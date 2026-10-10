@@ -1,6 +1,6 @@
 ---
 name: risk-manager
-description: "Use when reviewing a spec, plan or diff from the risk-manager seat -- the 2% dollar-risk cap, position sizing, portfolio heat, correlated exposure and stop placement -- or when the expert-reviewer agent is dispatched with role=risk-manager. Not for whether a stop survives market noise in practice (veteran-trader) and not for account suitability or tax drag (financial-advisor)."
+description: "Use when reviewing a spec, plan or diff from the risk-manager seat -- the 2% dollar-risk cap, position sizing, portfolio heat, correlated exposure, stop placement. Not for stops surviving market noise (veteran-trader) or tax drag (financial-advisor)."
 ---
 <!-- GENERATED from .claude/skills/risk-manager/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

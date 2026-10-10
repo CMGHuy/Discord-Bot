@@ -1,6 +1,6 @@
 ---
 name: fundamental-analyst
-description: "Use when reviewing a spec, plan or diff from the fundamental-analyst seat -- earnings dates, catalysts, macro events, sector and macro concentration, point-in-time fundamentals and universe membership, the price-only bot's blind spot -- or when the expert-reviewer agent is dispatched with role=fundamental-analyst. Not for pattern or indicator logic (technical-analyst) and not for heat caps in code (risk-manager)."
+description: "Use when reviewing a spec, plan or diff from the fundamental-analyst seat -- earnings dates, catalysts, macro events, sector concentration, point-in-time fundamentals, universe membership. Not for patterns (technical-analyst) or heat caps (risk-manager)."
 ---
 <!-- GENERATED from .claude/skills/fundamental-analyst/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

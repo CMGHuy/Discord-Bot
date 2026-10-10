@@ -1,6 +1,6 @@
 ---
 name: senior-engineer
-description: "Use when reviewing a diff or a plan task from the senior-engineer seat -- code-level quality inside the change: correctness at the line, the cyclomatic complexity limit, tests that prove behaviour, wiring that takes effect, and code that reads like its surroundings, and whether a refactor is behaviour-preserving -- or when the expert-reviewer agent is dispatched with role=senior-engineer. task-reviewer preloads it. Not for cross-package design or migrations (staff-engineer) and not for lookahead or caches (quant-engineer)."
+description: "Use when reviewing a diff or plan task from the senior-engineer seat -- correctness, complexity, test quality, code that reads like its module, behaviour-preserving refactors. Not for cross-package design (staff-engineer) or lookahead (quant-engineer)."
 ---
 
 # Senior engineer

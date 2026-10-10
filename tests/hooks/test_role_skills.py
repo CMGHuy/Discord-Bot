@@ -7,10 +7,16 @@ docs/claude/skills-tools.md, which /panel reads. See
 docs/superpowers/specs/2026-10-09-v145-expert-roles-model-routing.md
 """
 import pathlib
+import sys
 
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+# scripts/dev has no __init__.py: put it on sys.path, then import the helper.
+sys.path.insert(0, str(ROOT / "scripts" / "dev"))
+
+from skill_frontmatter import parse_frontmatter  # noqa: E402
+
 SKILLS_DIR = ROOT / ".claude" / "skills"
 SKILLS_TOOLS = ROOT / "docs/claude/skills-tools.md"
 
@@ -33,6 +39,8 @@ BOUNDARIES = ("never decide", "never lower a gate", "`pooled-numbers`",
 MIN_CHECKS, MAX_CHECKS = 8, 15
 REVIEWER_MODELS = {"sonnet", "opus"}   # no reviewer runs on haiku
 CASE_FILES = ("prompt.md", "graders/skill-fired.md")
+# Characters of the parsed description value -- the text inside the quotes.
+MAX_ROLE_DESCRIPTION = 260
 
 
 def _text(path):
@@ -41,6 +49,10 @@ def _text(path):
 
 def _body(name):
     return _text(SKILLS_DIR / name / "SKILL.md").split("---", 2)[2]
+
+
+def _description(name):
+    return parse_frontmatter(_text(SKILLS_DIR / name / "SKILL.md"))[0]["description"]
 
 
 def _section(body, heading):
@@ -138,3 +150,22 @@ def test_the_escalation_ladder_replaced_fails_review_twice():
     text = _text(SKILLS_TOOLS)
     assert "fails review twice" not in text
     assert "model-routing.md" in text and "one tier up" in text
+
+
+# v154 section 2: a role description is listed in every session and every
+# subagent, so it is capped. A missed fire case is fixed by rewording inside
+# the cap, never by raising it.
+@pytest.mark.parametrize("role", sorted(ROLES))
+def test_role_description_fits_the_listing_cap(role):
+    value = _description(role)
+    assert len(value) <= MAX_ROLE_DESCRIPTION, len(value)
+
+
+@pytest.mark.parametrize("role", sorted(ROLES))
+def test_role_description_keeps_its_seat_and_a_hand_off(role):
+    value = _description(role)
+    assert f"the {role} seat" in value
+    assert "Not for" in value
+    assert [other for other in ROLES if other != role and f"({other})" in value]
+    # expert-reviewer invokes the skill by name; the clause bought nothing.
+    assert "expert-reviewer" not in value
