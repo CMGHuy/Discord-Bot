@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — it repairs how rules load and what they cost. It sets no threshold, re-runs nothing and changes no wording of any gate.
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, quant-engineer
-**Status:** spec written 2026-10-10; panel review pending; no plan yet.
+**Status:** spec written 2026-10-10; panel review applied; no plan yet.
 **Depends on:** nothing unbuilt. Builds on v96 (skills layer) and v145 (expert roles).
 
 ## Why
@@ -28,7 +28,8 @@ Measured on 2026-10-10 from a fresh main-tree session:
    `docs/claude/backtest-methodology.md`, which is 59.8 KB in 256 lines with
    one `#` heading and one `###`. It cannot be read by section, so every fire
    pays for all of it. `alert-surface` and `no-lookahead` do the same with
-   `known-traps.md` (26.3 KB, ten `##` sections it could be addressed by).
+   `known-traps.md` (26.3 KB), whose relevant rules are bold bullets in an
+   unheaded preamble; `architecture.md` likewise has a single heading.
 3. **Role descriptions are long.** The nine run 392–541 characters, and each
    repeats "or when the expert-reviewer agent is dispatched with role=X", which
    the agent does not need: it invokes the skill by name.
@@ -37,149 +38,185 @@ Measured on 2026-10-10 from a fresh main-tree session:
    copy of `skill-creator` each add skills and agents to every session and
    every subagent. `.claude/settings.json` already disables ten plugins the
    same way.
-5. **`close-out` runs in the main context.** It is a mechanical ritual;
-   `gate` and `task-brief` already run as `context: fork` on `model: sonnet`.
 
 ## Decisions taken in the brainstorm
 
 - **Roles stay model-invocable** (partner, 2026-10-10). v145's decision stands:
   the six are repaired, and all nine descriptions are trimmed to at most 260
   characters. Panel-only roles were considered and rejected.
-- **`backtest-methodology.md` stays one file.** `.claude/hooks/guardrails.py`
-  reads the closed pre-registration table from it, and about forty code, test
-  and doc references name the path. It gains `##` headings in place; nothing
-  moves to another file.
-- **Section reads go through a script, not a skill.** A forked Haiku skill
-  would spend a model call to do what `sed` does.
+- **No file is split and no existing line changes.** About forty code, test
+  and doc references name `backtest-methodology.md`, and
+  `tests/hooks/test_guardrails.py:390` splits it on the literal
+  `### Closed pre-registrations`. The three docs gain headings by insertion
+  only.
+- **No new dependency.** PyYAML is not in `requirements.txt`, which is the one
+  file CI and the image install from; the frontmatter check is a strict rule in
+  the existing parser instead.
+- **Section reads go through a script, not a skill.**
 - **New skills are slash-only** so they add nothing to the listing.
 
 ## Design
 
-### 1. Frontmatter repair and the test that should have caught it
+### 1. Frontmatter repair and one strict parser
 
 - Wrap every `description:` value in `.claude/skills/*/SKILL.md` in double
-  quotes — all 25, not just the six, so the next inner colon is harmless.
-- `_read_skill` parses frontmatter with `yaml.safe_load` (PyYAML 5.4.1 is
-  already installed; add it to the dev requirements file if it is only there
-  transitively). A skill whose frontmatter does not parse fails
-  `test_every_skill_declares_name_and_description` by name.
-- `tests/hooks/test_agent_shape.py` gets the same parser if it has the same
-  splitter.
-- `python scripts/dev/sync_codex.py` regenerates `.agents/skills/`; the mirror
-  test must stay green.
+  quotes — all 25, so the next inner colon is harmless.
+- The colon splitter exists three times: `tests/hooks/test_skill_shape.py:45`,
+  `scripts/dev/sync_codex.py:56,70` and `tests/hooks/test_codex_mirror.py:33`.
+  It moves to one stdlib helper, `scripts/dev/skill_frontmatter.py`, imported
+  by all three. Values stay strings, so the existing `== "true"` comparison at
+  `test_skill_shape.py:110` is untouched.
+- The helper raises on what the real loader rejects or misreads: an unquoted
+  value containing `: ` or ` #`, a quoted value with an unescaped inner quote,
+  and a line that is not `key: value`. `sync_codex.py` strips the quotes it now
+  reads and re-emits them, so `.agents/skills/` stays byte-stable apart from
+  the quoting.
+- A regression fixture holds one of today's six broken frontmatters and
+  asserts the helper rejects it.
 
 ### 2. Role descriptions at most 260 characters
 
-Each keeps: the seat, the three to five things it checks, and its two
-"Not for … (other-role)" hand-offs. Each drops the `expert-reviewer` clause.
-A new assertion in `tests/hooks/test_role_skills.py` pins `len(description)
-<= 260` for the nine roles.
+Each keeps the seat, the three to five things it checks, and its two
+"Not for … (other-role)" hand-offs, and drops the `expert-reviewer` clause.
+`tests/hooks/test_role_skills.py` pins `len(description) <= 260` for the nine.
 
 The v145 eval suites (54 cases) are the regression check: re-run all nine with
 `claude plugin eval .claude/skills/<role> --runs 1 --no-publish --trust-plugin
 --ablation none`. A missed fire case is fixed by rewording within the cap,
-never by raising it. This is the first run in which the six repaired roles are
-graded against their real descriptions in a normal session, so failures here
-are expected signal, not flake.
+never by raising it.
 
 ### 3. Addressable `docs/claude/` sections
 
-- `backtest-methodology.md` gains `##` headings for the parts the skills name:
-  the acceptance gate, the funnel stages (with Stage −2 keeping its exact
-  current heading text, cited ten times as `§ Stage −2`), TRAIN/VALIDATION
-  windows, frozen constants, and closed pre-registrations (heading text
-  unchanged, cited nine times and parsed by `guardrails.py`). **Headings and
-  blank lines are the only additions**; a paragraph may be cut at a sentence
-  boundary to sit under its heading, with no word changed. The check is
-  mechanical: the file with heading lines and blank lines removed, and all
-  whitespace collapsed, is byte-identical before and after.
-- New `scripts/dev/doc_section.py <doc> [<heading>]`: with no heading, prints
-  the doc's headings with byte sizes; with one, prints that section (matching
-  by case-insensitive prefix, exit 2 and the heading list on no match or an
-  ambiguous match). `<doc>` resolves under `docs/claude/`. Stdlib only.
-- The four skills' Step 1 changes from "read the file" to the named sections:
+**Headings by insertion only.** `backtest-methodology.md`, `known-traps.md`
+and `architecture.md` gain `##` heading lines (each followed by a blank line)
+between existing lines. No bullet is promoted, no paragraph is cut, and the
+existing `### Closed pre-registrations` keeps its level and text. `Stage −2`
+stays the bold bullet it is at `backtest-methodology.md:53`; the ten
+`§ Stage −2` citations keep pointing at it, now inside a funnel section. The
+check is mechanical: deleting the inserted lines reproduces the old file byte
+for byte.
 
-  | Skill | Reads |
-  |---|---|
-  | `backtest-gate` | acceptance gate, windows, closed pre-registrations; the rest on demand |
-  | `pooled-numbers` | `edge-priorities.md` whole (5 KB); methodology: windows and badge scoring only |
-  | `alert-surface` | the `known-traps.md` sections on caches, shims and measured-empty tables |
-  | `no-lookahead` | `architecture.md` NO-LOOKAHEAD section; `known-traps.md` cache section |
+Headings to insert (exact line positions are the plan's job):
 
-  Each skill keeps its sentence that it restates nothing and that the doc is
-  the authority; it adds that any doubt means reading the whole file.
-- `CLAUDE.md` Token discipline gains one line pointing at `doc_section.py`;
-  `AGENTS.md` mirrors it.
+| Doc | Sections |
+|---|---|
+| `backtest-methodology.md` | acceptance gate; badge scoring (`:32-38`); funnel stages (covers Stage −2 and the `measure_arms` rules, `:53-110`); windows; frozen constants; harvest gate |
+| `known-traps.md` preamble | two OHLCV caches (`:7`, `:137`); silent no-op shims (`:56`); measured-empty tables (`:75`) |
+| `architecture.md` | module map; NO-LOOKAHEAD (`:72`); entry-signal single source |
+
+**`scripts/dev/doc_section.py <doc> [<heading> ...]`** — stdlib only. With no
+heading it prints the doc's `##` and `###` headings with byte sizes; with one
+or more it prints those sections. A heading matches by case-insensitive
+prefix; no match or an ambiguous match exits 2 and prints the heading list. A
+doc with no headings exits 2 and says to read the file — it never returns a
+silent whole-file or empty result.
+
+**What each skill's Step 1 reads:**
+
+| Skill | Mandatory | Whole file instead when |
+|---|---|---|
+| `backtest-gate` | acceptance gate, funnel stages, windows, frozen constants, closed pre-registrations (everything but badge scoring, the harvest gate and the tail) | the run is `--validation`, or a result is about to be called a pass or fail |
+| `pooled-numbers` | `edge-priorities.md` whole; methodology: windows, badge scoring | a badge tier is being assigned or changed |
+| `alert-surface` | `known-traps.md`: the three preamble sections, replay parity (`:186`), market_data self-heal (`:351`) | editing `scan_embeds` or a legacy shim |
+| `no-lookahead` | `architecture.md`: NO-LOOKAHEAD, entry-signal single source; `known-traps.md`: two caches, replay parity | a change crosses more than one `swingbot/core` package |
+
+The third column is a literal condition in the skill text, not a judgement
+call. `backtest-gate` therefore still reads most of its doc; the saving in
+this section comes from the other three skills.
+
+`CLAUDE.md` Token discipline gains one line pointing at `doc_section.py`.
+`scripts/dev/select_tests.py:260` (the `docs/claude/` row) gains the heading
+pin test and `tests/dev/test_doc_section.py`, so `testrun.py changed` selects
+them.
 
 ### 4. Listing overhead
 
-- `.claude/settings.json` `enabledPlugins` gains `false` for `feature-dev`,
-  `code-simplifier`, `claude-code-setup`, `claude-md-management` and the
-  plugin-marketplace `skill-creator` (the `anthropic-skills` copy remains for
-  skill work). `frontend-design`, `code-review`, `commit-commands` and
-  `superpowers` stay.
-- Whether the `anthropic-skills:*` set and unauthenticated connectors can be
-  turned off per project is checked through the `claude-code-guide` agent; if
-  they can, they are added here, and if not, the spec records that and stops.
-- `docs/claude/skills-tools.md` "disabled plugins" list is updated to match.
+`.claude/settings.json` `enabledPlugins` gains `false` for `feature-dev`,
+`code-simplifier`, `claude-code-setup`, `claude-md-management` and the
+plugin-marketplace `skill-creator`. `frontend-design`, `code-review`,
+`commit-commands` and `superpowers` stay. `anthropic-skills:*` and the
+claude.ai connectors are not locally disableable
+(`docs/claude/skills-tools.md:32-33`) and are untouched. The disabled-plugins
+list in that doc is updated to match.
 
-### 5. Fork `close-out`; three slash-only helpers
+### 5. Two slash-only helpers
 
-- `close-out` gains `context: fork` and `model: sonnet`. It stays
-  model-runnable (`MODEL_RUN_RITUALS`). Because a fork does not see the
-  conversation, its Step 1 states what the caller must pass as arguments (plan
-  path, results line) and stops with a one-line error when they are missing.
-- `/result-digest <a.json> [<b.json>]` — fork, haiku. Runs
-  `scripts/backtest/compare_backtest_json.py` (or reads one file) and returns
-  at most eight lines: window, N, ExpR, win rate, per-strategy deltas. It
-  states figures as read from the named file and never calls anything a pass;
-  that remains `backtest-gate`'s job.
+- `/result-digest <a.json> [<b.json>]` — `context: fork`, `model: haiku`.
+  Runs `scripts/backtest/compare_backtest_json.py` and returns its output
+  **verbatim**, prefixed with the file paths, the window and N, and ending with
+  the fixed line "Derived by compare_backtest_json.py from the named files;
+  not live-book figures — re-derive per pooled-numbers before quoting in a
+  spec, plan or commit." It never paraphrases a figure and never says pass.
 - `/handoff` — main context (it needs the conversation). Writes the plan's
   `## Handoff` block per `skills-tools.md` § Plan writing.
-- All three carry `disable-model-invocation: true` except `close-out`, join
-  `TIER_2`, and get Codex mirrors.
+- Both carry `disable-model-invocation: true` and join `TIER_2`.
+
+### Codex mirror
+
+Each commit that touches a skill runs `sync_codex.py`. `AGENTS.md` gains, in
+the same commit as the change it mirrors: the `doc_section.py` line, the two
+new skills, and the disabled-plugin list. `sync_codex.py:66-68` drops
+`context` and `model`, so Codex runs `/result-digest` unforked; that is
+accepted and stated in `AGENTS.md`.
 
 ## Edge cases
 
-- A description that itself contains a double quote: none today; the YAML test
-  catches one if it appears.
-- `guardrails.py` parsing the closed table: its tests
-  (`tests/hooks/test_guardrails.py`) run unchanged; a failure means a heading
-  was inserted inside the table.
-- `doc_section.py` on a doc with no `##` headings prints the whole file with a
-  one-line note, so a skill step never returns empty.
-- A forked `close-out` invoked with no arguments must not guess the plan.
+- `test_guardrails.py:390` keeps splitting on `### Closed pre-registrations`;
+  a failure means a heading was inserted inside that section's table.
+- A description containing a double quote: none today; the helper rejects an
+  unescaped one.
+- `/result-digest` given a file `compare_backtest_json.py` cannot read returns
+  the script's error verbatim and no figures.
 
 ## Testing
 
-- `test_skill_shape.py`: YAML parse for every skill; existing assertions kept.
-- `test_role_skills.py`: 260-character cap.
-- New `tests/dev/test_doc_section.py`: list mode, prefix match, ambiguous and
-  missing heading, heading-less doc.
-- New test pinning that `backtest-methodology.md` has the named `##` headings,
-  including the two cited ones verbatim.
-- `test_codex_mirror.py` green after `sync_codex.py`.
-- Manual, recorded in the plan's results: a fresh session's listing shows all
-  nine role descriptions; the nine role eval suites and the four edited
-  Tier 1/3 suites pass.
+- `test_skill_shape.py` and `test_codex_mirror.py` through the shared helper;
+  the broken-frontmatter fixture; existing assertions unchanged.
+- `test_role_skills.py`: the 260-character cap.
+- New `tests/dev/test_doc_section.py`: list mode, prefix match, several
+  headings, ambiguous, missing, heading-less doc.
+- New heading pin test: each doc carries the sections in the table above and
+  `backtest-methodology.md` still contains `### Closed pre-registrations`.
+- Insertion-only check, run once in the plan and recorded: old file equals new
+  file minus inserted lines, for all three docs.
+- Manual, recorded in the plan's results: a fresh session lists all nine role
+  descriptions; the nine role suites and the four edited Tier 1/3 suites pass.
 
 ## Parallelisation
 
-- **Group A (sequential):** §1 then §2 — both edit the same nine frontmatter
-  lines.
+- **Group A (sequential):** §1 then §2 — both edit the same frontmatter lines.
 - **Group B (sequential):** §3 headings, then `doc_section.py`, then the four
-  skill edits — each step consumes the previous one's output.
+  skill edits — each consumes the previous step's output.
 - **Group C (independent):** §4.
-- **Group D (independent of A–C):** §5, except that it must land after §1
-  because the new skills are written with quoted descriptions and the YAML test.
-- `sync_codex.py` runs inside every commit that touches a skill; A, B and D
-  therefore commit one at a time even where their edits do not overlap.
+- **Group D:** §5, after §1 because new skills are written against the strict
+  helper.
+- `sync_codex.py` rewrites `.agents/skills/` in every skill commit, so A, B
+  and D commit one at a time even where their edits do not overlap.
 
 ## Out of scope
 
-- Making roles panel-only; removing the superpowers SessionStart block.
-- Any change to the wording of a gate, a window, a constant or a closed
+- Forking `close-out` (see Panel review); making roles panel-only; removing
+  the superpowers SessionStart block.
+- Any change to the wording of a gate, window, constant or closed
   pre-registration.
-- Splitting other large `docs/claude/` files.
-- The research-integrity skills and the attribution/market skills — separate
-  specs, written after this one.
+- The research-integrity and attribution/market skills — separate specs.
+
+## Panel review
+
+Run 2026-10-10 on `558bfed0`. staff-engineer returned eight ADVISORY;
+quant-engineer three BLOCKING and three ADVISORY.
+
+- quant-engineer: BLOCKING — `backtest-gate` needs funnel stages and frozen constants, not "on demand" — applied (§3 table).
+- quant-engineer: BLOCKING — `architecture.md` has no NO-LOOKAHEAD section to address — applied (headings inserted there too).
+- quant-engineer: BLOCKING — the `known-traps.md` rules the skills need sit in an unheaded preamble — applied (preamble headings; replay parity and self-heal named).
+- staff-engineer: `guardrails.py` does not parse the doc; `test_guardrails.py:390` splits on the `###` heading — applied (heading level and text kept).
+- staff-engineer: Stage −2 is a bold bullet, so the byte-identity check conflicted with the design — applied (insertion only).
+- staff-engineer: `yaml.safe_load` returns booleans and leaves two other splitters behind — applied (one shared strict helper, strings kept).
+- staff-engineer: a forked `close-out` would dispatch `/panel` from a subagent and lose the judgement in steps 5 and 7 — applied (fork dropped).
+- staff-engineer: PyYAML is undeclared and would enter the image — applied (no dependency).
+- staff-engineer: `select_tests.py:260` needs rows for the new tests — applied.
+- staff-engineer: the `anthropic-skills` question is already answered at `skills-tools.md:32-33` — applied.
+- staff-engineer: `AGENTS.md` mentions and the dropped `context`/`model` keys — applied (Codex mirror section).
+- quant-engineer: name where the badge-scoring heading goes — applied (`:32-38`).
+- quant-engineer: `/result-digest` figures are derived and a small model paraphrases — applied (verbatim output, fixed disclaimer).
+- quant-engineer: "any doubt" is judgement; give a literal stop condition — applied (third column; a heading-less doc exits 2).
