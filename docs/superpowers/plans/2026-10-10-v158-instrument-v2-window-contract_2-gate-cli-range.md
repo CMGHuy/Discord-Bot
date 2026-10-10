@@ -821,6 +821,8 @@ git -C /home/user/Discord-Bot status --short
 
 **Model:** opus — edits the acceptance harness's cc-65 `main` (must go down, not up) and wires the v2 universe gate, holdout seal and watchlist slice while v1 stays byte-identical.
 
+**Cross-plan (audit 2026-10-10):** **Complexity gate (v149):** If `scripts/dev/complexity_gate.py` exists (v149 merged), this task lowers a legacy function at or above 15 (`run_backtest_range.main`, cc 65 → about 62), so after its radon step it runs `python scripts/dev/complexity_gate.py`, then `python scripts/dev/complexity_gate.py --update`, and adds `scripts/dev/complexity_baseline.json` to this task's commit (`improved`/`gone` expected; `new`/`risen` never). Full rule: index `## Cross-plan coordination (audit 2026-10-10)`.
+
 **Files:**
 - Modify: `scripts/backtest/run_backtest_range.py`
 - Create: `tests/scripts/test_run_backtest_range_instrument.py`

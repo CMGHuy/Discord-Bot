@@ -82,6 +82,13 @@ At most two implementers at once (CLAUDE.md). The natural pairs: FC2 ‖ FC3, th
 | FC8 | `backtest_wf` takes the instrument; "friction-adjusted" label removed | 2 | sonnet | M `swingbot/core/backtesting/backtest_wf.py`; M `scripts/backtest/wf_components.py`; C `tests/backtesting/test_backtest_wf_instrument.py` | `_exit_kwargs(instrument) -> dict`; `_default_run(start, end, overrides, strategies=None, horizons=None, tickers=None, instrument=None)`; `run_folds(overrides, folds=ANCHORED_FOLDS, tickers=None, run_fn=None, instrument=None)`; `collect_portfolio_signals(start, end, strategies=None, horizons=None, instrument=None)` |
 | FC9 | Full suite, golden and complexity gate | 2 | haiku | — | — |
 
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v147 (gate counterfactual) — FC7:** if `blocked_sink` is already a keyword of `StrategyEngine.__init__` (v147 merged), FC7's signature is `(self, strategies=None, compression_context=None, instrument=None, *, blocked_sink=None, compression_allowlist=None)`, keeping both groups of `self.` assignments; `test_strategy_engine_keeps_its_positional_arguments` still holds. The block sits after FC7's `**Model:**` line.
+- **v133 (liquidity role coverage) — FC6:** v133's V133-5 also drops its new context keys inside `tests/backtesting/instrument/golden.py:golden_records`; keep both drops (v133's keys and FC6's `signal_date`). The block sits after FC6's `**Model:**` line.
+- **v148 swallowed-error ratchet (owner v148; full rule in its index):** a new `except Exception` handler under `swingbot/**/*.py` that neither re-raises nor calls `swallowed()` gets `swallowed(log, "<area>.<function>", exc, level=logging.DEBUG)` (areas `scan|marketdata|earnings|runstate|ops`) once `tests/infra/test_swallowed_ratchet.py` exists. No v157 task adds such a handler today; a task that ends up adding one follows the rule.
+- **v149 complexity gate (owner v149; full rule in its index):** if `scripts/dev/complexity_gate.py` exists, a task that splits a legacy function below 15 or moves/renames one finishes with the gate and `--update`. No v157 task splits or moves a legacy >= 15 function (`run_backtest`, `run_backtest_daterange`, `portfolio_replay`, `collect_portfolio_signals` only gain a keyword at the same score), so no task carries the pointer.
+
 ## Parts
 
 | Part file | Tasks | Scope |

@@ -96,6 +96,14 @@ Recommended order: WC1, then {WC2→WC3, WC4, WC5, WC6} with at most 2 implement
 | WC11 | Date-literal guard and flag census | 3 | sonnet | C `tests/backtesting/instrument/test_date_literal_guard.py` | `ALLOW: dict[str, str]`, `NO_REPLAY: dict[str, str]` (rel path → one-line reason) |
 | WC12 | Full suite | 3 | haiku | — | — |
 
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v139 (confluence stop geometry) — WC11:** if `scripts/backtest/measure_confluence_stop.py` exists (v139 merged), add it to `ALLOW` with reason `"v139 one-shot pre-registered measurement; windows frozen in its record"`; otherwise v139's V139-10 adds it. **v134 is closed to no-lift: no `ALLOW` entry for it.** The block sits after WC11's `**Model:**` line.
+- **v133 / v135 / v139 / v146 / v147 — their measurement tasks:** every measurement command whose script's `--help` lists `--instrument` pins `--instrument v1` (each of those plans carries the rule; nothing to edit here, and WC8–WC10 keep `v1` as the default so an unpinned command still runs v1).
+- **v147 (gate counterfactual) — WC10:** v147's `measure_arms.record_blocked_main` (own parser) adds `add_instrument_arg` / `require_v1` when `instrument/cli.py` exists. If v147 merged first, WC10 adds those two calls itself (block after WC10's `**Model:**` line); if v147 lands later, v147 does.
+- **v148 swallowed-error ratchet (owner v148; full rule in its index):** repo-wide count over `swingbot/**/*.py`; a new `except Exception` there that neither re-raises nor calls `swallowed()` gets `swallowed(log, "<area>.<function>", exc, level=logging.DEBUG)`, tag areas `scan|marketdata|earnings|runstate|ops`, once `tests/infra/test_swallowed_ratchet.py` exists. v158's only new handler (WC9 `_v2_trades`) is under `scripts/`, outside the count; WC9 notes it.
+- **v149 complexity gate (owner v149; full rule in its index):** WC8 (`run_backtest_range.main` 65 → ~62) and WC9 (`tune_strategy.main` 29 → 20, `run_config` 17 → off the list) lower legacy >= 15 functions; if `scripts/dev/complexity_gate.py` exists, each finishes with the gate, `--update`, and the baseline in its commit (blocks after their `**Model:**` lines).
+
 ## Parts
 
 | Part | File | Tasks | Scope |

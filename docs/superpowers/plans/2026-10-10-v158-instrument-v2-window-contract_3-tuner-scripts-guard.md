@@ -27,6 +27,8 @@ Conventions used in every task (from the index's `## Where to work`):
 
 **Model:** opus — wires purged per-fold selection and pooled out-of-fold ExpR into the strategy tuner while its v1 stdout and JSON stay byte-identical, and lowers a D-29 `main`.
 
+**Cross-plan (audit 2026-10-10):** **Complexity gate (v149):** If `scripts/dev/complexity_gate.py` exists (v149 merged), this task lowers a legacy function at or above 15 (`tune_strategy.main` D 29 → C 20; `run_config` C 17 drops off the list once `_stats` moves out), so after its radon step it runs `python scripts/dev/complexity_gate.py`, then `python scripts/dev/complexity_gate.py --update`, and adds `scripts/dev/complexity_baseline.json` to this task's commit (`improved`/`gone` expected; `new`/`risen` never). The new `except Exception: continue` in `_v2_trades` lives under `scripts/`, outside the v148 swallowed-error ratchet's `swingbot/**/*.py` count, so it needs no `swallowed()` call. Full rule: index `## Cross-plan coordination (audit 2026-10-10)`.
+
 **Files:**
 - Modify: `scripts/backtest/tune_strategy.py`
 - Create: `tests/scripts/test_tune_strategy_instrument.py`
@@ -683,6 +685,8 @@ git -C /home/user/Discord-Bot status --short
 
 **Model:** sonnet — the same two-line flag-and-guard insertion in ten scripts plus one behaviour-preserving wrap of `ablation.py`, proven by one parametrised test.
 
+**Cross-plan (audit 2026-10-10):** If `scripts/backtest/measure_arms.py` already has `record_blocked_main` (v147 merged), v147 could not wire the flag there (no `instrument/cli.py` yet): add `instrument_cli.add_instrument_arg(parser)` after its `--validation` argument and, right after its `parse_args`, `instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_arms.py --record-blocked", "v147")`, unless those calls are already there; leave `main`'s own wiring (item 3 below) as written. `tests/scripts/test_measure_arms_record_blocked.py` then also passes `--instrument v1` in one case and asserts `--instrument v2` exits non-zero; add that test file to this task's Step 6 commit. If v147 lands later, it adds these calls itself (its V147-6 rule). `record_blocked_main` is not a legacy function; it stays below 15.
+
 **Files:**
 - Modify: `scripts/backtest/tune_exit_v2.py`
 - Modify: `scripts/backtest/tune_confluence_gates.py`
@@ -1192,6 +1196,8 @@ git -C /home/user/Discord-Bot status --short
 ### Task WC11: Date-literal guard and flag census
 
 **Model:** sonnet — one AST-walking test file with explicit allow-lists, modelled on `test_one_constructor_guard.py`; no production code changes expected.
+
+**Cross-plan (audit 2026-10-10):** If `scripts/backtest/measure_confluence_stop.py` exists (v139 merged), add it to `ALLOW` (alphabetical position, between `measure_bearish_arms.py` and `measure_dcb_veto.py`) with reason `"v139 one-shot pre-registered measurement; windows frozen in its record"`; it stays v1-only and takes no `--instrument` flag. If v139 lands later, its V139-10 adds that entry. v134 is closed to no-lift: no entry for it.
 
 **Files:**
 - Create: `tests/backtesting/instrument/test_date_literal_guard.py`

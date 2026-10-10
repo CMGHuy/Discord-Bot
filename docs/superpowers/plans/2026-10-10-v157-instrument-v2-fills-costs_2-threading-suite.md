@@ -21,6 +21,8 @@ What this part consumes from part 1 (all verified on disk in parts 1/1b, created
 
 **Model:** sonnet — threads one keyword through a replay and rewrites one row builder, with a cross-plan date contract (v158) and three serialisations that must keep their bytes; every edit is written out below.
 
+**Cross-plan (audit 2026-10-10):** v133 task V133-5 also drops its own new context keys inside `tests/backtesting/instrument/golden.py:golden_records`. If that drop is already in the trade loop (v133 merged), add the `signal_date` assert-and-pop of Step 4(a) beside it and keep both drops; if v133 lands later, it must keep this one. Either way the golden bytes stay unchanged.
+
 **Files:**
 - Modify: `swingbot/core/backtesting/backtest.py` (`BacktestTrade`: one field and `__post_init__`; `_live_trade` body and docstring; `_replay_live_constructor`: one keyword; `run_backtest`: the existing `_replay_live_constructor(...)` call gains `instrument=instrument`, and one docstring sentence)
 - Modify: `tests/backtesting/instrument/golden.py` (`golden_records`: drop `signal_date` after asserting it equals `entry_date`)
@@ -408,6 +410,8 @@ Expected: the commit lands on the branch; the main tree shows nothing new.
 ### Task FC7: Arms engines and `run_arm` take the instrument
 
 **Model:** sonnet — an optional keyword threaded through three small modules, each forwarding into FC5's seam; the code is written out below and the guard against v1 drift is the existing arms tests.
+
+**Cross-plan (audit 2026-10-10):** If `blocked_sink` is already a keyword of `StrategyEngine.__init__` (v147 merged), the Step 3(b) signature is `(self, strategies=None, compression_context=None, instrument=None, *, blocked_sink=None, compression_allowlist=None)` instead (type annotations as on `main`), keeping both groups of `self.` assignments (v147's and `self.instrument = instrument`); `test_strategy_engine_keeps_its_positional_arguments` still holds, since `instrument` stays the third positional argument. Otherwise write the signature as below.
 
 **Files:**
 - Modify: `swingbot/core/backtesting/arms/engine.py` (`get_engine`, `run_arm`: one keyword-only `instrument=None` each)
