@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part whole**: pull one task with `/task-brief V134-3` or `grep -n "^### Task V134-3" -A 200 docs/superpowers/plans/2026-10-06-v134-fvg-context-diagnostic_*.md`.
 
+**Closed (no-lift, 2026-10-10, partner decision):** never implemented; no code of this plan exists on any branch. Its premise is gone: v130 (structure features) closed no-lift, so `structure.major_structure_features` is not on `main` and V134-8 can never run; the displacement claim is already closed at plan level by v143 (and v128's `displacement@k` was refused at Stage 0). Found by the 2026-10-10 cross-plan audit. Do not re-open under another name (v143 rule).
+
 **Bump:** none
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-06-v134-fvg-context-diagnostic-design.md`](../specs/2026-10-06-v134-fvg-context-diagnostic-design.md)
+**Spec:** [`docs/superpowers/specs/no-lift/2026-10-06-v134-fvg-context-diagnostic-design.md`](../../specs/no-lift/2026-10-06-v134-fvg-context-diagnostic-design.md)
 
 **Goal:** Build a causal instrument that tags every fair value gap at formation and at first touch, then measure once, on TRAIN 2020-01-01..2023-12-31, whether each of four handbook claims (displacement, structure, confluence, approach) separates gap outcomes. It gates nothing and changes no vote.
 
