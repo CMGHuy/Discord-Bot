@@ -85,7 +85,11 @@ push, `update-ref -d` — targeting a `backup`/`stable-*` ref),
 pre-registration table), and `_rule_plan_doc_shape` (denies a Write to
 `docs/superpowers/{specs,plans}/` whose filename isn't
 `YYYY-MM-DD-vN-<name>.md`, or whose content has a two-hash `## Phase`
-heading).
+heading). v155 added a fourth deny rule, `_rule_screen_rerun` (denies a
+re-run or a full-universe dry run of a screened idea, a real run against a
+non-default `--ledger` or `--results-dir`, and a screen run inside a quoted
+wrapper; it reads flags only from the shell segment that runs
+`screen_idea.py`).
 
 | Skill | Tier | Invocation | `docs/claude/*.md` loaded in Step 1 |
 |---|---|---|---|
@@ -162,8 +166,9 @@ Moved verbatim from the root `CLAUDE.md` to keep it under 200 lines.
 preflights this repo's documented traps. `/gate` is the pre-commit
 verification gate. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
 **denies** the patterns this file forbids in prose — now including
-protected-branch deletion, closed-pre-registration knobs and malformed
-spec/plan writes — and warns on bare `pytest`/`cat` of the big docs, unit-
+protected-branch deletion, closed-pre-registration knobs, re-runs of a
+screened idea and malformed spec/plan writes — and warns on bare
+`pytest`/`cat` of the big docs, unit-
 tested in `tests/hooks/test_guardrails.py`, fails open by construction (this
 file wins on disagreement). Eleven `.claude/skills/` loaders sit beside it —
 the model-invocable ones self-trigger off `description`, shape-tested in

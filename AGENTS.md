@@ -319,7 +319,9 @@ Both agents enforce these habits with one hook, `.claude/hooks/guardrails.py`,
 wired for Codex in `.codex/hooks.json` (with the same session-status
 `SessionStart` hook). It denies `grep -r` from the repo root, worktree writes
 from the main tree, protected-branch deletion, closed-pre-registration backtest
-knobs and malformed spec/plan names, and warns on bare `pytest`, `cat` of the
+knobs, a re-run or full-universe dry run of a screened idea
+(`_rule_screen_rerun`) and malformed spec/plan names, and warns on bare
+`pytest`, `cat` of the
 big docs, and edits to Claude setup (the mirror reminder). Codex runs a new or
 changed hook only after it is trusted in `/hooks`: if a guardrail change has not
 been reviewed there, follow its rules by hand until it is. A deny is final:
