@@ -686,3 +686,168 @@ def test_results_doc_is_found_whatever_its_date(screen_repo):
 def test_a_missing_results_dir_reads_as_no_doc(screen_repo, monkeypatch):
     monkeypatch.setattr(guardrails, "SCREEN_RESULTS_DIR", str(screen_repo / "absent"))
     assert guardrails._screen_results_doc("x") is None
+
+
+# --- v155: _rule_screen_rerun (the idea screen's one-shot rule) -------------
+
+_SCREEN_TAIL = (' -- one shot per idea; see docs/claude/backtest-methodology.md '
+                '"Funnel stages".')
+
+
+def _screen_denial(cmd):
+    """The deny reason for `cmd`; fails the test when it is not a deny."""
+    out = _bash(cmd)
+    assert out is not None, cmd
+    hso = out["hookSpecificOutput"]
+    assert hso["permissionDecision"] == "deny", cmd
+    reason = hso["permissionDecisionReason"]
+    assert reason.startswith("screen_idea: ") and reason.endswith(_SCREEN_TAIL)
+    return reason
+
+
+def _screened(results, idea="gap_volume"):
+    """`idea` with a ledger row and its results doc, as a finished screen."""
+    record = f"docs/superpowers/results/2026-10-09-screen-{idea}.md"
+    _ledger_rows(results, {"id": f"screen-{idea}", "date": "2026-10-09",
+                           "verdict": "SCREEN-FAIL", "record": record})
+    (results / f"2026-10-09-screen-{idea}.md").write_text("# r\n", encoding="utf-8")
+
+
+def test_screen_rerun_rule_runs_right_after_the_closed_preregistration_rule():
+    bash_rules = guardrails._RULES["Bash"]
+    i = bash_rules.index(guardrails._rule_closed_preregistration)
+    assert bash_rules[i + 1] is guardrails._rule_screen_rerun
+
+
+def test_a_first_real_run_is_allowed(screen_repo):
+    assert _bash(f"{_SCREEN} --idea gap_volume") is None
+
+
+def test_a_rerun_of_a_screened_idea_is_denied_with_its_ledger_row(screen_repo):
+    _screened(screen_repo)
+    reason = _screen_denial(f"{_SCREEN} --idea gap_volume")
+    assert ("screen-gap_volume is already in the ledger (2026-10-09, SCREEN-FAIL, "
+            "docs/superpowers/results/2026-10-09-screen-gap_volume.md)") in reason
+
+
+def test_both_idea_spellings_are_denied(screen_repo):
+    _screened(screen_repo)
+    _screen_denial(f"{_SCREEN} --idea=gap_volume")
+    _screen_denial(f"{_SCREEN} --idea gap_volume")
+
+
+def test_only_the_exact_ledger_id_denies(screen_repo):
+    _ledger_rows(screen_repo, {"id": "screen-gap_volume_v2", "date": "d",
+                               "verdict": "v", "record": "r"})
+    assert _bash(f"{_SCREEN} --idea gap_volume") is None
+    assert _bash(f"{_SCREEN} --idea gap") is None
+
+
+def test_a_results_doc_with_no_ledger_row_is_denied(screen_repo):
+    (screen_repo / "2026-10-08-screen-turn_of_month.md").write_text(
+        "# r\n", encoding="utf-8")
+    reason = _screen_denial(f"{_SCREEN} --idea turn_of_month")
+    assert ("results doc docs/superpowers/results/2026-10-08-screen-turn_of_month.md "
+            "exists with no ledger row") in reason
+
+
+def test_a_full_universe_dry_run_is_denied(screen_repo):
+    reason = _screen_denial(f"{_SCREEN} --idea gap_volume --dry-run")
+    assert "--dry-run without --tickers" in reason
+
+
+def test_an_abbreviated_full_universe_dry_run_is_denied(screen_repo):
+    assert "--dry-run without --tickers" in _screen_denial(
+        f"{_SCREEN} --idea gap_volume --dry")
+
+
+def test_a_tickers_dry_run_is_allowed_even_for_a_screened_idea(screen_repo):
+    _screened(screen_repo)
+    assert _bash(f"{_SCREEN} --idea gap_volume --tickers AAPL,MSFT --dry-run") is None
+
+
+def test_a_non_default_ledger_is_denied(screen_repo):
+    reason = _screen_denial(f"{_SCREEN} --idea gap_volume --ledger fresh.jsonl")
+    assert "--ledger other than the default (fresh.jsonl)" in reason
+
+
+def test_a_non_existent_ledger_is_denied(screen_repo):
+    reason = _screen_denial(
+        f"{_SCREEN} --idea gap_volume --led=/nowhere/absent.jsonl")
+    assert "--ledger other than the default" in reason
+
+
+def test_the_default_ledger_spelled_out_is_allowed(screen_repo):
+    assert _bash(f"{_SCREEN} --idea gap_volume --ledger "
+                 "docs/superpowers/results/preregistration-ledger.jsonl") is None
+
+
+def test_a_non_default_results_dir_is_denied(screen_repo):
+    reason = _screen_denial(f"{_SCREEN} --idea gap_volume --results-dir scratch")
+    assert "--results-dir other than the default (scratch)" in reason
+
+
+def test_a_non_default_results_dir_hides_no_doc_from_the_rule(screen_repo):
+    (screen_repo / "2026-10-08-screen-gap_volume.md").write_text(
+        "# r\n", encoding="utf-8")
+    reason = _screen_denial(f"{_SCREEN} --idea gap_volume --res=elsewhere")
+    assert "--results-dir other than the default (elsewhere)" in reason
+
+
+def test_the_default_results_dir_spelled_out_is_allowed(screen_repo):
+    assert _bash(f"{_SCREEN} --idea gap_volume "
+                 "--results-dir docs/superpowers/results") is None
+
+
+def test_a_chained_command_reads_the_screen_segment(screen_repo):
+    _screened(screen_repo)
+    _screen_denial(f"cd scripts && cd .. && {_SCREEN} --idea gap_volume")
+    assert _bash("echo --dry-run && "
+                 f"{_SCREEN} --idea fresh_idea --tickers AAPL --dry-run") is None
+
+
+def test_the_first_denying_segment_wins(screen_repo):
+    _screened(screen_repo)
+    reason = _screen_denial(
+        f"{_SCREEN} --idea fresh_idea; {_SCREEN} --idea gap_volume --dry-run")
+    assert "--dry-run without --tickers" in reason
+
+
+def test_a_backslash_continued_command_is_read_whole(screen_repo):
+    reason = _screen_denial(f"{_SCREEN} \\\n  --idea gap_volume \\\n  --dry-run")
+    assert "--dry-run without --tickers" in reason
+
+
+def test_the_module_form_is_read(screen_repo):
+    _screened(screen_repo)
+    _screen_denial("python -m scripts.backtest.screen_idea --idea gap_volume")
+
+
+def test_a_quoted_ssh_wrapper_is_denied(screen_repo):
+    reason = _screen_denial(
+        'bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && '
+        f'{_SCREEN} --idea gap_volume"')
+    assert "inside a quoted wrapper" in reason
+
+
+def test_a_pwsh_wrapper_is_denied(screen_repo):
+    reason = _screen_denial(f"pwsh -Command '{_SCREEN} --idea gap_volume'")
+    assert "inside a quoted wrapper" in reason
+
+
+def test_an_untokenisable_screen_line_is_denied(screen_repo):
+    reason = _screen_denial(f"{_SCREEN} --idea 'gap_volume")
+    assert "could not tokenise" in reason
+
+
+def test_mentions_of_the_script_without_a_run_are_allowed(screen_repo):
+    _screened(screen_repo)
+    for cmd in ("git grep -n screen_idea", 'git grep -n "screen_idea.py"',
+                "cat scripts/backtest/screen_idea.py",
+                f"{_SCREEN} --help"):
+        assert _bash(cmd) is None, cmd
+
+
+def test_screen_rerun_rule_fails_open_on_a_missing_command():
+    assert guardrails._rule_screen_rerun({}) is None
+    assert guardrails._rule_screen_rerun({"command": 7}) is None

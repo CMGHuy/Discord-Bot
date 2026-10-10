@@ -451,6 +451,100 @@ def _screen_results_doc(idea: str) -> str | None:
     return hits[0] if hits else None
 
 
+
+_SCREEN_DENY_TAIL = (' -- one shot per idea; see docs/claude/backtest-methodology.md '
+                     '"Funnel stages".')
+
+
+def _screen_text(body: str) -> str:
+    """A deny text in the one shape every _rule_screen_rerun denial shares."""
+    return f"screen_idea: {body}{_SCREEN_DENY_TAIL}"
+
+
+def _repo_relative(path: str) -> str:
+    """`path` relative to the repo root with / separators, as the ledger's
+    record field spells it; unchanged when it is on another drive."""
+    try:
+        return os.path.relpath(path, _HOOK_REPO_ROOT).replace("\\", "/")
+    except ValueError:
+        return path
+
+
+def _screen_record_reason(idea: str) -> str | None:
+    """The deny text when `idea` was already screened: its exact ledger row
+    first, else a results doc a run left behind before it crashed."""
+    row = _screen_ledger_row(idea)
+    if row is not None:
+        return _screen_text(
+            f"screen-{idea} is already in the ledger ({row.get('date')}, "
+            f"{row.get('verdict')}, {row.get('record')}); a second real run "
+            "reads the same window again and is not a new result")
+    doc = _screen_results_doc(idea)
+    if doc is not None:
+        return _screen_text(
+            f"results doc {_repo_relative(doc)} exists with no ledger row; the "
+            "run that wrote it spent the shot even though it stopped before the "
+            "ledger append -- say so to the human partner, do not re-run")
+    return None
+
+
+def _screen_deny_reason(flags: dict) -> str | None:
+    """The deny text for one screen segment, or None to allow it. The order is
+    the index's Decision 10: a dry run is decided by --tickers alone; a real
+    run is denied on a non-default ledger or results dir, then on a record."""
+    if flags["dry_run"]:
+        if flags["tickers"]:
+            return None
+        return _screen_text(
+            "--dry-run without --tickers reads the whole universe and writes "
+            "nothing; a smoke test names two or three symbols with --tickers")
+    ledger, results_dir = flags["ledger"], flags["results_dir"]
+    if ledger is not None and not _is_default_ledger(ledger):
+        return _screen_text(
+            f"--ledger other than the default ({ledger}) hides the rows of "
+            "ideas already screened; a real run uses the default ledger")
+    if results_dir is not None and not _is_default_results_dir(results_dir):
+        return _screen_text(
+            f"--results-dir other than the default ({results_dir}) hides the "
+            "results docs of ideas already screened; a real run uses the "
+            "default results dir")
+    return _screen_record_reason(flags["idea"])
+
+
+def _has_wrapped_screen(segments: list[list[str]]) -> bool:
+    """Any token, in any segment, that carries a whole quoted screen run."""
+    return any(_is_wrapped_screen(tok) for seg in segments for tok in seg)
+
+
+def _rule_screen_rerun(ti: dict):
+    """Deny a second run of a screened idea, a full-universe dry run, and the
+    ways round screen_idea.py's own one-shot refusal (a fresh ledger or
+    results dir, a quoted wrapper). Flags come only from the segment that
+    runs the script, so `cd x && ...` and continuation lines read right."""
+    cmd = ti.get("command")
+    if not isinstance(cmd, str) or "screen_idea" not in cmd:
+        return None
+    segments = _command_segments(cmd)
+    if segments is None:
+        return _deny(_screen_text(
+            "could not tokenise a line that mentions screen_idea (an unclosed "
+            "quote?); write the command so a shell would read it"))
+    if _has_wrapped_screen(segments):
+        return _deny(_screen_text(
+            "a screen run inside a quoted wrapper (ssh-hetzner.sh \"...\", "
+            "pwsh -Command \"...\", a quoted commit message) is denied outright; "
+            "the screen's cache lives on this machine, so run the script "
+            "directly and name the rule, not the command line, in messages"))
+    for seg in segments:
+        flags = _screen_flags(seg)
+        if flags is None or flags["idea"] is None:
+            continue
+        reason = _screen_deny_reason(flags)
+        if reason is not None:
+            return _deny(reason)
+    return None
+
+
 # docs/superpowers/{specs,plans}/ have two unconditional shape rules
 # (document-conventions.md): the vN-numbered filename, and `# Phase` with ONE
 # hash so `grep -n "^# Phase"` can find it. v24 and v25 shipped with two and
@@ -548,7 +642,8 @@ def _rule_apply_patch(ti: dict):
 _RULES = {
     "Glob": [_rule_unscoped_glob],
     "Bash": [_rule_protected_branch_delete, _rule_closed_preregistration,
-             _rule_recursive_grep_from_root, _rule_bare_pytest, _rule_cat_big_doc],
+             _rule_screen_rerun, _rule_recursive_grep_from_root,
+             _rule_bare_pytest, _rule_cat_big_doc],
     "Read": [_rule_huge_implemented_plan, _rule_read_big_doc],
     "Edit": [_rule_worktree_write, _rule_codex_mirror_reminder],
     "Write": [_rule_worktree_write, _rule_plan_doc_shape, _rule_codex_mirror_reminder],
