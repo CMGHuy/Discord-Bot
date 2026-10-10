@@ -15,22 +15,29 @@ Referenced from the root `CLAUDE.md`.
   actual files.
 - `superpowers:brainstorming` then `superpowers:writing-plans` for new
   components, so the result matches the existing plan format.
-- `Explore` subagent for wide code searches; `feature-dev:code-reviewer` or
-  `/code-review` for review passes. `backtest-runner` for any backtest/grid/
+- `Explore` subagent for wide code searches; `/code-review` (the
+  `code-review` plugin) for review passes. `backtest-runner` for any backtest/grid/
   walk-forward/fold run over ~2 minutes; `symbol-verifier` to check a plan's
   claimed functions/classes/config fields actually exist before implementing
   against them; `test-runner` for any full-suite or fast-tier pytest run.
 - `.mcp.json` provides the `context7` server, scoped to yfinance/pandas-ta/
   discord.py docs — not this repo's own code.
-- **Plugins off for this project (v107)** — `.claude/settings.json`
+- **Plugins off for this project (v107, v154)** — `.claude/settings.json`
   `enabledPlugins` disables the claude.ai-synced knowledge-work plugins
   (`small-business`, `legal`, `finance`, `product-management`, `data`,
-  `engineering`, `productivity`, `pdf-viewer`, all `@synced`) and the
+  `engineering`, `productivity`, `pdf-viewer`, all `@synced`), the
   `chrome-devtools-mcp`/`playwright` MCP plugins, which also removes their
-  MCP servers. Project scope only; user settings are untouched. Need one for
-  a session? `claude --settings` or a `settings.local.json` override.
-  Not locally disableable: `anthropic-skills:*` and the Claude Docs
-  connector (claude.ai-served) and the built-in skills.
+  MCP servers, and (v154) the development plugins this repo never uses:
+  `feature-dev`, `code-simplifier`, `claude-code-setup`,
+  `claude-md-management` and the marketplace copy of `skill-creator`, all
+  `@claude-plugins-official`, whose skills and agents were listed in every
+  session and every subagent. `frontend-design`, `code-review`,
+  `commit-commands` and `superpowers` stay on. Project scope only; user
+  settings are untouched. Need one for a session? `claude --settings` or a
+  `settings.local.json` override.
+  Not locally disableable: `anthropic-skills:*` (including its own
+  `skill-creator`) and the Claude Docs connector (claude.ai-served) and the
+  built-in skills.
 - **At most ONE subagent at a time, by default.** Dispatch one, wait for it to
   return, then decide whether the next is still needed. Spawning several at
   once requires the human partner to ask for it explicitly — "in parallel",
