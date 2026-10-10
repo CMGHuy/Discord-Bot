@@ -297,6 +297,12 @@ documentation index; read the one topic file it links. For
 `scanning/`, `analytics/`, `charts/`, `presentation/`. `architecture.md` says
 which modules live where.
 
+- Read a `docs/claude/` file by section instead of whole where it has
+  headings: `python scripts/dev/doc_section.py <doc> [<heading> ...]` prints
+  the named `##`/`###` sections (a heading matches by case-insensitive
+  prefix; with no heading it lists them with byte sizes). Exit code 2 means
+  it could not pick a section: read the whole file.
+
 Large or historical plans are context hazards: **never read a plan file whole.**
 Extract one task with `rg -n "^### Task E53" -A 120 <plan>`, orienting first
 with `rg -n "^### Task" <plan>`. The live plan and spec lists are the top-level
