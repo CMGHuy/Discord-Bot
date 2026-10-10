@@ -11,7 +11,7 @@ Order inside this part: V147-5 and V147-6 need V147-4 (and V147-2/-3 through it)
 **Consumed from Part 1 (ledger contracts, final):**
 - `gate_counterfactual.BlockedCandidate(ticker, gate, reason, source, strategy, horizon, direction, signal_date, plan=None, scenario=None, scan_params=None, signal_close=None, margin=None)`, `CounterfactualResult(cf_status, cf_r, win, exit_index, last_bar_date, bars_sha256, reanchored, plan)`, `CF_STATUSES`, `simulate_blocked(candidate, bars, *, last_session=None)`.
 - `blocked_recorder.TRAIN_WINDOW`, `require_train_window(date_from, date_to, *, validation=False)` (raises `SystemExit(2)`), `over_cap(plan)`, `risk_cap_margin(plan)`, `gate_row(*, population, arm, source, ticker, strategy, horizon, direction, signal_date, gate, reason, margin, cf_status, cf_r, win, planned_loss_pct=None, expiry_bars=None, in_sample=False)`, `row_from_exit(exit_result, plan, **row_fields)`, `write_gate_rows(rows, path) -> int`.
-- This part relies on `row_from_exit` filling `cf_status`, `cf_r`, `win` (through `result_from_exit`) and `expiry_bars` (from `plan.expiry_bars`) itself, and taking every other `gate_row` keyword from `**row_fields`; `gate_row` derives `entry_date` and `dollar_risk`. If V147-4 landed differently, adapt the call sites here to it — never change V147-4.
+- Checked against Part 1 as written: `row_from_exit` fills `cf_status`, `cf_r`, `win` (through `result_from_exit`) and defaults `ticker`, `strategy`, `horizon`, `direction`, `expiry_bars` from the plan, with `**row_fields` overriding; `gate_row` validates `population`/`arm`/`source`/`gate`/`cf_status` (no `pending`), derives `entry_date` and `dollar_risk`. V147-3 also adds `PIN_KEYS` and the `scan_params` shape `{"stop_mult", "tp2_r", "time_stop_days", "params"}` (V147-6 uses it). If V147-4 landed differently, adapt the call sites here to it — never change V147-4.
 
 **TRAIN hooks fail loud, live hooks fail open.** The TRAIN recorders below are record-only (the replay's trades, stats and printed table never change, proved by an on/off test per hook) but do not swallow their own errors: a silently dropped row would bias an arm. Only the live helper (V147-9) is fail-open.
 
@@ -567,7 +567,7 @@ git commit -m "feat(v147): confluence replay gate rows + run_backtest_range --re
 - Create: `tests/scripts/test_measure_arms_record_blocked.py`
 
 **Interfaces:**
-- Consumes: `gate_counterfactual.BlockedCandidate`, `simulate_blocked`, `CounterfactualResult` (V147-2); `blocked_recorder.gate_row`, `TRAIN_WINDOW`, `require_train_window`, `write_gate_rows` (V147-4); `plan_types.plan_to_dict` (exists, `swingbot/core/planning/plan_types.py:185`); `compression_context.COMPRESSION_MODES` (exists, `swingbot/core/scanning/compression_context.py:90`); `compression_research.offline_context()` (exists); `measure_arms.cached_universe()`, `load_frame()` (exist).
+- Consumes: `gate_counterfactual.BlockedCandidate`, `simulate_blocked`, `CounterfactualResult` (V147-2), `PIN_KEYS` (V147-3, additive; the `scan_params` shape `{"stop_mult", "tp2_r", "time_stop_days", "params"}`); `blocked_recorder.gate_row`, `TRAIN_WINDOW`, `require_train_window`, `write_gate_rows` (V147-4); `plan_types.plan_to_dict` (exists, `swingbot/core/planning/plan_types.py:185`); `compression_context.COMPRESSION_MODES` (exists, `swingbot/core/scanning/compression_context.py:90`); `compression_research.offline_context()` (exists); `measure_arms.cached_universe()`, `load_frame()` (exist).
 - Produces (ledger): `StrategyEngine.__init__(self, strategies=None, compression_context=None, *, blocked_sink: list | None = None, compression_allowlist: tuple | None = None)`; `compression_research.record_blocked_compression(frames, window, *, context, horizons=("2w",)) -> list[dict]`; CLI `measure_arms.py --record-blocked PATH [--from --to]` through `measure_arms.cli(argv=None) -> int` (early dispatch; `main` untouched) and `measure_arms.record_blocked_main(argv) -> int` (own parser).
 - Sink protocol (private to this task): `blocked_sink` receives `(arm, BlockedCandidate)` tuples, `arm` in `("blocked", "taken")`. A `blocked` candidate carries `reason` (the `decide_compression_entry` reason) and `plan=None` — `simulate_blocked` builds it on the truncated window. A `taken` candidate carries `reason=None` and `plan=plan_to_dict(plan)` of the plan the engine itself built (stamp merged) — `simulate_blocked` walks it as stored. One instrument, both arms.
 
@@ -631,6 +631,7 @@ def test_a_rejected_candidate_is_a_blocked_candidate_without_a_plan():
     assert (candidate.strategy, candidate.horizon, candidate.direction) == (COMPRESSION_SHORT, "2w", "bearish")
     assert candidate.signal_date == SIGNAL_DAY.isoformat()
     assert candidate.plan is None and candidate.margin is None
+    assert candidate.scan_params["stop_mult"] is None and candidate.scan_params["params"]   # the engine's call
     assert candidate.signal_close == pytest.approx(float(FULL_PATH["Close"].iloc[SIGNAL_POS]))
 
 
@@ -762,21 +763,27 @@ Expected: FAIL — `StrategyEngine.__init__() got an unexpected keyword argument
 
 - [ ] **Step 4: The engine sink**
 
-In `swingbot/core/backtesting/arms/strategy_engine.py`, after `RESEARCH_KNOB = ...`:
+In `swingbot/core/backtesting/arms/strategy_engine.py`, add `import dataclasses` to the stdlib imports (the module imports only `from dataclasses import dataclass` today), then after `RESEARCH_KNOB = ...`:
 
 ```python
 #: v147: decide reasons that are research-universe masks, not the compression gate -- never a gate row.
 _NOT_A_GATE_REASONS = frozenset({"not_pit_member"})
 
 
-def _sink_candidate(ticker, window, strategy, horizon_key, direction, *, reason=None, plan=None):
-    """v147: one compression candidate as a BlockedCandidate, from the signal-bar window only."""
-    from swingbot.core.backtesting.gate_counterfactual import BlockedCandidate
+def _sink_candidate(ticker, window, strategy, horizon_key, direction, params, *, reason=None, plan=None):
+    """v147: one compression candidate as a BlockedCandidate, from the signal-bar window only.
+
+    `scan_params` mirrors the engine's own build call exactly: no override pinned (the engine passes
+    none either) and the run's ScanParams, so a rebuilt blocked plan uses the constructor the taken
+    arm used. With DATA_DRIVEN_STOPS_ENABLED on, V147-3 refuses the rebuild (no-data), as the
+    replays refuse live-state flags."""
+    from swingbot.core.backtesting.gate_counterfactual import PIN_KEYS, BlockedCandidate
     from swingbot.core.planning.plan_types import plan_to_dict
+    scan_params = {**dict.fromkeys(PIN_KEYS), "params": dataclasses.asdict(params) if params is not None else None}
     return BlockedCandidate(
         ticker=ticker, gate="compression", reason=reason, source="strategy", strategy=strategy,
         horizon=horizon_key, direction=direction, signal_date=str(window.index[-1].date()),
-        plan=plan_to_dict(plan) if plan is not None else None,
+        plan=plan_to_dict(plan) if plan is not None else None, scan_params=scan_params,
         signal_close=float(window["Close"].iloc[-1]))
 ```
 
@@ -828,7 +835,7 @@ In `_candidate_plan`, two helper calls and no new branch:
             self._candidate = (ticker, str(window.index[-1].date()))
             stamp, reason = self._compression_stamp(ticker, window)
             if reason is not None:
-                self._note_blocked(ticker, window, strategy, horizon_key, direction, reason, counted)
+                self._note_blocked(ticker, window, strategy, horizon_key, direction, params, reason, counted)
                 if counted:
                     self._count(stamp, reason)
                 return None, stamp
@@ -839,26 +846,26 @@ and at its end:
 ```python
         if stamp:
             plan.entry_context = {**(plan.entry_context or {}), **stamp}
-        self._note_taken(ticker, window, strategy, horizon_key, direction, plan, counted)
+        self._note_taken(ticker, window, strategy, horizon_key, direction, params, plan, counted)
         return plan, stamp
 ```
 
 Add the two methods after `_candidate_plan`:
 
 ```python
-    def _note_blocked(self, ticker, window, strategy, horizon_key, direction, reason, counted) -> None:
+    def _note_blocked(self, ticker, window, strategy, horizon_key, direction, params, reason, counted) -> None:
         """v147 record-only: a counted compression reject to the sink (research masks skipped)."""
         if self.blocked_sink is None or not counted or reason in _NOT_A_GATE_REASONS:
             return
         self.blocked_sink.append(
-            ("blocked", _sink_candidate(ticker, window, strategy, horizon_key, direction, reason=reason)))
+            ("blocked", _sink_candidate(ticker, window, strategy, horizon_key, direction, params, reason=reason)))
 
-    def _note_taken(self, ticker, window, strategy, horizon_key, direction, plan, counted) -> None:
+    def _note_taken(self, ticker, window, strategy, horizon_key, direction, params, plan, counted) -> None:
         """v147 record-only: a counted compression plan that passed the decision, as the engine built it."""
         if self.blocked_sink is None or not counted or strategy != COMPRESSION_SHORT:
             return
         self.blocked_sink.append(
-            ("taken", _sink_candidate(ticker, window, strategy, horizon_key, direction, plan=plan)))
+            ("taken", _sink_candidate(ticker, window, strategy, horizon_key, direction, params, plan=plan)))
 ```
 
 Add one sentence to the module docstring: ``` v147: an optional `blocked_sink` records every counted compression decision (rejected -> "blocked", passed -> "taken") for the gate counterfactual; it never changes a trade or a counter. ```
