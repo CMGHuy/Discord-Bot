@@ -110,6 +110,7 @@ wrapper; it reads flags only from the shell segment that runs
 | `handoff` | 2 | slash-only (`/handoff`) | `skills-tools.md` — only the "Handing a plan to another session or account" paragraph of § Plan writing, by `grep` |
 | `screen` | 2 | slash-only (`/screen <idea>`) | `backtest-methodology.md` — Step 1 reads the `Funnel stages` section with `doc_section.py` |
 | `prereg` | 2 | slash-only (`/prereg <id>`) | `backtest-methodology.md` — Step 1 reads the `Funnel stages` and `Evidence, registry and ledger` sections with `doc_section.py` |
+| `data-check` | 2 | slash-only (`/data-check [<universe>]`), forked on haiku | `known-traps.md` — Step 1 reads the `Two OHLCV caches` and `Full-history cache` sections with `doc_section.py` |
 
 Tier 1 (integrity gates) and Tier 3 (seam briefings) are both
 model-invocable and share one mechanical shape contract — a `Trigger table`
@@ -121,7 +122,8 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry no Trigger table — they are
 checklists for an explicit slash command. `/deploy`, `/stable-snapshot`,
-`/backup-pull`, `/result-digest`, `/handoff`, `/screen` and `/prereg` also carry
+`/backup-pull`, `/result-digest`, `/handoff`, `/screen`, `/prereg` and
+`/data-check` also carry
 `disable-model-invocation: true`: the model never decides to run them. `/new-doc` and `/close-out` do not (the partner let
 Claude run both, 2026-10-08): Claude invokes `new-doc` right before creating a
 numbered spec or plan, and `close-out` once a plan's final full-suite task is

@@ -35,7 +35,7 @@ TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod"
                 "veteran-trader", "technical-analyst", "fundamental-analyst",
                 "staff-engineer", "quant-engineer", "senior-engineer"}   # each skill task appends its own name
 TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel",
-          "result-digest", "handoff", "screen", "prereg"}        # each ritual task appends its own name
+          "result-digest", "handoff", "screen", "prereg", "data-check"}        # each ritual task appends its own name
 # Rituals the partner lets Claude run on its own (2026-10-08). Still checklists
 # with no Trigger table; their description names the moment they run.
 MODEL_RUN_RITUALS = {"close-out", "new-doc", "panel"}
@@ -100,7 +100,10 @@ def test_model_invocable_skills_carry_a_trigger_table():
 # sonnet, not the spec's haiku: its trap preflight is judgement, and a missed
 # trap costs a whole implement/review loop. v154: result-digest runs one
 # script and returns its output untouched, which needs no judgement: haiku.
-FORKED = {"gate": "sonnet", "task-brief": "sonnet", "result-digest": "haiku"}
+# v155: data-check runs one script and reads its last line, which needs no
+# judgement: haiku.
+FORKED = {"gate": "sonnet", "task-brief": "sonnet", "result-digest": "haiku",
+          "data-check": "haiku"}
 
 
 @pytest.mark.parametrize("name", sorted(FORKED))
