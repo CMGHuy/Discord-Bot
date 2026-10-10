@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — display only. It renders verdicts other documents measure (v146, v147, the pre-registration ledger) and sets no threshold, gates nothing and re-runs nothing.
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, financial-advisor, quant-researcher
-**Status:** spec written 2026-10-09; panel review applied.
+**Status:** spec written 2026-10-09; panel review applied; plan: [`2026-10-09-v150-reports-research-workspaces_0-index.md`](../plans/2026-10-09-v150-reports-research-workspaces_0-index.md).
 **Depends on:** v146 (`load_latest()`, v146 spec `:297`) and v147 (`load_report()`, v147 spec `:270`) for the Reports tabs' data, plus the cross-spec requirements in "Contract with v146/v147". The Research workspace depends on nothing unbuilt.
 
 ## Why

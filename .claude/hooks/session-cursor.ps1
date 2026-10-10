@@ -42,11 +42,44 @@ try {
 
     # --- active plan: most recently modified plan file, task count ---
     $plan = Get-ChildItem 'docs/superpowers/plans/*.md' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notmatch '_\d+\.md$|_0-index\.md$' } |
+            Where-Object { $_.Name -notmatch '_\d+[a-z]?(-[^.]*)?\.md$' } |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($plan) {
         $n = @(Select-String -Path $plan.FullName -Pattern '^### Task ' -ErrorAction SilentlyContinue).Count
         Emit ("PLAN     : {0} ({1} tasks, {2} KB - grep one task, never read whole)" -f $plan.Name, $n, [int]($plan.Length / 1KB))
+    }
+
+    # --- unfinished plans: ledger ids with no ### Task on disk yet ---
+    # A plan cut off by tokens is resumed by whichever session (or account, or
+    # Codex) starts next, so the state is derived from the plan files, which all
+    # of them share. Plans without a "## Task ledger" (pre-two-phase) are skipped.
+    try {
+        $pdir = if ($env:SWINGBOT_PLANS_DIR) { $env:SWINGBOT_PLANS_DIR } else { 'docs/superpowers/plans' }
+        $groups = Get-ChildItem -LiteralPath $pdir -Filter '*.md' -File -ErrorAction SilentlyContinue |
+                  Group-Object { $_.Name -replace '_\d+[a-z]?(-[^.]*)?\.md$', '' -replace '\.md$', '' }
+        foreach ($g in $groups) {
+            $ledger = New-Object System.Collections.ArrayList
+            $written = @{}
+            $handoff = $null
+            foreach ($f in ($g.Group | Sort-Object Name)) {
+                $section = ''
+                foreach ($line in (Get-Content -LiteralPath $f.FullName)) {
+                    if ($line -match '^## (.+)$') { $section = $Matches[1].Trim(); if ($section -eq 'Handoff') { $handoff = $f.Name } }
+                    elseif ($section -eq 'Task ledger' -and $line -match '^\|\s*`?([A-Z][A-Za-z0-9-]*\d[a-z]?)`?\s*\|') { [void]$ledger.Add($Matches[1]) }
+                    if ($line -match '^### Task ([A-Za-z0-9-]+)') { $written[$Matches[1].TrimEnd(':')] = $true }
+                }
+            }
+            if ($ledger.Count -eq 0) { continue }
+            $missing = @($ledger | Where-Object { -not $written.ContainsKey($_) })
+            if ($missing.Count -eq 0) { continue }
+            $span = if ($missing.Count -gt 1) { "$($missing[0])..$($missing[-1])" } else { $missing[0] }
+            Emit ("PLAN WIP : {0} -- {1}/{2} tasks written, missing {3}" -f $g.Name, ($ledger.Count - $missing.Count), $ledger.Count, $span)
+            Emit  "           Resume it before any new plan: plan-writer mode=part <N> per incomplete part (skills-tools.md, Plan writing)."
+            if ($handoff) { Emit "           Handoff notes: '## Handoff' in $handoff - read them first." }
+        }
+    }
+    catch {
+        Emit "PLAN WIP : (check failed: $($_.Exception.Message))"
     }
 
     # --- git ---

@@ -156,7 +156,8 @@ def load_rows(*, trade_log=None, journal=None) -> list[dict]:
     tl = trade_log if trade_log is not None else TradeLog()
     js = journal if journal is not None else JournalStore()
 
-    trades = tl.get_trades(status=None, limit=None) or []
+    from swingbot.core.tracking.origin import is_regular
+    trades = [t for t in (tl.get_trades(status=None, limit=None) or []) if is_regular(t)]
     try:
         entries = js.entries()
     except Exception:

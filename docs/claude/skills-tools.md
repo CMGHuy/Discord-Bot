@@ -187,14 +187,16 @@ haiku -- reviewing means judging.
 
 ## Which agent for what (v107)
 
-Serial, one at a time. Opus (main session) decides; agents do.
+Serial, one at a time — except plan parts (§ Plan writing below). Opus
+(main session) decides; agents do.
 
 | Work | Agent | Model |
 |---|---|---|
 | Implement one plan task from `/task-brief` | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
 | Review that task's commits | `task-reviewer` | sonnet |
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
-| Draft a plan from an approved spec | `plan-writer` | opus |
+| Gather a plan's code context into one brief | `plan-briefer` | sonnet |
+| Draft a plan from an approved spec — index, then parts in parallel | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |
 | Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
 | Full or fast suite run | `test-runner` | sonnet |
@@ -209,6 +211,65 @@ Opus inline, each step logged in `.superpowers/sdd/progress.md`.
 Brainstorming never goes to an agent — it needs the partner. `/gate` and
 `/task-brief` run forked on sonnet, so their tool output never reaches the
 Opus context.
+
+### Plan writing (two phases)
+
+Measured over nine plan-writer runs (v108–v145): wall time scales with what
+is written in one serial context — 13 min for a 70 KB plan, 51–55 min for
+170–320 KB — and tool execution is under 10% of it. So the plan is written
+in parallel parts, to disk as it goes:
+
+0. Dispatch `plan-briefer` with the spec path and
+   `.superpowers/briefs/<plan base>.md`. Exploration was most of the old
+   cost — 50–390 one-line Opus turns per run, each re-reading a growing
+   context, repeated by every part writer. On Sonnet, once, it is one file
+   every writer reads. The brief is gitignored but in the shared working
+   tree, so a resuming session or account reuses it (re-brief if missing).
+1. Dispatch `plan-writer` with `mode=index`, the spec path and the brief path. It writes the
+   index first (header, constraints, parallelisation, a task ledger fixing
+   every cross-task file and contract). A single-file plan (≤ ~1300 lines)
+   comes back `DONE` from this one run.
+2. On `PARTS`, dispatch one `plan-writer` per part with `mode=part <N>`, the
+   spec, index and brief paths — **all in one message**, so they run
+   concurrently. This is the standing exception to serial dispatch.
+   **Commit the index as soon as phase 1 returns**
+   (`docs(vN): plan index -- parts pending`), and each part as it returns, so
+   a session that runs out of tokens leaves committed, resumable work.
+3. When all return, run `python scripts/dev/plan_lint.py <index>` — header,
+   ledger vs tasks, `Model:` lines, the 1500-line cap, `Modify:` paths,
+   placeholders, in one call. It must print `PASS`; then review and commit.
+   Writers run it on their own files before returning, so it replaces the
+   validation scripts they used to improvise.
+
+Every writer appends one task per tool call, so the files fill visibly; a
+part that finds a wrong shared contract returns `BLOCKED:` instead of
+diverging from the ledger.
+
+**Never more than 2 plans being written at once in one session.** A plan
+counts from its `mode=index` dispatch until all its parts are committed; a
+third waits for one to finish. Its parts still fan out in parallel.
+
+**Running out of tokens is resumed, never skipped.** Any plan whose ledger
+lists ids missing from its part files is unfinished: re-dispatch the
+`mode=part <N>` writer for each incomplete part. The writer appends from the
+first missing id and leaves tasks already on disk alone. An unfinished plan
+counts toward the 2-plan limit.
+
+**Handing a plan to another session or account.** Progress lives in the
+repo, never in account memory: another account (or Codex) has its own
+config dir and sees none of this session's memory or context.
+- *Detection is automatic.* The SessionStart hook (`session-cursor.ps1`,
+  shared by Claude and Codex) prints `PLAN WIP` for every plan whose
+  `## Task ledger` names ids with no `### Task` on disk, with the resume
+  command. Resume those before starting anything new.
+- *Decisions go in the plan, as they are made.* Any partner answer, a
+  `BLOCKED:` resolution or a deviation from the spec is written into a
+  `## Handoff` section of the index (single file: of the plan) at once — not
+  only into the conversation. The hook points the next session at it.
+- *Commit as you go.* Index on return, each part on return, and — when the
+  usage watcher warns (≥ 90%) or the session is about to stop — the files on
+  disk right away as `docs(vN): plan WIP -- <k>/<n> tasks`. A WIP commit is
+  never reviewed or closed out; the resuming session finishes it.
 
 For small edits (a few lines of markdown or config), work inline: every agent
 spawn is a cold start that costs more than the edit.

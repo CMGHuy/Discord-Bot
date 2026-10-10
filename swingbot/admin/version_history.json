@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-09 10:56:03 UTC",
+  "generated_at": "2026-10-09 21:22:30 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.22.0",
-    "bot": "2.2.3"
+    "bot": "2.3.0"
   },
   "releases": [
     {
@@ -1496,6 +1496,19 @@
       "versions": {
         "ui": "1.22.0",
         "bot": "2.2.3"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-09",
+      "last_seen": "2026-10-09",
+      "commit": "c1b5ca83",
+      "subject": "release(bot): 2.3.0 -- next-session outlook lane (inert, NEXT_SESSION_SCAN_ENABLED=false)",
+      "versions": {
+        "ui": "1.22.0",
+        "bot": "2.3.0"
       },
       "changed": [
         "bot"

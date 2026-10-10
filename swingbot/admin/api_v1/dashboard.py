@@ -219,7 +219,7 @@ def _live_positions(open_trades: list[dict]) -> list[dict]:
 def dashboard():
     mode = _scope()
     tl = TradeLog()
-    from swingbot.core.tracking.ledger import is_main, split_by_ledger
+    from swingbot.core.tracking.ledger import is_main, is_weak, split_by_ledger
     all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
     # Open-side figures (open_pnl_pct, the open_trades chip, avg_confidence)
     # must live on the same ledger as `realized` below -- unfiltered here
@@ -298,5 +298,5 @@ def dashboard():
             mode,
         ),
         "realized_weak": _realized(
-            [t for t in all_raw if not is_main(t) and t.get("status") in ("win", "loss", "closed")], mode),
+            [t for t in all_raw if is_weak(t) and t.get("status") in ("win", "loss", "closed")], mode),
     })

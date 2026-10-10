@@ -100,12 +100,14 @@ plans = register(
         sa.Column("horizon_key", sa.Text, nullable=False),
         sa.Column("status", sa.Text, nullable=False),
         sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False),
+        sa.Column("valid_session", sa.Text),
         *standard_columns(),
         sa.Index("plans_status_idx", "status"),
         sa.Index("plans_ticker_idx", "ticker"),
+        sa.Index("plans_valid_session_idx", "valid_session"),
         sa.Index("plans_doc_gin", "doc", postgresql_using="gin"),
     ),
-    ("plan_id", "ticker", "strategy", "horizon_key", "status", "created_at"),
+    ("plan_id", "ticker", "strategy", "horizon_key", "status", "created_at", "valid_session"),
 )
 
 starred_plans = register(sa.Table(
@@ -232,6 +234,7 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "horizon_key": "per-horizon plan filters",
         "status": "plans_status_idx; open-plan polling every tick",
         "created_at": "age ordering on the Plans screen; NOT NULL",
+        "valid_session": "plans_valid_session_idx; the v144 wrap-up and outlook read one session's plans",
     },
     "starred_plans": {"plan_id": "unique key and cascading foreign key into plans"},
     "account": {"key": "singleton key ('config')"},

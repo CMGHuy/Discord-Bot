@@ -16,6 +16,13 @@ _LOCK = threading.Lock()
 _OPEN_STATUSES = {PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL}
 
 
+def _normalised(record: dict) -> dict:
+    """A plans row with created_at as the ISO string TradePlanV2 stores."""
+    if isinstance(record.get("created_at"), datetime):
+        record["created_at"] = record["created_at"].isoformat()
+    return record
+
+
 class PlanStore:
     @staticmethod
     def _persist(plan_dict: dict, *, conn=None) -> None:
@@ -27,11 +34,7 @@ class PlanStore:
     def _all() -> dict[str, dict]:
         """Map plan ids to records from the plans table."""
         from swingbot.core.db.repositories.plans import plans_repo
-        records = plans_repo().list_all()
-        for record in records:
-            if isinstance(record.get("created_at"), datetime):
-                record["created_at"] = record["created_at"].isoformat()
-        return {record["plan_id"]: record for record in records}
+        return {record["plan_id"]: _normalised(record) for record in plans_repo().list_all()}
 
     def get_record(self, plan_id: str) -> dict | None:
         """The raw plan dict for a plan id, or None."""
@@ -61,3 +64,10 @@ class PlanStore:
 
     def all(self) -> list[TradePlanV2]:
         return [plan_from_dict(d) for d in self._all().values()]
+
+    def for_session(self, day) -> list[TradePlanV2]:
+        """v144: the outlook plans valid for one NYSE session (`day`: a date or
+        an ISO string), oldest first. One indexed query, not a full scan."""
+        from swingbot.core.db.repositories.plans import plans_repo
+        key = day.isoformat() if hasattr(day, "isoformat") else str(day)
+        return [plan_from_dict(_normalised(record)) for record in plans_repo().for_session(key)]

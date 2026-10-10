@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — three guards that stop the codebase silently getting worse. They issue no signal, move no threshold and change no live path; any effect on expectancy is indirect (fewer regressions in the scan and backtest code) and is not claimed.
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, senior-engineer
-**Status:** spec written 2026-10-09; no plan yet.
+**Status:** spec written 2026-10-09; plan: [`2026-10-09-v149-hygiene-gates.md`](../plans/2026-10-09-v149-hygiene-gates.md).
 
 ## Why
 

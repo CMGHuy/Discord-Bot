@@ -15,6 +15,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.commands.views import PlanActionView
 from swingbot.core.scanning.embeds import build_embed
 from swingbot.core.market.session import market_today
+from swingbot.core.tracking.origin import is_regular
 
 _plan_store = PlanStore()
 
@@ -41,7 +42,8 @@ def soak_lines(strategy: str, verdict: dict, badge) -> list[str]:
 async def soak_cmd(ctx, *, strategy: str):
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
-    plans = [plan for plan in PlanStore().all() if plan.source == "strategy" and plan.strategy == strategy]
+    plans = [plan for plan in PlanStore().all()
+             if plan.source == "strategy" and plan.strategy == strategy and is_regular(plan)]
     if not plans:
         await ctx.send(f"No strategy-sourced plans for `{strategy}` yet (is STRATEGY_ALERTS_MODE off?).")
         return
