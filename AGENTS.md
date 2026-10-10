@@ -249,8 +249,9 @@ Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 (extract one plan task with its trap preflight), `deploy` (Hetzner deploy
 sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
-backup pull) and `result-digest` (two backtest `--json` files through
-`compare_backtest_json.py`, output returned verbatim, never judged). `new-doc`
+backup pull), `result-digest` (two backtest `--json` files through
+`compare_backtest_json.py`, output returned verbatim, never judged) and
+`handoff` (write the plan's `## Handoff` block before a session stops). `new-doc`
 (new spec or plan) and `close-out` (plan close-out) may
 also be run implicitly: `new-doc` right before creating a numbered spec or plan,
 `close-out` once a plan's final full-suite task is green. `panel` (dispatch

@@ -103,6 +103,7 @@ heading).
 | `stable-snapshot` | 2 | slash-only (`/stable-snapshot`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 | `backup-pull` | 2 | slash-only (`/backup-pull`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 | `result-digest` | 2 | slash-only (`/result-digest`) | none — runs `scripts/backtest/compare_backtest_json.py` on the two files it is given, reads no `docs/claude/` file |
+| `handoff` | 2 | slash-only (`/handoff`) | `skills-tools.md` — only the "Handing a plan to another session or account" paragraph of § Plan writing, by `grep` |
 
 Tier 1 (integrity gates) and Tier 3 (seam briefings) are both
 model-invocable and share one mechanical shape contract — a `Trigger table`
@@ -114,8 +115,8 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry no Trigger table — they are
 checklists for an explicit slash command. `/deploy`, `/stable-snapshot`,
-`/backup-pull` and `/result-digest` also carry `disable-model-invocation: true`: the model never
-decides to run them. `/new-doc` and `/close-out` do not (the partner let
+`/backup-pull`, `/result-digest` and `/handoff` also carry
+`disable-model-invocation: true`: the model never decides to run them. `/new-doc` and `/close-out` do not (the partner let
 Claude run both, 2026-10-08): Claude invokes `new-doc` right before creating a
 numbered spec or plan, and `close-out` once a plan's final full-suite task is
 green and its results are recorded. `MODEL_RUN_RITUALS` in
