@@ -42,6 +42,9 @@ These fill gaps the spec leaves to the plan.
 5. **When a look is recorded:** only after the seven lines printed for a closed trade. A missing trade, an open trade, or an unreachable production writes no row.
 6. **Earnings source:** production's `market_data/earnings/<T>.csv` through `CsvSource` only; no CSV for the ticker prints `not recorded`. `LiveSource` (recent reports only, network) and `risk_features["days_to_earnings"]` (never populated) are not used.
 7. **The manual run (V156-3) is typed by the partner** as `/trade-autopsy <id>` on the operator machine (the skill is slash-only, so no agent can invoke it, and the wrapper exists only there). The controller picks the trade id with one read-only query and records the output under `## Results`.
+8. **Line 2 is labelled "Fill vs trigger"**, not "gap at the open": no session-open price is stored, so the label names what is measured. A true open-gap figure needs its own spec.
+
+Decisions 3, 5, 6 and 8 were confirmed by the partner on 2026-10-10.
 
 ## Parallelisation
 
@@ -418,7 +421,7 @@ Create `.claude/skills/trade-autopsy/SKILL.md` with exactly this content (79 lin
 ```markdown
 ---
 name: trade-autopsy
-description: Review one closed trade in a fixed, measured shape (plan as alerted, fill versus plan, placeability, excursions, exit, context) and record the look. Slash-only, run as /trade-autopsy followed by a trade id.
+description: Review one closed trade in a fixed, measured shape (plan as alerted, fill vs trigger, placeability, excursions, exit, context) and record the look. Slash-only, run as /trade-autopsy followed by a trade id.
 disable-model-invocation: true
 context: fork
 model: sonnet
@@ -458,7 +461,7 @@ not exist; the trade's `status` is `open` (excursions are not final).
    `take_profit` and `target2`, `horizon_key`, `strategy`,
    `confidence_level`, alert time `opened_at`. Never `trade["entry"]` here: a
    stop-entry fill overwrote it. No `plan_id`: entry `not recorded`.
-2. **Fill versus plan** -- fill `plan.entry_price` against `trigger_price`
+2. **Fill vs trigger** -- fill `plan.entry_price` against `trigger_price`
    (no session-open price is stored, so this is not the open gap); fill time
    is the `at` of the first `ACTIVE` entry in `status_history` for a stop
    entry, `not recorded` for a market entry; slippage in R is the signed

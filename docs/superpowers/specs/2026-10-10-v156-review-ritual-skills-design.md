@@ -124,7 +124,7 @@ From `.superpowers/briefs/2026-10-10-v156-trade-autopsy.md`:
    `risk_features["days_to_earnings"]` is never populated and is not used);
    dollar volume yes, with bars sliced to `opened_at` first (no lookahead).
 
-Output changes: line 2's "gap at the open" becomes fill versus trigger (no
+Output changes: line 2 is renamed **Fill vs trigger** (partner, 2026-10-10) and its "gap at the open" becomes fill versus trigger (no
 session-open price is stored); fill time prints `not recorded` for
 market-entry plans. The closing line reads `N=1` so it passes
 `test_new_skills_restate_no_thresholds`.
