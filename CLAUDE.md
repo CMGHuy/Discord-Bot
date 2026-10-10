@@ -11,7 +11,7 @@ the bottom) — read the relevant one before working in that area.
 A Discord swing-trade alert bot ("swingbot"): scans a stock/ETF watchlist for
 multi-method-confirmed support/resistance setups across swing horizons
 (`strategy_types.py:HORIZONS` is authoritative) and posts trade-plan alerts
-with charts. **Paper trades only** — it never places orders. Python 3.11+,
+with charts. **Paper trades only** — it never places orders (roadmap: eToro demo, see below). Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest; JSON under `data/`.
 
 **"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine. **Always connect through `scripts/ops/ssh-hetzner.sh`** (uncommitted; WSL key) — never a raw `ssh`/`scp` or another key path: `bash scripts/ops/ssh-hetzner.sh "<cmd>"`, piping stdin for a script (`... "cd /opt/swing-bot && docker compose exec -T bot python -" < script.py`).
@@ -21,6 +21,15 @@ discord.py, pandas/numpy, yfinance, mplfinance, pytest; JSON under `data/`.
 Entry points: `bot.py` and `admin_ui.py` (Flask API + Angular SPA in
 `frontend/`), two Docker containers off one image (`docs/deploy/`). `.env` is
 the single config source, hot-reloaded via SIGHUP (schema: `swingbot/config.py`).
+
+## eToro roadmap: demo next, real money much later
+
+Stage 1 (near): issue trade plans to an **eToro demo account** via the Public API
+alongside the bomeo-capital.com page. Stage 2 (far): real trades, only after
+consecutive profitable months and better win rate / profit / loss. Until the
+partner says otherwise: **demo only, never `account: real`**; keys live in
+`.env` (`ETORO_USER_KEY`, `ETORO_API_KEY`, section "eToro Paper Trading"), unused
+so far. Skill: `etoro-public-api-operations`. Detail: `docs/claude/etoro-roadmap.md`.
 
 ## Far-off scheduled work runs on production
 
@@ -181,3 +190,4 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | `schema-evolution.md` | changing a table's shape or a stored record's fields — add, rename, drop, promote; no read-time upcasting |
 | `persona.md` | deciding how to question the partner, or what bar a change must meet |
 | `skills-tools.md` | picking a skill or agent, dispatching subagents, disabled plugins, driving a browser |
+| `etoro-roadmap.md` | touching eToro integration, its keys, or anything that places an order |
