@@ -450,11 +450,37 @@ def _with_readers(repo: pathlib.Path) -> pathlib.Path:
      ["tests/dev/test_doc_section.py", "tests/hooks/test_codex_mirror.py",
       "tests/hooks/test_doc_sections.py", "tests/hooks/test_guardrails.py",
       "tests/hooks/test_role_skills.py"]),
+    ("tests/hooks/fixtures/broken_frontmatter_SKILL.md",
+     ["tests/dev/test_skill_frontmatter.py", "tests/hooks/test_codex_mirror.py",
+      "tests/hooks/test_skill_shape.py"]),
 ])
 def test_data_read_path_routes_to_its_readers(sel, tmp_path, path, expected):
     """Partner decision 2026-09-29: the widening rule beats the inert list."""
-    result = sel.select([path], _with_readers(_repo(tmp_path)))
+    repo = _with_readers(_repo(tmp_path))
+    for target in expected:  # readers _with_readers does not create
+        if not target.endswith("/"):
+            (repo / target).parent.mkdir(parents=True, exist_ok=True)
+            (repo / target).write_text("X = 1\n", encoding="utf-8")
+    result = sel.select([path], repo)
     assert (result.full, result.targets) == (False, expected)
+
+
+def test_path_loaded_python_helper_selects_the_test_that_loads_its_importer(
+        sel, tmp_path):
+    """sync_codex.py does `import skill_frontmatter` and test_codex_mirror
+    loads sync_codex.py by path, so no import graph links the helper to it."""
+    repo = _with_readers(_repo(tmp_path))
+    for rel, body in {
+        "scripts/dev/skill_frontmatter.py": "X = 1\n",
+        "tests/dev/test_skill_frontmatter.py":
+            "from scripts.dev.skill_frontmatter import X\n",
+    }.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(body, encoding="utf-8")
+    result = sel.select(["scripts/dev/skill_frontmatter.py"], repo)
+    assert not result.full
+    assert "tests/hooks/test_codex_mirror.py" in result.targets
+    assert "tests/dev/test_skill_frontmatter.py" in result.targets
 
 
 @pytest.mark.parametrize("path", ["requirements.txt", ".github/dependabot.yml"])

@@ -270,6 +270,10 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tests/hooks/fixtures/broken_frontmatter_SKILL.md",
      ("tests/dev/test_skill_frontmatter.py", "tests/hooks/test_codex_mirror.py",
       "tests/hooks/test_skill_shape.py")),
+    # sync_codex.py does a bare `import skill_frontmatter` and test_codex_mirror
+    # loads sync_codex.py by path, so no import graph links them (v154). An
+    # exact Python key is the one Python form this table accepts.
+    ("scripts/dev/skill_frontmatter.py", ("tests/hooks/test_codex_mirror.py",)),
     # Every testrun.py command line deploy.yml runs is parsed for real.
     (".github/workflows/", ("tests/dev/test_testrun_ci_invocations.py",)),
     # Every spec past v140 must carry a valid **Screen:** header line, and
@@ -318,11 +322,11 @@ def _is_python(path: str) -> bool:
 
 
 def _readers_of(path: str) -> tuple[str, ...]:
-    """DATA_READERS targets for a non-Python path, else ()."""
-    if _is_python(path):
-        return ()
+    """DATA_READERS targets for a path, else (). A Python path matches an
+    exact key only: a prefix row would hide it from the import graph."""
+    python = _is_python(path)
     for key, targets in DATA_READERS:
-        if path == key or (key.endswith("/") and path.startswith(key)):
+        if path == key or (not python and key.endswith("/") and path.startswith(key)):
             return targets
     return ()
 
