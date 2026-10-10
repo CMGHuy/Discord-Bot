@@ -34,7 +34,8 @@ TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod"
                 "quant-researcher", "risk-manager", "financial-advisor",
                 "veteran-trader", "technical-analyst", "fundamental-analyst",
                 "staff-engineer", "quant-engineer", "senior-engineer"}   # each skill task appends its own name
-TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel"}        # each ritual task appends its own name
+TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel",
+          "result-digest"}        # each ritual task appends its own name
 # Rituals the partner lets Claude run on its own (2026-10-08). Still checklists
 # with no Trigger table; their description names the moment they run.
 MODEL_RUN_RITUALS = {"close-out", "new-doc", "panel"}
@@ -97,8 +98,9 @@ def test_model_invocable_skills_carry_a_trigger_table():
 
 # v107: mechanical slash skills run forked on a cheaper model. task-brief is
 # sonnet, not the spec's haiku: its trap preflight is judgement, and a missed
-# trap costs a whole implement/review loop.
-FORKED = {"gate": "sonnet", "task-brief": "sonnet"}
+# trap costs a whole implement/review loop. v154: result-digest runs one
+# script and returns its output untouched, which needs no judgement: haiku.
+FORKED = {"gate": "sonnet", "task-brief": "sonnet", "result-digest": "haiku"}
 
 
 @pytest.mark.parametrize("name", sorted(FORKED))
@@ -164,3 +166,25 @@ def test_the_reader_rejects_the_frontmatter_that_shipped_broken():
 def test_every_description_is_read_without_its_quotes(path):
     description = _read_skill(path.name)[0]["description"]
     assert description and description[0] != '"' and description[-1] != '"'
+
+
+# v154: the fixed line /result-digest ends every reply with. The figures it
+# hands back are derived from two files, never the live book.
+DIGEST_DISCLAIMER = ("Derived by compare_backtest_json.py from the named files; "
+                     "not live-book figures — re-derive per pooled-numbers before "
+                     "quoting in a spec, plan or commit.")
+
+
+def test_result_digest_returns_the_script_output_verbatim():
+    """v154: a small model paraphrases figures. The skill runs the one script
+    on both files, hands its output back untouched, explains the script's
+    hard-coded header and missing window, and ends with the disclaimer."""
+    _, body = _read_skill("result-digest")
+    assert "python scripts/backtest/compare_backtest_json.py <a.json> <b.json>" in body
+    assert "$ARGUMENTS" in body
+    assert "**verbatim**" in body
+    assert "never call a result a" in body
+    assert '"=== v35 AVWAP comparison ===" line is the script\'s own' in body
+    assert "the script prints none" in body
+    assert "no figures anywhere in the reply" in body
+    assert DIGEST_DISCLAIMER in body
