@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-09 21:22:30 UTC",
+  "generated_at": "2026-10-10 06:50:31 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.22.0",
-    "bot": "2.3.0"
+    "bot": "2.3.1"
   },
   "releases": [
     {
@@ -1509,6 +1509,19 @@
       "versions": {
         "ui": "1.22.0",
         "bot": "2.3.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "last_seen": "2026-10-10",
+      "commit": "ab08e170",
+      "subject": "release(bot): 2.3.1 -- admin tape cache and bounded Yahoo download lock (v132)",
+      "versions": {
+        "ui": "1.22.0",
+        "bot": "2.3.1"
       },
       "changed": [
         "bot"
