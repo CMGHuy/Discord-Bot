@@ -12,6 +12,12 @@
 
 **Tech Stack:** Python 3.11, Flask, pytest; Angular signals, vitest.
 
+## Progress (2026-10-10)
+
+- P1–P3 are implemented on `codex/v132-admin-download-pileup-integration`; the concurrency and throttle review findings were repaired in `7107f023`.
+- P4 local verification: `python scripts/dev/testrun.py full` passed with 7,626 passed, 3 skipped, 0 failed, 0 xfailed. `npx ng test --watch=false` passed 2,689 tests; `npx ng build` passed. Bot `2.3.1` and UI `1.22.1` are committed with regenerated version history; the post-bump version-matrix test passed 13 tests.
+- P4 remains open for the merge to `main`, Hetzner deployment, ten-minute production check, and close-out. The shared `main` checkout has another session's uncommitted setup files. Production deployment requires an explicit request under `AGENTS.md`.
+
 ## Global Constraints
 
 - The scanner, backtests and every `allow_stale=False` caller keep today's behaviour exactly: no cache, unlimited lock wait.
