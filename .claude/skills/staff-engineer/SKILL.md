@@ -1,6 +1,6 @@
 ---
 name: staff-engineer
-description: Use when reviewing a spec, plan or diff from the staff-engineer seat -- cross-cutting design: seams between swingbot/core packages, schema migrations, production VM operations, blast radius and long-run maintenance cost -- or when the expert-reviewer agent is dispatched with role=staff-engineer. Not for line-level quality inside one module (senior-engineer) and not for backtest plumbing (quant-engineer).
+description: "Use when reviewing a spec, plan or diff from the staff-engineer seat -- cross-cutting design: seams between swingbot/core packages, schema migrations, production VM operations, blast radius and long-run maintenance cost -- or when the expert-reviewer agent is dispatched with role=staff-engineer. Not for line-level quality inside one module (senior-engineer) and not for backtest plumbing (quant-engineer)."
 ---
 
 # Staff engineer

@@ -1,6 +1,6 @@
 ---
 name: test-runner
-description: Runs the pytest suite in an isolated context and returns only the verdict. Use for any full-suite or fast-tier run so ~1150 progress lines and any tracebacks never enter the main context.
+description: "Runs the pytest suite in an isolated context and returns only the verdict. Use for any full-suite or fast-tier run so ~1150 progress lines and any tracebacks never enter the main context."
 tools: Bash, Read, Grep
 model: sonnet
 ---

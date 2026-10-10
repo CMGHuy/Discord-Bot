@@ -1,6 +1,6 @@
 ---
 name: task-reviewer
-description: Reviews one implemented plan task's commits against its /task-brief -- spec compliance first, then code quality and complexity -- and returns numbered findings or CLEAN. Read-only. Use after task-implementer so review runs on Sonnet and only findings reach Opus.
+description: "Reviews one implemented plan task's commits against its /task-brief -- spec compliance first, then code quality and complexity -- and returns numbered findings or CLEAN. Read-only. Use after task-implementer so review runs on Sonnet and only findings reach Opus."
 tools: Bash, Read, Grep, Glob, Skill
 model: sonnet
 skills: [no-lookahead, senior-engineer]

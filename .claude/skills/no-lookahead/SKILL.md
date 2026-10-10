@@ -1,6 +1,6 @@
 ---
 name: no-lookahead
-description: Use when editing or reviewing entry-signal, feature or indicator computation under swingbot/core/market/, swingbot/core/edge/, swingbot/core/scanning/ or swingbot/core/planning/ -- anything that decides what a bar knew at the time. Catches lookahead bias, which inflates every downstream backtest silently. Not for chart rendering, embeds, admin UI or persistence code.
+description: "Use when editing or reviewing entry-signal, feature or indicator computation under swingbot/core/market/, swingbot/core/edge/, swingbot/core/scanning/ or swingbot/core/planning/ -- anything that decides what a bar knew at the time. Catches lookahead bias, which inflates every downstream backtest silently. Not for chart rendering, embeds, admin UI or persistence code."
 ---
 
 # No-lookahead

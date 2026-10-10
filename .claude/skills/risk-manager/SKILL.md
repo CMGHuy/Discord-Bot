@@ -1,6 +1,6 @@
 ---
 name: risk-manager
-description: Use when reviewing a spec, plan or diff from the risk-manager seat -- the 2% dollar-risk cap, position sizing, portfolio heat, correlated exposure and stop placement -- or when the expert-reviewer agent is dispatched with role=risk-manager. Not for whether a stop survives market noise in practice (veteran-trader) and not for account suitability or tax drag (financial-advisor).
+description: "Use when reviewing a spec, plan or diff from the risk-manager seat -- the 2% dollar-risk cap, position sizing, portfolio heat, correlated exposure and stop placement -- or when the expert-reviewer agent is dispatched with role=risk-manager. Not for whether a stop survives market noise in practice (veteran-trader) and not for account suitability or tax drag (financial-advisor)."
 ---
 
 # Risk manager

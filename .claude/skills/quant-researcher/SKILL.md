@@ -1,6 +1,6 @@
 ---
 name: quant-researcher
-description: Use when judging, from the quant-researcher seat, whether a statistical claim holds up -- an ExpR or win-rate lift, a grid winner, a pre-registration, a screen verdict or a badge tier -- in a spec, plan, diff or results doc, or when the expert-reviewer agent is dispatched with role=quant-researcher. Checks sample size, overfitting, multiple comparisons and pre-registration discipline. Not for lookahead or cache bugs in code (quant-engineer) and not for whether a setup can be traded (veteran-trader).
+description: "Use when judging, from the quant-researcher seat, whether a statistical claim holds up -- an ExpR or win-rate lift, a grid winner, a pre-registration, a screen verdict or a badge tier -- in a spec, plan, diff or results doc, or when the expert-reviewer agent is dispatched with role=quant-researcher. Checks sample size, overfitting, multiple comparisons and pre-registration discipline. Not for lookahead or cache bugs in code (quant-engineer) and not for whether a setup can be traded (veteran-trader)."
 ---
 
 # Quant researcher

@@ -1,6 +1,6 @@
 ---
 name: pooled-numbers
-description: Use when about to state a pooled expectancy, ExpR, win rate, sample size N, R-multiple or strategy badge tier -- in a message, a spec, a plan or a commit. Requires re-deriving the figure from the live book rather than quoting one from a document. Not for a figure the user just supplied, and not for a number being read back from a file open in this context.
+description: "Use when about to state a pooled expectancy, ExpR, win rate, sample size N, R-multiple or strategy badge tier -- in a message, a spec, a plan or a commit. Requires re-deriving the figure from the live book rather than quoting one from a document. Not for a figure the user just supplied, and not for a number being read back from a file open in this context."
 ---
 <!-- GENERATED from .claude/skills/pooled-numbers/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

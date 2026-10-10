@@ -1,6 +1,6 @@
 ---
 name: symbol-verifier
-description: Checks whether functions, methods, config fields and module paths named in a plan or brief actually exist in the codebase. Use before implementing any plan task that references symbols you have not personally read.
+description: "Checks whether functions, methods, config fields and module paths named in a plan or brief actually exist in the codebase. Use before implementing any plan task that references symbols you have not personally read."
 tools: Bash, Grep, Glob, Read
 model: haiku
 ---

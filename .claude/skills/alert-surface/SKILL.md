@@ -1,6 +1,6 @@
 ---
 name: alert-surface
-description: Use when editing the alert surface -- swingbot/core/scanning/engine.py, scan_embeds, embeds.py, or anything rendering a Discord alert or trade plan. This area has two OHLCV caches, legacy shims that silently no-op, and empty tables that are measured answers rather than stubs. Not for chart image generation and not for the admin UI.
+description: "Use when editing the alert surface -- swingbot/core/scanning/engine.py, scan_embeds, embeds.py, or anything rendering a Discord alert or trade plan. This area has two OHLCV caches, legacy shims that silently no-op, and empty tables that are measured answers rather than stubs. Not for chart image generation and not for the admin UI."
 ---
 
 # Alert surface

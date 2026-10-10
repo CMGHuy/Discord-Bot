@@ -1,6 +1,6 @@
 ---
 name: task-implementer
-description: Implements exactly one plan task from a /task-brief output, test-first, in the worktree it is given, and returns a short report. Use for plan-task implementation so the work runs on Sonnet and only the summary reaches the Opus controller.
+description: "Implements exactly one plan task from a /task-brief output, test-first, in the worktree it is given, and returns a short report. Use for plan-task implementation so the work runs on Sonnet and only the summary reaches the Opus controller."
 tools: Bash, Read, Edit, Write, Grep, Glob, Skill
 model: sonnet
 skills: [superpowers:test-driven-development, superpowers:verification-before-completion]

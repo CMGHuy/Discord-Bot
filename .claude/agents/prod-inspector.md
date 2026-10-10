@@ -1,6 +1,6 @@
 ---
 name: prod-inspector
-description: Answers one read-only question about the production Hetzner VM -- logs, container status, disk, last scan -- and returns a short summary with excerpts. Never changes anything. Use for any production investigation so log volume stays out of the Opus context.
+description: "Answers one read-only question about the production Hetzner VM -- logs, container status, disk, last scan -- and returns a short summary with excerpts. Never changes anything. Use for any production investigation so log volume stays out of the Opus context."
 tools: Bash, Read, Grep
 model: haiku
 ---

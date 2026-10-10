@@ -1,6 +1,6 @@
 ---
 name: etoro-public-api-operations
-description: Operate the eToro Public API through the etoro-public-api-mcp MCP server. Use when the user wants to discover eToro Public API routes, understand what a route does, or execute a Public API operation (get portfolio, search instruments, open or close a trade, place or cancel an order, transfer money, etc.). Covers MCP installation, route discovery, authentication, demo vs real accounts, request building, execution, and safety rules for money-moving operations.
+description: "Operate the eToro Public API through the etoro-public-api-mcp MCP server. Use when the user wants to discover eToro Public API routes, understand what a route does, or execute a Public API operation (get portfolio, search instruments, open or close a trade, place or cancel an order, transfer money, etc.). Covers MCP installation, route discovery, authentication, demo vs real accounts, request building, execution, and safety rules for money-moving operations."
 ---
 
 # eToro Public API Operations
