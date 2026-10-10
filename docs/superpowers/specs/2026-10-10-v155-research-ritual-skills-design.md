@@ -144,6 +144,12 @@ Which scripts read which cache is taken from the two-caches rules in
 `validate_data.py:12-17`, which is stale. The skill fixes nothing; repair stays
 with `scripts/ops/market_cache_repair.py` and a human.
 
+Neither mode checks `data/backtest_cache_ext`, the cache the idea screen reads
+(`screen_idea.py:42`; found by the v155 plan brief). Every `/data-check` reply
+therefore ends with a line saying the idea-screen cache was not checked, so a
+clean verdict is never read as vouching for a screen run's data. Adding a mode
+for that cache would change `validate_data.py` and is out of scope here.
+
 ### Codex mirror
 
 `sync_codex.py` mirrors the three skills; `AGENTS.md` gains their names and
