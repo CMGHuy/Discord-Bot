@@ -191,7 +191,8 @@ Recommended order: {SP1, SP2, SP3} (2 implementers at once), then SP4. After tha
 | Part | File | Tasks | Scope |
 |---|---|---|---|
 | 1 | `2026-10-10-v153-slash-command-parity_1-foundation.md` | SP1–SP4 | `Reply` contract and harness, task P, tree error handler, `/notify` check |
-| 2 | `2026-10-10-v153-slash-command-parity_2-group1-modules.md` | SP5–SP8 | Group 1 (parallel): `account`, `data`, `growth`, `history` |
+| 2 | `2026-10-10-v153-slash-command-parity_2-group1-modules.md` | SP5–SP7 | Group 1 (parallel): `account`, `data`, `growth` |
+| 2b | `2026-10-10-v153-slash-command-parity_2b-history.md` | SP8 | Group 1 (parallel): `history` (split from part 2 for the 1500-line cap) |
 | 3 | `2026-10-10-v153-slash-command-parity_3-info-trades-plans.md` | SP9–SP12 | `slash.py` chain I: `info`, `trades` ×2, `plans` |
 | 4 | `2026-10-10-v153-slash-command-parity_4-backtest-watchlist-stats-scanning.md` | SP13–SP16 | `slash.py` chain II: `backtest`, `watchlist`, `stats`, `scanning/commands` |
 | 5 | `2026-10-10-v153-slash-command-parity_5-catalog-parity-resync-suite.md` | SP17–SP22 | Help catalog, parity test, superseded tests, resync script, tip date, full suite |
