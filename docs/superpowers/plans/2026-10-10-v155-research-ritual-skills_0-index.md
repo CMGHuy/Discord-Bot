@@ -10,7 +10,7 @@
 
 **Goal:** Put a hook behind the idea screen's one-shot rule (`_rule_screen_rerun` in `.claude/hooks/guardrails.py`) and give the idea screen, the pre-registration and the data check each a slash-only ritual skill (`/screen`, `/prereg`, `/data-check`), mirrored to Codex.
 
-**Architecture:** The hook rule tokenises a Bash command into shell segments with `shlex`, reads `screen_idea.py` flags only from the segment that runs the script, and denies a re-run of a screened idea (ledger row or results doc), a full-universe `--dry-run`, a non-default `--ledger` and a quoted wrapper. Segment splitting, flag extraction and the ledger/results lookups are separate helpers so each stays under complexity 15; the ledger path and results dir are module-level constants tests monkeypatch, and a drift test pins the hook's ledger path to `stats.LEDGER_PATH` because the hook stays stdlib-only. The three skills are checklists that read their authority with `scripts/dev/doc_section.py` (v154), restate no threshold, and are mirrored by `scripts/dev/sync_codex.py`.
+**Architecture:** The hook rule tokenises a Bash command into shell segments with `shlex`, reads `screen_idea.py` flags only from the segment that runs the script, and denies a re-run of a screened idea (ledger row or results doc), a full-universe `--dry-run`, a real run with a non-default `--ledger` or `--results-dir`, a quoted wrapper and an untokenisable line. Segment splitting, flag extraction and the ledger/results lookups are separate helpers so each stays under complexity 15; the ledger path and results dir are module-level constants tests monkeypatch, and a drift test pins the hook's ledger path to `stats.LEDGER_PATH` because the hook stays stdlib-only. The three skills are checklists that read their authority with `scripts/dev/doc_section.py` (v154), restate no threshold, and are mirrored by `scripts/dev/sync_codex.py`.
 
 **Tech Stack:** Python 3.11 stdlib (`shlex`, `glob`, `json`, `os`), pytest, Claude Code skill frontmatter (strict parser from v154), `scripts/dev/sync_codex.py`.
 
@@ -48,7 +48,7 @@ These fill gaps the spec leaves to the plan, and every part is written against t
 7. **Wrapped-run detection** (spec § 1, last paragraph) applies to a single token that mentions `screen_idea` and also contains `--idea` but is not itself the script path or module name. The `--idea` condition is how the ssh wrapper and `pwsh -Command "..."` are caught without denying `git grep -n "screen_idea"` or a commit message that names the file. `--idea` is a required flag, so a wrapped run always carries it.
 8. **Script and module tokens.** A token is the screen script when, with `\` replaced by `/`, it ends with `screen_idea.py`, equals `screen_idea`, or ends with `.screen_idea` (`python -m scripts.backtest.screen_idea`). Flags are read from the tokens after it in the same segment.
 9. **A segment that runs the script without `--idea` is allowed.** That covers `--help`, and argparse rejects the rest.
-10. **The order of checks per segment:** dry-run without tickers → deny; dry-run with tickers → allow; non-default `--ledger` → deny; exact ledger row → deny; results doc → deny; otherwise allow. The first deny across segments wins.
+10. **The order of checks per segment:** dry-run without tickers → deny; dry-run with tickers → allow; non-default `--ledger` → deny; non-default `--results-dir` → deny (controller addition, contract C2); exact ledger row → deny; results doc → deny; otherwise allow. The first deny across segments wins.
 11. **Each skill reads its authority by section:** `/screen` reads `"Funnel stages"`, `/prereg` reads `"Funnel stages"` and `"Evidence, registry and ledger"` (both in `backtest-methodology.md`), and `/data-check` reads `"Two OHLCV caches"` and `"Full-history cache"` (in `known-traps.md`). Each skill also says that exit code 2 from `doc_section.py` means "read the whole file".
 12. **`/data-check`'s last reply line is fixed text** (contract C4), so the disclosure cannot be paraphrased away.
 
@@ -78,7 +78,7 @@ All tasks run in one worktree. The files each task touches decide what can run a
 | Id | Title | Part | Model | Files created / modified | Creates for later tasks |
 |---|---|---|---|---|---|
 | V155-1 | v154 precondition; hook constants, segment and flag helpers, ledger and results lookups, docstring, drift test | 1 | sonnet | Modify `.claude/hooks/guardrails.py`, `tests/hooks/test_guardrails.py`; record in `## Results` | `_HOOK_REPO_ROOT`, `SCREEN_LEDGER_PATH`, `SCREEN_RESULTS_DIR`, `_SCREEN_SEPARATORS`, `_SCREEN_OPTIONS`, `_command_segments`, `_is_screen_token`, `_is_wrapped_screen`, `_screen_flags`, `_is_default_ledger`, `_screen_ledger_row`, `_screen_results_doc` (contract C1) |
-| V155-2 | `_rule_screen_rerun`, registered in `_RULES["Bash"]`; hook-rule docs | 1 | sonnet | Modify `.claude/hooks/guardrails.py`, `tests/hooks/test_guardrails.py`, `docs/claude/skills-tools.md` (hook-rules paragraph), `AGENTS.md` (hook sentence); record radon in `## Results` | `_rule_screen_rerun(ti: dict) -> dict \| None`, `_screen_deny_reason(flags: dict) -> str \| None`, the deny texts (contract C2) |
+| V155-2 | `_rule_screen_rerun`, registered in `_RULES["Bash"]`; hook-rule docs | 1 | sonnet | Modify `.claude/hooks/guardrails.py`, `tests/hooks/test_guardrails.py`, `docs/claude/skills-tools.md` (hook-rules paragraph), `AGENTS.md` (hook sentence); record radon in `## Results` | `_rule_screen_rerun(ti: dict) -> dict \| None`, `_screen_deny_reason(flags: dict) -> str \| None`, the deny texts including the non-default `--results-dir` deny (contract C2) |
 | V155-3 | `/screen` slash-only skill | 2 | sonnet | Create `.claude/skills/screen/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`), `docs/claude/skills-tools.md` (skills table), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/screen/**` | `"screen"` in `TIER_2` (contract C3) |
 | V155-4 | `/prereg` slash-only skill | 2 | sonnet | Create `.claude/skills/prereg/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`), `docs/claude/skills-tools.md` (skills table), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/prereg/**` | `"prereg"` in `TIER_2` |
 | V155-5 | `/data-check` slash-only forked skill | 2 | sonnet | Create `.claude/skills/data-check/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`, `FORKED`), `docs/claude/skills-tools.md` (skills table), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/data-check/**` | `"data-check"` in `TIER_2` and `FORKED` (contract C3); the fixed disclosure line (contract C4) |
@@ -117,7 +117,8 @@ def _is_wrapped_screen(tok: str) -> bool:
 
 def _screen_flags(tokens: list[str]) -> dict | None:
     """None when no token of the segment is a screen token. Otherwise
-    {"idea": str | None, "dry_run": bool, "tickers": bool, "ledger": str | None},
+    {"idea": str | None, "dry_run": bool, "tickers": bool, "ledger": str | None,
+     "results_dir": str | None},
     read from the tokens after the first screen token. Accepts `--opt value`
     and `--opt=value`, and resolves a unique prefix of an entry in
     _SCREEN_OPTIONS (argparse allow_abbrev). "tickers" is True when --tickers
@@ -126,6 +127,9 @@ def _screen_flags(tokens: list[str]) -> dict | None:
 def _is_default_ledger(value: str) -> bool:
     """normcase(normpath(join(_HOOK_REPO_ROOT, value))) ==
     normcase(normpath(SCREEN_LEDGER_PATH)); an absolute value survives join."""
+
+def _is_default_results_dir(value: str) -> bool:
+    """The same comparison against SCREEN_RESULTS_DIR."""
 
 def _screen_ledger_row(idea: str) -> dict | None:
     """The first JSONL row of SCREEN_LEDGER_PATH whose "id" == f"screen-{idea}"
@@ -143,10 +147,13 @@ The drift test is `test_screen_ledger_path_matches_stats_ledger_path`. It assert
 
 ```python
 def _screen_deny_reason(flags: dict) -> str | None:   # the check order of Decision 10
+    # dry run: tickers -> None, else deny; then non-default --ledger -> deny;
+    # then non-default --results-dir -> deny; then ledger row, then results doc
 def _rule_screen_rerun(ti: dict) -> dict | None:
     # cmd not a str, or "screen_idea" not in cmd -> None
-    # any token anywhere _is_wrapped_screen -> deny (wrapped)
-    # _command_segments(cmd) is None -> deny (untokenisable)
+    # _command_segments(cmd) is None -> deny (untokenisable; checked first,
+    #   because the wrapped check needs tokens)
+    # _has_wrapped_screen(segments): any token _is_wrapped_screen -> deny (wrapped)
     # for each segment: flags = _screen_flags(seg); flags None or flags["idea"] None -> skip
     #   reason = _screen_deny_reason(flags); reason -> _deny(reason)
     # -> None
@@ -162,6 +169,7 @@ Every deny text starts with `screen_idea:` and ends with ` -- one shot per idea;
 | untokenisable | `could not tokenise` |
 | full-universe dry run | `--dry-run without --tickers` |
 | non-default ledger | `--ledger other than the default` |
+| non-default results dir (controller addition: a fresh dir hides the results doc a crashed run left behind) | `--results-dir other than the default` |
 | ledger row | `screen-<idea> is already in the ledger (<date>, <verdict>, <record>)` |
 | results doc, no row | `results doc <path relative to _HOOK_REPO_ROOT, / separators> exists with no ledger row` |
 
