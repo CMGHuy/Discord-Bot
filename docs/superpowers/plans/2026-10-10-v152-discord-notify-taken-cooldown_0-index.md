@@ -68,7 +68,8 @@ These settle the brief's drift items and the spec's open seams. Part writers and
 | 2 | [`_2-panel-following-taken`](2026-10-10-v152-discord-notify-taken-cooldown_2-panel-following-taken.md) | V152-6 .. V152-10 | Persistent panel + legacy fallback + `setup_hook`, `mark_taken` + close re-stamp, per-user Watch + Following, `taken` dimension, SPA option/caption/order |
 | 3 | [`_3-cooldown-near-stop-policy`](2026-10-10-v152-discord-notify-taken-cooldown_3-cooldown-near-stop-policy.md) | V152-11 .. V152-13 | `cooldown.py`, `_send_alerts(apply_cooldown=)` + digest line, near-stop event + `FOLLOW_ONLY_EVENTS` |
 | 3b | [`_3b-policy-and-loops`](2026-10-10-v152-discord-notify-taken-cooldown_3b-policy-and-loops.md) | V152-14 .. V152-15 | notify mapping + mention policy, D3 `loops.py` wiring (part 3 split only to stay under 1500 lines) |
-| 4 | [`_4-notifier-and-suite`](2026-10-10-v152-discord-notify-taken-cooldown_4-notifier-and-suite.md) | V152-16 .. V152-20 | **v151-gated:** copy + embed builder, delivery + retry, D1 `loops.py` wiring; then `/notify`, the full suites |
+| 4 | [`_4-notifier-and-suite`](2026-10-10-v152-discord-notify-taken-cooldown_4-notifier-and-suite.md) | V152-16 .. V152-19 | **v151-gated:** copy + embed builder, delivery + retry, D1 `loops.py` wiring; then `/notify` |
+| 4b | [`_4b-full-suite`](2026-10-10-v152-discord-notify-taken-cooldown_4b-full-suite.md) | V152-20 | full suites + complexity check (part 4 split only to stay under 1500 lines) |
 
 ## Task ledger
 
@@ -93,7 +94,7 @@ These settle the brief's drift items and the spec's open seams. Part writers and
 | V152-17 | **[v151]** Delivery: claim, send, mention, retry sweep | 4 | opus | M `swingbot/commands/scanning/follow_notify.py`; C `tests/commands/test_follow_notify_delivery.py` | `async notify_followers(bot, events: list[PlanEvent]) -> int` (messages sent); `async retry_pending_notifications(bot, now: dt.datetime \| None = None) -> int`; `_CLAIMED` cache; `_notify_channel(bot)` |
 | V152-18 | **[v151]** D1 `loops.py`: feed and notifier independent, per-tick sweep | 4 | sonnet | M `swingbot/commands/scanning/loops.py`; C `tests/commands/test_loops_follow_notify.py` | `loops._post_feed(plan_events) -> list` (async; deliveries); `_post_plan_events` = feed → notifier (own `try`) → ack; `loops._retry_notifications() -> None` (async) called every `trade_monitor` tick |
 | V152-19 | `/notify` slash command | 4 | sonnet | M `swingbot/commands/slash.py`; C `tests/commands/test_slash_notify.py` | `/notify` (`event: Choice[str]` incl. `all`, `enabled: bool`, `watch_mode: Choice[str]`); `slash._notify_summary(prefs: dict) -> str` (pure) |
-| V152-20 | Full suites + complexity check | 4 | haiku | none | none |
+| V152-20 | Full suites + complexity check | 4b | haiku | none | none |
 
 ## Parallelisation
 
