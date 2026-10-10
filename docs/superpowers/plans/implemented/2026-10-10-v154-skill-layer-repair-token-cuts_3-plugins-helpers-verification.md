@@ -2,7 +2,7 @@
 
 > Part of the v154 plan. Header, Global Constraints, the decisions fixed by the index, the cross-task contracts C1 to C6, the parallelisation map and the `## Results` table are in [`_0-index`](2026-10-10-v154-skill-layer-repair-token-cuts_0-index.md). **Never read this file whole**: `/task-brief V154-10` or `grep -n "^### Task V154-10" -A 200 <this file>`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md`](../specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md), sections 4 and 5, the Codex mirror section and Testing.
+**Spec:** [`docs/superpowers/specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md`](../../specs/implemented/2026-10-10-v154-skill-layer-repair-token-cuts-design.md), sections 4 and 5, the Codex mirror section and Testing.
 
 This part covers tasks V154-9 to V154-13: five unused plugins are switched off for the project, `/result-digest` and `/handoff` are added as slash-only skills, the eval suites and a fresh-session listing are re-run by hand against the skills as finally written, and the full suite runs once.
 
