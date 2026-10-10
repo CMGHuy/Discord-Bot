@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — no change to what is scanned, alerted or traded; it buys earlier detection of a dead bot or a degraded data feed, nothing on `ExpR`
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, quant-engineer
-**Status:** spec written 2026-10-09; design approved in the brainstorm; plan not written.
+**Status:** spec written 2026-10-09; design approved in the brainstorm; plan written 2026-10-10 (`docs/superpowers/plans/2026-10-09-v148-ops-hardening_0-index.md`, OH1–OH24).
 
 ## Why
 

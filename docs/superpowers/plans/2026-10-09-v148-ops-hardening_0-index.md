@@ -111,9 +111,9 @@ Recommended order: OH1; then {OH2, OH3, OH5, OH6} with at most 2 implementers at
 | OH19 | Heartbeat cron on the VM | 5 | sonnet | C `scripts/ops/heartbeat_watch.sh`, C `scripts/ops/install_heartbeat_watch_cron.sh`, M `docs/deploy/DEPLOY_HETZNER.md`, C `tests/scripts/test_heartbeat_watch.py` | CLI `heartbeat_watch.sh [--dry-run --age <s>] [--test]`; state `logs/heartbeat_watch.state`, log `logs/heartbeat_watch.log` (cap 2000 lines); env overrides `HEARTBEAT_WATCH_ROOT` (default `/opt/swing-bot`) |
 | OH20 | `GET /api/v1/system/health` | 5 | sonnet | C `swingbot/admin/api_v1/ops_health.py`, M `swingbot/admin/api_v1/__init__.py`, C `tests/admin/test_api_v1_ops_health.py` | JSON `{providers: [{at, tickers, provider_fallback_rate, stale_symbols, empty_symbols, empty_rate}] (newest first, ≤ 20), thresholds: {fallback_pct, empty_pct}, swallowed: [{process: "bot"\|"admin", tag, count, first_at, last_at, last_error}] (count desc), bot_counts_since: str \| null}` |
 | OH21 | Frontend health types, client and store | 5 | sonnet | M `frontend/src/app/api/models.ts`, M `frontend/src/app/api/api-client.ts`, M `frontend/src/app/stores/system.store.ts`, M `frontend/src/app/stores/system.store.spec.ts` | TS `ProviderHealthRow`, `SwallowedRow`, `SystemHealth`; `ApiClient.systemHealth(): Observable<SystemHealth>`; `SystemStore` state `health: SystemHealth \| null`, `healthError: string \| null`; method `resolveHealth(): Observable<void>`; `resolveScan()` also resolves health (so `scan`/`bot` SSE refreshes both) |
-| OH22 | Provider-health and swallowed-errors panels | 5 | sonnet | C `frontend/src/app/workspaces/system/provider-health-panel.ts`, C `provider-health-panel.spec.ts`, C `swallowed-errors-panel.ts`, C `swallowed-errors-panel.spec.ts`, M `frontend/src/app/workspaces/system/scan-tab.ts` | Components `sb-provider-health-panel`, `sb-swallowed-errors-panel` (inputs `health: SystemHealth \| null`) |
-| OH23 | Full suites | 5 | haiku | — | — |
-| OH24 | Production rollout (post-deploy) | 5 | sonnet | prod only: `.env` via `scripts/ops/env_set.py`, crontab via `install_heartbeat_watch_cron.sh` | Recorded in § Progress: one healthy verdict line, one `--test` post, `ps` shows gunicorn, tunnel login works |
+| OH22 | Provider-health and swallowed-errors panels | 5b | sonnet | C `frontend/src/app/workspaces/system/provider-health-panel.ts`, C `provider-health-panel.spec.ts`, C `swallowed-errors-panel.ts`, C `swallowed-errors-panel.spec.ts`, M `frontend/src/app/workspaces/system/scan-tab.ts` | Components `sb-provider-health-panel`, `sb-swallowed-errors-panel` (inputs `health: SystemHealth \| null`) |
+| OH23 | Full suites | 5b | haiku | — | — |
+| OH24 | Production rollout (post-deploy) | 5b | sonnet | prod only: `.env` via `scripts/ops/env_set.py`, crontab via `install_heartbeat_watch_cron.sh` | Recorded in § Progress: one healthy verdict line, one `--test` post, `ps` shows gunicorn, tunnel login works |
 
 ## Parts
 
@@ -124,4 +124,5 @@ Recommended order: OH1; then {OH2, OH3, OH5, OH6} with at most 2 implementers at
 | 3 | `2026-10-09-v148-ops-hardening_3-conversion.md` | OH10–OH13 | Phase C: remaining scan and marketdata conversions |
 | 3b | `2026-10-09-v148-ops-hardening_3b-earnings.md` | OH14 | Phase C: earnings conversion (part 3 split only to stay under 1500 lines) |
 | 4 | `2026-10-09-v148-ops-hardening_4-ratchet-metrics-watch.md` | OH15–OH18 | Phase D: ratchet, provider metrics, ops notices, watchdog and wiring |
-| 5 | `2026-10-09-v148-ops-hardening_5-cron-admin-ui-suite.md` | OH19–OH24 | Phase E: VM cron, health endpoint, frontend panels, full suites, production rollout |
+| 5 | `2026-10-09-v148-ops-hardening_5-cron-admin-ui-suite.md` | OH19–OH21 | Phase E: VM cron, health endpoint, store wiring |
+| 5b | `2026-10-09-v148-ops-hardening_5b-panels-suite-rollout.md` | OH22–OH24 | Phase E: frontend panels, full suites, production rollout (part 5 split only to stay under 1500 lines) |
