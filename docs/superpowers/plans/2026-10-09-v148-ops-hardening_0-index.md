@@ -1,0 +1,128 @@
+# v148 Ops hardening: production WSGI, login hardening, liveness alerts, provider and swallowed-error visibility. Implementation Plan, index
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief OH7` or `grep -n "^### Task OH7:" -A 220 docs/superpowers/plans/2026-10-09-v148-ops-hardening_*.md`.
+
+**Spec:** `docs/superpowers/specs/2026-10-09-v148-ops-hardening-design.md`
+**Bump:** ui patch · bot patch
+**Edge:** none (integrity)
+**Screen:** exempt (integrity)
+
+**Goal:** The admin runs under gunicorn (one gthread worker) when the image has it, with `app.run` kept as the fallback so a rollback image under today's compose file still boots. All three credential checks are constant-time and share a 5-failures-per-15-minutes login limiter keyed on `CF-Connecting-IP`. A wedged scan tick raises a stale-scan ops alert from an in-bot watchdog, and a dead bot raises one from a VM cron. Each scheduled scan records provider fallback, empty and stale symbol counts, and alerts on fallback/empty breaches. Every `except Exception` that swallows in the scan, marketdata, earnings and heartbeat scopes is counted per tag through one helper, and the counts cross the spawn boundary. Two new System → Scan panels show both, and an AST ratchet keeps the untagged count from growing.
+
+**Architecture:**
+- `swingbot/core/infra/swallowed.py` is a leaf module (no `swingbot` imports): a per-tag counter behind a lock, logging through the caller's logger with `stacklevel=2`.
+- `fetch._run_bounded` submits `_counted_call(fn, *args)`, which returns `(result, counts)`. `_run_bounded` unwraps on the success path only and merges the counts, so every caller sees the same return shape as today.
+- Heartbeat writes become key-level JSONB merges (`HeartbeatRepository.merge` → `Repository.patch`, `doc || :patch`). `_write_heartbeat` flushes the bot's swallowed counts every tick, and the admin reads them from the row.
+- `swingbot/commands/scanning/ops_watch.py` holds pure verdict functions, the `scan_watchdog` loop and `check_provider_health`. It imports nothing from `loops.py` at module level. The ops channel is looked up at call time with `from . import loops; loops._ops_channel()`, so `loops.py` can import `ops_watch` at the top and tests keep monkeypatching `loops._ops_channel`.
+- `telemetry.provider_health` is a pure function over the scan's frames and source counts. `telemetry.fallback_rate` is the single formula, used by both `provider_health` and `risk._data_sources_summary`.
+- The gunicorn decision sits inside the image (`admin_ui._maybe_exec_gunicorn`). Compose and CI are not touched.
+
+**Tech Stack:** Python 3.11, Flask, gunicorn 23.x (Linux only, never imported by tests), discord.py `tasks.loop`, SQLAlchemy/Postgres JSONB, pytest (+xdist via `scripts/dev/testrun.py`), `ast`, radon, bash/cron, Angular signal stores, vitest specs.
+
+## Progress
+
+Not started. OH1 records its single-worker finding here before OH2 starts.
+
+## Where to work
+
+- **Branch and worktree:** `2026-10-09-v148-ops-hardening`, at `/home/user/Discord-Bot/.claude/worktrees/2026-10-09-v148-ops-hardening` (written `$WT` below). The main tree is `$R` = `/home/user/Discord-Bot`. OH1 Step 0 creates the worktree with the `worktree-lifecycle` skill. Name it in every subagent dispatch.
+- **Never `cd`.** Use absolute paths and `git -C $WT`. `python $WT/scripts/dev/testrun.py file tests/...` resolves test paths against `$WT`. For the frontend, use `npm --prefix $WT/frontend test -- --include <spec>`.
+- **This plan is committed on `main`.** Only the implementation is branched, and each task commits on the branch. The exception is OH1's finding, which goes into this index's `## Progress` block on `main`: the controller commits it.
+- **The bump (`ui` patch, `bot` patch) is applied at close-out (`/close-out`)**, after OH23 is green. No task edits `VERSION.json`.
+- **OH24 is a production task, run after merge and deploy**, through `bash scripts/ops/ssh-hetzner.sh` only. It is the last thing done before close-out counts the plan as live.
+
+## Global Constraints
+
+- **Corrections to the spec's counts and paths (verified 2026-10-10 by the brief; binding over the spec text):**
+  1. The scan scope (`swingbot/core/scanning/*.py`) has **67** `except Exception` handlers, of which 65 are untagged and non-raising. The spec says 60. Repo-wide there are 335 by `git grep` and 327 untagged by AST (the spec says 323). **`BASELINE` is measured by OH15 after every conversion task has landed. It is never copied from the spec or from this index.**
+  2. The stores are `frontend/src/app/stores/system.store.ts` and `frontend/src/app/stores/session.store.ts`. `ApiError` is in `frontend/src/app/api/api-error.ts`. The API client is `frontend/src/app/api/api-client.ts`, and its types are in `frontend/src/app/api/models.ts`.
+  3. `_always_on_loops` is at `loops.py:966`, not :861. `plan_manager.py`'s `_run_bounded` call is at :1349, not :1283.
+  4. `Repository.patch` returns `None` when the row is absent; it does not raise. `HeartbeatRepository.merge` uses that return value to fall back to `beat`.
+  5. `admin_wsgi.py` must call `yf_safe.set_default_lock_timeout(float(config.ADMIN_YF_LOCK_TIMEOUT_SECONDS))`, exactly as `app.main()` does before `app.run`. Gunicorn never runs `main()`, so without this call the v132 safeguard is lost.
+  6. `runstate.py` gains `import logging` and `log = logging.getLogger(__name__)`.
+  7. The `ops_watch` ↔ `loops` cycle is resolved by the call-time lookup described under Architecture. `ops_watch` must never do `from .loops import ...` at module level.
+- **Behaviour-preserving conversion.** `swallowed(log, tag, exc, msg, *args, level=..., exc_info=...)` must emit the same record the handler emitted before: same logger object, level, message and args, and `exc_info`. `log.exception(m, *a)` becomes `swallowed(log, tag, exc, m, *a, level=logging.ERROR, exc_info=True)`. `log.warning(m, *a)` becomes `swallowed(log, tag, exc, m, *a)`. `log.error(..., exc_info=True)` keeps `exc_info=True`. A handler that logs nothing becomes `swallowed(log, tag, exc, level=logging.DEBUG)`; the one exception is `runstate._update_heartbeat`, which goes to WARNING with `"heartbeat write failed"`. When a handler has no `as exc`, add `as exc`. Return values, fallbacks and every other statement in the handler stay exactly as they are. A handler that contains a `raise` is not converted.
+- **Tags** are string literals of the form `<area>.<function>`, with areas `scan`, `marketdata`, `earnings`, `runstate` and `ops`. Each tag is unique repo-wide. When one function has several swallowing handlers, add a suffix naming what failed: `scan.run_scan.telemetry`, `scan.run_scan.snapshot`. OH15's ratchet asserts that tags are unique.
+- **Spawn safety.** Everything handed to `_run_bounded` stays picklable: a module-level function, or a `functools.partial` of one. `_counted_call` is module-level in `fetch.py`. When it runs in the parent process (`multiprocessing.parent_process() is None`, which is the case under `tests/scanning/conftest.py`'s in-process `_InlineProcessPool`), it returns `{}` for its counts, so a site is never counted twice. A real spawned child returns `swallowed.snapshot()`, and because the child starts at zero that snapshot is its delta.
+- **No gunicorn import, ever, in tests or in `admin_ui.py` at import time.** Use `importlib.util.find_spec("gunicorn")` and `runpy`. `deploy/gunicorn.conf.py` is plain Python and does not import gunicorn.
+- **Compose and CI stay `python admin_ui.py`.** Do not edit `docker-compose.yml` or `.github/workflows/deploy.yml`.
+- **Admin tests:** `tests/admin/conftest.py` reloads `swingbot.admin.app` per test but not `api_v1.*` or `swingbot.admin.login_limiter`. The module-level `login_limiter.LIMITER` is cleared by an autouse fixture that OH3 adds to `tests/admin/conftest.py`. `api_v1` modules reach app-level names through `_app.<attr>` at call time (`_app.credentials_match`), never with `from ..app import`.
+- **`.env.example` sync:** `tests/infra/test_env_example_sync.py` requires the three new `FIELDS` keys in `.env.example` (OH5).
+- **Market dates are ET:** `provider_health` receives `today = market_today()` and never calls `date.today()`. The previous session is `nyse_calendar().sessions(today - 14d, today - 1d)[-1]`. When that list is empty (outside the frozen 2030 table), it falls back to "no stale count" (`stale_symbols = None`), never to an exception.
+- **`tasks.loop` bodies never raise.** `scan_watchdog`'s whole body is wrapped in `try/except Exception as exc: swallowed(log, "ops.scan_watchdog", exc, "scan watchdog tick failed", level=logging.ERROR, exc_info=True)`. `check_provider_health` guards itself the same way under `"ops.provider_health"`, so `_session_scan_tick` gains one plain `await` line and no branch.
+- **Complexity:** every new or changed function stays < 15 (`python -m radon cc -s -n C <files>`). radon is not installed on the dev machine, so the first task that measures runs `python -m pip install radon` (no `requirements.txt` change). A conversion never adds a branch: each handler body is replaced one-for-one. `_session_scan_tick` gains no branch.
+- **Shell scripts** (`scripts/ops/*.sh`): `set -euo pipefail`, LF endings, no `sed -i`, and `.env` read with `grep '^KEY=' | cut -d= -f2-`, never sourced (`tests/scripts/test_pitr_crons.py` pattern).
+- **Schema:** heartbeat doc keys and telemetry fields are additive JSONB/jsonl keys, so no Alembic revision is needed. Old rows read as missing and are shown as `null`/"—". There is no read-time upcasting (`schema-evolution.md`).
+- **Green means `0 failed` and `0 xfailed`.** Each task runs only its narrow tests. OH23 runs the full suite and `npm test` once each.
+
+## Parallelisation
+
+| Task | Files (disjoint?) | Depends on | Why sequential / parallel |
+|---|---|---|---|
+| OH1 single-worker verification | `_0-index.md` § Progress (read-only on code) | — | Spec: gate before any O1 work; a blocker stops the plan |
+| OH2 gunicorn launch | `admin_ui.py`, `admin_wsgi.py`, `deploy/gunicorn.conf.py`, `requirements.txt`, `docs/deploy/DEPLOY_HETZNER.md` (rollback notes), `tests/admin/test_gunicorn_conf.py`, `tests/admin/test_admin_logging.py` | OH1 | Parallel with OH3, OH5, OH6 (disjoint files) |
+| OH3 credential checks + limiter | `swingbot/admin/app.py`, `api_v1/auth.py`, `api_v1/session.py`, `swingbot/admin/login_limiter.py`, `tests/admin/conftest.py`, `tests/admin/test_login_limiter.py` | OH1 | Parallel with OH2, OH5, OH6 |
+| OH4 SPA 429 message | `api-error.ts`, `session.store.ts`, `session.store.spec.ts` | OH3 | Contract: the `rate_limited` code and the body shape come from OH3 |
+| OH5 config keys | `swingbot/config.py`, `.env.example`, `tests/infra/test_config_ops_alerts.py` | — | Parallel with everything in Phase A/B |
+| OH6 swallowed helper | `swingbot/core/infra/swallowed.py`, `tests/infra/test_swallowed.py` | — | Every later O5 task imports it |
+| OH7 `_run_bounded` counts | `swingbot/core/scanning/fetch.py`, `tests/infra/test_swallowed.py` (append), `tests/infra/swallowed_probe.py` | OH6 | Same test file as OH6, and imports `swallowed` |
+| OH8 heartbeat merge + runstate | `repositories/heartbeat.py`, `commands/scanning/runstate.py`, `tests/scanning/test_heartbeat_merge.py` | OH6 | Imports `swallowed`. Parallel with OH7 |
+| OH9 scan conversion A | `scan_run.py`, `strategy_pass.py`, `plan_table.py`, `lane_overlap.py`, `outlook_context.py`, `scan_replay.py` | OH6 | Parallel with OH10–OH14 (disjoint files) |
+| OH10 scan conversion B | `analyze.py`, `fetch.py` | OH7 | Same file as OH7 (`fetch.py`) |
+| OH11 scan conversion C | `lifecycle_embeds.py`, `short_run.py`, `outlook_run.py`, `progress_store.py` | OH6 | Parallel with OH9, OH10, OH12–OH14 |
+| OH12 marketdata conversion A | `marketdata/data.py`, `marketdata/data_refresh.py` | OH6 | Parallel |
+| OH13 marketdata conversion B | `data_store.py`, `ticker_directory.py`, `export_data.py`, `backtest_cache.py`, `providers/alpaca_provider.py`, `providers/router.py`, `spot_metals.py` | OH6 | Parallel |
+| OH14 earnings conversion | `core/market/events.py`, `core/market/earnings_history.py` | OH6 | Parallel |
+| OH15 ratchet test | `tests/infra/test_swallowed_ratchet.py` | OH7–OH14 | `BASELINE` is the count after all conversions; OH2 must also have landed, because `admin_wsgi.py` is in the scan set |
+| OH16 provider metrics | `telemetry.py`, `scan_run.py`, `api_v1/risk.py`, `tests/scanning/test_provider_health.py` | OH9 | Same file as OH9 (`scan_run.py`) |
+| OH17 notices + pure verdicts | `commands/scanning/notices.py`, `commands/scanning/ops_watch.py` (create), `tests/scanning/test_ops_watch.py` | OH5, OH8 | Reads the config keys (OH5) and the runstate flags (OH8) |
+| OH18 watchdog loop + wiring | `ops_watch.py`, `commands/scanning/loops.py`, `tests/scanning/test_ops_watch.py` (append) | OH16, OH17 | Same files as OH17; reads OH16's telemetry fields |
+| OH19 heartbeat cron | `scripts/ops/heartbeat_watch.sh`, `scripts/ops/install_heartbeat_watch_cron.sh`, `docs/deploy/DEPLOY_HETZNER.md` (cron row), `tests/scripts/test_heartbeat_watch.py` | OH2, OH5 | Same doc as OH2; reads `OPS_ALERT_WEBHOOK_URL` (OH5). Otherwise parallel with OH9–OH18 |
+| OH20 `/system/health` endpoint | `api_v1/ops_health.py`, `api_v1/__init__.py`, `tests/admin/test_api_v1_ops_health.py` | OH5, OH6, OH8, OH16 | Reads the thresholds, the counters, the heartbeat `swallowed` key and the telemetry fields |
+| OH21 frontend types + store | `api/models.ts`, `api/api-client.ts`, `stores/system.store.ts`, `stores/system.store.spec.ts` | OH20 | Response contract |
+| OH22 frontend panels | `workspaces/system/provider-health-panel.ts` (+spec), `swallowed-errors-panel.ts` (+spec), `scan-tab.ts` | OH21 | Reads the store state |
+| OH23 full suites | — | OH1–OH22 | Final gate |
+| OH24 production rollout | prod `.env`, prod crontab (mirrored scripts already committed) | merge + deploy of OH23 | After deploy only |
+
+Recommended order: OH1; then {OH2, OH3, OH5, OH6} with at most 2 implementers at once; then OH4, OH7, OH8; then the conversions OH9–OH14, two at a time; then OH15, OH16; then OH17 → OH18, with OH19 alongside; then OH20 → OH21 → OH22; then OH23. OH24 follows merge and deploy.
+
+## Task ledger
+
+| Task | Title | Part | Model | Files (C = create, M = modify) | Creates, consumed later |
+|---|---|---|---|---|---|
+| OH1 | Single-worker verification (read-only) | 1 | sonnet | M `docs/superpowers/plans/2026-10-09-v148-ops-hardening_0-index.md` (§ Progress only) | Finding line in § Progress: `OH1: one worker safe — <evidence>` or a `BLOCKED` stop |
+| OH2 | gunicorn launch inside the image | 1 | sonnet | C `admin_wsgi.py`, C `deploy/gunicorn.conf.py`, M `admin_ui.py`, M `requirements.txt`, M `docs/deploy/DEPLOY_HETZNER.md`, C `tests/admin/test_gunicorn_conf.py`, M `tests/admin/test_admin_logging.py` | `admin_ui._gunicorn_argv(root: Path) -> list[str]` = `[sys.executable, "-m", "gunicorn", "-c", str(root / "deploy" / "gunicorn.conf.py"), "admin_wsgi:app"]`; `admin_ui._maybe_exec_gunicorn() -> None` (returns only when it does not exec); `admin_wsgi.app` (is `swingbot.admin.app.app`); `deploy/gunicorn.conf.py` module globals `bind, workers=1, worker_class="gthread", threads=16, timeout=60, graceful_timeout=5, keepalive=5, accesslog="-", preload_app=False` |
+| OH3 | Constant-time credentials and the login limiter | 1 | sonnet | C `swingbot/admin/login_limiter.py`, M `swingbot/admin/app.py`, M `swingbot/admin/api_v1/auth.py`, M `swingbot/admin/api_v1/session.py`, M `tests/admin/conftest.py`, C `tests/admin/test_login_limiter.py` | `app.credentials_match(username: str, password: str) -> bool`; `class LoginLimiter(max_failures: int = 5, window_s: float = 900, clock: Callable[[], float] = time.monotonic)` with `check(key: str) -> int \| None`, `fail(key: str) -> None`, `succeed(key: str) -> None`, `reset() -> None`; `login_limiter.LIMITER: LoginLimiter`; `login_limiter.client_key() -> str` (`CF-Connecting-IP` else `request.remote_addr` else `"unknown"`); `login_limiter.rate_limited_message(seconds: int) -> str` = `"Too many failed sign-ins. Try again in N minutes."` (N = ceil(seconds/60), min 1); v1 429 body `{"error": {"code": "rate_limited", ...}}` + header `Retry-After` |
+| OH4 | SPA shows the 429 message | 1 | haiku | M `frontend/src/app/api/api-error.ts`, M `frontend/src/app/stores/session.store.ts`, M `frontend/src/app/stores/session.store.spec.ts` | `ApiErrorCode` gains `'rate_limited'` |
+| OH5 | Ops alert config keys | 1 | haiku | M `swingbot/config.py`, M `.env.example`, C `tests/infra/test_config_ops_alerts.py` | `config.PROVIDER_FALLBACK_ALERT_PCT` (number, default 20, 1–100, hot), `config.EMPTY_SYMBOLS_ALERT_PCT` (number, default 5, 1–100, hot), `config.OPS_ALERT_WEBHOOK_URL` (password, `sensitive=True`, `hot_reloadable=False`, default "") — section "Data Sources" |
+| OH6 | `swallowed` helper | 2 | sonnet | C `swingbot/core/infra/swallowed.py`, C `tests/infra/test_swallowed.py` | `swallowed(log: logging.Logger, tag: str, exc: BaseException, msg: str = "", *args, level: int = logging.WARNING, exc_info: bool = False) -> None`; `snapshot() -> dict[str, dict]` (tag → `{"count": int, "first_at": iso str, "last_at": iso str, "last_error": str}`); `merge(counts: dict[str, dict]) -> None`; `reset() -> None`; `STARTED_AT: str` (UTC iso at import = process boot); record `extra={"swallowed_tag": tag}` |
+| OH7 | `_run_bounded` carries child counts back | 2 | opus | M `swingbot/core/scanning/fetch.py`, M `tests/infra/test_swallowed.py`, C `tests/infra/swallowed_probe.py` | `fetch._counted_call(fn, *args) -> tuple[Any, dict]`; `_run_bounded` return shape unchanged; failure tags `scan.run_bounded`; probe module functions `count_then_return(x)`, `sleep_forever()` (module-level, spawn-picklable) |
+| OH8 | Heartbeat key-level merge and runstate flags | 2 | opus | M `swingbot/core/db/repositories/heartbeat.py`, M `swingbot/commands/scanning/runstate.py`, C `tests/scanning/test_heartbeat_merge.py` | `HeartbeatRepository.merge(self, fields: dict, *, conn=None) -> None`; `runstate.get_stale_alert_active() -> bool`, `set_stale_alert_active(active: bool) -> None`, `get_provider_alert_active() -> bool`, `set_provider_alert_active(active: bool) -> None`; heartbeat doc key `swallowed: {"since": swallowed.STARTED_AT, "counts": swallowed.snapshot()}`; tags `runstate.read_heartbeat`, `runstate.update_heartbeat` |
+| OH9 | Scan conversion A (`scan_run` and five small files) | 2 | sonnet | M `swingbot/core/scanning/{scan_run,strategy_pass,plan_table,lane_overlap,outlook_context,scan_replay}.py` | `scan.*` tags |
+| OH10 | Scan conversion B (`analyze`, `fetch`) | 3 | sonnet | M `swingbot/core/scanning/analyze.py`, M `swingbot/core/scanning/fetch.py` | `scan.*` tags |
+| OH11 | Scan conversion C (`lifecycle_embeds`, `short_run`, `outlook_run`, `progress_store`) | 3 | sonnet | M `swingbot/core/scanning/{lifecycle_embeds,short_run,outlook_run,progress_store}.py` | `scan.*` tags |
+| OH12 | Marketdata conversion A (`data`, `data_refresh`) | 3 | sonnet | M `swingbot/core/marketdata/data.py`, M `swingbot/core/marketdata/data_refresh.py` | `marketdata.*` tags (incl. `marketdata.price_batch`) |
+| OH13 | Marketdata conversion B (seven files) | 3 | sonnet | M `swingbot/core/marketdata/{data_store,ticker_directory,export_data,backtest_cache,spot_metals}.py`, M `swingbot/core/marketdata/providers/{alpaca_provider,router}.py` | `marketdata.*` tags |
+| OH14 | Earnings conversion | 3b | sonnet | M `swingbot/core/market/events.py`, M `swingbot/core/market/earnings_history.py` | `earnings.*` tags (incl. `earnings.next_date`) |
+| OH15 | Swallowed-error ratchet | 4 | sonnet | C `tests/infra/test_swallowed_ratchet.py` | `SCOPES: tuple[str, ...]`, `EXCLUDED: dict[str, str]` (empty unless a conversion task named a file), `BASELINE: int` (measured), `untagged_handlers(path: Path) -> list[int]` |
+| OH16 | Provider degradation metrics | 4 | opus | M `swingbot/core/scanning/telemetry.py`, M `swingbot/core/scanning/scan_run.py`, M `swingbot/admin/api_v1/risk.py`, C `tests/scanning/test_provider_health.py` | `telemetry.fallback_rate(source_counts: list[dict]) -> float \| None`; `telemetry.provider_health(tickers: list, frames: dict, data_sources: dict, price_sources: dict, today: dt.date) -> dict` with keys `provider_fallback_rate: float \| None`, `empty_symbols: int`, `empty_rate: float \| None`, `stale_symbols: int \| None`; telemetry row gains those four keys |
+| OH17 | Ops notices and pure verdicts | 4 | sonnet | M `swingbot/commands/scanning/notices.py`, C `swingbot/commands/scanning/ops_watch.py`, C `tests/scanning/test_ops_watch.py` | `notices.stale_scan_embed(age_min: int, last_success: str)`, `notices.stale_scan_recovered_embed(last_success: str)`, `notices.provider_degraded_embed(row: dict, fallback_pct: float, empty_pct: float)`, `notices.provider_recovered_embed(row: dict)`; `ops_watch.BOOTED_AT: dt.datetime`; `ops_watch.stale_scan_verdict(now, last_success, interval_min, booted_at, *, in_session, paused, failure_alert_active, stale_alert_active) -> str \| None`; `ops_watch.provider_verdict(row: dict \| None, *, fallback_pct: float, empty_pct: float, alert_active: bool) -> str \| None` |
+| OH18 | Watchdog loop, provider check and loop wiring | 4 | sonnet | M `swingbot/commands/scanning/ops_watch.py`, M `swingbot/commands/scanning/loops.py`, M `tests/scanning/test_ops_watch.py`, M `tests/infra/test_silent_alerts_channel.py` | `ops_watch.scan_watchdog` (`tasks.loop(minutes=1)`), `async ops_watch.watchdog_tick(now: dt.datetime \| None = None) -> str \| None`, `async ops_watch.check_provider_health(row: dict \| None = None) -> str \| None`, `ops_watch._channel()`; `scan_watchdog` in `loops._always_on_loops()` |
+| OH19 | Heartbeat cron on the VM | 5 | sonnet | C `scripts/ops/heartbeat_watch.sh`, C `scripts/ops/install_heartbeat_watch_cron.sh`, M `docs/deploy/DEPLOY_HETZNER.md`, C `tests/scripts/test_heartbeat_watch.py` | CLI `heartbeat_watch.sh [--dry-run --age <s>] [--test]`; state `logs/heartbeat_watch.state`, log `logs/heartbeat_watch.log` (cap 2000 lines); env overrides `HEARTBEAT_WATCH_ROOT` (default `/opt/swing-bot`) |
+| OH20 | `GET /api/v1/system/health` | 5 | sonnet | C `swingbot/admin/api_v1/ops_health.py`, M `swingbot/admin/api_v1/__init__.py`, C `tests/admin/test_api_v1_ops_health.py` | JSON `{providers: [{at, tickers, provider_fallback_rate, stale_symbols, empty_symbols, empty_rate}] (newest first, ≤ 20), thresholds: {fallback_pct, empty_pct}, swallowed: [{process: "bot"\|"admin", tag, count, first_at, last_at, last_error}] (count desc), bot_counts_since: str \| null}` |
+| OH21 | Frontend health types, client and store | 5 | sonnet | M `frontend/src/app/api/models.ts`, M `frontend/src/app/api/api-client.ts`, M `frontend/src/app/stores/system.store.ts`, M `frontend/src/app/stores/system.store.spec.ts` | TS `ProviderHealthRow`, `SwallowedRow`, `SystemHealth`; `ApiClient.systemHealth(): Observable<SystemHealth>`; `SystemStore` state `health: SystemHealth \| null`, `healthError: string \| null`; method `resolveHealth(): Observable<void>`; `resolveScan()` also resolves health (so `scan`/`bot` SSE refreshes both) |
+| OH22 | Provider-health and swallowed-errors panels | 5b | sonnet | C `frontend/src/app/workspaces/system/provider-health-panel.ts`, C `provider-health-panel.spec.ts`, C `swallowed-errors-panel.ts`, C `swallowed-errors-panel.spec.ts`, M `frontend/src/app/workspaces/system/scan-tab.ts` | Components `sb-provider-health-panel`, `sb-swallowed-errors-panel` (inputs `health: SystemHealth \| null`) |
+| OH23 | Full suites | 5b | haiku | — | — |
+| OH24 | Production rollout (post-deploy) | 5b | sonnet | prod only: `.env` via `scripts/ops/env_set.py`, crontab via `install_heartbeat_watch_cron.sh` | Recorded in § Progress: one healthy verdict line, one `--test` post, `ps` shows gunicorn, tunnel login works |
+
+## Parts
+
+| Part | File | Tasks | Scope |
+|---|---|---|---|
+| 1 | `2026-10-09-v148-ops-hardening_1-admin-process.md` | OH1–OH5 | Phase A: single-worker check, gunicorn launch, login hardening (backend and SPA), config keys |
+| 2 | `2026-10-09-v148-ops-hardening_2-swallowed-heartbeat.md` | OH6–OH9 | Phase B: swallowed helper, spawn round-trip, heartbeat merge, first scan conversion |
+| 3 | `2026-10-09-v148-ops-hardening_3-conversion.md` | OH10–OH13 | Phase C: remaining scan and marketdata conversions |
+| 3b | `2026-10-09-v148-ops-hardening_3b-earnings.md` | OH14 | Phase C: earnings conversion (part 3 split only to stay under 1500 lines) |
+| 4 | `2026-10-09-v148-ops-hardening_4-ratchet-metrics-watch.md` | OH15–OH18 | Phase D: ratchet, provider metrics, ops notices, watchdog and wiring |
+| 5 | `2026-10-09-v148-ops-hardening_5-cron-admin-ui-suite.md` | OH19–OH21 | Phase E: VM cron, health endpoint, store wiring |
+| 5b | `2026-10-09-v148-ops-hardening_5b-panels-suite-rollout.md` | OH22–OH24 | Phase E: frontend panels, full suites, production rollout (part 5 split only to stay under 1500 lines) |
