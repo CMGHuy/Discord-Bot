@@ -387,7 +387,10 @@ today: `notify_plan_events` 12, `_send_alerts` 9, `close_plan_trade` 7.
   still runs the notifier; mentions honour defaults (Watch-only: near_stop and
   expired off), toggles and `watch_mode=silent`; `allowed_mentions`; no
   follower → silent, no mention; empty `DISCORD_CHANNEL_NOTIFY_ID` → no send;
-  `apply_chrome` receives `link_base=config.ADMIN_PUBLIC_URL`.
+  `apply_chrome` receives `link_base=config.ADMIN_PUBLIC_URL`. v151's AST
+  guard (task V151-6) scans a fixed `MODULES` list of `apply_chrome`
+  callers with per-module call counts; v152 adds `follow_notify.py` to that
+  list with its call count, or the new caller goes unguarded.
 - D2: a dynamic item rebuilds from its `custom_id` alone (restart), with and
   without the author segment, and the `!top` lock holds after rebuild; the
   legacy static ids reply with the predates-v152 line and Dismiss still works;
