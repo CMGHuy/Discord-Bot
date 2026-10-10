@@ -11,7 +11,12 @@ These four tasks are **Group 1**. SP5–SP7 are in this file. SP8 (`history`) is
 
 - `$WT` = `/home/user/Discord-Bot/.claude/worktrees/2026-10-10-v153-slash-command-parity`. Never `cd`; use `git -C $WT` and absolute paths.
 - Consumed from SP1 (`swingbot/commands/reply.py`): `CtxReply`, `InteractionReply`, `send_prefix_tip`. Consumed from SP1 (`tests/commands/reply_harness.py`): `ParityCase`, `FakeContext`, `FakeInteraction`, `run_both`, `comparable`. SP1's `tests/commands/test_reply_parity.py` parametrises one test over `all_cases()`, which imports every module in `tests/commands/parity_cases/` and concatenates their `CASES`. Adding a module there is how a task adds its handlers to the harness. Before Step 1 of any task here, confirm these names exist: `git -C $WT grep -n "def run_both\|class ParityCase\|def all_cases\|class FakeInteraction" -- tests/commands/reply_harness.py` and `git -C $WT grep -n "class CtxReply\|class InteractionReply\|def send_prefix_tip" -- swingbot/commands/reply.py`. If either grep is empty, SP1 has not landed. Stop and report `BLOCKED: SP1 missing`.
-- `ParityCase.expect` meanings, as SP1's test enforces them: `"send"` means both surfaces produce the same `comparable(...)` events and neither reply is `failed`. `"edit"` is the same, plus at least one `"edit"` event. `"multi_send"` is the same, plus at least two `"send"` events. `"error"` is the same, plus `failed` is `True` on both replies.
+- `ParityCase.expect` meanings, as SP1's `test_handler_parity` enforces them (the `_EXPECT` table in `tests/commands/test_reply_parity.py`). In every case both surfaces produce the same `comparable(...)` events.
+  - `"send"`: at least one `"send"` and no `"edit"`; neither reply is `failed`.
+  - `"edit"`: at least one `"send"` and at least one `"edit"`; neither reply is `failed`.
+  - `"multi_send"`: at least two `"send"` events and no `"edit"`; neither reply is `failed`.
+  - `"error"`: at least one `"send"`, and `failed` is `True` on both replies.
+  - A case's `stub` is applied once, and the handler then runs twice (Context first) under it, so stubs must be idempotent.
 - A validation failure answers through `reply.send_error(...)`. On `CtxReply` that is the same channel message as today. It also sets `reply.failed`, so the prefix command sends no tip after an error.
 - Slow handlers call `await reply.defer()` **after** their validation and **before** the slow work. On `CtxReply` it is a no-op. On the slash surface it keeps Discord's 3-second acknowledgement.
 - Every new slash command is new, so its name, description and options are free. Keep descriptions ≤ 100 characters and option names lower-case. SP18's parity test checks both.
@@ -480,7 +485,7 @@ git -C $WT grep -n "class CtxReply\|class InteractionReply\|TOKEN_LIFETIME_S =\|
 git -C $WT grep -n "class ParityCase\|class FakeInteraction\|calls" -- tests/commands/reply_harness.py
 ```
 
-Expected: hits for all four names in `reply.py` and both classes in the harness. Note the exact string `FakeInteraction` records in `.calls` for `interaction.channel.send` (the ledger names it `channel.send`). Step 2's test uses that string.
+Expected: hits for all four names in `reply.py` and both classes in the harness. `FakeInteraction` records `"channel.send"` in `.calls` when a stale reply posts to the channel; Step 2's test relies on it.
 
 - [ ] **Step 1: Write the parity cases (failing)**
 
@@ -610,7 +615,7 @@ CASES = [
 
 - [ ] **Step 2: Write the stale-token test (failing)**
 
-Create `$WT/tests/commands/test_scrapeall_stale.py`. Replace `"channel.send"` with the exact string from Step 0 if SP1 records it differently.
+Create `$WT/tests/commands/test_scrapeall_stale.py`:
 
 ```python
 """v153 SP6: a /scrapeall that outlives its interaction token still delivers
@@ -1097,7 +1102,7 @@ git -C $WT commit -m "feat(v153): SP6 data handlers, /charts /download /cached /
 
 **Interfaces:**
 - Consumes (SP1): `CtxReply`, `InteractionReply`, `send_prefix_tip`, `PREFIX_TIP_UNTIL`, `reply._today`; `ParityCase`.
-- Consumes (SP2): `growth.py`'s import of `swingbot.core.edge.portfolio_state.collect_portfolio_state`. The ledger says SP2 binds it "under the same local name". Step 0 reads the exact name. The code below calls it `_collect_portfolio_state`; if SP2 bound `collect_portfolio_state`, use that name in `handle_portfolio` and in the parity stub.
+- Consumes (SP2): `growth.py`'s line `from swingbot.core.edge.portfolio_state import collect_portfolio_state as _collect_portfolio_state` (SP2 Step 3). `handle_portfolio` and the parity stub use the local name `_collect_portfolio_state`. Step 0 confirms it.
 - Produces (ledger): `handle_growth(reply, target: float = 10.0)`, `handle_killswitch(reply, action: str = "status")`, `handle_portfolio(reply)`. Also `/growth`, `/portfolio`, and `/killswitch`, whose function is named `slash_killswitch` (SP18 reads it). `/killswitch` has action choices `status`/`on`/`off`, `@app_commands.default_permissions(administrator=True)`, `@app_commands.checks.has_permissions(administrator=True)` and `@app_commands.guild_only()`. SP3's `bot.tree.error` handler answers its `MissingPermissions` and `NoPrivateMessage`.
 - Output:
   - `!growth`, `!killswitch` and `!portfolio` texts are unchanged. Only the tip follows a successful answer.
@@ -1113,7 +1118,7 @@ git -C $WT grep -n "portfolio_state" -- swingbot/commands/growth.py
 git -C $WT grep -n "def _collect_portfolio_state" -- swingbot/commands/growth.py
 ```
 
-Expected: four hits in `reply.py`, and one import line in `growth.py` (note the bound name). The third grep must be **empty**. If it is not, SP2 has not landed: stop and report `BLOCKED: SP2 missing`.
+Expected: four hits in `reply.py`, and one import line in `growth.py` ending `as _collect_portfolio_state`. The third grep must be **empty**. If it is not, SP2 has not landed: stop and report `BLOCKED: SP2 missing`.
 
 - [ ] **Step 1: Write the parity cases (failing)**
 
@@ -1160,7 +1165,7 @@ def _stub_portfolio(monkeypatch):
         "kill": {"on": False, "reason": None},
         "growth": {"current_multiple": 1.32, "pct_to_target": 12.1},
     }
-    # SP2's import binds this name in growth.py (Step 0); patch the name the handler reads.
+    # SP2 binds collect_portfolio_state under this local name in growth.py.
     monkeypatch.setattr(growth_mod, "_collect_portfolio_state", lambda: dict(state))
 
 
@@ -1371,7 +1376,7 @@ async def killswitch_command(ctx, action: str = "status"):
     await send_prefix_tip(ctx, reply)
 ```
 
-4c. Replace `portfolio_command` (the `@bot.command(name="portfolio")` block) with the code below. Use the name Step 0 found in place of `_collect_portfolio_state` if it differs.
+4c. Replace `portfolio_command` (the `@bot.command(name="portfolio")` block) with:
 
 ```python
 async def handle_portfolio(reply) -> None:
