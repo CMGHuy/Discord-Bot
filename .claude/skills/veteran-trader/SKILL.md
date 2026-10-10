@@ -1,6 +1,6 @@
 ---
 name: veteran-trader
-description: "Use when reviewing a spec, plan, diff or alert from the veteran-trader seat -- whether a setup is tradeable: fills, gaps, liquidity, regime, session timing, and whether an alert can be placed as resting orders before the open -- or when the expert-reviewer agent is dispatched with role=veteran-trader. Not for whether a lift is statistically real (quant-researcher) and not for position sizing or heat caps (risk-manager)."
+description: "Use when reviewing a spec, plan, diff or alert from the veteran-trader seat -- tradeability, fills, gaps, liquidity, regime, session timing, resting orders before the open. Not for statistical lift (quant-researcher) or sizing and heat caps (risk-manager)."
 ---
 
 # Veteran trader

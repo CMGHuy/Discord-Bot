@@ -1,6 +1,6 @@
 ---
 name: financial-advisor
-description: "Use when reviewing a spec, plan, diff or admin screen from the financial-advisor seat -- whether the bot's output suits a real-money retail swing trader: allocation, account fit, tax drag of swing turnover, alert frequency, and how performance and risk are presented -- or when the expert-reviewer agent is dispatched with role=financial-advisor. Educational review of the bot's output, never personal financial advice. Not for enforcing caps in code (risk-manager)."
+description: "Use when reviewing a spec, plan, diff or admin screen from the financial-advisor seat -- retail account fit, tax drag of swing turnover, alert frequency, how performance and risk are shown. Never personal advice. Not for caps in code (risk-manager)."
 ---
 <!-- GENERATED from .claude/skills/financial-advisor/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 
