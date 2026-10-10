@@ -64,8 +64,11 @@ def _unquote(raw: str, lineno: int) -> str:
 def _scalar(raw: str, lineno: int) -> str:
     if raw.startswith('"'):
         return _unquote(raw, lineno)
+    # _KEY_RE already ate the whitespace after the colon, so a value that
+    # opens with `#` needs the space put back for the ` #` trap to see it.
+    padded = " " + raw
     for trap in _UNQUOTED_TRAPS:
-        if trap in raw:
+        if trap in padded:
             raise _fail(lineno, f"unquoted value contains {trap!r} -- wrap the "
                                 "whole value in double quotes")
     return raw
