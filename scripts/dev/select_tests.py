@@ -256,12 +256,20 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (".codex/", ("tests/hooks/",)),
     # backtest-methodology.md's closed table (test_guardrails); every
     # reference doc must be named in AGENTS.md (sync_codex via test_codex_mirror);
-    # skills-tools.md's roles table pins each reviewer model (test_role_skills).
+    # skills-tools.md's roles table pins each reviewer model (test_role_skills);
+    # three docs carry pinned section headings (test_doc_sections) that
+    # doc_section.py prints, one of them from the real file (test_doc_section).
     ("docs/claude/", ("tests/hooks/test_guardrails.py",
                       "tests/hooks/test_codex_mirror.py",
-                      "tests/hooks/test_role_skills.py")),
+                      "tests/hooks/test_role_skills.py",
+                      "tests/hooks/test_doc_sections.py",
+                      "tests/dev/test_doc_section.py")),
     # The backup runbook is parsed for the commands it documents.
     ("docs/deploy/DEPLOY_HETZNER.md", ("tests/scripts/test_backup_db.py",)),
+    # The broken-frontmatter fixture is read by three tests (v154).
+    ("tests/hooks/fixtures/broken_frontmatter_SKILL.md",
+     ("tests/dev/test_skill_frontmatter.py", "tests/hooks/test_codex_mirror.py",
+      "tests/hooks/test_skill_shape.py")),
     # Every testrun.py command line deploy.yml runs is parsed for real.
     (".github/workflows/", ("tests/dev/test_testrun_ci_invocations.py",)),
     # Every spec past v140 must carry a valid **Screen:** header line, and

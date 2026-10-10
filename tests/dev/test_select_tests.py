@@ -432,6 +432,7 @@ def _with_readers(repo: pathlib.Path) -> pathlib.Path:
     """Add the tests that read repo data files rather than importing code."""
     for rel in ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.py",
                 "tests/hooks/test_role_skills.py",
+                "tests/hooks/test_doc_sections.py", "tests/dev/test_doc_section.py",
                 "tests/dev/test_testrun_ci_invocations.py"):
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text("X = 1\n", encoding="utf-8")
@@ -446,7 +447,8 @@ def _with_readers(repo: pathlib.Path) -> pathlib.Path:
     ("CLAUDE.md", ["tests/hooks/"]),
     ("AGENTS.md", ["tests/hooks/"]),
     ("docs/claude/backtest-methodology.md",
-     ["tests/hooks/test_codex_mirror.py", "tests/hooks/test_guardrails.py",
+     ["tests/dev/test_doc_section.py", "tests/hooks/test_codex_mirror.py",
+      "tests/hooks/test_doc_sections.py", "tests/hooks/test_guardrails.py",
       "tests/hooks/test_role_skills.py"]),
 ])
 def test_data_read_path_routes_to_its_readers(sel, tmp_path, path, expected):
@@ -640,7 +642,9 @@ def test_unreached_source_widens_even_beside_a_reached_one(sel, tmp_path):
 
 def test_targets_inside_a_selected_directory_are_collapsed(sel, tmp_path):
     """tests/hooks/ plus tests/hooks/test_guardrails.py would hand pytest the
-    same file twice; the directory already covers it."""
+    same file twice; the directory already covers it. The docs/claude/ reader
+    outside tests/hooks/ is not covered by it and stays."""
     result = sel.select(["AGENTS.md", "docs/claude/testing-cost.md"],
                         _with_readers(_repo(tmp_path)))
-    assert (result.full, result.targets) == (False, ["tests/hooks/"])
+    assert (result.full, result.targets) == (
+        False, ["tests/dev/test_doc_section.py", "tests/hooks/"])
