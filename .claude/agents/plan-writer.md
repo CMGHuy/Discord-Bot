@@ -1,6 +1,6 @@
 ---
 name: plan-writer
-description: Writes an implementation plan from an already-approved spec, following this repo's document conventions (vN reuse, Bump/Edge header, ### Task ids, Parallelisation, 1500-line split rule). Runs on Opus, in two phases -- dispatch mode=index first; if it returns PARTS, dispatch one mode=part per part, all in one message so they run in parallel. Use after brainstorming has produced a spec and the user has approved it.
+description: Writes an implementation plan from an already-approved spec, following this repo's document conventions (vN reuse, Bump/Edge header, ### Task ids, Parallelisation, 1500-line split rule). Runs on Opus, in two phases -- dispatch mode=index first; if it returns PARTS, dispatch one mode=part per part, at most 2 at a time (two per message; the next pair when both return). Use after brainstorming has produced a spec and the user has approved it.
 tools: Bash, Read, Write, Grep, Glob, Skill
 model: opus
 skills: [superpowers:writing-plans]
