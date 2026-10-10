@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-10 06:50:31 UTC",
+  "generated_at": "2026-10-10 06:50:56 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.22.0",
+    "ui": "1.22.1",
     "bot": "2.3.1"
   },
   "releases": [
@@ -1525,6 +1525,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-10",
+      "last_seen": "2026-10-10",
+      "commit": "cb1df9d6",
+      "subject": "release(ui): 1.22.1 -- bounded scan refresh and hidden-tab pause (v132)",
+      "versions": {
+        "ui": "1.22.1",
+        "bot": "2.3.1"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
