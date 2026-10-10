@@ -1291,6 +1291,8 @@ On a failure:
 
 Never edit a test to make it pass without the owning task's review.
 
+If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), it passes: `python $WT/scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` (no `BASELINE` raise). If `scripts/dev/complexity_gate.py` exists (v149 merged), `python $WT/scripts/dev/complexity_gate.py` prints no `new`/`risen` verdict.
+
 - [ ] **Step 3: Complexity over every touched module**
 
 ```bash

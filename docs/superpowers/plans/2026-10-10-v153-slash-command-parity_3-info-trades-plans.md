@@ -24,6 +24,10 @@ These four tasks are the first half of the **`slash.py` chain** (SP3 → SP4 →
 
 **Model:** opus — seven handlers, the C15 `!ticker` split, the first atomic `slash.py` move, and the "Union, `!` body as base" output rule applied to four commands at once.
 
+**Swallowed-error ratchet (audit 2026-10-10):** this task writes `except Exception` handlers. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged): a handler moved from today's code keeps exactly the `swallowed(...)` call it carries in the current file (copy it from the file, not from this plan's pre-v148 text); a new handler that neither re-raises nor calls `swallowed()` follows the index Global Constraints bullet "Swallowed-error ratchet"; then run `python $WT/scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py`. Otherwise write them as planned.
+
+**Complexity gate (audit 2026-10-10):** this task splits `ticker_cmd` (15) below 15. If `scripts/dev/complexity_gate.py` exists (v149 merged), finish with `python $WT/scripts/dev/complexity_gate.py`, then `--update` and commit `scripts/dev/complexity_baseline.json` in this task's commit (verdicts `gone`/`improved` expected; `new`/`risen` never). Index Global Constraints, Complexity bullet.
+
 **Files:**
 - Modify: `swingbot/commands/info.py` (whole file, 205 lines today)
 - Modify: `swingbot/commands/slash.py` (delete the `/ping` `/help` `/confidence` `/strategies` `/regime` `/ticker` blocks; trim imports)

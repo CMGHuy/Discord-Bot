@@ -13,6 +13,10 @@ This is the fourth Group 1 task. It was split out of part 2 (`..._2-group1-modul
 
 **Model:** opus — `plans_cmd` is a legacy D24 body with a progress message edited across three branches; it must be split below 15 with every branch's text and order preserved.
 
+**Swallowed-error ratchet (audit 2026-10-10):** this task writes `except Exception` handlers. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged): a handler moved from today's code keeps exactly the `swallowed(...)` call it carries in the current file (copy it from the file, not from this plan's pre-v148 text); a new handler that neither re-raises nor calls `swallowed()` follows the index Global Constraints bullet "Swallowed-error ratchet"; then run `python $WT/scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py`. Otherwise write them as planned.
+
+**Complexity gate (audit 2026-10-10):** this task splits `plans_cmd` (24) below 15. If `scripts/dev/complexity_gate.py` exists (v149 merged), finish with `python $WT/scripts/dev/complexity_gate.py`, then `--update` and commit `scripts/dev/complexity_baseline.json` in this task's commit (verdicts `gone`/`improved` expected; `new`/`risen` never). Index Global Constraints, Complexity bullet.
+
 **Files:**
 - Modify: `swingbot/commands/history.py` (imports at lines 15-25; `_parse_plans_args` at lines 47-60; `plans_cmd` at lines 250-351, all today)
 - Create: `tests/commands/parity_cases/history.py`

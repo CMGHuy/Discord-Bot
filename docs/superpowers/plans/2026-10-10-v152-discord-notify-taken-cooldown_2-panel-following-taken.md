@@ -3,7 +3,7 @@
 **Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D2
 **Index:** [`2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`](2026-10-10-v152-discord-notify-taken-cooldown_0-index.md): Global Constraints, Decisions fixed by this index, the task ledger and `## Parallelisation` live there and bind every task below.
 
-Tasks V152-6 .. V152-10. None is v151-gated. Part 1's V152-3 creates `swingbot/core/db/repositories/followers.py` (`followers_repo()`, `FOLLOW_KINDS`), which V152-7 and V152-8 import; V152-2 creates the `plan_followers` table with its FK into `plans` (cascade). Every test that writes a follower row must therefore seed the plan first.
+Tasks V152-6 .. V152-9 (V152-10 lives in [`_2b-spa-followed-option`](2026-10-10-v152-discord-notify-taken-cooldown_2b-spa-followed-option.md); split only to stay under 1500 lines). None is v151-gated. Part 1's V152-3 creates `swingbot/core/db/repositories/followers.py` (`followers_repo()`, `FOLLOW_KINDS`), which V152-7 and V152-8 import; V152-2 creates the `plan_followers` table with its FK into `plans` (cascade). Every test that writes a follower row must therefore seed the plan first.
 
 Test ids: every test file below defines its own `PID` (a 36-char dashed uuid) and `AUTHOR`/`OTHER` (18-digit snowflakes) — the persistent `custom_id` template rejects short ids such as `"plan-123"` or `42`.
 
@@ -12,6 +12,8 @@ Test ids: every test file below defines its own `PID` (a 36-char dashed uuid) an
 ### Task V152-6: Persistent plan panel, legacy fallback, `setup_hook`
 
 **Model:** sonnet — a multi-file discord.py refactor with a fixed contract (DynamicItem template, registration hook), no schema or numerics.
+
+**Swallowed-error ratchet (audit 2026-10-10):** this task adds `except Exception` handlers. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), apply the index Global Constraints bullet "Swallowed-error ratchet (v148)" to every one that does not re-raise (`except Exception as exc:` + `swallowed(log, "ops.<module>.<function>", exc, level=logging.DEBUG)` first, keep the existing log line, unique tag) and run `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` before the commit. Otherwise write them as planned.
 
 **Files:**
 - Modify: `swingbot/commands/views.py` (imports; replace `class PlanActionView` at `:45-131`; module docstring first paragraph)
@@ -590,6 +592,8 @@ git commit -m "feat(v152): persistent plan panel via DynamicItem, legacy fallbac
 
 **Model:** opus — touches the trade ledger's close path inside the manager's transaction, where a failed read must neither abort the transaction nor block a close.
 
+**Swallowed-error ratchet (audit 2026-10-10):** this task adds `except Exception` handlers. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), apply the index Global Constraints bullet "Swallowed-error ratchet (v148)" to every one that does not re-raise (`except Exception as exc:` + `swallowed(log, "ops.<module>.<function>", exc, level=logging.DEBUG)` first, keep the existing log line, unique tag) and run `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` before the commit. Otherwise write them as planned.
+
 **Files:**
 - Modify: `swingbot/core/tracking/performance.py` (module helpers after `_LOCK = Lock()` `:39`; `TradeLog.mark_taken` after `mark_near_close` `:1259`; one statement in `close_plan_trade` `:737`)
 - Create: `tests/tracking/test_taken_by.py`
@@ -824,6 +828,8 @@ git commit -m "feat(v152): taken_by copy on the trade, written at press and re-s
 ### Task V152-8: Per-user Watch + `✅ Following` button + reply
 
 **Model:** sonnet — button callbacks and a pure reply renderer over contracts V152-3/V152-6/V152-7 already fixed; the hindsight rule is a status-set membership test.
+
+**Swallowed-error ratchet (audit 2026-10-10):** this task adds `except Exception` handlers. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), apply the index Global Constraints bullet "Swallowed-error ratchet (v148)" to every one that does not re-raise (`except Exception as exc:` + `swallowed(log, "ops.<module>.<function>", exc, level=logging.DEBUG)` first, keep the existing log line, unique tag) and run `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` before the commit. Otherwise write them as planned.
 
 **Files:**
 - Modify: `swingbot/commands/views.py` (imports; constants and helpers after `STARRED_REPLY`; `WatchButton.callback`; new `FollowingButton`; `PLAN_BUTTONS`)
@@ -1301,20 +1307,20 @@ git commit -m "feat(v152): per-user Watch and the Following button with an infor
 **Model:** haiku — one tuple entry and one extractor lambda, with the exact-set test updated.
 
 **Files:**
-- Modify: `swingbot/core/analytics/aggregate.py` (`DIMENSIONS` `:104`, `_EXTRACTORS` `:108`)
-- Modify: `tests/analytics/test_aggregate.py` (`test_all_ten_dimensions_present` `:50` becomes `test_all_eleven_dimensions_present`; new tests after `test_dimension_extractors`)
+- Modify: `swingbot/core/analytics/aggregate.py` (`DIMENSIONS` `:107`, `_EXTRACTORS` `:112`)
+- Modify: `tests/analytics/test_aggregate.py` (`test_all_ten_dimensions_present` `:50` becomes `test_all_dimensions_present`; new tests after `test_dimension_extractors`)
 
 **Produces (ledger):** `"taken"` in `DIMENSIONS`; `_EXTRACTORS["taken"] = lambda t: "followed" if t.get("taken_by") else "paper"`. A trade with no `taken_by` key, or an empty list (every follower left before the close, V152-7), is `paper`. `GET /api/v1/analytics/by-dimension` (`swingbot/admin/api_v1/analytics.py:~411`) already validates `dim` against `DIMENSIONS`, so `?dim=taken` is served with no API edit; the existing `MIN_CELL_N = 20` withholding applies to the small `followed` cell unchanged.
 
 - [ ] **Step 1: Write the failing tests**
 
-In `tests/analytics/test_aggregate.py`, replace `test_all_ten_dimensions_present` with:
+In `tests/analytics/test_aggregate.py`, replace `test_all_ten_dimensions_present` with the test below. **Cross-plan (audit 2026-10-10):** do not copy the set from this plan blind — take the CURRENT asserted set in the file and add `"taken"` after `"ledger"`, keeping every entry already there (v146 adds `"confluence"`, `"rs_quintile"` if merged). The docstring states the count: 11 without v146, 13 with it. The literal below is the no-v146 shape:
 
 ```python
-def test_all_eleven_dimensions_present():
+def test_all_dimensions_present():
     """v32 Task 11: "tier" (A/B/C) retired -- "confidence" already covered
     the same role, so DIMENSIONS dropped from 10 to 9. v93 then added
-    "ledger" (main/weak), back to 10; v152 adds "taken" (followed/paper)."""
+    "ledger" (main/weak), back to 10; v152 adds "taken" (followed/paper): 11."""
     assert set(DIMENSIONS) == {"strategy", "horizon", "badge", "confidence",
                                "direction", "dow", "month", "ticker", "source", "ledger",
                                "taken"}
@@ -1340,11 +1346,11 @@ def test_taken_never_buckets_as_unknown():
 - [ ] **Step 2: Run them and confirm they fail**
 
 Run: `python scripts/dev/testrun.py file tests/analytics/test_aggregate.py`
-Expected: FAIL (`test_all_eleven_dimensions_present` set mismatch; `stats_by(..., "taken")` raises on an unknown dimension).
+Expected: FAIL (`test_all_dimensions_present` set mismatch; `stats_by(..., "taken")` raises on an unknown dimension).
 
 - [ ] **Step 3: Add the dimension**
 
-In `swingbot/core/analytics/aggregate.py`:
+In `swingbot/core/analytics/aggregate.py`, add `"taken"` after `"ledger"` in the CURRENT `DIMENSIONS` tuple, keeping every entry already there (v146's `"confluence"`, `"rs_quintile"` if present) — do not replace the tuple from this text. The no-v146 result:
 
 ```python
 DIMENSIONS = ("strategy", "horizon", "badge", "confidence",
@@ -1372,128 +1378,4 @@ Expected: PASS (unchanged; it proves the route still validates against `DIMENSIO
 ```bash
 git add swingbot/core/analytics/aggregate.py tests/analytics/test_aggregate.py
 git commit -m "feat(v152): taken analytics dimension, followed vs paper (V152-9)"
-```
-
-### Task V152-10: SPA `Followed vs paper` option, caption, `exp_r`-first order
-
-**Model:** sonnet — Angular template and computed-signal edits with Vitest specs; verbatim copy from the financial-advisor panel.
-
-**Files:**
-- Modify: `frontend/src/app/stores/analytics.store.ts` (`BREAKDOWN_DIMENSIONS` `:275-286`)
-- Modify: `frontend/src/app/stores/analytics.store.spec.ts` (exact list `:739-743`)
-- Modify: `frontend/src/app/workspaces/analytics/tabs/attribution.ts` (template under `.breakdown-controls`; styles; `dimensionVisible`)
-- Modify: `frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts`
-
-**Produces (ledger):** `{ value: 'taken', label: 'Followed vs paper' }` in `BREAKDOWN_DIMENSIONS` (after `ledger`); `export const TAKEN_CAPTION` in `attribution.ts`. Verbatim copy (Global Constraints): label `Followed vs paper`; caption `Paper results, R units, pre-tax. Followed records the plan as followed, not your fill.` Shown only while the `taken` breakdown is selected. For that breakdown `dimensionVisible` puts `exp_r` before `win_rate` (expectancy leads, win rate secondary) and keeps `n`. The data table renders in `visible` order (`ui/data-table/data-table.ts` `renderedColumns`, which maps `visible()` keys; the class comment above it calling the order "ignored" predates SR14), so reordering the list reorders the columns. Every other breakdown keeps today's order.
-
-- [ ] **Step 1: Write the failing specs**
-
-In `analytics.store.spec.ts`, replace the exact-list expectation inside `it('carries the unit and offers every server-supported scoped breakdown', ...)` with:
-
-```ts
-      expect(BREAKDOWN_DIMENSIONS.map((dimension) => dimension.value)).toEqual([
-        'strategy', 'horizon', 'direction', 'dow', 'month', 'badge',
-        'confidence', 'source', 'ledger', 'taken', 'ticker',
-      ]);
-      expect(BREAKDOWN_DIMENSIONS.find((d) => d.value === 'taken')?.label).toBe('Followed vs paper');
-```
-
-In `attribution.spec.ts`, change the import to `import { AttributionTab, TAKEN_CAPTION } from './attribution';` and add inside `describe('AttributionTab', ...)`, after the badge-column tests:
-
-```ts
-  /* -- v152 D2: the followed-vs-paper breakdown ------------------------- */
-
-  it('captions the followed-vs-paper breakdown as paper results, not fills', () => {
-    const { el } = render({ breakdown: signal('taken'), breakdownLabel: signal('Followed vs paper') });
-    expect(TAKEN_CAPTION).toBe(
-      'Paper results, R units, pre-tax. Followed records the plan as followed, not your fill.');
-    expect(el.textContent).toContain(TAKEN_CAPTION);
-  });
-
-  it('shows no caption for any other breakdown', () => {
-    const { el } = render();
-    expect(el.textContent).not.toContain(TAKEN_CAPTION);
-  });
-
-  it('leads with expectancy for the followed-vs-paper breakdown and keeps N', () => {
-    const { fixture } = render({ breakdown: signal('taken') });
-    const visible: string[] = fixture.componentInstance['dimensionVisible']();
-    expect(visible.slice(0, 4)).toEqual(['key', 'n', 'exp_r', 'win_rate']);
-  });
-
-  it('keeps the default column order for every other breakdown', () => {
-    const { fixture } = render();
-    const visible: string[] = fixture.componentInstance['dimensionVisible']();
-    expect(visible.slice(0, 4)).toEqual(['key', 'n', 'win_rate', 'exp_r']);
-  });
-```
-
-- [ ] **Step 2: Run them and confirm they fail**
-
-Run: `npm --prefix frontend test -- --include src/app/stores/analytics.store.spec.ts --watch=false`
-Expected: FAIL (list lacks `taken`).
-Run: `npm --prefix frontend test -- --include src/app/workspaces/analytics/tabs/attribution.spec.ts --watch=false`
-Expected: FAIL (`TAKEN_CAPTION` is not exported).
-
-- [ ] **Step 3: Add the option**
-
-In `analytics.store.ts`, insert after `{ value: 'ledger', label: 'Ledger' },`:
-
-```ts
-  // v152 D2: trades whose plan had a Following follower vs the rest. Intent,
-  // never a fill -- the attribution tab captions it.
-  { value: 'taken', label: 'Followed vs paper' },
-```
-
-- [ ] **Step 4: Caption and column order in `attribution.ts`**
-
-Above `@Component(`, add:
-
-```ts
-/** v152 D2 (financial-advisor panel, verbatim): the followed/paper split is
- *  the paper book, in R, before tax; "followed" is what a user said, never
- *  a fill. */
-export const TAKEN_CAPTION =
-  'Paper results, R units, pre-tax. Followed records the plan as followed, not your fill.';
-```
-
-In the template, directly after the closing `</div>` of `.breakdown-controls`, add:
-
-```html
-      @if (store.breakdown() === 'taken') {
-        <p class="caption">{{ takenCaption }}</p>
-      }
-```
-
-Append to `styles` (both tokens exist: `styles/tokens.css:86`, and `--text-micro` is used across `ui/`): `.caption { margin: 0 0 var(--space-10); color: var(--text-muted); font-size: var(--text-micro); }`
-
-In the class, after `breakdownOptions`, add `protected readonly takenCaption = TAKEN_CAPTION;` and replace `dimensionVisible` with:
-
-```ts
-  /** `badge`/`soak` are present only for some dimensions (`dim=strategy` in
-   *  particular) -- shown only when a row on screen actually carries one.
-   *  v152: the followed-vs-paper split leads with expectancy, win rate
-   *  second; N stays shown per cell. */
-  protected readonly dimensionVisible = computed<string[]>(() => {
-    const rows = this.dimensionRows();
-    const rates = this.store.breakdown() === 'taken' ? ['exp_r', 'win_rate'] : ['win_rate', 'exp_r'];
-    const visible = ['key', 'n', ...rates, 'total_r', 'total_pnl', 'avg_win_r', 'avg_loss_r'];
-    if (rows.some((r) => r.badge !== undefined)) visible.push('badge');
-    if (rows.some((r) => r.soak !== undefined)) visible.push('soak');
-    return visible;
-  });
-```
-
-- [ ] **Step 5: Run the specs**
-
-Run: `npm --prefix frontend test -- --include src/app/stores/analytics.store.spec.ts --watch=false`
-Expected: PASS.
-Run: `npm --prefix frontend test -- --include src/app/workspaces/analytics/tabs/attribution.spec.ts --watch=false`
-Expected: PASS (the breakpoint test still finds only `639`).
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add frontend/src/app/stores/analytics.store.ts frontend/src/app/stores/analytics.store.spec.ts frontend/src/app/workspaces/analytics/tabs/attribution.ts frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts
-git commit -m "feat(v152): Followed vs paper breakdown with its caption, expectancy first (V152-10)"
 ```

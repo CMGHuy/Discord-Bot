@@ -306,6 +306,8 @@ git commit -m "feat(v152): follow-notify event mapping and mention policy tables
 
 **Model:** sonnet — three small edits in the scheduler module with a fixed contract; the care is in leaving every non-scheduled caller and the store-write-halt path untouched, which the tests below pin.
 
+**Swallowed-error ratchet (audit 2026-10-10):** this task adds `except Exception` handlers. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), apply the index Global Constraints bullet "Swallowed-error ratchet (v148)" to every one that does not re-raise (`except Exception as exc:` + `swallowed(log, "ops.<module>.<function>", exc, level=logging.DEBUG)` first, keep the existing log line, unique tag) and run `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` before the commit. Otherwise write them as planned.
+
 **Files:**
 - Modify: `swingbot/commands/scanning/loops.py` (package import :22; `_post_cooldown_note` and `_prune_alert_posts` after `_run_scan_posting_partial` :102-115; `_session_scan_tick` :197-200; `daily_recap` :690-693)
 - Create: `tests/commands/test_loops_cooldown.py`
@@ -514,13 +516,7 @@ Expected: FAIL — `AttributeError: module 'swingbot.commands.scanning.loops' ha
 
 - [ ] **Step 3: Import the cooldown module**
 
-In `swingbot/commands/scanning/loops.py`, change
-
-```python
-from . import notices, outlook, presence, recap, runstate
-```
-
-to
+In `swingbot/commands/scanning/loops.py`, add `cooldown` to the alphabetical `from . import …` line (`:22`), keeping every name other plans added (v148 adds `ops_watch`). Do not rewrite the line from this text. On a tree where no other plan has touched it, the result is:
 
 ```python
 from . import cooldown, notices, outlook, presence, recap, runstate

@@ -1,11 +1,11 @@
-# v153 Slash command parity. Part 4b: `slash.py` chain II, last link (`scanning/commands`)
+# v153 Slash command parity. Part 4c: `slash.py` chain II, last link (`scanning/commands`)
 
 **Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
 **Index:** `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here.
 
-This is the last task of the `slash.py` chain. It was split out of part 4 (`..._4-backtest-watchlist-stats-scanning.md`) only for the 1500-line file cap. The "Shared conventions for this part" block at the top of part 4 applies here unchanged: `$WT`, the SP1 names, the `ParityCase.expect` meanings, `send_error` for validation, `defer()` after validation, verbatim decorators for moved twins, and radon over every touched file. SP16 runs after SP15.
+This is the last task of the `slash.py` chain. It was split out of part 4 (`..._4-backtest-watchlist-stats-scanning.md`) only for the 1500-line file cap (it was `_4b-scanning` until the 2026-10-10 audit moved SP15 into `_4b-stats`). The "Shared conventions for this part" block at the top of part 4 applies here unchanged: `$WT`, the SP1 names, the `ParityCase.expect` meanings, `send_error` for validation, `defer()` after validation, verbatim decorators for moved twins, and radon over every touched file. SP16 runs after SP15.
 
 # Phase 4: `slash.py` chain II (continued)
 
@@ -13,12 +13,16 @@ This is the last task of the `slash.py` chain. It was split out of part 4 (`..._
 
 **Model:** opus — `check_cmd` (D23) and `_check_historical` (C17) are legacy bodies with a background progress poller and edit-based delivery; they must be split below 15, gain the stale-token path, and keep every text and the alert routing exactly.
 
+**Swallowed-error ratchet (audit 2026-10-10):** this task writes `except Exception` handlers. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged): a handler moved from today's code keeps exactly the `swallowed(...)` call it carries in the current file (copy it from the file, not from this plan's pre-v148 text); a new handler that neither re-raises nor calls `swallowed()` follows the index Global Constraints bullet "Swallowed-error ratchet"; then run `python $WT/scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py`. Otherwise write them as planned.
+
+**Complexity gate (audit 2026-10-10):** this task splits `check_cmd` (23) and `_check_historical` (17) below 15. If `scripts/dev/complexity_gate.py` exists (v149 merged), finish with `python $WT/scripts/dev/complexity_gate.py`, then `--update` and commit `scripts/dev/complexity_baseline.json` in this task's commit (verdicts `gone`/`improved` expected; `new`/`risen` never). Index Global Constraints, Complexity bullet.
+
 **Files:**
 - Modify: `swingbot/commands/scanning/commands.py` (whole command section, 379 lines today)
 - Modify: `swingbot/commands/slash.py` (delete `/check` and `/stop`; then trim the module docstring and dead imports)
 - Create: `tests/commands/parity_cases/scanning.py`
 - Modify: `tests/commands/test_commands_check.py` (update the one existing test; append a v153 block)
-- Modify: `tests/scanning/test_short_lane_scan.py` (line 288: the source check moves from `check_cmd.callback` to `_finish_check`)
+- Modify: `tests/scanning/test_short_lane_scan.py` (the `send_then_short(ctx, alerts` assertion, line 288 or 289 if v152 landed: the source check moves from `check_cmd.callback` to `_finish_check`)
 
 **Interfaces:**
 - Consumes (SP1): `CtxReply`, `InteractionReply`, `send_prefix_tip`, `TOKEN_LIFETIME_S`, `PREFIX_TIP_UNTIL`, `reply._today`; `ParityCase`, `FakeContext`, `FakeInteraction`, `run_both`, `comparable`. Consumes `slash.HORIZON_CHOICES`. Consumes `scanning/alerts.py`'s `_send_alerts`, `post_short_universe` and `send_then_short`, which take `reply` as their `destination` (index, Global Constraints: they call `destination.send(content=?, embed=, file=?, view=?, silent=)`).
@@ -314,7 +318,7 @@ def test_slash_check_passes_typed_options_and_drops_a_negative_minimum(monkeypat
     assert seen["args"] == ("4w", None, None, "2026-08-31")
 ```
 
-In `$WT/tests/scanning/test_short_lane_scan.py`, change line 288 to:
+In `$WT/tests/scanning/test_short_lane_scan.py`, replace the line `assert "send_then_short(ctx, alerts" in inspect.getsource(commands.check_cmd.callback)` (line 288, or 289 if v152 landed) with:
 
 ```python
     assert "send_then_short(reply, alerts" in inspect.getsource(commands._finish_check)
