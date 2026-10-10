@@ -14,7 +14,7 @@
 
 ## Blocked tasks: read this before dispatching anything
 
-`swingbot/core/analytics/expectancy_attribution.py` (v146) and `swingbot/core/analytics/gate_counterfactual_report.py` (v147) **do not exist on `main` as of 2026-10-09**, and neither spec has a plan yet.
+`swingbot/core/analytics/expectancy_attribution.py` (v146) and `swingbot/core/analytics/gate_counterfactual_report.py` (v147) **do not exist on `main` as of 2026-10-09**. v146 and v147 now have plans; their loaders live in `swingbot/core/infra/expectancy_attribution_store.py` (`load_latest`) and `swingbot/core/infra/gate_counterfactual_store.py` (`load_report`), re-exported by the analytics modules.
 
 | Tasks | State | Unblocks when |
 |---|---|---|
@@ -26,18 +26,28 @@ The gate, run from the worktree after rebasing it onto `main`:
 
 ```bash
 python - <<'EOF'
-from swingbot.core.analytics import expectancy_attribution as a
-from swingbot.core.analytics import gate_counterfactual_report as g
+from swingbot.core.infra import expectancy_attribution_store as a
+from swingbot.core.infra import gate_counterfactual_store as g
 print("load_latest:", callable(a.load_latest), " load_report:", callable(g.load_report))
 EOF
-git grep -n "os.replace" -- swingbot/core/analytics/expectancy_attribution.py swingbot/core/analytics/gate_counterfactual_report.py
+git grep -n "os.replace" -- swingbot/core/infra/jsonio.py
+git grep -n "atomic_write_json" -- swingbot/core/infra/expectancy_attribution_store.py swingbot/core/infra/gate_counterfactual_store.py
 git grep -n "verdict_of_record\|looks" -- swingbot/core/analytics/expectancy_attribution.py | head
 git grep -n "verdict_of_record" -- swingbot/core/analytics/gate_counterfactual_report.py | head
 ```
 
-Expected: both loaders are callable, both writers use `os.replace`, and `verdict_of_record` appears in both modules (`looks` in v146's). If the loaders live in separate light modules instead (spec § Cross-spec requirements, 2), substitute those module paths here and in V150-3. Anything missing is a v146/v147 defect: stop and report it; do not work around it in v150.
+Expected: both loaders are callable, `jsonio.py` uses `os.replace` and both store modules write through `atomic_write_json`, and `verdict_of_record` appears in both analytics modules (`looks` in v146's). The loaders live in the light infra store modules (spec § Cross-spec requirements, 2), which V150-3 imports. Anything missing is a v146/v147 defect: stop and report it; do not work around it in v150.
 
 **The Research tasks can be implemented and reviewed first.** They are not merged alone: `Bump: ui minor` is one release, and V150-12 rewires both routes together.
+
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v146, v147 — V150-3 and the gate above:** import `load_latest` from `swingbot.core.infra.expectancy_attribution_store` and `load_report` from `swingbot.core.infra.gate_counterfactual_store`, never from `swingbot.core.analytics.*` (that package pulls pandas/numpy). Names verified against v146 V146-9 and v147 V147-8.
+- **v151 — V150-5/V150-7:** the exported TS gate-counterfactual row type is `GateCounterfactualRow` (renamed from `GateRow`; `GateRowView` stays), because v151 defines its own `GateRow`.
+- **v151 — V150-12:** `app.routes.spec.ts` readiness `expected` list: add this plan's paths to the current list, keeping entries other plans added (v151 V151-16 adds `'plans/:id'`); never paste a full literal.
+- **v148 — V150-1/V150-3:** `api_v1/__init__.py` `register()` tuple: add this plan's names in alphabetical position, keeping names other plans added (v148 adds `ops_health`).
+- **v148 swallowed-error ratchet:** if `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), follow the rule in v148's index § Cross-plan coordination (`docs/superpowers/plans/2026-10-09-v148-ops-hardening_0-index.md`). V150-3's `_envelope` handler re-raises (`raise ApiError(...) from exc`), so the ratchet does not count it; any new handler that swallows must follow that rule.
+- **v149 complexity gate:** if `scripts/dev/complexity_gate.py` exists (v149 merged), follow the rule in v149's § Cross-plan coordination (`docs/superpowers/plans/2026-10-09-v149-hygiene-gates.md`).
 
 ## Global Constraints
 

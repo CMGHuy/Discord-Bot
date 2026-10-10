@@ -879,8 +879,8 @@ git commit -m "feat(api): Why panel keys on the trade detail endpoint (v151)"
 **Model:** haiku — one schema field and one `.env.example` entry, copying a neighbouring field's pattern.
 
 **Files:**
-- Modify: `swingbot/config.py` (Discord Alerts group: directly after the `ALERT_EMBED_LAYOUT` `Field(...)`, ~:757-762)
-- Modify: `.env.example` (Discord Alerts block: directly after `ALERT_EMBED_LAYOUT=detailed`, ~:461)
+- Modify: `swingbot/config.py` (Discord Alerts group: directly after the `ALERT_EMBED_LAYOUT` `Field(...)`, ~:769)
+- Modify: `.env.example` (Discord Alerts block: directly after `ALERT_EMBED_LAYOUT=detailed`, ~:467)
 - Create: `tests/test_config_admin_public_url.py`
 
 **Interfaces:**

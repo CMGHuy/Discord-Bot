@@ -78,6 +78,13 @@ export interface CalendarRow { date: string; kind: 'opex_monthly'; label: string
 
 Gate labels (Python, V151-2): RS `"Relative strength"`, parts `"Ticker RS pctile"` (`rs_pctile`) and `"Sector RS pctile"` (`sector_pctile`); Regime `"Regime"`, parts `[]`; Earnings `"Days to earnings"`, parts `[]`. Calendar row: `{"date": "<ISO>", "kind": "opex_monthly", "label": "Monthly OPEX"}`.
 
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v150 — `GateRow` (V151-8 and Group A):** v150 renames its gate-counterfactual row type to `GateCounterfactualRow`; `GateRow` is v151's. No rename here.
+- **v150 — V151-16:** `app.routes.spec.ts` readiness `expected` list: add `'plans/:id'` to the current list, keeping entries other plans added (v150 V150-12 adds `'research'`, `'reports'`); never paste a full literal.
+- **v148 swallowed-error ratchet:** if `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), follow the rule in v148's index § Cross-plan coordination (`docs/superpowers/plans/2026-10-09-v148-ops-hardening_0-index.md`). This plan adds no `except Exception` handler today (its handlers catch `ValueError`); any one added during implementation follows that rule.
+- **v149 complexity gate:** if `scripts/dev/complexity_gate.py` exists (v149 merged), follow the rule in v149's § Cross-plan coordination (`docs/superpowers/plans/2026-10-09-v149-hygiene-gates.md`).
+
 ## Parts
 
 | Part | File | Tasks | Content |
