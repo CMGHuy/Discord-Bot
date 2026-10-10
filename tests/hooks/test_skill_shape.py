@@ -35,7 +35,7 @@ TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod"
                 "veteran-trader", "technical-analyst", "fundamental-analyst",
                 "staff-engineer", "quant-engineer", "senior-engineer"}   # each skill task appends its own name
 TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel",
-          "result-digest"}        # each ritual task appends its own name
+          "result-digest", "handoff"}        # each ritual task appends its own name
 # Rituals the partner lets Claude run on its own (2026-10-08). Still checklists
 # with no Trigger table; their description names the moment they run.
 MODEL_RUN_RITUALS = {"close-out", "new-doc", "panel"}
@@ -188,3 +188,17 @@ def test_result_digest_returns_the_script_output_verbatim():
     assert "the script prints none" in body
     assert "no figures anywhere in the reply" in body
     assert DIGEST_DISCLAIMER in body
+
+
+def test_handoff_writes_the_plan_handoff_block_in_the_main_context():
+    """v154: /handoff records decisions taken in the conversation, so it
+    never forks, and it writes the block skills-tools.md § Plan writing
+    defines -- appending to it, never rewriting what is already there."""
+    meta, body = _read_skill("handoff")
+    assert "context" not in meta and "model" not in meta
+    assert "`## Handoff`" in body
+    assert "docs/claude/skills-tools.md" in body
+    assert "Handing a plan to another session or account" in body
+    assert "AskUserQuestion" in body
+    assert "never rewrite, renumber or delete" in body
+    assert "write nothing" in body
