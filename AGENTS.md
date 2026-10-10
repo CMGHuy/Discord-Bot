@@ -251,9 +251,10 @@ whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
 backup pull), `result-digest` (two backtest `--json` files through
 `compare_backtest_json.py`, output returned verbatim, never judged),
-`handoff` (write the plan's `## Handoff` block before a session stops) and
+`handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
-results-doc checks). `new-doc`
+results-doc checks) and `prereg` (commit a pre-registration stub before the
+measurement, append the ledger row after it). `new-doc`
 (new spec or plan) and `close-out` (plan close-out) may
 also be run implicitly: `new-doc` right before creating a numbered spec or plan,
 `close-out` once a plan's final full-suite task is green. `panel` (dispatch

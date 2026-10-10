@@ -35,7 +35,7 @@ TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod"
                 "veteran-trader", "technical-analyst", "fundamental-analyst",
                 "staff-engineer", "quant-engineer", "senior-engineer"}   # each skill task appends its own name
 TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel",
-          "result-digest", "handoff", "screen"}        # each ritual task appends its own name
+          "result-digest", "handoff", "screen", "prereg"}        # each ritual task appends its own name
 # Rituals the partner lets Claude run on its own (2026-10-08). Still checklists
 # with no Trigger table; their description names the moment they run.
 MODEL_RUN_RITUALS = {"close-out", "new-doc", "panel"}
