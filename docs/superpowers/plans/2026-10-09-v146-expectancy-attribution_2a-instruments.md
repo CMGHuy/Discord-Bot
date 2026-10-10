@@ -27,6 +27,8 @@
 
 **Model:** sonnet -- two small helpers and one keyword argument in a known function, with a stubbed-source test; no statistics and no shared contract beyond the ledger names.
 
+**Cross-plan (audit 2026-10-10):** swallowed-error ratchet (owner v148; full rule in the v148 index, cited in this plan's index). If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), `_days_to_earnings`' handler is written `except Exception as exc:` and its first statement is `swallowed(log, "scan._days_to_earnings", exc, level=logging.DEBUG)` (import `swallowed` from `swingbot.core.infra.swallowed`, and `logging` if `analyze.py` lacks it); the existing `log.debug(...)` line stays after it. Step 5 then also runs `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` (expected PASS; never raise its `BASELINE`). If v148 is not merged, write the handler as below.
+
 **Depends on:** V146-4 (shared file `swingbot/core/scanning/analyze.py`). Run after V146-4 is committed.
 
 **Files:**
@@ -270,6 +272,8 @@ git -C E:/Documents/Private/Projects/Discord-Bot status --short
 
 **Model:** sonnet -- two table-driven extractors, one public helper and one hard-coded frontend list, each pinned by an existing test; the contract (`rs_quintile_label`) is fully specified in the ledger.
 
+**Cross-plan (audit 2026-10-10):** v152 adds a `taken` dimension (after `ledger`) to the same four lists. Every list edit below is an **insertion into the list as it stands in the worktree**, never a replacement from this plan's text: add `"confluence"` and `"rs_quintile"` to the current `DIMENSIONS` tuple, the current dimension-set test, the current `BREAKDOWN_DIMENSIONS` block and the current `analytics.store.spec.ts` `toEqual` list, keeping every entry already there. If v152 merged (`"taken"` is in `DIMENSIONS`), keep `taken` where it is; the dimension count is then 13 instead of 12. The literals quoted below show the no-v152 shape for orientation only.
+
 **Depends on:** nothing. Independent of every other task (disjoint files); it must land before V146-10, which imports `aggregate.rs_quintile_label`.
 
 **Files:**
@@ -281,7 +285,7 @@ git -C E:/Documents/Private/Projects/Discord-Bot status --short
 
 **Interfaces:**
 - Consumes: trade records as `TradeLog` stores them -- `target_sources: list[str]` (always written, `performance.py:619`) and `entry_context: dict | None` carrying `rs_pctile` on a 0-100 scale (`swingbot/core/edge/context.py:108-109`).
-- Produces: `aggregate.DIMENSIONS` gains `"confluence"` and `"rs_quintile"` (12 total); `aggregate.rs_quintile_label(value: float | None) -> str` returning `"Q1"` .. `"Q5"` at 20-point cuts (`[0, 20)` -> `Q1`, `[20, 40)` -> `Q2`, `[40, 60)` -> `Q3`, `[60, 80)` -> `Q4`, `[80, 100]` -> `Q5`; below 0 clamps to `Q1`, above 100 to `Q5`) and `"unknown"` for `None`, NaN or a non-number. V146-10 imports it so the study buckets RS exactly as Analytics does. `GET /api/v1/analytics/by-dimension?dim=confluence|rs_quintile` is served unchanged by the existing endpoint (it validates against `DIMENSIONS`). Frontend `BREAKDOWN_DIMENSIONS` gains `{ value: 'confluence', label: 'Confluence' }` and `{ value: 'rs_quintile', label: 'RS quintile' }`.
+- Produces: `aggregate.DIMENSIONS` gains `"confluence"` and `"rs_quintile"` (12 total; 13 if v152's `taken` is present); `aggregate.rs_quintile_label(value: float | None) -> str` returning `"Q1"` .. `"Q5"` at 20-point cuts (`[0, 20)` -> `Q1`, `[20, 40)` -> `Q2`, `[40, 60)` -> `Q3`, `[60, 80)` -> `Q4`, `[80, 100]` -> `Q5`; below 0 clamps to `Q1`, above 100 to `Q5`) and `"unknown"` for `None`, NaN or a non-number. V146-10 imports it so the study buckets RS exactly as Analytics does. `GET /api/v1/analytics/by-dimension?dim=confluence|rs_quintile` is served unchanged by the existing endpoint (it validates against `DIMENSIONS`). Frontend `BREAKDOWN_DIMENSIONS` gains `{ value: 'confluence', label: 'Confluence' }` and `{ value: 'rs_quintile', label: 'RS quintile' }`.
 
 - [ ] **Step 1: Write the failing backend tests**
 
@@ -291,10 +295,10 @@ In `tests/analytics/test_aggregate.py`, change the import on line 3 to:
 from swingbot.core.analytics.aggregate import DIMENSIONS, StatRow, rs_quintile_label, stats_by
 ```
 
-Replace `test_all_ten_dimensions_present` (lines 50-55) with:
+Rename the current dimension-set test (today `test_all_ten_dimensions_present`, lines 50-55; v152 may have renamed it) to `test_all_dimensions_present`, add `"confluence"` and `"rs_quintile"` to its expected set **keeping every name already there** (including v152's `"taken"` if present), and extend its docstring with the v146 sentence and the resulting count. Without v152 the result reads:
 
 ```python
-def test_all_twelve_dimensions_present():
+def test_all_dimensions_present():
     """v32 Task 11: "tier" (A/B/C) retired -- "confidence" already covered
     the same role, so DIMENSIONS dropped from 10 to 9. v93 then added
     "ledger" (main/weak) as its own grouping dimension, back to 10. v146 I4
@@ -304,6 +308,8 @@ def test_all_twelve_dimensions_present():
                                "direction", "dow", "month", "ticker", "source", "ledger",
                                "confluence", "rs_quintile"}
 ```
+
+With v152's `taken` present the set also holds `"taken"` and the docstring's count is 13 (state v152's sentence before v146's).
 
 Append at the end of the file:
 
@@ -347,7 +353,7 @@ def test_rs_quintile_label_edges(value, label):
 
 (`pytest` is already imported in this file -- `test_stats_by_raises_on_unknown_dimension` uses it. If the import is missing, add `import pytest` at the top.)
 
-In `tests/admin/test_api_v1_analytics.py`, in `test_by_dimension_accepts_every_dimension_and_nulls_thin_rates`, replace the loop header
+In `tests/admin/test_api_v1_analytics.py`, in `test_by_dimension_accepts_every_dimension_and_nulls_thin_rates`, append `"confluence", "rs_quintile"` to the loop's tuple as it stands, keeping every entry already there. Today's header
 
 ```python
     for dim in ("strategy", "horizon", "badge", "confidence", "direction", "dow", "month", "ticker", "source"):
@@ -412,7 +418,7 @@ def _rs_quintile_key(t: dict) -> str:
     return rs_quintile_label(context.get("rs_pctile") if isinstance(context, dict) else None)
 ```
 
-Replace the `DIMENSIONS` tuple with:
+Append `"confluence", "rs_quintile"` to the current `DIMENSIONS` tuple, keeping every entry already there (v152's `"taken"` after `"ledger"` included). Without v152 the tuple reads:
 
 ```python
 DIMENSIONS = ("strategy", "horizon", "badge", "confidence",
@@ -420,7 +426,7 @@ DIMENSIONS = ("strategy", "horizon", "badge", "confidence",
              "confluence", "rs_quintile")
 ```
 
-and add two entries at the end of `_EXTRACTORS` (after `"month": _month_key,`):
+and add two entries at the end of `_EXTRACTORS` as it stands (today after `"month": _month_key,`):
 
 ```python
     "confluence": _confluence_key,
@@ -439,7 +445,7 @@ Expected: PASS, `0 failed`.
 
 - [ ] **Step 5: Write the failing frontend test**
 
-In `frontend/src/app/stores/analytics.store.spec.ts`, replace the pinned array (lines 738-741):
+In `frontend/src/app/stores/analytics.store.spec.ts`, insert `'confluence', 'rs_quintile'` right after `'confidence'` in the current pinned `toEqual` array (lines 738-741 today), keeping every entry already there (v152's `'taken'` included), and add the two label assertions after it. Today's array:
 
 ```typescript
       expect(BREAKDOWN_DIMENSIONS.map((dimension) => dimension.value)).toEqual([
@@ -448,7 +454,7 @@ In `frontend/src/app/stores/analytics.store.spec.ts`, replace the pinned array (
       ]);
 ```
 
-with:
+becomes (no-v152 shape):
 
 ```typescript
       expect(BREAKDOWN_DIMENSIONS.map((dimension) => dimension.value)).toEqual([
@@ -464,7 +470,7 @@ Expected: FAIL -- the `toEqual` diff shows `confluence` and `rs_quintile` missin
 
 - [ ] **Step 6: Add the two dropdown entries**
 
-In `frontend/src/app/stores/analytics.store.ts`, replace the doc comment and list (lines 273-286) with:
+In `frontend/src/app/stores/analytics.store.ts`, insert `{ value: 'confluence', label: 'Confluence' }` and `{ value: 'rs_quintile', label: 'RS quintile' }` after `{ value: 'confidence', … }` in `BREAKDOWN_DIMENSIONS` (lines 273-286 today), keeping every entry already there (v152's `taken` included), and add v146's clause to the doc comment. Without v152 the block reads:
 
 ```typescript
 /** Every dimension `aggregate.DIMENSIONS` serves, including v93's ledger and
@@ -512,11 +518,18 @@ git -C E:/Documents/Private/Projects/Discord-Bot status --short
 
 **Model:** opus -- a behaviour-preserving split of a C15 replay loop that twenty callers depend on, a scorer switch that must leave every live call byte-identical, and a no-lookahead contract on every new field.
 
+**Cross-plan (audit 2026-10-10):** v135 (V135-5/8), v147 (V147-5) and v133 (V133-6) carry conditional instructions targeting the helpers this task creates -- keep the names `_replay_params`, `_bar_scenarios`, `_accept_scenario`, `replay_scenarios_detailed` and the field `ReplayHit.target_confluence` exactly as written below. Before replacing `replay_scenarios`' body, read it as it stands in the worktree and carry every gate another plan has added:
+- If v135 merged (`_headroom_kept` exists in `backtest_scenarios.py`), `_bar_scenarios` keeps calling the headroom gate: its return ends `_headroom_kept(_dryup_kept(scenarios, window), supports, resistances)` (match the argument order of the merged `_headroom_kept`).
+- If v147 merged (`replay_scenarios` has a `blocked=` parameter), add `blocked: list | None = None` to both `replay_scenarios` and `replay_scenarios_detailed`, pass it through, and thread it into `_accept_scenario(..., blocked)`, keeping v147's `_note_blocked(blocked, i, sc)` call in `_accept_scenario`'s `if plan is None:` branch.
+- `tests/scripts/test_fvg_attribution.py::test_replay_still_has_the_shape_the_recorder_patches` is updated in Step 5 below; if v135 already updated it to the whole-module shape, keep v135's version.
+- Complexity gate (GENERIC, owner v149): this task splits the legacy C15 `replay_scenarios`. If `scripts/dev/complexity_gate.py` exists (v149 merged), Step 8 also runs `python scripts/dev/complexity_gate.py` (expect `improved`/`gone` for `replay_scenarios`, never `new`/`risen`), then `python scripts/dev/complexity_gate.py --update`, and Step 9 adds `scripts/dev/complexity_baseline.json` to the commit.
+
 **Depends on:** V146-2 (shared file `swingbot/core/scanning/confidence.py`; this task reads `ConfidenceResult.points` / `.unevaluated`, which V146-1 adds and V146-2 fills on the legacy path). Read the `no-lookahead` skill before starting.
 
 **Files:**
 - Modify: `swingbot/core/scanning/confidence.py` (`ConfidenceResult` near line 232; the legacy scorer's Step 4 `_expectancy_adjustment(scenario.risk_reward_ratio, track_record)` call, near line 565 before V146-2; `score_confidence` near line 593)
 - Modify: `swingbot/core/backtesting/backtest_scenarios.py` (imports lines 6-24; `replay_scenarios` lines 81-165)
+- Modify: `tests/scripts/test_fvg_attribution.py` (`test_replay_still_has_the_shape_the_recorder_patches` at line 109)
 - Create: `swingbot/core/backtesting/scenario_rows.py`
 - Create: `tests/backtesting/test_scenario_rows.py`
 
@@ -981,6 +994,16 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | 
         ticker, df, horizon_key, params=params, gates=gates, dcb_params=dcb_params, asof=asof)]
 ```
 
+The split moves `levels_asof(...)`, `build_confluence_plan(...)` and the `5.0` tolerance out of `replay_scenarios`' own source, so `tests/scripts/test_fvg_attribution.py::test_replay_still_has_the_shape_the_recorder_patches` (line 109, which reads `inspect.getsource(bs.replay_scenarios)`) would fail. Replace its body to read the whole module (unless v135 already made this change -- then keep v135's version):
+
+```python
+def test_replay_still_has_the_shape_the_recorder_patches():
+    src = inspect.getsource(bs)
+    assert "levels_asof(" in src
+    assert "build_confluence_plan(" in src
+    assert getattr(bs, "REPLAY_CONFLUENCE_TOLERANCE_PCT", 5.0) == 5.0 == fa.VOTE_TOLERANCE_PCT
+```
+
 - [ ] **Step 6: Create the TRAIN row module**
 
 Create `swingbot/core/backtesting/scenario_rows.py`:
@@ -1119,6 +1142,9 @@ Expected: PASS (cooldown, warmup, issued_at and stats-shape tests unchanged).
 Run: `python scripts/dev/testrun.py file tests/scripts/test_training_universe.py`
 Expected: PASS (it monkeypatches `bs.replay_scenarios`, which `_replay_ticker` still calls).
 
+Run: `python scripts/dev/testrun.py file tests/scripts/test_fvg_attribution.py`
+Expected: PASS (the Step 5 whole-module shape test).
+
 Run: `python scripts/dev/testrun.py file tests/scanning/test_confidence_points.py`
 Expected: PASS (V146-1/V146-2's scorer tests; the default path is unchanged).
 
@@ -1133,7 +1159,7 @@ Expected: `replay_scenarios_detailed`, `_bar_scenarios`, `_accept_scenario`, `_r
 - [ ] **Step 9: Commit**
 
 ```bash
-git add swingbot/core/scanning/confidence.py swingbot/core/backtesting/backtest_scenarios.py swingbot/core/backtesting/scenario_rows.py tests/backtesting/test_scenario_rows.py
+git add swingbot/core/scanning/confidence.py swingbot/core/backtesting/backtest_scenarios.py swingbot/core/backtesting/scenario_rows.py tests/backtesting/test_scenario_rows.py tests/scripts/test_fvg_attribution.py
 git commit -m "feat(v146): replay hits and the TRAIN per-trade row with a live-identical confidence score (V146-7)"
 git -C E:/Documents/Private/Projects/Discord-Bot status --short
 ```

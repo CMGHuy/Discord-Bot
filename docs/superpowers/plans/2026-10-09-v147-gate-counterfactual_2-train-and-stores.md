@@ -21,6 +21,14 @@ Order inside this part: V147-5 and V147-6 need V147-4 (and V147-2/-3 through it)
 
 **Model:** opus — record-only hooks inside a parallel replay with legacy C(15)/F(65) functions that must not gain a branch, plus a shadow of the live plan-time cap that must agree with `analyze.attach_plan_v2` exactly.
 
+**Cross-plan (audit 2026-10-10):** v146 (V146-7/V146-8) edits the same two files. Read them as they stand in the worktree first.
+- **Task-tuple slots are fixed:** `args[10]` is `spy_df` (v146; `None` when absent) and `args[11]` is `record_blocked`. This task always writes `None` into slot 10 when it appends slot 11, and never reads slot 10.
+- **Pool entry point name:** v147's row-recording worker is `_replay_ticker_gate_rows` (v146 owns `_replay_ticker_rows`). Never rename or reshape a v146 function.
+- **Step 4, if `replay_scenarios_detailed` exists (V146-7 merged):** `replay_scenarios`' body now lives in `_accept_scenario`. Add `blocked: list | None = None` to both `replay_scenarios` and `replay_scenarios_detailed`, pass it through, thread it into `_accept_scenario(..., blocked)`, and put `_note_blocked(blocked, i, sc)` in `_accept_scenario`'s `if plan is None:` branch (before its `return None`). The `_note_blocked` helper is as in Step 4.
+- **Steps 5-6, if `_replay_ticker_rows` or `_replay_exits` exists (V146-8 merged):** keep `_replay_ticker`, `_replay_exits`, `_replay_ticker_rows`, `_run_replay_tasks`, `_drain` and `_replay_with_rows` exactly as v146 left them. Add `_replay_ticker_gate_rows` (Step 5 body) and its helpers beside them instead of rewriting `_replay_ticker`. In `run_scenario_backtest`, keep v146's `collect_rows` arm; the plain arm uses `_replay_ticker_gate_rows` over `[t + (None, True) for t in tasks]` when `record_blocked` (through `_run_replay_tasks`, so no new pool code) and merges through `_scenario_result`; `collect_rows` and `record_blocked` are never both true (Step 8 refuses it), so keep the extra branch inside a helper to hold `run_scenario_backtest` below 15.
+- **Step 8, if `_scenario_stats` exists in `run_backtest_range.py` (V146-8 merged):** keep it; pass `record_blocked` through `_scenario_stats(..., record_blocked=bool(record_blocked))` into `run_scenario_backtest`, and call `_write_blocked(stats, record_blocked)` right after it. The dispatch becomes `run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out, universe=args.universe, trades_jsonl=args.trades_jsonl, record_blocked=args.record_blocked)`.
+- **`--trades-jsonl` with `--record-blocked` is refused (exit 2)** whatever merged: `_check_record_blocked` refuses it (Step 8), and the Step 2 refusal matrix carries the case.
+
 **Files:**
 - Modify: `swingbot/core/backtesting/backtest_scenarios.py` (`replay_scenarios` lines 81-165, `_replay_ticker` 192-215, `run_scenario_backtest` 241-290)
 - Modify: `scripts/backtest/run_backtest_range.py` (module docstring 1-11, imports 26-34, `run_scenario_mode` 166-191, `main` 366-433)
@@ -29,7 +37,7 @@ Order inside this part: V147-5 and V147-6 need V147-4 (and V147-2/-3 through it)
 
 **Interfaces:**
 - Consumes: `blocked_recorder.over_cap`, `risk_cap_margin`, `gate_row`, `row_from_exit`, `require_train_window`, `write_gate_rows` (V147-4); `risk_limits.planned_loss_pct(entry_price, stop_loss)` and `HARD_MAX_PLANNED_LOSS_PCT` (exist, `swingbot/core/risk_limits.py:9/17`); `primary_strategy_for` (exists, imported in `backtest_scenarios` already); `exit_sim._not_triggered`, `ExitResult` (exist).
-- Produces (ledger): `replay_scenarios(..., blocked: list | None = None)` — appends `(signal_index, scenario)` for every scenario whose `build_confluence_plan` returned `None`, output unchanged; `run_scenario_backtest(..., record_blocked: bool = False)` — adds key `"gate_rows": list[dict]` only when True, `pooled`/`by_horizon` identical either way; `run_scenario_mode(..., record_blocked: str | None = None)`; CLI `--record-blocked PATH`. Private helpers: `_note_blocked`, `_replay_ticker_rows(args) -> tuple[dict, list[dict]]`, `_horizon_gate_rows`, `_no_target_row`, `_plan_gate_row`, `_scenario_result`, `_bar_date`; script helpers `_check_record_blocked(args, date_from, date_to)`, `_write_blocked(stats, path)`.
+- Produces (ledger): `replay_scenarios(..., blocked: list | None = None)` — appends `(signal_index, scenario)` for every scenario whose `build_confluence_plan` returned `None`, output unchanged; `run_scenario_backtest(..., record_blocked: bool = False)` — adds key `"gate_rows": list[dict]` only when True, `pooled`/`by_horizon` identical either way; `run_scenario_mode(..., record_blocked: str | None = None)`; CLI `--record-blocked PATH`. Private helpers: `_note_blocked`, `_replay_ticker_gate_rows(args) -> tuple[dict, list[dict]]` (task tuple: `args[10]` = `spy_df` slot, `None` here; `args[11]` = record flag), `_horizon_gate_rows`, `_no_target_row`, `_plan_gate_row`, `_scenario_result`, `_bar_date`; script helpers `_check_record_blocked(args, date_from, date_to)`, `_write_blocked(stats, path)`.
 
 **What the rows are.** For every in-scope signal of every horizon: a scenario with no qualifying target is one `blocked` row (`gate="plan_rejected"`, `reason="no_qualifying_target"`, `cf_status="no-plan"`, margin `None`); every simulated plan is one row with its outcome already simulated by the replay itself — `blocked` with `reason="risk_cap"` (margin, `planned_loss_pct`, `dollar_risk`) when `over_cap(plan)`, otherwise `taken` (`reason=None`). No `rs` row and no `compression` row is ever written here. `in_sample=False` (the cap was never fitted on TRAIN). The replay's own `ExitResult` list is untouched, so `pooled`/`by_horizon` and the printed table are byte-identical with and without the flag.
 
@@ -150,7 +158,7 @@ def test_replay_records_no_target_scenarios_and_still_returns_nothing(monkeypatc
 def test_no_target_rows_are_blocked_no_plan_rows(monkeypatch):
     df = _structured_df()
     monkeypatch.setattr(bs, "build_confluence_plan", lambda *a, **k: None)
-    out, rows = bs._replay_ticker_rows(("AAPL", df, ["4w"], None, None, GATES, True, None, None, None, True))
+    out, rows = bs._replay_ticker_gate_rows(("AAPL", df, ["4w"], None, None, GATES, True, None, None, None, None, True))
     assert out == {"4w": []}
     assert rows
     for row in rows:
@@ -171,7 +179,7 @@ def test_recording_leaves_the_replay_stats_identical_and_writes_no_rs_row():
     rows = recorded["gate_rows"]
     assert rows and {row["gate"] for row in rows} == {"plan_rejected"}
     assert {row["population"] for row in rows} == {"train"}
-    out, _ = bs._replay_ticker_rows(("AAPL", df, ["4w"], None, None, GATES, True, None, None, None, True))
+    out, _ = bs._replay_ticker_gate_rows(("AAPL", df, ["4w"], None, None, GATES, True, None, None, None, None, True))
     simulated = [row for row in rows if row["reason"] != "no_qualifying_target"]
     assert len(simulated) == len(out["4w"])                              # one row per replayed plan
 
@@ -180,7 +188,7 @@ def test_recording_leaves_the_replay_stats_identical_and_writes_no_rs_row():
 def test_rows_respect_the_signal_window():
     df = _structured_df()
     start, end = str(df.index[100].date()), str(df.index[150].date())
-    _, rows = bs._replay_ticker_rows(("AAPL", df, ["4w"], start, end, GATES, True, None, None, None, True))
+    _, rows = bs._replay_ticker_gate_rows(("AAPL", df, ["4w"], start, end, GATES, True, None, None, None, None, True))
     assert rows and all(start <= row["signal_date"] <= end for row in rows)
 
 
@@ -190,7 +198,7 @@ def test_the_legacy_tuples_still_return_a_horizon_dict(monkeypatch):
     df = make_ohlcv([1.0, 2.0])
     base = ("T", df, ["2w"], None, None, {}, True, None, None)
     assert bs._replay_ticker(base) == {"2w": ["p0"]}
-    assert bs._replay_ticker_rows(base + (None,)) == ({"2w": ["p0"]}, [])   # record flag absent: no rows
+    assert bs._replay_ticker_gate_rows(base + (None, None, None)) == ({"2w": ["p0"]}, [])   # record flag (args[11]) None: no rows
 ```
 
 - [ ] **Step 2: Write the failing script tests**
@@ -230,6 +238,7 @@ def replay_calls(monkeypatch):
     ("--from", "2022-01-01", "--to", "2024-03-31", "--scenarios", "--scale-out"),
     ("--train", "--scale-out"),          # no --scenarios: compression rows come from measure_arms.py
     ("--train", "--scenarios"),          # no --scale-out: the counterfactual walk is scale_out=True
+    ("--train", "--scenarios", "--scale-out", "--trades-jsonl", "rows-v146.jsonl"),   # exclusive with v146's rows
 ])
 def test_record_blocked_refuses_before_any_replay(monkeypatch, replay_calls, tmp_path, argv):
     out = tmp_path / "rows.jsonl"
@@ -272,7 +281,7 @@ def test_write_blocked_writes_the_gate_rows_and_skips_without_a_path(tmp_path):
 - [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `python scripts/dev/testrun.py file tests/backtesting/test_scenario_gate_rows.py tests/scripts/test_range_record_blocked.py`
-Expected: FAIL — `AttributeError: module ... has no attribute '_plan_gate_row'` / `'_replay_ticker_rows'`, `replay_scenarios() got an unexpected keyword argument 'blocked'`, and the script tests fail on `unrecognized arguments: --record-blocked`.
+Expected: FAIL — `AttributeError: module ... has no attribute '_plan_gate_row'` / `'_replay_ticker_gate_rows'`, `replay_scenarios() got an unexpected keyword argument 'blocked'`, and the script tests fail on `unrecognized arguments: --record-blocked`.
 
 - [ ] **Step 4: Hook `replay_scenarios` (no new branch)**
 
@@ -314,15 +323,15 @@ and replace the `plan is None` branch body:
 
 - [ ] **Step 5: Split `_replay_ticker` into a row-recording core**
 
-Replace the whole `_replay_ticker` function (keep its docstring text, moved onto `_replay_ticker_rows`) with:
+Replace the whole `_replay_ticker` function (keep its docstring text, moved onto `_replay_ticker_gate_rows`) with (if V146-8 merged, see the Cross-plan block: keep v146's `_replay_ticker` and add only `_replay_ticker_gate_rows` and the helpers below):
 
 ```python
 def _replay_ticker(args) -> dict:
-    """All horizons for ONE ticker: {horizon_key: [exit_result, ...]} (see `_replay_ticker_rows`)."""
-    return _replay_ticker_rows(args)[0]
+    """All horizons for ONE ticker: {horizon_key: [exit_result, ...]} (see `_replay_ticker_gate_rows`)."""
+    return _replay_ticker_gate_rows(args)[0]
 
 
-def _replay_ticker_rows(args) -> tuple[dict, list]:
+def _replay_ticker_gate_rows(args) -> tuple[dict, list]:
     """All horizons for ONE ticker -- the process-pool entry point, so it must
     be module-level and take a single picklable argument.
 
@@ -335,13 +344,14 @@ def _replay_ticker_rows(args) -> tuple[dict, list]:
 
     Returns ({horizon_key: [exit_result, ...]}, gate_rows). The horizon travels
     in the RESULT rather than being inferred from completion order, which is what
-    makes the pooled path order-independent. `args[10]` (v147, optional) asks for
-    the record-only gate rows; without it the row list is always empty.
+    makes the pooled path order-independent. `args[11]` (v147, optional) asks for
+    the record-only gate rows; without it the row list is always empty. `args[10]`
+    is v146's SPY slot and is not read here.
     """
     ticker, df, horizons, start, end, gates, scale_out, dcb_params = args[:8]
     asof_df = args[8] if len(args) > 8 else None
     member_spans = args[9] if len(args) > 9 else None
-    record = bool(args[10]) if len(args) > 10 else False
+    record = bool(args[11]) if len(args) > 11 else False
     out = {hk: [] for hk in horizons}
     rows: list = []
     for hk in horizons:
@@ -421,16 +431,17 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
         (ticker, df, horizons, start, end, gates, scale_out, dcb_params,
          asof_map.get(ticker) if asof_map else None,
          membership.get(ticker, []) if membership is not None else None,
-         record_blocked)
+         None,              # args[10]: v146's spy_df slot, unused here
+         record_blocked)    # args[11]: v147 record flag
         for ticker, df in frames.items()
     ]
 
     n = _resolve_replay_workers(workers)
     if n <= 1 or len(tasks) <= 1:
-        per_ticker_results = [_replay_ticker_rows(t) for t in tasks]
+        per_ticker_results = [_replay_ticker_gate_rows(t) for t in tasks]
     else:
         with ProcessPoolExecutor(max_workers=n) as pool:
-            per_ticker_results = list(pool.map(_replay_ticker_rows, tasks))
+            per_ticker_results = list(pool.map(_replay_ticker_gate_rows, tasks))
     return _scenario_result(per_ticker_results, horizons, record_blocked)
 
 
@@ -480,6 +491,10 @@ def _check_record_blocked(args, date_from, date_to) -> None:
     Exits 2 before any data is loaded."""
     if not args.record_blocked:
         return
+    if getattr(args, "trades_jsonl", None):
+        print("refused: --record-blocked and --trades-jsonl are exclusive (run them as two replays)",
+              file=sys.stderr)
+        raise SystemExit(2)
     if not args.scenarios:
         print("refused: --record-blocked needs --scenarios (confluence no_qualifying_target + risk_cap shadow); "
               "compression rows come from scripts/backtest/measure_arms.py --record-blocked", file=sys.stderr)
@@ -529,7 +544,7 @@ directly after the `if args.train: ... else: ... label = ..., "CUSTOM"` window b
     _check_record_blocked(args, date_from, date_to)
 ```
 
-and the scenarios dispatch:
+and the scenarios dispatch (with V146-8 merged, add `trades_jsonl=args.trades_jsonl,` before `record_blocked=` -- see the Cross-plan block):
 
 ```python
     if args.scenarios:
@@ -559,6 +574,10 @@ git commit -m "feat(v147): confluence replay gate rows + run_backtest_range --re
 
 **Model:** opus — a record-only sink threaded through the research engine's decision path (its `iter_trades` is already C 14 and cannot take a branch), with a parity test that the rebuilt blocked plan and the engine's own taken plan walk to the same outcome.
 
+**Cross-plan (audit 2026-10-10):**
+- **v157 (`instrument` on `StrategyEngine`).** If `instrument` is already a parameter of `StrategyEngine.__init__` (v157 merged), the signature is `(self, strategies=None, compression_context=None, instrument=None, *, blocked_sink=None, compression_allowlist=None)`, keeping both groups of `self.` assignments (v157's and the two below). Without v157 it is the Step 4 signature (no `instrument`). Either way the keyword-only group is exactly `blocked_sink`, `compression_allowlist`.
+- **v158 (`--instrument` CLI).** If `swingbot/core/backtesting/instrument/cli.py` exists (v158 merged), `record_blocked_main` calls `instrument_cli.add_instrument_arg(parser)` after the `--validation` argument and, right after `parse_args`, `instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_arms.py --record-blocked", "v147")` (import `from swingbot.core.backtesting.instrument import cli as instrument_cli` inside the function); `test_measure_arms_record_blocked.py` then also passes `--instrument v1` in one case and asserts a `--instrument v2` refusal exits non-zero. Check v158's WC6 task for the exact names before writing; otherwise write Step 7 as shown.
+
 **Files:**
 - Modify: `swingbot/core/backtesting/arms/strategy_engine.py` (constants 37-43, `StrategyEngine.__init__` 85-94, `_compression_stamp` 147-162, `_candidate_plan` 218-243)
 - Modify: `swingbot/core/backtesting/arms/compression_research.py` (after `sidecar_record`, ~line 116)
@@ -568,7 +587,7 @@ git commit -m "feat(v147): confluence replay gate rows + run_backtest_range --re
 
 **Interfaces:**
 - Consumes: `gate_counterfactual.BlockedCandidate`, `simulate_blocked`, `CounterfactualResult` (V147-2), `PIN_KEYS` (V147-3, additive; the `scan_params` shape `{"stop_mult", "tp2_r", "time_stop_days", "params"}`); `blocked_recorder.gate_row`, `TRAIN_WINDOW`, `require_train_window`, `write_gate_rows` (V147-4); `plan_types.plan_to_dict` (exists, `swingbot/core/planning/plan_types.py:185`); `compression_context.COMPRESSION_MODES` (exists, `swingbot/core/scanning/compression_context.py:90`); `compression_research.offline_context()` (exists); `measure_arms.cached_universe()`, `load_frame()` (exist).
-- Produces (ledger): `StrategyEngine.__init__(self, strategies=None, compression_context=None, *, blocked_sink: list | None = None, compression_allowlist: tuple | None = None)`; `compression_research.record_blocked_compression(frames, window, *, context, horizons=("2w",)) -> list[dict]`; CLI `measure_arms.py --record-blocked PATH [--from --to]` through `measure_arms.cli(argv=None) -> int` (early dispatch; `main` untouched) and `measure_arms.record_blocked_main(argv) -> int` (own parser).
+- Produces (ledger): `StrategyEngine.__init__(self, strategies=None, compression_context=None, *, blocked_sink: list | None = None, compression_allowlist: tuple | None = None)` (with `instrument=None` as the third positional only if v157 merged); `compression_research.record_blocked_compression(frames, window, *, context, horizons=("2w",)) -> list[dict]`; CLI `measure_arms.py --record-blocked PATH [--from --to]` through `measure_arms.cli(argv=None) -> int` (early dispatch; `main` untouched) and `measure_arms.record_blocked_main(argv) -> int` (own parser).
 - Sink protocol (private to this task): `blocked_sink` receives `(arm, BlockedCandidate)` tuples, `arm` in `("blocked", "taken")`. A `blocked` candidate carries `reason` (the `decide_compression_entry` reason) and `plan=None` — `simulate_blocked` builds it on the truncated window. A `taken` candidate carries `reason=None` and `plan=plan_to_dict(plan)` of the plan the engine itself built (stamp merged) — `simulate_blocked` walks it as stored. One instrument, both arms.
 
 **What is and is not a row.** Every *counted* (`signal_date >= window start`) compression candidate that reaches the decision is one row: rejected by `decide_compression_entry` → `blocked` (reasons `no_mode`, `mode_not_allowed`, `earnings_*`, …); passed → `taken` (its walk may be `no-fill`). `not_pit_member` is the research universe mask, not the gate: never a row (index T1). Plan-construction failures after a pass (`plan is None`, O8) and non-compression strategies write nothing. Every row is `population="train"`, `gate="compression"`, `source="strategy"`, `margin=None`, `in_sample=True` (v119 fitted the gate on TRAIN). The decision uses the live allowlist (`COMPRESSION_MODES`, as `strategy_pass._compression_context` does), whatever the research knob says. A `pending` simulator status (too few bars after the signal; no TRAIN resolver exists) is written as `no-data`.
@@ -988,6 +1007,8 @@ git commit -m "feat(v147): StrategyEngine compression gate rows + measure_arms -
 ### Task V147-7: `gate_rejections` table, Alembic `v147_001`, repository
 
 **Model:** opus — a new Postgres table whose migration must match `schema.py` exactly, a conflict-ignoring insert the base repository lacks, and a resolve-once update guarded in SQL.
+
+**Cross-plan (audit 2026-10-10):** other plans add tables at the same three anchors. If another plan's table already follows `dropped_doc_fields` in `schema.py`, insert `gate_rejections` after the last such table; if `PROMOTION_REASONS` already ends with another plan's entry (after `"dropped_doc_fields"`), append after it; if another plan's `CASES` entry already follows `"market_data_state"` in `tests/db/test_unknown_field_round_trip.py`, insert after it. Never reorder or drop another plan's entries. `down_revision` stays whatever `python -m alembic heads` prints (Global Constraints).
 
 **Files:**
 - Modify: `swingbot/core/db/schema.py` (new table after `dropped_doc_fields`, ~line 208; `PROMOTION_REASONS` entry at its end, ~line 290)

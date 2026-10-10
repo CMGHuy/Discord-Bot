@@ -21,6 +21,8 @@ Order (index § Parallelisation): V147-9 needs V147-3 (`pinned_scan_params`, `sc
 
 **Model:** opus — the write path sits inside the live scan's serial merge; a raise here, or a swallowed DB error leaking into `write_failure`, would halt issuance, and the price-basis snapshot decides whether the resolver re-anchors correctly.
 
+**Cross-plan (audit 2026-10-10):** swallowed-error ratchet (owner v148; full rule in the v148 index, cited in this plan's index). `swingbot/core/scanning/*.py` is a ratchet scope. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), both new handlers in `rejection_recorder.py` are written `except Exception as exc:  # noqa: BLE001 -- ...` and their first statement is `swallowed(log, "<tag>", exc, level=logging.DEBUG)` (import `from swingbot.core.infra.swallowed import swallowed`, and `logging`), with the `_warn(...)` line kept after it: tag `scan.record_rejection` in `record_rejection`, `scan._record_built` in `_record_built`. Step 6 then also runs `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` (PASS; never raise `BASELINE`). If v148 is not merged, write the handlers as in Step 4.
+
 **Files:**
 - Create: `swingbot/core/scanning/rejection_recorder.py`
 - Modify: `swingbot/core/edge/rs_gate.py` (append `rs_margin`)
@@ -489,6 +491,10 @@ git commit -m "feat(v147): fail-open live gate-rejection recorder and rs_margin 
 ### Task V147-10: Live hooks at L1–L6
 
 **Model:** opus — four live-scan files, one of them the F(100) `_sync_run_scan`; each hook must be one call with no new branch, and the end-to-end tests must prove the scan result is unchanged with the store down.
+
+**Cross-plan (audit 2026-10-10):**
+- **v139 (`plan_stop_ceiling`).** If `plan_stop_ceiling` is imported in `analyze.py` (v139 merged), Step 4's cap edit reads `ceiling = plan_stop_ceiling(plan)`, `loss_pct = planned_loss_pct(plan.trigger_price, plan.stop_loss)`, `if loss_pct > ceiling + 1e-9:` ... `_reject_plan(item, "risk_cap", ticker, horizon_key, plan=plan, margin=loss_pct - ceiling)`, keeping v139's comment block and any other v139 reasons (`stop_beyond_confluence_ceiling`, `risk_sizing`) as they are. Do not re-import `HARD_MAX_PLANNED_LOSS_PCT` into `analyze.py`; the Step 2 margin test then asserts `loss - plan_stop_ceiling(plan)`. Without v139, Step 4 as written.
+- **Swallowed-error ratchet (owner v148).** If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), `_plan_snapshot`'s handler is `except Exception as exc:` with first statement `swallowed(log, "scan._plan_snapshot", exc, level=logging.DEBUG)` (import from `swingbot.core.infra.swallowed`), keeping the `log.debug(...)` line; Step 8 also runs `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` (PASS; never raise `BASELINE`).
 
 **Files:**
 - Modify: `swingbot/core/scanning/analyze.py` (`ScanItem` gains two fields; `_reject_plan` gains `plan=`/`margin=`; `attach_plan_v2` passes them on `risk_cap`)
@@ -1012,6 +1018,8 @@ git commit -m "feat(v147): record live RS, plan-rejected and compression blocks 
 ### Task V147-11: Resolver core
 
 **Model:** opus — due-date arithmetic over the NYSE calendar, the grace counter, the intraday price-basis bridge and the read-only-from-the-live-cache rule together decide whether every live blocked row is resolved once and reproducibly.
+
+**Cross-plan (audit 2026-10-10):** swallowed-error ratchet (owner v148). Its repo-wide count covers all of `swingbot/**/*.py`, not only the converted scopes, so `_safe_resolve`'s new handler in `gate_resolver.py` counts too. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), write it `except Exception as exc:` with first statement `swallowed(log, "backtest.gate_resolve_row", exc, level=logging.DEBUG)` (import from `swingbot.core.infra.swallowed`), keeping the existing log line, and also run `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` (PASS; never raise `BASELINE`). If v148 is not merged, write it as planned.
 
 **Files:**
 - Create: `swingbot/core/backtesting/gate_resolver.py`

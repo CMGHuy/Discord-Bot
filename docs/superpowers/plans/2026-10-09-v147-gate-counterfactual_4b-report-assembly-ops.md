@@ -907,6 +907,11 @@ git commit -m "feat(v147): weekly gate-counterfactual progress check and cron in
 
 **Model:** sonnet — runs two pre-specified TRAIN commands through `backtest-runner` and records their output verbatim; no judgement beyond reading the report it prints.
 
+**Cross-plan (audit 2026-10-10):**
+- **Cache and universe.** Both runs read the **main tree's** cache read-only: prefix each command with `BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache`. Never run `fetch_backtest_data.py` from the worktree. If v139's universe switch exists (`git grep -n "MEASURE_ARMS_UNIVERSE" -- scripts/backtest/measure_arms.py` hits), also prefix both commands with `MEASURE_ARMS_UNIVERSE=cache`. The results doc's **Run:** line records the cache path and the universe source (`MEASURE_ARMS_UNIVERSE=cache`, or "watchlist" when the switch does not exist) for both runs.
+- **`--instrument` (v158).** Before Steps 2 and 3, run each script with `--help`; if it lists `--instrument`, append `--instrument v1` to that command (the only permitted change), and the doc's Commands section shows it.
+- **Holdout overlap.** The doc's Limitations section gains one bullet: the live rows (2026 onward) overlap the v2 instrument's sealed holdout (2026-01-01 onward); any follow-on gate screen built on them has seen that period.
+
 **Files:**
 - Create: `docs/superpowers/results/2026-10-09-v147-gate-counterfactual.md`
 
@@ -922,16 +927,21 @@ git commit -m "feat(v147): weekly gate-counterfactual progress check and cron in
 
 - [ ] **Step 1: Check the backtest cache**
 
-Run: `python -c "from pathlib import Path; print(len(list(Path('data/backtest_cache').glob('*.csv'))))"`
-Expected: a count above 0 (the brief's runs used 75 cached tickers). If 0, run `python scripts/data/fetch_backtest_data.py` once (network) first.
+Run: `python -c "from pathlib import Path; print(len(list(Path('E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache').glob('*.csv'))))"` (the main tree's cache, read-only)
+Expected: a count above 0 (the brief's runs used 75 cached tickers). If 0, stop and report to the controller: never fetch from the worktree.
+
+Run: `git grep -n "MEASURE_ARMS_UNIVERSE" -- scripts/backtest/measure_arms.py` and `python scripts/backtest/run_backtest_range.py --help` / `python scripts/backtest/measure_arms.py --help`. Note whether the universe switch exists and whether each script lists `--instrument`; Steps 2-3 apply them per the Cross-plan block.
 
 - [ ] **Step 2: Confluence TRAIN run (backtest-runner)**
 
 Dispatch `backtest-runner` with:
 
 ```bash
-python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl
+BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache \
+  python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl
 ```
+
+(plus `MEASURE_ARMS_UNIVERSE=cache` in the prefix and `--instrument v1` at the end when Step 1 found them.)
 
 Expected: exit 0; the printed scenario table is the same table the replay prints without the flag (V147-5 pins byte-identity); the file holds `plan_rejected` rows only (`no_qualifying_target` blocked, `risk_cap` blocked, `taken`), no `rs` and no `compression` row.
 
@@ -940,8 +950,11 @@ Expected: exit 0; the printed scenario table is the same table the replay prints
 Dispatch `backtest-runner` with:
 
 ```bash
-python scripts/backtest/measure_arms.py --record-blocked logs/v147-blocked-compression.jsonl
+BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache \
+  python scripts/backtest/measure_arms.py --record-blocked logs/v147-blocked-compression.jsonl
 ```
+
+(plus `MEASURE_ARMS_UNIVERSE=cache` in the prefix and `--instrument v1` at the end when Step 1 found them.)
 
 Expected: exit 0; every row `gate == "compression"`, `source == "strategy"`, `in_sample == true`, `margin == null`.
 
@@ -1006,7 +1019,7 @@ Create `docs/superpowers/results/2026-10-09-v147-gate-counterfactual.md` with ex
 ```markdown
 # v147 gate counterfactual: TRAIN reading
 
-**Run:** <date of Steps 2-3>, TRAIN 2020-01-01..2023-12-31 (signal date), <ticker count from Step 1> cached tickers. VALIDATION never read. No RS row (live-only; v34 closed).
+**Run:** <date of Steps 2-3>, TRAIN 2020-01-01..2023-12-31 (signal date), <ticker count from Step 1> cached tickers from the main tree's `data/backtest_cache` (read-only), universe source <`MEASURE_ARMS_UNIVERSE=cache` or watchlist> for both runs, instrument <`v1` or no flag>. VALIDATION never read. No RS row (live-only; v34 closed).
 **Spec:** `docs/superpowers/specs/2026-10-09-v147-gate-counterfactual-design.md`
 **Plan:** `docs/superpowers/plans/2026-10-09-v147-gate-counterfactual_0-index.md`
 
@@ -1014,8 +1027,7 @@ Create `docs/superpowers/results/2026-10-09-v147-gate-counterfactual.md` with ex
 
 ## Commands
 
-    python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl
-    python scripts/backtest/measure_arms.py --record-blocked logs/v147-blocked-compression.jsonl
+    <the two commands exactly as run in Steps 2-3, with their env prefix and any --instrument v1>
     python scripts/reports/gate_counterfactual_report.py --train logs/v147-blocked-confluence.jsonl logs/v147-blocked-compression.jsonl --no-live --no-write --json logs/v147-train-report.json
 
 ## Rows recorded
@@ -1039,6 +1051,7 @@ Create `docs/superpowers/results/2026-10-09-v147-gate-counterfactual.md` with ex
 ## Limitations
 
 <the `limitations` list from logs/v147-train-report.json, one bullet each, verbatim>
+- The live rows (2026 onward) overlap the v2 instrument's sealed holdout (2026-01-01 onward); any follow-on gate screen built on them has seen that period.
 
 ## What this licenses
 

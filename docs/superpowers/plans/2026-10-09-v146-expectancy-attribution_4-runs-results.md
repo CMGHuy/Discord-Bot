@@ -22,6 +22,8 @@ MAIN=E:/Documents/Private/Projects/Discord-Bot
 
 **Model:** sonnet — runs one pre-specified command through `backtest-runner` and checks its output file; no code is written.
 
+**Cross-plan (audit 2026-10-10):** v158 may add an `--instrument` flag to `run_backtest_range.py`. Before Step 3, run `python "$WT/scripts/backtest/run_backtest_range.py" --help`; if it lists `--instrument`, append `--instrument v1` to the Step 3 command (the only permitted change to it) and pass the same line to the runner. The Step 5 manifest records which: `"instrument": "v1"` when the flag was passed, `"instrument": null` when `--help` did not list it.
+
 **Files:**
 - Modify: `.gitignore` (one line, `data/reports/`, only if Step 1 finds it missing: `data/` is not ignored wholesale, only named files under it, and on 2026-10-10 `git check-ignore data/reports/x.json` matched nothing).
 - Writes (gitignored, never committed): `data/reports/v146-train-scenarios.jsonl` in the worktree, its log `logs/v146/train-replay.log`, and `logs/v146/train-manifest.json`.
@@ -182,6 +184,7 @@ manifest = {
     "tickers": [],             # Step 2
     "run_started": "",         # Step 3
     "run_finished": "",        # Step 3
+    "instrument": None,        # "v1" if Step 3 appended --instrument v1 (v158 merged), else None
 }
 assert manifest["rows"] > 0 and len(manifest["sha256"]) == 64, "fill the slots first"
 with open(f"{wt}/logs/v146/train-manifest.json", "w", encoding="utf-8") as fh:
@@ -204,6 +207,8 @@ Nothing else is committed (the only tracked change this task can make is the Ste
 ### Task V146-14: Verdict run and results document
 
 **Model:** opus — the plan's one pre-registered verdict run, on a scratch copy of the production book, plus the closed-table row; a mistake here cannot be re-run away.
+
+**Cross-plan (audit 2026-10-10):** the live readings use 2026 trades, which overlap the v2 instrument's sealed holdout (2026-01-01 onward). Step 10's Caveats carry a bullet saying so: any follow-on filter screened from these tables has seen that period. A second Caveats bullet names the instrument V146-13's manifest records (`train_m.get("instrument")`; `null` when no `--instrument` flag existed).
 
 **Files:**
 - Create: `docs/superpowers/results/<run-date>-v146-expectancy-attribution.md` (`<run-date>` is `verdict_of_record.date` from the generated JSON; Step 10 builds the name, nobody types it).
@@ -409,7 +414,7 @@ print("stamped", manifest["migration"]["stamped"], "of", manifest["closed_rows"]
 PY
 ```
 
-Expected: `exit 0`; one `v146_001 <key>: parsed=… skipped=… unparsed=…` line per breakdown key and one `v146_001: stamped <n> trade row(s)`; `alembic=v146_001`; `with_points` equals the stamped count and equals `with_breakdown` (every row whose `confidence_breakdown` is an object gets stamped); the manifest line printed.
+Expected: `exit 0`; one `v146_001 <key>: parsed=… skipped=… unparsed=…` line per breakdown key and one `v146_001: stamped <n> trade row(s)`; `alembic=` the worktree's single head (`python -m alembic heads` run in `$WT`; another merged plan's revision may sit above `v146_001`), and the log contains the `v146_001` lines; `with_points` equals the stamped count and equals `with_breakdown` (every row whose `confidence_breakdown` is an object gets stamped); the manifest line printed.
 
 `unparsed` lines are a finding, not a failure: the revision counts them and leaves them out of `points` by design. Do not edit the revision and re-run it here to make a key parse; report the unparsed keys and counts to the controller in the hand-back, and they appear in the results document. If the upgrade exits non-zero, stop and report the last 40 log lines; Step 8 still runs.
 
@@ -706,6 +711,11 @@ doc = [
     "(`swingbot/core/backtesting/exit_sim.py:541-548`), so R is comparable in sign and order, not to the last hundredth.",
     f"- **Multiple comparisons.** {report['looks']} looks; a bucket or factor is a screen candidate only at BH q < 0.10 "
     "over all of them. No threshold is chosen from these tables.",
+    "- **The live rows overlap v2's sealed holdout.** The live book's 2026 trades fall inside the v2 instrument's "
+    "sealed holdout (2026-01-01 onward). Any follow-on filter screened from these tables has seen that period, so it "
+    "cannot use that holdout as unseen data.",
+    f"- **Instrument:** TRAIN replay run with `--instrument {train_m.get('instrument')}`." if train_m.get("instrument")
+    else "- **Instrument:** TRAIN replay run without an `--instrument` flag (none was offered).",
     "- **Populations are never pooled.** No figure in this document combines live and TRAIN.", "",
     "## What this licenses", "", LICENCE[verdict],
     "Any bucket that looks bad (a regime, an RS quintile, an earnings bucket, a factor with a negative delta) is a "
