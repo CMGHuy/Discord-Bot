@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-_REPO_ROOT =pathlib.Path(__file__).parent.parent.parent
+_REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 _SPEC = importlib.util.spec_from_file_location(
     "guardrails",
     _REPO_ROOT / ".claude" / "hooks" / "guardrails.py",
