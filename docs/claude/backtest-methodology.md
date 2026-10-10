@@ -3,11 +3,16 @@
 Referenced from the root `CLAUDE.md`. Read this before running or
 interpreting any backtest, grid, or validation result.
 
+## Windows
+
 - **Windows:** TRAIN = 2020-01-01..2023-12-31, VALIDATION = 2024-01-01..2025-12-31.
   Tune on TRAIN only. Validation is a **budget**: one pre-registered run per
   component, results recorded as-is, never retuned after — a config that fails
   train never gets a validation shot. Treat the 2024–2025 window as tainted
   for any selection decision.
+
+## Acceptance gate
+
 - **Acceptance gates (v72, `swingbot/core/backtesting/acceptance.py`).** A
   feature ships on-by-default only if every applicable clause passes.
   **Win rate is the objective; expectancy is a non-inferiority constraint.**
@@ -35,6 +40,8 @@ interpreting any backtest, grid, or validation result.
   `N >= 15` is superseded by the Stage 0 MDE precheck below; it still applies
   where it always did, to badge rows.
 
+## Badge scoring
+
   **The surviving badge threshold, and its history** (unchanged by v72; it
   scores a strategy/horizon cell's own population, not a feature's effect):
   `win_rate >= 50`, `expectancy_r > 0`, `N >= 30` (train) / `N >= 15`
@@ -49,6 +56,8 @@ interpreting any backtest, grid, or validation result.
   `1/(1+2.5) = 28.6%` at its cap. 50% is the margin over the 40% floor-case
   break-even, the way 80% was over 76.9% — **do not restore 80% for any run
   against the current engine.**
+
+## Funnel stages
 
 - **Stage −2: the idea screen (v140, `swingbot/core/backtesting/screen/`).**
   Answers "does this entry predict anything, after costs, beyond its own
@@ -101,6 +110,8 @@ interpreting any backtest, grid, or validation result.
   compute. Stage 0 uses the paired ticker-cluster-bootstrap MDE whenever the
   arms share keys; this better instrument does not reopen any closed row.
 
+## Harvest gate
+
 - **`Edge: harvest` features are OUT OF SCOPE for this funnel, and that is a
   known gap, not an oversight.** Exits, targets and sizing move geometry by
   construction, so clause 3 rejects them by design. The honest rule for
@@ -135,11 +146,17 @@ interpreting any backtest, grid, or validation result.
   that design. v100 added that paired variant:
   `acceptance.mde_paired(..., statistic=delta_expectancy_r)`, used by
   `validate_component.py --stage mde --gate harvest`.
+
+## Frozen constants
+
 - Frozen constants: `MIN_RISK_REWARD_RATIO = 1.5` / `MAX_RISK_REWARD_RATIO
   = 2.5` (the band `plan_engine.select_structural_target` picks every
   plan's target inside — replaces the pre-v31 per-strategy fixed
   reward:risk override table and its 0.30 floor, both deleted),
   `BREAKEVEN_TRIGGER_FRACTION = 0.5`, `tp1_fraction = 0.50`.
+
+## Evidence, registry and ledger
+
 - **Evidence age.** Every registry row's `run_date` yields a read-time decay
   verdict (`registry.decay_for`): `fresh`, `aging` at 90 days, `stale` at 180
   days, `unknown` when the row carries no usable date — fail-closed, an

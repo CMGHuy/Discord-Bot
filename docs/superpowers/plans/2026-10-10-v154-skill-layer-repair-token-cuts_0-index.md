@@ -195,10 +195,10 @@ Filled in by the tasks named; nothing here is a threshold or a pass on its own.
 
 | Check | Task | Result |
 |---|---|---|
-| Insertion-only check, `backtest-methodology.md` | V154-5 | _not yet run_ |
-| Insertion-only check, `known-traps.md` | V154-5 | _not yet run_ |
-| Insertion-only check, `architecture.md` | V154-5 | _not yet run_ |
-| `tests/hooks/test_guardrails.py` and `tests/backtesting/test_preregistration_ledger_file.py` after insertion | V154-5 | _not yet run_ |
+| Insertion-only check, `backtest-methodology.md` | V154-5 | PASS 2026-10-10, HEAD -> INDEX: old == new minus 7 headings and 10 blank lines (59561 -> 59704 bytes) |
+| Insertion-only check, `known-traps.md` | V154-5 | PASS 2026-10-10, HEAD -> INDEX: old == new minus 6 headings and 11 blank lines (25885 -> 26114 bytes) |
+| Insertion-only check, `architecture.md` | V154-5 | PASS 2026-10-10, HEAD -> INDEX: old == new minus 4 headings and 7 blank lines (9821 -> 9931 bytes) |
+| `tests/hooks/test_guardrails.py` and `tests/backtesting/test_preregistration_ledger_file.py` after insertion | V154-5 | PASS 2026-10-10: VERDICT: PASS  82 passed  in 1.7s |
 | Plugin keys read from the installed list (five) | V154-9 | _not yet run_ |
 | Fresh session lists all nine role descriptions | V154-12 | _not yet run_ |
 | Nine role eval suites | V154-12 | _not yet run_ |
