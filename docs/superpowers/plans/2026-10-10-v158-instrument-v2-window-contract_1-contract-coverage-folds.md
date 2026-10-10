@@ -749,16 +749,17 @@ git -C /home/user/Discord-Bot status --short
 
 ### Task WC3: Run the coverage check on the real cache and record gaps
 
-**Model:** sonnet — runs one read-only command where the cache lives and writes a results doc; no code, but it must route through production safely.
+**Model:** sonnet — runs the coverage check where the cache lives, writes a results doc, and may start one detached refetch job on the VM through the ops wrapper; it must route through production safely.
 
 **Files:**
 - Create: `docs/superpowers/results/2026-10-10-v158-cache-coverage.md`
+- Create: `scripts/ops/refetch_ext_cache_2009.sh` (only if Step 5 runs)
 
 **Why:** spec section 1, "Data precondition" (partner decision 7): the real 2009-06 coverage run happens wherever `data/backtest_cache_ext/` exists and records its gap list, rather than shrinking the universe silently. **There is no backtest cache on the dev machine**, so this task may block: if neither the dev machine nor the Hetzner VM holds the extended cache, stop at Step 1 and return `BLOCKED:` asking the partner to run Step 2a's command on their laptop and paste the output. Every other task in the plan proceeds without this one (nothing consumes the gap list in code); WC12 does not wait on it.
 
-**Read-only throughout.** This task never fetches, writes or deletes cache files, and never edits anything on production (a read-only `ls`/`exec` is not a production change, so `mirror-prod` does not apply). Whether to refetch the cache from `warmup_start` is the partner's decision, not this task's.
+**Steps 1–4 are read-only.** They never fetch, write or delete cache files, and never edit anything on production (a read-only `ls`/`exec` is not a production change, so `mirror-prod` does not apply). **The partner has already decided the refetch (2026-10-10): "Refetch from 2009-06".** If the report shows late rows that start on the first 2010 session, Step 5 refetches the extended cache from `warmup_start` (2009-06-01), as a one-time overnight job on the Hetzner VM, and Step 6 re-runs the check.
 
-**Expected finding, stated in advance so nobody reads it as a bug:** the extended cache was fetched in v102 with `fetch_backtest_data.py --start 2010-01-01 ...`, so most members probably start on the first 2010 session and land in **Late**. That is exactly the gap the precondition exists to surface. Record it; do not refetch.
+**Expected finding, stated in advance so nobody reads it as a bug:** the extended cache was fetched in v102 with `fetch_backtest_data.py --start 2010-01-01 ...`, so most members probably start on the first 2010 session and land in **Late**. That is exactly the gap the precondition exists to surface. Record it in Step 3, then refetch in Step 5.
 
 - [ ] **Step 1: Find the extended cache**
 
@@ -850,7 +851,7 @@ Create `$WT/docs/superpowers/results/2026-10-10-v158-cache-coverage.md` with thi
 ## Reading
 
 - Late members whose first PIT membership is after 2010 may simply not have existed in 2009 (IPO or spin-off); the table shows both dates side by side.
-- <If most late rows start on the first 2010 session:> The extended cache was fetched from 2010-01-01 (v102), so it holds no 2009 warm-up. Refetching from the contract's `warmup_start` is a partner decision; nothing here was refetched.
+- <If most late rows start on the first 2010 session:> The extended cache was fetched from 2010-01-01 (v102), so it holds no 2009 warm-up. On 2026-10-10 the partner decided to refetch from the contract's `warmup_start`; see `## Refetch` (Step 6).
 - Missing members are mostly delisted symbols Yahoo no longer serves (`pit_membership.py` module docstring: the residual survivorship bias of free data).
 
 ## Report
@@ -868,7 +869,24 @@ git -C $WT commit -m "docs(results): v158 WC3 cache coverage for the 2009-06 war
 git -C /home/user/Discord-Bot status --short
 ```
 
-Then tell the controller the verdict line and, when there are gaps, that the refetch decision is the partner's (one `AskUserQuestion`, recommended option first, belongs to the controller, not this task).
+If the report has no late rows that start on the first 2010 session, the task ends here: tell the controller the verdict line. Otherwise continue.
+
+- [ ] **Step 5: Refetch the extended cache from 2009-06-01 on the Hetzner VM (partner decision, 2026-10-10)**
+
+This step writes cache files only (`data/backtest_cache_ext/` is a gitignored research cache, not bot config), so no `.env` or code changes on production and nothing to mirror beyond the committed wrapper below. It is a long network job, so it runs **on the VM**, detached, never on the dev machine (`working-conventions.md` § Scheduling).
+
+1. Commit a wrapper at `scripts/ops/refetch_ext_cache_2009.sh` that runs, inside the bot container, `BACKTEST_CACHE_DIR=data/backtest_cache_ext python scripts/data/fetch_backtest_data.py --start 2009-06-01 --end 2025-12-31 --force --training-universe <the PIT name WC2 reads>`. Use `--force` because cached tickers must be overwritten to gain the 2009 bars. The wrapper logs to `/opt/swing-bot/logs/refetch_ext_2009.log` with flushed progress and a final `DONE <n> tickers` line. Confirm the exact `--training-universe`/`--universe` name against `fetch_backtest_data.py --help` before committing.
+2. Copy it to the VM through `scripts/ops/ssh-hetzner.sh` (stdin pipe) and start it detached (`nohup ... &`). The image on the VM already carries `fetch_backtest_data.py`; no v158 code is needed for this step.
+3. Return to the controller with `WAITING: ext-cache refetch running on Hetzner, log /opt/swing-bot/logs/refetch_ext_2009.log`. The plan's other tasks proceed; WC12 does not wait on this.
+
+- [ ] **Step 6: Re-check and record (next session, after the log shows `DONE`)**
+
+Re-run Step 2b against the refetched VM cache. Append a `## Refetch` section to the results doc with the wrapper command, the log's final line, and the new verdict line and counts. Late rows that remain should be members whose first PIT membership is after 2009 (IPOs, spin-offs); list any that are not. Commit:
+
+```bash
+git -C $WT add docs/superpowers/results/2026-10-10-v158-cache-coverage.md scripts/ops/refetch_ext_cache_2009.sh
+git -C $WT commit -m "docs(results): v158 WC3 coverage after the 2009-06 refetch"
+```
 
 # Phase B: Folds
 
