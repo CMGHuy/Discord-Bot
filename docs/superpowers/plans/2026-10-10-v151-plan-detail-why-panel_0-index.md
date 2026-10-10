@@ -86,7 +86,8 @@ Gate labels (Python, V151-2): RS `"Relative strength"`, parts `"Ticker RS pctile
 | 1 | [`_1-api-and-discord-link`](2026-10-10-v151-plan-detail-why-panel_1-api-and-discord-link.md) | V151-1 .. V151-7 | `session_after`, `why_view.py`, the detail endpoint, `ADMIN_PUBLIC_URL`, `plan_link` + `apply_chrome(link_base=)`, the caller kwarg, `spa.py` |
 | 2 | [`_2-store-and-why-components`](2026-10-10-v151-plan-detail-why-panel_2-store-and-why-components.md) | V151-8 .. V151-10 | Models + store computeds, `sb-why-panel`, `sb-levels-block` |
 | 2b | [`_2b-gets-there-and-sizing`](2026-10-10-v151-plan-detail-why-panel_2b-gets-there-and-sizing.md) | V151-11 .. V151-12 | `sb-if-it-gets-there`, `sb-sizing-panel` (split from part 2 at the 1500-line cap) |
-| 3 | [`_3-shared-components-and-pages`](2026-10-10-v151-plan-detail-why-panel_3-shared-components-and-pages.md) | V151-13 .. V151-17 | `sb-outcome-path`, `sb-plan-chart`, the trade-page refactor + arrival banner, the plan page + routes, both full suites |
+| 3 | [`_3-shared-components-and-pages`](2026-10-10-v151-plan-detail-why-panel_3-shared-components-and-pages.md) | V151-13 .. V151-15 | `sb-outcome-path`, `sb-plan-chart`, the trade-page refactor + arrival banner |
+| 3b | [`_3b-plan-page-and-suites`](2026-10-10-v151-plan-detail-why-panel_3b-plan-page-and-suites.md) | V151-16 .. V151-17 | The plan page + routes + redirects, both full suites (split from part 3 at the 1500-line budget) |
 
 ## Task ledger
 
@@ -107,8 +108,8 @@ Gate labels (Python, V151-2): RS `"Relative strength"`, parts `"Ticker RS pctile
 | V151-13 | `sb-outcome-path` | 3 | sonnet | C `frontend/src/app/workspaces/trades/why/outcome-path.ts`; C `frontend/src/app/workspaces/trades/why/outcome-path.spec.ts` | `OutcomePath` (`sb-outcome-path`); inputs `legs: Leg[]` (default `[]`), `timeline: StatusEvent[]` (default `[]`) |
 | V151-14 | `sb-plan-chart` | 3 | sonnet | C `frontend/src/app/workspaces/trades/why/plan-chart.ts`; C `frontend/src/app/workspaces/trades/why/plan-chart.spec.ts` | `PlanChart` (`sb-plan-chart`); inputs `ticker: string \| null`, `tradeId: string \| null`; injects `ChartStore`, calls `setTarget(ticker, tradeId)` in an effect |
 | V151-15 | Trade page onto the shared components + arrival banner | 3 | sonnet | M `frontend/src/app/workspaces/trades/trade-detail.ts`; M `frontend/src/app/workspaces/trades/trade-detail.spec.ts` | `TradeDetail.arrivedFromPlan: boolean`; `arrivalBanner(status: string \| null, barsToExpiry: number \| null): string` (exported from `trade-detail.ts`) |
-| V151-16 | Plan page `plans/:id` + routes + redirects | 3 | sonnet | C `frontend/src/app/workspaces/plans/plan-detail.ts`; C `frontend/src/app/workspaces/plans/plan-detail.routes.ts`; C `frontend/src/app/workspaces/plans/plan-detail.spec.ts`; M `frontend/src/app/app.routes.ts`; M `frontend/src/app/app.routes.spec.ts`; M `frontend/src/app/ui/async-coverage.spec.ts` | `PlanDetail` (`sb-plan-detail`); `planDetailRoutes: Routes`; `looksLikePlanId(id: string): boolean`; `redirectFor(status: string \| null, barsToExpiry: number \| null): 'banner' \| null` |
-| V151-17 | Full suites, complexity check | 3 | haiku | none | none |
+| V151-16 | Plan page `plans/:id` + routes + redirects | 3b | sonnet | C `frontend/src/app/workspaces/plans/plan-detail.ts`; C `frontend/src/app/workspaces/plans/plan-detail.routes.ts`; C `frontend/src/app/workspaces/plans/plan-detail.spec.ts`; M `frontend/src/app/app.routes.ts`; M `frontend/src/app/app.routes.spec.ts`; M `frontend/src/app/ui/async-coverage.spec.ts` | `PlanDetail` (`sb-plan-detail`); `planDetailRoutes: Routes`; `looksLikePlanId(id: string): boolean`; `redirectFor(status: string \| null, barsToExpiry: number \| null): 'banner' \| null` |
+| V151-17 | Full suites, complexity check | 3b | haiku | none | none |
 
 ## Parallelisation
 
