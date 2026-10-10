@@ -179,6 +179,7 @@ export class EventStream {
   private pass(throttle: Throttle): void {
     const wait = throttle.last + throttle.interval - Date.now();
     if (wait <= 0) {
+      if (throttle.timer !== null) clearTimeout(throttle.timer);
       this.release(throttle);
     } else if (throttle.timer === null) {
       throttle.timer = setTimeout(() => this.release(throttle), wait);
@@ -187,6 +188,7 @@ export class EventStream {
 
   private release(throttle: Throttle): void {
     throttle.timer = null;
+    if (this.pollTimer !== null && typeof document !== 'undefined' && document.hidden) return;
     throttle.last = Date.now();
     throttle.out.update((n) => n + 1);
   }

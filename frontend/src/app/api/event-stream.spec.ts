@@ -303,6 +303,37 @@ describe('EventStream', () => {
       .toBe(stream.changes('scan', { minIntervalMs: 30_000 }));
   });
 
+  it('cancels an overdue trailing timer when a new event releases immediately', () => {
+    const slow = stream.changes('scan', { minIntervalMs: 30_000 });
+    vi.setSystemTime(0);
+    FakeEventSource.latest().emit('scan', 1);
+    vi.setSystemTime(5_000);
+    FakeEventSource.latest().emit('scan', 2);
+    vi.setSystemTime(31_000);
+    FakeEventSource.latest().emit('scan', 3);
+    expect(slow()).toBe(2);
+    vi.runOnlyPendingTimers();
+    expect(slow()).toBe(2);
+  });
+
+  it('defers a pending fallback refresh while hidden until the tab returns', () => {
+    const slow = stream.changes('scan', { minIntervalMs: 30_000 });
+    const source = FakeEventSource.latest();
+    source.fail();
+    source.fail();
+    source.fail();
+    vi.advanceTimersByTime(POLL_INTERVAL_MS * 2);
+    expect(slow()).toBe(1);
+
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    vi.advanceTimersByTime(30_000);
+    expect(slow()).toBe(1);
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(slow()).toBe(2);
+    hidden.mockRestore();
+  });
+
   it('does not poll while the document is hidden, and catches up once on return', () => {
     const source = FakeEventSource.latest();
     source.fail();

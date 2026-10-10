@@ -30,6 +30,7 @@ class SingleFlightCache:
         self._entries: dict = {}
         self._cond = threading.Condition()
         self._fetching = False
+        self._flight_symbols: set[str] = set()
 
     def get(self, symbols: list, fetch) -> dict:
         """`{symbol: value}` for every symbol the cache can answer.
@@ -48,17 +49,30 @@ class SingleFlightCache:
             self._entries.clear()
 
     def _claim(self, symbols: list) -> list:
-        """The symbols this caller must fetch -- empty when all are fresh or
-        another caller's fetch was waited on instead."""
+        """Claim uncovered symbols, waiting through flights for at most one deadline.
+
+        Symbols already attempted by another flight are left for a later call
+        if that flight fails, so waiters never form a retry storm.
+        """
+        deadline = time.monotonic() + self._wait
+        attempted: set[str] = set()
         with self._cond:
-            missing = self._missing(symbols)
-            if not missing:
-                return []
-            if self._fetching:
-                self._cond.wait(timeout=self._wait)
-                return []
-            self._fetching = True
-            return missing
+            while True:
+                all_missing = self._missing(symbols)
+                if not all_missing:
+                    return []
+                missing = [s for s in all_missing if s not in attempted]
+                if not self._fetching:
+                    if not missing:
+                        return []
+                    self._fetching = True
+                    self._flight_symbols = set(missing)
+                    return missing
+                attempted.update(self._flight_symbols)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return []
+                self._cond.wait(timeout=remaining)
 
     def _missing(self, symbols: list) -> list:
         now = self._clock()
@@ -77,6 +91,7 @@ class SingleFlightCache:
                 for symbol, value in got.items():
                     self._entries[symbol] = (value, now)
                 self._fetching = False
+                self._flight_symbols.clear()
                 self._cond.notify_all()
 
 
