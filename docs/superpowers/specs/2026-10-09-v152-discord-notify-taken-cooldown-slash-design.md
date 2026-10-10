@@ -16,7 +16,7 @@ measured book is unchanged. D2 adds a dimension that splits the existing book;
 it does not change it.
 **Screen:** exempt (integrity)
 **Panel:** veteran-trader, financial-advisor, staff-engineer
-**Status:** spec written 2026-10-09; design approved section by section; panel review applied; D4 split to v153; no plan yet.
+**Status:** spec written 2026-10-09; design approved section by section; panel review applied; D4 split to v153; plan written 2026-10-10 (`plans/2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`).
 
 ## Why
 
