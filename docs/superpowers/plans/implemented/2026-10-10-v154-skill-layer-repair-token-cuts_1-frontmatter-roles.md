@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this file whole**: pull one task with `/task-brief V154-2` or `grep -n "^### Task V154-2" -A 330 <this file>`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md`](../specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md) (§ 1 and § 2)
+**Spec:** [`docs/superpowers/specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md`](../../specs/implemented/2026-10-10-v154-skill-layer-repair-token-cuts-design.md) (§ 1 and § 2)
 **Index:** [`2026-10-10-v154-skill-layer-repair-token-cuts_0-index.md`](2026-10-10-v154-skill-layer-repair-token-cuts_0-index.md): header block, `## Global Constraints`, `## Decisions fixed by this index`, `## Parallelisation`, the task ledger and contracts C1 (the helper) and C2 (importing it). Every task below implicitly includes that index's Global Constraints.
 
 **Tasks in this part:** V154-1, V154-2, V154-3, V154-4. They are strictly serial, in id order: V154-2 and V154-3 import what V154-1 creates, V154-3 can only switch the test readers once V154-2 has quoted every description, and V154-4 edits the same `description:` lines as V154-2.

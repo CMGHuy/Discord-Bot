@@ -2,7 +2,7 @@
 
 > Part of the v154 plan. Header, Global Constraints, the decisions fixed by the index, the cross-task contracts C1 to C6, the parallelisation map and the `## Results` table are in [`_0-index`](2026-10-10-v154-skill-layer-repair-token-cuts_0-index.md). **Never read this file whole**: `/task-brief V154-6` or `grep -n "^### Task V154-6" -A 200 <this file>`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md`](../specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md), section 3.
+**Spec:** [`docs/superpowers/specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md`](../../specs/implemented/2026-10-10-v154-skill-layer-repair-token-cuts-design.md), section 3.
 
 This part covers tasks V154-5 to V154-8: the headings go into three docs by pure insertion, `scripts/dev/doc_section.py` prints sections by name, the new tests are routed from `docs/claude/` changes, and four skills' Step 1 call the script.
 

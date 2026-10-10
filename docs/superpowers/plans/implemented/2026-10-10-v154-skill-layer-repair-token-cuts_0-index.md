@@ -5,7 +5,7 @@
 **Bump:** none
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md`](../specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md)
+**Spec:** [`docs/superpowers/specs/2026-10-10-v154-skill-layer-repair-token-cuts-design.md`](../../specs/implemented/2026-10-10-v154-skill-layer-repair-token-cuts-design.md)
 **Brief:** `.superpowers/briefs/2026-10-10-v154-skill-layer-repair-token-cuts.md` (line numbers from `main` @ `4b9edabd`)
 
 **Goal:** Make the six role skills that do not trigger load again, cap all nine role descriptions at 260 characters, let the four heaviest "read the authority" skill steps read `docs/claude/` by section instead of whole, switch off five unused plugins, and add two slash-only helper skills.
