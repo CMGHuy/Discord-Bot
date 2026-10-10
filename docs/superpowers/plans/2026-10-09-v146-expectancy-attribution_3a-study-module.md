@@ -783,6 +783,8 @@ git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-09-v1
 
 **Model:** opus -- this is the pre-registered verdict rule and its interval; every threshold and comparison operator is fixed by the spec and must be reproduced exactly.
 
+**Cross-plan (audit 2026-10-10):** v147 (V147-13) owns `two_sided_bootstrap_p(draws)`. If `stats.two_sided_bootstrap_p` exists in `swingbot/core/backtesting/instrument/stats.py` (v147 merged), `_look` calls `p=stats.two_sided_bootstrap_p(draws)` instead of adding a second copy of the `2.0 * tail` p formula (drop the local `tail = ...` line); its numbers are identical. If v147 merged without moving it there (it defines it in `gate_counterfactual_report.py` when v146 was not merged), move that definition into `instrument/stats.py`, import it from there in both modules, and run v147's `tests/analytics/test_gate_counterfactual_stats.py` afterwards -- never two copies. Otherwise write the inline formula as below.
+
 **Files:**
 - Modify: `swingbot/core/analytics/expectancy_attribution.py` (created by V146-10; this task appends, it changes no V146-10 function)
 - Create: `tests/analytics/test_expectancy_attribution_stats.py`

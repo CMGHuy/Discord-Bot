@@ -12,6 +12,12 @@
 
 **Tech Stack:** Python 3.11, radon 6.0.1, pytest; Angular 21, ESLint 9 (>= 9.24), angular-eslint 21, typescript-eslint; GitHub Actions.
 
+## Cross-plan coordination (audit 2026-10-10)
+
+**Complexity gate (owner v149; other plans cite this rule in one line).** If `scripts/dev/complexity_gate.py` exists (v149 merged), a task that splits a legacy function below 15 or moves/renames one finishes with `python scripts/dev/complexity_gate.py`; for a move or rename, first hand-rename its key in `scripts/dev/complexity_baseline.json`; then `--update` and commit the baseline in the same commit (`gone`/`improved` expected; `new`/`risen` never).
+
+- **Any plan that merges to `main` before v149 (v146–v158 …) — V149-4:** rebase onto `main` before `--init` and radon-check `.py` files other plans added since v149's spec (stop on any >= 15); if a plan merges after `--init` and before v149 merges, regenerate the baseline on the rebased tree before V149-8. **v154 — V149-1/V149-4:** `_with_readers` tuple edits add one entry and keep v154's. **CLAUDE.md — V149-7:** keep the `table-drive` clause. **v148 ratchet:** this plan adds no `except Exception`; if it ever does, follow v148's index § Cross-plan coordination.
+
 ## Global Constraints
 
 - **No existing complexity offender and no existing lint violation is fixed here.** A task that "tidies while it is there" is out of scope (spec § Scope, Out).
@@ -55,7 +61,7 @@
   - V149-2 before V149-3: V149-3's modes call `measure`, `compare`, `shrink` and the baseline I/O that V149-2 defines, in the same two files.
   - V149-4 after V149-1 and V149-3: it runs `--init`, so the script must exist, and it edits `scripts/dev/select_tests.py` and `tests/dev/test_select_tests.py`, which V149-1 also edits.
   - V149-6 after V149-4 and V149-5: the CI steps run the script against the baseline and run `npm run lint`. Both hunks are in `.github/workflows/deploy.yml`, so they are one task.
-  - V149-7 after V149-3 (the docs describe the script's flags). It is one task and one commit (Codex-mirror rule). If a v145 edit to `CLAUDE.md` / `AGENTS.md` is in flight in another session, it lands first and this task rebases onto it.
+  - V149-7 after V149-3 (the docs describe the script's flags). It is one task and one commit (Codex-mirror rule).
   - V149-8 last.
 
 ---
@@ -225,7 +231,7 @@ In `scripts/dev/select_tests.py`, add this row to `DATA_READERS`, directly after
 
 In `tests/dev/test_select_tests.py`:
 
-1. In `_with_readers`, add `"tests/dev/test_readme_paths.py"` to the tuple of files it creates:
+1. In `_with_readers`, add `"tests/dev/test_readme_paths.py"` to the tuple of files it creates, keeping any entries another plan added (v154: `tests/hooks/test_doc_sections.py`, `tests/dev/test_doc_section.py`); never paste the literal below over it. On today's tuple:
 
 ```python
     for rel in ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.py",
@@ -1000,7 +1006,7 @@ git status --short
 git log --oneline main..HEAD
 ```
 
-Expected: no uncommitted changes; the commits of V149-1, V149-2 and V149-3 are listed. The baseline must be generated from a committed tree.
+Expected: no uncommitted changes; the commits of V149-1, V149-2 and V149-3 are listed. The baseline must be generated from a committed tree. **Cross-plan (audit 2026-10-10):** rebase onto `main` first (`git rebase main`). Then, before `--init`, run `python -m radon cc -s -n C $(git diff --name-only --diff-filter=A $(git log --diff-filter=A --format=%H -1 -- docs/superpowers/specs/2026-10-09-v149-hygiene-gates-design.md) HEAD -- 'swingbot/*.py' 'scripts/*.py' 'tests/*.py' bot.py admin_ui.py)` over the files other plans added since v149's spec, and stop and report if any function scores >= 15 (it would be baselined silently). If any plan merges to `main` after `--init` and before this plan merges, rebase, delete `scripts/dev/complexity_baseline.json`, re-run `--init` (and this radon check) on the rebased tree, and commit the regenerated baseline before V149-8.
 
 - [ ] **Step 2: Generate the baseline**
 
@@ -1056,7 +1062,7 @@ In `scripts/dev/select_tests.py`, add to `DATA_READERS`, directly after the `("R
     ("scripts/dev/complexity_baseline.json", ("tests/dev/test_complexity_gate.py",)),
 ```
 
-In `tests/dev/test_select_tests.py`, add `"tests/dev/test_complexity_gate.py"` to the tuple in `_with_readers`:
+In `tests/dev/test_select_tests.py`, add `"tests/dev/test_complexity_gate.py"` to the tuple in `_with_readers`, keeping any entries another plan added (v154: `tests/hooks/test_doc_sections.py`, `tests/dev/test_doc_section.py`); never paste the literal below over it. On today's tuple (after V149-1):
 
 ```python
     for rel in ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.py",
@@ -1346,7 +1352,7 @@ Find the section with `grep -n "Keep every function under complexity 15" CLAUDE.
 Every function and method you write or change ends at cyclomatic complexity
 **< 15**, enforced by `scripts/dev/complexity_gate.py` against
 `complexity_baseline.json` (`testrun.py full` and CI; `--update` only shrinks it):
-split into named helpers, return early. A legacy function already >= 15 never gets worse. A refactor never changes behaviour. Detail: `code-complexity.md`.
+split into named helpers, table-drive `if/elif` chains, return early. A legacy function already >= 15 never gets worse. A refactor never changes behaviour. Detail: `code-complexity.md`.
 ```
 
 Run: `wc -l CLAUDE.md`

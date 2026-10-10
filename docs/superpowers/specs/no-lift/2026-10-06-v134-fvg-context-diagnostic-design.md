@@ -1,5 +1,7 @@
 # v134 — Fair value gap context diagnostic: structure, confluence, approach
 
+**Closed (no-lift, 2026-10-10, partner decision):** never implemented; no code of this plan exists on any branch. Its premise is gone: v130 (structure features) closed no-lift, so `structure.major_structure_features` is not on `main` and V134-8 can never run; the displacement claim is already closed at plan level by v143 (and v128's `displacement@k` was refused at Stage 0). Found by the 2026-10-10 cross-plan audit. Do not re-open under another name (v143 rule).
+
 **Version:** ui 1.21.1 · bot 2.0.1 (at writing)
 **Bump:** none (a pure module no live path imports, plus a read-only measurement script)
 **Edge:** none (integrity) — measurement only; it is the admission test for follow-on `expectancy` arms on how an FVG is weighted or entered

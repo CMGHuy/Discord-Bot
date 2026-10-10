@@ -676,7 +676,7 @@ import {
   ExpectancyAttribution,
   GateCell,
   GateCounterfactual,
-  GateRow,
+  GateCounterfactualRow,
   ReportEnvelope,
 } from '../api/models';
 import { routeRequest } from '../routing/route-request';
@@ -964,7 +964,7 @@ const GATE_SENTENCE: Record<string, string> = {
   INCONCLUSIVE: 'Over these trades, the difference between blocked and taken setups is not distinguishable from zero.',
 };
 
-const rowView = (row: GateRow): GateRowView => ({
+const rowView = (row: GateCounterfactualRow): GateRowView => ({
   reason: row.reason,
   blockedN: row.blocked_n,
   noPlanN: row.no_plan_n,
@@ -994,7 +994,7 @@ function cellLabels(cell: GateCell, state: GateCellView['state']): string[] {
   return labels;
 }
 
-function cellView(cell: GateCell, rows: readonly GateRow[]): GateCellView {
+function cellView(cell: GateCell, rows: readonly GateCounterfactualRow[]): GateCellView {
   const state = cellState(cell);
   const record = cell.verdict_of_record;
   return {

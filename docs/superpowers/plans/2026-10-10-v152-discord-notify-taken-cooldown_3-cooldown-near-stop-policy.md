@@ -24,6 +24,8 @@ Test plan ids are 36-char dashed uuids, like part 2's: the persistent `custom_id
 
 **Model:** sonnet — a small new module over an existing repository; the judgement is in the fail-open contract and the Berlin day boundary, both pinned by tests below.
 
+**Swallowed-error ratchet (audit 2026-10-10):** this task adds `except Exception` handlers. If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), apply the index Global Constraints bullet "Swallowed-error ratchet (v148)" to every one that does not re-raise (`except Exception as exc:` + `swallowed(log, "ops.<module>.<function>", exc, level=logging.DEBUG)` first, keep the existing log line, unique tag) and run `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` before the commit. Otherwise write them as planned.
+
 **Files:**
 - Create: `swingbot/commands/scanning/cooldown.py`
 - Create: `tests/commands/test_cooldown.py`

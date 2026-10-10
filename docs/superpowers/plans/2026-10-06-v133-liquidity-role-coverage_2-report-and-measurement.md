@@ -15,6 +15,10 @@
 - Consumes: `replay_scenarios(ticker, df, horizon_key, *, params=None, gates=None, dcb_params=None, asof=None) -> [(index, TradePlanV2)]`; `volume_context_report.ReportRow(source, direction, outcome, r_multiple, context)`.
 - Produces: `replay_scenarios(..., confluence_counts: dict | None = None)`, filled `{plan.plan_id: int}`; `volume_context_report.confluence_rows(..., *, annotate=None)`, `strategy_rows(..., *, annotate=None)`, `replay_all(tickers, horizons, window, *, workers=1, annotate=None)`. An `annotate` hook has the signature `annotate(df, plan, result, votes) -> dict`; its dict is merged into the **row's** context. `votes` is the target vote count for confluence rows and `None` for strategy rows. V133-7 passes `annotate=report_facts`.
 
+**Cross-plan (audit 2026-10-10):** v146 V146-7 moves `replay_scenarios`' body into `replay_scenarios_detailed(ticker, df, horizon_key, *, params=None, gates=None, dcb_params=None, asof=None) -> list[ReplayHit]` in `swingbot/core/backtesting/backtest_scenarios.py`; `ReplayHit` is `(i, plan, scenario, target_confluence)` and `target_confluence` is `(n_confl, families)`. Check first: `git grep -n "def replay_scenarios_detailed" -- swingbot/core/backtesting/backtest_scenarios.py`.
+- **If it exists (v146 merged):** do **not** add `confluence_counts` to `replay_scenarios` and do **not** write `_note_votes` — skip Step 5 and the `confluence_counts` tests in Step 2 (write `tests/backtesting/test_replay_confluence_counts.py` instead as one test that `replay_scenarios_detailed(...)` yields hits whose `target_confluence[0]` is an `int >= GATES["min_confluence"]`), and leave `backtest_scenarios.py` out of Files and the Step 9 commit. In Step 1, drop the check that "`n_confl` appears only as a local in `replay_scenarios`" (it now lives on `ReplayHit.target_confluence`); the other three checks stand. In Step 6's `confluence_rows`, iterate `replay_scenarios_detailed(ticker, df.loc[:end], horizon_key, params=params)`, take `index, plan = hit.i, hit.plan`, and fill `votes[hit.plan.plan_id] = hit.target_confluence[0]` before the date filter; everything after (`_extra(annotate, df, plan, result, votes.get(plan.plan_id))`) is unchanged. Step 3's fake must then patch `replay_scenarios_detailed` returning `ReplayHit`-shaped tuples instead of `replay_scenarios` with `confluence_counts`. Step 8 expects `replay_scenarios_detailed`'s helpers all below `C`, with only `_aggregate - C (18)` pre-existing.
+- **Otherwise:** as written below.
+
 **First, verify the finding this task rests on (index, frozen reading 9).** Do not skip it: if it no longer holds, the design below is wrong.
 
 - [ ] **Step 1: Verify where the count lives today**
@@ -1035,7 +1039,7 @@ Get-Process python -ErrorAction SilentlyContinue | Where-Object CPU -gt 300 | Se
 
 If one is, wait for it. Two competing runs make both slower and have been killed mid-run before.
 
-- [ ] **Step 4: Dispatch the `backtest-runner` agent** with exactly this command, from the v133 worktree, in the background:
+- [ ] **Step 4: Dispatch the `backtest-runner` agent** with exactly this command, from the v133 worktree, in the background (**cross-plan, audit 2026-10-10:** if `python scripts/reports/role_coverage_report.py --help` lists `--instrument` (v158 merged), append `--instrument v1` to the command, and the results doc and JSON record name the instrument `v1`):
 
 ```bash
 python scripts/reports/role_coverage_report.py --source replay --workers 4 \

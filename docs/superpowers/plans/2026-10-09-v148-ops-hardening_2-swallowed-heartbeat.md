@@ -907,6 +907,8 @@ git -C /home/user/Discord-Bot/.claude/worktrees/2026-10-09-v148-ops-hardening co
 
 **Model:** sonnet — a mechanical one-for-one conversion of 21 handlers across six files, where each site's level, message and `exc_info` must be carried over exactly.
 
+**Cross-plan (audit 2026-10-10):** Rebase onto `main` first. OH15's scope is every flat `swingbot/core/scanning/*.py`, so this task also converts, by the same rules and in this commit, the handlers in any `swingbot/core/scanning/*.py` not listed in OH9–OH11 (e.g. `rejection_recorder.py` if v147 merged). List them with `git -C $WT ls-files 'swingbot/core/scanning/*.py'`, run Step 1's scratch script over the unlisted ones, and give each handler a unique `scan.<function>` tag (module-prefixed if the function name is already used). Add each converted file to the commit; if there are none, say so in the commit message.
+
 **Files:**
 - Modify: `swingbot/core/scanning/scan_run.py` (14 handlers)
 - Modify: `swingbot/core/scanning/strategy_pass.py` (3 handlers)

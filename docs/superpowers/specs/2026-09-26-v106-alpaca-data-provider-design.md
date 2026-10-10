@@ -4,6 +4,7 @@
 **Bump:** bot minor, ui minor
 **Edge:** none (integrity)
 **Plan:** `docs/superpowers/plans/2026-09-26-v106-alpaca-data-provider.md`
+**Status:** Code shipped (T1–T11, T13a, T13b; verified by the files on `main`). Remaining: read the soak-3 cron FINAL line → T13 Step 6 verdict → T14 close-out (audit 2026-10-10).
 
 Spec 1 of 2. Spec 2 (mirroring paper trades onto an Alpaca *paper* account for
 realistic fills) is a separate, later brainstorm and must reconcile with the

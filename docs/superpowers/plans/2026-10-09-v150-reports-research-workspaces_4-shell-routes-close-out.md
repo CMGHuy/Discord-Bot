@@ -396,7 +396,7 @@ import { join } from 'node:path';
   });
 ```
 
-(c) In `describe('route data readiness contract', …)`, add both paths to `expected`:
+(c) In `describe('route data readiness contract', …)`, add `'research'` and `'reports'` to the current `expected` list, keeping every entry already there (v151 V151-16 adds `'plans/:id'`); never paste the literal below over it. On today's list:
 
 ```ts
   const expected = [

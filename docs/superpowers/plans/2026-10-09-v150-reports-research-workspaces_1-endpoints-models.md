@@ -290,7 +290,7 @@ def research_ledger():
 
 - [ ] **Step 4: Register the module**
 
-In `swingbot/admin/api_v1/__init__.py`, inside `register()`, add `research` to the import list, keeping it alphabetical:
+In `swingbot/admin/api_v1/__init__.py`, inside `register()`, add `research` to the import list, keeping it alphabetical and keeping every name other plans added (v148 adds `ops_health`). Re-read the tuple first; never paste the literal below over it. On today's tuple:
 
 ```python
     from . import (analytics, calendar, dashboard, jobs, market,  # noqa: F401
@@ -405,7 +405,7 @@ git commit -m "docs(v150): where the v146/v147 reports run in production, and th
 - Modify: `swingbot/admin/api_v1/__init__.py` (the import list V150-1 edited)
 
 **Interfaces:**
-- Consumes (v146, v147): `swingbot.core.analytics.expectancy_attribution.load_latest() -> dict | None`, `swingbot.core.analytics.gate_counterfactual_report.load_report() -> dict | None`. If the gate showed the loaders in separate light modules, use those paths in `_load_attribution` / `_load_gates` below and nowhere else.
+- Consumes (v146 V146-9, v147 V147-8): `swingbot.core.infra.expectancy_attribution_store.load_latest(path=None) -> dict | None`, `swingbot.core.infra.gate_counterfactual_store.load_report(path=None) -> dict | None`. Import them from these light infra store modules, never from `swingbot.core.analytics.*` (the analytics package `__init__` pulls pandas/numpy; the analytics modules only re-export these loaders).
 - Produces:
   - `GET /api/v1/reports/expectancy-attribution`, `GET /api/v1/reports/gate-counterfactual`, each →
     `{ "status": "ok" | "not_run", "generated_at": str | null, "result": dict | null }`
@@ -576,17 +576,17 @@ from .auth import require_auth
 
 
 def _load_attribution() -> dict | None:
-    # Imported on call: the report modules are heavy to import and only these
-    # two endpoints need them.
-    from swingbot.core.analytics import expectancy_attribution
+    # Imported on call, and from the light infra stores (v146/v147), never from
+    # swingbot.core.analytics, whose package __init__ pulls pandas/numpy.
+    from swingbot.core.infra import expectancy_attribution_store
 
-    return expectancy_attribution.load_latest()
+    return expectancy_attribution_store.load_latest()
 
 
 def _load_gates() -> dict | None:
-    from swingbot.core.analytics import gate_counterfactual_report
+    from swingbot.core.infra import gate_counterfactual_store
 
-    return gate_counterfactual_report.load_report()
+    return gate_counterfactual_store.load_report()
 
 
 def _envelope(load: Callable[[], dict | None]):
@@ -616,7 +616,7 @@ The two handlers wrap the loader in a `lambda` on purpose: it looks the name up 
 
 - [ ] **Step 4: Register the module**
 
-In `swingbot/admin/api_v1/__init__.py`, add `reports` to the list V150-1 edited:
+In `swingbot/admin/api_v1/__init__.py`, add `reports` to the list V150-1 edited, in alphabetical position, keeping every name other plans added (v148 adds `ops_health`). Re-read the tuple first; never paste the literal below over it. Without v148's name it reads:
 
 ```python
     from . import (analytics, calendar, dashboard, jobs, market,  # noqa: F401
@@ -791,15 +791,15 @@ git commit -m "feat(v150): research ledger wire types and client method; Strateg
 **Interfaces:**
 - Consumes: the dicts `load_latest()` and `load_report()` actually return on `main`.
 - Produces (names every later Reports task imports):
-  - `api/models.ts`: `VerdictOfRecord`, `AttributionMonotonicity`, `AttributionFactor`, `AttributionBucket`, `AttributionPopulation`, `ExpectancyAttribution`, `GateCell`, `GateRow`, `GateCounterfactual`
+  - `api/models.ts`: `VerdictOfRecord`, `AttributionMonotonicity`, `AttributionFactor`, `AttributionBucket`, `AttributionPopulation`, `ExpectancyAttribution`, `GateCell`, `GateCounterfactualRow`, `GateCounterfactual`
   - `ApiClient.reportExpectancyAttribution(): Observable<ReportEnvelope<ExpectancyAttribution>>`, `ApiClient.reportGateCounterfactual(): Observable<ReportEnvelope<GateCounterfactual>>`
   - `testing/report-fixtures.ts`: `ATTRIBUTION: ExpectancyAttribution`, `GATES: GateCounterfactual`, `ok<T>(result: T & { generated_at: string }): ReportEnvelope<T>`, `NOT_RUN: ReportEnvelope<never>`
 
 - [ ] **Step 1: Read the real shapes**
 
 ```bash
-git grep -n "def load_latest\|def build_\|def _population\|def _bucket\|def _factor\|def _monotonicity\|verdict_of_record\|\"looks\"\|\"thin\"" -- swingbot/core/analytics/expectancy_attribution.py
-git grep -n "def load_report\|def build_report\|def _cell\|def _row\|verdict_of_record\|over_cap\|in_sample\|near_miss\|WAITING" -- swingbot/core/analytics/gate_counterfactual_report.py
+git grep -n "def load_latest\|def build_\|def _population\|def _bucket\|def _factor\|def _monotonicity\|verdict_of_record\|\"looks\"\|\"thin\"" -- swingbot/core/analytics/expectancy_attribution.py swingbot/core/infra/expectancy_attribution_store.py
+git grep -n "def load_report\|def build_report\|def _cell\|def _row\|verdict_of_record\|over_cap\|in_sample\|near_miss\|WAITING" -- swingbot/core/analytics/gate_counterfactual_report.py swingbot/core/infra/gate_counterfactual_store.py
 ls tests/analytics/ | grep -i "attribution\|counterfactual"
 ```
 
@@ -907,7 +907,7 @@ export interface GateCell {
 }
 
 /** v147: one detail row, gate x reason x population. */
-export interface GateRow {
+export interface GateCounterfactualRow {
   gate: string;
   reason: string;
   population: 'live' | 'train';
@@ -933,7 +933,7 @@ export interface GateCounterfactual {
   generated_at: string;
   live_window: string | null;
   cells: GateCell[];
-  rows: GateRow[];
+  rows: GateCounterfactualRow[];
 }
 ```
 

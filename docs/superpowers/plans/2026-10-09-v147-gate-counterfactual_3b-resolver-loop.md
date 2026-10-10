@@ -12,6 +12,10 @@ All commands run inside the plan's worktree `.claude/worktrees/2026-10-09-v147-g
 
 **Model:** sonnet — a scheduled loop copied from `weekly_earnings_refresh`/`daily_recap` with a fixed slot, fire-once marker and `asyncio.to_thread`; the resolver logic itself is V147-11's.
 
+**Cross-plan (audit 2026-10-10):**
+- **`_always_on_loops()` (v148 adds `ops_watch`).** Insert `gate_counterfactual_resolve` into the `_always_on_loops()` tuple as it stands, before `pitr_watch_loop`, keeping every entry already there (v148 adds `ops_watch` after it). Never replace the tuple from this plan's literal.
+- **Swallowed-error ratchet (owner v148; full rule in the v148 index).** If `tests/infra/test_swallowed_ratchet.py` exists (v148 merged), the loop's handler is `except Exception as exc:` with first statement `swallowed(log, "ops.gate_counterfactual_resolve", exc, level=logging.DEBUG)` (import from `swingbot.core.infra.swallowed`), keeping the `log.exception(...)` line after it; Step 4 also runs `python scripts/dev/testrun.py file tests/infra/test_swallowed_ratchet.py` (PASS; never raise `BASELINE`).
+
 **Files:**
 - Modify: `swingbot/commands/scanning/loops.py`
 - Create: `tests/commands/test_gate_resolver_loop.py`
@@ -147,15 +151,7 @@ async def gate_counterfactual_resolve():
         log.exception("gate_counterfactual_resolve: resolver failed")
 ```
 
-In `_always_on_loops()`, replace
-
-```python
-    return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
-            weekend_deep_scan_task, weekly_earnings_refresh, pitr_watch_loop,
-            next_session_scan, next_session_wrapup)
-```
-
-with
+In `_always_on_loops()`, insert `gate_counterfactual_resolve` into the return tuple directly before `pitr_watch_loop`, keeping every entry already there (another plan, e.g. v148's `ops_watch`, may have added entries). With today's tuple the result reads:
 
 ```python
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,

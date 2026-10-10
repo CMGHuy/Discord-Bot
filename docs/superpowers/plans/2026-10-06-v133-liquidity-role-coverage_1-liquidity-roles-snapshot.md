@@ -1079,6 +1079,7 @@ git commit -m "feat(v133): four role flags and role_coverage from the v121 and l
 - Modify: `swingbot/core/edge/context.py` (`FEATURE_KEYS`; one helper; two lines inside `entry_context`)
 - Create: `tests/edge/context_witness.py`, `tests/fixtures/v133/entry_context_witness.json` (generated in Step 1), `tests/edge/test_edge_context_roles.py`
 - Modify: `tests/edge/test_edge_context_location.py:57-58`
+- Modify: `tests/backtesting/instrument/golden.py` (`golden_records`: assert-and-drop the ten new context keys, Step 6)
 
 **Interfaces:**
 - Consumes: `liquidity_features(df, direction, stop, target)` and `LIQUIDITY_KEYS` (V133-2); `role_features(df, direction, structure, liquidity)` and `ROLE_KEYS` (V133-4); `structure_features(df, direction)`; `entry_context(df, *, direction, horizon_key, stop, target, asof=None, entry=None)`.
@@ -1307,14 +1308,39 @@ python scripts/dev/testrun.py file tests/backtesting/test_replay_context.py
 
 The last two prove both replay paths stamp the ten keys with no new wiring (`set(context) == set(FEATURE_KEYS)`).
 
-- [ ] **Step 6: Complexity**
+- [ ] **Step 6: Keep the v1 instrument golden byte-identical**
+
+Every replay trade's `context` now carries ten more keys, so `tests/backtesting/instrument/test_v1_golden.py` would go red. The golden fixture `tests/fixtures/instrument/v1_golden.jsonl` carries exactly the 43 pre-v133 `FEATURE_KEYS` in each trade's `context` and **must NOT be regenerated** (regenerating it is a cutover decision, not a fix). Instead, in `tests/backtesting/instrument/golden.py:golden_records`, follow the v131 `limit_orders` precedent: for each trade whose `trade["context"]` is truthy, assert every key of `(*LIQUIDITY_KEYS, *ROLE_KEYS)` is present, then drop them before yielding:
+
+```python
+from swingbot.core.market.liquidity import LIQUIDITY_KEYS  # noqa: E402
+from swingbot.core.market.roles import ROLE_KEYS  # noqa: E402
+
+V133_CONTEXT_KEYS = (*LIQUIDITY_KEYS, *ROLE_KEYS)
+...
+            for k, trade in enumerate(trades):
+                context = trade.get("context")
+                if context:
+                    # v133 fields: present on every stamped trade, kept out of the golden bytes.
+                    assert all(key in context for key in V133_CONTEXT_KEYS)
+                    for key in V133_CONTEXT_KEYS:
+                        del context[key]
+                yield {"case": case, "trade": k, "row": trade}
+```
+
+v157 FC6 also edits `golden_records` (it drops `signal_date`). If that edit is already there, keep it and add this one beside it; whichever lands second rebases onto the other — keep both.
+
+Run: `python scripts/dev/testrun.py file tests/backtesting/instrument/test_v1_golden.py`
+Expected: `0 failed`.
+
+- [ ] **Step 7: Complexity**
 
 Run: `python -m radon cc -s -n C swingbot/core/edge/context.py`
 Expected: exactly one line, `entry_context - C (17)` (pre-existing, unchanged). A higher number means a branch was added: remove it.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add swingbot/core/edge/context.py tests/edge/test_edge_context_roles.py tests/edge/test_edge_context_location.py
+git add swingbot/core/edge/context.py tests/edge/test_edge_context_roles.py tests/edge/test_edge_context_location.py tests/backtesting/instrument/golden.py
 git commit -m "feat(v133): entry_context carries five liquidity keys and five role keys"
 ```

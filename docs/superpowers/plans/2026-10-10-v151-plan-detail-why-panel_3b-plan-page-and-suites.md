@@ -748,7 +748,7 @@ export const planDetailRoutes: Routes = [{
 
 - [ ] **Step 6: Register the route, with a failing routing test first**
 
-In `frontend/src/app/app.routes.spec.ts`, change the readiness `expected` list (`:110-113`) to:
+In `frontend/src/app/app.routes.spec.ts`, add `'plans/:id'` (after `'trades/:id'`) to the current readiness `expected` list (`:110-113`), keeping every entry already there (v150 V150-12 adds `'research'`, `'reports'`); never paste the literal below over it. On today's list:
 
 ```ts
   const expected = [

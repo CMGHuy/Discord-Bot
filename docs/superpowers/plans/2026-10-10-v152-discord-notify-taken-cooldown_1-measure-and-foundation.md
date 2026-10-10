@@ -200,16 +200,19 @@ git commit -m "docs(v152): M0 notify volume and cooldown estimate from productio
 - Modify: `tests/db/test_unknown_field_round_trip.py` (four `CASES` entries; the FK seeding generalised)
 
 **Interfaces:**
-- Consumes: `schema.register`, `schema.standard_columns`, `METADATA`, the `plans.plan_id` unique column (FK target, as `starred_plans` uses it at :113-117); Alembic head `v144_001` (index decision 1).
+- Consumes: `schema.register`, `schema.standard_columns`, `METADATA`, the `plans.plan_id` unique column (FK target, as `starred_plans` uses it at :113-117); Alembic head HEAD = the single id `python -m alembic heads` prints at implementation time (`v144_001` on 2026-10-10; `v146_001`/`v147_001` if those merged first; index decision 1).
 - Produces (V152-3 and V152-4 consume):
   - `schema.plan_followers`: `id` BIGINT PK, `plan_id` TEXT NOT NULL FK `plans.plan_id` ON DELETE CASCADE, `user_id` BIGINT NOT NULL, `kind` TEXT NOT NULL, `doc`, `updated_at`; `UniqueConstraint("plan_id", "user_id", "kind", name="plan_followers_row_uq")`; `Index("plan_followers_plan_idx", "plan_id")`. Promoted `("plan_id", "user_id", "kind")`.
   - `schema.plan_notifications`: `id`, `plan_id` TEXT NOT NULL FK cascade, `event` TEXT NOT NULL, `state` TEXT NOT NULL, `doc`, `updated_at`; `UniqueConstraint("plan_id", "event", name="plan_notifications_claim_uq")`; `Index("plan_notifications_state_idx", "state")`. Promoted `("plan_id", "event", "state")`.
   - `schema.notify_prefs`: `id`, `user_id` BIGINT NOT NULL UNIQUE, `doc`, `updated_at`. Promoted `("user_id",)`.
   - `schema.alert_posts`: `id`, `ticker` TEXT NOT NULL, `at` TIMESTAMPTZ NOT NULL, `outcome` TEXT NOT NULL, `doc`, `updated_at`; `Index("alert_posts_ticker_at_idx", "ticker", "at")` only (spec § Schema "Index choice"). Promoted `("ticker", "at", "outcome")`.
-  - Alembic revision `v152_001`, `down_revision = "v144_001"`; `downgrade()` drops the four tables.
+  - Alembic revision `v152_001`, `down_revision` = HEAD (Step 1); `downgrade()` drops the four tables.
+- **Insertion points (audit 2026-10-10, order-independent):** if another plan's table already follows `dropped_doc_fields` in `schema.py`, insert the four tables after that table instead; if another plan's `PROMOTION_REASONS` entry already ends the dict (after `dropped_doc_fields`), add the four entries after it; if another plan's `CASES` entry already follows `market_data_state` in `tests/db/test_unknown_field_round_trip.py`, add the four entries after it. Keep every entry other plans added.
 - None of the four tables gets a NOTIFY trigger or a `events.TABLE_CHANNELS` entry: nothing in the SPA streams them (`dropped_doc_fields` is the precedent for a trigger-less table; `tests/db/test_trigger_coverage.py` checks only mapped tables).
 
 - [ ] **Step 1: Write the failing tests**
+
+First run `python -m alembic heads` and call the single id it prints HEAD (`v144_001` on 2026-10-10; `v146_001` or `v147_001` if those plans merged first). Two heads printed → stop and ask the partner; never pick one.
 
 Create `tests/db/test_v152_tables.py`:
 
@@ -330,9 +333,10 @@ def test_an_alert_post_row_round_trips_its_doc(db_conn):
         "AAPL", "posted", "bullish", "2w")
 
 
-def test_v152_001_sits_on_v144_001():
-    scripts = ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
-    assert scripts.get_revision("v152_001").down_revision == "v144_001"
+def test_v152_001_sits_on_the_single_prior_head():
+    s = ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
+    rev = s.get_revision("v152_001")
+    assert s.get_revision(rev.down_revision) is not None and s.get_heads() == ["v152_001"]
 
 
 def _tables(connection) -> set[str]:
@@ -345,7 +349,7 @@ def test_v152_001_downgrade_drops_the_four_tables_and_upgrade_restores_them(db_e
         cfg.attributes["connection"] = connection
         upgrade(cfg, "head")
         assert set(V152_TABLES) <= _tables(connection)
-        downgrade(cfg, "v144_001")
+        downgrade(cfg, "-1")
         remaining = _tables(connection)
         assert not set(V152_TABLES) & remaining
         assert "plans" in remaining and "starred_plans" in remaining
@@ -361,7 +365,7 @@ Modify `tests/db/test_unknown_field_round_trip.py`. Add the import beside the ot
 from swingbot.core.db.repositories.base import Repository
 ```
 
-Add these four entries at the end of `CASES` (after `"market_data_state"`):
+Add these four entries at the end of `CASES` (after `"market_data_state"`, or after another plan's entry that already follows it):
 
 ```python
     # v152: the base surrogate-keyed Repository over each new table. The
@@ -405,7 +409,7 @@ Expected: FAIL — `KeyError: 'plan_followers'` (the tables do not exist in `sch
 
 - [ ] **Step 3: Declare the four tables in `schema.py`**
 
-In `swingbot/core/db/schema.py`, insert after the `dropped_doc_fields = register(...)` block (ends at :209) and before the `#: Why each promoted column ...` comment:
+In `swingbot/core/db/schema.py`, insert after the `dropped_doc_fields = register(...)` block (ends at :209) — or after another plan's table that already follows it — and before the `#: Why each promoted column ...` comment:
 
 ```python
 # v152 D1-D3: who follows a plan (Watch / Following), the notify channel's
@@ -457,7 +461,7 @@ In `PROMOTION_REASONS`, change the `plans` → `plan_id` line to:
         "plan_id": "natural key; foreign-key target of starred_plans, plan_followers, plan_notifications",
 ```
 
-and add after the `"dropped_doc_fields": {...},` entry (before the closing `}` at :291):
+and add after the `"dropped_doc_fields": {...},` entry — or after another plan's entry that already follows it — (before the closing `}` at :291):
 
 ```python
     "plan_followers": {
@@ -483,7 +487,7 @@ and add after the `"dropped_doc_fields": {...},` entry (before the closing `}` a
 - [ ] **Step 4: Run the declaration tests**
 
 Run: `python scripts/dev/testrun.py file tests/db/test_v152_tables.py`
-Expected: the metadata tests and the `db_conn` tests PASS (the session `db_engine` builds from `METADATA.create_all`); `test_v152_001_sits_on_v144_001` and the downgrade test FAIL (`v152_001` does not exist). If Postgres is unreachable every DB test is skipped with "Start it with: docker compose --profile test up -d db-test" — start it and re-run; a skip is not a pass.
+Expected: the metadata tests and the `db_conn` tests PASS (the session `db_engine` builds from `METADATA.create_all`); `test_v152_001_sits_on_the_single_prior_head` and the downgrade test FAIL (`v152_001` does not exist). If Postgres is unreachable every DB test is skipped with "Start it with: docker compose --profile test up -d db-test" — start it and re-run; a skip is not a pass.
 
 - [ ] **Step 5: Write the revision**
 
@@ -497,14 +501,14 @@ SPA streams none of them. The downgrade drops all four; the followers record
 and the notification claims go with them (trade taken_by stays in trades.doc).
 
 Revision ID: v152_001
-Revises: v144_001
+Revises: <HEAD>
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "v152_001"
-down_revision = "v144_001"
+down_revision = "<HEAD>"  # replace with the id Step 1 printed, e.g. "v144_001"
 branch_labels = None
 depends_on = None
 

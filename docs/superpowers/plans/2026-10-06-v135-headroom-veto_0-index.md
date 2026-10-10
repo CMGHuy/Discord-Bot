@@ -90,3 +90,13 @@ Created by this plan (do not `git grep` for them before their task): everything 
 | `2026-10-06-v135-headroom-veto_0-index.md` | -- | Header, where to work, global constraints, file map, review focus, parallelisation (this file) |
 | `2026-10-06-v135-headroom-veto_1-gate-and-call-sites.md` | V135-1 .. V135-7 | Phase 1 (knobs, predicate, witness) and Phase 2 (call sites, parity, reachability) |
 | `2026-10-06-v135-headroom-veto_2-funnel-and-measurement.md` | V135-8 .. V135-17 | Phase 3 (funnel tooling) and Phase 4 (pre-registration, serial measurement, ship or close, full suite, close-out) |
+
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v146 (V146-7) — V135-5, V135-8:** if `replay_scenarios_detailed` / `_bar_scenarios` exist in `backtest_scenarios.py` (v146 merged), V135-5 puts `_headroom_kept(_dryup_kept(scenarios, window), supports, resistances)` in `_bar_scenarios`' return, and V135-8 makes `scenarios_at` the pre-gate body of `_bar_scenarios`, which then calls it and applies both gates. Otherwise as written.
+- **v146 (V146-7) — V135-8 Step 3:** `tests/scripts/test_fvg_attribution.py::test_replay_still_has_the_shape_the_recorder_patches` is rewritten to read the whole module (`inspect.getsource(bs)`); v146 makes the same update — whichever lands second keeps the existing one.
+- **v147 (`_scan_params_of`) and v139 (V139-2) — V135-7:** `headroom_scope: str = "off"` and `headroom_min_r: float = 0.0` go at the END of `ScanParams`, defaulted, beside v139's defaulted fields, so v147's rebuild of stored rows never raises. v139 also appends `reachability.REGISTRY` and `searchable` rows; whichever lands second rebases onto the other's rows.
+- **v158 (`--instrument`) — V135-12..14:** append `--instrument v1` to every measurement command whose script's `--help` lists it; the pre-registration record names the instrument.
+- **Code-hash stability — V135-12..15:** no merge of `main` into the worktree between the pre-registration commit and the last stage (`measure_arms` stamps `code_hash()` over `swingbot/*.py`).
+- **Closed-table placement — V135-17:** rows go directly under the closed table's header separator (newest first); the top row is no longer v122.
+- **Generic rules:** the swallowed-error ratchet (owner v148) does not apply — no v135 task adds an `except Exception` handler. The complexity gate (owner v149, full text in v149's plan) applies to V135-8's extraction from `replay_scenarios` (a legacy C (15) function): if `scripts/dev/complexity_gate.py` exists, V135-8 finishes with it and commits the updated baseline.

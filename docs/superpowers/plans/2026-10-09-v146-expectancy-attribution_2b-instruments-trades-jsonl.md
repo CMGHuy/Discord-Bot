@@ -16,6 +16,8 @@
 
 **Model:** opus -- widens a process-pool worker contract that closed pre-registrations depend on (the aggregate must stay identical), ships a benchmark frame into a no-lookahead path, and edits two legacy functions (C19, F65) that may not grow.
 
+**Cross-plan (audit 2026-10-10):** task-tuple slots are fixed across plans: `args[10]` is `spy_df` (this task; `None` when absent) and `args[11]` is v147's `record_blocked`. If `_replay_ticker_gate_rows` exists in `backtest_scenarios.py` (v147 merged), keep task-tuple `args[11]` (`record_blocked`), v147's pool entry point and the `"gate_rows"` output key untouched: whenever a task tuple carries `args[11]`, it also carries `args[10]` (`None` when SPY is not shipped), and `_replay_ticker_rows` reads `args[10]` only. Keep v147's `--record-blocked` argument and dispatch keywords in `run_scenario_mode` when adding `trades_jsonl`.
+
 **Depends on:** V146-7 (shared file `swingbot/core/backtesting/backtest_scenarios.py`; this task consumes `ReplayHit`, `replay_scenarios_detailed` and `scenario_rows.scenario_trade_row`). Read the `no-lookahead` skill before starting (Step 1).
 
 **Files:**

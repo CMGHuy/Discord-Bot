@@ -849,6 +849,8 @@ git commit -m "feat(v135): live headroom veto call sites; headroom funnel counts
 - Modify: `swingbot/core/backtesting/backtest_scenarios.py` (a new `_headroom_kept`; one assignment in `replay_scenarios`)
 - Create: `tests/backtesting/arms/test_headroom_replay.py`
 
+**Cross-plan (audit 2026-10-10):** v146 V146-7 may have split `replay_scenarios` into helpers. Check `git grep -n "def replay_scenarios_detailed\|def _bar_scenarios" -- swingbot/core/backtesting/backtest_scenarios.py`. **If both exist (v146 merged),** Step 4's insertion point `scenarios = _dryup_kept(scenarios, window)` no longer exists: instead, in `_bar_scenarios`, change `return window, price, (supports, resistances), _dryup_kept(scenarios, window)` to `return window, price, (supports, resistances), _headroom_kept(_dryup_kept(scenarios, window), supports, resistances)`, and in Step 5's radon line expect `_bar_scenarios` below 15 (it gains no branch) in place of `replay_scenarios` C (15). **Otherwise** as written.
+
 **Interfaces:**
 - Consumes: `gates.headroom_active`, `gates.headroom_blocks_plan`, `gates.filter_headroom` (V135-2); the V135-3 witness.
 - Produces:
@@ -1303,7 +1305,7 @@ git commit -m "test(v135): live/replay headroom veto parity on one fixture"
 
 **Interfaces:**
 - Consumes: the replay call sites (V135-5).
-- Produces: `reachability.classify("HEADROOM_SCOPE") == REACHABLE` and the same for `HEADROOM_MIN_R`, with `observed_by=CS` and `fixture_observable=False` (a lone perturbation at the default is inert, the pattern `_DRYUP` uses). `config.searchable_attrs()` includes both. `ScanParams.headroom_scope: str` and `ScanParams.headroom_min_r: float`. `measure_arms.py --knob` then accepts both knobs.
+- Produces: `reachability.classify("HEADROOM_SCOPE") == REACHABLE` and the same for `HEADROOM_MIN_R`, with `observed_by=CS` and `fixture_observable=False` (a lone perturbation at the default is inert, the pattern `_DRYUP` uses). `config.searchable_attrs()` includes both. `ScanParams.headroom_scope: str = "off"` and `ScanParams.headroom_min_r: float = 0.0` (defaulted, at the end of the field list). `measure_arms.py --knob` then accepts both knobs.
 
 All three source edits land in **one** commit: `test_reachability.py` requires the registry to equal `searchable_attrs()`, and `test_scan_params_coverage.py` requires a `ScanParams` field per searchable knob.
 
@@ -1358,21 +1360,21 @@ In `config.py`, in `_SEARCH_CLASSES["searchable"]`, change the line that ends `"
         "HEADROOM_SCOPE", "HEADROOM_MIN_R",
 ```
 
-In `scan_params.py`, add two dataclass fields directly after `pullback_dryup_max_ratio: float` (they have no default, so they must stay above the defaulted `short_universe_research_mode`):
+In `scan_params.py`, add two **defaulted** dataclass fields at the **end** of the `ScanParams` field list (after the last field, today `fvg_displacement_atr_k: float = 1.5`, and beside v139's defaulted `confluence_structural_stop_pct` / `confluence_stop_drop_pct` if those landed first; above `__post_init__`). The defaults make the fields order-safe and mean v147's `_scan_params_of`, which rebuilds stored rows into `ScanParams`, never raises on a row that predates these keys (audit 2026-10-10):
 
 ```python
-    headroom_scope: str
-    headroom_min_r: float
+    headroom_scope: str = "off"             # v135: off | strategy | confluence
+    headroom_min_r: float = 0.0             # v135: 0 disables the gate
 ```
 
-and in `from_config`, directly after `pullback_dryup_max_ratio=config.PULLBACK_DRYUP_MAX_RATIO,`:
+and in `from_config`, directly after the last keyword already there (today `fvg_displacement_atr_k=...`, or v139's lines if present):
 
 ```python
             headroom_scope=config.HEADROOM_SCOPE,
             headroom_min_r=config.HEADROOM_MIN_R,
 ```
 
-Then run `git grep -n "ScanParams(" -- swingbot scripts tests`. Every hit other than `from_config` and `dataclasses.replace` constructs the dataclass by hand and needs the two new keyword arguments (`headroom_scope="off", headroom_min_r=0.0`); on 2026-10-06 there were none.
+Then run `git grep -n "ScanParams(" -- swingbot scripts tests`. The fields are defaulted, so a hand-built `ScanParams(...)` keeps working; on 2026-10-06 there were none.
 
 In `reachability.py`, add beside `_DRYUP`:
 
@@ -1392,6 +1394,8 @@ and in `REGISTRY`, after `"PULLBACK_DRYUP_MAX_RATIO"`:
     "HEADROOM_SCOPE": Reach(REACHABLE, _HEADROOM, CS),
     "HEADROOM_MIN_R": Reach(REACHABLE, _HEADROOM, CS),
 ```
+
+v139 (V139-2) also appends `reachability.REGISTRY` rows and `searchable` entries in `config._SEARCH_CLASSES` (and `ScanParams` fields); whichever of v135 and v139 lands second rebases onto the other's rows, keeping both (audit 2026-10-10).
 
 - [ ] **Step 4: Run the narrow tests**
 

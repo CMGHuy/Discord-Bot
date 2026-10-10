@@ -31,6 +31,8 @@ All commands run inside the plan's worktree `.claude/worktrees/2026-10-09-v147-g
 
 **Model:** opus — the pre-registered verdict rule (paired week-cluster bootstrap, two-sided p, BH over a fixed family, distinct-setup N) decides every GATE EARNS / COSTS; a slip here mislabels a gate.
 
+**Cross-plan (audit 2026-10-10):** v135 (`headroom`) and v139 (`stop_beyond_confluence_ceiling`, `risk_sizing`) add `plan_rejected` reasons that the live L4/L6 hooks may record. `cell_key` maps only v147's own reasons (`"risk_cap"`, the string V147-5 and V147-10 write, and `"no_qualifying_target"`; a taken row's `None` reason -> `risk_cap`) and sends every other `plan_rejected` reason to `"other"`, which is kept out of `CELLS` and `CELL_GATE`, so those rows never pool into `risk_cap` (Step 3 code and the `test_cell_key` cases below). The p formula: if v146's `2.0 * tail` copy exists, Step 0 moves it into `instrument/stats.py` as written (one copy only).
+
 **Files:**
 - Create: `swingbot/core/analytics/gate_counterfactual_report.py`
 - Create: `tests/analytics/test_gate_counterfactual_stats.py`
@@ -38,7 +40,7 @@ All commands run inside the plan's worktree `.claude/worktrees/2026-10-09-v147-g
 
 **Interfaces:**
 - Consumes: `stats.week_cluster_bootstrap(baseline, component, statistic, *, n_resamples, seed)` (groups by `getattr(obj, "entry_date")`, same week draw for both arms, drops `None` draws) and `stats.bh_qvalues(pvalues)` (exist, `swingbot/core/backtesting/instrument/stats.py:57/86`); `session.nyse_calendar().sessions_between(asof, target)` (exists, `swingbot/core/market/session.py:192/220`); `params.DEFAULT_EXPIRY_BARS = 5` (exists, `swingbot/core/planning/params.py:21`); no V147-4 symbol (the tests build the index's shared row shape locally, so V147-13 stays parallel with V147-4 as the index schedules it).
-- Produces (ledger): `VERDICT_FLOOR = 30`, `Q_MAX = 0.10`, `BOOTSTRAP_RESAMPLES = 10_000`, `BOOTSTRAP_SEED = 42`, `NEAR_MISS_BANDS = {"rs": 5.0, "risk_cap": 0.5}`, `CELLS` (the five verdict cells, in order), `two_sided_bootstrap_p(draws) -> float`, `distinct_setups(rows) -> list[dict]`, `arm_stats(rows) -> dict` (`n, filled_n, no_fill_n, no_plan_n, no_data_n, fill_rate, exp_r, win_rate`), `difference_reading(blocked, taken, *, seed=BOOTSTRAP_SEED) -> dict | None` (`difference, ci_low, ci_high, p`), `classify(reading, q, n) -> str`, `cell_key(row) -> str`. Additive, consumed by V147-15/-16: `EARNS = "GATE EARNS"`, `COSTS = "GATE COSTS"`, `INCONCLUSIVE`, `WAITING`, `VERDICTS`, `CELL_GATE` (cell key → the row `gate` field its taken arm carries), `family_qvalues(pvalues) -> list[float]` (BH over the fixed five-cell family, `None` → 1.0).
+- Produces (ledger): `VERDICT_FLOOR = 30`, `Q_MAX = 0.10`, `BOOTSTRAP_RESAMPLES = 10_000`, `BOOTSTRAP_SEED = 42`, `NEAR_MISS_BANDS = {"rs": 5.0, "risk_cap": 0.5}`, `CELLS` (the five verdict cells, in order), `two_sided_bootstrap_p(draws) -> float`, `distinct_setups(rows) -> list[dict]`, `arm_stats(rows) -> dict` (`n, filled_n, no_fill_n, no_plan_n, no_data_n, fill_rate, exp_r, win_rate`), `difference_reading(blocked, taken, *, seed=BOOTSTRAP_SEED) -> dict | None` (`difference, ci_low, ci_high, p`), `classify(reading, q, n) -> str`, `cell_key(row) -> str` (`"other"` for any `plan_rejected` reason that is not v147's; never a `CELLS` key). Additive, consumed by V147-15/-16: `EARNS = "GATE EARNS"`, `COSTS = "GATE COSTS"`, `INCONCLUSIVE`, `WAITING`, `VERDICTS`, `CELL_GATE` (cell key → the row `gate` field its taken arm carries), `family_qvalues(pvalues) -> list[float]` (BH over the fixed five-cell family, `None` → 1.0).
 
 **Rules fixed here (spec § Pre-registered verdict, index § Global Constraints):**
 - The statistic is blocked ExpR − taken ExpR over distinct **filled** setups. The bootstrap resamples ISO weeks of `entry_date` (`== signal_date`), both arms with the same week draw. Each arm is handed to `week_cluster_bootstrap` as one `(entry_date, total, n)` week-sum per ISO week (v146's recipe), which resamples exactly as per-trade rows would and is cheap at 10,000 draws.
@@ -138,6 +140,9 @@ def test_one_copy_of_the_p_formula():
     ("rs", "rs_blocked", "rs"), ("compression", "earnings_unknown", "compression"),
     ("plan_rejected", "risk_cap", "risk_cap"), ("plan_rejected", "no_qualifying_target", "no_qualifying_target"),
     ("plan_rejected", None, "risk_cap"),     # a taken confluence row belongs to the risk_cap cell
+    ("plan_rejected", "headroom", "other"),  # v135's gate: never pooled into risk_cap
+    ("plan_rejected", "stop_beyond_confluence_ceiling", "other"),   # v139
+    ("plan_rejected", "risk_sizing", "other"),                      # v139
 ])
 def test_cell_key(gate, reason, expected):
     assert gcr.cell_key({"gate": gate, "reason": reason}) == expected
@@ -307,13 +312,17 @@ def two_sided_bootstrap_p(draws) -> float:
 
 
 def cell_key(row) -> str:
-    """The report cell a row belongs to: rs, risk_cap, compression or no_qualifying_target.
+    """The report cell a row belongs to: rs, risk_cap, compression, no_qualifying_target or other.
 
-    A taken confluence row (gate plan_rejected, reason None) is the risk_cap cell's taken arm."""
+    A taken confluence row (gate plan_rejected, reason None) is the risk_cap cell's taken arm.
+    Any other plan_rejected reason (another plan's gate: v135 headroom, v139
+    stop_beyond_confluence_ceiling / risk_sizing) is "other" -- in no verdict cell, never
+    pooled into risk_cap."""
     gate = row["gate"]
     if gate != "plan_rejected":
         return gate
-    return "no_qualifying_target" if row.get("reason") == "no_qualifying_target" else "risk_cap"
+    return {"no_qualifying_target": "no_qualifying_target", "risk_cap": "risk_cap",
+            None: "risk_cap"}.get(row.get("reason"), "other")
 
 
 def _window(row) -> int:

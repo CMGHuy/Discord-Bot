@@ -21,6 +21,8 @@ Scope of this part: V147-1 (verify the block-point enumeration from code), V147-
 
 **Model:** sonnet — reading code paths and writing a table; no code change, but the judgement "is this one of the three gates" needs care.
 
+**Cross-plan (audit 2026-10-10):** other plans add block reasons that are **not** one of v147's three gates. If present at HEAD, add each to the Out-of-scope table (rows O11, O12, ...) with its line number: v135's `headroom` reject (`git grep -n "headroom" -- swingbot/core/scanning swingbot/core/backtesting/backtest_scenarios.py`), and v139's `stop_beyond_confluence_ceiling` and `risk_sizing` reasons (`git grep -n "stop_beyond_confluence_ceiling\|\"risk_sizing\"" -- swingbot`). Reason: they are separate gates from separate plans; the report keeps them out of every v147 cell (`cell_key` maps any unknown reason to `"other"`, which is not in `CELLS`, V147-13). If an L4/L6 hook would record them as `plan_rejected`, say so in the row: the rows are stored, never pooled into `risk_cap`.
+
 **Files:**
 - Create: `docs/superpowers/results/2026-10-09-v147-block-points.md`
 
@@ -99,7 +101,11 @@ and whether v147 records it. Covered = one of the three gates in the spec
 | O8 | TRAIN strategy | `arms/strategy_engine.py:<n>` | plan None, `_skipped` not_triggered | O1's twin; fill-time cancels are taken-arm `no-fill` rows |
 | O9 | confluence | `analyze.py:<n>` | dead-cat-bounce veto (`veto_bullish_for`) | the bullish scenario is never built inside `_scan_one` (a `map_tickers` worker); no candidate exists to record |
 | O10 | confluence | `scan_run.py:<n>` | regime gate | <what Step 2 found> |
+| O11 | confluence | `<file>:<n>` | v135 `headroom` reject (only if present at HEAD) | a v135 gate, not one of the three; `cell_key` -> `"other"`, never pooled into `risk_cap` |
+| O12 | confluence / strategy | `<file>:<n>` | v139 `stop_beyond_confluence_ceiling` / `risk_sizing` (only if present at HEAD) | v139 gates, not one of the three; `cell_key` -> `"other"`, never pooled into `risk_cap` |
 ```
+
+Drop O11 / O12 when the grep finds nothing (those plans not merged); never leave a `<n>` placeholder.
 
 If Step 2 finds a site that **drops** a candidate under one of the three gates and is not in the Covered table, stop and report it to the controller (it changes V147-10's hook list) instead of adding it silently.
 
@@ -968,6 +974,8 @@ git commit -m "feat(v147): truncated plan rebuild with pinned overrides, no-look
 ### Task V147-4: TRAIN gate-row recorder module
 
 **Model:** sonnet — a pure helper module against a fixed row shape; the cap check is copied verbatim from `attach_plan_v2`.
+
+**Cross-plan (audit 2026-10-10):** if `swingbot/core/backtesting/instrument/contract.py` exposes a v1 train window (v158 merged: `contract.resolve("v1").train_window`), derive `TRAIN_WINDOW = tuple(contract.resolve("v1").train_window)` from it (import `from swingbot.core.backtesting.instrument import contract`); its value is the same `("2020-01-01", "2023-12-31")`, so every test below holds unchanged. Otherwise keep the literal shown in Step 3.
 
 **Files:**
 - Create: `swingbot/core/backtesting/blocked_recorder.py`

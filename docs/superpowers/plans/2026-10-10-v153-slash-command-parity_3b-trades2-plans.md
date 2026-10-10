@@ -13,6 +13,8 @@ Split out of part 3 (`..._3-info-trades-plans.md`) only for the 1500-line file c
 
 **Model:** opus — the F52 `summary_cmd` must be split below 15 with byte-identical output (pinned by a before/after golden), plus the `/pnl` union and the `_send_chunks` removal.
 
+**Complexity gate (audit 2026-10-10):** this task splits `summary_cmd` (52) below 15. If `scripts/dev/complexity_gate.py` exists (v149 merged), finish with `python $WT/scripts/dev/complexity_gate.py`, then `--update` and commit `scripts/dev/complexity_baseline.json` in this task's commit (verdicts `gone`/`improved` expected; `new`/`risen` never). Index Global Constraints, Complexity bullet.
+
 **Files:**
 - Modify: `swingbot/commands/trades.py` (today's lines 385-421 `performance_cmd`, 423-450 `pnl_cmd`, 469-557 `summary_cmd`; the SP10 twins section)
 - Modify: `swingbot/commands/slash.py` (delete `_send_chunks`, `/pnl`, `/performance`; drop `import asyncio`)

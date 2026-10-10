@@ -847,7 +847,7 @@ def get_system_health():
 
 - [ ] **Step 4: Register the module**
 
-Use `Edit` on `$WT/swingbot/admin/api_v1/__init__.py`. Replace:
+Use `Edit` on `$WT/swingbot/admin/api_v1/__init__.py`: add `ops_health` to the deferred `from . import (...)` tuple in `register()`, in alphabetical position, keeping every name other plans added (v150 adds `reports` and `research`). Re-read the tuple first; never paste a literal over it. On today's tuple:
 
 ```python
     from . import (analytics, calendar, dashboard, jobs, market,  # noqa: F401
@@ -855,7 +855,7 @@ Use `Edit` on `$WT/swingbot/admin/api_v1/__init__.py`. Replace:
                    versions, watchlist)  # (register routes)
 ```
 
-with:
+becomes:
 
 ```python
     from . import (analytics, calendar, dashboard, jobs, market,  # noqa: F401

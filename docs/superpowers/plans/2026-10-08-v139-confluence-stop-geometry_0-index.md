@@ -95,3 +95,14 @@ Mirrors the spec's groups. Before anything: V139-0 Step 1 creates the worktree. 
 - **Sequential tail:** V139-16 after both chains (it records both arms, closed table and ledger together). V139-17 last: the full suite once, complexity, the release step, the close-out.
 
 **Cross-plan overlap:** v135 (`2026-10-06-v135-headroom-veto`, unimplemented) also edits `config.py` (`_SEARCH_CLASSES`), `scan_params.py`, `reachability.py`, `analyze.py` (`_scan_one`, not `attach_plan_v2`) and `backtest_scenarios.py` (`replay_scenarios`). Whichever plan lands second rebases. The conflicts are list insertions and disjoint functions. If v135 lands first, its headroom gate is default-off, so V139-8's entry-set assertion still holds. Re-run the V139-0 golden after the rebase.
+
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v147 — V139-7:** if `loss_pct =` and `_reject_plan(..., plan=plan, margin=…)` exist in `attach_plan_v2` (v147 merged), keep them and swap only the comparison and the margin base to `plan_stop_ceiling(plan)`; drop the `HARD_MAX_PLANNED_LOSS_PCT` import only if no use remains.
+- **v158 (date-literal guard) — V139-10:** if `tests/backtesting/instrument/test_date_literal_guard.py` exists, add `scripts/backtest/measure_confluence_stop.py` to its `ALLOW` with a one-line reason and run the guard.
+- **v158 (`--instrument`) — V139-11..15:** append `--instrument v1` to every measurement command whose script's `--help` lists it; the record names the instrument.
+- **PARTNER DECISION (2026-10-10) — V139-11/12/13, arm S:** arm S runs on v1 as pre-registered, `--instrument v1` pinned when the flag exists. If `swingbot/core/planning/exit_sim_v2.py` exists (v157 merged), the Stage-1 TRAIN paired ΔExpR is also reported with `instrument=resolve("v2")` fills and costs, as a disclosure only: it never gates and is labelled as such in the record.
+- **Code-hash stability — V139-11..16:** no merge of `main` into the worktree between the pre-registration commit and the last stage.
+- **Closed-table placement — V139-16:** insert the two rows directly under the closed table's header separator (newest first).
+- **v135 — V139-2:** v135's `ScanParams` fields are defaulted and placed at the end beside v139's; both plans append `REGISTRY` and `searchable` rows — whichever lands second rebases onto the other's rows.
+- **Generic rules:** the swallowed-error ratchet (owner v148) does not apply — no v139 task adds an `except Exception` handler. The complexity gate (owner v149, full text in v149's plan) applies to V139-5's `_confluence_candidates` extraction from `build_confluence_plan`: if `scripts/dev/complexity_gate.py` exists, that task finishes with it and commits the updated baseline.

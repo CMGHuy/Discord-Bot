@@ -16,20 +16,28 @@
 
 ## Global Constraints
 
+- **v154 and v155 must be merged on `main` before V156-1.** Check that `scripts/dev/skill_frontmatter.py` exists and that `.claude/skills/screen` and `.claude/skills/prereg` exist; otherwise stop with `BLOCKED`.
 - **No shipped code changes.** Nothing under `swingbot/`, `bot.py`, `admin_ui.py` or `frontend/` is touched; `VERSION.json` is not bumped (`Bump: none`). `mfe_mae.py` and `journal.py` are read, never edited (spec § Out of scope).
 - **Measurements, never a verdict.** The skill text contains no "stop too tight", "bad setup" or similar judgement, no interval and no significance figure.
 - **Excluded fields stay excluded:** the journal's `auto_lesson` and `tags`, anything after the exit, any interval or significance figure. The skill names them as excluded; a test pins that.
 - **The fixed closing line is exactly** `Descriptive only, N=1. A pattern seen here is a hypothesis for `/screen` or `/prereg`, not a result.` with `N=1` unspaced (`N = 1` trips `_THRESHOLD_RE` in `tests/hooks/test_skill_shape.py`).
 - **The skill is a new skill, not grandfathered:** at most 80 lines (`MAX_SKILL_LINES`), no token matching `_THRESHOLD_RE` in its body (no `=`, `<`, `>`, `<=`, `>=` directly before a digit; no `<digits> R`, `<digits> pp`), registered in `TIER_2` and `FORKED` (`"sonnet"`), carries `disable-model-invocation: true`, `context: fork`, `model: sonnet`.
-- **Description is strictly valid YAML as a plain scalar:** no `: `, no ` #`, does not start with a YAML indicator character. v154's strict parser (not yet on disk) will read it.
+- **Description is a double-quoted scalar** (v154's `test_every_source_description_is_a_double_quoted_scalar`); no inner `"`.
 - **Production is read-only and reached only through `scripts/ops/ssh-hetzner.sh`.** No raw `ssh`/`scp`, no restart, no write. The wrapper is gitignored and absent from cloud checkouts; a task that needs it and does not find it stops with `BLOCKED`, it never substitutes another route.
 - **No lookahead in the context line:** dollar volume and the earnings check use bars and reports dated strictly before the alert session (`opened_at`), never `df.tail` of the unsliced cache.
 - **A field the data cannot supply prints `not recorded`.** No read-time inference (`docs/claude/schema-evolution.md`).
 - **`looks.jsonl` is append-only**; a second look at the same trade is a second row. The first real row is written by V156-3.
-- **Codex mirror ships in the same commit as the skill:** `python scripts/dev/sync_codex.py`, the regenerated `.agents/skills/trade-autopsy/**`, and the `` `trade-autopsy` `` mention in `AGENTS.md`'s explicit-only rituals paragraph.
+- **Codex mirror ships in the same commit as the skill:** `python scripts/dev/sync_codex.py`, the regenerated `.agents/skills/trade-autopsy/**`, and the `` `trade-autopsy` `` mention in its own paragraph of `AGENTS.md` § Skills, directly above `Expert role skills (v145)` (V156-2 Step 5).
 - Every Python function written ends below cyclomatic complexity 15 (`python -m radon cc -s -n C <files>`; radon may need `pip install radon` first).
 - Per-task verification is the narrow run: `python scripts/dev/testrun.py file <test>`. The full suite runs once, in V156-4. Green means `0 failed` and `0 xfailed`.
 - **Do not commit from a part writer**; the controller commits each task on the implementation branch.
+
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v154, v155 — precondition for V156-1.** Both must be merged on `main` first (`scripts/dev/skill_frontmatter.py`, `.claude/skills/screen`, `.claude/skills/prereg` exist); otherwise `BLOCKED`.
+- **v154, v155 — V156-2 Step 1.** `TIER_2` and `FORKED` in `tests/hooks/test_skill_shape.py` already carry `result-digest`, `handoff`, `screen`, `prereg`, `data-check`: append `trade-autopsy`, never retype either literal.
+- **v154 — V156-2 Step 3.** v154's `test_every_source_description_is_a_double_quoted_scalar` requires the skill's `description:` to be double-quoted; the old plain-scalar test is dropped.
+- **v154, v155 — V156-2 Step 5.** The `AGENTS.md` ritual-list lines belong to v154/v155; v156 inserts its own paragraph above `Expert role skills (v145)`. In `docs/claude/skills-tools.md` it appends its row after whichever row is last and adds its name to the "also carry `disable-model-invocation: true`" sentence, keeping every name already there.
 
 ## Decisions fixed by this plan
 
@@ -72,6 +80,8 @@ Filled in by V156-3 (manual run) and V156-4 (suite and panel).
 ### Task V156-1: Look-record writer and its test
 
 **Model:** sonnet — a normal TDD task inside one script, behaviour fixed by the spec and Decisions 2–4.
+
+**Cross-plan (audit 2026-10-10):** v154 and v155 must be merged on `main` before this task starts. Check that `scripts/dev/skill_frontmatter.py` exists and that `.claude/skills/screen` and `.claude/skills/prereg` exist; otherwise stop with `BLOCKED`.
 
 **Files:**
 - Create: `scripts/reports/look_record.py`
@@ -355,6 +365,8 @@ git commit -m "feat(v156): look-record writer for docs/superpowers/results/looks
 
 **Model:** sonnet — skill prose plus test-set edits in one area, behaviour fixed by the spec's Design and "Answered by the brief"; no `swingbot/` code.
 
+**Cross-plan (audit 2026-10-10):** written against v154 and v155 as merged (V156-1's precondition). `TIER_2`, `FORKED`, the `AGENTS.md` ritual paragraph and the `docs/claude/skills-tools.md` skills table and slash-only sentence already carry `result-digest`, `handoff`, `screen`, `prereg` and `data-check`: add to them, never retype them. Every `description:` is a double-quoted scalar.
+
 **Files:**
 - Create: `.claude/skills/trade-autopsy/SKILL.md`
 - Modify: `tests/hooks/test_skill_shape.py`
@@ -364,28 +376,17 @@ git commit -m "feat(v156): look-record writer for docs/superpowers/results/looks
 
 Depends on V156-1: the skill's Step 3 cites `scripts/reports/look_record.py` and its flags `--skill`, `--trade-id`, `--close-date`.
 
-Traps (from the brief § 10): `N = 1` with spaces matches `_THRESHOLD_RE`, `N=1` does not; `trade["entry"]` is the fill for stop-entry plans, so the alerted entry is `plan.trigger_price` and slippage uses the alerted risk `|trigger_price - stop_loss|`; the MFE/MAE window starts on the alert day; `opened_at` is the alert time, the fill time lives only in `plan.status_history`. The description must stay a plain YAML scalar: no `: `, no ` #`.
+Traps (from the brief § 10): `N = 1` with spaces matches `_THRESHOLD_RE`, `N=1` does not; `trade["entry"]` is the fill for stop-entry plans, so the alerted entry is `plan.trigger_price` and slippage uses the alerted risk `|trigger_price - stop_loss|`; the MFE/MAE window starts on the alert day; `opened_at` is the alert time, the fill time lives only in `plan.status_history`.
 
 - [ ] **Step 1: Write the failing tests**
 
-In `tests/hooks/test_skill_shape.py`, add the name to `TIER_2` (line 26 today):
-
-```python
-TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel",
-          "trade-autopsy"}        # each ritual task appends its own name
-```
-
-Add it to `FORKED` (line 97 today), keeping the v107 comment above it unchanged:
-
-```python
-FORKED = {"gate": "sonnet", "task-brief": "sonnet", "trade-autopsy": "sonnet"}
-```
+Append `"trade-autopsy"` to the existing `TIER_2` literal and add `"trade-autopsy": "sonnet"` to the existing `FORKED` dict in `tests/hooks/test_skill_shape.py`, keeping every entry already there (after v154 and v155 these include `result-digest`, `handoff`, `screen`, `prereg`, `data-check`). Never retype either literal. Find each with `grep -n "^TIER_2 = \|^FORKED = " tests/hooks/test_skill_shape.py`; keep the comments above and beside them unchanged.
 
 Append at the end of the file:
 
 ```python
-# v156: /trade-autopsy is descriptive only. Pin the closing line, the fields
-# it must never print, and a description the strict v154 loader accepts.
+# v156: /trade-autopsy is descriptive only. Pin the closing line and the
+# fields it must never print.
 TRADE_AUTOPSY_CLOSING_LINE = ("Descriptive only, N=1. A pattern seen here is a "
                               "hypothesis for `/screen` or `/prereg`, not a result.")
 
@@ -400,19 +401,12 @@ def test_trade_autopsy_pins_its_closing_line_and_exclusions():
     assert "`not recorded`" in body
     assert "scripts/ops/ssh-hetzner.sh" in body
     assert "scripts/reports/look_record.py --skill trade-autopsy" in body
-
-
-def test_trade_autopsy_description_is_a_plain_yaml_scalar():
-    meta, _ = _read_skill("trade-autopsy")
-    description = meta["description"]
-    assert ": " not in description and " #" not in description
-    assert description[0] not in "-?:,[]{}#&*!|>'\"%@`"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `python scripts/dev/testrun.py file tests/hooks/test_skill_shape.py`
-Expected: FAIL — `test_every_skill_is_registered_in_exactly_one_tier` (`trade-autopsy` in `TIER_2`, no directory), `test_mechanical_skills_run_forked[trade-autopsy]`, `test_ritual_skills_are_slash_only` and both new tests with `FileNotFoundError` on `.claude/skills/trade-autopsy/SKILL.md`.
+Expected: FAIL — `test_every_skill_is_registered_in_exactly_one_tier` (`trade-autopsy` in `TIER_2`, no directory), `test_mechanical_skills_run_forked[trade-autopsy]`, `test_ritual_skills_are_slash_only` and the new test with `FileNotFoundError` on `.claude/skills/trade-autopsy/SKILL.md`.
 
 - [ ] **Step 3: Write the skill**
 
@@ -421,7 +415,7 @@ Create `.claude/skills/trade-autopsy/SKILL.md` with exactly this content (79 lin
 ```markdown
 ---
 name: trade-autopsy
-description: Review one closed trade in a fixed, measured shape (plan as alerted, fill vs trigger, placeability, excursions, exit, context) and record the look. Slash-only, run as /trade-autopsy followed by a trade id.
+description: "Review one closed trade in a fixed, measured shape (plan as alerted, fill vs trigger, placeability, excursions, exit, context) and record the look. Slash-only, run as /trade-autopsy followed by a trade id."
 disable-model-invocation: true
 context: fork
 model: sonnet
@@ -512,42 +506,21 @@ Expected: PASS — `0 failed`, `0 xfailed` (the parametrised budget and threshol
 
 - [ ] **Step 5: Name the skill in `AGENTS.md` and `docs/claude/skills-tools.md`**
 
-In `AGENTS.md`, § Skills, the explicit-only rituals paragraph (line 240 today; locate it with `grep -n "Explicit-only rituals" AGENTS.md`), replace
+In `AGENTS.md`, § Skills, do not touch the explicit-only rituals list lines (v154 and v155 rewrite them). Instead insert a new paragraph directly above the line starting `Expert role skills (v145)` (`grep -n "^Expert role skills (v145)" AGENTS.md`, one hit), with one blank line between it and each neighbour:
 
 ```text
-sequence), `stable-snapshot` (pin a known-good point) and `backup-pull` (off-VM
-backup pull). `new-doc` (new spec or plan) and `close-out` (plan close-out) may
+`trade-autopsy` is also explicit-only (`$trade-autopsy <trade id>`): one closed
+trade in a fixed, measured shape, read-only from production; each run appends a
+look to `docs/superpowers/results/looks.jsonl`.
 ```
 
-with
-
-```text
-sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
-backup pull) and `trade-autopsy` (one closed trade in a fixed, measured shape,
-read-only from production; each run appends a look to
-`docs/superpowers/results/looks.jsonl`). `new-doc` (new spec or plan) and
-`close-out` (plan close-out) may
-```
-
-In `docs/claude/skills-tools.md`, after the `backup-pull` row of the skills table (line 97 today; `grep -n "^| \`backup-pull\`" docs/claude/skills-tools.md`), insert the row
+In `docs/claude/skills-tools.md`, insert this row directly after the skills table's last row (`grep -n "^| Skill | Tier | Invocation |" docs/claude/skills-tools.md` finds the table; after v154 and v155 the last row is `data-check`, but take whichever row is last), keeping every existing row:
 
 ```text
 | `trade-autopsy` | 2 | slash-only (`/trade-autopsy <trade id>`), forked on sonnet | none — Step 1 reads production through `scripts/ops/ssh-hetzner.sh`; Step 3 appends to `docs/superpowers/results/looks.jsonl` (v156) |
 ```
 
-and in the paragraph below the table replace
-
-```text
-checklists for an explicit slash command. `/deploy`, `/stable-snapshot` and
-`/backup-pull` also carry `disable-model-invocation: true`: the model never
-```
-
-with
-
-```text
-checklists for an explicit slash command. `/deploy`, `/stable-snapshot`,
-`/backup-pull` and `/trade-autopsy` also carry `disable-model-invocation: true`: the model never
-```
+Then, in the paragraph below the table, add `/trade-autopsy` to the list of slash commands in the sentence containing `also carry \`disable-model-invocation: true\`` (`grep -n "also carry \`disable-model-invocation: true\`" docs/claude/skills-tools.md`), keeping every name already there (after v154 and v155: `/deploy`, `/stable-snapshot`, `/backup-pull`, `/result-digest`, `/handoff`, `/screen`, `/prereg`, `/data-check`). Never retype the sentence from this plan; re-wrap the paragraph's lines if needed and change nothing else in it.
 
 - [ ] **Step 6: Regenerate the Codex mirror**
 
