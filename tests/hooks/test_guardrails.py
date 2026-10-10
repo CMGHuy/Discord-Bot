@@ -596,7 +596,7 @@ def test_screen_flags_read_every_checked_option():
          "--tickers", "AAPL,MSFT", "--dry-run", "--ledger", "l.jsonl",
          "--results-dir=r"])
     assert flags == {"idea": "x", "dry_run": True, "tickers": True,
-                     "ledger": "l.jsonl", "results_dir": "r"}
+                     "ticker_count": 2, "ledger": "l.jsonl", "results_dir": "r"}
 
 
 def test_screen_flags_resolve_unique_abbreviations_like_argparse():
@@ -604,7 +604,7 @@ def test_screen_flags_resolve_unique_abbreviations_like_argparse():
         ["python", "screen_idea.py", "--id", "x", "--dry", "--led", "l.jsonl",
          "--res=r"])
     assert flags == {"idea": "x", "dry_run": True, "tickers": False,
-                     "ledger": "l.jsonl", "results_dir": "r"}
+                     "ticker_count": 0, "ledger": "l.jsonl", "results_dir": "r"}
 
 
 def test_screen_flags_ignore_an_ambiguous_abbreviation():
@@ -622,6 +622,13 @@ def test_an_empty_tickers_value_is_no_tickers():
     flags = guardrails._screen_flags(["python", "screen_idea.py", "--idea", "x",
                                       "--tickers=", "--dry-run"])
     assert flags["tickers"] is False
+    assert flags["ticker_count"] == 0
+
+
+def test_empty_ticker_entries_do_not_count():
+    flags = guardrails._screen_flags(["python", "screen_idea.py", "--idea", "x",
+                                      "--tickers", "A,,B,"])
+    assert flags["ticker_count"] == 2
 
 
 @pytest.fixture
@@ -764,6 +771,26 @@ def test_an_abbreviated_full_universe_dry_run_is_denied(screen_repo):
 def test_a_tickers_dry_run_is_allowed_even_for_a_screened_idea(screen_repo):
     _screened(screen_repo)
     assert _bash(f"{_SCREEN} --idea gap_volume --tickers AAPL,MSFT --dry-run") is None
+
+
+def test_a_three_ticker_dry_run_is_allowed(screen_repo):
+    assert _bash(f"{_SCREEN} --idea fresh_idea --tickers A,B,C --dry-run") is None
+
+
+def test_a_four_ticker_dry_run_is_denied(screen_repo):
+    reason = _screen_denial(
+        f"{_SCREEN} --idea fresh_idea --tickers A,B,C,D --dry-run")
+    assert "--dry-run with more than 3 --tickers" in reason
+
+
+def test_an_equals_form_four_ticker_abbreviated_dry_run_is_denied(screen_repo):
+    reason = _screen_denial(
+        f"{_SCREEN} --idea fresh_idea --tickers=a,b,c,d --dry")
+    assert "--dry-run with more than 3 --tickers" in reason
+
+
+def test_a_dry_run_with_empty_ticker_entries_counts_only_symbols(screen_repo):
+    assert _bash(f"{_SCREEN} --idea fresh_idea --tickers A,,B,,C --dry-run") is None
 
 
 def test_a_non_default_ledger_is_denied(screen_repo):
