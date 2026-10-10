@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-10-05-v132-admin-download-pileup-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-05-v132-admin-download-pileup-design.md`
 **Bump:** bot patch, ui patch
 **Edge:** none (integrity) — the admin UI stops taking itself down; no trade, signal or plan changes
 
@@ -14,9 +14,10 @@
 
 ## Progress (2026-10-10)
 
-- P1–P3 are implemented on `codex/v132-admin-download-pileup-integration`; the concurrency and throttle review findings were repaired in `7107f023`.
+- P1–P3 were implemented on `codex/v132-admin-download-pileup-integration` and merged to `main`; the concurrency and throttle review findings were repaired in `7107f023`.
 - P4 local verification: `python scripts/dev/testrun.py full` passed with 7,626 passed, 3 skipped, 0 failed, 0 xfailed. `npx ng test --watch=false` passed 2,689 tests; `npx ng build` passed. Bot `2.3.1` and UI `1.22.1` are committed with regenerated version history; the post-bump version-matrix test passed 13 tests.
-- P4 remains open for the merge to `main`, Hetzner deployment, ten-minute production check, and close-out. The shared `main` checkout has another session's uncommitted setup files. Production deployment requires an explicit request under `AGENTS.md`.
+- P4 release: the partner authorized pushing the full queued `main` history. CI run `38032763125` passed and deployed `b66f0e1d` to Hetzner; bot and admin were healthy and the authenticated SPA smoke test passed 32 checks. The bundled v144 release required its committed `v144_001` migration; it was applied on production after a missing-column error, and Alembic reported `v144_001 (head)`.
+- The ten-minute two-tab check was omitted at the partner's explicit request to close out. Its handle, thread, and tape-request trend remains unmeasured.
 
 ## Global Constraints
 
