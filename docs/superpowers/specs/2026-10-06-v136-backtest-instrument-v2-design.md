@@ -3,7 +3,7 @@
 **Version:** ui 1.21.1 · bot 2.0.2 (at writing)
 **Bump:** bot minor per phase plan (each ships inert behind `--instrument v1`, the default); bot major at the phase-6 cutover
 **Edge:** none (integrity) — the enabler for later `expectancy` work; ranked above direct ExpR work because recent closures (v104, v122, v123) were power failures, not measured negatives
-**Status:** umbrella spec written 2026-10-06; no plans yet. One plan per phase, each reusing this number (`v136-…_pN`).
+**Status:** umbrella spec written 2026-10-06. One plan per phase, each with its own number from the repo counter: phase 1 = v137 (implemented), phase 4 = v138 (implemented), phase 2 = v157 (fills and costs, planned 2026-10-10), phase 3 = v158 (window contract, planned 2026-10-10). Phases 5–6 not yet planned.
 
 ## Why
 
