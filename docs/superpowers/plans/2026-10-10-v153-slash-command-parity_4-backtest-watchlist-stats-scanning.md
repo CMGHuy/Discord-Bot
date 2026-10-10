@@ -787,30 +787,35 @@ async def handle_watchlist(reply, action: str = "show", ticker: str | None = Non
     await run(reply, ticker.upper() if ticker else None)
 
 
-async def _prefix_watchlist(ctx, action: str, ticker: str | None = None) -> None:
-    reply = CtxReply(ctx)
-    await handle_watchlist(reply, action, ticker)
-    await send_prefix_tip(ctx, reply)
-
+# Each prefix command calls the handler itself (the index's prefix pattern),
+# so SP18's one-body check sees the call inside the command.
 
 @bot.group(name="watchlist", invoke_without_command=True)
 async def watchlist_cmd(ctx):
-    await _prefix_watchlist(ctx, "show")
+    reply = CtxReply(ctx)
+    await handle_watchlist(reply, "show")
+    await send_prefix_tip(ctx, reply)
 
 
 @watchlist_cmd.command(name="add")
 async def watchlist_add(ctx, ticker: str = None):
-    await _prefix_watchlist(ctx, "add", ticker)
+    reply = CtxReply(ctx)
+    await handle_watchlist(reply, "add", ticker)
+    await send_prefix_tip(ctx, reply)
 
 
 @watchlist_cmd.command(name="remove")
 async def watchlist_remove(ctx, ticker: str = None):
-    await _prefix_watchlist(ctx, "remove", ticker)
+    reply = CtxReply(ctx)
+    await handle_watchlist(reply, "remove", ticker)
+    await send_prefix_tip(ctx, reply)
 
 
 @watchlist_cmd.command(name="clear")
 async def watchlist_clear(ctx):
-    await _prefix_watchlist(ctx, "clear")
+    reply = CtxReply(ctx)
+    await handle_watchlist(reply, "clear")
+    await send_prefix_tip(ctx, reply)
 
 
 # ──────────────────────────────────────────────
@@ -895,6 +900,7 @@ git -C $WT commit -m "feat(v153): SP14 watchlist handler and action table; /watc
   - Every `!` text is unchanged; the tip follows a successful answer.
   - `!stats <bad period>` and `!lessons <not a number>` answer the same text through `send_error`, with no tip.
   - `!top` attaches `PlanActionView(plan.plan_id, author_id=reply.author.id)`, the same id as `ctx.author.id`.
+  - Every parity stub freezes `discord.utils.utcnow` (`_freeze_clock`, the part 3 pattern): `ui.apply_chrome` stamps it on the `!stats <period>` and `!calibration` embeds, and the harness runs each handler twice.
   - Every chart render stays inside its `lambda target: render_…(…)` line, passed to `asyncio.to_thread(cached_chart, …)`. `test_no_direct_chart_render_calls_outside_to_thread` scans this module line by line, so keep those lines intact.
 
 - [ ] **Step 0: Confirm the chain position, and check v152 D2**
@@ -936,6 +942,15 @@ _ENTRIES = [
 ]
 
 
+_NOW = dt.datetime(2026, 10, 9, 14, 30, tzinfo=dt.timezone.utc)
+
+
+def _freeze_clock(monkeypatch):
+    """ui.apply_chrome stamps discord.utils.utcnow() on every chromed embed
+    (presentation/components.py); the handler runs twice, so freeze it."""
+    monkeypatch.setattr(discord.utils, "utcnow", lambda: _NOW)
+
+
 def _chart_path() -> str:
     path = os.path.join(tempfile.mkdtemp(prefix="v153-stats-"), "chart.png")
     with open(path, "wb") as f:
@@ -950,6 +965,7 @@ def _plan(plan_id: str):
 
 def _stub_plans(plans):
     def stub(monkeypatch):
+        _freeze_clock(monkeypatch)
         monkeypatch.setattr(stats_mod.PlanStore, "all", lambda self: list(plans))
         monkeypatch.setattr(stats_mod, "is_regular", lambda plan: True)
         monkeypatch.setattr(stats_mod, "market_today", lambda: dt.date(2026, 10, 9))
@@ -965,6 +981,7 @@ def _stub_plans(plans):
 
 def _stub_snapshot(snap):
     def stub(monkeypatch):
+        _freeze_clock(monkeypatch)
         path = _chart_path()
         monkeypatch.setattr("swingbot.core.analytics.snapshots.load_snapshot", lambda: snap)
         monkeypatch.setattr("swingbot.core.analytics.snapshots.refresh_snapshot", lambda: None)
@@ -975,6 +992,7 @@ def _stub_snapshot(snap):
 
 def _stub_trades(trades):
     def stub(monkeypatch):
+        _freeze_clock(monkeypatch)
         path = _chart_path()
         monkeypatch.setattr(scan_engine.trade_log, "get_trades", lambda **kw: list(trades))
         monkeypatch.setattr("swingbot.core.analytics.metrics.win_rate", lambda t: 50.0)
@@ -1019,11 +1037,13 @@ CASES = [
     ParityCase("stats_all_no_snapshot", stats_mod.handle_stats, stub=_stub_snapshot(None)),
     ParityCase("stats_period_30d", stats_mod.handle_stats, args=("30D",), stub=_stub_trades(_CLOSED)),
     ParityCase("stats_period_empty", stats_mod.handle_stats, args=("7d",), stub=_stub_trades([])),
-    ParityCase("stats_period_unknown", stats_mod.handle_stats, args=("fortnight",), expect="error"),
+    ParityCase("stats_period_unknown", stats_mod.handle_stats, args=("fortnight",), stub=_freeze_clock,
+               expect="error"),
     ParityCase("stats_lessons_recent", stats_mod.handle_lessons, stub=_stub_journal),
     ParityCase("stats_lessons_week", stats_mod.handle_lessons, args=("week",), stub=_stub_journal,
                expect="multi_send"),
-    ParityCase("stats_lessons_not_a_number", stats_mod.handle_lessons, args=("lots",), expect="error"),
+    ParityCase("stats_lessons_not_a_number", stats_mod.handle_lessons, args=("lots",), stub=_freeze_clock,
+               expect="error"),
     ParityCase("stats_calibration", stats_mod.handle_calibration, stub=_stub_trades(_CLOSED)),
     ParityCase("stats_calibration_no_trades", stats_mod.handle_calibration, stub=_stub_trades([])),
     ParityCase("stats_journal_note_saved", stats_mod.handle_journal, args=("T1", "watch the gap"),
