@@ -199,7 +199,7 @@ Filled in by the tasks named; nothing here is a threshold or a pass on its own.
 | Insertion-only check, `known-traps.md` | V154-5 | PASS 2026-10-10, HEAD -> INDEX: old == new minus 6 headings and 11 blank lines (25885 -> 26114 bytes) |
 | Insertion-only check, `architecture.md` | V154-5 | PASS 2026-10-10, HEAD -> INDEX: old == new minus 4 headings and 7 blank lines (9821 -> 9931 bytes) |
 | `tests/hooks/test_guardrails.py` and `tests/backtesting/test_preregistration_ledger_file.py` after insertion | V154-5 | PASS 2026-10-10: VERDICT: PASS  82 passed  in 1.7s |
-| Plugin keys read from the installed list (five) | V154-9 | _not yet run_ |
+| Plugin keys read from the installed list (five) | V154-9 | 2026-10-10: read from `E:\Claude\claude-config\config-meo\plugins\installed_plugins.json`; `feature-dev@claude-plugins-official`, `code-simplifier@claude-plugins-official`, `claude-code-setup@claude-plugins-official`, `claude-md-management@claude-plugins-official`, `skill-creator@claude-plugins-official` (one hit each); Step 4 check `PLUGIN CHECK PASS`, 15 entries |
 | Fresh session lists all nine role descriptions | V154-12 | _not yet run_ |
 | Nine role eval suites | V154-12 | _not yet run_ |
 | Four edited Tier 1/3 eval suites (`backtest-gate`, `pooled-numbers`, `alert-surface`, `no-lookahead`) | V154-12 | _not yet run_ |

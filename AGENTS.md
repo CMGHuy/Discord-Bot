@@ -272,6 +272,16 @@ open), `technical-analyst` (S/R, pattern and indicator logic),
 A role raises cited `BLOCKING`/`ADVISORY` findings; it never decides and never
 lowers a gate.
 
+Claude Code plugins switched off for this project in `.claude/settings.json`
+`enabledPlugins`, so none of their skills or agents load: the claude.ai-synced
+knowledge-work plugins (`small-business`, `legal`, `finance`,
+`product-management`, `data`, `engineering`, `productivity`, `pdf-viewer`),
+the `chrome-devtools-mcp` and `playwright` MCP plugins, and (v154)
+`feature-dev`, `code-simplifier`, `claude-code-setup`, `claude-md-management`
+and the marketplace `skill-creator`. Codex has no counterpart to switch off;
+do not name their skills or agents (for example `feature-dev:code-reviewer`)
+as a next step.
+
 ## Efficient repository navigation
 
 `.ignore` excludes `.claude/worktrees/`, `market_data/`, `data/` and `logs/`.
