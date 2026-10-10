@@ -226,4 +226,4 @@ The tasks named below fill this in. Nothing here is a threshold, and no row is a
 | Drift test `SCREEN_LEDGER_PATH` == `stats.LEDGER_PATH` | V155-1 | pass -- test_screen_ledger_path_matches_stats_ledger_path |
 | `radon cc -s -n C .claude/hooks/guardrails.py` (no function rated C(15) or above) | V155-2 | pass -- max C (11) _rule_recursive_grep_from_root; _rule_screen_rerun B (9) |
 | `python scripts/dev/sync_codex.py --check` after the last skill | V155-5 | 2026-10-10: `Codex mirror is current.`, exit 0, after `/screen`, `/prereg` and `/data-check` (V155-5) |
-| Full suite | V155-6 | _not yet run_ |
+| Full suite | V155-6 | PASS 6407 passed, 0 failed, 0 xfailed, 1443 skipped (test database unreachable, DB tests skip) at 2813fe0a. A first run at 33c629ad failed `tests/dev/test_select_tests.py::test_no_path_a_test_reads_is_classified_inert`: the new hook tests name `docs/superpowers/results`, which the inert-path check expands to every results doc. Fixed in 2813fe0a with one `DATA_READERS` row (`docs/superpowers/results/` -> `tests/hooks/test_guardrails.py`), a deviation from the Global Constraint "no new select_tests.py row" |
