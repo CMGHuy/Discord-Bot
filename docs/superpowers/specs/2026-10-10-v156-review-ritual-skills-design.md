@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — descriptive review only. It selects no parameter, moves no badge and registers no hypothesis; a pattern it surfaces becomes a separate pre-registration or nothing.
 **Screen:** exempt (integrity)
 **Panel:** quant-researcher, veteran-trader
-**Status:** spec written 2026-10-10; panel review applied and scope cut from four skills to one; **not ready for a plan** — see "Open before a plan".
+**Status:** spec written 2026-10-10; panel review applied and scope cut from four skills to one; open questions answered by the code brief 2026-10-10 (see "Answered by the brief"); ready for a plan.
 **Depends on:** v154 (frontmatter helper, `doc_section.py`) and v155 (`/prereg`, which cites the look record defined here).
 
 ## Why
@@ -67,7 +67,7 @@ else:
 5. **Exit** — how and when it closed, expiry or time-exit state, `r_realized`.
 6. **Context** — whether an earnings date fell inside the holding window, and
    dollar volume against position size.
-7. The fixed line: "Descriptive only, N = 1. A pattern seen here is a
+7. The fixed line: "Descriptive only, N=1. A pattern seen here is a
    hypothesis for `/screen` or `/prereg`, not a result."
 
 Excluded on purpose: the journal's auto-lesson and tags (`journal.py:80-93`,
@@ -102,6 +102,32 @@ shape rather than adding code under a `Bump: none` spec:
 3. Whether `trade["entry"]` in `mfe_mae.py` is the alerted entry or the fill.
 4. Whether alert time, earnings dates and a dollar-volume figure are available
    per trade without new code.
+
+## Answered by the brief
+
+From `.superpowers/briefs/2026-10-10-v156-trade-autopsy.md`:
+
+1. **Store** — `trades` (`TradeLog.get_trade_by_id`) holds stop, targets,
+   horizon, strategy, confidence and `opened_at` (the alert time); `plans`
+   (`PlanStore.get_record`, joined on `trade["plan_id"]`) holds
+   `trigger_price` (alerted entry) and `entry_price` (fill). A separate fill
+   exists for stop_entry plans only (`plan_manager.py:812`); its time is the
+   ACTIVE entry's `at` in `status_history`. Market-entry plans fill at the
+   alert. No `plan_id` → lines 1–2 print `not recorded`.
+2. **Local read** — no: both tables are Postgres on production only. The
+   skill reads them through `scripts/ops/ssh-hetzner.sh`, read-only.
+3. **`trade["entry"]`** — the fill for stop_entry plans (overwritten by
+   `record_plan_fill`), the alerted entry for market-entry plans. Slippage in R
+   uses `|trigger_price - stop|`. The MFE/MAE window starts on the alert day.
+4. **Per-trade data** — alert time yes; earnings partial (production's
+   earnings CSV when it covers the ticker, else `not recorded`;
+   `risk_features["days_to_earnings"]` is never populated and is not used);
+   dollar volume yes, with bars sliced to `opened_at` first (no lookahead).
+
+Output changes: line 2's "gap at the open" becomes fill versus trigger (no
+session-open price is stored); fill time prints `not recorded` for
+market-entry plans. The closing line reads `N=1` so it passes
+`test_new_skills_restate_no_thresholds`.
 
 ## Edge cases
 
