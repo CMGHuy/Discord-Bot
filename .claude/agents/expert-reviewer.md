@@ -1,6 +1,6 @@
 ---
 name: expert-reviewer
-description: Reviews a spec, plan, diff or backtest result through ONE expert role skill (role=<name>; the nine roles are listed in docs/claude/skills-tools.md under Expert roles) and returns numbered BLOCKING or ADVISORY findings, each with a citation, or CLEAN. Read-only. Dispatched by /panel, one role per dispatch, with that role's reviewer model as the override.
+description: "Reviews a spec, plan, diff or backtest result through ONE expert role skill (role=<name>; the nine roles are listed in docs/claude/skills-tools.md under Expert roles) and returns numbered BLOCKING or ADVISORY findings, each with a citation, or CLEAN. Read-only. Dispatched by /panel, one role per dispatch, with that role's reviewer model as the override."
 tools: Read, Grep, Glob, Bash, Skill
 model: sonnet
 ---

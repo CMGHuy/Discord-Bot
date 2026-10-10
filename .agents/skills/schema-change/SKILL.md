@@ -1,6 +1,6 @@
 ---
 name: schema-change
-description: Use when changing the Postgres schema, a store's read or write path, or a data migration -- every store is Postgres-only, so a shape change is an Alembic revision following docs/claude/schema-evolution.md. Not for reading data, not for analytics queries, and not for the few files under data/ that were never stores (snapshots, telemetry).
+description: "Use when changing the Postgres schema, a store's read or write path, or a data migration -- every store is Postgres-only, so a shape change is an Alembic revision following docs/claude/schema-evolution.md. Not for reading data, not for analytics queries, and not for the few files under data/ that were never stores (snapshots, telemetry)."
 ---
 <!-- GENERATED from .claude/skills/schema-change/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

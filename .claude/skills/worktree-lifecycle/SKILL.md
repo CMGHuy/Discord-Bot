@@ -1,6 +1,6 @@
 ---
 name: worktree-lifecycle
-description: Use when creating, entering, merging or removing a git worktree in this repo, or before merging a branch another concurrent session may be working on. Multiple sessions share this working tree, so a merge or a cross-worktree edit can silently overwrite another session's work. Not for ordinary commits on the current branch.
+description: "Use when creating, entering, merging or removing a git worktree in this repo, or before merging a branch another concurrent session may be working on. Multiple sessions share this working tree, so a merge or a cross-worktree edit can silently overwrite another session's work. Not for ordinary commits on the current branch."
 ---
 
 # Worktree lifecycle

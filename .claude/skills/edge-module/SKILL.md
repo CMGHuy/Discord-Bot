@@ -1,6 +1,6 @@
 ---
 name: edge-module
-description: Use when adding or changing a strategy or edge module under swingbot/core/edge/ or swingbot/core/market/strategy_types.py -- registry entry, badge tier, entry-signal wiring, or where it plugs into the scan pipeline. Not for tuning an existing strategy's parameters (use backtest-gate) and not for changing how a strategy is displayed.
+description: "Use when adding or changing a strategy or edge module under swingbot/core/edge/ or swingbot/core/market/strategy_types.py -- registry entry, badge tier, entry-signal wiring, or where it plugs into the scan pipeline. Not for tuning an existing strategy's parameters (use backtest-gate) and not for changing how a strategy is displayed."
 ---
 
 # Edge module

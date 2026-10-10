@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: The Hetzner deploy sequence -- decide config vs. code, push or trigger the build, verify both containers on the VM, and mirror any hand edit back. Invoked explicitly as /deploy, never model-triggered.
+description: "The Hetzner deploy sequence -- decide config vs. code, push or trigger the build, verify both containers on the VM, and mirror any hand edit back. Invoked explicitly as /deploy, never model-triggered."
 ---
 <!-- GENERATED from .claude/skills/deploy/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

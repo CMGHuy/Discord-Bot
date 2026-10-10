@@ -1,6 +1,6 @@
 ---
 name: backup-pull
-description: Pull a verified rebuild-from-zero backup set off the Hetzner VM into local backups/ and report the result. Invoked explicitly as /backup-pull, never model-triggered.
+description: "Pull a verified rebuild-from-zero backup set off the Hetzner VM into local backups/ and report the result. Invoked explicitly as /backup-pull, never model-triggered."
 ---
 <!-- GENERATED from .claude/skills/backup-pull/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

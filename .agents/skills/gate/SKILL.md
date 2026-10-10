@@ -1,6 +1,6 @@
 ---
 name: gate
-description: Pre-commit verification gate — syntax pass plus the full suite via scripts/dev/testrun.py, where green means literally zero failures.
+description: "Pre-commit verification gate — syntax pass plus the full suite via scripts/dev/testrun.py, where green means literally zero failures."
 ---
 <!-- GENERATED from .claude/skills/gate/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

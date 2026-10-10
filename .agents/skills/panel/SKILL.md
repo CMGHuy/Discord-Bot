@@ -1,6 +1,6 @@
 ---
 name: panel
-description: Dispatch expert role reviewers (/panel role[,role...] target) over a spec, plan, diff or backtest result, one at a time through the expert-reviewer agent, and merge their findings. Run as /panel, or by Claude itself right after committing a spec that carries a Panel header line, and before /close-out of a plan built from such a spec.
+description: "Dispatch expert role reviewers (/panel role[,role...] target) over a spec, plan, diff or backtest result, one at a time through the expert-reviewer agent, and merge their findings. Run as /panel, or by Claude itself right after committing a spec that carries a Panel header line, and before /close-out of a plan built from such a spec."
 ---
 <!-- GENERATED from .claude/skills/panel/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

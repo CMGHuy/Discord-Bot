@@ -1,6 +1,6 @@
 ---
 name: backtest-runner
-description: Runs long backtest, grid, walk-forward or fold scripts in an isolated context and returns only the verdicts. Use for any run expected to exceed ~2 minutes so its per-symbol progress output never enters the main context.
+description: "Runs long backtest, grid, walk-forward or fold scripts in an isolated context and returns only the verdicts. Use for any run expected to exceed ~2 minutes so its per-symbol progress output never enters the main context."
 tools: Bash, Read, Grep, Glob
 model: sonnet
 skills: [backtest-gate]

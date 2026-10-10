@@ -1,6 +1,6 @@
 ---
 name: backtest-gate
-description: Use when about to run, re-run, or interpret any backtest, grid, walk-forward, fold or validation script (scripts/backtest/run_backtest_range.py, scripts/backtest/tune_strategy.py, --train, --validation, --grid, --exit-model, --scale-out) -- BEFORE the command, not after. Also when a result is about to be called a pass. Not for reading a backtest result already in context, and not for the test suite (use /gate).
+description: "Use when about to run, re-run, or interpret any backtest, grid, walk-forward, fold or validation script (scripts/backtest/run_backtest_range.py, scripts/backtest/tune_strategy.py, --train, --validation, --grid, --exit-model, --scale-out) -- BEFORE the command, not after. Also when a result is about to be called a pass. Not for reading a backtest result already in context, and not for the test suite (use /gate)."
 ---
 <!-- GENERATED from .claude/skills/backtest-gate/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

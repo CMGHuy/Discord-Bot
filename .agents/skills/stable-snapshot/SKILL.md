@@ -1,6 +1,6 @@
 ---
 name: stable-snapshot
-description: Pin a known-good point -- VM snapshot folder, annotated stable-* git tag, and an off-VM copy -- and print the restore command. Invoked explicitly as /stable-snapshot, never model-triggered.
+description: "Pin a known-good point -- VM snapshot folder, annotated stable-* git tag, and an off-VM copy -- and print the restore command. Invoked explicitly as /stable-snapshot, never model-triggered."
 ---
 <!-- GENERATED from .claude/skills/stable-snapshot/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

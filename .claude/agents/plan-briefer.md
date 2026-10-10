@@ -1,6 +1,6 @@
 ---
 name: plan-briefer
-description: Reads an approved spec and the code it touches, and writes one code brief (.superpowers/briefs/<plan base>.md) -- signatures, bounded excerpts, test patterns, symbol verdicts -- so the Opus plan-writer reads one file instead of exploring. Dispatch before plan-writer mode=index; every part writer reads the same brief.
+description: "Reads an approved spec and the code it touches, and writes one code brief (.superpowers/briefs/<plan base>.md) -- signatures, bounded excerpts, test patterns, symbol verdicts -- so the Opus plan-writer reads one file instead of exploring. Dispatch before plan-writer mode=index; every part writer reads the same brief."
 tools: Bash, Read, Write, Grep, Glob
 model: sonnet
 ---

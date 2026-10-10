@@ -1,6 +1,6 @@
 ---
 name: mirror-prod
-description: Use when about to change anything on the Hetzner production VM (167.233.26.185, scripts/ops/ssh-hetzner.sh, docker compose restart, editing .env, a hotfix applied live). Production changes must be mirrored back into this repo and committed before the task counts as done. Not for read-only production commands -- logs, docker ps, status checks.
+description: "Use when about to change anything on the Hetzner production VM (167.233.26.185, scripts/ops/ssh-hetzner.sh, docker compose restart, editing .env, a hotfix applied live). Production changes must be mirrored back into this repo and committed before the task counts as done. Not for read-only production commands -- logs, docker ps, status checks."
 ---
 
 # Mirror prod

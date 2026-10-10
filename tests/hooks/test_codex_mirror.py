@@ -5,6 +5,9 @@ setup change also updates Codex" a gate rather than a habit."""
 import importlib.util
 import json
 import pathlib
+import re
+
+import pytest
 
 _ROOT = pathlib.Path(__file__).parent.parent.parent
 _SPEC = importlib.util.spec_from_file_location(
@@ -74,3 +77,55 @@ def test_codex_hooks_mirror_the_claude_guardrail_and_session_hooks():
     assert claude_pre == codex_pre
     codex_start = {h["command"] for e in codex["SessionStart"] for h in e["hooks"]}
     assert "pwsh -NoProfile -File .claude/hooks/session-cursor.ps1" in codex_start
+
+
+# v154: every description is a double-quoted scalar, read and re-emitted
+# through scripts/dev/skill_frontmatter.py.
+_FIXTURE = _ROOT / "tests" / "hooks" / "fixtures" / "broken_frontmatter_SKILL.md"
+_QUOTED_DESCRIPTION = re.compile(r'^description: ".*"$', re.M)
+
+
+def _sources():
+    return (sorted((_ROOT / ".claude" / "skills").glob("*/SKILL.md"))
+            + sorted((_ROOT / ".claude" / "agents").glob("*.md")))
+
+
+def test_every_source_description_is_a_double_quoted_scalar():
+    unquoted = [p.relative_to(_ROOT).as_posix() for p in _sources()
+                if not _QUOTED_DESCRIPTION.search(p.read_text(encoding="utf-8"))]
+    assert not unquoted, unquoted
+
+
+def test_generated_skill_description_is_quoted_and_reads_back_the_same():
+    for skill in (_ROOT / ".claude" / "skills").glob("*/SKILL.md"):
+        name = skill.parent.name
+        meta, _ = sync_codex._split_frontmatter(skill.read_text(encoding="utf-8"))
+        copy = (_ROOT / ".agents" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+        expected = "description: " + sync_codex.quote_value(meta["description"])
+        assert copy.splitlines()[2] == expected, name
+        assert sync_codex._split_frontmatter(copy)[0]["description"] == meta["description"], name
+
+
+def test_split_frontmatter_is_the_strict_reader():
+    with pytest.raises(sync_codex.FrontmatterError, match="frontmatter line 3"):
+        sync_codex._split_frontmatter(_FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_a_broken_source_is_reported_with_its_path(tmp_path, monkeypatch):
+    skill = tmp_path / ".claude" / "skills" / "broken" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(sync_codex, "ROOT", tmp_path)
+    with pytest.raises(sync_codex.FrontmatterError,
+                       match=r"^\.claude/skills/broken/SKILL\.md: frontmatter line 3"):
+        sync_codex._skill_outputs(skill)
+
+
+def test_main_reports_broken_frontmatter_without_a_traceback(monkeypatch, capsys):
+    def broken():
+        raise sync_codex.FrontmatterError("x/SKILL.md: frontmatter line 3: nope")
+
+    monkeypatch.setattr(sync_codex, "expected_files", broken)
+    assert sync_codex.main(["--check"]) == 1
+    out = capsys.readouterr().out
+    assert "invalid frontmatter: x/SKILL.md: frontmatter line 3: nope" in out

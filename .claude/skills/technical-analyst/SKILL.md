@@ -1,6 +1,6 @@
 ---
 name: technical-analyst
-description: Use when reviewing a spec, plan or diff from the technical-analyst seat -- support/resistance, chart and candlestick patterns, FVG, Fibonacci, trendlines and indicator logic: is the code computing what the setup is named for, the way traders trade it -- or when the expert-reviewer agent is dispatched with role=technical-analyst. Not for whether the pattern pays (quant-researcher) and not for cache or replay plumbing (quant-engineer).
+description: "Use when reviewing a spec, plan or diff from the technical-analyst seat -- support/resistance, chart and candlestick patterns, FVG, Fibonacci, trendlines and indicator logic: is the code computing what the setup is named for, the way traders trade it -- or when the expert-reviewer agent is dispatched with role=technical-analyst. Not for whether the pattern pays (quant-researcher) and not for cache or replay plumbing (quant-engineer)."
 ---
 
 # Technical analyst

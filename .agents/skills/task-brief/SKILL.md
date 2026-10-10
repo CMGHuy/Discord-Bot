@@ -1,6 +1,6 @@
 ---
 name: task-brief
-description: Extract one plan task into an execution brief with this repo's known traps pre-corrected. Use when starting a numbered plan task (E53, G134, C43...).
+description: "Extract one plan task into an execution brief with this repo's known traps pre-corrected. Use when starting a numbered plan task (E53, G134, C43...)."
 ---
 <!-- GENERATED from .claude/skills/task-brief/SKILL.md by scripts/dev/sync_codex.py -- edit the source, then re-run the script. Never edit this copy. -->
 

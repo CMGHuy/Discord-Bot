@@ -19,7 +19,14 @@ import json
 import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+# tests/hooks/test_codex_mirror.py loads this file by path, so the sibling
+# helper is importable only once this directory is on sys.path.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from skill_frontmatter import (  # noqa: E402
+    FrontmatterError, parse_frontmatter, quote_value)
+
+ROOT =pathlib.Path(__file__).resolve().parent.parent.parent
 CLAUDE_SKILLS = ROOT / ".claude" / "skills"
 CLAUDE_AGENTS = ROOT / ".claude" / "agents"
 CODEX_SKILLS = ROOT / ".agents" / "skills"
@@ -46,25 +53,28 @@ def _banner(source: str) -> str:
 
 
 def _split_frontmatter(text: str):
-    """Return ({key: value}, body) for a `---`-fenced markdown file."""
-    text = text.replace("\r\n", "\n")
-    if not text.startswith("---\n"):
-        return {}, text
-    head, _, body = text[4:].partition("\n---\n")
-    meta = {}
-    for line in head.splitlines():
-        key, sep, value = line.partition(":")
-        if sep and not line.startswith(" "):
-            meta[key.strip()] = value.strip()
-    return meta, body
+    """Return ({key: value}, body) for a `---`-fenced markdown file.
+
+    Strict -- scripts/dev/skill_frontmatter.py raises FrontmatterError on
+    frontmatter the real loader rejects. A quoted value comes back unquoted."""
+    return parse_frontmatter(text)
+
+
+def _read_source(path: pathlib.Path):
+    """`_split_frontmatter` of one source file; an error names the file."""
+    try:
+        return _split_frontmatter(path.read_text(encoding="utf-8"))
+    except FrontmatterError as exc:
+        raise FrontmatterError(
+            f"{path.relative_to(ROOT).as_posix()}: {exc}") from None
 
 
 def _skill_outputs(skill_md: pathlib.Path) -> dict:
-    meta, body = _split_frontmatter(skill_md.read_text(encoding="utf-8"))
+    meta, body = _read_source(skill_md)
     name = skill_md.parent.name
     source = skill_md.relative_to(ROOT).as_posix()
     text = (f"---\nname: {meta.get('name', name)}\n"
-            f"description: {meta.get('description', '')}\n---\n"
+            f"description: {quote_value(meta.get('description', ''))}\n---\n"
             f"<!-- {_banner(source)} -->\n{body}")
     out = {CODEX_SKILLS / name / "SKILL.md": text}
     if meta.get("disable-model-invocation") == "true":
@@ -78,7 +88,7 @@ def _toml_string(value: str) -> str:
 
 
 def _agent_outputs(agent_md: pathlib.Path) -> dict:
-    meta, body = _split_frontmatter(agent_md.read_text(encoding="utf-8"))
+    meta, body = _read_source(agent_md)
     source = agent_md.relative_to(ROOT).as_posix()
     name = meta.get("name", agent_md.stem)
     model, effort = CODEX_TIERS[meta.get("model", "sonnet")]
@@ -147,9 +157,13 @@ def write() -> None:
 
 
 def main(argv: list) -> int:
-    if "--check" not in argv:
-        write()
-    problems = check()
+    try:
+        if "--check" not in argv:
+            write()
+        problems = check()
+    except FrontmatterError as exc:
+        print(f"invalid frontmatter: {exc}")
+        return 1
     for line in problems:
         print(line)
     if problems:
