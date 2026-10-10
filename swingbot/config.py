@@ -124,6 +124,18 @@ FIELDS: list[Field] = [
                "without any configuration. Set this to keep health notices out of the "
                "alert stream. Unlike the alerts channel, health notices are NOT silent."),
 
+    # --- eToro paper trading (credentials only; nothing consumes them yet) ---
+    Field("ETORO_USER_KEY", "ETORO_USER_KEY", "eToro Paper Trading", "eToro user key",
+          type="password", sensitive=True, default="",
+          help="Personal x-user-key from eToro's Public API settings. Reserved for issuing "
+               "trade plans to an eToro DEMO account alongside the bomeo-capital.com page; "
+               "no code reads it yet. Real-money trading is a later roadmap stage, never "
+               "enabled by this key alone."),
+    Field("ETORO_API_KEY", "ETORO_API_KEY", "eToro Paper Trading", "eToro application API key",
+          type="password", sensitive=True, default="",
+          help="x-api-key, paired with ETORO_USER_KEY. Leave blank until the eToro paper "
+               "integration is built."),
+
     # --- Scanning & session ---
     Field("SESSION_START_HOUR", "SESSION_START_HOUR", "Scanning & Session", "Session start hour",
           type="number", default="8", min=0, max=23, step=1,
