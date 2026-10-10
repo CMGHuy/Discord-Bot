@@ -937,7 +937,7 @@ Expected: all three paths are listed. A missing one means V154-5 or V154-6 has n
 
 - [ ] **Step 2: Update the three expectations in `tests/dev/test_select_tests.py`**
 
-Edit 1, in `_with_readers` (find it with `grep -n "def _with_readers" tests/dev/test_select_tests.py`). The fixture tree must contain the two new readers, or the selector reports them missing and widens. Replace:
+Edit 1, in `_with_readers` (find it with `grep -n "def _with_readers" tests/dev/test_select_tests.py`). The fixture tree must contain the two new readers, or the selector reports them missing and widens. Add `"tests/hooks/test_doc_sections.py"` and `"tests/dev/test_doc_section.py"` to the tuple in `_with_readers`, keeping every existing entry (if v149 merged, `test_readme_paths.py` and `test_complexity_gate.py` are there; never retype the tuple from this plan). Order inside the tuple does not matter (it only creates fixture files). As written when this plan was drafted, before any other plan touched it, the tuple was:
 
 ```python
     for rel in ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.py",
@@ -945,15 +945,7 @@ Edit 1, in `_with_readers` (find it with `grep -n "def _with_readers" tests/dev/
                 "tests/dev/test_testrun_ci_invocations.py"):
 ```
 
-with:
-
-```python
-    for rel in ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.py",
-                "tests/hooks/test_role_skills.py",
-                "tests/hooks/test_doc_sections.py",
-                "tests/dev/test_doc_section.py",
-                "tests/dev/test_testrun_ci_invocations.py"):
-```
+and the two new strings go in as their own lines, for example directly after `"tests/hooks/test_role_skills.py",`.
 
 Edit 2, the last row of the `parametrize` list above `test_data_read_path_routes_to_its_readers` (find it with `grep -n '"docs/claude/backtest-methodology.md"' tests/dev/test_select_tests.py`). The selector returns its targets sorted. Replace:
 

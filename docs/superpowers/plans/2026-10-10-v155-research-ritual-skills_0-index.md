@@ -52,6 +52,12 @@ These fill gaps the spec leaves to the plan, and every part is written against t
 11. **Each skill reads its authority by section:** `/screen` reads `"Funnel stages"`, `/prereg` reads `"Funnel stages"` and `"Evidence, registry and ledger"` (both in `backtest-methodology.md`), and `/data-check` reads `"Two OHLCV caches"` and `"Full-history cache"` (in `known-traps.md`). Each skill also says that exit code 2 from `doc_section.py` means "read the whole file".
 12. **`/data-check`'s last reply line is fixed text** (contract C4), so the disclosure cannot be paraphrased away.
 
+## Cross-plan coordination (audit 2026-10-10)
+
+- **v154 — V155-1 and every part-2 task.** v155 edits `TIER_2`/`FORKED` in `tests/hooks/test_skill_shape.py`, the `AGENTS.md` ritual paragraph and the `docs/claude/skills-tools.md` skills table by anchor, after v154 (precondition checked in V155-1). Its anchors are the text V154-10 and V154-11 leave behind (the `AGENTS.md` ritual sentence as V154-11 rewrote it).
+- **v156 — V155-3, V155-4, V155-5 (`TIER_2`; V155-5 also `FORKED`).** v156 appends `trade-autopsy` to these literals after v155 — never retype the literals. v156 requires v154 and v155 merged before it starts.
+- **v154 — V155-3, V155-4, V155-5 (`skills-tools.md`).** V154-10, V154-11 and each of V155-3/4/5 add their slash-only name to the "also carry `disable-model-invocation: true`" sentence in `docs/claude/skills-tools.md`, keeping every name already there, so merge order does not matter.
+
 ## Parallelisation
 
 All tasks run in one worktree. The files each task touches decide what can run at the same time.
@@ -79,9 +85,9 @@ All tasks run in one worktree. The files each task touches decide what can run a
 |---|---|---|---|---|---|
 | V155-1 | v154 precondition; hook constants, segment and flag helpers, ledger and results lookups, docstring, drift test | 1 | sonnet | Modify `.claude/hooks/guardrails.py`, `tests/hooks/test_guardrails.py`; record in `## Results` | `_HOOK_REPO_ROOT`, `SCREEN_LEDGER_PATH`, `SCREEN_RESULTS_DIR`, `_SCREEN_SEPARATORS`, `_SCREEN_OPTIONS`, `_command_segments`, `_is_screen_token`, `_is_wrapped_screen`, `_screen_flags`, `_is_default_ledger`, `_screen_ledger_row`, `_screen_results_doc` (contract C1) |
 | V155-2 | `_rule_screen_rerun`, registered in `_RULES["Bash"]`; hook-rule docs | 1 | sonnet | Modify `.claude/hooks/guardrails.py`, `tests/hooks/test_guardrails.py`, `docs/claude/skills-tools.md` (hook-rules paragraph), `AGENTS.md` (hook sentence); record radon in `## Results` | `_rule_screen_rerun(ti: dict) -> dict \| None`, `_screen_deny_reason(flags: dict) -> str \| None`, the deny texts including the non-default `--results-dir` deny (contract C2) |
-| V155-3 | `/screen` slash-only skill | 2 | sonnet | Create `.claude/skills/screen/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`), `docs/claude/skills-tools.md` (skills table), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/screen/**` | `"screen"` in `TIER_2` (contract C3) |
-| V155-4 | `/prereg` slash-only skill | 2 | sonnet | Create `.claude/skills/prereg/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`), `docs/claude/skills-tools.md` (skills table), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/prereg/**` | `"prereg"` in `TIER_2` |
-| V155-5 | `/data-check` slash-only forked skill | 2 | sonnet | Create `.claude/skills/data-check/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`, `FORKED`), `docs/claude/skills-tools.md` (skills table), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/data-check/**` | `"data-check"` in `TIER_2` and `FORKED` (contract C3); the fixed disclosure line (contract C4) |
+| V155-3 | `/screen` slash-only skill | 2 | sonnet | Create `.claude/skills/screen/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`), `docs/claude/skills-tools.md` (skills table, slash-only sentence), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/screen/**` | `"screen"` in `TIER_2` (contract C3) |
+| V155-4 | `/prereg` slash-only skill | 2 | sonnet | Create `.claude/skills/prereg/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`), `docs/claude/skills-tools.md` (skills table, slash-only sentence), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/prereg/**` | `"prereg"` in `TIER_2` |
+| V155-5 | `/data-check` slash-only forked skill | 2 | sonnet | Create `.claude/skills/data-check/SKILL.md`; modify `tests/hooks/test_skill_shape.py` (`TIER_2`, `FORKED`), `docs/claude/skills-tools.md` (skills table, slash-only sentence), `AGENTS.md` (ritual paragraph); regenerated `.agents/skills/data-check/**` | `"data-check"` in `TIER_2` and `FORKED` (contract C3); the fixed disclosure line (contract C4) |
 | V155-6 | Full-suite verification | 2 | haiku | Record in `## Results` | The plan's green verdict |
 
 ## Cross-task contracts
