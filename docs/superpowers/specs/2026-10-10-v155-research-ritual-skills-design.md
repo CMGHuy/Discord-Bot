@@ -213,3 +213,17 @@ ADVISORY; quant-engineer three BLOCKING and three ADVISORY.
 - quant-engineer: `--universe` needs a name; unknown names and missing symbols — applied (`checked/total`, incomplete is not clean).
 - quant-engineer: the script docstring's cache mapping is stale — applied (`known-traps.md` is the source).
 - quant-engineer: tests for chained, wrapped and missing-ledger commands — applied.
+
+Pre-close-out re-review:
+
+- quant-researcher: dry run with a whole-universe --tickers list re-reads the verdict -- applied (hook caps a dry run at 3 tickers)
+- quant-researcher: dry run with a fresh --ledger on a closed idea -- not applied in v155 (advisory)
+- quant-researcher: --cache-dir/--membership unchecked on a real run -- not applied in v155 (advisory)
+- quant-researcher: /screen smoke test prints figures -- not applied in v155 (advisory)
+- quant-researcher: /prereg frozen block lacks window/cells/winner rule -- not applied in v155 (advisory)
+- quant-researcher: /prereg lacks the Closed-pre-registrations check -- not applied in v155 (advisory)
+- quant-researcher: /prereg stub-before-measurement ordering unproven -- not applied in v155 (advisory)
+- quant-engineer: /screen definition hash covers only screen/ -- not applied in v155 (advisory)
+- quant-engineer: one-shot is ledger-id not window based -- not applied in v155 (advisory)
+- quant-engineer: /data-check relies on universe_symbols returning [] for unknown names -- not applied in v155 (advisory)
+- quant-engineer: python -c runpy wrapper escapes the hook (inherent) -- not applied in v155 (advisory)

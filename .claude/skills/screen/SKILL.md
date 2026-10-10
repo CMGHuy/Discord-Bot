@@ -48,7 +48,7 @@ fail is never retried under a similar name, and this skill does not decide.
 
 `python scripts/backtest/screen_idea.py --idea <idea> --tickers <two or three, comma-separated> --dry-run`
 writes nothing. The guardrails hook (`_rule_screen_rerun`) denies a
-`--dry-run` without `--tickers`; a real run with a non-default `--ledger` or
+`--dry-run` without `--tickers` or with more than three; a real run with a non-default `--ledger` or
 `--results-dir`; a run of an idea that has a ledger row or a results doc; a
 run wrapped in a quoted string (`ssh-hetzner.sh "..."`, `pwsh -Command "..."`);
 and a line it cannot tokenise. A deny is the rule: never route round it.

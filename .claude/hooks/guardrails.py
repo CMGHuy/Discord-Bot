@@ -301,6 +301,7 @@ def _rule_closed_preregistration(ti: dict):
 _HOOK_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCREEN_RESULTS_DIR = os.path.join(_HOOK_REPO_ROOT, "docs", "superpowers", "results")
 SCREEN_LEDGER_PATH = os.path.join(SCREEN_RESULTS_DIR, "preregistration-ledger.jsonl")
+_SCREEN_MAX_SMOKE_TICKERS = 3
 _SCREEN_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
 _SCREEN_OPTIONS = ("--idea", "--cache-dir", "--membership", "--start", "--end",
                    "--date", "--ledger", "--results-dir", "--tickers", "--dry-run")
@@ -392,13 +393,15 @@ def _screen_flags(tokens: list[str]) -> dict | None:
     start = next((i for i, tok in enumerate(tokens) if _is_screen_token(tok)), None)
     if start is None:
         return None
-    flags = {"idea": None, "dry_run": False, "tickers": False,
+    flags = {"idea": None, "dry_run": False, "tickers": False, "ticker_count": 0,
              "ledger": None, "results_dir": None}
     for opt, value in _screen_option_values(tokens[start + 1:]):
         if opt == "--dry-run":
             flags["dry_run"] = True
         elif opt == "--tickers":
             flags["tickers"] = bool(value)
+            flags["ticker_count"] = sum(
+                1 for sym in (value or "").split(",") if sym.strip())
         elif opt in _SCREEN_VALUE_KEYS:
             flags[_SCREEN_VALUE_KEYS[opt]] = value
     return flags
@@ -493,6 +496,11 @@ def _screen_deny_reason(flags: dict) -> str | None:
     the index's Decision 10: a dry run is decided by --tickers alone; a real
     run is denied on a non-default ledger or results dir, then on a record."""
     if flags["dry_run"]:
+        if flags["tickers"] and flags["ticker_count"] > _SCREEN_MAX_SMOKE_TICKERS:
+            return _screen_text(
+                f"--dry-run with more than {_SCREEN_MAX_SMOKE_TICKERS} --tickers "
+                "re-reads the verdict across the universe and writes nothing; "
+                "a smoke test names two or three symbols with --tickers")
         if flags["tickers"]:
             return None
         return _screen_text(
