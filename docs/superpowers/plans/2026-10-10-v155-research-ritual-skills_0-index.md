@@ -222,8 +222,8 @@ The tasks named below fill this in. Nothing here is a threshold, and no row is a
 
 | Check | Task | Result |
 |---|---|---|
-| v154 precondition (four checks) | V155-1 | _not yet run_ |
-| Drift test `SCREEN_LEDGER_PATH` == `stats.LEDGER_PATH` | V155-1 | _not yet run_ |
+| v154 precondition (four checks) | V155-1 | pass -- a5f5d1eb |
+| Drift test `SCREEN_LEDGER_PATH` == `stats.LEDGER_PATH` | V155-1 | pass -- test_screen_ledger_path_matches_stats_ledger_path |
 | `radon cc -s -n C .claude/hooks/guardrails.py` (no function rated C(15) or above) | V155-2 | _not yet run_ |
 | `python scripts/dev/sync_codex.py --check` after the last skill | V155-5 | _not yet run_ |
 | Full suite | V155-6 | _not yet run_ |
