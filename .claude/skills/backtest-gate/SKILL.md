@@ -7,11 +7,16 @@ description: "Use when about to run, re-run, or interpret any backtest, grid, wa
 
 ## Step 1 — Read the authority
 
-`docs/claude/backtest-methodology.md`. Read it before anything else here — it
-owns the six-clause acceptance gate, the four-stage funnel, the TRAIN/
-VALIDATION windows, the frozen constants, and the closed pre-registration
-table. This skill does not restate any of that; nothing here substitutes for
-reading it.
+```bash
+python scripts/dev/doc_section.py docs/claude/backtest-methodology.md "Acceptance gate" "Funnel stages" "Windows" "Frozen constants" "Closed pre-registrations"
+```
+
+Those sections own the six-clause acceptance gate, the four-stage funnel, the
+TRAIN/VALIDATION windows, the frozen constants and the closed
+pre-registration table.
+**Whole file instead when:** the run is `--validation`, or a result is about to be called a pass or fail.
+Exit code 2 from `doc_section.py` means read the whole file. This skill does
+not restate any of that; nothing here substitutes for reading it.
 
 ## Step 2 — Is this shot already spent?
 
