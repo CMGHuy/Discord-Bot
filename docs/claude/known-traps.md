@@ -4,6 +4,8 @@ Referenced from the root `CLAUDE.md`. Each of these has already cost a
 session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 `embeds.py`, or the scan loop.
 
+## Two OHLCV caches
+
 - **Two parallel OHLCV cache subsystems — do not conflate them.** Both now
   live in `swingbot/core/marketdata/` (v27 repo restructure, 2026-08-15).
   `marketdata/backtest_cache.py` → `data/backtest_cache/` (flat `TICKER.csv`,
@@ -39,6 +41,9 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   1m ~30 days. "Since IPO" hourly data does not exist from this source at any
   tier — only daily and coarser reach the listing date. Do not write a task
   that assumes otherwise.
+
+## Legacy shims and silent no-ops
+
 - **The legacy shims are gone — do not go looking for them.**
   `core/scan_engine.py` (an `import *` shim over `core/scanning/engine.py`)
   and `core/trade_plan.py` (a deprecated adapter over
@@ -70,6 +75,9 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   go *after* `update_open_trades`/`_check_near_close` and *before* the
   new-signal horizon loop, so an already-open paper trade keeps being
   monitored for SL/TP even on a day its ticker fails the screen.
+
+## Measured-empty tables
+
 - **An empty config table is not automatically an unfinished one.**
   `strategy_types.REGIME_ALLOW = {}` with `REGIME_GATES_ENABLED` defaulting off
   reads like a stub someone forgot to fill. It is the **measured answer**: the
@@ -80,6 +88,9 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   or re-running with looser thresholds, undoes a closed pre-registration —
   see `docs/claude/backtest-methodology.md`. **Before "finishing" any empty
   table or default-off flag, grep `docs/superpowers/results/` for its name.**
+
+## Re-exports, stale prices and plan closes
+
 - **An "unused import" here is often a deliberate re-export — check before
   deleting one.** A linter's unused-import list is not a delete list in this
   repo: `core/market/strategy.py` re-exports its `signals`/`strategy_types`
@@ -121,6 +132,9 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   useful stretch, so more threads bought no real parallelism and were
   measurably slower than serial). Anything touching shared state
   (`state.confirm_or_update`, funnel counters) must stay serial/post-join.
+
+## Full-history cache and the live scan read
+
 - **`market_data/daily/{TICKER}.csv` holds each ticker's FULL history since
   listing, not `DEFAULT_HISTORY_PERIOD` (2y)** — `data_store.load_normalized()`
   never trims it, so it grows every incremental refresh (11,500+ daily bars /
@@ -143,6 +157,9 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   logged both as open trades with identical values.
   `tests/scanning/test_no_cross_ticker_mixing.py` is the standing guard -- if
   you ever make this concurrent a different way, that test must still pass.
+
+## Trade History, file sources and the write halt
+
 - **Trade History: filtering, sorting and paging must stay on the SAME side.**
   The dashboard's `ct-*` controls used to hide/reorder rows in the DOM while
   the server shipped up to 500 pre-rendered rows. Once paging moved

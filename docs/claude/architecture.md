@@ -3,6 +3,8 @@
 Referenced from the root `CLAUDE.md`. Read this before touching
 `swingbot/core`, `plan_engine`, or the scanning pipeline.
 
+## Module map
+
 - `swingbot/core/` is business logic with **no Discord dependency**;
   `swingbot/commands/` is the Discord command layer; `swingbot/admin/` is the
   Flask **API** (`admin/api_v1/`) plus the server side of the Angular SPA
@@ -63,16 +65,25 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   commission). Many ship **deliberately unwired** — tested pure functions
   landed ahead of the task that wires them into the scan path. Before "fixing"
   a seemingly-dead edge function, grep the plan for its wiring task.
+
+## Entry-signal single source
+
 - **Entry signals have a single source:** `swingbot/core/market/entry_filters.py`
   is consumed by BOTH the backtest (`backtest._vectorized_entries`) and the
   live scanner (`signals.py`). Change a filter there and both worlds change
   together — that is the point. Per-strategy tunables live in its
   `DEFAULT_PARAMS`; direction/horizon restrictions in
   `strategy_types.STRATEGY_GATES`.
+
+## NO-LOOKAHEAD
+
 - **NO-LOOKAHEAD RULE (law):** entry conditions may reference only the current
   bar and earlier (`shift(+n)`, trailing rolling windows). Every boolean gate
   is `.fillna(False)` — a gate that cannot be computed yet blocks entries,
   never passes. New gates need a truncation test (`full.iloc[:-1] == trunc`).
+
+## Plan engine, registry and scan pipeline
+
 - **Plan Engine v2** (`swingbot/core/planning/plan_engine.py`): `TradePlanV2`
   with lifecycle `PENDING → ACTIVE → PARTIAL → CLOSED/CANCELLED`, per-strategy
   sizing builders, and the exit simulator (TP1 = win; scale-out banks 50% at
