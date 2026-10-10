@@ -200,7 +200,7 @@ Filled in by the tasks named; nothing here is a threshold or a pass on its own.
 | Insertion-only check, `architecture.md` | V154-5 | PASS 2026-10-10, HEAD -> INDEX: old == new minus 4 headings and 7 blank lines (9821 -> 9931 bytes) |
 | `tests/hooks/test_guardrails.py` and `tests/backtesting/test_preregistration_ledger_file.py` after insertion | V154-5 | PASS 2026-10-10: VERDICT: PASS  82 passed  in 1.7s |
 | Plugin keys read from the installed list (five) | V154-9 | 2026-10-10: read from `E:\Claude\claude-config\config-meo\plugins\installed_plugins.json`; `feature-dev@claude-plugins-official`, `code-simplifier@claude-plugins-official`, `claude-code-setup@claude-plugins-official`, `claude-md-management@claude-plugins-official`, `skill-creator@claude-plugins-official` (one hit each); Step 4 check `PLUGIN CHECK PASS`, 15 entries |
-| Fresh session lists all nine role descriptions | V154-12 | _not yet run_ |
-| Nine role eval suites | V154-12 | _not yet run_ |
-| Four edited Tier 1/3 eval suites (`backtest-gate`, `pooled-numbers`, `alert-surface`, `no-lookahead`) | V154-12 | _not yet run_ |
+| Fresh session lists all nine role descriptions | V154-12 | 2026-10-10: LISTING PASS, nine of nine descriptions listed; PLUGINS: NONE; SLASH: NONE |
+| Nine role eval suites | V154-12 | 2026-10-10: 54/54 cases, all nine suites exit 0 (no rewording needed) |
+| Four edited Tier 1/3 eval suites (`backtest-gate`, `pooled-numbers`, `alert-surface`, `no-lookahead`) | V154-12 | 2026-10-10: NOT a pass. First run 27/28 cases: `backtest-gate` 8/8, `alert-surface` 6/6, `no-lookahead` 6/6 (exit 0 each); `pooled-numbers` 6/7, exit 1, `fire-edge-header-justification` skill called 0x. One re-run of `pooled-numbers` alone: 5/7, `fire-edge-header-justification` and `fire-commit-message-cites-winrate` skill called 0x (the latter fired in the first run). V154 changed only the quoting of that description and Step 1 of its body; nothing edited per plan. Reported to partner 2026-10-10 |
 | Full suite | V154-13 | _not yet run_ |
