@@ -12,7 +12,7 @@ confirmed by the staff-engineer panel.)
 the same handlers answer through a second surface.
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, senior-engineer
-**Status:** spec written 2026-10-09; split out of v152 (former D4) per partner so it deploys and rolls back alone; panel review applied 2026-10-09; no plan yet.
+**Status:** spec written 2026-10-09; split out of v152 (former D4) per partner so it deploys and rolls back alone; panel review applied 2026-10-09; plan `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md` written 2026-10-10 (22 tasks, 9 files).
 
 Parent: v152 (`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`),
 which keeps D1–D3 (notify, Following, cooldown) and links here from its
