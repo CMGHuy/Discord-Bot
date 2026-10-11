@@ -12,6 +12,7 @@ keeps the TradesPaginator author-lock / timeout pattern
 (swingbot/commands/trades.py:83).
 """
 import asyncio
+import datetime as dt
 import logging
 import os
 import re
@@ -24,8 +25,9 @@ from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
 from swingbot.core.backtesting.registry import decay_for, decay_note
 from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.planning.plan_types import PlanStatus
 from swingbot.core.market.strategy import HORIZONS
-from swingbot.core.market.session import market_today
+from swingbot.core.market.session import market_today, nyse_calendar
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +52,16 @@ PLAN_TEMPLATE_RE = r"plan:{action}:(?P<plan_id>[0-9a-f-]{{36}})(?::(?P<author>\d
 LEGACY_REPLY = "This alert predates v152 — use the plan page or `!plans`."
 NOT_YOUR_PANEL = "Not your panel."
 PLAN_GONE = "This plan no longer exists."
-STARRED_REPLY = "⭐ Starred — it'll sort first on `!plans` at equal follow score."
+WATCH_ON = ("⭐ Watching — it sorts first on `!plans` at equal follow score; "
+            "`/notify` sets which plan updates name you.")
+WATCH_OFF = "No longer watching."
+FOLLOWABLE_STATUSES = frozenset({PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL})
+FOLLOW_RECORDED = "Recorded as followed — paper plan, not your fill."
+FOLLOW_REMOVED = "No longer recorded as followed."
+FOLLOW_REFUSED = ("This plan is already {status}: following is recorded only while a plan is "
+                  "pending, active or partial, so a press after the outcome is known is not counted.")
+FOLLOW_FAILED = "Could not record that just now; please try again."
+_DIRECTION_WORD = {"bullish": "long", "bearish": "short"}
 
 
 def _template(action: str) -> str:
@@ -134,13 +145,98 @@ async def _send_chart(interaction: discord.Interaction, plan_id: str) -> None:
     )
 
 
-def _toggle_star(plan_id: str) -> bool:
-    """Global star toggle (pre-v152 Watch). True = now starred."""
-    if plan_id in starred_ids():
-        unstar_plan(plan_id)
+def _sessions_left(plan, now: dt.datetime | None = None) -> int:
+    """Sessions left of `expiry_bars`: NYSE sessions after the creation date
+    up to today's market date count as spent. Informational only."""
+    created = dt.date.fromisoformat(str(plan.created_at)[:10])
+    spent = len(nyse_calendar().sessions(created + dt.timedelta(days=1), market_today(now)))
+    return max(0, int(plan.expiry_bars) - spent)
+
+
+def _pending_detail(plan, price, now) -> str:
+    left = _sessions_left(plan, now)
+    line = (f"Entry trigger {plan.trigger_price:.2f}; "
+            f"{left} of {plan.expiry_bars} session(s) left before it expires.")
+    return f"{line} Plan stale." if left <= 1 else line
+
+
+def _open_detail(plan, price, now) -> str:
+    if price is None:
+        return ""
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    line = f"Last {price:.2f} vs entry {entry:.2f}."
+    risk = abs(entry - plan.stop_loss)
+    sign = 1 if plan.direction == "bullish" else -1
+    beyond = (price - entry) * sign / risk if risk else 0.0
+    return f"{line} Price already beyond entry by {beyond:.2f}R." if beyond > 0 else line
+
+
+_STATUS_DETAIL = {
+    PlanStatus.PENDING: _pending_detail,
+    PlanStatus.ACTIVE: _open_detail,
+    PlanStatus.PARTIAL: _open_detail,
+}
+
+
+def following_reply(plan, price: float | None, now: dt.datetime | None = None) -> str:
+    """The Following button's ephemeral reply: status and entry validity as
+    facts. It informs and never blocks; `price=None` drops the price line."""
+    word = _DIRECTION_WORD.get(plan.direction, plan.direction)
+    head = f"{plan.ticker} {word} paper plan, status {plan.status}."
+    detail = _STATUS_DETAIL.get(plan.status, lambda *_: "")(plan, price, now)
+    return "\n".join(line for line in (head, detail, FOLLOW_RECORDED) if line)
+
+
+def _followers():
+    from swingbot.core.db.repositories.followers import followers_repo
+    return followers_repo()
+
+
+def _toggle_watch(plan, user_id: int) -> bool:
+    """Toggle the presser's watch row. True = now watching. The first
+    watcher stars the plan; the last one leaving unstars it."""
+    repo = _followers()
+    if repo.has(plan.plan_id, user_id, "watch"):
+        repo.remove(plan.plan_id, user_id, "watch")
+        if not repo.user_ids(plan.plan_id, ("watch",)):
+            unstar_plan(plan.plan_id)
         return False
-    star_plan(plan_id)
+    first = not repo.user_ids(plan.plan_id, ("watch",))
+    repo.add(plan.plan_id, user_id, "watch", status_at_press=plan.status)
+    if first:
+        star_plan(plan.plan_id)
     return True
+
+
+def _copy_taken_to_trade(plan_id: str, repo) -> None:
+    from swingbot.core.tracking.performance import TradeLog
+    try:
+        TradeLog().mark_taken(plan_id, repo.user_ids(plan_id, ("taken",)))
+    except Exception:
+        log.warning("Following: could not copy followers onto plan %s's trade"
+                    " -- close_plan_trade re-stamps it", plan_id, exc_info=True)
+
+
+def _toggle_following(plan, user_id: int) -> bool:
+    """Toggle the presser's `taken` row, then rewrite the trade copy from the
+    table. True = now following. Callers have checked FOLLOWABLE_STATUSES."""
+    repo = _followers()
+    following = not repo.has(plan.plan_id, user_id, "taken")
+    if following:
+        repo.add(plan.plan_id, user_id, "taken", status_at_press=plan.status)
+    else:
+        repo.remove(plan.plan_id, user_id, "taken")
+    _copy_taken_to_trade(plan.plan_id, repo)
+    return following
+
+
+def _last_close(ticker: str) -> float | None:
+    """Latest cached daily close, None on any failure (the reply drops the line)."""
+    try:
+        return float(get_daily_data(ticker)["Close"].iloc[-1])
+    except Exception:
+        log.debug("Following: no cached close for %s", ticker, exc_info=True)
+        return None
 
 
 class ChartButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
@@ -172,8 +268,43 @@ class WatchButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
     LABEL = "⭐ Watch"
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        starred = await asyncio.to_thread(_toggle_star, self.plan_id)
-        await interaction.response.send_message(STARRED_REPLY if starred else "Unstarred.", ephemeral=True)
+        plan = await asyncio.to_thread(_get_plan, self.plan_id)
+        if plan is None:
+            await interaction.response.send_message(PLAN_GONE, ephemeral=True)
+            return
+        watching = await asyncio.to_thread(_toggle_watch, plan, interaction.user.id)
+        await interaction.response.send_message(WATCH_ON if watching else WATCH_OFF, ephemeral=True)
+
+
+class FollowingButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
+                      template=_template("follow")):
+    """Records that the presser followed this paper plan -- intent, never a
+    fill -- while the plan is still open."""
+
+    ACTION = "follow"
+    LABEL = "✅ Following"
+    STYLE = discord.ButtonStyle.success
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        plan = await asyncio.to_thread(_get_plan, self.plan_id)
+        reply = await self._reply_for(plan, interaction.user.id)
+        await interaction.followup.send(reply, ephemeral=True)
+
+    async def _reply_for(self, plan, user_id: int) -> str:
+        if plan is None:
+            return PLAN_GONE
+        if plan.status not in FOLLOWABLE_STATUSES:
+            return FOLLOW_REFUSED.format(status=plan.status)
+        try:
+            following = await asyncio.to_thread(_toggle_following, plan, user_id)
+        except Exception:
+            log.warning("Following: could not toggle plan %s for user %s", self.plan_id, user_id, exc_info=True)
+            return FOLLOW_FAILED
+        if not following:
+            return FOLLOW_REMOVED
+        price = await asyncio.to_thread(_last_close, plan.ticker)
+        return following_reply(plan, price)
 
 
 class DismissButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
@@ -185,7 +316,7 @@ class DismissButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
         await interaction.response.edit_message(view=None)
 
 
-PLAN_BUTTONS: tuple[type, ...] = (ChartButton, BreakdownButton, WatchButton, DismissButton)
+PLAN_BUTTONS: tuple[type, ...] = (ChartButton, BreakdownButton, WatchButton, FollowingButton, DismissButton)
 
 
 class PlanActionView(discord.ui.View):
