@@ -329,6 +329,7 @@ def test_help_catalog_covers_analytics_and_plans():
 
 def test_new_slash_commands_registered_on_tree():
     import swingbot.commands.slash  # noqa: F401 -- import side effect registers the commands
+    import swingbot.commands.plans  # noqa: F401  -- v153 SP12: /liveplans moved here
     from swingbot.bot_core import bot
 
     names = {cmd.name for cmd in bot.tree.get_commands()}

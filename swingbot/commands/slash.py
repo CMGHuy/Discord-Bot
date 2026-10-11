@@ -91,30 +91,6 @@ async def on_app_command_error(interaction: discord.Interaction,
 
 
 # ──────────────────────────────────────────────
-# /liveplans
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="liveplans", description="Live v2 plan lifecycle board (PENDING/ACTIVE/PARTIAL)")
-@app_commands.describe(status="Filter by lifecycle status", level="Filter by confidence level")
-@app_commands.choices(status=STATUS_CHOICES, level=LEVEL_CHOICES)
-async def slash_liveplans(
-    interaction: discord.Interaction,
-    status: app_commands.Choice[str] = None,
-    level: app_commands.Choice[str] = None,
-):
-    args = []
-    if status and status.value != "All":
-        args.append(status.value.lower())
-    if level and level.value != "All":
-        args.append(f"level:{level.value.lower()}")
-
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.plans import liveplans_cmd
-    await liveplans_cmd.callback(ctx, *args)
-
-
-# ──────────────────────────────────────────────
 # /check
 # ──────────────────────────────────────────────
 

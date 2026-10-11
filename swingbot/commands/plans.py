@@ -5,9 +5,12 @@ historical trade-plan lookup (ticker/date-range query against trades.json),
 an unrelated pre-existing feature -- this is the intraday PENDING/ACTIVE/
 PARTIAL board over the live PlanStore."""
 import discord
+from discord import app_commands
 
 from swingbot import config
 from swingbot.bot_core import bot
+from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
+from swingbot.commands.slash import LEVEL_CHOICES, STATUS_CHOICES
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core import presentation as ui
@@ -161,24 +164,57 @@ def _parse_board_args(args: tuple) -> dict:
     return parsed
 
 
-@bot.command(name="liveplans")
-async def liveplans_cmd(ctx, *args: str):
-    parsed = _parse_board_args(args)
-    parsed_status = parsed.get("status", "All")
-    parsed_level = parsed.get("level", "All")
-    parsed_badge = parsed.get("badge", "All")
-    parsed_ticker = parsed.get("ticker")
-
+async def handle_liveplans(reply, status: str = "All", level: str = "All", badge: str = "All",
+                           ticker: str | None = None) -> None:
+    """The live PENDING/ACTIVE/PARTIAL board. The ticker filter is fixed at
+    invocation: the view's render_fn closes over `ticker`, so changing the
+    status/level/badge dropdowns never drops it (Task B16)."""
+    await reply.defer()
     store = PlanStore()
     plans = store.open_plans()
     content, embed = render_board(
-        plans, status=parsed_status, level=parsed_level, badge=parsed_badge, ticker=parsed_ticker, page=0,
+        plans, status=status, level=level, badge=badge, ticker=ticker, page=0,
     )
     view = PlanBoardView(
         render_fn=lambda status, level, badge: render_board(
-            plans, status=status, level=level, badge=badge, ticker=parsed_ticker, page=0,
+            plans, status=status, level=level, badge=badge, ticker=ticker, page=0,
         ),
-        author_id=ctx.author.id,
+        author_id=reply.author.id,
         items=plans,
     )
-    view.message = await ctx.send(content=content, embed=embed, view=view)
+    view.message = await reply.send(content, embed=embed, view=view)
+
+
+@bot.command(name="liveplans")
+async def liveplans_cmd(ctx, *args: str):
+    parsed = _parse_board_args(args)
+    reply = CtxReply(ctx)
+    await handle_liveplans(
+        reply,
+        status=parsed.get("status", "All"),
+        level=parsed.get("level", "All"),
+        badge=parsed.get("badge", "All"),
+        ticker=parsed.get("ticker"),
+    )
+    await send_prefix_tip(ctx, reply)
+
+
+# ──────────────────────────────────────────────
+# /liveplans (moved from slash.py in v153, decorators verbatim). The
+# Choice values are what _parse_board_args produced from the old bridge's
+# args, so they go to the handler unchanged.
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="liveplans", description="Live v2 plan lifecycle board (PENDING/ACTIVE/PARTIAL)")
+@app_commands.describe(status="Filter by lifecycle status", level="Filter by confidence level")
+@app_commands.choices(status=STATUS_CHOICES, level=LEVEL_CHOICES)
+async def slash_liveplans(
+    interaction: discord.Interaction,
+    status: app_commands.Choice[str] = None,
+    level: app_commands.Choice[str] = None,
+):
+    await handle_liveplans(
+        InteractionReply(interaction),
+        status=status.value if status else "All",
+        level=level.value if level else "All",
+    )
