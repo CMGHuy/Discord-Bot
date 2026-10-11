@@ -32,7 +32,8 @@ def witness(delta=None) -> dict:
             for trade in run_arm(ticker, frame, ("confluence", "strategy"), HORIZONS, WINDOW,
                                  delta or {}):
                 r_multiple = None if trade.r_multiple is None else round(trade.r_multiple, 6)
-                rows.append([list(trade.key), trade.outcome, r_multiple, trade.planned_rr])
+                planned_rr = None if trade.planned_rr is None else round(trade.planned_rr, 9)
+                rows.append([list(trade.key), trade.outcome, r_multiple, planned_rr])
     finally:
         strategy_engine.build_level_map = original
     return {"rows": sorted(rows, key=repr), "strategy_level_map_builds": len(builds)}
@@ -45,4 +46,8 @@ def test_defaults_off_replay_matches_the_pre_gate_witness():
     current = json.loads(json.dumps(witness()))
     assert current["rows"], "fixture must produce trades or the witness proves nothing"
     assert current["strategy_level_map_builds"] > 0, "fixture must exercise the TP2 map build"
-    assert current == json.loads(WITNESS.read_text(encoding="utf-8"))
+    stored = json.loads(WITNESS.read_text(encoding="utf-8"))
+    # planned_rr carries ~1e-14 platform float noise; it is compared at 9 decimals.
+    for row in stored["rows"]:
+        row[3] = None if row[3] is None else round(row[3], 9)
+    assert current == stored
