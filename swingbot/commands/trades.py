@@ -336,7 +336,8 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
     if match.get("plan_id") or match.get("legs"):
         trade_id += " · Plan Engine v2"
     embed.add_field(name="Trade ID", value=trade_id, inline=False)
-    ui.apply_chrome(embed, accent=accent, plan_id=match.get("plan_id"))
+    ui.apply_chrome(embed, accent=accent, plan_id=match.get("plan_id"),
+                    link_base=config.ADMIN_PUBLIC_URL)
     return embed
 
 

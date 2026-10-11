@@ -128,7 +128,7 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
                                        exit_price=exit_price, stop=trade.get("stop_loss"),
                                        pct=pct, r=r))
     ui.apply_chrome(embed, kind=Kind.CLOSED_TRADE, r=kinds.result_r(outcome, r),
-                    plan_id=trade.get("plan_id"))
+                    plan_id=trade.get("plan_id"), link_base=config.ADMIN_PUBLIC_URL)
 
     # Realized $/€ gain/loss -- computed from the share count snapshotted
     # onto the trade when it was OPENED (see account.py / performance.py's
@@ -250,7 +250,7 @@ def build_near_close_embed(warning: dict) -> discord.Embed:
     kind = Kind.NEAR_STOP if is_sl else Kind.NEAR_TP
     distance = warning["sl_dist_pct" if is_sl else "tp_dist_pct"]
     embed = ui.push_embed(kind, t["ticker"], t.get("direction"), f"{distance:.1f}% away")
-    ui.apply_chrome(embed, kind=kind, plan_id=t.get("plan_id"))
+    ui.apply_chrome(embed, kind=kind, plan_id=t.get("plan_id"), link_base=config.ADMIN_PUBLIC_URL)
     embed.add_field(
         name="Approaching",
         value=f"**{approaching_word}** ({warning['sl_dist_pct' if is_sl else 'tp_dist_pct']:.1f}% away)",
@@ -404,7 +404,8 @@ def build_plan_event_embed(plan, event) -> discord.Embed:
     by the v110 registry. Field text is unchanged from the pre-v110 builder."""
     kind, detail, stripe_r = _event_style(plan, event)
     embed = ui.push_embed(kind, plan.ticker, plan.direction, detail)
-    ui.apply_chrome(embed, kind=kind, r=stripe_r, plan_id=plan.plan_id)
+    ui.apply_chrome(embed, kind=kind, r=stripe_r, plan_id=plan.plan_id,
+                    link_base=config.ADMIN_PUBLIC_URL)
     embed.add_field(name="Plan (v2)", value=strategy_plan_line(plan), inline=False)
     fields = _fields_for(event)
     if fields is not None:
