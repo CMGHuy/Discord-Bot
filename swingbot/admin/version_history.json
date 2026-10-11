@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-10 06:50:56 UTC",
+  "generated_at": "2026-10-11 08:45:39 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.22.1",
-    "bot": "2.3.1"
+    "bot": "2.4.0"
   },
   "releases": [
     {
@@ -1538,6 +1538,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-11",
+      "last_seen": "2026-10-11",
+      "commit": "2d304de0",
+      "subject": "release(bot): 2.4.0 -- slash command parity: every ! command has a / twin through one shared handler",
+      "versions": {
+        "ui": "1.22.1",
+        "bot": "2.4.0"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
