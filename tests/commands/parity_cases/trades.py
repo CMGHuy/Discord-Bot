@@ -122,3 +122,67 @@ CASES = [
     ParityCase("tradecharts_bad_status", trades_mod.handle_tradecharts, args=("pending",),
                stub=_stub(), expect="error"),
 ]
+
+# ── SP11: performance, pnl, summary ─────────────────────────────────────
+
+import types  # noqa: E402
+
+MANUAL_TRADE = {**WIN_TRADE, "id": "T0004", "ticker": "AMD", "status": "closed",
+                "exit_price": None, "realized_pnl_amount": None, "close_reason": "manual"}
+_METRICS = {
+    "n_trades": 12, "sharpe": 0.41, "sortino": 0.66, "max_drawdown_pct": 6.2, "calmar": 1.1,
+    "profit_factor": 1.35, "avg_win_pct": 3.1, "avg_loss_pct": -2.2,
+    "best_trade_pct": 8.4, "worst_trade_pct": -4.0,
+}
+
+
+class _FixedDatetime(dt.datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return dt.datetime(2026, 10, 9, 18, 0, tzinfo=dt.timezone.utc).astimezone(tz)
+
+
+def _with_metrics(monkeypatch):
+    monkeypatch.setattr(trades_mod, "compute_risk_metrics", lambda closed: dict(_METRICS))
+
+
+def _pnl_row(trade, price=None):
+    if price is None:
+        return {"trade": trade, "pnl": None}
+    pct = (price - trade["entry"]) / trade["entry"] * 100
+    return {"trade": trade, "pnl": types.SimpleNamespace(
+        current_price=price, pct_change=pct, distance_to_sl_pct=4.4, distance_to_tp_pct=6.1)}
+
+
+def _stub_pnl(rows):
+    def stub(monkeypatch):
+        monkeypatch.setattr(trades_mod.scan_engine, "get_all_unrealized_pnl", lambda: list(rows))
+    return stub
+
+
+def _stub_summary(trades, acct):
+    def stub(monkeypatch):
+        _stub(trades)(monkeypatch)
+        monkeypatch.setattr(trades_mod, "datetime", _FixedDatetime)
+        monkeypatch.setattr(trades_mod.account_module, "get_daily_summary", lambda: dict(acct))
+    return stub
+
+
+_PNL_ROWS = [_pnl_row(OPEN_TRADE, 184.5), _pnl_row({**OPEN_TRADE, "id": "T0009", "ticker": "AMD"})]
+_MANY_PNL_ROWS = [_pnl_row({**OPEN_TRADE, "id": f"T{i:04d}"}, 181.0 + i / 10) for i in range(60)]
+
+CASES += [
+    ParityCase("performance_overall", trades_mod.handle_performance, stub=_stub()),
+    ParityCase("performance_level", trades_mod.handle_performance, args=(3,), stub=_stub()),
+    ParityCase("performance_with_risk_metrics", trades_mod.handle_performance,
+               stub=lambda mp: (_stub()(mp), _with_metrics(mp))),
+    ParityCase("performance_bad_level", trades_mod.handle_performance, args=(9,),
+               stub=_stub(), expect="error"),
+    ParityCase("pnl", trades_mod.handle_pnl, stub=_stub_pnl(_PNL_ROWS), expect="multi_send"),
+    ParityCase("pnl_none_open", trades_mod.handle_pnl, stub=_stub_pnl([]), expect="multi_send"),
+    ParityCase("pnl_chunked", trades_mod.handle_pnl, stub=_stub_pnl(_MANY_PNL_ROWS), expect="multi_send"),
+    ParityCase("summary_busy_day", trades_mod.handle_summary,
+               stub=_stub_summary([*ALL_TRADES, MANUAL_TRADE], {"balance": 10_120.0, "pct_change_today": 0.6})),
+    ParityCase("summary_quiet_day", trades_mod.handle_summary,
+               stub=_stub_summary([], {"balance": None, "pct_change_today": None})),
+]

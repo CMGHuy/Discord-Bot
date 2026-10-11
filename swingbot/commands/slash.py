@@ -9,7 +9,6 @@ don't replace them. Both work in parallel.
 
 Registered via bot.tree; synced to Discord in on_ready (scanning.py).
 """
-import asyncio
 import logging
 
 import discord
@@ -89,38 +88,6 @@ async def on_app_command_error(interaction: discord.Interaction,
         await interaction.followup.send(text, ephemeral=True)
     else:
         await interaction.response.send_message(text, ephemeral=True)
-
-
-# ──────────────────────────────────────────────
-# Helper — send long text in chunks
-# ──────────────────────────────────────────────
-
-async def _send_chunks(interaction: discord.Interaction, text: str, ephemeral: bool = False) -> None:
-    """Send a response (possibly long) respecting the 2000-char limit."""
-    chunks = [text[i:i+1900] for i in range(0, len(text), 1900)]
-    await interaction.response.send_message(chunks[0], ephemeral=ephemeral)
-    for chunk in chunks[1:]:
-        await interaction.followup.send(chunk, ephemeral=ephemeral)
-
-
-# ──────────────────────────────────────────────
-# /pnl
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="pnl", description="Current unrealized P&L for every open trade")
-async def slash_pnl(interaction: discord.Interaction):
-    await interaction.response.defer()
-    # Delegate to the prefix command by posting it in the channel
-    # (slash and prefix share no ctx; easiest bridge is to re-use the engine directly)
-    from swingbot.core.scanning.engine import get_all_unrealized_pnl
-    rows = await asyncio.to_thread(get_all_unrealized_pnl)
-    if not rows:
-        await interaction.followup.send("No open trades right now.")
-        return
-    lines = ["**Open trade P&L** (live prices):"]
-    for r in rows:
-        lines.append(r)
-    await _send_chunks(interaction, "\n".join(lines))
 
 
 # ──────────────────────────────────────────────
@@ -282,25 +249,6 @@ async def slash_backtestwatchlist(
     ctx = await commands.Context.from_interaction(interaction)
     from swingbot.commands.backtest import backtestwatchlist_cmd
     await backtestwatchlist_cmd.callback(ctx, *args)
-
-
-# ──────────────────────────────────────────────
-# /performance
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="performance", description="Win rate + risk-adjusted stats for closed trades")
-@app_commands.describe(level="Filter to a specific confidence level (1-5), or omit for overall")
-async def slash_performance(
-    interaction: discord.Interaction,
-    level: int = None,
-):
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.trades import performance_cmd
-    if level is not None:
-        await performance_cmd.callback(ctx, level)
-    else:
-        await performance_cmd.callback(ctx)
 
 
 # ──────────────────────────────────────────────
