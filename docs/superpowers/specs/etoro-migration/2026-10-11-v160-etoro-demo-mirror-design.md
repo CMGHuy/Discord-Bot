@@ -6,7 +6,7 @@
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, quant-engineer, risk-manager
 **Status:** draft
-**Depends on:** v159 § B2 (`swingbot/core/infra/etoro_guard.py` with `assert_demo`, `ETORO_ALLOW_REAL`, the AST scan) must be merged before this plan's first task that touches eToro code. v159 § B4 (`reconciler` agent) is reused for the manual reconciliation read, not rebuilt.
+**Depends on:** v159 § B2 must be merged before this plan's first task that touches eToro code. v159 creates `swingbot/core/broker/` containing only `guard.py` (`assert_demo`, `RealAccountBlocked`, `ETORO_ALLOW_REAL`/`ETORO_REAL_SIGNOFF`, the AST scan), and corrects the package count in `architecture.md`/`CLAUDE.md`. v160 extends that package. **v160 owns every order-risk check** (partner decision 2026-10-11, moved out of v159): the per-trade cap, stop attached at order time, dollar risk, stop cap, heat, correlated heat, and stops only tightening. v159 § B4 (`reconciler` agent) is reused for the manual reconciliation read, not rebuilt.
 
 The panel line names seats that exist today. v159 adds `execution-specialist` and requires it on every eToro spec above v159. When v159 lands, its plan amends this line to `execution-specialist, risk-manager, staff-engineer`, or this plan's first task does if v159 lands first.
 
@@ -21,7 +21,7 @@ Roadmap stage 1 (`docs/claude/etoro-roadmap.md`): every main-ledger trade plan t
 | Broker | eToro, for both stages (`etoro-roadmap.md`, decided 2026-10-11) |
 | Autonomy | **Fully automatic on demo.** This spec is the durable authorisation the roadmap asks for; it covers `account: demo` only and grants nothing for real |
 | Which plans | `ledger == "main"` only |
-| Sizing | 2% dollar-risk rule on a configured account size (`ETORO_ACCOUNT_SIZE`), not the demo's virtual equity |
+| Sizing | The bot's own planned size (`planning.account.compute_position_size`, the 2%-risk size the alert shows), scaled down so `units × entry` never exceeds the `ETORO_MAX_TRADE_USD` setting (default 100, hot-reloaded, never hard-coded). Entry, stop and target are unchanged, so R stays comparable to paper. Partner, 2026-10-11; supersedes this brainstorm's first answer (2% of a separate `ETORO_ACCOUNT_SIZE`) |
 | Bearish plans | Mirrored as CFD shorts (`sellShort`, stop attached) |
 | Approach | **A, event follower.** Orders go out at the bot's own fill event. Approach B (resting limit orders at eToro at alert time) is out of scope and may be revisited only if the comparison report shows limit-entry fills lagging |
 
@@ -44,15 +44,15 @@ Verified 2026-10-11 against the eToro Public API OpenAPI document v1.387.0 throu
 
 | Unit | Job | Depends on |
 |---|---|---|
-| `etoro_client.py` | Thin REST client. Sends the auth headers from config and a caller-supplied `x-request-id`. **Every request has a hard 10 s timeout.** A non-blocking token bucket of **15 per 60 s** sits over the shared order budget: when it is empty, the call returns `deferred` at once and **never sleeps**. Returns typed results (`status_code`, body, retry-after, `deferred`). Calls `etoro_guard.assert_demo("demo")` on construction. **Only demo route paths are written in it**; a guard test fails on any real-account path. | `requests`, `config`, `infra.etoro_guard` |
+| `etoro_client.py` | Thin REST client. Sends the auth headers from config and a caller-supplied `x-request-id`. **Every request has a hard 10 s timeout.** A non-blocking token bucket of **15 per 60 s** sits over the shared order budget: when it is empty, the call returns `deferred` at once and **never sleeps**. Returns typed results (`status_code`, body, retry-after, `deferred`). Calls `broker.guard.assert_demo("demo")` on construction. **Only demo route paths are written in it**; a guard test fails on any real-account path. | `requests` (pinned in `requirements.txt` at the version already installed transitively), `config`, `broker.guard` |
 | `mirror.py` | **Pure translator.** `actions_for(event: PlanEvent, plan: TradePlanV2, sent: SentState) -> list[BrokerAction]`. `sent` is what the store says was already sent for this plan. No I/O, no clock. | `planning.plan_types` |
-| `sizing.py` | `units_for(entry, stop, account_size, risk_pct, precision) -> float`. Pure. Clamps `risk_pct` through `risk_limits.capped_planned_loss_pct`, so the 2% hard cap holds whatever `.env` says. Returns 0 for a zero or NaN stop distance. | `core.risk_limits` |
-| `pre_open.py` | **Pure.** The send-time checks for an `Open`, run against a live quote (§ Pre-open checks). Returns a skip reason or `None`. | `edge.heat`, `edge.correlation`, config |
-| `executor.py` | Runs actions in per-plan order under a per-tick time budget. Writes each row before sending, looks up in-flight orders, runs the daily reconciliation, and applies the outcome rules below. | client, repository, `pre_open` |
+| `sizing.py` | **Pure.** `mirror_units(plan_units, entry, max_trade_usd, precision) -> SizeResult`: scales the plan's units down so the notional is at most the cap, rounds down to the instrument's precision, and records the plan notional, capped notional and scale factor. Never raises a size above the plan's. | none |
+| `checks.py` | **Pure.** Every order-risk check (§ Sizing and order checks). `check_open(order, quote, eligibility, book, cfg) -> skip_reason or None`; `check_stop_move(position, new_stop) -> skip_reason or None`. | `core.risk_limits`, `edge.heat`, `edge.correlation`, config |
+| `executor.py` | Runs actions in per-plan order under a per-tick time budget. Writes each row before sending, looks up in-flight orders, runs the daily reconciliation, and applies the outcome rules below. | client, repository, `sizing`, `checks` |
 | `core/db/repositories/broker_orders.py` + Alembic revision | Postgres table `broker_orders`, as a repository under `core/db/`, the persistence boundary (`architecture.md` § Module map, `schema-evolution.md`). | `core/db` |
-| `__init__.py` | `mirror_events(events) -> None`, the single entry point the trade monitor calls. | executor |
+| `__init__.py` | `mirror_events(events) -> None`, the single entry point the trade monitor calls, and the `MIRROR_TICK_BUDGET_S = 25` constant the hook imports. | executor |
 
-`broker/` imports from `planning/`, `edge/`, `infra/` and `db/`. Nothing else under `swingbot/` imports `broker/` except `commands/scanning/loops.py`; `tests/broker/test_import_direction.py` pins that, scoped to `swingbot/` (scripts may import it). The plan's architecture task corrects the stale package count in `architecture.md` § Module map and in `CLAUDE.md`, and accounts for the flat `risk_limits.py`, instead of stacking another count on top of the drift.
+`broker/` imports from `planning/`, `edge/`, `db/` and `core.risk_limits`. Nothing else under `swingbot/` imports `broker/` except `commands/scanning/loops.py`; `tests/broker/test_import_direction.py` pins that, scoped to `swingbot/` (scripts may import it). v159 creates the package and corrects the package count; v160 adds its modules to the `broker/` row in `architecture.md` § Module map.
 
 **Hook:** `swingbot/commands/scanning/loops.py`, **after** `await _post_plan_events(plan_events)`, so Discord delivery never waits on eToro:
 
@@ -69,8 +69,7 @@ Inside `mirror_events`, the executor stops starting new requests once 20 s of th
 
 **Config** (`swingbot/config.py`, section "eToro Paper Trading", hot-reloaded):
 - `ETORO_MIRROR_ENABLED`: bool, default `false`.
-- `ETORO_ACCOUNT_SIZE`: float USD, default `0`. With the flag on and a value of 0 or less, every open is skipped with reason `no_account_size`. **It is fixed, not compounded:** demo drawdowns and run-ups never change position size. This keeps every trade's dollar risk comparable for the report. Stage 2 may revisit it.
-- `ETORO_RISK_PCT`: float, default `2.0`, clamped to `risk_limits.HARD_MAX_PLANNED_LOSS_PCT`.
+- `ETORO_MAX_TRADE_USD`: float, default `100`. The most money invested in one eToro position (USD, because eToro's `amount` is USD-only). A value of 0 or less skips every open with `no_trade_cap`.
 
 There is deliberately no account or environment field. Demo is the only path the code contains.
 
@@ -87,7 +86,7 @@ Every event whose plan has `ledger != "main"` maps to `[]`. Every non-`filled` e
 
 | `PlanEvent.transition` | Actions |
 |---|---|
-| `filled` | `Open`: `transaction = buy` (bullish) or `sellShort` (bearish); `orderType = mkt`; `leverage = 1`; `units` from `sizing.units_for(...)`; `stopLossRate` = `plan.stop_loss` rounded to the instrument's rate precision; `takeProfitRate` = the rule below; `stopLossType = fixed`. `settlementType` is resolved by the executor from eligibility: a long is `real` when eligible at leverage 1, else `cfd`; a short is `cfd`. Pre-open checks run first. |
+| `filled` | `Open`: `transaction = buy` (bullish) or `sellShort` (bearish); `orderType = mkt`; `leverage = 1`; `units` from `sizing.mirror_units(...)`; `stopLossRate` = `plan.stop_loss` rounded to the instrument's rate precision; `takeProfitRate` = the rule below; `stopLossType = fixed`. `settlementType` is resolved by the executor from eligibility: a long is `real` when eligible at leverage 1, else `cfd`; a short is `cfd`. Pre-open checks run first. |
 | `tp1_partial` | `CloseUnits(round_down(open_units × plan.tp1_fraction))`, then `MoveStop(target)`. The fraction actually closed is recorded. |
 | `be_moved`, `stop_moved` | `MoveStop(target)`. |
 | `closed` (every reason, including time, stall and structure exits) | `CloseAll`. |
@@ -98,30 +97,35 @@ Every event whose plan has `ledger != "main"` maps to `[]`. Every non-`filled` e
 
 **Take-profit rule:** `plan.tp2` when it is set. Otherwise `plan.tp1` when `plan.tp1_fraction >= 1.0`. Otherwise none: the runner exits on the bot's trail or time rules, and those reach eToro as `MoveStop` and `CloseAll`.
 
-### Sizing and pre-open checks
+### Sizing and order checks
 
-**Sizing:** `units = (ETORO_ACCOUNT_SIZE × capped(ETORO_RISK_PCT) / 100) / |entry − stop|`.
-- `entry` is `plan.entry_price`, the paper fill.
-- `stop` is the rounded `stopLossRate` that will actually be sent.
-- Units are rounded down to the instrument's precision: whole units unless eligibility reports fractional units.
+**Sizing:**
+1. `plan_units = planning.account.compute_position_size(plan.entry_price, plan.stop_loss, ...)` gives the size the paper plan and the alert use.
+2. `sizing.mirror_units` scales that down so `units × plan.entry_price <= ETORO_MAX_TRADE_USD`, then rounds down to the instrument's precision (whole units unless eligibility reports fractional units).
+3. Entry, stop and target are never changed, so R per trade matches paper. The plan notional, capped notional and scale factor are recorded in the row.
 
-**Pre-open checks** (`pre_open.py`) run at send time, after a fresh quote (`get-instruments-overview`-equivalent market-data read, recorded as `quote_at_send`). The first failing check is the skip reason; **the size is never adjusted to fit**, and an open is never retried without its stop.
+**Order checks** (`checks.check_open`) run at send time, after a fresh market-data quote (recorded as `quote_at_send`). The first failing check is the skip reason. **The size is never raised, and an open is never sent or retried without its stop.**
 
 | Check | Skip reason |
 |---|---|
-| `ETORO_ACCOUNT_SIZE <= 0` | `no_account_size` |
+| `ETORO_MAX_TRADE_USD <= 0` | `no_trade_cap` |
+| No stop on the order (defensive; the translator always sets one) | `no_stop` |
 | Not eligible for the direction, or no eligible settlement type at leverage 1 | `ineligible` |
 | Stop already breached at the quote (long: `stop >= bid`; short: `stop <= ask`) | `stop_breached` |
-| Stop distance from the quote exceeds `MAX_STOP_LOSS_PCT` (`config.py:182`), or is outside eToro's allowed stop bounds for the instrument | `stop_cap` / `stop_too_tight` |
-| Rounded units are 0, below the minimum exposure, or above the maximum units | `zero_units` / `below_min_exposure` / `above_max_units` |
-| Open mirror heat plus this trade's risk exceeds `PORTFOLIO_HEAT_CAP_PCT` (`config.py:518`), via `edge.heat.heat_check` on the mirror's own open rows against `ETORO_ACCOUNT_SIZE` | `heat_cap` |
-| Correlated-cluster heat exceeds `CORRELATED_HEAT_CAP_PCT` (`config.py:524`), via `edge.correlation.cluster_check` | `correlated_cap` |
+| Stop distance, from the entry and from the quote, exceeds `MAX_STOP_LOSS_PCT` (`config.py:182`) | `stop_cap` |
+| Stop outside eToro's allowed stop bounds for the instrument | `stop_too_tight` |
+| `units × |entry − stop|` exceeds `capped_planned_loss_pct(RISK_PER_TRADE_PCT)` of the sizing balance (`core/risk_limits.py:12`) | `dollar_risk` |
+| Units after the cap and rounding are 0, below the minimum exposure, or above the maximum units | `zero_units` / `below_min_exposure` / `above_max_units` |
+| Open mirror heat plus this order exceeds `PORTFOLIO_HEAT_CAP_PCT` (`config.py:518`), via `edge.heat.heat_check` over the mirror's open rows (`entry = avg_price`, `stop_loss = stop_sent`, `shares = units_filled`) against the sizing balance | `portfolio_heat` |
+| Correlated-cluster heat exceeds `CORRELATED_HEAT_CAP_PCT` (`config.py:524`), via `edge.correlation.cluster_check` | `correlated_heat` |
+
+**Stops only tighten** (`checks.check_stop_move`): a `MoveStop` whose target is farther from the price than the last stop sent (lower for a long, higher for a short), equal to it, or a request to clear the stop, is dropped with reason `stop_widen` and logged at WARNING. The mirror enforces this independently of the paper side.
 
 Each skip logs one INFO line in the form `etoro mirror skipped (<reason>): <ticker> <plan_id> ...`, so it can be grepped the same way as `plan rejected (`. The paper plan is unaffected.
 
 ### Executor rules
 
-- **No row, no send.** The row is written with status `sending` **before** the HTTP call. If that write fails, the action is not sent; it is retried next tick from the event-key check. If the write after the response fails (`sending` → `in_flight`), the next tick finds the row still `sending` and recovers it with `orders:lookup` by `referenceId`, which is the request id, before it ever resends. The failure is reported through `core/db/write_failure.py`.
+- **No row, no send.** The row is written with status `sending` **before** the HTTP call. If that write fails, the action is not sent; it is retried next tick from the event-key check. If the write after the response fails (`sending` → `in_flight`), the next tick finds the row still `sending` and recovers it with `orders:lookup` by `referenceId`, which is the request id, before it ever resends. The error is classified with `core/db/write_failure.py` and logged. A mirror write failure **never** raises `StoreWriteHalt`, because that would pause alert issuance.
 - **Idempotency:** `x-request-id = uuid5(NAMESPACE, f"{plan_id}:{action}:{event_key}")`. A resend after a crash, timeout or 5xx reuses it, and eToro's idempotency stops a second order.
 - **Per-plan ordering:** an action for a plan is not sent while an earlier `seq` for the same plan is not final. It stays `queued` across ticks, in order.
 - **Outcomes:**
@@ -136,14 +140,20 @@ Each skip logs one INFO line in the form `etoro mirror skipped (<reason>): <tick
 
 ### Table `broker_orders`
 
-`id` (PK), `plan_id`, `ticker`, `direction`, `action` (`open|close_units|close_all|move_stop`), `event_key`, `seq`, `request_id` (unique), `order_id`, `position_id`, `status` (`queued|sending|in_flight|filled|rejected|skipped|closed_by_broker`), `skip_reason`, `requested` (JSONB: the exact body sent), `settlement_type`, `stop_sent`, `tp_sent`, `units_requested`, `units_filled`, `fraction_closed`, `quote_at_send`, `avg_price`, `fees`, `overnight_fees`, `net_profit`, `event_at`, `sent_at`, `filled_at`, `error_code`, `error_message`, `created_at`, `updated_at`. Indexes: unique `(plan_id, action, event_key)`, `(plan_id, seq)`, and `status`.
+The table follows the hybrid schema in `schema-evolution.md`: a `doc` JSONB column, plus promoted columns, each with a one-line `PROMOTION_REASONS` entry.
+
+- **Promoted** (needed for uniqueness, lookup or ordering): `id` (PK), `plan_id`, `action` (`open|close_units|close_all|move_stop`), `event_key`, `seq`, `request_id` (unique), `status` (`queued|sending|in_flight|filled|rejected|skipped|closed_by_broker`), `position_id`, `created_at`, `updated_at`.
+- **Indexes:** unique `(plan_id, action, event_key)`, `(plan_id, seq)`, and `status`.
+- **In `doc`:** `ticker`, `direction`, `order_id`, `skip_reason`, `requested` (the exact body sent), `settlement_type`, `stop_sent`, `tp_sent`, `plan_units`, `units_requested`, `units_filled`, `scale_factor`, `plan_notional`, `capped_notional`, `fraction_closed`, `quote_at_send`, `avg_price`, `fees`, `overnight_fees`, `net_profit`, `event_at`, `sent_at`, `filled_at`, `error_code`, `error_message`.
+
+The Alembic revision is `v160_001`, with `down_revision` set to the head at implementation time (`v144_001` when this was written). Deduplication uses a plain `insert`, catching the unique-index `IntegrityError` as "already sent", because `Repository.upsert` conflicts on a single column only. If `core/db/events.py` `TABLE_CHANNELS` requires new tables to be listed, the table is added there; the plan's first storage task checks.
 
 ### Comparison report: `scripts/reports/etoro_parity_report.py`
 
 Read-only, over `broker_orders` and the plan store. Definitions are fixed here so the report is reproducible:
 
 - **1R (price)** = `|plan.entry_price − plan.stop_loss|`. This is the paper plan's original risk; `stop_loss` is never mutated (`plan_manager.py:223`). `working_stop` is never used for 1R.
-- **1R (dollars)** = `ETORO_ACCOUNT_SIZE × capped risk % / 100`, as recorded with the open row.
+- **1R (dollars)** = `units_filled × |avg_price − stop_sent|`, as recorded with the open row. eToro R is therefore per position and comparable to paper R. Dollar totals are reported separately, because the `ETORO_MAX_TRADE_USD` cap scales the notional.
 - **Paper R** = `Σ leg.fraction × leg.r` over `plan.legs_realized`. These are model fills (`gap_stop_fill`, `poll_stop_fill`) and gross of the friction model.
 - **eToro R gross** = realised price P&L in dollars (from `avg_price` and the close fills, sign-adjusted for shorts) ÷ 1R in dollars. **eToro R net** = (persisted `net_profit` − `fees` − `overnight_fees`) ÷ 1R in dollars. The two are reported in separate columns.
 - **Entry drift in R**, split in two:
@@ -162,7 +172,7 @@ Read-only, over `broker_orders` and the plan store. Definitions are fixed here s
 
 ### Daily reconciliation
 
-In-process, run by the executor on the first trade-monitor tick after 16:15 ET each NYSE session. The last-run date is persisted, so a restart does not double-run it or skip it. It compares the demo positions (`GET .../demo/portfolio`) with the repository's `filled`, still-open rows. Positions missing on either side, unit mismatches and stop mismatches are logged at WARNING. **Nothing is corrected automatically.** v159's `reconciler` agent is the on-demand deep read.
+In-process, run by the executor on the first trade-monitor tick after 16:15 ET each NYSE session (`session.market_today()`). The last-run date is persisted through `scheduled_repo()`, the same store other once-a-day jobs use, so a restart does not double-run it or skip it; no new table is needed. It compares the demo positions (`GET .../demo/portfolio`) with the repository's `filled`, still-open rows. Positions missing on either side, unit mismatches and stop mismatches are logged at WARNING. **Nothing is corrected automatically.** v159's `reconciler` agent is the on-demand deep read.
 
 ### Disable, drain and rollback
 
@@ -174,8 +184,8 @@ In-process, run by the executor on the first trade-monitor tick after 16:15 ET e
 ## Testing
 
 - `tests/broker/test_mirror.py`: every row of the event table, the non-main ledger, a plan with no open row, deduplication of a resent `filled` and `closed`, all three stop-target branches, the no-widen guard for both directions, and every take-profit branch.
-- `tests/broker/test_sizing.py`: the risk-percent clamp (`ETORO_RISK_PCT=5` sizes at 2%), rounding, fractional versus whole units, zero and NaN stop distance.
-- `tests/broker/test_pre_open.py`: one test per skip reason, including heat and correlated caps on the mirror's own rows.
+- `tests/broker/test_sizing.py`: scaling to the cap with entry, stop and target unchanged; a cap above the plan notional never raising units; a different `ETORO_MAX_TRADE_USD` value; rounding; fractional versus whole units.
+- `tests/broker/test_checks.py`: one test per skip reason in the order-check table, including heat and correlated heat over mirror rows, `dollar_risk` with `RISK_PER_TRADE_PCT=5` clamped to 2%, and `stop_widen` for both directions and for clearing a stop.
 - `tests/broker/test_executor.py` against a fake client and an in-memory repository:
   - no row, no send;
   - recovery of a row stuck at `sending` by `referenceId`;
@@ -196,15 +206,15 @@ Every new function stays below cyclomatic complexity 15.
 
 1. The plan merges with `ETORO_MIRROR_ENABLED=false`; deploy (`docs/deploy/DEPLOY_HETZNER.md`).
 2. The partner generates an eToro key with `demo:write` and `demo:read` (and `market-data:read` for the send-time quote); `get-my-profile-and-scopes` confirms them.
-3. On the VM, set `ETORO_USER_KEY`, `ETORO_API_KEY` and `ETORO_ACCOUNT_SIZE` in `.env` by editing in place (never `sed -i` on the bind-mounted file), run the smoke script, then set `ETORO_MIRROR_ENABLED=true` and send SIGHUP. Mirror the non-secret parts (`.env.example`, any ops script) into the repo (`mirror-prod`).
+3. On the VM, set `ETORO_USER_KEY` and `ETORO_API_KEY` in `.env` (and `ETORO_MAX_TRADE_USD` if not the default) by editing in place (never `sed -i` on the bind-mounted file), run the smoke script, then set `ETORO_MIRROR_ENABLED=true` and send SIGHUP. Mirror the non-secret parts (`.env.example`, any ops script) into the repo (`mirror-prod`).
 4. A first-week check through `prod-inspector`: the INFO lines, the skip reasons, one reconciliation, and one parity-report run.
 
 ## Parallelisation
 
-- **Group 1, in parallel:** `sizing.py` + tests, `mirror.py` + tests, `pre_open.py` + tests, and the Alembic revision + repository. These are pure units, or a new table with no reader yet, and none of them shares a file.
-- **Group 2, sequential after v159 § B2 merges:** `etoro_client.py`. It imports `infra.etoro_guard`, which does not exist until v159 lands. This is the plan's one external dependency.
+- **Group 1, in parallel:** `sizing.py` + tests, `checks.py` + tests, `mirror.py` + tests, and the Alembic revision + repository. These are pure units, or a new table with no reader yet, and none of them shares a file.
+- **Group 2, sequential after v159 § B2 merges:** `etoro_client.py`. It imports `broker.guard`, which does not exist until v159 lands. This is the plan's one external dependency.
 - **Group 3, sequential after Groups 1 and 2:** `executor.py`, including reconciliation. It needs the client's result type, the translator's action type, the pre-open checks and the repository.
-- **Group 4, sequential after Group 3:** the config fields, the `loops.py` hook and `broker/__init__.py`. They wire the executor in, and `loops.py` and `config.py` are shared files that other plans touch, so they go in one task. The architecture-doc correction rides along.
+- **Group 4, sequential after Group 3:** the config fields, the `loops.py` hook and `broker/__init__.py`. They wire the executor in, and `loops.py` and `config.py` are shared files that other plans touch, so they go in one task. The `architecture.md` `broker/` row update rides along.
 - **Group 5, in parallel after Group 3:** the parity report, the drain script, and the smoke script. They read the repository and touch disjoint files.
 - **Final:** the full suite, once.
 
@@ -251,3 +261,4 @@ Run 2026-10-11 on commit `83a2a908`: staff-engineer, quant-engineer, risk-manage
 - risk-manager 7: eToro stop-distance limits -- applied (`stop_too_tight`; never an open without a stop).
 - risk-manager 8: correlated clusters in the report -- applied (split by cluster).
 - risk-manager 9: never widen a stop -- applied (no-widen guard).
+- risk-manager 1, 2, 3, re-homed 2026-10-11: the partner moved every order-risk check out of v159 and into v160. v160's `sizing.py`/`checks.py` now own the cap (`ETORO_MAX_TRADE_USD`), the stop at order time, dollar risk clamped through `capped_planned_loss_pct`, the stop cap, portfolio and correlated heat, and stops only tightening. Sizing is the plan's own size, scaled to the cap; `ETORO_ACCOUNT_SIZE`/`ETORO_RISK_PCT` are dropped.
