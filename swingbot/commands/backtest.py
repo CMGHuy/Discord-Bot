@@ -12,10 +12,15 @@ instead of an interactive command.
 import asyncio
 import logging
 
+import discord
+from discord import app_commands
+
 from swingbot.core.backtesting.backtest import (
     ALL_STRATEGIES, run_backtest, run_backtest_daterange, run_full_backtest,
 )
 from swingbot.bot_core import bot
+from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
+from swingbot.commands.slash import HORIZON_CHOICES, STRATEGY_CHOICES
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.data import get_daily_data
 from swingbot.core.market.strategy import live_horizons
@@ -218,23 +223,34 @@ def _parse_backtest_args(args: tuple):
     return horizon, strategy_norm, date_from, date_to, list_setups
 
 
-@bot.command(name="backtest")
-async def backtest_cmd(ctx, ticker: str, *args):
+def _range_str(date_from: str | None, date_to: str | None) -> str:
+    return f" [{date_from or '…'} → {date_to or 'now'}]" if (date_from or date_to) else ""
+
+
+async def _send_long(reply, msg: str) -> None:
+    """One message up to 1950 chars, else 1900-char chunks (today's split)."""
+    if len(msg) <= 1950:
+        await reply.send(msg)
+        return
+    for chunk in [msg[i:i+1900] for i in range(0, len(msg), 1900)]:
+        await reply.send(chunk)
+
+
+async def handle_backtest(reply, ticker: str, horizon: str = "all", strategy: str = "all",
+                          date_from: str | None = None, date_to: str | None = None,
+                          list_setups: bool = False) -> None:
+    """Backtest one ticker. `strategy` is a canonical name (a STRATEGY_MAP value) or "all"."""
     ticker = ticker.upper()
-    horizon, strategy_norm, date_from, date_to, list_setups = _parse_backtest_args(args)
-
-    range_str = ""
-    if date_from or date_to:
-        range_str = f" [{date_from or '…'} → {date_to or 'now'}]"
-
-    await ctx.send(f"Backtesting **{ticker}**{range_str}… this can take a few seconds.")
+    range_str = _range_str(date_from, date_to)
+    await reply.defer()
+    await reply.send(f"Backtesting **{ticker}**{range_str}… this can take a few seconds.")
     try:
         bar_count, summaries = await asyncio.to_thread(
-            _sync_backtest_one, ticker, horizon, strategy_norm, date_from, date_to
+            _sync_backtest_one, ticker, horizon, strategy, date_from, date_to
         )
     except Exception as e:
         log.warning("!backtest %s: could not fetch data", ticker, exc_info=True)
-        await ctx.send(f"⚠️ Could not fetch data for {ticker}: {e}")
+        await reply.send_error(f"⚠️ Could not fetch data for {ticker}: {e}")
         return
 
     header = f"Backtest — **{ticker}**{range_str} ({bar_count} bars of history):"
@@ -242,47 +258,20 @@ async def backtest_cmd(ctx, ticker: str, *args):
         msg = _format_setup_list(header, summaries)
     else:
         msg = _format_backtest_table(header, summaries)
-
-    if len(msg) <= 1950:
-        await ctx.send(msg)
-    else:
-        for chunk in [msg[i:i+1900] for i in range(0, len(msg), 1900)]:
-            await ctx.send(chunk)
+    await _send_long(reply, msg)
 
     # Per-strategy win rate, combined across every horizon shown above.
-    await ctx.send(_format_per_strategy_winrate(summaries))
+    await reply.send(_format_per_strategy_winrate(summaries))
 
 
-@bot.command(name="backtestwatchlist")
-async def backtestwatchlist_cmd(ctx, *args):
-    horizon, strategy_norm, date_from, date_to, _ = _parse_backtest_args(args)
-
-    tickers = load_watchlist()
-    range_str = f" [{date_from or '…'} → {date_to or 'now'}]" if (date_from or date_to) else ""
-    await ctx.send(f"Backtesting **{len(tickers)}** watchlist ticker(s){range_str}… this can take a while.")
-
-    all_summaries, errors = await asyncio.to_thread(
-        _sync_backtest_watchlist, tickers, horizon, strategy_norm, date_from, date_to
-    )
-    for t, err in errors:
-        await ctx.send(f"⚠️ Skipping {t}: {err}")
-
+def _ranked_combos(all_summaries: list) -> list:
+    """Combos with 5+ closed trades, best expectancy first."""
     evaluated = [s for s in all_summaries if s.evaluated >= 5]
     evaluated.sort(key=lambda s: (s.expectancy_r if s.expectancy_r is not None else -999), reverse=True)
+    return evaluated
 
-    # Per-strategy win rate across the WHOLE watchlist (every ticker, every
-    # horizon tested, combined) -- answers "is every strategy hitting 80%?"
-    # directly, regardless of whether any single ticker/horizon combo had
-    # enough trades on its own to make the leaderboard below.
-    await ctx.send(_format_per_strategy_winrate(all_summaries))
 
-    if not evaluated:
-        await ctx.send(
-            "No combo had ≥5 closed backtest trades across the watchlist — "
-            "try `!backtest TICKER` on individual names instead."
-        )
-        return
-
+def _format_leaderboard(evaluated: list, range_str: str) -> str:
     lines = [
         f"**Watchlist backtest leaderboard**{range_str} (combos with 5+ closed trades, ranked by ExpR):",
         "```",
@@ -295,4 +284,108 @@ async def backtestwatchlist_cmd(ctx, *args):
         lines.append(f"{s.ticker:7s} {s.strategy:18s} {s.horizon_key:5s} {s.evaluated:4d} {wr:>6s} {er:>6s} {dd:>7s}")
     lines.append("```")
     lines.append("⚠️ Overlapping trades counted independently, no fees/slippage, survivorship bias.")
-    await ctx.send("\n".join(lines))
+    return "\n".join(lines)
+
+
+async def handle_backtestwatchlist(reply, horizon: str = "all", strategy: str = "all",
+                                   date_from: str | None = None, date_to: str | None = None) -> None:
+    """Backtest every watchlist ticker; `strategy` as in handle_backtest."""
+    await reply.defer()
+    tickers = load_watchlist()
+    range_str = _range_str(date_from, date_to)
+    await reply.send(f"Backtesting **{len(tickers)}** watchlist ticker(s){range_str}… this can take a while.")
+
+    all_summaries, errors = await asyncio.to_thread(
+        _sync_backtest_watchlist, tickers, horizon, strategy, date_from, date_to
+    )
+    for t, err in errors:
+        await reply.send(f"⚠️ Skipping {t}: {err}")
+
+    evaluated = _ranked_combos(all_summaries)
+
+    # Per-strategy win rate across the WHOLE watchlist (every ticker, every
+    # horizon tested, combined) -- answers "is every strategy hitting 80%?"
+    # directly, regardless of whether any single ticker/horizon combo had
+    # enough trades on its own to make the leaderboard below.
+    await reply.send(_format_per_strategy_winrate(all_summaries))
+
+    if not evaluated:
+        await reply.send(
+            "No combo had ≥5 closed backtest trades across the watchlist — "
+            "try `!backtest TICKER` on individual names instead."
+        )
+        return
+    await reply.send(_format_leaderboard(evaluated, range_str))
+
+
+@bot.command(name="backtest")
+async def backtest_cmd(ctx, ticker: str, *args):
+    horizon, strategy_norm, date_from, date_to, list_setups = _parse_backtest_args(args)
+    reply = CtxReply(ctx)
+    await handle_backtest(reply, ticker, horizon, strategy_norm, date_from, date_to, list_setups)
+    await send_prefix_tip(ctx, reply)
+
+
+@bot.command(name="backtestwatchlist")
+async def backtestwatchlist_cmd(ctx, *args):
+    horizon, strategy_norm, date_from, date_to, _ = _parse_backtest_args(args)
+    reply = CtxReply(ctx)
+    await handle_backtestwatchlist(reply, horizon, strategy_norm, date_from, date_to)
+    await send_prefix_tip(ctx, reply)
+
+
+# ──────────────────────────────────────────────
+# / slash twins (moved from slash.py in v153; payload unchanged)
+# ──────────────────────────────────────────────
+
+def _strategy_from_choice(choice) -> str:
+    """A STRATEGY_CHOICES value ("ema", …, "all") -> the canonical name the handlers take."""
+    if choice is None:
+        return "all"
+    return STRATEGY_MAP.get(choice.value, "all")
+
+
+@bot.tree.command(name="backtest", description="Backtest a ticker against historical data")
+@app_commands.describe(
+    ticker="Stock ticker symbol, e.g. AAPL",
+    horizon="Swing horizon (default: all)",
+    strategy="Strategy to test (default: all)",
+    from_date="Start date YYYY-MM-DD (optional)",
+    to_date="End date YYYY-MM-DD (optional)",
+    setups="List every individual trade setup instead of the summary table",
+)
+@app_commands.choices(horizon=HORIZON_CHOICES, strategy=STRATEGY_CHOICES)
+async def slash_backtest(
+    interaction: discord.Interaction,
+    ticker: str,
+    horizon: app_commands.Choice[str] = None,
+    strategy: app_commands.Choice[str] = None,
+    from_date: str = None,
+    to_date: str = None,
+    setups: bool = False,
+):
+    await handle_backtest(
+        InteractionReply(interaction), ticker, horizon.value if horizon else "all",
+        _strategy_from_choice(strategy), from_date, to_date, setups,
+    )
+
+
+@bot.tree.command(name="backtestwatchlist", description="Backtest every watchlist ticker, ranked by expectancy")
+@app_commands.describe(
+    horizon="Swing horizon (default: all)",
+    strategy="Strategy to test (default: all)",
+    from_date="Start date YYYY-MM-DD (optional)",
+    to_date="End date YYYY-MM-DD (optional)",
+)
+@app_commands.choices(horizon=HORIZON_CHOICES, strategy=STRATEGY_CHOICES)
+async def slash_backtestwatchlist(
+    interaction: discord.Interaction,
+    horizon: app_commands.Choice[str] = None,
+    strategy: app_commands.Choice[str] = None,
+    from_date: str = None,
+    to_date: str = None,
+):
+    await handle_backtestwatchlist(
+        InteractionReply(interaction), horizon.value if horizon else "all",
+        _strategy_from_choice(strategy), from_date, to_date,
+    )
