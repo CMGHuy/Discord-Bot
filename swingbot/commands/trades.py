@@ -1,9 +1,10 @@
-"""!trades, !trade, !tradecharts, !performance, !pnl, !summary."""
+"""!trades, !trade, !tradecharts, !performance, !pnl, !summary, and their slash twins (v153)."""
 import asyncio
 import os
 from datetime import datetime, timezone
 
 import discord
+from discord import app_commands
 
 from swingbot import config
 from swingbot.core.planning import account as account_module
@@ -12,6 +13,8 @@ from swingbot.core.presentation import kinds
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.bot_core import bot
+from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
+from swingbot.commands.slash import TRADE_FILTER_CHOICES
 from swingbot.core.tracking.risk_metrics import compute_risk_metrics
 from swingbot.core.tracking.performance import closed_pnl_pct
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
@@ -49,6 +52,8 @@ def _primary_source_label(t: dict) -> str:
 MIN_PER_PAGE = 1
 MAX_PER_PAGE = 25
 DEFAULT_PER_PAGE = 10
+TRADE_STATUSES = ("open", "win", "loss", "all")
+STATUS_ERROR = "Status must be one of: open, win, loss, all"
 
 
 def format_trade_row(t: dict, currency: str) -> str:
@@ -164,6 +169,40 @@ class TradesPaginator(discord.ui.View):
                 pass
 
 
+async def handle_trades(reply, status: str = "all", per_page: int = DEFAULT_PER_PAGE) -> None:
+    """
+    Shows every logged trade -- any confidence level, any status by
+    default -- sorted highest confidence first, paginated with Prev/Next
+    buttons. `per_page` sets how many rows show per page (1-25).
+    """
+    if status not in TRADE_STATUSES:
+        await reply.send_error(STATUS_ERROR)
+        return
+    per_page = max(MIN_PER_PAGE, min(per_page, MAX_PER_PAGE))
+    await reply.defer()
+
+    trades = trade_log.get_trades(status=status, limit=None, sort_by="confidence")
+    if not trades:
+        await reply.send(f"No trades found for status='{status}'.")
+        return
+
+    view = TradesPaginator(trades, f"**Trades ({status}, sorted by confidence high→low)**", per_page,
+                           reply.author.id)
+    view.message = await reply.send(view.render(), view=view)
+
+
+async def handle_trades_clear(reply) -> None:
+    """Clear all currently OPEN/active trades. Closed trade history is kept."""
+    count = trade_log.clear_open()
+    await reply.send(f"Cleared {count} open trade(s). Closed win/loss history was not touched.")
+
+
+async def handle_trades_clear_history(reply) -> None:
+    """Clear all CLOSED trade records (win/loss/manually-closed). Open trades are kept."""
+    count = trade_log.clear_history()
+    await reply.send(f"Cleared {count} closed trade record(s). Open trades were not touched.")
+
+
 @bot.group(name="trades", invoke_without_command=True)
 async def trades_cmd(ctx, status: str = "all", per_page: int = DEFAULT_PER_PAGE):
     """
@@ -171,33 +210,26 @@ async def trades_cmd(ctx, status: str = "all", per_page: int = DEFAULT_PER_PAGE)
     default -- sorted highest confidence first, paginated with Prev/Next
     buttons. `per_page` sets how many rows show per page (1-25).
     """
-    if status not in ("open", "win", "loss", "all"):
-        await ctx.send("Status must be one of: open, win, loss, all")
-        return
-    per_page = max(MIN_PER_PAGE, min(per_page, MAX_PER_PAGE))
-
-    trades = trade_log.get_trades(status=status, limit=None, sort_by="confidence")
-    if not trades:
-        await ctx.send(f"No trades found for status='{status}'.")
-        return
-
-    view = TradesPaginator(trades, f"**Trades ({status}, sorted by confidence high→low)**", per_page, ctx.author.id)
-    view.message = await ctx.send(view.render(), view=view)
+    reply = CtxReply(ctx)
+    await handle_trades(reply, status, per_page)
+    await send_prefix_tip(ctx, reply)
 
 
 @trades_cmd.group(name="clear", invoke_without_command=True)
 async def trades_clear(ctx):
     """Clear all currently OPEN/active trades. Closed trade history is kept.
     Use `!trades clear history` to remove closed trade records instead."""
-    count = trade_log.clear_open()
-    await ctx.send(f"Cleared {count} open trade(s). Closed win/loss history was not touched.")
+    reply = CtxReply(ctx)
+    await handle_trades_clear(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 @trades_clear.command(name="history")
 async def trades_clear_history(ctx):
     """Clear all CLOSED trade records (win/loss/manually-closed). Open trades are kept."""
-    count = trade_log.clear_history()
-    await ctx.send(f"Cleared {count} closed trade record(s). Open trades were not touched.")
+    reply = CtxReply(ctx)
+    await handle_trades_clear_history(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 _OPEN_STYLE = ("🔵", "scratch", "OPEN")
@@ -308,52 +340,71 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
     return embed
 
 
-@bot.group(name="trade", invoke_without_command=True)
-async def trade_cmd(ctx, trade_id: str):
+async def handle_trade_show(reply, trade_id: str) -> None:
     match = trade_log.get_trade_by_id(trade_id)
     if not match:
-        await ctx.send(f"No trade found with id `{trade_id}`. Use `!trades` to list recent ones.")
+        await reply.send_error(f"No trade found with id `{trade_id}`. Use `!trades` to list recent ones.")
         return
+    await reply.defer()
 
     embed = _build_trade_detail_embed(match)
     chart_path = await asyncio.to_thread(scan_engine.regenerate_chart_for_trade, match)
     if chart_path:
         filename = os.path.basename(chart_path)
         embed.set_image(url=f"attachment://{filename}")
-        await ctx.send(embed=embed, file=discord.File(chart_path, filename=filename))
+        await reply.send(embed=embed, file=discord.File(chart_path, filename=filename))
     else:
         embed.add_field(name="⚠️ Chart", value="Could not generate a chart for this trade right now.", inline=False)
-        await ctx.send(embed=embed)
+        await reply.send(embed=embed)
 
 
-@trade_cmd.command(name="delete")
-async def trade_delete(ctx, trade_id: str):
+async def handle_trade_delete(reply, trade_id: str) -> None:
     deleted = trade_log.delete_trade(trade_id)
-    if deleted:
-        await ctx.send(f"Deleted trade `{trade_id}`.")
-    else:
-        await ctx.send(f"No trade found with id `{trade_id}`.")
+    if not deleted:
+        await reply.send_error(f"No trade found with id `{trade_id}`.")
+        return
+    await reply.send(f"Deleted trade `{trade_id}`.")
 
 
-@bot.command(name="tradecharts")
-async def tradecharts_cmd(ctx, status: str = "open", limit: int = 5):
-    if status not in ("open", "win", "loss", "all"):
-        await ctx.send("Status must be one of: open, win, loss, all")
+async def handle_tradecharts(reply, status: str = "open", limit: int = 5) -> None:
+    if status not in TRADE_STATUSES:
+        await reply.send_error(STATUS_ERROR)
         return
     limit = min(limit, 10)
     trades = trade_log.get_trades(status=status, limit=limit)
     if not trades:
-        await ctx.send(f"No trades found for status='{status}'.")
+        await reply.send(f"No trades found for status='{status}'.")
         return
 
-    await ctx.send(f"Generating charts for {len(trades)} trade(s)…")
+    await reply.send(f"Generating charts for {len(trades)} trade(s)…")
     for t in trades:
         chart_path = await asyncio.to_thread(scan_engine.regenerate_chart_for_trade, t)
         caption = f"**{t['id']}** {t['ticker']} — {t['strategy']} ({t['horizon_key']}), {t['direction']}, status: {t['status']}"
         if chart_path:
-            await ctx.send(caption, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
+            await reply.send(caption, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
         else:
-            await ctx.send(caption + " (chart unavailable)")
+            await reply.send(caption + " (chart unavailable)")
+
+
+@bot.group(name="trade", invoke_without_command=True)
+async def trade_cmd(ctx, trade_id: str):
+    reply = CtxReply(ctx)
+    await handle_trade_show(reply, trade_id)
+    await send_prefix_tip(ctx, reply)
+
+
+@trade_cmd.command(name="delete")
+async def trade_delete(ctx, trade_id: str):
+    reply = CtxReply(ctx)
+    await handle_trade_delete(reply, trade_id)
+    await send_prefix_tip(ctx, reply)
+
+
+@bot.command(name="tradecharts")
+async def tradecharts_cmd(ctx, status: str = "open", limit: int = 5):
+    reply = CtxReply(ctx)
+    await handle_tradecharts(reply, status, limit)
+    await send_prefix_tip(ctx, reply)
 
 
 def _append_risk_metrics_lines(lines: list, closed_trades: list):
@@ -555,3 +606,66 @@ async def summary_cmd(ctx):
 
     ui.apply_chrome(embed, accent=ui.accent_for_outcome(outcome))
     await ctx.send(embed=embed)
+
+
+# ──────────────────────────────────────────────
+# / slash twins (v153). /trades moved from slash.py with its decorators
+# verbatim. A command cannot also be a group, so `!trades clear` and
+# `!trades clear history` become the top-level /trades-clear and
+# /trades-clear-history; `!trade` alone maps to /trade show.
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="trades", description="List logged trades with pagination")
+@app_commands.describe(
+    filter="Filter by trade status (default: all)",
+    per_page="Trades per page (default: 10)",
+)
+@app_commands.choices(filter=TRADE_FILTER_CHOICES)
+async def slash_trades(
+    interaction: discord.Interaction,
+    filter: app_commands.Choice[str] = None,
+    per_page: int = 10,
+):
+    await handle_trades(InteractionReply(interaction), filter.value if filter else "all", per_page)
+
+
+@bot.tree.command(name="trades-clear", description="Clear all open trades (closed trade history is kept)")
+async def slash_trades_clear(interaction: discord.Interaction):
+    await handle_trades_clear(InteractionReply(interaction))
+
+
+@bot.tree.command(name="trades-clear-history", description="Clear all closed trade records (open trades are kept)")
+async def slash_trades_clear_history(interaction: discord.Interaction):
+    await handle_trades_clear_history(InteractionReply(interaction))
+
+
+trade_group = app_commands.Group(name="trade", description="Show or delete one logged trade")
+
+
+@trade_group.command(name="show", description="Full detail and chart for one trade")
+@app_commands.describe(trade_id="Trade ID, as listed by /trades")
+async def slash_trade_show(interaction: discord.Interaction, trade_id: str):
+    await handle_trade_show(InteractionReply(interaction), trade_id)
+
+
+@trade_group.command(name="delete", description="Delete one logged trade")
+@app_commands.describe(trade_id="Trade ID, as listed by /trades")
+async def slash_trade_delete(interaction: discord.Interaction, trade_id: str):
+    await handle_trade_delete(InteractionReply(interaction), trade_id)
+
+
+bot.tree.add_command(trade_group)
+
+
+@bot.tree.command(name="tradecharts", description="Chart the most recent trades of one status")
+@app_commands.describe(
+    status="Trade status (default: open)",
+    limit="How many trades to chart (max 10, default 5)",
+)
+@app_commands.choices(status=TRADE_FILTER_CHOICES)
+async def slash_tradecharts(
+    interaction: discord.Interaction,
+    status: app_commands.Choice[str] = None,
+    limit: int = 5,
+):
+    await handle_tradecharts(InteractionReply(interaction), status.value if status else "open", limit)

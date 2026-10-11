@@ -285,27 +285,6 @@ async def slash_backtestwatchlist(
 
 
 # ──────────────────────────────────────────────
-# /trades
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="trades", description="List logged trades with pagination")
-@app_commands.describe(
-    filter="Filter by trade status (default: all)",
-    per_page="Trades per page (default: 10)",
-)
-@app_commands.choices(filter=TRADE_FILTER_CHOICES)
-async def slash_trades(
-    interaction: discord.Interaction,
-    filter: app_commands.Choice[str] = None,
-    per_page: int = 10,
-):
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.trades import trades_cmd
-    await trades_cmd.callback(ctx, filter.value if filter else "all", per_page)
-
-
-# ──────────────────────────────────────────────
 # /performance
 # ──────────────────────────────────────────────
 
