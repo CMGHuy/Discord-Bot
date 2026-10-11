@@ -78,6 +78,12 @@ def _dryup_kept(scenarios, window) -> list:
     return edge_gates.filter_pullback_dryup(scenarios, window)[0]
 
 
+def _headroom_kept(scenarios, supports, resistances) -> list:
+    """v135: the confluence-scope headroom veto at analyze._apply_headroom's point, on the
+    re-split lists the scenarios were just built from. A rejection sets no cooldown."""
+    return edge_gates.filter_headroom(scenarios, supports, resistances)[0]
+
+
 def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
                      gates: dict | None = None,
                      dcb_params: dict | None = None, asof=None) -> list:
@@ -141,6 +147,7 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | 
             block_bullish=block_bullish)
 
         scenarios = _dryup_kept(scenarios, window)
+        scenarios = _headroom_kept(scenarios, supports, resistances)
         for sc in scenarios:
             n_confl, families = levels.count_confirming_strategies(
                 window, h, price, sc.take_profit, tolerance_pct=5.0)

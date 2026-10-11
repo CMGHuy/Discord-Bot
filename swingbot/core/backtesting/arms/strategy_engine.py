@@ -79,6 +79,13 @@ class CompressionResearchContext:
         return self.sector_of(ticker) if self.sector_on is None else self.sector_on(ticker, day)
 
 
+def level_map_at(df, index: int, horizon_key: str):
+    """(supports, resistances) as of bar `index`: built on df.iloc[:index + 1] only and split
+    at that bar's close. NO-LOOKAHEAD: no bar after `index` is read."""
+    return build_level_map(df.iloc[:index + 1], HORIZONS[horizon_key],
+                           float(df["Close"].iloc[index]))
+
+
 class StrategyEngine:
     engine_id = "strategy"
 
@@ -243,14 +250,26 @@ class StrategyEngine:
     @staticmethod
     def _gated_plan(window, index, *, ticker, strategy, horizon_key, direction,
                     level_map, params) -> TradePlanV2 | None:
-        """Admit the signal on completed bars through index before constructing its plan."""
+        """Admit the signal on completed bars through index. v122's dry-up gate runs before
+        the plan is built; v135's headroom veto runs after, on the built plan's own entry and
+        stop. A rejection returns no plan, so it never occupies the one-position slot.
+
+        `level_map` is the engine's 5-bar TP2 bucket and goes to the builder only. The veto
+        never reads it: while the strategy scope is active it builds its own map at the
+        signal bar (`window` ends there), the same map live builds on its completed frame."""
         if gates.pullback_dryup_blocks(window, direction, source="strategy", strategy=strategy):
             return None
-        return build_strategy_plan(
+        plan = build_strategy_plan(
             window, index, ticker=ticker, strategy=strategy,
             horizon_key=horizon_key, direction=direction,
             level_map=level_map, scan_params=params,
         )
+        if plan is None or not gates.headroom_active("strategy", strategy):
+            return plan
+        signal_map = level_map_at(window, index, horizon_key)
+        if gates.headroom_blocks_plan(plan, signal_map, strategy=strategy):
+            return None
+        return plan
 
     def _skipped(self, result, strategy, stamp, counted=True) -> bool:
         """Whether the walk produced no scored trade; a compression row says why (expiry, gap-risk...)."""
