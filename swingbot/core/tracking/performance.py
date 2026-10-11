@@ -39,6 +39,31 @@ log = logging.getLogger(__name__)
 _LOCK = Lock()
 
 
+def _taken_by(plan_id: str) -> list[int] | None:
+    """The plan's Following followers (plan_followers kind "taken"), sorted --
+    the truth the trade's `taken_by` copy is taken from. None when the read
+    fails. Runs on its own connection: a failed statement inside the
+    manager's close transaction would abort it and lose the close."""
+    try:
+        from swingbot.core.db.repositories.followers import followers_repo
+        return followers_repo().user_ids(plan_id, ("taken",))
+    except Exception:
+        log.warning("taken_by: could not read followers of plan %s -- keeping the trade's copy",
+                    plan_id, exc_info=True)
+        return None
+
+
+def _restamp_taken_by(trade: dict, plan_id: str) -> None:
+    """Copy the followers table onto a trade about to close. Writes nothing
+    when the read failed, or when the plan never had a follower and the
+    trade carries no copy (a missing key reads as "paper")."""
+    taken = _taken_by(plan_id)
+    if taken is None:
+        return
+    if taken or "taken_by" in trade:
+        trade["taken_by"] = taken
+
+
 def _journal_close_safely(trade: dict) -> None:
     """Lazy import to avoid a circular import (analytics.journal doesn't
     import performance, but importing it eagerly at module load time
@@ -754,6 +779,7 @@ class TradeLog:
                                else t.get("exit_price"))
             t["closed_at"] = datetime.now(timezone.utc).isoformat()
             self._settle_account_balance(t)
+            _restamp_taken_by(t, plan_id)
             closed_trade = dict(t)
             self._db_upsert(t, conn=conn)
         _after_close(closed_trade)
@@ -1265,6 +1291,21 @@ class TradeLog:
                     t["near_close_alerted"] = alerted
                     self._db_upsert(t)
                     return
+
+    def mark_taken(self, plan_id: str, user_ids: list[int]) -> bool:
+        """v152 D2: copy the plan's Following followers onto its open trade
+        as `taken_by` (sorted, unique -- the whole set, so a repeated press
+        converges). A JSONB patch of that one key, never a read-modify-write
+        of the row. False when the plan has no open trade."""
+        from swingbot.core.db.repositories.trades import trades_repo
+        taken = sorted({int(user_id) for user_id in user_ids})
+        with _LOCK:
+            repo = trades_repo()
+            row = next((r for r in repo.open_trades() if r.get("plan_id") == plan_id), None)
+            if row is None:
+                return False
+            repo.patch(row["trade_id"], {"taken_by": taken})
+        return True
 
     def store_trendline_fit(self, trade_id: str, fit: dict) -> bool:
         """Write a backfilled trendline fit onto an existing trade.
