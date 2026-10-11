@@ -123,6 +123,11 @@ FIELDS: list[Field] = [
                "Empty = falls back to the alerts channel, so the safety net is armed "
                "without any configuration. Set this to keep health notices out of the "
                "alert stream. Unlike the alerts channel, health notices are NOT silent."),
+    Field("DISCORD_CHANNEL_NOTIFY_ID", "DISCORD_CHANNEL_NOTIFY_ID", "Discord Connection", "Plan-updates channel ID",
+          help="Channel for factual paper-plan updates on plans people follow: near stop, TP1, TP2, "
+               "stopped, expired, and closed/cancelled for Following followers only. Each message "
+               "mentions the users who follow the plan (Watch or Following), so this channel is NOT "
+               "silent; /notify sets each user's mentions. Empty = off: nothing is posted or recorded."),
 
     # --- eToro paper trading (credentials only; nothing consumes them yet) ---
     Field("ETORO_USER_KEY", "ETORO_USER_KEY", "eToro Paper Trading", "eToro user key",
@@ -782,6 +787,13 @@ FIELDS: list[Field] = [
           type="number", default="3", min=1, max=10, step=1,
           help="Default number of plans shown by `!top` when no explicit count is given, and the "
                "daily Top-Plans digest's plan count (Task B37). Purely a display cap."),
+    Field("ALERT_SYMBOL_COOLDOWN_HOURS", "ALERT_SYMBOL_COOLDOWN_HOURS", "Discord Alerts",
+          "Per-symbol alert cooldown (hours)",
+          type="float", default="24", min=0, step=1,
+          help="On the scheduled session scan only, an alert for the same ticker, direction and "
+               "horizon is not posted when one was posted within this many hours. The plan is still "
+               "built, managed and in the book -- only the Discord post is held, and the ops channel "
+               "says how many. !check and the admin-UI scan are never held. 0 = off."),
 
     # --- Execution Realism (Edge plan Task E11) ---
     Field("SLIPPAGE_BPS", "SLIPPAGE_BPS", "Execution Realism", "Slippage (bps per side)",
@@ -1275,6 +1287,7 @@ _SEARCH_CLASSES = {
         "QUIET_HOURS_START_BERLIN", "QUIET_HOURS_END_BERLIN",
         "EXTENDED_HOURS_DEBOUNCE_TICKS",
         "SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
+        "ALERT_SYMBOL_COOLDOWN_HOURS",
     },
     "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
 }
