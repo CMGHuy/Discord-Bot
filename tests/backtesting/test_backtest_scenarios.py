@@ -103,3 +103,48 @@ def test_replayed_plans_carry_no_issued_at():
     out = bs.replay_scenarios("AAPL", _structured_df(), "4w", gates=GATES)
     assert out, "fixture must produce at least one plan"
     assert all(plan.issued_at is None for _, plan in out)
+
+
+def test_bucket_bar_is_the_first_bar_the_replay_visits_in_the_bucket():
+    from swingbot.core.market.strategy_types import MIN_BARS
+
+    warmup = MIN_BARS["4w"]
+    first_full = (warmup // bs.LEVEL_REFRESH_BARS + 1) * bs.LEVEL_REFRESH_BARS
+    assert bs.bucket_bar(first_full, "4w") == first_full
+    assert bs.bucket_bar(first_full + 4, "4w") == first_full
+    assert bs.bucket_bar(first_full + 5, "4w") == first_full + 5
+    assert bs.bucket_bar(warmup, "4w") == warmup          # never before warm-up
+    assert bs.bucket_bar(warmup + 1, "4w") >= warmup
+
+
+def test_scenarios_at_rebuilds_what_the_replay_saw_at_each_plan_bar():
+    from swingbot.scan_params import ScanParams
+    from tests.backtesting.test_v74_fixture import load_v74_fixture
+
+    frame = load_v74_fixture()["AAPL"]
+    params = ScanParams.from_config()
+    plans = bs.replay_scenarios("AAPL", frame, "4w", params=params)
+    assert plans, "fixture must produce confluence plans or the test proves nothing"
+    for index, plan in plans[:20]:
+        cache = {}
+        bs.levels_asof("AAPL", frame, bs.bucket_bar(index, "4w"), "4w", cache)   # prime the bucket
+        window, price, supports, resistances, scenarios = bs.scenarios_at(
+            "AAPL", frame, index, "4w", params, cache)
+        assert len(window) == index + 1
+        assert price == float(frame["Close"].iloc[index])
+        assert all(level.price < price for level in supports)
+        assert all(level.price > price for level in resistances)
+        assert any(scenario.direction == plan.direction for scenario in scenarios)
+
+
+def test_scenarios_at_ignores_every_later_bar():
+    """NO-LOOKAHEAD: rewriting the frame after bar i leaves bar i's scenarios unchanged."""
+    from swingbot.scan_params import ScanParams
+    from tests.backtesting.test_v74_fixture import load_v74_fixture
+
+    frame, params, index = load_v74_fixture()["AAPL"], ScanParams.from_config(), 300
+    poisoned = frame.copy()
+    poisoned.iloc[index + 1:] = poisoned.iloc[index + 1:] * 10.0
+    clean = bs.scenarios_at("AAPL", frame, index, "4w", params, {})
+    dirty = bs.scenarios_at("AAPL", poisoned, index, "4w", params, {})
+    assert clean[1:] == dirty[1:]
