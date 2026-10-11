@@ -10,6 +10,7 @@ don't replace them. Both work in parallel.
 Registered via bot.tree; synced to Discord in on_ready (scanning.py).
 """
 import asyncio
+import logging
 
 import discord
 from discord import app_commands
@@ -19,6 +20,8 @@ from swingbot.bot_core import bot, COMMANDS_BY_CATEGORY, CONFIDENCE_EXPLAINER
 from swingbot.core import presentation as ui
 from swingbot.core.market.strategy import HORIZONS, live_horizons
 from swingbot.core.scanning import engine as scan_engine
+
+log = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
 # Choice lists
@@ -54,6 +57,39 @@ STATUS_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "PENDING
 # v32 Task 11: tier (A/B/C) retired in favour of confidence level (1-5).
 LEVEL_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "1", "2", "3", "4", "5")]
 PERIOD_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("7d", "30d", "90d", "ytd", "all")]
+
+
+# ──────────────────────────────────────────────
+# App-command errors (v153 SP3)
+# ──────────────────────────────────────────────
+
+# Check failures get a one-line ephemeral answer, matching the prefix side's
+# on_command_error (bot_core.py); anything else is logged and re-raised.
+APP_CHECK_REPLIES: dict[type, str] = {
+    app_commands.MissingPermissions: "🚫 You don't have permission to run that command.",
+    app_commands.NoPrivateMessage: "This command only works in a server.",
+}
+
+
+def _check_reply(error: Exception) -> str | None:
+    for kind, text in APP_CHECK_REPLIES.items():
+        if isinstance(error, kind):
+            return text
+    return None
+
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction,
+                               error: app_commands.AppCommandError) -> None:
+    text = _check_reply(error)
+    if text is None:
+        name = getattr(interaction.command, "qualified_name", "?")
+        log.error("Unhandled slash command error in /%s: %s", name, error, exc_info=error)
+        raise error
+    if interaction.response.is_done():
+        await interaction.followup.send(text, ephemeral=True)
+    else:
+        await interaction.response.send_message(text, ephemeral=True)
 
 
 # ──────────────────────────────────────────────
