@@ -13,8 +13,12 @@ Usage:
   !plans TSLA from:2024-06-01 4w bnr
 """
 import asyncio
+import datetime as dt
 import logging
 from collections import defaultdict
+
+import discord
+from discord import app_commands
 
 from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
@@ -22,7 +26,9 @@ from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_daily_data, get_currency_symbol
 from swingbot import config
 from swingbot.core.market.strategy import live_horizons
-from swingbot.commands.backtest import _parse_backtest_args
+from swingbot.commands.backtest import STRATEGY_MAP, _parse_backtest_args
+from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
+from swingbot.commands.slash import HORIZON_CHOICES, STRATEGY_CHOICES
 
 log = logging.getLogger(__name__)
 
@@ -44,19 +50,21 @@ def _fmt_plan_price(value, currency: str = "") -> str:
     return ui.fmt_price(value, currency) if isinstance(value, (int, float)) else str(value)
 
 
+def _default_window(date_from: str | None, date_to: str | None) -> tuple[str | None, str | None]:
+    """Default to the last 90 days when neither bound is given."""
+    if not date_from and not date_to:
+        date_from = (dt.date.today() - dt.timedelta(days=90)).isoformat()
+    return date_from, date_to
+
+
 def _parse_plans_args(args: tuple):
     """
     Same flexible parser as backtest — horizon, strategy, from:, to:.
     Returns (horizon, strategy_norm, date_from, date_to).
     Defaults to last 90 days if no dates given.
     """
-    import datetime as dt
     horizon, strategy_norm, date_from, date_to, _list_setups = _parse_backtest_args(args)
-
-    # Default: last 90 days
-    if not date_from and not date_to:
-        date_from = (dt.date.today() - dt.timedelta(days=90)).isoformat()
-
+    date_from, date_to = _default_window(date_from, date_to)
     return horizon, strategy_norm, date_from, date_to
 
 
@@ -247,63 +255,86 @@ def _format_generated_plan(strat: str, horiz: str, t, cur: str) -> str:
     )
 
 
-@bot.command(name="plans")
-async def plans_cmd(ctx, ticker: str = None, *args):
-    """
-    Show or generate trade plans for a ticker over a date range.
+SETUP_BATCH_CHARS = 1800
+GENERATED_FOOTER = (
+    "⚠️ *Generated setups are backtest simulations — no fees/slippage. "
+    "Overlapping signals within the same strategy/horizon are skipped. "
+    "Recorded alerts (`!check`) apply stricter confluence and confidence filters.*"
+)
 
-    !plans TICKER [from:DATE] [to:DATE] [horizon] [strategy]
-    """
+
+def _plans_ticker_error(ticker: str | None) -> str | None:
+    """The answer for an unusable ticker argument, or None when it is usable."""
     if ticker is None:
-        await ctx.send(USAGE)
-        return
+        return USAGE
+    if ticker.upper().startswith(("FROM:", "TO:")):
+        return f"⚠️ Please provide a ticker first.\n{USAGE}"
+    return None
 
-    ticker = ticker.upper()
-    if ticker.startswith("FROM:") or ticker.startswith("TO:"):
-        await ctx.send(f"⚠️ Please provide a ticker first.\n{USAGE}")
-        return
 
-    horizon, strategy_norm, date_from, date_to = _parse_plans_args(args)
+def _plans_header(ticker: str, horizon: str, strategy_norm: str,
+                  date_from: str | None, date_to: str | None) -> str:
+    range_str = f"{date_from or '…'} → {date_to or 'now'}"
+    horiz_str = f" · horizon `{horizon}`" if horizon != "all" else ""
+    strat_str = f" · strategy `{strategy_norm}`" if strategy_norm != "all" else ""
+    return f"**{ticker}** · {range_str}{horiz_str}{strat_str}"
 
-    range_str  = f"{date_from or '…'} → {date_to or 'now'}"
-    horiz_str  = f" · horizon `{horizon}`" if horizon != "all" else ""
-    strat_str  = f" · strategy `{strategy_norm}`" if strategy_norm != "all" else ""
-    header_ctx = f"**{ticker}** · {range_str}{horiz_str}{strat_str}"
 
-    status_msg = await ctx.send(f"🔍 Looking up trade plans for {header_ctx}…")
+async def _post_logged_plans(reply, status_msg, ticker: str, header_ctx: str, logged: list) -> None:
+    await status_msg.edit(
+        content=f"📋 Found **{len(logged)} recorded** trade plan(s) for {header_ctx}:"
+    )
+    await reply.send("**Win rate by strategy** (recorded alerts):")
+    await reply.send(_build_summary_stats_from_logged(logged))
+    for t in logged:
+        await reply.send(_format_logged_plan(t))
+    await reply.send(
+        f"*These are plans the bot actually posted. "
+        f"Use `!plans {ticker} ... generate` to also see backtest-generated setups.*"
+    )
 
-    # --- Step 1: check trade log ---
-    logged = _query_trade_log(ticker, horizon, strategy_norm, date_from, date_to)
 
-    if logged:
-        await status_msg.edit(
-            content=f"📋 Found **{len(logged)} recorded** trade plan(s) for {header_ctx}:"
-        )
-        await ctx.send("**Win rate by strategy** (recorded alerts):")
-        await ctx.send(_build_summary_stats_from_logged(logged))
-        for t in logged:
-            await ctx.send(_format_logged_plan(t))
-        await ctx.send(
-            f"*These are plans the bot actually posted. "
-            f"Use `!plans {ticker} ... generate` to also see backtest-generated setups.*"
-        )
-        return
+def _generated_headline(setups: list, header_ctx: str, bar_count: int) -> str:
+    ev_count = sum(1 for _, _, t, _ in setups if t.outcome in ("win", "loss"))
+    win_count = sum(1 for _, _, t, _ in setups if t.outcome == "win")
+    win_pct = f"{win_count/ev_count*100:.0f}%" if ev_count else "n/a"
+    total_r = sum(t.r_multiple or 0 for _, _, t, _ in setups if t.outcome in ("win", "loss"))
+    total_r_str = f"{total_r:+.1f}R" if ev_count else "n/a"
+    return (
+        f"⚙️ **{len(setups)} setup(s)** for {header_ctx} ({bar_count} bars)\n"
+        f"📊 Closed trades: **{ev_count}** evaluated · **{win_pct}** win rate · **{total_r_str}** total R\n"
+        f"*(one trade at a time per strategy/horizon — overlapping signals skipped)*"
+    )
 
-    # --- Step 2: nothing recorded — generate from backtest ---
+
+async def _send_setup_batches(reply, setups: list) -> None:
+    """Individual setups, joined into messages of at most ~SETUP_BATCH_CHARS."""
+    batch = []
+    for strat, horiz, trade, cur in setups:
+        line = _format_generated_plan(strat, horiz, trade, cur)
+        batch.append(line)
+        if len("\n\n".join(batch)) > SETUP_BATCH_CHARS:
+            await reply.send("\n\n".join(batch[:-1]))
+            batch = [line]
+    if batch:
+        await reply.send("\n\n".join(batch))
+
+
+async def _post_generated_plans(reply, status_msg, ticker: str, header_ctx: str, window: tuple) -> None:
+    """Nothing recorded: generate setups from the backtest engine.
+    `window` is (horizon, strategy_norm, date_from, date_to)."""
     await status_msg.edit(
         content=(
             f"📭 No recorded plans found for {header_ctx}.\n"
             f"🔄 Generating historical setups via backtest engine…"
         )
     )
-
     try:
-        setups, bar_count = await asyncio.to_thread(
-            _sync_generate_plans, ticker, horizon, strategy_norm, date_from, date_to
-        )
+        setups, bar_count = await asyncio.to_thread(_sync_generate_plans, ticker, *window)
     except Exception as e:
         log.warning("!plans %s: could not generate plans", ticker, exc_info=True)
         await status_msg.edit(content=f"⚠️ Could not fetch data for **{ticker}**: {e}")
+        reply.failed = True   # an error answer is not followed by the prefix tip
         return
 
     if not setups:
@@ -316,36 +347,86 @@ async def plans_cmd(ctx, ticker: str = None, *args):
         )
         return
 
-    ev_count = sum(1 for _, _, t, _ in setups if t.outcome in ("win", "loss"))
-    win_count = sum(1 for _, _, t, _ in setups if t.outcome == "win")
-    win_pct = f"{win_count/ev_count*100:.0f}%" if ev_count else "n/a"
-    total_r = sum(t.r_multiple or 0 for _, _, t, _ in setups if t.outcome in ("win", "loss"))
-    total_r_str = f"{total_r:+.1f}R" if ev_count else "n/a"
+    await status_msg.edit(content=_generated_headline(setups, header_ctx, bar_count))
+    await reply.send(_build_summary_stats(setups))
+    await _send_setup_batches(reply, setups)
+    await reply.send(GENERATED_FOOTER)
 
-    await status_msg.edit(
-        content=(
-            f"⚙️ **{len(setups)} setup(s)** for {header_ctx} ({bar_count} bars)\n"
-            f"📊 Closed trades: **{ev_count}** evaluated · **{win_pct}** win rate · **{total_r_str}** total R\n"
-            f"*(one trade at a time per strategy/horizon — overlapping signals skipped)*"
-        )
-    )
 
-    # Summary stats table
-    await ctx.send(_build_summary_stats(setups))
+async def handle_plans(reply, ticker: str | None, horizon: str = "all", strategy: str = "all",
+                       date_from: str | None = None, date_to: str | None = None) -> None:
+    """
+    Show or generate trade plans for a ticker over a date range.
+    `strategy` is a normalised name (a STRATEGY_MAP value) or "all".
+    """
+    error = _plans_ticker_error(ticker)
+    if error:
+        await reply.send_error(error)
+        return
 
-    # Individual setups in batches
-    batch = []
-    for strat, horiz, trade, cur in setups:
-        line = _format_generated_plan(strat, horiz, trade, cur)
-        batch.append(line)
-        if len("\n\n".join(batch)) > 1800:
-            await ctx.send("\n\n".join(batch[:-1]))
-            batch = [line]
-    if batch:
-        await ctx.send("\n\n".join(batch))
+    ticker = ticker.upper()
+    date_from, date_to = _default_window(date_from, date_to)
+    header_ctx = _plans_header(ticker, horizon, strategy, date_from, date_to)
 
-    await ctx.send(
-        "⚠️ *Generated setups are backtest simulations — no fees/slippage. "
-        "Overlapping signals within the same strategy/horizon are skipped. "
-        "Recorded alerts (`!check`) apply stricter confluence and confidence filters.*"
+    await reply.defer()
+    status_msg = await reply.send(f"🔍 Looking up trade plans for {header_ctx}…")
+
+    # --- Step 1: check trade log ---
+    logged = _query_trade_log(ticker, horizon, strategy, date_from, date_to)
+    if logged:
+        await _post_logged_plans(reply, status_msg, ticker, header_ctx, logged)
+        return
+
+    # --- Step 2: nothing recorded — generate from backtest ---
+    await _post_generated_plans(reply, status_msg, ticker, header_ctx,
+                                (horizon, strategy, date_from, date_to))
+
+
+@bot.command(name="plans")
+async def plans_cmd(ctx, ticker: str = None, *args):
+    """
+    Show or generate trade plans for a ticker over a date range.
+
+    !plans TICKER [from:DATE] [to:DATE] [horizon] [strategy]
+    """
+    reply = CtxReply(ctx)
+    horizon, strategy_norm, date_from, date_to = _parse_plans_args(args)
+    await handle_plans(reply, ticker, horizon, strategy_norm, date_from, date_to)
+    await send_prefix_tip(ctx, reply)
+
+
+# ──────────────────────────────────────────────
+# /plans (new in v153)
+# ──────────────────────────────────────────────
+
+def _strategy_from_choice(choice) -> str:
+    """STRATEGY_CHOICES values are !-style aliases ("bnr"); handle_plans takes
+    the normalised name, so they go through the same STRATEGY_MAP as !plans."""
+    if choice is None:
+        return "all"
+    return STRATEGY_MAP.get(choice.value, "all")
+
+
+@bot.tree.command(name="plans", description="Recorded trade plans for a ticker, or backtest-generated setups if none")
+@app_commands.describe(
+    ticker="Stock ticker symbol, e.g. TSLA",
+    from_date="Start date YYYY-MM-DD (default: 90 days ago)",
+    to_date="End date YYYY-MM-DD (optional)",
+    horizon="Swing horizon (default: all)",
+    strategy="Strategy (default: all)",
+)
+@app_commands.choices(horizon=HORIZON_CHOICES, strategy=STRATEGY_CHOICES)
+async def slash_plans(
+    interaction: discord.Interaction,
+    ticker: str,
+    from_date: str = None,
+    to_date: str = None,
+    horizon: app_commands.Choice[str] = None,
+    strategy: app_commands.Choice[str] = None,
+):
+    await handle_plans(
+        InteractionReply(interaction), ticker,
+        horizon=horizon.value if horizon else "all",
+        strategy=_strategy_from_choice(strategy),
+        date_from=from_date, date_to=to_date,
     )
