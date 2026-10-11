@@ -1,9 +1,16 @@
-"""!strategies, !confidence, !regime, !ticker, !strategycharts, !commands/!help, !ping."""
+"""!strategies, !confidence, !regime, !ticker, !strategycharts, !commands/!help,
+!ping, and their slash twins (v153).
+
+Each body lives in one handle_<name>(reply, ...) handler. The prefix command
+and the slash twin both call it through a Reply (swingbot/commands/reply.py),
+so the two surfaces cannot drift.
+"""
 import asyncio
 import logging
 import os
 
 import discord
+from discord import app_commands
 
 from swingbot import config
 from swingbot.core import presentation as ui
@@ -12,8 +19,28 @@ from swingbot.bot_core import bot, CONFIDENCE_EXPLAINER, COMMANDS_BY_CATEGORY
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS, evaluate_all, live_horizons
 from swingbot.core.charts.trade_chart import generate_all_strategy_charts
+from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
+from swingbot.commands.slash import HORIZON_CHOICES
 
 log = logging.getLogger(__name__)
+
+#: The help embed's description; SP17's help_embeds() reuses it.
+HELP_DESCRIPTION = "Alerts only, never places trades. Prefix: `!`  •  Slash: `/`"
+
+STRATEGY_NAMES = (
+    "EMA Crossover, VWAP, Fibonacci retracement, Support/Resistance breakout, "
+    "RSI mean-reversion, MACD, Elliott Wave, MA Ribbon, Break & Retest, RSI Divergence, Volume Profile"
+)
+
+#: !ticker splits its snapshot on a newline at or before this many chars.
+TICKER_MESSAGE_LIMIT = 1990
+
+# /strategycharts draws one horizon; "all" is a scan choice, not a chart horizon.
+CHART_HORIZON_CHOICES = [choice for choice in HORIZON_CHOICES if choice.value != "all"]
+DIRECTION_CHOICES = [
+    app_commands.Choice(name="bullish", value="bullish"),
+    app_commands.Choice(name="bearish", value="bearish"),
+]
 
 
 def format_signal_plan_line(plan) -> str:
@@ -37,36 +64,7 @@ def _sync_ticker_snapshot(ticker: str):
     return df, results, regime
 
 
-@bot.command(name="strategies")
-async def strategies_cmd(ctx):
-    lines = [
-        "**Strategies:** EMA Crossover, VWAP, Fibonacci retracement, Support/Resistance breakout, "
-        "RSI mean-reversion, Elliott Wave (simplified)",
-        "", "**Swing horizons:**",
-    ]
-    for key in live_horizons():
-        h = HORIZONS[key]
-        lines.append(f"`{key}` — {h['label']} (needs {MIN_BARS[key]}+ trading days of history)")
-    await ctx.send("\n".join(lines))
-
-
-@bot.command(name="confidence")
-async def confidence_cmd(ctx):
-    await ctx.send(CONFIDENCE_EXPLAINER)
-
-
-@bot.command(name="ticker")
-async def ticker_cmd(ctx, ticker: str):
-    """Full current-state snapshot for one ticker, independent of alert confirmation or confidence filter."""
-    ticker = ticker.upper()
-    await ctx.send(f"Pulling a full snapshot for {ticker}…")
-    try:
-        df, results, regime = await asyncio.to_thread(_sync_ticker_snapshot, ticker)
-    except Exception as e:
-        log.warning("!ticker %s: could not fetch data", ticker, exc_info=True)
-        await ctx.send(f"⚠️ Could not fetch data for {ticker}: {e}")
-        return
-
+def _ticker_table_lines(ticker: str, df, results, regime) -> list[str]:
     last_close = float(df["Close"].iloc[-1])
     last_vol = int(df["Volume"].iloc[-1])
 
@@ -84,37 +82,48 @@ async def ticker_cmd(ctx, ticker: str):
         f"{config.MIN_ALERT_CONFIDENCE_LEVEL}+ confidence signals become alerts via `!check`; "
         "everything is shown here regardless of confidence."
     )
+    return lines
 
+
+def _signal_plan(df, ticker: str, r):
+    from swingbot.core.planning.plan_engine import build_strategy_plan
+    try:
+        return build_strategy_plan(df, len(df) - 1, ticker=ticker,
+                                   strategy=r.strategy, horizon_key=r.horizon_key,
+                                   direction=r.trend)
+    except Exception:
+        return None
+
+
+def _ticker_plan_lines(ticker: str, df, results) -> list[str]:
     plan_lines = []
     for r in results:
         if not r.triggered:
             continue
-        from swingbot.core.planning.plan_engine import build_strategy_plan
-        try:
-            plan = build_strategy_plan(df, len(df) - 1, ticker=ticker,
-                                       strategy=r.strategy, horizon_key=r.horizon_key,
-                                       direction=r.trend)
-        except Exception:
-            plan = None
+        plan = _signal_plan(df, ticker, r)
         if plan is not None:
             plan_lines.append(format_signal_plan_line(plan))
     if plan_lines:
-        lines.append("**Trade plans (v2)**")
-        lines.extend(plan_lines)
-    elif any(r.triggered for r in results):
-        lines.append(
+        return ["**Trade plans (v2)**", *plan_lines]
+    if any(r.triggered for r in results):
+        return [
             f"**Trade plans (v2)** — no qualifying setup: no level beyond entry "
-            f"pays {config.MIN_RISK_REWARD_RATIO:.1f}:1 against its own stop.")
+            f"pays {config.MIN_RISK_REWARD_RATIO:.1f}:1 against its own stop."]
+    return []
 
-    msg = "\n".join(lines)
-    while len(msg) > 1990:
-        split_at = msg.rfind("\n", 0, 1990)
+
+def _message_parts(msg: str, limit: int = TICKER_MESSAGE_LIMIT) -> list[str]:
+    """Split on the last newline at or before `limit`; a whitespace-only tail is dropped."""
+    parts = []
+    while len(msg) > limit:
+        split_at = msg.rfind("\n", 0, limit)
         if split_at == -1:
-            split_at = 1990
-        await ctx.send(msg[:split_at])
+            split_at = limit
+        parts.append(msg[:split_at])
         msg = msg[split_at:]
     if msg.strip():
-        await ctx.send(msg)
+        parts.append(msg)
+    return parts
 
 
 def _sync_strategy_charts(ticker: str, df, direction: str, h: dict, currency_symbol: str):
@@ -125,8 +134,55 @@ def _sync_strategy_charts(ticker: str, df, direction: str, h: dict, currency_sym
     )
 
 
-@bot.command(name="strategycharts")
-async def strategycharts_cmd(ctx, ticker: str, horizon: str = "4w", direction: str = "bullish"):
+def _strategycharts_problem(horizon: str, direction: str) -> str | None:
+    if horizon not in live_horizons():
+        return f"Unknown horizon '{horizon}'. Use one of: {', '.join(live_horizons())}"
+    if direction not in ("bullish", "bearish"):
+        return "Direction must be 'bullish' or 'bearish'."
+    return None
+
+
+def _help_embed() -> discord.Embed:
+    embed = discord.Embed(title="📖 Swing Trade Bot — Commands", description=HELP_DESCRIPTION)
+    for category, cmds in COMMANDS_BY_CATEGORY.items():
+        value = "\n".join(f"`{cmd}` — {desc}" for cmd, desc in cmds)
+        embed.add_field(name=category, value=value, inline=False)
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
+    return embed
+
+
+# ──────────────────────────────────────────────
+# Handlers (one body per command, shared by ! and /)
+# ──────────────────────────────────────────────
+
+async def handle_strategies(reply) -> None:
+    lines = [f"**Strategies:** {STRATEGY_NAMES}", "", "**Swing horizons:**"]
+    for key in live_horizons():
+        h = HORIZONS[key]
+        lines.append(f"`{key}` — {h['label']} (needs {MIN_BARS[key]}+ trading days of history)")
+    await reply.send("\n".join(lines), ephemeral=True)
+
+
+async def handle_confidence(reply) -> None:
+    await reply.send(CONFIDENCE_EXPLAINER, ephemeral=True)
+
+
+async def handle_ticker(reply, ticker: str) -> None:
+    """Full current-state snapshot for one ticker, independent of alert confirmation or confidence filter."""
+    ticker = ticker.upper()
+    await reply.send(f"Pulling a full snapshot for {ticker}…")
+    try:
+        df, results, regime = await asyncio.to_thread(_sync_ticker_snapshot, ticker)
+    except Exception as e:
+        log.warning("!ticker %s: could not fetch data", ticker, exc_info=True)
+        await reply.send_error(f"⚠️ Could not fetch data for {ticker}: {e}")
+        return
+    lines = _ticker_table_lines(ticker, df, results, regime) + _ticker_plan_lines(ticker, df, results)
+    for part in _message_parts("\n".join(lines)):
+        await reply.send(part)
+
+
+async def handle_strategycharts(reply, ticker: str, horizon: str = "4w", direction: str = "bullish") -> None:
     """
     Generates one standalone chart per supported strategy (EMA, VWAP,
     Fibonacci, FVG, Bollinger, Donchian, Rolling S/R, Floor Pivot,
@@ -137,69 +193,169 @@ async def strategycharts_cmd(ctx, ticker: str, horizon: str = "4w", direction: s
     chart showing up here doesn't mean it would ever qualify as a real
     alert.
     """
-    ticker = ticker.upper()
-    horizon = horizon.lower()
-    direction = direction.lower()
-    if horizon not in live_horizons():
-        await ctx.send(f"Unknown horizon '{horizon}'. Use one of: {', '.join(live_horizons())}")
-        return
-    if direction not in ("bullish", "bearish"):
-        await ctx.send("Direction must be 'bullish' or 'bearish'.")
+    ticker, horizon, direction = ticker.upper(), horizon.lower(), direction.lower()
+    problem = _strategycharts_problem(horizon, direction)
+    if problem:
+        await reply.send_error(problem)
         return
 
     h = HORIZONS[horizon]
-    await ctx.send(f"Simulating every supported strategy for {ticker} ({h['label']}, {direction})…")
+    await reply.send(f"Simulating every supported strategy for {ticker} ({h['label']}, {direction})…")
     try:
         df = await asyncio.to_thread(get_daily_data, ticker, config.DEFAULT_HISTORY_PERIOD)
     except Exception as e:
         log.warning("!strategycharts %s: could not fetch data", ticker, exc_info=True)
-        await ctx.send(f"⚠️ Could not fetch data for {ticker}: {e}")
+        await reply.send_error(f"⚠️ Could not fetch data for {ticker}: {e}")
         return
     if len(df) < MIN_BARS.get(horizon, 0):
-        await ctx.send(f"Not enough history for {ticker} at this horizon ({len(df)} bars, needs {MIN_BARS[horizon]}+).")
+        await reply.send_error(
+            f"Not enough history for {ticker} at this horizon ({len(df)} bars, needs {MIN_BARS[horizon]}+).")
         return
 
     currency_symbol = get_currency_symbol(ticker, config.CURRENCY_SYMBOL)
     paths = await asyncio.to_thread(_sync_strategy_charts, ticker, df, direction, h, currency_symbol)
     if not paths:
-        await ctx.send(f"No strategy currently has a usable {direction} level for {ticker} at this horizon.")
+        await reply.send(f"No strategy currently has a usable {direction} level for {ticker} at this horizon.")
         return
 
-    await ctx.send(
+    await reply.send(
         f"**{len(paths)} strategy chart(s) for {ticker}** ({h['label']}, {direction}) -- each shows what THAT ONE "
         "strategy alone thinks the next level is; none of `!check`'s usual filters are applied here."
     )
     for family, path in paths.items():
-        await ctx.send(f"**{family}**", file=discord.File(path, filename=os.path.basename(path)))
+        await reply.send(f"**{family}**", file=discord.File(path, filename=os.path.basename(path)))
+
+
+async def handle_regime(reply) -> None:
+    await reply.defer(ephemeral=True)
+    regime = await asyncio.to_thread(scan_engine.get_regime)
+    if regime is None:
+        await reply.send_error("Could not fetch market regime right now.")
+        return
+    await reply.send(
+        f"**Market regime:** {regime.label}\n"
+        f"{regime.ticker} close: {regime.close} | 200EMA: {regime.ema200} "
+        f"({regime.pct_above_ema:+.1f}%) | 200EMA slope (20d): {regime.ema_slope_pct:+.2f}%\n\n"
+        f"This feeds into confidence scoring (+10 pts when a signal agrees with the regime).",
+        ephemeral=True,
+    )
+
+
+async def handle_ping(reply) -> None:
+    await reply.send(f"🏓 Pong! {round(bot.latency * 1000)}ms", ephemeral=True)
+
+
+async def handle_help(reply) -> None:
+    await reply.send(embed=_help_embed(), ephemeral=True)
+
+
+# ──────────────────────────────────────────────
+# ! prefix commands
+# ──────────────────────────────────────────────
+
+@bot.command(name="strategies")
+async def strategies_cmd(ctx):
+    reply = CtxReply(ctx)
+    await handle_strategies(reply)
+    await send_prefix_tip(ctx, reply)
+
+
+@bot.command(name="confidence")
+async def confidence_cmd(ctx):
+    reply = CtxReply(ctx)
+    await handle_confidence(reply)
+    await send_prefix_tip(ctx, reply)
+
+
+@bot.command(name="ticker")
+async def ticker_cmd(ctx, ticker: str):
+    """Full current-state snapshot for one ticker, independent of alert confirmation or confidence filter."""
+    reply = CtxReply(ctx)
+    await handle_ticker(reply, ticker)
+    await send_prefix_tip(ctx, reply)
+
+
+@bot.command(name="strategycharts")
+async def strategycharts_cmd(ctx, ticker: str, horizon: str = "4w", direction: str = "bullish"):
+    """One standalone chart per strategy for one ticker (diagnostic; no alert filters)."""
+    reply = CtxReply(ctx)
+    await handle_strategycharts(reply, ticker, horizon, direction)
+    await send_prefix_tip(ctx, reply)
 
 
 @bot.command(name="regime")
 async def regime_cmd(ctx):
-    regime = await asyncio.to_thread(scan_engine.get_regime)
-    if regime is None:
-        await ctx.send("Could not fetch market regime right now.")
-        return
-    await ctx.send(
-        f"**Market regime:** {regime.label}\n"
-        f"{regime.ticker} close: {regime.close} | 200EMA: {regime.ema200} "
-        f"({regime.pct_above_ema:+.1f}%) | 200EMA slope (20d): {regime.ema_slope_pct:+.2f}%\n\n"
-        f"This feeds into confidence scoring (+10 pts when a signal agrees with the regime)."
-    )
+    reply = CtxReply(ctx)
+    await handle_regime(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 @bot.command(name="ping")
 async def ping_cmd(ctx):
-    await ctx.send(f"🏓 Pong! {round(bot.latency * 1000)}ms")
+    reply = CtxReply(ctx)
+    await handle_ping(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 @bot.command(name="commands", aliases=["help"])
 async def commands_cmd(ctx):
-    embed = discord.Embed(
-        title="📖 Swing Trade Bot — Commands",
-        description="Alerts only, never places trades. Prefix: `!`",
+    reply = CtxReply(ctx)
+    await handle_help(reply)
+    await send_prefix_tip(ctx, reply)
+
+
+# ──────────────────────────────────────────────
+# / slash twins (moved from slash.py in v153, decorators verbatim;
+# /strategycharts is new)
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="ping", description="Check bot latency")
+async def slash_ping(interaction: discord.Interaction):
+    await handle_ping(InteractionReply(interaction))
+
+
+@bot.tree.command(name="help", description="Show all available commands")
+async def slash_help(interaction: discord.Interaction):
+    await handle_help(InteractionReply(interaction))
+
+
+@bot.tree.command(name="confidence", description="Explain the 5 confidence levels")
+async def slash_confidence(interaction: discord.Interaction):
+    await handle_confidence(InteractionReply(interaction))
+
+
+@bot.tree.command(name="strategies", description="List available strategies and swing horizons")
+async def slash_strategies(interaction: discord.Interaction):
+    await handle_strategies(InteractionReply(interaction))
+
+
+@bot.tree.command(name="regime", description="Show current broad market regime (SPY trend)")
+async def slash_regime(interaction: discord.Interaction):
+    await handle_regime(InteractionReply(interaction))
+
+
+@bot.tree.command(name="ticker", description="Full bias snapshot for a single stock across all strategies")
+@app_commands.describe(ticker="Stock ticker symbol, e.g. AAPL")
+async def slash_ticker(interaction: discord.Interaction, ticker: str):
+    await handle_ticker(InteractionReply(interaction), ticker)
+
+
+@bot.tree.command(name="strategycharts",
+                  description="One chart per strategy for a ticker (diagnostic, no alert filters)")
+@app_commands.describe(
+    ticker="Stock ticker symbol, e.g. AAPL",
+    horizon="Swing horizon (default: 4w)",
+    direction="Trade direction (default: bullish)",
+)
+@app_commands.choices(horizon=CHART_HORIZON_CHOICES, direction=DIRECTION_CHOICES)
+async def slash_strategycharts(
+    interaction: discord.Interaction,
+    ticker: str,
+    horizon: app_commands.Choice[str] = None,
+    direction: app_commands.Choice[str] = None,
+):
+    await handle_strategycharts(
+        InteractionReply(interaction), ticker,
+        horizon.value if horizon else "4w",
+        direction.value if direction else "bullish",
     )
-    for category, cmds in COMMANDS_BY_CATEGORY.items():
-        value = "\n".join(f"`{cmd}` — {desc}" for cmd, desc in cmds)
-        embed.add_field(name=category, value=value, inline=False)
-    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
-    await ctx.send(embed=embed)

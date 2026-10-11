@@ -363,6 +363,7 @@ def test_six_bridge_commands_still_registered():
     is what keeps that import from hiding a real production regression.
     """
     import swingbot.commands.slash  # noqa: F401  -- registers on import
+    import swingbot.commands.info  # noqa: F401  -- v153 SP9: /ticker moved here
     from swingbot.bot_core import bot
 
     names = {cmd.name for cmd in bot.tree.get_commands()}

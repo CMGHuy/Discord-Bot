@@ -16,9 +16,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from swingbot.bot_core import bot, COMMANDS_BY_CATEGORY, CONFIDENCE_EXPLAINER
-from swingbot.core import presentation as ui
-from swingbot.core.market.strategy import HORIZONS, live_horizons
+from swingbot.bot_core import bot
+from swingbot.core.market.strategy import live_horizons
 from swingbot.core.scanning import engine as scan_engine
 
 log = logging.getLogger(__name__)
@@ -102,80 +101,6 @@ async def _send_chunks(interaction: discord.Interaction, text: str, ephemeral: b
     await interaction.response.send_message(chunks[0], ephemeral=ephemeral)
     for chunk in chunks[1:]:
         await interaction.followup.send(chunk, ephemeral=ephemeral)
-
-
-# ──────────────────────────────────────────────
-# /ping
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="ping", description="Check bot latency")
-async def slash_ping(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        f"🏓 Pong! {round(bot.latency * 1000)}ms", ephemeral=True
-    )
-
-
-# ──────────────────────────────────────────────
-# /help
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="help", description="Show all available commands")
-async def slash_help(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="📖 Swing Trade Bot — Commands",
-        description="Alerts only, never places trades. Prefix: `!`  •  Slash: `/`",
-    )
-    for category, cmds in COMMANDS_BY_CATEGORY.items():
-        value = "\n".join(f"`{cmd}` — {desc}" for cmd, desc in cmds)
-        embed.add_field(name=category, value=value, inline=False)
-    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-# ──────────────────────────────────────────────
-# /confidence
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="confidence", description="Explain the 5 confidence levels")
-async def slash_confidence(interaction: discord.Interaction):
-    await interaction.response.send_message(CONFIDENCE_EXPLAINER, ephemeral=True)
-
-
-# ──────────────────────────────────────────────
-# /strategies
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="strategies", description="List available strategies and swing horizons")
-async def slash_strategies(interaction: discord.Interaction):
-    lines = [
-        "**Strategies:** EMA Crossover, VWAP, Fibonacci retracement, Support/Resistance breakout, "
-        "RSI mean-reversion, MACD, Elliott Wave, MA Ribbon, Break & Retest, RSI Divergence, Volume Profile",
-        "", "**Swing horizons:**",
-    ]
-    for key in live_horizons():
-        h = HORIZONS[key]
-        lines.append(f"`{key}` — {h['label']}")
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
-
-
-# ──────────────────────────────────────────────
-# /regime
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="regime", description="Show current broad market regime (SPY trend)")
-async def slash_regime(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    regime = await asyncio.to_thread(scan_engine.get_regime)
-    if regime is None:
-        await interaction.followup.send("Could not fetch market regime right now.", ephemeral=True)
-        return
-    await interaction.followup.send(
-        f"**Market regime:** {regime.label}\n"
-        f"{regime.ticker} close: {regime.close} | 200EMA: {regime.ema200} "
-        f"({regime.pct_above_ema:+.1f}%) | 200EMA slope (20d): {regime.ema_slope_pct:+.2f}%\n\n"
-        f"This feeds into confidence scoring (+10 pts when a signal agrees with the regime).",
-        ephemeral=True,
-    )
 
 
 # ──────────────────────────────────────────────
@@ -290,20 +215,6 @@ async def slash_stop(interaction: discord.Interaction):
     await interaction.response.send_message(
         "🛑 **Stop requested** — the running scan will end after finishing its current ticker."
     )
-
-
-# ──────────────────────────────────────────────
-# /ticker
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="ticker", description="Full bias snapshot for a single stock across all strategies")
-@app_commands.describe(ticker="Stock ticker symbol, e.g. AAPL")
-async def slash_ticker(interaction: discord.Interaction, ticker: str):
-    ticker = ticker.upper()
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.info import ticker_cmd
-    await ticker_cmd.callback(ctx, ticker)
 
 
 # ──────────────────────────────────────────────

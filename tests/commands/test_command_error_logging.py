@@ -5,7 +5,8 @@ import logging
 import pathlib
 
 COMMANDS = pathlib.Path(__file__).resolve().parents[2] / "swingbot" / "commands"
-_REPLIES = {"send", "send_message", "edit"}
+# v153: handlers answer through a Reply; send_error is a reply too.
+_REPLIES = {"send", "send_message", "edit", "send_error"}
 
 
 def _calls(handler):
