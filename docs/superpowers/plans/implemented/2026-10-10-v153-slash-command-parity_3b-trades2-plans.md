@@ -1,9 +1,9 @@
 # v153 Slash command parity. Part 3b: `slash.py` chain I, continued (`trades` II, `plans`)
 
-**Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
-**Index:** `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here.
+**Index:** `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here.
 
 Split out of part 3 (`..._3-info-trades-plans.md`) only for the 1500-line file cap. The "Shared conventions for this part" block at the top of part 3 applies here unchanged: `$WT`, the SP1 names, the `ParityCase.expect` meanings, the frozen embed clock, `send_error` for validation and "not found" answers, decorators of moved slash commands copied verbatim. SP11 and SP12 continue the `slash.py` chain, one at a time, after SP10.
 

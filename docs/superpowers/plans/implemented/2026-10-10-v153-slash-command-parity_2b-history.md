@@ -1,9 +1,9 @@
 # v153 Slash command parity. Part 2b: Group 1 module `history` (`!plans`)
 
-**Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
-**Index:** `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here.
+**Index:** `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here.
 
 This is the fourth Group 1 task. It was split out of part 2 (`..._2-group1-modules.md`) only for the 1500-line file cap. The "Shared conventions for this part" block at the top of part 2 applies here unchanged: `$WT`, the SP1 names, the `ParityCase.expect` meanings, `send_error` for validation, and `defer()` after validation. SP8 runs in parallel with SP5–SP7 and with the `slash.py` chain.
 

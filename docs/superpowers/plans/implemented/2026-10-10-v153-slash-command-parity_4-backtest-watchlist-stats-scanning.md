@@ -1,9 +1,9 @@
 # v153 Slash command parity. Part 4: `slash.py` chain II (`backtest`, `watchlist`, `stats`, `scanning/commands`)
 
-**Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
-**Index:** `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here. Read `## Global Constraints` before any task.
+**Index:** `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here. Read `## Global Constraints` before any task.
 
 These tasks continue the `slash.py` chain after part 3 (SP9–SP12). This file holds SP13–SP14; SP15 lives in [`_4b-stats`](2026-10-10-v153-slash-command-parity_4b-stats.md) and SP16 in [`_4c-scanning`](2026-10-10-v153-slash-command-parity_4c-scanning.md) (split only for the 1500-line cap; both use the shared conventions below). They run **one at a time, in id order**: every one of them edits `swingbot/commands/slash.py`. Each task moves its slash commands out of `slash.py` and into its own module **in the same commit**. A name registered twice raises `CommandAlreadyRegistered` at import, and a name deleted first would be missing, so the move is atomic.
 

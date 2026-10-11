@@ -13,7 +13,7 @@ confirmed by the staff-engineer panel.)
 the same handlers answer through a second surface.
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, senior-engineer
-**Status:** spec written 2026-10-09; split out of v152 (former D4) per partner so it deploys and rolls back alone; panel review applied 2026-10-09; plan `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md` written 2026-10-10 (22 tasks, 9 files); "Output changes" added by plan v153 SP21.
+**Status:** spec written 2026-10-09; split out of v152 (former D4) per partner so it deploys and rolls back alone; panel review applied 2026-10-09; plan `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md` written 2026-10-10 (22 tasks, 9 files); "Output changes" added by plan v153 SP21.
 
 Parent: v152 (`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`),
 which keeps D1–D3 (notify, Following, cooldown) and links here from its
@@ -476,3 +476,10 @@ a 20 s subprocess timeout under `-n 4` load, in a file this branch does not touc
 - senior-engineer: `handle_summary` / `handle_status` do store reads before the first reply with no `defer()` -- applied (`handle_account_show` reads only config, left)
 - senior-engineer: `_SPACER` literal U+200B -- applied (`"​"` escape)
 - senior-engineer: `send_error` ephemeral flag ignored after a non-ephemeral defer; duplicate `_strategy_from_choice`; `SLASH_ONLY` scaffolding in the parity test; `reply.failed` written directly; error copy naming `!` forms; `/watchlist` upper-casing and missing-ticker message; ungated destructive slash commands -- rejected for this plan: parity-preserving or cosmetic, no command's result changes; follow-ups for a later cleanup plan (destructive-command gating is a risk-manager and partner call)
+
+## Close-out
+
+2026-10-11, shipped as **bot 2.4.0** (predicted bump level, minor, delivered). SP1-SP21 landed; SP22 ran the full suite
+once (8320 passed, 1 load-timeout flake that passes alone). **SP4 committed nothing**: v152 had not landed, so `/notify`
+is not in this repo's `slash.py` and v153 has nothing to move. When v152's V152-19 merges, it adds `/notify` as a
+module-owned twin (v152 plan V152-19 Step 0 covers this) and the parity test's module list and `SLASH_TWIN` gain its row.

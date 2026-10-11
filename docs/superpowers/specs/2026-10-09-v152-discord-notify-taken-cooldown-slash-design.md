@@ -436,7 +436,7 @@ how they are managed; recording real fills.
 
 ## What follows
 
-D4 slash parity moved to v153 (docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md) so it deploys and rolls back alone.
+D4 slash parity moved to v153 (docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md) so it deploys and rolls back alone.
 
 ## Parallelisation
 

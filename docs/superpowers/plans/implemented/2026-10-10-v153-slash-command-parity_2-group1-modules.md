@@ -1,9 +1,9 @@
 # v153 Slash command parity. Part 2: Group 1 modules (`account`, `data`, `growth`, `history`)
 
-**Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
-**Index:** `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here. Read `## Global Constraints` before any task.
+**Index:** `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here. Read `## Global Constraints` before any task.
 
 These four tasks are **Group 1**. SP5–SP7 are in this file. SP8 (`history`) is in `2026-10-10-v153-slash-command-parity_2b-history.md`, because the four tasks together exceed the 1500-line file cap. None of them owns an existing slash command, none touches `swingbot/commands/slash.py`, and their files are disjoint. They run in parallel with each other and with the `slash.py` chain (SP9 onwards), at most 2 implementers at once. SP7 waits for SP2 (it rewrites `growth.py` after SP2's move).
 

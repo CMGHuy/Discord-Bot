@@ -27,7 +27,7 @@
 
 - [ ] **Step 0: Precondition — v153 SP4 shape (audit 2026-10-10)**
 
-Run `git grep -n SLASH_TWIN -- swingbot/commands`. If it prints nothing (v153 not merged), continue with Step 1 as written. If it is non-empty (v153 merged), build `/notify` in v153's SP4 shape instead: a new `swingbot/commands/notify.py` with `handle_notify(reply, …)` on `InteractionReply` and `SLASH_ONLY = {"notify"}`, imported from `bot.py`; `_notify_summary` lives there and the tests import it from `swingbot.commands.notify`; do **not** edit `slash.py`; the expected resync command count is 42. Read the exact frame first: `grep -n "^### Task SP4" -A 150 docs/superpowers/plans/2026-10-10-v153-slash-command-parity_1*.md` (SP4 sits in `_1b-notify-check` since the 2026-10-10 audit) (or the plan's `implemented/` copy).
+Run `git grep -n SLASH_TWIN -- swingbot/commands`. If it prints nothing (v153 not merged), continue with Step 1 as written. If it is non-empty (v153 merged), build `/notify` in v153's SP4 shape instead: a new `swingbot/commands/notify.py` with `handle_notify(reply, …)` on `InteractionReply` and `SLASH_ONLY = {"notify"}`, imported from `bot.py`; `_notify_summary` lives there and the tests import it from `swingbot.commands.notify`; do **not** edit `slash.py`; the expected resync command count is 42. Read the exact frame first: `grep -n "^### Task SP4" -A 150 docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_1*.md` (SP4 sits in `_1b-notify-check` since the 2026-10-10 audit) (or the plan's `implemented/` copy).
 
 - [ ] **Step 1: Write the failing tests**
 

@@ -1,9 +1,9 @@
 # v153 Slash command parity. Part 4c: `slash.py` chain II, last link (`scanning/commands`)
 
-**Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
-**Index:** `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here.
+**Index:** `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here.
 
 This is the last task of the `slash.py` chain. It was split out of part 4 (`..._4-backtest-watchlist-stats-scanning.md`) only for the 1500-line file cap (it was `_4b-scanning` until the 2026-10-10 audit moved SP15 into `_4b-stats`). The "Shared conventions for this part" block at the top of part 4 applies here unchanged: `$WT`, the SP1 names, the `ParityCase.expect` meanings, `send_error` for validation, `defer()` after validation, verbatim decorators for moved twins, and radon over every touched file. SP16 runs after SP15.
 

@@ -1,8 +1,8 @@
 # v153 Slash command parity through shared handlers. Implementation Plan, part 1b (`/notify` check)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task with `/task-brief SP4` or `grep -n "^### Task SP4:" -A 150 docs/superpowers/plans/2026-10-10-v153-slash-command-parity_1b-notify-check.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task with `/task-brief SP4` or `grep -n "^### Task SP4:" -A 150 docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_1b-notify-check.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`](../specs/2026-10-09-v153-slash-command-parity-design.md) (section "New top-level names")
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`](../specs/2026-10-09-v153-slash-command-parity-design.md) (section "New top-level names")
 **Index:** [`2026-10-10-v153-slash-command-parity_0-index.md`](2026-10-10-v153-slash-command-parity_0-index.md): header block, `## Where to work`, `## Global Constraints`, `## Parallelisation` and the task ledger bind every task below.
 
 Part 1 is split in two files only to stay under 1500 lines (audit 2026-10-10): [`_1-foundation`](2026-10-10-v153-slash-command-parity_1-foundation.md) holds SP1–SP3, this file SP4. Same part, same ledger rows, same contracts, and part 1's conventions paragraph (`$R`, `$WT`, never `cd`, radon < 15) applies unchanged. SP4 needs SP1 (`InteractionReply`) and SP3 (both edit `swingbot/commands/slash.py`).

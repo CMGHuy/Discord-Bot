@@ -1,8 +1,8 @@
 # v153 Slash command parity through shared handlers. Implementation Plan, index
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief SP7` or `grep -n "^### Task SP7:" -A 260 docs/superpowers/plans/2026-10-10-v153-slash-command-parity_*.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief SP7` or `grep -n "^### Task SP7:" -A 260 docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_*.md`.
 
-**Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
@@ -167,7 +167,7 @@ Recommended order: {SP1, SP2, SP3} (2 implementers at once), then SP4. After tha
 | SP18 | Slash parity test and shared module list | 5 | sonnet | C `swingbot/commands/modules.py`, C `tests/commands/test_slash_parity.py` | `modules.BOT_PY: Path`, `modules.bot_command_modules(bot_py: Path = BOT_PY) -> list[str]` (dotted names parsed from `^from swingbot\.commands import (\w+)` lines), `modules.import_bot_command_modules(bot_py: Path = BOT_PY) -> list[ModuleType]` |
 | SP19 | Delete superseded registration tests | 5 | haiku | M `tests/commands/test_slash_commands.py`, M `tests/commands/test_stats_commands.py` | — |
 | SP20 | `scripts/ops/resync_slash_commands.py` rollback remedy | 5 | sonnet | C `scripts/ops/resync_slash_commands.py`, C `tests/scripts/test_resync_slash_commands.py` | `resync(bot, token: str) -> int`, `main() -> int` |
-| SP21 | Pin `PREFIX_TIP_UNTIL` to deploy day + 90; amend the spec's output line | 5 | haiku | M `swingbot/commands/reply.py`, M `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md` | — |
+| SP21 | Pin `PREFIX_TIP_UNTIL` to deploy day + 90; amend the spec's output line | 5 | haiku | M `swingbot/commands/reply.py`, M `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md` | — |
 | SP22 | Full suite | 5 | haiku | — | — |
 
 ### `SLASH_TWIN` (SP1 writes it exactly; SP18 asserts it against `bot.walk_commands()` and `bot.tree`)

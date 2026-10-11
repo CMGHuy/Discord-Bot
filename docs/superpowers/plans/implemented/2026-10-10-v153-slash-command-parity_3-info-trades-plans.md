@@ -1,9 +1,9 @@
 # v153 Slash command parity. Part 3: `slash.py` chain I (`info`, `trades` ×2, `plans`)
 
-**Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
-**Index:** `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here. Read `## Global Constraints` before any task.
+**Index:** `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here. Read `## Global Constraints` before any task.
 
 These four tasks are the first half of the **`slash.py` chain** (SP3 → SP4 → SP9 → SP10 → SP11 → SP12 → SP13 → … → SP16). They run **one at a time, in id order**: each one edits `swingbot/commands/slash.py`, deletes the blocks of the slash commands it now owns, and defines those commands again in its own module, in the same commit. They may run in parallel with Group 1 (SP5–SP8), whose files are disjoint.
 

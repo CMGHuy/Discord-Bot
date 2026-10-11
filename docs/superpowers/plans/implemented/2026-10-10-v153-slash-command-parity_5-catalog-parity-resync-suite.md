@@ -1,9 +1,9 @@
 # v153 Slash command parity. Part 5: help catalog, parity test, superseded tests, resync script, tip date, full suite
 
-**Spec:** `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md`
 **Bump:** bot minor
 **Edge:** none (integrity)
-**Index:** `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here. Read `## Global Constraints` before any task.
+**Index:** `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md`. Global Constraints, Parallelisation and the task ledger live there and are binding here. Read `## Global Constraints` before any task.
 
 These six tasks run **after every module task (SP5–SP16) has landed**. Order: SP17, SP18, then SP19 and SP20 in parallel (disjoint files), then SP21, then SP22.
 
@@ -1090,7 +1090,7 @@ git -C $WT commit -m "feat(v153): SP20 scripts/ops/resync_slash_commands.py roll
 
 **Files:**
 - Modify: `swingbot/commands/reply.py` (the `PREFIX_TIP_UNTIL` line and its comment, from SP1)
-- Modify: `docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md` (`**Bump:**` paragraph, `**Status:**` line, a new `## Output changes` section, the "What this does not do" sentence)
+- Modify: `docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md` (`**Bump:**` paragraph, `**Status:**` line, a new `## Output changes` section, the "What this does not do" sentence)
 
 **Interfaces:**
 - Consumes (SP1): `reply.PREFIX_TIP_UNTIL` (provisional `dt.date(2027, 1, 8)`). The SP1, SP7 and SP18 tests compute their dates relative to the constant, so none of them changes.
@@ -1142,7 +1142,7 @@ Expected: the cutoff and `90`.
 python - <<'PY'
 from pathlib import Path
 
-spec = Path("/home/user/Discord-Bot/.claude/worktrees/2026-10-10-v153-slash-command-parity/docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md")
+spec = Path("/home/user/Discord-Bot/.claude/worktrees/2026-10-10-v153-slash-command-parity/docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md")
 text = spec.read_text(encoding="utf-8")
 
 EDITS = [
@@ -1155,7 +1155,7 @@ EDITS = [
     ),
     (
         "panel review applied 2026-10-09; no plan yet.",
-        "panel review applied 2026-10-09; plan `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md`; "
+        "panel review applied 2026-10-09; plan `docs/superpowers/plans/implemented/2026-10-10-v153-slash-command-parity_0-index.md`; "
         "\"Output changes\" added by its SP21.",
     ),
     (
@@ -1222,7 +1222,7 @@ The spec lives on `main` too. This edit travels with the branch and lands on `ma
 - [ ] **Step 3: Check the amendment matches the code**
 
 ```bash
-grep -n "^## Output changes\|^1\. \`Tip\|^11\. \|no command's result changes\|no plan yet" $WT/docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md
+grep -n "^## Output changes\|^1\. \`Tip\|^11\. \|no command's result changes\|no plan yet" $WT/docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md
 git -C $WT grep -n "MISSING_TICKER = \|^HELP_DESCRIPTION = \|STRATEGY_NAMES = (" -- swingbot/commands/
 ```
 
@@ -1241,7 +1241,7 @@ Expected: every run `0 failed`, `0 xfailed`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git -C $WT add swingbot/commands/reply.py docs/superpowers/specs/2026-10-09-v153-slash-command-parity-design.md
+git -C $WT add swingbot/commands/reply.py docs/superpowers/specs/implemented/2026-10-09-v153-slash-command-parity-design.md
 git -C $WT commit -m "chore(v153): SP21 pin PREFIX_TIP_UNTIL to deploy day + 90; spec lists every output change"
 ```
 
