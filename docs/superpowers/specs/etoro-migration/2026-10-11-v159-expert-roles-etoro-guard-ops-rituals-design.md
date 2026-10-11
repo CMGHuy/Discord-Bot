@@ -2,7 +2,7 @@
 
 **Version:** ui 1.22.1 · bot 2.3.1 (at writing)
 **Bump:** bot patch + ui patch (new eToro settings and a guard module the bot imports; the admin Settings page gains the eToro fields and a confirm step on the real-money unlock; no alert or embed changes)
-**Edge:** none (integrity). It protects against the most expensive mistake the roadmap allows: a real-money order placed before stage 3, or any order that bypasses the risk caps. It also closes review blind spots. It adds no strategy, threshold or measurement.
+**Edge:** none (integrity). It protects against the most expensive mistake the roadmap allows: a real-money order placed before stage 3, or by any session or code path that skips the guard. It also closes review blind spots. It adds no strategy, threshold or measurement.
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, risk-manager, financial-advisor
 **Status:** draft
@@ -33,14 +33,14 @@ Each is a `.claude/skills/<role>/SKILL.md` in the v145 shape (`## Lens`, `## Che
 
 | Role | Reviewer model | Lens | Out of scope (owner) |
 |---|---|---|---|
-| `execution-specialist` | opus (closest seat to real money) | Order types; limit vs market for resting pre-open orders; stop loss and take profit attached at order time; drift between paper and demo fills; partial fills; idempotent submit and retry; reconciling the journal against the broker book; instrument type (CFD vs real share: leverage, margin, overnight financing, a different gap and stop-fill model); demo-only enforcement and `validate_order` (part B) | cap values and sizing policy (`risk-manager`); setup tradeability (`veteran-trader`) |
+| `execution-specialist` | opus (closest seat to real money) | Order types; limit vs market for resting pre-open orders; stop loss and take profit attached at order time; drift between paper and demo fills; partial fills; idempotent submit and retry; reconciling the journal against the broker book; instrument type (CFD vs real share: leverage, margin, overnight financing, a different gap and stop-fill model); demo-only enforcement (`assert_demo`, part B) and v160's pre-open checks | cap values and sizing policy (`risk-manager`); setup tradeability (`veteran-trader`) |
 | `compliance-reviewer` | opus (legal nuance across three regimes) | Regulatory wording and disclosures in content published on bomeo-capital.com and in Discord, checked against EU MAR Art. 20 / MiFID II (investment-recommendation disclosure; whether a public plan with entry, stop and size reads as a **personalised recommendation**), UK FCA financial promotions (fair, clear, not misleading; risk warnings) and US SEC/FINRA (publisher's exemption; hypothetical- and past-performance presentation). Checks against the audience and disclosure text named in `docs/claude/compliance-publication.md` (created by this plan, see below). Paper, demo and real results always kept and labelled apart. Educational only: a doubtful case is a `needs counsel` finding, never a ruling | suitability, cost and tax presentation, alert cadence (`financial-advisor`) |
 | `ux-designer` | sonnet | Admin SPA and Discord embeds: visual hierarchy, density, the action an alert asks for, mobile/PWA, accessibility, light and dark themes. How risk and performance are shown: dollar risk and drawdown next to R, total open risk against `PORTFOLIO_HEAT_CAP_PCT`, a badge-tier and staleness cue, ExpR before win rate (`edge-priorities.md`), and a sizing line that does not read as a recommendation. Judges `ui-verifier` screenshots when they're supplied. Wording questions go to `compliance-reviewer` | embed code correctness (`alert-surface`, `senior-engineer`); regulatory wording (`compliance-reviewer`) |
 | `sre` | sonnet | Hetzner VM: soak criteria and razor-edge clauses, data-provider failover (yfinance ↔ Alpaca), cron and scheduling, logs and alerting, backup and PITR, capacity | cross-package design (`staff-engineer`); cache and backtest numerics (`quant-engineer`) |
 
 **Red flags that make a finding `BLOCKING`, at least:**
 - `execution-specialist`:
-  - any order path that skips `assert_demo` or `validate_order`;
+  - any order path that skips `assert_demo` or v160's sizing and pre-open checks;
   - order submit without an idempotency key or a journal entry;
   - a market order resting overnight;
   - a position that can exist without an attached stop;
@@ -81,7 +81,7 @@ Each is a `.claude/skills/<role>/SKILL.md` in the v145 shape (`## Lens`, `## Che
 
 The seat checks published content against this doc. It never writes the final disclosure.
 
-### B. eToro demo-only guard, order risk guard and reconciler
+### B. eToro demo-only guard and reconciler
 
 Stage numbering follows `docs/claude/etoro-roadmap.md`:
 1. keys configured (done);
@@ -109,40 +109,30 @@ Matchers:
 
 Error policy: a call the rule can't parse is allowed, as with the existing rules. An explicit real-account marker is always denied. A deny prints the reason and points at `etoro-roadmap.md`.
 
-**B2. Code guards.** New module `swingbot/core/planning/broker_guard.py`. `core/planning/` already owns plan construction and sizing (`architecture.md:20`), and an order is a plan made executable, so the future eToro client imports the guard from the package whose numbers it checks. `architecture.md` gains the module in its `core/planning/` line.
+**B2. Code guard.** New package `swingbot/core/broker/`, created by this plan with one module, `guard.py`. v160 (eToro demo mirror) builds the rest of `broker/` (client, sizing, pre-open checks) on top of it. A broker-account guard doesn't fit `core/infra/` ("JSON, locks and delivery channels", `architecture.md:25-27`), and the eToro client imports it from its own package. `architecture.md` § Module map gains `core/broker/`, and the package count in `CLAUDE.md` is corrected in the same commit.
 
 ```python
 class RealAccountBlocked(RuntimeError): ...
-class OrderRejected(ValueError):
-    cap: str  # which check refused it, e.g. "dollar_risk", "portfolio_heat"
 
 def assert_demo(account: str) -> None:
     """Raise RealAccountBlocked unless account == "demo", or real trading is
     explicitly unlocked (ETORO_ALLOW_REAL=true AND ETORO_REAL_SIGNOFF set to
     an ISO date no later than today, Europe/Berlin)."""
-
-def validate_order(order: BrokerOrder, plan: TradePlanV2, book: OpenBook) -> BrokerOrder:
-    """Return the order with its size capped, or raise OrderRejected naming the cap."""
 ```
 
-`TradePlanV2` already exists (`architecture.md` § Plan Engine v2). `BrokerOrder` (symbol, account, side, units, entry, stop, target, order type, rest-overnight flag, idempotency key) and `OpenBook` (open broker positions with their stops, plus sizing equity) are new frozen dataclasses in the same module. They're broker-agnostic, and the future eToro client maps to and from them.
+**Order-risk checks are v160's, not this plan's** (partner decision, 2026-10-11). The panel's risk findings are applied there, so there is one check per cap and no duplicate code path:
+- 2% dollar risk on `ETORO_ACCOUNT_SIZE`: `broker/sizing.py`.
+- `MAX_STOP_LOSS_PCT`, portfolio heat and correlated heat at send time: `broker/pre_open.py`.
+- The partner's **per-trade invested-amount cap** (`ETORO_MAX_TRADE_USD`, e.g. $100 while the bot plans with $1,000). It is USD because eToro's `amount` is USD-only. Units are scaled down so notional stays under the cap, with entry, stop and target unchanged.
+- Stop attached at order time, and **stops only tighten**.
 
-`validate_order` is the mechanical form of the risk caps for any order leaving the bot. A prose checklist step is not enforcement. It rejects or caps, in this order:
-1. **Stop and target attached at order time.** An order without a stop is rejected. A market order flagged to rest overnight is rejected.
-2. **Size is the engine's size.** Units come from the plan's own computed values (`edge/sizing.py` via the plan), never re-derived. Then the **eToro per-trade cap** applies: `ETORO_MAX_TRADE_EUR` is the most money invested in one position (e.g. €100 while the bot plans with €1,000). If the plan's notional exceeds it, units are scaled down so notional ≤ the cap. Entry, stop and target stay the same, so R per trade stays comparable to the paper ledger. The journal records plan notional, capped notional and the scale factor.
-3. **2% dollar risk:** `(entry − stop) × units` must not exceed 2% of the sizing equity. The sizing equity is the one the plan used; the journal records it.
-4. **`MAX_STOP_LOSS_PCT`** (`config.py:182`): the stop distance is within the cap.
-5. **Portfolio heat** (`PORTFOLIO_HEAT_CAP_PCT`, `config.py:518`, `edge/heat.py`) and **correlated heat** (`CORRELATED_HEAT_CAP_PCT`, `config.py:524`, `edge/correlation.py`), computed over the broker's open book plus this order. Once orders leave through MCP or a script, the alert path's gates no longer sit between plan and order, so they run again here.
-6. **Stops only tighten.** A modify request that moves a stop away from price, or removes it, raises `OrderRejected(cap="stop_widen")`.
-
-Every rejection is journalled with its `cap`, in the same shape as the alert path's `plan rejected (` lines, so a refused order is diagnosable later.
+This plan records those additions in v160's spec (§ Panel review below).
 
 **Settings.** New `Field`s in `swingbot/config.py`, section "eToro Paper Trading":
-- `ETORO_MAX_TRADE_EUR`: float, default `100`. Most money invested per eToro position.
 - `ETORO_ALLOW_REAL`: bool, default false.
 - `ETORO_REAL_SIGNOFF`: ISO date, default empty.
 
-Help text: real money is stage 3 only, see `etoro-roadmap.md`. The sign-off token is there so stage 3 can never be unlocked by flipping one boolean. `assert_demo` reads all three from the hot-reloaded `swingbot.config` settings, never `os.environ`. A test proves a SIGHUP reload flips the result.
+Help text: real money is stage 3 only, see `etoro-roadmap.md`. The sign-off token is there so stage 3 can never be unlocked by flipping one boolean. `assert_demo` reads both from the hot-reloaded `swingbot.config` settings, never `os.environ`. A test proves a SIGHUP reload flips the result.
 
 **Admin UI unlock path (the partner's choice).** The partner unlocks real money through the admin Settings page:
 - `ETORO_ALLOW_REAL` and `ETORO_REAL_SIGNOFF` are editable there.
@@ -153,18 +143,17 @@ Help text: real money is stage 3 only, see `etoro-roadmap.md`. The sign-off toke
 This is why the release is a `ui patch` as well.
 
 **Tests:**
-- `tests/infra/test_config_etoro.py` (the existing pin for this section) gains the three fields: section, defaults, types.
-- `tests/test_broker_guard.py`:
+- `tests/infra/test_config_etoro.py` (the existing pin for this section) gains the two fields: section, defaults, types.
+- `tests/broker/test_guard.py`:
   - `assert_demo` cases: demo, real-locked, flag without sign-off, sign-off without flag, future-dated sign-off, unlocked, SIGHUP flip;
-  - `validate_order` cases: missing stop, stop wider than `MAX_STOP_LOSS_PCT`, dollar risk over 2%, portfolio heat over the cap, correlated heat over the cap, notional above `ETORO_MAX_TRADE_EUR` scaled down with R unchanged, size different from the plan's, stop widen, stop removal, and a valid order passed through;
-  - an AST scan of `swingbot/`, `bot.py`, `admin_ui.py` and `scripts/`. It fails when a module references an eToro host, imports an eToro client, or reads `ETORO_USER_KEY`/`ETORO_API_KEY` without also calling both `assert_demo` and `validate_order`. Exempt: `broker_guard.py` and `config.py`'s field declarations. The scan passes trivially today and guards the first eToro client to land.
+  - an AST scan of `swingbot/`, `bot.py`, `admin_ui.py` and `scripts/`. It fails when a module references an eToro host, imports an eToro client, or reads `ETORO_USER_KEY`/`ETORO_API_KEY` without also calling `assert_demo`. Exempt: `broker/guard.py` and `config.py`'s field declarations. The scan passes trivially today and guards v160's client.
 - An admin API test that `save_settings` rejects `ETORO_ALLOW_REAL=true` without a sign-off date, and an `env_set.py` test that it refuses both keys.
 
 **B3. `order-safety` skill.** `.claude/skills/order-safety/SKILL.md`. Claude can invoke it itself. It fires before any eToro operation, from MCP, script or code. Checklist:
 1. Demo account only, and say so.
 2. **One prepare-trade → place-trade per explicit partner approval** (`etoro-roadmap.md` § Rules). Never batch, never place on an earlier approval.
 3. A read call first: portfolio, then instrument lookup by symbol. Record the **instrument type (CFD or real share)**, leverage and financing.
-4. Build the order from the plan's own numbers and run it through `validate_order`. A by-hand check of the 2% rule is never a substitute. Stop loss and take profit are attached at order time.
+4. Build the order through v160's `broker/sizing.py` and `broker/pre_open.py`. A by-hand check of the 2% rule is never a substitute. Stop loss and take profit are attached at order time.
 5. Send with an idempotency key.
 6. Write a journal entry for every order sent or rejected. A rejection records the `cap` that refused it.
 7. Never retry a write blind; read the state first.
@@ -177,7 +166,7 @@ It loads `etoro-public-api-operations` for the API itself. It's out of scope for
 - Size or stop mismatch.
 - **Any open position without an attached stop.**
 - **A stop moved away from price** since entry.
-- Dollar risk recomputed from the broker's actual fill and stop, flagged if above 2% of the sizing equity or above the `ETORO_MAX_TRADE_EUR` notional.
+- Dollar risk recomputed from the broker's actual fill and stop, flagged if above 2% of the sizing equity or above the `ETORO_MAX_TRADE_USD` notional.
 - **Broker-book portfolio heat against the scanner's heat.**
 - Fill-price drift against the paper fill, in R.
 - A gap through the stop, reported as the realised loss in R it is.
@@ -235,7 +224,7 @@ Every addition ships its mirror in the same commit:
 - the Codex matcher (B1, its own tool names) into `.codex/hooks.json`.
 
 `tests/hooks/test_codex_mirror.py` must stay green. `CLAUDE.md` changes are kept small, to respect the 200-line cap:
-- the eToro section: "Stage 1 (near)" / "Stage 2 (far)" become "Stage 2 (near)" / "Stage 3 (far)" to match the roadmap, plus one line: "`assert_demo` + `validate_order` guard every eToro order; `order-safety` fires first";
+- the eToro section: "Stage 1 (near)" / "Stage 2 (far)" become "Stage 2 (near)" / "Stage 3 (far)" to match the roadmap, plus one line: "`broker/guard.py:assert_demo` guards every eToro call; `order-safety` fires first";
 - one reference-table row for `compliance-publication.md`.
 
 ## Testing
@@ -247,7 +236,7 @@ Every addition ships its mirror in the same commit:
   - `_rule_soak_prereg_locked`;
   - one PowerShell deny case for each Bash command rule now registered under `PowerShell`.
 - `tests/hooks/test_codex_mirror.py`: both matchers include the MCP pattern.
-- `tests/test_broker_guard.py`, `tests/infra/test_config_etoro.py`, the `save_settings` and `env_set.py` tests: as in B2.
+- `tests/broker/test_guard.py`, `tests/infra/test_config_etoro.py`, the `save_settings` and `env_set.py` tests: as in B2.
 - `tests/hooks/test_spec_panel_header.py`: `Places-orders: yes` requires `execution-specialist`.
 - Complexity: every new or changed function stays under 15 (`radon cc -s -n C`).
 - One full-suite run, as the plan's final task.
@@ -256,12 +245,12 @@ Every addition ships its mirror in the same commit:
 
 Plan order: A (roles, panel table), then B1 → B2 → B3 → B4, then C1–C5. C has no dependency on B, so C can run in parallel with B once A is done.
 
-The pre-close-out `/panel` on this plan's diff runs `execution-specialist, compliance-reviewer, risk-manager`. The new seats review the guard and the publication wording they were created for, and `risk-manager` re-checks `validate_order` against its blocking findings below. `/close-out` applies `Bump: bot patch + ui patch`.
+The pre-close-out `/panel` on this plan's diff runs `execution-specialist, compliance-reviewer, risk-manager`. The new seats review the guard and the publication wording they were created for, and `risk-manager` re-checks that its blocking findings landed in v160's spec. `/close-out` applies `Bump: bot patch + ui patch`.
 
 ## Risks
 
 - **Registering the Bash rules under PowerShell denies a command that used to pass.** That is intended: the backup-branch and pre-registration guards were silently missing on the main dev shell. Mitigation: one test per rule, and the existing allow-on-parse-failure policy.
-- **`validate_order`'s heat check disagrees with the scanner's** because the broker book and the scanner's book differ. Mitigation: it uses the same `edge/heat.py` and `edge/correlation.py` functions, and the reconciler reports the difference.
+- **v160 lands before this plan's B2.** v160 depends on `broker/guard.py`, so its eToro-code tasks wait for this plan's B2 merge (v160 § Parallelisation, Group 2).
 - **The admin UI unlock is one form away from real money.** That was the partner's choice. Mitigation: the confirm step, the server-side sign-off check in `save_settings`, `env_set.py` refusing the keys, and the hook keeping Claude and Codex out of it.
 - **The compliance seat is read as legal advice.** Mitigation: the lens says "educational only" and the `needs counsel` finding type; it never rules.
 - **The AST scan for eToro references is evaded by dynamic URLs.** Accepted. The hook, the `order-safety` skill and the `execution-specialist` seat are the other layers. The scan catches the ordinary case: someone writes a client and forgets the guard.
@@ -275,19 +264,19 @@ This plan adds these to `docs/claude/etoro-roadmap.md` as open items. Answering 
 
 ## Panel review
 
-Spec review on 2026-10-11 over `8cd599bc`, seats run one at a time: staff-engineer (opus), risk-manager (sonnet), financial-advisor (sonnet). The partner decided two points during the review: the admin UI is the unlock path, and eToro uses a per-trade invested-amount cap (`ETORO_MAX_TRADE_EUR`).
+Spec review on 2026-10-11 over `8cd599bc`, seats run one at a time: staff-engineer (opus), risk-manager (sonnet), financial-advisor (sonnet). The partner decided two points during the review: the admin UI is the unlock path, and eToro uses a per-trade invested-amount cap. On the move to `etoro-migration/` the partner also assigned every order-risk check to v160, so the risk findings below are applied **in v160's spec**, not here.
 
-- risk-manager B1: order-safety checks only per-trade 2%, not portfolio or correlated heat or `MAX_STOP_LOSS_PCT` -- applied (`validate_order` steps 3-5)
-- risk-manager B2: no code-level sizing guard, the 2% check was prose -- applied (`validate_order`, sized from the plan, plus tests)
-- risk-manager B3: no stop-at-order-time or stops-only-tighten rule -- applied (`validate_order` steps 1 and 6, red flags, reconciler)
-- risk-manager B4: demo sizing basis undefined -- applied (partner: `ETORO_MAX_TRADE_EUR` invested-amount cap, units scaled down with R unchanged, basis journalled)
+- risk-manager B1: order-safety checks only per-trade 2%, not portfolio or correlated heat or `MAX_STOP_LOSS_PCT` -- applied in v160 (`pre_open.py` stop, heat and correlated checks)
+- risk-manager B2: no code-level sizing guard, the 2% check was prose -- applied in v160 (`sizing.py`, clamped through `capped_planned_loss_pct`, tested)
+- risk-manager B3: no stop-at-order-time or stops-only-tighten rule -- applied: red flags and reconciler here; stop-at-order-time and stops-only-tighten added to v160's pre-open checks
+- risk-manager B4: demo sizing basis undefined -- applied in v160 (fixed `ETORO_ACCOUNT_SIZE`, plus the partner's `ETORO_MAX_TRADE_USD` invested-amount cap; USD because eToro amounts are USD-only)
 - financial-advisor B1: presentation test was only "labelled paper/demo" -- applied (compliance red flags: pre-cost or pre-tax, ExpR first, badge tier, staleness)
 - financial-advisor B2: no rule keeping paper, demo and real results apart -- applied (compliance lens, red flag, `compliance-publication.md`)
 - staff-engineer A1: new fields appear in admin Settings and are editable there, which the hook never sees -- applied (partner chose the UI as the unlock path; confirm step, server-side sign-off check, `env_set.py` refuses the keys; Bump gains `ui patch`)
 - staff-engineer A2: `evaluate()` exact-name lookup misses MCP tools; swallowed exceptions -- applied (prefix table, never-raises tests)
 - staff-engineer A3: PowerShell skips every Bash command rule, including the backup-branch guard -- applied (Bash command rules registered under PowerShell)
 - staff-engineer A4: Codex matcher is separate; `apply_patch` path; mirror test ignores matchers -- applied
-- staff-engineer A5: `infra` is the wrong home for the guard -- applied (`core/planning/broker_guard.py`, architecture.md updated)
+- staff-engineer A5: `infra` is the wrong home for the guard -- applied (`core/broker/guard.py`, the package v160 extends; architecture.md updated)
 - staff-engineer A6: flag source and timezone unstated -- applied (hot-reloaded settings, SIGHUP test, Europe/Berlin)
 - staff-engineer A7: `expert-reviewer.md` hardcodes nine roles -- applied
 - staff-engineer A8: stage numbering differs from the roadmap; order-safety misses one-approval-per-trade -- applied (real money = stage 3, `CLAUDE.md` corrected, checklist step 2)
@@ -296,8 +285,8 @@ Spec review on 2026-10-11 over `8cd599bc`, seats run one at a time: staff-engine
 - staff-engineer A11: Bump level -- applied (`bot patch + ui patch`)
 - risk-manager A5 / financial-advisor A6: CFD leverage and its effect on demo evidence -- applied to the execution lens and order-safety step 3; the evidence-gate question is recorded as open roadmap item 1
 - risk-manager A6: reconciler contract too thin -- applied
-- risk-manager A7: rejection reason not journalled -- applied (`OrderRejected.cap`)
-- risk-manager A8: no test ties order params to the plan -- applied (`test_broker_guard.py`)
+- risk-manager A7: rejection reason not journalled -- applied in v160 (skip reasons journalled)
+- risk-manager A8: no test ties order params to the plan -- applied in v160 (`tests/broker/test_pre_open.py`, `test_sizing.py`)
 - financial-advisor A3: compliance / financial-advisor boundary; personalised-recommendation test -- applied
 - financial-advisor A4: no audience or disclosure artefact -- applied (`compliance-publication.md` with draft text for partner approval)
 - financial-advisor A5: ux lens lacks risk and performance display -- applied

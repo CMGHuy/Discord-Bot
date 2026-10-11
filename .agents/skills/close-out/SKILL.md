@@ -50,7 +50,11 @@ ran, otherwise into Step 6's move commit.
 
 `git mv` the plan — and any spec it was built from, if nothing else live
 still builds from it — into `implemented/` for work that reached `main`, or
-`no-lift/` for a plan whose code deliberately did not.
+`no-lift/` for a plan whose code deliberately did not. A doc that lives in a
+program folder (`etoro-migration/`) moves into **that folder's**
+`implemented/` or `no-lift/` (`plans/etoro-migration/implemented/`), never the
+top-level ones, so the program stays together (`document-lifecycle.md`
+§ Program folders).
 
 ## Step 7 — Remove the worktree, unless this closed to `no-lift/`
 

@@ -99,8 +99,8 @@ its spec** (`**Screen:**` header from v141). Detail: `edge-priorities.md`,
 ## Current status is not tracked here
 
 The `SessionStart` hook prints it (plan, next task, HEAD, worktrees, live
-backtests); live plans are whatever sits at the top of
-`docs/superpowers/plans/`. **Don't trust the hook's NEXT id blind** — verify
+backtests); live plans sit at the top of `plans/` or in a program folder
+(`plans/etoro-migration/`). **Don't trust the hook's NEXT id blind** — verify
 with `grep -n "^### Task" <plan>`. Tooling (`/task-brief`, `/gate`,
 `guardrails.py`): `skills-tools.md`; detail: `document-lifecycle.md`.
 

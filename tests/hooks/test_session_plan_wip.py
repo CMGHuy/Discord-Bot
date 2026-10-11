@@ -66,3 +66,23 @@ def test_finished_and_legacy_plans_are_silent(tmp_path):
     (tmp_path / "2026-10-01-v800-old.md").write_text(
         "# old plan, no ledger\n\n### Task V800-1: a\n", encoding="utf-8")
     assert _run(tmp_path) == []
+
+
+def test_program_folder_plan_is_flagged(tmp_path):
+    prog = tmp_path / "etoro-migration"
+    prog.mkdir()
+    (prog / "2026-10-09-v900-demo.md").write_text(
+        LEDGER + "\n### Task V900-1: first\n", encoding="utf-8")
+    lines = _run(tmp_path)
+    assert "2026-10-09-v900-demo -- 1/3 tasks written" in lines[0]
+
+
+def test_closed_folders_and_closed_program_plans_are_skipped(tmp_path):
+    for sub in ("implemented", "no-lift"):
+        (tmp_path / sub).mkdir()
+        (tmp_path / sub / f"2026-10-09-v90{len(sub)}-old.md").write_text(
+            LEDGER, encoding="utf-8")
+    done = tmp_path / "etoro-migration" / "implemented"
+    done.mkdir(parents=True)
+    (done / "2026-10-09-v901-done.md").write_text(LEDGER, encoding="utf-8")
+    assert _run(tmp_path) == []
