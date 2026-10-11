@@ -69,7 +69,9 @@ Angular SPA served by Flask's `/api/v1/*` API.
 **eToro roadmap:** next, trade plans may be issued to an eToro **demo** account
 via the Public API alongside bomeo-capital.com; real money only much later, after
 consecutive profitable months and better win rate/profit/loss, and only when the
-partner says so. Until then demo only, never `account: real`. Keys are
+partner says so. eToro stays the broker for both stages (decided 2026-10-11;
+IBKR, Trading 212, Saxo, Alpaca compared and not chosen). Until then demo only,
+never `account: real`. Keys are
 `ETORO_USER_KEY` / `ETORO_API_KEY` in `.env`, unused so far. Detail:
 `docs/claude/etoro-roadmap.md`.
 

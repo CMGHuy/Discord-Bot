@@ -22,3 +22,11 @@ Rules until stage 3 is explicitly unlocked:
   demo account is an additional mirror, not a replacement for it.
 - Pooled expectancy / win-rate gates (`backtest-methodology.md`) still decide
   whether a strategy's plans are worth issuing at all.
+
+Broker choice (decided 2026-10-11): **eToro stays the broker for both stages.**
+IBKR (cheapest per-share, native bracket/OCO orders), Trading 212 (beta API, no
+commission), Saxo (OpenAPI, pricier) and Alpaca (EU access via partners only)
+were compared and not chosen. Don't reopen the broker question unprompted.
+Open items for the stage-2 spec: check whether eToro EU fills US-listed ETFs as
+real shares or only as CFDs (EU PRIIPs/KID rule), and whether stop loss and
+take profit attach at order time so a resting plan is never unprotected.
