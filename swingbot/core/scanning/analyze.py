@@ -612,6 +612,17 @@ def scenarios_for_direction(scenarios, allowed_directions):
     return [s for s in scenarios if s.direction in allowed_directions]
 
 
+def _apply_headroom(scenarios, supports, resistances, stats, ticker, horizon_key) -> list:
+    """v135: drop confluence scenarios whose path to target 1 is blocked, counted in the
+    funnel. It reads the very lists the scenarios were built from: no map build, no frame."""
+    kept, rejected = gates_mod.filter_headroom(scenarios, supports, resistances)
+    stats["failed_counts"]["headroom"] += len(rejected)
+    for scenario in rejected:
+        log.debug("%s (%s, %s): rejected %s", ticker, horizon_key,
+                  scenario.direction, gates_mod.HEADROOM_REASON)
+    return kept
+
+
 def _apply_pullback_dryup(scenarios, df, stats, ticker, horizon_key, now=None) -> list:
     """Filter confluence candidates against completed daily bars and count rejections."""
     from .strategy_pass import completed_frame
@@ -699,7 +710,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
         "mtf_misaligned": 0,
         "failed_counts": {
             "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
-            "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0, "opex_close_window": 0, "pullback_volume": 0,
+            "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0, "opex_close_window": 0, "pullback_volume": 0, "headroom": 0,
         },
         "conf_level_counts": {},   # {1..5: number of scenarios scored at that level}
         "data_quality_failed": False,   # E47: this ticker tripped the E16 data-quality gate
@@ -886,6 +897,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                        "sides, or the reward/stop/risk-reward requirements weren't met)", ticker, horizon_key)
 
         scenarios = _apply_pullback_dryup(scenarios, df, stats, ticker, horizon_key)
+        scenarios = _apply_headroom(scenarios, supports, resistances, stats, ticker, horizon_key)
         for scenario in scenarios_for_direction(scenarios, allowed_directions):
             stats["scenarios_found"] += 1
             if scenario.tight_stop:

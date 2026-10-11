@@ -13,7 +13,10 @@ from swingbot.core.planning.params import stamp_badge, stamp_cohort, stamp_entry
 from swingbot.core.planning.stop_scope import risk_sizing_ok
 from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.edge.rs_gate import rs_verdict
-from swingbot.core.edge.gates import PULLBACK_VOLUME_REASON, pullback_dryup_blocks
+from swingbot.core.edge.gates import (HEADROOM_REASON, PULLBACK_VOLUME_REASON, headroom_active,
+                                      headroom_blocks_plan, pullback_dryup_blocks)
+from swingbot.core.market.levels import build_level_map
+from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.scanning.alert_embeds import (build_strategy_alert_embed,
                                                  build_strategy_simple_embed)
 
@@ -90,6 +93,7 @@ class PassResult:
     compression_reasons_by_mode: Counter = field(default_factory=Counter)
     compression_shadow: list = field(default_factory=list)  # audit records of the masked raw signal
     pullback_volume: int = 0
+    headroom: int = 0
 
 
 @dataclass
@@ -228,6 +232,19 @@ def _dryup_blocked(frame, *, ticker, strategy, direction, horizon) -> bool:
     return True
 
 
+def _headroom_blocked(plan, frame, *, ticker, strategy, horizon) -> bool:
+    """v135: veto a built plan whose path to TP1 is blocked. The level map is built here, on
+    the pass's completed daily frame, and only while the strategy scope is active."""
+    if not headroom_active("strategy", strategy):
+        return False
+    level_map = build_level_map(frame, HORIZONS[horizon], float(frame["Close"].iloc[-1]))
+    if not headroom_blocks_plan(plan, level_map, strategy=strategy):
+        return False
+    log.debug("%s (%s, %s, %s): rejected %s", ticker, horizon, strategy,
+              plan.direction, HEADROOM_REASON)
+    return True
+
+
 def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, horizon,
                  bar_date, regime, deps: _PassDeps) -> None:
     """Store and, when eligible, alert one fired strategy signal."""
@@ -250,6 +267,9 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
         asof=deps.asof_of(ticker) if deps.asof_of else None)
     if plan is None:
         _count_plan_none(result, frame, strategy, horizon, stamp)
+        return
+    if _headroom_blocked(plan, frame, ticker=ticker, strategy=strategy, horizon=horizon):
+        result.headroom += 1
         return
     plan.entry_context = {**(plan.entry_context or {}), **stamp}
     if not risk_sizing_ok(plan):
