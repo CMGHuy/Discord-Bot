@@ -14,7 +14,8 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes and at close-out (V135-17).
+Code tasks V135-1..V135-11 done and merged to `main` (2026-10-11, head `dff3908`); the gate ships off. **Resume at V135-12** (pre-registration, then V135-13/14 measurement) on a machine with `data/backtest_cache` and `scripts/ops/ssh-hetzner.sh`; V135-15..17 follow. Cloud sandbox had no cache and no network for yfinance. Full suite not yet run as V135-16; on the 3.13 sandbox 7 tests failed identically on the base commit (`test_short_lane_admission` x3, `test_short_lane_scan`, `test_testrun_lint_gate`, `test_pullback_dryup_witness` ~1e-14 float, `test_v129_flag_off_golden`). V135-5 fixed the plan's `_map_builds` window (4w built no maps; now 3m).
+Update this block when a phase closes and at close-out (V135-17).
 
 ## Where to work
 
