@@ -1464,8 +1464,8 @@ session, so CPU saved is wall time saved.
 - **Soak attempt 2 -- superseded by T13b at 15:26:27 UTC, never judged.**
   298 scans to then: (a) p95 4.69 s FAIL; (b) 1.48 % PASS; (c) 0.01299 PASS.
   Also mixed: v118 went live 14:39 UTC the same day (another session).
-- [ ] **Soak attempt 3 = 2026-10-05 .. 2026-10-09**, T13 Step 6 unchanged;
-  cron installed with that window; verdict = FINAL line of the cron log.
+- [ ] **Soak attempt 3 (2026-10-05 .. 10-09): FINAL FAIL** -- (a) p95 3.37 s, (c) 0.01302;
+  diagnosis and next steps: `docs/superpowers/results/2026-10-11-v106-soak-attempt-3.md`.
 
 ### Task T14: Close-out
 
