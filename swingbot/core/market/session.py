@@ -193,6 +193,21 @@ class SessionCalendar:
         a, b = self.position_on_or_before(asof), self.position_on_or_after(target)
         return None if a is None or b is None else b - a
 
+    def session_after(self, d: dt.date, n: int) -> dt.date | None:
+        """The session ``n`` sessions after the session on or before ``d``.
+
+        ``n = 0`` is that session itself. None when ``n`` is negative, when
+        ``d`` lies outside the calendar, or when the result runs past it.
+        v151: a plan's expiry day and time-exit day are bar counts from a
+        session, read here as dates.
+        """
+        if n < 0 or d < self.first or d > self.last:
+            return None
+        i = self.position_on_or_before(d)
+        if i is None or i + n >= len(self._sessions):
+            return None
+        return self._sessions[i + n]
+
 
 EARLY_CLOSE = dt.time(13, 0)
 
