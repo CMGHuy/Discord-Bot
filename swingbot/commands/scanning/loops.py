@@ -19,7 +19,7 @@ from swingbot.core.infra import pitr_watch
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
-from . import notices, outlook, presence, recap, runstate
+from . import cooldown, notices, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
@@ -115,6 +115,32 @@ async def _run_scan_posting_partial(channel, **scan_kwargs) -> list:
         raise
 
 
+async def _post_cooldown_note(held: list) -> None:
+    """v152 D3: one silent line on the ops channel (else the alerts channel)
+    when the scheduled scan held >= 1 alert -- the held count stays visible
+    with the digest off. Guarded like notices.send_guarded: any failure is
+    one WARNING and never raises into the scan."""
+    if not held:
+        return
+    try:
+        note = cooldown.held_note(held)
+        channel = _ops_channel()
+        if channel is not None:
+            await channel.send(content=note, silent=True)
+    except Exception:
+        log.warning("cooldown: could not post the held-alerts note", exc_info=True)
+
+
+async def _prune_alert_posts() -> None:
+    """v152 D3: the nightly alert_posts trim (keeps max(window, 7 days));
+    a failure is logged, never raised."""
+    try:
+        removed = await asyncio.to_thread(cooldown.prune)
+        log.info("daily_recap: pruned %d alert_posts row(s)", removed)
+    except Exception:
+        log.warning("daily_recap: could not prune alert_posts", exc_info=True)
+
+
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
 async def session_scan():
     # The entire tick's real work is wrapped in a try/except (see below) so
@@ -196,8 +222,11 @@ async def _session_scan_tick():
     progress = scan_engine.ScanProgress()
     alerts = await _run_scan_posting_partial(
         channel, require_confirmation=True, bot=bot, progress=progress)
-    await send_then_short(channel, alerts, bot=bot, require_confirmation=True,
-                          route_by_confidence=True)
+    # v152 D3: the only caller that applies the per-symbol cooldown -- the
+    # admin-UI scan, !check and the store-write-halt re-post never do.
+    held = await send_then_short(channel, alerts, bot=bot, require_confirmation=True,
+                                 route_by_confidence=True, apply_cooldown=True)
+    await _post_cooldown_note(held)
 
     from swingbot.core.charts.cache import purge
     await asyncio.to_thread(purge)
@@ -691,6 +720,7 @@ async def daily_recap():
         await recap._post_retrospective()
     except Exception:
         log.exception("daily_recap: failed to post retrospective")
+    await _prune_alert_posts()
 
 
 
