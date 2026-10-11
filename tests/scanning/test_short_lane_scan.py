@@ -254,8 +254,9 @@ def _record_order(monkeypatch):
     from swingbot.commands.scanning import alerts as alerts_mod
     events = []
 
-    async def fake_send(dest, alerts, route_by_confidence=False):
+    async def fake_send(dest, alerts, route_by_confidence=False, *, apply_cooldown=False):
         events.append(("send", list(alerts)))
+        return []
 
     async def fake_short(**kw):
         events.append(("short_fetch", kw["require_confirmation"]))

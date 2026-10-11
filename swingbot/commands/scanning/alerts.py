@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 
@@ -13,8 +14,9 @@ from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
 from swingbot.core.analytics.rank import rank_plans
 from swingbot.core.market.session import market_today
+from . import cooldown
 
-log = logging.getLogger(__name__)
+log =logging.getLogger(__name__)
 
 def _ordered_alerts(alerts: list, today=None) -> list:
     """Splits `alerts` (each a (embed, chart_path, plan_or_none) tuple)
@@ -50,6 +52,11 @@ def digest_payload(plans: list, today, max_n: int) -> list:
     return top_plans(validated_only, max_n, today=today)
 
 
+def _held_line(held: int) -> str:
+    """v152 D3: the digest's held-alert suffix; empty when nothing was held."""
+    return f" · {held} alert(s) held by the symbol cooldown today" if held > 0 else ""
+
+
 async def _post_daily_digest(channel) -> None:
     """Posts the curated 'Top plans today' digest right after the
     trading session closes for the day (see _check_session_transition's
@@ -65,15 +72,16 @@ async def _post_daily_digest(channel) -> None:
 
     plans = PlanStore().all()
     top = digest_payload(plans, market_today(), config.DIGEST_MAX_PLANS)
+    held_line = _held_line(await asyncio.to_thread(cooldown.held_today))
     if not top:
         await channel.send(content=kinds.content_line(
-            Kind.DIGEST, "", detail="no VALIDATED plans qualified today"))
+            Kind.DIGEST, "", detail="no VALIDATED plans qualified today") + held_line)
         return
 
     # v110 §4: one registry content line for the whole batch, on its first
     # embed -- it replaces the separate "📌 Top plans today" header message.
     header = kinds.content_line(
-        Kind.DIGEST, "", detail=f"{len(top)} VALIDATED plan(s), ranked by follow score")
+        Kind.DIGEST, "", detail=f"{len(top)} VALIDATED plan(s), ranked by follow score") + held_line
     for index, plan in enumerate(top):
         item = _fake_item_from_plan(plan)
         embed = build_embed(item, "", {"closed": 0}, None, None, layout="compact")
@@ -202,9 +210,12 @@ async def _mirror(simple_channel, simple_embed, plan) -> bool:
     return True
 
 
-async def _post_alert(send_to, embed, chart_path, plan, mirrored: bool, view_cls) -> None:
+async def _post_alert(send_to, embed, chart_path, plan, mirrored: bool, view_cls,
+                      *, record_post: bool = False) -> None:
     """Send one full alert: content line, chart, plan buttons. silent=True
-    only once the mirror landed (the alerts channel forces it regardless)."""
+    only once the mirror landed (the alerts channel forces it regardless).
+    record_post (v152 D3, scheduled path only): write the 'posted' cooldown
+    row once Discord accepted the send -- a failed send records nothing."""
     view = view_cls(plan.plan_id, author_id=None) if plan is not None else None
     kwargs = {**ui.push_kwargs(embed), "silent": mirrored}
     if chart_path:
@@ -215,9 +226,30 @@ async def _post_alert(send_to, embed, chart_path, plan, mirrored: bool, view_cls
     log_posted(embed, getattr(plan, "ticker", None), send_to)
     if view is not None:
         view.message = msg
+    if record_post and plan is not None:
+        await asyncio.to_thread(cooldown.record, plan, "posted")
 
 
-async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
+async def _hold_by_cooldown(alerts: list) -> tuple[list, list]:
+    """v152 D3: split a scheduled batch into (kept alerts, held plans).
+
+    Runs before ranking and the cap, so a held alert sends neither its full
+    alert nor its simple mirror and the overflow footer names only what
+    survived. A legacy (plan-less) alert always passes. A held plan is
+    recorded 'suppressed'. Both cooldown calls fail open and never raise."""
+    kept, held = [], []
+    for alert in alerts:
+        plan = alert[2]
+        if plan is not None and await asyncio.to_thread(cooldown.suppressed, plan):
+            held.append(plan)
+            await asyncio.to_thread(cooldown.record, plan, "suppressed")
+            continue
+        kept.append(alert)
+    return kept, held
+
+
+async def _send_alerts(destination, alerts, route_by_confidence: bool = False, *,
+                       apply_cooldown: bool = False) -> list:
     """alerts: list of (embed, chart_path, plan_or_none, simple_text_or_none)
     tuples; the 4th element is optional (see the unpack below).
 
@@ -250,6 +282,12 @@ async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
     paths pass True -- a user's own `!check`/`!scan` command result must
     keep posting back to wherever they invoked it (`ctx`), never get
     silently redirected mid-command.
+
+    `apply_cooldown` (v152 D3) is passed True by the scheduled session scan
+    only: an alert whose (ticker, direction, horizon_key) was posted within
+    ALERT_SYMBOL_COOLDOWN_HOURS is held -- before the cap -- and every post
+    that lands is recorded. Returns the held plans ([] when the flag is off).
+    The plan and its trade are already in the book; only the post is held.
     """
     from swingbot.commands.views import PlanActionView
     from swingbot.core.analytics.rank import follow_score
@@ -257,6 +295,9 @@ async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
     # Alert-flood control (Task E77): _ordered_alerts already ranks by
     # follow_score (rank_plans, THE shared ordering), so the cap is applied
     # directly to that ranked list.
+    held: list = []
+    if apply_cooldown:
+        alerts, held = await _hold_by_cooldown(alerts)
     ordered = _ordered_alerts(alerts)
     cap = getattr(config, "MAX_ALERTS_PER_SCAN", 10)
     to_send, overflow = ordered[:cap], ordered[cap:]
@@ -281,33 +322,47 @@ async def _send_alerts(destination, alerts, route_by_confidence: bool = False):
         # v110 s6.2: each send is isolated -- one failure is logged with its
         # traceback and the rest of the batch still posts.
         try:
-            await _post_alert(send_to, embed, chart_path, plan, mirrored, PlanActionView)
+            await _post_alert(send_to, embed, chart_path, plan, mirrored, PlanActionView,
+                              record_post=apply_cooldown)
         except Exception:
             log.warning("Could not post alert for %s -- the rest of the batch still posts.",
                         getattr(plan, "ticker", None) or getattr(embed, "title", "?"),
                         exc_info=True)
+    return held
 
 
 async def post_short_universe(destination, *, bot=None, require_confirmation: bool = True,
-                              route_by_confidence: bool = False) -> list:
+                              route_by_confidence: bool = False, apply_cooldown: bool = False,
+                              held: list | None = None) -> list:
     """V118-4: the SHORT extra-universe pass and its alerts.
 
     Only ever called AFTER the base alerts were sent, so a cold extra fetch
     cannot hold back a ready watchlist alert. Off (default): returns [] with
     no fetch. A recap/display-only caller never calls this and stays base-only.
+    v152 D3: `apply_cooldown` is forwarded to _send_alerts; the plans it held
+    are appended to `held` when one is given. Returns the short alerts.
     """
     if not admitted_short_modes(config):
         return []
     short_alerts = await scan_engine.run_short_universe_scan(
         require_confirmation=require_confirmation, bot=bot,
         progress=scan_engine.ScanProgress())
-    await _send_alerts(destination, short_alerts, route_by_confidence=route_by_confidence)
+    short_held = await _send_alerts(destination, short_alerts,
+                                    route_by_confidence=route_by_confidence,
+                                    apply_cooldown=apply_cooldown)
+    if held is not None:
+        held.extend(short_held)
     return short_alerts
 
 
 async def send_then_short(destination, base_alerts, *, bot=None, require_confirmation: bool = True,
-                          route_by_confidence: bool = False) -> None:
-    """Send the base alerts, THEN run the extra lane (the scheduled-path invariant)."""
-    await _send_alerts(destination, base_alerts, route_by_confidence=route_by_confidence)
+                          route_by_confidence: bool = False, apply_cooldown: bool = False) -> list:
+    """Send the base alerts, THEN run the extra lane (the scheduled-path invariant).
+    Returns every plan the v152 cooldown held across both ([] without it)."""
+    held = list(await _send_alerts(destination, base_alerts,
+                                   route_by_confidence=route_by_confidence,
+                                   apply_cooldown=apply_cooldown))
     await post_short_universe(destination, bot=bot, require_confirmation=require_confirmation,
-                              route_by_confidence=route_by_confidence)
+                              route_by_confidence=route_by_confidence,
+                              apply_cooldown=apply_cooldown, held=held)
+    return held
