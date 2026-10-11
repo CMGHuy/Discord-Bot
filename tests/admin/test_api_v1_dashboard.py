@@ -11,7 +11,7 @@ P&L, best trade, worst trade, avg holding period) are NOT here, and
             equity_30d (sparkline series) · position_premium
 
 Everything is projected from `dashboard`'s existing builders and
-`_collect_portfolio_state`. No metric is computed here: spec 3's constraint
+`collect_portfolio_state`. No metric is computed here: spec 3's constraint
 is "UI renders, analytics computes", and a second definition of win rate
 would drift from the one the Jinja UI shows.
 
@@ -238,13 +238,13 @@ def test_risk_used_skips_the_full_portfolio_collector(seed, logged_in, monkeypat
     """The landing page needs two numbers -- heat and its cap. The full
     collector also builds correlation clusters from per-ticker market-data
     fetches (~3.7s on production), none of which the dashboard shows."""
-    import swingbot.commands.growth as growth
+    import swingbot.core.edge.portfolio_state as portfolio_state
     from swingbot.core.edge import heat
 
     def boom():
         raise AssertionError("dashboard must not run the full portfolio collector")
 
-    monkeypatch.setattr(growth, "_collect_portfolio_state", boom)
+    monkeypatch.setattr(portfolio_state, "collect_portfolio_state", boom)
     from tests.admin.test_api_v1_trades import _trade
 
     main_trade = _trade("aaaaaaaaaaaaaaaa", plan_id=None, ticker="AAPL", status="open")

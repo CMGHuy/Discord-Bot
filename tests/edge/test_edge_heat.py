@@ -90,10 +90,10 @@ def test_portfolio_report_kill_state_prominent():
 def test_collect_portfolio_state_degrades_on_account_config_failure(monkeypatch):
     """Task E52 review Finding (Important): load_account_config() is file I/O
     plus a possible write-back and was the one sub-collector in
-    _collect_portfolio_state() NOT try/excepted. If it raises, `balance`
+    collect_portfolio_state() NOT try/excepted. If it raises, `balance`
     must still fall back to 0.0 (not NameError) and the growth-path section
     must degrade to {} rather than the whole command crashing."""
-    from swingbot.commands.growth import _collect_portfolio_state
+    from swingbot.core.edge.portfolio_state import collect_portfolio_state
     from swingbot.core.planning import account as account_module
 
     def _boom():
@@ -101,7 +101,7 @@ def test_collect_portfolio_state_degrades_on_account_config_failure(monkeypatch)
 
     monkeypatch.setattr(account_module, "load_account_config", _boom)
 
-    state = _collect_portfolio_state()
+    state = collect_portfolio_state()
 
     # Must return a dict with safe defaults, not propagate the exception.
     assert isinstance(state, dict)
@@ -128,7 +128,7 @@ def test_weekly_risk_report_renders():
 def test_collect_weekly_risk_stats_excludes_self_correlated_singleton(monkeypatch):
     """Task E53 review Finding (Important): _collect_weekly_risk_stats's
     biggest_cluster loop was missing the size->=2 filter that
-    _collect_portfolio_state (E52, growth.py) has. correlation.cluster_exposure
+    collect_portfolio_state (E52, core/edge/portfolio_state.py) has. correlation.cluster_exposure
     never excludes the candidate ticker from its own open_trades list, and
     returns_corr(df, df) (a ticker correlated with itself) always yields 1.0,
     which is > the 0.75 threshold once there are >=30 overlapping bars. With
@@ -190,3 +190,32 @@ def test_collect_weekly_risk_stats_excludes_uncorrelated_pair(monkeypatch):
     stats = retrospective._collect_weekly_risk_stats([], dt.date(2026, 7, 26))
 
     assert stats["biggest_cluster"] == []
+
+
+def test_growth_command_reads_the_moved_collector():
+    """v153 task P: one collector, re-exported under growth.py's old local name."""
+    from swingbot.commands import growth
+    from swingbot.core.edge import portfolio_state
+
+    assert growth._collect_portfolio_state is portfolio_state.collect_portfolio_state
+
+
+def test_admin_never_imports_the_growth_command_module():
+    """v153 task P: the admin process reads the collector from core/edge,
+    never from swingbot.commands.growth (a Discord command module)."""
+    import ast
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[2] / "swingbot" / "admin"
+    hits = []
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom):
+                names = {alias.name for alias in node.names}
+                if node.module == "swingbot.commands.growth" or (
+                        node.module == "swingbot.commands" and "growth" in names):
+                    hits.append(f"{path.name}:{node.lineno}")
+            elif isinstance(node, ast.Import):
+                if any(alias.name == "swingbot.commands.growth" for alias in node.names):
+                    hits.append(f"{path.name}:{node.lineno}")
+    assert hits == []
