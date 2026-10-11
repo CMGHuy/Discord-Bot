@@ -1,8 +1,8 @@
 # v135 Headroom veto: Implementation Plan, index
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part whole**: pull one task with `/task-brief V135-4` or `grep -n "^### Task V135-4" -A 140 docs/superpowers/plans/2026-10-06-v135-headroom-veto_*.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part whole**: pull one task with `/task-brief V135-4` or `grep -n "^### Task V135-4" -A 140 docs/superpowers/plans/implemented/2026-10-06-v135-headroom-veto_*.md`.
 
-**Spec:** `docs/superpowers/specs/2026-10-06-v135-headroom-veto-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-06-v135-headroom-veto-design.md`
 **Bump:** none
 **Edge:** expectancy
 
@@ -14,8 +14,14 @@
 
 ## Progress
 
-Code tasks V135-1..V135-11 done and merged to `main` (2026-10-11, head `dff3908`); the gate ships off. **Resume at V135-12** (pre-registration, then V135-13/14 measurement) on a machine with `data/backtest_cache` and `scripts/ops/ssh-hetzner.sh`; V135-15..17 follow. Cloud sandbox had no cache and no network for yfinance. Full suite not yet run as V135-16; on the 3.13 sandbox 7 tests failed identically on the base commit (`test_short_lane_admission` x3, `test_short_lane_scan`, `test_testrun_lint_gate`, `test_pullback_dryup_witness` ~1e-14 float, `test_v129_flag_off_golden`). V135-5 fixed the plan's `_map_builds` window (4w built no maps; now 3m).
-Update this block when a phase closes and at close-out (V135-17).
+**Closed 2026-10-11.** Tasks V135-1..V135-17 done; code merged to `main` (gate and call sites in V135-1..11, funnel results and the witness float fix in the `merge(v135)` commit). **Nothing shipped: `HEADROOM_SCOPE` stays `off`, `HEADROOM_MIN_R` stays `0.0`, the gate is inert.**
+
+- **Confluence component:** closed at Stage −1 (`refused:zero-diff`). Pilot `h = 1.0`, 20 tickers, 493 baseline rows and 493 component rows, 0 changed. VALIDATION budget not spent. Result: `docs/superpowers/results/2026-10-06-v135-confluence.md`.
+- **Strategy component:** closed at Stage 0, all three cells `REFUSED` (fold-train ΔWR +0.134 / +0.412 / +0.321 pp against paired MDE 1.657 / 2.428 / 3.021 pp; ΔExpR −0.017 / −0.030 / −0.040R). VALIDATION budget not spent. Result: `docs/superpowers/results/2026-10-06-v135-strategy.md`.
+- **Pre-registration:** `docs/superpowers/results/2026-10-06-v135-preregistration.md` (commit `f8081760`).
+- **Full suite (V135-16):** 8450 passed, 3 skipped, 0 xfailed; one failure, `test_headroom_witness.py::test_defaults_off_replay_matches_the_pre_gate_witness`, was 1e-14 float noise in `planned_rr` (same keys, outcomes and R), fixed in the test by comparing `planned_rr` at 9 decimals (`807ecfb2`) and re-run alone green.
+- **Measurement environment:** the funnel ran against the live watchlist read from the local `swing-db` container via a worktree-local `.env` with the DB host swapped; no tracked file changed for it.
+- **Outcome vs prediction:** `Bump: none` and `Edge: expectancy` stand (nothing shipped).
 
 ## Where to work
 

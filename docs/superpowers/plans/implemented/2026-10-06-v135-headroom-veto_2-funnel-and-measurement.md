@@ -2,7 +2,7 @@
 
 > Part of `2026-10-06-v135-headroom-veto_0-index.md` (header, where to work, global constraints, file map, review focus and `## Parallelisation` live there). Read that index's Global Constraints with every task. Steps use `- [ ]` for tracking. All paths are relative to the worktree `E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-06-v135-headroom-veto` unless a step says `main`.
 
-**Spec:** `docs/superpowers/specs/2026-10-06-v135-headroom-veto-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-06-v135-headroom-veto-design.md`
 
 # Phase 3 — Funnel tooling
 
@@ -882,7 +882,7 @@ Run `git status --short -- swingbot/ scripts/backtest/` (must print nothing) and
 ```markdown
 # v135 pre-registration — headroom veto
 
-**Committed before any v135 outcome is read and before any arm file exists.** Spec: `docs/superpowers/specs/2026-10-06-v135-headroom-veto-design.md`. Plan: `docs/superpowers/plans/2026-10-06-v135-headroom-veto_0-index.md` (parts `_1`, `_2`).
+**Committed before any v135 outcome is read and before any arm file exists.** Spec: `docs/superpowers/specs/implemented/2026-10-06-v135-headroom-veto-design.md`. Plan: `docs/superpowers/plans/implemented/2026-10-06-v135-headroom-veto_0-index.md` (parts `_1`, `_2`).
 
 ## Claim
 Removing plans that have a multi-source opposing level nearer than `h` x their own risk raises win rate without costing expectancy, under the standard v72 funnel. A binary filter, not a score weight.
@@ -1223,7 +1223,7 @@ Each fix is its own commit with its narrow test, `fix(v135): <what>`. If Step 1 
 **Files (all on `main`, after the merge):**
 - Modify: `docs/claude/backtest-methodology.md` (two rows in "Closed pre-registrations")
 - Modify if the mirror check reports drift: `AGENTS.md`
-- Move: `docs/superpowers/specs/2026-10-06-v135-headroom-veto-design.md` → `docs/superpowers/specs/implemented/`; the three `docs/superpowers/plans/2026-10-06-v135-headroom-veto_*.md` files → `docs/superpowers/plans/implemented/`
+- Move: `docs/superpowers/specs/implemented/2026-10-06-v135-headroom-veto-design.md` → `docs/superpowers/specs/implemented/`; the three `docs/superpowers/plans/implemented/2026-10-06-v135-headroom-veto_*.md` files → `docs/superpowers/plans/implemented/`
 - Modify: the moved index's `## Progress` block, `**Bump:**` and `**Edge:**` lines; the moved spec's `**Status:**` and `**Bump:**` lines; every reference to the old paths
 
 **Interfaces:**
@@ -1265,8 +1265,8 @@ Expected: PASS. If the check names `AGENTS.md`, update its condensed text to mat
 - [ ] **Step 4: Move the documents and fix every reference**
 
 ```bash
-git mv docs/superpowers/specs/2026-10-06-v135-headroom-veto-design.md docs/superpowers/specs/implemented/
-git mv docs/superpowers/plans/2026-10-06-v135-headroom-veto_0-index.md docs/superpowers/plans/2026-10-06-v135-headroom-veto_1-gate-and-call-sites.md docs/superpowers/plans/2026-10-06-v135-headroom-veto_2-funnel-and-measurement.md docs/superpowers/plans/implemented/
+git mv docs/superpowers/specs/implemented/2026-10-06-v135-headroom-veto-design.md docs/superpowers/specs/implemented/
+git mv docs/superpowers/plans/implemented/2026-10-06-v135-headroom-veto_0-index.md docs/superpowers/plans/implemented/2026-10-06-v135-headroom-veto_1-gate-and-call-sites.md docs/superpowers/plans/implemented/2026-10-06-v135-headroom-veto_2-funnel-and-measurement.md docs/superpowers/plans/implemented/
 git grep -n "2026-10-06-v135-headroom-veto" -- . ":(exclude)docs/superpowers/plans/implemented" ":(exclude)docs/superpowers/specs/implemented"
 ```
 

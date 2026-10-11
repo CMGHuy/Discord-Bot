@@ -2,7 +2,7 @@
 
 > Part of `2026-10-06-v135-headroom-veto_0-index.md` (header, where to work, global constraints, file map, review focus and `## Parallelisation` live there). Read that index's Global Constraints with every task. Steps use `- [ ]` for tracking. All paths are relative to the worktree `E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-06-v135-headroom-veto`.
 
-**Spec:** `docs/superpowers/specs/2026-10-06-v135-headroom-veto-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-06-v135-headroom-veto-design.md`
 
 # Phase 1 — Knobs, predicate, witness
 

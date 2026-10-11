@@ -1,6 +1,6 @@
 # v135 pre-registration — headroom veto
 
-**Committed before any v135 outcome is read and before any arm file exists.** Spec: `docs/superpowers/specs/2026-10-06-v135-headroom-veto-design.md`. Plan: `docs/superpowers/plans/2026-10-06-v135-headroom-veto_0-index.md` (parts `_1`, `_2`).
+**Committed before any v135 outcome is read and before any arm file exists.** Spec: `docs/superpowers/specs/implemented/2026-10-06-v135-headroom-veto-design.md`. Plan: `docs/superpowers/plans/implemented/2026-10-06-v135-headroom-veto_0-index.md` (parts `_1`, `_2`).
 
 ## Claim
 Removing plans that have a multi-source opposing level nearer than `h` x their own risk raises win rate without costing expectancy, under the standard v72 funnel. A binary filter, not a score weight.

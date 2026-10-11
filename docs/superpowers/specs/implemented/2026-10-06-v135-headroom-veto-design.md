@@ -1,9 +1,9 @@
 # v135 — Headroom veto: skip plans whose path to TP1 is blocked
 
 **Version:** ui 1.21.1 · bot 2.0.2 (at writing)
-**Bump:** none (gate ships inert, defaults off; amended at close-out if a scope passes VALIDATION)
+**Bump:** none (gate ships inert, defaults off; no scope passed VALIDATION, so nothing is released)
 **Edge:** expectancy
-**Status:** spec written 2026-10-06; no plan yet.
+**Status:** implemented and closed 2026-10-11; both components closed without a shipped scope (confluence at Stage −1, strategy at Stage 0), VALIDATION budgets not spent.
 
 ## Why
 

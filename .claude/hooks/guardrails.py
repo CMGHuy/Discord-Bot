@@ -269,6 +269,8 @@ CLOSED_PREREGISTRATION_KNOBS = frozenset({
     "FVG_LEVELS_MODE",
     "PULLBACK_DRYUP_SCOPE",
     "PULLBACK_DRYUP_MAX_RATIO",
+    "HEADROOM_SCOPE",
+    "HEADROOM_MIN_R",
 })
 _BACKTEST_SCRIPT_RE = re.compile(r"(?:tune_strategy|run_backtest_range)\.py")
 
