@@ -5,14 +5,15 @@
 22 new top-level slash commands appear in the client's `/` picker, and every
 `!` command now answers with a one-line nudge to its `/` twin. Someone who
 used the bot yesterday sees new commands and a new habit being asked of them,
-which is the shape of a minor (`working-conventions.md` § The three levels),
-even though no command's result changes. No admin UI change. (Bot minor
+which is the shape of a minor (`working-conventions.md` § The three levels).
+A few answers change too, each listed under "Output changes" (amended by
+plan v153 SP21; the first draft said no command's result changes). No admin UI change. (Bot minor
 confirmed by the staff-engineer panel.)
 **Edge:** none (integrity) — no plan, fill, stop, close or alert changes;
 the same handlers answer through a second surface.
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, senior-engineer
-**Status:** spec written 2026-10-09; split out of v152 (former D4) per partner so it deploys and rolls back alone; panel review applied 2026-10-09; plan `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md` written 2026-10-10 (22 tasks, 9 files).
+**Status:** spec written 2026-10-09; split out of v152 (former D4) per partner so it deploys and rolls back alone; panel review applied 2026-10-09; plan `docs/superpowers/plans/2026-10-10-v153-slash-command-parity_0-index.md` written 2026-10-10 (22 tasks, 9 files); "Output changes" added by plan v153 SP21.
 
 Parent: v152 (`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`),
 which keeps D1–D3 (notify, Following, cooldown) and links here from its
@@ -359,12 +360,49 @@ report. Moving a body never changes its behaviour.
   existing commands behave as before (identical definitions). Every `!`
   command works throughout, without the tip line.
 
+## Output changes (amended by plan v153 SP21)
+
+One handler per command means one answer per command. Where the two
+surfaces disagreed, the partner chose "union, `!` body as base": the
+handler keeps the `!` answer and takes in the slash side's fixes.
+Every resulting change:
+
+On `!`:
+
+1. `Tip: this is now /<twin>` follows every successful answer until
+   `PREFIX_TIP_UNTIL`. It is never sent after an error answer.
+2. `!strategies` lists the 11 strategies (was 6) and keeps the
+   `(needs N+ trading days of history)` note.
+3. `!help` / `!commands`: the header reads ``Prefix: `!`  •  Slash: `/` ``.
+   Each row shows its slash twin after the `!` form. Fields split into
+   `"<category> (cont.)"` fields so that each stays within Discord's
+   1024-char limit ("📊 Trades & performance" was already 1116 chars).
+4. A bare `!watchlist add|remove` answers `Please provide a ticker for
+   add/remove actions.` instead of the `COMMAND_USAGE` hint.
+5. `!watchlist add aapl` stores `AAPL`; `add_ticker` used to receive the raw text.
+6. Validation, "not found" and fetch-failure answers go through
+   `send_error`. The text is the same, and no tip follows.
+
+`!scrapeall` and `!check` deliver unchanged: a prefix reply never goes stale.
+
+On `/`:
+
+7. `/strategies` gains the history note (item 2).
+8. `/pnl` answers with the `!pnl` table. Its old raw-row body is dropped.
+9. `/backtest` and `/backtestwatchlist` keep a chosen horizon. The old
+   bridge re-joined the options into prefix tokens, and the default
+   strategy `all` then overrode the horizon.
+10. `/stop` logs `(by <user>)`, as `!stop` does.
+11. A `/scrapeall` or `/check` that outlives the 15-minute interaction
+    token posts its later answers as fresh channel messages instead of
+    losing them.
+
 ## What this does not do
 
 Retire prefix commands (kept by decision, no removal date); add permission
 policy beyond parity (only `/killswitch` maps its existing admin check);
-change any command's output beyond the tip line and the `/watchlist`
-missing-ticker text on the prefix surface; guild-scoped sync.
+change any command's output beyond the list under "Output changes";
+guild-scoped sync.
 
 ## Parallelisation
 

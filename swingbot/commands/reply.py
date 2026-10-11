@@ -21,9 +21,11 @@ from typing import Any, Callable, Protocol, runtime_checkable
 
 CHUNK = 1900                  # Discord caps a message at 2000 chars
 TOKEN_LIFETIME_S = 14 * 60    # interaction tokens die at 15 min; keep a minute's margin
-# Deploy day + 90 days; after it `prefix_tip` returns None. Provisional value,
-# pinned to the real deploy day by plan v153 SP21.
-PREFIX_TIP_UNTIL = dt.date(2027, 1, 8)
+# Deploy day (2026-10-12) + 90 days; on and after it `prefix_tip` returns
+# None and the tip line retires itself (pinned by plan v153 SP21). A date
+# check, not a config key. Owner: the partner. Deleting this constant and the
+# tip helpers is folded into the next plan that touches this file.
+PREFIX_TIP_UNTIL = dt.date(2027, 1, 10)
 
 SLASH_TWIN: dict[str, str] = {
     # account.py -- `!account` alone runs, so it maps to a `show` subcommand
