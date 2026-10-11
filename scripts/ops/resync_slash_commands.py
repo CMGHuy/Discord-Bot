@@ -15,7 +15,11 @@ the global set with the running image's commands. Idempotent.
 
 Run on production:
     bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/ops/resync_slash_commands.py"
-Fallback: docker compose restart bot (on_ready re-syncs on every start).
+This script exists only in v153-or-later images, so it fixes a failed sync
+on a v153 image (a roll-forward, or a restart that logged the WARNING). After a
+rollback to a PRE-v153 image the container has neither it nor
+swingbot/commands/modules.py: there the remedy is `docker compose restart bot`
+(on_ready re-syncs on every start; docs/deploy/DEPLOY_HETZNER.md § Rolling back).
 
 discord.py 2.7.1: Client.login() sets the application id tree.sync() needs;
 tests/scripts/test_resync_slash_commands.py pins that.

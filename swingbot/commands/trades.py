@@ -540,7 +540,7 @@ def _berlin_date(iso_ts: str):
     return dt.astimezone(_BERLIN_TZ).date()
 
 
-_SPACER = "​"
+_SPACER = "\u200b"
 
 
 def _sign_mark(value, positive: str, negative: str, zero: str) -> str:
@@ -667,6 +667,7 @@ async def handle_summary(reply) -> None:
     check-in-anytime) status read without digging through !trades or the
     admin Performance page.
     """
+    await reply.defer()  # store reads come first; /summary must ack inside Discord's 3 s window
     today = datetime.now(_BERLIN_TZ).date()
     all_trades = trade_log.get_trades(status="all", limit=None, ledger="main")
     acct = account_module.get_daily_summary()

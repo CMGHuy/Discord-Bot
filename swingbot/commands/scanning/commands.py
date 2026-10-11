@@ -366,6 +366,7 @@ async def handle_session(reply) -> None:
 
 
 async def handle_status(reply) -> None:
+    await reply.defer()  # get_stats reads the store; ack inside Discord's 3 s window
     wl = load_watchlist()
     stats = trade_log.get_stats()
     active = in_session()

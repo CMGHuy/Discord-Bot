@@ -49,7 +49,7 @@ from swingbot.commands import trades     # noqa: F401
 from swingbot.commands import backtest   # noqa: F401
 from swingbot.commands import account    # noqa: F401
 from swingbot.commands import data       # noqa: F401
-from swingbot.commands import slash      # noqa: F401  — slash (/) command equivalents
+from swingbot.commands import slash      # noqa: F401  — shared choice lists + tree error handler
 from swingbot.commands import history    # noqa: F401  — !plans command
 from swingbot.commands import plans      # noqa: F401  — !liveplans command (v2 lifecycle board)
 from swingbot.commands import stats      # noqa: F401  — !top ranked plans command

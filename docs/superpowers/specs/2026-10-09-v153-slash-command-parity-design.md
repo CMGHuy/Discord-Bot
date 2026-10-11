@@ -350,8 +350,12 @@ report. Moving a body never changes its behaviour.
   `bot.tree.sync()` — bulk-overwriting the global set with **the running
   image's** commands — printing the synced count. Run on production:
   `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/ops/resync_slash_commands.py"`.
-  It is idempotent; a restart (`docker compose restart bot`) is the
-  fallback. The plan's task confirms against discord.py 2.7.1's source that
+  It is idempotent. **It only exists in a v153-or-later image**, so it
+  cannot run after a rollback to a pre-v153 image (that image has neither
+  the script nor `swingbot/commands/modules.py`; `docker-compose.yml` mounts
+  no source tree). Closing panel, 2026-10-11: for a rollback past v153 the
+  remedy is `docker compose restart bot` (`on_ready` re-syncs on every
+  start); the script covers a failed sync on a v153 image. The plan's task confirms against discord.py 2.7.1's source that
   `login()` sets the application id `tree.sync()` needs.
 - **What users see after a rollback, during propagation (up to an hour).**
   Clients may still list the 22 v153 commands; invoking one gets Discord's
@@ -456,3 +460,19 @@ guild-scoped sync.
 - senior-engineer: radon over touched modules per task; `/watchlist` guard (`slash.py:401-403`) moves into the shared handler; tests for unknown action and missing ticker -- applied
 - senior-engineer: tip text from the complete `SLASH_TWIN` table only, skipped on handler error, one tested helper -- applied
 - senior-engineer: ordering — R adds `reply.py` only; each module task removes its own `slash.py` blocks in the same commit so no command is ever unregistered (or double-registered); `/watchlist` keeps its choice-dispatched shape -- applied
+
+## Closing panel review
+
+2026-10-11, `staff-engineer` and `senior-engineer` over the plan's full diff before close-out.
+Full suite recorded: 8320 passed, 1 failed -- `tests/commands/test_system_notices.py::test_chunk_text_terminates_when_a_chunk_starts_with_a_newline`,
+a 20 s subprocess timeout under `-n 4` load, in a file this branch does not touch; it passes alone (23 passed, twice).
+`collect_portfolio_state` is complexity 22, a pure move of the legacy `_collect_portfolio_state` (22 on main), not worsened.
+
+- staff-engineer: [BLOCKING] `resync_slash_commands.py` cannot run after a rollback to a pre-v153 image (the script and `modules.py` are absent from it) -- applied: spec § Rollback remedy, the script docstring and `DEPLOY_HETZNER.md` now name `docker compose restart bot` for a rollback past v153
+- staff-engineer: `DEPLOY_HETZNER.md` lacks the post-deploy sync check -- applied: new subsection under "Rolling back"
+- staff-engineer: `core/edge/portfolio_state.py` gives edge I/O dependencies -- rejected: the collector moved out of a Discord command module so admin stops importing `commands.growth`; relocating it again (e.g. `core/analytics`) is a separate design call
+- staff-engineer: `PREFIX_TIP_UNTIL` assumes deploy day 2026-10-12 -- rejected: SP21 pinned it deliberately; re-check the constant at deploy if the day slips
+- staff-engineer / senior-engineer: stale `bot.py:52` comment -- applied
+- senior-engineer: `handle_summary` / `handle_status` do store reads before the first reply with no `defer()` -- applied (`handle_account_show` reads only config, left)
+- senior-engineer: `_SPACER` literal U+200B -- applied (`"​"` escape)
+- senior-engineer: `send_error` ephemeral flag ignored after a non-ephemeral defer; duplicate `_strategy_from_choice`; `SLASH_ONLY` scaffolding in the parity test; `reply.failed` written directly; error copy naming `!` forms; `/watchlist` upper-casing and missing-ticker message; ungated destructive slash commands -- rejected for this plan: parity-preserving or cosmetic, no command's result changes; follow-ups for a later cleanup plan (destructive-command gating is a risk-manager and partner call)
