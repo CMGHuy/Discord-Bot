@@ -70,6 +70,13 @@ NOTICE_EVENTS = frozenset({"filled", "cancelled_expired", "cancelled_invalidated
                            "cancelled_risk_cap", "closed"})
 NOTICE_RESEND_DAYS = 5
 
+# v152 D1: events only the notify channel (commands/scanning/follow_notify.py)
+# posts. The execution feed skips them (lifecycle_embeds.notify_plan_events).
+FOLLOW_ONLY_EVENTS = frozenset({"near_stop"})
+# near_stop arms within this many INITIAL R of the resting stop.
+NEAR_STOP_R = 0.25
+_NEAR_STOP_STATUSES = frozenset({PlanStatus.ACTIVE, PlanStatus.PARTIAL})
+
 # v111: one INFO line per lifecycle transition, so a paper trade's life reads
 # from bot.log at INFO alone. transition -> (label, detail key of the price).
 # Feed-only events (stop_moved, pyramid_add) are absent on purpose.
@@ -137,6 +144,19 @@ def resting_stop(plan) -> float:
     if plan.status == PlanStatus.PARTIAL and plan.working_stop is None:
         return runner_floor(plan.entry_price, plan.tp1)
     return effective_stop(plan)
+
+
+def _arms_near_stop(now) -> bool:
+    """v152 D1: near_stop arms in the regular NYSE session only -- a pre- or
+    after-hours print never fires it, whatever INTRADAY_RTH_ONLY says."""
+    return is_regular_session(now)
+
+
+def _initial_risk(plan) -> float:
+    """abs(entry - initial stop); 0.0 when the plan has no entry yet."""
+    if plan.entry_price is None:
+        return 0.0
+    return abs(float(plan.entry_price) - float(plan.stop_loss))
 
 
 def _stop_at_close(plan) -> float:
@@ -566,7 +586,27 @@ class PlanManager:
                 log_plan_event(plan, event)
                 self._on_event(plan, event)
             events.extend(self._feed_bookkeeping(plan, new_events, regular, now))
+            events.extend(self._near_stop_event(plan, price, now))
         return events
+
+    def _near_stop_event(self, plan: TradePlanV2, price, now) -> list[PlanEvent]:
+        """v152 D1: one near_stop event when an ACTIVE/PARTIAL plan's price is
+        within NEAR_STOP_R initial R of its resting stop, not beyond it, in
+        the regular session; else []. Emits on every in-band tick -- the
+        notifier's plan_notifications claim makes it once per plan. Pure: it
+        reads the plan poll() just stepped and writes nothing."""
+        if plan.status not in _NEAR_STOP_STATUSES or not price or not _arms_near_stop(now):
+            return []
+        risk = _initial_risk(plan)
+        if risk <= 0:
+            return []
+        stop, price = float(resting_stop(plan)), float(price)
+        beyond = price < stop if plan.direction == "bullish" else price > stop
+        distance = abs(price - stop)
+        if beyond or distance > NEAR_STOP_R * risk:
+            return []
+        return [PlanEvent(plan.plan_id, "near_stop",
+                          {"stop": stop, "price": price, "r_dist": distance / risk})]
 
     def _warn_legacy_open_risk(self, plan: TradePlanV2) -> None:
         """Log once for a pre-cap live plan without changing the position.

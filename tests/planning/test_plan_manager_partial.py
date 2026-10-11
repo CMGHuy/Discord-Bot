@@ -2,6 +2,7 @@ import pytest
 
 from swingbot.core.planning.plan_engine import (PlanStatus, record_transition,
                                                 runner_floor)
+from swingbot.core.planning import plan_manager
 from swingbot.core.planning.plan_manager import PlanManager
 from swingbot.core.planning.plan_store import PlanStore
 from tests.fake_feed import FakePriceFeed
@@ -131,9 +132,11 @@ def test_pullback_between_old_breakeven_and_the_floor_now_closes(tmp_path):
     assert store.get("p1").legs_realized[1]["r"] == pytest.approx(0.6)
 
 
-def test_price_just_above_the_floor_keeps_the_runner_open(tmp_path):
+def test_price_just_above_the_floor_keeps_the_runner_open(tmp_path, monkeypatch):
     # The other side of the same boundary: 107.0 clears the floor, so the
     # runner rides on with its stop untouched.
+    # pins the lifecycle; v152 near_stop is tested in test_near_stop_event.py
+    monkeypatch.setattr(plan_manager, "_arms_near_stop", lambda now: False)
     store, mgr = _partial_env(tmp_path, [107.0])
     assert [e.transition for e in mgr.poll()] == ["stop_moved"]
     assert store.get("p1").status == PlanStatus.PARTIAL

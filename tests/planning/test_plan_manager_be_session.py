@@ -48,7 +48,9 @@ def test_be_stop_fires_the_same_session_it_armed(tmp_path):
 def test_be_stop_fires_the_next_session(tmp_path):
     store, mgr = _env(tmp_path, [105.0, 101.0, 99.9])
     mgr.poll(now=DAY1_A)
-    assert [event.transition for event in mgr.poll(now=DAY2_A)] == ["stop_moved"]
+    # 101.0 sits 0.2R above the break-even stop inside the regular session:
+    # v152's follow-only near_stop rides along with the stop_moved notice.
+    assert [event.transition for event in mgr.poll(now=DAY2_A)] == ["stop_moved", "near_stop"]
     event = mgr.poll(now=DAY2_B)[0]
     assert event.detail["reason"] == "scratch"
     assert event.detail["exit_price"] == 100.0

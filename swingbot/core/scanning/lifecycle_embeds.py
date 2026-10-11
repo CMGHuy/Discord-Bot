@@ -453,7 +453,7 @@ async def notify_plan_events(bot, events) -> list:
     keep their existing history-only status embed and are never acknowledged.
     """
     from swingbot.core.infra.silent_channel import silence
-    from swingbot.core.planning.plan_manager import NOTICE_EVENTS, STOP_EVENTS
+    from swingbot.core.planning.plan_manager import FOLLOW_ONLY_EVENTS, NOTICE_EVENTS, STOP_EVENTS
     from swingbot.core.planning.plan_store import PlanStore
     from swingbot.core.planning.time_exit import TIME_EVENTS
     from .execution_embeds import build_instruction_embed
@@ -463,6 +463,8 @@ async def notify_plan_events(bot, events) -> list:
     history = _resolve_channel(bot, config.DISCORD_CHANNEL_TRADES_HISTORY_ID)
     deliveries = []
     for event in events:
+        if event.transition in FOLLOW_ONLY_EVENTS:
+            continue    # v152: the notify channel's alone (commands/scanning/follow_notify.py)
         try:
             plan = store.get(event.plan_id)
             if plan is None:
