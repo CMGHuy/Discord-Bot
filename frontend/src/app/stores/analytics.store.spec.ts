@@ -738,8 +738,9 @@ describe('AnalyticsStore', () => {
     it('carries the unit and offers every server-supported scoped breakdown', () => {
       expect(BREAKDOWN_DIMENSIONS.map((dimension) => dimension.value)).toEqual([
         'strategy', 'horizon', 'direction', 'dow', 'month', 'badge',
-        'confidence', 'source', 'ledger', 'ticker',
+        'confidence', 'source', 'ledger', 'taken', 'ticker',
       ]);
+      expect(BREAKDOWN_DIMENSIONS.find((d) => d.value === 'taken')?.label).toBe('Followed vs paper');
       expect(BREAKDOWN_DIMENSIONS.map((d) => d.value)).toContain('ledger');
       expect(BREAKDOWN_DIMENSIONS.map((d) => d.value)).toContain('strategy');
       expect(store.unit()).toBe('r');

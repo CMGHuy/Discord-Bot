@@ -282,6 +282,9 @@ export const BREAKDOWN_DIMENSIONS = [
   { value: 'confidence', label: 'Confidence' },
   { value: 'source', label: 'Source' },
   { value: 'ledger', label: 'Ledger' },
+  // v152 D2: trades whose plan had a Following follower vs the rest. Intent,
+  // never a fill -- the attribution tab captions it.
+  { value: 'taken', label: 'Followed vs paper' },
   { value: 'ticker', label: 'Ticker' },
 ] as const;
 

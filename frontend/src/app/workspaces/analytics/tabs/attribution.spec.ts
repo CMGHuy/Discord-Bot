@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AnalyticsStore } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
-import { AttributionTab } from './attribution';
+import { AttributionTab, TAKEN_CAPTION } from './attribution';
 
 /* The store is stubbed down to the signals this tab reads: a tab component
  * owns no HTTP (spec v94 D12), so its spec asserts rendering, not fetching. */
@@ -107,6 +107,32 @@ describe('AttributionTab', () => {
   it('omits the badge column when no row carries one', () => {
     const { fixture } = render();
     expect(fixture.componentInstance['dimensionVisible']()).not.toContain('badge');
+  });
+
+  /* -- v152 D2: the followed-vs-paper breakdown ------------------------- */
+
+  it('captions the followed-vs-paper breakdown as paper results, not fills', () => {
+    const { el } = render({ breakdown: signal('taken'), breakdownLabel: signal('Followed vs paper') });
+    expect(TAKEN_CAPTION).toBe(
+      'Paper results, R units, pre-tax. Followed records the plan as followed, not your fill.');
+    expect(el.textContent).toContain(TAKEN_CAPTION);
+  });
+
+  it('shows no caption for any other breakdown', () => {
+    const { el } = render();
+    expect(el.textContent).not.toContain(TAKEN_CAPTION);
+  });
+
+  it('leads with expectancy for the followed-vs-paper breakdown and keeps N', () => {
+    const { fixture } = render({ breakdown: signal('taken') });
+    const visible: string[] = fixture.componentInstance['dimensionVisible']();
+    expect(visible.slice(0, 4)).toEqual(['key', 'n', 'exp_r', 'win_rate']);
+  });
+
+  it('keeps the default column order for every other breakdown', () => {
+    const { fixture } = render();
+    const visible: string[] = fixture.componentInstance['dimensionVisible']();
+    expect(visible.slice(0, 4)).toEqual(['key', 'n', 'win_rate', 'exp_r']);
   });
 });
 

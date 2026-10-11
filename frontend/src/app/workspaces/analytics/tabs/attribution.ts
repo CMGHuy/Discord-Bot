@@ -45,6 +45,12 @@ function measureValue(
  * ExpR and win-rate bars would sum to a number nobody asked for, and the
  * heat grid already carries its own reliability floor per cell.
  */
+/** v152 D2 (financial-advisor panel, verbatim): the followed/paper split is
+ *  the paper book, in R, before tax; "followed" is what a user said, never
+ *  a fill. */
+export const TAKEN_CAPTION =
+  'Paper results, R units, pre-tax. Followed records the plan as followed, not your fill.';
+
 @Component({
   selector: 'sb-attribution-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -133,6 +139,9 @@ function measureValue(
         <sb-select label="Group by" [options]="breakdownOptions" [value]="store.breakdown()"
                    (valueChange)="store.setBreakdown($event)" />
       </div>
+      @if (store.breakdown() === 'taken') {
+        <p class="caption">{{ takenCaption }}</p>
+      }
       @if (store.byDimensionError(); as error) {
         <sb-panel-error [message]="error" (retry)="store.reload('byDimension')" />
       } @else {
@@ -146,6 +155,7 @@ function measureValue(
     .controls { display: flex; }
     .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-14); }
     .breakdown-controls { margin: 0 0 var(--space-10); }
+    .caption { margin: 0 0 var(--space-10); color: var(--text-muted); font-size: var(--text-micro); }
     @media (max-width: 639px) { .panels { grid-template-columns: 1fr; } }
   `,
 })
@@ -159,6 +169,7 @@ export class AttributionTab {
     { value: 'win_rate', label: 'Win rate' },
   ];
   protected readonly breakdownOptions = BREAKDOWN_DIMENSIONS.map((d) => ({ value: d.value, label: d.label }));
+  protected readonly takenCaption = TAKEN_CAPTION;
 
   protected readonly measureLabel = computed(
     () => this.measureOptions.find((o) => o.value === this.store.measure())?.label ?? 'ExpR');
@@ -234,10 +245,13 @@ export class AttributionTab {
   ));
   /** `badge`/`soak` are present only for some dimensions (`dim=strategy` in
    *  particular) -- shown only when a row on screen actually carries one,
-   *  rather than as a column of dashes for the other nine. */
+   *  rather than as a column of dashes for the other nine.
+   *  v152: the followed-vs-paper split leads with expectancy, win rate
+   *  second; N stays shown per cell. */
   protected readonly dimensionVisible = computed<string[]>(() => {
     const rows = this.dimensionRows();
-    const visible = ['key', 'n', 'win_rate', 'exp_r', 'total_r', 'total_pnl', 'avg_win_r', 'avg_loss_r'];
+    const rates = this.store.breakdown() === 'taken' ? ['exp_r', 'win_rate'] : ['win_rate', 'exp_r'];
+    const visible = ['key', 'n', ...rates, 'total_r', 'total_pnl', 'avg_win_r', 'avg_loss_r'];
     if (rows.some((r) => r.badge !== undefined)) visible.push('badge');
     if (rows.some((r) => r.soak !== undefined)) visible.push('soak');
     return visible;
