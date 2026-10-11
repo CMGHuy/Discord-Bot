@@ -26,6 +26,7 @@ describe('entryTypeWord', () => {
     ['future_order', 'bullish', 'future_order'],
     ['constructor', 'bullish', 'constructor'], ['__proto__', null, '__proto__'],
     ['stop_entry', 'constructor', 'Stop entry'],
+    ['', 'bullish', ''],
   ])('renders %s with direction %s as %s', (type, direction, expected) => {
     expect(entryTypeWord(type, direction)).toBe(expected);
   });
@@ -60,6 +61,18 @@ describe('LevelsBlock', () => {
     expect(f.nativeElement.querySelector('dd.neg').textContent.trim()).toBe('95.00');
     expect([...f.nativeElement.querySelectorAll('dd.pos')].map((el: HTMLElement) => el.textContent?.trim()))
       .toEqual(['110.00', '120.00']);
+  });
+
+  it('lets the global muted class supply the paper line color', () => {
+    const globalStyle = document.createElement('style');
+    globalStyle.textContent = '.muted { color: rgb(123, 124, 125); }';
+    document.head.insertBefore(globalStyle, document.head.firstChild);
+    try {
+      const f = mount();
+      expect(getComputedStyle(f.nativeElement.querySelector('.muted')).color).toBe('rgb(123, 124, 125)');
+    } finally {
+      globalStyle.remove();
+    }
   });
 
   it('keeps zero optional values visible and removes each row when cleared', () => {

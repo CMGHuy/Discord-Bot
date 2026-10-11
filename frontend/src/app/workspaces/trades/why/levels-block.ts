@@ -10,7 +10,8 @@ export function entryTypeWord(entryType: string | null, direction: string | null
     stop_entry: { bullish: 'Buy stop', bearish: 'Sell stop', fallback: 'Stop entry' },
     limit: { bullish: 'Buy limit', bearish: 'Sell limit', fallback: 'Limit entry' },
   };
-  if (entryType === null || !Object.hasOwn(words, entryType)) return text(entryType);
+  if (entryType === null) return text(entryType);
+  if (!Object.hasOwn(words, entryType)) return entryType;
   const side = direction === 'bullish' || direction === 'bearish' ? direction : 'fallback';
   return words[entryType][side];
 }
@@ -41,7 +42,7 @@ export function entryTypeWord(entryType: string | null, direction: string | null
           <div><dt>Break-even at</dt><dd class="num">{{ fmtShare(breakevenTriggerPct()) }} of TP1</dd></div>
         }
       </dl>
-      <p class="muted">{{ paperLine }}</p>
+      <p class="paper-line muted">{{ paperLine }}</p>
     </sb-panel>
   `,
   styles: `
@@ -49,9 +50,9 @@ export function entryTypeWord(entryType: string | null, direction: string | null
     dl { display: grid; gap: var(--space-6); }
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
     dt, dd { font-size: var(--text-table); }
-    dt, .muted { color: var(--text-secondary); }
+    dt { color: var(--text-secondary); }
     dd { text-align: right; }
-    .muted { margin-top: var(--space-10); font-size: var(--text-table); line-height: 1.6; }
+    .paper-line { margin-top: var(--space-10); font-size: var(--text-table); line-height: 1.6; }
   `,
 })
 export class LevelsBlock {
