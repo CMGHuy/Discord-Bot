@@ -105,7 +105,7 @@ def stats_by(closed: list[dict], dimension: str) -> list[StatRow]:
 # gates whether an alert fires) already existed as a separate dimension and
 # covers the same "group trades by a quality classification" role.
 DIMENSIONS = ("strategy", "horizon", "badge", "confidence",
-             "direction", "dow", "month", "ticker", "source", "ledger")
+             "direction", "dow", "month", "ticker", "source", "ledger", "taken")
 
 # Replaces the Task A13 stub -- now a plain module global, not populated
 # via any self-import.
@@ -114,6 +114,10 @@ _EXTRACTORS = {
     "horizon": lambda t: t.get("horizon_key") or "unknown",
     "badge": lambda t: t.get("badge") or "unknown",
     "ledger": lambda t: t.get("ledger") or "main",
+    # v152 D2: a trade whose plan had a Following follower at close carries
+    # `taken_by` (performance.close_plan_trade). "Followed" records intent,
+    # never a fill -- the SPA caption says so.
+    "taken": lambda t: "followed" if t.get("taken_by") else "paper",
     "source": lambda t: t.get("source") or "unknown",
     "confidence": lambda t: str(t["confidence_level"]) if t.get("confidence_level") is not None else "unknown",
     "direction": lambda t: t.get("direction") or "unknown",

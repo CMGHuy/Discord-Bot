@@ -47,12 +47,14 @@ def _full_trade():
     }
 
 
-def test_all_ten_dimensions_present():
+def test_all_dimensions_present():
     """v32 Task 11: "tier" (A/B/C) retired -- "confidence" already covered
     the same role, so DIMENSIONS dropped from 10 to 9. v93 then added
-    "ledger" (main/weak) as its own grouping dimension, back to 10."""
+    "ledger" (main/weak) as its own grouping dimension, back to 10; v152
+    adds "taken" (followed/paper): 11."""
     assert set(DIMENSIONS) == {"strategy", "horizon", "badge", "confidence",
-                               "direction", "dow", "month", "ticker", "source", "ledger"}
+                               "direction", "dow", "month", "ticker", "source", "ledger",
+                               "taken"}
 
 
 def test_dimension_extractors():
@@ -65,6 +67,20 @@ def test_dimension_extractors():
     assert stats_by(closed, "ticker")[0].key == "AAPL"
     assert stats_by(closed, "dow")[0].key == "Monday"
     assert stats_by(closed, "month")[0].key == "2026-03"
+
+
+def test_taken_splits_followed_from_paper():
+    followed = {**_full_trade(), "taken_by": [123456789012345678]}
+    paper = _full_trade()
+    emptied = {**_full_trade(), "taken_by": []}
+    rows = {r.key: r for r in stats_by([followed, paper, emptied], "taken")}
+    assert set(rows) == {"followed", "paper"}
+    assert rows["followed"].n == 1
+    assert rows["paper"].n == 2
+
+
+def test_taken_never_buckets_as_unknown():
+    assert [r.key for r in stats_by([_full_trade()], "taken")] == ["paper"]
 
 
 def test_unknown_fields_bucket_as_unknown():
