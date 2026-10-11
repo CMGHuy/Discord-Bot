@@ -24,6 +24,7 @@ from swingbot.core.presentation import tokens as tk
 from swingbot.core.planning.plan_store import PlanStore
 from tests.planning.test_plan_manager_pending import _pending
 from swingbot.commands.views import (
+    PLAN_BUTTONS,
     PlanActionView,
     PlanBoardView,
     breakdown_embed,
@@ -32,6 +33,17 @@ from swingbot.commands.views import (
     starred_ids,
     unstar_plan,
 )
+
+PID = "0f8fad5b-d9cb-469f-a165-70867728950e"
+PID_404 = "11111111-1111-4111-8111-111111111111"
+PID_X = "22222222-2222-4222-8222-222222222222"
+AUTHOR = 123456789012345678
+OTHER = 876543210987654321
+
+
+def _button(view, action: str):
+    """The panel's button for one action (`chart`, `breakdown`, ...)."""
+    return next(item for item in view.children if item.custom_id.split(":")[1] == action)
 
 
 def _fake_interaction(user_id: int) -> MagicMock:
@@ -64,23 +76,19 @@ def _fake_plan(**overrides) -> types.SimpleNamespace:
     return types.SimpleNamespace(**defaults)
 
 
-def test_plan_action_view_has_one_chart_button():
-    view = PlanActionView("plan-123", author_id=42)
-    assert view.timeout == 180
-    assert len(view.children) == 4
-    custom_ids = [item.custom_id for item in view.children]
-    assert "plan:chart" in custom_ids
-    assert "plan:breakdown" in custom_ids
-    assert "plan:watch" in custom_ids
-    assert "plan:dismiss" in custom_ids
-    assert view.children[0].custom_id == "plan:chart"
+def test_plan_action_view_has_one_button_per_action_chart_first():
+    view = PlanActionView(PID, author_id=AUTHOR)
+    assert view.timeout is None
+    assert len(view.children) == len(PLAN_BUTTONS)
+    assert [item.custom_id.split(":")[1] for item in view.children] == [cls.ACTION for cls in PLAN_BUTTONS]
+    assert view.children[0].custom_id == f"plan:chart:{PID}:{AUTHOR}"
 
 
 def test_interaction_check_rejects_wrong_user():
-    view = PlanActionView("plan-123", author_id=42)
-    interaction = _fake_interaction(user_id=999)
+    view = PlanActionView(PID, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=OTHER)
 
-    allowed = asyncio.run(view.interaction_check(interaction))
+    allowed = asyncio.run(_button(view, "chart").interaction_check(interaction))
 
     assert allowed is False
     interaction.response.send_message.assert_awaited_once_with(
@@ -89,47 +97,25 @@ def test_interaction_check_rejects_wrong_user():
 
 
 def test_interaction_check_accepts_matching_user():
-    view = PlanActionView("plan-123", author_id=42)
-    interaction = _fake_interaction(user_id=42)
+    view = PlanActionView(PID, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
 
-    allowed = asyncio.run(view.interaction_check(interaction))
+    allowed = asyncio.run(_button(view, "chart").interaction_check(interaction))
 
     assert allowed is True
     interaction.response.send_message.assert_not_awaited()
 
 
-def test_on_timeout_disables_children_and_edits_message():
-    view = PlanActionView("plan-123", author_id=42)
-    message = MagicMock()
-    message.edit = AsyncMock()
-    view.message = message
-
-    asyncio.run(view.on_timeout())
-
-    assert view.children  # sanity: there is at least the chart button
-    assert all(item.disabled for item in view.children)
-    message.edit.assert_awaited_once_with(view=view)
-
-
-def test_on_timeout_without_message_does_not_raise():
-    view = PlanActionView("plan-123", author_id=42)
-    assert view.message is None
-
-    asyncio.run(view.on_timeout())  # must not raise despite no message to edit
-
-    assert all(item.disabled for item in view.children)
-
-
 def test_chart_button_plan_not_found_sends_ephemeral_message():
-    view = PlanActionView("plan-404", author_id=42)
-    interaction = _fake_interaction(user_id=42)
+    view = PlanActionView(PID_404, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
 
     with patch.object(views_module.PlanStore, "get", return_value=None) as mock_get, \
          patch.object(views_module, "get_daily_data") as mock_get_daily_data, \
          patch.object(views_module, "generate_trade_chart") as mock_generate_chart:
         asyncio.run(view.children[0].callback(interaction))
 
-    mock_get.assert_called_once_with("plan-404")
+    mock_get.assert_called_once_with(PID_404)
     interaction.response.defer.assert_awaited_once_with(ephemeral=True, thinking=True)
     interaction.followup.send.assert_awaited_once_with(
         "This plan no longer exists (closed/cancelled and pruned).", ephemeral=True
@@ -139,8 +125,8 @@ def test_chart_button_plan_not_found_sends_ephemeral_message():
 
 
 def test_chart_button_happy_path_sends_chart_file():
-    view = PlanActionView("plan-123", author_id=42)
-    interaction = _fake_interaction(user_id=42)
+    view = PlanActionView(PID, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
     plan = _fake_plan()
 
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png")
@@ -171,8 +157,8 @@ def test_chart_button_happy_path_sends_chart_file():
 
 
 def test_chart_button_data_fetch_failure_sends_ephemeral_error():
-    view = PlanActionView("plan-123", author_id=42)
-    interaction = _fake_interaction(user_id=42)
+    view = PlanActionView(PID, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
     plan = _fake_plan()
 
     with patch.object(views_module.PlanStore, "get", return_value=plan), \
@@ -189,8 +175,8 @@ def test_chart_button_data_fetch_failure_sends_ephemeral_error():
 
 
 def test_chart_button_render_failure_sends_ephemeral_error():
-    view = PlanActionView("plan-123", author_id=42)
-    interaction = _fake_interaction(user_id=42)
+    view = PlanActionView(PID, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
     plan = _fake_plan()
 
     with patch.object(views_module.PlanStore, "get", return_value=plan), \
@@ -242,10 +228,10 @@ def test_views_has_no_direct_colour_and_breakdown_matches_plan_confidence():
 
 
 def test_breakdown_button_sends_ephemeral():
-    view = PlanActionView("abcd1234-plan", author_id=1)
-    interaction = _fake_interaction(user_id=1)
+    view = PlanActionView(PID, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
     with patch.object(views_module.PlanStore, "get", return_value=_fixture_plan()):
-        asyncio.run(view.breakdown_button.callback(interaction))
+        asyncio.run(_button(view, "breakdown").callback(interaction))
     interaction.response.send_message.assert_awaited_once()
     _, kwargs = interaction.response.send_message.call_args
     assert kwargs.get("ephemeral") is True
@@ -271,26 +257,26 @@ def test_star_unstar_roundtrip():
 
 
 def test_watch_button_toggles_star():
-    _seed_plans("plan-x")
-    view = PlanActionView("plan-x", author_id=1)
-    interaction = _fake_interaction(user_id=1)
-    asyncio.run(view.watch_button.callback(interaction))
-    assert "plan-x" in starred_ids()
-    asyncio.run(view.watch_button.callback(interaction))
-    assert "plan-x" not in starred_ids()
+    _seed_plans(PID_X)
+    view = PlanActionView(PID_X, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
+    asyncio.run(_button(view, "watch").callback(interaction))
+    assert PID_X in starred_ids()
+    asyncio.run(_button(view, "watch").callback(interaction))
+    assert PID_X not in starred_ids()
 
 
 def test_dismiss_button_removes_view_keeps_embed():
-    view = PlanActionView("plan-x", author_id=1)
-    interaction = _fake_interaction(user_id=1)
-    asyncio.run(view.dismiss_button.callback(interaction))
+    view = PlanActionView(PID_X, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
+    asyncio.run(_button(view, "dismiss").callback(interaction))
     interaction.response.edit_message.assert_awaited_once_with(view=None)
 
 
 def test_any_author_id_none_interaction_check_true_for_any_user():
-    view = PlanActionView("plan-x", author_id=None)
-    for uid in (1, 2, 999999):
-        assert asyncio.run(view.interaction_check(_fake_interaction(user_id=uid))) is True
+    view = PlanActionView(PID_X, author_id=None)
+    for uid in (1, AUTHOR, OTHER):
+        assert asyncio.run(_button(view, "chart").interaction_check(_fake_interaction(user_id=uid))) is True
 
 
 def _stub_render_fn(calls):
@@ -331,11 +317,11 @@ def test_plan_board_view_has_6_children_after_pagination():
 
 def test_breakdown_button_reads_plan_created_after_views_import(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
-    plan = _pending(plan_id="late-plan", ticker="MSFT")
+    plan = _pending(plan_id=PID, ticker="MSFT")
     PlanStore().add(plan)
-    view = PlanActionView(plan.plan_id, author_id=1)
-    interaction = _fake_interaction(user_id=1)
+    view = PlanActionView(plan.plan_id, author_id=AUTHOR)
+    interaction = _fake_interaction(user_id=AUTHOR)
 
-    asyncio.run(view.breakdown_button.callback(interaction))
+    asyncio.run(_button(view, "breakdown").callback(interaction))
 
     interaction.response.send_message.assert_awaited_once()

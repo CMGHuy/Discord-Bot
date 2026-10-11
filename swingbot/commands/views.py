@@ -1,17 +1,20 @@
 """
 Interactive discord.ui.View subclasses for the plan-centric UX: a
 per-alert action panel (chart / breakdown / watch / dismiss buttons --
-PlanActionView, Tasks B9-B11) and the filterable/paginated !plans board
-(PlanBoardView, Tasks B13-B14). Both follow the exact author-lock/
-timeout/on_timeout-disables-children pattern TradesPaginator already
-established (swingbot/commands/trades.py:83) -- the ONLY other View in
-this codebase before this file existed -- so a user who has learned
-"only the person who ran the command can page through it" from !trades
-gets the identical mental model here.
+PlanActionView) and the filterable/paginated !plans board (PlanBoardView).
+
+v152 D2: the plan panel is persistent. Each of its buttons is a
+discord.ui.DynamicItem whose custom_id carries the plan id (plus the author
+id for an author-locked `!top` panel), registered once in bot_core's
+setup_hook, so a press on an alert posted before a restart still works.
+LegacyPlanPanel answers the static ids pre-v152 alerts carry. PlanBoardView
+keeps the TradesPaginator author-lock / timeout pattern
+(swingbot/commands/trades.py:83).
 """
 import asyncio
 import logging
 import os
+import re
 
 import discord
 
@@ -43,90 +46,211 @@ def unstar_plan(plan_id: str) -> None:
     starred_repo().unstar(plan_id)
 
 
-class PlanActionView(discord.ui.View):
-    """
-    One action panel per posted plan: Chart (this task), Breakdown
-    (Task B10), Watch/Dismiss (Task B11). `author_id=None` relaxes the
-    lock to "any user may click" -- used when this view is attached to
-    a scan alert (Task B12), where there is no single "author" (nobody
-    ran a command; the bot posted it on its own schedule) and locking
-    it to one person would make the buttons useless to everyone else
-    watching the channel.
-    """
+PLAN_TEMPLATE_RE = r"plan:{action}:(?P<plan_id>[0-9a-f-]{{36}})(?::(?P<author>\d{{17,20}}))?"
+LEGACY_REPLY = "This alert predates v152 — use the plan page or `!plans`."
+NOT_YOUR_PANEL = "Not your panel."
+PLAN_GONE = "This plan no longer exists."
+STARRED_REPLY = "⭐ Starred — it'll sort first on `!plans` at equal follow score."
 
-    def __init__(self, plan_id: str, author_id: int | None, *, timeout: int = 180):
-        super().__init__(timeout=timeout)
+
+def _template(action: str) -> str:
+    return PLAN_TEMPLATE_RE.format(action=action)
+
+
+def custom_id_for(action: str, plan_id: str, author_id: int | None) -> str:
+    """The persistent custom_id of one plan button: always the plan id, and
+    the author id only for an author-locked (`!top`) panel."""
+    base = f"plan:{action}:{plan_id}"
+    return base if author_id is None else f"{base}:{author_id}"
+
+
+def _persistable(plan_id: str, author_id: int | None) -> bool:
+    return re.fullmatch(_template("chart"), custom_id_for("chart", plan_id, author_id)) is not None
+
+
+def _get_plan(plan_id: str):
+    """Sync plan read; every button calls it through asyncio.to_thread."""
+    return PlanStore().get(plan_id)
+
+
+class _PlanButtonMixin:
+    """The body every persistent plan button shares. A concrete button sets
+    ACTION/LABEL/STYLE and passes `template=_template(ACTION)` to
+    DynamicItem; this mixin must come first in the bases so its
+    interaction_check overrides DynamicItem's pass-through."""
+
+    ACTION = ""
+    LABEL = ""
+    STYLE = discord.ButtonStyle.secondary
+
+    def __init__(self, plan_id: str, author_id: int | None = None):
+        super().__init__(discord.ui.Button(
+            label=self.LABEL, style=self.STYLE,
+            custom_id=custom_id_for(self.ACTION, plan_id, author_id)))
         self.plan_id = plan_id
         self.author_id = author_id
-        self.message: discord.Message | None = None
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match, /):
+        author = match["author"]
+        return cls(match["plan_id"], int(author) if author else None)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.author_id is None or interaction.user.id == self.author_id:
             return True
-        await interaction.response.send_message("Not your panel.", ephemeral=True)
+        await interaction.response.send_message(NOT_YOUR_PANEL, ephemeral=True)
         return False
 
-    async def on_timeout(self):
-        for item in self.children:
-            item.disabled = True
-        if self.message is not None:
-            try:
-                await self.message.edit(view=self)
-            except discord.HTTPException:
-                pass
 
-    @discord.ui.button(label="📊 Chart", style=discord.ButtonStyle.primary, custom_id="plan:chart")
-    async def chart_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        plan = PlanStore().get(self.plan_id)
-        if plan is None:
-            await interaction.followup.send("This plan no longer exists (closed/cancelled and pruned).", ephemeral=True)
-            return
-        try:
-            df = await asyncio.to_thread(get_daily_data, plan.ticker)
-        except Exception as exc:
-            log.warning("plan panel %s: could not fetch price data for %s", self.plan_id, plan.ticker, exc_info=True)
-            await interaction.followup.send(f"Could not fetch price data for {plan.ticker}: {exc}", ephemeral=True)
-            return
-        h = HORIZONS.get(plan.horizon_key, {})
-        filename = f"{plan.ticker}_{plan.plan_id}_panel.png"
-        try:
-            chart_path = await asyncio.to_thread(
-                generate_trade_chart,
-                plan.ticker, df, plan.trigger_price, plan.stop_loss, plan.tp1,
-                plan.direction, plan.strategy, h.get("label", plan.horizon_key), config.TRADE_CHART_DIR,
-                filename=filename, currency_symbol=get_currency_symbol(plan.ticker, config.CURRENCY_SYMBOL),
-                target2=plan.tp2, trendline_lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
-                horizon=h, plan_v2=plan,
-            )
-        except Exception as exc:
-            log.warning("plan panel %s: chart render failed", self.plan_id, exc_info=True)
-            await interaction.followup.send(f"Chart render failed: {exc}", ephemeral=True)
-            return
-        await interaction.followup.send(
-            file=discord.File(chart_path, filename=os.path.basename(chart_path)), ephemeral=True,
+async def _send_chart(interaction: discord.Interaction, plan_id: str) -> None:
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    plan = await asyncio.to_thread(_get_plan, plan_id)
+    if plan is None:
+        await interaction.followup.send("This plan no longer exists (closed/cancelled and pruned).", ephemeral=True)
+        return
+    try:
+        df = await asyncio.to_thread(get_daily_data, plan.ticker)
+    except Exception as exc:
+        log.warning("plan panel %s: could not fetch price data for %s", plan_id, plan.ticker, exc_info=True)
+        await interaction.followup.send(f"Could not fetch price data for {plan.ticker}: {exc}", ephemeral=True)
+        return
+    h = HORIZONS.get(plan.horizon_key, {})
+    filename = f"{plan.ticker}_{plan.plan_id}_panel.png"
+    try:
+        chart_path = await asyncio.to_thread(
+            generate_trade_chart,
+            plan.ticker, df, plan.trigger_price, plan.stop_loss, plan.tp1,
+            plan.direction, plan.strategy, h.get("label", plan.horizon_key), config.TRADE_CHART_DIR,
+            filename=filename, currency_symbol=get_currency_symbol(plan.ticker, config.CURRENCY_SYMBOL),
+            target2=plan.tp2, trendline_lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
+            horizon=h, plan_v2=plan,
         )
+    except Exception as exc:
+        log.warning("plan panel %s: chart render failed", plan_id, exc_info=True)
+        await interaction.followup.send(f"Chart render failed: {exc}", ephemeral=True)
+        return
+    await interaction.followup.send(
+        file=discord.File(chart_path, filename=os.path.basename(chart_path)), ephemeral=True,
+    )
 
-    @discord.ui.button(label="🔍 Breakdown", style=discord.ButtonStyle.secondary, custom_id="plan:breakdown")
-    async def breakdown_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        plan = PlanStore().get(self.plan_id)
+
+def _toggle_star(plan_id: str) -> bool:
+    """Global star toggle (pre-v152 Watch). True = now starred."""
+    if plan_id in starred_ids():
+        unstar_plan(plan_id)
+        return False
+    star_plan(plan_id)
+    return True
+
+
+class ChartButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
+                  template=_template("chart")):
+    ACTION = "chart"
+    LABEL = "📊 Chart"
+    STYLE = discord.ButtonStyle.primary
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await _send_chart(interaction, self.plan_id)
+
+
+class BreakdownButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
+                      template=_template("breakdown")):
+    ACTION = "breakdown"
+    LABEL = "🔍 Breakdown"
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        plan = await asyncio.to_thread(_get_plan, self.plan_id)
         if plan is None:
-            await interaction.response.send_message("This plan no longer exists.", ephemeral=True)
+            await interaction.response.send_message(PLAN_GONE, ephemeral=True)
             return
         await interaction.response.send_message(embed=breakdown_embed(plan), ephemeral=True)
 
+
+class WatchButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
+                  template=_template("watch")):
+    ACTION = "watch"
+    LABEL = "⭐ Watch"
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        starred = await asyncio.to_thread(_toggle_star, self.plan_id)
+        await interaction.response.send_message(STARRED_REPLY if starred else "Unstarred.", ephemeral=True)
+
+
+class DismissButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
+                    template=_template("dismiss")):
+    ACTION = "dismiss"
+    LABEL = "🔕 Dismiss"
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(view=None)
+
+
+PLAN_BUTTONS: tuple[type, ...] = (ChartButton, BreakdownButton, WatchButton, DismissButton)
+
+
+class PlanActionView(discord.ui.View):
+    """One persistent action panel per posted plan. `author_id=None` lets
+    any user press (scan and digest alerts: nobody ran a command);
+    `!top` passes the caller's id, which rides in every custom_id so the
+    lock survives a restart."""
+
+    def __init__(self, plan_id: str, author_id: int | None):
+        super().__init__(timeout=None)
+        self.plan_id = plan_id
+        self.author_id = author_id
+        self.message: discord.Message | None = None
+        if not _persistable(plan_id, author_id):
+            log.warning("plan panel: plan %r / author %r cannot form a persistent custom_id"
+                        " -- posting without buttons", plan_id, author_id)
+            return
+        for button_cls in PLAN_BUTTONS:
+            self.add_item(button_cls(plan_id, author_id))
+
+
+def chart_only_view(plan_id: str) -> discord.ui.View:
+    """A persistent view with just the Chart button (the notify channel's
+    messages, V152-17)."""
+    view = discord.ui.View(timeout=None)
+    if _persistable(plan_id, None):
+        view.add_item(ChartButton(plan_id))
+    return view
+
+
+async def _legacy_reply(interaction: discord.Interaction) -> None:
+    await interaction.response.send_message(LEGACY_REPLY, ephemeral=True)
+
+
+class LegacyPlanPanel(discord.ui.View):
+    """Claims the four static ids every pre-v152 alert carries, so pressing
+    one never shows "This interaction failed". Those ids hold no plan id:
+    Chart/Breakdown/Watch can only point at the plan page; Dismiss needs no
+    plan and still removes the panel."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📊 Chart", style=discord.ButtonStyle.primary, custom_id="plan:chart")
+    async def chart_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _legacy_reply(interaction)
+
+    @discord.ui.button(label="🔍 Breakdown", style=discord.ButtonStyle.secondary, custom_id="plan:breakdown")
+    async def breakdown_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _legacy_reply(interaction)
+
     @discord.ui.button(label="⭐ Watch", style=discord.ButtonStyle.secondary, custom_id="plan:watch")
     async def watch_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.plan_id in starred_ids():
-            unstar_plan(self.plan_id)
-            await interaction.response.send_message("Unstarred.", ephemeral=True)
-        else:
-            star_plan(self.plan_id)
-            await interaction.response.send_message("⭐ Starred — it'll sort first on `!plans` at equal follow score.", ephemeral=True)
+        await _legacy_reply(interaction)
 
     @discord.ui.button(label="🔕 Dismiss", style=discord.ButtonStyle.secondary, custom_id="plan:dismiss")
     async def dismiss_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(view=None)
+
+
+def register_persistent_views(bot) -> None:
+    """Called once from bot_core.setup_hook, before the gateway connects.
+    Reads PLAN_BUTTONS at call time, so a button appended later registers too."""
+    bot.add_dynamic_items(*PLAN_BUTTONS)
+    bot.add_view(LegacyPlanPanel())
 
 
 def breakdown_embed(plan) -> discord.Embed:

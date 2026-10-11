@@ -320,6 +320,17 @@ def install_reload_signal_handler():
 
 
 @bot.event
+async def setup_hook() -> None:
+    """discord.py awaits this once, after login and before the gateway
+    connects: the one place persistent views must be registered so a button
+    on an alert posted before a restart still dispatches (v152 D2). Lazy
+    import: views.py imports the plan store, which bot_core must not load
+    at import time."""
+    from swingbot.commands import views
+    views.register_persistent_views(bot)
+
+
+@bot.event
 async def on_command(ctx):
     """Logs every command invocation -- who ran what, where. Cheap, and
     genuinely useful for after-the-fact debugging ("why did the bot do
