@@ -264,6 +264,26 @@ FIELDS: list[Field] = [
           type="float", default="0", min=0, max=2, step=0.05,
           help="The gate rejects when the ratio is strictly above this value. 0 turns the "
                "gate off whatever the scope. v122's frozen grid is 0.60 / 0.75 / 0.90."),
+    Field("HEADROOM_SCOPE", "HEADROOM_SCOPE", "Trade Filters & Risk",
+          "Headroom veto: scope (v135)",
+          type="select", default="off",
+          options=[("off", "Off"),
+                   ("strategy", "Strategy entries -- EMA Crossover, VWAP, Fibonacci, "
+                                "Support/Resistance, RSI, Elliott Wave, MA Ribbon, "
+                                "Break & Retest, RSI Divergence"),
+                   ("confluence", "Confluence entries (both directions)")],
+          help="v135. Skips a plan when an opposing level confirmed by at least two "
+               "detector families sits beyond entry and nearer than HEADROOM_MIN_R x the "
+               "plan's own risk. Targets and stops are never moved. Ships OFF: each scope "
+               "is its own pre-registered measurement and flips on only if its one "
+               "VALIDATION shot passes."),
+    Field("HEADROOM_MIN_R", "HEADROOM_MIN_R", "Trade Filters & Risk",
+          "Headroom veto: minimum clear room to the nearest confirmed opposing level (x risk)",
+          type="float", default="0", min=0, max=1, step=0.25,
+          help="The veto rejects when a confirmed opposing level is strictly nearer than "
+               "this multiple of the plan's risk. 0 turns the veto off whatever the scope. "
+               "v135's frozen grid is 0.5 / 0.75 / 1.0; the field stops at 1.0 so a plan's "
+               "own first target can never be its blocker."),
     Field("FIB_SR_CONFLUENCE_ATR", "FIB_SR_CONFLUENCE_ATR", "Trade Filters & Risk",
           "Fibonacci: Rolling S/R confluence tolerance (x ATR)",
           type="float", default="0.0", min=0.0, max=2.0, step=0.25,
@@ -1303,6 +1323,7 @@ _MODE_VALUES = {
     "RUNNER_STRUCTURE_EXIT": ("off", "hl_trail", "progress_stall"),
     "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
     "PULLBACK_DRYUP_SCOPE": ("off", "strategy", "confluence"),
+    "HEADROOM_SCOPE": ("off", "strategy", "confluence"),
     "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
     "COMPRESSION_SHORT_RESEARCH_MODE": ("off", "broad", "isolated"),
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
