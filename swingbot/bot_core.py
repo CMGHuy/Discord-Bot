@@ -76,6 +76,11 @@ CONFIDENCE_EXPLAINER = (
     "that empirical validation -- the confidence score alone can't promise it."
 )
 
+# Help catalog, rendered by swingbot/commands/info.py:help_embeds() for !help
+# and /help. Each row is (usage, description) with the `!` form FIRST (v153):
+# info.help_line() appends the slash twin from reply.SLASH_TWIN, so a row
+# never spells out a `/` form itself. Rows are split into "(cont.)" fields to
+# stay within Discord's 1024-char field limit.
 COMMANDS_BY_CATEGORY = {
     "📡 Scanning": [
         ("!check [horizon] [min_strategies] [from:YYYY-MM-DD] [to:YYYY-MM-DD]",

@@ -19,13 +19,22 @@ from swingbot.bot_core import bot, CONFIDENCE_EXPLAINER, COMMANDS_BY_CATEGORY
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS, evaluate_all, live_horizons
 from swingbot.core.charts.trade_chart import generate_all_strategy_charts
-from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
+from swingbot.commands.reply import SLASH_TWIN, CtxReply, InteractionReply, send_prefix_tip
 from swingbot.commands.slash import HORIZON_CHOICES
 
 log = logging.getLogger(__name__)
 
 #: The help embed's description; SP17's help_embeds() reuses it.
 HELP_DESCRIPTION = "Alerts only, never places trades. Prefix: `!`  •  Slash: `/`"
+
+HELP_TITLE = "📖 Swing Trade Bot — Commands"
+CONT = " (cont.)"
+
+# Discord embed limits: a field value, the fields per embed, and the
+# characters per embed (title + description + field names/values + footer).
+FIELD_VALUE_LIMIT = 1024
+EMBED_FIELD_LIMIT = 25
+EMBED_TOTAL_LIMIT = 6000
 
 STRATEGY_NAMES = (
     "EMA Crossover, VWAP, Fibonacci retracement, Support/Resistance breakout, "
@@ -142,13 +151,71 @@ def _strategycharts_problem(horizon: str, direction: str) -> str | None:
     return None
 
 
-def _help_embed() -> discord.Embed:
-    embed = discord.Embed(title="📖 Swing Trade Bot — Commands", description=HELP_DESCRIPTION)
-    for category, cmds in COMMANDS_BY_CATEGORY.items():
-        value = "\n".join(f"`{cmd}` — {desc}" for cmd, desc in cmds)
-        embed.add_field(name=category, value=value, inline=False)
+def help_line(usage: str, desc: str) -> str:
+    """One help row: the `!` form first, then its slash twin (v153).
+
+    The twin comes only from SLASH_TWIN, for the longest key equal to the
+    usage's leading words: `!trades clear` -> `trades clear` -> `/trades-clear`,
+    `!trade ID` -> `trade` -> `/trade show`."""
+    words = usage.lstrip("!").split()
+    for n in range(len(words), 0, -1):
+        twin = SLASH_TWIN.get(" ".join(words[:n]))
+        if twin is not None:
+            return f"`{usage}` · `/{twin}` — {desc}"
+    return f"`{usage}` — {desc}"
+
+
+def _clip(line: str, limit: int) -> str:
+    return line if len(line) <= limit else line[: limit - 1] + "…"
+
+
+def _field_chunks(lines: list[str], limit: int = FIELD_VALUE_LIMIT) -> list[str]:
+    """Join rows into field values of at most `limit` chars, breaking only between rows."""
+    chunks: list[str] = []
+    current = ""
+    for line in (_clip(raw, limit) for raw in lines):
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > limit:
+            chunks.append(current)
+            candidate = line
+        current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def help_fields() -> list[tuple[str, str]]:
+    """(name, value) per field; an oversized category continues as '<category> (cont.)'."""
+    fields: list[tuple[str, str]] = []
+    for category, rows in COMMANDS_BY_CATEGORY.items():
+        chunks = _field_chunks([help_line(usage, desc) for usage, desc in rows])
+        fields.extend((category if i == 0 else category + CONT, value) for i, value in enumerate(chunks))
+    return fields
+
+
+def _new_help_embed(first: bool) -> discord.Embed:
+    if first:
+        embed = discord.Embed(title=HELP_TITLE, description=HELP_DESCRIPTION)
+    else:
+        embed = discord.Embed(title=HELP_TITLE + CONT)
     ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
     return embed
+
+
+def _fits(embed: discord.Embed, name: str, value: str) -> bool:
+    return (len(embed.fields) < EMBED_FIELD_LIMIT
+            and len(embed) + len(name) + len(value) <= EMBED_TOTAL_LIMIT)
+
+
+def help_embeds() -> list[discord.Embed]:
+    """The help catalog as embeds within Discord's limits (chrome applied first,
+    so len(embed) already counts the footer)."""
+    embeds = [_new_help_embed(first=True)]
+    for name, value in help_fields():
+        if not _fits(embeds[-1], name, value):
+            embeds.append(_new_help_embed(first=False))
+        embeds[-1].add_field(name=name, value=value, inline=False)
+    return embeds
 
 
 # ──────────────────────────────────────────────
@@ -246,7 +313,8 @@ async def handle_ping(reply) -> None:
 
 
 async def handle_help(reply) -> None:
-    await reply.send(embed=_help_embed(), ephemeral=True)
+    for embed in help_embeds():
+        await reply.send(embed=embed, ephemeral=True)
 
 
 # ──────────────────────────────────────────────

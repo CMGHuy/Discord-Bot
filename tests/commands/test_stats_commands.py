@@ -325,6 +325,9 @@ def test_help_catalog_covers_analytics_and_plans():
     for name in ("top", "stats", "lessons", "calibration", "journal", "plans", "liveplans"):
         assert name in all_listed, f"{name} missing from COMMANDS_BY_CATEGORY"
         assert name in COMMAND_USAGE, f"{name} missing from COMMAND_USAGE"
+    # v153 (Controller decision 4): the `!` form stays first in every row, so
+    # the first-word lookup above keeps working; info.help_line adds the `/` form.
+    assert all(cmd.startswith("!") for cmds in COMMANDS_BY_CATEGORY.values() for cmd, _ in cmds)
 
 
 def test_new_slash_commands_registered_on_tree():
