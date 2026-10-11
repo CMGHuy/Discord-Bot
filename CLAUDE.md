@@ -124,6 +124,10 @@ make up / make logs / make restart         # docker compose lifecycle
 failure. Baseline, and why counts/timings swing with machine load:
 `docs/claude/testing-cost.md`.
 
+**A failed test is fixed and re-run alone** (`testrun.py file …` or `pytest
+path::test`), never by re-running the whole suite. **No full suite after
+merging back to `main`**: it ran once, before the merge. Detail: `testing-cost.md`.
+
 **Long backtest/grid runs** go to `backtest-runner`, chunked per strategy.
 Past a couple of minutes a run prints flushed progress; **past 15 minutes, a
 percent figure** in a log deleted on completion. Detail: `working-conventions.md`.

@@ -371,6 +371,11 @@ of ~1150 progress lines. Never re-run the full suite to check a local change.
   touches `frontend/`. A full run to chase an already-observed failure is
   debugging, not a second verification step.
 
+**A failed test is fixed and re-run alone** (`testrun.py file ...` or
+`pytest path::test`), never by re-running the whole suite; a fix touching other
+files widens to `testrun.py changed`. **No full suite after merging back to
+`main`**: it ran once, before the merge.
+
 **Green means `0 failed` and `0 xfailed`.** A changed pass count is not itself a
 failure; read the output rather than assuming. Prove correctness and move on:
 timings here swing 2-4x with machine load, so do not re-measure to justify a
