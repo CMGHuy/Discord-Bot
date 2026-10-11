@@ -31,7 +31,7 @@ from swingbot.admin import spa
 # The four whose URL the Jinja UI does not already own. `/risk` and
 # `/trades/<trade_id>` are still Jinja routes until NG57 -- see
 # test_a_workspace_the_jinja_ui_still_owns_stays_jinja.
-SPA_WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system")
+SPA_WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system", "plans")
 
 
 @pytest.fixture
@@ -77,7 +77,10 @@ def test_each_workspace_serves_the_spa(client, workspace, built):
     assert b"sb-root" in response.data
 
 
-@pytest.mark.parametrize("path", ["/universe/AAPL"])
+@pytest.mark.parametrize("path", [
+    "/universe/AAPL",
+    "/plans/44444444-4444-4444-8444-444444444444",
+])
 def test_a_detail_url_reloads_into_the_spa(client, path, built):
     """Refreshing on /trades/:id must not 404 -- the route only exists in
     the browser, so the server has to hand back the shell and let the
