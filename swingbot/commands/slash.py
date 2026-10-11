@@ -161,44 +161,6 @@ async def slash_stop(interaction: discord.Interaction):
 
 
 # ──────────────────────────────────────────────
-# /watchlist
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="watchlist", description="Show, add, or remove tickers from the watchlist")
-@app_commands.describe(
-    action="Action to perform (leave blank to just show the list)",
-    ticker="Ticker to add or remove",
-)
-@app_commands.choices(action=[
-    app_commands.Choice(name="Show",   value="show"),
-    app_commands.Choice(name="Add",    value="add"),
-    app_commands.Choice(name="Remove", value="remove"),
-    app_commands.Choice(name="Clear",  value="clear"),
-])
-async def slash_watchlist(
-    interaction: discord.Interaction,
-    action: app_commands.Choice[str] = None,
-    ticker: str = None,
-):
-    act = action.value if action else "show"
-    if act in ("add", "remove") and not ticker:
-        await interaction.response.send_message("Please provide a ticker for add/remove actions.", ephemeral=True)
-        return
-
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.watchlist import watchlist_cmd, watchlist_add, watchlist_remove, watchlist_clear
-    if act == "show":
-        await watchlist_cmd.callback(ctx)
-    elif act == "add":
-        await watchlist_add.callback(ctx, ticker.upper())
-    elif act == "remove":
-        await watchlist_remove.callback(ctx, ticker.upper())
-    elif act == "clear":
-        await watchlist_clear.callback(ctx)
-
-
-# ──────────────────────────────────────────────
 # /top
 # ──────────────────────────────────────────────
 
