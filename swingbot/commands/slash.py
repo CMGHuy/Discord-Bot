@@ -1,23 +1,22 @@
 """
-Slash-command (/command) equivalents for key bot commands.
+Shared slash-command (/command) building blocks.
 
-Discord shows these natively when the user types '/' — each parameter
-has a description and, where applicable, a dropdown of valid choices.
+Since v153 every slash command lives next to its prefix (!) twin, in the
+same module, and both call one shared handle_<name>(reply, ...) handler
+(swingbot/commands/reply.py). This module keeps only what several of them
+share: the choice lists, and the bot.tree error handler for app-command
+check failures. It must never import a command module (they import it).
 
-These wrap the same business logic as the prefix (!) commands; they
-don't replace them. Both work in parallel.
-
-Registered via bot.tree; synced to Discord in on_ready (scanning.py).
+The tree is synced to Discord once per process start, in on_ready
+(swingbot/commands/scanning/loops.py).
 """
 import logging
 
 import discord
 from discord import app_commands
-from discord.ext import commands
 
 from swingbot.bot_core import bot
 from swingbot.core.market.strategy import live_horizons
-from swingbot.core.scanning import engine as scan_engine
 
 log = logging.getLogger(__name__)
 
@@ -88,73 +87,3 @@ async def on_app_command_error(interaction: discord.Interaction,
         await interaction.followup.send(text, ephemeral=True)
     else:
         await interaction.response.send_message(text, ephemeral=True)
-
-
-# ──────────────────────────────────────────────
-# /check
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="check", description="Live scan or historical review of recorded trade plans")
-@app_commands.describe(
-    horizon="Swing horizon (default: all)",
-    min_strategies="Override min confirmed strategies for this run (live mode only)",
-    from_date="Start date YYYY-MM-DD — enables historical mode, shows recorded plans",
-    to_date="End date YYYY-MM-DD — use with from_date for a specific window",
-)
-@app_commands.choices(horizon=HORIZON_CHOICES)
-async def slash_check(
-    interaction: discord.Interaction,
-    horizon: app_commands.Choice[str] = None,
-    min_strategies: int = None,
-    from_date: str = None,
-    to_date: str = None,
-):
-    """
-    Runs the exact same underlying coroutine as the `!check` prefix
-    command -- directly, not by faking a "!check ..." message in the
-    channel like this used to. That old trick was silently broken: a
-    message sent via `interaction.channel.send()` is authored BY THE BOT
-    ITSELF, and discord.py's `commands.Bot.process_commands()`
-    unconditionally ignores any message whose author is a bot
-    (`if message.author.bot: return`, see discord.py's ext/commands/bot.py).
-    So `/check` was posting a "!check all" line that looked like a
-    command but was never actually parsed or run -- explaining why it
-    appeared to do nothing (and why, with no horizon chosen, it always
-    looked like it had specifically run "!check all" rather than the
-    equivalent bare "!check").
-
-    Fixed by building a real `Context` from the interaction (discord.py
-    2.0+'s supported bridge, `Context.from_interaction`) and calling
-    `check_cmd`'s own callback directly -- same code path, same live
-    progress messages, same result, whether invoked via `!check` or
-    `/check`.
-    """
-    args = []
-    if horizon is not None:
-        args.append(horizon.value)
-    if min_strategies is not None:
-        args.append(str(min_strategies))
-    if from_date:
-        args.append(f"from:{from_date}")
-    if to_date:
-        args.append(f"to:{to_date}")
-
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.scanning import check_cmd
-    await check_cmd.callback(ctx, *args)
-
-
-# ──────────────────────────────────────────────
-# /stop
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="stop", description="Stop whatever scan is currently running")
-async def slash_stop(interaction: discord.Interaction):
-    if not scan_engine.is_scan_running():
-        await interaction.response.send_message("ℹ️ No scan is currently running.", ephemeral=True)
-        return
-    scan_engine.request_stop()
-    await interaction.response.send_message(
-        "🛑 **Stop requested** — the running scan will end after finishing its current ticker."
-    )
