@@ -1,4 +1,4 @@
-"""!top, !stats, !lessons, !calibration, !journal -- the analytics-facing
+"""!soak, !top, !stats, !lessons, !calibration, !journal and their slash twins -- the analytics-facing
 command surface. Every number here is read from a Plan A function or
 the analytics snapshot; nothing in this module computes a stat from
 raw trades itself (see this Part's Global Constraints)."""
@@ -6,11 +6,14 @@ import datetime as dt
 import types
 
 import discord
+from discord import app_commands
 
 from swingbot import config
 from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
 from swingbot.core.analytics.rank import rank_plans
+from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
+from swingbot.commands.slash import PERIOD_CHOICES
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.commands.views import PlanActionView
 from swingbot.core.scanning.embeds import build_embed
@@ -38,17 +41,24 @@ def soak_lines(strategy: str, verdict: dict, badge) -> list[str]:
     return lines
 
 
-@bot.command(name="soak")
-async def soak_cmd(ctx, *, strategy: str):
+async def handle_soak(reply, strategy: str) -> None:
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
+    await reply.defer()
     plans = [plan for plan in PlanStore().all()
              if plan.source == "strategy" and plan.strategy == strategy and is_regular(plan)]
     if not plans:
-        await ctx.send(f"No strategy-sourced plans for `{strategy}` yet (is STRATEGY_ALERTS_MODE off?).")
+        await reply.send(f"No strategy-sourced plans for `{strategy}` yet (is STRATEGY_ALERTS_MODE off?).")
         return
     badge = get_badge("strategy", strategy)
-    await ctx.send("\n".join(soak_lines(strategy, soak_verdict(plans, badge), badge)))
+    await reply.send("\n".join(soak_lines(strategy, soak_verdict(plans, badge), badge)))
+
+
+@bot.command(name="soak")
+async def soak_cmd(ctx, *, strategy: str):
+    reply = CtxReply(ctx)
+    await handle_soak(reply, strategy)
+    await send_prefix_tip(ctx, reply)
 
 
 def top_plans(plans: list, n: int, today=None) -> list:
@@ -107,21 +117,28 @@ def _fake_item_from_plan(plan):
     )
 
 
-@bot.command(name="top")
-async def top_cmd(ctx, n: int = None):
+async def handle_top(reply, n: int | None = None) -> None:
     n = n or config.DIGEST_MAX_PLANS
+    await reply.defer()
     plans = PlanStore().all()
     top = top_plans(plans, n, today=market_today())
     if not top:
-        await ctx.send("No PENDING/ACTIVE plans right now.")
+        await reply.send("No PENDING/ACTIVE plans right now.")
         return
 
-    await ctx.send(f"📌 **Top {len(top)} plan(s) by follow score:**")
+    await reply.send(f"📌 **Top {len(top)} plan(s) by follow score:**")
     for plan in top:
         item = _fake_item_from_plan(plan)
         embed = build_embed(item, "", {"closed": 0}, None, None, layout="compact")
-        view = PlanActionView(plan.plan_id, author_id=ctx.author.id)
-        view.message = await ctx.send(embed=embed, view=view)
+        view = PlanActionView(plan.plan_id, author_id=reply.author.id)
+        view.message = await reply.send(embed=embed, view=view)
+
+
+@bot.command(name="top")
+async def top_cmd(ctx, n: int = None):
+    reply = CtxReply(ctx)
+    await handle_top(reply, n)
+    await send_prefix_tip(ctx, reply)
 
 
 def _dash(x, fmt="{:.1f}"):
@@ -203,49 +220,42 @@ def _since(period: str, today: dt.date) -> "dt.date | None":
     return None
 
 
-@bot.command(name="stats")
-async def stats_cmd(ctx, period: str = "all"):
-    period = period.lower()
-    if period == "all":
-        from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
-        import asyncio
+async def _stats_all(reply) -> None:
+    from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
+    import asyncio
 
+    snap = load_snapshot()
+    if snap is None:
+        await asyncio.to_thread(refresh_snapshot)
         snap = load_snapshot()
-        if snap is None:
-            await asyncio.to_thread(refresh_snapshot)
-            snap = load_snapshot()
-        if snap is None:
-            await ctx.send("No analytics snapshot available yet — not enough closed trades, or the snapshot build failed. Check logs.")
-            return
-
-        embed = stats_embed(snap)
-
-        import os
-
-        from swingbot.core.charts.analytics_charts import render_equity_curve
-        from swingbot.core.charts.cache import cached_chart
-
-        chart_path = await asyncio.to_thread(
-            cached_chart,
-            {"kind": "equity_curve", "snapshot_built_at": snap["built_at"]},
-            lambda target: render_equity_curve(snap["equity_curve"], os.path.dirname(target), filename=os.path.basename(target)),
-        )
-        await ctx.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
+    if snap is None:
+        await reply.send("No analytics snapshot available yet — not enough closed trades, or the snapshot build failed. Check logs.")
         return
 
-    since = _since(period, dt.date.today())
-    if since is None:
-        await ctx.send(f"Unrecognized period `{period}`. Use one of: 7d, 30d, 90d, ytd, all.")
-        return
+    embed = stats_embed(snap)
 
+    import os
+
+    from swingbot.core.charts.analytics_charts import render_equity_curve
+    from swingbot.core.charts.cache import cached_chart
+
+    chart_path = await asyncio.to_thread(
+        cached_chart,
+        {"kind": "equity_curve", "snapshot_built_at": snap["built_at"]},
+        lambda target: render_equity_curve(snap["equity_curve"], os.path.dirname(target), filename=os.path.basename(target)),
+    )
+    await reply.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
+
+
+async def _stats_period(reply, period: str, since: dt.date) -> None:
     from swingbot.core.scanning import engine as scan_engine
     from swingbot.core.analytics import metrics as m
 
     all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
     closed = [t for t in all_trades if t.get("status") in ("win", "loss")
-             and t.get("closed_at", "")[:10] >= since.isoformat()]
+              and t.get("closed_at", "")[:10] >= since.isoformat()]
     if not closed:
-        await ctx.send(f"No closed trades in the last `{period}` window.")
+        await reply.send(f"No closed trades in the last `{period}` window.")
         return
 
     embed = discord.Embed(
@@ -257,7 +267,28 @@ async def stats_cmd(ctx, period: str = "all"):
         ),
     )
     ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
-    await ctx.send(embed=embed)
+    await reply.send(embed=embed)
+
+
+async def handle_stats(reply, period: str = "all") -> None:
+    period = period.lower()
+    if period == "all":
+        await reply.defer()
+        await _stats_all(reply)
+        return
+    since = _since(period, dt.date.today())
+    if since is None:
+        await reply.send_error(f"Unrecognized period `{period}`. Use one of: 7d, 30d, 90d, ytd, all.")
+        return
+    await reply.defer()
+    await _stats_period(reply, period, since)
+
+
+@bot.command(name="stats")
+async def stats_cmd(ctx, period: str = "all"):
+    reply = CtxReply(ctx)
+    await handle_stats(reply, period)
+    await send_prefix_tip(ctx, reply)
 
 
 _OUTCOME_EMOJI = {"win": "✅", "loss": "❌", "scratch": "⬜", "timeout": "⬜"}
@@ -281,37 +312,50 @@ def _tag_cloud(entries: list) -> str:
     return " · ".join(f"`{tag}` x{n}" for tag, n in counts.most_common(10))
 
 
-@bot.command(name="lessons")
-async def lessons_cmd(ctx, arg: str = "5"):
-    from swingbot.core.analytics.journal import JournalStore
-    store = JournalStore()
+async def _lessons_week(reply, store) -> None:
+    from swingbot.core.scanning import engine as scan_engine
+    from swingbot.core.analytics.insights import weekly_digest
+    import datetime as _dt
 
-    if arg.lower() == "week":
-        from swingbot.core.scanning import engine as scan_engine
-        from swingbot.core.analytics.insights import weekly_digest
-        import datetime as _dt
+    all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
+    closed = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
+    messages = weekly_digest(store.entries(), closed, today=_dt.date.today())
+    for msg in messages:
+        await reply.send(msg)
 
-        all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
-        closed = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
-        messages = weekly_digest(store.entries(), closed, today=_dt.date.today())
-        for msg in messages:
-            await ctx.send(msg)
-        return
 
-    try:
-        n = max(1, min(25, int(arg)))
-    except ValueError:
-        await ctx.send(f"`{arg}` isn't a number or `week`. Usage: `!lessons [n|week]`.")
-        return
-
+async def _lessons_recent(reply, store, n: int) -> None:
     entries = store.entries()[:n]
     if not entries:
-        await ctx.send("No journal entries yet.")
+        await reply.send("No journal entries yet.")
         return
 
     lines = lessons_lines(entries)
     text = "\n".join(lines) + f"\n\n**Tags:** {_tag_cloud(entries)}"
-    await ctx.send(f"📖 **Last {len(entries)} journal entr{'y' if len(entries)==1 else 'ies'}:**\n{text[:1900]}")
+    await reply.send(f"📖 **Last {len(entries)} journal entr{'y' if len(entries)==1 else 'ies'}:**\n{text[:1900]}")
+
+
+async def handle_lessons(reply, arg: str = "5") -> None:
+    from swingbot.core.analytics.journal import JournalStore
+
+    if arg.lower() == "week":
+        await reply.defer()
+        await _lessons_week(reply, JournalStore())
+        return
+    try:
+        n = max(1, min(25, int(arg)))
+    except ValueError:
+        await reply.send_error(f"`{arg}` isn't a number or `week`. Usage: `!lessons [n|week]`.")
+        return
+    await reply.defer()
+    await _lessons_recent(reply, JournalStore(), n)
+
+
+@bot.command(name="lessons")
+async def lessons_cmd(ctx, arg: str = "5"):
+    reply = CtxReply(ctx)
+    await handle_lessons(reply, arg)
+    await send_prefix_tip(ctx, reply)
 
 
 def calibration_lines(level_rows: list, decay_lines: list) -> list:
@@ -327,8 +371,8 @@ def calibration_lines(level_rows: list, decay_lines: list) -> list:
     return lines
 
 
-@bot.command(name="calibration")
-async def calibration_cmd(ctx):
+async def handle_calibration(reply) -> None:
+    await reply.defer()
     from swingbot.core.scanning import engine as scan_engine
     from swingbot.core.analytics.calibration import level_calibration, score_deciles
     from swingbot.core.analytics.insights import edge_decay_report
@@ -336,7 +380,7 @@ async def calibration_cmd(ctx):
     all_trades = scan_engine.trade_log.get_trades(status="all", limit=None, ledger="main")
     closed = [t for t in all_trades if t.get("status") in ("win", "loss")]
     if not closed:
-        await ctx.send("No closed trades yet — nothing to calibrate against.")
+        await reply.send("No closed trades yet — nothing to calibrate against.")
         return
 
     levels = level_calibration(closed)
@@ -365,7 +409,14 @@ async def calibration_cmd(ctx):
         {"kind": "calibration", "n": len(closed), "latest": closed[-1].get("closed_at")},
         lambda target: render_calibration(deciles, os.path.dirname(target), filename=os.path.basename(target)),
     )
-    await ctx.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
+    await reply.send(embed=embed, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
+
+
+@bot.command(name="calibration")
+async def calibration_cmd(ctx):
+    reply = CtxReply(ctx)
+    await handle_calibration(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 def _journal_note_result(store, trade_id: str, note: str) -> str:
@@ -375,21 +426,73 @@ def _journal_note_result(store, trade_id: str, note: str) -> str:
     return f"📝 Note saved for trade `{trade_id}`."
 
 
-@bot.command(name="journal")
-async def journal_cmd(ctx, target: str, *, note: str = None):
+async def handle_journal(reply, target: str, note: str | None = None) -> None:
     from swingbot.core.analytics.journal import JournalStore
+    await reply.defer()
     store = JournalStore()
 
     if note:
         # target is a trade_id in this form.
-        await ctx.send(_journal_note_result(store, target, note))
+        await reply.send(_journal_note_result(store, target, note))
         return
 
     # No note text -> target is a ticker to list, reusing lessons_lines.
     entries = store.entries()
     matching = [e for e in entries if e.get("ticker", "").upper() == target.upper()]
     if not matching:
-        await ctx.send(f"No journal entries for `{target.upper()}`.")
+        await reply.send(f"No journal entries for `{target.upper()}`.")
         return
     lines = lessons_lines(matching)
-    await ctx.send(f"📖 **{len(matching)} journal entr{'y' if len(matching)==1 else 'ies'} for {target.upper()}:**\n" + "\n".join(lines)[:1900])
+    await reply.send(f"📖 **{len(matching)} journal entr{'y' if len(matching)==1 else 'ies'} for {target.upper()}:**\n" + "\n".join(lines)[:1900])
+
+
+@bot.command(name="journal")
+async def journal_cmd(ctx, target: str, *, note: str = None):
+    reply = CtxReply(ctx)
+    await handle_journal(reply, target, note)
+    await send_prefix_tip(ctx, reply)
+
+
+
+# ──────────────────────────────────────────────
+# / slash twins (/top /stats /soak /lessons moved from slash.py in v153,
+# payload unchanged; /calibration and /journal new)
+# ──────────────────────────────────────────────
+
+@bot.tree.command(name="top", description="Highest follow-score PENDING/ACTIVE plans")
+@app_commands.describe(n="How many plans to show (default: config.DIGEST_MAX_PLANS)")
+async def slash_top(interaction: discord.Interaction, n: int = None):
+    await handle_top(InteractionReply(interaction), n)
+
+
+@bot.tree.command(name="stats", description="Win rate, expectancy, and risk-adjusted stats")
+@app_commands.describe(period="Time window")
+@app_commands.choices(period=PERIOD_CHOICES)
+async def slash_stats(interaction: discord.Interaction, period: app_commands.Choice[str] = None):
+    await handle_stats(InteractionReply(interaction), period.value if period else "all")
+
+
+@bot.tree.command(name="soak", description="v93 trust-rule readout for a strategy's shadow plans")
+@app_commands.describe(strategy="Exact strategy name, e.g. MACD")
+async def slash_soak(interaction: discord.Interaction, strategy: str):
+    await handle_soak(InteractionReply(interaction), strategy)
+
+
+@bot.tree.command(name="lessons", description="Recent journal entries and their auto-generated lessons")
+@app_commands.describe(arg="A number of entries, or 'week' for the weekly digest")
+async def slash_lessons(interaction: discord.Interaction, arg: str = "5"):
+    await handle_lessons(InteractionReply(interaction), arg)
+
+
+@bot.tree.command(name="calibration", description="Win rate per confidence level, edge decay and score deciles")
+async def slash_calibration(interaction: discord.Interaction):
+    await handle_calibration(InteractionReply(interaction))
+
+
+@bot.tree.command(name="journal", description="Save a note on a trade, or list a ticker's journal entries")
+@app_commands.describe(
+    target="A trade id (to save a note) or a ticker (to list its entries)",
+    note="Note text to save on that trade id; leave blank to list a ticker",
+)
+async def slash_journal(interaction: discord.Interaction, target: str, note: str = None):
+    await handle_journal(InteractionReply(interaction), target, note)

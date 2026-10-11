@@ -15,6 +15,7 @@ def test_soak_slash_registered():
     # test_six_bridge_commands_still_registered for why that matters
     # under `-n 4` (import order across workers is not deterministic).
     import swingbot.commands.slash  # noqa: F401
+    import swingbot.commands.stats  # noqa: F401  -- v153: /soak moved here
     from swingbot.bot_core import bot
 
     names = {cmd.name for cmd in bot.tree.get_commands()}
