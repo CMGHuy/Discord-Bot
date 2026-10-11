@@ -209,6 +209,49 @@ dropped_doc_fields = register(sa.Table("dropped_doc_fields", METADATA,
     ("table_name", "field", "row_id"))
 
 
+# v152 D1-D3: who follows a plan (Watch / Following), the notify channel's
+# one-message-per-(plan, event) claim with its retry state, each Discord
+# user's /notify settings, and the scheduled scan's alert-post record the
+# per-symbol cooldown reads. Followers and claims cascade with their plan;
+# the trade keeps its own denormalised taken_by copy (a doc field).
+plan_followers = register(sa.Table(
+    "plan_followers", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("plan_id", sa.Text, sa.ForeignKey("plans.plan_id", ondelete="CASCADE"),
+              nullable=False),
+    sa.Column("user_id", sa.BigInteger, nullable=False),
+    sa.Column("kind", sa.Text, nullable=False),
+    *standard_columns(),
+    sa.UniqueConstraint("plan_id", "user_id", "kind", name="plan_followers_row_uq"),
+    sa.Index("plan_followers_plan_idx", "plan_id"),
+), ("plan_id", "user_id", "kind"))
+
+plan_notifications = register(sa.Table(
+    "plan_notifications", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("plan_id", sa.Text, sa.ForeignKey("plans.plan_id", ondelete="CASCADE"),
+              nullable=False),
+    sa.Column("event", sa.Text, nullable=False),
+    sa.Column("state", sa.Text, nullable=False),
+    *standard_columns(),
+    sa.UniqueConstraint("plan_id", "event", name="plan_notifications_claim_uq"),
+    sa.Index("plan_notifications_state_idx", "state"),
+), ("plan_id", "event", "state"))
+
+notify_prefs = register(sa.Table(
+    "notify_prefs", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("user_id", sa.BigInteger, nullable=False, unique=True),
+    *standard_columns(),
+), ("user_id",))
+
+alert_posts = register(sa.Table(
+    "alert_posts", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("ticker", sa.Text, nullable=False),
+    sa.Column("at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("outcome", sa.Text, nullable=False),
+    *standard_columns(),
+    sa.Index("alert_posts_ticker_at_idx", "ticker", "at"),
+), ("ticker", "at", "outcome"))
+
+
 #: Why each promoted column is a column and not a `doc` field. A promotion
 #: costs a migration forever after, so each names what needs it: identity,
 #: a foreign key, an index a hot query uses, or a NOT NULL the database must
@@ -228,7 +271,7 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "stop_loss": "numeric column for SQL-side risk queries",
     },
     "plans": {
-        "plan_id": "natural key; foreign-key target of starred_plans",
+        "plan_id": "natural key; foreign-key target of starred_plans, plan_followers, plan_notifications",
         "ticker": "plans_ticker_idx; per-ticker plan lookup",
         "strategy": "per-strategy plan filters",
         "horizon_key": "per-horizon plan filters",
@@ -287,5 +330,21 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "table_name": "which table a dropped value came from; restore filter",
         "field": "which doc field was dropped; restore filter",
         "row_id": "the source row's id; restore join key",
+    },
+    "plan_followers": {
+        "plan_id": "cascading foreign key into plans; plan_followers_plan_idx lookup by plan",
+        "user_id": "part of the plan_followers_row_uq natural key; the Discord user",
+        "kind": "part of the natural key; watch vs taken filter",
+    },
+    "plan_notifications": {
+        "plan_id": "cascading foreign key into plans; half of the claim key",
+        "event": "other half of plan_notifications_claim_uq, the idempotency claim",
+        "state": "plan_notifications_state_idx; the retry sweep's state='pending' filter",
+    },
+    "notify_prefs": {"user_id": "natural key; one row per Discord user"},
+    "alert_posts": {
+        "ticker": "alert_posts_ticker_at_idx; the per-ticker cooldown window lookup",
+        "at": "alert_posts_ticker_at_idx; window, digest count and prune by time; NOT NULL",
+        "outcome": "posted vs suppressed; only posted rows open a cooldown window",
     },
 }

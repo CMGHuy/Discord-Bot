@@ -6,6 +6,7 @@ import pytest
 
 from swingbot.core.db import schema
 from swingbot.core.db.repositories.account import AccountRepository
+from swingbot.core.db.repositories.base import Repository
 from swingbot.core.db.repositories.flags import FlagRepository
 from swingbot.core.db.repositories.heartbeat import HeartbeatRepository
 from swingbot.core.db.repositories.jobs import JobRepository
@@ -57,12 +58,26 @@ CASES = {
     "tuning_proposals": (ProposalRepository, {"filename": "p.json", "created_at": TS}),
     "scan_progress": (ScanProgressRepository, {"key": "current"}),
     "market_data_state": (MarketDataStateRepository, {"key": "AAPL|daily"}),
+    # v152: the base surrogate-keyed Repository over each new table. The
+    # V152-3/V152-4 classes subclass it; the property under test is the base
+    # insert/list path every one of them reads back through.
+    "plan_followers": (lambda: Repository(schema.plan_followers, key="id"),
+                       {"plan_id": "P-probe", "user_id": 123456789012345678, "kind": "watch"}),
+    "plan_notifications": (lambda: Repository(schema.plan_notifications, key="id"),
+                           {"plan_id": "P-probe", "event": "tp1", "state": "pending"}),
+    "notify_prefs": (lambda: Repository(schema.notify_prefs, key="id"),
+                     {"user_id": 123456789012345678}),
+    "alert_posts": (lambda: Repository(schema.alert_posts, key="id"),
+                    {"ticker": "AAPL", "at": TS, "outcome": "posted"}),
 }
 
 #: Tables with no repository, and why. Anything else must be in CASES.
 NOT_REPOSITORY_BACKED = {
     "dropped_doc_fields": "written only by swingbot.core.db.doc_fields inside Alembic revisions",
 }
+
+#: Tables whose rows need the probe plan first (a foreign key into plans).
+NEEDS_PLAN = {"starred_plans", "plan_followers", "plan_notifications"}
 
 
 def _write(repo, record, conn):
@@ -75,7 +90,7 @@ def _write(repo, record, conn):
 @pytest.mark.parametrize("table", sorted(CASES))
 def test_an_unseen_field_round_trips_unchanged(table, db_conn):
     factory, required = CASES[table]
-    if table == "starred_plans":
+    if table in NEEDS_PLAN:
         PlanRepository().upsert(dict(PLAN), conn=db_conn)   # its foreign key
     repo = factory()
     assert repo.table.name == table
