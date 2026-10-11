@@ -1,8 +1,16 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, computed, provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GateRow } from '../../../api/models';
-import { GATE_CAVEAT, WHY_SECTIONS, WhyPanel, marginTone } from './why-panel';
+import { GATE_CAVEAT, WHY_SECTIONS, WhyPanel, WhySection, marginTone } from './why-panel';
+
+@Component({
+  imports: [WhyPanel],
+  template: `<sb-why-panel [sections]="sections()" />`,
+})
+class ReadonlySectionsHost {
+  readonly sections = computed<readonly WhySection[]>(() => ['gates']);
+}
 
 function mount(inputs: Record<string, unknown> = {}): ComponentFixture<WhyPanel> {
   const fixture = TestBed.createComponent(WhyPanel);
@@ -35,6 +43,13 @@ describe('marginTone', () => {
 
 describe('WhyPanel', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+
+  it('accepts a readonly computed section list from its host', () => {
+    const f = TestBed.createComponent(ReadonlySectionsHost);
+    f.detectChanges();
+    expect(f.nativeElement.querySelectorAll('sb-panel')).toHaveLength(1);
+    expect(f.nativeElement.textContent).toContain("Gate margins (vs today's thresholds)");
+  });
 
   it('renders the five sections in canonical order with quality inside confidence', () => {
     const f = mount({ sections: [...WHY_SECTIONS].reverse(), confidenceFactors: [{ factor: 'Trend', note: 'Up' }],

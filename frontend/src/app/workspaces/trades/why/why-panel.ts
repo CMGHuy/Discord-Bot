@@ -7,7 +7,7 @@ import { InlineMd } from '../../../ui/inline-md';
 import { num, signed, text } from '../../../ui/format';
 
 export type WhySection = 'levels' | 'confidence' | 'gates' | 'calendar' | 'explanation';
-export const WHY_SECTIONS: WhySection[] = ['levels', 'confidence', 'gates', 'calendar', 'explanation'];
+export const WHY_SECTIONS: readonly WhySection[] = ['levels', 'confidence', 'gates', 'calendar', 'explanation'];
 export const GATE_CAVEAT = "Margins are measured against today's thresholds, not the ones in force when this plan was issued.";
 
 export function marginTone(
@@ -136,7 +136,7 @@ export function marginTone(
   `,
 })
 export class WhyPanel {
-  readonly sections = input<WhySection[]>(WHY_SECTIONS);
+  readonly sections = input<readonly WhySection[]>(WHY_SECTIONS);
   readonly status = input<string | null>(null);
   readonly barsToExpiry = input<number | null>(null);
   readonly sessionsSinceCreated = input<number | null>(null);
