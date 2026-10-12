@@ -94,6 +94,12 @@ def test_healthcheck_is_a_stethoscope_text_line_with_plain_marks():
         assert glyph not in text
 
 
+def test_healthcheck_at_one_confirmation_scan_does_not_claim_a_wait():
+    text = notices.healthcheck_text("10:05", FUNNEL, 2, 1)
+    assert "unchanged since it last posted" in text
+    assert "needs to reappear" not in text
+
+
 def test_healthcheck_without_a_funnel_is_the_short_form():
     assert notices.healthcheck_text("10:05", None, 0, 2) == (
         "🩺 **Healthcheck** (10:05) — scan complete, nothing new\n• 📂 0 open trade(s)")

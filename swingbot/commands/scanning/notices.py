@@ -125,8 +125,13 @@ def healthcheck_text(now_str: str, funnel: dict | None, open_count: int,
         return (f"{HEALTHCHECK_BADGE} **Healthcheck** ({now_str}) — scan complete, nothing new\n"
                 f"• 📂 {open_count} open trade(s)")
     awaiting = funnel.get("awaiting_confirmation", 0)
-    confirm_note = (f" (needs to reappear {confirmation_scans} scan(s) in a row before it posts)"
-                    if awaiting else "")
+    if confirmation_scans <= 1:
+        # One scan confirms on first sight, so "awaiting" can only be a repeat of
+        # a signal that already posted with the same value.
+        confirm_note = " (unchanged since it last posted, so it won't post again)" if awaiting else ""
+    else:
+        confirm_note = (f" (needs to reappear {confirmation_scans} scan(s) in a row before it posts)"
+                        if awaiting else "")
     bullets = [
         f"📡 {funnel['tickers']} tickers scanned",
         f"🧮 {funnel['scenarios_found']} scenario(s) found",
