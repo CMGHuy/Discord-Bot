@@ -1,11 +1,21 @@
 # v156 Trade autopsy: Implementation Plan
 
+> **CLOSED 2026-10-12, not implemented -- NOT merged to `main`.** Partner's decision
+> not to ship v156. V156-1 (look-record writer) and V156-2 (`/trade-autopsy` skill,
+> Codex mirror) were built on worktree branch
+> `2026-10-10-v156-review-ritual-skills` (commits `a677bdec`, `bae78ce2`, `5a31af4f`);
+> V156-3 (manual run) was started and V156-4 never ran. Two manual runs came back as
+> prose summaries, not the seven-line shape, which suggests the forked skill's result
+> is relayed through a parent summary; the question was left open when the plan was
+> closed. A considered decision, not an oversight: the branch and worktree are kept
+> as the only copy of that code and are not deleted here.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief V156-2` or `grep -n "^### Task V156-2" -A 200 <this file>`.
 
 **Bump:** none
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-10-v156-review-ritual-skills-design.md`](../specs/2026-10-10-v156-review-ritual-skills-design.md)
+**Spec:** [`docs/superpowers/specs/no-lift/2026-10-10-v156-review-ritual-skills-design.md`](../../specs/no-lift/2026-10-10-v156-review-ritual-skills-design.md)
 **Brief:** `.superpowers/briefs/2026-10-10-v156-trade-autopsy.md` (line numbers from `claude/adoring-cori-u9l0th` @ `4d4f1955`)
 
 **Goal:** Ship `/trade-autopsy <trade id>`, a slash-only forked skill that prints one closed trade in the spec's fixed seven-line shape (measurements, never a verdict), and a look-record writer that appends one row per review to `docs/superpowers/results/looks.jsonl`.
