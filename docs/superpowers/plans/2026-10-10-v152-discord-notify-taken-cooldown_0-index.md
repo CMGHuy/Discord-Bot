@@ -134,3 +134,9 @@ Parallel tasks need disjoint files and no contract dependency. Every sequential 
 - **Forward:** deploy the image; `docker compose exec bot alembic upgrade head` (`docs/deploy/DEPLOY_HETZNER.md:281`) before restarting the bot; set `DISCORD_CHANNEL_NOTIFY_ID` on the VM with `python3 scripts/ops/env_set.py` under `mirror-prod`; set the channel topic by hand: "Paper plan updates for plans you follow: near stop, TP1, TP2, stopped, expired; closed/cancelled for Following only. Not advice. /notify to choose." `ALERT_SYMBOL_COOLDOWN_HOURS` goes live at 24.
 - **Image-only rollback:** the four tables stay and are ignored; buttons on v152 alerts then fail with "This interaction failed". `alembic downgrade -1` (run while `v152_001` is the head; never `downgrade v144_001`, which would also drop v147's `gate_rejections` and v146's backfill) is optional and drops the followers record.
 - **PITR rollback:** `scripts/ops/rollback_to.sh` rewinds the tables and trade `taken_by` with the book; posted Discord messages are not rolled back.
+
+## Handoff (2026-10-12)
+
+- Foundation and policy commits predate the task-ID subject convention used by V152-20's grep: V152-2 `eafc3946`; V152-3 `0b9d2eae`; V152-4 `0a0cad62`; V152-5 `683fc163`; V152-11 `501028f5`; V152-12 `d287f922`; V152-13 `2932ad39`; V152-14 `8a4fe07f`; V152-15 `e75bd7fd`. Their tracked deliverables and focused tests are present; the subject grep undercounts them.
+- V152-20 on `codex/v152-notifier-finish`: Python full suite 8,892 passed, 0 failed, 0 xfailed, 3 unrelated skips; SPA full suite 2,869 passed; complexity and syntax checks passed. The veteran-trader, financial-advisor and staff-engineer panel re-reviews are CLEAN.
+- This implementation branch includes the v151/v153 integration. The older `2026-10-10-v152-discord-notify-taken-cooldown` worktree remains clean at `b94df6c9`; it was not edited or removed here. The production steps are in the After merge section above.
