@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-12 19:35:53 UTC",
+  "generated_at": "2026-10-12 19:36:46 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.23.0",
+    "ui": "1.23.1",
     "bot": "2.5.0"
   },
   "releases": [
@@ -1590,6 +1590,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-12",
+      "last_seen": "2026-10-12",
+      "commit": "1566ff5f",
+      "subject": "release(ui): 1.23.1 -- followed-plan analytics breakdown",
+      "versions": {
+        "ui": "1.23.1",
+        "bot": "2.5.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
