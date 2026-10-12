@@ -5,7 +5,8 @@ import logging
 import pathlib
 
 COMMANDS = pathlib.Path(__file__).resolve().parents[2] / "swingbot" / "commands"
-_REPLIES = {"send", "send_message", "edit"}
+# v153: handlers answer through a Reply; send_error is a reply too.
+_REPLIES = {"send", "send_message", "edit", "send_error"}
 
 
 def _calls(handler):
@@ -76,3 +77,26 @@ def test_backtest_watchlist_worker_failure_is_logged_and_still_reported(monkeypa
     [record] = [r for r in caplog.records if r.name == backtest.log.name]
     assert record.exc_info is not None and "AAPL" in record.getMessage()
     assert summaries == [] and errors == [("AAPL", "no data")]
+
+
+
+def test_backtest_command_failure_is_logged_shown_and_not_followed_by_a_tip(monkeypatch, caplog):
+    import datetime as dt
+
+    from swingbot.commands import backtest
+    from swingbot.commands import reply as reply_mod
+    from tests.commands.reply_harness import FakeContext
+
+    def boom(*args):
+        raise RuntimeError("yahoo down")
+
+    monkeypatch.setattr(backtest, "_sync_backtest_one", boom)
+    monkeypatch.setattr(reply_mod, "_today", lambda: reply_mod.PREFIX_TIP_UNTIL - dt.timedelta(days=1))
+    events: list = []
+    with caplog.at_level(logging.WARNING, logger=backtest.log.name):
+        asyncio.run(backtest.backtest_cmd.callback(FakeContext(events, qualified_name="backtest"), "aapl"))
+
+    [record] = [r for r in caplog.records if r.name == backtest.log.name]
+    assert record.exc_info is not None and "AAPL" in record.getMessage()
+    assert events[-1][1] == "⚠️ Could not fetch data for AAPL: yahoo down"
+    assert not any((event[1] or "").startswith("Tip:") for event in events)

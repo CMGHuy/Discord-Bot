@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-10 06:50:56 UTC",
+  "generated_at": "2026-10-12 08:32:51 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.22.1",
-    "bot": "2.3.1"
+    "ui": "1.23.0",
+    "bot": "2.4.1"
   },
   "releases": [
     {
@@ -1538,6 +1538,45 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-11",
+      "last_seen": "2026-10-11",
+      "commit": "ccc501c6",
+      "subject": "release(bot): 2.4.0 -- slash command parity: every ! command has a / twin through one shared handler",
+      "versions": {
+        "ui": "1.22.1",
+        "bot": "2.4.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-12",
+      "last_seen": "2026-10-12",
+      "commit": "f352663d",
+      "subject": "release(ui): 1.23.0 -- plan page and shared Why panel on the trade page (v151)",
+      "versions": {
+        "ui": "1.23.0",
+        "bot": "2.4.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-12",
+      "last_seen": "2026-10-12",
+      "commit": "870f7865",
+      "subject": "release(bot): 2.4.1 -- plan-carrying embeds link to the plan page (v151)",
+      "versions": {
+        "ui": "1.23.0",
+        "bot": "2.4.1"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]

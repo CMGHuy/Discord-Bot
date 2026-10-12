@@ -1,28 +1,22 @@
 """
-Slash-command (/command) equivalents for key bot commands.
+Shared slash-command (/command) building blocks.
 
-Discord shows these natively when the user types '/' — each parameter
-has a description and, where applicable, a dropdown of valid choices.
+Since v153 every slash command lives next to its prefix (!) twin, in the
+same module, and both call one shared handle_<name>(reply, ...) handler
+(swingbot/commands/reply.py). This module keeps only what several of them
+share: the choice lists, and the bot.tree error handler for app-command
+check failures. It must never import a command module (they import it).
 
-These wrap the same business logic as the prefix (!) commands; they
-don't replace them. Both work in parallel.
-
-Registered via bot.tree; synced to Discord in on_ready (scanning.py).
+The tree is synced to Discord once per process start, in on_ready
+(swingbot/commands/scanning/loops.py).
 """
-import asyncio
 import logging
 
 import discord
 from discord import app_commands
-from discord.ext import commands
 
-from swingbot.bot_core import bot, COMMANDS_BY_CATEGORY, CONFIDENCE_EXPLAINER
-from swingbot.commands.scanning.follow_notify import (
-    EVENT_LABELS, FOLLOWING_ONLY, NOTIFY_EVENTS, mentions_user,
-)
-from swingbot.core import presentation as ui
-from swingbot.core.market.strategy import HORIZONS, live_horizons
-from swingbot.core.scanning import engine as scan_engine
+from swingbot.bot_core import bot
+from swingbot.core.market.strategy import live_horizons
 
 log = logging.getLogger(__name__)
 
@@ -60,487 +54,36 @@ STATUS_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "PENDING
 # v32 Task 11: tier (A/B/C) retired in favour of confidence level (1-5).
 LEVEL_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("All", "1", "2", "3", "4", "5")]
 PERIOD_CHOICES = [app_commands.Choice(name=v, value=v) for v in ("7d", "30d", "90d", "ytd", "all")]
-WATCH_MODES = ("mention", "silent")
-NOTIFY_EVENT_CHOICES = [app_commands.Choice(name=n, value=n) for n in (*NOTIFY_EVENTS, "all")]
-WATCH_MODE_CHOICES = [app_commands.Choice(name=m, value=m) for m in WATCH_MODES]
 
 
 # ──────────────────────────────────────────────
-# Helper — send long text in chunks
+# App-command errors (v153 SP3)
 # ──────────────────────────────────────────────
 
-async def _send_chunks(interaction: discord.Interaction, text: str, ephemeral: bool = False) -> None:
-    """Send a response (possibly long) respecting the 2000-char limit."""
-    chunks = [text[i:i+1900] for i in range(0, len(text), 1900)]
-    await interaction.response.send_message(chunks[0], ephemeral=ephemeral)
-    for chunk in chunks[1:]:
-        await interaction.followup.send(chunk, ephemeral=ephemeral)
+# Check failures get a one-line ephemeral answer, matching the prefix side's
+# on_command_error (bot_core.py); anything else is logged and re-raised.
+APP_CHECK_REPLIES: dict[type, str] = {
+    app_commands.MissingPermissions: "🚫 You don't have permission to run that command.",
+    app_commands.NoPrivateMessage: "This command only works in a server.",
+}
 
 
-# ──────────────────────────────────────────────
-# /ping
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="ping", description="Check bot latency")
-async def slash_ping(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        f"🏓 Pong! {round(bot.latency * 1000)}ms", ephemeral=True
-    )
+def _check_reply(error: Exception) -> str | None:
+    for kind, text in APP_CHECK_REPLIES.items():
+        if isinstance(error, kind):
+            return text
+    return None
 
 
-# ──────────────────────────────────────────────
-# /help
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="help", description="Show all available commands")
-async def slash_help(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="📖 Swing Trade Bot — Commands",
-        description="Alerts only, never places trades. Prefix: `!`  •  Slash: `/`",
-    )
-    for category, cmds in COMMANDS_BY_CATEGORY.items():
-        value = "\n".join(f"`{cmd}` — {desc}" for cmd, desc in cmds)
-        embed.add_field(name=category, value=value, inline=False)
-    ui.apply_chrome(embed, accent=ui.accent_for_outcome("scratch"))
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-# ──────────────────────────────────────────────
-# /confidence
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="confidence", description="Explain the 5 confidence levels")
-async def slash_confidence(interaction: discord.Interaction):
-    await interaction.response.send_message(CONFIDENCE_EXPLAINER, ephemeral=True)
-
-
-# ──────────────────────────────────────────────
-# /strategies
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="strategies", description="List available strategies and swing horizons")
-async def slash_strategies(interaction: discord.Interaction):
-    lines = [
-        "**Strategies:** EMA Crossover, VWAP, Fibonacci retracement, Support/Resistance breakout, "
-        "RSI mean-reversion, MACD, Elliott Wave, MA Ribbon, Break & Retest, RSI Divergence, Volume Profile",
-        "", "**Swing horizons:**",
-    ]
-    for key in live_horizons():
-        h = HORIZONS[key]
-        lines.append(f"`{key}` — {h['label']}")
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
-
-
-# ──────────────────────────────────────────────
-# /regime
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="regime", description="Show current broad market regime (SPY trend)")
-async def slash_regime(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    regime = await asyncio.to_thread(scan_engine.get_regime)
-    if regime is None:
-        await interaction.followup.send("Could not fetch market regime right now.", ephemeral=True)
-        return
-    await interaction.followup.send(
-        f"**Market regime:** {regime.label}\n"
-        f"{regime.ticker} close: {regime.close} | 200EMA: {regime.ema200} "
-        f"({regime.pct_above_ema:+.1f}%) | 200EMA slope (20d): {regime.ema_slope_pct:+.2f}%\n\n"
-        f"This feeds into confidence scoring (+10 pts when a signal agrees with the regime).",
-        ephemeral=True,
-    )
-
-
-# ──────────────────────────────────────────────
-# /pnl
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="pnl", description="Current unrealized P&L for every open trade")
-async def slash_pnl(interaction: discord.Interaction):
-    await interaction.response.defer()
-    # Delegate to the prefix command by posting it in the channel
-    # (slash and prefix share no ctx; easiest bridge is to re-use the engine directly)
-    from swingbot.core.scanning.engine import get_all_unrealized_pnl
-    rows = await asyncio.to_thread(get_all_unrealized_pnl)
-    if not rows:
-        await interaction.followup.send("No open trades right now.")
-        return
-    lines = ["**Open trade P&L** (live prices):"]
-    for r in rows:
-        lines.append(r)
-    await _send_chunks(interaction, "\n".join(lines))
-
-
-# ──────────────────────────────────────────────
-# /liveplans
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="liveplans", description="Live v2 plan lifecycle board (PENDING/ACTIVE/PARTIAL)")
-@app_commands.describe(status="Filter by lifecycle status", level="Filter by confidence level")
-@app_commands.choices(status=STATUS_CHOICES, level=LEVEL_CHOICES)
-async def slash_liveplans(
-    interaction: discord.Interaction,
-    status: app_commands.Choice[str] = None,
-    level: app_commands.Choice[str] = None,
-):
-    args = []
-    if status and status.value != "All":
-        args.append(status.value.lower())
-    if level and level.value != "All":
-        args.append(f"level:{level.value.lower()}")
-
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.plans import liveplans_cmd
-    await liveplans_cmd.callback(ctx, *args)
-
-
-# ──────────────────────────────────────────────
-# /check
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="check", description="Live scan or historical review of recorded trade plans")
-@app_commands.describe(
-    horizon="Swing horizon (default: all)",
-    min_strategies="Override min confirmed strategies for this run (live mode only)",
-    from_date="Start date YYYY-MM-DD — enables historical mode, shows recorded plans",
-    to_date="End date YYYY-MM-DD — use with from_date for a specific window",
-)
-@app_commands.choices(horizon=HORIZON_CHOICES)
-async def slash_check(
-    interaction: discord.Interaction,
-    horizon: app_commands.Choice[str] = None,
-    min_strategies: int = None,
-    from_date: str = None,
-    to_date: str = None,
-):
-    """
-    Runs the exact same underlying coroutine as the `!check` prefix
-    command -- directly, not by faking a "!check ..." message in the
-    channel like this used to. That old trick was silently broken: a
-    message sent via `interaction.channel.send()` is authored BY THE BOT
-    ITSELF, and discord.py's `commands.Bot.process_commands()`
-    unconditionally ignores any message whose author is a bot
-    (`if message.author.bot: return`, see discord.py's ext/commands/bot.py).
-    So `/check` was posting a "!check all" line that looked like a
-    command but was never actually parsed or run -- explaining why it
-    appeared to do nothing (and why, with no horizon chosen, it always
-    looked like it had specifically run "!check all" rather than the
-    equivalent bare "!check").
-
-    Fixed by building a real `Context` from the interaction (discord.py
-    2.0+'s supported bridge, `Context.from_interaction`) and calling
-    `check_cmd`'s own callback directly -- same code path, same live
-    progress messages, same result, whether invoked via `!check` or
-    `/check`.
-    """
-    args = []
-    if horizon is not None:
-        args.append(horizon.value)
-    if min_strategies is not None:
-        args.append(str(min_strategies))
-    if from_date:
-        args.append(f"from:{from_date}")
-    if to_date:
-        args.append(f"to:{to_date}")
-
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.scanning import check_cmd
-    await check_cmd.callback(ctx, *args)
-
-
-# ──────────────────────────────────────────────
-# /stop
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="stop", description="Stop whatever scan is currently running")
-async def slash_stop(interaction: discord.Interaction):
-    if not scan_engine.is_scan_running():
-        await interaction.response.send_message("ℹ️ No scan is currently running.", ephemeral=True)
-        return
-    scan_engine.request_stop()
-    await interaction.response.send_message(
-        "🛑 **Stop requested** — the running scan will end after finishing its current ticker."
-    )
-
-
-# ──────────────────────────────────────────────
-# /ticker
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="ticker", description="Full bias snapshot for a single stock across all strategies")
-@app_commands.describe(ticker="Stock ticker symbol, e.g. AAPL")
-async def slash_ticker(interaction: discord.Interaction, ticker: str):
-    ticker = ticker.upper()
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.info import ticker_cmd
-    await ticker_cmd.callback(ctx, ticker)
-
-
-# ──────────────────────────────────────────────
-# /backtest
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="backtest", description="Backtest a ticker against historical data")
-@app_commands.describe(
-    ticker="Stock ticker symbol, e.g. AAPL",
-    horizon="Swing horizon (default: all)",
-    strategy="Strategy to test (default: all)",
-    from_date="Start date YYYY-MM-DD (optional)",
-    to_date="End date YYYY-MM-DD (optional)",
-    setups="List every individual trade setup instead of the summary table",
-)
-@app_commands.choices(horizon=HORIZON_CHOICES, strategy=STRATEGY_CHOICES)
-async def slash_backtest(
-    interaction: discord.Interaction,
-    ticker: str,
-    horizon: app_commands.Choice[str] = None,
-    strategy: app_commands.Choice[str] = None,
-    from_date: str = None,
-    to_date: str = None,
-    setups: bool = False,
-):
-    ticker = ticker.upper()
-    args = [ticker, horizon.value if horizon else "all", strategy.value if strategy else "all"]
-    if from_date:
-        args.append(f"from:{from_date}")
-    if to_date:
-        args.append(f"to:{to_date}")
-    if setups:
-        args.append("setups")
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.backtest import backtest_cmd
-    await backtest_cmd.callback(ctx, *args)
-
-
-# ──────────────────────────────────────────────
-# /backtestwatchlist
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="backtestwatchlist", description="Backtest every watchlist ticker, ranked by expectancy")
-@app_commands.describe(
-    horizon="Swing horizon (default: all)",
-    strategy="Strategy to test (default: all)",
-    from_date="Start date YYYY-MM-DD (optional)",
-    to_date="End date YYYY-MM-DD (optional)",
-)
-@app_commands.choices(horizon=HORIZON_CHOICES, strategy=STRATEGY_CHOICES)
-async def slash_backtestwatchlist(
-    interaction: discord.Interaction,
-    horizon: app_commands.Choice[str] = None,
-    strategy: app_commands.Choice[str] = None,
-    from_date: str = None,
-    to_date: str = None,
-):
-    args = [horizon.value if horizon else "all", strategy.value if strategy else "all"]
-    if from_date:
-        args.append(f"from:{from_date}")
-    if to_date:
-        args.append(f"to:{to_date}")
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.backtest import backtestwatchlist_cmd
-    await backtestwatchlist_cmd.callback(ctx, *args)
-
-
-# ──────────────────────────────────────────────
-# /trades
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="trades", description="List logged trades with pagination")
-@app_commands.describe(
-    filter="Filter by trade status (default: all)",
-    per_page="Trades per page (default: 10)",
-)
-@app_commands.choices(filter=TRADE_FILTER_CHOICES)
-async def slash_trades(
-    interaction: discord.Interaction,
-    filter: app_commands.Choice[str] = None,
-    per_page: int = 10,
-):
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.trades import trades_cmd
-    await trades_cmd.callback(ctx, filter.value if filter else "all", per_page)
-
-
-# ──────────────────────────────────────────────
-# /performance
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="performance", description="Win rate + risk-adjusted stats for closed trades")
-@app_commands.describe(level="Filter to a specific confidence level (1-5), or omit for overall")
-async def slash_performance(
-    interaction: discord.Interaction,
-    level: int = None,
-):
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.trades import performance_cmd
-    if level is not None:
-        await performance_cmd.callback(ctx, level)
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction,
+                               error: app_commands.AppCommandError) -> None:
+    text = _check_reply(error)
+    if text is None:
+        name = getattr(interaction.command, "qualified_name", "?")
+        log.error("Unhandled slash command error in /%s: %s", name, error, exc_info=error)
+        raise error
+    if interaction.response.is_done():
+        await interaction.followup.send(text, ephemeral=True)
     else:
-        await performance_cmd.callback(ctx)
-
-
-# ──────────────────────────────────────────────
-# /watchlist
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="watchlist", description="Show, add, or remove tickers from the watchlist")
-@app_commands.describe(
-    action="Action to perform (leave blank to just show the list)",
-    ticker="Ticker to add or remove",
-)
-@app_commands.choices(action=[
-    app_commands.Choice(name="Show",   value="show"),
-    app_commands.Choice(name="Add",    value="add"),
-    app_commands.Choice(name="Remove", value="remove"),
-    app_commands.Choice(name="Clear",  value="clear"),
-])
-async def slash_watchlist(
-    interaction: discord.Interaction,
-    action: app_commands.Choice[str] = None,
-    ticker: str = None,
-):
-    act = action.value if action else "show"
-    if act in ("add", "remove") and not ticker:
-        await interaction.response.send_message("Please provide a ticker for add/remove actions.", ephemeral=True)
-        return
-
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.watchlist import watchlist_cmd, watchlist_add, watchlist_remove, watchlist_clear
-    if act == "show":
-        await watchlist_cmd.callback(ctx)
-    elif act == "add":
-        await watchlist_add.callback(ctx, ticker.upper())
-    elif act == "remove":
-        await watchlist_remove.callback(ctx, ticker.upper())
-    elif act == "clear":
-        await watchlist_clear.callback(ctx)
-
-
-# ──────────────────────────────────────────────
-# /top
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="top", description="Highest follow-score PENDING/ACTIVE plans")
-@app_commands.describe(n="How many plans to show (default: config.DIGEST_MAX_PLANS)")
-async def slash_top(interaction: discord.Interaction, n: int = None):
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.stats import top_cmd
-    if n is not None:
-        await top_cmd.callback(ctx, n)
-    else:
-        await top_cmd.callback(ctx)
-
-
-# ──────────────────────────────────────────────
-# /stats
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="stats", description="Win rate, expectancy, and risk-adjusted stats")
-@app_commands.describe(period="Time window")
-@app_commands.choices(period=PERIOD_CHOICES)
-async def slash_stats(interaction: discord.Interaction, period: app_commands.Choice[str] = None):
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.stats import stats_cmd
-    await stats_cmd.callback(ctx, period.value if period else "all")
-
-
-# ──────────────────────────────────────────────
-# /soak
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="soak", description="v93 trust-rule readout for a strategy's shadow plans")
-@app_commands.describe(strategy="Exact strategy name, e.g. MACD")
-async def slash_soak(interaction: discord.Interaction, strategy: str):
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.stats import soak_cmd
-    await soak_cmd.callback(ctx, strategy=strategy)
-
-
-# ──────────────────────────────────────────────
-# /lessons
-# ──────────────────────────────────────────────
-
-@bot.tree.command(name="lessons", description="Recent journal entries and their auto-generated lessons")
-@app_commands.describe(arg="A number of entries, or 'week' for the weekly digest")
-async def slash_lessons(interaction: discord.Interaction, arg: str = "5"):
-    await interaction.response.defer()
-    ctx = await commands.Context.from_interaction(interaction)
-    from swingbot.commands.stats import lessons_cmd
-    await lessons_cmd.callback(ctx, arg)
-
-
-# ──────────────────────────────────────────────
-# /notify  (v152 D1)
-# ──────────────────────────────────────────────
-
-_ON_OFF = {True: "on", False: "off"}
-NOTIFY_PAIRING = ("Pass `event:` and `enabled:` together to change one update. "
-                  "Nothing was changed.")
-NOTIFY_STORE_DOWN = "Could not read or save your notify settings right now. Try again shortly."
-
-
-def _notify_line(event: str, prefs: dict) -> str:
-    following = _ON_OFF[mentions_user(frozenset({"taken"}), event, prefs)]
-    watch = ("never" if event in FOLLOWING_ONLY
-             else _ON_OFF[mentions_user(frozenset({"watch"}), event, prefs)])
-    return f"• `{event}` — {EVENT_LABELS[event]}. Following: {following} · Watch: {watch}"
-
-
-def _notify_summary(prefs: dict) -> str:
-    """Which events the notify channel announces, and when it mentions the caller."""
-    mode = prefs.get("watch_mode") if prefs.get("watch_mode") in WATCH_MODES else "mention"
-    return "\n".join([
-        "**The notify channel posts these paper plan updates** (facts, not advice):",
-        *(_notify_line(event, prefs) for event in NOTIFY_EVENTS),
-        f"Watch-only plans: {mode}.",
-        "`closed_other` posts only when a plan has a Following follower, and mentions only them. "
-        "Your settings decide whether you are mentioned, never whether a message posts.",
-        "Change: `/notify event:<name|all> enabled:<true|false>` · `/notify watch_mode:<mention|silent>`",
-    ])
-
-
-def _apply_notify_change(user_id: int, event: str | None, enabled: bool | None,
-                         watch_mode: str | None) -> dict:
-    """Store the caller's change (sync; run in a thread) and return their prefs."""
-    from swingbot.core.db.repositories.notify_prefs import notify_prefs_repo
-    repo = notify_prefs_repo()
-    if event is not None and enabled is not None:
-        for name in (NOTIFY_EVENTS if event == "all" else (event,)):
-            repo.set_pref(user_id, name, bool(enabled))
-    if watch_mode is not None:
-        repo.set_pref(user_id, "watch_mode", watch_mode)
-    return repo.prefs(user_id)
-
-
-@bot.tree.command(name="notify", description="Choose which paper plan updates mention you in the notify channel")
-@app_commands.describe(event="The update to change, or all",
-                       enabled="Mention me for it (true) or not (false)",
-                       watch_mode="On plans I only Watch: mention me, or stay silent")
-@app_commands.choices(event=NOTIFY_EVENT_CHOICES, watch_mode=WATCH_MODE_CHOICES)
-async def slash_notify(interaction: discord.Interaction, event: app_commands.Choice[str] = None,
-                       enabled: bool = None, watch_mode: app_commands.Choice[str] = None):
-    event_name = event.value if event else None
-    if (event_name is None) != (enabled is None):
-        await interaction.response.send_message(NOTIFY_PAIRING, ephemeral=True)
-        return
-    mode = watch_mode.value if watch_mode else None
-    try:
-        prefs = await asyncio.to_thread(_apply_notify_change, interaction.user.id,
-                                        event_name, enabled, mode)
-    except Exception:
-        log.warning("/notify: could not read or save prefs for user %s",
-                    interaction.user.id, exc_info=True)
-        await interaction.response.send_message(NOTIFY_STORE_DOWN, ephemeral=True)
-        return
-    await interaction.response.send_message(_notify_summary(prefs), ephemeral=True)
+        await interaction.response.send_message(text, ephemeral=True)

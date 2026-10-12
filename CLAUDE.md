@@ -99,8 +99,8 @@ its spec** (`**Screen:**` header from v141). Detail: `edge-priorities.md`,
 ## Current status is not tracked here
 
 The `SessionStart` hook prints it (plan, next task, HEAD, worktrees, live
-backtests); live plans are whatever sits at the top of
-`docs/superpowers/plans/`. **Don't trust the hook's NEXT id blind** — verify
+backtests); live plans sit at the top of `plans/` or in a program folder
+(`plans/etoro-migration/`). **Don't trust the hook's NEXT id blind** — verify
 with `grep -n "^### Task" <plan>`. Tooling (`/task-brief`, `/gate`,
 `guardrails.py`): `skills-tools.md`; detail: `document-lifecycle.md`.
 
@@ -123,6 +123,10 @@ make up / make logs / make restart         # docker compose lifecycle
 **Green means `0 failed` and `0 xfailed`.** A *changed* pass count is not a
 failure. Baseline, and why counts/timings swing with machine load:
 `docs/claude/testing-cost.md`.
+
+**A failed test is fixed and re-run alone** (`testrun.py file …` or `pytest
+path::test`), never by re-running the whole suite. **No full suite after
+merging back to `main`**: it ran once, before the merge. Detail: `testing-cost.md`.
 
 **Long backtest/grid runs** go to `backtest-runner`, chunked per strategy.
 Past a couple of minutes a run prints flushed progress; **past 15 minutes, a

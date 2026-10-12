@@ -21,7 +21,7 @@ that move, so re-adding one here is a design change, not a convenience.
 
 **Nothing is computed in this module.** Spec 3's constraint is "UI renders,
 analytics computes": every figure is projected from `dashboard`'s existing
-builders, `TradeLog.get_stats`, or `_collect_portfolio_state`. A second
+builders, `TradeLog.get_stats`, or `collect_portfolio_state`. A second
 definition of win rate here would drift from the projected one.
 
 The equity sparkline ships as NUMBERS, via `_equity_30d()` below. Jinja's
@@ -79,7 +79,7 @@ def _risk_used(all_trades: list[dict]) -> tuple[float | None, float | None]:
     """
     cap = float(getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0))
     try:
-        # Not `_collect_portfolio_state`: that also builds sector heat, the
+        # Not `collect_portfolio_state`: that also builds sector heat, the
         # throttle, the growth path and correlation clusters (one market-data
         # fetch per open ticker, ~3.7s on production), and this page shows
         # none of it. Heat is a pure function of the open trades and balance.

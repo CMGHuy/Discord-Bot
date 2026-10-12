@@ -174,9 +174,11 @@ def test_liveplans_cmd_ticker_filter_survives_view_filter_change():
     with patch.object(plans_module, "PlanStore", return_value=fake_store):
         asyncio.run(plans_module.liveplans_cmd.callback(ctx, "NVDA"))
 
+    # v153: CtxReply passes the board text positionally; a MagicMock ctx has
+    # no str qualified_name, so no tip follows and this is still the only send.
     ctx.send.assert_awaited_once()
-    _, kwargs = ctx.send.call_args
-    assert "NVDA" in kwargs["content"] and "AAPL" not in kwargs["content"]
+    args, kwargs = ctx.send.call_args
+    assert "NVDA" in args[0] and "AAPL" not in args[0]
 
     view = kwargs["view"]
     # Simulate the user then changing status/level/badge dropdowns to

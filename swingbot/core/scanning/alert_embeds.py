@@ -30,7 +30,8 @@ def build_strategy_alert_embed(plan) -> "discord.Embed":
     embed = ui.push_embed(Kind.STRATEGY_SIGNAL, plan.ticker, plan.direction, plan.strategy,
                           description=_strategy_levels(plan))
     ui.apply_chrome(embed, kind=Kind.STRATEGY_SIGNAL,
-                    level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id)
+                    level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id,
+                    link_base=config.ADMIN_PUBLIC_URL)
     embed.add_field(name="Plan (v2)", value=strategy_plan_line(plan), inline=False)
     for name, value in (("Entry", plan.trigger_price), ("Stop", plan.stop_loss), ("TP1", plan.tp1)):
         embed.add_field(name=name, value=f"{value:.2f}")
@@ -50,7 +51,8 @@ def build_strategy_simple_embed(plan) -> "discord.Embed":
         Kind.STRATEGY_SIGNAL, plan.ticker, plan.direction, plan.strategy,
         description=f"{_strategy_levels(plan)}\n{strategy_plan_line(plan)} · ledger {plan.ledger}")
     ui.apply_chrome(embed, kind=Kind.STRATEGY_SIGNAL,
-                    level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id)
+                    level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id,
+                    link_base=config.ADMIN_PUBLIC_URL)
     return embed
 
 
@@ -296,7 +298,8 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     if chart_filename:
         embed.set_image(url=f"attachment://{chart_filename}")
     ui.apply_chrome(embed, kind=Kind.SETUP_ALERT, level=conf.level, blocked=blocked is not None,
-                    plan_id=plan_v2.plan_id if plan_v2 else None)
+                    plan_id=plan_v2.plan_id if plan_v2 else None,
+                    link_base=config.ADMIN_PUBLIC_URL)
     return embed
 
 
@@ -379,5 +382,6 @@ def _legacy_simple_alert(item) -> discord.Embed:
         ),
     )
     ui.apply_chrome(embed, kind=Kind.SETUP_SIMPLE, level=conf.level,
-                    plan_id=plan_v2.plan_id if plan_v2 else None)
+                    plan_id=plan_v2.plan_id if plan_v2 else None,
+                    link_base=config.ADMIN_PUBLIC_URL)
     return embed

@@ -116,3 +116,26 @@ def test_eligible_neighbors_with_expectancy_spike_are_refused():
 def test_missing_neighbor_expectancy_cannot_make_a_plateau():
     cells = [cell(.75), replace(cell(.90), expectancy_r=None)]
     assert select_cell(cells, 'd').verdict == SPIKE
+
+
+def test_tie_can_prefer_the_smaller_value():
+    """v135: a smaller h is the smaller cut, so the tie goes the other way from v122's d."""
+    cells = [cell(.5), cell(.75), cell(1.0)]
+    assert select_cell(cells, 'h', tie='smaller').selected == .5
+
+
+def test_default_tie_still_prefers_the_larger_value():
+    """v122 witness: the default rule is unchanged by the tie parameter."""
+    cells = [cell(.5), cell(.75), cell(1.0)]
+    assert select_cell(cells, 'd').selected == 1.0
+    assert select_cell(cells, 'd', tie='larger').selected == 1.0
+
+
+def test_tie_preference_never_overrides_a_larger_improvement():
+    cells = [cell(.5, 1), cell(.75, 2), cell(1.0, 3)]
+    assert select_cell(cells, 'h', tie='smaller').selected == 1.0
+
+
+def test_an_unknown_tie_rule_is_refused():
+    with pytest.raises(ValueError):
+        select_cell([cell(.5), cell(.75)], 'h', tie='nearest')

@@ -269,6 +269,26 @@ FIELDS: list[Field] = [
           type="float", default="0", min=0, max=2, step=0.05,
           help="The gate rejects when the ratio is strictly above this value. 0 turns the "
                "gate off whatever the scope. v122's frozen grid is 0.60 / 0.75 / 0.90."),
+    Field("HEADROOM_SCOPE", "HEADROOM_SCOPE", "Trade Filters & Risk",
+          "Headroom veto: scope (v135)",
+          type="select", default="off",
+          options=[("off", "Off"),
+                   ("strategy", "Strategy entries -- EMA Crossover, VWAP, Fibonacci, "
+                                "Support/Resistance, RSI, Elliott Wave, MA Ribbon, "
+                                "Break & Retest, RSI Divergence"),
+                   ("confluence", "Confluence entries (both directions)")],
+          help="v135. Skips a plan when an opposing level confirmed by at least two "
+               "detector families sits beyond entry and nearer than HEADROOM_MIN_R x the "
+               "plan's own risk. Targets and stops are never moved. Ships OFF: each scope "
+               "is its own pre-registered measurement and flips on only if its one "
+               "VALIDATION shot passes."),
+    Field("HEADROOM_MIN_R", "HEADROOM_MIN_R", "Trade Filters & Risk",
+          "Headroom veto: minimum clear room to the nearest confirmed opposing level (x risk)",
+          type="float", default="0", min=0, max=1, step=0.25,
+          help="The veto rejects when a confirmed opposing level is strictly nearer than "
+               "this multiple of the plan's risk. 0 turns the veto off whatever the scope. "
+               "v135's frozen grid is 0.5 / 0.75 / 1.0; the field stops at 1.0 so a plan's "
+               "own first target can never be its blocker."),
     Field("FIB_SR_CONFLUENCE_ATR", "FIB_SR_CONFLUENCE_ATR", "Trade Filters & Risk",
           "Fibonacci: Rolling S/R confluence tolerance (x ATR)",
           type="float", default="0.0", min=0.0, max=2.0, step=0.25,
@@ -777,6 +797,14 @@ FIELDS: list[Field] = [
                "just the headline, trade plan table, and a one-line quality summary -- confluence/"
                "what-changed/branch sections are dropped to fit more alerts on screen at once. "
                "Purely a rendering choice; no scoring or filtering changes."),
+    # v151: the plan-detail link on every plan-carrying embed. Bot-side on
+    # purpose -- the Admin UI group configures the admin container, while this
+    # one is read by the bot at embed-build time (apply_chrome's link_base).
+    Field("ADMIN_PUBLIC_URL", "ADMIN_PUBLIC_URL", "Discord Alerts", "Admin UI public URL (plan links)",
+          type="text", default="", hot_reloadable=True,
+          help="Read by the bot each time it builds an alert embed — SIGHUP applies a change, no "
+               "restart. The admin UI's base URL as reached from the device you open Discord on "
+               "(e.g. the Cloudflare tunnel hostname); empty = no link."),
     Field("DAILY_DIGEST_ENABLED", "DAILY_DIGEST_ENABLED", "Discord Alerts", "Daily top-plans digest enabled",
           type="checkbox", default="false",
           help="Post a curated 'Top plans today' digest (VALIDATED plans only, ranked by follow score) "
@@ -1268,6 +1296,7 @@ _SEARCH_CLASSES = {
         "DCB_VOLUME_RATIO", "RSI_DIV_MIN_CONSECUTIVE_TURN",
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
         "FIB_TARGET_1_0_EXTENSION", "PULLBACK_DRYUP_SCOPE", "PULLBACK_DRYUP_MAX_RATIO",
+        "HEADROOM_SCOPE", "HEADROOM_MIN_R",
         "SHORT_UNIVERSE_RESEARCH_MODE",
         "COMPRESSION_SHORT_RESEARCH_MODE",
         "FVG_LEVELS_MODE", "FVG_DISPLACEMENT_ATR_K",
@@ -1316,6 +1345,7 @@ _MODE_VALUES = {
     "RUNNER_STRUCTURE_EXIT": ("off", "hl_trail", "progress_stall"),
     "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
     "PULLBACK_DRYUP_SCOPE": ("off", "strategy", "confluence"),
+    "HEADROOM_SCOPE": ("off", "strategy", "confluence"),
     "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
     "COMPRESSION_SHORT_RESEARCH_MODE": ("off", "broad", "isolated"),
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),

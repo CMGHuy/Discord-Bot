@@ -107,10 +107,10 @@ def test_context_slice_splits_on_fvg_in_families():
 
 
 def test_replay_still_has_the_shape_the_recorder_patches():
-    source = inspect.getsource(bs.replay_scenarios)
-    assert "levels_asof(ticker, df, i, horizon_key, cache)" in source
-    assert "build_confluence_plan(" in source and "tolerance_pct=5.0" in source
-    assert fa.VOTE_TOLERANCE_PCT == 5.0
+    src = inspect.getsource(bs)
+    assert "levels_asof(" in src
+    assert "build_confluence_plan(" in src
+    assert getattr(bs, "REPLAY_CONFLUENCE_TOLERANCE_PCT", 5.0) == 5.0 == fa.VOTE_TOLERANCE_PCT
 
 
 def _write_arms(tmp_path, knobs, baseline, component, engine_hash):

@@ -60,3 +60,38 @@ def test_dryup_knobs_change_outcomes_together_on_the_fixture(monkeypatch):
         gated = run_arm("AAPL", frame, engines, ("4w", "3m"), window,
                         {"PULLBACK_DRYUP_SCOPE": scope, "PULLBACK_DRYUP_MAX_RATIO": 0.60})
         assert gated != base, scope
+
+
+HEADROOM = ("HEADROOM_SCOPE", "HEADROOM_MIN_R")
+
+
+def test_headroom_knobs_are_searchable_and_reachable_by_both_engines():
+    for attr in HEADROOM:
+        assert attr in config.searchable_attrs()
+        assert r.classify(attr) == r.REACHABLE
+        assert r.REGISTRY[attr].observed_by == r.CS
+        assert r.REGISTRY[attr].fixture_observable is False
+        assert "Stage -1" in r.reason(attr)
+
+
+def test_headroom_knobs_are_threaded_through_scan_params():
+    from swingbot.scan_params import ScanParams
+
+    params = ScanParams.from_config()
+    assert params.headroom_scope == "off" and params.headroom_min_r == 0.0
+
+
+@pytest.mark.slow
+def test_headroom_knobs_change_outcomes_together_on_the_fixture(monkeypatch):
+    """Fixture-level stand-in for the Stage -1 pilot: both scopes reach trades."""
+    from swingbot.core.backtesting.arms.engine import run_arm
+    from swingbot.core.edge import gates
+    from tests.backtesting.test_v74_fixture import load_v74_fixture
+
+    monkeypatch.setattr(gates, "headroom_rejects", lambda *args: True)
+    frame, window = load_v74_fixture()["AAPL"], ("1900-01-01", "2100-12-31")
+    for scope, engines in (("confluence", ("confluence",)), ("strategy", ("strategy",))):
+        base = run_arm("AAPL", frame, engines, ("4w", "3m"), window, {})
+        gated = run_arm("AAPL", frame, engines, ("4w", "3m"), window,
+                        {"HEADROOM_SCOPE": scope, "HEADROOM_MIN_R": 1.0})
+        assert gated != base, scope

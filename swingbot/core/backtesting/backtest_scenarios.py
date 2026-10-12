@@ -73,9 +73,53 @@ def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
     return result
 
 
+def bucket_bar(index: int, horizon_key: str) -> int:
+    """The bar whose as-of map replay_scenarios has cached for `index`'s bucket: the first
+    bar of that LEVEL_REFRESH_BARS bucket the loop visits (never before warm-up)."""
+    return max(MIN_BARS[horizon_key], (index // LEVEL_REFRESH_BARS) * LEVEL_REFRESH_BARS)
+
+
+def scenarios_at(ticker: str, df, i: int, horizon_key: str, params, cache: dict,
+                 dcb_params: dict | None = None):
+    """(window, price, supports, resistances, scenarios) at bar i, before any admission gate.
+
+    NO-LOOKAHEAD: reads df.iloc[:i + 1] and levels_asof's as-of map only. The map is the one
+    cached for i's bucket, re-split against this bar's own price because the bucket can lag
+    (the map's supports/resistances were split against ITS OWN price).
+    A caller that asks for one bar out of order must first prime the bucket the way the
+    replay loop does: levels_asof(ticker, df, bucket_bar(i, horizon_key), horizon_key, cache).
+    `window` is the harness's no-lookahead slice -- the same frame the live scan hands to
+    veto_bullish_for (v68); dcb_params=None is the baseline arm and must not pay for the detector.
+    """
+    h = HORIZONS[horizon_key]
+    window = df.iloc[:i + 1]
+    price = float(window["Close"].iloc[-1])
+    supports, resistances = levels_asof(ticker, df, i, horizon_key, cache)
+    all_levels = sorted(supports + resistances, key=lambda lv: lv.price)
+    supports = [lv for lv in all_levels if lv.price < price][::-1]
+    resistances = [lv for lv in all_levels if lv.price > price]
+    floor_pct = levels.atr_floor_pct(window, price, h)
+    gate_inputs = scenario_gate_inputs(params, h)
+    block_bullish = dcb_params is not None and bool(dead_cat_bounce(window, dcb_params)["detected"])
+    scenarios = levels.build_scenarios(
+        price, supports, resistances, gate_inputs["min_reward_pct"],
+        atr_floor=floor_pct,
+        min_stop_distance_pct=gate_inputs["min_stop_distance_pct"],
+        max_stop_distance_pct=gate_inputs["max_stop_distance_pct"],
+        min_risk_reward=gate_inputs["min_risk_reward"],
+        block_bullish=block_bullish)
+    return window, price, supports, resistances, scenarios
+
+
 def _dryup_kept(scenarios, window) -> list:
     """Admit scenarios on the completed as-of window before planning or cooldown."""
     return edge_gates.filter_pullback_dryup(scenarios, window)[0]
+
+
+def _headroom_kept(scenarios, supports, resistances) -> list:
+    """v135: the confluence-scope headroom veto at analyze._apply_headroom's point, on the
+    re-split lists the scenarios were just built from. A rejection sets no cooldown."""
+    return edge_gates.filter_headroom(scenarios, supports, resistances)[0]
 
 
 def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
@@ -114,33 +158,10 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | 
     last_accepted: dict = {}   # direction -> bar index
 
     for i in range(warmup, len(df)):
-        window = df.iloc[:i + 1]
-        price = float(window["Close"].iloc[-1])
-        supports, resistances = levels_asof(ticker, df, i, horizon_key, cache)
-        # drop levels the later bars created is already impossible (as-of map);
-        # but the map's supports/resistances were split against ITS OWN price --
-        # re-split against this bar's price when the cache bucket lags:
-        all_levels = sorted(supports + resistances, key=lambda lv: lv.price)
-        supports = [lv for lv in all_levels if lv.price < price][::-1]
-        resistances = [lv for lv in all_levels if lv.price > price]
-
-        floor_pct = levels.atr_floor_pct(window, price, h)
-        gates = scenario_gate_inputs(params, h)
-        # v68. `window` is the harness's no-lookahead slice -- the same frame
-        # the live scan hands to veto_bullish_for. dcb_params=None is the
-        # baseline arm and must not pay for the detector at all.
-        block_bullish = False
-        if dcb_params is not None:
-            block_bullish = bool(dead_cat_bounce(window, dcb_params)["detected"])
-        scenarios = levels.build_scenarios(
-            price, supports, resistances, gates["min_reward_pct"],
-            atr_floor=floor_pct,
-            min_stop_distance_pct=gates["min_stop_distance_pct"],
-            max_stop_distance_pct=gates["max_stop_distance_pct"],
-            min_risk_reward=gates["min_risk_reward"],
-            block_bullish=block_bullish)
-
+        window, price, supports, resistances, scenarios = scenarios_at(
+            ticker, df, i, horizon_key, params, cache, dcb_params)
         scenarios = _dryup_kept(scenarios, window)
+        scenarios = _headroom_kept(scenarios, supports, resistances)
         for sc in scenarios:
             n_confl, families = levels.count_confirming_strategies(
                 window, h, price, sc.take_profit, tolerance_pct=5.0)

@@ -90,7 +90,7 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
     if mode == "off":
         return {"strategy_plans": 0, "strategy_opened": 0,
                 "compression_shadow": 0, "compression_rejected": 0,
-                "strategy_pullback_volume": 0}
+                "strategy_pullback_volume": 0, "strategy_headroom": 0}
     if not require_confirmation:
         mode = "shadow"
     live_allow = {value.strip() for value in (config.STRATEGY_ALERTS_LIVE_STRATEGIES or "").split(",") if value.strip()}
@@ -125,7 +125,8 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
     return {"strategy_plans": len(result.plans), "strategy_opened": result.opened,
             "compression_shadow": len(result.compression_shadow),
             "compression_rejected": result.compression_rejected,
-            "strategy_pullback_volume": result.pullback_volume}
+            "strategy_pullback_volume": result.pullback_volume,
+            "strategy_headroom": result.headroom}
 
 
 def _compression_seen() -> set:
@@ -527,7 +528,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     data_quality_failed_count = 0   # E47: feeds check_kill_triggers' data_fail_frac
     failed_counts = {
         "min_reward": 0, "min_stop_distance": 0, "max_stop_distance": 0,
-        "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0, "opex_close_window": 0, "pullback_volume": 0,
+        "min_risk_reward": 0, "min_confluence": 0, "min_confidence": 0, "opex_close_window": 0, "pullback_volume": 0, "headroom": 0,
     }
     conf_level_counts: dict = {}   # {1..5: number of scenarios scored at that level}
     filtered_by_confirmation = 0
@@ -767,6 +768,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "failed_min_confidence": failed_counts["min_confidence"],
             "failed_opex_close_window": failed_counts["opex_close_window"],
             "failed_pullback_volume": failed_counts["pullback_volume"],
+            "failed_headroom": failed_counts["headroom"],
             "awaiting_confirmation": filtered_by_confirmation,
             "mtf_misaligned": mtf_misaligned,
             "rs_blocked": rs_blocked,

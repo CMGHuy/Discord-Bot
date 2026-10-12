@@ -1,6 +1,9 @@
 from swingbot.core.presentation import components as c
 from swingbot.core.presentation import tokens as t
 import re
+import datetime
+import json
+import logging
 
 import discord
 import pytest
@@ -148,3 +151,82 @@ def test_result_headline_never_raises_on_six_digit_prices():
     plain = re.sub(r"\[[0-9;]*m", "", text)
     assert "150000" in plain and "160000" in plain
     assert all(len(line) <= 32 for line in plain.splitlines())
+
+
+@pytest.mark.parametrize("base, expected", [
+    ("https://example.com", "https://example.com/plans/abc123"),
+    ("https://example.com///", "https://example.com/plans/abc123"),
+    ("http://localhost:5000", "http://localhost:5000/plans/abc123"),
+])
+def test_plan_link_uses_the_full_id_and_normalizes_trailing_slashes(base, expected):
+    assert c.plan_link("abc123", base) == expected
+
+
+@pytest.mark.parametrize("plan_id, base", [
+    (None, "https://example.com"), ("", "https://example.com"),
+    ("abc123", None), ("abc123", ""),
+])
+def test_plan_link_omits_links_without_both_inputs(plan_id, base):
+    assert c.plan_link(plan_id, base) is None
+
+
+@pytest.mark.parametrize("base", [
+    "ftp://x", "javascript:x", "https://", "example.com", "https://[broken",
+    " https://example.com", "https://example.com/a b", "https://example.com\t",
+    "https://example.com\n", "https://example.com/\u00a0",
+])
+def test_plan_link_rejects_malformed_or_whitespace_bases(base):
+    assert c.plan_link("abc123", base) is None
+
+
+def test_invalid_bases_warn_once_per_distinct_nonempty_value(monkeypatch, caplog):
+    monkeypatch.setattr(c, "_WARNED_BASES", set())
+    with caplog.at_level(logging.WARNING, logger=c.__name__):
+        for base in (None, "", "ftp://first", "ftp://first", "https://[bad", "https://[bad"):
+            assert c.plan_link("abc123", base) is None
+    warnings = [record for record in caplog.records if record.name == c.__name__]
+    assert len(warnings) == 2
+    assert all(record.levelno == logging.WARNING for record in warnings)
+    assert "ftp://first" in warnings[0].getMessage()
+    assert "https://[bad" in warnings[1].getMessage()
+
+
+@pytest.mark.parametrize("style, color", [
+    ({"kind": Kind.SETUP_ALERT, "level": 5}, 0x0B44B0),
+    ({"accent": t.accent_for_level(5)}, 0x17C98E),
+])
+def test_apply_chrome_adds_a_title_link_preserving_footer_and_color(style, color, monkeypatch):
+    now = datetime.datetime(2026, 10, 11, tzinfo=datetime.timezone.utc)
+    monkeypatch.setattr(discord.utils, "utcnow", lambda: now)
+    before = discord.Embed(title="AAPL", description="Trade plan")
+    after = discord.Embed(title="AAPL", description="Trade plan")
+    c.apply_chrome(before, plan_id="a4f19c2233445566", **style)
+    c.apply_chrome(after, plan_id="a4f19c2233445566", link_base="https://example.com/", **style)
+    expected = before.to_dict()
+    expected["url"] = "https://example.com/plans/a4f19c2233445566"
+    assert after.to_dict() == expected
+    assert after.color.value == color
+    assert after.footer.text == f"{t.DISCLAIMER} · plan a4f19c22"
+
+
+@pytest.mark.parametrize("base", [None, "", "ftp://bad", " https://example.com"])
+def test_apply_chrome_without_valid_base_preserves_serialized_output(base, monkeypatch):
+    now = datetime.datetime(2026, 10, 11, tzinfo=datetime.timezone.utc)
+    monkeypatch.setattr(discord.utils, "utcnow", lambda: now)
+    embed = discord.Embed(title="x", url="https://existing.example", description="body")
+    c.apply_chrome(embed, accent=t.accent_for_level(5), plan_id="a4f19c2233445566", link_base=base)
+    expected = {
+        "title": "x", "url": "https://existing.example", "description": "body",
+        "type": "rich", "flags": 0, "color": 0x17C98E,
+        "timestamp": "2026-10-11T00:00:00+00:00",
+        "footer": {"text": f"{t.DISCLAIMER} · plan a4f19c22"},
+    }
+    assert json.dumps(embed.to_dict(), sort_keys=True) == json.dumps(expected, sort_keys=True)
+
+
+@pytest.mark.parametrize("plan_id", [None, ""])
+def test_apply_chrome_without_plan_id_has_no_title_link(plan_id):
+    embed = discord.Embed(title="x")
+    c.apply_chrome(embed, kind=Kind.SETUP_ALERT, level=5, plan_id=plan_id,
+                   link_base="https://example.com")
+    assert embed.url is None

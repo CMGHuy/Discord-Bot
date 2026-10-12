@@ -1,9 +1,10 @@
-"""!trades, !trade, !tradecharts, !performance, !pnl, !summary."""
+"""!trades, !trade, !tradecharts, !performance, !pnl, !summary, and their slash twins (v153)."""
 import asyncio
 import os
 from datetime import datetime, timezone
 
 import discord
+from discord import app_commands
 
 from swingbot import config
 from swingbot.core.planning import account as account_module
@@ -12,6 +13,8 @@ from swingbot.core.presentation import kinds
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.bot_core import bot
+from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
+from swingbot.commands.slash import TRADE_FILTER_CHOICES
 from swingbot.core.tracking.risk_metrics import compute_risk_metrics
 from swingbot.core.tracking.performance import closed_pnl_pct
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
@@ -49,6 +52,8 @@ def _primary_source_label(t: dict) -> str:
 MIN_PER_PAGE = 1
 MAX_PER_PAGE = 25
 DEFAULT_PER_PAGE = 10
+TRADE_STATUSES = ("open", "win", "loss", "all")
+STATUS_ERROR = "Status must be one of: open, win, loss, all"
 
 
 def format_trade_row(t: dict, currency: str) -> str:
@@ -164,6 +169,40 @@ class TradesPaginator(discord.ui.View):
                 pass
 
 
+async def handle_trades(reply, status: str = "all", per_page: int = DEFAULT_PER_PAGE) -> None:
+    """
+    Shows every logged trade -- any confidence level, any status by
+    default -- sorted highest confidence first, paginated with Prev/Next
+    buttons. `per_page` sets how many rows show per page (1-25).
+    """
+    if status not in TRADE_STATUSES:
+        await reply.send_error(STATUS_ERROR)
+        return
+    per_page = max(MIN_PER_PAGE, min(per_page, MAX_PER_PAGE))
+    await reply.defer()
+
+    trades = trade_log.get_trades(status=status, limit=None, sort_by="confidence")
+    if not trades:
+        await reply.send(f"No trades found for status='{status}'.")
+        return
+
+    view = TradesPaginator(trades, f"**Trades ({status}, sorted by confidence high→low)**", per_page,
+                           reply.author.id)
+    view.message = await reply.send(view.render(), view=view)
+
+
+async def handle_trades_clear(reply) -> None:
+    """Clear all currently OPEN/active trades. Closed trade history is kept."""
+    count = trade_log.clear_open()
+    await reply.send(f"Cleared {count} open trade(s). Closed win/loss history was not touched.")
+
+
+async def handle_trades_clear_history(reply) -> None:
+    """Clear all CLOSED trade records (win/loss/manually-closed). Open trades are kept."""
+    count = trade_log.clear_history()
+    await reply.send(f"Cleared {count} closed trade record(s). Open trades were not touched.")
+
+
 @bot.group(name="trades", invoke_without_command=True)
 async def trades_cmd(ctx, status: str = "all", per_page: int = DEFAULT_PER_PAGE):
     """
@@ -171,33 +210,26 @@ async def trades_cmd(ctx, status: str = "all", per_page: int = DEFAULT_PER_PAGE)
     default -- sorted highest confidence first, paginated with Prev/Next
     buttons. `per_page` sets how many rows show per page (1-25).
     """
-    if status not in ("open", "win", "loss", "all"):
-        await ctx.send("Status must be one of: open, win, loss, all")
-        return
-    per_page = max(MIN_PER_PAGE, min(per_page, MAX_PER_PAGE))
-
-    trades = trade_log.get_trades(status=status, limit=None, sort_by="confidence")
-    if not trades:
-        await ctx.send(f"No trades found for status='{status}'.")
-        return
-
-    view = TradesPaginator(trades, f"**Trades ({status}, sorted by confidence high→low)**", per_page, ctx.author.id)
-    view.message = await ctx.send(view.render(), view=view)
+    reply = CtxReply(ctx)
+    await handle_trades(reply, status, per_page)
+    await send_prefix_tip(ctx, reply)
 
 
 @trades_cmd.group(name="clear", invoke_without_command=True)
 async def trades_clear(ctx):
     """Clear all currently OPEN/active trades. Closed trade history is kept.
     Use `!trades clear history` to remove closed trade records instead."""
-    count = trade_log.clear_open()
-    await ctx.send(f"Cleared {count} open trade(s). Closed win/loss history was not touched.")
+    reply = CtxReply(ctx)
+    await handle_trades_clear(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 @trades_clear.command(name="history")
 async def trades_clear_history(ctx):
     """Clear all CLOSED trade records (win/loss/manually-closed). Open trades are kept."""
-    count = trade_log.clear_history()
-    await ctx.send(f"Cleared {count} closed trade record(s). Open trades were not touched.")
+    reply = CtxReply(ctx)
+    await handle_trades_clear_history(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 _OPEN_STYLE = ("🔵", "scratch", "OPEN")
@@ -304,56 +336,76 @@ def _build_trade_detail_embed(match: dict) -> discord.Embed:
     if match.get("plan_id") or match.get("legs"):
         trade_id += " · Plan Engine v2"
     embed.add_field(name="Trade ID", value=trade_id, inline=False)
-    ui.apply_chrome(embed, accent=accent, plan_id=match.get("plan_id"))
+    ui.apply_chrome(embed, accent=accent, plan_id=match.get("plan_id"),
+                    link_base=config.ADMIN_PUBLIC_URL)
     return embed
 
 
-@bot.group(name="trade", invoke_without_command=True)
-async def trade_cmd(ctx, trade_id: str):
+async def handle_trade_show(reply, trade_id: str) -> None:
     match = trade_log.get_trade_by_id(trade_id)
     if not match:
-        await ctx.send(f"No trade found with id `{trade_id}`. Use `!trades` to list recent ones.")
+        await reply.send_error(f"No trade found with id `{trade_id}`. Use `!trades` to list recent ones.")
         return
+    await reply.defer()
 
     embed = _build_trade_detail_embed(match)
     chart_path = await asyncio.to_thread(scan_engine.regenerate_chart_for_trade, match)
     if chart_path:
         filename = os.path.basename(chart_path)
         embed.set_image(url=f"attachment://{filename}")
-        await ctx.send(embed=embed, file=discord.File(chart_path, filename=filename))
+        await reply.send(embed=embed, file=discord.File(chart_path, filename=filename))
     else:
         embed.add_field(name="⚠️ Chart", value="Could not generate a chart for this trade right now.", inline=False)
-        await ctx.send(embed=embed)
+        await reply.send(embed=embed)
 
 
-@trade_cmd.command(name="delete")
-async def trade_delete(ctx, trade_id: str):
+async def handle_trade_delete(reply, trade_id: str) -> None:
     deleted = trade_log.delete_trade(trade_id)
-    if deleted:
-        await ctx.send(f"Deleted trade `{trade_id}`.")
-    else:
-        await ctx.send(f"No trade found with id `{trade_id}`.")
+    if not deleted:
+        await reply.send_error(f"No trade found with id `{trade_id}`.")
+        return
+    await reply.send(f"Deleted trade `{trade_id}`.")
 
 
-@bot.command(name="tradecharts")
-async def tradecharts_cmd(ctx, status: str = "open", limit: int = 5):
-    if status not in ("open", "win", "loss", "all"):
-        await ctx.send("Status must be one of: open, win, loss, all")
+async def handle_tradecharts(reply, status: str = "open", limit: int = 5) -> None:
+    if status not in TRADE_STATUSES:
+        await reply.send_error(STATUS_ERROR)
         return
     limit = min(limit, 10)
     trades = trade_log.get_trades(status=status, limit=limit)
     if not trades:
-        await ctx.send(f"No trades found for status='{status}'.")
+        await reply.send(f"No trades found for status='{status}'.")
         return
 
-    await ctx.send(f"Generating charts for {len(trades)} trade(s)…")
+    await reply.send(f"Generating charts for {len(trades)} trade(s)…")
     for t in trades:
         chart_path = await asyncio.to_thread(scan_engine.regenerate_chart_for_trade, t)
         caption = f"**{t['id']}** {t['ticker']} — {t['strategy']} ({t['horizon_key']}), {t['direction']}, status: {t['status']}"
         if chart_path:
-            await ctx.send(caption, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
+            await reply.send(caption, file=discord.File(chart_path, filename=os.path.basename(chart_path)))
         else:
-            await ctx.send(caption + " (chart unavailable)")
+            await reply.send(caption + " (chart unavailable)")
+
+
+@bot.group(name="trade", invoke_without_command=True)
+async def trade_cmd(ctx, trade_id: str):
+    reply = CtxReply(ctx)
+    await handle_trade_show(reply, trade_id)
+    await send_prefix_tip(ctx, reply)
+
+
+@trade_cmd.command(name="delete")
+async def trade_delete(ctx, trade_id: str):
+    reply = CtxReply(ctx)
+    await handle_trade_delete(reply, trade_id)
+    await send_prefix_tip(ctx, reply)
+
+
+@bot.command(name="tradecharts")
+async def tradecharts_cmd(ctx, status: str = "open", limit: int = 5):
+    reply = CtxReply(ctx)
+    await handle_tradecharts(reply, status, limit)
+    await send_prefix_tip(ctx, reply)
 
 
 def _append_risk_metrics_lines(lines: list, closed_trades: list):
@@ -382,26 +434,20 @@ def _append_risk_metrics_lines(lines: list, closed_trades: list):
     )
 
 
-@bot.command(name="performance")
-async def performance_cmd(ctx, level: int = None):
-    all_trades = trade_log.get_trades(status="all", limit=None, ledger="main")
+def _level_performance_lines(level: int, all_trades: list) -> list[str]:
+    stats = trade_log.get_stats(level)
+    wr = f"{stats['win_rate']:.0f}%" if stats["win_rate"] is not None else "n/a"
+    lines = [
+        f"**Confidence Level {level}** — {stats['total']} trades logged "
+        f"({stats['open']} open, {stats['closed']} closed)",
+        f"Win rate: {wr} ({stats['wins']}W / {stats['losses']}L)",
+    ]
+    closed_at_level = [t for t in all_trades if t["confidence_level"] == level and t["status"] in ("win", "loss")]
+    _append_risk_metrics_lines(lines, closed_at_level)
+    return lines
 
-    if level is not None:
-        if level not in range(1, 6):
-            await ctx.send("Level must be 1-5.")
-            return
-        stats = trade_log.get_stats(level)
-        wr = f"{stats['win_rate']:.0f}%" if stats["win_rate"] is not None else "n/a"
-        lines = [
-            f"**Confidence Level {level}** — {stats['total']} trades logged "
-            f"({stats['open']} open, {stats['closed']} closed)",
-            f"Win rate: {wr} ({stats['wins']}W / {stats['losses']}L)",
-        ]
-        closed_at_level = [t for t in all_trades if t["confidence_level"] == level and t["status"] in ("win", "loss")]
-        _append_risk_metrics_lines(lines, closed_at_level)
-        await ctx.send("\n".join(lines))
-        return
 
+def _overall_performance_lines(all_trades: list) -> list[str]:
     lines = ["**Performance by confidence level:**"]
     by_level = trade_log.get_stats_by_confidence()
     for lvl in range(1, 6):
@@ -417,17 +463,30 @@ async def performance_cmd(ctx, level: int = None):
     weak = trade_log.weak_summary()
     lines.append(f"\n**WEAK ledger (separate):** {weak['wins']}W/{weak['losses']}L, "
                  f"N {weak['n']}, P&L {weak['total_pnl']:+.2f}")
-    await ctx.send("\n".join(lines))
+    return lines
 
 
-@bot.command(name="pnl")
-async def pnl_cmd(ctx):
-    await ctx.send("Fetching current prices for all open trades…")
-    rows = await asyncio.to_thread(scan_engine.get_all_unrealized_pnl)
-    if not rows:
-        await ctx.send("No open trades right now.")
+async def handle_performance(reply, level: int | None = None) -> None:
+    if level is not None and level not in range(1, 6):
+        await reply.send_error("Level must be 1-5.")
         return
+    await reply.defer()
+    all_trades = trade_log.get_trades(status="all", limit=None, ledger="main")
+    if level is None:
+        lines = _overall_performance_lines(all_trades)
+    else:
+        lines = _level_performance_lines(level, all_trades)
+    await reply.send("\n".join(lines))
 
+
+@bot.command(name="performance")
+async def performance_cmd(ctx, level: int = None):
+    reply = CtxReply(ctx)
+    await handle_performance(reply, level)
+    await send_prefix_tip(ctx, reply)
+
+
+def _pnl_lines(rows: list) -> list[str]:
     lines = [f"**Unrealized P/L — {len(rows)} open trade(s):**", "```"]
     lines.append(f"{'ID':8s} {'Ticker':6s} {'Dir':7s} {'Entry':>9s} {'Now':>9s} {'P/L%':>7s} {'ToSL%':>6s} {'ToTP%':>6s}")
     total_pct = 0.0
@@ -447,7 +506,23 @@ async def pnl_cmd(ctx):
     if counted:
         lines.append(f"Average unrealized P/L across {counted} priced trade(s): {total_pct/counted:+.2f}%")
     lines.append("ToSL%/ToTP% = how far the current price is from the stop-loss / recommended TP.")
-    await ctx.send("\n".join(lines))
+    return lines
+
+
+async def handle_pnl(reply) -> None:
+    await reply.send("Fetching current prices for all open trades…")
+    rows = await asyncio.to_thread(scan_engine.get_all_unrealized_pnl)
+    if not rows:
+        await reply.send("No open trades right now.")
+        return
+    await reply.send_chunks("\n".join(_pnl_lines(rows)))
+
+
+@bot.command(name="pnl")
+async def pnl_cmd(ctx):
+    reply = CtxReply(ctx)
+    await handle_pnl(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 def _berlin_date(iso_ts: str):
@@ -466,8 +541,126 @@ def _berlin_date(iso_ts: str):
     return dt.astimezone(_BERLIN_TZ).date()
 
 
-@bot.command(name="summary")
-async def summary_cmd(ctx):
+_SPACER = "\u200b"
+
+
+def _sign_mark(value, positive: str, negative: str, zero: str) -> str:
+    """`positive` above 0, `negative` below, `zero` at 0 or None."""
+    v = value or 0
+    if v > 0:
+        return positive
+    if v < 0:
+        return negative
+    return zero
+
+
+def _clip_field(text: str) -> str:
+    return text[:997] + "…" if len(text) > 1000 else text
+
+
+def _add_spacer(embed: discord.Embed) -> None:
+    embed.add_field(name=_SPACER, value=_SPACER, inline=True)   # keeps the 3-column grid even
+
+
+def _summary_day(all_trades: list, today) -> dict:
+    opened = [t for t in all_trades if _berlin_date(t.get("opened_at")) == today]
+    closed = [
+        t for t in all_trades
+        if t["status"] in ("win", "loss", "closed") and _berlin_date(t.get("closed_at")) == today
+    ]
+    return {
+        "opened": opened,
+        "closed": closed,
+        "wins": [t for t in closed if t["status"] == "win"],
+        "losses": [t for t in closed if t["status"] == "loss"],
+        "manual": [t for t in closed if t["status"] == "closed"],
+    }
+
+
+def _summary_money(closed: list) -> tuple:
+    """(net realized amount, average realized P&L %), each None when nothing counts."""
+    amounts = [t["realized_pnl_amount"] for t in closed if t.get("realized_pnl_amount") is not None]
+    net_amount = sum(amounts) if amounts else None
+    pnl_pcts = [p for t in closed if (p := closed_pnl_pct(t)) is not None]
+    avg_pnl_pct = sum(pnl_pcts) / len(pnl_pcts) if pnl_pcts else None
+    return net_amount, avg_pnl_pct
+
+
+def _add_count_fields(embed: discord.Embed, day: dict, open_count: int) -> None:
+    embed.add_field(name="🆕 Opened today", value=str(len(day["opened"])), inline=True)
+    embed.add_field(name="🏁 Closed today", value=str(len(day["closed"])), inline=True)
+    embed.add_field(name="📂 Still open", value=str(open_count), inline=True)
+
+    embed.add_field(name="Wins", value=f"✅ {len(day['wins'])}", inline=True)
+    embed.add_field(name="Losses", value=f"❌ {len(day['losses'])}", inline=True)
+    if day["manual"]:
+        embed.add_field(name="Manually closed", value=f"🔒 {len(day['manual'])}", inline=True)
+    else:
+        _add_spacer(embed)
+
+
+def _add_money_fields(embed: discord.Embed, avg_pnl_pct, net_amount) -> None:
+    pnl_emoji = _sign_mark(avg_pnl_pct, "🟢", "🔴", "⚪")
+    net_emoji = _sign_mark(net_amount, "🟢", "🔴", "⚪")
+    embed.add_field(name="📊 Avg realized P&L", value=f"{pnl_emoji} {ui.fmt_pct(avg_pnl_pct)}" if avg_pnl_pct is not None else "n/a", inline=True)
+    embed.add_field(name="💰 Net gain/loss", value=f"{net_emoji} {net_amount:+.2f}" if net_amount is not None else "n/a", inline=True)
+    _add_spacer(embed)
+
+
+def _add_balance_fields(embed: discord.Embed, acct: dict) -> None:
+    embed.add_field(name="🏦 Account balance", value=ui.fmt_price(acct["balance"]) if acct["balance"] is not None else "n/a", inline=True)
+    bal_change = acct.get("pct_change_today")
+    bal_emoji = _sign_mark(bal_change, "📈", "📉", "➖")
+    embed.add_field(
+        name="Balance change today",
+        value=f"{bal_emoji} {ui.fmt_pct(bal_change)}" if bal_change is not None else "no change yet today",
+        inline=True,
+    )
+    _add_spacer(embed)
+
+
+def _closed_trade_line(t: dict) -> str:
+    icon = kinds.outcome_mark(_STATUS_OUTCOME.get(t["status"], "manual"))
+    pct = closed_pnl_pct(t)
+    amt = t.get("realized_pnl_amount")
+    pct_str = ui.fmt_pct(pct) if pct is not None else "n/a"
+    amt_str = f"{amt:+.2f}" if amt is not None else "n/a"
+    return f"{icon} `{t['id']}` {t['ticker']:6s} {pct_str:>8s}  ({amt_str})"
+
+
+def _opened_trade_line(t: dict) -> str:
+    return (
+        f"{'🟩' if t['direction'] == 'bullish' else '🟥'} `{t['id']}` {t['ticker']:6s} "
+        f"{ui.direction_glyph(t['direction'])} {'LONG' if t['direction'] == 'bullish' else 'SHORT'} "
+        f"{ui.confidence_label(t.get('confidence_level'), None)}"
+    )
+
+
+def _add_trade_lists(embed: discord.Embed, day: dict) -> None:
+    if day["closed"]:
+        ordered = sorted(day["closed"], key=lambda t: t.get("closed_at") or "")
+        text = _clip_field("\n".join(_closed_trade_line(t) for t in ordered))
+        embed.add_field(name="Closed trades today", value=f"```{text}```", inline=False)
+    if day["opened"]:
+        text = _clip_field("\n".join(_opened_trade_line(t) for t in day["opened"]))
+        embed.add_field(name="Opened trades today", value=f"```{text}```", inline=False)
+    if not day["opened"] and not day["closed"]:
+        embed.add_field(name=_SPACER, value="No trades opened or closed yet today.", inline=False)
+
+
+def _summary_embed(today, all_trades: list, open_count: int, acct: dict) -> discord.Embed:
+    day = _summary_day(all_trades, today)
+    net_amount, avg_pnl_pct = _summary_money(day["closed"])
+    embed = discord.Embed(title=f"📋 Today's Summary — {today.isoformat()} (Berlin)")
+    _add_count_fields(embed, day, open_count)
+    _add_money_fields(embed, avg_pnl_pct, net_amount)
+    _add_balance_fields(embed, acct)
+    _add_trade_lists(embed, day)
+    ui.apply_chrome(embed, accent=ui.accent_for_outcome(_sign_mark(net_amount, "win", "loss", "scratch")))
+    return embed
+
+
+async def handle_summary(reply) -> None:
     """
     Everything that happened TODAY (Europe/Berlin calendar day) in one
     place: trades opened, trades closed (win/loss, %, and $/€), and the
@@ -475,83 +668,99 @@ async def summary_cmd(ctx):
     check-in-anytime) status read without digging through !trades or the
     admin Performance page.
     """
+    await reply.defer()  # store reads come first; /summary must ack inside Discord's 3 s window
     today = datetime.now(_BERLIN_TZ).date()
     all_trades = trade_log.get_trades(status="all", limit=None, ledger="main")
-
-    opened_today = [t for t in all_trades if _berlin_date(t.get("opened_at")) == today]
-    closed_today = [
-        t for t in all_trades
-        if t["status"] in ("win", "loss", "closed") and _berlin_date(t.get("closed_at")) == today
-    ]
-    wins_today   = [t for t in closed_today if t["status"] == "win"]
-    losses_today = [t for t in closed_today if t["status"] == "loss"]
-    manual_today = [t for t in closed_today if t["status"] == "closed"]
-
-    amounts = [t["realized_pnl_amount"] for t in closed_today if t.get("realized_pnl_amount") is not None]
-    net_amount = sum(amounts) if amounts else None
-    pnl_pcts = [p for t in closed_today if (p := closed_pnl_pct(t)) is not None]
-    avg_pnl_pct = sum(pnl_pcts) / len(pnl_pcts) if pnl_pcts else None
-
     acct = account_module.get_daily_summary()
+    open_count = trade_log.get_stats()["open"]
+    await reply.send(embed=_summary_embed(today, all_trades, open_count, acct))
 
-    outcome = "win" if (net_amount or 0) > 0 else "loss" if (net_amount or 0) < 0 else "scratch"
-    embed = discord.Embed(title=f"📋 Today's Summary — {today.isoformat()} (Berlin)")
 
-    embed.add_field(name="🆕 Opened today", value=str(len(opened_today)), inline=True)
-    embed.add_field(name="🏁 Closed today", value=str(len(closed_today)), inline=True)
-    embed.add_field(name="📂 Still open", value=str(trade_log.get_stats()["open"]), inline=True)
+@bot.command(name="summary")
+async def summary_cmd(ctx):
+    """Everything that happened today (Europe/Berlin calendar day) in one place."""
+    reply = CtxReply(ctx)
+    await handle_summary(reply)
+    await send_prefix_tip(ctx, reply)
 
-    embed.add_field(name="Wins", value=f"✅ {len(wins_today)}", inline=True)
-    embed.add_field(name="Losses", value=f"❌ {len(losses_today)}", inline=True)
-    if manual_today:
-        embed.add_field(name="Manually closed", value=f"🔒 {len(manual_today)}", inline=True)
-    else:
-        embed.add_field(name="\u200b", value="\u200b", inline=True)   # keeps the 3-column grid even
 
-    pnl_emoji = "🟢" if (avg_pnl_pct or 0) > 0 else "🔴" if (avg_pnl_pct or 0) < 0 else "⚪"
-    net_emoji = "🟢" if (net_amount or 0) > 0 else "🔴" if (net_amount or 0) < 0 else "⚪"
-    embed.add_field(name="📊 Avg realized P&L", value=f"{pnl_emoji} {ui.fmt_pct(avg_pnl_pct)}" if avg_pnl_pct is not None else "n/a", inline=True)
-    embed.add_field(name="💰 Net gain/loss", value=f"{net_emoji} {net_amount:+.2f}" if net_amount is not None else "n/a", inline=True)
-    embed.add_field(name="\u200b", value="\u200b", inline=True)
+# ──────────────────────────────────────────────
+# / slash twins (v153). /trades moved from slash.py with its decorators
+# verbatim. A command cannot also be a group, so `!trades clear` and
+# `!trades clear history` become the top-level /trades-clear and
+# /trades-clear-history; `!trade` alone maps to /trade show.
+# ──────────────────────────────────────────────
 
-    embed.add_field(name="🏦 Account balance", value=ui.fmt_price(acct["balance"]) if acct["balance"] is not None else "n/a", inline=True)
-    bal_change = acct.get("pct_change_today")
-    bal_emoji = "📈" if (bal_change or 0) > 0 else "📉" if (bal_change or 0) < 0 else "➖"
-    embed.add_field(
-        name="Balance change today",
-        value=f"{bal_emoji} {ui.fmt_pct(bal_change)}" if bal_change is not None else "no change yet today",
-        inline=True,
-    )
-    embed.add_field(name="\u200b", value="\u200b", inline=True)
+@bot.tree.command(name="trades", description="List logged trades with pagination")
+@app_commands.describe(
+    filter="Filter by trade status (default: all)",
+    per_page="Trades per page (default: 10)",
+)
+@app_commands.choices(filter=TRADE_FILTER_CHOICES)
+async def slash_trades(
+    interaction: discord.Interaction,
+    filter: app_commands.Choice[str] = None,
+    per_page: int = 10,
+):
+    await handle_trades(InteractionReply(interaction), filter.value if filter else "all", per_page)
 
-    if closed_today:
-        lines = []
-        for t in sorted(closed_today, key=lambda t: t.get("closed_at") or ""):
-            icon = kinds.outcome_mark(_STATUS_OUTCOME.get(t["status"], "manual"))
-            pct = closed_pnl_pct(t)
-            amt = t.get("realized_pnl_amount")
-            pct_str = ui.fmt_pct(pct) if pct is not None else "n/a"
-            amt_str = f"{amt:+.2f}" if amt is not None else "n/a"
-            lines.append(f"{icon} `{t['id']}` {t['ticker']:6s} {pct_str:>8s}  ({amt_str})")
-        text = "\n".join(lines)
-        if len(text) > 1000:
-            text = text[:997] + "…"
-        embed.add_field(name="Closed trades today", value=f"```{text}```", inline=False)
 
-    if opened_today:
-        lines = [
-            f"{'🟩' if t['direction'] == 'bullish' else '🟥'} `{t['id']}` {t['ticker']:6s} "
-            f"{ui.direction_glyph(t['direction'])} {'LONG' if t['direction'] == 'bullish' else 'SHORT'} "
-            f"{ui.confidence_label(t.get('confidence_level'), None)}"
-            for t in opened_today
-        ]
-        text = "\n".join(lines)
-        if len(text) > 1000:
-            text = text[:997] + "…"
-        embed.add_field(name="Opened trades today", value=f"```{text}```", inline=False)
+@bot.tree.command(name="trades-clear", description="Clear all open trades (closed trade history is kept)")
+async def slash_trades_clear(interaction: discord.Interaction):
+    await handle_trades_clear(InteractionReply(interaction))
 
-    if not opened_today and not closed_today:
-        embed.add_field(name="\u200b", value="No trades opened or closed yet today.", inline=False)
 
-    ui.apply_chrome(embed, accent=ui.accent_for_outcome(outcome))
-    await ctx.send(embed=embed)
+@bot.tree.command(name="trades-clear-history", description="Clear all closed trade records (open trades are kept)")
+async def slash_trades_clear_history(interaction: discord.Interaction):
+    await handle_trades_clear_history(InteractionReply(interaction))
+
+
+trade_group = app_commands.Group(name="trade", description="Show or delete one logged trade")
+
+
+@trade_group.command(name="show", description="Full detail and chart for one trade")
+@app_commands.describe(trade_id="Trade ID, as listed by /trades")
+async def slash_trade_show(interaction: discord.Interaction, trade_id: str):
+    await handle_trade_show(InteractionReply(interaction), trade_id)
+
+
+@trade_group.command(name="delete", description="Delete one logged trade")
+@app_commands.describe(trade_id="Trade ID, as listed by /trades")
+async def slash_trade_delete(interaction: discord.Interaction, trade_id: str):
+    await handle_trade_delete(InteractionReply(interaction), trade_id)
+
+
+bot.tree.add_command(trade_group)
+
+
+@bot.tree.command(name="tradecharts", description="Chart the most recent trades of one status")
+@app_commands.describe(
+    status="Trade status (default: open)",
+    limit="How many trades to chart (max 10, default 5)",
+)
+@app_commands.choices(status=TRADE_FILTER_CHOICES)
+async def slash_tradecharts(
+    interaction: discord.Interaction,
+    status: app_commands.Choice[str] = None,
+    limit: int = 5,
+):
+    await handle_tradecharts(InteractionReply(interaction), status.value if status else "open", limit)
+
+
+@bot.tree.command(name="performance", description="Win rate + risk-adjusted stats for closed trades")
+@app_commands.describe(level="Filter to a specific confidence level (1-5), or omit for overall")
+async def slash_performance(
+    interaction: discord.Interaction,
+    level: int = None,
+):
+    await handle_performance(InteractionReply(interaction), level)
+
+
+@bot.tree.command(name="pnl", description="Current unrealized P&L for every open trade")
+async def slash_pnl(interaction: discord.Interaction):
+    await handle_pnl(InteractionReply(interaction))
+
+
+@bot.tree.command(name="summary", description="Today's trades opened and closed, P&L and balance change (Berlin day)")
+async def slash_summary(interaction: discord.Interaction):
+    await handle_summary(InteractionReply(interaction))

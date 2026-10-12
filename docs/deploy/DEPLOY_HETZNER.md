@@ -240,6 +240,24 @@ fact. This only touches the server's local image cache, not GHCR — a
 rollback still works exactly as above, since `docker pull` fetches whatever
 tag you ask for regardless of what's cached locally.
 
+### After every deploy or rollback: check the slash-command sync
+
+`on_ready` syncs Discord's global slash-command set once per process start
+(`swingbot/commands/scanning/loops.py`). A rejected sync is only a WARNING and
+is never retried in-process, so look for it after each deploy and rollback:
+
+```bash
+bash scripts/ops/ssh-hetzner.sh "grep -i 'slash' /opt/swing-bot/logs/*.log | tail -5"
+```
+
+If it failed, the remedy depends on the image now running:
+
+- **A v153-or-later image:** `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/ops/resync_slash_commands.py"`
+  (idempotent; HTTP-only login, leaves the running bot's session alone).
+- **A rollback to a pre-v153 image:** that image has no resync script, so
+  `docker compose restart bot` — `on_ready` re-syncs on every start. Clients
+  may list the removed commands for up to an hour while Discord propagates.
+
 ## Accessing the admin UI
 
 The admin UI runs on port `1234` (or `$ADMIN_PORT`). The firewall keeps

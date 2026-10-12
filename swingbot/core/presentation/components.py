@@ -1,11 +1,16 @@
 """Whole reusable Discord embed parts rather than presentation tokens."""
 
+import logging
 from typing import NamedTuple
+from urllib.parse import urlsplit
 
 import discord
 
 from swingbot.core.presentation import ansi, kinds, tokens
 from swingbot.core.presentation.kinds import Kind
+
+_LOG = logging.getLogger(__name__)
+_WARNED_BASES: set[str] = set()
 
 
 class EmbedField(NamedTuple):
@@ -61,10 +66,28 @@ def blocked_by_field(unmet: list[tuple[str, str]]) -> EmbedField | None:
     return EmbedField("⚠ Blocked by", body, False)
 
 
+def plan_link(plan_id: str | None, base: str | None) -> str | None:
+    """Build a plan title link from an explicitly supplied HTTP(S) base."""
+    if not base:
+        return None
+    try:
+        parts = urlsplit(base)
+        valid = (not any(char.isspace() for char in base)
+                 and parts.scheme in {"http", "https"} and bool(parts.netloc))
+    except ValueError:
+        valid = False
+    if not valid:
+        if base not in _WARNED_BASES:
+            _WARNED_BASES.add(base)
+            _LOG.warning("Invalid plan link base: %r", base)
+        return None
+    return f"{base.rstrip('/')}/plans/{plan_id}" if plan_id else None
+
+
 def apply_chrome(embed: discord.Embed, *, accent: discord.Color | None = None,
                  plan_id: str | None = None, kind: Kind | None = None,
                  level: int | None = None, r: float | None = None,
-                 blocked: bool = False) -> None:
+                 blocked: bool = False, link_base: str | None = None) -> None:
     """Apply the stripe, footer and timestamp in place.
 
     Pushed builders pass ``kind`` (v110): the stripe and footer come from the
@@ -80,6 +103,9 @@ def apply_chrome(embed: discord.Embed, *, accent: discord.Color | None = None,
         text = f"{tokens.DISCLAIMER} · plan {plan_id[:8]}" if plan_id else tokens.DISCLAIMER
     embed.timestamp = discord.utils.utcnow()
     embed.set_footer(text=text)
+    link = plan_link(plan_id, link_base)
+    if link is not None:
+        embed.url = link
 
 
 class PushEmbed(discord.Embed):

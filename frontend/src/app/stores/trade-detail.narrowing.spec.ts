@@ -169,6 +169,120 @@ describe('TradeDetailStore — the fields that rendered nowhere', () => {
     );
   });
 
+  it('reads the recorded Why context and lifecycle without coercing numbers', () => {
+    open({ ...FULL_DETAIL, entry_context: { gap_p90_pct: 1.8, gap_fragile: false },
+      risk_features: { liquidity: 'thin' }, confidence_points: { trend: 12, volume: 0 },
+      confidence_unevaluated: ['earnings', 42, '', '  ', null, {}],
+      sessions_since_created: 0, expires_on: '2026-08-07', time_exit_on: '2026-08-14',
+      hold_cap_bars: 10, acceptance_level: 101.2 });
+    expect(store.entryContext()).toEqual({ gap_p90_pct: 1.8, gap_fragile: false });
+    expect(store.riskFeatures()).toEqual({ liquidity: 'thin' });
+    expect(store.confidencePoints()).toEqual({ trend: 12, volume: 0 });
+    expect(store.confidenceUnevaluated()).toEqual(['earnings', '42']);
+    expect(store.sessionsSinceCreated()).toBe(0);
+    expect(store.expiresOn()).toBe('2026-08-07');
+    expect(store.timeExitOn()).toBe('2026-08-14');
+    expect(store.holdCapBars()).toBe(10);
+    expect(store.acceptanceLevel()).toBe(101.2);
+    expect(store.gapP90Pct()).toBe(1.8);
+    expect(store.gapFragile()).toBe(false);
+  });
+
+  it.each([FULL_DETAIL, LEGACY_DETAIL])('defaults pre-v146 and legacy missing keys', (detail) => {
+    open(detail);
+    expect(store.entryContext()).toEqual({});
+    expect(store.riskFeatures()).toEqual({});
+    expect(store.confidencePoints()).toBeNull();
+    expect(store.confidenceUnevaluated()).toEqual([]);
+    expect(store.gates()).toEqual([]);
+    expect(store.calendar()).toEqual([]);
+    expect(store.sessionsSinceCreated()).toBeNull();
+    expect(store.expiresOn()).toBeNull();
+    expect(store.timeExitOn()).toBeNull();
+    expect(store.holdCapBars()).toBeNull();
+    expect(store.acceptanceLevel()).toBeNull();
+    expect(store.gapP90Pct()).toBeNull();
+    expect(store.gapFragile()).toBeNull();
+    expect(store.detailAbsent()).toBe(detail === LEGACY_DETAIL);
+  });
+
+  it.each([null, [], 'wrong', {}, { trend: '12', bad: NaN }])(
+    'keeps confidence points absent when no numeric entries exist: %j', (points) => {
+      open({ ...FULL_DETAIL, confidence_points: points });
+      expect(store.confidencePoints()).toBeNull();
+    },
+  );
+
+  it('drops invalid confidence points and keeps finite numeric zero', () => {
+    open({ ...FULL_DETAIL, confidence_points: { trend: 0, volume: -2, bad: Infinity,
+      text: '3', absent: null, flag: false } });
+    expect(store.confidencePoints()).toEqual({ trend: 0, volume: -2 });
+  });
+
+  it('narrows known gates and their scalar values and readable parts', () => {
+    open({ ...FULL_DETAIL, gates: [null, [], 'junk', { key: 'future' },
+      { key: 'rs', label: 'Relative strength', value: 2, threshold: 1, margin: 1,
+        applies: true, parts: [{ label: 'Stock', value: 3 }, { label: 'SPY', value: 'flat' },
+          null, {}, { label: 'Missing', value: {} }], note: 'Above threshold' },
+      { key: 'rs', label: {} }, { key: 'earnings' },
+      { key: 'regime', label: 'Regime', value: {}, threshold: '1', margin: NaN,
+        applies: 'true', parts: {}, note: {} },
+      { key: 'earnings', label: 'Earnings', value: 'clear', applies: false },
+    ] });
+    expect(store.gates()).toEqual([
+      { key: 'rs', label: 'Relative strength', value: 2, threshold: 1, margin: 1,
+        applies: true, parts: [{ label: 'Stock', value: 3 }, { label: 'SPY', value: 'flat' },
+          { label: 'Missing', value: null }], note: 'Above threshold' },
+      { key: 'regime', label: 'Regime', value: null, threshold: null, margin: null,
+        applies: false, parts: [], note: null },
+      { key: 'earnings', label: 'Earnings', value: 'clear', threshold: null, margin: null,
+        applies: false, parts: [], note: null },
+    ]);
+  });
+
+  it('keeps only dated monthly OPEX calendar rows with a readable label', () => {
+    open({ ...FULL_DETAIL, calendar: [null, [], {},
+      { kind: 'other', date: '2026-08-21' }, { kind: 'opex_monthly', date: '' },
+      { kind: 'opex_monthly', date: '2026-08-21', label: 'August OPEX' },
+      { kind: 'opex_monthly', date: '2026-09-18', label: {} },
+    ] });
+    expect(store.calendar()).toEqual([
+      { kind: 'opex_monthly', date: '2026-08-21', label: 'August OPEX' },
+      { kind: 'opex_monthly', date: '2026-09-18', label: 'Monthly OPEX' },
+    ]);
+  });
+
+  it('tolerates wrong wire types without presenting coerced risk numbers', () => {
+    open({ ...FULL_DETAIL, entry_context: [], risk_features: 'wrong',
+      confidence_unevaluated: {}, gates: {}, calendar: 'wrong',
+      sessions_since_created: '2', expires_on: {}, time_exit_on: '',
+      hold_cap_bars: Infinity, acceptance_level: false });
+    expect(store.entryContext()).toEqual({});
+    expect(store.riskFeatures()).toEqual({});
+    expect(store.confidenceUnevaluated()).toEqual([]);
+    expect(store.gates()).toEqual([]);
+    expect(store.calendar()).toEqual([]);
+    expect(store.sessionsSinceCreated()).toBeNull();
+    expect(store.expiresOn()).toBeNull();
+    expect(store.timeExitOn()).toBeNull();
+    expect(store.holdCapBars()).toBeNull();
+    expect(store.acceptanceLevel()).toBeNull();
+  });
+
+  it.each(['true', 1, null])('accepts only real gap booleans: %j', (fragile) => {
+    open({ ...LEGACY_DETAIL, entry_context: { gap_fragile: fragile, gap_p90_pct: '2' },
+      risk_features: { recorded: true } });
+    expect(store.gapFragile()).toBeNull();
+    expect(store.gapP90Pct()).toBeNull();
+    expect(store.detailAbsent()).toBe(true);
+  });
+
+  it('keeps a true gap flag and leaves detailAbsent based on the original fields', () => {
+    open({ ...LEGACY_DETAIL, entry_context: { gap_fragile: true } });
+    expect(store.gapFragile()).toBe(true);
+    expect(store.detailAbsent()).toBe(true);
+  });
+
   it('reads confirmed_by as strategy and horizon pairs', () => {
     open(FULL_DETAIL);
     expect(store.confirmedBy()).toEqual([

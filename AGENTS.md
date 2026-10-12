@@ -69,7 +69,9 @@ Angular SPA served by Flask's `/api/v1/*` API.
 **eToro roadmap:** next, trade plans may be issued to an eToro **demo** account
 via the Public API alongside bomeo-capital.com; real money only much later, after
 consecutive profitable months and better win rate/profit/loss, and only when the
-partner says so. Until then demo only, never `account: real`. Keys are
+partner says so. eToro stays the broker for both stages (decided 2026-10-11;
+IBKR, Trading 212, Saxo, Alpaca compared and not chosen). Until then demo only,
+never `account: real`. Keys are
 `ETORO_USER_KEY` / `ETORO_API_KEY` in `.env`, unused so far. Detail:
 `docs/claude/etoro-roadmap.md`.
 
@@ -313,8 +315,9 @@ which modules live where.
 Large or historical plans are context hazards: **never read a plan file whole.**
 Extract one task with `rg -n "^### Task E53" -A 120 <plan>`, orienting first
 with `rg -n "^### Task" <plan>`. The live plan and spec lists are the top-level
-files in `docs/superpowers/plans/` and `specs/`; `implemented/` and `no-lift/`
-are not active work. Current status is not tracked in any document: do not trust
+files in `docs/superpowers/plans/` and `specs/`, plus the top level of a
+program folder (`etoro-migration/`); `implemented/` and `no-lift/`, at either
+level, are not active work. Current status is not tracked in any document: do not trust
 a reported "next task" until it appears in the active plan. Plan `[x]` boxes
 are not a status signal; deliverables and merge commits are. Hand wide
 exploratory searches to a subagent so raw output stays out of the main context.
@@ -368,6 +371,11 @@ of ~1150 progress lines. Never re-run the full suite to check a local change.
   `cd frontend && npm test` only once as the plan's final verification if it
   touches `frontend/`. A full run to chase an already-observed failure is
   debugging, not a second verification step.
+
+**A failed test is fixed and re-run alone** (`testrun.py file ...` or
+`pytest path::test`), never by re-running the whole suite; a fix touching other
+files widens to `testrun.py changed`. **No full suite after merging back to
+`main`**: it ran once, before the merge.
 
 **Green means `0 failed` and `0 xfailed`.** A changed pass count is not itself a
 failure; read the output rather than assuming. Prove correctness and move on:
@@ -493,7 +501,9 @@ finished: no feature branch, no worktree, no approval gate for the commit. Branc
 or create a worktree only to implement a plan. When work stops being live, move
 its plan and spec in the closing commit: `implemented/` for completed, abandoned
 or rolled-back work, `no-lift/` for deliberately unmerged work that showed no
-edge (`document-lifecycle.md`).
+edge (`document-lifecycle.md`). A doc in a program folder (all eToro specs and
+plans live in `etoro-migration/`) closes into that folder's own `implemented/`
+or `no-lift/`, never the top-level ones.
 
 ## Git safety
 

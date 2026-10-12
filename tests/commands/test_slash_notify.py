@@ -1,6 +1,6 @@
 """v152 D1: /notify -- which plan updates mention the caller.
 
-The command is registered explicitly by importing swingbot.commands.slash
+The command is registered explicitly by importing swingbot.commands.notify
 (see test_slash_commands.py for why under -n 4). Prefs are real rows on the
 per-worker test Postgres. No pytest-asyncio: coroutines run through asyncio.run.
 """
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from discord import app_commands
 
-import swingbot.commands.slash as slash
+import swingbot.commands.notify as notify
 from swingbot.bot_core import bot
 from swingbot.commands.scanning.follow_notify import EVENT_LABELS, NOTIFY_EVENTS
 from swingbot.core.db.repositories.notify_prefs import notify_prefs_repo
@@ -31,7 +31,7 @@ def _choice(value: str) -> app_commands.Choice:
 
 def _run(**kwargs) -> str:
     interaction = _interaction()
-    asyncio.run(slash.slash_notify.callback(interaction, **kwargs))
+    asyncio.run(notify.slash_notify.callback(interaction, **kwargs))
     interaction.response.send_message.assert_awaited_once()
     args, sent = interaction.response.send_message.call_args
     assert sent.get("ephemeral") is True
@@ -52,7 +52,7 @@ def test_notify_is_registered_with_its_three_options():
 
 
 def test_the_summary_lists_every_announced_event_with_its_label():
-    text = slash._notify_summary({})
+    text = notify._notify_summary({})
     for event in NOTIFY_EVENTS:
         assert EVENT_LABELS[event] in _line(text, event)
     assert "not advice" in text
@@ -61,7 +61,7 @@ def test_the_summary_lists_every_announced_event_with_its_label():
 
 
 def test_the_summary_shows_the_defaults():
-    text = slash._notify_summary({})
+    text = notify._notify_summary({})
     assert _line(text, "near_stop").endswith("Following: on · Watch: off")
     assert _line(text, "expired").endswith("Following: on · Watch: off")
     for event in ("tp1", "tp2", "stopped"):
@@ -70,7 +70,7 @@ def test_the_summary_shows_the_defaults():
 
 
 def test_the_summary_shows_a_toggle_and_silent_mode():
-    text = slash._notify_summary({"tp2": False, "near_stop": True, "watch_mode": "silent"})
+    text = notify._notify_summary({"tp2": False, "near_stop": True, "watch_mode": "silent"})
     assert _line(text, "tp2").endswith("Following: off · Watch: off")
     assert _line(text, "near_stop").endswith("Following: on · Watch: off")   # silent drops Watch
     assert "Watch-only plans: silent." in text
@@ -113,5 +113,5 @@ def test_a_store_failure_replies_instead_of_raising(monkeypatch):
     def broken(*args):
         raise RuntimeError("db down")
 
-    monkeypatch.setattr(slash, "_apply_notify_change", broken)
+    monkeypatch.setattr(notify, "_apply_notify_change", broken)
     assert "could not" in _run(event=_choice("tp1"), enabled=True).lower()

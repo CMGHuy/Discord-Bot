@@ -325,68 +325,9 @@ def test_help_catalog_covers_analytics_and_plans():
     for name in ("top", "stats", "lessons", "calibration", "journal", "plans", "liveplans"):
         assert name in all_listed, f"{name} missing from COMMANDS_BY_CATEGORY"
         assert name in COMMAND_USAGE, f"{name} missing from COMMAND_USAGE"
-
-
-def test_new_slash_commands_registered_on_tree():
-    import swingbot.commands.slash  # noqa: F401 -- import side effect registers the commands
-    from swingbot.bot_core import bot
-
-    names = {cmd.name for cmd in bot.tree.get_commands()}
-    for expected in ("liveplans", "top", "stats", "lessons"):
-        assert expected in names, f"/{expected} not registered on bot.tree"
-
-
-def test_slash_py_has_no_bang_command_channel_send_calls():
-    import inspect
-    from swingbot.commands import slash as slash_mod
-
-    source = inspect.getsource(slash_mod)
-    assert 'channel.send(f"!' not in source
-    assert 'channel.send("!' not in source
-
-
-BRIDGE_COMMANDS = ("ticker", "backtest", "backtestwatchlist",
-                   "trades", "performance", "watchlist")
-
-
-def test_six_bridge_commands_still_registered():
-    """The six prefix commands that also exist as slash commands.
-
-    swingbot/commands/slash.py registers these on `bot.tree` as an IMPORT
-    SIDE EFFECT (@bot.tree.command decorators run at module import), and
-    swingbot/bot_core.py itself registers nothing. This test used to import
-    only bot_core and read the tree, so it passed purely on whether some
-    earlier test in the same process had already imported a command module
-    -- under `-n 4` that depends on which worker the test lands in, which
-    made it fail at random. Importing the registrar here makes it
-    deterministic; test_bot_entrypoint_still_imports_the_slash_module below
-    is what keeps that import from hiding a real production regression.
-    """
-    import swingbot.commands.slash  # noqa: F401  -- registers on import
-    from swingbot.bot_core import bot
-
-    names = {cmd.name for cmd in bot.tree.get_commands()}
-    missing = [c for c in BRIDGE_COMMANDS if c not in names]
-    assert not missing, f"slash commands missing from bot.tree: {missing}"
-
-
-def test_bot_entrypoint_still_imports_the_slash_module():
-    """Guards the hole the fix above would otherwise open.
-
-    Registration only happens for modules something actually imports. With
-    the test importing swingbot.commands.slash itself, deleting bot.py's own
-    import of it would leave the test green while the live bot silently lost
-    all six slash commands -- exactly the regression this pair exists to
-    catch. bot.py is the single entry point that wires them up, so assert
-    the import line is still there.
-    """
-    import re as _re
-    from pathlib import Path
-
-    src = Path("bot.py").read_text(encoding="utf-8")
-    assert _re.search(r"^from swingbot\.commands import slash\b", src, _re.M), (
-        "bot.py no longer imports swingbot.commands.slash -- the six bridge "
-        "slash commands would not be registered on the live bot")
+    # v153 (Controller decision 4): the `!` form stays first in every row, so
+    # the first-word lookup above keeps working; info.help_line adds the `/` form.
+    assert all(cmd.startswith("!") for cmds in COMMANDS_BY_CATEGORY.values() for cmd, _ in cmds)
 
 
 import re
@@ -419,3 +360,98 @@ def test_no_direct_chart_render_calls_outside_to_thread():
         for lineno, line in enumerate(inspect.getsource(mod).splitlines(), start=1):
             if pattern.search(line) and "def " not in line and "to_thread" not in line and "lambda" not in line:
                 raise AssertionError(f"{mod.__name__}:{lineno}: direct chart render call not wrapped in to_thread: {line.strip()}")
+
+
+# --- v153 SP15: stats handlers, the tip line and the twins ----------------------
+
+def _tip_window_open(monkeypatch):
+    from swingbot.commands import reply as reply_mod
+    monkeypatch.setattr(reply_mod, "_today", lambda: reply_mod.PREFIX_TIP_UNTIL - dt.timedelta(days=1))
+
+
+def test_stats_twins_live_in_stats_py():
+    import inspect as _inspect
+
+    from swingbot.bot_core import bot
+    from swingbot.commands import slash
+    from swingbot.commands import stats as stats_mod
+
+    source = _inspect.getsource(slash)
+    for name in ("top", "stats", "soak", "lessons"):
+        assert f'name="{name}"' not in source, f"/{name} still defined in slash.py"
+    for name in ("top", "stats", "soak", "lessons", "calibration", "journal"):
+        assert bot.tree.get_command(name) is getattr(stats_mod, f"slash_{name}")
+
+
+def test_moved_stats_twins_keep_their_payload():
+    from swingbot.commands import stats as stats_mod
+
+    assert stats_mod.slash_top.description == "Highest follow-score PENDING/ACTIVE plans"
+    assert [p.name for p in stats_mod.slash_top.parameters] == ["n"]
+    assert stats_mod.slash_stats.description == "Win rate, expectancy, and risk-adjusted stats"
+    assert [c.value for c in stats_mod.slash_stats.parameters[0].choices] == ["7d", "30d", "90d", "ytd", "all"]
+    assert stats_mod.slash_soak.description == "v93 trust-rule readout for a strategy's shadow plans"
+    assert [(p.name, p.required) for p in stats_mod.slash_soak.parameters] == [("strategy", True)]
+    assert stats_mod.slash_lessons.description == "Recent journal entries and their auto-generated lessons"
+    assert [p.name for p in stats_mod.slash_lessons.parameters] == ["arg"]
+
+
+def test_new_journal_twin_takes_target_then_optional_note():
+    from swingbot.commands import stats as stats_mod
+
+    assert [(p.name, p.required) for p in stats_mod.slash_journal.parameters] == [
+        ("target", True), ("note", False)]
+    assert stats_mod.slash_calibration.parameters == []
+
+
+def test_soak_prefix_answer_ends_with_the_tip(monkeypatch):
+    import asyncio
+
+    from swingbot.commands.stats import soak_cmd
+    from swingbot.core.planning.plan_store import PlanStore
+    from tests.commands.reply_harness import FakeContext
+
+    _tip_window_open(monkeypatch)
+    monkeypatch.setattr(PlanStore, "all", lambda self: [])
+    events: list = []
+
+    asyncio.run(soak_cmd.callback(FakeContext(events, qualified_name="soak"), strategy="MACD"))
+
+    assert [event[1] for event in events] == [
+        "No strategy-sourced plans for `MACD` yet (is STRATEGY_ALERTS_MODE off?).",
+        "Tip: this is now /soak",
+    ]
+
+
+def test_bad_stats_period_answers_once_without_a_tip(monkeypatch):
+    import asyncio
+
+    from swingbot.commands.stats import stats_cmd
+    from tests.commands.reply_harness import FakeContext
+
+    _tip_window_open(monkeypatch)
+    events: list = []
+
+    asyncio.run(stats_cmd.callback(FakeContext(events, qualified_name="stats"), "fortnight"))
+
+    assert [event[1] for event in events] == [
+        "Unrecognized period `fortnight`. Use one of: 7d, 30d, 90d, ytd, all."]
+
+
+def test_top_panel_is_locked_to_the_invoking_user_on_both_surfaces(monkeypatch):
+    from swingbot.commands import stats as stats_mod
+    from tests.commands.parity_cases.stats import _plan, _stub_plans
+    from tests.commands.reply_harness import run_both
+
+    _stub_plans([_plan("p1")])(monkeypatch)
+    views = []
+    real = stats_mod.PlanActionView
+
+    def spy(plan_id, author_id):
+        views.append(author_id)
+        return real(plan_id, author_id=author_id)
+    monkeypatch.setattr(stats_mod, "PlanActionView", spy)
+
+    run_both(lambda reply: stats_mod.handle_top(reply, 1), monkeypatch)
+
+    assert views == [1, 1]  # FakeContext.author.id and FakeInteraction.user.id

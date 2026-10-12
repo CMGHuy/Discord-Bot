@@ -97,19 +97,26 @@ def _plateau_candidates(cells, param_name):
     return candidates
 
 
-def _selection_rank(candidate):
+_TIE_SIGN = {'larger': 1.0, 'smaller': -1.0}
+
+
+def _selection_rank(candidate, tie_sign=1.0):
     cell, _ = candidate
     improvement = float('-inf') if cell.delta_win_rate_pp is None else cell.delta_win_rate_pp
-    return improvement, cell.value
+    return improvement, tie_sign * cell.value
 
 
-def select_cell(cells, param_name):
-    """Select maximum dWR among eligible adjacent plateaus; ties cut less."""
+def select_cell(cells, param_name, *, tie='larger'):
+    """Select maximum dWR among eligible adjacent plateaus. A tie goes to the smaller cut:
+    the larger value by default (v122's d), the smaller one with tie='smaller' (v135's h)."""
+    if tie not in _TIE_SIGN:
+        raise ValueError(f"tie must be one of {sorted(_TIE_SIGN)}, got {tie!r}")
     ordered = sorted(cells, key=lambda cell: cell.value)
     if not any(cell.eligible for cell in ordered):
         return Selection(ordered, None, None, NO_ELIGIBLE)
     candidates = _plateau_candidates(ordered, param_name)
     if not candidates:
         return Selection(ordered, None, None, SPIKE)
-    chosen, plateau = max(candidates, key=_selection_rank)
+    sign = _TIE_SIGN[tie]
+    chosen, plateau = max(candidates, key=lambda candidate: _selection_rank(candidate, sign))
     return Selection(ordered, chosen.value, plateau, SELECTED)

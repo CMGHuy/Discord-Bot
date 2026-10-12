@@ -10,7 +10,7 @@ would look mapped while four panels quietly vanished. Everything the page
 renders is therefore projected here; dropping a panel stays a decision
 someone makes on purpose, in the SPA, where it is visible.
 
-Nothing is computed. `_collect_portfolio_state` is the same collector behind
+Nothing is computed. `collect_portfolio_state` is the same collector behind
 the `!portfolio` Discord command and today's Risk page, and per-position
 risk comes from `heat.trade_risk_pct` -- the exact function `open_heat` sums.
 A second definition of either would let this endpoint and the Jinja page
@@ -277,9 +277,9 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
 @require_auth
 def get_risk():
     from swingbot.admin import dashboard as dash
-    from swingbot.commands.growth import _collect_portfolio_state
+    from swingbot.core.edge.portfolio_state import collect_portfolio_state
 
-    state = _collect_portfolio_state()
+    state = collect_portfolio_state()
 
     try:
         account_cfg = dash.load_account_config()

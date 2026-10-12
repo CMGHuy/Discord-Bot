@@ -15,7 +15,7 @@ from swingbot.core.backtesting.acceptance import ALPHA, CLOSED, BOOTSTRAP_RESAMP
 from swingbot.core.backtesting.acceptance_harvest import HARVEST_VERSION, WIN_RATE_FLOOR_PP, evaluate_harvest, mde_expectancy_r  # noqa: E402
 from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
 from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell, with_clause  # noqa: E402
-from swingbot.core.backtesting.arms import dryup_clauses, reachability  # noqa: E402
+from swingbot.core.backtesting.arms import dryup_clauses, headroom_clauses, reachability  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate  # noqa: E402
@@ -184,6 +184,8 @@ def _run_gate(args, stage):
         mechanism = load_clause(args.mechanism_json) if args.mechanism_json else _cell_mechanism(args, args.arms, baseline, component, None)
     except dryup_clauses.NotADryupArm:
         return _refuse_not_dryup()
+    except headroom_clauses.NotAHeadroomArm:
+        return _refuse_not_headroom()
     if mechanism is not None:
         result = with_mechanism_clause(result, mechanism)
     markdown = render_markdown(result, title=args.title, window=args.window, notes=_notes(args)); print(markdown)
@@ -233,10 +235,51 @@ def _refuse_not_dryup():
     return 1
 
 
+# One invocation's grid cells share readings: a reading depends on the frame and the trade
+# key only, never on h. The cache lives and dies with the process.
+_HEADROOM_CACHE: dict = {}
+
+
+def _headroom_progress(done, total):
+    print(f"headroom readings: {done}/{total} tickers ({done / total * 100:.0f}%)", flush=True)
+
+
+def _baseline_headroom(baseline, scope, window):
+    return headroom_clauses.scoped_readings(baseline, _frame_for, scope, window,
+                                            cache=_HEADROOM_CACHE, progress=_headroom_progress)
+
+
+def _headroom_mechanism_for(path, baseline):
+    """The frozen v135 clause-6 reading for one stamped arm file, plus its no-map share."""
+    blob = json.loads(Path(path).read_text())
+    context = headroom_clauses.knob_context(blob)
+    if context is None:
+        raise headroom_clauses.NotAHeadroomArm(str(path))
+    scope, min_r = context
+    readings = _baseline_headroom(baseline, scope, headroom_clauses.signal_window(blob))
+    print(json.dumps(headroom_clauses.no_map_share(readings, scope)))
+    return headroom_clauses.baseline_mechanism(
+        baseline, headroom_clauses.flagged_keys(readings, min_r), scope)
+
+
+def _refuse_not_headroom():
+    print('refused:not-a-headroom-arm -- active headroom knobs required. Budget intact.', file=sys.stderr)
+    return 1
+
+
+def _selection_axis(args):
+    """(config attr, printed label, tie rule) of the grid the active mechanism selects on."""
+    if getattr(args, 'headroom_mechanism', False):
+        return 'HEADROOM_MIN_R', 'h', 'smaller'
+    return 'PULLBACK_DRYUP_MAX_RATIO', 'd', 'larger'
+
+
 def _cell_mechanism(args, path, baseline, component, value):
     """Opt-in frozen baseline reading; replacements stay in clauses 1–5."""
     if getattr(args, 'dryup_mechanism', False):
         return _dryup_mechanism_for(path, baseline)
+    if getattr(args, 'headroom_mechanism', False):
+        return _headroom_mechanism_for(path, baseline)
     return None
 
 
@@ -300,11 +343,14 @@ def stage_selection(args):
         cells = _selection_cells(args, grid)
     except dryup_clauses.NotADryupArm:
         return _refuse_not_dryup()
+    except headroom_clauses.NotAHeadroomArm:
+        return _refuse_not_headroom()
     if cells is None:
         return 1
-    result = select_cell(cells, "PULLBACK_DRYUP_MAX_RATIO")
+    name, label, tie = _selection_axis(args)
+    result = select_cell(cells, name, tie=tie)
     for cell in result.cells:
-        print(f"d={cell.value} eligible={cell.eligible} dWR={cell.delta_win_rate_pp} ExpR={cell.expectancy_r} failed={cell.failed} disclosure={cell.disclosure}")
+        print(f"{label}={cell.value} eligible={cell.eligible} dWR={cell.delta_win_rate_pp} ExpR={cell.expectancy_r} failed={cell.failed} disclosure={cell.disclosure}")
     print(f"verdict={result.verdict} selected={result.selected}")
     if args.out_json:
         path = Path(args.out_json)
@@ -318,8 +364,10 @@ def main(argv=None):
     parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=("win_rate", "harvest"), default="win_rate")
     parser.add_argument("--grid-arms", action="append", default=[])
     parser.add_argument("--mde-refused", action="append", type=float, default=[])
-    parser.add_argument('--dryup-mechanism', action='store_true'); parser.add_argument("--mechanism-json", default=None)
+    parser.add_argument('--dryup-mechanism', action='store_true'); parser.add_argument('--headroom-mechanism', action='store_true'); parser.add_argument("--mechanism-json", default=None)
     args = parser.parse_args(argv)
+    if args.dryup_mechanism and args.headroom_mechanism:
+        parser.error("--dryup-mechanism and --headroom-mechanism are different clause-6 readings; pass one")
     if args.mechanism_json and args.gate == "harvest":
         parser.error("--mechanism-json replaces v72 clause 6; the v92 harvest gate has no mechanism clause")
     if args.dryup_mechanism and args.gate == "harvest":

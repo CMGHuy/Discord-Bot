@@ -50,6 +50,16 @@ export const routes: Routes = [
     loadChildren: () => import('./workspaces/trades/trade-detail.routes').then((m) => m.tradeDetailRoutes),
   },
   {
+    // v151: one open plan, reached from a Discord alert's title link. Its
+    // own route-scoped stores and resolver, like Trade Detail. spa.py's
+    // WORKSPACES lists `plans` so a reload of /plans/<id> serves the SPA.
+    path: 'plans/:id',
+    canMatch: [authGuard],
+    title: 'Plan detail',
+    data: { subtitle: 'Why this plan, and how it is going' },
+    loadChildren: () => import('./workspaces/plans/plan-detail.routes').then((m) => m.planDetailRoutes),
+  },
+  {
     path: 'analytics',
     canMatch: [authGuard],
     title: 'Analytics',

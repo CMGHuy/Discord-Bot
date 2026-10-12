@@ -423,7 +423,7 @@ def breakdown_embed(plan) -> discord.Embed:
     embed.add_field(name="🕒 Status timeline", value=timeline[:1024], inline=False)
 
     ui.apply_chrome(embed, accent=ui.accent_for_level(plan.confidence_level),
-                    plan_id=plan.plan_id)
+                    plan_id=plan.plan_id, link_base=config.ADMIN_PUBLIC_URL)
     return embed
 
 

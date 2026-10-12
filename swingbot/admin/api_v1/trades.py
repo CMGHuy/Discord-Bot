@@ -38,6 +38,7 @@ from datetime import date, datetime, timezone
 from flask import jsonify, request
 
 from swingbot.admin import dashboard as dash
+from swingbot.admin.trade_why import legacy_why_fields, plan_why_fields
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.presentation.plan_view import plan_view
@@ -666,6 +667,7 @@ def _plan_detail(plan: dict, trade: dict | None) -> dict:
     """
     t = trade or {}
     return {
+        **plan_why_fields(plan, trade),
         "trade_id": t.get("id"),
         "note": _note_for(t.get("id")),
         "created_at": plan.get("created_at"),
@@ -703,6 +705,7 @@ def _legacy_detail(t: dict) -> dict:
     fields that are simply absent on older records.
     """
     return {
+        **legacy_why_fields(t),
         "trade_id": t.get("id"),
         "note": _note_for(t.get("id")),
         "created_at": t.get("opened_at"),

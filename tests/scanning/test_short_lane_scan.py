@@ -286,7 +286,7 @@ def test_the_scheduled_and_manual_callers_use_the_sequencing_helper():
     import inspect
     from swingbot.commands.scanning import commands, loops
     assert "send_then_short(channel, alerts" in inspect.getsource(loops._session_scan_tick)
-    assert "send_then_short(ctx, alerts" in inspect.getsource(commands.check_cmd.callback)
+    assert "send_then_short(reply, alerts" in inspect.getsource(commands._finish_check)
 
 
 # --- RS is ranked on the same completed, aligned window as its reference ------------

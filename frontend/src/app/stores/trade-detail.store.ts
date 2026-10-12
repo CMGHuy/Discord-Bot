@@ -11,7 +11,9 @@ import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { Observable, of } from 'rxjs';
 import { routeRequest } from '../routing/route-request';
-import { AnalyticsStrategies, JournalEntry, TradeDetail } from '../api/models';
+import {
+  AnalyticsStrategies, CalendarRow, GateKey, GatePart, GateRow, JournalEntry, TradeDetail,
+} from '../api/models';
 import { StrategyRow } from './analytics.store';
 
 /* -- the narrowed shapes of the loosely typed detail fields ---------------
@@ -77,6 +79,70 @@ function asText(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function asScalar(value: unknown): number | string | null {
+  return asNumber(value) ?? asText(value);
+}
+
+function toConfidencePoints(raw: unknown): Record<string, number> | null {
+  if (!isRecord(raw)) return null;
+  const points = Object.fromEntries(Object.entries(raw).flatMap(([key, value]) => {
+    const number = asNumber(value);
+    return number === null ? [] : [[key, number]];
+  }));
+  return Object.keys(points).length ? points : null;
+}
+
+function toTextList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((value) => {
+    const text = asText(value);
+    return text === null ? [] : [text];
+  });
+}
+
+function isGateKey(key: unknown): key is GateKey {
+  return key === 'rs' || key === 'regime' || key === 'earnings';
+}
+
+function toGateParts(raw: unknown): GatePart[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((row) => {
+    if (!isRecord(row)) return [];
+    const label = asText(row['label']);
+    return label === null ? [] : [{ label, value: asScalar(row['value']) }];
+  });
+}
+
+function toGates(raw: unknown): GateRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((row) => {
+    if (!isRecord(row) || !isGateKey(row['key'])) return [];
+    const label = asText(row['label']);
+    if (label === null) return [];
+    return [{
+      key: row['key'], label, value: asScalar(row['value']),
+      threshold: asNumber(row['threshold']), margin: asNumber(row['margin']),
+      applies: row['applies'] === true, parts: toGateParts(row['parts']),
+      note: asText(row['note']),
+    }];
+  });
+}
+
+function toCalendar(raw: unknown): CalendarRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((row) => {
+    if (!isRecord(row) || row['kind'] !== 'opex_monthly') return [];
+    const date = asText(row['date']);
+    return date === null ? [] : [{
+      date, kind: 'opex_monthly' as const, label: asText(row['label']) ?? 'Monthly OPEX',
+    }];
+  });
 }
 
 /** `[label, points]` pairs. Anything that is not a readable pair is dropped:
@@ -236,6 +302,25 @@ export const TradeDetailStore = signalStore(
      *  object, so a template cannot read a plan field that has not arrived
      *  and render a confident em dash for it. */
     detail: computed(() => data()?.detail ?? null),
+
+    /** Recorded inputs and server-derived lifecycle dates for the Why panel.
+     * Older records may omit these fields; malformed values remain unknown. */
+    entryContext: computed(() => asRecord(data()?.detail?.entry_context)),
+    riskFeatures: computed(() => asRecord(data()?.detail?.risk_features)),
+    confidencePoints: computed(() => toConfidencePoints(data()?.detail?.confidence_points)),
+    confidenceUnevaluated: computed(() => toTextList(data()?.detail?.confidence_unevaluated)),
+    gates: computed(() => toGates(data()?.detail?.gates)),
+    calendar: computed(() => toCalendar(data()?.detail?.calendar)),
+    sessionsSinceCreated: computed(() => asNumber(data()?.detail?.sessions_since_created)),
+    expiresOn: computed(() => asText(data()?.detail?.expires_on)),
+    timeExitOn: computed(() => asText(data()?.detail?.time_exit_on)),
+    holdCapBars: computed(() => asNumber(data()?.detail?.hold_cap_bars)),
+    acceptanceLevel: computed(() => asNumber(data()?.detail?.acceptance_level)),
+    gapP90Pct: computed(() => asNumber(asRecord(data()?.detail?.entry_context)['gap_p90_pct'])),
+    gapFragile: computed(() => {
+      const value = asRecord(data()?.detail?.entry_context)['gap_fragile'];
+      return typeof value === 'boolean' ? value : null;
+    }),
 
     /** Risk and reward per share, from the plan's own levels. Null unless
      *  both sides are known — half an R:R is not an R:R. */

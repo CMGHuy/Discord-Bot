@@ -217,3 +217,88 @@ def test_killswitch_command_permission_check_allows_administrator():
     ctx.permissions = discord.Permissions.all()
 
     assert killswitch_command.checks[0](ctx) is True
+
+
+
+# --- v153 SP7: the prefix tip line and the /killswitch twin -------------------
+
+def _named_ctx(qualified_name: str) -> MagicMock:
+    """A MagicMock ctx whose command has a real qualified name, so
+    send_prefix_tip resolves it in SLASH_TWIN (a bare MagicMock does not)."""
+    ctx = MagicMock()
+    ctx.send = AsyncMock()
+    ctx.command.qualified_name = qualified_name
+    return ctx
+
+
+def _tip_window_open(monkeypatch):
+    import datetime as dt
+    from swingbot.commands import reply as reply_mod
+    monkeypatch.setattr(reply_mod, "_today", lambda: reply_mod.PREFIX_TIP_UNTIL - dt.timedelta(days=1))
+
+
+def test_growth_prefix_answer_is_followed_by_the_slash_tip(monkeypatch):
+    from swingbot.core.planning import account as account_module
+    _tip_window_open(monkeypatch)
+    monkeypatch.setattr(account_module, "load_account_config",
+                        lambda: {"risk_pct": 1.0, "base_balance": None, "balance": None})
+    monkeypatch.setattr(account_module, "get_balance_history_points", lambda: [])
+    ctx = _named_ctx("growth")
+
+    asyncio.run(growth_command.callback(ctx, target=5.0))
+
+    assert ctx.send.await_count == 2
+    assert "GROWTH REALITY CHECK" in ctx.send.call_args_list[0].args[0]
+    assert ctx.send.call_args_list[-1].args[0] == "Tip: this is now /growth"
+
+
+def test_growth_prefix_error_is_not_followed_by_a_tip(monkeypatch):
+    _tip_window_open(monkeypatch)
+    ctx = _named_ctx("growth")
+
+    asyncio.run(growth_command.callback(ctx, target=1.0))
+
+    ctx.send.assert_awaited_once()
+    assert "1x" in ctx.send.call_args.args[0]
+
+
+def test_killswitch_prefix_tip_names_the_slash_twin(monkeypatch):
+    _tip_window_open(monkeypatch)
+    ctx = _named_ctx("killswitch")
+
+    asyncio.run(killswitch_command.callback(ctx, action="status"))
+
+    assert ctx.send.call_args_list[-1].args[0] == "Tip: this is now /killswitch"
+
+
+def test_slash_killswitch_is_hidden_from_non_admins_and_guild_only():
+    from swingbot.commands.growth import slash_killswitch
+    assert slash_killswitch.default_permissions is not None
+    assert slash_killswitch.default_permissions.administrator is True
+    assert slash_killswitch.guild_only is True
+
+
+def test_slash_killswitch_check_rejects_a_non_administrator():
+    from discord import app_commands
+    from swingbot.commands.growth import slash_killswitch
+    interaction = MagicMock()
+    interaction.permissions = discord.Permissions.none()
+
+    assert slash_killswitch.checks, "/killswitch must carry the has_permissions check"
+    with pytest.raises(app_commands.MissingPermissions):
+        slash_killswitch.checks[0](interaction)
+
+
+def test_slash_killswitch_check_allows_an_administrator():
+    from swingbot.commands.growth import slash_killswitch
+    interaction = MagicMock()
+    interaction.permissions = discord.Permissions.all()
+
+    assert slash_killswitch.checks[0](interaction) is True
+
+
+def test_slash_killswitch_offers_exactly_status_on_off():
+    from swingbot.commands.growth import slash_killswitch
+    (action,) = slash_killswitch.parameters
+    assert [c.value for c in action.choices] == ["status", "on", "off"]
+    assert action.required is False

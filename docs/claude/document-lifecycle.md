@@ -83,9 +83,10 @@ there is no lingering case to handle differently.)
   (`swingbot/core/analytics/*.py`, `swingbot/admin/**`), tests and
   `.claude/skills/task-brief/SKILL.md` all cite these paths; after moving,
   re-point every reference and confirm none dangle.
-- **The `SessionStart` hook only globs `plans/*.md`**, so a moved plan drops out
-  of the cursor's "active plan" line by design. To resume one, move it back up
-  first.
+- **The `SessionStart` hook globs `plans/*.md` and `plans/<program>/*.md`**
+  (any subfolder except `implemented/` and `no-lift/`), so a moved plan drops
+  out of the cursor's "active plan" line by design. To resume one, move it back
+  up first.
 
 ## A plan whose code never reached `main` moves to `no-lift/`, not `implemented/`
 
@@ -118,6 +119,24 @@ or not.
 - **`docs/claude/backtest-methodology.md`'s closed pre-registration table still
   gets a row** — the TRAIN/VALIDATION result is exactly what that table
   exists to record, whether or not the code shipped.
+
+## Program folders keep a multi-spec programme together
+
+**Every eToro spec and plan lives in `docs/superpowers/specs/etoro-migration/`
+and `docs/superpowers/plans/etoro-migration/`** (partner decision, 2026-10-11).
+A program folder sits beside `implemented/` and `no-lift/` and carries its own
+`implemented/` and `no-lift/` subfolders: at close-out a program doc moves into
+**its folder's** closed subfolder, never the top-level one, so the whole
+programme can be read in one place.
+
+- **Live means top level of `plans/` or of a program folder.** The
+  `SessionStart` hook (`.claude/hooks/session-cursor.ps1`) scans both;
+  `tests/hooks/test_session_plan_wip.py` pins that a program-folder plan is
+  flagged and that `implemented/`/`no-lift/` at either level are skipped.
+- **Numbering is unchanged.** `/new-doc`'s `find` recurses, so program docs
+  share the one repo-wide `vN` counter; the filename shape is the same.
+- **A new program folder is a partner decision**, not a filing preference;
+  record it in this section when one is created.
 
 ## Worktrees are named after the plan
 

@@ -1,17 +1,24 @@
-"""!growth — the compounding reality dashboard (Edge plan E2)."""
+"""!growth, !killswitch, !portfolio and their slash twins (Edge plan E2; v153).
+
+Each command body lives in one handle_<name>(reply, ...) handler shared by
+the prefix command and its /<name> slash twin (swingbot/commands/reply.py).
+"""
 import asyncio
 import os
 from datetime import date
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from swingbot import config
 from swingbot.bot_core import bot
+from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
 from swingbot.core import presentation as ui
 from swingbot.core.planning import account as account_module
 from swingbot.core.edge.growth import AVG_DAYS_PER_MONTH, growth_report, growth_path
 from swingbot.core.tracking.performance import TradeLog
+from swingbot.core.edge.portfolio_state import collect_portfolio_state as _collect_portfolio_state
 
 MC_MIN_CLOSED_TRADES = 10   # below this a bootstrap R-multiple sample is noise
 
@@ -63,133 +70,59 @@ def _collect_stats(target: float = 10.0) -> dict:
     return stats
 
 
-@bot.command(name="growth")
-async def growth_command(ctx, target: float = 10.0):
+def _growth_path_line(gp: dict, target: float) -> str:
+    on_track = gp["on_track_vs"].get(8, False)
+    on_track_str = "yes" if on_track else "no"
+    return (f"\nat {gp['current_multiple']:.2f}x — {ui.fmt_pct(gp['pct_to_target'])} of the way "
+            f"(log scale) toward {target:g}x; on track for {target:g}x-in-8y: {on_track_str}")
+
+
+async def handle_growth(reply, target: float = 10.0) -> None:
     """Show the honest math to <target>x at current expectancy/frequency."""
     if target <= 1:
-        await ctx.send(
+        await reply.send_error(
             f"Target must be greater than 1x (got {target:g}x) -- a target of 1x or "
             "less means \"no growth needed\" or \"shrink\", which this dashboard doesn't model. "
             "Try e.g. `!growth 10`."
         )
         return
+    await reply.defer()
     stats = await asyncio.to_thread(_collect_stats, target)
     report = growth_report(stats, target=target)
     gp = stats.get("growth_path")
     if gp and gp.get("realized_daily_growth") is not None:
-        on_track = gp["on_track_vs"].get(8, False)
-        on_track_str = "yes" if on_track else "no"
-        report += (f"\nat {gp['current_multiple']:.2f}x — {ui.fmt_pct(gp['pct_to_target'])} of the way "
-                   f"(log scale) toward {target:g}x; on track for {target:g}x-in-8y: {on_track_str}")
+        report += _growth_path_line(gp, target)
     chart_path = stats.get("mc_chart_path")
     file = discord.File(chart_path, filename=os.path.basename(chart_path)) if chart_path else None
-    await ctx.send(f"```\n{report}\n```", file=file)
+    await reply.send(f"```\n{report}\n```", file=file)
+
+
+async def handle_killswitch(reply, action: str = "status") -> None:
+    """on|off|status — hard pause for all new entries."""
+    from swingbot.core.edge import throttle
+    if action == "status":
+        st = throttle.kill_state()
+        await reply.send(f"kill switch: {'🔴 ON — ' + str(st['reason']) if st['on'] else '🟢 off'}")
+        return
+    st = throttle.set_kill(action == "on", reason="manual")
+    await reply.send(f"kill switch {'engaged 🔴 — no new entries' if st['on'] else 'released 🟢'}")
+
+
+@bot.command(name="growth")
+async def growth_command(ctx, target: float = 10.0):
+    """Show the honest math to <target>x at current expectancy/frequency."""
+    reply = CtxReply(ctx)
+    await handle_growth(reply, target)
+    await send_prefix_tip(ctx, reply)
 
 
 @bot.command(name="killswitch")
 @commands.has_permissions(administrator=True)
 async def killswitch_command(ctx, action: str = "status"):
     """!killswitch on|off|status — hard pause for all new entries."""
-    from swingbot.core.edge import throttle
-    if action == "status":
-        st = throttle.kill_state()
-        await ctx.send(f"kill switch: {'🔴 ON — ' + str(st['reason']) if st['on'] else '🟢 off'}")
-        return
-    st = throttle.set_kill(action == "on", reason="manual")
-    await ctx.send(f"kill switch {'engaged 🔴 — no new entries' if st['on'] else 'released 🟢'}")
-
-
-def _collect_portfolio_state() -> dict:
-    """Assemble the !portfolio survival-dashboard state from the E7/E8/E45/
-    E47/E9 accessors over the open-trade list. Mirrors _collect_stats's
-    soft-import style: every sub-collector try/excepted to a safe default
-    so a missing/broken piece never kills the whole command."""
-    from swingbot.core.edge import correlation, heat, throttle
-    from swingbot.core.marketdata.data import get_daily_data
-    from swingbot.core.marketdata import universe
-
-    state: dict = {}
-
-    try:
-        cfg = account_module.load_account_config()
-        balance = cfg.get("balance", cfg.get("base_balance", 0.0))
-    except Exception:
-        cfg = {}
-        balance = 0.0
-
-    open_trades: list = []
-    try:
-        open_trades = TradeLog().get_trades(status="open", limit=None)
-    except Exception:
-        open_trades = []
-
-    try:
-        state["open_heat"] = heat.open_heat(open_trades, balance)
-    except Exception:
-        state["open_heat"] = 0.0
-    state["heat_cap"] = getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0)
-
-    sectors: dict = {}
-    try:
-        sectors = universe.sector_map(getattr(config, "SCAN_UNIVERSE", "watchlist") or "watchlist")
-    except Exception:
-        sectors = {}
-
-    try:
-        state["sector_heat"] = heat.sector_heat(open_trades, balance, sectors)
-    except Exception:
-        state["sector_heat"] = {}
-
-    try:
-        equity_points = [bal for _, bal in account_module.get_balance_history_points()]
-        mult, paused = throttle.current_throttle(equity_points, was_paused=False)
-        state["throttle_mult"] = mult
-        state["paused"] = paused
-    except Exception:
-        state["throttle_mult"] = 1.0
-        state["paused"] = False
-
-    try:
-        state["kill"] = throttle.kill_state()
-    except Exception:
-        state["kill"] = {"on": False, "reason": None}
-
-    try:
-        base = cfg.get("base_balance")
-        if base:
-            state["growth"] = growth_path(
-                account_module.get_balance_history_points(), base, target_multiple=10.0)
-        else:
-            state["growth"] = {}
-    except Exception:
-        state["growth"] = {}
-
-    try:
-        clusters: list = []
-        tickers = sorted({t.get("ticker") for t in open_trades if t.get("ticker")})
-        dfs: dict = {}
-        for ticker in tickers:
-            try:
-                dfs[ticker] = get_daily_data(ticker)
-            except Exception:
-                continue
-        seen: set = set()
-        for ticker in tickers:
-            result = correlation.cluster_exposure(
-                open_trades, ticker, dfs, balance, sectors=sectors)
-            cluster = result.get("cluster") or []
-            if not cluster:
-                continue
-            group = frozenset({ticker}) | frozenset(cluster)
-            if len(group) < 2 or group in seen:
-                continue
-            seen.add(group)
-            clusters.append(sorted(group))
-        state["clusters"] = clusters
-    except Exception:
-        state["clusters"] = []
-
-    return state
+    reply = CtxReply(ctx)
+    await handle_killswitch(reply, action)
+    await send_prefix_tip(ctx, reply)
 
 
 def portfolio_report(state: dict) -> str:
@@ -213,11 +146,19 @@ def portfolio_report(state: dict) -> str:
     return "\n".join(lines)
 
 
+async def handle_portfolio(reply) -> None:
+    """Open heat vs cap, sector bars, clusters, throttle + kill state."""
+    await reply.defer()
+    state = await asyncio.to_thread(_collect_portfolio_state)
+    await reply.send(f"```\n{portfolio_report(state)}\n```")
+
+
 @bot.command(name="portfolio")
 async def portfolio_command(ctx):
     """Open heat vs cap, sector bars, clusters, throttle + kill state."""
-    state = await asyncio.to_thread(_collect_portfolio_state)
-    await ctx.send(f"```\n{portfolio_report(state)}\n```")
+    reply = CtxReply(ctx)
+    await handle_portfolio(reply)
+    await send_prefix_tip(ctx, reply)
 
 
 def weekly_risk_report(week_stats: dict) -> str:
@@ -259,3 +200,39 @@ def rs_rotation_report(rels: dict, sectors: dict, top_n: int = 10) -> str:
     for sec, rs in sorted(by_sector.items(), key=lambda kv: -sum(kv[1]) / len(kv[1])):
         lines.append(f"  {sec:<26} {ui.fmt_pct(sum(rs) / len(rs) * 100)} (n={len(rs)})")
     return "\n".join(lines)
+
+
+# ──────────────────────────────────────────────
+# / slash twins (new in v153)
+# ──────────────────────────────────────────────
+
+KILLSWITCH_CHOICES = [
+    app_commands.Choice(name="status", value="status"),
+    app_commands.Choice(name="on — block all new entries", value="on"),
+    app_commands.Choice(name="off — release the kill switch", value="off"),
+]
+
+
+@bot.tree.command(name="growth", description="The honest math to a target multiple at current expectancy and frequency")
+@app_commands.describe(target="Target account multiple, above 1 (default 10)")
+async def slash_growth(interaction: discord.Interaction, target: float = 10.0):
+    await handle_growth(InteractionReply(interaction), target)
+
+
+# Mirrors !killswitch's runtime check, not just its visibility (spec,
+# "Grouping and permissions"): hidden from non-admins in the picker,
+# enforced at invocation, and unavailable in DMs where no administrator
+# permission exists. SP3's bot.tree.error handler answers the check failures.
+@bot.tree.command(name="killswitch", description="Hard pause for all new entries (administrators only)")
+@app_commands.describe(action="status (default), on or off")
+@app_commands.choices(action=KILLSWITCH_CHOICES)
+@app_commands.default_permissions(administrator=True)
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.guild_only()
+async def slash_killswitch(interaction: discord.Interaction, action: app_commands.Choice[str] = None):
+    await handle_killswitch(InteractionReply(interaction), action.value if action else "status")
+
+
+@bot.tree.command(name="portfolio", description="Open heat vs cap, sector heat, correlated clusters, throttle and kill state")
+async def slash_portfolio(interaction: discord.Interaction):
+    await handle_portfolio(InteractionReply(interaction))

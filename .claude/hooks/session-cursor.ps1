@@ -40,8 +40,18 @@ try {
     }
     Emit "CURSOR   : $cursor"
 
+    # Live plans sit at the top of plans/ or one level down in a program folder
+    # (e.g. plans/etoro-migration/); implemented/ and no-lift/ at either level
+    # are closed work and never listed.
+    $pdir = if ($env:SWINGBOT_PLANS_DIR) { $env:SWINGBOT_PLANS_DIR } else { 'docs/superpowers/plans' }
+    $closed = @('implemented', 'no-lift')
+    $programs = @(Get-ChildItem -LiteralPath $pdir -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $closed -notcontains $_.Name })
+    $livePlans = @(Get-ChildItem -LiteralPath $pdir -Filter '*.md' -File -ErrorAction SilentlyContinue) +
+                 @($programs | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter '*.md' -File -ErrorAction SilentlyContinue })
+
     # --- active plan: most recently modified plan file, task count ---
-    $plan = Get-ChildItem 'docs/superpowers/plans/*.md' -ErrorAction SilentlyContinue |
+    $plan = $livePlans |
             Where-Object { $_.Name -notmatch '_\d+[a-z]?(-[^.]*)?\.md$' } |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($plan) {
@@ -54,8 +64,7 @@ try {
     # Codex) starts next, so the state is derived from the plan files, which all
     # of them share. Plans without a "## Task ledger" (pre-two-phase) are skipped.
     try {
-        $pdir = if ($env:SWINGBOT_PLANS_DIR) { $env:SWINGBOT_PLANS_DIR } else { 'docs/superpowers/plans' }
-        $groups = Get-ChildItem -LiteralPath $pdir -Filter '*.md' -File -ErrorAction SilentlyContinue |
+        $groups = $livePlans |
                   Group-Object { $_.Name -replace '_\d+[a-z]?(-[^.]*)?\.md$', '' -replace '\.md$', '' }
         foreach ($g in $groups) {
             $ledger = New-Object System.Collections.ArrayList

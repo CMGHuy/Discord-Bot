@@ -72,6 +72,10 @@ def _mechanism_result(removed, retained, scope):
                         f'removed ExpR {removed_exp:+.4f}R (must be <= 0)', removed_wr, retained_wr)
 
 
+#: Shared with headroom_clauses (v135): the removed-vs-retained scorer is predicate-agnostic.
+mechanism_result = _mechanism_result
+
+
 def knob_context(blob):
     """Return an active component only when both dry-up knobs are stamped."""
     delta = (blob.get('provenance') or {}).get('knob_delta') or {}

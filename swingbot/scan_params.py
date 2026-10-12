@@ -89,6 +89,8 @@ class ScanParams:
     compression_short_research_mode: str = "off"   # v119 research replay only
     fvg_levels_mode: str = "all"            # v128: all | displacement | off
     fvg_displacement_atr_k: float = 1.5     # v128: read only in displacement mode
+    headroom_scope: str = "off"             # v135: off | strategy | confluence
+    headroom_min_r: float = 0.0             # v135: 0 disables the gate
 
     def __post_init__(self):
         _validate_fvg(self.fvg_levels_mode, self.fvg_displacement_atr_k)
@@ -154,4 +156,6 @@ class ScanParams:
             compression_short_research_mode=config.COMPRESSION_SHORT_RESEARCH_MODE,
             fvg_levels_mode=config.FVG_LEVELS_MODE,
             fvg_displacement_atr_k=config.FVG_DISPLACEMENT_ATR_K,
+            headroom_scope=config.HEADROOM_SCOPE,
+            headroom_min_r=config.HEADROOM_MIN_R,
         )

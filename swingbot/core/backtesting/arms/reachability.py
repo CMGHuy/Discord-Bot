@@ -48,6 +48,13 @@ _DRYUP = ("v122 pullback dry-up gate (edge/gates.py), applied before plan constr
           "perturbation at the default is inert by design. Stage -1: measure_arms.py --stage "
           "pilot --knob PULLBACK_DRYUP_SCOPE=<scope> --knob PULLBACK_DRYUP_MAX_RATIO=0.60, "
           "then validate_component.py --stage reachability.")
+_HEADROOM = ("v135 headroom veto (edge/gates.py), applied to the built plan in "
+             "StrategyEngine._gated_plan and to each scenario in "
+             "backtest_scenarios._headroom_kept. Inert unless HEADROOM_SCOPE != off and "
+             "HEADROOM_MIN_R > 0 together, so a lone perturbation at the default is inert "
+             "by design. Stage -1: measure_arms.py --stage pilot --knob "
+             "HEADROOM_SCOPE=<scope> --knob HEADROOM_MIN_R=1.0, then "
+             "validate_component.py --stage reachability.")
 
 REGISTRY: dict[str, Reach] = {
     "MIN_REWARD_PCT": Reach(REACHABLE, "Scenario admission gate in replay_scenarios.", C, True),
@@ -69,6 +76,8 @@ REGISTRY: dict[str, Reach] = {
                                     "a lone perturbation at the default mode is inert by design.", CS),
     "PULLBACK_DRYUP_SCOPE": Reach(REACHABLE, _DRYUP, CS),
     "PULLBACK_DRYUP_MAX_RATIO": Reach(REACHABLE, _DRYUP, CS),
+    "HEADROOM_SCOPE": Reach(REACHABLE, _HEADROOM, CS),
+    "HEADROOM_MIN_R": Reach(REACHABLE, _HEADROOM, CS),
     "SHORT_UNIVERSE_RESEARCH_MODE": Reach(REACHABLE, (
         "v118: the short_universe population engine replays the base scan and the extra "
         "lane per decision date through the live selector (build_extra_candidates), "

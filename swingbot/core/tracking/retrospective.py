@@ -271,8 +271,8 @@ def _emit_table(title: str, header_line: str, sep: str, row_lines: list[str],
 
 
 def _collect_weekly_risk_stats(all_trades: list, today: dt.date) -> dict:
-    """Assemble the !weekly-risk-report stats. Mirrors _collect_portfolio_state's
-    (Task E52, swingbot/commands/growth.py) soft-degrade-per-section philosophy:
+    """Assemble the !weekly-risk-report stats. Mirrors collect_portfolio_state's
+    (Task E52, swingbot/core/edge/portfolio_state.py) soft-degrade-per-section philosophy:
     each expensive/network-dependent piece is its own try/except so one failure
     (e.g. a price fetch) never blocks the others."""
     from swingbot.core.edge import correlation, ruin

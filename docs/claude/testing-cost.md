@@ -5,6 +5,21 @@ reasoning about how long the suite takes. Every number here was measured on
 2026-08-07 at `main` = `017c777`, 12 logical cores. Full design:
 `docs/superpowers/specs/implemented/2026-08-07-v7-test-cost-reduction-design.md`.
 
+## When a test fails, and after the merge
+
+- **Fix the failing test, re-run only it.** `python scripts/dev/testrun.py file
+  tests/foo.py` (~7s) or `python -m pytest tests/foo.py::test_bar`. Never repeat
+  the whole suite to confirm a one-test fix: a full run costs ~20 minutes under
+  load and re-proves nothing the narrow run did not. A failure that is a
+  load-sensitive timeout (the v153 `test_system_notices` child-process timeout,
+  `test_analytics_perf`) is confirmed by the same narrow run, and recorded as
+  such in the plan's results.
+- **A fix that touches other files** widens to `testrun.py changed`, not `full`.
+- **No full suite after merging back to `main`.** The plan's final task ran it
+  once on the branch; the merge adds no code the branch run did not see. A merge
+  that needed conflict resolution is checked with `changed` over the resolved
+  files. Close-out never ends with a full run.
+
 ## Baseline
 
 **1145 collected — 1008 passed, 136 skipped, 1 xfailed, 0 failed.**
