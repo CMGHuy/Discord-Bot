@@ -1,10 +1,10 @@
 # v151 Plan detail page and the shared "Why" panel: Implementation Plan, index
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part whole**: pull one task with `/task-brief V151-4` or `grep -n "^### Task V151-4:" -A 400 docs/superpowers/plans/2026-10-10-v151-plan-detail-why-panel_*.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part whole**: pull one task with `/task-brief V151-4` or `grep -n "^### Task V151-4:" -A 400 docs/superpowers/plans/implemented/2026-10-10-v151-plan-detail-why-panel_*.md`.
 
 **Bump:** ui minor · bot patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v151-plan-detail-why-panel-design.md`](../specs/2026-10-09-v151-plan-detail-why-panel-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v151-plan-detail-why-panel-design.md`](../../specs/implemented/2026-10-09-v151-plan-detail-why-panel-design.md)
 
 **Goal:** Make the reasons stored on every plan readable in one click. A shared **Why panel** (levels with their confirming methods, confidence points, gate margins against today's thresholds, monthly OPEX in the holding window, the explanation) renders on the trade page and on a new `plans/:id` page for open plans. Every plan-carrying Discord embed links its title to that page.
 

@@ -45,7 +45,8 @@ def render(instruction: Instruction, kind: Kind, *, block: str | None = None,
     embed = ui.push_embed(kind, instruction.ticker, instruction.direction, detail)
     body = [*instruction.warnings, f"**{instruction.headline}**", *instruction.lines]
     embed.description = "\n".join([block, *body] if block else body)
-    ui.apply_chrome(embed, kind=kind, level=instruction.level, r=r, plan_id=instruction.plan_id)
+    ui.apply_chrome(embed, kind=kind, level=instruction.level, r=r, plan_id=instruction.plan_id,
+                    link_base=config.ADMIN_PUBLIC_URL)
     return embed
 
 

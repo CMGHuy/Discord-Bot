@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { EventStream } from '../../api/event-stream';
 import {
@@ -21,7 +21,12 @@ import {
 } from '../../api/interceptors';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
-import { TradeDetail } from './trade-detail';
+import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
+import { TradeDetail, arrivalBanner } from './trade-detail';
+
+// The Chart tab now mounts the shared chart, which asks for matchMedia the
+// moment a chart exists. See the polyfill for why.
+installMatchMediaPolyfill();
 
 /* SR49 — the rendering half.
  *
@@ -494,5 +499,168 @@ describe('TradeDetail states', () => {
 
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.failed')).toBeTruthy();
+  });
+});
+
+describe('TradeDetail — the shared Why components (v151)', () => {
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  function mount(tab: string, detail: object = DETAIL, status = 'ACTIVE', overrides: object = {}) {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', tab);
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(detail, status, overrides));
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('hosts the levels block, the two plan panels and the Why panel on the Plan tab', () => {
+    const el = mount('plan');
+    expect(el.querySelector('sb-levels-block')).toBeTruthy();
+    expect(el.querySelector('sb-if-it-gets-there')).toBeTruthy();
+    expect(el.querySelector('sb-sizing-panel')).toBeTruthy();
+    expect(el.querySelector('sb-why-panel')).toBeTruthy();
+    expect(el.textContent).toContain('Paper plan — this page places no orders.');
+  });
+
+  it('renders the level sources exactly once', () => {
+    const text = mount('plan').textContent ?? '';
+    expect(text.split('Target confirmed by').length - 1).toBe(1);
+    expect(text.split('Stop confirmed by').length - 1).toBe(1);
+  });
+
+  it('shows the gate margins section with its caveat on the Plan tab', () => {
+    const text = mount('plan').textContent ?? '';
+    expect(text).toContain("Gate margins (vs today's thresholds)");
+    expect(text).toContain(
+      "Margins are measured against today's thresholds, not the ones in force when this plan was issued.",
+    );
+    expect(text).toContain('Calendar in the holding window');
+  });
+
+  it('keeps the gate rows on a legacy record that has no detail', () => {
+    const el = mount('plan', {
+      ...DETAIL,
+      explanation: null,
+      confirmed_by: [],
+      target_sources: [],
+      stop_sources: [],
+      confidence_breakdown: null,
+      quality_breakdown: [],
+      status_history: [],
+      gates: [{
+        key: 'rs', label: 'Relative strength', value: null, threshold: 25,
+        margin: null, applies: false, parts: [], note: 'exempt',
+      }],
+    });
+    const text = el.textContent ?? '';
+    expect(text).toContain('logged before the admin UI captured the full alert detail');
+    expect(text).toContain('Relative strength');
+    expect(text).not.toContain('Why this trade');
+    expect(text).not.toContain('Quality breakdown');
+  });
+
+  it('hosts the outcome path on the Live tab', () => {
+    const el = mount('live');
+    expect(el.querySelector('sb-outcome-path')).toBeTruthy();
+    expect(el.textContent).toContain('Scale-out');
+    expect(el.textContent).toContain('Timeline');
+  });
+
+  it('hosts the plan chart on the Chart tab', () => {
+    const el = mount('chart');
+    expect(el.querySelector('sb-plan-chart')).toBeTruthy();
+  });
+});
+
+describe('TradeDetail — arrival banner from the plan page (v151)', () => {
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => history.replaceState(null, ''));
+
+  function mountWithState(state: object | null, status: string, overrides: object = {}) {
+    history.replaceState(state, '');
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, status, overrides));
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('says the plan is closed when redirected from a closed plan', () => {
+    const el = mountWithState({ from: 'plan' }, 'CLOSED');
+    expect(el.querySelector('.arrival')?.textContent).toContain('This plan is closed');
+  });
+
+  it('says the plan was cancelled when redirected from a cancelled plan', () => {
+    const el = mountWithState({ from: 'plan' }, 'CANCELLED');
+    expect(el.querySelector('.arrival')?.textContent).toContain('This plan was cancelled');
+  });
+
+  it('says the plan has expired when redirected from an expired pending plan', () => {
+    const el = mountWithState({ from: 'plan' }, 'PENDING', { bars_to_expiry: 0 });
+    expect(el.querySelector('.arrival')?.textContent).toContain('This plan has expired');
+  });
+
+  it('shows no banner on a direct visit', () => {
+    const el = mountWithState(null, 'CLOSED');
+    expect(el.querySelector('.arrival')).toBeNull();
+  });
+
+  it('shows no banner for a live plan even with the state set', () => {
+    const el = mountWithState({ from: 'plan' }, 'ACTIVE');
+    expect(el.querySelector('.arrival')).toBeNull();
+  });
+});
+
+describe('arrivalBanner', () => {
+  it('words each terminal case', () => {
+    expect(arrivalBanner('PENDING', 0)).toBe('This plan has expired — this is its trade record.');
+    expect(arrivalBanner('CANCELLED', null)).toBe('This plan was cancelled — this is its trade record.');
+    expect(arrivalBanner('CLOSED', null)).toBe('This plan is closed — this is its trade record.');
+  });
+
+  it('returns nothing for a plan that is still open', () => {
+    expect(arrivalBanner('PENDING', 3)).toBe('');
+    expect(arrivalBanner('PENDING', null)).toBe('');
+    expect(arrivalBanner('ACTIVE', null)).toBe('');
+    expect(arrivalBanner('PARTIAL', null)).toBe('');
+    expect(arrivalBanner(null, null)).toBe('');
   });
 });

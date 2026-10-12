@@ -1,10 +1,10 @@
 # v151 Plan detail page and the shared "Why" panel: Part 1, API and Discord link
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V151-3:" -A 400 docs/superpowers/plans/2026-10-10-v151-plan-detail-why-panel_1-api-and-discord-link.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V151-3:" -A 400 docs/superpowers/plans/implemented/2026-10-10-v151-plan-detail-why-panel_1-api-and-discord-link.md`.
 
 **Bump:** ui minor · bot patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v151-plan-detail-why-panel-design.md`](../specs/2026-10-09-v151-plan-detail-why-panel-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v151-plan-detail-why-panel-design.md`](../../specs/implemented/2026-10-09-v151-plan-detail-why-panel-design.md)
 
 Global constraints, the decisions this part relies on (1-7 and 12), the wire contract, the task ledger and `## Parallelisation` live in the index: [`2026-10-10-v151-plan-detail-why-panel_0-index.md`](2026-10-10-v151-plan-detail-why-panel_0-index.md). Every task below implicitly includes those constraints (no `swingbot.config` import under `core/presentation`; v146 keys passed through; never `cd`; stage by name; no `VERSION.json` bump; complexity < 15).
 

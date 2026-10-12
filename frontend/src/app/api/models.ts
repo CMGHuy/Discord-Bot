@@ -165,6 +165,30 @@ export interface TradeRow {
   leg_total: number;
 }
 
+export type GateKey = 'rs' | 'regime' | 'earnings';
+
+export interface GatePart {
+  label: string;
+  value: number | string | null;
+}
+
+export interface GateRow {
+  key: GateKey;
+  label: string;
+  value: number | string | null;
+  threshold: number | null;
+  margin: number | null;
+  applies: boolean;
+  parts: GatePart[];
+  note: string | null;
+}
+
+export interface CalendarRow {
+  date: string;
+  kind: 'opex_monthly';
+  label: string;
+}
+
 /** The heavy half of a trade, fetched only for the detail view.
  *
  *  One shape for both origins on purpose: the server fills the plan-only
@@ -208,6 +232,18 @@ export interface TradeDetailFields {
   target2_sources: string[];
   sizing_mode: string | null;
   account_balance_after: number | null;
+  entry_context: Record<string, unknown>;
+  risk_features: Record<string, unknown>;
+  cohort_label: string | null;
+  confidence_points: Record<string, number> | null;
+  confidence_unevaluated: string[];
+  gates: GateRow[];
+  sessions_since_created: number | null;
+  expires_on: string | null;
+  time_exit_on: string | null;
+  calendar: CalendarRow[];
+  hold_cap_bars: number | null;
+  acceptance_level: number | null;
 }
 
 /** `GET /trades/:id` -- a list row plus the heavy fields. */

@@ -792,6 +792,14 @@ FIELDS: list[Field] = [
                "just the headline, trade plan table, and a one-line quality summary -- confluence/"
                "what-changed/branch sections are dropped to fit more alerts on screen at once. "
                "Purely a rendering choice; no scoring or filtering changes."),
+    # v151: the plan-detail link on every plan-carrying embed. Bot-side on
+    # purpose -- the Admin UI group configures the admin container, while this
+    # one is read by the bot at embed-build time (apply_chrome's link_base).
+    Field("ADMIN_PUBLIC_URL", "ADMIN_PUBLIC_URL", "Discord Alerts", "Admin UI public URL (plan links)",
+          type="text", default="", hot_reloadable=True,
+          help="Read by the bot each time it builds an alert embed — SIGHUP applies a change, no "
+               "restart. The admin UI's base URL as reached from the device you open Discord on "
+               "(e.g. the Cloudflare tunnel hostname); empty = no link."),
     Field("DAILY_DIGEST_ENABLED", "DAILY_DIGEST_ENABLED", "Discord Alerts", "Daily top-plans digest enabled",
           type="checkbox", default="false",
           help="Post a curated 'Top plans today' digest (VALIDATED plans only, ranked by follow score) "
