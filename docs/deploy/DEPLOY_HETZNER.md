@@ -443,3 +443,25 @@ it rewrites in place.
 **Remote commands through `ssh-hetzner.sh`.** The wrapper runs `wsl ssh "<cmd>"`, so `$(...)` and
 `$VAR` inside the quoted command expand on the dev machine, not the VM. Pipe a script on stdin
 (`... "bash -s" < script.sh`) whenever the command needs the VM's own values.
+
+**Running the Reports workspace's reports (v146, v147).** The live trade book is on this VM, so
+both report scripts run here, inside the bot container, and write `/opt/swing-bot/data/reports/`.
+`data/` is bind-mounted into both containers, so the admin shows a new result without a rebuild
+or a restart:
+
+```bash
+bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/reports/<script>.py"
+```
+
+`<script>` is the v146 or v147 report script; each one's own spec names its arguments. The TRAIN
+half of each report is a backtest produced on the dev machine. Upload its JSONL inputs first, over
+ssh stdin (never `scp`, never another key path):
+
+```bash
+bash scripts/ops/ssh-hetzner.sh "mkdir -p /opt/swing-bot/data/reports/inputs"
+bash scripts/ops/ssh-hetzner.sh "cat > /opt/swing-bot/data/reports/inputs/<file>" < <local file>
+```
+
+Each run overwrites its one result file; there is no history beyond the latest. A report that has
+never run shows as "Not yet run" on the page, which is a state, not a fault. These runs are manual:
+nothing schedules them.
