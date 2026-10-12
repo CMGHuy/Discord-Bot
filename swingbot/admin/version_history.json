@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12 08:32:41 UTC",
+  "generated_at": "2026-10-12 08:32:51 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.23.0",
-    "bot": "2.4.0"
+    "bot": "2.4.1"
   },
   "releases": [
     {
@@ -1564,6 +1564,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-12",
+      "last_seen": "2026-10-12",
+      "commit": "870f7865",
+      "subject": "release(bot): 2.4.1 -- plan-carrying embeds link to the plan page (v151)",
+      "versions": {
+        "ui": "1.23.0",
+        "bot": "2.4.1"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
