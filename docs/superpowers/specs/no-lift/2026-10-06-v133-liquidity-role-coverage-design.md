@@ -1,7 +1,7 @@
 # v133 — Liquidity pools and four-role coverage in the entry snapshot
 
 **Version:** ui 1.21.1 · bot 2.0.1 (at writing)
-**Bump:** bot patch (new fields on stored trade records; no alert, gate or exit changes)
+**Bump:** none (measurement closed not-more-informative; no code reached main)
 **Edge:** none (integrity) — measurement only; its verdict decides whether a follow-on `expectancy` spec (a role-coverage gate on the confluence scan) gets written
 
 ## Why

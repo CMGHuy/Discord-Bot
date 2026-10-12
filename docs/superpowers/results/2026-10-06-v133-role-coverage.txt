@@ -1,0 +1,220 @@
+[1/72] 1.4%
+[2/72] 2.8%
+[3/72] 4.2%
+[4/72] 5.6%
+[5/72] 6.9%
+[6/72] 8.3%
+[7/72] 9.7%
+[8/72] 11.1%
+[9/72] 12.5%
+[10/72] 13.9%
+[11/72] 15.3%
+[12/72] 16.7%
+[13/72] 18.1%
+[14/72] 19.4%
+[15/72] 20.8%
+[16/72] 22.2%
+[17/72] 23.6%
+[18/72] 25.0%
+[19/72] 26.4%
+[20/72] 27.8%
+[21/72] 29.2%
+[22/72] 30.6%
+[23/72] 31.9%
+[24/72] 33.3%
+[25/72] 34.7%
+[26/72] 36.1%
+[27/72] 37.5%
+[28/72] 38.9%
+[29/72] 40.3%
+[30/72] 41.7%
+[31/72] 43.1%
+[32/72] 44.4%
+[33/72] 45.8%
+[34/72] 47.2%
+[35/72] 48.6%
+[36/72] 50.0%
+[37/72] 51.4%
+[38/72] 52.8%
+[39/72] 54.2%
+[40/72] 55.6%
+[41/72] 56.9%
+[42/72] 58.3%
+[43/72] 59.7%
+[44/72] 61.1%
+[45/72] 62.5%
+[46/72] 63.9%
+[47/72] 65.3%
+[48/72] 66.7%
+[49/72] 68.1%
+[50/72] 69.4%
+[51/72] 70.8%
+[52/72] 72.2%
+[53/72] 73.6%
+[54/72] 75.0%
+[55/72] 76.4%
+[56/72] 77.8%
+[57/72] 79.2%
+[58/72] 80.6%
+[59/72] 81.9%
+[60/72] 83.3%
+[61/72] 84.7%
+[62/72] 86.1%
+[63/72] 87.5%
+[64/72] 88.9%
+[65/72] 90.3%
+[66/72] 91.7%
+[67/72] 93.1%
+[68/72] 94.4%
+[69/72] 95.8%
+[70/72] 97.2%
+[71/72] 98.6%
+[72/72] 100.0%
+v133 role-coverage report -- DESCRIPTIVE ONLY. The verdict decides whether a follow-on spec is written, never its thresholds. No inferential statistic is printed.
+closed trades: 12207
+
+== 1. role_coverage ==
+confluence bearish  0-1      N= 2051  WR  31.94%  ExpR -0.0305
+confluence bearish  2        N= 1608  WR  34.88%  ExpR -0.0627
+confluence bearish  3-4      N=  184  WR  44.85%  ExpR +0.4608
+confluence bearish  None     N=    5  thin
+confluence bullish  0-1      N= 2229  WR  38.72%  ExpR +0.1955
+confluence bullish  2        N= 1652  WR  35.35%  ExpR +0.0785
+confluence bullish  3-4      N=  233  WR  32.55%  ExpR +0.1358
+confluence bullish  None     N=    5  thin
+strategy   bearish  0-1      N=  185  WR  24.68%  ExpR -0.0515
+strategy   bearish  2        N=  318  WR  38.40%  ExpR +0.1331
+strategy   bearish  3-4      N=  142  WR  39.86%  ExpR +1.1422
+strategy   bullish  0-1      N= 1362  WR  45.28%  ExpR +0.4075
+strategy   bullish  2        N= 1372  WR  41.44%  ExpR +0.3662
+strategy   bullish  3-4      N=  861  WR  35.49%  ExpR +0.1651
+
+== 2. control: target confluence count (confluence-sourced only) ==
+confluence bearish  2        N=  523  WR  24.58%  ExpR -0.2897
+confluence bearish  3        N=  631  WR  32.86%  ExpR -0.0201
+confluence bearish  4+       N= 2694  WR  36.01%  ExpR +0.0310
+confluence bullish  2        N=  561  WR  31.56%  ExpR +0.0861
+confluence bullish  3        N=  669  WR  37.67%  ExpR +0.1615
+confluence bullish  4+       N= 2889  WR  37.93%  ExpR +0.1521
+
+== 3. role_context ==
+confluence bearish  False    N= 2524  WR  33.24%  ExpR +0.0034
+confluence bearish  None     N=    5  thin
+confluence bearish  True     N= 1319  WR  34.95%  ExpR -0.0661
+confluence bullish  False    N= 2811  WR  35.99%  ExpR +0.1221
+confluence bullish  None     N=    5  thin
+confluence bullish  True     N= 1303  WR  39.23%  ExpR +0.1948
+strategy   bearish  False    N=  447  WR  33.16%  ExpR +0.3683
+strategy   bearish  True     N=  198  WR  38.69%  ExpR +0.1533
+strategy   bullish  False    N= 2247  WR  44.74%  ExpR +0.4331
+strategy   bullish  True     N= 1348  WR  36.15%  ExpR +0.1679
+
+== 3. role_location ==
+confluence bearish  False    N= 3213  WR  32.47%  ExpR -0.0729
+confluence bearish  None     N=    5  thin
+confluence bearish  True     N=  630  WR  40.57%  ExpR +0.2467
+confluence bullish  False    N= 3276  WR  38.85%  ExpR +0.1826
+confluence bullish  None     N=    5  thin
+confluence bullish  True     N=  838  WR  30.31%  ExpR -0.0011
+strategy   bearish  False    N=  298  WR  30.00%  ExpR +0.0521
+strategy   bearish  True     N=  347  WR  38.74%  ExpR +0.5172
+strategy   bullish  False    N= 2173  WR  41.41%  ExpR +0.3080
+strategy   bullish  True     N= 1422  WR  41.46%  ExpR +0.3729
+
+== 3. role_path ==
+confluence bearish  False    N=   63  WR  25.81%  ExpR -0.1112
+confluence bearish  None     N=    5  thin
+confluence bearish  True     N= 3780  WR  34.00%  ExpR -0.0190
+confluence bullish  False    N=  135  WR  31.06%  ExpR +0.1128
+confluence bullish  None     N=    5  thin
+confluence bullish  True     N= 3979  WR  37.22%  ExpR +0.1462
+strategy   bearish  False    N=   10  thin
+strategy   bearish  True     N=  635  WR  33.65%  ExpR +0.2743
+strategy   bullish  False    N=   54  WR  81.40%  ExpR +2.2340
+strategy   bullish  True     N= 3541  WR  40.81%  ExpR +0.3047
+
+== 3. role_trigger ==
+confluence bearish  False    N= 3748  WR  34.04%  ExpR -0.0192
+confluence bearish  None     N=    5  thin
+confluence bearish  True     N=   95  WR  25.93%  ExpR -0.0699
+confluence bullish  False    N= 4029  WR  37.43%  ExpR +0.1536
+confluence bullish  None     N=    5  thin
+confluence bullish  True     N=   85  WR  18.29%  ExpR -0.2557
+strategy   bearish  False    N=  556  WR  33.70%  ExpR +0.0591
+strategy   bearish  True     N=   89  WR  40.91%  ExpR +1.8219
+strategy   bullish  False    N= 2977  WR  42.42%  ExpR +0.3526
+strategy   bullish  True     N=  618  WR  36.94%  ExpR +0.2426
+
+== 4. stop_in_pool ==
+confluence bearish  False    N= 3843  WR  33.85%  ExpR -0.0205
+confluence bearish  None     N=    5  thin
+confluence bullish  False    N= 4105  WR  37.07%  ExpR +0.1472
+confluence bullish  None     N=    5  thin
+confluence bullish  True     N=    9  thin
+strategy   bearish  False    N=  645  WR  34.87%  ExpR +0.3023
+strategy   bullish  False    N= 3558  WR  41.26%  ExpR +0.3147
+strategy   bullish  True     N=   37  WR  54.05%  ExpR +2.1585
+
+== 4. target_past_pool ==
+confluence bearish  False    N= 2716  WR  33.51%  ExpR -0.0405
+confluence bearish  None     N= 1019  WR  34.00%  ExpR +0.0263
+confluence bearish  True     N=  113  WR  39.60%  ExpR +0.0234
+confluence bullish  False    N= 2291  WR  30.94%  ExpR -0.0556
+confluence bullish  None     N= 1761  WR  45.03%  ExpR +0.4175
+confluence bullish  True     N=   67  WR  30.19%  ExpR -0.1823
+strategy   bearish  False    N=  434  WR  34.63%  ExpR +0.3827
+strategy   bearish  None     N=  194  WR  34.27%  ExpR +0.1143
+strategy   bearish  True     N=   17  thin
+strategy   bullish  False    N=  977  WR  43.46%  ExpR +0.3832
+strategy   bullish  None     N= 2242  WR  38.85%  ExpR +0.2744
+strategy   bullish  True     N=  376  WR  50.48%  ExpR +0.5582
+
+== 4. liq_stop_side_atr  TRAIN quintile edges=[3.04744, 5.043724, 7.699573, 11.444441] ==
+confluence bearish  None     N= 1517  WR  33.93%  ExpR -0.0244
+confluence bearish  Q1       N=  401  WR  31.70%  ExpR -0.0218
+confluence bearish  Q2       N=  458  WR  36.27%  ExpR +0.0287
+confluence bearish  Q3       N=  433  WR  36.13%  ExpR -0.0029
+confluence bearish  Q4       N=  394  WR  29.92%  ExpR -0.1104
+confluence bearish  Q5       N=  645  WR  34.16%  ExpR -0.0050
+confluence bullish  None     N=  993  WR  31.68%  ExpR +0.0101
+confluence bullish  Q1       N=  756  WR  35.43%  ExpR +0.1141
+confluence bullish  Q2       N=  743  WR  34.55%  ExpR +0.0792
+confluence bullish  Q3       N=  676  WR  38.26%  ExpR +0.1624
+confluence bullish  Q4       N=  594  WR  48.57%  ExpR +0.4826
+confluence bullish  Q5       N=  357  WR  40.38%  ExpR +0.1233
+strategy   bearish  None     N=   89  WR  31.34%  ExpR -0.1193
+strategy   bearish  Q1       N=   74  WR  60.00%  ExpR +0.9549
+strategy   bearish  Q2       N=   66  WR  44.26%  ExpR +0.9005
+strategy   bearish  Q3       N=   91  WR  22.73%  ExpR +0.8456
+strategy   bearish  Q4       N=  133  WR  39.17%  ExpR +0.1866
+strategy   bearish  Q5       N=  192  WR  26.03%  ExpR -0.1368
+strategy   bullish  None     N=  373  WR  49.65%  ExpR +0.5366
+strategy   bullish  Q1       N=  616  WR  51.19%  ExpR +0.6728
+strategy   bullish  Q2       N=  579  WR  45.68%  ExpR +0.5436
+strategy   bullish  Q3       N=  648  WR  35.83%  ExpR +0.1583
+strategy   bullish  Q4       N=  723  WR  36.66%  ExpR +0.1678
+strategy   bullish  Q5       N=  656  WR  34.80%  ExpR +0.0705
+
+== 5. sweep stop-outs: losing trades whose stop bar or the next 3 bars closed back beyond the stop ==
+confluence bearish  losses= 2197  swept  72.83%
+confluence bullish  losses= 2318  swept  67.26%
+strategy   bearish  losses=  353  swept  79.60%
+strategy   bullish  losses= 1650  swept  74.79%
+
+== 6. census per horizon: share of entry bars (percent) ==
+2m       N= 1316  live stop-side pool  77.9  role_context=None   0.0  role_location=None   0.0  role_path=None   0.0  role_trigger=None   0.0
+2w       N=  920  live stop-side pool  76.7  role_context=None   0.9  role_location=None   0.9  role_path=None   0.9  role_trigger=None   0.9
+3m       N= 1380  live stop-side pool  78.1  role_context=None   0.0  role_location=None   0.0  role_path=None   0.0  role_trigger=None   0.0
+4m       N= 1250  live stop-side pool  75.4  role_context=None   0.0  role_location=None   0.0  role_path=None   0.0  role_trigger=None   0.0
+4w       N= 1411  live stop-side pool  79.3  role_context=None   0.1  role_location=None   0.1  role_path=None   0.1  role_trigger=None   0.1
+5m       N= 1158  live stop-side pool  72.8  role_context=None   0.0  role_location=None   0.0  role_path=None   0.0  role_trigger=None   0.0
+6m       N= 1155  live stop-side pool  72.0  role_context=None   0.0  role_location=None   0.0  role_path=None   0.0  role_trigger=None   0.0
+7m       N= 1307  live stop-side pool  74.3  role_context=None   0.0  role_location=None   0.0  role_path=None   0.0  role_trigger=None   0.0
+8m       N= 1166  live stop-side pool  73.6  role_context=None   0.0  role_location=None   0.0  role_path=None   0.0  role_trigger=None   0.0
+9m       N= 1144  live stop-side pool  75.2  role_context=None   0.0  role_location=None   0.0  role_path=None   0.0  role_trigger=None   0.0
+
+== VERDICT (confluence-sourced, pre-registered in the v133 spec) ==
+bullish  spread_roles -0.0597  spread_votes +0.0659  clause1=False clause2=False clause3=True thin=False
+bearish  spread_roles +0.4913  spread_votes +0.3207  clause1=False clause2=True clause3=True thin=False
+clause4 (bearish agrees in sign, or is thin) = False
+VERDICT: not more informative

@@ -1073,8 +1073,8 @@ A run that fails one of these is **not** a "not more informative" result. Report
 ```markdown
 # v133 — role coverage vs level-vote count: TRAIN measurement
 
-**Spec:** `docs/superpowers/specs/2026-10-06-v133-liquidity-role-coverage-design.md`
-**Plan:** `docs/superpowers/plans/2026-10-06-v133-liquidity-role-coverage_0-index.md`
+**Spec:** `docs/superpowers/specs/no-lift/2026-10-06-v133-liquidity-role-coverage-design.md`
+**Plan:** `docs/superpowers/plans/no-lift/2026-10-06-v133-liquidity-role-coverage_0-index.md`
 **Run:** <date of the run>, branch `2026-10-06-v133-liquidity-role-coverage` at <commit>, `--workers 4`
 **Window:** TRAIN 2020-01-01..2023-12-31, full cached universe (<N> tickers), all horizons
 **Raw output:** `2026-10-06-v133-role-coverage.txt`, `2026-10-06-v133-role-coverage.json`

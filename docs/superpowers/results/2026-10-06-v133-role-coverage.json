@@ -1,0 +1,215 @@
+{
+ "window": [
+  "2020-01-01",
+  "2023-12-31"
+ ],
+ "closed": 12207,
+ "edges": [
+  3.04744,
+  5.043724,
+  7.699573,
+  11.444441
+ ],
+ "verdict": "not more informative",
+ "clause_4": false,
+ "bullish": {
+  "direction": "bullish",
+  "coverage": {
+   "0-1": [
+    2229,
+    0.19551951547779273
+   ],
+   "2": [
+    1652,
+    0.07848970944309928
+   ],
+   "3-4": [
+    233,
+    0.13583690987124464
+   ],
+   "None": [
+    5,
+    -0.30119999999999997
+   ]
+  },
+  "votes": {
+   "2": [
+    561,
+    0.08613903743315508
+   ],
+   "3": [
+    669,
+    0.1614618834080718
+   ],
+   "4+": [
+    2889,
+    0.15205261336102457
+   ]
+  },
+  "spread_roles": -0.05968260560654809,
+  "spread_votes": 0.06591357592786949,
+  "clause_1": false,
+  "clause_2": false,
+  "clause_3": true,
+  "thin": false
+ },
+ "bearish": {
+  "direction": "bearish",
+  "coverage": {
+   "0-1": [
+    2051,
+    -0.030523159434422232
+   ],
+   "2": [
+    1608,
+    -0.0626946517412935
+   ],
+   "3-4": [
+    184,
+    0.46075543478260866
+   ],
+   "None": [
+    5,
+    -0.38339999999999996
+   ]
+  },
+  "votes": {
+   "2": [
+    523,
+    -0.28965200764818355
+   ],
+   "3": [
+    631,
+    -0.02006022187004753
+   ],
+   "4+": [
+    2694,
+    0.031028953229398665
+   ]
+  },
+  "spread_roles": 0.4912785942170309,
+  "spread_votes": 0.32068096087758224,
+  "clause_1": false,
+  "clause_2": true,
+  "clause_3": true,
+  "thin": false
+ },
+ "sweep_stop_outs": [
+  {
+   "source": "confluence",
+   "direction": "bearish",
+   "losses": 2197,
+   "swept_share": 72.82658170232135
+  },
+  {
+   "source": "confluence",
+   "direction": "bullish",
+   "losses": 2318,
+   "swept_share": 67.25625539257982
+  },
+  {
+   "source": "strategy",
+   "direction": "bearish",
+   "losses": 353,
+   "swept_share": 79.60339943342777
+  },
+  {
+   "source": "strategy",
+   "direction": "bullish",
+   "losses": 1650,
+   "swept_share": 74.78787878787878
+  }
+ ],
+ "census": [
+  {
+   "horizon": "2m",
+   "n": 1316,
+   "live_stop_pool": 77.88753799392097,
+   "role_context_none": 0.0,
+   "role_location_none": 0.0,
+   "role_path_none": 0.0,
+   "role_trigger_none": 0.0
+  },
+  {
+   "horizon": "2w",
+   "n": 920,
+   "live_stop_pool": 76.73913043478261,
+   "role_context_none": 0.8695652173913043,
+   "role_location_none": 0.8695652173913043,
+   "role_path_none": 0.8695652173913043,
+   "role_trigger_none": 0.8695652173913043
+  },
+  {
+   "horizon": "3m",
+   "n": 1380,
+   "live_stop_pool": 78.1159420289855,
+   "role_context_none": 0.0,
+   "role_location_none": 0.0,
+   "role_path_none": 0.0,
+   "role_trigger_none": 0.0
+  },
+  {
+   "horizon": "4m",
+   "n": 1250,
+   "live_stop_pool": 75.44,
+   "role_context_none": 0.0,
+   "role_location_none": 0.0,
+   "role_path_none": 0.0,
+   "role_trigger_none": 0.0
+  },
+  {
+   "horizon": "4w",
+   "n": 1411,
+   "live_stop_pool": 79.30545712260808,
+   "role_context_none": 0.14174344436569808,
+   "role_location_none": 0.14174344436569808,
+   "role_path_none": 0.14174344436569808,
+   "role_trigger_none": 0.14174344436569808
+  },
+  {
+   "horizon": "5m",
+   "n": 1158,
+   "live_stop_pool": 72.79792746113989,
+   "role_context_none": 0.0,
+   "role_location_none": 0.0,
+   "role_path_none": 0.0,
+   "role_trigger_none": 0.0
+  },
+  {
+   "horizon": "6m",
+   "n": 1155,
+   "live_stop_pool": 72.03463203463204,
+   "role_context_none": 0.0,
+   "role_location_none": 0.0,
+   "role_path_none": 0.0,
+   "role_trigger_none": 0.0
+  },
+  {
+   "horizon": "7m",
+   "n": 1307,
+   "live_stop_pool": 74.29227237949503,
+   "role_context_none": 0.0,
+   "role_location_none": 0.0,
+   "role_path_none": 0.0,
+   "role_trigger_none": 0.0
+  },
+  {
+   "horizon": "8m",
+   "n": 1166,
+   "live_stop_pool": 73.58490566037736,
+   "role_context_none": 0.0,
+   "role_location_none": 0.0,
+   "role_path_none": 0.0,
+   "role_trigger_none": 0.0
+  },
+  {
+   "horizon": "9m",
+   "n": 1144,
+   "live_stop_pool": 75.17482517482517,
+   "role_context_none": 0.0,
+   "role_location_none": 0.0,
+   "role_path_none": 0.0,
+   "role_trigger_none": 0.0
+  }
+ ]
+}

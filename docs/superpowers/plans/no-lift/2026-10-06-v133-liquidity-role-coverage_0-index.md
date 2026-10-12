@@ -1,10 +1,10 @@
 # v133 — Liquidity pools and four-role coverage in the entry snapshot: Implementation Plan (index)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part file whole** — pull one task: `/task-brief V133-2` or `grep -n "^### Task V133-2" -A 260 docs/superpowers/plans/2026-10-06-v133-liquidity-role-coverage_1-liquidity-roles-snapshot.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part file whole** — pull one task: `/task-brief V133-2` or `grep -n "^### Task V133-2" -A 260 docs/superpowers/plans/no-lift/2026-10-06-v133-liquidity-role-coverage_1-liquidity-roles-snapshot.md`.
 
-**Bump:** bot patch (only if the verdict is "more informative" and the branch merges; otherwise none — see V133-10)
+**Bump:** none (measurement closed not-more-informative; no code reached main)
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-06-v133-liquidity-role-coverage-design.md`](../specs/2026-10-06-v133-liquidity-role-coverage-design.md)
+**Spec:** [`docs/superpowers/specs/no-lift/2026-10-06-v133-liquidity-role-coverage-design.md`](../specs/2026-10-06-v133-liquidity-role-coverage-design.md)
 **Progress:** planning complete; implementation not started.
 
 **Goal:** Build the missing liquidity instrument (equal-high / equal-low pools and their sweeps), stamp five liquidity keys and five role keys on every entry snapshot, and answer once, on TRAIN, whether the number of distinct roles a setup covers separates trade outcomes better than the number of level votes it collects.
@@ -137,3 +137,7 @@ None of these changes a spec definition, constant, bucket edge or verdict clause
 - **v137/v157 instrument golden — V133-5:** the ten new context keys would turn `tests/backtesting/instrument/test_v1_golden.py` red. V133-5 Step 6 asserts-and-drops them in `golden.py:golden_records` (the v131 `limit_orders` precedent); the fixture `tests/fixtures/instrument/v1_golden.jsonl` (exactly the 43 current `FEATURE_KEYS`) is never regenerated. v157 FC6 edits the same function for `signal_date`: keep both.
 - **v158 (`--instrument`) — V133-9:** append `--instrument v1` to the measurement command if the script's `--help` lists it; the record names the instrument.
 - **Generic rules:** the swallowed-error ratchet (owner v148) applies to no task here — no task adds an `except Exception` handler. The complexity gate (owner v149, full text in v149's plan) applies only if a task splits, moves or renames a legacy function; none here does (V133-6 adds new helpers only).
+
+## Closing note (2026-10-12)
+
+Measured once on TRAIN 2020-01-01..2023-12-31 (72 tickers, 12,207 closed trades): **VERDICT: not more informative** (`docs/superpowers/results/2026-10-06-v133-role-coverage.md`). The code lives only on branch `2026-10-06-v133-liquidity-role-coverage` (full suite there: 8771 passed, 0 failed, 0 xfailed). **Not merging was a considered decision, not an oversight.** The branch is the only copy of the tested liquidity/role code and report; it is kept and must not be deleted without the partner's decision.
