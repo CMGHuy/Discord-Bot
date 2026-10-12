@@ -153,22 +153,23 @@ def _sessions_left(plan, now: dt.datetime | None = None) -> int:
     return max(0, int(plan.expiry_bars) - spent)
 
 
-def _pending_detail(plan, price, now) -> str:
+def _pending_detail(plan, price, now, price_date=None) -> str:
     left = _sessions_left(plan, now)
     line = (f"Entry trigger {plan.trigger_price:.2f}; "
             f"{left} of {plan.expiry_bars} session(s) left before it expires.")
     return f"{line} Plan stale." if left <= 1 else line
 
 
-def _open_detail(plan, price, now) -> str:
+def _open_detail(plan, price, now, price_date=None) -> str:
     if price is None:
         return ""
     entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
-    line = f"Last {price:.2f} vs entry {entry:.2f}."
+    date_label = price_date.isoformat() if price_date is not None else "(date unavailable)"
+    line = f"Daily close {date_label}: {price:.2f} vs entry {entry:.2f}."
     risk = abs(entry - plan.stop_loss)
     sign = 1 if plan.direction == "bullish" else -1
     beyond = (price - entry) * sign / risk if risk else 0.0
-    return f"{line} Price already beyond entry by {beyond:.2f}R." if beyond > 0 else line
+    return f"{line} At that close, price was beyond entry by {beyond:.2f}R." if beyond > 0 else line
 
 
 _STATUS_DETAIL = {
@@ -178,12 +179,13 @@ _STATUS_DETAIL = {
 }
 
 
-def following_reply(plan, price: float | None, now: dt.datetime | None = None) -> str:
+def following_reply(plan, price: float | None, now: dt.datetime | None = None,
+                    price_date: dt.date | None = None) -> str:
     """The Following button's ephemeral reply: status and entry validity as
     facts. It informs and never blocks; `price=None` drops the price line."""
     word = _DIRECTION_WORD.get(plan.direction, plan.direction)
     head = f"{plan.ticker} {word} paper plan, status {plan.status}."
-    detail = _STATUS_DETAIL.get(plan.status, lambda *_: "")(plan, price, now)
+    detail = _STATUS_DETAIL.get(plan.status, lambda *_: "")(plan, price, now, price_date)
     return "\n".join(line for line in (head, detail, FOLLOW_RECORDED) if line)
 
 
@@ -195,16 +197,20 @@ def _followers():
 def _toggle_watch(plan, user_id: int) -> bool:
     """Toggle the presser's watch row. True = now watching. The first
     watcher stars the plan; the last one leaving unstars it."""
+    from swingbot.core.db.engine import transaction
+    from swingbot.core.db.repositories.starred import starred_repo
+
     repo = _followers()
-    if repo.has(plan.plan_id, user_id, "watch"):
-        repo.remove(plan.plan_id, user_id, "watch")
-        if not repo.user_ids(plan.plan_id, ("watch",)):
-            unstar_plan(plan.plan_id)
-        return False
-    first = not repo.user_ids(plan.plan_id, ("watch",))
-    repo.add(plan.plan_id, user_id, "watch", status_at_press=plan.status)
-    if first:
-        star_plan(plan.plan_id)
+    with transaction() as conn:
+        if repo.has(plan.plan_id, user_id, "watch", conn=conn):
+            repo.remove(plan.plan_id, user_id, "watch", conn=conn)
+            if not repo.user_ids(plan.plan_id, ("watch",), conn=conn):
+                starred_repo().unstar(plan.plan_id, conn=conn)
+            return False
+        first = not repo.user_ids(plan.plan_id, ("watch",), conn=conn)
+        repo.add(plan.plan_id, user_id, "watch", status_at_press=plan.status, conn=conn)
+        if first:
+            starred_repo().star(plan.plan_id, conn=conn)
     return True
 
 
@@ -230,10 +236,13 @@ def _toggle_following(plan, user_id: int) -> bool:
     return following
 
 
-def _last_close(ticker: str) -> float | None:
-    """Latest cached daily close, None on any failure (the reply drops the line)."""
+def _last_close(ticker: str) -> tuple[float, dt.date] | None:
+    """Latest cached daily close and bar date, or None on a failed read."""
     try:
-        return float(get_daily_data(ticker)["Close"].iloc[-1])
+        daily = get_daily_data(ticker)
+        bar_date = daily.index[-1]
+        date = bar_date.date() if hasattr(bar_date, "date") else dt.date.fromisoformat(str(bar_date)[:10])
+        return float(daily["Close"].iloc[-1]), date
     except Exception:
         log.debug("Following: no cached close for %s", ticker, exc_info=True)
         return None
@@ -303,8 +312,9 @@ class FollowingButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button
             return FOLLOW_FAILED
         if not following:
             return FOLLOW_REMOVED
-        price = await asyncio.to_thread(_last_close, plan.ticker)
-        return following_reply(plan, price)
+        close = await asyncio.to_thread(_last_close, plan.ticker)
+        price, price_date = close if close is not None else (None, None)
+        return following_reply(plan, price, price_date=price_date)
 
 
 class DismissButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],

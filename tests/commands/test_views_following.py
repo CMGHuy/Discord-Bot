@@ -64,7 +64,7 @@ def plan_env(tmp_path, monkeypatch):
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
         "sizing_mode": "risk_pct", "balance_history": [],
     })
-    monkeypatch.setattr(views, "_last_close", lambda ticker: 102.5)
+    monkeypatch.setattr(views, "_last_close", lambda ticker: (102.5, dt.date(2026, 10, 9)))
 
     def make(status=PlanStatus.PENDING, **kw):
         PlanStore().add(_plan(plan_id=PID, status=status, **kw))
@@ -122,9 +122,17 @@ def test_pending_reply_flags_a_stale_plan_at_one_or_no_session_left():
 
 def test_active_reply_states_price_against_entry_and_beyond_entry_in_r():
     plan = _plan(plan_id=PID, status=PlanStatus.ACTIVE, entry_price=100.0, stop_loss=95.0)
-    text = following_reply(plan, 102.5)
-    assert "Last 102.50 vs entry 100.00." in text
-    assert "Price already beyond entry by 0.50R." in text
+    text = following_reply(plan, 102.5, price_date=dt.date(2026, 10, 9))
+    assert "Daily close 2026-10-09: 102.50 vs entry 100.00." in text
+    assert "At that close, price was beyond entry by 0.50R." in text
+
+
+def test_last_close_reads_the_cached_daily_bar_date(monkeypatch):
+    import pandas as pd
+
+    frame = pd.DataFrame({"Close": [102.5]}, index=[pd.Timestamp("2026-10-09")])
+    monkeypatch.setattr(views, "get_daily_data", lambda ticker: frame)
+    assert views._last_close("AAPL") == (102.5, dt.date(2026, 10, 9))
 
 
 def test_bearish_beyond_entry_is_measured_downward():
@@ -132,20 +140,20 @@ def test_bearish_beyond_entry_is_measured_downward():
                  entry_price=100.0, stop_loss=105.0, tp1=95.0, tp2=90.0)
     text = following_reply(plan, 97.5)
     assert "short" in text
-    assert "Price already beyond entry by 0.50R." in text
+    assert "At that close, price was beyond entry by 0.50R." in text
 
 
 def test_price_on_the_wrong_side_of_entry_is_not_called_beyond():
     plan = _plan(plan_id=PID, status=PlanStatus.ACTIVE, entry_price=100.0, stop_loss=95.0)
     text = following_reply(plan, 99.0)
-    assert "Last 99.00 vs entry 100.00." in text
+    assert "Daily close (date unavailable): 99.00 vs entry 100.00." in text
     assert "beyond" not in text
 
 
 def test_a_failed_price_read_drops_only_the_price_line():
     plan = _plan(plan_id=PID, status=PlanStatus.ACTIVE, entry_price=100.0, stop_loss=95.0)
     text = following_reply(plan, None)
-    assert "Last" not in text
+    assert "Daily close" not in text
     assert "ACTIVE" in text and "Recorded as followed" in text
 
 
@@ -166,6 +174,13 @@ def test_following_records_the_row_with_status_at_press_and_copies_it_to_the_tra
     assert [(r.user_id, r.kind) for r in rows] == [(AUTHOR, "taken")]
     assert rows[0].doc["status_at_press"] == PlanStatus.PENDING
     assert TradeLog().get_trade_by_id(trade_id)["taken_by"] == [AUTHOR]
+
+
+def test_following_button_dates_the_cached_close_in_its_reply(plan_env):
+    plan_env(status=PlanStatus.ACTIVE, entry_price=100.0, stop_loss=95.0)
+    text = _reply_text(_press("follow", AUTHOR))
+    assert "Daily close 2026-10-09: 102.50 vs entry 100.00." in text
+    assert "At that close, price was beyond entry by 0.50R." in text
 
 
 def test_a_second_press_unfollows_and_rewrites_the_trade_copy(plan_env):
@@ -216,6 +231,27 @@ def test_watch_is_per_user_and_the_star_follows_first_and_last_watcher(plan_env)
     assert [(r.user_id, r.kind) for r in _follower_rows()] == [(OTHER, "watch")]
     _press("watch", OTHER)                   # the last watcher leaves
     assert PID not in starred_ids()
+
+
+@pytest.mark.parametrize("leaving", [False, True])
+def test_watch_and_star_roll_back_together_on_star_write_failure(plan_env, monkeypatch, leaving):
+    from swingbot.core.db.repositories.starred import StarredRepository
+
+    plan_env()
+    if leaving:
+        _press("watch", AUTHOR)
+    method = "unstar" if leaving else "star"
+
+    def broken(self, plan_id, *, conn=None):
+        raise RuntimeError("star write failed")
+
+    monkeypatch.setattr(StarredRepository, method, broken)
+    with pytest.raises(RuntimeError, match="star write failed"):
+        views._toggle_watch(PlanStore().get(PID), AUTHOR)
+    assert [(r.user_id, r.kind) for r in _follower_rows()] == (
+        [(AUTHOR, "watch")] if leaving else []
+    )
+    assert (PID in starred_ids()) is leaving
 
 
 def test_watch_replies_ephemerally_on_and_off(plan_env):
