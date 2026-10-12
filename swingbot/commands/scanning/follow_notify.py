@@ -10,11 +10,21 @@ chains: every rule is a table.
 """
 from __future__ import annotations
 
+import asyncio
+import datetime as dt
+import logging
+
+import discord
+
 from swingbot import config
 from swingbot.core import presentation as ui
+from swingbot.core.db.repositories.notifications import MAX_ATTEMPTS
+from swingbot.core.infra.posted_log import log_posted
 from swingbot.core.planning.plan_manager import _STOPPED_REASONS, PlanEvent, resting_stop
 from swingbot.core.presentation import instructions
 from swingbot.core.presentation.kinds import Kind
+
+log = logging.getLogger(__name__)
 
 NOTIFY_EVENTS = ("near_stop", "tp1", "tp2", "stopped", "expired", "closed_other")
 
@@ -214,3 +224,209 @@ def build_notify_embed(plan, notify_event: str, transition: str, detail: dict) -
                     link_base=config.ADMIN_PUBLIC_URL)
     embed.set_footer(text=embed.footer.text + " · " + FOOTER)
     return embed
+
+
+# --------------------------------------------------------------------------
+# Delivery (V152-17): claim, send, mention, retry sweep.
+# --------------------------------------------------------------------------
+
+#: A pending row is re-sent once it has sat this long since its last attempt.
+RETRY_AFTER = dt.timedelta(seconds=60)
+
+#: (plan_id, notify_event) keys already claimed, in any state. Seeded once
+#: from plan_notifications; after the first claim a near-stop that fires on
+#: every in-band tick costs one set lookup and no database call.
+_CLAIMED: set[tuple[str, str]] | None = None
+_BAD_CHANNEL_IDS: set[str] = set()
+
+
+def _notify_channel(bot):
+    """The notify channel, or None when D1 is off or the id is unusable.
+    Never wrapped in silence(): the mentions must ping."""
+    raw = str(getattr(config, "DISCORD_CHANNEL_NOTIFY_ID", "") or "").strip()
+    if not raw:
+        return None
+    try:
+        return bot.get_channel(int(raw))
+    except (TypeError, ValueError):
+        if raw not in _BAD_CHANNEL_IDS:
+            _BAD_CHANNEL_IDS.add(raw)
+            log.warning("follow_notify: DISCORD_CHANNEL_NOTIFY_ID=%r is not a channel id; "
+                        "follower notifications are off", raw)
+        return None
+
+
+# Sync store calls: always run through asyncio.to_thread.
+
+def _load_plan(plan_id: str):
+    from swingbot.core.planning.plan_store import PlanStore
+    return PlanStore().get(plan_id)
+
+
+def _audience(plan_id: str) -> tuple[dict, dict]:
+    from swingbot.core.db.repositories.followers import followers_repo
+    from swingbot.core.db.repositories.notify_prefs import notify_prefs_repo
+    followers = followers_repo().followers(plan_id)
+    prefs = notify_prefs_repo().prefs_many(list(followers)) if followers else {}
+    return followers, prefs
+
+
+def _claim(plan_id: str, notify_event: str, doc: dict) -> bool:
+    from swingbot.core.db.repositories.notifications import notifications_repo
+    return notifications_repo().claim(plan_id, notify_event, doc)
+
+
+def _mark_sent(plan_id: str, notify_event: str) -> None:
+    from swingbot.core.db.repositories.notifications import notifications_repo
+    notifications_repo().mark_sent(plan_id, notify_event)
+
+
+def _record_failure(plan_id: str, notify_event: str) -> str:
+    from swingbot.core.db.repositories.notifications import notifications_repo
+    return notifications_repo().record_failure(plan_id, notify_event)
+
+
+def _pending_rows(cutoff: dt.datetime) -> list[dict]:
+    from swingbot.core.db.repositories.notifications import notifications_repo
+    return notifications_repo().pending_older_than(cutoff)
+
+
+def _claimed_keys() -> set[tuple[str, str]]:
+    from swingbot.core.db.repositories.notifications import notifications_repo
+    return notifications_repo().claimed_keys()
+
+
+async def _claimed_cache() -> set[tuple[str, str]]:
+    global _CLAIMED
+    if _CLAIMED is None:
+        try:
+            _CLAIMED = set(await asyncio.to_thread(_claimed_keys))
+        except Exception:
+            log.warning("follow_notify: could not seed the claim cache; "
+                        "claims still dedupe in the database", exc_info=True)
+            _CLAIMED = set()
+    return _CLAIMED
+
+
+def _stored_detail(detail: dict) -> dict:
+    """The event detail as the claim stores it: manager bookkeeping keys dropped."""
+    return {key: value for key, value in (detail or {}).items() if not str(key).startswith("_")}
+
+
+def _send_kwargs(embed, mentions: list[int], plan_id: str) -> dict:
+    """push_kwargs plus the Chart button, and either the mentions or silent."""
+    from swingbot.commands.views import chart_only_view
+    kwargs = ui.push_kwargs(embed)
+    kwargs["view"] = chart_only_view(plan_id)
+    if not mentions:
+        kwargs.update(silent=True, allowed_mentions=discord.AllowedMentions.none())
+        return kwargs
+    tags = " ".join(f"<@{user_id}>" for user_id in mentions)
+    kwargs["content"] = f"{kwargs.get('content', '')}\n{tags}".strip()
+    kwargs["allowed_mentions"] = discord.AllowedMentions(
+        users=[discord.Object(id=user_id) for user_id in mentions], roles=False, everyone=False)
+    return kwargs
+
+
+async def _note_failure(plan_id: str, notify_event: str) -> None:
+    try:
+        state = await asyncio.to_thread(_record_failure, plan_id, notify_event)
+    except Exception:
+        log.warning("follow_notify: could not count the failed attempt for %s on plan %s",
+                    notify_event, plan_id, exc_info=True)
+        return
+    if state == "failed":
+        log.warning("follow_notify: giving up on %s for plan %s after %d attempts",
+                    notify_event, plan_id, MAX_ATTEMPTS)
+
+
+async def _send_and_settle(channel, plan, notify_event: str, transition: str,
+                           detail: dict, audience: tuple[dict, dict]) -> int:
+    """Send one claimed message; mark it sent, or count the failed attempt."""
+    followers, prefs = audience
+    try:
+        embed = build_notify_embed(plan, notify_event, transition, detail)
+        mentions = eligible_mentions(followers, notify_event, prefs)
+        await channel.send(**_send_kwargs(embed, mentions, plan.plan_id))
+    except Exception:
+        log.warning("follow_notify: %s for plan %s not sent; the retry sweep will try again",
+                    notify_event, plan.plan_id, exc_info=True)
+        await _note_failure(plan.plan_id, notify_event)
+        return 0
+    log_posted(embed, plan.ticker, channel)
+    try:
+        await asyncio.to_thread(_mark_sent, plan.plan_id, notify_event)
+    except Exception:
+        log.warning("follow_notify: %s for plan %s was sent but not marked sent; "
+                    "the sweep may send it once more", notify_event, plan.plan_id, exc_info=True)
+    return 1
+
+
+async def _deliver(channel, claimed: set, event: PlanEvent) -> int:
+    notify_event = notify_event_for(event)
+    key = (event.plan_id, notify_event)
+    if notify_event is None or key in claimed:
+        return 0
+    plan = await asyncio.to_thread(_load_plan, event.plan_id)
+    if plan is None:
+        return 0
+    audience = await asyncio.to_thread(_audience, event.plan_id)
+    if not posts_message(notify_event, audience[0]):
+        return 0
+    doc = {"transition": event.transition, "detail": _stored_detail(event.detail)}
+    inserted = await asyncio.to_thread(_claim, event.plan_id, notify_event, doc)
+    claimed.add(key)
+    if not inserted:
+        return 0
+    return await _send_and_settle(channel, plan, notify_event, event.transition,
+                                  event.detail, audience)
+
+
+async def notify_followers(bot, events: list[PlanEvent]) -> int:
+    """Post each mappable plan event to the notify channel once; returns messages sent.
+
+    Independent of the execution feed: loops._post_plan_events calls it
+    whatever the feed did. One event's failure never stops the batch."""
+    channel = _notify_channel(bot)
+    if channel is None or not events:
+        return 0
+    claimed = await _claimed_cache()
+    sent = 0
+    for event in events:
+        try:
+            sent += await _deliver(channel, claimed, event)
+        except Exception:
+            log.warning("follow_notify: could not handle %s for plan %s",
+                        event.transition, event.plan_id, exc_info=True)
+    return sent
+
+
+async def _retry_row(channel, row: dict) -> int:
+    plan = await asyncio.to_thread(_load_plan, row["plan_id"])
+    if plan is None:
+        return 0
+    audience = await asyncio.to_thread(_audience, row["plan_id"])
+    return await _send_and_settle(channel, plan, row["event"], row.get("transition", ""),
+                                  row.get("detail") or {}, audience)
+
+
+async def retry_pending_notifications(bot, now: dt.datetime | None = None) -> int:
+    """Re-send pending claims older than RETRY_AFTER; returns messages sent.
+    Runs once per trade_monitor tick, whether or not the tick had events."""
+    channel = _notify_channel(bot)
+    if channel is None:
+        return 0
+    now = now or dt.datetime.now(dt.timezone.utc)
+    try:
+        rows = await asyncio.to_thread(_pending_rows, now - RETRY_AFTER)
+    except Exception:
+        log.warning("follow_notify: could not read pending notifications", exc_info=True)
+        return 0
+    sent = 0
+    for row in rows:
+        try:
+            sent += await _retry_row(channel, row)
+        except Exception:
+            log.warning("follow_notify: retry of %s for plan %s failed",
+                        row.get("event"), row.get("plan_id"), exc_info=True)
+    return sent
