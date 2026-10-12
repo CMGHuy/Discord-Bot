@@ -515,21 +515,40 @@ async def _config_watcher_error(exc: Exception):
     if not config_watcher.is_running():
         config_watcher.restart()
 
-async def _post_plan_events(plan_events) -> None:
-    """Post plan events, then record only the deliveries that reached Discord."""
-    from swingbot.core.planning import plan_manager
+async def _post_feed(plan_events) -> list:
+    """Return only the plan-event deliveries that reached the Discord feed."""
     from swingbot.core.scanning.embeds import notify_plan_events
     try:
-        deliveries = await notify_plan_events(bot, plan_events)
+        return await notify_plan_events(bot, plan_events)
     except Exception as exc:
         log.warning("trade_monitor: failed to post plan events: %s", exc, exc_info=True)
-        return
+        return []
+
+
+async def _post_plan_events(plan_events) -> None:
+    """Deliver feed and follower notices independently, then acknowledge the feed."""
+    from swingbot.core.planning import plan_manager
+    from . import follow_notify
+    deliveries = await _post_feed(plan_events)
+    try:
+        await follow_notify.notify_followers(bot, plan_events)
+    except Exception as exc:
+        log.warning("trade_monitor: follower notifications failed: %s", exc, exc_info=True)
     if not deliveries:
         return
     try:
         await asyncio.to_thread(plan_manager.ack_notified, deliveries)
     except Exception as exc:
         log.warning("trade_monitor: could not record feed deliveries (they will be re-sent): %s", exc, exc_info=True)
+
+
+async def _retry_notifications() -> None:
+    """Sweep pending follower notices even when this tick produced no events."""
+    from . import follow_notify
+    try:
+        await follow_notify.retry_pending_notifications(bot)
+    except Exception as exc:
+        log.warning("trade_monitor: follower notification retry failed: %s", exc, exc_info=True)
 
 
 async def _resend_plan_notices() -> None:
@@ -648,6 +667,7 @@ async def trade_monitor():
         plan_events = []
     if plan_events:
         await _post_plan_events(plan_events)
+    await _retry_notifications()
 
     if all_newly_closed:
         from swingbot.core.scanning.embeds import notify_closed_trades
