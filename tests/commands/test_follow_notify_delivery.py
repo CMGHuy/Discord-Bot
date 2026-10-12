@@ -56,6 +56,7 @@ def notify_on(monkeypatch):
     monkeypatch.setattr(config, "DISCORD_CHANNEL_NOTIFY_ID", str(NOTIFY_ID))
     monkeypatch.setattr(config, "ADMIN_PUBLIC_URL", "")
     monkeypatch.setattr(fn, "_CLAIMED", None)
+    monkeypatch.setattr(fn, "_UNSETTLED", set())
 
 
 def _store(status: str, plan_id: str = PID):
@@ -228,7 +229,7 @@ def test_five_failed_attempts_mark_the_row_failed_with_a_warning(caplog):
     assert chan.sent == []
 
 
-def test_a_lost_sent_write_re_sends_once_then_settles(monkeypatch):
+def test_a_lost_sent_write_settles_without_resending(monkeypatch):
     _store(PlanStatus.PARTIAL)
     chan = Chan()
 
@@ -239,9 +240,9 @@ def test_a_lost_sent_write_re_sends_once_then_settles(monkeypatch):
         failed_write.setattr(fn, "_mark_sent", broken)
         assert _notify(Bot(chan), _tp1_event()) == 1
         assert _rows()[(PID, "tp1")]["state"] == "pending"
-    assert _sweep(Bot(chan)) == 1
+    assert _sweep(Bot(chan)) == 0
     assert _sweep(Bot(chan), minutes=10) == 0
-    assert len(chan.sent) == 2 and chan.sent[0]["content"] == chan.sent[1]["content"]
+    assert len(chan.sent) == 1
     assert _rows()[(PID, "tp1")]["state"] == "sent"
 
 
@@ -346,4 +347,47 @@ def test_delivery_and_retry_database_calls_run_off_event_loop(monkeypatch):
     assert _notify(Bot(chan), _tp1_event()) == 0
     assert _sweep(Bot(chan)) == 1
     assert calls == set(helpers)
+    assert _rows()[(PID, "tp1")]["state"] == "sent"
+
+
+@pytest.mark.parametrize("initial_send_fails", [False, True])
+def test_repeated_sent_write_failures_retry_settlement_without_resending(
+        monkeypatch, initial_send_fails):
+    _store(PlanStatus.PARTIAL)
+    chan = Chan(fail=int(initial_send_fails))
+
+    def broken(plan_id, notify_event):
+        raise RuntimeError("settlement unavailable")
+
+    with monkeypatch.context() as failed_write:
+        failed_write.setattr(fn, "_mark_sent", broken)
+        _notify(Bot(chan), _tp1_event())
+        _sweep(Bot(chan))
+        _sweep(Bot(chan), minutes=4)
+        assert len(chan.sent) == 1
+        row = _rows()[(PID, "tp1")]
+        assert row["state"] == "pending"
+        assert row["attempts"] == int(initial_send_fails)
+    assert _sweep(Bot(chan), minutes=6) == 0
+    assert len(chan.sent) == 1
+    assert _rows()[(PID, "tp1")]["state"] == "sent"
+    assert (PID, "tp1") not in fn._UNSETTLED
+
+
+def test_restart_recovers_a_successful_send_without_durable_settlement(monkeypatch):
+    _store(PlanStatus.PARTIAL)
+    chan = Chan()
+
+    def broken(plan_id, notify_event):
+        raise RuntimeError("settlement unavailable")
+
+    with monkeypatch.context() as failed_write:
+        failed_write.setattr(fn, "_mark_sent", broken)
+        assert _notify(Bot(chan), _tp1_event()) == 1
+    # A new process cannot distinguish a lost settlement from an unsent claim.
+    monkeypatch.setattr(fn, "_CLAIMED", None)
+    monkeypatch.setattr(fn, "_UNSETTLED", set())
+    assert _sweep(Bot(chan)) == 1
+    assert _sweep(Bot(chan), minutes=4) == 0
+    assert len(chan.sent) == 2
     assert _rows()[(PID, "tp1")]["state"] == "sent"

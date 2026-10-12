@@ -239,6 +239,13 @@ RETRY_AFTER = dt.timedelta(seconds=60)
 _CLAIMED: set[tuple[str, str]] | None = None
 _BAD_CHANNEL_IDS: set[str] = set()
 
+#: Discord accepted these messages, but their sent state is not confirmed in DB.
+#: Sweeps retry settlement only while this process remembers the success.
+#: After a restart, an unsettled row is indistinguishable from an unsent claim;
+#: recovering it can duplicate the message. Repeated crashes before settlement
+#: cannot have a durable duplicate bound without Discord-side idempotency.
+_UNSETTLED: set[tuple[str, str]] = set()
+
 
 def _notify_channel(bot):
     """The notify channel, or None when D1 is off or the id is unusable.
@@ -340,6 +347,17 @@ async def _note_failure(plan_id: str, notify_event: str) -> None:
                     notify_event, plan_id, MAX_ATTEMPTS)
 
 
+async def _settle_sent(plan_id: str, notify_event: str) -> None:
+    """Retry the sent write without repeating a known successful Discord send."""
+    try:
+        await asyncio.to_thread(_mark_sent, plan_id, notify_event)
+    except Exception:
+        log.warning("follow_notify: %s for plan %s was sent but not marked sent; "
+                    "the sweep will retry settlement", notify_event, plan_id, exc_info=True)
+    else:
+        _UNSETTLED.discard((plan_id, notify_event))
+
+
 async def _send_and_settle(channel, plan, notify_event: str, transition: str,
                            detail: dict, audience: tuple[dict, dict]) -> int:
     """Send one claimed message; mark it sent, or count the failed attempt."""
@@ -353,12 +371,9 @@ async def _send_and_settle(channel, plan, notify_event: str, transition: str,
                     notify_event, plan.plan_id, exc_info=True)
         await _note_failure(plan.plan_id, notify_event)
         return 0
+    _UNSETTLED.add((plan.plan_id, notify_event))
     log_posted(embed, plan.ticker, channel)
-    try:
-        await asyncio.to_thread(_mark_sent, plan.plan_id, notify_event)
-    except Exception:
-        log.warning("follow_notify: %s for plan %s was sent but not marked sent; "
-                    "the sweep may send it once more", notify_event, plan.plan_id, exc_info=True)
+    await _settle_sent(plan.plan_id, notify_event)
     return 1
 
 
@@ -402,6 +417,10 @@ async def notify_followers(bot, events: list[PlanEvent]) -> int:
 
 
 async def _retry_row(channel, row: dict) -> int:
+    key = (row["plan_id"], row["event"])
+    if key in _UNSETTLED:
+        await _settle_sent(*key)
+        return 0
     plan = await asyncio.to_thread(_load_plan, row["plan_id"])
     if plan is None:
         return 0
@@ -411,7 +430,9 @@ async def _retry_row(channel, row: dict) -> int:
 
 
 async def retry_pending_notifications(bot, now: dt.datetime | None = None) -> int:
-    """Re-send pending claims older than RETRY_AFTER; returns messages sent.
+    """Recover pending claims older than RETRY_AFTER; returns messages sent.
+
+    Known successful sends retry only settlement; other claims are re-sent.
     Runs once per trade_monitor tick, whether or not the tick had events."""
     channel = _notify_channel(bot)
     if channel is None:
