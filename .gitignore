@@ -157,3 +157,5 @@ data/scan_snapshots.json
 # claude plugin eval run artefacts (HTML reports, aggregate json) -- never committed
 .claude/skills/*/evals/results/
 
+
+.superpowers/brainstorm/.last-*
