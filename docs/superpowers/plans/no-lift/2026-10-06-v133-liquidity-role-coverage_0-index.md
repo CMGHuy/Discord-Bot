@@ -4,7 +4,7 @@
 
 **Bump:** none (measurement closed not-more-informative; no code reached main)
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/no-lift/2026-10-06-v133-liquidity-role-coverage-design.md`](../specs/2026-10-06-v133-liquidity-role-coverage-design.md)
+**Spec:** [`docs/superpowers/specs/no-lift/2026-10-06-v133-liquidity-role-coverage-design.md`](../../specs/no-lift/2026-10-06-v133-liquidity-role-coverage-design.md)
 **Progress:** planning complete; implementation not started.
 
 **Goal:** Build the missing liquidity instrument (equal-high / equal-low pools and their sweeps), stamp five liquidity keys and five role keys on every entry snapshot, and answer once, on TRAIN, whether the number of distinct roles a setup covers separates trade outcomes better than the number of level votes it collects.
