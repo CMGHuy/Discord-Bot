@@ -255,7 +255,7 @@ _UNSETTLED: set[tuple[str, str]] = set()
 
 def _notify_channel(bot):
     """The notify channel, or None when D1 is off or the id is unusable.
-    Never wrapped in silence(): the mentions must ping."""
+    Never silenced: the mentions must ping."""
     raw = str(getattr(config, "DISCORD_CHANNEL_NOTIFY_ID", "") or "").strip()
     if not raw:
         return None

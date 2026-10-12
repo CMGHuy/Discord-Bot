@@ -1,6 +1,6 @@
 """v152 D3: the per-symbol alert cooldown, owner of the alert_posts record.
 
-On the scheduled session scan only (alerts._send_alerts(apply_cooldown=True)),
+On the scheduled session scan only (the cooldown-enabled alerts path),
 an alert for (ticker, direction, horizon_key) is not posted when one with the
 same key was POSTED within ALERT_SYMBOL_COOLDOWN_HOURS. Only the Discord post
 is held: the plan and its placeholder trade were persisted by scan_run before
