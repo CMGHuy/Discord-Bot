@@ -15,6 +15,8 @@ const FETCHING = [
   'workspaces/dashboard/dashboard.ts',
   'workspaces/trades/trades.ts',
   'workspaces/trades/trade-detail.ts',
+  // v151's plan page: the same detail fetch as the trade page.
+  'workspaces/plans/plan-detail.ts',
   // v94: `workspaces/analytics/analytics.ts` used to be here and is not any
   // more. It is now a shell -- a tab strip, a scope bar and a switch -- and
   // it renders no fetched value of its own, so an sb-async on it would gate

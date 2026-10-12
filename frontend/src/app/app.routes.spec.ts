@@ -93,6 +93,18 @@ describe('routing, authenticated', () => {
     expect(await children[0]!.loadComponent!()).toBeDefined();
   });
 
+  it('serves the plan page behind the auth guard (v151)', async () => {
+    const route = routes.find((r) => r.path === 'plans/:id');
+    expect(route).toBeDefined();
+    expect(route?.canMatch).toEqual([authGuard]);
+    expect(route?.title).toBe('Plan detail');
+    expect(route?.data?.['subtitle']).toBe('Why this plan, and how it is going');
+
+    const children = await route!.loadChildren!() as Routes;
+    expect(children[0]?.loadComponent).toBeTypeOf('function');
+    expect(await children[0]!.loadComponent!()).toBeDefined();
+  });
+
   it('exposes Research and Reports as guarded, titled lazy stubs', async () => {
     for (const path of ['research', 'reports']) {
       const route = routes.find((item) => item.path === path);
@@ -108,7 +120,7 @@ describe('routing, authenticated', () => {
 
 describe('route data readiness contract', () => {
   const expected = [
-    'dashboard', 'trades', 'trades/:id', 'analytics', 'calendar', 'watchlist',
+    'dashboard', 'trades', 'trades/:id', 'plans/:id', 'analytics', 'calendar', 'watchlist',
     'watchlist/:symbol', 'risk', 'system', 'versions',
   ] as const;
 
