@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12 08:32:51 UTC",
+  "generated_at": "2026-10-12 19:35:53 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.23.0",
-    "bot": "2.4.1"
+    "bot": "2.5.0"
   },
   "releases": [
     {
@@ -1574,6 +1574,19 @@
       "versions": {
         "ui": "1.23.0",
         "bot": "2.4.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-12",
+      "last_seen": "2026-10-12",
+      "commit": "beaa64ec",
+      "subject": "release(bot): 2.5.0 -- Discord follower updates and scheduled alert cooldown",
+      "versions": {
+        "ui": "1.23.0",
+        "bot": "2.5.0"
       },
       "changed": [
         "bot"
