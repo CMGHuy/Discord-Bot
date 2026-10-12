@@ -8,6 +8,7 @@ import {
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
+import { StrategyRow } from '../api/models';
 import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
 import { Observable } from 'rxjs';
@@ -45,34 +46,9 @@ import { PreferencesStore } from './preferences.store';
  * than fifteen template expressions.
  */
 
-/** One row of `_registry_rows()`: the committed out-of-sample badge for a
- *  strategy, joined against how that strategy is actually doing live. */
-export interface StrategyRow {
-  strategy: string;
-  /** `VALIDATED` or `WEAK` — whether it cleared its one-shot OOS bar. */
-  status: string;
-  /** OOS sample and result, from the committed validation registry. */
-  n: number;
-  win_rate: number;
-  expectancy_r: number;
-  window: string | null;
-  run_date: string | null;
-  /** Live counterparts. Null until there are closed trades to measure. */
-  live_n: number | null;
-  live_wr: number | null;
-  delta_vs_oos: number | null;
-  /** Pre-registered decay rule: live_n >= 20 and live_wr < oos_wr - 10. */
-  decayed: boolean;
-  /** Age of the evidence itself, derived server-side from `run_date` at read
-   *  time and never stored: `fresh` | `aging` | `stale` | `unknown`. A
-   *  different fact from `decayed` above, which is live-vs-OOS win-rate drift.
-   *  Display only — nothing is gated on it. */
-  evidence_decay: string;
-  gate_description: string | null;
-  /** Rolling 10-trade win rate, oldest first. Carries nulls for windows the
-   *  server could not compute, which the sparkline cannot plot. */
-  win_rate_series: (number | null)[];
-}
+/** Moved to `api/models.ts` (v150): the Research workspace reads the same
+ *  rows. Re-exported so every existing Analytics import keeps working. */
+export type { StrategyRow } from '../api/models';
 
 export interface HeatmapCell {
   strategy: string;

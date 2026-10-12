@@ -40,6 +40,7 @@ import {
   Preferences,
   Proposal,
   ProposalList,
+  ResearchLedger,
   Risk,
   ScanCommandResult,
   ScanStatus,
@@ -280,6 +281,13 @@ export class ApiClient {
 
   analyticsPlans(): Observable<AnalyticsPlans> {
     return this.http.get<AnalyticsPlans>(`${this.base}/analytics/plans`);
+  }
+
+  /* -- research ---------------------------------------------------------- */
+
+  /** The whole pre-registration ledger. Filtering and paging are client-side. */
+  researchLedger(): Observable<ResearchLedger> {
+    return this.http.get<ResearchLedger>(`${this.base}/research/ledger`);
   }
 
   /* -- jobs and tuning proposals ---------------------------------------- */

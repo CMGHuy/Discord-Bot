@@ -687,6 +687,35 @@ export interface AnalyticsHeatGrid extends Scoped {
   min_cell_n: number;
 }
 
+/** One row of `_registry_rows()`: the committed out-of-sample badge for a
+ *  strategy, joined against how that strategy is actually doing live. */
+export interface StrategyRow {
+  strategy: string;
+  /** `VALIDATED` or `WEAK` — whether it cleared its one-shot OOS bar. */
+  status: string;
+  /** OOS sample and result, from the committed validation registry. */
+  n: number;
+  win_rate: number;
+  expectancy_r: number;
+  window: string | null;
+  run_date: string | null;
+  /** Live counterparts. Null until there are closed trades to measure. */
+  live_n: number | null;
+  live_wr: number | null;
+  delta_vs_oos: number | null;
+  /** Pre-registered decay rule: live_n >= 20 and live_wr < oos_wr - 10. */
+  decayed: boolean;
+  /** Age of the evidence itself, derived server-side from `run_date` at read
+   *  time and never stored: `fresh` | `aging` | `stale` | `unknown`. A
+   *  different fact from `decayed` above, which is live-vs-OOS win-rate drift.
+   *  Display only — nothing is gated on it. */
+  evidence_decay: string;
+  gate_description: string | null;
+  /** Rolling 10-trade win rate, oldest first. Carries nulls for windows the
+   *  server could not compute, which the sparkline cannot plot. */
+  win_rate_series: (number | null)[];
+}
+
 /** `GET /analytics/registry`.
  *
  *  It really is this one key. The `{strategies, horizons, cells}` shape this
@@ -696,7 +725,55 @@ export interface AnalyticsHeatGrid extends Scoped {
  *  read three keys the endpoint has never sent. Same failure as the `ohlcv`
  *  envelope: it type-checks and returns `undefined`. */
 export interface AnalyticsRegistry {
-  registry: unknown[];
+  registry: StrategyRow[];
+}
+
+/* -- research (v150) ---------------------------------------------------- */
+
+/** Which docs folder a ledger row's `record` points into. */
+export type LedgerRecordKind = 'results' | 'specs' | 'plans' | 'other';
+
+/** One pre-registration: the nine fields the ledger stores, plus three the
+ *  endpoint derives. `n`, `exp_r` and `p` are null on most historical rows —
+ *  a null is "not recorded", never zero. */
+export interface LedgerRow {
+  id: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  hypothesis: string;
+  instrument: string;
+  n: number | null;
+  exp_r: number | null;
+  p: number | null;
+  verdict: string;
+  /** Repo-relative path of the results doc, spec or plan that records it. */
+  record: string;
+  /** BH q-value across every ledger row with a p-value. Reported, never
+   *  gating; null when `p` is null. Filters do not change it. */
+  q: number | null;
+  /** Whether `record` resolves in the deployed build. */
+  record_exists: boolean;
+  record_kind: LedgerRecordKind;
+}
+
+/** `GET /research/ledger`. The vocabularies come from the server so a
+ *  verdict added to the ledger later appears as a filter without a release. */
+export interface ResearchLedger {
+  rows: LedgerRow[];
+  /** How many rows have a p-value: the BH family size behind every `q`. */
+  q_family_m: number;
+  verdicts: string[];
+  instruments: string[];
+}
+
+/* -- reports (v150) ----------------------------------------------------- */
+
+/** The envelope both `GET /reports/*` endpoints return. `not_run` is a
+ *  state the page renders ("Not yet run"), not an error. */
+export interface ReportEnvelope<T> {
+  status: 'ok' | 'not_run';
+  generated_at: string | null;
+  result: T | null;
 }
 
 /* -- jobs and tuning ---------------------------------------------------- */

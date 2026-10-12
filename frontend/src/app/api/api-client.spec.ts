@@ -77,4 +77,14 @@ describe('ApiClient — scope and analytics', () => {
     expect(noLessonsSpecified.request.params.get('direction')).toBe('bullish');
     expect(noLessonsSpecified.request.params.has('lessons')).toBe(false);
   });
+
+  it('researchLedger GETs /research/ledger and returns the body untouched', () => {
+    let got: unknown;
+    api.researchLedger().subscribe((r) => (got = r));
+    const req = http.expectOne((r) => r.url.endsWith('/research/ledger'));
+    expect(req.request.method).toBe('GET');
+    const body = { rows: [], q_family_m: 0, verdicts: [], instruments: [] };
+    req.flush(body);
+    expect(got).toEqual(body);
+  });
 });
