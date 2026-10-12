@@ -147,7 +147,9 @@ def _near_stop_copy(plan, transition: str, detail: dict) -> str:
 def _tp1_copy(plan, transition: str, detail: dict) -> str:
     if transition == "closed":
         return _target_close_copy(plan, "TP1", detail)
-    return f"reached TP1 at {ui.fmt_price(detail.get('price'))}."
+    fill = detail.get("exit_price")
+    fill = plan.tp1 if fill is None else fill
+    return f"reached TP1 at {ui.fmt_price(fill)}."
 
 
 def _target_close_copy(plan, target: str, detail: dict) -> str:

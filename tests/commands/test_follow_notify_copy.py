@@ -16,7 +16,7 @@ FORBIDDEN = (
 CASES = [
     ('near_stop', 'near_stop', 'ACTIVE', {'r_dist': .21, 'price': 96.05},
      'is 0.21R from its stop, last 96.05.', Kind.NEAR_STOP),
-    ('tp1', 'tp1_partial', 'PARTIAL', {'price': 110},
+    ('tp1', 'tp1_partial', 'PARTIAL', {'exit_price': 110},
      'reached TP1 at 110.00.', Kind.TP1_HIT),
     ('tp1', 'closed', 'CLOSED', {'reason': 'win', 'exit_price': 110},
      'closed at TP1 110.00: +2.0R.', Kind.TP1_HIT),
@@ -92,6 +92,7 @@ def test_near_stop_uses_current_resting_stop_in_both_open_states(status, target)
 
 def test_missing_prices_and_targets_use_the_shared_absent_format():
     plan = _plan('PARTIAL')
+    plan.tp1 = None
     plan.tp2 = None
     line = fn.message_line(plan, 'tp1', 'tp1_partial', {})
     assert f'reached TP1 at {ui.ABSENT}.' in line
@@ -134,3 +135,21 @@ def test_next_notification_reads_reloaded_public_url(monkeypatch):
     after = fn.build_notify_embed(plan, 'near_stop', 'near_stop', {'r_dist': .21, 'price': 96})
     assert 'url' not in before.to_dict()
     assert after.url == f'https://new.example.com/plans/{plan.plan_id}'
+
+
+@pytest.mark.parametrize('direction,fill,target', [('bullish', 111, 110), ('bearish', 89, 90)])
+def test_tp1_partial_reports_the_realized_leg_fill(direction, fill, target):
+    plan = _plan('PARTIAL', direction)
+    plan.tp1 = target
+    detail = {'fraction': .5, 'exit_price': fill, 'r': 2.2, 'reason': 'tp1',
+              'closed_at': '2026-10-12T14:00:00Z'}
+    embed = fn.build_notify_embed(plan, 'tp1', 'tp1_partial', detail)
+    assert f'reached TP1 at {fill:.2f}.' in embed.description
+    assert embed.push_text == embed.description
+
+
+@pytest.mark.parametrize('direction,target', [('bullish', 110), ('bearish', 90)])
+def test_tp1_partial_falls_back_to_the_plan_target(direction, target):
+    plan = _plan('PARTIAL', direction)
+    plan.tp1 = target
+    assert f'reached TP1 at {target:.2f}.' in fn.message_line(plan, 'tp1', 'tp1_partial', {})
