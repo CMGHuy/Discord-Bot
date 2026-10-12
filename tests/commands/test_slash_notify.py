@@ -21,6 +21,8 @@ def _interaction(user_id: int = USER) -> MagicMock:
     interaction = MagicMock()
     interaction.user.id = user_id
     interaction.response = AsyncMock()
+    interaction.response.is_done = MagicMock(return_value=False)
+    interaction.original_response = AsyncMock()
     interaction.followup = AsyncMock()
     return interaction
 
@@ -40,6 +42,11 @@ def _run(**kwargs) -> str:
 
 def _line(text: str, event: str) -> str:
     return next(line for line in text.splitlines() if line.startswith(f"• `{event}`"))
+
+
+def test_notify_is_registered_as_a_slash_only_handler():
+    assert notify.SLASH_ONLY == {"notify"}
+    assert "notify" in {command.name for command in bot.tree.get_commands()}
 
 
 def test_notify_is_registered_with_its_three_options():

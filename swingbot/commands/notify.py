@@ -6,11 +6,13 @@ import discord
 from discord import app_commands
 
 from swingbot.bot_core import bot
+from swingbot.commands.reply import InteractionReply
 from swingbot.commands.scanning.follow_notify import (
     EVENT_LABELS, FOLLOWING_ONLY, NOTIFY_EVENTS, mentions_user,
 )
 
 log = logging.getLogger(__name__)
+SLASH_ONLY = {"notify"}
 
 WATCH_MODES = ("mention", "silent")
 NOTIFY_EVENT_CHOICES = [app_commands.Choice(name=n, value=n) for n in (*NOTIFY_EVENTS, "all")]
@@ -56,6 +58,23 @@ def _apply_notify_change(user_id: int, event: str | None, enabled: bool | None,
     return repo.prefs(user_id)
 
 
+async def handle_notify(reply, event: str | None = None,
+                        enabled: bool | None = None, watch_mode: str | None = None) -> None:
+    """Read or update the caller's mention preferences, then answer ephemerally."""
+    if (event is None) != (enabled is None):
+        await reply.send(NOTIFY_PAIRING, ephemeral=True)
+        return
+    try:
+        prefs = await asyncio.to_thread(_apply_notify_change, reply.author.id,
+                                        event, enabled, watch_mode)
+    except Exception:
+        log.warning("/notify: could not read or save prefs for user %s",
+                    reply.author.id, exc_info=True)
+        await reply.send(NOTIFY_STORE_DOWN, ephemeral=True)
+        return
+    await reply.send(_notify_summary(prefs), ephemeral=True)
+
+
 @bot.tree.command(name="notify", description="Choose which paper plan updates mention you in the notify channel")
 @app_commands.describe(event="The update to change, or all",
                        enabled="Mention me for it (true) or not (false)",
@@ -63,17 +82,5 @@ def _apply_notify_change(user_id: int, event: str | None, enabled: bool | None,
 @app_commands.choices(event=NOTIFY_EVENT_CHOICES, watch_mode=WATCH_MODE_CHOICES)
 async def slash_notify(interaction: discord.Interaction, event: app_commands.Choice[str] = None,
                        enabled: bool = None, watch_mode: app_commands.Choice[str] = None):
-    event_name = event.value if event else None
-    if (event_name is None) != (enabled is None):
-        await interaction.response.send_message(NOTIFY_PAIRING, ephemeral=True)
-        return
-    mode = watch_mode.value if watch_mode else None
-    try:
-        prefs = await asyncio.to_thread(_apply_notify_change, interaction.user.id,
-                                        event_name, enabled, mode)
-    except Exception:
-        log.warning("/notify: could not read or save prefs for user %s",
-                    interaction.user.id, exc_info=True)
-        await interaction.response.send_message(NOTIFY_STORE_DOWN, ephemeral=True)
-        return
-    await interaction.response.send_message(_notify_summary(prefs), ephemeral=True)
+    await handle_notify(InteractionReply(interaction), event.value if event else None,
+                        enabled, watch_mode.value if watch_mode else None)
