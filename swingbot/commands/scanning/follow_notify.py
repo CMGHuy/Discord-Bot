@@ -124,7 +124,7 @@ FORBIDDEN_PHRASES = (
     "exit now", "move stop", "move your stop", "take profit", "sell now",
     "buy now", "close your", "you should",
 )
-FOOTER = "Paper plan update, not advice."
+FOOTER = "Paper plan update, not advice. R is before costs and tax."
 _STOP_LABELS = {
     "loss": "at its stop",
     "scratch": "at breakeven",
@@ -151,6 +151,12 @@ def _signed_close_r(plan, detail: dict) -> str:
 def _near_stop_copy(plan, transition: str, detail: dict) -> str:
     distance = detail.get("r_dist")
     distance_text = f"{distance:.2f}R" if distance is not None else ui.ABSENT
+    observed_at = detail.get("observed_at")
+    if observed_at is not None:
+        timestamp = dt.datetime.fromisoformat(observed_at) if isinstance(observed_at, str) else observed_at
+        observed = timestamp.astimezone(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        return (f"was {distance_text} from its stop at {observed}, "
+                f"last observed {ui.fmt_price(detail.get('price'))}.")
     return f"is {distance_text} from its stop, last {ui.fmt_price(detail.get('price'))}."
 
 
@@ -388,7 +394,10 @@ async def _deliver(channel, claimed: set, event: PlanEvent) -> int:
     audience = await asyncio.to_thread(_audience, event.plan_id)
     if not posts_message(notify_event, audience[0]):
         return 0
-    doc = {"transition": event.transition, "detail": _stored_detail(event.detail)}
+    detail = _stored_detail(event.detail)
+    if notify_event == "near_stop":
+        detail["observed_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    doc = {"transition": event.transition, "detail": detail}
     inserted = await asyncio.to_thread(_claim, event.plan_id, notify_event, doc)
     claimed.add(key)
     if not inserted:

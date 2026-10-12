@@ -1,4 +1,6 @@
 """Follower updates report paper-plan facts across every event and direction."""
+import datetime as dt
+
 import pytest
 
 from swingbot import config
@@ -76,10 +78,19 @@ def test_rendered_updates_are_factual_linked_and_registry_styled(monkeypatch, di
     assert ui.push_kwargs(embed)['content'] == embed.description
     assert f'NVDA {side} ' in embed.push_text
     assert payload['url'] == f'https://example.com/plans/{plan.plan_id}'
-    assert embed.footer.text.endswith(' · Paper plan update, not advice.')
+    assert embed.footer.text.endswith(' · Paper plan update, not advice. R is before costs and tax.')
     rendered = str(payload).lower() + embed.push_text.lower()
     for forbidden in FORBIDDEN:
         assert forbidden not in rendered
+
+
+def test_retried_near_stop_copy_identifies_the_observation_time():
+    plan = _plan('CLOSED')
+    detail = {'r_dist': .21, 'price': 96.05,
+              'observed_at': dt.datetime(2026, 10, 12, 14, 5, tzinfo=dt.timezone.utc)}
+    line = fn.message_line(plan, 'near_stop', 'near_stop', detail)
+    assert 'was 0.21R from its stop at 2026-10-12 14:05 UTC, last observed 96.05.' in line
+    assert 'Stop now at' not in line
 
 
 @pytest.mark.parametrize('status,target', [('ACTIVE', '110.00'), ('PARTIAL', '120.00')])

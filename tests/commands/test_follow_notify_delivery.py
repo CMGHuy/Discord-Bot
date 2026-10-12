@@ -216,6 +216,16 @@ def test_a_failed_send_stays_pending_and_the_sweep_retries_it():
     assert chan.sent[0]["content"].startswith("Paper plan update: AAPL long reached TP1")
 
 
+def test_retried_near_stop_message_is_dated_as_historical():
+    _store(PlanStatus.ACTIVE)
+    chan = Chan(fail=1)
+    event = PlanEvent(PID, "near_stop", {"r_dist": .21, "price": 96.05, "stop": 95.0})
+    assert _notify(Bot(chan), event) == 0
+    assert _sweep(Bot(chan)) == 1
+    assert "was 0.21R from its stop at " in chan.sent[0]["content"]
+    assert "UTC, last observed 96.05." in chan.sent[0]["content"]
+
+
 def test_five_failed_attempts_mark_the_row_failed_with_a_warning(caplog):
     _store(PlanStatus.PARTIAL)
     chan = Chan(fail=MAX_ATTEMPTS)

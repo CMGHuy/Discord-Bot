@@ -420,8 +420,8 @@ today: `notify_plan_events` 12, `_send_alerts` 9, `close_plan_trade` 7.
   image. Buttons on alerts posted under v152 then fail with Discord's "This
   interaction failed" — the old image registers no dynamic items and no
   legacy reply; the plan page and `!plans` still work. Notifications and the
-  cooldown stop. `alembic downgrade v116_002` is optional and drops the
-  followers record.
+  cooldown stop. `alembic downgrade -1` is optional while `v152_001` is
+  the head; it drops the followers record without removing intervening migrations.
 - **PITR rollback.** `scripts/ops/rollback_to.sh` restores Postgres to one
   second (`rollback_to.sh:6`) with the matching image, so `plan_followers`,
   `plan_notifications` and trade `taken_by` rewind together with the book;
