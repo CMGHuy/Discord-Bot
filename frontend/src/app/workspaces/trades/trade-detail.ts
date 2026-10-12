@@ -18,13 +18,10 @@ import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, ChipTone, QualityChip } from '../../ui/chip';
 import { MetricChip } from '../../ui/metric-chip';
-import { ChartContainer } from '../../ui/chart-container';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { TradeChart } from '../../ui/chart/trade-chart';
 import { dateTime, held, num, pct, rMultiple, share, text } from '../../ui/format';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
-import { InlineMd } from '../../ui/inline-md';
 import {
   ACTION_LABELS,
   ACTION_TITLES,
@@ -33,6 +30,12 @@ import {
   availableActions,
   runTradeAction,
 } from './trade-actions';
+import { IfItGetsThere } from './why/if-it-gets-there';
+import { LevelsBlock } from './why/levels-block';
+import { OutcomePath } from './why/outcome-path';
+import { PlanChart } from './why/plan-chart';
+import { SizingPanel } from './why/sizing-panel';
+import { WHY_SECTIONS, WhyPanel, WhySection } from './why/why-panel';
 
 /** Plan · Live · Chart · Notes · Strategy — spec 3's five, in its order. */
 const TABS: Tab[] = [
@@ -44,6 +47,34 @@ const TABS: Tab[] = [
 ];
 
 const TAB_IDS = new Set(TABS.map((tab) => tab.id));
+
+/** A legacy record with no captured detail still shows its gate rows: "not
+ *  recorded" is a measured answer and is never hidden (spec v151 § Edge
+ *  cases). The reasoning sections stay out, exactly as before. */
+const ABSENT_SECTIONS: readonly WhySection[] = ['gates', 'calendar'];
+
+const ARRIVAL_SUFFIX = ' — this is its trade record.';
+
+/**
+ * Why the plan page sent the reader here instead (spec v151 § Arrival
+ * banner). A Discord link outlives the plan's open life; when it lands on
+ * the trade record, this line says why. Empty for a plan that is still open.
+ */
+export function arrivalBanner(status: string | null, barsToExpiry: number | null): string {
+  if (status === 'PENDING' && barsToExpiry === 0) return `This plan has expired${ARRIVAL_SUFFIX}`;
+  if (status === 'CANCELLED') return `This plan was cancelled${ARRIVAL_SUFFIX}`;
+  if (status === 'CLOSED') return `This plan is closed${ARRIVAL_SUFFIX}`;
+  return '';
+}
+
+/** Read once, at construction: the plan page's redirect passes
+ *  `state: { from: 'plan' }`, and a direct visit has no such state. */
+function cameFromPlan(): boolean {
+  if (typeof history === 'undefined') return false;
+  const state: unknown = history.state;
+  return typeof state === 'object' && state !== null
+    && (state as Record<string, unknown>)['from'] === 'plan';
+}
 
 /**
  * One trade — the shell and the Plan tab (NG43). Live is NG44, Chart NG45,
@@ -69,16 +100,22 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     QualityChip,
     Button,
     ConfirmDialog,
-    ChartContainer,
-    TradeChart,
     MetricChip,
     Chip,
     Async,
-    InlineMd,
+    WhyPanel,
+    LevelsBlock,
+    IfItGetsThere,
+    SizingPanel,
+    OutcomePath,
+    PlanChart,
   ],
   template: `
     <header class="head">
       <a class="back" routerLink="/trades">← Trades</a>
+      @if (arrival(); as message) {
+        <p class="arrival" role="status">{{ message }}</p>
+      }
 
       @if (store.trade(); as trade) {
         <div class="trade-title" role="heading" aria-level="2">
@@ -158,72 +195,20 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       @case ('plan') {
         @if (store.trade(); as trade) {
           <div class="panels">
-            <sb-panel heading="Levels">
-              <dl>
-                <div>
-                  <dt>Entry</dt>
-                  <dd class="num">{{ fmt(trade.entry) }}</dd>
-                </div>
-                <div>
-                  <dt>{{ stopLabel() }}</dt>
-                  <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
-                </div>
-                <div>
-                  <dt>Target 1</dt>
-                  <dd class="num pos">{{ fmt(trade.target) }}</dd>
-                </div>
-                <div>
-                  <dt>Target 2</dt>
-                  <dd class="num pos">{{ fmt(trade.target2) }}</dd>
-                </div>
-                <div>
-                  <dt>R:R</dt>
-                  <dd class="num">{{ fmt(trade.risk_reward) }}</dd>
-                </div>
-                <!-- The trigger is the only actionable price on a PENDING
-                     plan: the entry price stays null until it fills. Shown only when
-                     there is one, so a filled position does not carry a row
-                     about a threshold it crossed days ago. -->
-                @if (store.triggerPrice() !== null) {
-                  <div>
-                    <dt>Trigger</dt>
-                    <dd class="num">{{ fmt(store.triggerPrice()) }}</dd>
-                  </div>
-                }
-                @if (store.tp1Pct() !== null) {
-                  <div>
-                    <dt>TP1 closes</dt>
-                    <dd class="num">{{ fmtShare(store.tp1Pct()) }}</dd>
-                  </div>
-                }
-                @if (store.breakevenTriggerPct() !== null) {
-                  <div>
-                    <dt>Break-even at</dt>
-                    <dd class="num">{{ fmtShare(store.breakevenTriggerPct()) }} of TP1</dd>
-                  </div>
-                }
-              </dl>
-
-              <!-- What put each level where it is. Separate lists rather than
-                   the Jinja tooltip's merged one: there is room here to say
-                   which level a source justifies, which the tooltip could not. -->
-              @if (store.targetSources().length || store.stopSources().length) {
-                <div class="sources">
-                  @if (store.targetSources().length) {
-                    <p><span class="src-label">Target confirmed by</span>
-                      {{ store.targetSources().join(', ') }}</p>
-                  }
-                  @if (store.stopSources().length) {
-                    <p><span class="src-label">Stop confirmed by</span>
-                      {{ store.stopSources().join(', ') }}</p>
-                  }
-                  @if (store.target2Sources().length) {
-                    <p><span class="src-label">Target 2 confirmed by</span>
-                      {{ store.target2Sources().join(', ') }}</p>
-                  }
-                </div>
-              }
-            </sb-panel>
+            <sb-levels-block
+              [direction]="trade.direction"
+              [entryType]="store.detail()?.entry_type ?? null"
+              [trigger]="store.triggerPrice()"
+              [entry]="trade.entry"
+              [stop]="trade.stop_loss"
+              [stopLabel]="stopLabel()"
+              [target1]="trade.target"
+              [target2]="trade.target2"
+              [riskReward]="trade.risk_reward"
+              [acceptanceLevel]="store.acceptanceLevel()"
+              [tp1Pct]="store.tp1Pct()"
+              [breakevenTriggerPct]="store.breakevenTriggerPct()"
+            />
 
             <sb-panel heading="Per share">
               <dl>
@@ -246,59 +231,20 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               </dl>
             </sb-panel>
 
-            <!-- SR60. trade_detail.html:96-104. Derived from target2 and
-                 stop_loss, both of which the Levels panel already shows --
-                 what was missing was the sentence saying what they MEAN if
-                 price actually gets to TP1. -->
-            <sb-panel [heading]="ifItGetsThereHeading()">
-              <dl>
-                <div>
-                  <dt>Continues past {{ levelWord() }} 1</dt>
-                  <dd class="num">
-                    @if (trade.target2 !== null) {
-                      next stop {{ fmt(trade.target2) }}
-                    } @else {
-                      <span class="absent">no further level found</span>
-                    }
-                  </dd>
-                </div>
-                <div>
-                  <dt>Reverses at {{ levelWord() }} 1</dt>
-                  <dd class="num">
-                    pulls back toward {{ oppositeWord() }} at {{ fmt(trade.stop_loss) }}
-                  </dd>
-                </div>
-              </dl>
-            </sb-panel>
+            <sb-if-it-gets-there
+              [direction]="trade.direction"
+              [target2]="trade.target2"
+              [stopLoss]="trade.stop_loss"
+            />
 
-            <sb-panel heading="Sizing">
-              <!-- SR60. _trade_history_rows.html:67. The number was already
-                   here as a picker-addable column; what was missing is that a
-                   trade logged before sizing snapshots existed shows an
-                   estimate, not a recorded figure. -->
-              <p class="section-help">
-                Position size is snapshotted when the trade opens. A trade with
-                no sizing snapshot was logged before that feature existed.
-              </p>
-              <dl>
-                <div>
-                  <dt>Shares</dt>
-                  <dd class="num">{{ fmt(trade.shares, 0) }}</dd>
-                </div>
-                <div>
-                  <dt>Deployed</dt>
-                  <dd class="num">{{ fmt(trade.position_value) }}</dd>
-                </div>
-                <div>
-                  <dt>Sizing mode</dt>
-                  <dd>{{ fmtText(store.detail()?.sizing_mode ?? null) }}</dd>
-                </div>
-                <div>
-                  <dt>Working stop</dt>
-                  <dd class="num">{{ fmt(store.detail()?.working_stop ?? null) }}</dd>
-                </div>
-              </dl>
-            </sb-panel>
+            <sb-sizing-panel
+              [shares]="trade.shares"
+              [positionValue]="trade.position_value"
+              [sizingMode]="store.detail()?.sizing_mode ?? null"
+              [workingStop]="store.detail()?.working_stop ?? null"
+              [gapP90Pct]="store.gapP90Pct()"
+              [gapFragile]="store.gapFragile()"
+            />
 
             <sb-panel heading="Opened">
               <dl>
@@ -322,8 +268,9 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
             </sb-panel>
           </div>
 
-          <!-- The reasoning. Everything above is a number; this is the only
-               part of the screen that says why any of them were chosen. -->
+          <!-- The reasoning. Everything above is a number; the Why panel is
+               the only part of the screen that says why any of them were
+               chosen, and the one place level sources render (v151). -->
           @if (store.detailAbsent()) {
             <!-- Not an error and not an empty panel per field: this record
                  predates the detail capture entirely, and nine em dashes read
@@ -332,51 +279,31 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
               This trade was logged before the admin UI captured the full alert
               detail — only the plan above is available for it.
             </p>
-          } @else {
-            @if (store.explanation(); as why) {
-              <sb-panel heading="Why this trade">
-                <p class="prose"><sb-inline-md [text]="why" /></p>
-              </sb-panel>
-            }
-
-            @if (store.confirmedBy().length) {
-              <sb-panel heading="Confirmed by">
-                <ul class="confirmations">
-                  @for (c of store.confirmedBy(); track c.strategy + (c.horizon ?? '')) {
-                    <li>
-                      {{ c.strategy }}
-                      @if (c.horizon) {
-                        <span class="muted muted-gap">({{ c.horizon }})</span>
-                      }
-                    </li>
-                  }
-                </ul>
-              </sb-panel>
-            }
-
-            @if (store.confidenceFactors().length) {
-              <sb-panel heading="Confidence breakdown">
-                <dl class="factors">
-                  @for (f of store.confidenceFactors(); track f.factor) {
-                    <div><dt>{{ f.factor }}</dt><dd>{{ f.note }}</dd></div>
-                  }
-                </dl>
-              </sb-panel>
-            }
-
-            @if (store.qualityFactors().length) {
-              <sb-panel heading="Quality breakdown">
-                <dl class="factors">
-                  @for (f of store.qualityFactors(); track f.label) {
-                    <div>
-                      <dt>{{ f.label }}</dt>
-                      <dd class="num">{{ signed(f.points) }}</dd>
-                    </div>
-                  }
-                </dl>
-              </sb-panel>
-            }
           }
+          <sb-why-panel
+            [sections]="whySections()"
+            [status]="trade.status"
+            [barsToExpiry]="trade.bars_to_expiry"
+            [sessionsSinceCreated]="store.sessionsSinceCreated()"
+            [entry]="trade.entry"
+            [trigger]="store.triggerPrice()"
+            [stop]="trade.stop_loss"
+            [stopLabel]="stopLabel()"
+            [target1]="trade.target"
+            [target2]="trade.target2"
+            [acceptanceLevel]="store.acceptanceLevel()"
+            [targetSources]="store.targetSources()"
+            [stopSources]="store.stopSources()"
+            [target2Sources]="store.target2Sources()"
+            [confirmedBy]="store.confirmedBy()"
+            [confidencePoints]="store.confidencePoints()"
+            [confidenceUnevaluated]="store.confidenceUnevaluated()"
+            [confidenceFactors]="store.confidenceFactors()"
+            [qualityFactors]="store.qualityFactors()"
+            [gates]="store.gates()"
+            [calendar]="store.calendar()"
+            [explanation]="store.explanation()"
+          />
         }
       }
       @case ('live') {
@@ -494,73 +421,12 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
             </sb-panel>
           </div>
 
-          <!-- Scale-out legs. A position that took TP1 and is riding a runner
-               is TWO results, and a single P&L figure describes neither. -->
-          @if (store.legs().length > 1) {
-            <sb-panel heading="Scale-out">
-              <dl class="factors">
-                @for (leg of store.legs(); track $index) {
-                  <div>
-                    <dt>
-                      @if ($index === 0) { First } @else { Runner }
-                      @if (leg.fraction !== null) {
-                        <span class="muted muted-gap">{{ fmtShare(leg.fraction * 100) }}</span>
-                      }
-                    </dt>
-                    <dd class="num">
-                      @if (leg.exitPrice !== null) {
-                        {{ fmt(leg.exitPrice) }}
-                        @if (leg.r !== null) {
-                          <span [class]="pnlClass(leg.r)">{{ fmtR(leg.r) }}</span>
-                        }
-                        @if (leg.reason) {
-                          <span class="muted muted-gap">{{ leg.reason }}</span>
-                        }
-                      } @else {
-                        <span class="muted muted-gap">still open</span>
-                      }
-                    </dd>
-                  </div>
-                }
-              </dl>
-            </sb-panel>
-          }
-
-          <!-- The plan's audit trail. Every transition carries the reason it
-               happened, which is the only place "why did this cancel" is
-               answered. -->
-          @if (store.timeline().length) {
-            <sb-panel heading="Timeline">
-              <ol class="timeline">
-                @for (event of store.timeline(); track $index) {
-                  <li>
-                    <span class="tl-status">{{ event.status }}</span>
-                    @if (event.reason) {
-                      <span class="tl-reason">{{ event.reason }}</span>
-                    }
-                    @if (event.at) {
-                      <span class="tl-at">{{ fmtDate(event.at) }}</span>
-                    }
-                  </li>
-                }
-              </ol>
-            </sb-panel>
-          }
+          <sb-outcome-path [legs]="store.legs()" [timeline]="store.timeline()" />
         }
       }
       @case ('chart') {
         <div class="chart">
-          <sb-chart-container
-            [loading]="chart.loading()"
-            [error]="chart.error()"
-            [hasData]="!chartEmpty()"
-            [height]="520"
-            [caption]="chartCaption()"
-            [canRetry]="true"
-            (retry)="chart.retry()"
-          >
-            <sb-trade-chart [data]="chart.data()" />
-          </sb-chart-container>
+          <sb-plan-chart [ticker]="store.trade()?.ticker ?? null" [tradeId]="store.trade()?.id ?? null" />
         </div>
       }
       @case ('notes') {
@@ -744,6 +610,16 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       text-decoration: underline;
     }
 
+    /* Why the plan page sent the reader here (v151). Informational, not a
+       warning: the record is fine, the plan's open life is simply over. */
+    .arrival {
+      max-width: 68ch;
+      padding: var(--space-8);
+      border-left: 2px solid var(--accent);
+      color: var(--text);
+      font-size: var(--text-table);
+    }
+
     .trade-title {
       margin: 0;
       display: flex;
@@ -805,15 +681,6 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
     }
     /* -- SR49: the plan's reasoning ------------------------------------- */
 
-    /* Prose, not data. Wider measure than a table cell and a real line
-       height, because this is the one part of the screen meant to be read
-       rather than scanned. */
-    .prose {
-      max-width: 68ch;
-      color: var(--text);
-      font-size: var(--text-table);
-      line-height: 1.6;
-    }
     .no-detail {
       max-width: 68ch;
       color: var(--text-faint);
@@ -821,44 +688,6 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
       line-height: 1.6;
     }
 
-    .sources {
-      margin-top: var(--space-10);
-      padding-top: var(--space-10);
-      border-top: 1px solid var(--border);
-    }
-    .sources p {
-      color: var(--text);
-      font-size: var(--text-chip);
-      line-height: 1.5;
-    }
-    .src-label {
-      display: block;
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .confirmations {
-      display: grid;
-      gap: var(--space-6);
-      list-style: none;
-    }
-    .confirmations li {
-      color: var(--text);
-      font-size: var(--text-table);
-    }
-
-    /* The two breakdowns and the scale-out legs share a shape: a label and a
-       value that is usually a sentence, so the value is allowed to wrap where
-       the plain definition list above keeps everything on one line. */
-    .factors > div {
-      align-items: baseline;
-      gap: var(--space-14);
-    }
-    .factors dd {
-      text-align: right;
-    }
     /* v54: dropped this call site's own .muted rule entirely -- the gate
        forbids redefining that selector at all, not just its colour (which
        was color: var(--text-faint), a drift off the global .muted's
@@ -867,44 +696,6 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
        .muted in the markup so the two concerns stay separately named. */
     .muted-gap {
       margin-left: var(--space-6);
-    }
-
-    /* A rule down the left with a node per event: the shape says "these
-       happened in order", which a plain list does not. */
-    .timeline {
-      display: grid;
-      gap: var(--space-8);
-      margin-left: var(--space-6);
-      padding-left: var(--space-14);
-      border-left: 1px solid var(--border-strong);
-      list-style: none;
-    }
-    .timeline li {
-      position: relative;
-      font-size: var(--text-table);
-    }
-    .timeline li::before {
-      content: '';
-      position: absolute;
-      left: calc(-1 * var(--space-14) - 3px);
-      top: 0.45em;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: var(--border-strong);
-    }
-    .tl-status {
-      color: var(--text);
-      font-weight: 600;
-    }
-    .tl-reason {
-      margin-left: var(--space-6);
-      color: var(--text-secondary);
-    }
-    .tl-at {
-      margin-left: var(--space-6);
-      color: var(--text-faint);
-      font-size: var(--text-chip);
     }
 
     .chart {}
@@ -1006,21 +797,23 @@ export class TradeDetail {
   /** The active tab, as a query parameter. */
   readonly tab = input<string>();
 
+  /** True only when the plan page redirected here (v151). Read once: a
+   *  later navigation inside this page must not re-raise the banner. */
+  protected readonly arrivedFromPlan: boolean = cameFromPlan();
+
+  protected readonly arrival = computed(() => {
+    if (!this.arrivedFromPlan) return '';
+    const trade = this.store.trade();
+    return trade ? arrivalBanner(trade.status, trade.bars_to_expiry ?? null) : '';
+  });
+
+  /** Every Why section, except on a record that predates detail capture,
+   *  which keeps only its gate rows and calendar. */
+  protected readonly whySections = computed<readonly WhySection[]>(() =>
+    this.store.detailAbsent() ? ABSENT_SECTIONS : WHY_SECTIONS,
+  );
+
   protected readonly tabs = TABS;
-
-  /* -- SR60: the "if it gets there" wording ---------------------------- */
-
-  /** `admin/app.py:691` -- Resistance for a long, Support for a short. The
-   *  words matter: "next stop 210" reads differently above and below price. */
-  protected readonly levelWord = computed(() =>
-    this.store.trade()?.direction === 'bearish' ? 'support' : 'resistance',
-  );
-
-  protected readonly oppositeWord = computed(() =>
-    this.store.trade()?.direction === 'bearish' ? 'resistance' : 'support',
-  );
-
-  protected readonly ifItGetsThereHeading = computed(() => 'If it gets there');
 
   /** "Stop" vs "Trailing stop" -- a PARTIAL position's `stop_loss` field is
    *  no longer the original risk-defining level (the API returns the
@@ -1130,25 +923,6 @@ export class TradeDetail {
     return kind && trade ? actionConsequence(kind, trade) : '';
   });
 
-  protected readonly chartCaption = computed(() => {
-    const trade = this.store.trade();
-    if (!trade) return null;
-    // The confirming methods, when the trade has any. An empty list is an
-    // ordinary state — an older trade with no recorded sources — so the
-    // caption simply says less rather than announcing an absence. Both sides
-    // are named when both are drawn: they are different methods, and the
-    // legend below is the only other place that says which.
-    const source = (this.chart.data()?.overlays ?? [])
-      .map((overlay) => overlay.source)
-      .join(' · ');
-    const base = `${trade.ticker} — daily, with this plan's levels`;
-    return source ? `${base} · ${source}` : base;
-  });
-
-  /** No bars is distinct from an error and from still loading: the request
-   *  succeeded and the window is empty. */
-  protected readonly chartEmpty = this.chart.isEmpty;
-
   /** Autosave delay. Long enough that ordinary typing does not generate a
    *  request per word, short enough that the note is stored before attention
    *  moves on. Blur flushes, so the wait is never the last word on it. */
@@ -1203,13 +977,6 @@ export class TradeDetail {
       const trade = this.store.trade();
       this.chart.setTarget(trade?.ticker ?? null, trade?.id ?? null);
     });
-  }
-
-  /** Quality-score points, signed. These are contributions to a total, and a
-   *  factor that cost the plan points is as informative as one that earned
-   *  them — an unsigned "5" beside "Badge" would read as a credit either way. */
-  protected signed(points: number): string {
-    return `${points > 0 ? '+' : ''}${points}`;
   }
 
   protected pnlClass(value: number | null | undefined): string {
