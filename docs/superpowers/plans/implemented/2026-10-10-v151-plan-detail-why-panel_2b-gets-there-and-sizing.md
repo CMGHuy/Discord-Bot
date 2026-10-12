@@ -1,10 +1,10 @@
 # v151 Plan detail page and the shared "Why" panel: Part 2b, If-it-gets-there and Sizing panels
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V151-12:" -A 400 docs/superpowers/plans/2026-10-10-v151-plan-detail-why-panel_2b-gets-there-and-sizing.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V151-12:" -A 400 docs/superpowers/plans/implemented/2026-10-10-v151-plan-detail-why-panel_2b-gets-there-and-sizing.md`.
 
 **Bump:** ui minor · bot patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v151-plan-detail-why-panel-design.md`](../specs/2026-10-09-v151-plan-detail-why-panel-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v151-plan-detail-why-panel-design.md`](../../specs/implemented/2026-10-09-v151-plan-detail-why-panel-design.md)
 
 This file continues Part 2 ([`_2-store-and-why-components`](2026-10-10-v151-plan-detail-why-panel_2-store-and-why-components.md)): Part 2 reached the 1500-line cap after V151-10, and a task is never split or compressed to fit. V151-11 and V151-12 are the last two tasks of Phase 5 (Group A, parallel after V151-8). Global constraints, decisions, the wire contract, the task ledger and `## Parallelisation` live in the index: [`2026-10-10-v151-plan-detail-why-panel_0-index.md`](2026-10-10-v151-plan-detail-why-panel_0-index.md). The short version:
 

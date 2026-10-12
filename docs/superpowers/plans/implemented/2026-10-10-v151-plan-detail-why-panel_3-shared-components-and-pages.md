@@ -1,10 +1,10 @@
 # v151 Plan detail page and the shared "Why" panel: Part 3, outcome path, plan chart, both pages, full suites
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V151-15:" -A 600 docs/superpowers/plans/2026-10-10-v151-plan-detail-why-panel_3-shared-components-and-pages.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V151-15:" -A 600 docs/superpowers/plans/implemented/2026-10-10-v151-plan-detail-why-panel_3-shared-components-and-pages.md`.
 
 **Bump:** ui minor · bot patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v151-plan-detail-why-panel-design.md`](../specs/2026-10-09-v151-plan-detail-why-panel-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v151-plan-detail-why-panel-design.md`](../../specs/implemented/2026-10-09-v151-plan-detail-why-panel-design.md)
 
 Global constraints, the decisions, the wire contract, the task ledger and `## Parallelisation` live in the index: [`2026-10-10-v151-plan-detail-why-panel_0-index.md`](2026-10-10-v151-plan-detail-why-panel_0-index.md). The short version for this part:
 
