@@ -1,6 +1,6 @@
 # v152 part 2: persistent panel, Following, `taken` dimension
 
-**Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D2
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../../specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D2
 **Index:** [`2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`](2026-10-10-v152-discord-notify-taken-cooldown_0-index.md): Global Constraints, Decisions fixed by this index, the task ledger and `## Parallelisation` live there and bind every task below.
 
 Tasks V152-6 .. V152-9 (V152-10 lives in [`_2b-spa-followed-option`](2026-10-10-v152-discord-notify-taken-cooldown_2b-spa-followed-option.md); split only to stay under 1500 lines). None is v151-gated. Part 1's V152-3 creates `swingbot/core/db/repositories/followers.py` (`followers_repo()`, `FOLLOW_KINDS`), which V152-7 and V152-8 import; V152-2 creates the `plan_followers` table with its FK into `plans` (cascade). Every test that writes a follower row must therefore seed the plan first.

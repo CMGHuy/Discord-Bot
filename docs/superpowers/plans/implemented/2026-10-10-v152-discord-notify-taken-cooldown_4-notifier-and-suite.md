@@ -1,6 +1,6 @@
 # v152 part 4: the follower notifier, `/notify`, the full suites
 
-**Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D1 (Copy rule, Delivery, Idempotent with its own retry, Message, `/notify`), § Testing, § Parallelisation
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../../specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D1 (Copy rule, Delivery, Idempotent with its own retry, Message, `/notify`), § Testing, § Parallelisation
 **Index:** [`2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`](2026-10-10-v152-discord-notify-taken-cooldown_0-index.md): Global Constraints, Decisions fixed by this index, the task ledger and `## Parallelisation` live there and bind every task below.
 
 Tasks V152-16 .. V152-18 (V152-19 and V152-20 live in [`_4b-full-suite`](2026-10-10-v152-discord-notify-taken-cooldown_4b-full-suite.md); split only to stay under 1500 lines). **V152-16, V152-17 and V152-18 are v151-gated** (index § Precondition): each starts with a precondition step and stops with `BLOCKED: v151 not merged` when it fails. V152-19 is not gated (it reads only V152-14's tables and V152-3's prefs repository). V152-20 runs last, after every other task of the plan.

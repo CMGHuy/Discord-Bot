@@ -4,7 +4,7 @@
 
 **Bump:** bot minor · ui patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../../specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md)
 **Brief:** `.superpowers/briefs/2026-10-10-v152-discord-notify-taken-cooldown.md` (current line numbers; the spec's are stale by 2–30 lines)
 
 **Goal:** Three Discord-surface changes that leave the measured book untouched. **D1:** a dedicated channel (`DISCORD_CHANNEL_NOTIFY_ID`) that posts factual paper-plan updates (near stop, TP1, TP2, stopped, expired; closed/cancelled for Following followers only) and mentions the users who follow the plan, idempotent with its own retry, with `/notify` per-user settings. **D2:** a persistent plan panel (`DynamicItem` buttons that survive restarts, a fallback for pre-v152 static ids), per-user Watch, a `✅ Following` button, a denormalised `taken_by` on the trade and a `taken` analytics dimension. **D3:** a per-symbol alert cooldown (`ALERT_SYMBOL_COOLDOWN_HOURS`, default 24) on the scheduled scan only, failing open, with a visible held count.
@@ -139,4 +139,4 @@ Parallel tasks need disjoint files and no contract dependency. Every sequential 
 
 - Foundation and policy commits predate the task-ID subject convention used by V152-20's grep: V152-2 `eafc3946`; V152-3 `0b9d2eae`; V152-4 `0a0cad62`; V152-5 `683fc163`; V152-11 `501028f5`; V152-12 `d287f922`; V152-13 `2932ad39`; V152-14 `8a4fe07f`; V152-15 `e75bd7fd`. Their tracked deliverables and focused tests are present; the subject grep undercounts them.
 - V152-20 on `codex/v152-notifier-finish`: Python full suite 8,892 passed, 0 failed, 0 xfailed, 3 unrelated skips; SPA full suite 2,869 passed; complexity and syntax checks passed. The veteran-trader, financial-advisor and staff-engineer panel re-reviews are CLEAN.
-- This implementation branch includes the v151/v153 integration. The older `2026-10-10-v152-discord-notify-taken-cooldown` worktree remains clean at `b94df6c9`; it was not edited or removed here. The production steps are in the After merge section above.
+- Main fast-forwarded to the verified implementation at `9bfe9ec2`; bot 2.5.0 and UI 1.23.1 were released with regenerated history. Both v152 worktrees and topic branches were retired at close-out. The production steps remain in the After merge section above.

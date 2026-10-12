@@ -1,6 +1,6 @@
 # v152 part 2b: SPA `Followed vs paper` option
 
-**Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D2
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../../specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D2
 **Index:** [`2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`](2026-10-10-v152-discord-notify-taken-cooldown_0-index.md): Global Constraints, Decisions fixed by this index, the task ledger and `## Parallelisation` live there and bind every task below.
 
 Part 2 is split in two files only to stay under 1500 lines: [`_2-panel-following-taken`](2026-10-10-v152-discord-notify-taken-cooldown_2-panel-following-taken.md) holds V152-6 .. V152-9, this file V152-10. Same part, same ledger rows, same contracts. None is v151-gated.

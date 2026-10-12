@@ -4,7 +4,7 @@
 
 **Bump:** bot minor · ui patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../../specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md)
 
 Global constraints, the decisions this part relies on (1–4), the task ledger and the full `## Parallelisation` live in the index: [`2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`](2026-10-10-v152-discord-notify-taken-cooldown_0-index.md). Every task below implicitly includes those constraints (never `cd`; stage by name; no `VERSION.json` bump; complexity < 15; every new DB call from Discord code goes through `asyncio.to_thread` — the repositories here are plain sync code, the callers in later parts wrap them).
 
@@ -146,7 +146,7 @@ Create `docs/superpowers/results/<run-date>-v152-notify-cooldown-volume.md` with
 # v152 M0 — notify volume and cooldown estimate (production, read-only)
 
 **Run:** <run-date>, `PlanStore().all()` on the Hetzner bot container, window <SINCE> .. <NOW> (4 weeks).
-**Plan:** [v152 index](../plans/2026-10-10-v152-discord-notify-taken-cooldown_0-index.md), task V152-1.
+**Plan:** [v152 index](../plans/implemented/2026-10-10-v152-discord-notify-taken-cooldown_0-index.md), task V152-1.
 
 ## D1 — notify channel, messages/week per event
 

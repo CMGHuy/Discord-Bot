@@ -4,7 +4,7 @@
 
 **Bump:** bot minor · ui patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D3, § D1 (near-stop detection, event mapping, `/notify` defaults)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../../specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D3, § D1 (near-stop detection, event mapping, `/notify` defaults)
 **Index:** [`2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`](2026-10-10-v152-discord-notify-taken-cooldown_0-index.md): Global Constraints, Decisions fixed by this index (4, 9, 10, 13, 14 bind this part), the task ledger and the full `## Parallelisation` live there and bind every task below.
 
 Tasks V152-11 .. V152-13 here; V152-14 and V152-15 continue in [`_3b-policy-and-loops`](2026-10-10-v152-discord-notify-taken-cooldown_3b-policy-and-loops.md) (same part, split only to stay under 1500 lines). None is v151-gated. Part 1 creates what this part consumes: `alert_posts_repo()` with `add` / `posted_since` / `count_since` / `prune_before` (V152-4, `swingbot/core/db/repositories/alert_posts.py`) and `config.ALERT_SYMBOL_COOLDOWN_HOURS` (V152-5). Every test that touches the database gets the worker's test database and has its tables truncated afterwards (`tests/conftest.py::_store_database`, autouse), so the cooldown tests below run against the real repository.

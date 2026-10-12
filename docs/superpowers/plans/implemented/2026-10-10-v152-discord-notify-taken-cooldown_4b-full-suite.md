@@ -1,6 +1,6 @@
 # v152 part 4b: `/notify` and the full suites
 
-**Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § Testing ("One full suite, as the plan's final task"), § Complexity
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../../specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § Testing ("One full suite, as the plan's final task"), § Complexity
 **Index:** [`2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`](2026-10-10-v152-discord-notify-taken-cooldown_0-index.md): Global Constraints, decisions, the task ledger and `## Parallelisation` live there. Part 4 overflowed the 1500-line cap, so its last two tasks (V152-19, moved here by the 2026-10-10 audit, and V152-20) live here; ledger ids, files and order are unchanged. V152-19 is not v151-gated. The contracts V152-19 consumes (V152-14's `NOTIFY_EVENTS`, `EVENT_LABELS`, `WATCH_DEFAULTS`; V152-3's `notify_prefs_repo().prefs / .set_pref`) are listed in [part 4's preamble](2026-10-10-v152-discord-notify-taken-cooldown_4-notifier-and-suite.md).
 
 # Phase 2: `/notify`

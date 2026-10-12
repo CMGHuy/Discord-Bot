@@ -4,7 +4,7 @@
 
 **Bump:** bot minor · ui patch
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../specs/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D1 (event mapping, `/notify` defaults), § D3 (Where, Visible held count, Record)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md`](../../specs/implemented/2026-10-09-v152-discord-notify-taken-cooldown-slash-design.md) § D1 (event mapping, `/notify` defaults), § D3 (Where, Visible held count, Record)
 **Index:** [`2026-10-10-v152-discord-notify-taken-cooldown_0-index.md`](2026-10-10-v152-discord-notify-taken-cooldown_0-index.md): Global Constraints, Decisions fixed by this index (9, 13 bind this file), the task ledger and the full `## Parallelisation` live there and bind every task below.
 
 Part 3 is split in two files only to stay under 1500 lines: [`_3-cooldown-near-stop-policy`](2026-10-10-v152-discord-notify-taken-cooldown_3-cooldown-near-stop-policy.md) holds V152-11 .. V152-13, this file V152-14 and V152-15. Same part, same ledger rows, same contracts.

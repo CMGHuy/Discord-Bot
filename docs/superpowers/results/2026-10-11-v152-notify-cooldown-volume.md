@@ -1,7 +1,7 @@
 # v152 M0 — notify volume and cooldown estimate (production, read-only)
 
 **Run:** 2026-10-11, `PlanStore().all()` on the Hetzner bot container, window 2026-09-13T00:22:12Z .. 2026-10-11T00:22:12Z (4 weeks).
-**Plan:** [v152 index](../plans/2026-10-10-v152-discord-notify-taken-cooldown_0-index.md), task V152-1.
+**Plan:** [v152 index](../plans/implemented/2026-10-10-v152-discord-notify-taken-cooldown_0-index.md), task V152-1.
 
 ## D1 — notify channel, messages/week per event
 
