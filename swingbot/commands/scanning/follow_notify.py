@@ -4,13 +4,16 @@ Factual paper-plan updates for plans people follow -- near stop, TP1, TP2,
 stopped, expired, and closed/cancelled for Following followers only -- each
 mentioning the followers who want it. This first part is pure policy: which
 PlanEvent is which notify event, which Kind it renders as, and whom it
-mentions. The copy table and embed (V152-16) and the claim / send / retry
-delivery (V152-17) build on these tables. No if/elif chains: every rule is
-a table.
+mentions. The factual copy table and linked embed build on these policies;
+claim / send / retry delivery (V152-17) builds on the same tables. No if/elif
+chains: every rule is a table.
 """
 from __future__ import annotations
 
-from swingbot.core.planning.plan_manager import _STOPPED_REASONS, PlanEvent
+from swingbot import config
+from swingbot.core import presentation as ui
+from swingbot.core.planning.plan_manager import _STOPPED_REASONS, PlanEvent, resting_stop
+from swingbot.core.presentation import instructions
 from swingbot.core.presentation.kinds import Kind
 
 NOTIFY_EVENTS = ("near_stop", "tp1", "tp2", "stopped", "expired", "closed_other")
@@ -104,3 +107,108 @@ def posts_message(notify_event: str, followers: dict[int, frozenset[str]]) -> bo
     """Every event posts, except closed_other without a Following follower."""
     return notify_event not in FOLLOWING_ONLY or any(
         "taken" in kinds for kinds in followers.values())
+
+
+# Factual paper-plan copy is independent of the imperative execution feed.
+FORBIDDEN_PHRASES = (
+    "exit now", "move stop", "move your stop", "take profit", "sell now",
+    "buy now", "close your", "you should",
+)
+FOOTER = "Paper plan update, not advice."
+_STOP_LABELS = {
+    "loss": "at its stop",
+    "scratch": "at breakeven",
+    "tp1_runner_be": "at its runner stop",
+    "tp1_runner_trail": "at its trailing stop",
+}
+_EXIT_LABELS = {
+    "time_exit": "time exit",
+    "stall_exit": "stall exit",
+    "tp1_runner_progress_stall": "structure exit",
+}
+_CANCEL_LABELS = {
+    "cancelled_invalidated": "invalidated before entry",
+    "cancelled_risk_cap": "risk cap reached",
+}
+
+
+def _signed_close_r(plan, detail: dict) -> str:
+    value = round(instructions.total_r(plan, detail.get("exit_price")), 1)
+    value = value if value else 0.0
+    return ("+" if value > 0 else "") + ui.fmt_r(value)
+
+
+def _near_stop_copy(plan, transition: str, detail: dict) -> str:
+    distance = detail.get("r_dist")
+    distance_text = f"{distance:.2f}R" if distance is not None else ui.ABSENT
+    return f"is {distance_text} from its stop, last {ui.fmt_price(detail.get('price'))}."
+
+
+def _tp1_copy(plan, transition: str, detail: dict) -> str:
+    if transition == "closed":
+        return _target_close_copy(plan, "TP1", detail)
+    return f"reached TP1 at {ui.fmt_price(detail.get('price'))}."
+
+
+def _target_close_copy(plan, target: str, detail: dict) -> str:
+    return (f"closed at {target} {ui.fmt_price(detail.get('exit_price'))}: "
+            f"{_signed_close_r(plan, detail)}.")
+
+
+def _tp2_copy(plan, transition: str, detail: dict) -> str:
+    return _target_close_copy(plan, "TP2", detail)
+
+
+def _stopped_copy(plan, transition: str, detail: dict) -> str:
+    label = _STOP_LABELS.get(detail.get("reason"), "at its stop")
+    return (f"closed {label} {ui.fmt_price(detail.get('exit_price'))}: "
+            f"{_signed_close_r(plan, detail)}.")
+
+
+def _expired_copy(plan, transition: str, detail: dict) -> str:
+    return "expired unfilled."
+
+
+def _other_copy(plan, transition: str, detail: dict) -> str:
+    if transition != "closed":
+        label = _CANCEL_LABELS.get(transition, "withdrawn before entry")
+        return f"cancelled: {label}."
+    reason = detail.get("reason") or "other exit"
+    label = _EXIT_LABELS.get(reason, reason.replace("_", " "))
+    return (f"closed by {label} at {ui.fmt_price(detail.get('exit_price'))}: "
+            f"{_signed_close_r(plan, detail)}.")
+
+
+COPY = {
+    "near_stop": _near_stop_copy,
+    "tp1": _tp1_copy,
+    "tp2": _tp2_copy,
+    "stopped": _stopped_copy,
+    "expired": _expired_copy,
+    "closed_other": _other_copy,
+}
+
+
+def message_line(plan, notify_event: str, transition: str, detail: dict) -> str:
+    """Describe the paper event and the current levels of any open position."""
+    side = "long" if plan.direction == "bullish" else "short"
+    phrase = COPY[notify_event](plan, transition, detail)
+    line = f"Paper plan update: {plan.ticker} {side} {phrase}"
+    if plan.status in {"ACTIVE", "PARTIAL"}:
+        target = plan.tp1 if plan.status == "ACTIVE" else plan.tp2
+        line += (f" Stop now at {ui.fmt_price(resting_stop(plan))}, "
+                 f"remaining target {ui.fmt_price(target)}.")
+    return line
+
+
+def build_notify_embed(plan, notify_event: str, transition: str, detail: dict) -> ui.PushEmbed:
+    """Build a registry-styled factual update, linked to the current admin URL."""
+    kind = kind_for(PlanEvent(plan.plan_id, transition, detail), notify_event)
+    line = message_line(plan, notify_event, transition, detail)
+    embed = ui.push_embed(kind, plan.ticker, plan.direction, description=line)
+    embed.push_text = line
+    close_r = instructions.total_r(plan, detail.get("exit_price")) if transition == "closed" else None
+    ui.apply_chrome(embed, kind=kind, plan_id=plan.plan_id, r=close_r,
+                    link_base=config.ADMIN_PUBLIC_URL)
+    embed.set_footer(text=embed.footer.text + " · " + FOOTER)
+    return embed

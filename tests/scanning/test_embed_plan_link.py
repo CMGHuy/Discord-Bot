@@ -17,6 +17,7 @@ BASE = "https://swingbot.example.com"
 PLAN_ID = "44444444-4444-4444-8444-444444444444"
 LINK = "https://swingbot.example.com/plans/44444444-4444-4444-8444-444444444444"
 MODULE_COUNTS = {
+    "swingbot/commands/scanning/follow_notify.py": 1,
     "swingbot/core/scanning/alert_embeds.py": 4,
     "swingbot/core/scanning/execution_embeds.py": 1,
     "swingbot/core/scanning/lifecycle_embeds.py": 3,
