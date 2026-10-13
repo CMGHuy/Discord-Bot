@@ -48,6 +48,11 @@ _DRYUP = ("v122 pullback dry-up gate (edge/gates.py), applied before plan constr
           "perturbation at the default is inert by design. Stage -1: measure_arms.py --stage "
           "pilot --knob PULLBACK_DRYUP_SCOPE=<scope> --knob PULLBACK_DRYUP_MAX_RATIO=0.60, "
           "then validate_component.py --stage reachability.")
+_V139 = ("v139: builders.confluence_stop_geometry inside build_confluence_plan, which "
+         "replay_scenarios (ConfluenceEngine) reaches. Only clamped confluence plans "
+         "(structural stop beyond the 2% cap) move; strategy plans never. Not verified on "
+         "the v74 fixture; covered by tests/planning/test_confluence_stop_geometry.py and "
+         "tests/backtesting/test_confluence_stop_replay.py.")
 _HEADROOM = ("v135 headroom veto (edge/gates.py), applied to the built plan in "
              "StrategyEngine._gated_plan and to each scenario in "
              "backtest_scenarios._headroom_kept. Inert unless HEADROOM_SCOPE != off and "
@@ -117,6 +122,11 @@ REGISTRY: dict[str, Reach] = {
     "RUNNER_STRUCTURE_EXIT": Reach(REACHABLE, "Post-TP1 runner rule in simulate_exit's scale-out walk (exit_sim.runner_structure_step); both engines simulate scale_out=True. Not observable on the v74 fixture (measured 2026-10-05: hl_trail b=0.0 and progress_stall c=1.0 changed 0 outcomes or R; no runner reaches a post-entry pivot rule). Covered by V123-5 tests.", CS),
     "RUNNER_HL_TRAIL_ATR_BUFFER": Reach(REACHABLE, _V123_PARAM, CS),
     "RUNNER_STALL_RANGE_MAX": Reach(REACHABLE, _V123_PARAM, CS),
+    "CONFLUENCE_STRUCTURAL_STOP_PCT": Reach(REACHABLE, _V139 + " Arm S is gated by the v92 harvest "
+                                            "gate through scripts/backtest/measure_confluence_stop.py, "
+                                            "not measure_arms.py.", C),
+    "CONFLUENCE_STOP_DROP_PCT": Reach(REACHABLE, _V139 + " Arm D runs the standard v72 funnel "
+                                      "through measure_arms.py.", C),
 }
 
 

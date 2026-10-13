@@ -198,6 +198,23 @@ FIELDS: list[Field] = [
                "the min reward:risk ratio. Off: the stop stays where the levels put it and any plan "
                "beyond 2% is rejected (risk_cap), which at a 2.0% stop floor posts almost nothing. "
                "Historical replay clamps too. An unmeasured live change (v115, Edge: volume)."),
+    Field("CONFLUENCE_STRUCTURAL_STOP_PCT", "CONFLUENCE_STRUCTURAL_STOP_PCT", "Trade Filters & Risk",
+          "Confluence structural-stop ceiling % (v139 arm S)",
+          type="float", default="0", min=0, max=11, step=0.5,
+          help="v139 arm S. 0 = off: today's 1.75% clamp. Above 0, a confluence stop the clamp "
+               "would move stays at its level when that level is within this ceiling less 0.25% "
+               "headroom; the target is re-chosen against the wider risk, the plan stores this "
+               "ceiling, and the position must be sized to fixed dollar risk (risk_pct). No target "
+               "inside the reward:risk band rolls the plan back to the clamp. Unmeasured: "
+               "pre-registered grid {3, 4, 5}; keep 0 until its VALIDATION shot passes and the "
+               "partner decides."),
+    Field("CONFLUENCE_STOP_DROP_PCT", "CONFLUENCE_STOP_DROP_PCT", "Trade Filters & Risk",
+          "Confluence stop drop ceiling % (v139 arm D)",
+          type="float", default="0", min=0, max=11, step=0.5,
+          help="v139 arm D. 0 = off. Above 0, a confluence setup whose structural stop sits "
+               "further than this from the entry gets no plan (stop_beyond_confluence_ceiling) "
+               "instead of the 1.75% clamp. Unmeasured: pre-registered grid {3, 4, 5}; keep 0 "
+               "until its VALIDATION shot passes and the partner decides."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
@@ -1300,6 +1317,7 @@ _SEARCH_CLASSES = {
         "SHORT_UNIVERSE_RESEARCH_MODE",
         "COMPRESSION_SHORT_RESEARCH_MODE",
         "FVG_LEVELS_MODE", "FVG_DISPLACEMENT_ATR_K",
+        "CONFLUENCE_STRUCTURAL_STOP_PCT", "CONFLUENCE_STOP_DROP_PCT",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
