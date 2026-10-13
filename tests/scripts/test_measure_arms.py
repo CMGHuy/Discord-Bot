@@ -71,3 +71,43 @@ def test_progress_file_is_deleted_on_success(tmp_path):
     ma.produce("pilot", {}, universe=["AAPL"], spec=FIXTURE_PILOT, horizons=("4w",),
                engines=("confluence",), workers=1, progress_path=progress)
     assert not progress.exists()
+
+
+def _cache(tmp_path, monkeypatch, names):
+    from swingbot.core.marketdata import backtest_cache
+    for name in names:
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    monkeypatch.setattr(backtest_cache, "CACHE_DIR", tmp_path)
+
+
+def test_universe_defaults_to_the_cached_watchlist(tmp_path, monkeypatch):
+    import run_backtest_range
+    _cache(tmp_path, monkeypatch, ["AAPL.csv", "MSFT.csv"])
+    monkeypatch.delenv(ma.UNIVERSE_ENV, raising=False)
+    monkeypatch.setattr(run_backtest_range, "_tickers_for_run",
+                        lambda universe: ["MSFT", "AAPL", "NOPE"])
+    assert ma.cached_universe() == ["AAPL", "MSFT"]
+
+
+def test_cache_source_lists_every_cached_csv_without_the_watchlist(tmp_path, monkeypatch):
+    import run_backtest_range
+    _cache(tmp_path, monkeypatch, ["MSFT.csv", "AAPL.csv", "SPY.csv", "notes.txt"])
+    monkeypatch.setenv(ma.UNIVERSE_ENV, "cache")
+    monkeypatch.setattr(run_backtest_range, "_tickers_for_run",
+                        lambda universe: pytest.fail("the watchlist was read"))
+    assert ma.cached_universe() == ["AAPL", "MSFT", "SPY"]
+
+
+def test_unknown_source_raises_never_falls_back(monkeypatch):
+    monkeypatch.setenv(ma.UNIVERSE_ENV, "postgres")
+    with pytest.raises(ValueError, match=ma.UNIVERSE_ENV):
+        ma.cached_universe()
+
+
+def test_the_judges_read_the_same_universe(tmp_path, monkeypatch):
+    import validate_component as vc
+    from scripts.backtest import permutation_test as pt
+    _cache(tmp_path, monkeypatch, ["AAPL.csv", "DELL.csv"])
+    monkeypatch.setenv(ma.UNIVERSE_ENV, "cache")
+    assert vc._full_universe() == ["AAPL", "DELL"]
+    assert pt._full_universe() == ["AAPL", "DELL"]

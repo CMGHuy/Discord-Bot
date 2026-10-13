@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import sys
 import uuid
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -24,7 +25,28 @@ from swingbot.core.backtesting.backtest_scenarios import _resolve_replay_workers
 LOG_DIR = ROOT / "logs"
 
 
+#: v139: where the arm universe comes from. "watchlist" (the default, unchanged)
+#: is the Postgres watchlist filtered to cached frames. "cache" is every cached
+#: CSV in backtest_cache.CACHE_DIR, for a worktree where Postgres is unreachable
+#: (the v129 precedent, partner-approved 2026-10-08). The stamp records the list
+#: either way, and validate_component / permutation_test call this same function,
+#: so a producer run and its judge agree.
+UNIVERSE_ENV = "MEASURE_ARMS_UNIVERSE"
+UNIVERSE_SOURCES = ("watchlist", "cache")
+
+
+def cache_listing() -> list[str]:
+    """Every ticker with a cached CSV, sorted."""
+    from swingbot.core.marketdata import backtest_cache
+    return sorted(path.stem for path in Path(backtest_cache.CACHE_DIR).glob("*.csv"))
+
+
 def cached_universe() -> list[str]:
+    source = (os.environ.get(UNIVERSE_ENV) or "watchlist").strip().lower()
+    if source not in UNIVERSE_SOURCES:
+        raise ValueError(f"{UNIVERSE_ENV} must be one of {UNIVERSE_SOURCES}, got {source!r}")
+    if source == "cache":
+        return cache_listing()
     from swingbot.core.marketdata.backtest_cache import cache_path
     from run_backtest_range import _tickers_for_run
     return sorted(ticker for ticker in _tickers_for_run(None) if cache_path(ticker).exists())
