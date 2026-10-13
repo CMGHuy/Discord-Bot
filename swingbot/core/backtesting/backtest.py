@@ -427,7 +427,8 @@ def _live_trade(df, i, plan, res, horizon_key, asof) -> BacktestTrade:
     """One v2-instrument trade row (v157): entry_date and entry are the fill
     (res.entry_index / res.entry_price, raw: costs show only in r_multiple),
     signal_date is the signal bar i, holding_days counts from the fill. The
-    entry context is the signal bar's, where the plan was built."""
+    entry context is the signal bar's, where the plan was built, and is keyed on
+    the PLANNED entry (plan.trigger_price), never the slipped fill."""
     entry, stop_loss, take_profit = res.entry_price, plan.stop_loss, plan.tp1
     risk_per_share = abs(entry - stop_loss)
     entry_i, exit_i = res.entry_index, res.exit_index
@@ -441,7 +442,8 @@ def _live_trade(df, i, plan, res, horizon_key, asof) -> BacktestTrade:
         runner_outcome=res.runner_outcome,
         context=entry_context(df.iloc[:i + 1], direction=plan.direction, horizon_key=horizon_key,
                               stop=stop_loss, target=take_profit,
-                              asof=asof_row(asof, df.index[i]), entry=entry),
+                              asof=asof_row(asof, df.index[i]),
+                              entry=plan.trigger_price),
         signal_date=str(df.index[i].date()),
     )
 

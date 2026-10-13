@@ -102,8 +102,9 @@ def test_live_trade_dates_and_entry_come_from_the_fill(monkeypatch, instrument):
     assert trade.return_pct == round(res.r_total * (6.0 / 101.0) * 100, 3)
     assert trade.exit_price == round(res.legs[-1]["exit_price"], 4)
     assert (trade.stop_loss, trade.take_profit) == (95.0, 110.0)
-    # The context is the signal bar's: the plan is known at the signal close.
-    assert seen["rows"] == 1 and seen["entry"] == 101.0
+    # The context is the signal bar's and keyed on the PLANNED entry (trigger),
+    # never the slipped fill: plan_provenance compares by identity to the plan.
+    assert seen["rows"] == 1 and seen["entry"] == plan.trigger_price == 100.0
     assert trade.context == {"probe": True}
 
 
