@@ -95,7 +95,8 @@ def test_run_folds_threads_tickers_into_default_run(monkeypatch):
 
     captured = []
 
-    def fake_default_run(start, end, overrides, strategies=None, horizons=None, tickers=None):
+    def fake_default_run(start, end, overrides, strategies=None, horizons=None, tickers=None,
+                         instrument=None):
         captured.append(tickers)
         return {"expectancy_r": 0.1, "n": 50}
 
