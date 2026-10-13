@@ -45,15 +45,27 @@ def stop_ceiling(
 
 
 def plan_stop_ceiling(plan) -> float:
-    """Return the persisted plan's allowed planned-loss percentage."""
+    """Return the persisted plan's allowed planned-loss percentage. v139: a
+    stored stop_ceiling_pct (arm S) wins for any source; otherwise 2% for
+    non-strategy plans and the v104 scope ceiling for strategy plans."""
+    stored = getattr(plan, "stop_ceiling_pct", None)
+    if stored is not None:
+        return float(stored)
     if getattr(plan, "source", None) != "strategy":
         return HARD_MAX_PLANNED_LOSS_PCT
     return stop_ceiling(plan.strategy, plan.direction, plan.horizon_key)[0]
 
 
+def _needs_risk_sizing(plan) -> bool:
+    """v104 scope pairs, and (v139) any plan holding a stored structural-stop ceiling."""
+    if getattr(plan, "stop_ceiling_pct", None) is not None:
+        return True
+    return in_scope(plan.strategy, plan.direction)
+
+
 def risk_sizing_ok(plan, sizing_fn=None) -> bool:
-    """Return whether an in-scope plan has safe risk-based dollar sizing."""
-    if not in_scope(plan.strategy, plan.direction):
+    """Return whether a plan that needs it has safe risk-based dollar sizing."""
+    if not _needs_risk_sizing(plan):
         return True
     if sizing_fn is None:
         from swingbot.core.planning.account import compute_position_size as sizing_fn
