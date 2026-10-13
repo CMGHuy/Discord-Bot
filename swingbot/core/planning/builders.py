@@ -553,6 +553,61 @@ def _clamp_stop_to_hard_cap(entry: float, stop_loss: float, is_bull: bool) -> fl
     return entry - offset if is_bull else entry + offset
 
 
+# v139: float tolerance on the two ceiling boundaries (entry_filters' 1e-9), so
+# d exactly at c - CLAMP_HEADROOM_PCT is arm S and d exactly at c is kept by arm D.
+STOP_GEOMETRY_TOL = 1e-9
+
+
+def clamped_distance(entry, level, is_bull) -> float | None:
+    """v139: the structural distance d (planned-loss %) of a stop that
+    _clamp_stop_to_hard_cap moves -- on the stop side of a valid entry and
+    beyond HARD_MAX_PLANNED_LOSS_PCT -- else None. It ignores
+    CLAMP_STOP_TO_HARD_CAP: the arms key on geometry, and only their
+    fallback (today's plan) reads the flag."""
+    if level is None or entry is None or entry <= 0:
+        return None
+    if (level >= entry) if is_bull else (level <= entry):
+        return None
+    d = planned_loss_pct(entry, level)
+    return d if d > HARD_MAX_PLANNED_LOSS_PCT else None
+
+
+def _arm_s_stop(entry, level, is_bull, d, candidates, params):
+    """(level, c) when arm S keeps the structural stop, else None: the knob is
+    off, d is past c - CLAMP_HEADROOM_PCT, or no candidate clears the
+    reward:risk band at the structural risk (the rollback)."""
+    c = params.confluence_structural_stop_pct
+    if c <= 0 or d > c - CLAMP_HEADROOM_PCT + STOP_GEOMETRY_TOL:
+        return None
+    tp1 = select_structural_target(entry, level, is_bull, candidates,
+                                   params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+    return None if tp1 is None else (float(level), float(c))
+
+
+def confluence_stop_geometry(entry, level, is_bull, candidates, params):
+    """v139: (stop_loss, stop_ceiling_pct) for a confluence plan, or None to
+    issue no plan (arm D).
+
+    With both knobs at 0 this is exactly (_clamp_stop_to_hard_cap(...), None).
+    Only a clamped plan (clamped_distance is not None) is ever changed:
+    arm S (CONFLUENCE_STRUCTURAL_STOP_PCT = c > 0) keeps the level when
+    d <= c - CLAMP_HEADROOM_PCT and a candidate clears the reward:risk band at
+    that risk, storing c as the plan's ceiling; otherwise the plan is today's.
+    Arm D (CONFLUENCE_STOP_DROP_PCT = c > 0) then drops what is beyond c.
+    Arm S applies first when both are set."""
+    today = _clamp_stop_to_hard_cap(entry, level, is_bull)
+    d = clamped_distance(entry, level, is_bull)
+    if d is None:
+        return today, None
+    structural = _arm_s_stop(entry, level, is_bull, d, candidates, params)
+    if structural is not None:
+        return structural
+    drop = params.confluence_stop_drop_pct
+    if drop > 0 and d > drop + STOP_GEOMETRY_TOL:
+        return None
+    return today, None
+
+
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
                           primary_strategy, level_map=None,
                           quality_inputs=None, params=None,
