@@ -608,6 +608,27 @@ def confluence_stop_geometry(entry, level, is_bull, candidates, params):
     return today, None
 
 
+def _confluence_candidates(scenario, level_map) -> list:
+    """TP candidates for a confluence plan: the unified level map's when one is
+    supplied, else the scenario's own real target (or nothing)."""
+    if level_map is not None:
+        return levels.target_candidates(*level_map, scenario.direction)
+    return [scenario.take_profit] if scenario.take_profit is not None else []
+
+
+def confluence_stop_dropped(scenario, level_map=None, params=None) -> bool:
+    """v139: True when build_confluence_plan returns None because arm D drops
+    the scenario (its structural stop is beyond CONFLUENCE_STOP_DROP_PCT and
+    arm S did not keep it). Same inputs, same geometry call as the builder, so
+    analyze.attach_plan_v2 can name the reason without a second rule."""
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
+    candidates = _confluence_candidates(scenario, level_map)
+    return confluence_stop_geometry(scenario.entry, scenario.stop_loss,
+                                    scenario.direction == "bullish", candidates, params) is None
+
+
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
                           primary_strategy, level_map=None,
                           quality_inputs=None, params=None,
@@ -623,19 +644,23 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     pair from levels.build_level_map -- when absent, the only honest
     candidate is the scenario's own real target. v115: a stop beyond the 2% hard
     cap is first clamped to 1.75% (_clamp_stop_to_hard_cap), so tp1/tp2 and the plan
-    use the clamped risk."""
+    use the clamped risk.
+    v139: the stop comes from confluence_stop_geometry -- the clamp with both
+    knobs at 0; arm S keeps a structural stop up to
+    CONFLUENCE_STRUCTURAL_STOP_PCT (tp1/tp2 against that risk, the ceiling
+    stored as stop_ceiling_pct); arm D returns None beyond
+    CONFLUENCE_STOP_DROP_PCT."""
     if params is None:
         from swingbot.scan_params import ScanParams
         params = ScanParams.from_config()
     entry = scenario.entry
     is_bull = scenario.direction == "bullish"
     level = scenario.stop_loss   # v129: the pre-clamp level the trade leans on
-    stop_loss = _clamp_stop_to_hard_cap(entry, level, is_bull)
-
-    if level_map is not None:
-        candidates = levels.target_candidates(*level_map, scenario.direction)
-    else:
-        candidates = [scenario.take_profit] if scenario.take_profit is not None else []
+    candidates = _confluence_candidates(scenario, level_map)
+    geometry = confluence_stop_geometry(entry, level, is_bull, candidates, params)
+    if geometry is None:
+        return None              # v139 arm D: structural stop beyond its ceiling
+    stop_loss, stop_ceiling_pct = geometry
 
     tp1 = select_structural_target(entry, stop_loss, is_bull, candidates,
                                    params.min_risk_reward_ratio, params.max_risk_reward_ratio)
@@ -667,6 +692,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         breakeven_trigger_fraction=BREAKEVEN_TRIGGER_FRACTION,
         trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
+        stop_ceiling_pct=stop_ceiling_pct,
     )
     if entry_type == "market":
         record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
