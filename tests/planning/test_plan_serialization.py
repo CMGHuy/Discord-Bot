@@ -108,3 +108,15 @@ def test_runner_path_defaults_to_none_and_round_trips():
             "ladder": {"1.5": "2026-10-05", "2.0": "2026-10-05", "2.5": "2026-10-06",
                        "3.0": "2026-10-06", "4.0": None}}
     assert plan_from_dict(plan_to_dict(_plan(runner_path=path))).runner_path == path
+
+
+def test_stop_ceiling_pct_defaults_to_none_and_round_trips():
+    assert _plan().stop_ceiling_pct is None
+    q = plan_from_dict(plan_to_dict(_plan(stop_ceiling_pct=4.0)))
+    assert q.stop_ceiling_pct == 4.0
+
+
+def test_pre_v139_record_without_stop_ceiling_pct_loads_as_none():
+    d = plan_to_dict(_plan())
+    d.pop("stop_ceiling_pct")
+    assert plan_from_dict(d).stop_ceiling_pct is None

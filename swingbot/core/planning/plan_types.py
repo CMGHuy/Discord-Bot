@@ -129,6 +129,14 @@ class TradePlanV2:
     # Set only by an enabled acceptance arm (planning/acceptance_levels.py);
     # None = no close exit. Read by exit_sim.acceptance_exit.
     acceptance_close_below: float | None = None
+    # v139 arm S: the planned-loss ceiling (percent) this plan is held to --
+    # the c of CONFLUENCE_STRUCTURAL_STOP_PCT it was built under, when it kept
+    # a structural stop past the 2% cap. None = today's ceiling
+    # (stop_scope.plan_stop_ceiling: 2% for confluence, the v104 scope
+    # ceiling for strategy plans). Set only by
+    # builders.confluence_stop_geometry; read by plan_stop_ceiling,
+    # risk_sizing_ok and analyze.attach_plan_v2.
+    stop_ceiling_pct: float | None = None
     # v119 ten-session time exit (planning/time_exit.py). pending_time_notices:
     # the due / unresolved notices not yet acknowledged, one dict per notice
     # {"id", "transition", "detail", "at", "acked"}; a list because a due notice
