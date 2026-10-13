@@ -11,6 +11,10 @@ SKIPPED = ("not_triggered", "no_trade")
 class ConfluenceEngine:
     engine_id = "confluence"
 
+    def __init__(self, instrument=None):
+        # v157: the backtest instrument every simulate_exit call runs under; None is v1.
+        self.instrument = instrument
+
     def run_ticker(self, ticker, df, horizons, signal_window, params) -> list:
         """Produce closed confluence trades with signal dates in the window."""
         start, end = signal_window
@@ -21,7 +25,8 @@ class ConfluenceEngine:
                 entry_date = str(df.index[index].date())
                 if entry_date < start:
                     continue
-                result = simulate_exit(df, index, plan, scale_out=True)
+                result = simulate_exit(df, index, plan, scale_out=True,
+                                       instrument=self.instrument)
                 if result.outcome in SKIPPED:
                     continue
                 out.append(arm_trade_from_plan(
