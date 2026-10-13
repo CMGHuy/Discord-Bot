@@ -33,7 +33,9 @@ from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
-from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
+from swingbot.core.planning.builders import confluence_stop_dropped
+from swingbot.core.planning.stop_scope import plan_stop_ceiling, risk_sizing_ok
+from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
 
@@ -346,6 +348,14 @@ def pd_normalize(when):
     return pd.Timestamp(when).normalize()
 
 
+def _no_plan_reason(scenario, level_map) -> str:
+    """Why build_confluence_plan returned None: v139 arm D's ceiling, or no
+    level paying MIN_RISK_REWARD_RATIO."""
+    if confluence_stop_dropped(scenario, level_map):
+        return "stop_beyond_confluence_ceiling"
+    return "no_qualifying_target"
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     regime=None, rs_percentile=None, breadth=None, regime2_state=None,
                     issued_at=None, now=None):
@@ -376,16 +386,24 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # the legacy scenario numbers (which is what plan_numbers_for_display
             # does for plan=None, and would silently re-post the very prices
             # this change exists to stop posting).
-            _reject_plan(item, "no_qualifying_target", ticker, horizon_key)
+            _reject_plan(item, _no_plan_reason(scenario, level_map), ticker, horizon_key)
             return
-        if planned_loss_pct(plan.trigger_price, plan.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT + 1e-9:
+        if planned_loss_pct(plan.trigger_price, plan.stop_loss) > plan_stop_ceiling(plan) + 1e-9:
             # Scenario building keeps the horizon's wider stop ceiling so
             # historical replay evaluates the same candidates (90e3ddef), but
-            # PlanManager refuses to open any plan beyond the hard cap -- a
+            # PlanManager refuses to open any plan beyond its ceiling -- a
             # stop_entry plan is cancelled_risk_cap on fill and a market plan
             # would open in breach of the 2% rule. Posting it only issues an
             # alert the bot then cancels seconds later (GC=F, 2026-09-28).
+            # v139: the ceiling is plan_stop_ceiling -- 2% unless arm S stored one.
             _reject_plan(item, "risk_cap", ticker, horizon_key)
+            return
+        if plan.stop_ceiling_pct is not None and not risk_sizing_ok(plan):
+            # v139 arm S: a structural stop past 2% is honest only when the
+            # position is sized to fixed dollar risk (spec Arm S). Checked
+            # only for such plans: a confluence plan's strategy is its primary
+            # attribution, which in_scope() could otherwise match.
+            _reject_plan(item, "risk_sizing", ticker, horizon_key)
             return
         # item.plan_v2 is set BEFORE risk_features stamping (below) is even
         # attempted -- a render-only feature's stamping failure must never
