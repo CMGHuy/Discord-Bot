@@ -629,8 +629,14 @@ def simulate_exit(
     *,
     scale_out: bool = False,
     max_holding_days: int | None = None,
+    instrument=None,
 ) -> ExitResult:
     """Shared entry + exit simulator (Tasks 18/20/21/24).
+
+    ``instrument`` (v157): None or the v1 ``InstrumentSpec`` runs the code
+    below, unchanged. Any other version is handed to
+    ``exit_sim_v2.simulate_exit_v2`` (next-open market entries, gap-through
+    fills, costs booked in R; v136 spec section 2).
 
     ``market`` entries fill immediately at the signal bar's close.
     ``stop_entry`` entries scan forward from signal_index + 1 through the
@@ -653,6 +659,10 @@ def simulate_exit(
     ``limit`` entries (v113) are resting limits: see _limit_entry_exit. A plan
     whose tp1_fraction is 1.0 always takes the single-leg walk.
     """
+    if instrument is not None and instrument.version != "v1":
+        from .exit_sim_v2 import simulate_exit_v2   # exit_sim_v2 imports this module
+        return simulate_exit_v2(df, signal_index, plan, instrument, scale_out=scale_out,
+                                max_holding_days=max_holding_days)
     # Resolved eagerly per the interface contract -- both the single-leg
     # (Task 21) and scale-out (Task 24+) exit walks use it to bound the
     # timeout scan.
