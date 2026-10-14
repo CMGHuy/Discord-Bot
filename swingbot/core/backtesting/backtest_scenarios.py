@@ -8,6 +8,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from concurrent.futures import ProcessPoolExecutor
+from typing import NamedTuple
 
 import numpy as np
 
@@ -58,6 +59,34 @@ CONFLUENCE_GATES = {
     "cooldown_bars": 5,
     "horizons": ["4w", "2m", "3m", "4m", "6m"],  # grid coverage, not a pass
 }
+
+
+#: Tolerance the replay counts confirming strategies with (the live default,
+#: CONFLUENCE_DEVIATION_PCT, is also 5.0). Named in v146 so the TRAIN
+#: score's stop confluence (scenario_rows) uses the same one.
+REPLAY_CONFLUENCE_TOLERANCE_PCT = 5.0
+_REPLAY_COOLDOWN_BARS = 5
+
+
+class ReplayHit(NamedTuple):
+    """One accepted replay signal. The first two fields are the legacy
+    (signal_index, plan) pair, so hit[0] / hit[1] read like the old tuples;
+    scenario and target_confluence are what v146's TRAIN row needs."""
+    i: int
+    plan: object
+    scenario: object
+    target_confluence: tuple
+
+
+@dataclasses.dataclass
+class _ReplayScope:
+    """Per-call constants of one replay, so the helpers stay small."""
+    ticker: str
+    horizon_key: str
+    h: dict
+    params: ScanParams
+    legacy_gates: bool
+    asof: object
 
 
 def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
@@ -122,13 +151,65 @@ def _headroom_kept(scenarios, supports, resistances) -> list:
     return edge_gates.filter_headroom(scenarios, supports, resistances)[0]
 
 
-def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
-                     gates: dict | None = None,
-                     dcb_params: dict | None = None, asof=None) -> list:
-    """(signal_index, TradePlanV2) for every bar where the confluence scan
-    WOULD have emitted a plan, under `gates`, with a per-direction cooldown.
+def _replay_params(params: ScanParams | None, gates: dict | None) -> tuple:
+    """(params, legacy_gates): a legacy gates dict overrides the admission
+    fields of ScanParams, exactly as before the v146 split."""
+    if params is None:
+        params = ScanParams.from_config()
+    if gates is None:
+        return params, False
+    return dataclasses.replace(
+        params,
+        min_reward_pct=gates.get("min_reward_pct", params.min_reward_pct),
+        min_stop_distance_pct=gates.get("min_stop_distance_pct", params.min_stop_distance_pct),
+        max_stop_loss_pct=gates.get("max_stop_distance_pct", params.max_stop_loss_pct),
+        min_risk_reward_ratio=gates.get("min_risk_reward", params.min_risk_reward_ratio),
+        min_target_confluence_count=gates.get("min_confluence", params.min_target_confluence_count),
+    ), True
 
-    No lookahead: every computation below is scoped to `window = df.iloc[:i+1]`
+
+def _bar_scenarios(scope: _ReplayScope, df, i: int, cache: dict, dcb_params: dict | None) -> tuple:
+    """(window, price, level_map, scenarios) for bar i after the dry-up and
+    headroom gates -- every computation on window = df.iloc[:i+1]
+    (scenarios_at / levels_asof enforce the same slice)."""
+    window, price, supports, resistances, scenarios = scenarios_at(
+        scope.ticker, df, i, scope.horizon_key, scope.params, cache, dcb_params)
+    scenarios = _headroom_kept(_dryup_kept(scenarios, window), supports, resistances)
+    return window, price, (supports, resistances), scenarios
+
+
+def _accept_scenario(scope: _ReplayScope, i: int, window, price: float, level_map: tuple,
+                     sc, last_accepted: dict) -> ReplayHit | None:
+    """The confluence gate, the per-direction cooldown and the plan build
+    for one scenario; None when any of them says no."""
+    n_confl, families = levels.count_confirming_strategies(
+        window, scope.h, price, sc.take_profit, tolerance_pct=REPLAY_CONFLUENCE_TOLERANCE_PCT)
+    if not passes_confluence(n_confl, scope.params):
+        return None
+    last = last_accepted.get(sc.direction)
+    if last is not None and i - last < _REPLAY_COOLDOWN_BARS:
+        return None
+    plan = build_confluence_plan(
+        sc, window, ticker=scope.ticker, horizon_key=scope.horizon_key,
+        primary_strategy=primary_strategy_for(sc),
+        level_map=level_map,
+        # Legacy callers historically used their dict only for
+        # scenario admission; target construction still read config.
+        # Keep that compatibility while callers migrate to params.
+        params=ScanParams.from_config() if scope.legacy_gates else scope.params)
+    if plan is None:
+        return None          # no qualifying target -> no trade, same as live
+    stamp_entry_context(plan, window, asof_row(scope.asof, window.index[-1]))
+    return ReplayHit(i, plan, sc, (n_confl, families))
+
+
+def replay_scenarios_detailed(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
+                              gates: dict | None = None, dcb_params: dict | None = None,
+                              asof=None) -> list[ReplayHit]:
+    """A ReplayHit for every bar where the confluence scan WOULD have emitted
+    a plan, under `gates`, with a per-direction cooldown.
+
+    No lookahead: every computation is scoped to `window = df.iloc[:i+1]`
     (or `levels_asof`, which enforces the same slice internally) -- never
     `df.iloc[-1]` or any index beyond `i`.
 
@@ -138,52 +219,30 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | 
     workers fight over. `None` is the baseline arm and must not pay for the
     detector at all.
     """
-    if params is None:
-        params = ScanParams.from_config()
-    legacy_gates = gates is not None
-    if legacy_gates:
-        params = dataclasses.replace(
-            params,
-            min_reward_pct=gates.get("min_reward_pct", params.min_reward_pct),
-            min_stop_distance_pct=gates.get("min_stop_distance_pct", params.min_stop_distance_pct),
-            max_stop_loss_pct=gates.get("max_stop_distance_pct", params.max_stop_loss_pct),
-            min_risk_reward_ratio=gates.get("min_risk_reward", params.min_risk_reward_ratio),
-            min_target_confluence_count=gates.get("min_confluence", params.min_target_confluence_count),
-        )
-    h = HORIZONS[horizon_key]
-    warmup = MIN_BARS[horizon_key]
-    cooldown = 5
+    params, legacy_gates = _replay_params(params, gates)
+    scope = _ReplayScope(ticker, horizon_key, HORIZONS[horizon_key], params, legacy_gates, asof)
     cache: dict = {}
-    out: list = []
+    out: list[ReplayHit] = []
     last_accepted: dict = {}   # direction -> bar index
-
-    for i in range(warmup, len(df)):
-        window, price, supports, resistances, scenarios = scenarios_at(
-            ticker, df, i, horizon_key, params, cache, dcb_params)
-        scenarios = _dryup_kept(scenarios, window)
-        scenarios = _headroom_kept(scenarios, supports, resistances)
+    for i in range(MIN_BARS[horizon_key], len(df)):
+        window, price, level_map, scenarios = _bar_scenarios(scope, df, i, cache, dcb_params)
         for sc in scenarios:
-            n_confl, families = levels.count_confirming_strategies(
-                window, h, price, sc.take_profit, tolerance_pct=5.0)
-            if not passes_confluence(n_confl, params):
-                continue
-            last = last_accepted.get(sc.direction)
-            if last is not None and i - last < cooldown:
-                continue
-            plan = build_confluence_plan(
-                sc, window, ticker=ticker, horizon_key=horizon_key,
-                primary_strategy=primary_strategy_for(sc),
-                level_map=(supports, resistances),
-                # Legacy callers historically used their dict only for
-                # scenario admission; target construction still read config.
-                # Keep that compatibility while callers migrate to params.
-                params=ScanParams.from_config() if legacy_gates else params)
-            if plan is None:
-                continue          # no qualifying target -> no trade, same as live
-            stamp_entry_context(plan, window, asof_row(asof, window.index[-1]))
-            last_accepted[sc.direction] = i
-            out.append((i, plan))
+            hit = _accept_scenario(scope, i, window, price, level_map, sc, last_accepted)
+            if hit is not None:
+                last_accepted[sc.direction] = i
+                out.append(hit)
     return out
+
+
+def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
+                     gates: dict | None = None,
+                     dcb_params: dict | None = None, asof=None) -> list:
+    """(signal_index, TradePlanV2) for every bar where the confluence scan
+    WOULD have emitted a plan -- the projection of replay_scenarios_detailed
+    that every pre-v146 caller unpacks. Same arguments, same no-lookahead
+    contract."""
+    return [(hit.i, hit.plan) for hit in replay_scenarios_detailed(
+        ticker, df, horizon_key, params=params, gates=gates, dcb_params=dcb_params, asof=asof)]
 
 
 def _aggregate(results: list) -> dict:

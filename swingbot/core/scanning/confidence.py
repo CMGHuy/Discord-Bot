@@ -288,6 +288,20 @@ def _expectancy_adjustment(risk_reward_ratio: float, track_record: tuple) -> tup
     return adjustment, detail
 
 
+#: Step 4's breakdown line when the expectancy step is neutralised (v146).
+NEUTRAL_EXPECTANCY_DETAIL = "neutralised for the TRAIN replay (no live track record) -> 0 levels"
+
+
+def _expectancy_step(risk_reward_ratio: float, track_record: tuple, neutral: bool) -> tuple:
+    """Step 4 of the legacy scorer. `neutral` (v146, the TRAIN replay only)
+    skips _expectancy_adjustment: at track_record=None that step is NOT
+    neutral -- it assumes a 50% win rate and moves the level +-1 by
+    reward:risk. Every live caller leaves it False."""
+    if neutral:
+        return 0, NEUTRAL_EXPECTANCY_DETAIL
+    return _expectancy_adjustment(risk_reward_ratio, track_record)
+
+
 # v35: each AVWAP anchor produces its own raw source label --
 # "Anchored VWAP (52w high)", "Anchored VWAP (swing low)", etc. (see
 # levels.collect_candidate_levels) -- naming the anchor for DISPLAY is the
@@ -347,7 +361,8 @@ def _legacy_points(scored: tuple, tight_penalty: int | None) -> dict[str, int]:
 
 def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
                              target_confluence: tuple = None, stop_confluence: tuple = None,
-                             track_record: tuple = None) -> ConfidenceResult:
+                             track_record: tuple = None,
+                             neutral_expectancy: bool = False) -> ConfidenceResult:
     """
     `target_confluence` / `stop_confluence`, if given, are (count,
     family_names) tuples from levels.count_confirming_strategies -- the
@@ -600,7 +615,8 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
     breakdown["Quality score"] = f"{quality_score}/100 ({quality_reason})"
 
     # --- Step 4: expectancy-based adjustment -- "can I confidently trade this?" ---
-    expectancy_adjustment, expectancy_detail = _expectancy_adjustment(scenario.risk_reward_ratio, track_record)
+    expectancy_adjustment, expectancy_detail = _expectancy_step(
+        scenario.risk_reward_ratio, track_record, neutral_expectancy)
     breakdown["Track record (expectancy)"] = expectancy_detail
 
     # --- Step 5: final level, clamped ---------------------------------
@@ -639,7 +655,8 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
 
 def score_confidence(scenario, regime_trend: str = None, df=None,
                      target_confluence: tuple = None, stop_confluence: tuple = None,
-                     track_record: tuple = None, **kwargs) -> ConfidenceResult:
+                     track_record: tuple = None, neutral_expectancy: bool = False,
+                     **kwargs) -> ConfidenceResult:
     """Dispatches to the pre-v32 scorer unless UNIFIED_CONFIDENCE is on, in
     which case it runs the merged factor registry (swingbot.core.scanning.factors)
     instead. Signature and ConfidenceResult shape are unchanged either way --
@@ -647,12 +664,16 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     inputs (htf_bias, rs_percentile, breadth, volume_ratio, atr_pct,
     trigger_distance_pct, badge_status, gap_fragile, macro_verdict) the
     legacy path never read; v32 Task 7 and v33 Task 5 wire real values in
-    from engine.py."""
+    from engine.py.
+    `neutral_expectancy` (v146) zeroes the legacy scorer's track-record
+    step for the TRAIN replay, which has no live track record; the
+    unified path has no such step and ignores it. Live callers never pass it."""
     if not getattr(config, "UNIFIED_CONFIDENCE", False):
         return _score_confidence_legacy(
             scenario, regime_trend=regime_trend, df=df,
             target_confluence=target_confluence,
-            stop_confluence=stop_confluence, track_record=track_record)
+            stop_confluence=stop_confluence, track_record=track_record,
+            neutral_expectancy=neutral_expectancy)
 
     target_count, target_families = _resolve_confluence(target_confluence, scenario.target_sources)
     stop_count, stop_families = _resolve_confluence(stop_confluence, scenario.stop_sources)
