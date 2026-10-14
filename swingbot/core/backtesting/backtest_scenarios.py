@@ -284,17 +284,41 @@ def _replay_ticker(args) -> dict:
     RESULT rather than being inferred from completion order, which is what
     makes the pooled path order-independent.
     """
+    return {hk: [result for _, result in pairs]
+            for hk, pairs in _replay_exits(args, replay_scenarios).items()}
+
+
+def _replay_exits(args, replay) -> dict:
+    """{horizon_key: [(hit, ExitResult), ...]} for one ticker -- the loop
+    _replay_ticker and _replay_ticker_rows share. `replay` yields (i, plan)
+    pairs or ReplayHits; both read as hit[0], hit[1]. args[10] (SPY) is not
+    read here: only the row builder needs it."""
     ticker, df, horizons, start, end, gates, scale_out, dcb_params = args[:8]
     asof_df = args[8] if len(args) > 8 else None
     member_spans = args[9] if len(args) > 9 else None
     out = {hk: [] for hk in horizons}
     for hk in horizons:
-        for i, plan in replay_scenarios(ticker, df, hk, gates=gates,
-                                        dcb_params=dcb_params, asof=asof_df):
-            if not _signal_in_scope(str(df.index[i].date()), start, end, member_spans):
+        for hit in replay(ticker, df, hk, gates=gates, dcb_params=dcb_params, asof=asof_df):
+            if not _signal_in_scope(str(df.index[hit[0]].date()), start, end, member_spans):
                 continue
-            out[hk].append(simulate_exit(df, i, plan, scale_out=scale_out))
+            out[hk].append((hit, simulate_exit(df, hit[0], hit[1], scale_out=scale_out)))
     return out
+
+
+def _replay_ticker_rows(args) -> tuple:
+    """_replay_ticker plus one v146 TRAIN row per CLOSED exit: (exits, rows).
+    args is _replay_ticker's tuple with the benchmark frame appended as
+    args[10]. The whole SPY frame travels; scenario_rows slices it to each
+    signal bar (no lookahead), and nothing here indexes it."""
+    # Imported here: scenario_rows imports this module.
+    from swingbot.core.backtesting import scenario_rows
+    ticker, df = args[0], args[1]
+    spy_df = args[10] if len(args) > 10 else None
+    exits = _replay_exits(args, replay_scenarios_detailed)
+    rows = [scenario_rows.scenario_trade_row(ticker, hk, df, hit, result, spy_df)
+            for hk, pairs in exits.items() for hit, result in pairs
+            if result.outcome != "not_triggered"]
+    return {hk: [result for _, result in pairs] for hk, pairs in exits.items()}, rows
 
 
 def _signal_in_scope(signal_date: str, start, end, member_spans) -> bool:
@@ -318,10 +342,41 @@ def _resolve_replay_workers(workers: int | None) -> int:
     return max(1, (os.cpu_count() or 2) - 1)
 
 
+def _run_replay_tasks(worker, tasks: list, workers, on_ticker_done=None) -> list:
+    """worker over every task, sequentially or across the process pool, in
+    task order. on_ticker_done(done, total) fires as each result arrives
+    (pool.map yields in task order, so the count is monotone but can lag a
+    slow early ticker)."""
+    n = _resolve_replay_workers(workers)
+    if n <= 1 or len(tasks) <= 1:
+        return _drain(map(worker, tasks), len(tasks), on_ticker_done)
+    with ProcessPoolExecutor(max_workers=n) as pool:
+        return _drain(pool.map(worker, tasks), len(tasks), on_ticker_done)
+
+
+def _drain(results, total: int, on_ticker_done) -> list:
+    out = []
+    for result in results:
+        out.append(result)
+        if on_ticker_done is not None:
+            on_ticker_done(len(out), total)
+    return out
+
+
+def _replay_with_rows(tasks: list, spy_df, workers, on_ticker_done) -> tuple:
+    """(per-ticker exits, flat rows): the row-collecting twin of the plain
+    run. SPY rides as args[10] of every task."""
+    results = _run_replay_tasks(_replay_ticker_rows, [t + (spy_df,) for t in tasks],
+                                workers, on_ticker_done)
+    return ([exits for exits, _ in results],
+            [row for _, ticker_rows in results for row in ticker_rows])
+
+
 def run_scenario_backtest(frames: dict, start, end, *, gates,
                           scale_out=True, horizons=None, workers=None,
                           dcb_params: dict | None = None, asof_map: dict | None = None,
-                          membership: dict | None = None) -> dict:
+                          membership: dict | None = None, spy_df=None,
+                          collect_rows: bool = False, on_ticker_done=None) -> dict:
     """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
     dates -- the exit walk may run past `end`, same convention as
     run_backtest_daterange.
@@ -340,6 +395,11 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     `membership` ({ticker: [(start, end_exclusive), ...]}, from
     pit_membership.membership_map) masks signals to the dates each ticker was
     an index member; None (every non-`_pit` universe) leaves them unmasked.
+
+    v146: `collect_rows=True` adds "rows" -- one TRAIN row per closed exit
+    (scenario_rows.scenario_trade_row) -- and ships `spy_df` to the workers
+    as args[10]; "pooled" and "by_horizon" are identical either way.
+    `on_ticker_done(done, total)` is called after each ticker returns.
     """
     horizons = horizons or list(LEGACY_HORIZONS)
     results_by_hz: dict = {hk: [] for hk in horizons}
@@ -351,17 +411,18 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
         for ticker, df in frames.items()
     ]
 
-    n = _resolve_replay_workers(workers)
-    if n <= 1 or len(tasks) <= 1:
-        per_ticker_results = [_replay_ticker(t) for t in tasks]
+    if collect_rows:
+        per_ticker_results, rows = _replay_with_rows(tasks, spy_df, workers, on_ticker_done)
     else:
-        with ProcessPoolExecutor(max_workers=n) as pool:
-            per_ticker_results = list(pool.map(_replay_ticker, tasks))
+        per_ticker_results, rows = _run_replay_tasks(_replay_ticker, tasks, workers, on_ticker_done), None
 
     for per_ticker in per_ticker_results:
         for hk, results in per_ticker.items():
             results_by_hz[hk].extend(results)
 
     all_results = [r for rs in results_by_hz.values() for r in rs]
-    return {"pooled": _aggregate(all_results),
-            "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
+    stats = {"pooled": _aggregate(all_results),
+             "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
+    if rows is not None:
+        stats["rows"] = rows
+    return stats
