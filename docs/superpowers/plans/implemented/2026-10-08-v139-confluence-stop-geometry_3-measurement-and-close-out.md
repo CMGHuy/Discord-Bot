@@ -57,8 +57,8 @@ Write `docs/superpowers/results/2026-10-08-v139-preregistration.md` with exactly
 ```markdown
 # v139 — Confluence stop geometry: pre-registration
 
-Written before any measurement. Spec: `docs/superpowers/specs/2026-10-08-v139-confluence-stop-geometry-design.md`.
-Plan: `docs/superpowers/plans/2026-10-08-v139-confluence-stop-geometry_0-index.md` (Spec corrections 7-11 are part of this record).
+Written before any measurement. Spec: `docs/superpowers/specs/implemented/2026-10-08-v139-confluence-stop-geometry-design.md`.
+Plan: `docs/superpowers/plans/implemented/2026-10-08-v139-confluence-stop-geometry_0-index.md` (Spec corrections 7-11 are part of this record).
 
 ## Claim
 <spec § Pre-registered claim, both bullets and the closing sentence, verbatim>

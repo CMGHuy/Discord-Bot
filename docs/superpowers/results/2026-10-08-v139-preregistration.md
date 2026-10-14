@@ -1,7 +1,7 @@
 # v139 — Confluence stop geometry: pre-registration
 
-Written before any measurement. Spec: `docs/superpowers/specs/2026-10-08-v139-confluence-stop-geometry-design.md`.
-Plan: `docs/superpowers/plans/2026-10-08-v139-confluence-stop-geometry_0-index.md` (Spec corrections 7-11 are part of this record).
+Written before any measurement. Spec: `docs/superpowers/specs/implemented/2026-10-08-v139-confluence-stop-geometry-design.md`.
+Plan: `docs/superpowers/plans/implemented/2026-10-08-v139-confluence-stop-geometry_0-index.md` (Spec corrections 7-11 are part of this record).
 
 Closed-row check (V139-11 Step 1): no row of "Closed pre-registrations — do not re-run these" closes a structural confluence stop sized to dollar risk, or a confluence drop by structural stop distance. v104 Part A is strategy × direction cells, v129 arm Z is a disaster stop plus close exit capped at 2%, v101 is the Fibonacci rescue; the spec's § Not a re-run argues each.
 

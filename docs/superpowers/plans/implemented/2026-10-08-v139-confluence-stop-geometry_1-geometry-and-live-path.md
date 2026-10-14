@@ -521,7 +521,7 @@ Create `tests/planning/test_confluence_stop_geometry.py`:
 ```python
 """v139 confluence_stop_geometry: arm S (structural stop up to c - 0.25,
 target re-selected, rollback to the clamp) and arm D (no plan beyond c), both
-directions. Spec: docs/superpowers/specs/2026-10-08-v139-confluence-stop-geometry-design.md"""
+directions. Spec: docs/superpowers/specs/implemented/2026-10-08-v139-confluence-stop-geometry-design.md"""
 import dataclasses
 
 import pytest
