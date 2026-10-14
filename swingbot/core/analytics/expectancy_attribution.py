@@ -231,8 +231,10 @@ MIN_SPREAD_R = 0.10
 VERDICTS = ("PREDICTIVE", "WEAK", "NOT PREDICTIVE")
 #: Factor keys that exist on a row only when they fired: their absence is a
 #: reading of 0. Any other key absent from a row means another scorer wrote
-#: that row, and the row is left out of that factor's look.
-ABSENT_IS_ZERO = frozenset({"Tight stop penalty"})
+#: that row, and the row is left out of that factor's look. These are the
+#: scorers in ``swingbot.core.scanning.factors`` that return None when they do
+#: not fire (``factor_tight_stop``, ``factor_gap``), not only on missing data.
+ABSENT_IS_ZERO = frozenset({"Tight stop penalty", "Gap penalty"})
 
 
 class _Obs(NamedTuple):

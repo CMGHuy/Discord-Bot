@@ -149,6 +149,18 @@ def test_a_penalty_key_reads_zero_when_absent_but_other_keys_do_not():
     assert factors["gap"]["n_pos"] == 0 and factors["gap"]["p"] is None
 
 
+def test_the_gap_penalty_reads_zero_when_absent():
+    # factors.factor_gap writes "Gap penalty" only when the gap is fragile, so
+    # a row without the key is a 0 reading, not another scorer's row.
+    rows = population("predictive")
+    for i, row in enumerate(rows):
+        if i % 4 == 0:
+            row["confidence_points"] = dict(row["confidence_points"], **{"Gap penalty": -10})
+    gap = {item["key"]: item for item in ea.factor_deltas(rows, seed=SEED)}["Gap penalty"]
+    assert (gap["n_pos"], gap["n_zero"]) == (45, 135)
+    assert gap["delta"] is not None and gap["p"] is not None
+
+
 def test_bucket_looks_fill_the_interval_on_non_thin_buckets_only():
     rows = population("predictive")
     buckets = ea.population_buckets(rows)
