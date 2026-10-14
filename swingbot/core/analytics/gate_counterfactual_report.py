@@ -4,8 +4,7 @@ V147-13 holds the pre-registered statistics (spec § Pre-registered verdict):
 distinct setups, the one population rule, the blocked - taken difference with a
 paired week-cluster bootstrap, v146's two-sided p, BH over the five verdict
 cells, and the EARNS / COSTS / INCONCLUSIVE / WAITING rule. V147-15 adds
-`build_report`. The file itself is written and read by the light
-`swingbot.core.infra.gate_counterfactual_store` (this module imports numpy).
+`build_report`. `build_report` writes through the light `swingbot.core.infra.gate_counterfactual_store` (atomic `os.replace` lives there); `load_report` is that module's, re-exported.
 """
 from __future__ import annotations
 
@@ -14,7 +13,11 @@ from collections import Counter, defaultdict, namedtuple
 
 import numpy as np
 
+from swingbot.core.analytics import gate_counterfactual_inputs as inputs
 from swingbot.core.backtesting.instrument import stats
+from swingbot.core.infra import gate_counterfactual_store as store
+from swingbot.core.infra.gate_counterfactual_store import load_report  # noqa: F401  -- re-export for v150
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT
 from swingbot.core.market.session import nyse_calendar
 from swingbot.core.planning.params import DEFAULT_EXPIRY_BARS
 
@@ -171,3 +174,159 @@ def classify(reading, q, n) -> str:
     if reading["ci_low"] > 0:
         return COSTS
     return INCONCLUSIVE
+
+
+# --- V147-15: the report -------------------------------------------------------------
+
+NOTE_NO_TRAIN_RS = "no TRAIN population"
+NOTE_NO_PLAN = "no verdict — no-plan"
+NOTE_CELLS = (("rs", "train", NOTE_NO_TRAIN_RS), ("no_qualifying_target", "live", NOTE_NO_PLAN),
+              ("no_qualifying_target", "train", NOTE_NO_PLAN))
+EMPTY_TAKEN_NOTES = {("compression", "train"): "no TRAIN taken arm — no as-of earnings archive"}
+IN_SAMPLE_CELLS = frozenset({("compression", "train")})
+ROW_GATES = ("rs", "risk_cap", "no_qualifying_target", "compression")
+SOURCE_FAMILY = {"strategy": "strategy", "confluence": "confluence", "short_lane": "confluence"}
+LIMITATIONS = (
+    "Portfolio state: every blocked candidate is simulated as a lone trade; the portfolio heat and "
+    "correlated-cluster caps are ignored, and heat at block time is not stored (null).",
+    "Gap floor: simulate_exit books a stop at the stop price, so a gap through the stop reads -1.0R; "
+    "counterfactual losses on gaps are understated, so the blocked arm's losses are understated.",
+    "R is per-trade risk-normalised (every trade sized to 1R). risk_cap rows add dollar_risk -- the "
+    "outcome in units of the 2% dollar cap -- and are over-cap: never a tradable alternative.",
+    "TRAIN compression is in-sample (v119 fitted the gate on TRAIN); TRAIN has no as-of earnings "
+    "archive, so its taken arm is expected to be empty and the cell carries a note, not a verdict.",
+    "Live rows from 2026-10 sit inside the 2026 holdout; a follow-on screen built on a live verdict "
+    "must name a holdout this report has not seen.",
+    "Short-lane blocked rows are scoped against confluence taken plans (issued plans carry no lane "
+    "marker); live taken plans store no signal-day close, so their re-walk is never re-anchored.",
+    "A verdict changes nothing: GATE COSTS licenses one Stage -2 screen under a new idea name (for "
+    "risk_cap, with the partner); no closed pre-registration is reopened.",
+)
+
+
+def _blocked_rows(rows, key: str, population: str) -> list:
+    return [r for r in rows
+            if r["population"] == population and r["arm"] == "blocked" and cell_key(r) == key]
+
+
+def _taken_match(row, key: str, population: str, scope: set) -> bool:
+    if row["population"] != population or row["arm"] != "taken" or row["gate"] != CELL_GATE[key]:
+        return False
+    if key == "compression" and row["strategy"] != COMPRESSION_SHORT:
+        return False
+    return (SOURCE_FAMILY[row["source"]], row["direction"]) in scope
+
+
+def _arms(rows, key: str, population: str) -> tuple[list, list]:
+    """(blocked, taken) distinct setups of one cell, the taken arm in the blocked arm's scope."""
+    blocked = distinct_setups(_blocked_rows(rows, key, population))
+    scope = {(SOURCE_FAMILY[r["source"]], r["direction"]) for r in blocked}
+    taken = distinct_setups([r for r in rows if _taken_match(r, key, population, scope)])
+    return blocked, taken
+
+
+def _note_for(key: str, population: str, n: int, taken_n: int) -> str | None:
+    if n < VERDICT_FLOOR:
+        return None
+    if taken_n == 0:
+        return EMPTY_TAKEN_NOTES.get((key, population), f"no {population.upper()} taken arm")
+    if taken_n < VERDICT_FLOOR:
+        return f"taken arm below the floor ({taken_n} distinct filled setups < {VERDICT_FLOOR})"
+    return None
+
+
+def _evaluate(rows, key: str, population: str) -> dict:
+    blocked, taken = _arms(rows, key, population)
+    n, taken_n = len(_filled(blocked)), len(_filled(taken))
+    note = _note_for(key, population, n, taken_n)
+    eligible = note is None and n >= VERDICT_FLOOR
+    return {"gate": key, "population": population, "n": n, "taken_n": taken_n, "note": note,
+            "reading": difference_reading(blocked, taken) if eligible else None}
+
+
+def _cell(state: dict, q, today: str) -> dict:
+    """One verdict cell (v150 shape); the record is seeded here and frozen by the store."""
+    reading = state["reading"]
+    verdict = WAITING if state["note"] else classify(reading, q, state["n"])
+    latest = None if reading is None else {"difference": reading["difference"], "ci_low": reading["ci_low"],
+                                           "ci_high": reading["ci_high"], "q": q, "p": reading["p"]}
+    record = None if verdict == WAITING else {"verdict": verdict, "date": today, "n": state["n"]}
+    return {"gate": state["gate"], "population": state["population"], "verdict": verdict, "n": state["n"],
+            "taken_n": state["taken_n"], "verdict_of_record": record, "latest": latest,
+            "in_sample": (state["gate"], state["population"]) in IN_SAMPLE_CELLS, "note": state["note"]}
+
+
+def _note_cell(key: str, population: str, note: str) -> dict:
+    return {"gate": key, "population": population, "verdict": WAITING, "n": 0, "taken_n": 0,
+            "verdict_of_record": None, "latest": None, "in_sample": False, "note": note}
+
+
+def _cells(rows, today: str) -> list[dict]:
+    states = [_evaluate(rows, key, population) for key, population in CELLS]
+    qvalues = family_qvalues([s["reading"]["p"] if s["reading"] else None for s in states])
+    cells = [_cell(state, q, today) for state, q in zip(states, qvalues)]
+    return cells + [_note_cell(key, population, note) for key, population, note in NOTE_CELLS]
+
+
+def _near_miss(key: str, blocked) -> dict:
+    band = NEAR_MISS_BANDS.get(key)
+    if band is None:
+        return {"near_miss_n": None, "near_miss_exp_r": None, "rest_n": None, "rest_exp_r": None}
+    inside = [r["margin"] is not None and abs(r["margin"]) <= band for r in blocked]
+    near = [r for r, flag in zip(blocked, inside) if flag]
+    rest = [r for r, flag in zip(blocked, inside) if not flag]
+    return {"near_miss_n": len(near), "near_miss_exp_r": arm_stats(near)["exp_r"],
+            "rest_n": len(rest), "rest_exp_r": arm_stats(rest)["exp_r"]}
+
+
+def _dollar_risk(key: str, blocked) -> float | None:
+    if key != "risk_cap":
+        return None
+    return _mean(r["dollar_risk"] for r in _filled(blocked) if r.get("dollar_risk") is not None)
+
+
+def _row(key: str, reason, population: str, blocked, taken) -> dict:
+    """One detail row: gate x reason x population (v150 shape)."""
+    b, t = arm_stats(blocked), arm_stats(taken)
+    return {"gate": key, "reason": reason, "population": population,
+            "blocked_n": b["n"], "no_plan_n": b["no_plan_n"], "fill_rate": b["fill_rate"],
+            "blocked_exp_r": b["exp_r"], "blocked_win_rate": b["win_rate"],
+            "taken_n": t["filled_n"], "taken_exp_r": t["exp_r"], "taken_win_rate": t["win_rate"],
+            "taken_realised_exp_r": _mean(r["realised_r"] for r in taken if r.get("realised_r") is not None),
+            **_near_miss(key, blocked), "dollar_risk": _dollar_risk(key, blocked),
+            "over_cap": key == "risk_cap", "in_sample": (key, population) in IN_SAMPLE_CELLS}
+
+
+def _rows_for(rows, key: str, population: str) -> list[dict]:
+    blocked, taken = _arms(rows, key, population)
+    by_reason = defaultdict(list)
+    for row in blocked:
+        by_reason[row["reason"]].append(row)
+    return [_row(key, reason, population, members, taken)
+            for reason, members in sorted(by_reason.items(), key=lambda item: str(item[0]))]
+
+
+def _report_rows(rows) -> list[dict]:
+    return [row for population in ("live", "train") for key in ROW_GATES
+            for row in _rows_for(rows, key, population)]
+
+
+def _live_window(rows) -> str | None:
+    dates = sorted(r["signal_date"] for r in rows if r["population"] == "live")
+    return f"{dates[0]}..{dates[-1]}" if dates else None
+
+
+def build_report(*, train_rows=None, live_blocked=None, live_taken=None, today=None, write=True,
+                 path=None) -> dict:
+    """The gate-counterfactual report (v150 shape); written through the light store unless write=False."""
+    if train_rows is None:
+        train_rows = inputs.load_train_rows(inputs.default_train_paths())
+    if live_blocked is None or live_taken is None:
+        live_blocked, live_taken = inputs.load_live()
+    rows = [*train_rows, *live_blocked, *live_taken]
+    now = dt.datetime.now(dt.timezone.utc)
+    today = today or now.date().isoformat()
+    result = {"generated_at": now.isoformat(timespec="seconds"), "live_window": _live_window(rows),
+              "bh_family": len(CELLS), "seed": BOOTSTRAP_SEED, "limitations": list(LIMITATIONS),
+              "cells": _cells(rows, today), "rows": _report_rows(rows)}
+    return store.write_report(result, path) if write else result
