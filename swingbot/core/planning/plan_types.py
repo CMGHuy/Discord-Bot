@@ -97,6 +97,15 @@ class TradePlanV2:
     # quality_score -- optional because not every _apply_quality caller
     # (e.g. the offline decile-audit script) has a live scan's conf in hand.
     confidence_level: int | None = None
+    # v146 I1: the integer each scored confidence factor added, keyed as the
+    # trade's confidence_breakdown is, and the factors whose reading was a
+    # neutral fallback for a missing input. Set where confidence_level is
+    # set (_apply_quality, from the live scan's item.conf). None for every
+    # replayed plan, every caller with no live conf, and every record
+    # persisted before v146 -- plans are never backfilled, there is no
+    # source text to parse.
+    confidence_points: dict | None = None
+    confidence_unevaluated: list | None = None
     # The ET session dates on which break-even and runner-floor protections
     # armed. None marks legacy plans whose persisted record predates v64.
     be_armed_session: str | None = None

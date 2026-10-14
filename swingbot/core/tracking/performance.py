@@ -490,6 +490,23 @@ def _apply_exit_price(t: dict, price: float, reason: str) -> None:
     t["exit_price"] = price
 
 
+def _confidence_point_fields(points, unevaluated) -> dict:
+    """v146 I1: the two record fields written beside `confidence_breakdown`.
+
+    `points` is the integer each scored factor added (ConfidenceResult.points)
+    and `unevaluated` the factors whose line was a neutral fallback for a
+    missing input. Both are copied, so the stored record never aliases the
+    scorer's own objects. None stays None -- a trade that carried no score
+    (strategy-path trades, plan-manager fills) -- and is never turned into an
+    empty map, which would read as "scored, nothing awarded"."""
+    return {
+        "confidence_points": (None if points is None
+                              else {str(key): int(value) for key, value in points.items()}),
+        "confidence_unevaluated": (None if unevaluated is None
+                                   else [str(key) for key in unevaluated]),
+    }
+
+
 def _db_record(trade: dict) -> dict:
     """Translate a JSON-store trade dict for the normalized trades table."""
     rest = {key: value for key, value in trade.items()
@@ -594,7 +611,8 @@ class TradeLog:
                   explanation=None, confirmed_by=None, plan_id=None,
                   badge=None, quality_score=None, source=None,
                   trendline_fit=None, cohort_label=None, cohort_stats=None,
-                  risk_features=None, ledger=None, entry_context=None, origin=None) -> str:
+                  risk_features=None, ledger=None, entry_context=None, origin=None,
+                  confidence_points=None, confidence_unevaluated=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -638,6 +656,9 @@ class TradeLog:
             "confidence_label": confidence_label,
             "confidence_score": confidence_score,
             "confidence_breakdown": confidence_breakdown,     # dict: factor -> explanation string, from confidence.py
+            # v146 I1: the same factors as numbers, so no reader parses the
+            # breakdown text. None on both = this trade carried no score.
+            **_confidence_point_fields(confidence_points, confidence_unevaluated),
             "entry": entry,
             "stop_loss": stop_loss,
             "take_profit": take_profit,

@@ -102,9 +102,13 @@ def test_build_quality_inputs_never_duplicates_direction_or_badge_status():
     out = engine._build_quality_inputs(item, _scenario(), make_ohlcv([100.0] * 60), "4w")
     assert "direction" not in out
     assert "badge_status" not in out
+    # v146 I1: confidence_points / confidence_unevaluated ride along exactly
+    # as confidence_level does -- _apply_quality pops all three before the
+    # rest is spread into score_plan().
     assert set(out) == {"regime", "htf_bias", "confluence_count", "volume_ratio",
                         "atr_pct", "trigger_distance_pct", "rs_percentile",
-                        "breadth", "confidence_level"}
+                        "breadth", "confidence_level", "confidence_points",
+                        "confidence_unevaluated"}
 
 
 def test_build_quality_inputs_reuses_items_htf_bias_without_recomputing(monkeypatch):

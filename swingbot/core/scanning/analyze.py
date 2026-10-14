@@ -287,6 +287,7 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
             volume_ratio = float(df["Volume"].iloc[-1] / avg_vol)
     target_confluence = getattr(item, "target_confluence", None)
     confluence_count = target_confluence[0] if target_confluence else 0
+    conf = getattr(item, "conf", None)
     return {
         "regime": regime.trend if regime else None,
         # item.htf_bias was already computed once by _scan_one's own
@@ -305,6 +306,11 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
         # comment. item.conf is set in _scan_one, well before attach_plan_v2
         # (and this function) run in _sync_run_scan's later merge loop.
         "confidence_level": item.conf.level if getattr(item, "conf", None) else None,
+        # v146 I1: ride along beside confidence_level and are popped with it
+        # in _apply_quality. getattr with a None default: a stand-in conf
+        # without `points` is a plan without factor points.
+        "confidence_points": getattr(conf, "points", None),
+        "confidence_unevaluated": getattr(conf, "unevaluated", None),
     }
 
 
