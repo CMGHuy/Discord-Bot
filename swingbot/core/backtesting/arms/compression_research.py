@@ -111,6 +111,40 @@ def sidecar_record(measured: CompressionMeasurement, *, signal_window, universe,
     }
 
 
+
+def record_blocked_compression(frames: dict, window: tuple[str, str], *, context: CompressionResearchContext,
+                               horizons=("2w",)) -> list[dict]:
+    """v147 TRAIN compression gate rows (in-sample: v119 fitted the gate on TRAIN).
+
+    Every counted compression decision over `frames` (backtest-cache frames) under the LIVE mode
+    allowlist: a reject is a `blocked` row simulated from the signal bar by `simulate_blocked` (plan
+    rebuilt on the truncated window), a pass is a `taken` row walking the engine's own plan through
+    the same call. The research knob is not read for the decision; the replay's trades are untouched."""
+    from swingbot.core.scanning.compression_context import COMPRESSION_MODES
+    from swingbot.scan_params import ScanParams
+    sink: list = []
+    engine = StrategyEngine((COMPRESSION_SHORT,), compression_context=context, blocked_sink=sink,
+                            compression_allowlist=COMPRESSION_MODES)
+    params = ScanParams.from_config()
+    for ticker in sorted(frames):
+        engine.run_ticker(ticker, frames[ticker], horizons, window, params)
+    return [_compression_gate_row(arm, candidate, frames[candidate.ticker]) for arm, candidate in sink]
+
+
+def _compression_gate_row(arm: str, candidate, frame) -> dict:
+    """One sink entry walked through the shared simulator; TRAIN has no resolver, so pending -> no-data."""
+    from swingbot.core.backtesting import gate_counterfactual
+    from swingbot.core.backtesting.blocked_recorder import gate_row
+    result = gate_counterfactual.simulate_blocked(candidate, frame)
+    status = "no-data" if result.cf_status == "pending" else result.cf_status
+    filled = status == "filled"
+    return gate_row(
+        population="train", arm=arm, source="strategy", ticker=candidate.ticker,
+        strategy=candidate.strategy, horizon=candidate.horizon, direction=candidate.direction,
+        signal_date=candidate.signal_date, gate="compression", reason=candidate.reason, margin=None,
+        cf_status=status, cf_r=result.cf_r if filled else None, win=result.win if filled else None,
+        expiry_bars=(result.plan or {}).get("expiry_bars"), in_sample=True)
+
 # --- the explicit offline as-of loader ------------------------------------------------------
 
 def _cached_frame(symbol: str) -> pd.DataFrame | None:
