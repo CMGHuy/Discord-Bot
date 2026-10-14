@@ -34,7 +34,8 @@ from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.planning.account import load_account_config
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, lane_overlap, qualify, runstate, scan_run, short_funnel, telemetry
+from . import (analyze, dedup, fetch, lane_overlap, qualify, rejection_recorder, runstate, scan_run,
+               short_funnel, telemetry)
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
 from .short_candidates import admitted_short_modes, extra_symbols
@@ -151,6 +152,7 @@ def _qualified_items(items, require_confirmation, frames, lane) -> list:
     for item in items:
         verdict = qualify.qualify_short_item(item.candidate_context, item, context)
         qualify.record_verdict(lane.get("funnel"), verdict)
+        rejection_recorder.record_short_verdict(verdict, frames)
         if isinstance(verdict, qualify.Accepted):
             kept.append(item)
     return kept
