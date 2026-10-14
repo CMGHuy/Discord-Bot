@@ -8,7 +8,7 @@ this very module and would otherwise close a circular import.
 """
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
-from swingbot.core.market import levels, trendlines
+from swingbot.core.market import earnings_calendar, levels, trendlines
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
@@ -362,6 +362,38 @@ def _no_plan_reason(scenario, level_map) -> str:
     return "no_qualifying_target"
 
 
+def _earnings_source():
+    """The live earnings calendar (events.get_earnings_datetimes, 6-hour
+    cached). A function rather than a module constant so tests swap it
+    without touching the network (tests/scanning/conftest.py)."""
+    return earnings_calendar.LiveSource()
+
+
+def _decision_session_date(df) -> date:
+    """ET session date of the decision bar -- the frame's last row. A
+    tz-aware index is converted to America/New_York first; a naive daily
+    index already is the session date."""
+    import pandas as pd
+    ts = pd.Timestamp(df.index[-1])
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("America/New_York")
+    return ts.date()
+
+
+def _days_to_earnings(ticker: str, df) -> int | None:
+    """v146 I2: NYSE sessions from the decision bar to the next earnings
+    reaction session (earnings_calendar's own unit, the one v82's exposure
+    rule uses). None -- never an exception -- on a failed or empty fetch, a
+    fund, a bad frame or anything else: a recorded field must never block a
+    plan. NO-LOOKAHEAD: live only; the as-of answer IS today's calendar."""
+    try:
+        return earnings_calendar.sessions_to_reaction(
+            ticker, _decision_session_date(df), source=_earnings_source())
+    except Exception:
+        log.debug("days_to_earnings unavailable for %s", ticker, exc_info=True)
+        return None
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     regime=None, rs_percentile=None, breadth=None, regime2_state=None,
                     issued_at=None, now=None):
@@ -442,6 +474,10 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                 atr_val=_atr_for(df),
                 close=float(df["Close"].iloc[-1]),
                 rs_percentile=rs_percentile,
+                # v146 I2: live wall clock only. A historical replay supplies
+                # issued_at, and the live calendar would answer for TODAY,
+                # not for its decision date -- that replay records None.
+                days_to_earnings=(_days_to_earnings(ticker, df) if issued_at is None else None),
                 now=now or now_et(),
             )
         except Exception:

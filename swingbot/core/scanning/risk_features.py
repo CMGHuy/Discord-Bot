@@ -60,7 +60,9 @@ def build(*, regime2_state, confidence_level, htf_bias, direction,
                     if not _bad_atr(atr_val) and close else None),
         "rs_percentile": rs_percentile,
         "session_bucket": session_bucket(now),
-        # Opportunistic: null unless v82's calendar is merged and wired. This
-        # plan does not depend on v82 and must never block on it.
+        # v146 I2: NYSE sessions from the decision bar to the next earnings
+        # reaction session (earnings_calendar.sessions_to_reaction, v82's
+        # unit), from the live calendar. None on a historical replay, a
+        # failed or empty fetch, or a fund -- it never blocks a plan.
         "days_to_earnings": days_to_earnings,
     }
