@@ -15,7 +15,7 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Plan fully written 2026-10-14 (EM1–EM16 across parts 1, 1b, 2, 3, 3b, 4, 5, 5b; `plan_lint.py` passes, 9 files). Implementation not started. Next: `Implement plan v160` in a worktree, after the v159 gate (EM1). EM15 Steps 5–7 (`/panel`) need the controller, not the implementer. Update this block when a phase closes.
 
 ## Depends on v159 (hard gate)
 
@@ -120,7 +120,8 @@ At most two implementers at once. Two tasks run in parallel only when their file
 | 3 | `2026-10-11-v160-etoro-demo-mirror_3-executor.md` | EM8 | Phase 4: the executor |
 | 3b | `2026-10-11-v160-etoro-demo-mirror_3b-close-and-reconcile.md` | EM9 | Phase 4: close persistence, daily reconciliation |
 | 4 | `2026-10-11-v160-etoro-demo-mirror_4-wiring-and-parity-report.md` | EM10–EM12 | Phase 5: hook and docs; Phase 6: the parity report |
-| 5 | `2026-10-11-v160-etoro-demo-mirror_5-ops-scripts-and-gate.md` | EM13–EM16 | Phase 6: drain and smoke scripts; Phase 7: panel, full suite |
+| 5 | `2026-10-11-v160-etoro-demo-mirror_5-ops-scripts-and-gate.md` | EM13–EM14 | Phase 6: drain and smoke scripts |
+| 5b | `2026-10-11-v160-etoro-demo-mirror_5b-panel-and-full-suite.md` | EM15–EM16 | Phase 7: complexity sweep, pre-close-out `/panel`, full suite |
 
 ## After close-out: rollout (partner-gated, not a task)
 
