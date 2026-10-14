@@ -205,16 +205,16 @@ FIELDS: list[Field] = [
                "would move stays at its level when that level is within this ceiling less 0.25% "
                "headroom; the target is re-chosen against the wider risk, the plan stores this "
                "ceiling, and the position must be sized to fixed dollar risk (risk_pct). No target "
-               "inside the reward:risk band rolls the plan back to the clamp. Unmeasured: "
-               "pre-registered grid {3, 4, 5}; keep 0 until its VALIDATION shot passes and the "
-               "partner decides."),
+               "inside the reward:risk band rolls the plan back to the clamp. Closed: "
+               "NO_ELIGIBLE_CELL at Stage 1 (every cell lost ExpR) -- see the v139 closed row in "
+               "docs/claude/backtest-methodology.md. Keep 0."),
     Field("CONFLUENCE_STOP_DROP_PCT", "CONFLUENCE_STOP_DROP_PCT", "Trade Filters & Risk",
           "Confluence stop drop ceiling % (v139 arm D)",
           type="float", default="0", min=0, max=11, step=0.5,
           help="v139 arm D. 0 = off. Above 0, a confluence setup whose structural stop sits "
                "further than this from the entry gets no plan (stop_beyond_confluence_ceiling) "
-               "instead of the 1.75% clamp. Unmeasured: pre-registered grid {3, 4, 5}; keep 0 "
-               "until its VALIDATION shot passes and the partner decides."),
+               "instead of the 1.75% clamp. Closed: REFUSED at Stage 0 in every cell (effect below "
+               "MDE) -- see the v139 closed row in docs/claude/backtest-methodology.md. Keep 0."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
