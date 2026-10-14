@@ -360,7 +360,8 @@ def test_index_benchmark_rebases_to_first_point_in_range():
 
 def test_by_dimension_accepts_every_dimension_and_nulls_thin_rates(seed, logged_in):
     seed(trades=[_closed("a" * 16), _closed("b" * 16, status="loss", direction="bearish")])
-    for dim in ("strategy", "horizon", "badge", "confidence", "direction", "dow", "month", "ticker", "source"):
+    for dim in ("strategy", "horizon", "badge", "confidence", "direction", "dow", "month", "ticker", "source",
+                "confluence", "rs_quintile"):
         body = logged_in.get(f"/api/v1/analytics/by-dimension?dim={dim}").get_json()
         assert body["min_cell_n"] == 20 and body["n"] == 2, dim
         for row in body["rows"]:
