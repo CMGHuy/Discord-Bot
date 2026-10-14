@@ -13,13 +13,25 @@ pre-registered verdict always compares exact values.
 """
 from __future__ import annotations
 
+import datetime as dt
+import hashlib
+import json
+import logging
+import sys
+from pathlib import Path
 from typing import NamedTuple
 
 import numpy as np
 
+from swingbot import config
+from swingbot.core.analytics import metrics
 from swingbot.core.analytics.aggregate import rs_quintile_label
+from swingbot.core.analytics.scope import closed_only
 from swingbot.core.backtesting.instrument import stats
 from swingbot.core.edge.frictions import apply_frictions, commission_r
+from swingbot.core.infra.expectancy_attribution_store import load_latest, write_latest  # noqa: F401  (load_latest is re-exported for v150)
+from swingbot.core.market import earnings_calendar
+from swingbot.core.market.earnings_calendar import EARNINGS_CSV_DIR
 from swingbot.core.market.strategy_types import HORIZONS
 
 #: Spec: a bucket with N < 30 is shown greyed (``thin``) and enters no verdict.
@@ -423,3 +435,283 @@ def verdict(live_mono: dict | None, train_mono: dict | None) -> str:
     monotonicity dict's ``inverted`` flag, inside NOT PREDICTIVE or WEAK."""
     passed = sum(1 for mono in (live_mono, train_mono) if population_passes(mono))
     return VERDICTS[2 - passed]
+
+
+# --------------------------------------------------------------------------
+# Populations, the report and the run. Only ``load_live_rows`` touches the
+# database and only ``run`` writes (through ``write_latest``).
+# --------------------------------------------------------------------------
+
+log = logging.getLogger(__name__)
+
+#: Handoff 5, verified in V146-12 Step 1: live fills are booked at the exact
+#: trigger / stop / target price (no slippage, no commission), so the study
+#: nets live rows with the same model as TRAIN rows. True would mean "use
+#: metrics.r_multiple as it is".
+LIVE_FILLS_INCLUDE_FRICTIONS = False
+WEEK_BOOTSTRAP_SEED = stats.WEEK_BOOTSTRAP_SEED
+#: Spec: a TRAIN signal later than the last CSV report plus this margin has
+#: unknown earnings (the CSV has gone stale), in calendar days.
+TRAIN_EARNINGS_MARGIN_DAYS = 100
+
+_NOTES = {
+    "live": (
+        "Closed trades from the trades table, both ledgers. Confidence analyses "
+        "use rows with a non-null confidence_score.",
+        "Range-restricted: only trades at or above MIN_ALERT_CONFIDENCE_LEVEL were "
+        "ever paper-traded, which attenuates any score-R slope; a weaker live slope "
+        "is the expected shape, not by itself a contradiction.",
+        "confidence_score is level-major (the quality score is repositioned inside "
+        "the final level's band), so deciles read close to level, then quality.",
+        "Earnings: risk_features.days_to_earnings, a provider point-in-time estimate "
+        "in NYSE sessions; unknown for every trade opened before v146 I2 shipped.",
+    ),
+    "train": (
+        "TRAIN confluence replay (--scenarios --train --exit-model v2 --scale-out), "
+        "not level-gated; VALIDATION is never read.",
+        "The TRAIN score is computed with the expectancy level adjustment "
+        "neutralised; the R:R distribution per tercile shows any residual effect.",
+        "R net: the replay's exit_sim applies no frictions, so slippage and "
+        "commission are re-applied here; exp_r_gross is the replay's own r_total.",
+        "Earnings: actual report dates (CsvSource). Buckets >20 and none are "
+        "ex-post, 11-20 partly; report timing is ex-post and can move a row across "
+        "the 0-5 edge. Never merged with the live estimate.",
+        "Backtest and live differ in their gap-fill model (exit_sim.py:541-548).",
+    ),
+}
+
+
+def _progress(message: str) -> None:
+    print(f"[expectancy-attribution] {message}", file=sys.stderr, flush=True)
+
+
+def _week_of(value) -> str | None:
+    """The Monday (ISO date) of the week holding an ISO date or timestamp."""
+    try:
+        day = dt.date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+    return (day - dt.timedelta(days=day.weekday())).isoformat()
+
+
+def _live_net(trade: dict, gross: float) -> float | None:
+    if LIVE_FILLS_INCLUDE_FRICTIONS:
+        return gross
+    legs = trade.get("legs") or [{"fraction": 1.0, "exit_price": trade.get("exit_price")}]
+    if any(leg.get("exit_price") is None for leg in legs):
+        return None
+    try:
+        return net_r(trade["entry"], trade["stop_loss"], trade["direction"], legs)
+    except ValueError:
+        return None
+
+
+def live_row(trade: dict) -> dict | None:
+    """One closed live trade as an attribution row, or None when it has no
+    R (``metrics.r_multiple`` is None), no entry week, or a leg with no fill
+    price to net."""
+    gross = metrics.r_multiple(trade)
+    week = _week_of(trade.get("opened_at"))
+    if gross is None or week is None:
+        return None
+    net = _live_net(trade, gross)
+    if net is None:
+        return None
+    features = trade.get("risk_features") or {}
+    context = trade.get("entry_context") or {}
+    sessions = features.get("days_to_earnings")
+    known = isinstance(sessions, int) and not isinstance(sessions, bool)
+    return {
+        "r": net, "r_gross": gross, "week": week,
+        "confidence_score": trade.get("confidence_score"),
+        "confidence_level": trade.get("confidence_level"),
+        "confidence_points": trade.get("confidence_points"),
+        "confidence_unevaluated": trade.get("confidence_unevaluated") or [],
+        # The count_confirming_strategies count, the definition TRAIN records;
+        # never len(target_sources).
+        "confluence_count": features.get("confluence_count"),
+        "regime2_state": context.get("regime2_state") or features.get("regime2_state"),
+        "rs_pctile": context.get("rs_pctile"),
+        "direction": trade.get("direction"),
+        "horizon": trade.get("horizon_key"),
+        "earnings_sessions": sessions if known else None,
+        "earnings_status": "known" if known else "unknown",
+        "risk_reward_ratio": trade.get("risk_reward_ratio"),
+    }
+
+
+def load_live_rows() -> list[dict]:
+    """Every closed trade of both ledgers, as attribution rows. The database
+    is whatever ``swingbot.config.DATABASE_URL`` names when this is CALLED:
+    nothing is captured at import."""
+    from swingbot.core.tracking.performance import TradeLog
+    closed = closed_only(TradeLog().get_trades(status=None, limit=None, ledger=None) or [])
+    rows = [row for row in map(live_row, closed) if row is not None]
+    if len(rows) != len(closed):
+        log.warning("expectancy attribution: %d of %d closed live trades have no "
+                    "usable R and are left out", len(closed) - len(rows), len(closed))
+    return rows
+
+
+def train_earnings(ticker: str, signal_date: dt.date, source, *,
+                   margin_days: int = 100) -> tuple[int | None, str]:
+    """(sessions to the next earnings reaction, status) as of a TRAIN signal.
+
+    "unknown": no earnings CSV rows for the ticker, or the signal is later
+    than the last CSV report plus ``margin_days``. "none": coverage reaches
+    the signal and holds no report at or after it. Otherwise "known"."""
+    reports = source.reports(ticker)
+    if not reports:
+        return None, "unknown"
+    last = max(report.date for report in reports)
+    if signal_date > last + dt.timedelta(days=margin_days):
+        return None, "unknown"
+    sessions = earnings_calendar.sessions_to_reaction(ticker, signal_date, source=source)
+    return (None, "none") if sessions is None else (int(sessions), "known")
+
+
+def _train_row(raw: dict, source) -> dict | None:
+    legs = raw.get("legs") or []
+    week = _week_of(raw.get("signal_date"))
+    entry = raw.get("entry_price") if raw.get("entry_price") is not None else raw.get("entry")
+    if not legs or week is None or entry is None or raw.get("r_total") is None:
+        return None
+    try:
+        net = net_r(entry, raw["stop_loss"], raw["direction"], legs)
+    except (KeyError, TypeError, ValueError):
+        return None
+    context = raw.get("entry_context") or {}
+    sessions, status = train_earnings(
+        raw["ticker"], dt.date.fromisoformat(str(raw["signal_date"])[:10]), source,
+        margin_days=TRAIN_EARNINGS_MARGIN_DAYS)
+    return {
+        "r": net, "r_gross": float(raw["r_total"]), "week": week,
+        "confidence_score": raw.get("confidence_score"),
+        "confidence_level": raw.get("confidence_level"),
+        "confidence_points": raw.get("confidence_points"),
+        "confidence_unevaluated": raw.get("confidence_unevaluated") or [],
+        "confluence_count": raw.get("confluence_count"),
+        "regime2_state": context.get("regime2_state"),
+        "rs_pctile": context.get("rs_pctile"),
+        "direction": raw.get("direction"),
+        "horizon": raw.get("horizon_key"),
+        "earnings_sessions": sessions, "earnings_status": status,
+        "risk_reward_ratio": raw.get("risk_reward_ratio"),
+    }
+
+
+def load_train_rows(path, *, source=None) -> list[dict]:
+    """The TRAIN replay's ``--trades-jsonl`` rows as attribution rows.
+    ``source`` defaults to ``CsvSource()`` on the code-relative
+    ``market_data/earnings/`` directory (actual report dates)."""
+    source = source if source is not None else earnings_calendar.CsvSource()
+    rows = []
+    with Path(path).open(encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                row = _train_row(json.loads(line), source)
+                if row is not None:
+                    rows.append(row)
+    return rows
+
+
+def earnings_provenance(directory=EARNINGS_CSV_DIR) -> dict:
+    """What the TRAIN earnings buckets were read from: the file set's count,
+    one sha256 over every (file name, bytes) in name order, and the newest
+    ``report_date`` in it."""
+    folder = Path(directory)
+    paths = sorted(folder.glob("*.csv")) if folder.is_dir() else []
+    digest, dates = hashlib.sha256(), []
+    for path in paths:
+        data = path.read_bytes()
+        digest.update(path.name.encode("utf-8"))
+        digest.update(data)
+        dates.extend(line.split(",")[0] for line in data.decode("utf-8").splitlines()[1:]
+                     if line.strip())
+    return {"directory": str(folder), "files": len(paths),
+            "sha256": digest.hexdigest() if paths else None,
+            "newest_report_date": max(dates, default=None),
+            "calendar": "v82 earnings_calendar.sessions_to_reaction (NYSE sessions "
+                        "to the next earnings reaction session)"}
+
+
+def _splits(rows: list[dict], seed: int) -> dict:
+    """The verdict table again per direction and per horizon, so a lift that
+    concentrates in one is visible."""
+    out = {}
+    for name in ("direction", "horizon"):
+        labels = sorted({_label(row.get(name)) for row in _scored(rows)}, key=_sort_key)
+        out[name] = {label: monotonicity([row for row in rows if _label(row.get(name)) == label],
+                                         seed=seed)
+                     for label in labels}
+    return out
+
+
+def _population(name: str, rows: list[dict], seed: int) -> dict | None:
+    if not rows:
+        return None
+    _progress(f"{name}: {len(rows)} rows -- buckets and bucket looks")
+    buckets = population_buckets(rows)
+    bucket_looks(rows, buckets, seed=seed)
+    _progress(f"{name}: monotonicity, splits and factor deltas")
+    weeks = sorted(row["week"] for row in rows)
+    return {
+        "window": {"first_week": weeks[0], "last_week": weeks[-1]},
+        "n": len(rows),
+        "monotonicity": monotonicity(rows, seed=seed),
+        "factors": factor_deltas(rows, seed=seed),
+        "buckets": buckets,
+        "splits": _splits(rows, seed),
+        "notes": list(_NOTES[name]),
+    }
+
+
+def build_report(live_rows: list[dict], train_rows: list[dict], *, seed: int,
+                 generated_at: str | None = None) -> dict:
+    """The whole report, pure: the two populations side by side (never
+    pooled), q-values over every look, and the verdict. ``provenance`` is
+    filled by ``run``."""
+    populations = {"live": _population("live", live_rows, seed),
+                   "train": _population("train", train_rows, seed)}
+    looks = assign_qvalues(populations)
+    monos = [(populations[name] or {}).get("monotonicity") for name in ("live", "train")]
+    outcome = verdict(*monos)
+    stamp = generated_at or dt.datetime.now(dt.timezone.utc).isoformat()
+    return {
+        "generated_at": stamp,
+        "verdict": outcome,
+        # Handoff 9: n is the rows that entered the verdict, live + TRAIN.
+        # write_latest keeps an earlier record on disk in place of this one.
+        "verdict_of_record": {"verdict": outcome, "date": stamp[:10],
+                              "n": sum((mono or {}).get("n", 0) for mono in monos)},
+        "looks": looks,
+        "seed": seed,
+        "provenance": {},
+        "populations": populations,
+    }
+
+
+def _file_sha256(path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def run(train_jsonl, *, seed: int = WEEK_BOOTSTRAP_SEED, write: bool = True) -> dict:
+    """Load both populations, build the report, persist it (unless
+    ``write=False``) and return what was written."""
+    train_rows = load_train_rows(train_jsonl)
+    live_rows = load_live_rows()
+    report = build_report(live_rows, train_rows, seed=seed)
+    report["provenance"] = {
+        "earnings": earnings_provenance(),
+        "train_rows": {"path": str(train_jsonl), "rows": len(train_rows),
+                       "sha256": _file_sha256(train_jsonl)},
+        "live_fills_include_frictions": LIVE_FILLS_INCLUDE_FRICTIONS,
+        "frictions": {"slippage_bps": getattr(config, "SLIPPAGE_BPS", 5.0),
+                      "commission_r": commission_r()},
+        "n_resamples": N_RESAMPLES,
+    }
+    return write_latest(report) if write else report
