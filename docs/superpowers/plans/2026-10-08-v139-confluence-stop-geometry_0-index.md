@@ -109,31 +109,8 @@ Mirrors the spec's groups. Before anything: V139-0 Step 1 creates the worktree. 
 
 ## Handoff
 
-*Written 2026-10-13 (session 1) at worktree HEAD `ce700ad1`. Resume here; trust `git log` over this text if they differ.*
+*Rewritten 2026-10-14 (session 2) at worktree HEAD `b192e446`. Trust `git log` over this text.*
 
-**Where:** worktree `.claude/worktrees/2026-10-08-v139-confluence-stop-geometry`, branch `2026-10-08-v139-confluence-stop-geometry`, 14 commits ahead of `main` (`f3fcfcfa`). Nothing merged. Resume with "implement plan v139" (reuse that worktree; `EnterWorktree` with its `path`).
+**Done:** V139-0..16. Arm S closed at Stage 1 (`NO_ELIGIBLE_CELL`, dExpR -0.033/-0.026/-0.031R); arm D closed at Stage 0 (`REFUSED` in all three cells). Neither spent its VALIDATION shot. Closed-table rows, ledger rows and Field help are committed; both knobs stay 0. V139-17 Step 1: full suite once = 7430 passed, 1 failed, 1561 skipped (DB unreachable); the one failure is `test_every_closed_table_version_has_a_ledger_row` on `v133` (main's closed row has no ledger row, not v139). Step 3 complexity: `build_confluence_plan` C (13), within < 15.
 
-**Done and committed:**
-- V139-0..10 (build tasks), each test-first; knobs-off golden green throughout. Commits `0c9d6cb9` .. `71fe2dd2`.
-- V139-11: pre-registration `99225882` (committed alone, before any run); Stage −1 `ce700ad1`. Arm S census `REACHABLE` (8495 plans, 5557 clamped; changed 3883/5094/5391 at c3/c4/c5; 0 rollbacks; no identical adjacent cells). Arm D pilot c=3.0 `REACHABLE` (removed 25, added 15, 40 changed outcomes, `is_subset=False`).
-
-**Interrupted:** V139-12 Step 1, arm S Stage 0 (`python scripts/backtest/measure_confluence_stop.py --stage 0`). Killed at 26/75 tickers when the machine ran out of memory (2.0 GB free of 31.7 GB). No `stage0.json` / `train-rows.json` was written, so nothing is spent and nothing needs deleting. A fresh run restarts from ticker 1 and takes ~3 h (the Stage −1 census alone took 3.5 h).
-
-**Next, in order:**
-1. Free memory first (close the IDE, stop the WSL/Docker VM; check `Get-CimInstance Win32_OperatingSystem` FreePhysicalMemory). Confirm no stray `python` processes.
-2. V139-12: invoke `backtest-gate`, then dispatch ONE `backtest-runner` with `BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache`, `MEASURE_ARMS_UNIVERSE=cache` and `--stage 0`. Then Stage 1, sanity checks (Step 3), Stage 2, commit (Step 5).
-3. V139-13: arm S Stage 3, the ONE VALIDATION shot (only if Stage 0/1/2 advance); else its Step 4 result record.
-4. V139-14, V139-15: arm D chain (`measure_arms.py` / `validate_component.py` / `permutation_test.py`). Its Stage −1 is already done; start at Stage 0.
-5. V139-16: record both arms (closed table + ledger together; ask the partner on a pass). V139-17: full suite once, complexity, close-out.
-
-**Rules that bit this session:**
-- One `backtest-runner` at a time; never run two measurements in parallel.
-- A runner agent dying (API 529) does NOT stop its python process: check `Get-CimInstance Win32_Process` for `measure_confluence_stop.py` and `logs/measure_confluence_stop.rows.progress` before relaunching, or you start a second run.
-- Do not merge `main` into the worktree before the last stage run (`code_hash()` is stamped).
-- Do not hand-edit or delete stage files; a stage that does not advance closes its arm.
-- Partner approved (2026-10-13) running Phase 4 straight through; still stop for the plan's own partner questions (degenerate axis, a pass at V139-16).
-- Neither knob ships live: on a pass the default stays 0 and the partner decides.
-
-**Environment facts:** no `--instrument` flag exists on the four scripts and `exit_sim_v2.py` is absent (v157/v158 not merged), so there is nothing to pin and no v2 disclosure. The arm D results doc `docs/superpowers/results/2026-10-08-v139-armD.md` already holds its Stage −1 section; append later stages.
-
-Commits ahead of `main`: `git log --oneline f3fcfcfa..HEAD`.
+**Remaining (V139-17 Steps 2, 4, 5):** start `db-test` and run `tests/db/test_plans_repository.py -k v139` (it was skipped); `Bump: none`; move index, parts and spec to `implemented/`, fix links, merge to `main` (note `main` has an uncommitted edit to `tests/backtesting/test_preregistration_ledger_file.py`; coordinate before merging), remove the worktree.
