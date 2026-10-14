@@ -234,6 +234,15 @@ class ConfidenceResult:
     label: str
     score: int
     breakdown: dict = field(default_factory=dict)
+    # v146 I1: the integer each scored factor added, keyed exactly as in
+    # `breakdown`. Non-factor lines (base level, quality score, track record,
+    # level adjustment, confirming methods) never appear here.
+    points: dict = field(default_factory=dict)
+    # v146 I1: factors whose line was a neutral fallback for a missing input
+    # ("regime unavailable", "not evaluated ..."). Their `points` entry is the
+    # integer awarded, so the sum still reconciles; this list lets a reader
+    # keep "no data" out of a per-factor comparison.
+    unevaluated: list = field(default_factory=list)
 
 
 def _expectancy_adjustment(risk_reward_ratio: float, track_record: tuple) -> tuple:
@@ -624,7 +633,7 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
             "macro_verdict")
            if k in kwargs},
     )
-    raw, breakdown = run_factors(FACTORS, ctx)
+    raw, breakdown, points = run_factors(FACTORS, ctx)
     score = max(0, min(100, raw))
 
     # Method count is re-read AFTER the factors run: the squeeze and
@@ -635,4 +644,5 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     breakdown["Confirming methods"] = (
         f"{target_count} independent method(s) -> base Level "
         f"{honesty_cap(target_count)}, quality score nudges +-1 from there")
-    return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown)
+    return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown,
+                            points=points, unevaluated=[])
