@@ -5,6 +5,7 @@ pools results per strategy over an entry-date window.
     python scripts/backtest/run_backtest_range.py --train        # 2020-01-01 .. 2023-12-31
     python scripts/backtest/run_backtest_range.py --validation   # 2024-01-01 .. 2025-12-31 (run ONCE, at the end)
     python scripts/backtest/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
+    python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl   # v147 TRAIN gate rows
 
 Legacy reporting gate: win_rate >= 80; the live decision bar is 50 (see
 docs/claude/backtest-methodology.md). expectancy_r > 0, N >= 30 (train) / 15
@@ -30,6 +31,7 @@ from swingbot import config
 from swingbot.core.market import market_context
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
+from swingbot.core.backtesting.blocked_recorder import require_train_window, write_gate_rows
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
 
@@ -163,7 +165,38 @@ def _scenario_row_stats(agg):
     }
 
 
-def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None):
+def _check_record_blocked(args, date_from, date_to) -> None:
+    """v147: `--record-blocked` is TRAIN-only, confluence-scenarios-only and needs the scale-out walk.
+
+    Compression blocks are recorded by `measure_arms.py --record-blocked` (StrategyEngine), because
+    `run_backtest` refuses the compression short; RS is never recorded on TRAIN (v34 closed).
+    Exits 2 before any data is loaded."""
+    if not args.record_blocked:
+        return
+    if getattr(args, "trades_jsonl", None):
+        print("refused: --record-blocked and --trades-jsonl are exclusive (run them as two replays)",
+              file=sys.stderr)
+        raise SystemExit(2)
+    if not args.scenarios:
+        print("refused: --record-blocked needs --scenarios (confluence no_qualifying_target + risk_cap shadow); "
+              "compression rows come from scripts/backtest/measure_arms.py --record-blocked", file=sys.stderr)
+        raise SystemExit(2)
+    if not args.scale_out:
+        print("refused: --record-blocked needs --scale-out (the counterfactual walk is scale_out=True)",
+              file=sys.stderr)
+        raise SystemExit(2)
+    require_train_window(date_from, date_to, validation=args.validation)
+
+
+def _write_blocked(stats: dict, path) -> None:
+    """v147: write the replay's record-only gate rows when --record-blocked asked for them."""
+    if not path:
+        return
+    count = write_gate_rows(stats.get("gate_rows", []), path)
+    print(f"Wrote {count} gate rows to {path}", flush=True)
+
+
+def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None, record_blocked=None):
     """--scenarios: replay the confluence scan itself (backtest_scenarios)
     instead of a named strategy, and print per-horizon + pooled rows in the
     standard table with strategy column `confluence/<horizon>`."""
@@ -188,7 +221,9 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
 
     stats = run_scenario_backtest(frames, date_from, date_to,
                                   gates=CONFLUENCE_GATES, scale_out=scale_out,
-                                  horizons=list(LEGACY_HORIZONS), membership=membership)
+                                  horizons=list(LEGACY_HORIZONS), membership=membership,
+                                  record_blocked=bool(record_blocked))
+    _write_blocked(stats, record_blocked)
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
     lines = []
@@ -376,6 +411,9 @@ def main():
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--trades-jsonl", dest="trades_jsonl", default=None,
                     help="write one JSONL training row per windowed trade")
+    ap.add_argument("--record-blocked", dest="record_blocked", default=None,
+                    help="v147: write one JSONL gate row per blocked/taken confluence candidate "
+                         "(TRAIN window only; needs --scenarios --scale-out)")
     ap.add_argument("--context", choices=["on", "off"], default="on",
                     help="build cross-sectional entry context (default: on)")
     ap.add_argument("--emit-registry", dest="emit_registry", default=None,
@@ -415,6 +453,7 @@ def main():
         if not (args.date_from and args.date_to):
             ap.error("need --train, --validation, or --from/--to")
         date_from, date_to, min_n, label = args.date_from, args.date_to, 15, "CUSTOM"
+    _check_record_blocked(args, date_from, date_to)
 
     if args.from_json:
         # Registry regeneration WITHOUT re-running the window (run-once
@@ -435,7 +474,7 @@ def main():
 
     if args.scenarios:
         run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out,
-                          universe=args.universe)
+                          universe=args.universe, record_blocked=args.record_blocked)
         return
 
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
