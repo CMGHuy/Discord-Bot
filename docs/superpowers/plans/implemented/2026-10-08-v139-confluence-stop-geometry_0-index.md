@@ -1,6 +1,6 @@
 # v139 — Confluence stop geometry: Implementation Plan (index)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part file whole** — pull one task: `grep -n "^### Task V139-4" -A 200 docs/superpowers/plans/2026-10-08-v139-confluence-stop-geometry_1-geometry-and-live-path.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read a part file whole** — pull one task: `grep -n "^### Task V139-4" -A 200 docs/superpowers/plans/implemented/2026-10-08-v139-confluence-stop-geometry_1-geometry-and-live-path.md`.
 
 **Bump:** none
 **Edge:** expectancy — arm D removes trades (v72 funnel); arm S keeps the entries and moves stop and target geometry, so it is gated as harvest (v92) — predicted; measured no lift: arm S NO_ELIGIBLE_CELL at Stage 1, arm D REFUSED at Stage 0, VALIDATION unspent
