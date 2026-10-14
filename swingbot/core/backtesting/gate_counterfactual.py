@@ -278,7 +278,7 @@ def _built_plan(candidate: BlockedCandidate, window) -> tuple[TradePlanV2 | None
         return _plan_for(candidate, window), False
     except UnpinnableBuild as exc:
         log.warning("gate counterfactual: %s %s %s -- %s; no-data", candidate.ticker,
-                    candidate.strategy, candidate.signal_date, exc)
+                    candidate.strategy, candidate.signal_date, exc, exc_info=True)
         return None, True
 
 

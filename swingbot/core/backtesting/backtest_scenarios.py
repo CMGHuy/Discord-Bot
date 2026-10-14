@@ -279,7 +279,7 @@ def _safe_gate_rows(ticker, df, horizon_key, taken, blocked, scope) -> list[dict
     try:
         return _horizon_gate_rows(ticker, df, horizon_key, taken, blocked, scope)
     except Exception as exc:  # noqa: BLE001 -- record-only path must never change replay results
-        log.warning("v147 gate rows skipped for %s/%s: %s", ticker, horizon_key, exc)
+        log.warning("v147 gate rows skipped for %s/%s: %s", ticker, horizon_key, exc, exc_info=True)
         return []
 
 
