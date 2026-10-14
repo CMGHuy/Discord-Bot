@@ -3,7 +3,8 @@
 One pure function, ``simulate_blocked(candidate, bars)``, shared unchanged by
 the TRAIN recorders and the live resolver. It finds the signal bar by exact
 date, re-anchors stored prices when the bar basis moved (split/dividend), takes
-the stored plan (V147-3 adds the truncated rebuild), and walks it through
+the stored plan or rebuilds it on the frame truncated at the signal bar
+(overrides pinned to the stored scan params), and walks it through
 ``exit_sim.simulate_exit(..., scale_out=True)`` -- the exact call the replays
 make (``arms/strategy_engine.py``, ``backtest_scenarios.py``), with
 ``max_holding_days`` left None so it resolves to the horizon's value.
@@ -22,7 +23,11 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from swingbot import config
+from swingbot.core.market import levels
 from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.planning import params as plan_params
+from swingbot.core.planning.builders import build_confluence_plan, build_strategy_plan
 from swingbot.core.planning.exit_sim import simulate_exit
 from swingbot.core.planning.plan_types import TradePlanV2, plan_from_dict, plan_to_dict
 
@@ -171,11 +176,110 @@ def _outcome(frame, index: int, plan: TradePlanV2, reanchored: bool) -> Counterf
                                 bars_sha256(used), reanchored, plan_to_dict(plan))
 
 
+class UnpinnableBuild(RuntimeError):
+    """A strategy rebuild would read live state (journal / wall clock) no stored field pins."""
+
+
+PIN_KEYS = ("stop_mult", "tp2_r", "time_stop_days")
+_WALL_CLOCK_FLAGS = ("STALL_EXIT_ENABLED", "OPEX_CAUTION_ENABLED")
+
+
+def scenario_to_dict(scenario) -> dict:
+    """JSON-safe dict of a levels.Scenario (sources kept as plain strings)."""
+    out = dataclasses.asdict(scenario)
+    for key in ("stop_sources", "target_sources", "target2_sources"):
+        if out.get(key) is not None:
+            out[key] = [str(s) for s in out[key]]
+    return out
+
+
+def scenario_from_dict(d: dict) -> levels.Scenario:
+    """Inverse of scenario_to_dict; unknown keys are ignored."""
+    known = {f.name for f in dataclasses.fields(levels.Scenario)}
+    return levels.Scenario(**{k: v for k, v in d.items() if k in known})
+
+
+def pinned_scan_params(strategy: str, *, plan: TradePlanV2 | None = None, params=None) -> dict:
+    """The candidate's ``scan_params``: the three data-driven-stops overrides as they
+    stood at the gate, plus the ScanParams fields. Read off the plan when one
+    exists, else resolved now (the block time) through the live resolvers."""
+    if plan is not None:
+        pins = {"stop_mult": plan.stop_mult_applied, "tp2_r": plan.tp2_r_applied,
+                "time_stop_days": plan.time_stop_days}
+    else:
+        pins = {"stop_mult": plan_params._resolve_stop_mult(strategy),
+                "tp2_r": plan_params._resolve_tp2_r(strategy),
+                "time_stop_days": plan_params._resolve_time_stop_days(strategy)}
+    pins["params"] = dataclasses.asdict(params) if params is not None else None
+    return pins
+
+
+def _scan_params_of(candidate: BlockedCandidate):
+    """The stored ScanParams, or None (the builder's own default)."""
+    stored = (candidate.scan_params or {}).get("params")
+    if not stored:
+        return None
+    from swingbot.scan_params import ScanParams
+    known = {f.name for f in dataclasses.fields(ScanParams)}
+    return ScanParams(**{k: v for k, v in stored.items() if k in known})
+
+
+def _strategy_pins(candidate: BlockedCandidate) -> dict:
+    """The pinned overrides; raises UnpinnableBuild when the build would read live state."""
+    on = [name for name in _WALL_CLOCK_FLAGS if getattr(config, name, False)]
+    if on:
+        raise UnpinnableBuild(f"{', '.join(on)} on: the rebuild would read live state")
+    stored = candidate.scan_params or {}
+    pins = {key: stored.get(key) for key in PIN_KEYS}
+    if config.DATA_DRIVEN_STOPS_ENABLED and any(v is None for v in pins.values()):
+        raise UnpinnableBuild("DATA_DRIVEN_STOPS_ENABLED on and an override is not pinned")
+    return pins
+
+
+def _strategy_plan(candidate: BlockedCandidate, window) -> TradePlanV2 | None:
+    """The live strategy constructor on the truncated frame, overrides pinned."""
+    pins = _strategy_pins(candidate)
+    return build_strategy_plan(
+        window, len(window) - 1, ticker=candidate.ticker, strategy=candidate.strategy,
+        horizon_key=candidate.horizon, direction=candidate.direction,
+        stop_mult=pins["stop_mult"], tp2_r=pins["tp2_r"],
+        time_stop_days=pins["time_stop_days"], scan_params=_scan_params_of(candidate))
+
+
+def _confluence_plan(candidate: BlockedCandidate, window) -> TradePlanV2 | None:
+    """The live confluence constructor; level_map from the truncated frame."""
+    if candidate.scenario is None:
+        return None
+    price = float(window["Close"].iloc[-1])
+    level_map = levels.build_level_map(window, HORIZONS[candidate.horizon], price)
+    return build_confluence_plan(
+        scenario_from_dict(candidate.scenario), window, ticker=candidate.ticker,
+        horizon_key=candidate.horizon, primary_strategy=candidate.strategy,
+        level_map=level_map, quality_inputs=None, params=_scan_params_of(candidate))
+
+
+def build_candidate_plan(candidate: BlockedCandidate, window) -> TradePlanV2 | None:
+    """Rebuild the plan the gate threw away, from ``window`` (bars <= signal) only."""
+    if candidate.source == "strategy":
+        return _strategy_plan(candidate, window)
+    return _confluence_plan(candidate, window)
+
+
 def _plan_for(candidate: BlockedCandidate, window) -> TradePlanV2 | None:
-    """The stored plan as stored. V147-3 adds the truncated rebuild from ``window``."""
+    """The stored plan as stored; otherwise the truncated rebuild."""
     if candidate.plan is not None:
         return plan_from_dict(candidate.plan)
-    return None
+    return build_candidate_plan(candidate, window)
+
+
+def _built_plan(candidate: BlockedCandidate, window) -> tuple[TradePlanV2 | None, bool]:
+    """(plan | None, unpinnable)."""
+    try:
+        return _plan_for(candidate, window), False
+    except UnpinnableBuild as exc:
+        log.warning("gate counterfactual: %s %s %s -- %s; no-data", candidate.ticker,
+                    candidate.strategy, candidate.signal_date, exc)
+        return None, True
 
 
 def simulate_blocked(candidate: BlockedCandidate, bars, *,
@@ -188,7 +292,9 @@ def simulate_blocked(candidate: BlockedCandidate, bars, *,
     if index is None:
         return _status_only("no-data")
     ratio = _reanchor_ratio(candidate, frame, index)
-    plan = _plan_for(_rebased(candidate, ratio), frame.iloc[:index + 1])
+    plan, unpinnable = _built_plan(_rebased(candidate, ratio), frame.iloc[:index + 1])
+    if unpinnable:
+        return _status_only("no-data", reanchored=ratio is not None)
     if plan is None:
         return _status_only("no-plan", reanchored=ratio is not None)
     return _outcome(frame, index, plan, ratio is not None)

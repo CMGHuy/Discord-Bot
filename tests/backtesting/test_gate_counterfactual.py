@@ -1,7 +1,12 @@
 """v147 V147-2: simulate_blocked core -- signal bar, price basis, walk, status."""
+import math
+
 import pytest
 
 from swingbot.core.backtesting import gate_counterfactual as gc
+from swingbot import config
+from swingbot.core.market import levels
+from swingbot.core.planning import params as plan_params
 from swingbot.core.planning.exit_sim import _not_triggered, _no_trade
 from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2, simulate_exit
 from swingbot.core.planning.plan_types import plan_from_dict, plan_to_dict
@@ -184,3 +189,187 @@ def test_walk_is_the_replays_exact_call(monkeypatch):
     monkeypatch.setattr(gc, "simulate_exit", spy)
     gc.simulate_blocked(_candidate(_plan()), _frame([]))
     assert seen == {"scale_out": True, "signal_index": SIGNAL}
+
+
+# --- V147-3: truncated plan build, pinned overrides, no-lookahead ---
+
+REBUILD_SIGNAL = 300
+
+
+def _sine_frame():
+    """Steady uptrend: the RSI ATR-branch plan builds; a 6% confluence target does not qualify."""
+    return make_ohlcv([100 + 0.15 * i + 3 * math.sin(i / 4.0) for i in range(340)], start="2021-01-04")
+
+
+def _pullback_frame():
+    """Uptrend, decline, base: the window's resistances give a confluence target."""
+    up = [100 + 0.2 * i + 3 * math.sin(i / 4.0) for i in range(240)]
+    down = [up[-1] - 0.35 * i + 2 * math.sin(i / 3.0) for i in range(1, 61)]
+    base = [down[-1] + 0.3 * math.sin(i / 2.0) for i in range(1, 41)]
+    return make_ohlcv(up + down + base, start="2021-01-04")
+
+
+def _signal_date(frame) -> str:
+    return str(frame.index[REBUILD_SIGNAL].date())
+
+
+def _scenario(price: float) -> dict:
+    sc = levels.Scenario(
+        direction="bullish", entry=price, market_price=price, stop_loss=price * 0.985,
+        stop_sources=["Support/Resistance"], stop_distance_pct=1.5, tight_stop=False,
+        atr_floor_pct=1.0, take_profit=price * 1.06, target_distance_pct=6.0,
+        target_sources=["Fibonacci"], target2_price=None, target2_distance_pct=None,
+        target2_sources=None)
+    return gc.scenario_to_dict(sc)
+
+
+def _confluence(frame, **kw) -> gc.BlockedCandidate:
+    price = float(frame["Close"].iloc[REBUILD_SIGNAL])
+    base = dict(ticker="T", gate="rs", reason="rs_blocked", source="confluence",
+                strategy="Fibonacci", horizon="2w", direction="bullish",
+                signal_date=_signal_date(frame), scenario=_scenario(price))
+    base.update(kw)
+    return gc.BlockedCandidate(**base)
+
+
+def _strategy(frame, **kw) -> gc.BlockedCandidate:
+    base = dict(ticker="T", gate="rs", reason="rs_blocked", source="strategy", strategy="RSI",
+                horizon="2w", direction="bullish", signal_date=_signal_date(frame),
+                scan_params={"stop_mult": None, "tp2_r": None, "time_stop_days": None,
+                             "params": None})
+    base.update(kw)
+    return gc.BlockedCandidate(**base)
+
+
+def _same_plan(a: dict, b: dict) -> bool:
+    return {k: v for k, v in a.items() if k != "plan_id"} == \
+        {k: v for k, v in b.items() if k != "plan_id"}
+
+
+def test_scenario_round_trip():
+    d = _scenario(100.0)
+    assert gc.scenario_to_dict(gc.scenario_from_dict(d)) == d
+    assert gc.scenario_from_dict({**d, "unknown": 1}).entry == 100.0
+
+
+def test_strategy_rebuild_from_the_truncated_frame_equals_the_full_frame_result():
+    full = _sine_frame()
+    cand = _strategy(full)
+    truncated = gc.build_candidate_plan(cand, full.iloc[:REBUILD_SIGNAL + 1])
+    assert truncated is not None
+    res = gc.simulate_blocked(cand, full)
+    assert res.cf_status == "filled"
+    assert _same_plan(res.plan, plan_to_dict(truncated))
+
+
+def test_confluence_rebuild_from_the_truncated_frame_equals_the_full_frame_result():
+    full = _pullback_frame()
+    cand = _confluence(full)
+    truncated = gc.build_candidate_plan(cand, full.iloc[:REBUILD_SIGNAL + 1])
+    assert truncated is not None and truncated.source == "confluence"
+    assert truncated.strategy == "Fibonacci"           # the stored primary_strategy_for label
+    res = gc.simulate_blocked(cand, full)
+    assert res.cf_status in ("filled", "no-fill")
+    assert _same_plan(res.plan, plan_to_dict(truncated))
+
+
+def test_confluence_without_a_qualifying_target_is_no_plan():
+    full = _sine_frame()
+    assert gc.build_candidate_plan(_confluence(full), full.iloc[:REBUILD_SIGNAL + 1]) is None
+    assert gc.simulate_blocked(_confluence(full), full).cf_status == "no-plan"
+
+
+def test_short_lane_rebuilds_like_confluence():
+    full = _pullback_frame()
+    a = gc.build_candidate_plan(_confluence(full), full.iloc[:REBUILD_SIGNAL + 1])
+    b = gc.build_candidate_plan(_confluence(full, source="short_lane"), full.iloc[:REBUILD_SIGNAL + 1])
+    assert _same_plan(plan_to_dict(a), plan_to_dict(b))
+
+
+def test_builder_sees_only_bars_up_to_the_signal(monkeypatch):
+    full = _sine_frame()
+    seen = []
+    real = gc.build_candidate_plan
+
+    def spy(candidate, window):
+        seen.append((len(window), str(window.index[-1].date())))
+        return real(candidate, window)
+
+    monkeypatch.setattr(gc, "build_candidate_plan", spy)
+    gc.simulate_blocked(_strategy(full), full)
+    assert seen == [(REBUILD_SIGNAL + 1, _signal_date(full))]
+
+
+def test_appended_bars_change_no_rebuilt_outcome():
+    full = _sine_frame()
+    shorter = full.iloc[:REBUILD_SIGNAL + 1 + 30]
+    a, b = gc.simulate_blocked(_strategy(full), full), gc.simulate_blocked(_strategy(full), shorter)
+    assert (a.cf_status, a.cf_r, a.win, a.bars_sha256) == (b.cf_status, b.cf_r, b.win, b.bars_sha256)
+
+
+def _journal_must_not_be_read(monkeypatch):
+    def boom(*_a, **_k):
+        raise AssertionError("live journal read at resolution time")
+    for name in ("_resolve_stop_mult", "_resolve_tp2_r", "_resolve_time_stop_days"):
+        monkeypatch.setattr(plan_params, name, boom)
+
+
+def test_pinned_overrides_ignore_a_changed_live_journal(monkeypatch):
+    full = _sine_frame()
+    monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", True)
+    _journal_must_not_be_read(monkeypatch)
+    pins = {"stop_mult": 1.25, "tp2_r": 2.0, "time_stop_days": 6, "params": None}
+    plan = gc.build_candidate_plan(_strategy(full, scan_params=pins), full.iloc[:REBUILD_SIGNAL + 1])
+    assert plan is not None
+    assert plan.stop_mult_applied == 1.25 and plan.time_stop_days == 6
+
+
+def test_unpinned_override_with_the_flag_on_is_no_data(monkeypatch):
+    full = _sine_frame()
+    monkeypatch.setattr(config, "DATA_DRIVEN_STOPS_ENABLED", True)
+    _journal_must_not_be_read(monkeypatch)
+    with pytest.raises(gc.UnpinnableBuild):
+        gc.build_candidate_plan(_strategy(full), full.iloc[:REBUILD_SIGNAL + 1])
+    assert gc.simulate_blocked(_strategy(full), full).cf_status == "no-data"
+
+
+@pytest.mark.parametrize("flag", ["STALL_EXIT_ENABLED", "OPEX_CAUTION_ENABLED"])
+def test_wall_clock_flags_make_a_strategy_rebuild_unpinnable(monkeypatch, flag):
+    full = _sine_frame()
+    monkeypatch.setattr(config, flag, True)
+    assert gc.simulate_blocked(_strategy(full), full).cf_status == "no-data"
+
+
+def test_pinned_scan_params_reads_a_plan_or_the_resolvers(monkeypatch):
+    full = _sine_frame()
+    plan = gc.build_candidate_plan(_strategy(full), full.iloc[:REBUILD_SIGNAL + 1])
+    from_plan = gc.pinned_scan_params("RSI", plan=plan)
+    assert set(from_plan) == {"stop_mult", "tp2_r", "time_stop_days", "params"}
+    assert from_plan["stop_mult"] == plan.stop_mult_applied
+    monkeypatch.setattr(plan_params, "_resolve_stop_mult", lambda s: 1.5)
+    monkeypatch.setattr(plan_params, "_resolve_tp2_r", lambda s: None)
+    monkeypatch.setattr(plan_params, "_resolve_time_stop_days", lambda s: 4)
+    assert gc.pinned_scan_params("RSI") == {"stop_mult": 1.5, "tp2_r": None,
+                                            "time_stop_days": 4, "params": None}
+
+
+def test_stored_scan_params_round_trip_into_the_build():
+    from swingbot.scan_params import ScanParams
+    full = _pullback_frame()
+    params = ScanParams.from_config()
+    stored = gc.pinned_scan_params("Fibonacci", params=params)
+    assert gc._scan_params_of(_confluence(full, scan_params=stored)) == params
+
+
+def test_reanchored_scenario_rebuilds_on_the_cache_basis():
+    full = _pullback_frame()
+    price = float(full["Close"].iloc[REBUILD_SIGNAL])
+    halved = full.copy()
+    for col in ("Open", "High", "Low", "Close"):
+        halved[col] = halved[col] * 0.5
+    stored = _confluence(full, signal_close=price)           # scenario in the pre-split basis
+    res = gc.simulate_blocked(stored, halved)
+    plain = gc.simulate_blocked(_confluence(full, signal_close=price), full)
+    assert res.reanchored is True
+    assert res.plan["trigger_price"] == pytest.approx(plain.plan["trigger_price"] * 0.5)
+    assert res.cf_status == plain.cf_status
