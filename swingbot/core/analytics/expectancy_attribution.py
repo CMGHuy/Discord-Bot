@@ -13,9 +13,12 @@ pre-registered verdict always compares exact values.
 """
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import numpy as np
 
 from swingbot.core.analytics.aggregate import rs_quintile_label
+from swingbot.core.backtesting.instrument import stats
 from swingbot.core.edge.frictions import apply_frictions, commission_r
 from swingbot.core.market.strategy_types import HORIZONS
 
@@ -214,3 +217,207 @@ def population_buckets(rows: list[dict]) -> dict[str, list[dict]]:
             for bucket, members in zip(out[name], groups.values()):
                 bucket.update(_decile_extras(members))
     return out
+
+
+# --------------------------------------------------------------------------
+# Statistics: week-clustered looks, monotonicity, factor deltas, BH, verdict.
+# --------------------------------------------------------------------------
+
+#: Bootstrap replicates per look (pre-registered default, 10,000).
+N_RESAMPLES = stats.WEEK_BOOTSTRAP_RESAMPLES
+TERCILES = 3
+#: Spec, "The verdict": point estimate >= +0.10R (and CI lower bound > 0).
+MIN_SPREAD_R = 0.10
+VERDICTS = ("PREDICTIVE", "WEAK", "NOT PREDICTIVE")
+#: Factor keys that exist on a row only when they fired: their absence is a
+#: reading of 0. Any other key absent from a row means another scorer wrote
+#: that row, and the row is left out of that factor's look.
+ABSENT_IS_ZERO = frozenset({"Tight stop penalty"})
+
+
+class _Obs(NamedTuple):
+    """One arm's rows of one entry week, summed. ``entry_date`` is the week's
+    Monday, which is what ``stats.group_by_week`` keys on."""
+    entry_date: str
+    total: float
+    n: int
+
+
+def _week_sums(rows: list[dict]) -> list[_Obs]:
+    sums: dict[str, tuple[float, int]] = {}
+    for row in rows:
+        total, n = sums.get(row["week"], (0.0, 0))
+        sums[row["week"]] = (total + row["r"], n + 1)
+    return [_Obs(week, total, n) for week, (total, n) in sorted(sums.items())]
+
+
+def _mean_gap(base: list[_Obs], comp: list[_Obs]) -> float | None:
+    """ExpR(comp) - ExpR(base) for one resample; None when an arm is empty
+    (the bootstrap drops that draw, it never zero-fills it)."""
+    base_n, comp_n = sum(obs.n for obs in base), sum(obs.n for obs in comp)
+    if not base_n or not comp_n:
+        return None
+    return sum(obs.total for obs in comp) / comp_n - sum(obs.total for obs in base) / base_n
+
+
+def _look(base_rows: list[dict], comp_rows: list[dict], seed: int) -> dict:
+    """One look: ExpR(comp) - ExpR(base), its 95% week-clustered bootstrap CI
+    and a two-sided bootstrap p. An arm under THIN_N rows gets the point
+    estimate only -- no interval, no p, so it never enters the BH family."""
+    out = {"delta": None, "ci_low": None, "ci_high": None, "p": None}
+    if base_rows and comp_rows:
+        out["delta"] = _mean([row["r"] for row in comp_rows]) - _mean([row["r"] for row in base_rows])
+    if min(len(base_rows), len(comp_rows)) < THIN_N:
+        return out
+    draws = stats.week_cluster_bootstrap(_week_sums(base_rows), _week_sums(comp_rows),
+                                         _mean_gap, n_resamples=N_RESAMPLES, seed=seed)
+    if not len(draws):
+        return out
+    low, high = np.percentile(draws, [2.5, 97.5])
+    tail = min(int((draws <= 0).sum()), int((draws >= 0).sum())) + 1
+    out.update(ci_low=float(low), ci_high=float(high),
+               p=min(1.0, 2.0 * tail / (len(draws) + 1)))
+    return out
+
+
+def _ranks(values: list[float]) -> list[float]:
+    """1-based ranks, ties sharing their mean rank."""
+    order = sorted(range(len(values)), key=lambda index: values[index])
+    ranks = [0.0] * len(values)
+    start = 0
+    while start < len(order):
+        end = start
+        while end + 1 < len(order) and values[order[end + 1]] == values[order[start]]:
+            end += 1
+        for position in range(start, end + 1):
+            ranks[order[position]] = (start + end) / 2.0 + 1.0
+        start = end + 1
+    return ranks
+
+
+def _spearman(xs: list[float], ys: list[float]) -> float | None:
+    """Spearman rho (Pearson on mean ranks); None under 3 points or when one
+    side is constant. numpy only: scipy is not a dependency."""
+    if len(xs) < 3:
+        return None
+    rank_x, rank_y = np.asarray(_ranks(xs)), np.asarray(_ranks(ys))
+    if rank_x.std() == 0 or rank_y.std() == 0:
+        return None
+    return float(np.corrcoef(rank_x, rank_y)[0, 1])
+
+
+def _terciles(scored: list[dict]) -> list[list[dict]]:
+    """[bottom, middle, top] by ``confidence_score``; ties never split."""
+    bins = quantile_bins([row["confidence_score"] for row in scored], TERCILES)
+    return [[row for row, index in zip(scored, bins) if index == third]
+            for third in range(TERCILES)]
+
+
+def monotonicity(rows: list[dict], *, seed: int) -> dict:
+    """Does ``confidence_score`` rank R? Spearman rho and the top-minus-bottom
+    tercile ExpR with its week-clustered CI, on the scored rows.
+
+    The tercile of every row is fixed ONCE here, on the full sample; the
+    bootstrap resamples weeks of rows that keep their tercile."""
+    scored = _scored(rows)
+    thirds = _terciles(scored)
+    look = _look(thirds[0], thirds[-1], seed)
+    return {
+        "n": len(scored),
+        "spearman_rho": _spearman([row["confidence_score"] for row in scored],
+                                  [row["r"] for row in scored]),
+        "tercile_spread": look["delta"],
+        "ci_low": look["ci_low"],
+        "ci_high": look["ci_high"],
+        "p": look["p"],
+        "inverted": look["ci_high"] is not None and look["ci_high"] < 0,
+        "tercile_n": [len(third) for third in thirds],
+        "rr_by_tercile": [_quartiles([row.get("risk_reward_ratio") for row in third])
+                          for third in thirds],
+    }
+
+
+def _factor_arms(rows: list[dict], key: str) -> tuple[list[dict], list[dict]]:
+    """(rows where the factor scored, rows where it scored 0). A row that
+    lists the factor in ``confidence_unevaluated`` is in neither arm: "no
+    data" is never a positive reading."""
+    scored_rows, zero_rows = [], []
+    for row in rows:
+        points = row.get("confidence_points")
+        if not isinstance(points, dict) or key in (row.get("confidence_unevaluated") or ()):
+            continue
+        if key not in points and key not in ABSENT_IS_ZERO:
+            continue
+        (scored_rows if points.get(key, 0) != 0 else zero_rows).append(row)
+    return scored_rows, zero_rows
+
+
+def factor_deltas(rows: list[dict], *, seed: int) -> list[dict]:
+    """Per factor key: ExpR where it scored minus ExpR where it scored 0."""
+    keys = sorted({key for row in rows for key in (row.get("confidence_points") or {})})
+    out = []
+    for key in keys:
+        scored_rows, zero_rows = _factor_arms(rows, key)
+        look = _look(zero_rows, scored_rows, seed)
+        out.append({"key": key, "n": len(scored_rows) + len(zero_rows),
+                    "n_pos": len(scored_rows), "n_zero": len(zero_rows),
+                    "delta": look["delta"], "ci_low": look["ci_low"],
+                    "ci_high": look["ci_high"], "p": look["p"], "q": None})
+    return out
+
+
+def bucket_looks(rows: list[dict], buckets: dict[str, list[dict]], *, seed: int) -> None:
+    """Fill ``delta, ci_low, ci_high, p`` on every bucket, in place: the
+    bucket's ExpR minus the ExpR of the rest of its own grouping. A thin
+    bucket (or a thin rest) keeps None for the interval and the p."""
+    for name, groups in _grouped_rows(rows).items():
+        for bucket in buckets.get(name, ()):
+            inside = groups.get(bucket["label"], [])
+            members = {id(row) for row in inside}
+            rest = [row for group in groups.values() for row in group
+                    if id(row) not in members]
+            bucket.update(_look(rest, inside, seed))
+
+
+def _look_holders(population: dict | None) -> list[tuple[dict, bool]]:
+    """Every dict of one population that carries a ``p``, with whether it
+    takes a ``q`` (buckets and factors do; monotonicity keeps its shape)."""
+    if not population:
+        return []
+    holders = [(population["monotonicity"], False)]
+    for split in (population.get("splits") or {}).values():
+        holders.extend((mono, False) for mono in split.values())
+    holders.extend((factor, True) for factor in population.get("factors") or ())
+    for grouping in (population.get("buckets") or {}).values():
+        holders.extend((bucket, True) for bucket in grouping)
+    return holders
+
+
+def assign_qvalues(populations: dict) -> int:
+    """Benjamini-Hochberg over EVERY look of both populations (one family).
+    Writes ``q`` on buckets and factors and returns ``looks``, the family
+    size (the number of non-null p-values)."""
+    holders = [holder for name in ("live", "train")
+               for holder in _look_holders(populations.get(name))]
+    qvalues = stats.bh_qvalues([holder.get("p") for holder, _ in holders])
+    for (holder, takes_q), q in zip(holders, qvalues):
+        if takes_q:
+            holder["q"] = q
+    return sum(1 for q in qvalues if q is not None)
+
+
+def population_passes(mono: dict) -> bool:
+    """One population's clause of the pre-registered verdict: CI lower bound
+    > 0 AND point estimate >= +0.10R; any tercile with N < 30 fails it."""
+    if not mono or min(mono.get("tercile_n") or [0]) < THIN_N:
+        return False
+    low, spread = mono.get("ci_low"), mono.get("tercile_spread")
+    return low is not None and spread is not None and low > 0 and spread >= MIN_SPREAD_R
+
+
+def verdict(live_mono: dict | None, train_mono: dict | None) -> str:
+    """PREDICTIVE when the clause holds in both populations, WEAK in exactly
+    one, NOT PREDICTIVE otherwise. An inverted CI is reported through the
+    monotonicity dict's ``inverted`` flag, inside NOT PREDICTIVE or WEAK."""
+    passed = sum(1 for mono in (live_mono, train_mono) if population_passes(mono))
+    return VERDICTS[2 - passed]
