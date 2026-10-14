@@ -31,10 +31,11 @@ Spec § Executor rules ("At close: when a position's last close fills, or is fou
 What this task adds:
 
 1. **Close economics.** `_after_final(row)` (EM8's no-op hook) runs on every final status. When the row is a plan's closing row (a `close_all` that ended `filled`, or any row that ended `closed_by_broker`), it reads the trade history pages from the open's fill date (`HISTORY_PAGE_SIZE = 200` per page, at most `HISTORY_MAX_PAGES = 10`, stopping at the first short page), merges every history entry for the open row's `position_id` (`history_item`; a position closed in parts may be booked as more than one entry, so money fields are summed and the latest `closeTimestamp`'s `closeRate` is kept), and writes `close_economics(item)` plus `history_pending: False` into that row **without changing its status**. Exactly one closing row per plan holds the economics: a row is not persisted when another row of the plan already holds `net_profit` or `history_pending`.
+1b. **Every close leg's exit price (controller decision 2026-10-14).** The spec's eToro R gross is built "from `avg_price` and the close fills", so a filled `close_units` row (the TP1 partial) also gets its own `close_rate` and `closed_at`: from the history entry for the same `position_id` whose `units` equal the row's `units_requested` (latest `closeTimestamp` if several), so the final close's entry is never mistaken for the partial. Not found (or history unreadable) → `close_rate_pending: True` plus one WARNING, retried at the reconciliation. Only `close_rate`/`closed_at` go on a partial row; `net_profit`, `fees` and `overnight_fees` stay on the plan's last close (spec § Executor rules), and `close_rate_pending` never blocks the closing row (`_holds_close` reads only `net_profit`/`history_pending`).
 2. **Not in history yet.** A close can reach history after its lookup says filled. If no entry matches, or the history read fails, the row gets `history_pending: True` and one WARNING; the daily reconciliation retries every pending row.
 3. **Daily reconciliation.** `maybe_reconcile(now=None)` runs at the end of every `run_tick` whose send budget is not spent. It returns `False` at once unless `now_et(now).time() >= RECONCILE_AFTER_ET` (16:15) on an NYSE session day (`nyse_calendar().is_session`) not yet reconciled: a process-local date first, then `scheduled_repo().fired_on(RECONCILE_JOB)` (the persisted ET date, ISO). It reads the demo portfolio; on failure it returns `False` without marking, so the next tick retries. On success it logs one WARNING per `reconcile_findings` entry over the open rows (each enriched with `expected_units` = `units_filled` minus filled `close_units` `units_requested`, and `expected_stop` = the highest-`seq` filled `open`/`move_stop` row's `stop_sent`), retries pending closes, then marks the day (`scheduled_repo().mark(RECONCILE_JOB, day.isoformat())`) and returns `True`. Nothing is ever sent or corrected.
 
-Row doc fields this task writes (flat record keys, closing rows only): `net_profit`, `fees`, `overnight_fees` (eToro's `overnightFees`, else `None`), `close_rate`, `closed_at` (eToro's `closeTimestamp`), `history_pending`.
+Row doc fields this task writes (flat record keys). Closing row: `net_profit`, `fees`, `overnight_fees` (eToro's `overnightFees`, else `None`), `close_rate`, `closed_at` (eToro's `closeTimestamp`), `history_pending`. Filled `close_units` row: `close_rate`, `closed_at`, `close_rate_pending`. So every close leg carries `close_rate` once history has it; the parity report (EM11) reads each leg's exit price from it.
 
 **Files:**
 - Modify: `swingbot/core/broker/executor.py`
@@ -53,6 +54,7 @@ Row doc fields this task writes (flat record keys, closing rows only): `net_prof
   - `history_item(body: object, position_id: int) -> dict | None` (keys `positionId`, `closeRate`, `closeTimestamp`, `netProfit`, `fees`, `overnightFees`, `units`; accepts a list, or a dict wrapping one list).
   - `close_economics(item: dict) -> dict` (`{"net_profit", "fees", "overnight_fees", "close_rate", "closed_at"}`).
   - `reconcile_findings(portfolio_body: object, open_rows: list[dict]) -> list[str]` (row keys `plan_id`, `ticker`, `position_id`, `units_filled`, `stop_sent`, optional `expected_units`, `expected_stop`).
+  - Every filled close leg (`close_units` filled, and the closing row) carries `close_rate` and `closed_at`; only the closing row carries `net_profit`, `fees`, `overnight_fees`.
   - `Executor._after_final(row)` implemented; `Executor.maybe_reconcile(now: datetime | None = None) -> bool`; `run_tick` calls it last when the budget is not spent.
 
 - [ ] **Step 1: Confirm EM8 is on the branch**
@@ -247,12 +249,58 @@ def test_a_stop_move_closed_by_broker_persists_on_that_row(rig):
     assert (row["status"], row["net_profit"]) == ("closed_by_broker", 7.5)
 
 
-def test_an_open_fill_or_a_partial_close_reads_no_history(rig):
-    _open(rig)
-    rig.repo.seed("p1", "close_units", "tp1_partial", "in_flight", units_requested=1.0)
+def test_an_open_fill_reads_no_history(rig):
     rig.repo.seed("p2", "open", "filled", "in_flight", stop_sent=95.0)
     rig.ex.run_tick([])
-    assert rig.client.names() == ["lookup", "lookup"]
+    assert rig.client.names() == ["lookup"]
+
+
+PARTIAL = {"positionId": 5001, "closeRate": 102.0, "closeTimestamp": "2026-10-12T15:00:00Z",
+           "netProfit": 1.9, "fees": 0.2, "units": 1.0}
+PARTIAL_RID = request_id_for("p1", "close_units", "tp1_partial")
+
+
+def test_a_filled_partial_close_stores_its_own_exit_price(rig):
+    _open(rig)
+    rig.repo.seed("p1", "close_units", "tp1_partial", "in_flight", units_requested=1.0)
+    rig.client.script("history", ClientResult(200, [OTHER, PARTIAL]))
+    rig.ex.run_tick([])
+    assert rig.client.names() == ["lookup", "history"]
+    row = rig.repo.row(PARTIAL_RID)
+    assert (row["status"], row["close_rate"], row["closed_at"], row["close_rate_pending"]) == (
+        "filled", 102.0, "2026-10-12T15:00:00Z", False)
+    assert "net_profit" not in row and "history_pending" not in row
+
+
+def test_a_partial_close_ignores_entries_of_another_size_and_retries(rig, caplog):
+    _open(rig)
+    rig.repo.seed("p1", "close_units", "tp1_partial", "in_flight", units_requested=1.0)
+    rig.client.script("history", ClientResult(200, [TRADE]))          # 2 units: not the leg
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        rig.ex.run_tick([])
+    row = rig.repo.row(PARTIAL_RID)
+    assert row["close_rate_pending"] is True and "close_rate" not in row
+    assert "partial close not in trade history yet: AAPL p1" in caplog.text
+    rig.now[0] = MON_1620_ET
+    rig.client.script("history", ClientResult(200, [TRADE, PARTIAL]))
+    rig.ex.run_tick([])
+    assert rig.client.names()[-2:] == ["portfolio", "history"]
+    row = rig.repo.row(PARTIAL_RID)
+    assert (row["close_rate"], row["close_rate_pending"]) == (102.0, False)
+
+
+def test_the_last_close_after_a_partial_holds_the_economics(rig):
+    _open(rig)
+    rig.repo.seed("p1", "close_units", "tp1_partial", "filled", units_requested=1.0,
+                  close_rate=102.0, close_rate_pending=False)
+    rig.repo.seed("p1", "close_all", "closed", "in_flight")
+    final = {**TRADE, "netProfit": 5.6, "fees": 0.2, "units": 1.0}
+    rig.client.script("history", ClientResult(200, [PARTIAL, final]))
+    rig.ex.run_tick([])
+    row = rig.repo.row(CLOSE_RID)
+    assert row["net_profit"] == pytest.approx(7.5)
+    assert (row["close_rate"], row["history_pending"]) == (104.0, False)
+    assert rig.repo.row(PARTIAL_RID)["close_rate"] == 102.0
 
 
 def test_a_second_closing_row_does_not_persist_again(rig):
@@ -442,6 +490,18 @@ def history_item(body: object, position_id: int) -> dict | None:
             "units": _sum_field(matches, "units")}
 
 
+def _leg_item(items: list, position_id: int, units: float | None) -> dict | None:
+    """One partial close's history entry: same position, same units, latest close.
+    Matching on units keeps the final close's entry from being taken for the leg."""
+    if units is None:
+        return None
+    legs = [item for item in items if isinstance(item, dict)
+            and _int_or_none(item.get("positionId")) == position_id
+            and _float(item.get("units")) is not None
+            and abs(_float(item.get("units")) - units) <= UNIT_TOLERANCE]
+    return max(legs, key=lambda item: str(item.get("closeTimestamp") or "")) if legs else None
+
+
 def close_economics(item: dict) -> dict:
     """The fields persisted into a closing row; anything unreadable is None."""
     closed_at = item.get("closeTimestamp")
@@ -510,6 +570,11 @@ def _is_closing(row: dict) -> bool:
         row["action"] == mirror.ACTION_CLOSE_ALL and row["status"] == "filled")
 
 
+def _is_leg(row: dict) -> bool:
+    """A filled partial close: it records its own exit price, not the economics."""
+    return row["action"] == mirror.ACTION_CLOSE_UNITS and row["status"] == "filled"
+
+
 def _holds_close(row: dict) -> bool:
     return row.get("net_profit") is not None or bool(row.get("history_pending"))
 
@@ -549,13 +614,39 @@ def _history_since(opened: dict, now: dt.datetime) -> str:
 ```python
     # close-time persistence -----------------------------------------------------------
     def _after_final(self, row: dict) -> None:
-        """On a plan's closing row, persist the trade's economics from history."""
-        if not _is_closing(row):
+        """A plan's closing row gets the trade economics from history; a filled
+        partial close gets its own exit price."""
+        persist = self._persist_for(closing=_is_closing(row), leg=_is_leg(row))
+        if persist is None:
             return
         try:
-            self._persist_close(row)
+            persist(row)
         except Exception as exc:
             self._store_problem("persist close", row["plan_id"], exc)
+
+    def _persist_for(self, *, closing: bool, leg: bool):
+        if closing:
+            return self._persist_close
+        return self._persist_leg_rate if leg else None
+
+    def _persist_leg_rate(self, row: dict) -> None:
+        opened = self._open_row(row["plan_id"])
+        if opened is None:
+            return
+        position_id = int(opened["position_id"])
+        items = self._history_items_for(position_id, _history_since(opened, self._now()))
+        item = _leg_item(items or [], position_id, _float(row.get("units_requested")))
+        if item is None:
+            log.warning("etoro mirror partial close not in trade history yet: %s position %s; "
+                        "retried at the daily reconciliation", _who(row), position_id)
+            changes = {"close_rate_pending": True}
+        else:
+            closed_at = item.get("closeTimestamp")
+            changes = {"close_rate": _float(item.get("closeRate")),
+                       "closed_at": str(closed_at) if closed_at else None,
+                       "close_rate_pending": False}
+        self.repo.set_status(row["request_id"], row["status"], changes)   # status unchanged
+        row.update(changes)
 
     def _persist_close(self, row: dict) -> None:
         others = [r for r in self.repo.for_plan(row["plan_id"]) if r["request_id"] != row["request_id"]]
@@ -577,7 +668,8 @@ def _history_since(opened: dict, now: dt.datetime) -> str:
         self.repo.set_status(row["request_id"], row["status"], changes)   # status unchanged
         row.update(changes)
 
-    def _history_for(self, position_id: int, min_date: str) -> dict | None:
+    def _history_items_for(self, position_id: int, min_date: str) -> list | None:
+        """Every history entry from min_date (paged); None when a page read fails."""
         items = []
         for page in range(1, HISTORY_MAX_PAGES + 1):
             result = self.client.history(min_date, page, HISTORY_PAGE_SIZE)
@@ -588,14 +680,21 @@ def _history_since(opened: dict, now: dt.datetime) -> str:
             items.extend(batch)
             if len(batch) < HISTORY_PAGE_SIZE:
                 break
-        return history_item(items, position_id)
+        return items
+
+    def _history_for(self, position_id: int, min_date: str) -> dict | None:
+        items = self._history_items_for(position_id, min_date)
+        return None if items is None else history_item(items, position_id)
 
     def _retry_pending_closes(self) -> None:
+        """Closing rows and partial-close legs whose history entry was not there yet."""
         for row in self.repo.with_status(("filled", "closed_by_broker")):
-            if not row.get("history_pending"):
+            persist = self._persist_for(closing=bool(row.get("history_pending")),
+                                        leg=bool(row.get("close_rate_pending")))
+            if persist is None:
                 continue
             try:
-                self._persist_close(row)
+                persist(row)
             except Exception as exc:
                 self._store_problem("persist close", row["plan_id"], exc)
 
@@ -680,8 +779,9 @@ Expected: no output. `reconcile_findings`, `_drift` and `_reconcile_day` are the
 git -C "$WT" add swingbot/core/broker/executor.py tests/broker/test_executor_close_and_reconcile.py
 git -C "$WT" commit -m "feat(v160): EM9 -- broker executor: close economics and daily reconciliation
 
-When a plan's position closes (close_all filled, or any row closed_by_broker)
-the executor merges that position's trade-history entries and persists
+A filled partial close records its own exit price (close_rate) from the
+history entry of the same size. When a plan's position closes (close_all
+filled, or any row closed_by_broker) the executor merges that position's trade-history entries and persists
 net_profit, fees, overnight fees, close rate and time into the closing row,
 so the parity report never re-reads live routes; a close not yet in history
 is retried at the reconciliation. Once per NYSE session after 16:15 ET the
