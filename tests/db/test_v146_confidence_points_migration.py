@@ -92,6 +92,26 @@ def test_an_unparseable_line_is_reported_not_fatal():
     assert unparsed == ["Mystery factor", "Odd value"]
 
 
+def test_the_retired_htf_penalty_int_value_is_its_own_points():
+    """v33's HTF rebucket stored htf_counter_trend_penalty as a bare negative
+    int beside the text lines (e1e93097); it is the factor's points, so a
+    row's points sum back to its score."""
+    points, unevaluated, unparsed = MIG.parse_breakdown({
+        "ADX trend strength": "ADX 31.0 (strong trend) (+15)",
+        "htf_counter_trend_penalty": -10,
+        "zero_penalty": 0,
+    })
+    assert points == {"ADX trend strength": 15, "htf_counter_trend_penalty": -10, "zero_penalty": 0}
+    assert unevaluated == []
+    assert unparsed == []
+
+
+@pytest.mark.parametrize("value", [True, False, 1.5, [3], {"pts": 3}])
+def test_a_bool_or_other_non_int_value_stays_unparsed(value):
+    points, unevaluated, unparsed = MIG.parse_breakdown({"Odd value": value})
+    assert (points, unevaluated, unparsed) == ({}, [], ["Odd value"])
+
+
 # --- the backfill on a real trades table ------------------------------
 
 @pytest.fixture

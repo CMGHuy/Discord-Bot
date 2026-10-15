@@ -7,8 +7,10 @@ factors to `confidence_unevaluated`. It is the only place that text is ever
 parsed (docs/claude/schema-evolution.md: no read-time upcasting). Plans are
 not backfilled: they never carried a breakdown.
 
-A line matching neither the trailing "(+N)" / "(-N)" form nor the penalty's
-"-> -N quality pts" form is left out of `points` and counted as unparsed;
+A bare int value (v33's retired `htf_counter_trend_penalty`) is its own
+points. A line matching neither the trailing "(+N)" / "(-N)" form nor the
+penalty's "-> -N quality pts" form is left out of `points` and counted as
+unparsed;
 the per-key parsed / skipped / unparsed counts are logged.
 
 Revision ID: v146_001
@@ -53,6 +55,11 @@ _UPDATE = sa.text(
 
 
 def _line_points(line) -> int | None:
+    # v33's retired HTF rebucket stored htf_counter_trend_penalty as a bare
+    # int (e1e93097): that int IS the factor's points. bool is not a points
+    # value even though it subclasses int.
+    if isinstance(line, int) and not isinstance(line, bool):
+        return line
     if not isinstance(line, str):
         return None
     match = _POINTS_RE.search(line) or _PENALTY_RE.search(line)
@@ -72,7 +79,7 @@ def parse_breakdown(breakdown: dict) -> tuple[dict[str, int], list[str], list[st
             unparsed.append(key)
             continue
         points[key] = value
-        if _FALLBACK_RE.match(line):
+        if isinstance(line, str) and _FALLBACK_RE.match(line):
             unevaluated.append(key)
     return points, unevaluated, unparsed
 

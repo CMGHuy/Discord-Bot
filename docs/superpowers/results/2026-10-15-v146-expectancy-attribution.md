@@ -282,6 +282,7 @@ Live rows left out by the study (`load_live_rows` warning in the verdict-run log
 - **Instrument:** TRAIN replay run without an `--instrument` flag (none was offered).
 - **Most live rows are `unknown` on four groupings.** Live rows labelled `unknown`: `regime2_state` 801 of 912, `rs_quintile` 806 of 912, `confluence` 797 of 912, `earnings` 912 of 912. Trades opened before v146 lack these fields, so the live readings for these four groupings are effectively empty. For example, live `regime2_state` `bull_quiet` (n 111, CI [-0.0868, 0.4600], p 0.1359) and `unknown` (n 801, CI [-0.4600, 0.0868], p 0.1359) are the same split seen from both sides: mirror-image CIs, equal p. Such bucket pairs are not independent findings.
 - **Populations are never pooled.** No statistic combines live and TRAIN; `verdict_of_record.n` is only the sum of the two sample sizes.
+- **One factor was unparsed in the verdict run.** The run used the backfill parser as committed at `8b4d71be`, under which `htf_counter_trend_penalty` (a bare int written by the retired v33 HTF rebucket; 174 of 896 stamped live rows) was unparsed, so those rows' points did not sum to their score. The shipped `v146_001` now parses it. The verdict of record is not re-run; a recompute would add one factor row to the per-factor table.
 
 ## What this licenses
 
