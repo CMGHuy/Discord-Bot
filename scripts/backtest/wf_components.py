@@ -47,6 +47,9 @@ from swingbot.core.backtesting.backtest_wf import (ANCHORED_FOLDS, GATE_MAX_DEGR
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 from swingbot.core.marketdata.universe import liquidity_ok, universe_symbols  # noqa: E402
 from swingbot.core.marketdata.watchlist import load_watchlist  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cache_dir_source  # noqa: E402
 
 # Components the backtest can actually observe. Verified empirically
 # before registering (flip the flag, same windows, compare expectancy).
@@ -179,7 +182,8 @@ def _render(results, universe, symbols, strategies, horizons, elapsed) -> str:
         f"{len(strategies)} strategies × {len(horizons)} horizons",
         "- Exit model: v2 + scale-out, `tp2_mode=levels`, frictions ON "
         "(matches the E22 friction-adjusted baseline tooling's own defaults)",
-        "- OHLCV: `data/backtest_cache/` (same cache the E22 baseline was measured on)",
+        f"- OHLCV: `{training_data.active()}` training data (v162 switch; the E22 baseline "
+        "was measured on `yfinance`)",
         "- Each (symbol, strategy, horizon) backtested once per leg; folds sliced by entry_date",
         "",
         "## Results",
@@ -209,7 +213,7 @@ def _render(results, universe, symbols, strategies, horizons, elapsed) -> str:
     return "\n".join(out) + "\n"
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--component", action="append", default=None)
     ap.add_argument("--universe", default="watchlist")
@@ -217,7 +221,9 @@ def main() -> int:
     ap.add_argument("--horizon", action="append", default=None)
     ap.add_argument("--limit-symbols", type=int, default=None)
     ap.add_argument("--out", default="docs/superpowers/results/2026-07-26-edge-folds.md")
-    args = ap.parse_args()
+    cache_dir_source.add_args(ap)
+    args = ap.parse_args(argv)
+    cache_dir_source.resolve(args)
 
     def log(msg):
         print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -257,6 +263,7 @@ def main() -> int:
                    "elapsed_sec": elapsed, "inert": INERT_COMPONENTS,
                    "results": {k: {"result": v, "gate": gate(v)}
                                for k, v in results.items()}}, fh, indent=2)
+    training_data.write_provenance(args.out.replace(".md", ".json"))
     log(f"DONE in {elapsed/60:.1f} min -> {args.out}")
     for name, res in results.items():
         log(f"  {name}: {gate(res)}")
