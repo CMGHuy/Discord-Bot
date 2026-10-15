@@ -88,7 +88,9 @@ from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest  # n
 from swingbot.core.edge import factors as rs_factors  # noqa: E402
 from swingbot.core.marketdata import universe  # noqa: E402
 from swingbot.core.marketdata.asset_class import is_rs_eligible  # noqa: E402
-from swingbot.core.marketdata.backtest_cache import cache_path  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cache_dir_source  # noqa: E402
 from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS  # noqa: E402
 
 CACHE_DIR = ROOT / "data" / "backtest_cache"
@@ -402,7 +404,7 @@ def rotation_table(sector_rel: pd.DataFrame, window: tuple) -> dict:
 _REL63: pd.DataFrame | None = None
 
 
-def main() -> int:
+def main(argv=None) -> int:
     global _REL63
     ap = argparse.ArgumentParser(description=__doc__)
     g = ap.add_mutually_exclusive_group(required=True)
@@ -410,10 +412,7 @@ def main() -> int:
     g.add_argument("--validation", action="store_true",
                    help="the VALIDATION window -- v34 Task 8's ONE shot only")
     ap.add_argument("--json", default=None)
-    ap.add_argument("--cache-dir", default=None,
-                    help="OHLCV CSV cache. Defaults to <repo>/data/backtest_cache, "
-                         "which is EMPTY inside a git worktree -- point this at "
-                         "the main checkout's cache when running from one.")
+    ap.add_argument("--cache-dir", default=None, help=cache_dir_source.CACHE_DIR_HELP)
     ap.add_argument("--limit", type=int, default=None,
                     help="only the first N watchlist tickers (smoke test)")
     ap.add_argument("--verify-rs", action="store_true",
@@ -430,18 +429,15 @@ def main() -> int:
     ap.add_argument("--rotations-only", action="store_true",
                     help="print only the sector-leadership rotation table "
                          "(Step 4) -- panels only, no backtest population")
-    args = ap.parse_args()
+    cache_dir_source.add_args(ap)
+    args = ap.parse_args(argv)
+    cache = cache_dir_source.resolve(args)
 
     window = VALIDATION if args.validation else TRAIN
     label = "VALIDATION" if args.validation else "TRAIN"
-    cache = Path(args.cache_dir) if args.cache_dir else CACHE_DIR
 
     def load(sym):
-        p = Path(cache) / cache_path(sym).name
-        if not p.exists():
-            return None
-        df = pd.read_csv(p, index_col="Date", parse_dates=True)
-        return df if len(df) else None
+        return cache_dir_source.load_frame(cache, sym)
 
     # Scenario universe = the WATCHLIST, not every CSV in the cache: SPY and
     # the sector ETFs now live there too and are inputs, not subjects.
@@ -456,7 +452,8 @@ def main() -> int:
         frames = dict(list(frames.items())[:args.limit])
     spy = load(BENCHMARK)
     if not frames or spy is None:
-        print(f"Need watchlist CSVs and {BENCHMARK}.csv in {cache} -- run "
+        print(f"Need watchlist CSVs and {BENCHMARK}.csv in "
+              f"{cache_dir_source.describe(cache)} -- run "
               f"scripts/data/fetch_backtest_data.py, or pass --cache-dir.",
               file=sys.stderr)
         return 1
@@ -589,6 +586,7 @@ def main() -> int:
     if args.json:
         Path(args.json).parent.mkdir(parents=True, exist_ok=True)
         Path(args.json).write_text(json.dumps(result, indent=2))
+        training_data.write_provenance(args.json)
         print(f"\nWrote {args.json}", flush=True)
     return 0
 
