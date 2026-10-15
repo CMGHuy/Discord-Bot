@@ -58,7 +58,7 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
       @case ('partials') { <sb-partials-tab /> }
     }
   `,
-  styles: `:host { display: grid; gap: var(--space-14); }`,
+  styles: `:host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); }`,
 })
 export class Analytics {
   protected readonly store = inject(AnalyticsStore);

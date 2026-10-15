@@ -74,13 +74,13 @@ describe('sb-tab-bar overflow (v80 D4)', () => {
     expect(tabs[1].getAttribute('aria-label')).toBeNull();
   });
 
-  it('drops the label below md (mobile and tablet) for an iconed tab only, via CSS', () => {
-    // 1023px, not 1024: breakpoints.ts's md floor is 1024px and the rule
-    // must apply BELOW it, so both phone and tablet widths are covered.
-    const block = SOURCE.match(/@media \(max-width: 1023px\) \{([\s\S]*?)\n {4}\}/);
+  it('keeps the label at every width and drops only the icon on a phone, via CSS', () => {
+    // Icon-only tabs ("glyph + 11" x5) were unreadable on a phone: the word
+    // is the content there. The label carries the count already.
+    const block = SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/);
     expect(block).not.toBeNull();
-    expect(block![1]).toContain('.tab.iconed .label { display: none; }');
-    expect(block![1]).toContain('.tab.iconed .count { display: inline; }');
+    expect(block![1]).toContain('.tab.iconed sb-icon { display: none; }');
+    expect(SOURCE).not.toContain('.tab.iconed .label { display: none; }');
   });
 
   it('renders "· N" next to the icon when a count is given, hidden by default', () => {
@@ -234,17 +234,9 @@ describe('sb-panel force-expand guard', () => {
 
 /* -- v95 C4 -- tab counts survive icon-only ------------------------------- */
 
-describe('sb-tab-bar icon-only counts', () => {
-  // TabBar has no viewportAt override -- its icon-only demotion is CSS-only
-  // (`@media (max-width: 1023px)`), so this is asserted against the
-  // stylesheet text the way A2/A7 assert breakpoint values, not by forcing a
-  // viewport signal jsdom cannot lay out anyway.
-  it('keeps the count visible when the tab bar goes icon-only', () => {
-    // An icon-only tab that drops "6" answers none of the question the tab
-    // exists to answer. The icon may replace the word; it must not replace
-    // the number.
-    const block = SOURCE.match(/@media \(max-width: 1023px\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
-    expect(block).toMatch(/\.tab\.iconed \.label \{ display: none; \}/);
-    expect(block).toMatch(/\.tab\.iconed \.count \{ display: inline; \}/);
+describe('sb-tab-bar narrow widths', () => {
+  it('never hides the label, so the count inside it is never lost', () => {
+    expect(SOURCE).not.toMatch(/\.tab\.iconed \.label \{ display: none; \}/);
+    expect(SOURCE).not.toMatch(/\.tab\.iconed \.count \{ display: inline; \}/);
   });
 });

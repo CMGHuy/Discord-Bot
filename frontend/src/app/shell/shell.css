@@ -49,6 +49,13 @@
    of it instead of under it. */
 .shell.overlay .topbar {
   padding-left: calc(var(--space-10) + var(--control-h) + var(--space-10));
+  /* The menu button is `position: fixed`, so it stays on screen while the
+     bar scrolled away -- leaving a lone hamburger floating over table rows
+     and paragraphs. Keep the bar with it. */
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: var(--bg);
 }
 
 /* On the rail: icons only, centred, labels hidden but still in the DOM so

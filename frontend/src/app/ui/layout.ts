@@ -225,18 +225,15 @@ export interface Tab {
     .tab:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .active { color: var(--text); border-bottom-color: var(--accent); }
     .count { display: none; }
-    /* Below md (mobile and tablet -- breakpoints.ts's floor for md is
-       1024, so 1023 is the last width still below it), an iconed tab
-       drops its text and becomes the icon alone -- title/aria-label (set
-       above) carry the name a sighted mouse user would otherwise read
-       from the label. In its place, when a count was given, "· N" renders
-       next to the icon so the tab still answers "how many" without the
-       full label. A tab with no icon is untouched: text is its only
-       content either way. */
-    @media (max-width: 1023px) {
-      .tab.iconed { padding: var(--space-8); gap: var(--space-4); }
-      .tab.iconed .label { display: none; }
-      .tab.iconed .count { display: inline; }
+    /* An iconed tab keeps its words at every width. It used to drop the
+       label below 1024 and show "icon + 11", which on a phone left five
+       glyphs nobody could tell apart. The label already carries the count
+       ("Open 11"), so what goes instead is the icon, and only where the
+       strip would otherwise have to scroll to fit five labels -- on a phone
+       the word is the content and the glyph is decoration. */
+    @media (max-width: 639px) {
+      .tab.iconed sb-icon { display: none; }
+      .tab.iconed { padding: var(--space-8) var(--space-10); }
     }
     .strip::before, .strip::after {
       content: ''; position: absolute; top: 0; bottom: 0; width: var(--space-20);
