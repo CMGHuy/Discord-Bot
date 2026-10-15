@@ -27,6 +27,8 @@ import {
   Dashboard,
   DashboardScope,
   Collection,
+  ExpectancyAttribution,
+  GateCounterfactual,
   Health,
   Identity,
   Job,
@@ -40,6 +42,7 @@ import {
   Preferences,
   Proposal,
   ProposalList,
+  ReportEnvelope,
   ResearchLedger,
   Risk,
   ScanCommandResult,
@@ -288,6 +291,18 @@ export class ApiClient {
   /** The whole pre-registration ledger. Filtering and paging are client-side. */
   researchLedger(): Observable<ResearchLedger> {
     return this.http.get<ResearchLedger>(`${this.base}/research/ledger`);
+  }
+
+  /* -- reports ----------------------------------------------------------- */
+
+  /** v146's latest result, or `status: 'not_run'`. Never recomputed here. */
+  reportExpectancyAttribution(): Observable<ReportEnvelope<ExpectancyAttribution>> {
+    return this.http.get<ReportEnvelope<ExpectancyAttribution>>(`${this.base}/reports/expectancy-attribution`);
+  }
+
+  /** v147's latest result, or `status: 'not_run'`. */
+  reportGateCounterfactual(): Observable<ReportEnvelope<GateCounterfactual>> {
+    return this.http.get<ReportEnvelope<GateCounterfactual>>(`${this.base}/reports/gate-counterfactual`);
   }
 
   /* -- jobs and tuning proposals ---------------------------------------- */

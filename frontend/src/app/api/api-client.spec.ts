@@ -87,4 +87,24 @@ describe('ApiClient — scope and analytics', () => {
     req.flush(body);
     expect(got).toEqual(body);
   });
+
+  it('reportExpectancyAttribution GETs /reports/expectancy-attribution and returns the envelope untouched', () => {
+    let got: unknown;
+    api.reportExpectancyAttribution().subscribe((r) => (got = r));
+    const req = http.expectOne((r) => r.url.endsWith('/reports/expectancy-attribution'));
+    expect(req.request.method).toBe('GET');
+    const body = { status: 'not_run', generated_at: null, result: null };
+    req.flush(body);
+    expect(got).toEqual(body);
+  });
+
+  it('reportGateCounterfactual GETs /reports/gate-counterfactual and returns the envelope untouched', () => {
+    let got: unknown;
+    api.reportGateCounterfactual().subscribe((r) => (got = r));
+    const req = http.expectOne((r) => r.url.endsWith('/reports/gate-counterfactual'));
+    expect(req.request.method).toBe('GET');
+    const body = { status: 'ok', generated_at: '2026-10-20T21:45:00+00:00', result: { cells: [], rows: [] } };
+    req.flush(body);
+    expect(got).toEqual(body);
+  });
 });
