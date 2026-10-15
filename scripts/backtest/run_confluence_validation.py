@@ -48,6 +48,7 @@ import numpy as np
 
 from fetch_backtest_data import load_cached, load_watchlist
 from run_backtest_range import build_registry_records, merge_registry
+from swingbot.core.marketdata import training_data
 from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, replay_scenarios
 from swingbot.core.planning.plan_engine import simulate_exit
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
@@ -148,6 +149,15 @@ def passes(stats: dict, min_n: int) -> bool:
             and stats["excluded_share"] <= 0.5)
 
 
+def _pin_yfinance() -> None:
+    """This script replays only the VALIDATION window, whose shot is spent, and
+    resumes from yfinance chunk files. A new data source buys no second run and
+    must never mix into those chunks (spec § Research discipline), so the
+    replay is pinned to yfinance and takes no --data-source flag."""
+    training_data.select("yfinance")
+    print("training data: yfinance (pinned: VALIDATION replay of a spent shot)", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--emit-registry", dest="emit_registry", default=None,
@@ -166,6 +176,7 @@ def main():
         emit_registry_records(args.emit_registry, args.run_date)
         return
 
+    _pin_yfinance()
     CHUNK_DIR.mkdir(parents=True, exist_ok=True)
     tickers = sorted(load_watchlist())
     frames = {}
@@ -241,6 +252,7 @@ def main():
     }
     out_path = RESULTS_PATH
     out_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    training_data.write_provenance(out_path)
     print(f"\nSaved {out_path}")
 
 
