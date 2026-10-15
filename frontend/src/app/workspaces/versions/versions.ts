@@ -15,7 +15,7 @@ import { Button } from '../../ui/button';
 import { ControlRow } from '../../ui/layout';
 import { PaginationComponent } from '../../ui/pagination';
 import { SectionHead } from '../../ui/section-head';
-import { StatTile } from '../../ui/stat-tile';
+import { num, share } from '../../ui/format';
 import { Timeline, TimelineItem } from '../../ui/timeline';
 import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
@@ -43,7 +43,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 @Component({
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, PaginationComponent, SectionHead, Async, StatTile, Timeline],
+  imports: [Button, ControlRow, PaginationComponent, SectionHead, Async, Timeline],
   // v54 D1: this workspace is a lane strip plus a change stream -- both
   // dense, repeating rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -200,9 +200,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                      -- two of them "—" with "N=1 thin sample" on nearly every
                      release -- made this page ~6,400px of mostly empty boxes. -->
                 <p class="telemetry-cards">
-                  @if (telemetry.uptime_pct !== null) { <span>Uptime <strong>{{ telemetry.uptime_pct.toFixed(2) }}%</strong></span> }
-                  @if (telemetry.error_rate !== null) { <span>Error rate <strong>{{ (telemetry.error_rate * 100).toFixed(2) }}%</strong></span> }
-                  @if (telemetry.median_scan_sec !== null) { <span>Median scan <strong>{{ telemetry.median_scan_sec.toFixed(1) }}s</strong></span> }
+                  @if (telemetry.uptime_pct !== null) { <span>Uptime <strong>{{ share(telemetry.uptime_pct, 2) }}</strong></span> }
+                  @if (telemetry.error_rate !== null) { <span>Error rate <strong>{{ share(telemetry.error_rate * 100, 2) }}</strong></span> }
+                  @if (telemetry.median_scan_sec !== null) { <span>Median scan <strong>{{ num(telemetry.median_scan_sec, 1) }}s</strong></span> }
                   @if (telemetry.uptime_pct === null && telemetry.error_rate === null && telemetry.median_scan_sec === null) { <span>No uptime or error data for this release</span> }
                   <span class="n">N={{ telemetry.n_days }} day{{ telemetry.n_days === 1 ? '' : 's' }}</span>
                 </p>
@@ -362,6 +362,8 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 })
 export class Versions {
   protected readonly store = inject(VersionsStore);
+  protected readonly num = num;
+  protected readonly share = share;
   private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');
 
   protected readonly async = computed(() =>
