@@ -6,6 +6,10 @@ Referenced from the root `CLAUDE.md`.
 budgets, parallelisation, `implemented/` — lives in `document-conventions.md`.**
 This file is session hygiene: commits, shared state, and versioning.
 
+- **Always split a change into several scoped commits, never one big one**
+  (fix + its test; backend vs frontend; docs vs code; CI vs tooling). Stage by
+  path per group, one message per group. A diff touching unrelated areas is a
+  sign to split, not to summarise.
 - Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`), one
   commit per task; the task's own narrow test run
   (`scripts/dev/testrun.py file ...`, or `fast` when it crosses files) plus
