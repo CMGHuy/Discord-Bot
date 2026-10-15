@@ -7,7 +7,20 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 
+import pytest  # noqa: E402
+
 import tune_strategy as ts  # noqa: E402
+from swingbot import config  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _pin_yfinance(monkeypatch):
+    """v162: this CLI test predates the Alpaca store; pin it to yfinance."""
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")
+    training_data.reset()
+    yield
+    training_data.reset()
 
 
 def test_tune_strategy_writes_json_output(tmp_path, monkeypatch):
