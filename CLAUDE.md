@@ -33,11 +33,8 @@ so far. Skill: `etoro-public-api-operations`. Detail: `docs/claude/etoro-roadmap
 
 ## Far-off scheduled work runs on production
 
-If something must happen well after now (next trading day, a week out), schedule
-it **on the Hetzner VM** (cron, mirrored under `scripts/ops/`), never on this
-laptop — it may be shut down. A cron can only run checks; anything needing a
-Claude session (suite, commit, close-out) waits for the next session, which
-reads the cron's log. Detail: `working-conventions.md` § Scheduling.
+Anything due well after now runs **on the Hetzner VM** (cron, mirrored under
+`scripts/ops/`), never this laptop. `working-conventions.md` § Scheduling.
 
 ## Who you are on this repo
 
@@ -47,6 +44,8 @@ once — the persona raises the bar, never lowers a gate; rules below win.
 first**, whenever something is ambiguous or the call is the partner's — no
 question budget; never ask which option *after* a finding is established.
 Once a plan task's scope is clear, run it straight through. Detail: `persona.md`.
+**Never propose or start anything billed beyond the Claude subscription**
+(API keys, `/code-review ultra`, paid services) unless asked by name: `working-conventions.md` § Paid usage.
 
 ## Claude is the operator; Codex follows
 
@@ -86,9 +85,8 @@ its spec** (`**Screen:**` header from v141). Detail: `edge-priorities.md`,
   `architecture.md`.
 - **Read a `docs/claude/` file by section, not whole:** `python scripts/dev/doc_section.py <doc> [<heading> ...]` (no heading lists them; exit code 2 means read the file).
 - **Don't re-run the full suite to check a local change** — use
-  `python scripts/dev/testrun.py changed` (diff-selected; widens when unsure)
-  or `... file tests/test_foo.py` (~7s), or `... fast` (~27s). One-line
-  verdict instead of ~1150 progress lines.
+  `python scripts/dev/testrun.py changed` (diff-selected; widens when unsure),
+  `... file tests/test_foo.py` (~7s), `... fast` (~27s) or `... suite <name>`.
   Dispatch the `test-runner` subagent for a full run so none of it reaches
   this context. When a *plan* schedules its runs: "Naming specs and plans".
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
@@ -98,16 +96,15 @@ its spec** (`**Screen:**` header from v141). Detail: `edge-priorities.md`,
 
 ## Current status is not tracked here
 
-The `SessionStart` hook prints it (plan, next task, HEAD, worktrees, live
-backtests); live plans sit at the top of `plans/` or in a program folder
-(`plans/etoro-migration/`). **Don't trust the hook's NEXT id blind** — verify
-with `grep -n "^### Task" <plan>`. Tooling (`/task-brief`, `/gate`,
-`guardrails.py`): `skills-tools.md`; detail: `document-lifecycle.md`.
+The `SessionStart` hook prints it (plan, next task, HEAD, worktrees, backtests);
+live plans sit at the top of `plans/` or in a program folder. **Don't trust the
+hook's NEXT id blind** — verify with `grep -n "^### Task" <plan>`. Tooling:
+`skills-tools.md`; detail: `document-lifecycle.md`.
 
 ## Commands
 
 ```bash
-python scripts/dev/testrun.py full             # full suite via -n 4 — the pre-commit gate; one-line verdict
+python scripts/dev/testrun.py full             # full suite via -n 4 — the pre-commit gate
 python scripts/dev/testrun.py fast             # ~27s, skips the slow tier; auto-escalates if charts/templates touched
 python scripts/dev/testrun.py changed          # only tests reaching your diff; widens to full when unsure (--dry-run: print, don't run)
 python scripts/dev/testrun.py file tests/test_foo.py  # one file (~7s) — use this while iterating
@@ -126,11 +123,15 @@ failure. Baseline, and why counts/timings swing with machine load:
 
 **A failed test is fixed and re-run alone** (`testrun.py file …` or `pytest
 path::test`), never by re-running the whole suite. **No full suite after
-merging back to `main`**: it ran once, before the merge. Detail: `testing-cost.md`.
+merging back to `main`**: it ran once, before the merge.
 
-**Long backtest/grid runs** go to `backtest-runner`, chunked per strategy.
-Past a couple of minutes a run prints flushed progress; **past 15 minutes, a
-percent figure** in a log deleted on completion. Detail: `working-conventions.md`.
+**Tests live in suites** (`tests/suites.toml`; `testrun.py suite <name>`, `suites`
+lists). A new `tests/` directory joins exactly one suite in the same commit; a
+suite past `max_tests` is **split by feature**, never the limit raised. CI runs
+one job per suite from that file — never hand-list one. `testing-cost.md` § Test suites.
+
+**Long backtest/grid runs** go to `backtest-runner`, chunked per strategy; past
+15 minutes a run prints a percent figure. Detail: `working-conventions.md`.
 
 ## Naming specs and plans
 
@@ -190,7 +191,7 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | `model-routing.md` | writing a plan or dispatching a plan task — the `Model:` tier rubric and the escalation ladder |
 | `working-conventions.md` | committing, bumping `VERSION.json`, production changes, Codex mirror |
 | `git-safety.md` | any branch deletion or force push |
-| `testing-cost.md` | optimising or timing tests, or reacting to a changed pass count |
+| `testing-cost.md` | adding tests or a `tests/` directory (suites), optimising or timing tests, or reacting to a changed pass count |
 | `code-complexity.md` | writing or changing any function — the < 15 limit, how to measure it, how to split without changing behaviour |
 | `schema-evolution.md` | changing a table's shape or a stored record's fields — add, rename, drop, promote; no read-time upcasting |
 | `persona.md` | deciding how to question the partner, or what bar a change must meet |

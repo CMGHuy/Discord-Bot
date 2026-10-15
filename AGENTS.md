@@ -55,6 +55,12 @@ on the Hetzner VM as cron (scripts under `scripts/ops/` with an idempotent
 laptop. Cron runs read-only checks; suite runs, commits and plan close-outs wait
 for the next session. Detail: `docs/claude/working-conventions.md` § Scheduling.
 
+## No paid usage
+
+Never propose or start anything billed beyond the subscription (API keys,
+`/code-review ultra`, paid services) unless the partner asks by name. Detail:
+`docs/claude/working-conventions.md` § Paid usage.
+
 ## Project and production boundary
 
 Swingbot is a Discord swing-trade alert bot. It scans stock and ETF watchlists
@@ -151,42 +157,16 @@ partner **trades real money off the alerts**, so a silent stop move, missing
 expiry or lost send on the alert channel is real-money divergence: that work is
 `Edge: harvest`, not cosmetics (`edge-priorities.md`).
 
-Specs numbered above v140 carry a `**Screen:**` header line under `Edge:`. An
-`expectancy` or `volume` spec adding an entry strategy or a filter cites
-`<ledger-id> SCREEN-PASS`, earned once per idea with `python
-scripts/backtest/screen_idea.py --idea <name>` (PIT S&P 500 2010-2019; a fixed
-1.5/3 ATR trade against a matched random baseline; ΔExpR ≥ +0.10R after
-costs, lower 95% bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300). A stop/target
-or `harvest` spec cites `harvest-headroom <results path>`; integrity work says
-`exempt (integrity)`. A screen fail is closed and never re-screened.
-`tests/hooks/test_spec_screen_header.py` enforces the line.
-Specs numbered v146 or above also carry `**Panel:**` directly below
-`**Screen:**`: one to three expert role skills (defaults by subject in
-`document-conventions.md`), run through `panel` after the spec is committed
-and again over the plan's diff before close-out, where an unresolved
-`BLOCKING` finding stops the close. `tests/hooks/test_spec_panel_header.py`
-enforces it.
-
-Feature acceptance runs through one gate (`swingbot/core/backtesting/
-acceptance.py`), driven by `python scripts/backtest/validate_component.py
---stage mde|walkforward|validation`. Within that gate win rate is the objective
-and expectancy a non-inferiority constraint. Six clauses, all applicable ones
-must pass: mix-standardised ΔWR > 0 at one-sided p < 0.05 on a ticker-cluster
-bootstrap; ΔExpR lower 95% bound > −0.01R; median planned RR and mean win R each
-fall no more than 2%; accepted-alert count cut no more than 25%; permutation
-p < 0.05; and, for a subset feature, the removed trades must be the bad ones
-(removed WR < retained WR and removed ExpR ≤ 0). Two free stages stand in front
-of the one-shot VALIDATION budget: an MDE precheck that refuses an unanswerable
-question with the budget intact, and a fold-test consistency gate (≥ 2 of 3 fold
-years improving, none worse than −1.0pp, N ≥ 30 per fold). The absolute
-`win_rate >= 50` floor no longer gates acceptance; it survives only as a
-strategy-badge threshold. `Edge: harvest` features are out of scope for this
-funnel and must name the gate they use instead. Every pre-registration verdict
-appends one row to `docs/superpowers/results/preregistration-ledger.jsonl` with
-`python scripts/reports/preregistration_ledger.py`, which prints a
-Benjamini–Hochberg q-value across the ledger; the q-value is reported, never
-gating, and ledger rows are never edited. v124 and v127 are exempt from the
-backfill (no spent budget or no enum verdict).
+Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
+cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`; a screen
+fail is closed, never re-screened) and from v146 `**Panel:**` (1-3 role skills run
+through `panel`; an unresolved `BLOCKING` finding stops close-out). Feature
+acceptance is one gate (`swingbot/core/backtesting/acceptance.py`, driven by
+`scripts/backtest/validate_component.py --stage mde|walkforward|validation`):
+win rate is the objective, expectancy a non-inferiority constraint, and every
+verdict appends a row to `preregistration-ledger.jsonl`. Clauses, thresholds and
+stages: `docs/claude/backtest-methodology.md`, `document-conventions.md`;
+`tests/hooks/test_spec_screen_header.py` and `test_spec_panel_header.py` enforce.
 
 **Never quote a pooled figure (ExpR, win rate, N, badge tier) from a document.**
 Re-derive it from the live book. A dev database's `journal_entries`, `trades`
@@ -365,12 +345,20 @@ of ~1150 progress lines. Never re-run the full suite to check a local change.
   UNKNOWN, exit 2, when the full run did not complete).
 - `python scripts/dev/testrun.py file tests/test_foo.py` while iterating.
 - `python scripts/dev/testrun.py fast` for broader, non-render-heavy checks.
+- `python scripts/dev/testrun.py suite <name>` runs one feature's suite (`suites`
+  lists them); suites are defined in `tests/suites.toml`.
 - `python scripts/dev/testrun.py full` once as final verification of an entire
   plan; do not rerun it after a clean merge unless conflicts were resolved.
 - Same cadence for the frontend: `npm test -- --include <spec>` per task, a bare
   `cd frontend && npm test` only once as the plan's final verification if it
   touches `frontend/`. A full run to chase an already-observed failure is
   debugging, not a second verification step.
+
+**Tests live in suites** (`tests/suites.toml`). A new `tests/` directory joins
+exactly one suite in the same commit; a suite past `max_tests` is split by
+feature, never the limit raised. CI builds one job per suite from that file, so
+never hand-list a job in `deploy.yml`; `tests/dev/test_suites.py` enforces this.
+Detail: `docs/claude/testing-cost.md` § Test suites.
 
 **A failed test is fixed and re-run alone** (`testrun.py file ...` or
 `pytest path::test`), never by re-running the whole suite; a fix touching other
