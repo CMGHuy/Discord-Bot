@@ -86,6 +86,15 @@ def test_live_row_refuses_a_trade_without_r_or_an_entry_week():
     assert ea.live_row(_trade(legs=[{"fraction": 1.0, "r": 1.0}])) is None   # no fill to net
 
 
+@pytest.mark.parametrize("exit_price", ["n/a", [110.0], {"px": 110.0}],
+                         ids=["text", "list", "dict"])
+def test_live_row_drops_a_non_numeric_exit_price_instead_of_failing(exit_price):
+    """r_multiple reads the leg's recorded r, so the bad fill only surfaces in
+    net_r: ValueError for text, TypeError for a container -- both drop the row."""
+    legs = [{"fraction": 1.0, "exit_price": exit_price, "r": 2.0}]
+    assert ea.live_row(_trade(legs=legs)) is None
+
+
 def test_live_row_uses_r_multiple_as_is_when_fills_already_carry_frictions(monkeypatch):
     monkeypatch.setattr(ea, "LIVE_FILLS_INCLUDE_FRICTIONS", True)
     row = ea.live_row(_trade())

@@ -502,8 +502,8 @@ def _live_net(trade: dict, gross: float) -> float | None:
         return None
     try:
         return net_r(trade["entry"], trade["stop_loss"], trade["direction"], legs)
-    except ValueError:
-        return None
+    except (KeyError, TypeError, ValueError):
+        return None          # a malformed fill drops the row, never the report (as _train_row)
 
 
 def live_row(trade: dict) -> dict | None:
