@@ -32,7 +32,7 @@ That is more than a side drawer holds, so it becomes a page at `/calendar/:date`
 
 ## D1 — Fuller rows (`pnl_calendar.py`, pure)
 
-`_row_for` gains these fields, read from the part (`expand_realized_legs` row) and its parent trade `t` — never re-derived from the plan, never a third copy of leg pricing:
+`_row_for` gains these fields, read from the part (`expand_realized_legs` row) and its parent trade `t` — never re-derived from the plan, never a third copy of leg pricing. `_row_for(part, entry)` does not receive `t` today, so it gains a `trade` parameter passed from `joined_rows`' loop (the part's `legs` is `None`). There is no remainder part: `expand_realized_legs` drops an open remainder, and the closing leg of a finished scale-out is an ordinary leg row:
 
 | Field | Source |
 |---|---|
@@ -54,7 +54,7 @@ Leg figures follow the prerequisite as-is and claim one invariant only: a trade'
 `day_context(rows, date)` — the filtered calendar rows (all history) and the day — computed over **all history under the active filter**, the same scope the weekday stats already use:
 
 - `percentile` — share of trading days with net P&L strictly below this day, ties counting half, × 100. A "trading day" is a date with ≥ 1 closed calendar row under the filter. `null` when fewer than **20** such days exist; `history_days` always returned so the page can say why.
-- `vs_avg_day` / `vs_weekday_avg` — `{pnl_amount, r}` deltas against the all-history mean day and the mean of the same weekday (reusing the weekday aggregation that feeds `day_of_week`).
+- `vs_avg_day` / `vs_weekday_avg` — `{pnl_amount, r}` deltas against the all-history mean day and the mean of the same weekday (reusing only the weekday *grouping* behind `day_of_week`: that breakdown averages per trade, while this delta compares day nets, so the mean is over the same weekday's other trading days).
 
 Month rank, month-to-date and the month equity line are **not** server fields: the page already fetches `/calendar/pnl?month=` (D5) and derives them in a pure, spec-tested frontend helper from its `days`, so they cannot disagree with the grid.
 
@@ -113,7 +113,7 @@ Empty day or a date with no rows: "No closed trades on <date> under this filter"
 
 ## Testing
 
-- **Python** (`tests/analytics/test_pnl_calendar.py`, `tests/admin/test_api_v1_calendar.py`; no new test directory, suites unchanged): every D1 field for whole trade, leg and remainder part; null inputs; leg exit-reason bucketing; percentile ties and the < 20 days null; vs-average deltas; renamed `exit_reason_bucket` keeps exit-quality output identical; day net equals that day's `/calendar/pnl` cell for the same filter; breakdown sums equal tiles; sparkline cache hit / miss / spot metal / truncation / clip after exit / bad date / unknown param.
+- **Python** (`tests/analytics/test_pnl_calendar.py`, `tests/admin/test_api_v1_calendar.py`; no new test directory, suites unchanged): every D1 field for a whole trade, a TP1 leg and the closing leg of a finished scale-out; null inputs; leg exit-reason bucketing; percentile ties and the < 20 days null; vs-average deltas; renamed `exit_reason_bucket` keeps exit-quality output identical; day net equals that day's `/calendar/pnl` cell for the same filter; breakdown sums equal tiles; sparkline cache hit / miss / spot metal / truncation / clip after exit / bad date / unknown param.
 - **Python, panel additions**: percentile excludes the day itself; null-net days excluded; band thresholds are page-side; leg `pnl_amount`s sum to the trade's `realized_pnl_amount`; `return_pct` null on zero entry and sign-flipped for shorts; `held_hours` null when reversed; sparkline exit/entry bar selection across a UTC/exchange date mismatch, post-exit bars marked, ticks nulled when entry is outside the window range, `stale` when the cache ends early, deterministic truncation order.
 - **Frontend specs**: D7 caption present on page and drawer; win% suppressed below n 5; percentile band below 60 and hidden below 20; `month-context` (rank, MTD on the last day equals month `totals`, curve); route parsing and filter round trip; a day 404 renders the empty state with prev/next; prev/next skipping empty days and crossing a month; percentile hidden below 20 days; breakdown tab switch; card Open link target and sort; sparkline null state; drawer "Open full day" link carries filters; calendar filters restored from the URL.
 - Every new or changed function < complexity 15 (`radon cc -s -n C`).
