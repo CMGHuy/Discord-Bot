@@ -102,13 +102,41 @@ targets, stop distance in ATR, exit time, exit reason (including the value
 `mae_r`, `mfe_r`, regime fields, earnings/OPEX/macro-event proximity where
 stored, dollar volume and ATR% at signal, alert hour.
 
+**Data availability (plan brief, 2026-10-15) — overrides the column list above.**
+`journal_entries` promotes only `trade_id`, `strategy`, `outcome`, `closed_at`,
+`created_at`; the rest is `doc->>'key'` (incl. `risk_features.*`,
+`entry_context.*`), joined to `trades` by `trade_id` and `plans` by the trade's
+`plan_id`. Where a spec column is not stored:
+
+- **Net R:** nothing live stores it; `r_realized` is gross price R. The autopsy
+  computes net R locally with `apply_frictions` and `commission_r`
+  (`swingbot/core/edge/frictions.py:15,22`) and labels it *modelled* net.
+- **Fill status:** unfilled plans have no journal row; the export also selects
+  `plans` with `status` and the last `status_history` reason (`expired`,
+  `risk_cap`, `invalidated`). "Never touched" versus "expired unfilled" is
+  derived locally from cached bars over the plan's validity, bar-covered N printed.
+- **Open price on the fill day, dollar volume:** from the local OHLCV cache by
+  ticker and date (`known-traps.md` § the two OHLCV caches: the plan names which),
+  bar-covered N printed.
+- **Sector:** `universe.sector_map` is today's mapping, not point-in-time; the
+  cut is labelled so and never used as a regime-desk filter argument.
+- **Alert hour:** from `plans.created_at`; `risk_features.session_bucket` as given.
+- **Macro events:** `swingbot/core/market/market_events.py` (`FOMC_DECISION_DATES`
+  :31, covering 2026-2027, which spans the live book), OPEX via `opex_tier`
+  (`opex.py:96`); `events.py` is earnings only. CPI/NFP are included only if that
+  module carries their past dates; otherwise the cut is omitted and the header says so.
+- **Near-TP exits:** `close_reason` `auto (near-TP stall)` / `auto (near-TP timeout)`
+  (`performance.py:1657-1659`), journal `outcome` `timeout`.
+- **psql on the VM:** `docker compose exec -T db psql -U swingbot -d swingbot`
+  (the host has no psql); the export is piped like `scripts/ops/pull_backups.sh`.
+
 **`book_autopsy.py` — local, deterministic, no model, no network.**
 
 - Reads the two CSVs; computes every cut locally (bootstraps never run on the VM).
 - **Cuts:**
   - strategy × horizon; direction; ticker and sector concentration;
   - regime bucket; entry weekday and Friday/weekend hold; earnings, OPEX and
-    macro-event (FOMC, CPI, NFP via `swingbot/core/market/events.py`) proximity;
+    macro-event proximity (see Data availability);
   - **fill reality:** fill rate (filled / expired unfilled / never touched),
     open gap against planned entry, entries that gapped through the limit;
   - **liquidity and volatility:** dollar-volume and ATR% buckets;
