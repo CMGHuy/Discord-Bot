@@ -266,9 +266,13 @@ export class OverviewTab {
       fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
       fixedTile('Profit factor', num(profitFactor, 2), this.store.scopeN(), null,
         'Gross realised win ÷ gross realised loss.'),
-      tile('Max drawdown', drawdownR, null, drawdownMoney, equityCurve?.points_n ?? null, null,
-        'Largest peak-to-trough decline in the scope.'),
-      fixedTile('Sharpe', signed(sharpe, 2), this.store.scopeN(), null, 'Annualised, from realised returns.'),
+      // Negated: a drawdown is a loss, and an unsigned magnitude rendered
+      // "+120.66R" -- the same sign as a gain, in the same row as Total R.
+      tile('Max drawdown', drawdownR === null ? null : -drawdownR, null,
+        drawdownMoney === null ? null : -drawdownMoney, equityCurve?.points_n ?? null, null,
+        'Largest peak-to-trough decline in the selected range (Risk shows all closed trades).'),
+      fixedTile('Sharpe', signed(sharpe, 2), this.store.scopeN(), null,
+        'Annualised, from realised returns in the selected range (Risk shows per-trade R, all-time).'),
     ];
   });
 
