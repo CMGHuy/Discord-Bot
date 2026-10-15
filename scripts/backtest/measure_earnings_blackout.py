@@ -11,14 +11,16 @@ from swingbot.core.backtesting.acceptance import arm_trade_from_backtest, arm_tr
 from swingbot.core.market.earnings_calendar import EARNINGS_CSV_DIR, UNCONFIRMED, CsvSource, next_reaction_distance, reaction_session
 from swingbot.core.market.session import SessionCalendar
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import cache_dir_source
 CACHE_DIR, OUT_ROOT=ROOT / "data" / "backtest_cache", ROOT / "data" / "v82"
 RUNS={"run1": eb.RUN1_WINDOW, "run2": eb.VALIDATION_WINDOW}; STAGE2_PASS_MARKER="**Overall: PASS**"
 def load_frame(cache_dir, symbol):
+    if cache_dir is None: return cache_dir_source.load_frame(None, symbol)
     path=Path(cache_dir) / f"{symbol}.csv"
     return pd.read_csv(path, index_col="Date", parse_dates=True) if path.exists() else None
 def load_calendar(cache_dir):
     frame=load_frame(cache_dir, "SPY")
-    if frame is None or frame.empty: raise SystemExit(f"SPY.csv missing from {cache_dir}")
+    if frame is None or frame.empty: raise SystemExit(f"SPY missing from {cache_dir_source.describe(cache_dir)}")
     return SessionCalendar.from_bar_index(frame.index)
 def calendar_meta(calendar): return {"first":calendar.first.isoformat(),"last":calendar.last.isoformat(),"sessions":len(calendar)}
 def reaction_positions(ticker, source, calendar):
@@ -61,12 +63,12 @@ def cmd_replay(args):
         if document is None or not document.exists() or STAGE2_PASS_MARKER not in document.read_text(encoding="utf-8"): return 3
     from swingbot.core.backtesting.backtest import ALL_STRATEGIES
     from swingbot.core.marketdata.universe import is_etf
-    cache=Path(args.cache_dir); calendar=load_calendar(cache); run_dir=Path(args.out_root)/args.run; run_dir.mkdir(parents=True,exist_ok=True); meta=calendar_meta(calendar); previous=run_dir/"calendar.json"
+    cache=cache_dir_source.resolve(args); calendar=load_calendar(cache); run_dir=Path(args.out_root)/args.run; run_dir.mkdir(parents=True,exist_ok=True); meta=calendar_meta(calendar); previous=run_dir/"calendar.json"
     if previous.exists() and json.loads(previous.read_text()) != meta:return 4
-    previous.write_text(json.dumps(meta)); symbols=args.tickers.split(",") if args.tickers else sorted(path.stem for path in cache.glob("*.csv")); todo=[symbol for symbol in symbols if not (run_dir/f"{symbol}.jsonl").exists()]; horizons=args.horizons.split(",") if args.horizons else list(LEGACY_HORIZONS); strategies=args.strategies.split("|") if args.strategies else list(ALL_STRATEGIES)
-    progress=run_dir/"progress.txt"; tasks=[(symbol,str(cache),str(args.csv_dir),RUNS[args.run],horizons,strategies,is_etf(symbol)) for symbol in todo]
+    previous.write_text(json.dumps(meta)); symbols=args.tickers.split(",") if args.tickers else cache_dir_source.listing(cache); todo=[symbol for symbol in symbols if not (run_dir/f"{symbol}.jsonl").exists()]; horizons=args.horizons.split(",") if args.horizons else list(LEGACY_HORIZONS); strategies=args.strategies.split("|") if args.strategies else list(ALL_STRATEGIES)
+    progress=run_dir/"progress.txt"; tasks=[(symbol,cache,str(args.csv_dir),RUNS[args.run],horizons,strategies,is_etf(symbol)) for symbol in todo]
     try:
-        iterator=map(_worker,tasks) if args.workers==1 else ProcessPoolExecutor(max_workers=args.workers).map(_worker,tasks)
+        iterator=map(_worker,tasks) if args.workers==1 else ProcessPoolExecutor(max_workers=args.workers, **cache_dir_source.pool_kwargs()).map(_worker,tasks)
         for done,(ticker,rows) in enumerate(iterator,1): write_shard(run_dir/f"{ticker}.jsonl",rows); progress.write_text(f"{done}/{len(todo)} tickers ({100*done//len(todo) if todo else 100}%)\n"); print(f"[{done}/{len(todo)}] {ticker}: {len(rows)} rows",flush=True)
     finally: progress.unlink(missing_ok=True)
     print(f"complete: {len(read_rows(run_dir))} rows",flush=True); return 0
@@ -90,13 +92,13 @@ def cmd_arms(args):
         blob=eb.arms_blob(rows,args.k)
     Path(args.out).write_text(json.dumps(blob)); return 0
 def cmd_permute(args):
-    calendar=load_calendar(args.cache_dir); run_dir=Path(args.out_root)/"run2"; meta=run_dir/"calendar.json"
+    calendar=load_calendar(cache_dir_source.resolve(args)); run_dir=Path(args.out_root)/"run2"; meta=run_dir/"calendar.json"
     if not meta.exists() or json.loads(meta.read_text()) != calendar_meta(calendar):return 4
     rows=eb.in_window(read_rows(run_dir),eb.VALIDATION_WINDOW); source=CsvSource(args.csv_dir); reactions={ticker:reaction_positions(ticker,source,calendar) for ticker in {row.trade.ticker for row in rows if row.covered}}; result=eb.permutation_test(rows,args.k,reactions,len(calendar));
     if args.out_json:Path(args.out_json).write_text(json.dumps(result,indent=1)); return 0
 def main(argv=None):
     parser=argparse.ArgumentParser(); sub=parser.add_subparsers(dest="command",required=True)
-    def common(p):p.add_argument("--cache-dir",default=str(CACHE_DIR));p.add_argument("--csv-dir",default=str(EARNINGS_CSV_DIR));p.add_argument("--out-root",default=str(OUT_ROOT))
+    def common(p):p.add_argument("--cache-dir",default=None,help=cache_dir_source.CACHE_DIR_HELP);cache_dir_source.add_args(p);p.add_argument("--csv-dir",default=str(EARNINGS_CSV_DIR));p.add_argument("--out-root",default=str(OUT_ROOT))
     p=sub.add_parser("replay");common(p);p.add_argument("--run",choices=RUNS,required=True);p.add_argument("--tickers");p.add_argument("--horizons");p.add_argument("--strategies");p.add_argument("--workers",type=int,default=max(1, os.cpu_count() or 1));p.add_argument("--stage2-doc")
     p=sub.add_parser("coverage");common(p);p.add_argument("--run",choices=RUNS,required=True);p.add_argument("--window",required=True)
     p=sub.add_parser("select");common(p);p.add_argument("--out-md");p.add_argument("--out-json")

@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from measure_armed_entries import (  # noqa: E402  (sibling script, same dir)
     STAGE2_PASS_MARKER, _map, _trade, load_frame, read_rows, write_shard,
 )
+import cache_dir_source  # noqa: E402
 from swingbot.core.backtesting import structure_measurement as sm  # noqa: E402
 from swingbot.core.backtesting.acceptance import ArmTrade  # noqa: E402
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
@@ -106,7 +107,7 @@ def read_arms(run_dir) -> list:
 
 
 def run_meta(cache_dir, window, horizons) -> dict:
-    return {"cache_files": sorted(p.name for p in Path(cache_dir).glob("*.csv")),
+    return {"cache_files": cache_dir_source.cache_files(cache_dir),
             "window": list(window), "horizons": list(horizons),
             "cells": [cell.cell_id for cell in sm.CELLS]}
 
@@ -122,7 +123,7 @@ def _claim_run_dir(args, horizons):
     """The run dir, or None when an existing run.json disagrees (no resume)."""
     run_dir = Path(args.out_root) / args.run
     run_dir.mkdir(parents=True, exist_ok=True)
-    meta = run_meta(Path(args.cache_dir), RUNS[args.run], horizons)
+    meta = run_meta(cache_dir_source.as_dir(args.cache_dir), RUNS[args.run], horizons)
     meta_path = run_dir / "run.json"
     if meta_path.exists() and json.loads(meta_path.read_text()) != meta:
         return None
@@ -141,16 +142,16 @@ def cmd_replay(args) -> int:
         print("REFUSED -- run2 replays VALIDATION; it needs --stage2-doc reading "
               f"{STAGE2_PASS_MARKER}", flush=True)
         return 3
+    cache = cache_dir_source.resolve(args)
     horizons = args.horizons.split(",") if args.horizons else list(LEGACY_HORIZONS)
     run_dir = _claim_run_dir(args, horizons)
     if run_dir is None:
         print(f"REFUSED -- {args.out_root}/{args.run}/run.json was written for a different "
               "cache/window/horizons/grid", flush=True)
         return 4
-    cache = Path(args.cache_dir)
-    symbols = args.tickers.split(",") if args.tickers else sorted(p.stem for p in cache.glob("*.csv"))
+    symbols = args.tickers.split(",") if args.tickers else cache_dir_source.listing(cache)
     todo = [s for s in symbols if not (run_dir / f"{s}.jsonl").exists()]
-    tasks = [(s, str(cache), RUNS[args.run], horizons) for s in todo]
+    tasks = [(s, cache, RUNS[args.run], horizons) for s in todo]
     progress = run_dir / "progress.txt"
     try:
         for done, (ticker, rows, counts, arms) in enumerate(_map(_replay_worker, tasks, args.workers), 1):
@@ -270,11 +271,12 @@ def cmd_permute(args) -> int:
     if not meta_path.exists():
         print("REFUSED -- no run2 replay to permute", flush=True)
         return 4
+    cache = cache_dir_source.resolve(args)
     meta = json.loads(meta_path.read_text())
     rows = sm.in_window(read_rows(run_dir), sm.VALIDATION_WINDOW)
     baseline, real = sm.arm_trades(rows, sm.BASELINE), sm.arm_trades(rows, args.cell)
     tickers = sorted({row.trade.ticker for row in rows})
-    tasks = [(t, args.cache_dir, args.cell, meta["horizons"], sm.PERMUTATION_N, sm.PERMUTATION_SEED)
+    tasks = [(t, cache, args.cell, meta["horizons"], sm.PERMUTATION_N, sm.PERMUTATION_SEED)
              for t in tickers]
     permuted = _collect_permutations(tasks, args.workers, run_dir / "progress.txt")
     result = {**sm.permutation_p(baseline, real, permuted), "seed": sm.PERMUTATION_SEED,
@@ -292,7 +294,8 @@ def _parser() -> argparse.ArgumentParser:
 
     def command(name):
         p = sub.add_parser(name)
-        p.add_argument("--cache-dir", default=str(CACHE_DIR))
+        p.add_argument("--cache-dir", default=None, help=cache_dir_source.CACHE_DIR_HELP)
+        cache_dir_source.add_args(p)
         p.add_argument("--out-root", default=str(OUT_ROOT))
         return p
 
