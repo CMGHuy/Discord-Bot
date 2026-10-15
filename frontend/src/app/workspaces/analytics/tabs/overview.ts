@@ -319,7 +319,10 @@ export class OverviewTab {
   });
 
   readonly rBins = computed(() => (this.store.performance()?.distributions.r_multiples ?? [])
-    .map((b) => ({ label: `${b.lo}R`, count: b.count })));
+    // Rounded to 1 place: the server's bin edges are the span divided by the
+    // bin count, so "-4.688333R" and "-3.346667R" were shipped as floats.
+    // `-0` is normalised so a bin starting at zero is not marked negative.
+    .map((b) => ({ label: `${(Math.round(b.lo * 10) / 10 || 0).toFixed(1)}R`, count: b.count })));
   readonly monthBars = computed(() => (this.store.performance()?.calendar ?? [])
     .map((m) => ({ label: m.month, value: m.return_pct, n: m.n })));
   readonly negativeBin = (bin: { label: string }) => bin.label.startsWith('-');

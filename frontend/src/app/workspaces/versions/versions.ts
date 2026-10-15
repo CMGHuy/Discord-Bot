@@ -196,11 +196,16 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                 @if (release.provenance?.spec; as spec) { <a [href]="spec">{{ spec.split('/').at(-1) }}</a> }
               </div>
               @if (release.telemetry; as telemetry) {
-                <div class="telemetry-cards">
-                  <sb-stat-tile label="Uptime" [value]="telemetry.uptime_pct === null ? '—' : telemetry.uptime_pct.toFixed(2) + '%'" [sample]="telemetry.n_days" />
-                  <sb-stat-tile label="Error rate" [value]="telemetry.error_rate === null ? '—' : (telemetry.error_rate * 100).toFixed(2) + '%'" [sample]="telemetry.n_days" />
-                  <sb-stat-tile label="Median scan" [value]="telemetry.median_scan_sec === null ? '—' : telemetry.median_scan_sec.toFixed(1) + 's'" [sample]="telemetry.n_days" />
-                </div>
+                <!-- One line of the figures that exist. Three tiles per release
+                     -- two of them "—" with "N=1 thin sample" on nearly every
+                     release -- made this page ~6,400px of mostly empty boxes. -->
+                <p class="telemetry-cards">
+                  @if (telemetry.uptime_pct !== null) { <span>Uptime <strong>{{ telemetry.uptime_pct.toFixed(2) }}%</strong></span> }
+                  @if (telemetry.error_rate !== null) { <span>Error rate <strong>{{ (telemetry.error_rate * 100).toFixed(2) }}%</strong></span> }
+                  @if (telemetry.median_scan_sec !== null) { <span>Median scan <strong>{{ telemetry.median_scan_sec.toFixed(1) }}s</strong></span> }
+                  @if (telemetry.uptime_pct === null && telemetry.error_rate === null && telemetry.median_scan_sec === null) { <span>No uptime or error data for this release</span> }
+                  <span class="n">N={{ telemetry.n_days }} day{{ telemetry.n_days === 1 ? '' : 's' }}</span>
+                </p>
                 <p class="release-meta">Telemetry: {{ telemetry.source === 'marker' ? 'measured' : 'inferred' }}</p>
               } @else { <p class="release-meta">Telemetry: window unknown</p> }
             </div>
@@ -261,7 +266,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .chip.quiet { color: var(--text-faint); cursor: default; }
     .release-meta, .provenance { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-faint); font-size: var(--text-micro); }
     .provenance a { color: var(--accent); }
-    .telemetry-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin-top: var(--space-8); }
+    .telemetry-cards { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-14); margin: var(--space-8) 0 0; font-size: var(--text-table); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .telemetry-cards strong { color: var(--text); font-weight: 600; }
+    .telemetry-cards .n { color: var(--text-faint); font-size: var(--text-micro); }
 
     .strip { display: flex; flex-direction: column; gap: var(--space-6);
               position: relative; overflow-x: auto; }

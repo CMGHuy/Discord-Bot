@@ -216,7 +216,7 @@ describe('Calendar summary strip', () => {
     expect(rows[1].textContent).toContain('—');
   });
 
-  it('reports the five month-summary figures from the visible trading days', async () => {
+  it('reports the month-summary figures from the visible trading days', async () => {
     const fixture = seed();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -224,7 +224,9 @@ describe('Calendar summary strip', () => {
     // Month-over-month stats share one row (.totals) with the live-month
     // totals now, rather than a separate .month-summary row of their own.
     const summary = el(fixture).querySelector('.totals');
-    expect(summary?.textContent).toContain('Month total');
+    // "Month total" was the same number as "Net this month" -- one tile.
+    expect(summary?.textContent).not.toContain('Month total');
+    expect(summary?.textContent).toContain('Net this month');
     expect(summary?.textContent).toContain('Winning days');
     expect(summary?.textContent).toContain('1 (50%)');
     expect(summary?.textContent).toContain('Average day');

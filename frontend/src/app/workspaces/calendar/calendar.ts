@@ -116,7 +116,6 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
           />
           <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
           <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
-          <sb-stat-tile label="Month total" [value]="monthTotal()" [sample]="monthDays().length" />
           <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
           <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
           <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
@@ -637,15 +636,6 @@ export class Calendar {
     const n = this.monthDays().length;
     return n < MIN_SAMPLE_N ? `thin sample — N=${n}` : null;
   });
-
-  protected monthTotal(): string {
-    const value = this.totalValue();
-    if (value === null) return ABSENT;
-    if (this.store.metric() === 'r') return rMultiple(value);
-    if (this.store.metric() === 'currency') return money(value, this.currency(), 2);
-    if (this.store.metric() === 'win_rate') return `${value.toFixed(1)}%`;
-    return `${value}`;
-  }
 
   protected winningDaysLabel(): string {
     const days = this.monthDays();
