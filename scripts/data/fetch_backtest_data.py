@@ -47,6 +47,7 @@ import yfinance as yf
 # Cache location, filename scheme, and CSV shape are owned by the core module
 # so this bulk populator and the auto-cache-on-add path can never drift.
 from swingbot.core.marketdata.backtest_cache import CACHE_DIR, cache_path, normalize_ohlcv
+from swingbot.core.marketdata import training_data
 
 START, END = "2018-06-01", "2025-12-31"
 
@@ -66,11 +67,24 @@ def load_watchlist() -> list[str]:
 
 
 def load_cached(ticker: str) -> pd.DataFrame | None:
-    p = cache_path(ticker)
-    if not p.exists():
-        return None
-    df = pd.read_csv(p, index_col="Date", parse_dates=True)
-    return df if len(df) else None
+    """Daily training bars for one ticker from the selected source (v162):
+    TRAINING_DATA_SOURCE, a script's --data-source, or yfinance when
+    BACKTEST_CACHE_DIR is set. Every backtest script that imports this reads
+    through swingbot.core.marketdata.training_data."""
+    return training_data.load_daily(ticker)
+
+
+def add_data_source_arg(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument("--data-source", choices=training_data.DATA_SOURCES, default=None,
+                    help="training bars: 'alpaca' (data/market_data/ history store) or "
+                         "'yfinance' (data/backtest_cache/); default TRAINING_DATA_SOURCE")
+
+
+def apply_data_source(args: argparse.Namespace) -> str:
+    """Select the run's training source and say which one, before any bar is read."""
+    source = training_data.select(getattr(args, "data_source", None))
+    print(f"training data: {source} ({len(training_data.excluded())} excluded)")
+    return source
 
 
 def fetch(ticker: str, start: str, end: str) -> pd.DataFrame | None:
