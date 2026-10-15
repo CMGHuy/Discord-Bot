@@ -8,6 +8,14 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# One run at a time, newest pending wins. Deliberately NOT cancel-in-progress: the
+# `deploy` job SSHes into production, and killing it mid-flight would leave the VM
+# half-updated. A push that lands while a run is going waits, and a second push
+# replaces the first one's pending slot instead of stacking a queue.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ── 1. Python: compile, then the test suites, one CI job per suite ─────────
   #
@@ -25,6 +33,7 @@ jobs:
   # docs/claude/testing-cost.md "Test suites" has the rule.
   test-plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
@@ -42,6 +51,7 @@ jobs:
     needs: test-plan
     name: backend-test (${{ matrix.suite }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       # One red suite must not hide the others' verdicts.
       fail-fast: false
@@ -95,6 +105,7 @@ jobs:
   # whatever suite you run), once, in its own job instead of inside one suite.
   backend-lint-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -121,6 +132,7 @@ jobs:
   # `backend-test` suites.
   frontend-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -188,6 +200,7 @@ jobs:
   # the file exists.
   compose-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
 
@@ -225,6 +238,7 @@ jobs:
   # whichever job wrote it last time.
   docker-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     outputs:
@@ -286,6 +300,7 @@ jobs:
   # Dockerfile.db).
   db-image:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write
@@ -344,6 +359,7 @@ jobs:
     # tests, so it lives in `publish-image` below.
     needs: docker-build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -545,6 +561,7 @@ jobs:
     # Nothing to publish on a pull_request or a manual run against a branch.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write        # GITHUB_TOKEN needs this to push to GHCR
@@ -619,6 +636,7 @@ jobs:
   cleanup:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Prune unused images over SSH
         uses: appleboy/ssh-action@v1.2.5
@@ -663,6 +681,7 @@ jobs:
     # deploying would silently re-run whatever :latest currently points at.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.5
