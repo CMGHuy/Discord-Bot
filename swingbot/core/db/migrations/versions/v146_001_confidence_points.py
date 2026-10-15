@@ -12,7 +12,7 @@ A line matching neither the trailing "(+N)" / "(-N)" form nor the penalty's
 the per-key parsed / skipped / unparsed counts are logged.
 
 Revision ID: v146_001
-Revises: v152_001
+Revises: v147_001
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from alembic import op
 from swingbot.core.db.doc_fields import drop_doc_field
 
 revision = "v146_001"
-down_revision = "v152_001"
+down_revision = "v147_001"
 branch_labels = None
 depends_on = None
 
