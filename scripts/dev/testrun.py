@@ -68,7 +68,7 @@ TEST_DB_URL_DEFAULT = "postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/sw
 # conclude "passed". -v gives per-test node IDs, which is what the progress
 # tracker keys off; it is verbose on purpose because it lands in the log,
 # not in anyone's context.
-BASE = ["-o", "addopts=", "-v", "--tb=short", "-rf", "-p", "no:cacheprovider"]
+BASE = ["-o", "addopts=", "-v", "--tb=short", "-rfE", "-p", "no:cacheprovider"]
 
 # Matches the node id in both serial (`tests/x.py::test_y PASSED [ 5%]`) and
 # xdist (`[gw2] [ 5%] PASSED tests/x.py::test_y`) verbose output.
