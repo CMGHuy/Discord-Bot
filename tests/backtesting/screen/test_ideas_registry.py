@@ -7,16 +7,17 @@ from swingbot.core.backtesting.screen import ideas
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea
 
 
-def test_registry_holds_the_first_batch_in_spec_order():
+def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
     assert ideas.IDEA_MODULES == ("high52w", "uptrend_pullback", "gap_volume",
-                                  "turn_of_month")
+                                  "turn_of_month", "turtle_soup", "quiet_pullback")
     assert list(IDEAS) == list(ideas.IDEA_MODULES)
     assert all(IDEAS[name].name == name for name in IDEAS)
 
 
 def test_time_caps_are_the_spec_values():
     assert {n: i.time_cap_bars for n, i in IDEAS.items()} == {
-        "high52w": 60, "uptrend_pullback": 10, "gap_volume": 20, "turn_of_month": 4}
+        "high52w": 60, "uptrend_pullback": 10, "gap_volume": 20, "turn_of_month": 4,
+        "turtle_soup": 10, "quiet_pullback": 10}
 
 
 def test_frozen_parameter_sets():
@@ -29,6 +30,10 @@ def test_frozen_parameter_sets():
         "gap_atr": 1.0, "atr_n": 14, "volume_mult": 2.0, "volume_window": 50}
     assert dict(IDEAS["turn_of_month"].params) == {
         "day": "last trading day of the calendar month"}
+    assert dict(IDEAS["turtle_soup"].params) == {"channel": 20, "min_age": 4}
+    assert dict(IDEAS["quiet_pullback"].params) == {
+        "trend_sma": 200, "rsi_n": 2, "rsi_below": 10, "quiet_bars": 3,
+        "gap_atr": 1.0, "atr_n": 14, "volume_mult": 2.0, "volume_window": 50}
 
 
 def test_every_idea_is_long_and_cites_its_source():
