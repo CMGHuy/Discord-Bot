@@ -24,6 +24,15 @@ def fixture_frames(monkeypatch):
     monkeypatch.setattr(ma, "load_frame", lambda ticker: FIXTURE.get(ticker))
 
 
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
+
 def test_static_refusal_happens_before_any_compute(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(ma, "run_arm", lambda *args, **kwargs: pytest.fail("computed"))
     rc = ma.main(["--knob", "STALL_EXIT_ENABLED=true", "--stage", "pilot", "--out", str(tmp_path / "x.json")])

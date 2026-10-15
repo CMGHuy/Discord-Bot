@@ -33,6 +33,7 @@ from swingbot.core.backtesting import acceptance_exit_funnel as funnel  # noqa: 
 from swingbot.core.backtesting.acceptance import BOOTSTRAP_RESAMPLES  # noqa: E402
 from swingbot.core.backtesting.acceptance_replay import CELLS, cell_key, replay_entries  # noqa: E402
 from swingbot.core.backtesting.backtest_scenarios import _resolve_replay_workers  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 
 RESULTS = ROOT / "docs" / "superpowers" / "results" / "v129"
@@ -86,12 +87,12 @@ def _write_progress(path, done, total) -> None:
 
 
 def cache_universe() -> list[str]:
-    """Every ticker with a cached CSV. The pre-registered universe is 'every
-    watchlist ticker with a cached frame'; the watchlist lives in Postgres
-    (unreachable from a worktree) and the cache holds exactly those tickers,
-    so the cache listing stands in for it (partner decision, 2026-10-08)."""
-    from swingbot.core.marketdata import backtest_cache
-    return sorted(p.stem for p in Path(backtest_cache.CACHE_DIR).glob("*.csv"))
+    """Every ticker the selected training data holds. The pre-registered universe
+    is 'every watchlist ticker with a cached frame'; the watchlist lives in
+    Postgres (unreachable from a worktree) and the cache holds exactly those
+    tickers, so the listing stands in for it (partner decision, 2026-10-08).
+    v162: listed through training_data, the yfinance glob under yfinance."""
+    return training_data.available_tickers()
 
 
 def build_rows(arm, window, cells, *, tickers=None, workers=None) -> list:
@@ -116,7 +117,8 @@ def build_rows(arm, window, cells, *, tickers=None, workers=None) -> list:
         for task in tasks:
             record(*_worker(task))
     else:
-        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+        with ProcessPoolExecutor(max_workers=n_workers, initializer=training_data.select,
+                                 initargs=(training_data.active(),)) as pool:
             for future in as_completed([pool.submit(_worker, task) for task in tasks]):
                 record(*future.result())
     progress.unlink(missing_ok=True)
@@ -217,7 +219,10 @@ def main(argv=None) -> int:
     parser.add_argument("--tickers", type=int, default=None)
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES)
+    from fetch_backtest_data import add_data_source_arg, apply_data_source
+    add_data_source_arg(parser)
     args = parser.parse_args(argv)
+    apply_data_source(args)
     refusal = _cli_refusal(args)
     if refusal:
         print(refusal, file=sys.stderr)

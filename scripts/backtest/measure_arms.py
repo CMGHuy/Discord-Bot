@@ -24,13 +24,14 @@ from swingbot.core.backtesting.arms.knobs import apply_knobs, parse_knob  # noqa
 from swingbot.core.backtesting.arms.pairing import changed_outcomes  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import build_stamp, code_hash  # noqa: E402
 from swingbot.core.backtesting.backtest_scenarios import _resolve_replay_workers  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
 
 LOG_DIR = ROOT / "logs"
 
 
 #: v139: where the arm universe comes from. "watchlist" (the default, unchanged)
-#: is the Postgres watchlist filtered to cached frames. "cache" is every cached
-#: CSV in backtest_cache.CACHE_DIR, for a worktree where Postgres is unreachable
+#: is the Postgres watchlist filtered to cached frames. "cache" is every ticker
+#: the training data holds (v162: training_data.available_tickers()), for a worktree where Postgres is unreachable
 #: (the v129 precedent, partner-approved 2026-10-08). The stamp records the list
 #: either way, and validate_component / permutation_test call this same function,
 #: so a producer run and its judge agree.
@@ -39,9 +40,19 @@ UNIVERSE_SOURCES = ("watchlist", "cache")
 
 
 def cache_listing() -> list[str]:
-    """Every ticker with a cached CSV, sorted."""
-    from swingbot.core.marketdata import backtest_cache
-    return sorted(path.stem for path in Path(backtest_cache.CACHE_DIR).glob("*.csv"))
+    """Every ticker the selected training data holds, sorted (v162). Under
+    yfinance that is the CSV stems of backtest_cache.CACHE_DIR, as before."""
+    return training_data.available_tickers()
+
+
+def _available() -> set[str]:
+    return set(training_data.available_tickers())
+
+
+def _in_training_data(symbol: str, available: set[str]) -> bool:
+    """A ticker, or its yfinance file stem (=, ^ and / become _), is served."""
+    from swingbot.core.marketdata.backtest_cache import cache_path
+    return symbol in available or cache_path(symbol).stem in available
 
 
 def cached_universe() -> list[str]:
@@ -50,9 +61,9 @@ def cached_universe() -> list[str]:
         raise ValueError(f"{UNIVERSE_ENV} must be one of {UNIVERSE_SOURCES}, got {source!r}")
     if source == "cache":
         return cache_listing()
-    from swingbot.core.marketdata.backtest_cache import cache_path
     from run_backtest_range import _tickers_for_run
-    return sorted(ticker for ticker in _tickers_for_run(None) if cache_path(ticker).exists())
+    available = _available()
+    return sorted(ticker for ticker in _tickers_for_run(None) if _in_training_data(ticker, available))
 
 
 def load_frame(ticker):
@@ -114,7 +125,8 @@ def _run_arm_all(label, universe, engines, horizons, signal_window, delta, worke
         for task in tasks:
             record(*_worker(task))
     else:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        with ProcessPoolExecutor(max_workers=workers, initializer=training_data.select,
+                                 initargs=(training_data.active(),)) as pool:
             for future in as_completed([pool.submit(_worker, task) for task in tasks]):
                 record(*future.result())
     return [trade for ticker in sorted(by_ticker) for trade in by_ticker[ticker]]
@@ -126,17 +138,17 @@ def _rows(trades, start, end):
 
 def population_symbols() -> list[str]:
     """v118: every symbol a whole-scan replay may need -- the cached universe, the
-    point-in-time S&P 500 members that have a cached frame, the benchmark and the
+    point-in-time S&P 500 members that the training data holds, the benchmark and the
     sector ETFs. A member with no cached frame is simply absent (counted by the
     replay as missing_frame): Yahoo keeps no history for most delisted names."""
     from swingbot import config
     from swingbot.core.marketdata import universe as universe_mod
-    from swingbot.core.marketdata.backtest_cache import cache_path
     from swingbot.core.marketdata.pit_membership import load_intervals
     members = load_intervals(str(Path(universe_mod.UNIVERSE_DIR) / "sp500_membership.csv"))
     etfs = universe_mod.sector_map("etfs")
     wanted = set(cached_universe()) | set(members) | set(etfs) | {config.MARKET_REGIME_TICKER}
-    return sorted(symbol for symbol in wanted if cache_path(symbol).exists())
+    available = _available()
+    return sorted(symbol for symbol in wanted if _in_training_data(symbol, available))
 
 
 def _population_arm(engine_id, frames, universe, horizons, window, delta) -> list:
@@ -235,7 +247,10 @@ def main(argv=None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--preregistration", type=Path, default=None)
+    from fetch_backtest_data import add_data_source_arg, apply_data_source
+    add_data_source_arg(parser)
     args = parser.parse_args(argv)
+    apply_data_source(args)
     try:
         delta = dict(parse_knob(knob) for knob in args.knob)
     except ValueError as exc:
@@ -256,6 +271,7 @@ def main(argv=None) -> int:
                    preregistration=str(args.preregistration) if args.preregistration else None)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(blob), encoding="utf-8")
+    training_data.write_provenance(args.out)
     _write_sidecar_or_warn(args.out, blob, delta, universe, windows.resolve(args.stage))
     if args.stage == "pilot" and blob["provenance"]["changed_outcomes"] == 0:
         print("refused:zero-diff -- the component changed no trade on the pilot slice. Budget intact.", file=sys.stderr)

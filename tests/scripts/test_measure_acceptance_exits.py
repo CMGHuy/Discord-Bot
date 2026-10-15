@@ -16,6 +16,16 @@ from tests.backtesting.acceptance_rows import lifted_rows
 N = 200
 
 
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot import config
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
+
 def _fake_build(calls, lift=0.3):
     def build(arm, window, cells):
         calls.append((arm, tuple(window), [tuple(cell) for cell in cells]))
