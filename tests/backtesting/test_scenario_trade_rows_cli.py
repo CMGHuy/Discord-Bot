@@ -37,7 +37,9 @@ def test_replay_ticker_rows_one_row_per_closed_exit():
     spy = make_ohlcv([300.0 + 0.1 * k for k in range(500)], start="2023-01-02")
     task = ("AAPL", df, ["4w"], None, None, GATES, True, None, None, None)
 
-    exits, rows = bs._replay_ticker_rows(task + (spy,))
+    exits, rows, gate_rows = bs._replay_ticker_rows(task + (spy, False))
+
+    assert gate_rows == []                          # v147 record flag off
 
     assert exits == bs._replay_ticker(task)        # the aggregate's input is untouched
     closed = [r for r in exits["4w"] if r.outcome != "not_triggered"]
@@ -62,7 +64,7 @@ def test_replay_ticker_rows_skips_untriggered_exits(monkeypatch):
     monkeypatch.setattr(scenario_rows, "scenario_trade_row",
                         lambda ticker, hk, df, hit, result, spy_df: {"i": hit.i, "spy": spy_df})
 
-    exits, rows = bs._replay_ticker_rows(("AAPL", df, ["2w"], None, None, {}, True, None, None, None, "SPY"))
+    exits, rows, _ = bs._replay_ticker_rows(("AAPL", df, ["2w"], None, None, {}, True, None, None, None, "SPY"))
 
     assert [r.outcome for r in exits["2w"]] == ["win", "not_triggered"]
     assert rows == [{"i": 0, "spy": "SPY"}]
@@ -70,19 +72,23 @@ def test_replay_ticker_rows_skips_untriggered_exits(monkeypatch):
 
 # --- run_scenario_backtest ----------------------------------------------------
 
-def test_spy_rides_only_on_the_row_collecting_tasks(monkeypatch):
-    seen, calls = {}, []
-
+def _fake_workers(monkeypatch, seen):
+    """Both replay workers faked; each records (len(args), args[10], args[11])."""
     def fake_plain(args):
-        seen["plain"] = len(args)
-        return {"4w": []}
+        seen["plain"] = (len(args), args[10], args[11])
+        return {"4w": []}, [{"gate": args[0]}] if args[11] else []
 
     def fake_rows(args):
-        seen["rows"] = (len(args), args[10])
-        return {"4w": []}, [{"ticker": args[0]}]
+        seen["rows"] = (len(args), args[10], args[11])
+        return {"4w": []}, [{"ticker": args[0]}], [{"gate": args[0]}] if args[11] else []
 
-    monkeypatch.setattr(bs, "_replay_ticker", fake_plain)
+    monkeypatch.setattr(bs, "_replay_ticker_gate_rows", fake_plain)
     monkeypatch.setattr(bs, "_replay_ticker_rows", fake_rows)
+
+
+def test_spy_rides_only_on_the_row_collecting_tasks(monkeypatch):
+    seen, calls = {}, []
+    _fake_workers(monkeypatch, seen)
     frames = {"AAA": "frame-a", "BBB": "frame-b"}
 
     plain = bs.run_scenario_backtest(frames, None, None, gates=GATES, horizons=["4w"],
@@ -91,11 +97,38 @@ def test_spy_rides_only_on_the_row_collecting_tasks(monkeypatch):
                                    spy_df="SPY", collect_rows=True,
                                    on_ticker_done=lambda done, total: calls.append((done, total)))
 
-    assert "rows" not in plain and seen["plain"] == 10      # today's 10-tuple, no SPY shipped
-    assert seen["rows"] == (11, "SPY")
+    assert "rows" not in plain and seen["plain"] == (12, None, False)   # slot 10 empty, no SPY shipped
+    assert seen["rows"] == (12, "SPY", False)
     assert out["rows"] == [{"ticker": "AAA"}, {"ticker": "BBB"}]
+    assert "gate_rows" not in out
     assert calls == [(1, 2), (2, 2)]
     assert (out["pooled"], out["by_horizon"]) == (plain["pooled"], plain["by_horizon"])
+
+
+def test_spy_fills_slot_10_beside_the_v147_record_flag(monkeypatch):
+    """Merge with v147: SPY goes INTO main's reserved args[10], never appended
+    after record_blocked (args[11]); both row kinds come back from one replay."""
+    seen = {}
+    _fake_workers(monkeypatch, seen)
+    frames = {"AAA": "frame-a", "BBB": "frame-b"}
+
+    out = bs.run_scenario_backtest(frames, None, None, gates=GATES, horizons=["4w"], workers=1,
+                                   spy_df="SPY", collect_rows=True, record_blocked=True)
+
+    assert seen["rows"] == (12, "SPY", True)
+    assert out["rows"] == [{"ticker": "AAA"}, {"ticker": "BBB"}]
+    assert out["gate_rows"] == [{"gate": "AAA"}, {"gate": "BBB"}]
+
+
+def test_record_blocked_without_spy_keeps_the_plain_path(monkeypatch):
+    seen = {}
+    _fake_workers(monkeypatch, seen)
+
+    out = bs.run_scenario_backtest({"AAA": "frame-a"}, None, None, gates=GATES, horizons=["4w"],
+                                   workers=1, spy_df=None, record_blocked=True)
+
+    assert seen == {"plain": (12, None, True)}
+    assert "rows" not in out and out["gate_rows"] == [{"gate": "AAA"}]
 
 
 # --- the writer and the mode --------------------------------------------------
