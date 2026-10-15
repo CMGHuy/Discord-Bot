@@ -25,8 +25,8 @@ export const OPEN_POSITIONS_PER_PAGE = 5;
  *  different surface -- it names a whole group, not one row's status, and
  *  is exactly what a mobile-width icon-only tab needs to stay legible). */
 export const POSITION_TABS: (Tab & { status: string; scoped: boolean })[] = [
-  { id: 'ACTIVE',    label: 'Open',      icon: STATUS_ICON['ACTIVE'],    status: 'ACTIVE',    scoped: false },
   { id: 'PENDING',   label: 'Pending',   icon: STATUS_ICON['PENDING'],   status: 'PENDING',   scoped: false },
+  { id: 'ACTIVE',    label: 'Open',      icon: STATUS_ICON['ACTIVE'],    status: 'ACTIVE',    scoped: false },
   { id: 'PARTIAL',   label: 'Partial',   icon: STATUS_ICON['PARTIAL'],   status: 'PARTIAL',   scoped: false },
   { id: 'CLOSED',    label: 'Closed',    icon: STATUS_ICON['CLOSED'],    status: 'CLOSED',    scoped: true  },
   { id: 'CANCELLED', label: 'Cancelled', icon: STATUS_ICON['CANCELLED'], status: 'CANCELLED', scoped: true  },
