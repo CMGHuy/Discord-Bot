@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-15 07:40:01 UTC",
+  "generated_at": "2026-10-15 11:18:19 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.23.1",
-    "bot": "2.5.1"
+    "bot": "2.5.2"
   },
   "releases": [
     {
@@ -1613,6 +1613,19 @@
       "versions": {
         "ui": "1.23.1",
         "bot": "2.5.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-15",
+      "last_seen": "2026-10-15",
+      "commit": "d2bb17d9",
+      "subject": "release(bot): 2.5.2 -- expectancy attribution instruments (numeric confidence points, earnings stamp, analytics dimensions)",
+      "versions": {
+        "ui": "1.23.1",
+        "bot": "2.5.2"
       },
       "changed": [
         "bot"
