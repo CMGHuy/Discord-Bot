@@ -51,7 +51,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
 import numpy as np
 
-from fetch_backtest_data import load_cached, load_watchlist
+from fetch_backtest_data import add_data_source_arg, apply_data_source, load_cached, load_watchlist
+from swingbot.core.marketdata import training_data
 from swingbot import config
 from swingbot.core.market import market_context
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
@@ -212,7 +213,9 @@ def main(argv=None) -> int:
     p.add_argument("--strategy", action="append", default=None, help="repeatable; default = all")
     p.add_argument("--json", type=Path, default=None)
     p.add_argument("--out", type=Path, default=None, help="write the report here too")
+    add_data_source_arg(p)
     args = p.parse_args(argv)
+    apply_data_source(args)
 
     # Measuring must happen ungated: we need the ungated per-regime behaviour
     # in order to decide what to gate.
@@ -248,6 +251,7 @@ def main(argv=None) -> int:
     if args.json:
         args.json.write_text(json.dumps({"allow": {k: list(v) for k, v in allow.items()},
                                          "rows": rows}, indent=2), encoding="utf-8")
+        training_data.write_provenance(args.json)
     return 0
 
 
