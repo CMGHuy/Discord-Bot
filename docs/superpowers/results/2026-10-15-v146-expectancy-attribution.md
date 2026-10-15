@@ -280,7 +280,8 @@ Live rows left out by the study (`load_live_rows` warning in the verdict-run log
 - **Multiple comparisons.** 113 looks; a bucket or factor is a screen candidate only at BH q < 0.10 over all of them. No threshold is chosen from these tables.
 - **The live rows overlap v2's sealed holdout.** The live book's 2026 trades fall inside the v2 instrument's sealed holdout (2026-01-01 onward). Any follow-on filter screened from these tables has seen that period, so it cannot use that holdout as unseen data.
 - **Instrument:** TRAIN replay run without an `--instrument` flag (none was offered).
-- **Populations are never pooled.** No figure in this document combines live and TRAIN.
+- **Most live rows are `unknown` on four groupings.** Live rows labelled `unknown`: `regime2_state` 801 of 912, `rs_quintile` 806 of 912, `confluence` 797 of 912, `earnings` 912 of 912. Trades opened before v146 lack these fields, so the live readings for these four groupings are effectively empty. For example, live `regime2_state` `bull_quiet` (n 111, CI [-0.0868, 0.4600], p 0.1359) and `unknown` (n 801, CI [-0.4600, 0.0868], p 0.1359) are the same split seen from both sides: mirror-image CIs, equal p. Such bucket pairs are not independent findings.
+- **Populations are never pooled.** No statistic combines live and TRAIN; `verdict_of_record.n` is only the sum of the two sample sizes.
 
 ## What this licenses
 
