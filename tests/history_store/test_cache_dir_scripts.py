@@ -198,3 +198,70 @@ def test_armed_run_meta_lists_training_files(alpaca_store):
     armed = _load("measure_armed_entries")
     meta = armed.run_meta(None, ("2020-01-01", "2023-12-31"), ["4w"])
     assert meta["cache_files"] == ["AAA.csv", "SPY.csv"]
+
+
+# --- resumable run dirs never mix data sources ------------------------------------------
+
+RESUMABLE = ["measure_armed_entries", "measure_structure_arm", "measure_earnings_blackout"]
+RECORD = {"measure_armed_entries": "run.json", "measure_structure_arm": "run.json",
+          "measure_earnings_blackout": "calendar.json"}
+
+
+def _replay(name, out, *flags):
+    """One replay of a pre-sharded run dir: only the resume guard and the record run."""
+    run_dir = out / "run1"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "AAA.jsonl").write_text("", encoding="utf-8")
+    argv = ["replay", "--run", "run1", "--workers", "1", "--tickers", "AAA",
+            "--out-root", str(out), *flags]
+    return _load(name).main(argv), run_dir / RECORD[name]
+
+
+@pytest.mark.parametrize("name", RESUMABLE)
+def test_a_yfinance_run_dir_refuses_an_alpaca_resume(name, alpaca_store, csv_dir, tmp_path):
+    code, record = _replay(name, tmp_path / "out", "--cache-dir", str(csv_dir))
+    assert code == 0 and "data_source" not in json.loads(record.read_text())
+    training_data.reset()
+    code, _ = _replay(name, tmp_path / "out", "--data-source", "alpaca")
+    assert code == 4
+
+
+@pytest.mark.parametrize("name", RESUMABLE)
+def test_an_alpaca_run_dir_refuses_a_yfinance_resume(name, alpaca_store, csv_dir, tmp_path):
+    code, record = _replay(name, tmp_path / "out", "--data-source", "alpaca")
+    assert code == 0 and json.loads(record.read_text())["data_source"] == "alpaca"
+    training_data.reset()
+    code, _ = _replay(name, tmp_path / "out", "--cache-dir", str(csv_dir))
+    assert code == 4
+
+
+@pytest.mark.parametrize("name", RESUMABLE)
+def test_same_source_resumes(name, alpaca_store, csv_dir, tmp_path):
+    for flags in (("--cache-dir", str(csv_dir)), ("--data-source", "alpaca")):
+        out = tmp_path / flags[0].strip("-")
+        assert _replay(name, out, *flags)[0] == 0
+        training_data.reset()
+        assert _replay(name, out, *flags)[0] == 0
+        training_data.reset()
+
+
+def test_earnings_refusal_names_both_sources(alpaca_store, csv_dir, tmp_path, capsys):
+    _replay("measure_earnings_blackout", tmp_path / "out", "--cache-dir", str(csv_dir))
+    training_data.reset()
+    _replay("measure_earnings_blackout", tmp_path / "out", "--data-source", "alpaca")
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "yfinance" in out and "alpaca" in out
+
+
+def test_cache_files_follow_filename_order(tmp_path):
+    folder = tmp_path / "pair"
+    folder.mkdir()
+    for stem in ("A", "A-B", "AB"):
+        _frame().to_csv(folder / f"{stem}.csv", index_label="Date")
+    assert cds.cache_files(folder) == ["A-B.csv", "A.csv", "AB.csv"]
+
+
+def test_cache_files_of_the_switch_are_filename_ordered(store_root):
+    _write_store(store_root, {"A": _frame(), "A-B": _frame(seed=2), "AB": _frame(seed=3)})
+    training_data.select("alpaca")
+    assert cds.cache_files(None) == ["A-B.csv", "A.csv", "AB.csv"]

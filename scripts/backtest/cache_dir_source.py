@@ -83,8 +83,15 @@ def load_all(cache_dir, limit: int | None = None) -> dict:
 def cache_files(cache_dir) -> list[str]:
     """What a run.json records under cache_files: a resume on other data is refused."""
     if cache_dir is None:
-        return [f"{ticker}.csv" for ticker in training_data.available_tickers()]
+        return sorted(f"{ticker}.csv" for ticker in training_data.available_tickers())
     return sorted(p.name for p in Path(cache_dir).glob("*.csv"))
+
+
+def source_marker() -> dict:
+    """What a resumable run records so another source cannot resume it: the
+    active source, only when it is not yfinance (pre-v162 records carry none)."""
+    active = training_data.active()
+    return {} if active == "yfinance" else {"data_source": active}
 
 
 def describe(cache_dir) -> str:

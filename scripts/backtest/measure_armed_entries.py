@@ -119,7 +119,8 @@ def read_rows(run_dir) -> list:
 def run_meta(cache_dir, window, horizons) -> dict:
     return {"cache_files": cache_dir_source.cache_files(cache_dir),
             "window": list(window), "horizons": list(horizons),
-            "cells": [cell.cell_id for cell in am.CELLS]}
+            "cells": [cell.cell_id for cell in am.CELLS],
+            **cache_dir_source.source_marker()}
 
 
 def _map(worker, tasks, workers):

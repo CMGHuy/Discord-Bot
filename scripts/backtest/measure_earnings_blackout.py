@@ -22,7 +22,17 @@ def load_calendar(cache_dir):
     frame=load_frame(cache_dir, "SPY")
     if frame is None or frame.empty: raise SystemExit(f"SPY missing from {cache_dir_source.describe(cache_dir)}")
     return SessionCalendar.from_bar_index(frame.index)
-def calendar_meta(calendar): return {"first":calendar.first.isoformat(),"last":calendar.last.isoformat(),"sessions":len(calendar)}
+def calendar_meta(calendar): return {"first":calendar.first.isoformat(),"last":calendar.last.isoformat(),"sessions":len(calendar),**cache_dir_source.source_marker()}
+def source_refusal(previous, meta):
+    """The refusal text when the recorded source differs (no key = pre-v162 = yfinance), else None."""
+    was, now = previous.get("data_source","yfinance"), meta.get("data_source","yfinance")
+    return f"REFUSED -- this run dir was measured on {was} data; this run reads {now} (a resume never mixes adjustment bases)" if was != now else None
+def resume_refused(path, meta):
+    """True (after saying why, for a source mismatch) when an existing calendar.json forbids the resume."""
+    if not path.exists():return False
+    recorded=json.loads(path.read_text()); refusal=source_refusal(recorded,meta)
+    if refusal is not None:print(refusal,flush=True)
+    return refusal is not None or recorded != meta
 def reaction_positions(ticker, source, calendar):
     return sorted({position for report in source.reports(ticker) if (session:=reaction_session(report, calendar)) is not None and (position:=calendar.position_on_or_after(session)) is not None})
 def exposure_row(trade, population, signal_date, *, is_etf, positions, calendar):
@@ -64,7 +74,7 @@ def cmd_replay(args):
     from swingbot.core.backtesting.backtest import ALL_STRATEGIES
     from swingbot.core.marketdata.universe import is_etf
     cache=cache_dir_source.resolve(args); calendar=load_calendar(cache); run_dir=Path(args.out_root)/args.run; run_dir.mkdir(parents=True,exist_ok=True); meta=calendar_meta(calendar); previous=run_dir/"calendar.json"
-    if previous.exists() and json.loads(previous.read_text()) != meta:return 4
+    if resume_refused(previous,meta):return 4
     previous.write_text(json.dumps(meta)); symbols=args.tickers.split(",") if args.tickers else cache_dir_source.listing(cache); todo=[symbol for symbol in symbols if not (run_dir/f"{symbol}.jsonl").exists()]; horizons=args.horizons.split(",") if args.horizons else list(LEGACY_HORIZONS); strategies=args.strategies.split("|") if args.strategies else list(ALL_STRATEGIES)
     progress=run_dir/"progress.txt"; tasks=[(symbol,cache,str(args.csv_dir),RUNS[args.run],horizons,strategies,is_etf(symbol)) for symbol in todo]
     try:

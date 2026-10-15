@@ -109,7 +109,8 @@ def read_arms(run_dir) -> list:
 def run_meta(cache_dir, window, horizons) -> dict:
     return {"cache_files": cache_dir_source.cache_files(cache_dir),
             "window": list(window), "horizons": list(horizons),
-            "cells": [cell.cell_id for cell in sm.CELLS]}
+            "cells": [cell.cell_id for cell in sm.CELLS],
+            **cache_dir_source.source_marker()}
 
 
 def _run2_locked(args) -> bool:
