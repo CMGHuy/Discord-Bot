@@ -298,8 +298,10 @@ Every trading and operational store is a Postgres table; there is no JSON copy,
 no per-store stage and no import step. Only `analytics_snapshot.json`,
 `scan_snapshots.json`, `scan_telemetry.jsonl` and `.env` remain files.
 
-- **Schema.** `docker compose exec bot alembic upgrade head`. A shape change is
-  an Alembic revision (`docs/claude/schema-evolution.md`).
+- **Schema.** `deploy/deploy.sh` runs `docker compose exec -T bot alembic upgrade
+  head` after `up --wait` (the bot never migrates at startup); run it by hand only
+  for an out-of-band fix. A shape change is an Alembic revision
+  (`docs/claude/schema-evolution.md`).
 - **Write failures.** A database write failure at issuance pauses scanning
   (`StoreWriteHalt`); fix the database, then unpause from the admin UI.
 - **Editing `.env`.** `python3 scripts/ops/env_set.py KEY value` edits it in
