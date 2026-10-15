@@ -255,7 +255,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             } @else { <p>Nothing lost money today.</p> }
           </section>
         </div>
-        @for (trade of detail.trades; track trade.trade_id) {
+        @for (trade of detail.trades; track trade.trade_id + ':' + trade.leg_index) {
           <article class="day-row">
             <header>
               <strong>{{ trade.ticker }}</strong>
@@ -269,6 +269,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             </header>
             <p class="meta">Opened {{ dateTime(trade.opened_at) }} · Closed {{ dateTime(trade.closed_at) }}</p>
             <p class="meta">
+              @if (trade.leg_total > 1) { <span class="leg">Leg {{ trade.leg_index + 1 }} of {{ trade.leg_total }}</span> · }
               {{ trade.outcome }} · {{ rLabel(trade.r_multiple) }}
               @if (trade.mfe_r !== null) { · MFE {{ rLabel(trade.mfe_r) }} }
               @if (trade.mae_r !== null) { · MAE {{ rLabel(trade.mae_r) }} }

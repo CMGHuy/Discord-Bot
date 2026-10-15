@@ -1708,6 +1708,14 @@ export interface CalendarTrade {
   exit_efficiency: number | null;
   tags: string[];
   auto_lesson: string | null;
+  /** A scaled-out position is one row per realized leg, each on the day
+   *  that leg closed -- the same split the Trades table makes (v79), so a
+   *  banked TP1 partial counts on its own day. 0/1 for an unsplit trade.
+   *  `leg_total` includes a runner that is still open. A leg is counted
+   *  as an individual trade: its `outcome` and `r_multiple` are the leg's
+   *  own, and the legs' `pnl_amount` sum to the trade's realized total. */
+  leg_index: number;
+  leg_total: number;
 }
 
 /** `days`/`totals` are the requested month; `day_of_week`, `best_day`,

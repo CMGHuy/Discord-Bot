@@ -190,7 +190,7 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
         "pnl_amount": NULLABLE_NUMBER, "r_multiple": NULLABLE_NUMBER,
         "mfe_r": NULLABLE_NUMBER, "mae_r": NULLABLE_NUMBER,
         "exit_efficiency": NULLABLE_NUMBER, "tags": list,
-        "auto_lesson": NULLABLE_STR,
+        "auto_lesson": NULLABLE_STR, "leg_index": int, "leg_total": int,
     }, where="trades[0]")
     assert body["trades"][0]["tags"] == ["clean-exit"]
     assert body["trades"][0]["auto_lesson"] == "Held to target."
@@ -264,3 +264,26 @@ def test_a_missing_or_malformed_date_is_a_400(seed, logged_in):
     assert_error(logged_in.get("/api/v1/calendar/pnl/day"), "invalid", 400)
     assert_error(logged_in.get("/api/v1/calendar/pnl/day?date=2026-08"),
                  "invalid", 400)
+
+
+def test_a_banked_tp1_partial_counts_on_the_day_it_closed(seed, logged_in):
+    """The Dashboard's Trades table shows a TP1 partial as its own CLOSED
+    row on the day it banked, even while the runner is still open. The
+    calendar must count the same row, or the two pages disagree on how many
+    trades closed that day."""
+    runner = {**_trade("m" * 16, status="open", closed_at=None, exit_price=None, pnl=None),
+              "ticker": "MSFT",
+              "legs": [{"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1",
+                        "closed_at": "2026-08-03T15:00:00+00:00"}]}
+    seed(trades=[_trade("a" * 16), runner])
+
+    grid = logged_in.get("/api/v1/calendar/pnl?month=2026-08").get_json()
+    day = next(d for d in grid["days"] if d["date"] == "2026-08-03")
+    assert day["trade_count"] == 2
+    # +$50 whole trade, + 10 shares x 0.5 x +$10 = +$50 on the TP1 leg.
+    assert day["net_pnl_amount"] == 100.0
+
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
+    leg = next(t for t in body["trades"] if t["trade_id"] == "m" * 16)
+    assert (leg["leg_index"], leg["leg_total"]) == (0, 2)
+    assert leg["r_multiple"] == pytest.approx(2.0)

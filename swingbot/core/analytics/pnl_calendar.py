@@ -21,7 +21,7 @@ from __future__ import annotations
 import datetime as _dt
 
 from swingbot.core.analytics import metrics
-from swingbot.core.tracking.performance import primary_strategy_label
+from swingbot.core.tracking.performance import expand_realized_legs, primary_strategy_label
 
 # The three statuses that mean "this position is over". Matches the filter
 # `api_v1/analytics.py` applies before every historical figure it serves.
@@ -34,7 +34,7 @@ CLOSED_STATUSES = frozenset({"win", "loss", "closed"})
 ROW_KEYS = (
     "trade_id", "plan_id", "ticker", "strategy", "horizon", "direction", "day",
     "opened_at", "closed_at", "outcome", "pnl_amount", "r_multiple", "mfe_r", "mae_r",
-    "exit_efficiency", "tags", "auto_lesson",
+    "exit_efficiency", "tags", "auto_lesson", "leg_index", "leg_total",
 )
 
 
@@ -67,14 +67,66 @@ def _float_or_none(value) -> float | None:
         return None
 
 
+def _row_for(part: dict, entry: dict) -> dict | None:
+    """One calendar row for one realized part of a trade.
+
+    `part` is a row of `performance.expand_realized_legs`: the trade itself
+    when it never scaled out, else one realized leg. A leg is counted as an
+    individual trade -- its own day, its own win/loss, its own R -- which is
+    how the Dashboard's Trades table and its chips count it too.
+
+    For a whole trade the journal's r_realized is authoritative when
+    present: it was computed by the same metrics.r_multiple at close time,
+    and reusing it avoids a second answer for one trade. A leg's R is the
+    leg's own (`metrics.r_multiple` on a leg row prices that leg's exit); the
+    journal only ever recorded the blended R of the whole position.
+    """
+    day = day_of(part.get("closed_at"))
+    if day is None:
+        return None
+    whole = part["leg_total"] == 1
+    r = _float_or_none(entry.get("r_realized")) if whole else None
+    if r is None:
+        r = metrics.r_multiple(part)
+    return {
+        "trade_id": part.get("id"),
+        # The Trades detail route is keyed by plan id when the trade has
+        # one (that is the id the Trades list shows), else by trade id.
+        "plan_id": part.get("plan_id"),
+        "ticker": part.get("ticker"),
+        "strategy": primary_strategy_label(part),
+        "horizon": part.get("horizon_key"),
+        "direction": part.get("direction"),
+        "day": day,
+        "opened_at": part.get("opened_at"),
+        "closed_at": part.get("closed_at"),
+        "outcome": (entry.get("outcome") if whole else None) or part.get("status"),
+        "pnl_amount": _float_or_none(part.get("realized_pnl_amount")),
+        "r_multiple": r,
+        "mfe_r": _float_or_none(entry.get("mfe_r")),
+        "mae_r": _float_or_none(entry.get("mae_r")),
+        "exit_efficiency": _float_or_none(entry.get("exit_efficiency")),
+        "tags": list(entry.get("tags") or []),
+        "auto_lesson": entry.get("auto_lesson") or None,
+        "leg_index": part["leg_index"],
+        "leg_total": part["leg_total"],
+    }
+
+
 def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
-    """One row per closed trade, with its journal entry merged in.
+    """One row per closed trade -- or per realized leg of a scaled-out
+    one -- with its journal entry merged in.
 
     The join key is asymmetric by construction: the trade side calls it
     `id`, the journal side `trade_id` (set from `trade.get("id")` at
     `journal.py:211`). A trade with no journal entry still produces a row --
     its dollar figure is what colours the grid cell, and dropping it would
     make the calendar disagree with the Dashboard's realized total.
+
+    A scaled-out trade is split by `expand_realized_legs`, so a TP1 partial
+    counts on the day it banked -- even while its runner is still open --
+    rather than vanishing into the runner's close. Its legs' dollars sum to
+    the trade's own realized total.
     """
     by_trade_id = {
         e["trade_id"]: e for e in entries if e.get("trade_id")
@@ -82,41 +134,10 @@ def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
 
     rows: list[dict] = []
     for t in trades:
-        if t.get("status") not in CLOSED_STATUSES:
-            continue
-        day = day_of(t.get("closed_at"))
-        if day is None:
-            continue
-
         entry = by_trade_id.get(t.get("id")) or {}
-        # The journal's r_realized is authoritative when present: it was
-        # computed by the same metrics.r_multiple at close time, and reusing
-        # it avoids a second answer for one trade.
-        r = _float_or_none(entry.get("r_realized"))
-        if r is None:
-            r = metrics.r_multiple(t)
-
-        rows.append({
-            "trade_id": t.get("id"),
-            # The Trades detail route is keyed by plan id when the trade has
-            # one (that is the id the Trades list shows), else by trade id.
-            "plan_id": t.get("plan_id"),
-            "ticker": t.get("ticker"),
-            "strategy": primary_strategy_label(t),
-            "horizon": t.get("horizon_key"),
-            "direction": t.get("direction"),
-            "day": day,
-            "opened_at": t.get("opened_at"),
-            "closed_at": t.get("closed_at"),
-            "outcome": entry.get("outcome") or t.get("status"),
-            "pnl_amount": _float_or_none(t.get("realized_pnl_amount")),
-            "r_multiple": r,
-            "mfe_r": _float_or_none(entry.get("mfe_r")),
-            "mae_r": _float_or_none(entry.get("mae_r")),
-            "exit_efficiency": _float_or_none(entry.get("exit_efficiency")),
-            "tags": list(entry.get("tags") or []),
-            "auto_lesson": entry.get("auto_lesson") or None,
-        })
+        for part in expand_realized_legs(t):
+            if (row := _row_for(part, entry)) is not None:
+                rows.append(row)
     return rows
 
 

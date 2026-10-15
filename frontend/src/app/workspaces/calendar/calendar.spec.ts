@@ -279,6 +279,8 @@ const TRADE: CalendarTrade = {
   auto_lesson: 'Held to target.',
   plan_id: null,
   opened_at: '2026-08-01T14:30:00+00:00',
+  leg_index: 0,
+  leg_total: 1,
 };
 
 describe('Calendar day drawer', () => {
@@ -311,6 +313,26 @@ describe('Calendar day drawer', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].textContent).toContain('AAPL');
     expect(rows[1].textContent).toContain('MSFT');
+  });
+
+  it('lists both legs of a scaled-out trade closed that day, each labelled', async () => {
+    const fixture = seed();
+    await openDay(fixture, [
+      { ...TRADE, leg_index: 0, leg_total: 2 },
+      { ...TRADE, leg_index: 1, leg_total: 2 },
+    ]);
+
+    const rows = el(fixture).querySelectorAll('.day-row');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelector('.leg')?.textContent).toContain('Leg 1 of 2');
+    expect(rows[1].querySelector('.leg')?.textContent).toContain('Leg 2 of 2');
+  });
+
+  it('does not label an unsplit trade as a leg', async () => {
+    const fixture = seed();
+    await openDay(fixture, [TRADE]);
+
+    expect(el(fixture).querySelector('.day-row .leg')).toBeNull();
   });
 
   it('shows the journal half when the join found one', async () => {
