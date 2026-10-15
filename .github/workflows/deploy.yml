@@ -9,57 +9,44 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  # ── 1. Python: compile, then the actual test suite, sharded by topic ───────
+  # ── 1. Python: compile, then the test suites, one CI job per suite ─────────
   #
-  # This used to be one `backend-test` job running the whole suite (`testrun.py
-  # full`) on a single runner's 4 xdist workers. It's now 5 jobs, each a
-  # `full` shard (`testrun.py full <paths> --skip-lint-gate`) on its OWN
-  # 4-core runner, so a push actually gets ~5x the CPU working the suite in
-  # parallel instead of contending for one runner's 4 cores. `container-
-  # healthcheck` waits on the SLOWEST shard, not their sum.
+  # The suites live in tests/suites.toml -- the single source of truth, also used
+  # by `python scripts/dev/testrun.py suite <name>` for a partial local run. The
+  # `test-plan` job below turns that file into a matrix, so adding a suite there
+  # adds a `backend-test` leg here with NO edit to this workflow. A tests/
+  # directory that belongs to no suite fails tests/dev/test_suites.py, so a test
+  # can never silently be missing from CI (six loose tests/test_config_*.py files
+  # were, until the suites existed).
   #
-  # 5 is a cap, not a target -- more shards means more fixed per-job overhead
-  # (checkout + setup-python + uv install + compileall, paid on every shard)
-  # for less benefit each, and GitHub bills per job-minute regardless of
-  # wall-clock overlap. Split further only if a specific shard becomes the
-  # visible bottleneck.
-  #
-  # The 5 groups follow swingbot/core's own package boundaries
-  # (docs/claude/architecture.md), not file-count arithmetic, and every group
-  # is a set of PATHS, never a hand-maintained file list -- a plan or
-  # directory listing that drifts from what actually exists was already
-  # rejected once here (see the dropped Flask-route-list note this comment
-  # used to carry): a new test file in an existing shard directory is picked
-  # up the next run with no CI edit needed. A new tests/ subdirectory is the
-  # one case that DOES need a line added below, the same way a 12th core
-  # package needs a line in architecture.md's module map.
-  #
-  # tests/charts/ is its own shard (backend-test-charts) even though it's the
-  # smallest by file count: docs/claude/testing-cost.md measured the 5 core
-  # chart-render files alone at 84s of the suite's 180s serial baseline (43%)
-  # -- rendering PNGs is what actually dominates wall-clock here, not test
-  # count, so isolating it is what gets the other four shards down near the
-  # "fast tier" floor (~27s) instead of one of them randomly inheriting most
-  # of that 84s.
-  #
-  # Only ONE shard (backend-test-misc) runs the pyflakes undefined-name gate
-  # (testrun.py's `undefined_names()`) -- it scans every tracked .py file
-  # regardless of `target`, so running it in all 5 would just be the same
-  # ~52s check five times for one answer. The other four pass
-  # --skip-lint-gate. `compileall`, by contrast, IS cheap (~5s) and stays in
-  # every shard: fast, independent, fail-fast confirmation the whole tree
-  # still compiles, without waiting on whichever shard "owns" that check.
-  #
-  # Steps below are identical across all 5 jobs except the shard's own name,
-  # target paths and (misc only) the lint-gate flag -- YAML anchors would
-  # dedupe that, but this file uses none anywhere else, and explicit is what
-  # the rest of it already is.
-
-  # tests/charts/ -- chart/PNG rendering. See header comment above for why
-  # this is alone.
-  backend-test-charts:
+  # One leg per suite pays ~1-2 min of checkout/uv/compile overhead each, in
+  # parallel -- that is the price of "a new suite is a new job"; the suite size
+  # cap (max_tests in the manifest) keeps each leg worth its overhead.
+  # docs/claude/testing-cost.md "Test suites" has the rule.
+  test-plan:
     runs-on: ubuntu-latest
-    # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build the suite matrix from tests/suites.toml
+        id: plan
+        run: python scripts/dev/testrun.py suites --matrix >> "$GITHUB_OUTPUT"
+
+  backend-test:
+    needs: test-plan
+    name: backend-test (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      # One red suite must not hide the others' verdicts.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.test-plan.outputs.matrix) }}
+    # v116 Phase 4: every store is Postgres; store tests need the database in every suite.
     services:
       db-test:
         image: postgres:18-alpine
@@ -90,38 +77,24 @@ jobs:
       - name: Compile every module
         run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
 
-      - name: Test suite (charts)
-        run: python scripts/dev/testrun.py full tests/charts/ --skip-lint-gate
+      - name: Test suite (${{ matrix.suite }})
+        run: python scripts/dev/testrun.py suite ${{ matrix.suite }}
 
       - name: Upload pytest log on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: pytest-log-charts
+          name: pytest-log-${{ matrix.suite }}
           path: .pytest-last-run.log
           # A dotfile: upload-artifact v4+ skips hidden files unless told.
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
 
-  # tests/marketdata/, tests/market/, tests/scanning/, tests/planning/ -- the
-  # scan-to-plan pipeline: OHLCV fetch/cache -> entry signals -> the scan
-  # engine -> trade-plan construction and lifecycle.
-  backend-test-pipeline:
+  # The whole-repo pyflakes undefined-name gate (it scans every tracked .py file,
+  # whatever suite you run), once, in its own job instead of inside one suite.
+  backend-lint-gate:
     runs-on: ubuntu-latest
-    # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
-    services:
-      db-test:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: swingbot
-          POSTGRES_DB: swingbot_test
-          POSTGRES_PASSWORD: swingbot
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U swingbot -d swingbot_test"
-          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -137,193 +110,15 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -r requirements.txt
 
-      - name: Compile every module
-        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
-
-      - name: Test suite (scan/plan pipeline)
-        run: |
-          python scripts/dev/testrun.py full \
-            tests/marketdata/ tests/market/ tests/scanning/ tests/planning/ \
-            --skip-lint-gate
-
-      - name: Upload pytest log on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pytest-log-pipeline
-          path: .pytest-last-run.log
-          # A dotfile: upload-artifact v4+ skips hidden files unless told.
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 7
-
-  # tests/backtesting/, tests/edge/, tests/analytics/, tests/tracking/ --
-  # strategy/edge validation, the backtest engine, analytics, and the paper
-  # trade log's write path that both backtests and live tracking feed.
-  backend-test-backtest-edge:
-    runs-on: ubuntu-latest
-    # The Postgres-backed store tests (killswitch, journal, trade log,
-    # analytics backend parity) skip without it. Mirrors docker-compose's
-    # db-test service, so tests/db/conftest.py's default URL reaches it.
-    services:
-      db-test:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: swingbot
-          POSTGRES_DB: swingbot_test
-          POSTGRES_PASSWORD: swingbot
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U swingbot -d swingbot_test"
-          --health-interval 5s --health-timeout 3s --health-retries 10
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-
-      - uses: astral-sh/setup-uv@v10.0.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: requirements.txt
-
-      - name: Install dependencies
-        run: uv pip install --system -r requirements.txt
-
-      - name: Compile every module
-        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
-
-      - name: Test suite (backtest/edge/analytics/tracking)
-        run: |
-          python scripts/dev/testrun.py full \
-            tests/backtesting/ tests/edge/ tests/analytics/ tests/tracking/ \
-            --skip-lint-gate
-
-      - name: Upload pytest log on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pytest-log-backtest-edge
-          path: .pytest-last-run.log
-          # A dotfile: upload-artifact v4+ skips hidden files unless told.
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 7
-
-  # tests/admin/, tests/presentation/, tests/commands/, tests/infra/ -- the
-  # admin API/SPA backend, Discord embed/message rendering, slash commands,
-  # and shared infra (jsonio etc.).
-  backend-test-admin:
-    runs-on: ubuntu-latest
-    # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
-    services:
-      db-test:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: swingbot
-          POSTGRES_DB: swingbot_test
-          POSTGRES_PASSWORD: swingbot
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U swingbot -d swingbot_test"
-          --health-interval 5s --health-timeout 3s --health-retries 10
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-
-      - uses: astral-sh/setup-uv@v10.0.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: requirements.txt
-
-      - name: Install dependencies
-        run: uv pip install --system -r requirements.txt
-
-      - name: Compile every module
-        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
-
-      - name: Test suite (admin/presentation/commands/infra)
-        run: |
-          python scripts/dev/testrun.py full \
-            tests/admin/ tests/presentation/ tests/commands/ tests/infra/ \
-            --skip-lint-gate
-
-      - name: Upload pytest log on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pytest-log-admin
-          path: .pytest-last-run.log
-          # A dotfile: upload-artifact v4+ skips hidden files unless told.
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 7
-
-  # tests/db/, tests/scripts/, tests/hooks/ and tests/dev/. Also the ONE shard
-  # that runs the whole-repo pyflakes undefined-name gate -- see header comment.
-  # There are no loose top-level tests/test_*.py files any more: every test lives
-  # in a package subdirectory, and each subdirectory is listed in exactly one shard.
-  backend-test-misc:
-    runs-on: ubuntu-latest
-    # v116 Phase 4: every store is Postgres; store tests need the database in every shard.
-    services:
-      db-test:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: swingbot
-          POSTGRES_DB: swingbot_test
-          POSTGRES_PASSWORD: swingbot
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U swingbot -d swingbot_test"
-          --health-interval 5s --health-timeout 3s --health-retries 10
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-
-      - uses: astral-sh/setup-uv@v10.0.0
-        with:
-          enable-cache: true
-          cache-dependency-glob: requirements.txt
-
-      - name: Install dependencies
-        run: uv pip install --system -r requirements.txt
-
-      - name: Compile every module
-        run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
-
-      - name: Test suite (db/scripts/hooks/dev)
-        run: |
-          python scripts/dev/testrun.py full \
-            tests/db/ tests/scripts/ tests/hooks/ tests/dev/
-
-      - name: Upload pytest log on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pytest-log-misc
-          path: .pytest-last-run.log
-          # A dotfile: upload-artifact v4+ skips hidden files unless told.
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 7
+      - name: Undefined-name gate
+        run: python scripts/dev/testrun.py lint
 
   # ── 2b. The frontend ───────────────────────────────────────────────────────
   # The Angular suite and a real production build. The build is not redundant
   # with the Docker one below: this fails in ~1 minute with a readable
   # TypeScript error, where the Docker stage fails several minutes in with the
   # same error buried in build output. It also runs in parallel with the
-  # `backend-test-*` shards.
+  # `backend-test` suites.
   frontend-test:
     runs-on: ubuntu-latest
     defaults:
@@ -417,7 +212,7 @@ jobs:
   # putting it fully on the critical path to deploy. It has no actual
   # dependency on their result, only a "don't bother if tests would fail"
   # rationale -- so it now starts immediately alongside every
-  # `backend-test-*` shard, frontend-test, compose-lint and cleanup, and only
+  # `backend-test` suite, frontend-test, compose-lint and cleanup, and only
   # the smoke tests + GHCR push (which DO need a proven, unchanged artifact)
   # wait on all of them. On a green run this overlaps the build with the
   # slowest test shard instead of stacking them, which is where most of the
@@ -544,18 +339,13 @@ jobs:
   # loaded here, never rebuilt -- so what ships is byte-identical to what
   # every check below ran against.
   container-healthcheck:
-    needs:
-      - docker-build
-      - backend-test-charts
-      - backend-test-pipeline
-      - backend-test-backtest-edge
-      - backend-test-admin
-      - backend-test-misc
-      - frontend-test
+    # Needs ONLY the image: the smoke tests overlap the test suites instead of
+    # queueing behind them. Publishing is the one step that must wait for the
+    # tests, so it lives in `publish-image` below.
+    needs: docker-build
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write        # GITHUB_TOKEN needs this to push to GHCR
     steps:
       - uses: actions/checkout@v7
 
@@ -739,7 +529,35 @@ jobs:
         if: always()
         run: docker rm -f swing-bot-admin-ci || true
 
-      # ── Publish ─────────────────────────────────────────────────────────
+  # ── 3c. Publish ──────────────────────────────────────────────────────────
+  # Last, and only on a green run: the tests, the lint gate, the frontend AND
+  # the container smoke tests above all passed. Split out of container-healthcheck
+  # so that job could start as soon as the image existed rather than after the
+  # slowest test suite; the cost is one more artifact download + `docker load`
+  # (~20s) here, far less than the ~45s of smoke tests it took off the critical path.
+  publish-image:
+    needs:
+      - docker-build
+      - container-healthcheck
+      - backend-test
+      - backend-lint-gate
+      - frontend-test
+    # Nothing to publish on a pull_request or a manual run against a branch.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write        # GITHUB_TOKEN needs this to push to GHCR
+    steps:
+      - name: Download image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: swing-bot-ci-image
+          path: /tmp
+
+      - name: Load image built by docker-build
+        run: gunzip -c /tmp/swing-bot-ci.tar.gz | docker load
+
       # Last, and only on a green run: everything above proved THIS image
       # works, and re-tagging the local one is what guarantees the bytes
       # that ship are the bytes that passed. A second `docker build` here
@@ -823,7 +641,7 @@ jobs:
   # before returning (see deploy/deploy.sh). The server no longer builds
   # anything.
   #
-  # needs container-healthcheck (the proof the image is healthy), docker-build
+  # needs publish-image (which itself needs container-healthcheck, the proof the image is healthy), docker-build
   # (only to read its image/tag outputs -- GitHub Actions requires a job to be
   # a direct `needs` entry to read `needs.<job>.outputs`, even though the
   # dependency already holds transitively through container-healthcheck),
@@ -840,7 +658,7 @@ jobs:
   # race, and nothing stops the pull from landing before the prune does on
   # the exact disk-is-nearly-full run this ordering exists to protect.
   deploy:
-    needs: [docker-build, db-image, container-healthcheck, cleanup, compose-lint]
+    needs: [docker-build, db-image, publish-image, cleanup, compose-lint]
     # Skip on a manual run against a branch, where nothing was published --
     # deploying would silently re-run whatever :latest currently points at.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
