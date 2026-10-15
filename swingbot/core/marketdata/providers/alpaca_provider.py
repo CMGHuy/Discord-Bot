@@ -22,6 +22,14 @@ _PERIOD_DAYS = {"1d": 5, "5d": 7, "1mo": 31, "3mo": 92, "6mo": 183, "1y": 366,
 INTRADAY_DAYS = 700
 ROWS_PER_PAGE = 10_000      # Alpaca bars page size; a request past it paginates serially
 
+#: v162 history store timeframes -> Alpaca bar size. Native 1Hour bars are
+#: clock-aligned and never used: hourly is rebuilt from 30-minute bars.
+HISTORY_TIMEFRAMES = {
+    "15min": TimeFrame(15, TimeFrameUnit.Minute),
+    "30min": TimeFrame(30, TimeFrameUnit.Minute),
+    "1d": TimeFrame.Day,
+}
+
 
 _RAW_COLS = ["t", "o", "h", "l", "c", "v"]
 _FRAME_COLS = ["open", "high", "low", "close", "volume"]
@@ -110,6 +118,30 @@ class AlpacaProvider:
         raw = self._bars([ticker], TimeFrame(30, TimeFrameUnit.Minute), start)
         df = raw.get(ticker)
         return None if df is None or df.empty else to_yf_hourly(df)
+
+    def history_bars(self, ticker, timeframe, start, end):
+        """v162: one symbol's raw bars over [start, end] for the history store.
+
+        SIP feed, Adjustment.ALL, `end` clamped to now - SIP_DELAY (the free
+        plan's delay). alpaca-py pages inside the one call, so callers bound
+        memory by asking for one calendar year at a time. Returns the raw
+        frame (lowercase open..volume, tz-aware UTC index) or None when there
+        are no bars. Live callers keep using _bars; this method is research-only.
+        """
+        bar_size = HISTORY_TIMEFRAMES.get(timeframe)
+        if bar_size is None:
+            raise ValueError(f"unknown history timeframe {timeframe!r}; "
+                             f"expected one of {sorted(HISTORY_TIMEFRAMES)}")
+        end = min(end, self._now() - SIP_DELAY)
+        if start >= end:
+            return None
+        symbol = to_alpaca_symbol(ticker)
+        req = StockBarsRequest(symbol_or_symbols=[symbol], timeframe=bar_size,
+                               start=start, end=end,
+                               feed=DataFeed.SIP, adjustment=Adjustment.ALL)
+        raw = self._call("get_stock_bars", req, self._bars_client) or {}
+        df = _frames_from_raw(raw).get(symbol)
+        return None if df is None or df.empty else df
 
     def _fresh_price(self, snap, now, max_age_s):
         trade = getattr(snap, "latest_trade", None)

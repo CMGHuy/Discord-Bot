@@ -113,3 +113,75 @@ def test_default_clients_raw_for_bars_models_for_snapshots(monkeypatch):
                         lambda *a, **k: made.append(k) or FakeClient())
     ap.AlpacaProvider("k", "s", "iex")
     assert sorted(bool(k.get("raw_data")) for k in made) == [False, True]
+
+
+# --- v162: history_bars, the history store's one fetch path -------------------
+
+H_START = datetime(2016, 1, 1, tzinfo=timezone.utc)
+H_END = datetime(2017, 1, 1, tzinfo=timezone.utc)
+
+
+def test_history_bars_requests_one_symbol_sip_all_over_the_given_window():
+    c = FakeClient(bars=_barset(["AAPL"]))
+    out = _prov(c).history_bars("AAPL", "15min", H_START, H_END)
+    req = c.requests[0]
+    assert req.symbol_or_symbols == ["AAPL"]
+    assert req.timeframe.value == "15Min"
+    assert str(req.feed.value) == "sip" and str(req.adjustment.value) == "all"
+    # alpaca-py's request model converts datetimes to UTC and drops tzinfo
+    assert req.start == datetime(2016, 1, 1) and req.end == datetime(2017, 1, 1)
+    assert list(out.columns) == ["open", "high", "low", "close", "volume"]
+    assert str(out.index.tz) == "UTC"
+
+
+@pytest.mark.parametrize("timeframe,wire", [("15min", "15Min"), ("30min", "30Min"), ("1d", "1Day")])
+def test_history_bars_timeframes(timeframe, wire):
+    c = FakeClient(bars=_barset(["AAPL"]))
+    _prov(c).history_bars("AAPL", timeframe, H_START, H_END)
+    assert c.requests[0].timeframe.value == wire
+
+
+def test_history_bars_unknown_timeframe_raises_before_any_request():
+    c = FakeClient(bars=_barset(["AAPL"]))
+    with pytest.raises(ValueError, match="1Hour"):
+        _prov(c).history_bars("AAPL", "1Hour", H_START, H_END)
+    assert c.requests == []
+
+
+def test_history_bars_clamps_end_to_the_sip_delay():
+    c = FakeClient(bars=_barset(["AAPL"]))
+    _prov(c).history_bars("AAPL", "1d", H_START, NOW + pd.Timedelta(days=30))
+    assert c.requests[0].end == (NOW - ap.SIP_DELAY).replace(tzinfo=None)
+
+
+def test_history_bars_window_entirely_inside_the_delay_is_none_without_a_request():
+    c = FakeClient(bars=_barset(["AAPL"]))
+    start = NOW - pd.Timedelta(minutes=5)
+    assert _prov(c).history_bars("AAPL", "15min", start, NOW) is None
+    assert c.requests == []
+
+
+@pytest.mark.parametrize("bars", [{}, {"AAPL": []}, None])
+def test_history_bars_no_bars_is_none(bars):
+    assert _prov(FakeClient(bars=bars)).history_bars("AAPL", "1d", H_START, H_END) is None
+
+
+def test_history_bars_class_share_uses_the_dotted_symbol():
+    c = FakeClient(bars=_barset(["BRK.B"]))
+    out = _prov(c).history_bars("BRK-B", "1d", H_START, H_END)
+    assert c.requests[0].symbol_or_symbols == ["BRK.B"]
+    assert out is not None and len(out) == 2
+
+
+def test_history_bars_auth_error_propagates():
+    err = Exception("forbidden"); err.status_code = 401
+    with pytest.raises(ap.AlpacaAuthError):
+        _prov(FakeClient(exc=err)).history_bars("AAPL", "1d", H_START, H_END)
+
+
+def test_history_bars_rate_limit_is_a_miss_with_the_status_on_the_cause():
+    err = Exception("too many requests"); err.status_code = 429
+    with pytest.raises(ap.AlpacaMiss) as info:
+        _prov(FakeClient(exc=err)).history_bars("AAPL", "1d", H_START, H_END)
+    assert not isinstance(info.value, ap.AlpacaAuthError)
+    assert info.value.__cause__.status_code == 429

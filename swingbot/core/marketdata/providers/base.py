@@ -51,3 +51,29 @@ def to_yf_hourly(df30: pd.DataFrame) -> pd.DataFrame:
     out = out.dropna(subset=["Open"])
     out.index.name = "Datetime"
     return out
+
+
+def to_store_intraday(df: pd.DataFrame) -> pd.DataFrame:
+    """v162 history store: raw Alpaca intraday bars (UTC) as naive
+    America/New_York wall-clock bars labelled at the bar start, index
+    `Datetime`. Every session is kept (04:00-20:00 ET); readers filter.
+    A naive input index is taken as UTC. Duplicates (a year window's
+    inclusive end) keep the last bar."""
+    out = _yf_columns(df)
+    idx = pd.DatetimeIndex(df.index)
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    out.index = idx.tz_convert(NY).tz_localize(None)
+    out.index.name = "Datetime"
+    out = out[~out.index.duplicated(keep="last")]
+    return out.sort_index()
+
+
+def to_store_hourly(df30: pd.DataFrame) -> pd.DataFrame:
+    """v162 history store: `to_yf_hourly` (09:30-anchored, regular hours,
+    the last bar 15:30-16:00 is a half-hour) with the New York index made
+    naive. Wall-clock times are kept as they are."""
+    out = to_yf_hourly(df30)
+    out.index = pd.DatetimeIndex(out.index).tz_localize(None)
+    out.index.name = "Datetime"
+    return out
