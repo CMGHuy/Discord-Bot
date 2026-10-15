@@ -26,6 +26,7 @@ import numpy as np
 from swingbot import config
 from swingbot.core.analytics import metrics
 from swingbot.core.analytics.aggregate import rs_quintile_label
+from swingbot.core.analytics.gate_counterfactual_report import two_sided_bootstrap_p
 from swingbot.core.analytics.scope import closed_only
 from swingbot.core.backtesting.instrument import stats
 from swingbot.core.edge.frictions import apply_frictions, commission_r
@@ -288,9 +289,8 @@ def _look(base_rows: list[dict], comp_rows: list[dict], seed: int) -> dict:
     if not len(draws):
         return out
     low, high = np.percentile(draws, [2.5, 97.5])
-    tail = min(int((draws <= 0).sum()), int((draws >= 0).sum())) + 1
-    out.update(ci_low=float(low), ci_high=float(high),
-               p=min(1.0, 2.0 * tail / (len(draws) + 1)))
+    # The single copy of the two-sided +1-corrected p lives in v147's module.
+    out.update(ci_low=float(low), ci_high=float(high), p=two_sided_bootstrap_p(draws))
     return out
 
 
