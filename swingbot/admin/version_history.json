@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-15 14:21:30 UTC",
+  "generated_at": "2026-10-15 15:37:56 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.23.2",
+    "ui": "1.24.0",
     "bot": "2.5.2"
   },
   "releases": [
@@ -1638,6 +1638,19 @@
       "subject": "release(ui): 1.23.2 -- UX audit fixes: no live-refresh veil, phone layout, labelled scopes",
       "versions": {
         "ui": "1.23.2",
+        "bot": "2.5.2"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-15",
+      "last_seen": "2026-10-15",
+      "commit": "70f6e762",
+      "subject": "release(ui): 1.24.0 -- Reports and Research workspaces",
+      "versions": {
+        "ui": "1.24.0",
         "bot": "2.5.2"
       },
       "changed": [
