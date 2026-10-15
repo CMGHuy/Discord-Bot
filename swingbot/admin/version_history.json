@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12 19:36:46 UTC",
+  "generated_at": "2026-10-15 07:40:01 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.23.1",
-    "bot": "2.5.0"
+    "bot": "2.5.1"
   },
   "releases": [
     {
@@ -1603,6 +1603,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-15",
+      "last_seen": "2026-10-15",
+      "commit": "79278312",
+      "subject": "release(bot): 2.5.1 -- v147 gate counterfactual: record what the RS, plan-rejection and compression gates discard",
+      "versions": {
+        "ui": "1.23.1",
+        "bot": "2.5.1"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
