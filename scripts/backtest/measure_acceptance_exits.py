@@ -59,6 +59,7 @@ def _load(path):
 def _write(path, blob, indent=1) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(blob, indent=indent), encoding="utf-8")
+    training_data.write_provenance(path)
 
 
 def _refuse(message):

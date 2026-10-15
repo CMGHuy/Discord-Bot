@@ -244,3 +244,10 @@ def test_confluence_validation_is_pinned_to_yfinance(store_root, tmp_path, monke
     assert training_data.active() == "yfinance"
     side = json.loads(training_data.provenance_path(tmp_path / "rcv.json").read_text(encoding="utf-8"))
     assert side["data_source"] == "yfinance"
+
+
+def test_acceptance_exits_write_leaves_a_provenance_sidecar(yf_cache, tmp_path):
+    target = tmp_path / "out.json"
+    training_data.select("yfinance")
+    mae._write(target, {"ok": 1})
+    assert training_data.provenance_path(target).exists()
