@@ -57,11 +57,12 @@ def problems(repo: pathlib.Path = REPO, manifest: pathlib.Path = MANIFEST) -> li
         if size > max_tests:
             out.append(f"suite {name} has {size} tests (limit {max_tests}) -- split it "
                        "by feature into smaller suites")
-    on_disk = {f"tests/{d.name}/" for d in (repo / "tests").iterdir()
-               if d.is_dir() and test_files(f"tests/{d.name}", repo)}
-    out += [f"{d} holds tests but belongs to no suite -- add it to tests/suites.toml"
-            for d in sorted(on_disk - set(owner))]
     covered = {f for p in owner for f in test_files(p, repo)}
+    # A directory may be split across suites by glob (tests/backtesting/ is), so
+    # "owned" means every test file in it is covered, not that its own path is a key.
+    out += [f"tests/{d.name}/ holds tests but belongs to no suite -- add it to tests/suites.toml"
+            for d in sorted((repo / "tests").iterdir())
+            if d.is_dir() and set(test_files(f"tests/{d.name}", repo)) - covered]
     out += [f"tests/{f.name} is a loose top-level test file in no suite"
             for f in sorted((repo / "tests").glob("test_*.py")) if f not in covered]
     return out

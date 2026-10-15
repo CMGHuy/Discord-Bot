@@ -63,3 +63,20 @@ def test_problems_flags_an_unowned_directory_and_an_oversized_suite(tmp_path):
 def test_paths_for_rejects_an_unknown_suite():
     with pytest.raises(KeyError):
         suites.paths_for("no-such-suite")
+
+def test_a_directory_split_by_glob_is_owned_but_an_uncovered_file_in_it_is_not(tmp_path):
+    split = tmp_path / "tests" / "split"
+    split.mkdir(parents=True)
+    (split / "test_a.py").write_text("def test_a():\n    pass\n")
+    (split / "test_z.py").write_text("def test_z():\n    pass\n")
+    manifest = tmp_path / "suites.toml"
+    manifest.write_text('max_tests = 9\n[suites.low]\ndescription = "x"\n'
+                        'paths = ["tests/split/test_[a-m]*.py"]\n')
+
+    found = suites.problems(repo=tmp_path, manifest=manifest)
+    assert found == ["tests/split/ holds tests but belongs to no suite -- add it to tests/suites.toml"]
+
+    manifest.write_text('max_tests = 9\n[suites.low]\ndescription = "x"\n'
+                        'paths = ["tests/split/test_[a-m]*.py"]\n'
+                        '[suites.high]\ndescription = "y"\npaths = ["tests/split/test_[n-z]*.py"]\n')
+    assert suites.problems(repo=tmp_path, manifest=manifest) == []

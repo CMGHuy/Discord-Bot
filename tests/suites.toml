@@ -30,9 +30,25 @@ paths = ["tests/scanning/"]
 description = "trade-plan construction and lifecycle"
 paths = ["tests/planning/"]
 
-[suites.backtesting]
-description = "the backtest engine, grids, walk-forward"
-paths = ["tests/backtesting/"]
+# tests/backtesting/ is ~40% of the suite's wall-clock, so it is four legs, cut by
+# measured per-file time (~320/290/270/190 CPU-s) rather than by feature -- one leg
+# of 136 s was the CI critical path. The three file globs are by file-name letter and
+# are exhaustive (a-z), so a new test_*.py lands in a leg without a manifest edit.
+[suites.backtesting-arms]
+description = "backtesting arms/, instrument/, screen/ subpackages"
+paths = ["tests/backtesting/arms/", "tests/backtesting/instrument/", "tests/backtesting/screen/"]
+
+[suites.backtesting-scenarios]
+description = "backtesting scenario replay (test_scenario_parallel.py is ~1/5 of the area)"
+paths = ["tests/backtesting/test_s*.py"]
+
+[suites.backtesting-a-k]
+description = "backtesting top-level files test_a* .. test_k* (acceptance, backtest, compression, headroom, knob)"
+paths = ["tests/backtesting/test_[a-k]*.py"]
+
+[suites.backtesting-l-z]
+description = "backtesting top-level files test_l* .. test_z*, minus test_s* (validate_component, v131/v139 witnesses)"
+paths = ["tests/backtesting/test_[l-r]*.py", "tests/backtesting/test_[t-z]*.py"]
 
 [suites.edge-analytics]
 description = "edge modules and analytics"
