@@ -240,14 +240,18 @@ def test_folds_read_the_same_cache_the_baseline_was_measured_on(tmp_path, monkey
     right at the folds' own anchor, so indicators would get no warm-up."""
     import pandas as pd
     from swingbot.core.backtesting import backtest_wf as wf
+    from swingbot.core.marketdata import training_data
 
+    # v162: _frame_for reads the training-data switch; pin its yfinance leg.
     monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.CACHE_DIR", tmp_path)
+    monkeypatch.setattr(training_data, "_SELECTION", None)   # restored at teardown
+    training_data.select("yfinance")
     assert wf._frame_for("NOPE") is None
 
     frame = pd.DataFrame({"Open": [1.0], "High": [1.0], "Low": [1.0],
                           "Close": [1.0], "Volume": [1.0]},
                          index=pd.to_datetime(["2021-01-04"]))
-    frame.to_csv(tmp_path / "AAA.csv")
+    frame.to_csv(tmp_path / "AAA.csv", index_label="Date")
     got = wf._frame_for("AAA")
     assert got is not None and list(got.columns) == ["Open", "High", "Low", "Close", "Volume"]
 
