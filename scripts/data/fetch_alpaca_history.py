@@ -29,7 +29,7 @@ for _p in (ROOT, ROOT / "scripts" / "data"):
 
 import pandas as pd  # noqa: E402
 
-from alpaca_history import fetch, guards, identity, store_io  # noqa: E402
+from alpaca_history import fetch, guards, identity, store_io, update  # noqa: E402
 from swingbot.core.marketdata import history_store  # noqa: E402
 from swingbot.core.marketdata.data_store import safe_symbol  # noqa: E402
 from swingbot.core.marketdata.providers.alpaca_provider import SIP_DELAY, AlpacaAuthError  # noqa: E402
@@ -266,8 +266,46 @@ def run_full(args, provider, limiter: guards.TokenBucket, now: datetime) -> RunS
     return summary
 
 
-# AH8 registers "update".
-_RUNNERS = {"full": run_full}
+def _updatable(run: _Run, ticker: str) -> bool:
+    """True when daily and every requested timeframe already have a stored file."""
+    manifests = _manifests(run.root)
+    for tf in {"daily", *run.timeframes}:
+        entry = manifests[tf]["tickers"].get(ticker) or {}
+        if not entry.get("sha256") or not _store_path(run.root, tf, ticker).exists():
+            return False
+    return True
+
+
+_OUTCOME_FIELD = {"unchanged": "unchanged", "appended": "written", "refetched": "refetched"}
+
+
+def _update_one(ticker: str, run: _Run, summary: RunSummary) -> None:
+    if identity.skip_reason(ticker) or not _updatable(run, ticker):
+        full_ticker(ticker, run, summary)
+        return
+    daily = store_io.load_manifest(run.root, "daily")["tickers"][ticker]
+    outcome = update.update_ticker(
+        ticker, root=run.root, provider=run.provider, limiter=run.limiter, now=run.now,
+        timeframes=run.timeframes, start=date.fromisoformat(daily["start"]))
+    tfs = history_store.TIMEFRAMES if outcome == "refetched" else run.timeframes
+    getattr(summary, _OUTCOME_FIELD[outcome]).extend(f"{ticker}/{tf}" for tf in tfs)
+    if daily["status"] != "ok":
+        summary.flagged[ticker] = daily["status"]
+
+
+def run_update(args, provider, limiter: guards.TokenBucket, now: datetime) -> RunSummary:
+    run = _make_run(args, provider, limiter, now)
+    summary = RunSummary()
+    tickers = _tickers(args)
+    progress = guards.Progress(len(tickers))
+    for ticker in tickers:
+        progress.step(ticker)
+        _update_one(ticker, run, summary)
+    summary.requests = limiter.calls
+    return summary
+
+
+_RUNNERS = {"full": run_full, "update": run_update}
 
 
 def make_limiter() -> guards.TokenBucket:
