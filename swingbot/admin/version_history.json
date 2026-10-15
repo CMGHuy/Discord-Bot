@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-15 15:37:56 UTC",
+  "generated_at": "2026-10-15 22:11:52 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.24.0",
+    "ui": "1.24.1",
     "bot": "2.5.2"
   },
   "releases": [
@@ -1651,6 +1651,19 @@
       "subject": "release(ui): 1.24.0 -- Reports and Research workspaces",
       "versions": {
         "ui": "1.24.0",
+        "bot": "2.5.2"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-16",
+      "last_seen": "2026-10-16",
+      "commit": "b0bce389",
+      "subject": "release(ui): 1.24.1 -- calendar and Dashboard count each partial leg as its own trade",
+      "versions": {
+        "ui": "1.24.1",
         "bot": "2.5.2"
       },
       "changed": [
