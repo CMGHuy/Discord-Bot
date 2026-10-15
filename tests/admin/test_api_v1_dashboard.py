@@ -569,3 +569,39 @@ def test_train_window_still_matches_the_dates_the_spa_prints():
         "TRAIN_WINDOW changed. Update the literal dates in "
         "frontend/src/app/workspaces/analytics/analytics.ts (Run a TRAIN grid)."
     )
+
+
+def test_chips_and_realized_count_each_partial_leg_as_its_own_trade(seed, logged_in):
+    """A partial is an individual trade: the chips and the realized card
+    count every leg that closed today, on the leg's own close -- the same
+    CLOSED rows the Trades table lists under them. 10 shares, entry 100,
+    stop 95 (risk 5) throughout.
+
+    Today's parts, hand-computed:
+      whole  -- exit 110: win, +2R, +$50
+      runner -- still open, TP1 half banked today at 110: win, +2R, +$50
+      split  -- TP1 half at 110 (win, +2R, +$50), runner half at 92
+                (loss, -1.6R, total $10 - $50 = -$40)
+      late   -- TP1 half banked on 2026-01-05 (not today), runner half
+                today at 105: win, +1R, total $75 - $50 = +$25
+    -> n 5, 4 wins / 1 loss, 80% WR, expectancy 5.4 / 5 = 1.08R, +$135."""
+    today = _today_iso()
+    tp1 = {"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "closed_at": today}
+    runner = {**_closed("r" * 16, closed_at=None, amount=None, pct_exit=None),
+              "status": "open", "legs": [dict(tp1)]}
+    split = {**_closed("s" * 16, closed_at=today, amount=10.0, pct_exit=101.0),
+             "legs": [dict(tp1), {"fraction": 0.5, "exit_price": 92.0, "r": -1.6,
+                                  "closed_at": today}]}
+    late = {**_closed("l" * 16, closed_at=today, amount=75.0, pct_exit=107.5),
+            "legs": [{**tp1, "closed_at": "2026-01-05T15:00:00+00:00"},
+                     {"fraction": 0.5, "exit_price": 105.0, "r": 1.0, "closed_at": today}]}
+    seed(trades=[_closed("w" * 16, closed_at=today, amount=50.0), runner, split, late])
+
+    body = logged_in.get("/api/v1/dashboard?mode=today").get_json()
+    assert body["win_rate"] == pytest.approx(80.0)
+    assert body["win_rate_n"] == 5
+    assert body["expectancy_r"] == pytest.approx(1.08)
+    assert body["expectancy_n"] == 5
+    assert body["realized"]["n"] == 5
+    assert (body["realized"]["wins"], body["realized"]["losses"]) == (4, 1)
+    assert body["realized"]["amount"] == pytest.approx(135.0)

@@ -36,7 +36,7 @@ from flask import jsonify, request
 from swingbot import config
 from swingbot.admin import dashboard as dash
 from swingbot.core.planning.plan_engine import DEFAULT_EXPIRY_BARS
-from swingbot.core.tracking.performance import TradeLog
+from swingbot.core.tracking.performance import TradeLog, expand_realized_legs
 
 from . import ApiError, api_v1
 from .auth import require_auth
@@ -154,8 +154,25 @@ def _scope() -> str:
     return raw
 
 
-def _realized(closed: list[dict], mode: str) -> dict:
-    """Realised P&L over the scoped closes.
+def _realized_parts(trades: list[dict], mode: str) -> list[dict]:
+    """Every realized part of `trades` -- whole trades and individual legs --
+    scoped by the part's OWN close.
+
+    A partial is an individual trade (`expand_realized_legs`): the TP1 leg
+    of a runner that is still open counts on the day it banked, and the two
+    legs of a position that scaled out today count as two. That is the
+    population the Trades table shows as CLOSED rows under it, and the one
+    `get_stats` has counted since v79; scoping whole trades by the trade's
+    close left this card and its chips a different book from that table.
+    """
+    parts = [part for t in trades for part in expand_realized_legs(t)]
+    if mode == "all":
+        return parts
+    return [part for part in parts if dash.is_today_berlin(part.get("closed_at"))]
+
+
+def _realized(closed: list[dict]) -> dict:
+    """Realised P&L over the scoped closes (`_realized_parts`).
 
     **`active` and `today` are identical here, deliberately.** The only thing
     separating those two modes is whether still-open positions are included,
@@ -167,9 +184,6 @@ def _realized(closed: list[dict], mode: str) -> dict:
     today" and "closed exactly flat" are different facts and a card must not
     render them identically.
     """
-    if mode != "all":
-        closed = [t for t in closed if dash.is_today_berlin(t.get("closed_at"))]
-
     amounts = [a for a in (t.get("realized_pnl_amount") for t in closed)
                if isinstance(a, (int, float))]
     pcts = [p for p in (dash.closed_pnl(t) for t in closed) if p is not None]
@@ -219,7 +233,7 @@ def _live_positions(open_trades: list[dict]) -> list[dict]:
 def dashboard():
     mode = _scope()
     tl = TradeLog()
-    from swingbot.core.tracking.ledger import is_main, is_weak, split_by_ledger
+    from swingbot.core.tracking.ledger import is_main, is_weak
     all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
     # Open-side figures (open_pnl_pct, the open_trades chip, avg_confidence)
     # must live on the same ledger as `realized` below -- unfiltered here
@@ -244,8 +258,8 @@ def dashboard():
     stats = tl.get_stats(trades=scoped_main)
     stats.update(tl.get_extended_stats(trades=scoped_main))
     from swingbot.core.analytics import metrics as m
-    closed_scoped_all = [t for t in scoped_raw if t.get("status") in ("win", "loss", "closed")]
-    closed_scoped, closed_weak = split_by_ledger(closed_scoped_all)
+    # Each realized leg is its own trade here -- see `_realized_parts`.
+    closed_scoped = _realized_parts([t for t in all_raw if is_main(t)], mode)
     scoped_rs = m.r_multiples(closed_scoped)
 
     account_cfg = dash.load_account_config()
@@ -293,10 +307,7 @@ def dashboard():
         # SR58 -- the date scope, echoed back so the workspace can label the
         # figures it is showing rather than assume the request applied.
         "scope": {"mode": mode},
-        "realized": _realized(
-            [t for t in all_raw if is_main(t) and t.get("status") in ("win", "loss", "closed")],
-            mode,
-        ),
+        "realized": _realized(closed_scoped),
         "realized_weak": _realized(
-            [t for t in all_raw if is_weak(t) and t.get("status") in ("win", "loss", "closed")], mode),
+            _realized_parts([t for t in all_raw if is_weak(t)], mode)),
     })
