@@ -214,6 +214,19 @@ def get_earnings_datetimes(ticker: str, *, refresh: bool = False) -> list[dt.dat
     return list(result)
 
 
+def peek_cached_earnings_datetimes(ticker: str) -> list[dt.datetime] | None:
+    """Read-only twin of `get_earnings_datetimes`: the fresh cached list, or
+    None when nothing usable is cached -- never fetches, never blocks.
+
+    A cached empty list is answered None as well: `get_earnings_datetimes`
+    caches [] for a failed fetch exactly as for "no reports", so an empty
+    entry cannot be trusted as an answer here (v146 panel fix)."""
+    cached = _earnings_datetimes_cache.get(ticker.upper().strip())
+    if not cached or time.monotonic() - cached[1] >= _EARNINGS_DATETIME_CACHE_TTL_SECONDS:
+        return None
+    return list(cached[0]) or None
+
+
 def _utc(value: dt.datetime, what: str) -> dt.datetime:
     """Tz-aware UTC instant; a naive timestamp is ambiguous and rejected."""
     if value.tzinfo is None or value.utcoffset() is None:

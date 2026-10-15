@@ -48,6 +48,43 @@ def write_trades_jsonl(rows, path) -> None:
             handle.write(json.dumps(row, default=str) + "\n")
 
 
+def _jsonable(value):
+    """numpy scalars become Python numbers (default=str would write an
+    np.int64 as a string); anything else falls back to str."""
+    return value.item() if isinstance(value, np.generic) else str(value)
+
+
+def write_scenario_trades_jsonl(rows, path) -> None:
+    """Write one self-contained TRAIN row per closed confluence-replay exit
+    (v146 I3; row shape: scenario_rows.ROW_KEYS)."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, default=_jsonable) + "\n")
+
+
+def _progress_path(trades_jsonl) -> Path:
+    return Path(str(trades_jsonl) + ".progress")
+
+
+def _scenario_progress(trades_jsonl):
+    """Per-ticker progress for the long row-collecting replay: a flushed
+    line and a percent figure in <trades_jsonl>.progress, which
+    _scenario_stats deletes on completion. None when no rows are collected."""
+    if not trades_jsonl:
+        return None
+    target = _progress_path(trades_jsonl)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    def on_ticker_done(done: int, total: int) -> None:
+        pct = 100.0 * done / total
+        target.write_text(f"{pct:.1f}% ({done}/{total} tickers)\n", encoding="utf-8")
+        print(f"  replay {done}/{total} tickers ({pct:.1f}%)", flush=True)
+
+    return on_ticker_done
+
+
 def _build_asof_map(tickers: list, frames: dict, universe: str | None):
     """Build every loaded ticker's point-in-time cross-sectional context once."""
     from swingbot.core.backtesting.asof_context import build_asof
@@ -196,7 +233,32 @@ def _write_blocked(stats: dict, path) -> None:
     print(f"Wrote {count} gate rows to {path}", flush=True)
 
 
-def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None, record_blocked=None):
+def _scenario_stats(frames, date_from, date_to, *, scale_out, universe, membership, trades_jsonl,
+                    record_blocked=None) -> dict:
+    """run_scenario_mode's replay call. v146 I3: every scenario run builds
+    the as-of map, so entry_context carries rs_pctile / regime2_state (it
+    feeds stamp_entry_context only -- the table cannot move). With
+    --trades-jsonl it also ships SPY to the workers, collects one row per
+    closed exit, writes them and deletes the progress file. v147's
+    --record-blocked rides the same call (gate rows written by _write_blocked)."""
+    stats = run_scenario_backtest(
+        frames, date_from, date_to, gates=CONFLUENCE_GATES, scale_out=scale_out,
+        horizons=list(LEGACY_HORIZONS), membership=membership,
+        asof_map=_build_asof_map(list(frames), frames, universe),
+        spy_df=_market_frame() if trades_jsonl else None,
+        collect_rows=bool(trades_jsonl), on_ticker_done=_scenario_progress(trades_jsonl),
+        record_blocked=bool(record_blocked))
+    _write_blocked(stats, record_blocked)
+    if trades_jsonl:
+        rows = stats.pop("rows")
+        write_scenario_trades_jsonl(rows, trades_jsonl)
+        _progress_path(trades_jsonl).unlink(missing_ok=True)
+        print(f"Wrote {len(rows)} trade rows to {trades_jsonl}", flush=True)
+    return stats
+
+
+def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None, trades_jsonl=None,
+                      record_blocked=None):
     """--scenarios: replay the confluence scan itself (backtest_scenarios)
     instead of a named strategy, and print per-horizon + pooled rows in the
     standard table with strategy column `confluence/<horizon>`."""
@@ -219,11 +281,9 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
           f"({len(excluded_illiquid)} excluded illiquid, "
           f"{len(excluded_bad_data)} excluded bad data)", flush=True)
 
-    stats = run_scenario_backtest(frames, date_from, date_to,
-                                  gates=CONFLUENCE_GATES, scale_out=scale_out,
-                                  horizons=list(LEGACY_HORIZONS), membership=membership,
-                                  record_blocked=bool(record_blocked))
-    _write_blocked(stats, record_blocked)
+    stats = _scenario_stats(frames, date_from, date_to, scale_out=scale_out, universe=universe,
+                            membership=membership, trades_jsonl=trades_jsonl,
+                            record_blocked=record_blocked)
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
     lines = []
@@ -410,7 +470,8 @@ def main():
                          "swingbot.core.marketdata.universe.universe_symbols, instead of the watchlist")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--trades-jsonl", dest="trades_jsonl", default=None,
-                    help="write one JSONL training row per windowed trade")
+                    help="write one JSONL training row per windowed trade "
+                         "(with --scenarios: one row per closed confluence-replay exit)")
     ap.add_argument("--record-blocked", dest="record_blocked", default=None,
                     help="v147: write one JSONL gate row per blocked/taken confluence candidate "
                          "(TRAIN window only; needs --scenarios --scale-out)")
@@ -474,7 +535,8 @@ def main():
 
     if args.scenarios:
         run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out,
-                          universe=args.universe, record_blocked=args.record_blocked)
+                          universe=args.universe, trades_jsonl=args.trades_jsonl,
+                          record_blocked=args.record_blocked)
         return
 
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)

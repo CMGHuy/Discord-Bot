@@ -69,3 +69,27 @@ def refresh_watchlist_earnings(symbols: list[str], *, now: dt.datetime | None = 
     snapshot = {"updated_at": _iso(now), "symbols": next_entries}
     atomic_write_json(_path(), snapshot)
     return snapshot
+
+
+def _parse_ts(value) -> dt.datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=dt.timezone.utc)
+
+
+def cached_earnings_datetimes(symbol: str) -> list[dt.datetime] | None:
+    """The persisted ledger's dates for `symbol` (past plus next), ascending,
+    or None when the ledger has no usable entry for it. Disk only -- never
+    fetches; the weekly refresh is what fills it (v146 panel fix)."""
+    snapshot = read_json(_path(), {})
+    symbols = snapshot.get("symbols") if isinstance(snapshot, dict) else None
+    entry = symbols.get(symbol.upper().strip()) if isinstance(symbols, dict) else None
+    if not isinstance(entry, dict):
+        return None
+    past = entry.get("past") if isinstance(entry.get("past"), list) else []
+    dates = {parsed for value in [*past, entry.get("next")] if (parsed := _parse_ts(value)) is not None}
+    return sorted(dates) or None

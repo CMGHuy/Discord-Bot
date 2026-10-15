@@ -193,7 +193,8 @@ def _log_trade(item, nums, explanation, fit, alerts, origin=None):
         cohort_label=plan_v2.cohort_label if plan_v2 is not None else None,
         cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
         risk_features=plan_v2.risk_features if plan_v2 is not None else None,
-        entry_context=plan_v2.entry_context if plan_v2 is not None else None, origin=origin)
+        entry_context=plan_v2.entry_context if plan_v2 is not None else None, origin=origin,
+        **scan_run._confidence_point_kwargs(conf))
 
 
 def _render_chart(item, nums, df, frames, spy_df, trade_id, fit):

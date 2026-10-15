@@ -248,6 +248,16 @@ def get_regime(regime_df=None):
         log.warning("Could not fetch market regime: %s", e, exc_info=True)
         return None
 
+def _confidence_point_kwargs(conf) -> dict:
+    """v146 I1: the two log_trade kwargs carrying the scorer's numeric points.
+
+    Read with a None default: a stand-in `conf` that has no `points` (the
+    stats-command placeholder, test doubles) is a trade without factor
+    points, which the record spells as None."""
+    return {"confidence_points": getattr(conf, "points", None),
+            "confidence_unevaluated": getattr(conf, "unevaluated", None)}
+
+
 def _logged_plan_fields(plan_v2, scenario, level_map, direction: str) -> tuple[list, float]:
     """Attribution and R:R for the exact prices persisted to a trade row."""
     if plan_v2 is None:
@@ -1000,6 +1010,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
                 risk_features=plan_v2.risk_features if plan_v2 is not None else None,
                 entry_context=plan_v2.entry_context if plan_v2 is not None else None,
+                **_confidence_point_kwargs(conf),
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
         else:

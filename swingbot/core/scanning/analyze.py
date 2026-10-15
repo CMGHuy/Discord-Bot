@@ -8,7 +8,7 @@ this very module and would otherwise close a circular import.
 """
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
-from swingbot.core.market import levels, trendlines
+from swingbot.core.market import earnings_calendar, levels, trendlines
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
@@ -309,6 +309,7 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
             volume_ratio = float(df["Volume"].iloc[-1] / avg_vol)
     target_confluence = getattr(item, "target_confluence", None)
     confluence_count = target_confluence[0] if target_confluence else 0
+    conf = getattr(item, "conf", None)
     return {
         "regime": regime.trend if regime else None,
         # item.htf_bias was already computed once by _scan_one's own
@@ -327,6 +328,11 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
         # comment. item.conf is set in _scan_one, well before attach_plan_v2
         # (and this function) run in _sync_run_scan's later merge loop.
         "confidence_level": item.conf.level if getattr(item, "conf", None) else None,
+        # v146 I1: ride along beside confidence_level and are popped with it
+        # in _apply_quality. getattr with a None default: a stand-in conf
+        # without `points` is a plan without factor points.
+        "confidence_points": getattr(conf, "points", None),
+        "confidence_unevaluated": getattr(conf, "unevaluated", None),
     }
 
 
@@ -376,6 +382,43 @@ def _no_plan_reason(scenario, level_map) -> str:
     if confluence_stop_dropped(scenario, level_map):
         return "stop_beyond_confluence_ceiling"
     return "no_qualifying_target"
+
+
+def _earnings_source():
+    """The cache-only earnings calendar (earnings_calendar.CachedSource): the
+    fresh in-process events cache, else the weekly on-disk ledger -- never a
+    Yahoo call, so the stamp adds no network latency to the scan loop and a
+    cold cache (a restart, a ticker outside the ledger) stamps None. A
+    function rather than a module constant so tests swap it
+    (tests/scanning/conftest.py)."""
+    return earnings_calendar.CachedSource()
+
+
+def _decision_session_date(df) -> date:
+    """ET session date of the decision bar -- the frame's last row. A
+    tz-aware index is converted to America/New_York first; a naive daily
+    index already is the session date."""
+    import pandas as pd
+    ts = pd.Timestamp(df.index[-1])
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("America/New_York")
+    return ts.date()
+
+
+def _days_to_earnings(ticker: str, df) -> int | None:
+    """v146 I2: NYSE sessions from the decision bar to the next earnings
+    reaction session (earnings_calendar's own unit, the one v82's exposure
+    rule uses). Reads already-warmed data only (_earnings_source); None --
+    never an exception -- means unknown: not cached, no upcoming report in
+    the cache, a fund, a bad frame or anything else. A recorded field must
+    never block a plan. NO-LOOKAHEAD: live only; the as-of answer IS today's
+    calendar."""
+    try:
+        return earnings_calendar.sessions_to_reaction(
+            ticker, _decision_session_date(df), source=_earnings_source())
+    except Exception:
+        log.debug("days_to_earnings unavailable for %s", ticker, exc_info=True)
+        return None
 
 
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
@@ -461,6 +504,10 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                 atr_val=_atr_for(df),
                 close=float(df["Close"].iloc[-1]),
                 rs_percentile=rs_percentile,
+                # v146 I2: live wall clock only. A historical replay supplies
+                # issued_at, and the live calendar would answer for TODAY,
+                # not for its decision date -- that replay records None.
+                days_to_earnings=(_days_to_earnings(ticker, df) if issued_at is None else None),
                 now=now or now_et(),
             )
         except Exception:

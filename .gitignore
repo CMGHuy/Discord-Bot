@@ -159,3 +159,6 @@ data/scan_snapshots.json
 
 
 .superpowers/brainstorm/.last-*
+
+# v146 expectancy attribution: run output (TRAIN rows, latest report)
+data/reports/

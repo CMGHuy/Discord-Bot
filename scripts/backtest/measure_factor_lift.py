@@ -204,18 +204,9 @@ def collect_train_trades() -> list:
                         target_count=target_confluence[0], target_families=list(target_confluence[1]),
                         stop_count=stop_confluence[0], stop_families=list(stop_confluence[1]),
                     )
-                    score_raw, breakdown_points = run_factors(FACTORS, ctx)
+                    score_raw, _breakdown, points = run_factors(FACTORS, ctx)
                     score = max(0, min(100, score_raw))
                     level, _label = level_for_score(score, target_confluence[0])
-
-                    # run_factors() returns {name: line}; re-derive the raw
-                    # points per factor for the median split above (the
-                    # line string embeds them but isn't meant to be parsed).
-                    points = {}
-                    for fn in FACTORS:
-                        r = fn(ctx)
-                        if r is not None:
-                            points[r.name] = r.points
 
                     rows.append({
                         "ticker": ticker, "horizon": hk, "strategy": strategy,

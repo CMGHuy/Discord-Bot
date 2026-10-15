@@ -73,3 +73,20 @@ def sample_scenario():
         target2_distance_pct=None,
         target2_sources=None,
     )
+
+
+class _NoEarnings:
+    """An earnings source with no reports -- what a fund looks like."""
+
+    def reports(self, ticker):
+        return []
+
+
+@pytest.fixture(autouse=True)
+def _no_live_earnings(monkeypatch):
+    """v146 I2: attach_plan_v2 now asks the live earnings calendar (Yahoo)
+    for days_to_earnings. No scanning test may reach the network, so every
+    test here sees an empty calendar; a test that needs real readings
+    patches analyze._earnings_source with its own stub."""
+    from swingbot.core.scanning import analyze
+    monkeypatch.setattr(analyze, "_earnings_source", lambda: _NoEarnings())

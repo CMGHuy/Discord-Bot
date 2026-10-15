@@ -270,8 +270,8 @@ export interface Streaks {
   worstLoss: number | null;
 }
 
-/** Every dimension `aggregate.DIMENSIONS` serves, including v93's ledger.
- *  `tier` stays retired -- it would 400. */
+/** Every dimension `aggregate.DIMENSIONS` serves, including v93's ledger and
+ *  v146's confluence (target-source count) and RS quintile. `tier` stays retired -- it would 400. */
 export const BREAKDOWN_DIMENSIONS = [
   { value: 'strategy', label: 'Strategy' },
   { value: 'horizon', label: 'Horizon' },
@@ -280,6 +280,8 @@ export const BREAKDOWN_DIMENSIONS = [
   { value: 'month', label: 'Month' },
   { value: 'badge', label: 'Badge' },
   { value: 'confidence', label: 'Confidence' },
+  { value: 'confluence', label: 'Confluence' },
+  { value: 'rs_quintile', label: 'RS quintile' },
   { value: 'source', label: 'Source' },
   { value: 'ledger', label: 'Ledger' },
   // v152 D2: trades whose plan had a Following follower vs the rest. Intent,

@@ -234,6 +234,15 @@ class ConfidenceResult:
     label: str
     score: int
     breakdown: dict = field(default_factory=dict)
+    # v146 I1: the integer each scored factor added, keyed exactly as in
+    # `breakdown`. Non-factor lines (base level, quality score, track record,
+    # level adjustment, confirming methods) never appear here.
+    points: dict = field(default_factory=dict)
+    # v146 I1: factors whose line was a neutral fallback for a missing input
+    # ("regime unavailable", "not evaluated ..."). Their `points` entry is the
+    # integer awarded, so the sum still reconciles; this list lets a reader
+    # keep "no data" out of a per-factor comparison.
+    unevaluated: list = field(default_factory=list)
 
 
 def _expectancy_adjustment(risk_reward_ratio: float, track_record: tuple) -> tuple:
@@ -279,6 +288,20 @@ def _expectancy_adjustment(risk_reward_ratio: float, track_record: tuple) -> tup
     return adjustment, detail
 
 
+#: Step 4's breakdown line when the expectancy step is neutralised (v146).
+NEUTRAL_EXPECTANCY_DETAIL = "neutralised for the TRAIN replay (no live track record) -> 0 levels"
+
+
+def _expectancy_step(risk_reward_ratio: float, track_record: tuple, neutral: bool) -> tuple:
+    """Step 4 of the legacy scorer. `neutral` (v146, the TRAIN replay only)
+    skips _expectancy_adjustment: at track_record=None that step is NOT
+    neutral -- it assumes a 50% win rate and moves the level +-1 by
+    reward:risk. Every live caller leaves it False."""
+    if neutral:
+        return 0, NEUTRAL_EXPECTANCY_DETAIL
+    return _expectancy_adjustment(risk_reward_ratio, track_record)
+
+
 # v35: each AVWAP anchor produces its own raw source label --
 # "Anchored VWAP (52w high)", "Anchored VWAP (swing low)", etc. (see
 # levels.collect_candidate_levels) -- naming the anchor for DISPLAY is the
@@ -316,9 +339,30 @@ def _resolve_confluence(explicit: tuple | None, sources: list) -> tuple:
     return len(families), families
 
 
+# v146 I1: the legacy scorer's scored factors, in scoring order, keyed exactly
+# as its breakdown lines. "Tight stop penalty" is negative and present only
+# when its line is. The other breakdown keys (base level, quality score, track
+# record, level adjustment) are not scored factors and never enter `points`.
+LEGACY_POINT_KEYS = (
+    "Target distance quality", "Stop level confluence", "Market regime alignment",
+    "ADX trend strength", "MACD momentum", "RSI trend alignment",
+    "TTM Squeeze + volume breakout", "Candlestick pattern", "Tight stop penalty",
+)
+
+
+def _legacy_points(scored: tuple, tight_penalty: int | None) -> dict[str, int]:
+    """{factor: integer added} from the legacy scorer's eight point locals, in
+    LEGACY_POINT_KEYS order, plus the penalty (negated) when it applied."""
+    points = {key: int(value) for key, value in zip(LEGACY_POINT_KEYS[:-1], scored)}
+    if tight_penalty is not None:
+        points["Tight stop penalty"] = -int(tight_penalty)
+    return points
+
+
 def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
                              target_confluence: tuple = None, stop_confluence: tuple = None,
-                             track_record: tuple = None) -> ConfidenceResult:
+                             track_record: tuple = None,
+                             neutral_expectancy: bool = False) -> ConfidenceResult:
     """
     `target_confluence` / `stop_confluence`, if given, are (count,
     family_names) tuples from levels.count_confirming_strategies -- the
@@ -341,6 +385,7 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
     confluence tuples above).
     """
     breakdown = {}
+    unevaluated: list[str] = []   # v146 I1: factors scored on a neutral fallback
 
     target_count, target_families = _resolve_confluence(target_confluence, scenario.target_sources)
     stop_count, stop_families = _resolve_confluence(stop_confluence, scenario.stop_sources)
@@ -386,6 +431,7 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
     if regime_trend is None:
         pts_regime = 7
         breakdown["Market regime alignment"] = "regime unavailable (+7)"
+        unevaluated.append("Market regime alignment")
     elif regime_trend == scenario.direction:
         pts_regime = 15
         breakdown["Market regime alignment"] = f"aligned with {regime_trend} market regime (+{pts_regime})"
@@ -413,9 +459,11 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
         else:
             pts_adx = 7   # neutral when unavailable
             breakdown["ADX trend strength"] = "not evaluated (insufficient history) (+7)"
+            unevaluated.append("ADX trend strength")
     else:
         pts_adx = 7
         breakdown["ADX trend strength"] = "not evaluated (no price history passed in) (+7)"
+        unevaluated.append("ADX trend strength")
 
     # MACD momentum alignment (0-15) -- NEW factor.
     # Independent momentum confirmation from the MACD histogram direction
@@ -449,6 +497,7 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
     else:
         pts_macd = 7   # neutral when unavailable
         breakdown["MACD momentum"] = "not evaluated (no price history passed in) (+7)"
+        unevaluated.append("MACD momentum")
 
     # RSI trend alignment (0-10) -- NEW factor. Independent of MACD: MACD
     # can look aligned (or simply not be checked) while RSI's own read on
@@ -461,6 +510,7 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
         if rsi_mom["rsi_val"] is None:
             pts_rsi = 5   # neutral when unavailable
             breakdown["RSI trend alignment"] = "not evaluated (insufficient history) (+5)"
+            unevaluated.append("RSI trend alignment")
         elif rsi_mom["strength"] == "strong":
             pts_rsi = 10
             breakdown["RSI trend alignment"] = (
@@ -485,6 +535,7 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
     else:
         pts_rsi = 5   # neutral when unavailable
         breakdown["RSI trend alignment"] = "not evaluated (no price history passed in) (+5)"
+        unevaluated.append("RSI trend alignment")
 
     # TTM Squeeze + volume breakout confirmation (0-10) -- uses proper TTM
     # Squeeze logic: Bollinger Bands contracting inside Keltner Channel =
@@ -512,6 +563,7 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
             breakdown["TTM Squeeze + volume breakout"] = "no squeeze/breakout confirmation right now (+0)"
     else:
         breakdown["TTM Squeeze + volume breakout"] = "not evaluated (no price history passed in) (+0)"
+        unevaluated.append("TTM Squeeze + volume breakout")
 
     # Candlestick pattern confirmation (0-10, bonus on top of the
     # 100-point quality base -- min(100, ...) below caps its effect).
@@ -530,9 +582,11 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
             breakdown["Candlestick pattern"] = "no confirming pattern on the most recent candle(s) (+0)"
     else:
         breakdown["Candlestick pattern"] = "not evaluated (no price history passed in) (+0)"
+        unevaluated.append("Candlestick pattern")
 
     quality_score = min(100, pts_distance + pts_stop + pts_regime + pts_adx + pts_macd + pts_rsi + pts_squeeze + pts_candle)
 
+    pts_tight_penalty = None   # v146 I1: stays None when no penalty line is written
     # Tight-stop penalty: if the stop sits below the ATR-based daily noise
     # floor, ordinary price swings can trigger it before a genuine reversal
     # has time to develop. Penalise quality proportionally to how much shorter
@@ -561,7 +615,8 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
     breakdown["Quality score"] = f"{quality_score}/100 ({quality_reason})"
 
     # --- Step 4: expectancy-based adjustment -- "can I confidently trade this?" ---
-    expectancy_adjustment, expectancy_detail = _expectancy_adjustment(scenario.risk_reward_ratio, track_record)
+    expectancy_adjustment, expectancy_detail = _expectancy_step(
+        scenario.risk_reward_ratio, track_record, neutral_expectancy)
     breakdown["Track record (expectancy)"] = expectancy_detail
 
     # --- Step 5: final level, clamped ---------------------------------
@@ -591,12 +646,17 @@ def _score_confidence_legacy(scenario, regime_trend: str = None, df=None,
                pts_distance, pts_stop, pts_regime, pts_adx, pts_macd, pts_rsi, pts_squeeze, pts_candle,
                quality_adjustment, expectancy_adjustment, level, label, score)
 
-    return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown)
+    points = _legacy_points(
+        (pts_distance, pts_stop, pts_regime, pts_adx, pts_macd, pts_rsi, pts_squeeze, pts_candle),
+        pts_tight_penalty)
+    return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown,
+                            points=points, unevaluated=unevaluated)
 
 
 def score_confidence(scenario, regime_trend: str = None, df=None,
                      target_confluence: tuple = None, stop_confluence: tuple = None,
-                     track_record: tuple = None, **kwargs) -> ConfidenceResult:
+                     track_record: tuple = None, neutral_expectancy: bool = False,
+                     **kwargs) -> ConfidenceResult:
     """Dispatches to the pre-v32 scorer unless UNIFIED_CONFIDENCE is on, in
     which case it runs the merged factor registry (swingbot.core.scanning.factors)
     instead. Signature and ConfidenceResult shape are unchanged either way --
@@ -604,12 +664,16 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     inputs (htf_bias, rs_percentile, breadth, volume_ratio, atr_pct,
     trigger_distance_pct, badge_status, gap_fragile, macro_verdict) the
     legacy path never read; v32 Task 7 and v33 Task 5 wire real values in
-    from engine.py."""
+    from engine.py.
+    `neutral_expectancy` (v146) zeroes the legacy scorer's track-record
+    step for the TRAIN replay, which has no live track record; the
+    unified path has no such step and ignores it. Live callers never pass it."""
     if not getattr(config, "UNIFIED_CONFIDENCE", False):
         return _score_confidence_legacy(
             scenario, regime_trend=regime_trend, df=df,
             target_confluence=target_confluence,
-            stop_confluence=stop_confluence, track_record=track_record)
+            stop_confluence=stop_confluence, track_record=track_record,
+            neutral_expectancy=neutral_expectancy)
 
     target_count, target_families = _resolve_confluence(target_confluence, scenario.target_sources)
     stop_count, stop_families = _resolve_confluence(stop_confluence, scenario.stop_sources)
@@ -624,7 +688,7 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
             "macro_verdict")
            if k in kwargs},
     )
-    raw, breakdown = run_factors(FACTORS, ctx)
+    raw, breakdown, points = run_factors(FACTORS, ctx)
     score = max(0, min(100, raw))
 
     # Method count is re-read AFTER the factors run: the squeeze and
@@ -635,4 +699,5 @@ def score_confidence(scenario, regime_trend: str = None, df=None,
     breakdown["Confirming methods"] = (
         f"{target_count} independent method(s) -> base Level "
         f"{honesty_cap(target_count)}, quality score nudges +-1 from there")
-    return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown)
+    return ConfidenceResult(level=level, label=label, score=score, breakdown=breakdown,
+                            points=points, unevaluated=[])

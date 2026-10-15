@@ -166,6 +166,10 @@ def _apply_quality(plan: TradePlanV2, quality_inputs: dict | None) -> None:
     # a plain dict passthrough would raise TypeError otherwise.
     quality_inputs = dict(quality_inputs)
     plan.confidence_level = quality_inputs.pop("confidence_level", None)
+    # v146 I1: the same ride-along, for the same reason -- neither is a
+    # score_plan() kwarg.
+    plan.confidence_points = quality_inputs.pop("confidence_points", None)
+    plan.confidence_unevaluated = quality_inputs.pop("confidence_unevaluated", None)
     q = score_plan(direction=plan.direction, badge_status=plan.badge, **quality_inputs)
     plan.quality_score = q.score
     plan.quality_breakdown = q.breakdown
