@@ -31,13 +31,15 @@ _INVOCATION_RE = re.compile(r"python scripts/dev/testrun\.py[ \t]+(.+)")
 def _extract_invocations() -> list[str]:
     text = WORKFLOW.read_text(encoding="utf-8")
     joined = re.sub(r"\\\r?\n[ \t]*", " ", text)
-    return [m.group(1).strip() for m in _INVOCATION_RE.finditer(joined)]
+    # A shell redirect (`>> "$GITHUB_OUTPUT"`) is the shell's, not argparse's.
+    return [re.sub(r"\s*>>.*$", "", m.group(1)).strip()
+            for m in _INVOCATION_RE.finditer(joined)]
 
 
 def test_deploy_workflow_has_testrun_invocations():
     # A regex that stopped matching would make every check below vacuously
     # pass without testing anything -- assert there is something to check.
-    assert len(_extract_invocations()) >= 5
+    assert len(_extract_invocations()) >= 3
 
 
 @pytest.mark.parametrize("line", _extract_invocations())

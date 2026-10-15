@@ -27,8 +27,8 @@ for one, is how this goes wrong in both directions.
 Normal path — CI builds the image, Node stage included: `git push origin
 main`, or **Actions → Deploy to Hetzner → Run workflow**. CI's `frontend`
 job runs `ng test` plus a production build of the Angular SPA before the
-image is ever built; `container-healthcheck` builds the image once,
-smoke-tests it, publishes it to GHCR; `deploy` SSHes in and runs
+image is ever built; `docker-build` builds the image once,
+`container-healthcheck` smoke-tests it and `publish-image` pushes it to GHCR; `deploy` SSHes in and runs
 `deploy/deploy.sh`.
 
 Manual, on-demand redeploy of whatever is already published (same as CI):

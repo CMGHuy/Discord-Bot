@@ -14,20 +14,22 @@ git push origin main
         │
         ▼
 GitHub Actions (.github/workflows/deploy.yml)
-  1. test          -- the Python suite
+  1. backend-test  -- one job per suite in tests/suites.toml (+ the lint gate)
   2. frontend      -- ng test + a real production build of the SPA
   2c. compose-lint -- docker-compose.yml still parses, default profile AND
                       the `tunnel` profile (catches a broken cloudflared
                       service before it ever reaches the server)
   3. container-healthcheck
-        builds the image ONCE, starts it, runs the auth/route/SPA smoke
-        tests against that exact image, and only then pushes it to GHCR as
+        starts the image docker-build produced (as soon as it exists, in
+        parallel with the tests) and runs the auth/route/SPA smoke tests
+     publish-image
+        waits on 1, 2 and 3, then pushes that exact image to GHCR as
         ghcr.io/<owner>/<repo>:sha-<12> and :latest
   4. cleanup   -- starts immediately alongside 1-3 (needs nothing they
                   build) and prunes old sha-* images already on the
                   Hetzner box, so disk is freed BEFORE deploy asks it
                   to pull a new one
-  5. deploy    -- waits on container-healthcheck, cleanup AND compose-lint,
+  5. deploy    -- waits on publish-image, cleanup AND compose-lint,
                   then SSHes in as `deploy` and runs deploy.sh with
                   SWING_BOT_IMAGE pinned to the sha- tag just published
         │

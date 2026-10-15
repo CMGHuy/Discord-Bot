@@ -19,6 +19,7 @@ from swingbot.core.market.levels import build_level_map
 from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.scanning.alert_embeds import (build_strategy_alert_embed,
                                                  build_strategy_simple_embed)
+from swingbot.core.scanning import rejection_recorder
 
 log = logging.getLogger(__name__)
 from swingbot.core.market.session import is_regular_session, session_date
@@ -253,6 +254,9 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
         return
     if _rs_blocked(ticker, direction, deps.rs_combined_of):
         result.rs_blocked += 1
+        rejection_recorder.record_strategy_block(
+            deps, frame, ticker=ticker, strategy=strategy, horizon=horizon, direction=direction,
+            gate="rs", reason="rs_blocked")
         return
     if _dryup_blocked(frame, ticker=ticker, strategy=strategy, direction=direction, horizon=horizon):
         result.pullback_volume += 1
@@ -260,6 +264,9 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
     stamp, reject_reason = _compression_context(ticker, strategy, frame, deps)
     if reject_reason:
         _count_compression_reject(result, stamp, reject_reason)
+        rejection_recorder.record_strategy_block(
+            deps, frame, ticker=ticker, strategy=strategy, horizon=horizon, direction=direction,
+            gate="compression", reason=reject_reason, entry_context=stamp)
         return
     plan = build_strategy_plan_at(
         frame, ticker=ticker, strategy=strategy, horizon_key=horizon,

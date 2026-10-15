@@ -132,6 +132,10 @@ green and its results are recorded. `MODEL_RUN_RITUALS` in
 
 ## Proving a skill fires: the eval suites
 
+**Never run these unless the partner asks by name** — each case is a billed
+child `claude` run (`working-conventions.md` § Paid usage). The suites are kept
+as the written record of each trigger table.
+
 Every Tier 1 and Tier 3 trigger table is wired into a runnable suite under
 `.claude/skills/<skill>/evals/` — one case per table row, `fire-*` for a
 should-fire row and `no-fire-*` for a near-miss. A case is a `prompt.md` (the

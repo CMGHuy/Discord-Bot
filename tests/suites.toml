@@ -1,0 +1,59 @@
+# Test suites: the single source of truth for "which tests verify which feature".
+#
+# A suite is a group of tests/ subdirectories you can run on their own:
+#     python scripts/dev/testrun.py suite <name>        # -n 4, one-line verdict
+#     python scripts/dev/testrun.py suites              # list them
+# and the CI pipeline (.github/workflows/deploy.yml) runs ONE job per suite, built
+# from this file -- add a suite here and the next push has a job for it, with no
+# workflow edit. tests/dev/test_suites.py fails when a tests/ directory belongs to
+# no suite (or two), a path does not exist, or a suite grows past MAX_TESTS.
+#
+# Rule, in docs/claude/testing-cost.md "Test suites": when a suite passes MAX_TESTS
+# test functions, split it by FEATURE into smaller suites (move the directories, or
+# give a feature its own tests/<feature>/ directory) instead of raising the limit.
+
+max_tests = 1200
+
+[suites.charts]
+description = "chart/PNG rendering -- alone because rendering dominates wall-clock"
+paths = ["tests/charts/"]
+
+[suites.market-data]
+description = "OHLCV fetch/cache and the market layer: indicators, entry signals"
+paths = ["tests/marketdata/", "tests/market/"]
+
+[suites.scanning]
+description = "the scan engine and everything it posts"
+paths = ["tests/scanning/"]
+
+[suites.planning]
+description = "trade-plan construction and lifecycle"
+paths = ["tests/planning/"]
+
+[suites.backtesting]
+description = "the backtest engine, grids, walk-forward"
+paths = ["tests/backtesting/"]
+
+[suites.edge-analytics]
+description = "edge modules and analytics"
+paths = ["tests/edge/", "tests/analytics/"]
+
+[suites.storage]
+description = "Postgres stores, migrations, and the paper trade log"
+paths = ["tests/db/", "tests/tracking/"]
+
+[suites.admin]
+description = "Flask admin API"
+paths = ["tests/admin/"]
+
+[suites.discord]
+description = "slash commands, embeds/presentation, infra"
+paths = ["tests/commands/", "tests/presentation/", "tests/infra/"]
+
+[suites.tooling]
+description = "scripts, hooks and the dev tooling itself (incl. this file's guard)"
+paths = ["tests/scripts/", "tests/hooks/", "tests/dev/"]
+
+[suites.config]
+description = "Config schema/keys -- the loose tests/test_*.py files (CI used to skip these)"
+paths = ["tests/test_*.py"]

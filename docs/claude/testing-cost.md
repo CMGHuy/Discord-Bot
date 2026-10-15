@@ -66,23 +66,40 @@ closed pre-registrations.
   Run it serial; workers only add cost.
 - **Single file** (`test_universe.py`, 45 tests): ~7s wall, ~2.4-4.3s internal.
 
-## CI: the suite is sharded across 5 parallel jobs, not run as one
+## Test suites: group, run partially, one CI job each
 
-`.github/workflows/deploy.yml` no longer has a single `backend-test` job.
-It's 5 `backend-test-*` jobs (`charts`, `pipeline`, `backtest-edge`, `admin`,
-`misc`), each `testrun.py full <paths>` on its own runner, grouped along
-`swingbot/core`'s own package boundaries (`architecture.md`'s module map) —
-5 is a cap on job count, not a target; a shard boundary changes only when a
-`tests/` subdirectory is added or moves. `tests/charts/` is alone in its own
-shard despite being the smallest by file count: this doc's own numbers above
-are why — the 5 core chart-render files are 84s of the 180.4s serial
-baseline, so leaving them in a shard with anything else makes that shard the
-new bottleneck. Only the `misc` shard runs the whole-repo pyflakes
-undefined-name gate (`testrun.py`'s `undefined_names()`); the other four pass
-`--skip-lint-gate` since the gate isn't shard-scoped and running it 5x would
-just be the same ~52s answer five times. The workflow file's own comments
-carry the full reasoning; this entry exists so "why does CI have 5 backend
-jobs instead of 1" doesn't require reading the YAML to answer.
+`tests/suites.toml` is the single source of truth for which tests verify which
+feature. A **suite** is a set of `tests/` directories (or a glob such as
+`tests/test_*.py` for loose files) with a one-line description:
+
+    python scripts/dev/testrun.py suites            # list them
+    python scripts/dev/testrun.py suite planning    # -n 4, one-line verdict, just that suite
+
+Use `suite <name>` to verify a feature's area without the full run; `changed`
+stays the default while iterating, `full` the plan's final gate.
+
+**The rule.** `max_tests` in the manifest (1200 `def test_` functions, counted
+by `scripts/dev/suites.py`) is the ceiling per suite. When a suite passes it,
+**split it by feature** into smaller suites — move directories between suites,
+or give a feature its own `tests/<feature>/` directory — instead of raising the
+number. A new `tests/` directory (or loose `tests/test_*.py`) belongs to
+exactly one suite: add it to the manifest in the same commit.
+`tests/dev/test_suites.py` fails on an unowned directory, an overlap, a missing
+path or an oversized suite, so none of this relies on remembering.
+
+**CI follows the manifest.** `.github/workflows/deploy.yml` has a `test-plan`
+job that runs `testrun.py suites --matrix`, and one `backend-test` matrix job
+that runs `testrun.py suite <name>` per suite on its own runner — a new suite is
+a new job with no workflow edit. Never add a hand-listed `backend-test-<x>` job
+(the guard test rejects it). The whole-repo pyflakes undefined-name gate is its
+own `backend-lint-gate` job (`testrun.py lint`), once, not part of any suite.
+`fail-fast` is off so one red suite does not hide the others. Cost: each suite
+pays the ~1-2 min checkout/uv/compile overhead in parallel, which is why the
+ceiling exists — splitting past what a leg is worth costs job-minutes.
+
+History: until suites existed, six loose `tests/test_config_*.py` files ran in
+no CI shard at all (the shards listed directories, and nobody owned the
+strays); the guard now makes "every test file is in a suite" a gate.
 
 ## Change-aware selection (`changed`)
 
