@@ -228,7 +228,11 @@ def test_build_quality_inputs_carries_the_points(item, points, unevaluated):
 @pytest.fixture
 def scan_env(tmp_path, monkeypatch):
     """The account row and data dir attach_plan_v2's plan build reads -- the
-    same isolation tests/scanning/test_engine_v2_plans.py applies."""
+    same isolation tests/scanning/test_engine_v2_plans.py applies -- plus
+    tests/scanning/conftest.py's empty earnings calendar, so days_to_earnings
+    never reaches Yahoo from here."""
+    from tests.scanning.conftest import _NoEarnings
+    monkeypatch.setattr(analyze, "_earnings_source", lambda: _NoEarnings())
     monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
     seed_store("account", {
         "balance": 10000.0, "risk_pct": 1.0, "max_position_pct": 20.0,
@@ -238,7 +242,10 @@ def scan_env(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
 
 
-def test_attach_plan_v2_stamps_the_live_plan(scan_env):
+def test_attach_plan_v2_stamps_the_live_plan(scan_env, monkeypatch):
+    live_built = []
+    monkeypatch.setattr(analyze.earnings_calendar, "LiveSource",
+                        lambda *a, **k: live_built.append(1))   # the Yahoo calendar must not be built
     item = SimpleNamespace(plan_v2=None, target_confluence=(2, ["EMA21", "Fib"]),
                            conf=_conf(), htf_bias="bullish")
     analyze.attach_plan_v2(
@@ -249,3 +256,4 @@ def test_attach_plan_v2_stamps_the_live_plan(scan_env):
     assert item.plan_v2.confidence_level == 3
     assert item.plan_v2.confidence_points == POINTS
     assert item.plan_v2.confidence_unevaluated == UNEVALUATED
+    assert live_built == []
