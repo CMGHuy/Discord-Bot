@@ -43,6 +43,17 @@ describe('StatusCell', () => {
     expect(el.textContent).toContain('no price');
   });
 
+  it('says "trailing", not "no price", for a runner with no target', () => {
+    const el = render({
+      ...live, status: 'PARTIAL', progress_pct: null, progress_band: null,
+      blink_seconds: null, bar_kind: 'trailing',
+    });
+    expect(el.querySelector('.fill')).toBeNull();
+    expect(el.textContent).toContain('PARTIAL');
+    expect(el.textContent).toContain('trailing');
+    expect(el.textContent).not.toContain('no price');
+  });
+
   it('shows the chip alone for a trade that has not opened', () => {
     const el = render({ ...live, status: 'PENDING', progress_pct: null, progress_band: null });
     expect(el.querySelector('.fill')).toBeNull();

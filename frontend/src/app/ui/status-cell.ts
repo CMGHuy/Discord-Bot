@@ -32,6 +32,9 @@ export interface StatusCellRow {
    *  real, computed position -- the point is to say the number backing it
    *  might be stale, not to hide it. */
   current_price_stale: boolean;
+  /** 'trailing' = a PARTIAL runner with no TP2: there is no target to draw a
+   *  bar toward, which is not the same as a failed price lookup. */
+  bar_kind?: string;
 }
 
 /**
@@ -190,7 +193,11 @@ export class StatusCell {
    * still has no bar means the price lookup failed, and that is worth
    * distinguishing from a quiet trade.
    */
-  protected readonly hint = computed(() =>
-    NO_POSITION_YET.has(this.row().status) ? null : 'no price',
-  );
+  protected readonly hint = computed(() => {
+    const r = this.row();
+    if (NO_POSITION_YET.has(r.status)) return null;
+    // A trailing runner has a price and a stop but no target, so the bar is
+    // withheld by design -- saying "no price" there would be false.
+    return r.bar_kind === 'trailing' ? 'trailing' : 'no price';
+  });
 }
