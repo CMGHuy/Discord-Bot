@@ -1,7 +1,7 @@
 # v146 Expectancy attribution: result
 
 **Run:** 2026-10-15, live book (closed production trades, both ledgers, read from a local copy) and TRAIN confluence replay 2020-01-06..2023-12-29 (signal date), side by side and never pooled. Read-only; VALIDATION never read.
-**Spec:** `docs/superpowers/specs/2026-10-09-v146-expectancy-attribution-design.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-09-v146-expectancy-attribution-design.md`
 
 **Verdict: NOT PREDICTIVE.** Closes "raise the confidence floor" as a measured no; any bucket candidate stands on its own and needs its own Stage -2 screen.
 
