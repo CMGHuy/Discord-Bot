@@ -20,11 +20,11 @@ GitHub Actions (.github/workflows/deploy.yml)
                       the `tunnel` profile (catches a broken cloudflared
                       service before it ever reaches the server)
   3. container-healthcheck
-        starts the image docker-build produced (as soon as it exists, in
-        parallel with the tests) and runs the auth/route/SPA smoke tests
+        pulls the candidate image docker-build pushed (ci-<12>, as soon as it
+        exists, in parallel with the tests) and runs the auth/route/SPA smoke tests
      publish-image
-        waits on 1, 2 and 3, then pushes that exact image to GHCR as
-        ghcr.io/<owner>/<repo>:sha-<12> and :latest
+        waits on 1, 2 and 3, then retags that exact digest in GHCR as
+        ghcr.io/<owner>/<repo>:sha-<12> and :latest (no rebuild, no reload)
   4. cleanup   -- starts immediately alongside 1-3 (needs nothing they
                   build) and prunes old sha-* images already on the
                   Hetzner box, so disk is freed BEFORE deploy asks it

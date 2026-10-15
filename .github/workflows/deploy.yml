@@ -217,7 +217,8 @@ jobs:
 
   # ── 3a. Docker build ────────────────────────────────────────────────────────
   # Builds the real Docker image (same Dockerfile used in production) and
-  # hands it to container-healthcheck below as a workflow artifact.
+  # hands it to container-healthcheck below as a private candidate tag (ci-<sha>)
+  # in GHCR, which publish-image later promotes.
   #
   # This used to be the first step of container-healthcheck, gated on
   # `needs: [backend-test, frontend-test]` -- so the multi-minute image build
@@ -241,9 +242,11 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      packages: write        # pushes the candidate image
     outputs:
       image: ${{ steps.imagename.outputs.image }}
       tag: ${{ steps.imagename.outputs.tag }}
+      candidate: ${{ steps.imagename.outputs.candidate }}
     steps:
       - uses: actions/checkout@v7
 
@@ -260,36 +263,34 @@ jobs:
           TAG="sha-$(echo '${{ github.sha }}' | cut -c1-12)"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          # Per-run candidate, promoted to $TAG by publish-image once green.
+          echo "candidate=$IMAGE:ci-$(echo '${{ github.sha }}' | cut -c1-12)" >> "$GITHUB_OUTPUT"
           echo "Publishing as $IMAGE:$TAG"
 
       # BuildKit is required for --mount=type=cache in the Dockerfile.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build Docker image
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pushed as a CANDIDATE tag, not the deployable one: `ci-<sha>` is read
+      # by container-healthcheck and promoted by publish-image, and nothing
+      # deploys it. It replaces a `docker save | gzip` + artifact upload and
+      # the two download + `docker load` steps that followed (~70 s across the
+      # three jobs); layers already in GHCR are not re-sent.
+      - name: Build and push the candidate image
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: false
-          load: true
-          tags: swing-bot:ci
+          push: true
+          tags: ${{ steps.imagename.outputs.candidate }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      # docker-build and container-healthcheck are different runners, so the
-      # loaded image has to cross as a file, not a docker daemon reference.
-      # Compressed, since the layer set here (Python + pandas/numpy/scipy/
-      # matplotlib + the built SPA) is large enough that shipping it
-      # uncompressed would eat into the time this split is meant to save.
-      - name: Save image for container-healthcheck
-        run: docker save swing-bot:ci | gzip > /tmp/swing-bot-ci.tar.gz
-
-      - name: Upload image artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: swing-bot-ci-image
-          path: /tmp/swing-bot-ci.tar.gz
-          retention-days: 1
 
   # ── 3a'. Postgres image (v116 PITR) ─────────────────────────────────────────
   # postgres:18-alpine + pgBackRest. Tagged by the content hash of its two
@@ -349,10 +350,9 @@ jobs:
   #     Basic Auth credentials still 401).
   #   - Any route returning 5xx instead of 200.
   #
-  # It also PUBLISHES the image, and the ordering is still the point: the
-  # artifact that gets pushed is the exact tar docker-build produced --
-  # loaded here, never rebuilt -- so what ships is byte-identical to what
-  # every check below ran against.
+  # It does not publish. The image it tests is the candidate docker-build
+  # pushed (`ci-<sha>`), and `publish-image` retags that same digest, so what
+  # ships is byte-identical to what every check below ran against.
   container-healthcheck:
     # Needs ONLY the image: the smoke tests overlap the test suites instead of
     # queueing behind them. Publishing is the one step that must wait for the
@@ -362,17 +362,23 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      packages: read         # pull the candidate image docker-build pushed
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download image artifact
-        uses: actions/download-artifact@v7
+      # The candidate is private to this run (`ci-<sha>`, never a tag anything
+      # deploys), pulled from the registry instead of crossing as a tarball.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          name: swing-bot-ci-image
-          path: /tmp
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Load image built by docker-build
-        run: gunzip -c /tmp/swing-bot-ci.tar.gz | docker load
+      - name: Pull the image built by docker-build
+        run: |
+          docker pull "${{ needs.docker-build.outputs.candidate }}"
+          docker tag "${{ needs.docker-build.outputs.candidate }}" swing-bot:ci
 
       # ── Entrypoint import checks (no network, no Discord token needed) ──
       - name: bot.py — entrypoint imports cleanly inside the image
@@ -549,8 +555,7 @@ jobs:
   # Last, and only on a green run: the tests, the lint gate, the frontend AND
   # the container smoke tests above all passed. Split out of container-healthcheck
   # so that job could start as soon as the image existed rather than after the
-  # slowest test suite; the cost is one more artifact download + `docker load`
-  # (~20s) here, far less than the ~45s of smoke tests it took off the critical path.
+  # slowest test suite. Promotion is a registry-side retag, so it costs seconds.
   publish-image:
     needs:
       - docker-build
@@ -566,21 +571,14 @@ jobs:
       contents: read
       packages: write        # GITHUB_TOKEN needs this to push to GHCR
     steps:
-      - name: Download image artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: swing-bot-ci-image
-          path: /tmp
-
-      - name: Load image built by docker-build
-        run: gunzip -c /tmp/swing-bot-ci.tar.gz | docker load
-
       # Last, and only on a green run: everything above proved THIS image
-      # works, and re-tagging the local one is what guarantees the bytes
-      # that ship are the bytes that passed. A second `docker build` here
-      # would look equivalent and would not be -- a cache miss, a moved
-      # base-image tag or a dependency resolving differently all produce a
-      # different artifact from the one just tested.
+      # works. The candidate (`ci-<sha>`) was pushed by docker-build and is the
+      # exact manifest container-healthcheck pulled and smoke-tested, so
+      # promoting it is a registry-side retag of that digest: no download, no
+      # `docker load`, no rebuild. A rebuild here would look equivalent and
+      # would not be -- a cache miss, a moved base-image tag or a dependency
+      # resolving differently all produce a different artifact from the one
+      # just tested.
       #
       # Only on a real push to main. A pull_request or a manual run against
       # a branch still gets every check above, it just doesn't publish.
@@ -594,16 +592,14 @@ jobs:
           # the `packages: write` permission above.
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push the tested image
+      - name: Promote the tested image (retag the candidate digest)
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
           IMAGE="${{ needs.docker-build.outputs.image }}"
           TAG="${{ needs.docker-build.outputs.tag }}"
-          docker tag swing-bot:ci "$IMAGE:$TAG"
-          docker tag swing-bot:ci "$IMAGE:latest"
-          docker push "$IMAGE:$TAG"
-          docker push "$IMAGE:latest"
-          echo "Pushed $IMAGE:$TAG and $IMAGE:latest"
+          CANDIDATE="${{ needs.docker-build.outputs.candidate }}"
+          docker buildx imagetools create -t "$IMAGE:$TAG" -t "$IMAGE:latest" "$CANDIDATE"
+          echo "Promoted $CANDIDATE to $IMAGE:$TAG and $IMAGE:latest"
 
   # ── 4. Clean up old images on the server ────────────────────────────────────
   # Runs BEFORE deploy, not after, and does not wait on container-healthcheck
