@@ -1,1 +1,0 @@
-V146-15 fix: tests/db/test_v152_tables.py made head-agnostic (v146_001 now head). Test 1 asserts single head and v152_001 in chain; test 2 downgrades to v152_001.down_revision. No other test hardcodes a head id (git grep clean). v152, v146 migration, migrations files all pass.
