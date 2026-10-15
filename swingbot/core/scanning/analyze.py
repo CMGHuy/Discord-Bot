@@ -344,6 +344,26 @@ def _atr_for(df) -> float:
     return float(atr_series.iloc[-1])
 
 
+# A daily regime row lands only once its session settles, so a scan on TODAY's
+# bar finds the series ending the prior session. Up to this many calendar days
+# past the series end (a long weekend plus a day) the last settled label is
+# the most the bar can know; beyond it the series is stale -- a data fault.
+REGIME_LAG_DAYS = 4
+
+
+def _label_past_series_end(regimes, when):
+    """The series' last label when `when` is a bar past its end by at most
+    REGIME_LAG_DAYS, else None. Causal: the row returned is dated BEFORE `when`.
+    Only the series END is bridged -- a gap inside the span stays unknown."""
+    import pandas as pd
+    idx = regimes.index.normalize()
+    last = idx.max()
+    gap = (pd_normalize(when) - last).days
+    if gap < 1 or gap > REGIME_LAG_DAYS:
+        return None
+    return str(regimes[idx == last].iloc[0])
+
+
 def _regime_at(regimes, when) -> str | None:
     """The regime label for THIS bar, never the latest one. regime_series is
     causal at every bar, so indexing it by the creating bar's timestamp is
@@ -363,6 +383,12 @@ def _regime_at(regimes, when) -> str | None:
                         when, len(regimes), exc_info=True)
         return None
     if hit.empty:
+        try:
+            lagged = _label_past_series_end(regimes, when) if len(regimes) > 0 else None
+        except Exception:       # same stance as the lookup above: never raise into a scan
+            lagged = None
+        if lagged is not None:
+            return lagged
         if len(regimes) > 0:
             log.warning("_regime_at found no regime row for bar %s "
                         "(regime series spans %s..%s) -- plan stamps COHORT_UNKNOWN",

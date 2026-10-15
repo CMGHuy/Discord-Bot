@@ -903,6 +903,50 @@ def test_regime_at_returns_the_matching_regime_without_logging(caplog):
     assert not caplog.records
 
 
+# --- today's bar is not in the daily regime series until it settles ----------
+
+def _lagging_regimes():
+    import pandas as pd
+    return pd.Series(["bull_quiet", "bear_volatile", "bull_volatile"],
+                     index=pd.to_datetime(["2026-10-08", "2026-10-09", "2026-10-12"]))
+
+
+def test_regime_at_uses_the_last_known_label_for_a_bar_the_series_has_not_reached(caplog):
+    """Production 2026-10-13/14: scans on today's bar found no regime row (the
+    series ends the prior session) and stamped COHORT_UNKNOWN, 40 warnings. The
+    last settled label is all a bar past the series end can know."""
+    import pandas as pd
+    with caplog.at_level("WARNING", logger="swingbot.core.scanning.analyze"):
+        got = analyze._regime_at(_lagging_regimes(), pd.Timestamp("2026-10-13"))
+    assert got == "bull_volatile"
+    assert not caplog.records
+
+
+def test_regime_at_does_not_bridge_a_stale_series():
+    import pandas as pd
+    # 8 days past the last row is a data fault, not a settling lag.
+    assert analyze._regime_at(_lagging_regimes(), pd.Timestamp("2026-10-20")) is None
+
+
+def test_regime_at_inside_the_span_is_unchanged_by_the_lag_fallback():
+    """A bar inside the series span with no row (weekend/holiday) stays unknown:
+    the fallback is for the series END only, so replays are untouched."""
+    import pandas as pd
+    assert analyze._regime_at(_lagging_regimes(), pd.Timestamp("2026-10-10")) is None
+    assert analyze._regime_at(_lagging_regimes(), pd.Timestamp("2026-10-09")) == "bear_volatile"
+
+
+def test_regime_at_truncation_test_never_reads_a_later_row():
+    """NO-LOOKAHEAD: the label at bar k is identical with the future removed."""
+    import pandas as pd
+    full = _lagging_regimes()
+    for k in full.index:
+        assert analyze._regime_at(full, k) == analyze._regime_at(full.loc[:k], k)
+    # and the lag fallback only ever returns a row dated before the bar asked about
+    got = analyze._regime_at(full.loc[:pd.Timestamp("2026-10-09")], pd.Timestamp("2026-10-12"))
+    assert got == "bear_volatile"
+
+
 def test_attach_plan_v2_stamps_issued_at_in_utc(monkeypatch):
     from datetime import datetime, timezone
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "shadow")
