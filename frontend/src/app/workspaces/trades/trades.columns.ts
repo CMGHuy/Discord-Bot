@@ -33,6 +33,33 @@ export const COMPACT_COLUMNS = [
 ];
 
 /**
+ * The compact order on a phone: outcome before plan.
+ *
+ * Below `sm` only TICKER, PLAN and P&L % stay inline (v95 C2), but PLAN is a
+ * 12rem cell, so with the compact order the P&L % -- the one number a trader
+ * opens a phone to read -- landed past the right edge behind the scroller
+ * (measured at 390px, 2026-10-15). Same set, same density, P&L first.
+ */
+export const PHONE_COMPACT_COLUMNS = [
+  ...COMPACT_COLUMNS.filter((key) => key !== 'pnl_pct' && key !== 'plan'),
+  'pnl_pct',
+  'plan',
+].sort((a, b) => PHONE_RANK(a) - PHONE_RANK(b));
+
+function PHONE_RANK(key: string): number {
+  const lead = ['status', 'ticker', 'pnl_pct', 'plan'];
+  const at = lead.indexOf(key);
+  return at === -1 ? lead.length + COMPACT_COLUMNS.indexOf(key) : at;
+}
+
+/** The baseline for a density, phone-aware. Compact is the only density that
+ *  re-orders: Full is an explicit request for width. */
+export function baselineColumns(density: 'compact' | 'full', phone: boolean): string[] {
+  if (density === 'full') return FULL_COLUMNS;
+  return phone ? PHONE_COMPACT_COLUMNS : COMPACT_COLUMNS;
+}
+
+/**
  * Full adds what compact folds away: the risk/reward numbers, the setup
  * (strategy, horizon), and the realised amount. It is not "every column" —
  * the picker still exists for that.
