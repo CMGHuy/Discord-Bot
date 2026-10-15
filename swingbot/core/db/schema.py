@@ -252,6 +252,26 @@ alert_posts = register(sa.Table(
 ), ("ticker", "at", "outcome"))
 
 
+# v147: one row per candidate a live gate (RS, plan rejection, compression) threw away, resolved once
+# by the nightly counterfactual resolver. Append-only: only cf_status/resolved_at and the outcome doc
+# fields are ever updated, by that resolver; rows are never deleted. No SSE event (not in TABLE_CHANNELS).
+gate_rejections = register(sa.Table("gate_rejections", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("ticker", sa.Text, nullable=False),
+    sa.Column("gate", sa.Text, nullable=False),
+    sa.Column("strategy", sa.Text, nullable=False),
+    sa.Column("horizon", sa.Text, nullable=False),
+    sa.Column("signal_date", sa.Text, nullable=False),
+    sa.Column("cf_status", sa.Text, nullable=False),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("resolved_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns(),
+    sa.UniqueConstraint("ticker", "gate", "strategy", "horizon", "signal_date",
+                        name="gate_rejections_key_uq"),
+    sa.Index("gate_rejections_status_idx", "cf_status")),
+    ("ticker", "gate", "strategy", "horizon", "signal_date", "cf_status", "created_at", "resolved_at"))
+
+
 #: Why each promoted column is a column and not a `doc` field. A promotion
 #: costs a migration forever after, so each names what needs it: identity,
 #: a foreign key, an index a hot query uses, or a NOT NULL the database must
@@ -346,5 +366,15 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "ticker": "alert_posts_ticker_at_idx; the per-ticker cooldown window lookup",
         "at": "alert_posts_ticker_at_idx; window, digest count and prune by time; NOT NULL",
         "outcome": "posted vs suppressed; only posted rows open a cooldown window",
+    },
+    "gate_rejections": {
+        "ticker": "gate_rejections_key_uq; the ON CONFLICT DO NOTHING dedupe key",
+        "gate": "gate_rejections_key_uq; the report's per-gate cells",
+        "strategy": "gate_rejections_key_uq; scopes the taken arm per strategy",
+        "horizon": "gate_rejections_key_uq; one setup on two horizons is two rows",
+        "signal_date": "gate_rejections_key_uq; the exact-date signal bar the resolver walks from",
+        "cf_status": "gate_rejections_status_idx; the resolver's WHERE cf_status = 'pending'",
+        "created_at": "NOT NULL write time; resolver due order and the report's live window",
+        "resolved_at": "when the outcome was filled once; NULL while pending",
     },
 }

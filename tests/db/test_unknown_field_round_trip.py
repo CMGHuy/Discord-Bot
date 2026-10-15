@@ -8,6 +8,7 @@ from swingbot.core.db import schema
 from swingbot.core.db.repositories.account import AccountRepository
 from swingbot.core.db.repositories.base import Repository
 from swingbot.core.db.repositories.flags import FlagRepository
+from swingbot.core.db.repositories.gate_rejections import GateRejectionRepository
 from swingbot.core.db.repositories.heartbeat import HeartbeatRepository
 from swingbot.core.db.repositories.jobs import JobRepository
 from swingbot.core.db.repositories.journal import JournalRepository
@@ -69,6 +70,9 @@ CASES = {
                      {"user_id": 123456789012345678}),
     "alert_posts": (lambda: Repository(schema.alert_posts, key="id"),
                     {"ticker": "AAPL", "at": TS, "outcome": "posted"}),
+    "gate_rejections": (GateRejectionRepository, {"ticker": "AAPL", "gate": "rs", "strategy": "RSI",
+                                                  "horizon": "2w", "signal_date": "2026-10-01",
+                                                  "cf_status": "pending", "created_at": TS}),
 }
 
 #: Tables with no repository, and why. Anything else must be in CASES.

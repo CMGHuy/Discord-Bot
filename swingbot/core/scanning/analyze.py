@@ -85,6 +85,8 @@ class ScanItem:
     htf_bias: str | None = None       # "bullish"/"bearish" from the same get_htf_bias() call, always stored (not just on counter-trend like htf_info) so attach_plan_v2/_build_quality_inputs can reuse it instead of recomputing
     plan_v2: object = None            # TradePlanV2 | None
     plan_v2_rejected: str | None = None  # e.g. "no_qualifying_target" (v31 Task 6) -- distinguishes a real "no trade here" from a builder exception
+    plan_v2_rejected_plan: dict | None = None     # v147: plan_to_dict of a risk_cap-rejected plan, for gate_rejections
+    plan_v2_rejected_margin: float | None = None  # v147: planned loss % past plan_stop_ceiling (risk_cap only)
     level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
     sector_rs_percentile: float | None = None  # percentile (0-100) of this ticker's sector ETF vs SPY; None when the sector is unknown or its ETF frame wasn't fetched this scan (v34 Task 5)
@@ -122,9 +124,29 @@ def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str 
     return allowed, reason
 
 
-def _reject_plan(item, reason: str, ticker: str, horizon_key: str) -> None:
-    """Record why no v2 plan was attached; say so at DEBUG (per symbol, per scan)."""
+def _plan_snapshot(plan) -> dict | None:
+    """v147: plan_to_dict for the gate-rejection record (None without a plan); a failure costs
+    the snapshot only."""
+    if plan is None:
+        return None
+    try:
+        from swingbot.core.planning.plan_types import plan_to_dict
+        return plan_to_dict(plan)
+    except Exception:   # noqa: BLE001 -- measurement only, never the rejection itself
+        log.debug("gate: plan snapshot failed", exc_info=True)
+        return None
+
+
+def _reject_plan(item, reason: str, ticker: str, horizon_key: str, *, plan=None,
+                 margin: float | None = None) -> None:
+    """Record why no v2 plan was attached; say so at DEBUG (per symbol, per scan).
+
+    v147: also stamp the rejected plan (when one was built) and its margin past
+    the gate, which the v147 gate-rejection recorder stores. Both are reset
+    on every rejection, so no stale stamp survives."""
     item.plan_v2_rejected = reason
+    item.plan_v2_rejected_plan = _plan_snapshot(plan)
+    item.plan_v2_rejected_margin = margin
     log.debug("gate: %s (%s) plan rejected -- %s", ticker, horizon_key, reason)
 
 
@@ -388,7 +410,9 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # this change exists to stop posting).
             _reject_plan(item, _no_plan_reason(scenario, level_map), ticker, horizon_key)
             return
-        if planned_loss_pct(plan.trigger_price, plan.stop_loss) > plan_stop_ceiling(plan) + 1e-9:
+        ceiling = plan_stop_ceiling(plan)
+        loss_pct = planned_loss_pct(plan.trigger_price, plan.stop_loss)
+        if loss_pct > ceiling + 1e-9:
             # Scenario building keeps the horizon's wider stop ceiling so
             # historical replay evaluates the same candidates (90e3ddef), but
             # PlanManager refuses to open any plan beyond its ceiling -- a
@@ -396,7 +420,8 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # would open in breach of the 2% rule. Posting it only issues an
             # alert the bot then cancels seconds later (GC=F, 2026-09-28).
             # v139: the ceiling is plan_stop_ceiling -- 2% unless arm S stored one.
-            _reject_plan(item, "risk_cap", ticker, horizon_key)
+            _reject_plan(item, "risk_cap", ticker, horizon_key, plan=plan,
+                         margin=loss_pct - ceiling)
             return
         if plan.stop_ceiling_pct is not None and not risk_sizing_ok(plan):
             # v139 arm S: a structural stop past 2% is honest only when the

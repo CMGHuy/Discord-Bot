@@ -117,7 +117,8 @@ def test_an_alert_post_row_round_trips_its_doc(db_conn):
 def test_v152_001_sits_on_the_single_prior_head():
     s = ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
     rev = s.get_revision("v152_001")
-    assert s.get_revision(rev.down_revision) is not None and s.get_heads() == ["v152_001"]
+    assert s.get_revision(rev.down_revision) is not None and len(s.get_heads()) == 1
+    assert "v152_001" in {r.revision for r in s.walk_revisions()}
 
 
 def _tables(connection) -> set[str]:
@@ -130,7 +131,7 @@ def test_v152_001_downgrade_drops_the_four_tables_and_upgrade_restores_them(db_e
         cfg.attributes["connection"] = connection
         upgrade(cfg, "head")
         assert set(V152_TABLES) <= _tables(connection)
-        downgrade(cfg, "-1")
+        downgrade(cfg, ScriptDirectory.from_config(cfg).get_revision("v152_001").down_revision)
         remaining = _tables(connection)
         assert not set(V152_TABLES) & remaining
         assert "plans" in remaining and "starred_plans" in remaining

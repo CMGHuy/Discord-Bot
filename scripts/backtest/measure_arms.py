@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Produce stamped baseline/component replay arms for the v100 funnel."""
+"""Produce stamped baseline/component replay arms for the v100 funnel.
+
+v147: `--record-blocked PATH [--from --to]` writes TRAIN compression gate rows instead (see `record_blocked_main`).
+"""
 from __future__ import annotations
 
 import argparse
@@ -260,5 +263,43 @@ def main(argv=None) -> int:
     return 0
 
 
+def record_blocked_main(argv) -> int:
+    """v147: TRAIN compression gate rows (blocked + taken) through StrategyEngine, one JSONL file.
+
+    TRAIN window only (2020-01-01..2023-12-31); bars come from the backtest cache via `load_frame`.
+    Flushed per-ticker progress; refusals exit 2 before any data is read."""
+    from swingbot.core.backtesting.arms import compression_research as cr
+    from swingbot.core.backtesting.blocked_recorder import TRAIN_WINDOW, require_train_window, write_gate_rows
+    parser = argparse.ArgumentParser(description="v147: TRAIN compression gate rows through StrategyEngine")
+    parser.add_argument("--record-blocked", dest="record_blocked", required=True, type=Path)
+    parser.add_argument("--from", dest="date_from", default=TRAIN_WINDOW[0])
+    parser.add_argument("--to", dest="date_to", default=TRAIN_WINDOW[1])
+    parser.add_argument("--validation", action="store_true", help="refused: --record-blocked is TRAIN-only")
+    args = parser.parse_args(argv)
+    require_train_window(args.date_from, args.date_to, validation=args.validation)
+    context = cr.offline_context()
+    universe = cached_universe()
+    rows: list = []
+    for done, ticker in enumerate(universe, 1):
+        frame = load_frame(ticker)
+        if frame is not None:
+            rows.extend(cr.record_blocked_compression({ticker: frame}, (args.date_from, args.date_to),
+                                                      context=context))
+        print(f"  [record-blocked] {done}/{len(universe)} ({done * 100 // len(universe)}%) {ticker}: "
+              f"{len(rows)} rows", flush=True)
+    args.record_blocked.parent.mkdir(parents=True, exist_ok=True)
+    count = write_gate_rows(rows, args.record_blocked)
+    print(f"Wrote {count} compression gate rows to {args.record_blocked}", flush=True)
+    return 0
+
+
+def cli(argv=None) -> int:
+    """Script entry: `--record-blocked` dispatches before `main` parses its required arm flags."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if any(arg.split("=", 1)[0] == "--record-blocked" for arg in argv):
+        return record_blocked_main(argv)
+    return main(argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(cli())

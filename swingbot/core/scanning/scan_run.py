@@ -36,7 +36,8 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, lane_overlap, progress_store, runstate, short_funnel, strategy_pass, telemetry
+from . import (analyze, dedup, fetch, lane_overlap, progress_store, rejection_recorder, runstate,
+               short_funnel, strategy_pass, telemetry)
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
 from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
@@ -672,6 +673,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                               item.result.trend, rs_result["reason"])
                     rs_blocked += 1
                     funnel.record_item(item, "rs", "rs_blocked")
+                    rejection_recorder.record_item_block(item, fresh_data, "rs", "rs_blocked",
+                                                         source="confluence")
                     continue
             funnel.record_item(item, "rs")
 
@@ -697,6 +700,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     filtered_by_rr += 1
                     funnel.record_item(item, "plan", item.plan_v2_rejected)
                     _skip_rejected_plan(item, require_confirmation)
+                    rejection_recorder.record_item_block(item, fresh_data, "plan_rejected",
+                                                         item.plan_v2_rejected, source="confluence")
                     continue          # never reaches scan_items -> never alerts
                 funnel.record_item(item, "plan")
             scan_items.append(item)

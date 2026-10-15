@@ -688,6 +688,7 @@ async def _trade_monitor_error(exc: Exception):
 _recap_fired_date: dt.date | None = None   # process-local fast path; persisted below for restart safety
 _weekend_scan_fired_date: dt.date | None = None
 _earnings_refresh_fired_date: dt.date | None = None
+_gate_resolve_fired_date: dt.date | None = None
 
 
 def _scheduled_job_already_fired(job: str, today: dt.date) -> bool:
@@ -902,6 +903,32 @@ async def weekly_earnings_refresh():
     except Exception:
         log.exception("weekly_earnings_refresh: refresh failed")
 
+
+@tasks.loop(minutes=1)
+async def gate_counterfactual_resolve():
+    """v147: resolve expired `gate_rejections` rows once per weekday at SESSION_END_HOUR:45 Berlin.
+
+    Off the event loop (`asyncio.to_thread`) under gate_resolver's per-night batch
+    cap; reads the live market_data cache only. The persisted scheduler marker
+    makes a restart inside the slot safe."""
+    global _gate_resolve_fired_date
+    now = dt.datetime.now(SESSION_TZ)
+    if now.weekday() > 4 or now.hour != config.SESSION_END_HOUR or now.minute < 45:
+        return
+    today = now.date()
+    if _gate_resolve_fired_date == today or _scheduled_job_already_fired('gate_counterfactual_resolve', today):
+        return
+    _gate_resolve_fired_date = today
+    _mark_scheduled_job_fired('gate_counterfactual_resolve', today)
+    try:
+        from swingbot.core.backtesting import gate_resolver
+        from swingbot.core.market.session import session_date
+        counts = await asyncio.to_thread(gate_resolver.resolve_due, session_date(now))
+        log.info("gate_counterfactual_resolve: %s", counts or "nothing due")
+    except Exception:
+        log.exception("gate_counterfactual_resolve: resolver failed")
+
+
 @tasks.loop(minutes=config.MARKET_DATA_REFRESH_MINUTES)
 async def market_data_refresh():
     """
@@ -1016,8 +1043,8 @@ async def pitr_watch_loop():
 def _always_on_loops() -> tuple:
     """Loops on_ready starts unconditionally, in start order."""
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
-            weekend_deep_scan_task, weekly_earnings_refresh, pitr_watch_loop,
-            next_session_scan, next_session_wrapup)
+            weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
+            pitr_watch_loop, next_session_scan, next_session_wrapup)
 
 
 def _start_background_loops() -> None:
