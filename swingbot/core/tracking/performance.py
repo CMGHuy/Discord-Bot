@@ -469,6 +469,54 @@ def expand_trade_legs(trade: dict) -> list[dict]:
     return rows
 
 
+_REALIZED_STATUSES = ("win", "loss", "closed")
+
+
+def _leg_amount(row: dict) -> float | None:
+    """One expanded leg's own dollars: its shares times its own move."""
+    shares, entry, exit_price = row.get("shares"), row.get("entry"), row.get("exit_price")
+    if shares is None or entry is None or exit_price is None:
+        return None
+    sign = 1 if row.get("direction") == "bullish" else -1
+    return round(shares * (exit_price - entry) * sign, 2)
+
+
+def expand_realized_legs(trade: dict) -> list[dict]:
+    """Every realized part of a trade as its own closed trade -- one row per
+    realized leg of a scaled-out position, else the trade itself (or
+    nothing, if it is still open with nothing banked).
+
+    `expand_trade_legs` minus the still-open remainder, and unlike it
+    leg-accurate in `realized_pnl_amount`: each leg carries its own dollars,
+    and the closing leg of a finished trade carries the trade's total minus
+    the earlier legs, so a trade's rows always sum to the trade's own
+    realized figure. Each row also says which leg it is (`leg_index`) of how
+    many (`leg_total`, counting a still-open runner), the shape the Trades
+    table's leg rows carry.
+
+    This is how the Dashboard's chips and the P&L calendar count a partial:
+    as an individual trade, on the day it banked, with its own outcome and
+    its own R (`metrics.r_multiple` on a row prices the leg's own exit).
+    """
+    expanded = expand_trade_legs(trade)
+    total = len(expanded)
+    rows = [
+        {**row, "leg_index": index, "leg_total": total}
+        for index, row in enumerate(expanded)
+        if row.get("status") in _REALIZED_STATUSES
+    ]
+    if total == 1 or not rows:
+        return rows
+    for row in rows:
+        row["realized_pnl_amount"] = _leg_amount(row)
+    trade_amount = trade.get("realized_pnl_amount")
+    earlier = [row["realized_pnl_amount"] for row in rows[:-1]]
+    if (trade.get("status") in _REALIZED_STATUSES and trade_amount is not None
+            and None not in earlier):
+        rows[-1]["realized_pnl_amount"] = round(trade_amount - sum(earlier), 2)
+    return rows
+
+
 def _apply_exit_price(t: dict, price: float, reason: str) -> None:
     """Records `price` as `t`'s exit, realizing whatever fraction of the
     position is still open as one more leg on top of any TP1 already
