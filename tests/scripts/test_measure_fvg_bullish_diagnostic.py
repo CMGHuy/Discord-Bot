@@ -22,6 +22,16 @@ from tests.planning.test_exit_sim_single import _plan  # noqa: E402
 SCRIPT = ROOT / "scripts" / "backtest" / "measure_fvg_bullish_diagnostic.py"
 
 
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot import config
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
+
 class Scenario:
     """The four levels.Scenario attributes the driver reads."""
     take_profit = 123.0

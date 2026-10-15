@@ -65,24 +65,27 @@ def refresh_cache() -> None:
 
 
 def data_quality_sweep() -> dict:
-    print("\n[2/5] Data quality sweep over cached tickers...")
-    import pandas as pd
-    from swingbot.core.marketdata.backtest_cache import CACHE_DIR
+    """Data-quality issues per ticker of the training data. It follows
+    TRAINING_DATA_SOURCE (v162) because the fold sweep and permutation test this
+    script runs as subprocesses read bars at that value too; switching the
+    quarterly run is the .env line, not a flag."""
+    from swingbot.core.marketdata import training_data
     from swingbot.core.marketdata.universe import data_quality_issues
 
+    print(f"\n[2/5] Data quality sweep over the {training_data.active()} training data...")
     issues = {}
-    csvs = sorted(CACHE_DIR.glob("*.csv")) if CACHE_DIR.exists() else []
-    for path in csvs:
-        df = pd.read_csv(path, index_col=0, parse_dates=True)
-        found = data_quality_issues(df, path.stem)
+    tickers = training_data.available_tickers()
+    for ticker in tickers:
+        df = training_data.load_daily(ticker)
+        found = data_quality_issues(df, ticker) if df is not None else []
         if found:
-            issues[path.stem] = found
+            issues[ticker] = found
     if issues:
-        print(f"  {len(issues)}/{len(csvs)} ticker(s) with data quality issues:")
+        print(f"  {len(issues)}/{len(tickers)} ticker(s) with data quality issues:")
         for ticker, found in issues.items():
             print(f"    {ticker}: {'; '.join(found)}")
     else:
-        print(f"  clean -- {len(csvs)} cached ticker(s), no data quality issues found")
+        print(f"  clean -- {len(tickers)} ticker(s), no data quality issues found")
     return issues
 
 
