@@ -111,10 +111,15 @@ export type ButtonVariant =
       min-width: 0;
       border-color: transparent;
       background: transparent;
-      color: var(--neg);
+      /* Quiet until reached for. A saturated red bin on all 77 watchlist rows
+         was the loudest thing on the page and one tap from a delete; it now
+         stays out of the way and turns red only on hover or focus. */
+      color: var(--text-faint);
       line-height: 1;
     }
-    :host(.danger-icon:not([disabled]):hover) {
+    :host(.danger-icon:not([disabled]):hover),
+    :host(.danger-icon:not([disabled]):focus-visible) {
+      color: var(--neg);
       background: color-mix(in srgb, var(--neg) 14%, transparent);
     }
 

@@ -256,7 +256,7 @@ export const DASHBOARD_COLUMNS = tradeColumns();
              entry) that closing only one of them is a real, distinct
              action, not a convenience shortcut for the combined one. -->
         <div class="close-all-menu" table-actions #closeAllMenu>
-          <button sb-button variant="secondary" type="button"
+          <button sb-button variant="danger" type="button"
                   data-action="close-all"
                   [attr.aria-expanded]="closeAllMenuOpen()"
                   aria-haspopup="menu"

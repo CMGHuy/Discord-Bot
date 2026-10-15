@@ -301,7 +301,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
       <button
         slot="clear-open"
         sb-button
-        variant="ghost"
+        variant="danger"
         type="button"
         (click)="bulk.set('open')"
       >
@@ -310,7 +310,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
       <button
         slot="clear-history"
         sb-button
-        variant="ghost"
+        variant="danger"
         type="button"
         (click)="bulk.set('history')"
       >
