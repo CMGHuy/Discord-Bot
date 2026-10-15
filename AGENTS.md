@@ -232,7 +232,8 @@ Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 (extract one plan task with its trap preflight), `deploy` (Hetzner deploy
 sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
-backup pull), `result-digest` (two backtest `--json` files through
+backup pull), `replicate-prod-db` (read-only copy of the production database
+into a local replica database), `result-digest` (two backtest `--json` files through
 `compare_backtest_json.py`, output returned verbatim, never judged),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
