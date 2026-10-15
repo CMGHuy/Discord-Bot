@@ -73,3 +73,7 @@ paths = ["tests/scripts/", "tests/hooks/", "tests/dev/"]
 [suites.config]
 description = "Config schema/keys -- the loose tests/test_*.py files (CI used to skip these)"
 paths = ["tests/test_*.py"]
+
+[suites.scout]
+description = "v161 trade scout: book export, autopsy, merge, generator roles"
+paths = ["tests/scout/"]
