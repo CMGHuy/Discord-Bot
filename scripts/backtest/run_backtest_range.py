@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
 import numpy as np
 
-from fetch_backtest_data import load_cached, load_watchlist
+from fetch_backtest_data import add_data_source_arg, apply_data_source, load_cached, load_watchlist
 from swingbot import config
 from swingbot.core.market import market_context
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
@@ -34,8 +34,17 @@ from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_s
 from swingbot.core.backtesting.blocked_recorder import require_train_window, write_gate_rows
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
+from swingbot.core.marketdata import training_data
+from swingbot.core.marketdata.history_store import MissingStoreError
 
 _SPY_CACHE: dict = {}
+
+#: Printed on every --validation run (spec § Research discipline): the switch
+#: never buys a component a second VALIDATION shot.
+VALIDATION_SOURCE_NOTICE = (
+    "NOTE: a new data source resets no VALIDATION budget. A component whose "
+    "validation shot was spent on yfinance has spent it, and every closed "
+    "pre-registration stays closed (backtest-methodology.md).")
 
 
 def write_trades_jsonl(rows, path) -> None:
@@ -85,6 +94,17 @@ def _scenario_progress(trades_jsonl):
     return on_ticker_done
 
 
+def _context_symbols(symbols) -> list:
+    """Context-only symbols (sector ETFs) the selected training data holds.
+    One absent from the store is skipped rather than loaded: loading it would
+    record a 'not in store' exclusion for a ticker the run never trades
+    (yfinance's cache lacks them too), burying the real exclusions in the
+    provenance sidecar. Under yfinance the list is the cache's own files, so
+    nothing changes there."""
+    available = set(training_data.available_tickers())
+    return [symbol for symbol in symbols if symbol in available]
+
+
 def _build_asof_map(tickers: list, frames: dict, universe: str | None):
     """Build every loaded ticker's point-in-time cross-sectional context once."""
     from swingbot.core.backtesting.asof_context import build_asof
@@ -95,7 +115,7 @@ def _build_asof_map(tickers: list, frames: dict, universe: str | None):
         print("    ! no SPY frame -- as-of context disabled for this run", flush=True)
         return {}
     sector_of_etf = sector_map("etfs")
-    etf_frames = {etf: frame for etf in sector_of_etf
+    etf_frames = {etf: frame for etf in _context_symbols(sector_of_etf)
                   if (frame := load_cached(etf)) is not None}
     sector_of_ticker = sector_map(universe or "watchlist")
     return build_asof(frames, spy, sector_of_ticker=sector_of_ticker,
@@ -277,6 +297,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
             target.append((ticker, excluded[1]))
             continue
         frames[ticker] = df
+    _report_exclusions()
     print(f"loaded {len(frames)}/{len(tickers)} cached tickers "
           f"({len(excluded_illiquid)} excluded illiquid, "
           f"{len(excluded_bad_data)} excluded bad data)", flush=True)
@@ -284,6 +305,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     stats = _scenario_stats(frames, date_from, date_to, scale_out=scale_out, universe=universe,
                             membership=membership, trades_jsonl=trades_jsonl,
                             record_blocked=record_blocked)
+    _write_provenance(trades_jsonl)
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
     lines = []
@@ -413,14 +435,58 @@ def registry_refusal(result, *, min_n=15):
     return None
 
 
+def _replay_data_source(json_in: str) -> str:
+    """The source a previous --json output was measured on: its sidecar's
+    data_source, or yfinance for a file written before v162 (no sidecar)."""
+    sidecar = training_data.provenance_path(json_in)
+    if not sidecar.exists():
+        return "yfinance"
+    return json.loads(sidecar.read_text(encoding="utf-8")).get("data_source") or "yfinance"
+
+
+def _resolve_data_source(args) -> str:
+    """The run's one training-data source (spec §3), chosen before any bar is
+    read. --from-json replays what its sidecar recorded and reads no bars; every
+    other mode selects --data-source (else TRAINING_DATA_SOURCE) and stops with
+    an error naming the missing path when the Alpaca store is absent."""
+    if args.from_json:
+        replayed = _replay_data_source(args.from_json)
+        if args.data_source not in (None, replayed):
+            raise SystemExit(f"error: {args.from_json} was measured on {replayed}; "
+                             f"--data-source {args.data_source} cannot relabel it")
+        return replayed
+    try:
+        source = apply_data_source(args)
+    except MissingStoreError as exc:
+        raise SystemExit(f"error: {exc}") from exc
+    if args.validation:
+        print(VALIDATION_SOURCE_NOTICE, flush=True)
+    return source
+
+
+def _report_exclusions() -> None:
+    """Every ticker the training data left out, with its reason (spec §3)."""
+    for line in training_data.exclusion_lines():
+        print(line, flush=True)
+
+
+def _write_provenance(json_out: str | None) -> None:
+    """<out>.provenance.json next to a result file; the result shape is unchanged."""
+    if not json_out:
+        return
+    path = training_data.write_provenance(json_out)
+    print(f"Wrote provenance to {path}", flush=True)
+
+
 def build_registry_records(summaries, *, source, window, run_date,
-                           horizon=None, pass_wr=80.0, min_n=15):
+                           horizon=None, pass_wr=80.0, min_n=15, data_source="yfinance"):
     """Turn pooled per-strategy summaries into validation-registry records.
 
     A record is VALIDATED only when it clears the acceptance gates on the
     window it was measured on; everything else is WEAK. A cell that fails a
     hard gate (see registry_refusal) yields no record at all -- refusal is
     per-row, so one unhealthy cell never discards the healthy cells beside it.
+    `data_source` (v162) names the bars the summaries were measured on.
     """
     recs = []
     for s in summaries:
@@ -441,19 +507,38 @@ def build_registry_records(summaries, *, source, window, run_date,
                      "n": s["n"],
                      "win_rate": round(wr, 1),
                      "expectancy_r": round(er, 3),
-                     "window": window, "run_date": run_date})
+                     "window": window, "run_date": run_date,
+                     "data_source": data_source})
     return recs
 
 
+def registry_key(rec: dict) -> tuple:
+    """(source, strategy, horizon, data_source); a row with no data_source was
+    measured before v162 and means yfinance (schema-evolution: an added field,
+    old rows never rewritten)."""
+    return (rec["source"], rec["strategy"], rec.get("horizon"),
+            rec.get("data_source") or "yfinance")
+
+
+def _registry_sort_key(rec: dict) -> tuple:
+    """(source, strategy, str(horizon)), then yfinance before any other
+    data_source: the pre-v162 row of a key stays first, so today's
+    yfinance-only file keeps its order."""
+    data_source = registry_key(rec)[3]
+    return (rec["source"], rec["strategy"], str(rec.get("horizon")),
+            data_source != "yfinance", data_source)
+
+
 def merge_registry(path, new_records):
-    """Merge records into the registry JSON, replacing same-key entries."""
+    """Merge records into the registry JSON, replacing same-key entries only.
+
+    The key includes data_source, so an Alpaca row sits beside the yfinance
+    row of the same (source, strategy, horizon) instead of overwriting it."""
     path = Path(path)
     existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-    new_keys = {(r["source"], r["strategy"], r.get("horizon")) for r in new_records}
-    kept = [r for r in existing
-            if (r["source"], r["strategy"], r.get("horizon")) not in new_keys]
-    merged = sorted(kept + new_records,
-                    key=lambda r: (r["source"], r["strategy"], str(r.get("horizon"))))
+    new_keys = {registry_key(r) for r in new_records}
+    kept = [r for r in existing if registry_key(r) not in new_keys]
+    merged = sorted(kept + new_records, key=_registry_sort_key)
     path.write_text(json.dumps(merged, indent=1) + "\n", encoding="utf-8")
     return merged
 
@@ -502,9 +587,11 @@ def main():
                     help="replay per-strategy summaries from a previous --json "
                          "output instead of running the backtest (honors the "
                          "run-once validation budget); requires --emit-registry")
+    add_data_source_arg(ap)
     args = ap.parse_args()
     if args.emit_registry and not args.run_date:
         ap.error("--emit-registry requires --run-date")
+    data_source = _resolve_data_source(args)
 
     if args.train:
         date_from, date_to, min_n, label = *TRAIN, 30, "TRAIN"
@@ -528,7 +615,8 @@ def main():
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
-            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr))
+            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr,
+            data_source=data_source))
         print(f"Merged {len(summaries)} records into {args.emit_registry} "
               f"(replayed from {args.from_json}, no backtest run)")
         return
@@ -557,6 +645,7 @@ def main():
     # before individual liquidity/data-quality exclusions are applied below.
     frames = {ticker: _with_context(load_cached(ticker)) for ticker in tickers}
     frames = {ticker: frame for ticker, frame in frames.items() if frame is not None}
+    _report_exclusions()
     asof_map = _build_asof_map(tickers, frames, args.universe) if args.context == "on" else {}
     membership = _membership_for_run(args.universe, tickers)
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
@@ -665,12 +754,15 @@ def main():
     if args.trades_jsonl:
         write_trades_jsonl(trade_rows, args.trades_jsonl)
         print(f"Wrote {len(trade_rows)} trade rows to {args.trades_jsonl}")
+    _write_provenance(args.json_out)
+    _write_provenance(args.trades_jsonl)
     if args.emit_registry:
         summaries = [{"strategy": k, "n": v["n_eval"], "win_rate": v["win_rate"],
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
-            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr))
+            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr,
+            data_source=data_source))
         print(f"Merged {len(summaries)} records into {args.emit_registry}")
     print("\nSaved backtest_range_summary.txt")
 
