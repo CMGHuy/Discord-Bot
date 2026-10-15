@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — produces hypotheses, never a lift by itself. Every row it emits still has to earn a `SCREEN-PASS` or a pre-registration before any spec.
 **Screen:** exempt (integrity)
 **Panel:** quant-researcher, veteran-trader, staff-engineer
-**Status:** spec written 2026-10-15 from a brainstorm with the partner (approach "A and B": one orchestrator plus three generator roles); panel review applied (see the end). Sub-project 1 of 2; the live alert desk is sub-project 2, not specified here.
+**Status:** spec written 2026-10-15 from a brainstorm with the partner (approach "A and B": one orchestrator plus three generator roles); panel review applied (see the end); plan: [`2026-10-15-v161-trade-scout_0-index.md`](../plans/2026-10-15-v161-trade-scout_0-index.md). Sub-project 1 of 2; the live alert desk is sub-project 2, not specified here.
 
 ## Why
 
