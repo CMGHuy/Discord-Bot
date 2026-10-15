@@ -286,7 +286,8 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("docs/superpowers/results/preregistration-ledger.jsonl",
      ("tests/backtesting/test_preregistration_ledger_file.py",
       "tests/backtesting/test_instrument_stats_ledger.py",
-      "tests/scripts/test_preregistration_ledger_cli.py")),
+      "tests/scripts/test_preregistration_ledger_cli.py",
+      "tests/admin/test_api_v1_research.py")),
     # _rule_screen_rerun globs results docs (*-screen-<idea>.md) for a screened
     # idea, so a results doc is a hook input (v155).
     ("docs/superpowers/results/", ("tests/hooks/test_guardrails.py",)),

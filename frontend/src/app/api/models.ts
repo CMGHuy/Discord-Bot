@@ -687,6 +687,35 @@ export interface AnalyticsHeatGrid extends Scoped {
   min_cell_n: number;
 }
 
+/** One row of `_registry_rows()`: the committed out-of-sample badge for a
+ *  strategy, joined against how that strategy is actually doing live. */
+export interface StrategyRow {
+  strategy: string;
+  /** `VALIDATED` or `WEAK` — whether it cleared its one-shot OOS bar. */
+  status: string;
+  /** OOS sample and result, from the committed validation registry. */
+  n: number;
+  win_rate: number;
+  expectancy_r: number;
+  window: string | null;
+  run_date: string | null;
+  /** Live counterparts. Null until there are closed trades to measure. */
+  live_n: number | null;
+  live_wr: number | null;
+  delta_vs_oos: number | null;
+  /** Pre-registered decay rule: live_n >= 20 and live_wr < oos_wr - 10. */
+  decayed: boolean;
+  /** Age of the evidence itself, derived server-side from `run_date` at read
+   *  time and never stored: `fresh` | `aging` | `stale` | `unknown`. A
+   *  different fact from `decayed` above, which is live-vs-OOS win-rate drift.
+   *  Display only — nothing is gated on it. */
+  evidence_decay: string;
+  gate_description: string | null;
+  /** Rolling 10-trade win rate, oldest first. Carries nulls for windows the
+   *  server could not compute, which the sparkline cannot plot. */
+  win_rate_series: (number | null)[];
+}
+
 /** `GET /analytics/registry`.
  *
  *  It really is this one key. The `{strategies, horizons, cells}` shape this
@@ -696,7 +725,247 @@ export interface AnalyticsHeatGrid extends Scoped {
  *  read three keys the endpoint has never sent. Same failure as the `ohlcv`
  *  envelope: it type-checks and returns `undefined`. */
 export interface AnalyticsRegistry {
-  registry: unknown[];
+  registry: StrategyRow[];
+}
+
+/* -- research (v150) ---------------------------------------------------- */
+
+/** Which docs folder a ledger row's `record` points into. */
+export type LedgerRecordKind = 'results' | 'specs' | 'plans' | 'other';
+
+/** One pre-registration: the nine fields the ledger stores, plus three the
+ *  endpoint derives. `n`, `exp_r` and `p` are null on most historical rows —
+ *  a null is "not recorded", never zero. */
+export interface LedgerRow {
+  id: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  hypothesis: string;
+  instrument: string;
+  n: number | null;
+  exp_r: number | null;
+  p: number | null;
+  verdict: string;
+  /** Repo-relative path of the results doc, spec or plan that records it. */
+  record: string;
+  /** BH q-value across every ledger row with a p-value. Reported, never
+   *  gating; null when `p` is null. Filters do not change it. */
+  q: number | null;
+  /** Whether `record` resolves in the deployed build. */
+  record_exists: boolean;
+  record_kind: LedgerRecordKind;
+}
+
+/** `GET /research/ledger`. The vocabularies come from the server so a
+ *  verdict added to the ledger later appears as a filter without a release. */
+export interface ResearchLedger {
+  rows: LedgerRow[];
+  /** How many rows have a p-value: the BH family size behind every `q`. */
+  q_family_m: number;
+  verdicts: string[];
+  instruments: string[];
+}
+
+/* -- reports (v150) ----------------------------------------------------- */
+
+/** The envelope both `GET /reports/*` endpoints return. `not_run` is a
+ *  state the page renders ("Not yet run"), not an error. */
+export interface ReportEnvelope<T> {
+  status: 'ok' | 'not_run';
+  generated_at: string | null;
+  result: T | null;
+}
+
+/* Field names below are v146's and v147's, pinned 2026-10-15 from the
+ * builders' own output (`report-fixtures.spec.ts` holds the key lists). Units
+ * differ between the two reports: v146 `win_rate` is a PERCENT (0-100), v147
+ * `*_win_rate` and `fill_rate` are FRACTIONS (0-1). */
+
+/** The verdict that counts: fixed at the first qualifying run and carried
+ *  forward unchanged by every later one. */
+export interface VerdictOfRecord {
+  verdict: string;
+  /** `YYYY-MM-DD` of the run that fixed it. */
+  date: string;
+  /** v146: rows that entered the verdict, live + TRAIN. v147: the cell's
+   *  distinct filled blocked setups at that run. */
+  n: number;
+}
+
+/** p25 / median / p75 of the planned risk:reward ratio; all null when no
+ *  row carried one. */
+export interface AttributionQuartiles {
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+}
+
+/** v146: does confidence order R? Spearman rho plus the top-minus-bottom
+ *  tercile ExpR with its week-clustered 95% interval. The interval and p are
+ *  null when a tercile is under v146's floor. */
+export interface AttributionMonotonicity {
+  /** Rows with a confidence score. */
+  n: number;
+  spearman_rho: number | null;
+  tercile_spread: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  p: number | null;
+  /** The interval lies wholly below zero. Reported inside NOT PREDICTIVE. */
+  inverted: boolean;
+  /** Rows per tercile: [bottom, middle, top]. */
+  tercile_n: number[];
+  /** R:R quartiles per tercile, same order as `tercile_n`. */
+  rr_by_tercile: AttributionQuartiles[];
+}
+
+/** v146: ExpR where a confidence factor scored > 0, minus where it scored 0.
+ *  `key` is the factor's display name (e.g. `MACD momentum`). */
+export interface AttributionFactor {
+  key: string;
+  /** `n_pos + n_zero`. */
+  n: number;
+  n_pos: number;
+  n_zero: number;
+  delta: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  p: number | null;
+  /** BH q over every look on the report. */
+  q: number | null;
+}
+
+export interface AttributionBucket {
+  label: string;
+  n: number;
+  /** PERCENT (0-100); a win is net `r > 0`. */
+  win_rate: number | null;
+  /** Net of frictions. */
+  exp_r: number | null;
+  exp_r_gross: number | null;
+  /** v146 sets this on every bucket below its floor. The page never tests N. */
+  thin: boolean;
+  /** This bucket's ExpR minus the rest of its grouping's, with its interval
+   *  and p (null on a thin bucket or a thin rest). */
+  delta: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  p: number | null;
+  q: number | null;
+  /** `confidence_decile` buckets only. */
+  unevaluated_n?: number;
+  /** `confidence_decile` buckets only. */
+  rr?: AttributionQuartiles;
+}
+
+/** ISO Mondays of the first and last entry week in the population. */
+export interface AttributionWindow {
+  first_week: string;
+  last_week: string;
+}
+
+export interface AttributionPopulation {
+  window: AttributionWindow;
+  n: number;
+  monotonicity: AttributionMonotonicity;
+  factors: AttributionFactor[];
+  /** Grouping -> its buckets, in the report's own order. Groupings:
+   *  confidence_decile, confidence_level, confluence, regime2_state,
+   *  rs_quintile, direction, horizon, earnings, earnings_in_hold. */
+  buckets: Record<string, AttributionBucket[]>;
+  /** The monotonicity table again per direction (`bullish` / `bearish`) and
+   *  per horizon key (`2w`, `3m`, ...). */
+  splits: {
+    direction: Record<string, AttributionMonotonicity>;
+    horizon: Record<string, AttributionMonotonicity>;
+  };
+  /** Fixed caveats for this population, in order. */
+  notes: string[];
+}
+
+/** `load_latest()` of `swingbot/core/infra/expectancy_attribution_store.py`. */
+export interface ExpectancyAttribution {
+  generated_at: string;
+  /** The latest run's reading. Descriptive once a verdict of record exists. */
+  verdict: string;
+  verdict_of_record: VerdictOfRecord;
+  /** The BH family size behind every q on this report. */
+  looks: number;
+  seed: number;
+  /** Earnings file set, TRAIN input, frictions, resamples. Shown as-is. */
+  provenance: Record<string, unknown>;
+  /** Never pooled. Either side may be absent from a run. */
+  populations: {
+    live: AttributionPopulation | null;
+    train: AttributionPopulation | null;
+  };
+}
+
+/** v147: one verdict cell, gate x population. Five verdict cells, then three
+ *  note cells (`rs`/train, `no_qualifying_target`/live and /train). */
+export interface GateCell {
+  /** `rs`, `risk_cap`, `compression` or `no_qualifying_target`. */
+  gate: string;
+  population: 'live' | 'train';
+  /** The latest reading: GATE EARNS | GATE COSTS | INCONCLUSIVE | WAITING.
+   *  Always WAITING when `note` is set. */
+  verdict: string;
+  /** Distinct filled blocked setups. v147 counts it; the page never does. */
+  n: number;
+  /** Distinct filled setups in the taken arm. */
+  taken_n: number;
+  /** Null until the first reading at or above v147's floor. */
+  verdict_of_record: VerdictOfRecord | null;
+  /** Blocked ExpR minus taken ExpR, its interval, p and BH q over the five
+   *  verdict cells. Null when the cell had no eligible reading. */
+  latest: { difference: number; ci_low: number; ci_high: number; q: number; p: number } | null;
+  in_sample: boolean;
+  /** A fixed non-verdict state persisted by v147: "no TRAIN population",
+   *  "no verdict — no-plan", "no TRAIN taken arm — no as-of earnings
+   *  archive", or "taken arm below the floor (...)". */
+  note: string | null;
+}
+
+/** v147: one detail row, gate x reason x population. */
+export interface GateCounterfactualRow {
+  gate: string;
+  reason: string;
+  population: 'live' | 'train';
+  blocked_n: number;
+  no_plan_n: number;
+  /** FRACTION (0-1) of tried blocked setups that filled. */
+  fill_rate: number | null;
+  blocked_exp_r: number | null;
+  /** FRACTION (0-1). */
+  blocked_win_rate: number | null;
+  /** Filled setups in the taken arm. */
+  taken_n: number;
+  taken_exp_r: number | null;
+  /** FRACTION (0-1). */
+  taken_win_rate: number | null;
+  /** The taken arm's booked R, beside the re-walk; never the taken ExpR. */
+  taken_realised_exp_r: number | null;
+  near_miss_n: number | null;
+  near_miss_exp_r: number | null;
+  rest_n: number | null;
+  rest_exp_r: number | null;
+  /** `risk_cap` rows only: the fixed-dollar-risk figure beside R. */
+  dollar_risk: number | null;
+  over_cap: boolean;
+  in_sample: boolean;
+}
+
+/** `load_report()` of `swingbot/core/infra/gate_counterfactual_store.py`. */
+export interface GateCounterfactual {
+  generated_at: string;
+  live_window: string | null;
+  /** The BH family size: the five verdict cells. */
+  bh_family: number;
+  seed: number;
+  /** Fixed caveats, in order. */
+  limitations: string[];
+  cells: GateCell[];
+  rows: GateCounterfactualRow[];
 }
 
 /* -- jobs and tuning ---------------------------------------------------- */

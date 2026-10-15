@@ -80,38 +80,55 @@ Expected: both loaders are callable, `jsonio.py` uses `os.replace` and both stor
 6. **The `N 17 / 30` progress figure uses a display constant** (`FLOOR_N_DISPLAY = 30`, v147 spec `:311`). Whether a cell is below the floor is still decided only by v147 (`verdict_of_record` is null); the constant is text, never a test.
 7. **The freshness marker on Reports is never flagged stale.** `sb-freshness` defaults to "stale after 15 minutes", which is wrong for a report with no cadence; the page shows the timestamp and leaves the judgement to the reader.
 
-## Assumed wire shapes (pinned by V150-5 before any Reports UI task starts)
+## Wire shapes (pinned 2026-10-15 from 01d8aaae)
 
-The v146 and v147 specs fix the top-level shape and describe the rest in prose. The Reports tasks are written against the names below. **V150-5 replaces this table's assumptions with the real names from the merged modules**, and its fixtures are what every later Reports task tests against.
+V150-5 read `expectancy_attribution.build_report` / `gate_counterfactual_report.build_report` and dumped one real result of each from the modules' own test populations. The TypeScript models in `frontend/src/app/api/models.ts` and the fixtures in `frontend/src/app/testing/report-fixtures.ts` are the authority; `report-fixtures.spec.ts` pins every key list below, so a fixture that drifts from the wire fails there. Every later Reports task tests against those fixtures. **Where a later task's code in parts 2-4 still uses an assumed name, use the real one** (the "Differences" lines say which).
 
-v146, `load_latest()` (v146 spec `:297-301`; top-level names are fixed, inner names are assumed):
+v146, `load_latest()` (`swingbot/core/infra/expectancy_attribution_store.py`):
 
 ```
-{ generated_at: str, verdict: str, verdict_of_record: {verdict, date, n}, looks: int, seed: int,
+{ generated_at, verdict, verdict_of_record: {verdict, date, n}, looks, seed,
+  provenance: {...},                               # filled by run(); {} from build_report alone
   populations: { live: Population | null, train: Population | null } }
-Population = { window: str | null, n: int,
+Population = { window: {first_week, last_week}, n,
   monotonicity: Monotonicity,
-  factors: [ { key: str, n: int, delta: float | null, ci_low, ci_high, q: float | null } ],
-  buckets: { <dimension>: [ { label: str, n: int, win_rate, exp_r, thin: bool, q: float | null } ] },
-  splits: { direction: { <name>: Monotonicity }, horizon: { <name>: Monotonicity } } }
-Monotonicity = { n: int, spearman_rho, tercile_spread, ci_low, ci_high, inverted: bool }
+  factors: [ {key, n, n_pos, n_zero, delta, ci_low, ci_high, p, q} ],
+  buckets: { <grouping>: [ {label, n, win_rate, exp_r, exp_r_gross, thin, q, delta, ci_low, ci_high, p
+                            [, unevaluated_n, rr: {p25, median, p75}]   # confidence_decile only
+                           } ] },
+  splits: { direction: {<label>: Monotonicity}, horizon: {<label>: Monotonicity} },
+  notes: [str] }
+Monotonicity = { n, spearman_rho, tercile_spread, ci_low, ci_high, p, inverted,
+                 tercile_n: [int, int, int], rr_by_tercile: [{p25, median, p75} x3] }
 ```
 
-v147, `load_report()` (v147 spec `:266-338`; assumed throughout):
+Differences from the assumptions:
+
+- **`window` is an object** `{first_week, last_week}` (ISO Mondays), not a string. Never null on a present population (an empty population is `null` as a whole). The store's `reading(..., window)` and the tab's `Window` cell format it, e.g. `first_week..last_week`.
+- **Grouping keys** are `confidence_decile, confidence_level, confluence, regime2_state, rs_quintile, direction, horizon, earnings, earnings_in_hold` (that order). The assumed `regime` is **`regime2_state`** (labels `bull_quiet`, `bull_volatile`, `bear_quiet`, `bear_volatile`), and `earnings_bucket` is **`earnings`** (labels `0-5`, `6-10`, `11-20`, `>20`, `none`, `unknown`).
+- **Factor keys are display names** (`MACD momentum`, `RSI trend alignment`, ...), not snake_case.
+- **v146 `win_rate` is a percent (0-100)**; v147's `*_win_rate` and `fill_rate` are fractions (0-1). Format each in its own unit; never share one formatter blindly.
+- Extra fields the page may ignore: `provenance`, `notes`, `p` everywhere, `tercile_n`, `rr_by_tercile`, `n_pos`/`n_zero`, `exp_r_gross`, bucket `delta`/`ci_low`/`ci_high`. A thin bucket's `p` and `q` are null in practice (v146 runs no look under its floor); the fixture's thin bucket keeps `q 0.01` on purpose.
+- Fixture value renames that parts 2-4 must follow: dimension keys `regime2_state` / `earnings` (labels `bull_quiet` / `bear_volatile`), factor keys `RSI trend alignment` (q 0.04, candidate) / `MACD momentum` (q 0.31), split names `Direction:bullish`, `Direction:bearish`, `Horizon:2w`, `Horizon:3m` (the bearish split keeps spread -0.05; TRAIN bearish n 620). The regime candidate reads `bull_quiet (Live)`.
+
+v147, `load_report()` (`swingbot/core/infra/gate_counterfactual_store.py`):
 
 ```
-{ generated_at: str, live_window: str | null,
-  cells: [ { gate: str, population: "live" | "train", verdict: str, n: int,
-             verdict_of_record: {verdict, date, n} | null,
-             latest: { difference, ci_low, ci_high, q } | null,
-             in_sample: bool, note: str | null } ],
-  rows:  [ { gate, reason, population, blocked_n, no_plan_n, fill_rate,
-             blocked_exp_r, blocked_win_rate, taken_exp_r, taken_win_rate,
-             near_miss_n, near_miss_exp_r, rest_n, rest_exp_r,
-             dollar_risk: float | null, over_cap: bool, in_sample: bool } ] }
+{ generated_at, live_window: "first..last" | null, bh_family: 5, seed, limitations: [str],
+  cells: [ {gate, population, verdict, n, taken_n, verdict_of_record: {verdict, date, n} | null,
+            latest: {difference, ci_low, ci_high, q, p} | null, in_sample, note: str | null} ],
+  rows:  [ {gate, reason, population, blocked_n, no_plan_n, fill_rate,
+            blocked_exp_r, blocked_win_rate, taken_n, taken_exp_r, taken_win_rate, taken_realised_exp_r,
+            near_miss_n, near_miss_exp_r, rest_n, rest_exp_r, dollar_risk, over_cap, in_sample} ] }
 ```
 
-`note` carries the two fixed non-verdict states the spec names: `"no TRAIN population"` (RS) and `"no verdict — no-plan"` (`no_qualifying_target`). If v147 does not persist them, V150-7's `gatesView` derives them from the gate name, and V150-5 records which.
+Differences from the assumptions: extra `bh_family`, `seed`, `limitations` at the top; `taken_n` on cells and rows; `p` inside `latest`; `taken_realised_exp_r` on rows (the taken arm's booked R, never the taken ExpR). `near_miss_*` / `rest_*` are null on `compression` rows (no margin band). A real report carries **eight cells**: the five verdict cells (`rs`/live, `risk_cap`/live, `compression`/live, `risk_cap`/train, `compression`/train), then three note cells (`rs`/train, `no_qualifying_target`/live, `no_qualifying_target`/train). The fixture keeps the plan's six; V150-7 adds a local `no_qualifying_target` cell where it needs that case.
+
+The three questions:
+
+1. **Direction and horizon splits** live at `populations.<p>.splits.direction|horizon`, as assumed: `{<label>: Monotonicity}`. Direction labels are `bullish` / `bearish`; horizon labels are `HORIZONS` keys (`1w`, `2w`, `4w`, `2m` ... `9m`), sorted digits-first by v146.
+2. **v147 persists the non-verdict states** in the cell's `note`, as assumed: `"no TRAIN population"` (`rs`/train) and `"no verdict — no-plan"` (both `no_qualifying_target` cells), plus two run-time notes on a cell at or above the floor whose taken arm is unusable: `"no TRAIN taken arm — no as-of earnings archive"` (`compression`/train) / `"no <POP> taken arm"`, and `"taken arm below the floor (<k> distinct filled setups < 30)"`. A cell with a note is always `WAITING` with `verdict_of_record: null`; `gatesView` (V150-7) shows the note and derives nothing from the gate name.
+3. **The interval is flat** `ci_low` / `ci_high` in both reports (monotonicity, factors, buckets, and v147's `latest`), as assumed. Below v147's floor `latest` is null in practice; the fixture fills live `rs`'s on purpose so the page proves it shows none of it.
 
 ## Where to work
 
