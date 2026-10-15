@@ -75,7 +75,7 @@ export function marginTone(
           <section class="quality">
             <h3 class="sb-label">Quality breakdown</h3>
             @for (factor of qualityFactors(); track $index) {
-              <div class="factor-row"><span>{{ factor.label }}</span><span class="sb-num">{{ fmtSigned(factor.points, 0) }}</span></div>
+              <div class="factor-row"><span>{{ humanFactor(factor.label) }}</span><span class="sb-num">{{ fmtSigned(factor.points, 0) }}</span></div>
             }
           </section>
         }
@@ -124,7 +124,9 @@ export function marginTone(
     dt, .muted { color: var(--text-secondary); }
     dd { margin: var(--space-4) 0 0; font-variant-numeric: tabular-nums; }
     .source { margin-top: var(--space-10); }
-    .factor-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-8); padding: var(--space-4) 0; }
+    /* A 1300px row put the label at one edge and its number at the other, so
+       the eye had to travel the whole panel to pair them. */
+    .factor-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-8); padding: var(--space-4) 0; max-width: 64rem; }
     .factor-row .note { grid-column: 1 / -1; }
     .total { border-top: 1px solid var(--border); margin-top: var(--space-8); }
     .quality { padding-top: var(--space-14); }
@@ -160,6 +162,20 @@ export class WhyPanel {
   readonly explanation = input<string | null>(null);
 
   protected readonly fmtNum = num;
+  /** Quality factors arrive as engine keys (`atr_percentile`, `htf`, `rs`).
+   *  Known ones get their trader's name; anything new is made readable
+   *  rather than shown raw. */
+  protected humanFactor(key: string): string {
+    const known: Record<string, string> = {
+      htf: 'Higher timeframe', rs: 'Relative strength', atr_percentile: 'ATR percentile',
+      trigger_distance: 'Trigger distance', regime: 'Market regime', confluence: 'Confluence',
+      volume: 'Volume', badge: 'Strategy badge', breadth: 'Market breadth',
+    };
+    if (known[key]) return known[key];
+    const spaced = key.replace(/_/g, ' ').trim();
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  }
+
   protected readonly fmtSigned = signed;
   protected readonly caveat = GATE_CAVEAT;
   protected readonly tone = computed(() => marginTone(this.status(), this.barsToExpiry(), this.sessionsSinceCreated()));
