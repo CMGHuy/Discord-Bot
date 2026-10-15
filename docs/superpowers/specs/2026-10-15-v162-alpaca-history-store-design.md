@@ -277,6 +277,16 @@ registry and ledger):
 8. The cron is installed on the VM and mirrored in `scripts/ops/`. The store
    is pulled to this machine and verified against its hashes.
 
+## Amendments from the plan brief (2026-10-15)
+
+The plan-briefer's code read corrected three premises of §3; these decisions supersede the text above where they differ:
+
+- **Ledger field is optional.** `stats.validate_ledger_row` demands exactly `LEDGER_FIELDS`, so a new required field would invalidate every existing row. `data_source` becomes an *optional* ledger field: the validator accepts `LEDGER_FIELDS` plus an `OPTIONAL_LEDGER_FIELDS` set, `append_ledger_row` keeps it, and an absent value means `yfinance`.
+- **Registry rows are keyed by source.** `merge_registry` replaces rows on `(source, strategy, horizon)`, so an Alpaca row would overwrite the yfinance one. The key becomes `(source, strategy, horizon, data_source)`, with an absent value meaning `yfinance`, so the two populations sit side by side. Badge lookup takes the row whose `data_source` matches `TRAINING_DATA_SOURCE` and falls back to the `yfinance` row when none exists, logging which one it used. A badge is never computed from a blend of the two.
+- **Provenance is a sidecar, not a key.** `run_backtest_range.py --json` is a flat `{strategy: stats}` dict that `--from-json` iterates, so a top-level key would break replay. Provenance is written to `<out>.provenance.json` next to every `--json` output; the result JSON shape is unchanged.
+- **One loader seam.** `scripts/data/fetch_backtest_data.py:load_cached` is the loader most backtest scripts use, so the source switch lives there. `measure_*` scripts with their own `CACHE_DIR`/`--cache-dir` are wired one by one. The ext-cache screens (fib, v104, v113) stay on `backtest_cache_ext`.
+- `.gitignore` gains `data/backtest_cache_snapshot_v162/`.
+
 ## Panel review
 
 Spec review, 2026-10-15, on 963254d0.
