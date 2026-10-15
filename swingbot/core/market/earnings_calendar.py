@@ -99,6 +99,19 @@ class LiveSource:
         return sorted({report_from_timestamp(ts) for ts in events.get_earnings_datetimes(ticker)}, key=lambda report: (report.date, report.timing))
 
 
+class CachedSource:
+    """Already-warmed earnings data only -- never a network call. Reads the
+    fresh in-process `events` cache first, then the weekly on-disk ledger
+    (`earnings_history`); a ticker in neither answers [] -- "unknown / not
+    cached", not "no earnings". For a caller inside the scan loop that must
+    never add provider latency (v146 days_to_earnings stamp)."""
+
+    def reports(self, ticker: str) -> list[Report]:
+        from swingbot.core.market import earnings_history, events
+        stamps = events.peek_cached_earnings_datetimes(ticker) or earnings_history.cached_earnings_datetimes(ticker) or []
+        return sorted({report_from_timestamp(ts) for ts in stamps}, key=lambda report: (report.date, report.timing))
+
+
 def next_report(ticker: str, asof: dt.date, *, source: EarningsSource, calendar: SessionCalendar | None = None) -> Report | None:
     calendar = calendar or nyse_calendar()
     asof_position = calendar.position_on_or_before(asof)

@@ -4,6 +4,7 @@ import datetime as dt
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from swingbot.core.market import earnings_calendar
 from swingbot.core.planning.plan_types import PlanStatus, TradePlanV2
@@ -93,3 +94,95 @@ def test_decision_session_date_is_the_et_date_of_the_last_bar():
 def test_days_to_earnings_swallows_a_bad_frame(monkeypatch):
     monkeypatch.setattr(analyze, "_earnings_source", lambda: _StubSource([]))
     assert analyze._days_to_earnings("AAPL", pd.DataFrame()) is None
+
+
+# --- Panel fix: the stamp reads only already-warmed data, never the network --
+
+_REAL_EARNINGS_SOURCE = analyze._earnings_source   # captured before conftest's autouse stub
+
+
+@pytest.fixture
+def cold_caches(monkeypatch, tmp_path):
+    """The real cache-only source over an empty data dir and an empty
+    in-process earnings cache. Every Yahoo entry point records its call: the
+    stamp swallows exceptions, so a raising fetcher alone would prove nothing."""
+    from swingbot import config
+    from swingbot.core.market import events
+    monkeypatch.setattr(analyze, "_earnings_source", _REAL_EARNINGS_SOURCE)
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(events, "_earnings_datetimes_cache", {})
+    fetched = []
+
+    def _no_fetch(*args, **kwargs):
+        fetched.append(args)
+        raise AssertionError("the days_to_earnings stamp must never fetch")
+
+    monkeypatch.setattr(events.yf, "Ticker", _no_fetch)
+    monkeypatch.setattr(events, "get_earnings_datetimes", _no_fetch)
+    return tmp_path, fetched
+
+
+def _ledger(tmp_path, symbols):
+    from swingbot.core.infra.jsonio import atomic_write_json
+    atomic_write_json(str(tmp_path / "earnings_history.json"),
+                      {"updated_at": "2025-07-01T00:00:00+00:00", "symbols": symbols})
+
+
+def _frame_and_report():
+    df = make_ohlcv([100.0] * 300, start="2025-06-02")
+    last = df.index[-1].date()
+    report_ts = dt.datetime.combine(last + dt.timedelta(days=14), dt.time(20, 30),
+                                    tzinfo=dt.timezone.utc)                # 16:30 ET: after close
+    return df, last, report_ts
+
+
+def test_a_cold_cache_stamps_none_without_fetching(cold_caches):
+    _, fetched = cold_caches
+    df, _, _ = _frame_and_report()
+    assert analyze._days_to_earnings("AAPL", df) is None
+    assert fetched == []
+
+
+def test_a_ticker_missing_from_a_warm_ledger_stamps_none_without_fetching(cold_caches):
+    tmp_path, fetched = cold_caches
+    df, _, report_ts = _frame_and_report()
+    _ledger(tmp_path, {"MSFT": {"next": report_ts.isoformat(), "past": []}})
+    assert analyze._days_to_earnings("AAPL", df) is None
+    assert fetched == []
+
+
+def test_the_weekly_ledger_yields_the_session_count(cold_caches):
+    tmp_path, fetched = cold_caches
+    df, last, report_ts = _frame_and_report()
+    _ledger(tmp_path, {"AAPL": {"next": report_ts.isoformat(), "past": []}})
+    expected = earnings_calendar.sessions_to_reaction(
+        "AAPL", last, source=_StubSource([earnings_calendar.report_from_timestamp(report_ts)]))
+    assert expected is not None and expected > 0
+    assert analyze._days_to_earnings("aapl", df) == expected
+    assert fetched == []
+
+
+def test_a_fresh_in_process_cache_yields_the_session_count(cold_caches, monkeypatch):
+    import time
+    from swingbot.core.market import events
+    _, fetched = cold_caches
+    df, last, report_ts = _frame_and_report()
+    events._earnings_datetimes_cache["AAPL"] = ([report_ts], time.monotonic())
+    expected = earnings_calendar.sessions_to_reaction(
+        "AAPL", last, source=_StubSource([earnings_calendar.report_from_timestamp(report_ts)]))
+    assert analyze._days_to_earnings("AAPL", df) == expected
+    assert fetched == []
+
+
+def test_an_expired_or_empty_in_process_entry_is_not_trusted(cold_caches):
+    """A cached [] may be a failed fetch (events caches it for 6h), and an
+    expired entry is stale: neither is read as an answer."""
+    import time
+    from swingbot.core.market import events
+    _, fetched = cold_caches
+    df, _, report_ts = _frame_and_report()
+    events._earnings_datetimes_cache["AAPL"] = ([report_ts], time.monotonic() - 7 * 3600)
+    events._earnings_datetimes_cache["MSFT"] = ([], time.monotonic())
+    assert analyze._days_to_earnings("AAPL", df) is None
+    assert analyze._days_to_earnings("MSFT", df) is None
+    assert fetched == []

@@ -385,10 +385,13 @@ def _no_plan_reason(scenario, level_map) -> str:
 
 
 def _earnings_source():
-    """The live earnings calendar (events.get_earnings_datetimes, 6-hour
-    cached). A function rather than a module constant so tests swap it
-    without touching the network (tests/scanning/conftest.py)."""
-    return earnings_calendar.LiveSource()
+    """The cache-only earnings calendar (earnings_calendar.CachedSource): the
+    fresh in-process events cache, else the weekly on-disk ledger -- never a
+    Yahoo call, so the stamp adds no network latency to the scan loop and a
+    cold cache (a restart, a ticker outside the ledger) stamps None. A
+    function rather than a module constant so tests swap it
+    (tests/scanning/conftest.py)."""
+    return earnings_calendar.CachedSource()
 
 
 def _decision_session_date(df) -> date:
@@ -405,9 +408,11 @@ def _decision_session_date(df) -> date:
 def _days_to_earnings(ticker: str, df) -> int | None:
     """v146 I2: NYSE sessions from the decision bar to the next earnings
     reaction session (earnings_calendar's own unit, the one v82's exposure
-    rule uses). None -- never an exception -- on a failed or empty fetch, a
-    fund, a bad frame or anything else: a recorded field must never block a
-    plan. NO-LOOKAHEAD: live only; the as-of answer IS today's calendar."""
+    rule uses). Reads already-warmed data only (_earnings_source); None --
+    never an exception -- means unknown: not cached, no upcoming report in
+    the cache, a fund, a bad frame or anything else. A recorded field must
+    never block a plan. NO-LOOKAHEAD: live only; the as-of answer IS today's
+    calendar."""
     try:
         return earnings_calendar.sessions_to_reaction(
             ticker, _decision_session_date(df), source=_earnings_source())
