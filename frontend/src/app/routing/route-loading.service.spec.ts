@@ -4,7 +4,7 @@ import { Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { routeData } from './route-metadata';
-import { RouteLoadingService } from './route-loading.service';
+import { BACKGROUND_REFRESH_INFO, RouteLoadingService } from './route-loading.service';
 
 function routeState(label: string): RouterStateSnapshot {
   return { root: { data: {}, firstChild: { data: routeData(label, () => true), firstChild: null } } } as unknown as RouterStateSnapshot;
@@ -40,5 +40,20 @@ describe('RouteLoadingService', () => {
     events.next(new NavigationCancel(1, '/risk', 'superseded'));
     expect(service.pending()).toBe(false);
     expect(service.visible()).toBe(false);
+  });
+
+  it('never veils the page for a live background refresh, but still reports it pending', () => {
+    vi.useFakeTimers();
+    const events = new Subject<unknown>();
+    const currentNavigation = () => ({ extras: { info: BACKGROUND_REFRESH_INFO } });
+    TestBed.configureTestingModule({ providers: [{ provide: Router, useValue: { events, currentNavigation } }] });
+    const service = TestBed.inject(RouteLoadingService);
+    const state = routeState('Risk');
+    events.next(new ResolveStart(1, '/risk', '/risk', state));
+    vi.advanceTimersByTime(5000);
+    expect(service.pending()).toBe(true);
+    expect(service.visible()).toBe(false);
+    events.next(new ResolveEnd(1, '/risk', '/risk', state));
+    expect(service.pending()).toBe(false);
   });
 });

@@ -5,6 +5,17 @@ import { RESOLVER_ROUTE_DATA, ResolverRouteData, resolvedRoute } from './route-m
 export const ROUTE_LOADING_DELAY_MS = 1000;
 export const LIVE_REFRESH_DEBOUNCE_MS = 300;
 
+/**
+ * Navigation `info` marking a live refresh of the page already on screen.
+ * Its resolver still runs, but the page keeps showing (and accepting
+ * clicks on) the data it has until the new data lands: a veil over content
+ * the reader is in the middle of reading is the one thing a live refresh
+ * must never do. Only a navigation to somewhere new shows the overlay.
+ */
+export const BACKGROUND_REFRESH_INFO = { backgroundRefresh: true } as const;
+const isBackgroundRefresh = (info: unknown): boolean =>
+  typeof info === 'object' && info !== null && (info as { backgroundRefresh?: unknown }).backgroundRefresh === true;
+
 @Injectable({ providedIn: 'root' })
 export class RouteLoadingService {
   private readonly _pending = signal(false);
@@ -14,8 +25,9 @@ export class RouteLoadingService {
   readonly pending = this._pending.asReadonly();
   readonly visible = this._visible.asReadonly();
   readonly label = this._label.asReadonly();
+  private readonly router = inject(Router);
   constructor() {
-    inject(Router).events.subscribe((event) => {
+    this.router.events.subscribe((event) => {
       if (event instanceof ResolveStart) this.start(event.state.root);
       if (event instanceof ResolveEnd || event instanceof NavigationEnd || event instanceof NavigationCancel || event instanceof NavigationError) this.finish();
     });
@@ -26,6 +38,7 @@ export class RouteLoadingService {
     const meta = route?.data[RESOLVER_ROUTE_DATA] as ResolverRouteData | undefined;
     if (!meta) return;
     this._pending.set(true); this._label.set(`Loading ${meta.loadingLabel}`);
+    if (isBackgroundRefresh(this.router.currentNavigation?.()?.extras.info)) return;
     this.timer = setTimeout(() => { this.timer = null; if (this._pending()) this._visible.set(true); }, ROUTE_LOADING_DELAY_MS);
   }
   private finish(): void { if (this.timer !== null) clearTimeout(this.timer); this.timer = null; this._pending.set(false); this._visible.set(false); }

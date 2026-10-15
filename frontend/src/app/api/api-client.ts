@@ -361,6 +361,12 @@ export class ApiClient {
     return this.http.get<Risk>(`${this.base}/risk`);
   }
 
+  /** The killswitch alone, for the shell banner on every page -- `risk()`
+   *  rebuilds the whole exposure picture server-side to answer one boolean. */
+  killswitch(): Observable<KillswitchResult> {
+    return this.http.get<KillswitchResult>(`${this.base}/risk/killswitch`);
+  }
+
   /** Returns the killswitch alone, not the whole risk resource: rebuilding
    *  that server-side means re-clustering open positions, which fetches
    *  daily history per ticker. The `risk` event that follows is what brings

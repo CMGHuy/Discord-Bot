@@ -3,7 +3,7 @@ import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angul
 import { Subject, debounceTime, filter } from 'rxjs';
 
 import { EventName, EventStream } from '../api/event-stream';
-import { RouteLoadingService } from './route-loading.service';
+import { BACKGROUND_REFRESH_INFO, RouteLoadingService } from './route-loading.service';
 import { RESOLVER_ROUTE_DATA, ResolverRouteData, resolvedRoute } from './route-metadata';
 
 @Injectable({ providedIn: 'root' })
@@ -39,6 +39,6 @@ export class RouteRefreshService {
     this.events.clear();
     this.mutationPending = false;
     if (!shouldRefresh) return;
-    void this.router.navigateByUrl(this.router.url, { onSameUrlNavigation: 'reload', replaceUrl: true });
+    void this.router.navigateByUrl(this.router.url, { onSameUrlNavigation: 'reload', replaceUrl: true, info: BACKGROUND_REFRESH_INFO });
   }
 }
