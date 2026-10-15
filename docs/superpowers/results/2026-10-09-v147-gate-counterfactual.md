@@ -78,3 +78,35 @@ The confluence run's scenario table ended `confluence/pooled  4955  33.9%  +0.04
 ## What this licenses
 
 Nothing changes automatically. A `GATE COSTS` reading of record licenses exactly one Stage -2 screen for loosening that gate under a new idea name; for `risk_cap` that screen also needs the partner, must state its drawdown and risk-of-ruin effect, and must keep the dollar cap binding through sizing, never through stop width. A `GATE EARNS` reading is evidence for a later tightening screen. Neither reopens a closed row.
+
+## Panel review (pre-close-out)
+
+Roles: quant-researcher, quant-engineer, risk-manager. **No BLOCKING finding.**
+Advisories, all left as documented limitations of a measurement-only plan:
+
+- **Zero confluence TRAIN blocked rows is structural, not a recorder defect**
+  (quant-engineer). The replay admits scenarios at 2.0-7.0% stops and
+  `build_confluence_plan` clamps them to 1.75% (`builders.py:546-553`,
+  `CLAMP_STOP_TO_HARD_CAP` on), so the TRAIN `risk_cap` shadow cannot fire and
+  `no_qualifying_target` is near-unreachable at RR 1.5. The TRAIN `risk_cap`
+  cell is **unreachable under the clamp**, not "waiting for data"; live
+  `risk_cap` rows come from `attach_plan_v2` paths only. A recorder failure is
+  swallowed to a warning (`backtest_scenarios.py:279-286`), so a zero is not by
+  itself proof the recorder ran; this run's 5881 taken rows share that list.
+- **Reproducibility** (quant-engineer, quant-researcher): the confluence run used
+  an out-of-repo wrapper over the 75 cached tickers (not point-in-time, survivorship
+  exposed). A later TRAIN verdict must commit the wrapper and record the effective
+  `CLAMP_STOP_TO_HARD_CAP` / `CONFLUENCE_*` values.
+- **Verdict of record** (quant-researcher): stores only `{verdict, date, n}` and is
+  lost silently if the JSON is unreadable; BH q for unfrozen cells is recomputed from
+  frozen cells' later p; the taken-arm floor (30) is stricter than the spec's.
+  Detail rows have no direction/horizon split; the blocked-minus-taken difference
+  mixes strategies and horizons. Win rate here is over all filled rows, scratches
+  included, unlike the scenario table's.
+- **Cap parity and presentation** (risk-manager): TRAIN `over_cap` uses the 2.0
+  constant, live uses `plan_stop_ceiling(plan)`; `dollar_risk` is at the 2%-stop
+  notional; the `risk_cap` cell carries no in-band over-cap marker; blocked rows are
+  simulated without heat. A `GATE COSTS` reading on `risk_cap` is **not** an
+  achievable gain and is not licence to loosen the cap.
+
+These feed any future screen's spec; none changes v147's measurement.
