@@ -6,6 +6,8 @@ ranking rule is tested alone; the CLI test runs the whole merge against the
 real ledger and the real closed pre-registrations table."""
 import json
 import sys
+
+import pytest
 from dataclasses import fields
 from pathlib import Path
 
@@ -127,6 +129,51 @@ def test_a_playbook_row_routed_to_prereg_still_needs_a_cell():
     row = _row(idea="gap-and-hold", evidence="playbook gap-and-hold", route="/prereg")
     _, drops = _screen([row])
     assert "no autopsy cell" in drops[0].reason
+
+
+
+@pytest.mark.parametrize("old,new,label", [
+    ("N 40", "N 400", "N"),
+    ("weeks 12", "weeks 120", "weeks"),
+    ("0.200", "0.900", "Δ"),
+    ("0.050", "0.500", "CI lower"),
+    ("0.350", "0.900", "CI upper"),
+    ("q 0.040", "q 0.001", "q"),
+])
+def test_fabricated_evidence_figures_are_dropped(old, new, label):
+    kept, drops = _screen([_row(evidence=GOOD_EVIDENCE.replace(old, new))])
+    assert kept == []
+    assert label in drops[0].reason and "invented figure" in drops[0].reason
+
+
+@pytest.mark.parametrize("evidence", [
+    "cell regime=risk_on",
+    GOOD_EVIDENCE.replace("N 40; ", ""),
+    GOOD_EVIDENCE.replace("weeks 12; ", ""),
+    GOOD_EVIDENCE.replace("; q 0.040", ""),
+    GOOD_EVIDENCE.replace("q 0.040", "q NaN"),
+    GOOD_EVIDENCE + "; q 0.001",
+])
+def test_incomplete_or_ambiguous_evidence_is_dropped(evidence):
+    kept, drops = _screen([_row(evidence=evidence)])
+    assert kept == []
+    assert "evidence format" in drops[0].reason
+
+
+@pytest.mark.parametrize("q", [0.10001, None, float("nan"), float("inf")])
+def test_q_cutoff_uses_unrounded_json_and_requires_finite_q(q):
+    cell = dict(CELLS["regime=risk_on"], q=q)
+    evidence = GOOD_EVIDENCE.replace("q 0.040", "q 0.100")
+    kept, drops = _screen([_row(evidence=evidence)], cells={cell["id"]: cell})
+    assert kept == []
+    assert "q" in drops[0].reason and "0.10" in drops[0].reason
+
+
+def test_printed_rounding_and_q_at_cutoff_are_accepted():
+    cell = dict(CELLS["regime=risk_on"], delta=0.20049, ci=[0.05049, 0.35049], q=0.1)
+    evidence = GOOD_EVIDENCE.replace("0.200", "+0.200").replace("q 0.040", "q 0.100")
+    kept, drops = _screen([_row(evidence=evidence)], cells={cell["id"]: cell})
+    assert len(kept) == 1 and drops == []
 
 
 # ---- ranking -------------------------------------------------------------

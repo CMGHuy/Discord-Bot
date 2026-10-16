@@ -30,6 +30,13 @@ _START_RE = re.compile(r"^- idea:\s*(.*)$")
 _FIELD_RE = re.compile(r"^  ([^:]+):\s*(.*)$")
 _CELL_RE = re.compile(r"\bcell\s+([^;]+?)\s*(?:;|$)")
 _PLAYBOOK_RE = re.compile(r"\bplaybook:?\s+([a-z0-9][a-z0-9-]*)")
+_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+_EVIDENCE_RE = re.compile(
+    rf"cell\s+[^;]+;\s*N\s+(?P<n>\d+);\s*weeks\s+(?P<weeks>\d+);\s*"
+    rf"Δ net ExpR\s+(?P<delta>{_NUMBER})\s*"
+    rf"\[\s*(?P<lo>{_NUMBER})\s*,\s*(?P<hi>{_NUMBER})\s*\];\s*q\s+(?P<q>{_NUMBER})"
+    r"(?:\s*\|\s*playbook:?\s+[a-z0-9][a-z0-9-]*)?"
+)
 _N_RE = re.compile(r"\bN\s+(\d+)")
 _TAG_RE = re.compile(r"\((v\d+)")
 _TICK_RE = re.compile(r"`([^`]+)`")
@@ -275,6 +282,45 @@ def _identity_reason(row: ScoutRow, seen: dict[str, str], closed: set[str],
     return None
 
 
+def _finite_number(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _statistical_reason(cell: dict) -> str | None:
+    """Apply evidence thresholds to unrounded JSON, including the q boundary."""
+    lower = _lower_bound(cell)
+    if _finite_number(lower) is None or lower <= 0:
+        return f"cell {cell['id']} Δ lower bound {_signed(lower)} is at or below zero or unavailable"
+    q = _finite_number(cell.get("q"))
+    if q is None or not 0 <= q <= 0.10:
+        return f"cell {cell['id']} q must be finite and between 0 and 0.10 in the autopsy JSON"
+    return None
+
+
+def _quoted_figures_reason(row: ScoutRow, cell: dict) -> str | None:
+    """Require the complete Row format and the autopsy Markdown's three decimals."""
+    match = _EVIDENCE_RE.fullmatch(row.evidence.strip())
+    if match is None:
+        return "evidence format must quote cell, N, weeks, Δ net ExpR [CI] and q exactly once"
+    values = match.groupdict()
+    expected = (("n", "N", cell["n"]), ("weeks", "weeks", cell["weeks"]),
+                ("delta", "Δ", cell.get("delta")), ("lo", "CI lower", cell["ci"][0]),
+                ("hi", "CI upper", cell["ci"][1]), ("q", "q", cell.get("q")))
+    for key, label, raw in expected:
+        number = _finite_number(raw)
+        if number is None:
+            return f"autopsy {label} is unavailable for {cell['id']}"
+        printed = number if key in ("n", "weeks") else float(f"{number:.3f}")
+        if float(values[key]) != printed:
+            return (f"quoted {label} {values[key]} differs from the autopsy {label} "
+                    f"{printed:g} for {cell['id']} (invented figure)")
+    return None
+
+
 def _cell_reason(row: ScoutRow, cells: dict[str, dict]) -> str | None:
     """Evidence checks against the autopsy JSON, the only source of figures."""
     cid = row.cell_id
@@ -285,14 +331,9 @@ def _cell_reason(row: ScoutRow, cells: dict[str, dict]) -> str | None:
         return f"cell {cid} is not in the autopsy JSON (invented figure)"
     if cell.get("thin"):
         return f"cell {cid} is thin (N {cell['n']}, {cell['weeks']} weeks)"
-    if row.quoted_n is not None and row.quoted_n != cell["n"]:
-        return f"quoted N {row.quoted_n} differs from the autopsy N {cell['n']} for {cid} (invented figure)"
     if not _is_yes(row.exploratory):
         return "autopsy evidence must be marked exploratory: yes (spec boundary 5)"
-    lower = _lower_bound(cell)
-    if lower is None or lower <= 0:
-        return f"cell {cid} Δ lower bound {_signed(lower)} is at or below zero"
-    return None
+    return _statistical_reason(cell) or _quoted_figures_reason(row, cell)
 
 
 def screen_rows(rows: list[ScoutRow], *, closed: set[str], ledger: dict[str, str],
