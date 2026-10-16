@@ -7,8 +7,11 @@
 # Writes the MAIN tree's data/market_data/ (never the root market_data/ live
 # cache, never a worktree), so a pull made from a worktree session survives
 # the worktree. HISTORY_PULL_DEST overrides the destination.
+# Do not pull Sunday 06:30-07:30 UTC: the weekly update cron writes
+# data/market_data/ on the VM then (hash verification would catch a torn copy,
+# but the pull would fail).
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 SSH_HETZNER="${SSH_HETZNER:-E:/Documents/Private/Projects/Discord-Bot/scripts/ops/ssh-hetzner.sh}"
 
 # The main worktree's root: the parent of git's common dir, else this checkout.
@@ -80,6 +83,28 @@ verify() {
   [ "$problems" = "0" ]
 }
 
+# swap_in: move the verified $PARTIAL into place, keeping the old store as
+# $DEST.prev. If the second move fails after $DEST went to $DEST.prev, put the
+# old store back; if even that fails, say how to restore by hand.
+swap_in() {
+  if [ -e "$DEST" ]; then
+    rm -rf "$DEST.prev"
+    mv "$DEST" "$DEST.prev"
+  fi
+  if mv "$PARTIAL" "$DEST"; then
+    return 0
+  fi
+  echo "pull_history_store: ERROR could not move $PARTIAL to $DEST" >&2
+  if [ -e "$DEST.prev" ]; then
+    if mv "$DEST.prev" "$DEST"; then
+      echo "pull_history_store: old store restored to $DEST; new pull left in $PARTIAL" >&2
+    else
+      echo "pull_history_store: restore FAILED; run by hand: mv \"$DEST.prev\" \"$DEST\"" >&2
+    fi
+  fi
+  return 1
+}
+
 pull() {
   if [ -e "$PARTIAL" ]; then
     echo "pull_history_store: $PARTIAL exists from an earlier pull; inspect it, then delete it by hand" >&2
@@ -94,17 +119,15 @@ pull() {
     echo "pull_history_store: FAIL hash verify, left $PARTIAL (see $PARTIAL.check.txt)" >&2
     exit 1
   fi
-  if [ -e "$DEST" ]; then
-    rm -rf "$DEST.prev"
-    mv "$DEST" "$DEST.prev"
-  fi
-  mv "$PARTIAL" "$DEST"
+  swap_in
   mv "$PARTIAL.check.txt" "$DEST.check.txt"
   echo "pull_history_store: PASS $DEST bytes=$(du -sb "$DEST" | cut -f1)"
 }
 
-if [ "${1:-}" = "--probe" ]; then
-  probe
-else
-  pull
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  if [ "${1:-}" = "--probe" ]; then
+    probe
+  else
+    pull
+  fi
 fi

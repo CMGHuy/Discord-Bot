@@ -21,8 +21,23 @@ BASE="${BASE:-/opt/swing-bot}"
 CRON_LINE='30 6 * * 0 cd /opt/swing-bot && { echo "=== $(date -u +\%Y-\%m-\%dT\%H:\%M:\%SZ) ==="; /usr/bin/docker compose run --rm -T bot python scripts/data/fetch_alpaca_history.py --mode update; echo "update exit $?"; /usr/bin/docker compose run --rm -T bot python scripts/data/check_history_store.py --verify-hashes; echo "check exit $?"; } >> /opt/swing-bot/logs/history_store_cron.log 2>&1'
 
 mkdir -p "$BASE/logs"
+
+# Read the current crontab first. Only "no crontab for <user>" means empty; any
+# other failure aborts before anything is written, so a crontab we could not
+# read (backups, PITR entries) is never overwritten.
+ERR_FILE="$(mktemp)"
+trap 'rm -f "$ERR_FILE"' EXIT
+if EXISTING="$(crontab -l 2>"$ERR_FILE")"; then
+    :
+elif grep -q "no crontab for" "$ERR_FILE"; then
+    EXISTING=""
+else
+    echo "install_v162_history_cron: could not read the current crontab, nothing written: $(cat "$ERR_FILE")" >&2
+    exit 1
+fi
+
 {
-    crontab -l 2>/dev/null | grep -vF "$MARKER" | grep -vF "fetch_alpaca_history.py --mode update" || true
+    printf '%s\n' "$EXISTING" | grep -vF "$MARKER" | grep -vF "fetch_alpaca_history.py --mode update" | grep -v '^$' || true
     echo "$MARKER"
     echo "$CRON_LINE"
 } | crontab -

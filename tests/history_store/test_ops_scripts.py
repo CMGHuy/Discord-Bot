@@ -141,8 +141,9 @@ def test_hashes_are_verified_before_the_swap():
     body = src[src.index("pull() {"):]
     body = body[:body.index("\n}")]
     verify = body.index('verify "$PARTIAL"')
-    assert verify < body.index('mv "$DEST" "$DEST.prev"')
-    assert verify < body.index('mv "$PARTIAL" "$DEST"')
+    assert verify < body.index("swap_in")
+    swap = src[src.index("swap_in() {"):src.index("pull() {")]
+    assert swap.index('mv "$DEST" "$DEST.prev"') < swap.index('mv "$PARTIAL" "$DEST"')
     assert "check_history_store.py --root" in src and "--verify-hashes" in src
 
 
@@ -158,3 +159,61 @@ def test_probe_compares_one_small_file_by_sha256():
     assert "probe-hash)" in remote and "probe-stream)" in remote
     assert "daily/_manifest.json" in remote
     assert '"${1:-}" = "--probe"' in src
+
+
+# --- AH20 review fixes -------------------------------------------------------
+
+def _run_installer(tmp_path, crontab_l_body):
+    """Run the installer with a stub crontab whose `-l` runs crontab_l_body.
+    Returns (completed process, store file, marker file of `crontab -` calls)."""
+    bash = _working_bash(INSTALL, tmp_path)
+    if bash is None:
+        pytest.skip("no bash that can see host paths")
+    store = tmp_path / "cron.txt"
+    store.write_text("0 3 * * * /x/backup_db.sh\n")
+    wrote = tmp_path / "wrote.txt"
+    fn = (f'crontab() {{ if [ "$1" = "-l" ]; then {crontab_l_body}; '
+          f'else echo called >> "{wrote.as_posix()}"; d=$(cat); printf "%s\\n" "$d" > "{store.as_posix()}"; fi; }}; '
+          f'export -f crontab; bash "{INSTALL.as_posix()}"')
+    env = {**os.environ, "BASE": tmp_path.as_posix()}
+    proc = subprocess.run([bash, "-c", fn], env=env, capture_output=True, text=True)
+    return proc, store, wrote
+
+
+def test_installer_aborts_without_writing_when_crontab_l_fails_for_another_reason(tmp_path):
+    proc, store, wrote = _run_installer(
+        tmp_path, 'echo "crontab: permission denied" >&2; return 1')
+    assert proc.returncode != 0
+    assert not wrote.exists()
+    assert store.read_text() == "0 3 * * * /x/backup_db.sh\n"
+    assert "could not read" in proc.stderr
+
+
+def test_installer_installs_when_the_user_has_no_crontab_yet(tmp_path):
+    # `-l` fails with "no crontab" until the installer has written one.
+    proc, store, wrote = _run_installer(
+        tmp_path, f'if [ -e "{(tmp_path / "wrote.txt").as_posix()}" ]; then cat "{(tmp_path / "cron.txt").as_posix()}"; '
+                  'else echo "no crontab for root" >&2; return 1; fi')
+    assert proc.returncode == 0, proc.stderr
+    assert wrote.exists()
+    assert MARKER in store.read_text().splitlines()
+
+
+def test_pull_restores_the_old_store_when_the_second_mv_fails(tmp_path):
+    bash = _working_bash(PULL, tmp_path)
+    if bash is None:
+        pytest.skip("no bash that can see host paths")
+    dest, partial = tmp_path / "market_data", tmp_path / "market_data.partial"
+    dest.mkdir()
+    (dest / "old.txt").write_text("old")
+    partial.mkdir()
+    (partial / "new.txt").write_text("new")
+    fn = ('mv() { if [ "$1" = "$PARTIAL" ] && [ "$2" = "$DEST" ]; then return 1; fi; command mv "$@"; }; '
+          f'source "{PULL.as_posix()}"; swap_in')
+    env = {**os.environ, "HISTORY_PULL_DEST": dest.as_posix()}
+    proc = subprocess.run([bash, "-c", fn], env=env, capture_output=True, text=True)
+    assert proc.returncode != 0
+    assert (dest / "old.txt").read_text() == "old"
+    assert (partial / "new.txt").exists()
+    assert not (tmp_path / "market_data.prev").exists()
+    assert "restored" in proc.stderr
