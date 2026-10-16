@@ -25,6 +25,10 @@ import { resolveToken } from './testing/resolve-token';
  * the frontend project root as its working directory.
  */
 const CSS = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
+/** Tier 3 is the LAST top-level block of tokens.css, under this banner (spec v167 §3). */
+const TIER3_BANNER = '/* ===== Tier 3: component tokens (spec v167 §3) ===== */';
+/** Everything from the tier-3 banner to the end of the file; '' while the banner is missing. */
+const TIER3 = CSS.includes(TIER3_BANNER) ? CSS.slice(CSS.indexOf(TIER3_BANNER)) : '';
 
 const REQUIRED = [
   '--bg',
@@ -33,7 +37,6 @@ const REQUIRED = [
   '--surface-overlay',
   '--border',
   '--border-strong',
-  '--shadow-overlay',
   '--scrim',
 
   '--text',
@@ -46,6 +49,7 @@ const REQUIRED = [
   '--warn',
   '--accent',
   '--accent-fill',
+  '--accent-fill-hi',
   '--on-accent',
   '--info',
 
@@ -76,6 +80,23 @@ const REQUIRED = [
 
   '--control-h',
   '--section-gap',
+
+  // v167 §3, tier 3
+  '--panel-radius',
+  '--control-radius',
+  '--chip-radius',
+  '--radius-sm',
+  '--panel-bg',
+  '--panel-border',
+  '--panel-shadow',
+  '--panel-inner-bg',
+  '--panel-inner-radius',
+  '--shadow-overlay',
+  '--btn-fill',
+  '--btn-fill-hover',
+  '--glow-accent',
+  '--glow-ambient',
+  '--scrim-soft',
 ];
 
 describe('design tokens', () => {
@@ -118,8 +139,12 @@ describe('design tokens', () => {
     expect(CSS).toMatch(/^\s*--transition:/m);
   });
 
-  it('defines exactly one elevation shadow, for L3', () => {
-    expect(CSS).toMatch(/^\s*--shadow-overlay:\s*0 8px 24px/m);
+  /* v167 §3 supersedes v54 D2's one-shadow law: two levels, both in tier 3. */
+  it('defines the two elevation shadows', () => {
+    expect(TIER3).toMatch(/^\s*--panel-shadow:\s*inset 0 1px 0 rgba\(255, 255, 255, \.03\), 0 6px 18px rgba\(0, 0, 0, \.25\);/m);
+    expect(TIER3).toMatch(/^\s*--shadow-overlay:\s*0 16px 40px rgba\(0, 0, 0, \.55\), 0 2px 8px rgba\(0, 0, 0, \.4\);/m);
+    // declared once, in tier 3 -- not left behind in tier 2 as well
+    expect([...CSS.matchAll(/^\s*--shadow-overlay:/gm)]).toHaveLength(1);
   });
 });
 
@@ -323,5 +348,65 @@ describe('v80 D3: type, shape and touch', () => {
     expect(block![1]).toMatch(/--control-h:\s*44px;/);
     expect(block![1]).toMatch(/--row-h:\s*44px;/);
     expect(block![1]).toMatch(/--text-control:\s*calc\(16px \* var\(--text-scale\)\);/);
+  });
+});
+
+/**
+ * v167 §3: the component tokens. Values are asserted as DECLARED (whitespace
+ * collapsed), because tier 3 is the contract components read; one resolved
+ * case proves the gradient reaches the Arctic Navy fill blues through tier 2.
+ */
+describe('v167 §3: the tier-3 component tokens', () => {
+  const declared = (name: string) =>
+    TIER3.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
+
+  const VALUES: Record<string, string> = {
+    '--panel-radius': '8px',
+    '--control-radius': '6px',
+    '--chip-radius': '999px',
+    '--radius-sm': '2px',
+    '--panel-bg': 'linear-gradient(180deg, var(--surface-raised), var(--surface))',
+    '--panel-border': '1px solid var(--border)',
+    '--panel-shadow': 'inset 0 1px 0 rgba(255, 255, 255, .03), 0 6px 18px rgba(0, 0, 0, .25)',
+    '--panel-inner-bg': 'var(--surface-raised)',
+    '--panel-inner-radius': 'var(--control-radius)',
+    '--shadow-overlay': '0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4)',
+    '--btn-fill': 'linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill))',
+    '--btn-fill-hover':
+      'linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white), color-mix(in srgb, var(--accent-fill) 88%, white))',
+    '--glow-accent': '0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent)',
+    '--glow-ambient':
+      'radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%)',
+    '--scrim-soft': 'rgb(0 0 0 / 0.5)',
+  };
+
+  it('sits in one :root block after every other block, under its banner', () => {
+    expect(TIER3).not.toBe('');
+    expect(TIER3.match(/:root\s*\{/g)).toHaveLength(1);
+    expect(TIER3).not.toContain('@media');
+  });
+
+  for (const [name, value] of Object.entries(VALUES)) {
+    it(`${name} is ${value}`, () => {
+      expect(declared(name)).toBe(value);
+    });
+  }
+
+  it('resolves the button gradient to the two Arctic Navy fill blues', () => {
+    expect(resolveToken('--btn-fill')).toBe('linear-gradient(180deg, #2474d2, #1c6dd0)');
+  });
+
+  /* A gradient is an image: as background-color it is invalid and the
+   * declaration is dropped silently, leaving the element transparent. */
+  it('never paints a gradient token as background-color (styles.css and ui/)', () => {
+    const GRADIENT_AS_COLOUR = /background-color:\s*var\(--(?:panel-bg|btn-fill|btn-fill-hover|glow-ambient)\)/;
+    const files = [
+      join(process.cwd(), 'src/styles.css'),
+      ...readdirSync(UI)
+        .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts'))
+        .map((file) => join(UI, file)),
+    ];
+    const offenders = files.filter((file) => GRADIENT_AS_COLOUR.test(readFileSync(file, 'utf8')));
+    expect(offenders).toEqual([]);
   });
 });
