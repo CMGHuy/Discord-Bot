@@ -193,3 +193,43 @@ def test_truncating_the_frame_three_bars_past_the_exit_changes_nothing():
     drop = ("last_bar", "stale")
     assert {k: v for k, v in full.items() if k not in drop} == \
         {k: v for k, v in cut.items() if k not in drop}
+
+
+def _with_nan_close(i, periods=30):
+    frame = _frame(periods)
+    frame.iloc[i, frame.columns.get_loc("Close")] = float("nan")
+    return frame
+
+
+def test_a_nan_close_inside_the_window_is_dropped_and_the_payload_is_strict_json():
+    """A NaN close would serialise as bare NaN, which JSON.parse rejects for
+    the whole response. The bar is dropped before any index is computed, so
+    exit_bar still points at the exit date."""
+    import json
+    series, _ = ds.sparklines_payload([_row()], lambda t: _with_nan_close(11))  # Tue 08-04
+    json.dumps(series, allow_nan=False)
+    one = series[KEY]
+    dates = [c["date"] for c in one["closes"]]
+    assert "2026-08-04" not in dates
+    assert dates == ["2026-07-29", "2026-07-30", "2026-07-31", "2026-08-03",
+                     "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10"]
+    assert one["closes"][one["exit_bar"]]["date"] == one["exit_date"] == "2026-08-05"
+
+
+def test_a_nan_close_on_the_exit_day_moves_the_exit_to_the_prior_bar():
+    series, _ = ds.series_for(_row(), _with_nan_close(12))                  # Wed 08-05
+    assert series["exit_date"] == "2026-08-04"
+    assert series["closes"][series["exit_bar"]]["date"] == "2026-08-04"
+    assert [c["date"] for c in series["closes"][series["exit_bar"] + 1:]] == [
+        "2026-08-06", "2026-08-07", "2026-08-10"]
+
+
+def test_a_nan_last_bar_is_not_the_last_bar():
+    series, _ = ds.series_for(_row(), _with_nan_close(29))                  # Fri 08-28
+    assert series["last_bar"] == "2026-08-27"
+
+
+def test_an_all_nan_frame_is_none():
+    frame = _frame()
+    frame["Close"] = float("nan")
+    assert ds.series_for(_row(), frame) == (None, False)

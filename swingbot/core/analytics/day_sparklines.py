@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 
 from swingbot.core.marketdata import spot_metals
@@ -71,9 +72,21 @@ def _ticks(row: dict, window: pd.DataFrame) -> dict:
     return {name: row.get(field) for name, field in _TICKS}
 
 
+def _finite_closes(frame: pd.DataFrame | None) -> pd.DataFrame | None:
+    """The frame without bars whose Close is NaN/inf -- they would serialise
+    as bare NaN, which JSON.parse rejects for the whole response. Dropped
+    before any bar index is computed so entry, exit, the 400-bar cut and
+    `last_bar` all agree; each bar is judged by its own Close only."""
+    if frame is None:
+        return None
+    close = pd.to_numeric(frame["Close"], errors="coerce").to_numpy(dtype=float)
+    return frame[np.isfinite(close)]
+
+
 def series_for(row: dict, frame: pd.DataFrame | None) -> tuple[dict | None, bool]:
     """One row's series and whether the 400-bar cap cut it."""
     opened, day = _utc_date(row.get("opened_at")), row.get("day")
+    frame = _finite_closes(frame)
     if frame is None or frame.empty or opened is None or not day:
         return None, False
     bounds = _bounds(frame.index, opened, day)
