@@ -51,6 +51,15 @@ frontend/src/styles/
 
 Both vitest specs import the TS helper. Nobody keeps a private copy.
 
+**The two resolvers are tested against each other.**
+- The TS spec writes nothing.
+- Instead, a committed fixture `tests/charts/resolved_tokens.json` lists every token name → resolved hex.
+- Both `resolve-token.spec.ts` and `test_chart_theme.py` assert that their own resolver reproduces that fixture exactly.
+- Regenerating the fixture is a one-line script, `scripts/dev/dump_tokens.py`.
+- So a resolver drift in either language, or a token edit without regenerating, fails a test.
+
+**Test selection follows the new file.** `scripts/dev/select_tests.py:222-225` `ESCALATE_PREFIXES` (and `testrun.py:118`) name only `frontend/src/styles/tokens.css`. The same commit that creates `palette.css` widens the prefix to `frontend/src/styles/`. Otherwise a palette-only edit under `testrun.py fast` would skip the slow-tier `test_chart_theme.py` (`pytestmark = slow`, line 22), and the PNG lockstep could drift unnoticed.
+
 ### 2. Arctic Navy palette (tier 1 values, tier 2 mapping)
 
 | Semantic token | Before | After | Worst-case contrast (vs the four surfaces) |
@@ -102,8 +111,9 @@ The valence rule (one hue = one meaning; a sixth hue is a review defect) is **un
 --btn-fill: linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill));
 --btn-fill-hover: linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white),
                                           color-mix(in srgb, var(--accent-fill) 88%, white));
---glow-accent: 0 4px 14px rgba(28,109,208,.35);
---glow-ambient: radial-gradient(120% 60% at 0% 0%, rgba(28,109,208,.12), transparent 60%);
+--glow-accent: 0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent);
+--glow-ambient: radial-gradient(120% 60% at 0% 0%,
+                color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%);
 --scrim-soft: rgb(0 0 0 / 0.5);   /* shell.css:33's mobile-nav scrim, given a name */
 ```
 
@@ -138,11 +148,17 @@ The valence rule (one hue = one meaning; a sixth hue is a review defect) is **un
 - Discord alert charts turn navy.
 - `--text-faint` in a PNG is used for fine rules only, so the same "never text" rule holds there.
 
+**Two Python colour sources stay outside the lockstep, deliberately:**
+- **Discord embed stripes** (`swingbot/core/presentation/kinds.py:22-40`). They are tuned to read on Discord's own `#313338` dark and `#FFFFFF` light themes, not on the admin's ground, and they carry their own semantic ramp (setup level, result size). Moving them onto Arctic Navy would optimise them for a background they never sit on. "One palette everywhere" (D2) therefore means **the admin and the chart PNGs**.
+- **The export disclaimer grey** (`swingbot/core/marketdata/export_data.py:91`, `#5a6169`). It is a plain historical export, not an alert chart, and is logged as a v169 follow-up candidate.
+
+**The chart cache outlives a deploy.** `swingbot/core/charts/cache.py` keys PNGs by content (e.g. `stats.py:242-245`, `:405-408`), not by style, and lives on the `./exports` host volume. Without a fix, `!stats` charts would keep the old palette for up to 7 days after deploy, and a rollback would serve navy PNGs for as long. Fix: `chart_style.py` exports a `STYLE_VERSION` string (bumped whenever `THEME` changes), and `cache.py` folds it into every key. `test_chart_theme.py` asserts that `STYLE_VERSION` changes whenever the `THEME` digest does: it pins the pair, so editing one without the other fails.
+
 ### 5. Gates (new or changed)
 
 | Gate | Rule |
 |---|---|
-| `primitives.spec.ts` "no colour is declared outside tokens.css" (**extended**, not duplicated) | Today it matches `(?<!&)#hex` in every `ui/` call site, with an empty `HEX_ALLOWLIST`. It is extended in three ways. **Scope:** every `frontend/src/**/*.{ts,css}` and `frontend/src/index.html`, excluding specs, `styles/palette.css`, and `styles/tokens.css` (checked separately: hex only on the seven allow-listed names of §1, `rgb(a)` only inside tier-3 shadow and glow tokens). **Pattern:** also `rgb(`/`rgba(`/`hsl(` in both comma and space syntax, so `shell.css:33`'s `rgb(0 0 0 / 0.5)` is caught (it migrates to `--scrim-soft`). It keeps the `(?<!&)` guard for `&#9650;` (`versions.ts:151`). **Comments:** `/* … */` and `//` comments are stripped before matching, so `button.ts:65-66`'s documentary hex stays legal. |
+| `primitives.spec.ts` "no colour is declared outside tokens.css" (**extended**, not duplicated) | Today it matches `(?<!&)#hex` in every `ui/` call site, with an empty `HEX_ALLOWLIST`. It is extended in three ways. **Scope:** every `frontend/src/**/*.{ts,css}` and `frontend/src/index.html`, excluding specs, `styles/palette.css`, and `styles/tokens.css` (checked separately: hex only on the seven allow-listed names of §1; `rgb(a)` only inside tier-3 shadow tokens and only **black or white** at some alpha. Any hued glow derives from a tier-2 token with `color-mix()`, so a palette change reaches it.). **Pattern:** also `rgb(`/`rgba(`/`hsl(` in both comma and space syntax, so `shell.css:33`'s `rgb(0 0 0 / 0.5)` is caught (it migrates to `--scrim-soft`). It keeps the `(?<!&)` guard for `&#9650;` (`versions.ts:151`). **Comments:** `/* … */` and `//` comments are stripped before matching, so `button.ts:65-66`'s documentary hex stays legal. |
 | `primitives.spec.ts` **raw radius** (new describe block, same file and helpers) | No `border-radius: <n>px` outside `styles/`. `50%` and `0` are allowed. No `var(--radius)`/`var(--radius-chip)` remains. |
 | `primitives.spec.ts` **G3** (changed) | As §3: components cast no non-inset shadow, and `styles.css` casts exactly `var(--panel-shadow)` and `var(--shadow-overlay)`. |
 | `elevation.spec.ts` (changed) | Also checks the `.sb-panel` rule. |
@@ -170,6 +186,8 @@ The superseded passages are marked in place, not deleted (this repo's convention
 
   `index.html` is in the colour gate's scope with an allow-list entry for exactly those two hex values, each with its comment. The cold-load style cannot use `var()`, because the stylesheet has not loaded yet.
 
+Because they are copies, a new assertion in `primitives.spec.ts` checks, through `resolve-token.ts`, that all four literals equal the resolved `--bg`: `index.html` ×2, plus the manifest's `theme_color` and `background_color`. A later palette change then fails a test instead of leaving a cold-load flash and a stale PWA bar.
+
 ## Out of scope
 
 - All motion and animation (v168). This spec leaves `--dur-*`, keyframes and the `prefers-reduced-motion` block untouched.
@@ -179,7 +197,19 @@ The superseded passages are marked in place, not deleted (this repo's convention
 
 ## Interaction with live plans
 
-- **v165 (calendar day page)** and **v166 (trade detail reorganisation)** add components. They must use tokens, not hex, which they already must under the existing `primitives.spec.ts` hex gate. Whichever lands second rebases. The extended gates will name any stray literal or raw radius.
+**v165 (calendar day page)** and **v166 (trade detail reorganisation)** spell out constructs that v167 deletes or bans:
+- `v166 …_2-header-strip.md:742` uses `border-radius: var(--radius)`;
+- `v165 …_3-day-page-ui.md:325, :694` and `…_3b-day-page-drawer-url.md:688` use `var(--radius-chip)` and a raw `border-radius: 2px`.
+
+If either lands after v167, the new radius gate fails. If someone merges around the gate, a deleted `var()` silently resolves to radius 0.
+
+**Required order:** v167's radius-inventory task runs **only after v165 and v166 are merged to `main`**, so that their components are inventoried like everything else. If either is still unmerged when v167 reaches that task, v167 stops there and records it in `## Handoff`. It never edits another plan's worktree. The palette, resolver and chart tasks that come before the inventory do not depend on v165 or v166.
+
+## Deploy and rollback
+
+- **No step on the Hetzner VM.** One image serves both containers, `.env` is untouched, and there is no schema change, cron job or store write.
+- **Rollback** is the immutable `sha-` image tag (`docs/deploy/DEPLOY_HETZNER.md:208-217`). It reverts the SPA and the PNG palette together, and `STYLE_VERSION` (§4) keeps the chart cache from serving the wrong palette in either direction.
+- **PWA:** the service worker (`frontend/ngsw-config.json:13`) picks up the new `manifest.webmanifest` on its next update check. An installed PWA may show the old title-bar colour until it next reloads. This is cosmetic and needs no action.
 
 ## Testing and evidence
 
@@ -192,7 +222,7 @@ The superseded passages are marked in place, not deleted (this repo's convention
 
 ## Panel review
 
-Run 2026-10-16 on commit `e8a8e9bc`.
+Run 2026-10-16. senior-engineer reviewed commit `e8a8e9bc`, and staff-engineer reviewed `c17de9e6`. Every finding was ADVISORY, with no BLOCKING findings.
 
 - senior-engineer: the shadow gate is `primitives.spec.ts` G3, not `elevation.spec.ts` (which only matches two rules) -- applied (§3, §5).
 - senior-engineer: `contrast.spec.ts` and `chart-palette.spec.ts` token helpers are hex-only and will throw on `var()` tier-2 tokens -- applied (§1 shared resolver, §5).
@@ -203,3 +233,11 @@ Run 2026-10-16 on commit `e8a8e9bc`.
 - senior-engineer: gradients cannot be `background-color`; button hover `color-mix` needs a gradient token; gradient backgrounds do not transition -- applied (`--btn-fill-hover`, §3).
 - senior-engineer: `chart_style.py:19-27` and `tokens.css` comments need supersede marks; keep `D1_TOKENS` unchanged -- applied (§4, §6).
 - senior-engineer: tasks must quote narrow-run verdict lines; screenshots need a pass criterion -- applied (Testing and evidence).
+- staff-engineer: `select_tests.py` `ESCALATE_PREFIXES` names only `tokens.css`; a palette-only edit would skip the slow chart-theme test -- applied (§1).
+- staff-engineer: the content-hash chart cache has no style version and outlives deploy and rollback -- applied (§4 `STYLE_VERSION`).
+- staff-engineer: embed stripe colours (`kinds.py`) and the export grey (`export_data.py:91`) sit outside the lockstep -- applied as an explicit out-of-scope statement with the reason (§4). Stripes are tuned to Discord's own themes.
+- staff-engineer: hued glows hard-code the fill blue as `rgba` -- applied (`color-mix()` from `--accent-fill`; the gate allows only black or white `rgba`).
+- staff-engineer: the `#070b14` copies in `index.html` and the manifest are unchecked against `--bg` -- applied (§7 equality assertion).
+- staff-engineer: v165 and v166 plan text uses tokens v167 deletes -- applied (required order, § Interaction with live plans).
+- staff-engineer: no deploy or rollback note -- applied (§ Deploy and rollback).
+- staff-engineer: two hand-kept resolvers with no cross-check -- applied (shared fixture `resolved_tokens.json`, §1).
