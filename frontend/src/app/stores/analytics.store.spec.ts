@@ -639,6 +639,14 @@ describe('AnalyticsStore', () => {
     backend.expectNone('/api/v1/jobs/tune/defaults');
   });
 
+  it("loads the tune defaults when the route resolver opens the Tuning tab", () => {
+    tick();
+    respondOverview();
+    store.resolveTab('tuning').subscribe();
+    backend.expectOne('/api/v1/jobs/tune/defaults').flush(TUNE_DEFAULTS);
+    expect(store.tuneDefaults()).toEqual(TUNE_DEFAULTS);
+  });
+
   it('reports a launch conflict separately from a stale-data error', () => {
     tick();
     respondOverview();

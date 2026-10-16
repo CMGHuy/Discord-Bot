@@ -58,11 +58,11 @@ import {
   TickerSuggestions,
   TradeDetail,
   TradeCollection,
-  TuneDefaults,
   TradeNote,
   TradeQuery,
   TradeRow,
   TradeJournal,
+  TuneDefaults,
   VersionHistory,
 } from './models';
 
