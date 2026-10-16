@@ -567,3 +567,53 @@ def day_breakdown(rows: list[dict]) -> dict[str, list[dict]]:
             key=_breakdown_order,
         )
     return out
+
+
+# --- v165 D4: the day drawer's / day page's summary tiles -------------------
+
+
+def _leaders(rows: list[dict]) -> list[dict]:
+    """The five rows with the largest |R|, as `{ticker, r}`."""
+    return [
+        {"ticker": row["ticker"], "r": row["r_multiple"]}
+        for row in sorted(rows, key=lambda row: abs(row["r_multiple"]), reverse=True)[:5]
+    ]
+
+
+def _worst_drawdown_r(measured: list[float]) -> float | None:
+    """Deepest peak-to-trough fall of the running R, walked in close order."""
+    if not measured:
+        return None
+    running = peak = worst = 0.0
+    for value in measured:
+        running += value
+        peak = max(peak, running)
+        worst = max(worst, peak - running)
+    return round(worst, 2)
+
+
+def day_totals(day_rows: list[dict]) -> dict:
+    """The day's summary tiles, over exactly the rows the day lists.
+
+    Lifted verbatim from `api_v1/calendar.calendar_pnl_day` (v165) so the
+    route stays below complexity 15 and this module stays the one place the
+    calendar's arithmetic lives. `day_rows` must be in close order -- the
+    drawdown walks them as the day happened.
+    """
+    measured = [r["r_multiple"] for r in day_rows if r["r_multiple"] is not None]
+    winners = [r for r in day_rows if r["r_multiple"] is not None and r["r_multiple"] > 0]
+    losers = [r for r in day_rows if r["r_multiple"] is not None and r["r_multiple"] < 0]
+    return {
+        # `trades` stays the route's list contract; this is its numeric
+        # companion for the tiles.
+        "trade_count": len(day_rows),
+        "winners": len(winners),
+        "losers": len(losers),
+        "total_r": _sum_or_none(measured),
+        "total_ccy": _sum_or_none([r["pnl_amount"] for r in day_rows]),
+        "win_rate": metrics.win_rate([{"status": r["outcome"]} for r in day_rows]),
+        "avg_trade_r": _avg_or_none(measured),
+        "worst_drawdown_r": _worst_drawdown_r(measured),
+        "contributors": _leaders(winners),
+        "detractors": _leaders(losers),
+    }

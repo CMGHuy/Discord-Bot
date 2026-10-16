@@ -181,7 +181,22 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
         "avg_trade_r": NULLABLE_NUMBER,
         "worst_drawdown_r": NULLABLE_NUMBER, "contributors": list,
         "detractors": list,
+        # v165 D2 / D3.
+        "context": dict, "breakdown": dict,
     })
+    assert_shape(body["context"], {
+        "percentile": NULLABLE_NUMBER, "history_days": int,
+        "vs_avg_day": dict, "vs_weekday_avg": dict,
+    }, where="context")
+    for side in ("vs_avg_day", "vs_weekday_avg"):
+        assert_shape(body["context"][side], {"pnl_amount": NULLABLE_NUMBER, "r": NULLABLE_NUMBER},
+                     where=f"context.{side}")
+    # Set, not order: Flask's default JSON provider sorts keys on the wire.
+    assert set(body["breakdown"]) == {"strategy", "horizon", "direction", "exit_reason"}
+    assert_shape(body["breakdown"]["strategy"][0], {
+        "key": str, "n": int, "pnl_amount": NULLABLE_NUMBER,
+        "r": NULLABLE_NUMBER, "win_rate": NULLABLE_NUMBER,
+    }, where="breakdown.strategy[0]")
     assert_shape(body["trades"][0], {
         "trade_id": str, "ticker": str, "strategy": str,
         "plan_id": NULLABLE_STR, "opened_at": NULLABLE_STR,
@@ -292,3 +307,88 @@ def test_a_banked_tp1_partial_counts_on_the_day_it_closed(seed, logged_in):
     leg = next(t for t in body["trades"] if t["trade_id"] == "m" * 16)
     assert (leg["leg_index"], leg["leg_total"]) == (0, 2)
     assert leg["r_multiple"] == pytest.approx(2.0)
+
+
+# --- v165: day context and breakdown on the day route ----------------------
+
+
+def _context_book():
+    """08-03 (Mon): EMA20 +50 (r +2.0), VWAP -20.  08-04 (Tue): EMA20 +30
+    (r +1.2).  08-05 (Wed): EMA20 -10 (r -0.4), VWAP +100. No journal, so
+    every R is metrics.r_multiple off entry 100 / stop 95."""
+    return [
+        _trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00", pnl=50.0,
+               exit_price=110.0, sources=("EMA20",)),
+        _trade("b" * 16, closed_at="2026-08-03T21:00:00+00:00", pnl=-20.0,
+               exit_price=96.0, status="loss", sources=("VWAP",)),
+        _trade("c" * 16, closed_at="2026-08-04T20:00:00+00:00", pnl=30.0,
+               exit_price=106.0, sources=("EMA20",)),
+        _trade("d" * 16, closed_at="2026-08-05T20:00:00+00:00", pnl=-10.0,
+               exit_price=98.0, status="loss", sources=("EMA20",)),
+        _trade("e" * 16, closed_at="2026-08-05T21:00:00+00:00", pnl=100.0,
+               exit_price=120.0, sources=("VWAP",)),
+    ]
+
+
+def test_day_context_compares_against_the_other_days_under_the_filter(seed, logged_in):
+    seed(trades=_context_book())
+    body = logged_in.get(
+        "/api/v1/calendar/pnl/day?date=2026-08-03&strategy=EMA20").get_json()
+    # Other EMA20 days: 08-04 (+30, 1.2R) and 08-05 (-10, -0.4R).
+    # Means +10 and 0.4R -> deltas +40 and 2.0 - 0.4 = 1.6R. No other Monday.
+    assert body["context"] == {
+        "percentile": None, "history_days": 2,
+        "vs_avg_day": {"pnl_amount": 40.0, "r": 1.6},
+        "vs_weekday_avg": {"pnl_amount": None, "r": None},
+    }
+
+
+def test_day_net_equals_the_grid_cell_and_the_breakdown_sums_to_the_tiles(seed, logged_in):
+    seed(trades=_context_book())
+    for query in ("", "&strategy=EMA20", "&strategy=VWAP"):
+        grid = logged_in.get(f"/api/v1/calendar/pnl?month=2026-08{query}").get_json()
+        cell = next(d for d in grid["days"] if d["date"] == "2026-08-03")
+        body = logged_in.get(f"/api/v1/calendar/pnl/day?date=2026-08-03{query}").get_json()
+        assert body["total_ccy"] == cell["net_pnl_amount"], query
+        assert body["trade_count"] == cell["trade_count"], query
+        for dimension, groups in body["breakdown"].items():
+            assert sum(g["n"] for g in groups) == body["trade_count"], (query, dimension)
+            assert sum(g["pnl_amount"] for g in groups if g["pnl_amount"] is not None) \
+                == pytest.approx(body["total_ccy"]), (query, dimension)
+            assert sum(g["r"] for g in groups if g["r"] is not None) \
+                == pytest.approx(body["total_r"]), (query, dimension)
+
+
+def test_day_breakdown_is_built_from_exactly_the_days_trades(seed, logged_in):
+    seed(trades=_context_book())
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
+    # R: (110-100)/5 = 2.0 and (96-100)/5 = -0.8.
+    assert body["breakdown"]["strategy"] == [
+        {"key": "EMA20", "n": 1, "pnl_amount": 50.0, "r": 2.0, "win_rate": 100.0},
+        {"key": "VWAP", "n": 1, "pnl_amount": -20.0, "r": -0.8, "win_rate": 0.0},
+    ]
+    # Unfiltered: this day nets 50 - 20 = +30; the other days are 08-04 (+30)
+    # and 08-05 (-10 + 100 = +90), mean +60 -> delta -30.
+    assert body["context"]["history_days"] == 2
+    assert body["context"]["vs_avg_day"]["pnl_amount"] == -30.0
+
+
+def test_a_leg_row_on_the_day_route_carries_its_own_d1_fields(seed, logged_in):
+    runner = {**_trade("m" * 16, status="open", closed_at=None, exit_price=None, pnl=None),
+              "legs": [{"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "reason": "tp1",
+                        "closed_at": "2026-08-03T15:00:00+00:00"}]}
+    seed(trades=[runner])
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
+    leg = body["trades"][0]
+    assert (leg["exit_reason"], leg["shares"], leg["exit_price"], leg["return_pct"]) == (
+        "tp1", 5.0, 110.0, 10.0)
+    # 2026-08-01T14:00Z -> 2026-08-03T15:00Z.
+    assert leg["held_hours"] == 49.0
+    assert body["breakdown"]["exit_reason"] == [
+        {"key": "tp1", "n": 1, "pnl_amount": 50.0, "r": 2.0, "win_rate": 100.0}]
+
+
+def test_the_day_route_still_404s_before_computing_context(seed, logged_in):
+    seed(trades=_context_book())
+    assert_error(logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-09&strategy=EMA20"),
+                 "not_found", 404)

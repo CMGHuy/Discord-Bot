@@ -750,3 +750,55 @@ def test_breakdown_reads_the_d1_exit_reason_of_joined_rows():
                                           {**_RUNNER, "reason": "runner_trail"}))
     keys = {g["key"] for g in day_breakdown(joined_rows([trade], []))["exit_reason"]}
     assert keys == {"tp1", "runner_trail"}
+
+
+# --- v165 D4: the day route's summary, lifted out of the view --------------
+
+from swingbot.core.analytics.pnl_calendar import day_totals
+
+
+def _tile_row(ticker, r, pnl, outcome):
+    return {"ticker": ticker, "r_multiple": r, "pnl_amount": pnl, "outcome": outcome}
+
+
+def test_day_totals_has_exactly_the_routes_summary_keys_in_order():
+    assert list(day_totals([_tile_row("AAPL", 1.0, 10.0, "win")])) == [
+        "trade_count", "winners", "losers", "total_r", "total_ccy", "win_rate",
+        "avg_trade_r", "worst_drawdown_r", "contributors", "detractors"]
+
+
+def test_day_totals_values():
+    rows = [_tile_row("AAPL", 2.0, 50.0, "win"),
+            _tile_row("MSFT", -1.0, -25.0, "loss"),
+            _tile_row("NVDA", None, None, "closed")]
+    assert day_totals(rows) == {
+        "trade_count": 3, "winners": 1, "losers": 1,
+        "total_r": 1.0, "total_ccy": 25.0,
+        # NVDA's "closed" is neither a win nor a loss.
+        "win_rate": 50.0,
+        "avg_trade_r": 0.5,
+        # Running R: 2.0 (peak) then 1.0 -> drawdown 1.0.
+        "worst_drawdown_r": 1.0,
+        "contributors": [{"ticker": "AAPL", "r": 2.0}],
+        "detractors": [{"ticker": "MSFT", "r": -1.0}],
+    }
+
+
+def test_day_totals_with_no_measurable_r_is_none_not_zero():
+    totals = day_totals([_tile_row("AAPL", None, None, "closed")])
+    assert (totals["total_r"], totals["total_ccy"], totals["avg_trade_r"],
+            totals["worst_drawdown_r"], totals["win_rate"]) == (None, None, None, None, None)
+    assert (totals["winners"], totals["losers"]) == (0, 0)
+    assert totals["contributors"] == [] and totals["detractors"] == []
+
+
+def test_day_totals_leaders_are_the_five_largest_by_magnitude():
+    rows = [_tile_row(f"T{i}", float(i), 1.0, "win") for i in range(1, 8)]
+    assert [x["r"] for x in day_totals(rows)["contributors"]] == [7.0, 6.0, 5.0, 4.0, 3.0]
+
+
+def test_day_totals_drawdown_walks_the_rows_in_the_order_given():
+    # Close order +1, -2, +3, -1: peak 1 -> -1 (dd 2), peak 2 -> 1 (dd 1).
+    rows = [_tile_row("A", 1.0, 1.0, "win"), _tile_row("B", -2.0, -1.0, "loss"),
+            _tile_row("C", 3.0, 1.0, "win"), _tile_row("D", -1.0, -1.0, "loss")]
+    assert day_totals(rows)["worst_drawdown_r"] == 2.0
