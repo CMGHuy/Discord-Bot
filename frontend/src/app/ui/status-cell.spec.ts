@@ -54,11 +54,14 @@ describe('StatusCell', () => {
     expect(el.textContent).not.toContain('no price');
   });
 
-  it('draws the bar with a partial + trailing icon pair for a trailing runner', () => {
-    const el = render({ ...live, status: 'PARTIAL', bar_kind: 'trailing', banked_fraction: 0.5 });
+  it('draws the bar with a single trailing-stop icon and P&L at both ends', () => {
+    const el = render({ ...live, status: 'PARTIAL', bar_kind: 'trailing', banked_fraction: 0.5,
+      stop_pnl_pct: 1.25, best_pnl_pct: 6 });
     expect(el.querySelector('.fill')).not.toBeNull();
-    expect(el.querySelectorAll('sb-icon').length).toBe(2);
+    expect(el.querySelectorAll('sb-icon').length).toBe(1);
     expect(el.querySelector('sb-icon[title="Trailing stop"]')).not.toBeNull();
+    expect(el.querySelector('.end.neg')!.textContent).toBe('+1.3%');
+    expect(el.querySelector('.end.pos')!.textContent).toBe('+6.0%');
   });
 
   it('adds no icons to an ordinary PARTIAL row with a TP2 bar', () => {

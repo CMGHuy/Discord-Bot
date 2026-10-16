@@ -39,6 +39,10 @@ export interface StatusCellRow {
   bar_kind?: string;
   /** Fraction of the position TP1 already closed (0-1); null until PARTIAL. */
   banked_fraction?: number | null;
+  /** Trailing runner only: P&L % if the trailing stop is hit (the bar's 0%)
+   *  and at the best price since TP1 (its 100%), both vs the original fill. */
+  stop_pnl_pct?: number | null;
+  best_pnl_pct?: number | null;
 }
 
 /**
@@ -62,8 +66,8 @@ export interface StatusCellRow {
  * (`pending`/`opened`/`partial`/`closed`/`cancelled`) lives only in Recent
  * Activity now, on direct request -- this table keeps its dot+bar/chip
  * language instead of also carrying the icon. The one exception, on direct
- * request (2026-10-16): a trailing-stop runner carries a partial + trailing
- * icon pair, because its bar measures stop-to-best-price rather than
+ * request (2026-10-16): a trailing-stop runner carries a trailing-stop
+ * icon, because its bar measures stop-to-best-price rather than
  * stop-to-target and would otherwise read like any other PARTIAL bar.
  */
 @Component({
@@ -76,7 +80,6 @@ export interface StatusCellRow {
         @if (row().bar_kind === 'trailing') {
           <!-- The only status icons in this table: a runner with no target
                is told apart by what protects it, not by a different bar. -->
-          <sb-icon name="partial" title="Partial: TP1 banked" />
           <sb-icon name="trailing" title="Trailing stop" />
         }
         <span
@@ -86,6 +89,9 @@ export interface StatusCellRow {
           [style.animation-duration]="b.blink"
           aria-hidden="true"
         ></span>
+        @if (ends(); as e) {
+          <span class="end neg" title="P&L if the trailing stop is hit">{{ e.stop }}</span>
+        }
         <span
           class="track"
           role="progressbar"
@@ -100,7 +106,11 @@ export interface StatusCellRow {
                position relative to this mark rather than a separate column. -->
           <span class="tick" [style.left.%]="b.entry" aria-hidden="true"></span>
         </span>
-        <span class="pct">{{ b.pct }}%</span>
+        @if (ends(); as e) {
+          <span class="end pos" title="P&L at the best price since TP1">{{ e.best }}</span>
+        } @else {
+          <span class="pct">{{ b.pct }}%</span>
+        }
         @if (openLabel(); as o) {
           <span class="hint">{{ o }}</span>
         }
@@ -176,6 +186,9 @@ export interface StatusCellRow {
       .fill { transition: none; }
     }
 
+    .end { font-family: var(--font-mono); font-size: var(--text-chip); }
+    .end.neg { color: var(--neg); }
+    .end.pos { color: var(--pos); }
     .pct { font-family: var(--font-mono); font-size: var(--text-table); color: var(--text-secondary); }
     .hint { font-size: var(--text-chip); color: var(--text-faint); }
     /* --warn is the design system's designated token for stale data (see
@@ -217,6 +230,14 @@ export class StatusCell {
     // withheld by design -- saying "no price" there would be false.
     if (r.bar_kind !== 'trailing') return 'no price';
     return [this.openLabel(), 'trailing'].filter(Boolean).join(' · ');
+  });
+
+  /** Signed P&L % at both ends of a trailing runner's bar, or null. */
+  protected readonly ends = computed(() => {
+    const r = this.row();
+    if (r.bar_kind !== 'trailing' || r.stop_pnl_pct == null || r.best_pnl_pct == null) return null;
+    const f = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
+    return { stop: f(r.stop_pnl_pct), best: f(r.best_pnl_pct) };
   });
 
   /** How much of a PARTIAL position is still open ("50% open"), so the chip

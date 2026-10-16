@@ -157,6 +157,10 @@ export interface TradeRow {
    *  the trailing stop). Server-side input to `progress_pct`; null until the
    *  runner has recorded one and on every row that is not a runner. */
   runner_best?: number | null;
+  /** Trailing runner only: P&L % vs the original fill if the trailing stop
+   *  is hit (bar 0%) and at the best price since TP1 (bar 100%). */
+  stop_pnl_pct?: number | null;
+  best_pnl_pct?: number | null;
   floor_r: number | null;
   price_r: number | null;
   headroom_r: number | null;
