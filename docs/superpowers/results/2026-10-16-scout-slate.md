@@ -71,3 +71,22 @@ None.
 - setup-scout: 3 rows returned.
 - regime-desk: 1 row returned.
 - This slate uses the corrected 2026-10-16 export that includes plans linked to open trades. It supersedes the earlier same-date slate committed as `6648d737`.
+
+## Panel review
+
+Run 2026-10-16 over `b389ca09` (quant-researcher on opus).
+
+- quant-researcher [ADVISORY]: Rank 1's issuance-hour association does not measure whether an extra evening preparation pass produces incremental actionable opportunities. The proposed `/screen` route measures entry outcomes, not that intervention. Row 1 is withdrawn from the partner's choice pending a defined opportunity outcome and comparator; the ranked output above remains an audit record (`docs/superpowers/results/2026-10-16-scout-slate.md:14-23`; `docs/claude/backtest-methodology.md:62`).
+- quant-researcher [ADVISORY]: The issuance-hour comparison excludes records with missing timestamps and may reflect selection, strategy or session effects. This limitation applies to the withdrawn row (`docs/superpowers/results/2026-10-16-book-autopsy.json:7527`; `scripts/reports/autopsy/cells.py:153`).
+- Rows 2-4 remain exploratory playbook hypotheses requiring their own `/screen` runs before any spec.
+- Dispatch note: the named `scout` agent was unavailable in this session; the three roles ran serially through the plan's read-only general-agent fallback.
+
+## Partner pick
+
+On 2026-10-16 the partner chose all three surviving setup ideas from this corrected slate for future screens:
+
+- `gap-and-hold` -> `/screen gap-and-hold`
+- `three-bar-weekly-reversal` -> `/screen three-bar-weekly-reversal`
+- `tight-base-breakout` -> `/screen tight-base-breakout`
+
+This records routing only; no screen was started. The earlier pick for the superseded slate does not carry forward its `rs-leader-index-pullback` row.
