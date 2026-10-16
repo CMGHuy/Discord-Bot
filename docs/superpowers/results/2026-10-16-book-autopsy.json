@@ -30,7 +30,7 @@
       "min_risk_fraction": 0.001
     },
     "input_fingerprints": {
-      "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rows.csv": "c3c223a13d6a8fbed59d8dc06d39da977a7c5f50a36ea77654607152f472d819",
+      "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rows_corrected.csv": "8c288325c18a83dec4839b4f9a5ffad2da7707c09a7907317b10626920390db3",
       "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rejections.csv": "38132e3614b1b8b443482fb5057bc12a50973d505dacbcb2981483b705d253b2",
       "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars\\DDOG.csv": "a9c5b8e0ade29f06c4860b25bbe3e9c3c8578656264bd5c8937f847996512c39",
       "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars\\STX.csv": "65c8c412504003254f1b57f15ad5c48bdc2fe4dd9abb9db3c800ac9569eda965",
@@ -103,13 +103,14 @@
       "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars\\HD.csv": "69b85b50ff7517c8295ca025c0e510a31f9f24ef831075fa9114fa3f7a3b3462",
       "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars\\JPM.csv": "30ef647fa68f1ecfeb1f3674f4ab7b330426d8fc9a2a3c45f48fd5059122e030",
       "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars\\GC_F.csv": "eb73e6571c9f484bed4d562dc5c349e1b51ef18a24c842774cca2221219ec589",
+      "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars\\ISRG.csv": "33848c689244a0afb9c7867abd30a1414e26e767746c49b845845468a4047e28",
       "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars\\SBUX.csv": "e6f6a186c3bd7a24b8e3c85d11adf0656c337163737658c1926e5ee6e9dfcd0e"
     },
     "invocation": {
       "command": [
         "C:\\Users\\HuyCao\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
         "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\scripts\\reports\\book_autopsy.py",
-        "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rows.csv",
+        "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rows_corrected.csv",
         "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rejections.csv",
         "--bars-dir",
         "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars",
@@ -119,7 +120,7 @@
         "2026-10-16"
       ],
       "options": {
-        "rows": "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rows.csv",
+        "rows": "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rows_corrected.csv",
         "rejections": "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\rejections.csv",
         "bars_dir": "C:\\Users\\HuyCao\\.codex\\worktrees\\b06d\\Discord-Bot\\.superpowers\\sdd\\2026-10-15-v161-trade-scout_0-index\\scratch\\autopsy_bars",
         "out_dir": "E:\\Documents\\Private\\Projects\\Discord-Bot\\docs\\superpowers\\results",
@@ -167,6 +168,7 @@
       "INTC": "Information Technology",
       "INTU": "Information Technology",
       "IREN": null,
+      "ISRG": "Health Care",
       "JNJ": "Health Care",
       "JPM": "Financials",
       "META": "Communication Services",
@@ -7542,7 +7544,7 @@
       "p": 0.0014,
       "q": 0.0033,
       "thin": false,
-      "bar_covered_n": 718,
+      "bar_covered_n": 177,
       "extra": {
         "tickers": 48,
         "top_ticker_share": 0.1186,
@@ -7566,7 +7568,7 @@
       "p": 0.0858,
       "q": 0.1803,
       "thin": false,
-      "bar_covered_n": 718,
+      "bar_covered_n": 54,
       "extra": {
         "tickers": 30,
         "top_ticker_share": 0.1111,
@@ -7590,7 +7592,7 @@
       "p": 0.0002,
       "q": 0.0008,
       "thin": false,
-      "bar_covered_n": 718,
+      "bar_covered_n": 208,
       "extra": {
         "tickers": 50,
         "top_ticker_share": 0.0865,
@@ -7614,7 +7616,7 @@
       "p": 0.2296,
       "q": 0.4049,
       "thin": false,
-      "bar_covered_n": 718,
+      "bar_covered_n": 35,
       "extra": {
         "tickers": 20,
         "top_ticker_share": 0.1429,
@@ -7638,7 +7640,7 @@
       "p": 0.3652,
       "q": 0.5711,
       "thin": true,
-      "bar_covered_n": 718,
+      "bar_covered_n": 14,
       "extra": {
         "tickers": 8,
         "top_ticker_share": 0.2857,
@@ -7662,7 +7664,7 @@
       "p": 0.3652,
       "q": 0.5711,
       "thin": true,
-      "bar_covered_n": 718,
+      "bar_covered_n": 45,
       "extra": {
         "tickers": 19,
         "top_ticker_share": 0.1556,
@@ -7686,7 +7688,7 @@
       "p": 0.8004,
       "q": 0.8807,
       "thin": true,
-      "bar_covered_n": 718,
+      "bar_covered_n": 7,
       "extra": {
         "tickers": 2,
         "top_ticker_share": 0.5714,
@@ -7710,7 +7712,7 @@
       "p": 0.4213,
       "q": 0.6206,
       "thin": false,
-      "bar_covered_n": 718,
+      "bar_covered_n": 707,
       "extra": {
         "tickers": 66,
         "top_ticker_share": 0.0778,
@@ -7734,7 +7736,7 @@
       "p": 0.0003,
       "q": 0.0008,
       "thin": true,
-      "bar_covered_n": 718,
+      "bar_covered_n": 4,
       "extra": {
         "tickers": 1,
         "top_ticker_share": 1.0,
@@ -7758,7 +7760,7 @@
       "p": 0.2246,
       "q": 0.3981,
       "thin": true,
-      "bar_covered_n": 718,
+      "bar_covered_n": 9,
       "extra": {
         "tickers": 9,
         "top_ticker_share": 0.1111,
@@ -7785,7 +7787,7 @@
       "p": 0.2246,
       "q": 0.3981,
       "thin": true,
-      "bar_covered_n": 718,
+      "bar_covered_n": 17,
       "extra": {
         "tickers": 13,
         "top_ticker_share": 0.1176,
@@ -8695,10 +8697,10 @@
       "id": "fill_status=filled",
       "cut": "fill_status",
       "value": "filled",
-      "count": 747,
+      "count": 825,
       "extra": {
-        "bar_covered": 733,
-        "of_plans": 802
+        "bar_covered": 809,
+        "of_plans": 880
       }
     },
     {
@@ -8708,7 +8710,7 @@
       "count": 1,
       "extra": {
         "bar_covered": 1,
-        "of_plans": 802
+        "of_plans": 880
       }
     },
     {
@@ -8718,7 +8720,7 @@
       "count": 0,
       "extra": {
         "bar_covered": 0,
-        "of_plans": 802
+        "of_plans": 880
       }
     },
     {
@@ -8728,7 +8730,7 @@
       "count": 45,
       "extra": {
         "bar_covered": 45,
-        "of_plans": 802
+        "of_plans": 880
       }
     },
     {
@@ -8738,7 +8740,7 @@
       "count": 9,
       "extra": {
         "bar_covered": 9,
-        "of_plans": 802
+        "of_plans": 880
       }
     },
     {
@@ -8748,7 +8750,7 @@
       "count": 0,
       "extra": {
         "bar_covered": 0,
-        "of_plans": 802
+        "of_plans": 880
       }
     },
     {
@@ -8758,7 +8760,7 @@
       "count": 0,
       "extra": {
         "bar_covered": 0,
-        "of_plans": 802
+        "of_plans": 880
       }
     },
     {
@@ -8774,9 +8776,9 @@
       "id": "alerts_per_day=2_3",
       "cut": "alerts_per_day",
       "value": "2_3",
-      "count": 6,
+      "count": 5,
       "extra": {
-        "plans": 17
+        "plans": 15
       }
     },
     {
@@ -8785,37 +8787,37 @@
       "value": "4_6",
       "count": 14,
       "extra": {
-        "plans": 68
+        "plans": 70
       }
     },
     {
       "id": "alerts_per_day=7_plus",
       "cut": "alerts_per_day",
       "value": "7_plus",
-      "count": 28,
+      "count": 33,
       "extra": {
-        "plans": 474
+        "plans": 552
       }
     },
     {
       "id": "alert_hour_session=premarket",
       "cut": "alert_hour_session",
       "value": "premarket",
-      "count": 37,
+      "count": 38,
       "extra": {}
     },
     {
       "id": "alert_hour_session=regular",
       "cut": "alert_hour_session",
       "value": "regular",
-      "count": 61,
+      "count": 67,
       "extra": {}
     },
     {
       "id": "alert_hour_session=after_close",
       "cut": "alert_hour_session",
       "value": "after_close",
-      "count": 468,
+      "count": 539,
       "extra": {}
     },
     {
@@ -8829,14 +8831,14 @@
       "id": "actionable_before_open=yes",
       "cut": "actionable_before_open",
       "value": "yes",
-      "count": 505,
+      "count": 577,
       "extra": {}
     },
     {
       "id": "actionable_before_open=no",
       "cut": "actionable_before_open",
       "value": "no",
-      "count": 61,
+      "count": 67,
       "extra": {}
     },
     {
