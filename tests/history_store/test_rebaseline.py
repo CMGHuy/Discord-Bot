@@ -207,11 +207,12 @@ def _row(ticker, day, outcome, r):
             "r_multiple": r, "holding_days": 3, "runner_outcome": None, "context": None}
 
 
-def _snapshot_dir(tmp_path, name="snap", digest="snaphash"):
-    folder = tmp_path / name
-    folder.mkdir(exist_ok=True)
-    (folder / "_hashes.json").write_text(json.dumps({"hash": digest, "files": {}}), encoding="utf-8")
-    return folder
+def _snapshot_dir(tmp_path, name="snap", start=None, tickers=("AAPL", "MSFT")):
+    """A real hashed snapshot (the report verifies it)."""
+    src = _cache(tmp_path / f"cache_{name}", list(tickers))
+    out = tmp_path / name
+    snap.snapshot(src, out, start=start)
+    return out
 
 
 def _write_leg(tmp_path, name, rows, *, source, store_dir):
@@ -234,9 +235,10 @@ C_ROWS = [_row("AAPL", WEEKS[0], "win", 2.0), _row("AAPL", WEEKS[1], "win", 2.0)
 
 @pytest.fixture
 def legs(tmp_path):
-    yf = _snapshot_dir(tmp_path)
-    return {"a": _write_leg(tmp_path, "a", A_ROWS, source="yfinance", store_dir=yf),
-            "b": _write_leg(tmp_path, "b", A_ROWS, source="yfinance", store_dir=yf),
+    ya = _snapshot_dir(tmp_path, "snap_a")
+    yb = _snapshot_dir(tmp_path, "snap_b", start="2015-01-01")
+    return {"a": _write_leg(tmp_path, "a", A_ROWS, source="yfinance", store_dir=ya),
+            "b": _write_leg(tmp_path, "b", A_ROWS, source="yfinance", store_dir=yb),
             "c": _write_leg(tmp_path, "c", C_ROWS, source="alpaca", store_dir=tmp_path / "store")}
 
 
@@ -276,7 +278,8 @@ def test_differences_carry_paired_week_clustered_intervals(legs):
 
 def test_provenance_and_snapshot_hash_are_recorded(legs):
     report = _report(legs)
-    assert report["legs"]["a"]["provenance"]["snapshot_hash"] == "snaphash"
+    assert report["legs"]["a"]["provenance"]["snapshot_hash"] == (
+        json.loads((Path(legs["a"]).parent / "snap_a" / "_hashes.json").read_text())["hash"])
     assert report["legs"]["c"]["provenance"]["manifest_hash"] == "mhash"
     assert (report["window"], report["from"], report["to"]) == ("train", "2020-01-01", "2023-12-31")
 
@@ -361,3 +364,54 @@ def test_cli_turns_a_provenance_problem_into_exit_1(tmp_path, capsys):
     code = rep.main([f"--leg=a={a}", f"--leg=b={a}", f"--leg=c={c}", "--window", "train",
                      "--out", str(tmp_path / "o.json"), "--resamples", "50"])
     assert code == 1 and "leg c must be alpaca" in capsys.readouterr().err
+
+
+# --- AH23 review fixes -------------------------------------------------------
+
+def test_an_edited_snapshot_is_refused(tmp_path):
+    folder = _snapshot_dir(tmp_path)
+    path = _write_leg(tmp_path, "a", A_ROWS, source="yfinance", store_dir=folder)
+    with (folder / "AAPL.csv").open("a", encoding="utf-8") as handle:
+        handle.write("2030-01-01,1,1,1,1,1" + chr(10))
+    with pytest.raises(ValueError, match="CHANGED AAPL.csv"):
+        rep.load_provenance("a", [path])
+
+
+def test_a_yfinance_leg_without_a_store_dir_is_refused(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "_hashes.json").write_text(json.dumps({"hash": "x", "files": {}}), encoding="utf-8")
+    path = _write_leg(tmp_path, "a", A_ROWS, source="yfinance", store_dir="")
+    prov = json.loads(training_data.provenance_path(path).read_text())
+    prov["store_dir"] = None
+    training_data.provenance_path(path).write_text(json.dumps(prov), encoding="utf-8")
+    with pytest.raises(ValueError, match="not a v162 snapshot"):
+        rep.load_provenance("a", [path])
+
+
+def test_legs_a_and_b_on_the_same_snapshot_are_refused(legs, tmp_path):
+    legs["b"] = _write_leg(tmp_path, "b2", A_ROWS, source="yfinance",
+                           store_dir=tmp_path / "snap_a")
+    with pytest.raises(ValueError, match="same snapshot"):
+        _report(legs)
+
+
+def test_legs_a_and_b_on_different_ticker_sets_are_refused(legs, tmp_path):
+    other = _snapshot_dir(tmp_path, "snap_other", start="2015-01-01", tickers=("AAPL", "NVDA"))
+    legs["b"] = _write_leg(tmp_path, "b2", A_ROWS, source="yfinance", store_dir=other)
+    with pytest.raises(ValueError, match="ticker"):
+        _report(legs)
+
+
+CRLF = chr(13) + chr(10)
+
+
+def test_start_copies_a_byte_exact_line_subset(tmp_path):
+    src = tmp_path / "cache"
+    src.mkdir()
+    lines = ["Date,Open,High,Low,Close,Volume", "2015-12-30,1.10,2.0,0.50,1.50,1e3",
+             "2016-01-04,1.10,2.0,0.50,1.50,1e3", "2016-01-05,1.20,2.0,0.50,1.50,2e3"]
+    (src / "AAPL.csv").write_bytes((CRLF.join(lines) + CRLF).encode())
+    snap.snapshot(src, tmp_path / "snap", start="2016-01-01")
+    source = (src / "AAPL.csv").read_bytes().splitlines(keepends=True)
+    cut = (tmp_path / "snap" / "AAPL.csv").read_bytes().splitlines(keepends=True)
+    assert cut == [source[0], source[2], source[3]]

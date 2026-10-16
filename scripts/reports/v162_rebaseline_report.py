@@ -27,6 +27,10 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+if str(ROOT / "scripts" / "data") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts" / "data"))
+
+import snapshot_backtest_cache  # noqa: E402
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
 from swingbot.core.marketdata import training_data  # noqa: E402
 
@@ -85,11 +89,18 @@ def _sidecar(path: Path) -> dict:
     return json.loads(side.read_text(encoding="utf-8"))
 
 
-def _snapshot_hash(prov: dict) -> str | None:
-    hashes = Path(prov.get("store_dir") or "") / SNAPSHOT_HASHES
-    if not hashes.is_file():
-        return None
-    return json.loads(hashes.read_text(encoding="utf-8")).get("hash")
+def _snapshot(label: str, prov: dict) -> tuple[str, list[str]]:
+    """(combined hash, file names) of the leg's snapshot, verified intact."""
+    store = prov.get("store_dir")
+    hashes = Path(store) / SNAPSHOT_HASHES if store else None
+    if hashes is None or not hashes.is_file():
+        raise ValueError(f"leg {label}: {store} is not a v162 snapshot (no {SNAPSHOT_HASHES})")
+    problems = snapshot_backtest_cache.verify(store)
+    if problems:
+        raise ValueError(f"leg {label}: snapshot {store} is not intact: "
+                         f"{'; '.join(problems[:3])}")
+    manifest = json.loads(hashes.read_text(encoding="utf-8"))
+    return manifest.get("hash"), sorted(manifest.get("files") or {})
 
 
 def load_provenance(label: str, paths: list[Path]) -> dict:
@@ -104,10 +115,7 @@ def load_provenance(label: str, paths: list[Path]) -> dict:
         raise ValueError(f"leg {label} must be {want}, its sidecar says "
                          f"{prov.get('data_source')!r}")
     if want == "yfinance":
-        prov["snapshot_hash"] = _snapshot_hash(prov)
-        if prov["snapshot_hash"] is None:
-            raise ValueError(f"leg {label}: {prov.get('store_dir')} is not a v162 snapshot "
-                             f"(no {SNAPSHOT_HASHES})")
+        prov["snapshot_hash"], prov["snapshot_files"] = _snapshot(label, prov)
     return prov
 
 
@@ -164,9 +172,22 @@ def ticker_counts(legs: dict[str, list[Trade]]) -> dict[str, dict[str, int]]:
     return {name: {label: counts[label][name] for label in sorted(legs)} for name in names}
 
 
+def _check_a_vs_b(provenance: dict[str, dict]) -> None:
+    """Legs a and b differ only by --start: the same snapshot makes the a-vs-b
+    comparison silently zero, and different ticker sets make it meaningless."""
+    a, b = provenance.get("a"), provenance.get("b")
+    if not a or not b:
+        return
+    if a.get("snapshot_hash") == b.get("snapshot_hash"):
+        raise ValueError("legs a and b read the same snapshot; leg b needs its own --start snapshot")
+    if a.get("snapshot_files") != b.get("snapshot_files"):
+        raise ValueError("legs a and b snapshots cover different ticker sets")
+
+
 def build_report(legs: dict[str, list[Trade]], provenance: dict[str, dict], window: str, *,
                  n_resamples: int = stats.WEEK_BOOTSTRAP_RESAMPLES,
                  seed: int = stats.WEEK_BOOTSTRAP_SEED) -> dict:
+    _check_a_vs_b(provenance)
     for label, trades in legs.items():
         _check_window(label, trades, window)
     comparisons = [{"base": base, "comp": comp, "what": what,
