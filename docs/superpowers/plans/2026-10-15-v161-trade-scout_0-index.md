@@ -15,7 +15,7 @@
 
 ## Progress
 
-TS1–TS12 implemented on `2026-10-15-v161-trade-scout`; TS13 first live run is in progress on 2026-10-16. TS14 is pending.
+TS1–TS13 implemented on `2026-10-15-v161-trade-scout`; the corrected live autopsy, slate, panel review and partner routes are committed on `main`. TS14 is pending.
 
 ## Handoff
 
@@ -25,6 +25,7 @@ TS1–TS12 implemented on `2026-10-15-v161-trade-scout`; TS13 first live run is 
 - TS1 review correction: plans linked to open trades were absent from the first export because its plan arm selected only plans without any trade. The export must include every issued plan exactly once for fill and alert-supply denominators; the first-run autopsy and slate remain provisional until a corrected export is authorized and run.
 - TS9 review correction: the merge now verifies every quoted cell figure against the JSON at Markdown precision and enforces finite unrounded q ≤ 0.10. This supersedes the narrower `_cell_reason` example in part 3; playbook `/screen` rows retain their exemption.
 - TS7 review correction: bar-cut cells now report coverage among their own members, bounded by cell N; the header still reports whole-book coverage. The first-run report remains provisional until regenerated with corrected code.
+- TS13 completed: the partner approved one corrected read-only `rows` export through `scripts/ops/ssh-hetzner.sh` after the TS1 fix. The corrected autopsy pair is `384b4b01`; the regenerated slate is `b389ca09`; quant review and the partner's three `/screen` choices are `dfe069ef`. The timing row was withdrawn because issuance-hour association does not measure extra opportunities from an evening pass. No screen was started. Raw CSV and temporary role files were removed from scratch.
 
 ## Where to work
 
