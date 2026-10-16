@@ -67,4 +67,12 @@ describe('accent legibility (v80 D1)', () => {
   it('--on-accent on --accent-fill clears 4.5:1', () => {
     expect(ratio(resolveToken('--on-accent'), resolveToken('--accent-fill'))).toBeGreaterThanOrEqual(4.5);
   });
+
+  /* v167 §2: --accent-fill-hi is the TOP stop of the primary button's
+   * gradient (tier 3 --btn-fill), so white ink sits on it too. It clears
+   * with the thinnest margin in the palette (4.66:1), which is why it is
+   * checked by name rather than assumed from --accent-fill. */
+  it('--on-accent on --accent-fill-hi clears 4.5:1', () => {
+    expect(ratio(resolveToken('--on-accent'), resolveToken('--accent-fill-hi'))).toBeGreaterThanOrEqual(4.5);
+  });
 });

@@ -1,17 +1,57 @@
-/* Tier 1: the palette (spec v167 § 1).
+/* Tier 1: the Arctic Navy palette -- spec v167 §1-§2
+ * (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md).
  *
- * Raw named colours. This is the ONLY file under frontend/src allowed to hold
- * a hued colour literal. The exceptions are fixed and gated: --chart-1..6 and
- * --quality-4 stay literal hex in tokens.css (jsdom and chart-palette.spec.ts
- * read them, see the comment there), and index.html / manifest.webmanifest
- * carry copies of the resolved --bg for the cold load.
+ * THE ONLY FILE under frontend/src that holds hued colour literals (the
+ * exceptions are named in the spec: --chart-1..6 and --quality-4 stay
+ * literal in tokens.css, and index.html / manifest.webmanifest carry copies
+ * of --bg for the cold load).
  *
- * Names say what a colour IS (--navy-950, --mint-400-a12), never what it MEANS
- * (--surface, --pos-soft): meaning is tier 2, in tokens.css, which refers to
- * these through var(). Components never read this file's names directly.
+ * A palette name says what a colour IS (hue and step), never what it is
+ * FOR. Meaning lives in tokens.css tier 2 (--bg, --accent, --pos ...), which
+ * references these with var(). A component never reads a palette name.
  *
- * After every edit: `python scripts/dev/dump_tokens.py`, and commit
- * tests/charts/resolved_tokens.json in the same commit.
+ * The -aNN entries are the soft tints and the overlay dim: literal rgba of a
+ * palette hue at NN% alpha. They live here, not as color-mix() in
+ * tokens.css, so jsdom and lightweight-charts receive a plain colour string
+ * (spec v167, amendment 2).
+ *
+ * Change a value here, then run `python scripts/dev/dump_tokens.py` and
+ * commit tests/charts/resolved_tokens.json with it. If the token is one
+ * chart_style.THEME names, THEME and STYLE_VERSION change in the same
+ * commit (tests/charts/test_chart_theme.py pins the pair).
  */
 :root {
+  /* ground and structure, darkest first */
+  --navy-950: #070b14;
+  --navy-900: #0c1320;
+  --navy-850: #121b2d;
+  --navy-800: #1a2540;
+  --navy-750: #1d2940;
+  --navy-700: #2a3a58;
+  --navy-600: #3a4a66;
+
+  /* ink */
+  --slate-400: #8f9db5;
+  --slate-300: #b3bfd3;
+  --slate-100: #e8eef8;
+  --white: #ffffff;
+
+  /* the blue: interactive only */
+  --sky-300: #7cc4ff;
+  --sky-550: #2474d2;
+  --sky-600: #1c6dd0;
+
+  /* valence hues */
+  --mint-400: #3ddc97;
+  --coral-400: #ff6f7d;
+  --amber-300: #ffc266;
+  --violet-300: #c3a6ff;
+
+  /* alpha entries: tints and the overlay dim */
+  --navy-950-a72: rgba(7, 11, 20, 0.72);
+  --mint-400-a12: rgba(61, 220, 151, 0.12);
+  --coral-400-a12: rgba(255, 111, 125, 0.12);
+  --amber-300-a12: rgba(255, 194, 102, 0.12);
+  --sky-600-a18: rgba(28, 109, 208, 0.18);
+  --violet-300-a14: rgba(195, 166, 255, 0.14);
 }

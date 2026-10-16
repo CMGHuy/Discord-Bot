@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resolveToken } from './testing/resolve-token';
 
 /**
  * The token file is asserted as TEXT, not through a mounted component.
@@ -237,40 +238,57 @@ describe('no workspace hand-rolls a control row', () => {
   }
 });
 
-describe('v80 D1: the TradingView Blue palette', () => {
-  const EXPECTED: Record<string, string> = {
-    '--bg': '#0c0f16',
-    '--surface': '#131722',
-    '--surface-raised': '#1c212d',
-    '--surface-overlay': '#242936',
-    '--border': '#2a2e39',
-    '--border-strong': '#363a45',
-    '--text': '#d9dce4',
-    '--text-secondary': '#9ea2ad',
-    '--text-muted': '#9195a0',
-    '--text-faint': '#4e5361',
-    '--accent': '#5593ff',
-    '--accent-fill': '#2962ff',
-    '--on-accent': '#ffffff',
-    '--info': '#b39ddb',
-    '--pos': '#17c98e',
-    '--neg': '#ff5470',
-    '--warn': '#ffb43d',
-  };
+/**
+ * v167 §2: the Arctic Navy palette. Supersedes the v80 D1 block that pinned
+ * literal hexes here: tier 2 no longer holds a colour, it references a
+ * tier-1 palette entry in styles/palette.css. Two assertions per token --
+ * the reference as written (the tier contract) and the value it resolves to
+ * (the spec's table) -- so a palette edit that keeps the names but drifts a
+ * value fails here as well as in contrast.spec.ts.
+ */
+describe('v167 §2: the Arctic Navy palette', () => {
+  const EXPECTED: [token: string, palette: string, value: string][] = [
+    ['--bg', '--navy-950', '#070b14'],
+    ['--surface', '--navy-900', '#0c1320'],
+    ['--surface-raised', '--navy-850', '#121b2d'],
+    ['--surface-overlay', '--navy-800', '#1a2540'],
+    ['--overlay-dim', '--navy-950-a72', 'rgba(7, 11, 20, 0.72)'],
+    ['--border', '--navy-750', '#1d2940'],
+    ['--border-strong', '--navy-700', '#2a3a58'],
+    ['--text', '--slate-100', '#e8eef8'],
+    ['--text-secondary', '--slate-300', '#b3bfd3'],
+    ['--text-muted', '--slate-400', '#8f9db5'],
+    ['--text-faint', '--navy-600', '#3a4a66'],
+    ['--accent', '--sky-300', '#7cc4ff'],
+    ['--accent-fill', '--sky-600', '#1c6dd0'],
+    ['--accent-fill-hi', '--sky-550', '#2474d2'],
+    ['--on-accent', '--white', '#ffffff'],
+    ['--pos', '--mint-400', '#3ddc97'],
+    ['--neg', '--coral-400', '#ff6f7d'],
+    ['--warn', '--amber-300', '#ffc266'],
+    ['--info', '--violet-300', '#c3a6ff'],
+    ['--pos-soft', '--mint-400-a12', 'rgba(61, 220, 151, 0.12)'],
+    ['--neg-soft', '--coral-400-a12', 'rgba(255, 111, 125, 0.12)'],
+    ['--warn-soft', '--amber-300-a12', 'rgba(255, 194, 102, 0.12)'],
+    ['--accent-soft', '--sky-600-a18', 'rgba(28, 109, 208, 0.18)'],
+    ['--info-soft', '--violet-300-a14', 'rgba(195, 166, 255, 0.14)'],
+  ];
 
-  for (const [name, hex] of Object.entries(EXPECTED)) {
-    it(`${name} is ${hex}`, () => {
-      expect(CSS).toMatch(new RegExp(`^\\s*${name}:\\s*${hex};`, 'mi'));
+  for (const [name, palette, value] of EXPECTED) {
+    it(`${name} references ${palette}`, () => {
+      expect(CSS).toMatch(new RegExp(`^\\s*${name}:\\s*var\\(${palette}\\);`, 'm'));
+    });
+
+    it(`${name} resolves to ${value}`, () => {
+      expect(resolveToken(name)).toBe(value);
     });
   }
 
-  it('dims the overlay from the new ground', () => {
-    expect(CSS).toMatch(/^\s*--overlay-dim:\s*rgba\(12, 15, 22, \.72\);/m);
-  });
-
-  it('tints accent-soft from the fill blue and info-soft from lavender', () => {
-    expect(CSS).toMatch(/^\s*--accent-soft:\s*rgba\(41, 98, 255, 0\.18\);/m);
-    expect(CSS).toMatch(/^\s*--info-soft:\s*rgba\(179, 157, 219, 0\.14\);/m);
+  it('leaves --quality-4 and the six chart series literal (spec §1 exception)', () => {
+    expect(CSS).toMatch(/^\s*--quality-4:\s*#9acd32;/m);
+    for (let i = 1; i <= 6; i++) {
+      expect(CSS).toMatch(new RegExp(`^\\s*--chart-${i}:\\s*#[0-9a-f]{6};`, 'mi'));
+    }
   });
 });
 

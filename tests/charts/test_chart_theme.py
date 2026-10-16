@@ -43,6 +43,7 @@ D2_SERIES = frozenset(f"chart-{i}" for i in range(1, 7))
 # bump (or a bump without a THEME change) fails here.
 STYLE_PINS: tuple[tuple[str, str], ...] = (
     ("fb0f840658155cd0", "v80"),
+    ("96d64692ba7c2abf", "v167"),  # v167 §4: Arctic Navy
 )
 
 # constant -> the THEME key it must equal (the plan's D5 role table)

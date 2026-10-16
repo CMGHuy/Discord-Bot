@@ -40,17 +40,22 @@
    * platform renders direction this way — breaking the convention to satisfy
    * an internal rule would be worse, not more consistent.
    */
-  /* v80 D1: direction C, "TradingView Blue". The surface ladder steps far
+  /* Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §2):
+   * v80 D1: direction C, "TradingView Blue". The surface ladder steps far
    * enough apart (0c0f16 -> 131722 -> 1c212d -> 242936) that panels read as
    * separate objects without a shadow; --surface is TradingView's own chart
    * pane, so the admin and the Discord charts sit on one ground. */
-  --bg: #0c0f16;
-  --surface: #131722;
-  --surface-raised: #1c212d;
-  --surface-overlay: #242936;
-  --overlay-dim: rgba(12, 15, 22, .72);
-  --border: #2a2e39;
-  --border-strong: #363a45;
+  /* v167 §2, Arctic Navy. The ground steps 070b14 -> 0c1320 -> 121b2d ->
+   * 1a2540. Every colour in this tier is a var() into styles/palette.css
+   * (tier 1): a tier-2 token names a MEANING and never holds a hue.
+   * --surface is still the Discord chart ground (chart_style.CHART_BG). */
+  --bg: var(--navy-950);
+  --surface: var(--navy-900);
+  --surface-raised: var(--navy-850);
+  --surface-overlay: var(--navy-800);
+  --overlay-dim: var(--navy-950-a72);
+  --border: var(--navy-750);
+  --border-strong: var(--navy-700);
 
   /* -- elevation --------------------------------------------------------
    * ONE shadow, and it means one thing: this element is not part of the
@@ -74,45 +79,54 @@
    * (versions.ts faked one with a 9999px spread). */
   --scrim: var(--overlay-dim);
 
-  --text: #d9dce4;
-  --text-secondary: #9ea2ad;
+  --text: var(--slate-100);
+  --text-secondary: var(--slate-300);
   /* v80 D1: direction C's first muted grey (#888c97) measured 4.32:1 on
    * --surface-overlay -- under the 4.5:1 gate contrast.spec.ts enforces on
    * all four surfaces, for real readable labels at --text-micro (nav group
    * headers, chip captions, .sb-label). #9195a0 is the smallest lift that
    * clears it with v54's safety margin: worst case 4.85:1 on
    * --surface-overlay. v54 Task 42 made the same kind of measured,
-   * single-token change for the previous palette. */
-  --text-muted: #9195a0;
-  /* --text-faint is a RULE AND DIVIDER colour (~2.3:1 on --surface) -- never
+   * single-token change for the previous palette.
+   * v167 §2: now --slate-400, worst case 5.54:1 (on --surface-overlay). */
+  --text-muted: var(--slate-400);
+  /* --text-faint is a RULE AND DIVIDER colour (~2:1 on --surface) -- never
    * text that must be read. contrast.spec.ts's `no-text-uses-text-faint`
    * assumes this and this comment is what it checks for. */
-  --text-faint: #4e5361;
+  --text-faint: var(--navy-600);
 
-  --pos: #17c98e;
-  --neg: #ff5470;
-  --warn: #ffb43d;
+  --pos: var(--mint-400);
+  --neg: var(--coral-400);
+  --warn: var(--amber-300);
   /* v80 D1: the accent is two tokens. --accent is the colour of interactive
    * TEXT and state -- links, the active tab, the sort arrow, focus -- and
    * #5593ff clears 4.85:1 on every surface. --accent-fill is the deeper
    * TradingView blue a filled button paints, with --on-accent on top at
-   * 4.90:1; the text-safe blue is too light to carry white ink. */
-  --accent: #5593ff;
-  --accent-fill: #2962ff;
-  --on-accent: #ffffff;
+   * 4.90:1; the text-safe blue is too light to carry white ink.
+   * v167 §2: --accent is --sky-300 (8.10:1 worst case); --accent-fill is
+   * --sky-600 (white 5.06:1); --accent-fill-hi (new) is --sky-550, the top
+   * stop of the primary button's gradient (tier 3 --btn-fill), white 4.66:1.
+   * That margin is thin, so contrast.spec.ts checks it by name. */
+  --accent: var(--sky-300);
+  --accent-fill: var(--sky-600);
+  --accent-fill-hi: var(--sky-550);
+  --on-accent: var(--white);
   /* v80 D1: info moved off sky blue. Under direction C the accent took the
-   * blue, and two blues would make "neutral" read as "interactive". */
-  --info: #b39ddb;
+   * blue, and two blues would make "neutral" read as "interactive".
+   * v167 §2: still violet (--violet-300), 7.39:1 worst case. */
+  --info: var(--violet-300);
 
   /* 12% tints, for cell and chip backgrounds, hover states and the chart's
-   * risk/reward bands. Literal rgba rather than colour-mix() so the values
-   * survive without a fallback path. --accent-soft is 18% of the FILL blue:
-   * the selected-segment ground needs to separate from --surface-raised. */
-  --pos-soft: rgba(23, 201, 142, 0.12);
-  --neg-soft: rgba(255, 84, 112, 0.12);
-  --warn-soft: rgba(255, 180, 61, 0.12);
-  --accent-soft: rgba(41, 98, 255, 0.18);
-  --info-soft: rgba(179, 157, 219, 0.14);
+   * risk/reward bands; --info-soft is 14%. --accent-soft is 18% of the FILL
+   * blue: the selected-segment ground needs to separate from
+   * --surface-raised. v167 amendment 2: each is a tier-1 alpha entry in
+   * palette.css (literal rgba of the hue), so jsdom and lightweight-charts
+   * still receive a plain colour string and this file holds no hued rgba. */
+  --pos-soft: var(--mint-400-a12);
+  --neg-soft: var(--coral-400-a12);
+  --warn-soft: var(--amber-300-a12);
+  --accent-soft: var(--sky-600-a18);
+  --info-soft: var(--violet-300-a14);
 
   /* Quality ramp — confidence Lv1-5 and tier A/B/C.
    *
