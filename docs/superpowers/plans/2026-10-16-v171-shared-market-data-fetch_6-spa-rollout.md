@@ -13,8 +13,8 @@
 
 **Decisions this part fixes** (inside the ledger's contracts):
 
-- **What "fresh" means in the SPA.** Every `GET` made while the app is in its boot phase (from the first load or a browser reload until the second `NavigationStart`, i.e. the first in-app navigation) carries `X-Swingbot-Fresh: 1`, and so does every `GET` issued inside `FreshRequestService.markFresh(fn)` or with the `FRESH_REQUEST` context token. Non-`GET` requests never carry it (a mutation reads no market data). The `EventSource` stream cannot set headers and needs none.
-- **The page's own refresh control is the `sb-async` Retry button.** No price page has any other refresh control, and the spec forbids new controls. `Async` (`ui/async.ts`) emits `retry` inside `markFresh`, so every Retry on every page is a fresh request with one edit. This replaces the ledger's per-page edits of `dashboard.ts` and `watchlist.ts` in V171-30 (those two files are still edited in V171-32 for the age hints); nothing in another part depends on it.
+- **What "fresh" means in the SPA.** Every `GET` made while the app is in its boot phase (from the first load or a browser reload until the second `NavigationStart`, i.e. the first in-app navigation, or `BOOT_FRESH_WINDOW_MS` = 10 s after the first `NavigationEnd`, whichever comes first) carries `X-Swingbot-Fresh: 1`, and so does every `GET` issued inside `FreshRequestService.markFresh(fn)` or with the `FRESH_REQUEST` context token. Non-`GET` requests never carry it (a mutation reads no market data). A page left open reuses the cache like navigation does: its later event-driven refetches on the same route are unmarked (partner's rule: only an intentional reload, a first load or a Retry click is fresh). The `EventSource` stream cannot set headers and needs none.
+- **The page's own refresh control is the `sb-async` Retry button.** No price page has any other refresh control, and the spec forbids new controls. `Async` (`ui/async.ts`) emits `retry` inside `markFresh`, so every Retry on every page is a fresh request with one edit.
 - **Windows on the SPA side** are constants in `ui/age-hint.ts`: `DASHBOARD_PRICE_WINDOW_S = 15`, `PAGE_PRICE_WINDOW_S = 60`, `TAPE_WINDOW_S = 60` (the D2 defaults; the server's knobs are not served to the SPA, so a changed `.env` moves only when the hint appears, never what is fetched).
 - **Where the new elements sit.** Age hints: the Dashboard positions' live P&L cell (15 s), the Watchlist price cell, the trade detail's "Now / Price" row and every tape tile (60 s). The quote line ("Alert price"): the trade detail's "Opened" panel and the plan page header. The Trades list "Now" column and the Risk page get no hint: V171-25 adds no age to the Risk rows, and the Trades list column is a text-only `value` function (the trade detail carries the hint). Both are listed under OPEN for the controller.
 - **The D9 report is the measuring instrument for the Success table, defined before any data exists** (V171-34): provider calls = counter rows with outcome `fetched` or `failed` (a `hit`, `shared-wait` or `budget-deferred` made no provider call), counted per symbol in both modes; an in-session hour is a UTC hour bucket whose midpoint is in the regular session and on an open tape day (`session.is_regular_session` and `session.is_tape_open`); blank tape minutes come from a once-a-minute sampler of the shared tape copy, and the check needs at least 95 % minute coverage of the window's session minutes to count as measured. Two rows (429s, delta parity) are measured by V171-39 from the logs and a parity run, never by the report.
@@ -35,20 +35,19 @@
 - Modify: `frontend/src/app/api/interceptors.ts` (new `freshInterceptor` after `routeRefreshInterceptor`, end of file)
 - Modify: `frontend/src/app/api/interceptors.spec.ts` (the interceptor list in `beforeEach`, plus one new test)
 - Modify: `frontend/src/app/app.config.ts` (`withInterceptors([...])` list and its order comment)
-- Modify: `frontend/src/app/ui/async.ts` (the Retry button's `(click)`; replaces the ledger's per-page edits, see the part header)
+- Modify: `frontend/src/app/ui/async.ts` (the Retry button's `(click)`)
 - Modify: `frontend/src/app/ui/async.spec.ts` (one new test)
 
 **Interfaces:**
 - Consumes: the header name `X-Swingbot-Fresh` and value `1` (V171-25 `freshness.FRESH_HEADER`; the server reads exactly `"1"`).
 - Produces:
-  - `fresh-request.service.ts`: `export const FRESH_HEADER = 'X-Swingbot-Fresh';`, `export const FRESH_REQUEST = new HttpContextToken<boolean>(() => false);`, `@Injectable({ providedIn: 'root' }) export class FreshRequestService` with `isBootPhase(): boolean` (true until the second `NavigationStart` the router emits), `isMarking(): boolean` (true while a `markFresh` callback runs), `markFresh<T>(fn: () => T): T` (runs `fn` synchronously; every request whose interceptor chain runs inside `fn` carries the mark; nests; the depth is restored when `fn` throws).
+  - `fresh-request.service.ts`: `export const FRESH_HEADER = 'X-Swingbot-Fresh';`, `export const FRESH_REQUEST = new HttpContextToken<boolean>(() => false);`, `@Injectable({ providedIn: 'root' }) export class FreshRequestService` with `export const BOOT_FRESH_WINDOW_MS = 10_000;`, `isBootPhase(): boolean` (true until the second `NavigationStart` or until `BOOT_FRESH_WINDOW_MS` after the first `NavigationEnd`, whichever comes first), `isMarking(): boolean` (true while a `markFresh` callback runs), `markFresh<T>(fn: () => T): T` (runs `fn` synchronously; every request whose interceptor chain runs inside `fn` carries the mark; nests; the depth is restored when `fn` throws).
   - `interceptors.ts`: `export const freshInterceptor: HttpInterceptorFn`. A `GET` gets `X-Swingbot-Fresh: 1` when `req.context.get(FRESH_REQUEST)`, `fresh.isMarking()` or `fresh.isBootPhase()`; every other request passes unchanged.
   - `Async` (`sb-async`): the Retry button emits `retry` inside `markFresh`, so a parent's synchronous `store.load()` is a fresh request.
 
-Why "the second `NavigationStart`": the first one is the initial navigation of a full page load (first load or browser reload); the second is the first in-app route change (a link click, or a background resolver refresh from `RouteRefreshService`). Requests until then are "the requests a full page load makes" (spec D2). A page left open on its first route keeps marking its event-driven refetches until the first navigation; the server serves them at tier 5 with max age 0, single-flighted and inside the 50 % tier-5 reserve, so they can never take budget from tiers 1-3 (index Global Constraints, Budget).
+Why "the second `NavigationStart`": the first one is the initial navigation of a full page load (first load or browser reload); the second is the first in-app route change (a link click, or a background resolver refresh from `RouteRefreshService`). Why also the 10 s window: a page left open on its first route would otherwise mark every event-driven refetch (the tape's 30 s `scan` refetch, store reloads) fresh until the first navigation. The window keeps the initial page load's GETs (resolvers and the stores' first loads, all issued within a few seconds of the first `NavigationEnd`) and ends there, so the open page reuses the shared cache like navigation does (partner's rule). Requests until the boot phase ends are "the requests a full page load makes" (spec D2).
 
 - [ ] **Step 1: Write the failing service spec**
-
 Create `frontend/src/app/api/fresh-request.service.spec.ts`:
 
 ```ts
@@ -57,9 +56,9 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FRESH_HEADER, FRESH_REQUEST, FreshRequestService } from './fresh-request.service';
+import { BOOT_FRESH_WINDOW_MS, FRESH_HEADER, FRESH_REQUEST, FreshRequestService } from './fresh-request.service';
 import { freshInterceptor } from './interceptors';
 
 @Component({ template: '' })
@@ -113,6 +112,19 @@ describe('FreshRequestService (v171 D2: reload means fresh, navigation means reu
     expect(header('/api/v1/watchlist/tickers')).toBeNull();
   });
 
+  it('ends the boot phase 10 s after the first NavigationEnd on the same route', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });   // zoneless app, no zone.js: vitest clock, not fakeAsync
+    try {
+      await router.navigateByUrl('/a');
+      vi.setSystemTime(Date.now() + BOOT_FRESH_WINDOW_MS - 1);
+      expect(fresh.isBootPhase()).toBe(true);
+      vi.setSystemTime(Date.now() + 2);
+      expect(fresh.isBootPhase()).toBe(false);
+      http.get('/api/v1/market/tape').subscribe();
+      expect(header('/api/v1/market/tape')).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('marks requests issued inside markFresh after the boot phase', async () => {
     await router.navigateByUrl('/a');
     await router.navigateByUrl('/b');
@@ -144,17 +156,14 @@ describe('FreshRequestService (v171 D2: reload means fresh, navigation means reu
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
-
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/api/fresh-request.service.spec.ts`
-Expected: FAIL, the build cannot resolve `./fresh-request.service` and `freshInterceptor`.
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/api/fresh-request.service.spec.ts`. Expected: FAIL, the build cannot resolve `./fresh-request.service` and `freshInterceptor`.
 
 - [ ] **Step 3: Implement `FreshRequestService` in `frontend/src/app/api/fresh-request.service.ts`**
 
 ```ts
 import { HttpContextToken } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { NavigationStart, Router } from '@angular/router';
-import { filter } from 'rxjs';
+import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 
 /** v171 D2. The admin server reads exactly this header with value `1` and
  *  then skips the shared cache's reuse window for that request's market
@@ -164,29 +173,36 @@ export const FRESH_HEADER = 'X-Swingbot-Fresh';
 /** Per-request opt-in, for a caller that is a refresh but not a Retry. */
 export const FRESH_REQUEST = new HttpContextToken<boolean>(() => false);
 
+/** How long after the first NavigationEnd the page load's GETs stay fresh. */
+export const BOOT_FRESH_WINDOW_MS = 10_000;
+
 /**
  * Which requests are "fresh" (spec v171 D2, the partner's rule): the ones a
  * full page load makes (first load or browser reload) and the ones an
  * explicit refresh click makes. In-app navigation reuses the shared cache.
  *
- * The boot phase ends at the second NavigationStart: the first one is the
- * page load's own initial navigation, the second is the first in-app route
- * change. A background resolver refresh (RouteRefreshService) also counts,
- * which only ends the boot phase sooner.
+ * The boot phase ends at the second NavigationStart (the first in-app route
+ * change, or a background resolver refresh) or BOOT_FRESH_WINDOW_MS after the
+ * first NavigationEnd, whichever comes first: a page left open then reuses
+ * the cache for its event-driven refetches, like navigation does.
  */
 @Injectable({ providedIn: 'root' })
 export class FreshRequestService {
   private navigationStarts = 0;
+  private bootEndsAt: number | null = null;
   private depth = 0;
 
   constructor() {
-    inject(Router).events
-      .pipe(filter((event) => event instanceof NavigationStart))
-      .subscribe(() => this.navigationStarts++);
+    inject(Router).events.subscribe((event) => {
+      if (event instanceof NavigationStart) this.navigationStarts++;
+      if (event instanceof NavigationEnd && this.bootEndsAt === null) {
+        this.bootEndsAt = Date.now() + BOOT_FRESH_WINDOW_MS;
+      }
+    });
   }
 
   isBootPhase(): boolean {
-    return this.navigationStarts < 2;
+    return this.navigationStarts < 2 && (this.bootEndsAt === null || Date.now() < this.bootEndsAt);
   }
 
   isMarking(): boolean {
@@ -208,7 +224,6 @@ export class FreshRequestService {
 ```
 
 - [ ] **Step 4: Add `freshInterceptor` at the end of `frontend/src/app/api/interceptors.ts`**
-
 Import `FRESH_HEADER`, `FRESH_REQUEST`, `FreshRequestService` from `./fresh-request.service`.
 
 ```ts
@@ -223,12 +238,9 @@ export const freshInterceptor: HttpInterceptorFn = (req, next) => {
 ```
 
 - [ ] **Step 5: Run the service spec to verify it passes**
-
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/api/fresh-request.service.spec.ts`
-Expected: PASS (7 tests).
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/api/fresh-request.service.spec.ts`. Expected: PASS (8 tests).
 
 - [ ] **Step 6: Register it, keeping the interceptor spec in the app's order**
-
 In `frontend/src/app/app.config.ts`, import `freshInterceptor` with the other interceptors and make the list `withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor, freshInterceptor])`. Extend the order comment above `provideHttpClient` with one line: `fresh is innermost: it only adds a header on the way out and never sees a response, so its position changes nothing else.`
 
 In `frontend/src/app/api/interceptors.spec.ts`, import `freshInterceptor` and `provideRouter` (`@angular/router`); add `freshInterceptor` at the end of the `withInterceptors([...])` list in the top-level `beforeEach` (same order as `app.config.ts`, as that file's header comment requires) and add `provideRouter([])` to its providers. Append inside the top-level `describe`:
@@ -246,7 +258,6 @@ In `frontend/src/app/api/interceptors.spec.ts`, import `freshInterceptor` and `p
 ```
 
 - [ ] **Step 7: Write the failing `Async` test**
-
 In `frontend/src/app/ui/async.spec.ts`, import `FreshRequestService` from `../api/fresh-request.service` and append inside `describe('Async', ...)`:
 
 ```ts
@@ -264,11 +275,9 @@ In `frontend/src/app/ui/async.spec.ts`, import `FreshRequestService` from `../ap
 
 and give the spec's `Host` a hook the handler calls: the template's `(retry)="retried = retried + 1"` becomes `(retry)="retried = retried + 1; onRetried()"`, and `Host` gains `onRetried: () => void = () => undefined;`.
 
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/ui/async.spec.ts`
-Expected: FAIL on `markingDuringRetry` (`false`: the button emits outside `markFresh`).
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/ui/async.spec.ts`. Expected: FAIL on `markingDuringRetry` (`false`: the button emits outside `markFresh`).
 
 - [ ] **Step 8: Emit Retry inside `markFresh` in `frontend/src/app/ui/async.ts`**
-
 Import `inject` from `@angular/core` and `FreshRequestService` from `../api/fresh-request.service`. Change the button to `(click)="onRetry()"` and add to the class:
 
 ```ts
@@ -283,9 +292,7 @@ Import `inject` from `@angular/core` and `FreshRequestService` from `../api/fres
 ```
 
 - [ ] **Step 9: Run every spec this task touched, plus the guards over `ui/`**
-
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/api/fresh-request.service.spec.ts --include src/app/api/interceptors.spec.ts --include src/app/ui/async.spec.ts --include src/app/ui/async-coverage.spec.ts --include src/app/ui/primitives.spec.ts`
-Expected: PASS, 0 failed.
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/api/fresh-request.service.spec.ts --include src/app/api/interceptors.spec.ts --include src/app/ui/async.spec.ts --include src/app/ui/async-coverage.spec.ts --include src/app/ui/primitives.spec.ts`. Expected: PASS, 0 failed.
 
 - [ ] **Step 10: Commit**
 
@@ -293,8 +300,9 @@ Expected: PASS, 0 failed.
 git -C $WT add frontend/src/app/api/fresh-request.service.ts frontend/src/app/api/fresh-request.service.spec.ts frontend/src/app/api/interceptors.ts frontend/src/app/api/interceptors.spec.ts frontend/src/app/app.config.ts frontend/src/app/ui/async.ts frontend/src/app/ui/async.spec.ts
 git -C $WT commit -m "feat(v171): SPA marks page-load and Retry requests fresh (X-Swingbot-Fresh)
 
-Spec D2: reload means fresh, navigation means reuse. The boot phase ends at
-the second NavigationStart; sb-async Retry emits inside markFresh.
+Spec D2: reload means fresh, navigation and an open page reuse. The boot
+phase ends at the second NavigationStart or 10 s after the first
+NavigationEnd; sb-async Retry emits inside markFresh.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -313,14 +321,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `/api/v1/market/tape` rows `is_proxy`, `proxy_symbol`, `age_s` (V171-29). With `TAPE_SHARED_ENABLED` off the server sends none of them, and the tape renders exactly as today.
 - Produces (V171-32 and V171-33 use these):
-  - `ui/age-hint.ts`: `export const DASHBOARD_PRICE_WINDOW_S = 15;`, `export const PAGE_PRICE_WINDOW_S = 60;`, `export const TAPE_WINDOW_S = 60;`, `export function ageText(ageS: number | null): string | null`, component `AgeHint` (selector `sb-age-hint`, standalone, OnPush) with `ageS = input<number | null>(null)` and `windowS = input.required<number>()`; renders `<span class="age-hint">` only when `ageS !== null && ageS > windowS`.
+  - `ui/age-hint.ts`: `export const DASHBOARD_PRICE_WINDOW_S = 15;`, `export const PAGE_PRICE_WINDOW_S = 60;`, `export const TAPE_WINDOW_S = 60;`, `export function ageText(ageS: number | null): string | null`, component `AgeHint` (selector `sb-age-hint`, standalone, OnPush) with `ageS = input<number | null>(null)` and `windowS = input.required<number>()`; renders `<span class="age-hint">` only when the US market is open (`ConnectionStore.marketActive() === true`, the SR58 `/health` `market_active` flag the shell already polls; `null` = not known yet counts as closed) and `ageS !== null && ageS > windowS`. V171-25 reports a quote's own age, so outside the session every price is "old"; the hint stays silent then (partner: the UI must not feel heavier).
   - `TapeRow` gains `is_proxy?: boolean`, `proxy_symbol?: string | null`, `age_s?: number | null`.
   - Tape tile DOM: a proxy tile shows its index label, the change % and `<span class="ctx proxy">SPY proxy</span>`, never a price and never "no price"; every tile ends with `<sb-age-hint>` (window 60 s).
 
 `ageText` rules (spec D2 "12 s ago" / "1 min ago"): `null`, `NaN` or a negative age -> `null`; under 60 -> `` `${Math.round(ageS)} s ago` ``; under 3600 -> `` `${Math.floor(ageS / 60)} min ago` ``; else `` `${Math.floor(ageS / 3600)} h ago` ``. The hint is quiet text in the existing styling: `font-size: var(--text-micro)`, `color: var(--text-faint)`, `white-space: nowrap`, `margin-inline-start: var(--space-4)`, `font-variant-numeric: tabular-nums`; no colour change, no icon, no animation (spec D2 "UX stays light"). It carries `title="Price is <text> old"` for hover and is plain text for screen readers.
 
 - [ ] **Step 1: Write the failing `AgeHint` spec**
-
 Create `frontend/src/app/ui/age-hint.spec.ts`:
 
 ```ts
@@ -328,7 +335,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ConnectionStore } from '../stores/connection.store';
 import { AgeHint, PAGE_PRICE_WINDOW_S, ageText } from './age-hint';
+
+let marketActive: boolean | null = true;
 
 function render(ageS: number | null, windowS = PAGE_PRICE_WINDOW_S): HTMLElement {
   const f = TestBed.createComponent(AgeHint);
@@ -356,7 +366,16 @@ describe('ageText (v171 D2)', () => {
 
 describe('AgeHint (sb-age-hint)', () => {
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    marketActive = true;
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(),
+      { provide: ConnectionStore, useValue: { marketActive: () => marketActive } }] });
+  });
+
+  it('renders nothing while the market is closed or its state is unknown, however old', () => {
+    marketActive = false;
+    expect(render(7200).querySelector('.age-hint')).toBeNull();
+    marketActive = null;
+    expect(render(7200).querySelector('.age-hint')).toBeNull();
   });
 
   it('renders nothing inside the window', () => {
@@ -382,13 +401,14 @@ describe('AgeHint (sb-age-hint)', () => {
 });
 ```
 
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/ui/age-hint.spec.ts`
-Expected: FAIL, `./age-hint` does not exist.
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/ui/age-hint.spec.ts`. Expected: FAIL, `./age-hint` does not exist.
 
 - [ ] **Step 2: Implement `frontend/src/app/ui/age-hint.ts`**
 
 ```ts
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+
+import { ConnectionStore } from '../stores/connection.store';
 
 /** The D2 windows as the SPA sees them. The server's `.env` knobs are not
  *  served to the SPA; changing one moves what is fetched, and only these
@@ -433,19 +453,20 @@ export function ageText(ageS: number | null): string | null {
 export class AgeHint {
   readonly ageS = input<number | null>(null);
   readonly windowS = input.required<number>();
+  private readonly connection = inject(ConnectionStore);
 
+  /** Market closed (or not known yet): every quote is "old", so say nothing. */
   protected readonly text = computed(() => {
     const age = this.ageS();
+    if (this.connection.marketActive() !== true) return null;
     return age !== null && age > this.windowS() ? ageText(age) : null;
   });
 }
 ```
 
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/ui/age-hint.spec.ts --include src/app/ui/spacing.spec.ts --include src/app/ui/primitives.spec.ts --include src/app/ui/contrast.spec.ts`
-Expected: PASS, 0 failed.
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/ui/age-hint.spec.ts --include src/app/ui/spacing.spec.ts --include src/app/ui/primitives.spec.ts --include src/app/ui/contrast.spec.ts`. Expected: PASS, 0 failed.
 
 - [ ] **Step 3: Extend `TapeRow` in `frontend/src/app/api/models.ts`**
-
 Add after `sort_rank: number;`:
 
 ```ts
@@ -461,11 +482,12 @@ Add after `sort_rank: number;`:
 ```
 
 - [ ] **Step 4: Write the failing tape specs**
-
 Append inside `describe('Tape', ...)` in `frontend/src/app/shell/tape/tape.spec.ts`:
 
 ```ts
   const proxy = { symbol: '^GSPC', price: null, change_pct: 0.42, is_proxy: true, proxy_symbol: 'SPY', age_s: 20 };
+  // setup() gains `{ provide: ConnectionStore, useValue: { marketActive: () => true } }` in its providers
+  // (import from '../../stores/connection.store'), so the age tests run with the market open.
 
   it('labels a proxy row and shows its change only, never a level (v171 D7)', () => {
     const el = setup([proxy], []).nativeElement as HTMLElement;
@@ -491,11 +513,9 @@ Append inside `describe('Tape', ...)` in `frontend/src/app/shell/tape/tape.spec.
 
 (`pct` in `ui/format.ts` signs a positive change: `pct(0.42)` is `+0.42%`.)
 
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/shell/tape/tape.spec.ts`
-Expected: FAIL on the three new tests (no `.proxy`, no `.age-hint`; the proxy tile still reads "no price").
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/shell/tape/tape.spec.ts`. Expected: FAIL on the three new tests (no `.proxy`, no `.age-hint`; the proxy tile still reads "no price").
 
 - [ ] **Step 5: Render proxies and ages in `frontend/src/app/shell/tape/tape.ts`**
-
 - `Tile` gains `proxyLabel: string | null` and `ageS: number | null`. The index mapping sets `proxyLabel: r.is_proxy ? \`${r.proxy_symbol ?? 'ETF'} proxy\` : null` and `ageS: r.age_s ?? null`; the stock mapping sets the same two fields from its row (a flagged `SI=F` can be a proxy too).
 - Import `AgeHint` and `TAPE_WINDOW_S` from `../../ui/age-hint`; add `AgeHint` to `imports`; expose `protected readonly tapeWindowS = TAPE_WINDOW_S;`.
 - Replace the price block of the tile template (the `@if (tile.price !== null) { ... } @else { <span class="ctx muted">no price</span> }`) with:
@@ -518,8 +538,7 @@ Expected: FAIL on the three new tests (no `.proxy`, no `.age-hint`; the proxy ti
 
   and add `<sb-age-hint [ageS]="tile.ageS" [windowS]="tapeWindowS" />` as the last child of the `<a class="tile">`, after the `context_label` block. `.ctx.proxy` uses the existing `.ctx` rule in `tape.css` unchanged (no new colour); the tile stays one line: `.tile` is `inline-flex` with `align-items: baseline` (`tape.css` :69), so both new spans sit on its baseline, and the hint's own `nowrap` keeps "4 min ago" whole. Below the tape's narrow breakpoint `tape.css` hides `.px`; a proxy tile has no `.px`, so it reads the same at every width.
 
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/shell/tape/tape.spec.ts --include src/app/ui/age-hint.spec.ts`
-Expected: PASS, 0 failed (the existing "never shows the word live" test still passes: "SPY proxy" and "4 min ago" contain no "live").
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/shell/tape/tape.spec.ts --include src/app/ui/age-hint.spec.ts`. Expected: PASS, 0 failed (the existing "never shows the word live" test still passes: "SPY proxy" and "4 min ago" contain no "live").
 
 - [ ] **Step 6: Commit**
 
@@ -569,7 +588,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Placement (part header, "Where the new elements sit"): Dashboard positions' live P&L cell, window 15 s; Watchlist price cell, trade detail "Now / Price", window 60 s; quote line in the trade detail's "Opened" panel (`<dt>Alert price</dt>`) and in the plan page's header tags (`Alert price: ...`). The Risk page and the Trades list "Now" column get no hint (no age on Risk rows from V171-25; the list column is a text `value` function); the trade detail carries the Trades hint.
 
 - [ ] **Step 1: Write the failing API test**
-
 Create `tests/admin/test_api_quote_fields.py`:
 
 ```python
@@ -638,11 +656,9 @@ def test_pre_v171_rows_carry_no_quote(seed, logged_in, row_id, plans, trades):
     assert _quote(logged_in, row_id) is None
 ```
 
-Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_api_quote_fields.py`
-Expected: FAIL with `KeyError: 'quote'` (6 failed).
+Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_api_quote_fields.py`. Expected: FAIL with `KeyError: 'quote'` (6 failed).
 
 - [ ] **Step 2: Implement `_quote_stamp` in `swingbot/admin/api_v1/trades.py`**
-
 Add before `_plan_detail`:
 
 ```python
@@ -669,11 +685,9 @@ def _quote_stamp(plan: dict | None, trade: dict | None) -> dict | None:
 
 Add `"quote": _quote_stamp(plan, trade),` as the last key of `_plan_detail`'s dict and `"quote": _quote_stamp(None, t),` as the last key of `_legacy_detail`'s dict (one detail shape, as `_legacy_detail`'s docstring requires).
 
-Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_api_quote_fields.py` then `python $WT/scripts/dev/testrun.py file tests/admin/test_api_v1_trade_detail.py`
-Expected: PASS, 0 failed, both files.
+Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_api_quote_fields.py` then `python $WT/scripts/dev/testrun.py file tests/admin/test_api_v1_trade_detail.py`. Expected: PASS, 0 failed, both files.
 
 - [ ] **Step 3: Write the failing SPA spec**
-
 Create `frontend/src/app/workspaces/trades/quote-line.spec.ts`:
 
 ```ts
@@ -733,11 +747,9 @@ describe('v171 page wiring', () => {
 });
 ```
 
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/workspaces/trades/quote-line.spec.ts`
-Expected: FAIL, `./quote-line` and `QuoteStamp` do not exist.
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/workspaces/trades/quote-line.spec.ts`. Expected: FAIL, `./quote-line` and `QuoteStamp` do not exist.
 
 - [ ] **Step 4: Add the model fields and `quoteLine`**
-
 In `frontend/src/app/api/models.ts`: add `QuoteStamp` (Interfaces block, with a doc comment naming V171-17/18 and "n/a before v171") just above `TradeDetailFields`; add `quote?: QuoteStamp | null;` as the last member of `TradeDetailFields`; add to `TradeRow` after `current_price_stale` and to `Ticker` after `price_source`:
 
 ```ts
@@ -772,7 +784,6 @@ export function quoteLine(q: QuoteStamp | null | undefined): string {
 ```
 
 - [ ] **Step 5: Wire the four pages**
-
 - `dashboard.ts`: import `AgeHint`, `DASHBOARD_PRICE_WINDOW_S` from `../../ui/age-hint`; add `AgeHint` to `imports`; add `protected readonly dashboardWindowS = DASHBOARD_PRICE_WINDOW_S;` beside the other protected helpers (:~951); in `#pnlCell`'s live branch, right after the closing `</span>` of the `livePnlPct(row)` span and before `<span class="sep">`, add `<sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />`.
 - `watchlist.ts`: import `AgeHint`, `PAGE_PRICE_WINDOW_S`; add `AgeHint` to `imports`; add `protected readonly pageWindowS = PAGE_PRICE_WINDOW_S;`; in `#priceCell`, after `<span class="as-of">{{ text(row.as_of) }}</span>`, add `<sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="pageWindowS" />`.
 - `trade-detail.ts`: import `AgeHint`, `PAGE_PRICE_WINDOW_S` and `quoteLine` (`./quote-line`); add `AgeHint` to `imports`; add `protected readonly pageWindowS = PAGE_PRICE_WINDOW_S;` and `protected readonly quoteLine = quoteLine;`; in the "Now" panel's Price `<dd>`, after the `current_price_stale` block, add `<sb-age-hint [ageS]="trade.price_age_s ?? null" [windowS]="pageWindowS" />`; in the "Opened" panel, after the "Entry type" `<div>`, add:
@@ -787,9 +798,7 @@ export function quoteLine(q: QuoteStamp | null | undefined): string {
 - `plan-detail.ts`: import `quoteLine` from `../trades/quote-line`; add `protected readonly quoteLine = quoteLine;`; in `.tags`, after the `@if (createdAt(); as at) { ... }` block, add `<span class="created">Alert price: {{ quoteLine(store.detail()?.quote ?? null) }}</span>` (the existing `.created` style; no new colour or chip).
 
 - [ ] **Step 6: Run the specs of every page touched**
-
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/workspaces/trades/quote-line.spec.ts --include src/app/workspaces/trades/trade-detail.spec.ts --include src/app/workspaces/plans/plan-detail.spec.ts --include src/app/workspaces/dashboard/dashboard.spec.ts --include src/app/workspaces/watchlist/watchlist.spec.ts --include src/app/ui/async-coverage.spec.ts --include src/app/ui/spacing.spec.ts`
-Expected: PASS, 0 failed. A page spec that pins exact text (for example a header's tag list in `plan-detail.spec.ts`) and now also sees `Alert price: n/a` is updated in this commit to expect it, and the commit body names the test.
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/workspaces/trades/quote-line.spec.ts --include src/app/workspaces/trades/trade-detail.spec.ts --include src/app/workspaces/plans/plan-detail.spec.ts --include src/app/workspaces/dashboard/dashboard.spec.ts --include src/app/workspaces/watchlist/watchlist.spec.ts --include src/app/ui/async-coverage.spec.ts --include src/app/ui/spacing.spec.ts`. Expected: PASS, 0 failed. A page spec that pins exact text (for example a header's tag list in `plan-detail.spec.ts`) and now also sees `Alert price: n/a` is updated in this commit to expect it, and the commit body names the test.
 
 - [ ] **Step 7: Commit**
 
@@ -818,7 +827,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **The acceptance rule** (spec D2 "UX stays light", `docs/claude/ui-design.md` § Checklist): at 390, 768 and 1440 px, on the Dashboard, the Watchlist, one trade detail (`?tab=live` and the default tab) and one plan page: the proxy label, the age hint and the quote line are visible, unclipped and on the line they belong to; the page never scrolls sideways; no spinner, veil or blank state appears that the same page without the v171 fields does not show; first-load requests carry `X-Swingbot-Fresh: 1` and requests after an in-app navigation do not.
 
-**Data.** The local stack has no bot feeding the shared tape and the main-tree API has no v171 fields, so the probe rewrites the API responses in the browser (Playwright `page.route`): `^GSPC` becomes an SPY proxy (`price` null, `change_pct` 0.42, `age_s` 20), `^VIX` gets `age_s` 240, every other tape row `age_s` 5; the first `/trades` row and every trade detail get `price_age_s` 75 (and 30 on the Dashboard's second row, to show the 15 s window); the first watchlist ticker gets `price_age_s` 90; the trade detail gets `detail.quote` = `{kind: 'mid', age_s: 1.7, session: 'pre-market', confirmed: true}` and the plan page `{kind: 'scan', age_s: null, session: 'regular', confirmed: false}`. Real responses are fetched first and only these fields are added, so layout comes from real data.
+**Data.** The local stack has no bot feeding the shared tape and the main-tree API has no v171 fields, so the probe rewrites the API responses in the browser (Playwright `page.route`): `^GSPC` becomes an SPY proxy (`price` null, `change_pct` 0.42, `age_s` 20), `^VIX` gets `age_s` 240, every other tape row `age_s` 5; `/health` answers `market_active: true` (the age hint shows only while the market is open); the first `/trades` row and every trade detail get `price_age_s` 75 (and 30 on the Dashboard's second row, to show the 15 s window); the first watchlist ticker gets `price_age_s` 90; the trade detail gets `detail.quote` = `{kind: 'mid', age_s: 1.7, session: 'pre-market', confirmed: true}` and the plan page `{kind: 'scan', age_s: null, session: 'regular', confirmed: false}`. Real responses are fetched first and only these fields are added, so layout comes from real data.
 
 - [ ] **Step 1: Check the tools**
 
@@ -851,7 +860,7 @@ const patchDetail = (b) => ({ ...b, price_age_s: 75, detail: { ...b.detail, quot
   ? { at: null, kind: 'scan', age_s: null, session: 'regular', confirmed: false }
   : { at: '2026-10-15T12:00:01+00:00', kind: 'mid', age_s: 1.7, session: 'pre-market', confirmed: true } } });
 const patchTickers = (b) => ({ ...b, tickers: b.tickers.map((t, i) => ({ ...t, price_age_s: i === 0 ? 90 : 5 })) });
-const ROUTES = [[/\/api\/v1\/market\/tape/, patchTape], [/\/api\/v1\/trades\?|\/api\/v1\/trades$/, patchList],
+const ROUTES = [[/\/api\/v1\/health$/, (b) => ({ ...b, market_active: true })], [/\/api\/v1\/market\/tape/, patchTape], [/\/api\/v1\/trades\?|\/api\/v1\/trades$/, patchList],
   [/\/api\/v1\/trades\/[^/?]+$/, patchDetail], [/\/api\/v1\/watchlist\/tickers$/, patchTickers]];
 
 const ctx = await chromium.launchPersistentContext(PROFILE, { headless: false });
@@ -904,11 +913,9 @@ console.log(`shots ${report.length}, sideways/spinner ${bad.length}, firstLoad f
 await ctx.close();
 ```
 
-Run: `node --check $WT/.superpowers/v171-probe.mjs`
-Expected: no output.
+Run: `node --check $WT/.superpowers/v171-probe.mjs`. Expected: no output.
 
 - [ ] **Step 3: Start the local stack**
-
 Each is long-running: start it with the Bash tool's `run_in_background`, never with `&`, and wait for its ready line.
 
 ```bash
@@ -934,11 +941,9 @@ node $WT/.superpowers/v171-probe.mjs $WT/frontend http://localhost:4123 $WT/.sup
 Expected: `shots 15, sideways/spinner 0, firstLoad fresh true, afterNav unmarked true`. In `report.json`: every Dashboard shot lists `ageHints` entries `1 min ago` (the 75 s row) and `30 s ago` (the 30 s row: past the Dashboard's 15 s window, inside the 60 s one); the Watchlist lists `1 min ago`; the trade detail `?tab=live` lists `1 min ago`; every page lists the tape's `S&P 500` proxy `SPY proxy` and `4 min ago` for VIX; the trade detail's `alertPrice` is `Bid/ask mid, 1.7 s to post, pre-market` and the plan page's `Alert price: Price not confirmed live`. Any `inView: false` entry outside the tape track is a defect.
 
 - [ ] **Step 6: Judge the shots**
-
 Open every PNG under `$WT/.superpowers/v171-shots/` with the Read tool. One line per shot: page, width, then yes/no for: a new element clipped, overlapping or wrapping onto a line of its own where its neighbours stay on one line; sideways scroll; a spinner, veil, skeleton or empty state that is not on the same page without the probe (compare against one `browse.mjs shots` run of the same paths without the probe if unsure); the tape tile with "SPY proxy" taller than its neighbours. At 390 px, the Dashboard live P&L cell may wrap the hint under the percentage; that is acceptable when the cell keeps its own width (ui-design.md: wrapping stated, no sideways scroll).
 
 - [ ] **Step 7: Fix a defect, if one was found**
-
 A defect is fixed in the file that renders the element (`ui/age-hint.ts` styles, `shell/tape/tape.ts`, or the page template from V171-32), with only the existing tokens and breakpoints. After each fix run the specs of that file (V171-31 Step 5 or V171-32 Step 6 command) and re-run Steps 5-6 for the affected pages, then commit:
 
 ```bash
@@ -949,7 +954,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 - [ ] **Step 8: Record the pass and stop the stack**
-
 Stop both background processes. Under `## Progress` in `$WT/docs/superpowers/plans/2026-10-16-v171-shared-market-data-fetch_0-index.md` add: `V171-33 Playwright pass <date>: 15 shots at 390/768/1440 (Dashboard, Watchlist, trade <id> default and live tab, plan <id>); sideways 0, spinners 0; fresh header on first load yes, after navigation no; fixes: <commit ids or none>; missing local data: <none or which>.` Show the partner the shot folder path and ask for sign-off before committing (one question, recommended option first: "Looks right, commit the record").
 
 ```bash
@@ -966,7 +970,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Create: `scripts/reports/market_fetch_report.py`
 - Create: `tests/infra/test_market_fetch_report.py`
-- Create: `scripts/ops/v171_tape_sampler.py` (added to the ledger row; see the part header)
+- Create: `scripts/ops/v171_tape_sampler.py`
 - Create: `scripts/ops/v171_report_cron.sh`, `scripts/ops/v171_tape_sampler_cron.sh`, `scripts/ops/install_v171_cron.sh`
 
 **Interfaces:**
@@ -985,7 +989,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Verdicts: `quote_age` PASS when `stamped > 0` and `misses == 0`, MISS when `misses > 0`, else UNMEASURED; `blank_tape` MISS when `blank_minutes > 0`, PASS when 0 with `coverage >= 0.95` and no sample `error`, else UNMEASURED; `errors_per_ticker` PASS when the week's value <= the baseline's, MISS when above, UNMEASURED without a baseline or scans; `calls_per_hour` PASS when the week's mean <= 0.5 × the baseline's mean, MISS when above, UNMEASURED when either mean is None; `provider_429s` and `delta_parity` always UNMEASURED here, value `"see V171-39"` (measured from the logs and a parity run).
 
 - [ ] **Step 1: Write the failing tests**
-
 Create `tests/infra/test_market_fetch_report.py`:
 
 ```python
@@ -1121,21 +1124,16 @@ def test_sampler_counts_a_symbol_with_neither_price_nor_change_as_blank():
     assert smp.blank_symbols(entries, ("^GSPC", "^NDX", "^DJI", "^VIX")) == ["^DJI", "^VIX"]
 ```
 
-Run: `python $WT/scripts/dev/testrun.py file tests/infra/test_market_fetch_report.py`
-Expected: FAIL at collection (`FileNotFoundError` for `scripts/reports/market_fetch_report.py`).
+Run: `python $WT/scripts/dev/testrun.py file tests/infra/test_market_fetch_report.py`. Expected: FAIL at collection (`FileNotFoundError` for `scripts/reports/market_fetch_report.py`).
 
 - [ ] **Step 2: Implement `scripts/reports/market_fetch_report.py`**
-
 Module docstring: what it measures, the definitions above (copied as the source of record), and the two run forms. Stdlib plus `swingbot` imports only inside the loader functions (`_load_counts(start, end)` via `transaction()` + `market_shared_repo().count_rows`, `_load_telemetry()` reading `telemetry.TELEMETRY_PATH` line by line and skipping unparseable lines, `_load_plans()` = `PlanStore().records()`, `_load_samples(path)` = JSON lines, `[]` when the file is missing), so the pure functions import cleanly in the test. Timestamps parse with `datetime.fromisoformat` and compare as aware UTC. `checks` builds each row through one small helper per check (`_quote_check`, `_tape_check`, `_ratio_check`), so every function stays under complexity 15. `build_report` returns `{"since", "until", "week": {"calls", "scan", "quotes", "rebuild", "tape"}, "baseline": {"calls", "scan"} | None, "checks"}`; `main(argv=None)` parses the flags, calls the loaders and `build_report`, prints the table (`by_provider`, `by_kind`, `by_asker`, `by_outcome`, `days`, then the six checks), writes `--json` when given, returns 0. End with `if __name__ == "__main__": sys.exit(main())` (true when piped over stdin too).
 
 - [ ] **Step 3: Implement `scripts/ops/v171_tape_sampler.py`**
-
 `blank_symbols(entries, symbols)` returns, in `symbols` order, every symbol whose entry is missing or has both `price` and `change_pct` None (a proxy row has `change_pct`, so it is not blank). `sample(now) -> dict`: `in_session = is_regular_session(now) and is_tape_open(now)`; when in session, `blank = blank_symbols(tape.read_tape(list(tape.TAPE_FIXED)), tape.TAPE_FIXED)`, an exception gives `blank: None, error: f"{type(exc).__name__}: {exc}"`; out of session `blank: []`. `main(argv=None)`: `--out` (required), `--until-utc` (default `21:15`); loop: append `json.dumps(sample(now))` plus newline to `--out` (open, append, close each time, so a killed run loses at most one line), sleep to the next whole minute, stop once UTC time passes `--until-utc`. Imports of `swingbot` sit inside `sample` and `main`, so the test loads the module without them.
 
 - [ ] **Step 4: Run the tests**
-
-Run: `python $WT/scripts/dev/testrun.py file tests/infra/test_market_fetch_report.py`
-Expected: PASS (11 tests). Then `python -m radon cc -s -n C $WT/scripts/reports/market_fetch_report.py $WT/scripts/ops/v171_tape_sampler.py`: no output (nothing at C or worse).
+Run: `python $WT/scripts/dev/testrun.py file tests/infra/test_market_fetch_report.py`. Expected: PASS (11 tests). Then `python -m radon cc -s -n C $WT/scripts/reports/market_fetch_report.py $WT/scripts/ops/v171_tape_sampler.py`: no output (nothing at C or worse).
 
 - [ ] **Step 5: Write the cron wrappers** (pattern: `scripts/ops/v106_soak_cron.sh`, `install_v106_soak_cron.sh`)
 
@@ -1192,14 +1190,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:** none (a failure is fixed in the file of the task that owns it, then re-run alone).
 
 - [ ] **Step 1: Full Python suite, once**
-
 Dispatch the `test-runner` subagent (so the output stays out of this context) for `python $WT/scripts/dev/testrun.py full`.
 Expected: `0 failed`, `0 xfailed`. A changed pass count is not a failure (`docs/claude/testing-cost.md`). Each failed test is fixed in its owning task's files and re-run alone (`python $WT/scripts/dev/testrun.py file <test>`), never by re-running the whole suite.
 
 - [ ] **Step 2: Frontend, once**
-
-Run: `npm --prefix $WT/frontend exec -- ng test --watch=false` then `npm --prefix $WT/frontend run build`
-Expected: every spec passes; the production build completes with no error (CI runs the same two, `docs/deploy/DEPLOY_HETZNER.md` § How it works).
+Run: `npm --prefix $WT/frontend exec -- ng test --watch=false` then `npm --prefix $WT/frontend run build`. Expected: every spec passes; the production build completes with no error (CI runs the same two, `docs/deploy/DEPLOY_HETZNER.md` § How it works).
 
 - [ ] **Step 3: Complexity and syntax**
 
@@ -1210,7 +1205,6 @@ git -C $WT diff --name-only main...HEAD -- '*.py' | sed "s|^|$WT/|" | xargs pyth
 Expected: `py_compile` prints nothing. `radon` lists only the legacy functions named in the index's Global Constraints (Complexity), each at or below its listed grade and score (`_scan_one` lower than E(36)); any other function at C (15) or worse is a defect, split per `docs/claude/code-complexity.md` in its owning task's files, then re-run that task's narrow test.
 
 - [ ] **Step 4: Record**
-
 Under `## Progress` in `$WT/docs/superpowers/plans/2026-10-16-v171-shared-market-data-fetch_0-index.md`: `V171-35 <date>: full suite <passed> passed, 0 failed, 0 xfailed; ng test <n> passed; ng build ok; radon: legacy list only.`
 
 ```bash
@@ -1235,7 +1229,6 @@ Every task here uses the `mirror-prod` skill, connects only through `bash script
 Every push to `main` runs the deploy pipeline and restarts both containers (`.github/workflows/deploy.yml`), so every push in Phase 7 happens outside the regular session.
 
 - [ ] **Step 1: Merge and push**
-
 Use the `worktree-lifecycle` skill: check for concurrent sessions on `main`, merge branch `2026-10-16-v171-shared-market-data-fetch` into `main` in `$R` (no full suite after the merge: V171-35 ran it), push outside the session, and follow the run with `gh run watch`. Expected: every job green, `deploy` done.
 
 - [ ] **Step 2: Read the deploy back (flags at their code defaults)**
@@ -1255,7 +1248,6 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && for s in bot admin; do doc
 Expected: `count` twice. Record the UTC time of the switch.
 
 - [ ] **Step 4: Counts flow from every process, and count mode never serves from cache**
-
 Wait three minutes (the trade monitor ticks every 60 s around the clock and the counters flush every 60 s), open one admin page, then:
 
 ```bash
@@ -1264,7 +1256,6 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db 
 Expected: rows for asker `STOP_MONITOR` (bot) and an `ADMIN_*` asker (admin); outcomes only `fetched` or `failed` (pass-through: a `hit`, `shared-wait` or `budget-deferred` row means count mode is serving from the cache, which is a defect: switch back to `off` with Step 3's commands and report `BLOCKED:`). `SCAN` and `BACKGROUND` rows appear with the next scan and refresh; the first daily baseline report (V171-37) confirms them.
 
 - [ ] **Step 5: Mirror and commit**
-
 `.env.example`, above `MARKETDATA_LAYER=`: `# Production: count since <UTC date> (v171 V171-36); on after the baseline week (V171-38).` `DEPLOY_HETZNER.md`, new subsection `### v171 market-data layer rollout`: a table of the four flags (`MARKETDATA_LAYER`, `DAILY_DELTA_FETCH`, `PLAN_REBUILD_ENABLED`, `TAPE_SHARED_ENABLED`) with their production value and the date set, then the rollback order in three lines (a flag off with `env_set.py` + `docker compose restart bot admin`; the previous image per § Rolling back; `scripts/ops/rollback_to.sh` with `--dry-run` first, only for damaged data), and one line that the `v171_001` tables stay on every rollback.
 
 ```bash
@@ -1299,7 +1290,6 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && tail -n 60 logs/v171_basel
 Expected: the last block ends with `FINAL: window START..END closed`. Check, in this order: every `days` entry has at least 5 in-session hours (else apply the replacement rule above and wait); `by_asker` holds `STOP_MONITOR`, `SCAN`, `BACKGROUND` and at least one `ADMIN_*`; `by_outcome` holds only `fetched` and `failed`; `calls.mean` and `scan.per_ticker` are numbers. A missing asker means a consumer bypasses the layer's counting: report it as a defect (`BLOCKED:`) before V171-38, never switch on over it.
 
 - [ ] **Step 3: Record and commit**
-
 Create `docs/superpowers/results/2026-10-16-v171-baseline-week.md`: title, the window and the switch time from V171-36, the replacement days if any, the report's table (`calls.mean`, `calls.calls`, `calls.hours`, `by_provider`, `by_kind`, `by_asker`, `by_outcome`, `days`, `scan.scans`, `scan.tickers`, `scan.errors`, `scan.data_skips`, `scan.per_ticker`), the full JSON in a fenced block, and the two baseline numbers the success check compares against, stated once: `calls_per_hour baseline = <mean>` (the success threshold is half of it) and `errors_per_ticker baseline = <per_ticker>`. Also update `## Progress` in the index.
 
 ```bash
@@ -1334,7 +1324,6 @@ bash scripts/ops/ssh-hetzner.sh "bash -s -- report staging A D BASE_SINCE BASE_U
 with day A, day D and the baseline window from V171-37 written in. Each weekday's 21:15 UTC run lands in `logs/v171_staging_cron.log`; each read-back below starts from that log (the next session reads it first) and adds the spot checks named.
 
 - [ ] **Step 2: Day A, `MARKETDATA_LAYER=on`; read back after day A's session**
-
 Expected in the log: `by_outcome` now holds `hit` (and usually `shared-wait`); provider calls per in-session hour below the baseline's; `failed` not above the baseline's share. Spot checks: `grep -c "fail open" logs/bot.log logs/admin.log` (exact log file names: `ls logs/` on the VM) is a handful, not a storm (one warning per minute per operation and error class is the cap, so a storm is hundreds); the trade monitor ticked every minute (`grep -c trade_monitor` over the session hours); `grep -ciE "429|too many requests"` on both logs is 0. A breach of any: `MARKETDATA_LAYER=count` and stop.
 
 - [ ] **Step 3: Day B, `DAILY_DELTA_FETCH=true`; read back after day B's session**
@@ -1345,7 +1334,6 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && ls market_data/daily_alpac
 Expected: one CSV and one `.meta.json` per Alpaca-eligible watchlist symbol, none for `XAUUSD`/`XAGUSD`; telemetry `errors` and `data_skips` per scan at the baseline level; the log's `scan.per_ticker` not above the baseline's. Breach: `DAILY_DELTA_FETCH=false` (files stay valid for the flag-off path, spec Rollout) and stop.
 
 - [ ] **Step 4: Day C, `PLAN_REBUILD_ENABLED=true`; read back after day C's session**
-
 Expected: the log's `rebuild` totals are present (`kept`, `dropped`, `misses`) and `quotes.stamped` equals the number of main-scan and SHORT plans posted that day; `quotes.misses` is 0; any posted alert in Discord shows the quote line (`Price: ...` or `Price not confirmed live (scan price)`). `dropped` reasons: `grep "not posted -- rebuild:" logs/bot.log` lists each with its reason. A miss here is not yet a success-table verdict (the week has not started) but it is a defect to investigate before day D: `PLAN_REBUILD_ENABLED=false` while it is.
 
 - [ ] **Step 5: Day D, `TAPE_SHARED_ENABLED=true`; read back after day D's session**
@@ -1356,7 +1344,6 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot
 Expected: four entries, each with a price or (proxy) a change %, ages under 180 s during the session; the admin tape at 390, 768 and 1440 px shows the four indices, with a "proxy" label only where Yahoo was blank (`node frontend/scripts/browse.mjs shots --out .superpowers/v171-prod --widths 390,768,1440 --path dashboard`, the partner signs in; read the PNGs). `grep -c "possibly delisted" logs/admin.log` far below the pre-v171 bursts. Breach: `TAPE_SHARED_ENABLED=false` and stop.
 
 - [ ] **Step 6: Start the success week**
-
 The success window, fixed now: `S` = the first trading day after day D, `E` = the fifth trading day from `S`, inclusive; same replacement rule as the baseline (a day with fewer than 5 of 7 in-session hours with rows is replaced by the next trading day). Install both crons:
 
 ```bash
@@ -1472,11 +1459,9 @@ verdict = "MISS" if fails else ("UNMEASURED" if unmeasured else "PASS")
 print(f"PARITY {verdict}: {len(symbols) - len(fails) - len(unmeasured)} equal, fails={fails}, unmeasured={unmeasured}")
 ```
 
-Run: `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python -" < $R/.superpowers/v171-parity.py`
-Expected: one line per symbol and a final `PARITY <verdict>` line. `DELTA_OVERLAP_TOLERANCE` (1e-4 relative) is the spec's rounding-noise bound; a real re-adjustment is far above it. An unmeasured symbol (fetch failed) is retried once on the next day before the verdict stays UNMEASURED. **A FAIL is a data-integrity miss (spec Anti-goals): set `DAILY_DELTA_FETCH=false` at once (V171-38's flip commands), then record it;** repairing a file is `scripts/ops/market_cache_repair.py`'s job and the partner's call, never row deletion.
+Run: `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python -" < $R/.superpowers/v171-parity.py`. Expected: one line per symbol and a final `PARITY <verdict>` line. `DELTA_OVERLAP_TOLERANCE` (1e-4 relative) is the spec's rounding-noise bound; a real re-adjustment is far above it. An unmeasured symbol (fetch failed) is retried once on the next day before the verdict stays UNMEASURED. **A FAIL is a data-integrity miss (spec Anti-goals): set `DAILY_DELTA_FETCH=false` at once (V171-38's flip commands), then record it;** repairing a file is `scripts/ops/market_cache_repair.py`'s job and the partner's call, never row deletion.
 
 - [ ] **Step 4: Record the verdict and commit**
-
 Create `docs/superpowers/results/2026-10-16-v171-success-week.md`: the window `S..E`, the flag dates from V171-38, the baseline file link, then the six-row table copied from the spec (`Check | Threshold | Measured | Verdict`), each verdict PASS, MISS or UNMEASURED with its evidence (report JSON in a fenced block, the 429 lines or "none", the parity summary line and any FAIL rows), the tape coverage and sample count, and the rebuild totals (`kept`, `dropped`, `misses`). Overall: **PASS** only when all six rows are PASS.
 
 In the index: `## Progress` gets the week and the overall verdict. `## What follows`: on PASS, keep the first bullet (the follow-up plan that removes `count` mode and the per-part flags; `loops.daily_reanchor` stays) and mark it due; on any MISS or UNMEASURED, add one bullet per such row naming the row, its value and the flag it belongs to, and leave the flags as they are.
@@ -1490,5 +1475,4 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Push outside the session.
 
 - [ ] **Step 5: Hand the outcome to the partner**
-
 On PASS: report the six rows and that the plan is ready for `/close-out` (release lines are resolved there, not here). On any MISS or UNMEASURED: ask the partner one question (`AskUserQuestion`, recommended option first) per row, the options being to turn that row's flag off (quote age -> `PLAN_REBUILD_ENABLED`; blank tape -> `TAPE_SHARED_ENABLED`; 429s or calls per hour -> `MARKETDATA_LAYER=count`; errors per ticker -> `DAILY_DELTA_FETCH`), to keep it on and open a fix plan, or (UNMEASURED only) to re-measure a further week with the same definitions. Thresholds are never offered as an option.
