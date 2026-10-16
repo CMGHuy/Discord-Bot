@@ -4,11 +4,15 @@
     python scripts/backtest/screen_idea.py --idea high52w \
         --cache-dir E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache_ext
 
-Every event races a fixed trade (entry next open, stop 1.5 x ATR14, target
-3 x ATR14, idea-specific time cap, costs) against K = 20 matched random bars
-(same ticker, month and trend state). verdict.decide applies the four-clause
-pass rule; the script writes docs/superpowers/results/<date>-screen-<idea>.md
-and appends ledger row screen-<idea>. It refuses an idea already in the
+Every event races the idea's frozen shape (v163): ``fixed`` (entry next
+open, stop 1.5 x ATR14, target 3 x ATR14, idea-specific time cap, costs) or
+``trail`` (same entry and initial stop, no target, a chandelier stop
+3 x ATR14[t] under the highest high of the bars before, cap >= 60 bars)
+against K = 20 matched random bars raced the same way (same ticker, month
+and trend state). verdict.decide applies the four-clause pass rule, the
+same for both shapes; the script writes
+docs/superpowers/results/<date>-screen-<idea>.md and appends ledger row
+screen-<idea>. It refuses an idea already in the
 ledger (one shot per idea) and a window end after 2019-12-31. --dry-run
 prints the results doc and writes nothing; --tickers needs --dry-run.
 """
@@ -29,7 +33,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from swingbot import config  # noqa: E402
-from swingbot.core.backtesting.screen import forward, indicators, null, race, verdict  # noqa: E402,F401
+from swingbot.core.backtesting.screen import forward, indicators, null, race, trail, verdict  # noqa: E402,F401
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from swingbot.core.edge.frictions import commission_r  # noqa: E402
@@ -315,6 +319,23 @@ def _yes(ok: bool) -> str:
     return "yes" if ok else "**no**"
 
 
+def _render_trade(idea, run) -> str:
+    """The trade line for the idea's shape; the fixed text is today's, byte for byte."""
+    costs = (f"costs {run['slippage_bps']} bps a side + {run['commission']:.4f}R "
+             "commission.")
+    if idea.race_shape == "trail":
+        return (f"**Trade:** entry next open; initial stop {race.STOP_ATR} x ATR14[t] (1R); "
+                "no target; chandelier trail: the stop on bar j is the higher of the "
+                "initial stop and the highest high of bars t+1..j-1 minus "
+                f"{trail.TRAIL_ATR} x ATR14[t], never lowered, ATR frozen at the signal "
+                "bar; a gap through the stop fills at the open; no exit after "
+                f"{idea.time_cap_bars} bars -> out at that close; R in the initial 1R; "
+                + costs)
+    return (f"**Trade:** entry next open; stop {race.STOP_ATR} x ATR14; target "
+            f"{race.STOP_ATR * race.REWARD_RISK} x ATR14; a gap through either level "
+            "fills at the open; stop first on a bar touching both; " + costs)
+
+
 def _render_head(idea, v, run) -> list:
     params = ", ".join(f"{key}={value}" for key, value in idea.params.items())
     return [
@@ -330,10 +351,7 @@ def _render_head(idea, v, run) -> list:
         f"week resamples, seed {stats.WEEK_BOOTSTRAP_SEED}.", "",
         f"**Trigger:** {idea.summary} ({idea.source}); params {params}; time cap "
         f"{idea.time_cap_bars} bars; {idea.direction} only.", "",
-        f"**Trade:** entry next open; stop {race.STOP_ATR} x ATR14; target "
-        f"{race.STOP_ATR * race.REWARD_RISK} x ATR14; a gap through either level "
-        f"fills at the open; stop first on a bar touching both; costs "
-        f"{run['slippage_bps']} bps a side + {run['commission']:.4f}R commission.", "",
+        _render_trade(idea, run), "",
         "**Spec:** `docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md`",
     ]
 
@@ -383,6 +401,40 @@ def _render_arms(summary, names: tuple) -> list:
     return lines
 
 
+def _share(share) -> str:
+    return "n/a" if share is None else f"{100.0 * share:.1f}%"
+
+
+def _render_stress(summary, run) -> str:
+    """The trail book re-priced at STRESS_SLIPPAGE_FACTOR x slippage (spec
+    § Costs): printed beside the verdict, never a clause of it."""
+    stressed, base = summary["stress"], summary["verdict"]
+    bps = STRESS_SLIPPAGE_FACTOR * run["slippage_bps"]
+    if stressed is None or stressed.delta_exp_r is None:
+        return f"At {bps} bps a side ({STRESS_SLIPPAGE_FACTOR} x slippage): no stressed pairs."
+    change = None if base.delta_exp_r is None else stressed.delta_exp_r - base.delta_exp_r
+    return (f"At {bps} bps a side ({STRESS_SLIPPAGE_FACTOR} x slippage, both fills): "
+            f"ΔExpR {_fmt(stressed.delta_exp_r)}R, 95% week-clustered interval "
+            f"{_fmt(stressed.ci_low)}R to {_fmt(stressed.ci_high)}R; change vs the base "
+            f"book {_fmt(change)}R. Printed, never gating.")
+
+
+def _render_trail(summary, run) -> list:
+    """Trail ideas only: N beside the overlap skips, timeouts per book (the cap
+    is the trail's main free parameter), and the 2 x slippage line."""
+    v, t = summary["verdict"], summary["timeouts"]
+    null_n = sum(summary["null_outcomes"].values())
+    return ["## Trail race (reported, never gating)", "",
+            f"Kept events N = {v.n}; skipped as overlapping an open race "
+            f"(`skipped_overlap`) = {summary['counters']['skipped_overlap']}.", "",
+            "| | event book | null book |", "|---|---|---|",
+            f"| races | {v.n} | {null_n} |",
+            f"| timeouts (share) | {t['event'][0]} ({_share(t['event'][1])}) | "
+            f"{t['null'][0]} ({_share(t['null'][1])}) |",
+            f"| mean timeout R, after costs | {_fmt(t['event'][2])}R | {_fmt(t['null'][2])}R |",
+            "", _render_stress(summary, run)]
+
+
 def _render_years(v) -> list:
     lines = ["## Per year", "", "| Year | N | mean(d) |", "|---|---|---|"]
     lines += [f"| {year} | {n} | {_fmt(mean)}R |" for year, (n, mean) in v.per_year.items()]
@@ -414,8 +466,11 @@ def _render_drift(summary) -> list:
 def render_results(idea, summary, universe, run) -> str:
     v = summary["verdict"]
     sections = [_render_head(idea, v, run), _render_universe(universe, summary),
-                _render_verdict(v), _render_arms(summary, race.SHAPE_OUTCOMES[idea.race_shape]),
-                _render_years(v), _render_drift(summary)]
+                _render_verdict(v),
+                _render_arms(summary, race.SHAPE_OUTCOMES[idea.race_shape])]
+    if idea.race_shape == "trail":
+        sections.append(_render_trail(summary, run))
+    sections += [_render_years(v), _render_drift(summary)]
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
 
 
@@ -427,11 +482,21 @@ def record_path(path) -> str:
         return path.as_posix()
 
 
+def hypothesis(idea) -> str:
+    """The ledger hypothesis, naming the shape and cap; the fixed text is
+    today's, byte for byte."""
+    if idea.race_shape == "trail":
+        return (f"{idea.name}: {idea.summary}; chandelier {trail.TRAIL_ATR} ATR trail race, "
+                f"initial stop {race.STOP_ATR} ATR, cap {idea.time_cap_bars} vs K={null.K} "
+                "matched null, PIT S&P 500 2010-2019, after costs (v163 trail screen)")
+    return (f"{idea.name}: {idea.summary}; fixed {race.STOP_ATR}/{race.STOP_ATR * race.REWARD_RISK} ATR race vs K={null.K} "
+            f"matched null, cap {idea.time_cap_bars}, PIT S&P 500 "
+            "2010-2019, after costs (v140 screen)")
+
+
 def ledger_row(idea, v, record: str, day: str) -> dict:
     return {"id": ledger_id(idea.name), "date": day,
-            "hypothesis": (f"{idea.name}: {idea.summary}; fixed {race.STOP_ATR}/{race.STOP_ATR * race.REWARD_RISK} ATR race vs K={null.K} "
-                           f"matched null, cap {idea.time_cap_bars}, PIT S&P 500 "
-                           "2010-2019, after costs (v140 screen)"),
+            "hypothesis": hypothesis(idea),
             "instrument": INSTRUMENT, "n": v.n,
             "exp_r": None if v.delta_exp_r is None else round(v.delta_exp_r, 4),
             "p": None if v.p is None else round(v.p, 4),

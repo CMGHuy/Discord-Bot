@@ -559,3 +559,92 @@ def test_summarise_stress_verdict_pools_only_stressed_rows():
     assert out["stress"].n == 2
     assert out["stress"].delta_exp_r == pytest.approx(((1.9 - 0.45) + (-1.1 + 0.05)) / 2)
     assert screen_idea.summarise([fixed])["stress"] is None
+
+
+# --- v163: trail rendering
+
+from swingbot.core.backtesting.screen import trail as trail_mod  # noqa: E402
+
+RUN_INFO = {"ledger_id": "screen-trail_probe", "q": None, "date": "2026-10-15",
+            "start": screen_idea.WINDOW_START, "end": screen_idea.WINDOW_END,
+            "slippage_bps": 5.0, "commission": 0.02}
+
+
+def _trail_render_inputs():
+    rows = [_row("2012-03-01", 2.0, 0.5, "timeout"), _row("2013-04-02", -1.0, 0.0, "stop"),
+            _row("2014-05-01", 1.2, 0.1, "trail"), _row("2015-06-01", 0.4, -0.2, "gap_trail")]
+    stressed = [{"entry_date": r["entry_date"], "r_event": r["r_event"] - 0.05,
+                 "r_null": r["r_null"] - 0.04} for r in rows]       # every d falls by 0.01
+    screen = _screen(rows, {"timeout": 3, "trail": 9, "stop": 6, "gap_stop": 1, "gap_trail": 1},
+                     null_timeout_r=[0.2, 0.4, 0.9], stressed=stressed)
+    screen.counters.update(skipped_overlap=7)
+    universe = screen_idea.Universe(intervals={}, members=["AAA"], cached=["AAA"], missing=[])
+    return screen_idea.summarise([screen]), universe
+
+
+def test_fixed_trade_line_is_unchanged():
+    assert screen_idea._render_trade(IDEAS["turn_of_month"], RUN_INFO) == (
+        "**Trade:** entry next open; stop 1.5 x ATR14; target 3.0 x ATR14; a gap "
+        "through either level fills at the open; stop first on a bar touching both; "
+        "costs 5.0 bps a side + 0.0200R commission.")
+
+
+def test_trail_trade_line_names_the_trail_and_no_target():
+    line = screen_idea._render_trade(_trail_probe(), RUN_INFO)
+    assert line.startswith("**Trade:** entry next open; initial stop 1.5 x ATR14")
+    assert "no target" in line and "chandelier" in line
+    assert f"{trail_mod.TRAIL_ATR} x ATR14[t]" in line
+    assert "60 bars" in line and "initial 1R" in line
+    assert line.endswith("costs 5.0 bps a side + 0.0200R commission.")
+    assert "chandelier" in screen_idea.__doc__
+
+
+def test_trail_doc_has_the_trail_section_and_only_trail_exits():
+    summary, universe = _trail_render_inputs()
+    doc = screen_idea.render_results(_trail_probe(), summary, universe, RUN_INFO)
+    assert (doc.index("## Both arms") < doc.index("## Trail race (reported, never gating)")
+            < doc.index("## Per year"))
+    for name in race_mod.SHAPE_OUTCOMES["trail"]:
+        assert f"| {name} |" in doc, name
+    assert "| target |" not in doc and "| gap_target |" not in doc
+    assert "(`skipped_overlap`) = 7" in doc
+    assert "| races | 4 | 20 |" in doc
+    assert "| timeouts (share) | 1 (25.0%) | 3 (15.0%) |" in doc
+    assert "| mean timeout R, after costs | +2.0000R | +0.5000R |" in doc
+    assert "At 10.0 bps a side (2 x slippage, both fills)" in doc
+    assert "change vs the base book -0.0100R" in doc
+    assert "no target" in doc
+
+
+def test_a_fixed_doc_has_no_trail_section_and_no_trail_rows():
+    summary, universe = _trail_render_inputs()
+    doc = screen_idea.render_results(IDEAS["turn_of_month"], summary, universe, RUN_INFO)
+    assert "## Trail race" not in doc
+    assert "| gap_trail |" not in doc and "| trail |" not in doc
+    assert "| target |" in doc
+
+
+def test_the_stress_line_says_so_when_there_are_no_stressed_pairs():
+    summary, universe = _trail_render_inputs()
+    summary["stress"] = None
+    lines = screen_idea._render_trail(summary, RUN_INFO)
+    assert lines[0] == "## Trail race (reported, never gating)"
+    assert lines[-1] == "At 10.0 bps a side (2 x slippage): no stressed pairs."
+
+
+def test_trail_hypothesis_names_the_shape_and_cap():
+    idea = _trail_probe()
+    text = screen_idea.hypothesis(idea)
+    assert "chandelier 3.0 ATR trail race, initial stop 1.5 ATR, cap 60" in text
+    assert "fixed" not in text
+    v = verdict.Verdict("SCREEN-FAIL", 412, 0.03, -0.01, 0.07, 0.2, 6, {}, {})
+    row = screen_idea.ledger_row(idea, v, "docs/superpowers/results/x.md", "2026-10-15")
+    stats.validate_ledger_row(row)
+    assert row["hypothesis"] == text
+
+
+def test_fixed_hypothesis_is_unchanged():
+    idea = IDEAS["gap_volume"]
+    assert screen_idea.hypothesis(idea) == (
+        f"gap_volume: {idea.summary}; fixed 1.5/3.0 ATR race vs K=20 matched null, "
+        "cap 20, PIT S&P 500 2010-2019, after costs (v140 screen)")
