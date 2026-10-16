@@ -238,10 +238,9 @@ function sign(value: number | null): 'pos' | 'neg' | null {
     .month-line .zero { stroke: var(--border-strong); stroke-dasharray: 2 2; }
     .month-line .curve { fill: none; stroke: var(--text-secondary); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
     .month-line .marker { fill: var(--accent); }
-    .mtd, .month-panel .rank { margin: var(--space-4) 0 0; font-size: var(--text-table); }
+    .mtd { margin: var(--space-4) 0 0; font-size: var(--text-table); }
+    .month-panel .rank { margin: 0; padding-top: var(--space-4); font-size: var(--text-table); }
     .mtd span { font-family: var(--font-mono); }
-    .pos { color: var(--pos); }
-    .neg { color: var(--neg); }
     .table-wrap { overflow-x: auto; }
     .breakdown { width: 100%; margin-top: var(--space-10); border-collapse: collapse; font-size: var(--text-table); }
     .breakdown th, .breakdown td { padding: var(--space-4) var(--space-6); text-align: left; }
