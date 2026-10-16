@@ -274,7 +274,8 @@ do not name their skills or agents (for example `feature-dev:code-reviewer`)
 as a next step.
 
 Drive any browser, including production at bomeo-capital.com, with Playwright
-(`npx playwright` from `frontend/`). For production, launch it headed and let
+(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile, so one
+sign-in lasts; paths without a leading slash). For production, launch it headed and let
 the partner type the credentials; never script, ask for or store that login.
 
 ## Efficient repository navigation

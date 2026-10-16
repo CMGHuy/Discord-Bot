@@ -57,7 +57,15 @@ Referenced from the root `CLAUDE.md`.
   to production at bomeo-capital.com): use Playwright, never
   `claude-in-chrome`.** For bomeo-capital.com, launch it headed
   (`headless: false`) and let the partner type the credentials into the
-  window — never script, ask for or store a production login. The extension isn't installed/connected in this
+  window — never script, ask for or store a production login. **Use
+  `frontend/scripts/browse.mjs`** (Playwright is a `frontend` devDependency,
+  so `npm ci` keeps it; Chromium lives in `%LOCALAPPDATA%\ms-playwright`): it
+  opens a persistent profile under `%LOCALAPPDATA%\swingbot-playwright`, so
+  one sign-in lasts until the session cookie expires. `node
+  frontend/scripts/browse.mjs shots --out <dir> --path "trades/<id>?tab=live"
+  --widths 1440,820,390` writes full-height PNG + text per width; `... api
+  --path "api/v1/trades/<id>"` prints JSON. Write paths without the leading
+  slash (Git Bash rewrites `/trades/...`). The extension isn't installed/connected in this
   repo's sessions, so trying it first is a wasted round trip every time — go
   straight to `npx playwright` (install a local copy with
   `npm install --no-save playwright` inside `frontend/`, then
