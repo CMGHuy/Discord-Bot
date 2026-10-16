@@ -366,3 +366,180 @@ def test_a_trade_that_never_scaled_out_is_still_one_row():
     rows = joined_rows([_trade("a" * 16)], [])
     assert [(r["leg_index"], r["leg_total"]) for r in rows] == [(0, 1)]
     assert rows[0]["pnl_amount"] == 50.0
+
+
+# --- v165 D1: fuller rows -------------------------------------------------
+#
+# Every figure is read from the part `expand_realized_legs` produced (leg
+# prices, leg shares, leg close) -- never re-derived from the plan, never a
+# third copy of the leg pricing in `expand_trade_legs` / `_row_from_leg`.
+
+from swingbot.core.analytics.pnl_calendar import (ROW_KEYS, held_hours,
+                                                  return_pct, row_exit_reason)
+
+_D1_KEYS = ("entry_price", "exit_price", "stop_price", "tp1", "tp2", "shares",
+            "held_hours", "return_pct", "exit_reason")
+
+
+def test_the_d1_keys_are_appended_after_leg_total_in_order():
+    assert ROW_KEYS[-10:] == ("leg_total", *_D1_KEYS)
+
+
+def test_a_whole_trade_row_carries_every_d1_field():
+    trade = _trade("a" * 16)
+    trade.update(take_profit=120.0, target2=130.0, close_reason="time_exit")
+    row = joined_rows([trade], [])[0]
+    assert {k: row[k] for k in _D1_KEYS} == {
+        "entry_price": 100.0, "exit_price": 110.0, "stop_price": 95.0,
+        "tp1": 120.0, "tp2": 130.0, "shares": 10.0,
+        # 2026-08-01T14:00Z -> 2026-08-03T20:00Z = 2 days 6 hours.
+        "held_hours": 54.0,
+        # (110 - 100) / 100 * 100.
+        "return_pct": 10.0,
+        # Whole trade: metrics.exit_reason_bucket(trade), alias time_exit.
+        "exit_reason": "timeout",
+    }
+
+
+def test_a_short_whole_trade_return_is_sign_flipped():
+    trade = _trade("a" * 16, direction="bearish", exit_price=90.0, stop=105.0)
+    row = joined_rows([trade], [])[0]
+    # (100 - 90) / 100 * 100: a short that fell 10% made +10%.
+    assert row["return_pct"] == 10.0
+
+
+def _reasoned_scaled_trade():
+    """TP1 half at 110 on 08-03 15:00Z, runner half at 105 on 08-05 19:00Z,
+    each leg carrying the reason the v2 manager writes."""
+    trade = _scaled_trade("a" * 16, legs=({**_TP1, "reason": "tp1"},
+                                          {**_RUNNER, "reason": "runner_trail"}))
+    trade.update(take_profit=110.0, target2=120.0)
+    return trade
+
+
+def test_a_tp1_leg_reads_its_own_prices_shares_hold_and_reason():
+    leg = joined_rows([_reasoned_scaled_trade()], [])[0]
+    assert {k: leg[k] for k in _D1_KEYS} == {
+        "entry_price": 100.0, "exit_price": 110.0, "stop_price": 95.0,
+        "tp1": 110.0, "tp2": 120.0,
+        # 10 shares x fraction 0.5, already scaled by expand_trade_legs.
+        "shares": 5.0,
+        # 2026-08-01T14:00Z -> the LEG's close 2026-08-03T15:00Z = 49 h.
+        "held_hours": 49.0,
+        "return_pct": 10.0,
+        "exit_reason": "tp1",
+    }
+
+
+def test_the_closing_leg_of_a_finished_scale_out_reads_its_own_figures():
+    closing = joined_rows([_reasoned_scaled_trade()], [])[1]
+    assert {k: closing[k] for k in _D1_KEYS} == {
+        "entry_price": 100.0, "exit_price": 105.0, "stop_price": 95.0,
+        "tp1": 110.0, "tp2": 120.0, "shares": 5.0,
+        # 2026-08-01T14:00Z -> 2026-08-05T19:00Z = 4 days 5 hours.
+        "held_hours": 101.0,
+        "return_pct": 5.0,
+        "exit_reason": "runner_trail",
+    }
+
+
+def test_leg_dollars_still_sum_to_the_trades_realized_total():
+    # The one leg invariant v165 claims (D1). Leg R is NOT additive and is
+    # deliberately not asserted to sum to anything.
+    trade = _reasoned_scaled_trade()
+    rows = joined_rows([trade], [])
+    assert sum(r["pnl_amount"] for r in rows) == pytest.approx(trade["realized_pnl_amount"])
+
+
+def test_a_single_leg_trade_is_whole_and_uses_the_trade_level_bucket():
+    only = {"fraction": 1.0, "exit_price": 105.0, "reason": "tp1_runner_be",
+            "closed_at": "2026-08-05T19:00:00+00:00"}
+    row = joined_rows([_scaled_trade("a" * 16, legs=(only,), pnl=50.0)], [])[0]
+    assert (row["leg_index"], row["leg_total"]) == (0, 1)
+    # legs[-1].reason through the alias table.
+    assert row["exit_reason"] == "runner_be"
+
+
+def test_a_banked_leg_of_an_open_runner_buckets_by_the_legs_reason():
+    trade = _scaled_trade("a" * 16, status="open", closed_at=None, pnl=None,
+                          legs=({**_TP1, "reason": "tp1"},))
+    row = joined_rows([trade], [])[0]
+    assert (row["leg_total"], row["exit_reason"]) == (2, "tp1")
+
+
+def test_a_leg_with_no_or_unknown_reason_buckets_other():
+    # _TP1/_RUNNER carry no "reason" key at all.
+    rows = joined_rows([_scaled_trade("a" * 16)], [])
+    assert [r["exit_reason"] for r in rows] == ["other", "other"]
+    odd = _scaled_trade("b" * 16, legs=({**_TP1, "reason": "operator felt like it"},
+                                        {**_RUNNER, "reason": None}))
+    assert [r["exit_reason"] for r in joined_rows([odd], [])] == ["other", "other"]
+
+
+@pytest.mark.parametrize(("part", "trade"), [
+    pytest.param({"leg_index": 3, "leg_total": 4}, {"legs": [{"reason": "tp1"}]},
+                 id="index-overruns-legs"),
+    pytest.param({"leg_index": 0, "leg_total": 2}, {"legs": None}, id="no-legs"),
+    pytest.param({"leg_index": None, "leg_total": 2}, {"legs": [{"reason": "tp1"}]},
+                 id="no-index"),
+    pytest.param({"leg_index": -1, "leg_total": 2}, {"legs": [{"reason": "tp1"}]},
+                 id="negative-index"),
+])
+def test_row_exit_reason_never_raises_on_a_malformed_leg(part, trade):
+    assert row_exit_reason(part, trade) == "other"
+
+
+def test_missing_prices_and_stamps_are_none_never_zero():
+    trade = _trade("a" * 16, exit_price=None)
+    trade.update(opened_at=None, shares=None)
+    row = joined_rows([trade], [])[0]
+    assert row["exit_price"] is None
+    assert row["return_pct"] is None
+    assert row["held_hours"] is None
+    assert row["shares"] is None
+    # _trade sets no take_profit / target2 at all.
+    assert (row["tp1"], row["tp2"]) == (None, None)
+
+
+@pytest.mark.parametrize(("opened", "closed", "hours"), [
+    pytest.param("2026-08-01T14:00:00+00:00", "2026-08-03T20:00:00+00:00", 54.0, id="offset"),
+    pytest.param("2026-08-01T14:00:00Z", "2026-08-01T16:00:00Z", 2.0, id="zulu"),
+    pytest.param("2026-08-01T14:00:00", "2026-08-01T15:30:00+00:00", 1.5, id="naive-is-utc"),
+    pytest.param("2026-08-01T14:00:00+00:00", "2026-08-01T14:20:00+00:00", 0.33, id="two-dp"),
+    pytest.param("2026-08-01T14:00:00+00:00", "2026-08-01T14:00:00+00:00", 0.0, id="same-instant"),
+])
+def test_held_hours(opened, closed, hours):
+    assert held_hours(opened, closed) == hours
+
+
+@pytest.mark.parametrize(("opened", "closed"), [
+    pytest.param(None, "2026-08-03T20:00:00+00:00", id="no-open"),
+    pytest.param("2026-08-01T14:00:00+00:00", None, id="no-close"),
+    pytest.param("2026-08-01T14:00:00+00:00", "", id="empty-close"),
+    pytest.param("yesterday", "2026-08-03T20:00:00+00:00", id="unparseable"),
+    pytest.param("2026-08-03T20:00:00+00:00", "2026-08-01T14:00:00+00:00", id="reversed"),
+])
+def test_held_hours_is_none_when_it_cannot_be_measured(opened, closed):
+    assert held_hours(opened, closed) is None
+
+
+@pytest.mark.parametrize(("entry", "exit_price", "direction", "pct"), [
+    pytest.param(100.0, 110.0, "bullish", 10.0, id="long-up"),
+    pytest.param(100.0, 90.0, "bullish", -10.0, id="long-down"),
+    pytest.param(100.0, 90.0, "bearish", 10.0, id="short-down"),
+    pytest.param(100.0, 110.0, "bearish", -10.0, id="short-up"),
+    pytest.param(3.0, 3.1, "bullish", 3.33, id="two-dp"),
+])
+def test_return_pct(entry, exit_price, direction, pct):
+    assert return_pct(entry, exit_price, direction) == pct
+
+
+@pytest.mark.parametrize(("entry", "exit_price", "direction"), [
+    pytest.param(None, 110.0, "bullish", id="no-entry"),
+    pytest.param(0.0, 110.0, "bullish", id="zero-entry"),
+    pytest.param(100.0, None, "bullish", id="no-exit"),
+    pytest.param(100.0, 110.0, None, id="no-direction"),
+    pytest.param(100.0, 110.0, "sideways", id="unknown-direction"),
+])
+def test_return_pct_is_none_when_it_cannot_be_signed(entry, exit_price, direction):
+    assert return_pct(entry, exit_price, direction) is None

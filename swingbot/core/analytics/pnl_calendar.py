@@ -35,6 +35,9 @@ ROW_KEYS = (
     "trade_id", "plan_id", "ticker", "strategy", "horizon", "direction", "day",
     "opened_at", "closed_at", "outcome", "pnl_amount", "r_multiple", "mfe_r", "mae_r",
     "exit_efficiency", "tags", "auto_lesson", "leg_index", "leg_total",
+    # v165 D1 -- read from the part, never re-derived (see `_detail_fields`).
+    "entry_price", "exit_price", "stop_price", "tp1", "tp2", "shares",
+    "held_hours", "return_pct", "exit_reason",
 )
 
 
@@ -67,7 +70,101 @@ def _float_or_none(value) -> float | None:
         return None
 
 
-def _row_for(part: dict, entry: dict) -> dict | None:
+def _utc_stamp(value) -> _dt.datetime | None:
+    """An ISO timestamp as an aware datetime, a naive one read as UTC.
+
+    Every close the tracker writes is UTC ISO (`day_of`'s premise), so a
+    naive stamp is an older record missing its offset, not local time.
+    """
+    if not value:
+        return None
+    try:
+        stamp = _dt.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=_dt.timezone.utc)
+
+
+def held_hours(opened_at: str | None, closed_at: str | None) -> float | None:
+    """Hours from open to close, 2 dp -- or None when it cannot be measured.
+
+    None, never 0, when either stamp is missing or unparseable, and when the
+    close precedes the open (a hand-edited record): a 0h hold is a real
+    answer that a broken record must not be able to fake. Deliberately not
+    `api_v1/trades._held_hours` -- core never imports admin.
+    """
+    opened, closed = _utc_stamp(opened_at), _utc_stamp(closed_at)
+    if opened is None or closed is None or closed < opened:
+        return None
+    return round((closed - opened).total_seconds() / 3600, 2)
+
+
+# The only two directions a return can be signed for -- the same rule
+# `metrics.r_multiple` applies; anything else is None, not a guessed long.
+_DIRECTION_SIGN = {"bullish": 1, "bearish": -1}
+
+
+def return_pct(entry: float | None, exit_price: float | None,
+               direction: str | None) -> float | None:
+    """Signed % move from entry to exit in the trade's favour, 2 dp.
+
+    A short that fell 10% returns +10. None when entry is missing or 0, the
+    exit is missing, or the direction is unknown.
+    """
+    sign = _DIRECTION_SIGN.get(direction)
+    if not entry or exit_price is None or sign is None:
+        return None
+    return round((exit_price - entry) / entry * 100 * sign, 2)
+
+
+def _leg_reason(part: dict, trade: dict) -> str | None:
+    """The parent trade's recorded reason for this part's leg, or None.
+
+    A leg part carries `legs: None`, so the reason only lives on the parent,
+    at the part's own `leg_index` (`expand_trade_legs` emits legs in order).
+    """
+    legs = trade.get("legs") or []
+    index = part.get("leg_index")
+    if not isinstance(index, int) or not 0 <= index < len(legs):
+        return None
+    return legs[index].get("reason")
+
+
+def row_exit_reason(part: dict, trade: dict) -> str:
+    """The EXIT_REASONS bucket of one calendar row.
+
+    A whole trade (`leg_total == 1`) is bucketed like every other exit-quality
+    table: `metrics.exit_reason_bucket` on the trade. A leg is bucketed by
+    its own recorded reason, text only -- "other" when that names nothing.
+    """
+    if part.get("leg_total") == 1:
+        return metrics.exit_reason_bucket(trade)
+    return metrics.exit_reason_bucket_text(_leg_reason(part, trade)) or "other"
+
+
+def _detail_fields(part: dict, trade: dict) -> dict:
+    """The D1 fields, read from the part `expand_realized_legs` built.
+
+    Leg prices, leg shares and the leg's close are already on the part, so
+    nothing here re-prices a leg -- a third copy of that maths beside
+    `expand_trade_legs` and `api_v1/trades._row_from_leg` is how the three
+    start to disagree. Every missing input stays None.
+    """
+    entry_price = _float_or_none(part.get("entry"))
+    exit_price = _float_or_none(part.get("exit_price"))
+    return {
+        "entry_price": entry_price,
+        "exit_price": exit_price,
+        "stop_price": _float_or_none(part.get("stop_loss")),
+        "tp1": _float_or_none(part.get("take_profit")),
+        "tp2": _float_or_none(part.get("target2")),
+        "shares": _float_or_none(part.get("shares")),
+        "held_hours": held_hours(part.get("opened_at"), part.get("closed_at")),
+        "return_pct": return_pct(entry_price, exit_price, part.get("direction")),
+        "exit_reason": row_exit_reason(part, trade),
+    }
+
+def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
     """One calendar row for one realized part of a trade.
 
     `part` is a row of `performance.expand_realized_legs`: the trade itself
@@ -80,6 +177,9 @@ def _row_for(part: dict, entry: dict) -> dict | None:
     and reusing it avoids a second answer for one trade. A leg's R is the
     leg's own (`metrics.r_multiple` on a leg row prices that leg's exit); the
     journal only ever recorded the blended R of the whole position.
+
+    `trade` is the part's parent record: a leg part has `legs: None`, and its
+    exit reason only lives in `trade["legs"]` (see `row_exit_reason`).
     """
     day = day_of(part.get("closed_at"))
     if day is None:
@@ -110,6 +210,7 @@ def _row_for(part: dict, entry: dict) -> dict | None:
         "auto_lesson": entry.get("auto_lesson") or None,
         "leg_index": part["leg_index"],
         "leg_total": part["leg_total"],
+        **_detail_fields(part, trade),
     }
 
 
@@ -136,7 +237,7 @@ def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
     for t in trades:
         entry = by_trade_id.get(t.get("id")) or {}
         for part in expand_realized_legs(t):
-            if (row := _row_for(part, entry)) is not None:
+            if (row := _row_for(part, entry, t)) is not None:
                 rows.append(row)
     return rows
 

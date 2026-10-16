@@ -191,6 +191,11 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
         "mfe_r": NULLABLE_NUMBER, "mae_r": NULLABLE_NUMBER,
         "exit_efficiency": NULLABLE_NUMBER, "tags": list,
         "auto_lesson": NULLABLE_STR, "leg_index": int, "leg_total": int,
+        # v165 D1.
+        "entry_price": NULLABLE_NUMBER, "exit_price": NULLABLE_NUMBER,
+        "stop_price": NULLABLE_NUMBER, "tp1": NULLABLE_NUMBER, "tp2": NULLABLE_NUMBER,
+        "shares": NULLABLE_NUMBER, "held_hours": NULLABLE_NUMBER,
+        "return_pct": NULLABLE_NUMBER, "exit_reason": str,
     }, where="trades[0]")
     assert body["trades"][0]["tags"] == ["clean-exit"]
     assert body["trades"][0]["auto_lesson"] == "Held to target."
