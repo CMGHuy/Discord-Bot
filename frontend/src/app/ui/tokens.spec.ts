@@ -281,11 +281,12 @@ describe('v80 D3: type, shape and touch', () => {
 
   it('offers a hero size above the primary metric size', () => {
     const style = getComputedStyle(document.documentElement);
-    const hero = style.getPropertyValue('--text-hero').trim();
-    expect(hero).not.toBe('');
+    expect(style.getPropertyValue('--text-hero').trim()).not.toBe('');
     // Same calc(px * var(--text-scale)) shape as every other size token, so
-    // the zoom control reaches it too.
-    expect(hero).toContain('var(--text-scale)');
+    // the zoom control reaches it too. Asserted on the source: the jsdom
+    // document carries flattened literals (spec v167, Amendment 1), where
+    // var(--text-scale) has already been replaced by its value.
+    expect(CSS).toMatch(/^\s*--text-hero:\s*calc\(44px \* var\(--text-scale\)\);/m);
   });
 
   it('tightens both radii to 2px', () => {
