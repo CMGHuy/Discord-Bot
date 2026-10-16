@@ -46,6 +46,7 @@ from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 from swingbot.core.planning.acceptance_levels import enabled_arms  # noqa: E402
 from swingbot.core.planning.exit_sim import simulate_exit  # noqa: E402
 from swingbot.scan_params import ScanParams  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
 
 RESULTS = ROOT / "docs" / "superpowers" / "results"
 LOG_DIR = ROOT / "logs"
@@ -129,17 +130,26 @@ def ticker_rows(ticker, frame, positions, calendar, tolerance_pct,
     return rows, others
 
 
+def _session_calendar():
+    """The SPY trading calendar from the selected training data (v162). Under
+    yfinance this reads the same SPY.csv measure_earnings_blackout.load_calendar did."""
+    from swingbot.core.market.session import SessionCalendar
+    spy = training_data.load_daily("SPY")
+    if spy is None or spy.empty:
+        raise SystemExit("SPY missing from the training data")
+    return SessionCalendar.from_bar_index(spy.index)
+
+
 def _worker(task) -> tuple:
     """One ticker, every horizon -- the process-pool entry point."""
     ticker, earnings_dir, tolerance_pct = task
     from measure_arms import load_frame
-    from measure_earnings_blackout import load_calendar, reaction_positions
-    from swingbot.core.marketdata import backtest_cache
+    from measure_earnings_blackout import reaction_positions
     from swingbot.core.marketdata.universe import is_etf
     frame = load_frame(ticker)
     if frame is None:
         return ticker, [], 0
-    calendar = load_calendar(backtest_cache.CACHE_DIR)
+    calendar = _session_calendar()
     positions = [] if is_etf(ticker) else reaction_positions(
         ticker, CsvSource(earnings_dir), calendar)
     rows, others = ticker_rows(ticker, frame, positions, calendar, tolerance_pct)
@@ -174,7 +184,8 @@ def run_replay(universe, earnings_dir, workers=None) -> dict:
         for task in tasks:
             record(*_worker(task))
     else:
-        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+        with ProcessPoolExecutor(max_workers=n_workers, initializer=training_data.select,
+                                 initargs=(training_data.active(),)) as pool:
             for future in as_completed([pool.submit(_worker, task) for task in tasks]):
                 record(*future.result())
     PROGRESS.unlink(missing_ok=True)
@@ -233,6 +244,7 @@ def load_or_replay(args) -> dict:
     target = rows_path(args.out_dir)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(blob), encoding="utf-8")
+    training_data.write_provenance(target)
     return blob
 
 
@@ -254,7 +266,10 @@ def main(argv=None) -> int:
     parser.add_argument("--tickers", type=int, default=None)
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--from-rows", type=Path, default=None)
+    from fetch_backtest_data import add_data_source_arg, apply_data_source
+    add_data_source_arg(parser)
     args = parser.parse_args(argv)
+    apply_data_source(args)
     refusal = cli_refusal(args)
     if refusal:
         print(refusal, file=sys.stderr)

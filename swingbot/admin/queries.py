@@ -39,7 +39,7 @@ from swingbot.core.tracking.performance import TradeLog, primary_strategy_label
 from swingbot.core.planning.plan_engine import PlanStatus, plan_to_dict
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.market.strategy_types import STRATEGY_GATES, live_horizons
-from swingbot.core.backtesting.registry import decay_for, load_registry
+from swingbot.core.backtesting.registry import active_rows, decay_for, load_registry
 
 from .dashboard import is_today_berlin as _is_today_berlin
 
@@ -203,13 +203,15 @@ def _registry_rows() -> list[dict]:
     filters to the pooled record (horizon is None) for each name in
     ALL_STRATEGIES -- that also makes the strategy->record mapping
     deterministic (no ambiguity from multiple records sharing a strategy
-    key)."""
+    key).
+
+    v162: active_rows keeps one row per key, the active training source's."""
     snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
     by_strategy_rows = ((snap or {}).get("by") or {}).get("strategy", [])
     by_strategy = {row["key"]: row for row in by_strategy_rows}
     drift_by_strategy = {d["strategy"]: d for d in ((snap or {}).get("calibration") or {}).get("drift") or []}
     rows = []
-    for rec in load_registry():
+    for rec in active_rows(load_registry()):
         if rec.get("horizon") is not None or rec["strategy"] not in ALL_STRATEGIES:
             continue
         live = by_strategy.get(rec["strategy"], {})

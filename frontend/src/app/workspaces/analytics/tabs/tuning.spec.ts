@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal, WritableSignal } from '@angular
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AnalyticsStrategies } from '../../../api/models';
+import { AnalyticsStrategies, TuneDefaults } from '../../../api/models';
 import { AnalyticsStore, GridRow, JobStatus, JobSummary, ProposalRow } from '../../../stores/analytics.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import { installDialogPolyfill } from '../../../testing/dialog-polyfill';
@@ -58,6 +58,8 @@ interface StoreStub {
   job: WritableSignal<JobStatus | null>;
   grid: WritableSignal<GridRow[]>;
   gridStrategy: WritableSignal<string | null>;
+  gridDataSource: WritableSignal<string | null>;
+  tuneDefaults: WritableSignal<TuneDefaults | null>;
   proposeResult: WritableSignal<string | null>;
   proposeError: WritableSignal<string | null>;
   proposing: WritableSignal<number | null>;
@@ -77,6 +79,8 @@ function storeStub(overrides: Partial<Record<keyof StoreStub, unknown>> = {}): S
     job: signal(null),
     grid: signal([]),
     gridStrategy: signal(null),
+    gridDataSource: signal(null),
+    tuneDefaults: signal({ data_source: 'alpaca', choices: ['alpaca', 'yfinance'] }),
     proposeResult: signal(null),
     proposeError: signal(null),
     proposing: signal(null),
@@ -109,7 +113,7 @@ describe('TuningTab', () => {
     // RSI before MACD -- alphabetically backwards -- so this also proves the
     // picker does not re-sort what `/analytics/strategies` already ordered.
     const { el } = render(storeStub());
-    const options = [...el.querySelectorAll('sb-select option')].map((o) => o.textContent!.trim());
+    const options = [...el.querySelector('sb-select')!.querySelectorAll('option')].map((o) => o.textContent!.trim());
     expect(options).toEqual(['Pick a strategy', 'RSI', 'MACD']);
     const launch = [...el.querySelectorAll('button')].find((b) => b.textContent!.includes('Launch TRAIN grid'))!;
     expect(launch.disabled).toBe(true);
@@ -125,7 +129,7 @@ describe('TuningTab', () => {
     const launch = [...el.querySelectorAll('button')].find((b) => b.textContent!.includes('Launch TRAIN grid'))!;
     expect(launch.disabled).toBe(false);
     launch.click();
-    expect(store.startTune).toHaveBeenCalledWith('RSI');
+    expect(store.startTune).toHaveBeenCalledWith('RSI', 'alpaca');
 
     store.jobActive.set(true);
     fixture.detectChanges();
@@ -233,5 +237,61 @@ describe('TuningTab', () => {
     const { el } = render(storeStub({ grid: signal([gridRow()]) }));
     expect(el.querySelector('.n')).toBeNull();
     expect(el.querySelector('.all-time')).toBeNull();
+  });
+
+  /* -- v162: training data --------------------------------------------- */
+
+  function sourceSelect(el: HTMLElement): HTMLSelectElement {
+    return el.querySelectorAll<HTMLSelectElement>('sb-select select')[1];
+  }
+
+  function pickStrategy(fixture: { detectChanges(): void }, el: HTMLElement, value: string) {
+    const select = el.querySelector<HTMLSelectElement>('sb-select select')!;
+    select.value = value;
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+  }
+
+  function launchButton(el: HTMLElement): HTMLButtonElement {
+    return [...el.querySelectorAll('button')].find((b) => b.textContent!.includes('Launch TRAIN grid'))!;
+  }
+
+  it('offers the training data with the server default first and preselected', () => {
+    const store = storeStub({ tuneDefaults: signal({ data_source: 'yfinance', choices: ['alpaca', 'yfinance'] }) });
+    const { el } = render(store);
+    const select = sourceSelect(el);
+    const labels = [...select.querySelectorAll('option')].map((o) => o.textContent!.trim());
+    expect(labels).toEqual(['yfinance cache (default)', 'Alpaca history store']);
+    expect(select.value).toBe('yfinance');
+    expect(el.textContent).toContain('Training data');
+  });
+
+  it('launches with the source the user picked', () => {
+    const store = storeStub();
+    const { fixture, el } = render(store);
+    pickStrategy(fixture, el, 'MACD');
+    const source = sourceSelect(el);
+    source.value = 'yfinance';
+    source.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    launchButton(el).click();
+    expect(store.startTune).toHaveBeenCalledWith('MACD', 'yfinance');
+  });
+
+  it('hides the source picker when the defaults never arrived, and still launches', () => {
+    const store = storeStub({ tuneDefaults: signal(null) });
+    const { fixture, el } = render(store);
+    expect(el.querySelectorAll('sb-select')).toHaveLength(1);
+    pickStrategy(fixture, el, 'RSI');
+    launchButton(el).click();
+    // An empty source: the server applies TRAINING_DATA_SOURCE itself.
+    expect(store.startTune).toHaveBeenCalledWith('RSI', '');
+  });
+
+  it('names the training data a grid was measured on in its heading', () => {
+    const { el } = render(storeStub({
+      grid: signal([gridRow()]), gridStrategy: signal('RSI'), gridDataSource: signal('alpaca'),
+    }));
+    expect(el.textContent).toContain('Grid results — RSI · training data: alpaca');
   });
 });

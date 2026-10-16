@@ -63,6 +63,10 @@ from swingbot.core.edge import factors as rs_factors
 from swingbot.core.market.indicators import ema
 from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS
 from swingbot.core.scanning.regime import _HTF_EMA_PERIOD, get_htf_bias
+from swingbot.core.marketdata import training_data
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cache_dir_source  # noqa: E402
 
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
 TRAIN = ("2020-01-01", "2023-12-31")
@@ -380,33 +384,26 @@ def identity_check(rows: list) -> dict:
     }
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--train", action="store_true",
                     help="run over the TRAIN window (the only supported window)")
     ap.add_argument("--json", default=None, help="write the full result set here")
-    ap.add_argument("--cache-dir", default=None,
-                    help="OHLCV CSV cache. Defaults to <repo>/data/backtest_cache, "
-                         "which is EMPTY inside a git worktree (data/ is "
-                         "gitignored, so a worktree gets its own bare copy) -- "
-                         "point this at the main checkout's cache when running "
-                         "from one.")
+    ap.add_argument("--cache-dir", default=None, help=cache_dir_source.CACHE_DIR_HELP)
     ap.add_argument("--limit", type=int, default=None,
                     help="only the first N cached tickers (smoke test)")
     ap.add_argument("--verify-ema", action="store_true",
                     help="assert the EMA precompute matches get_htf_bias, then exit")
-    args = ap.parse_args()
+    cache_dir_source.add_args(ap)
+    args = ap.parse_args(argv)
 
-    cache = Path(args.cache_dir) if args.cache_dir else CACHE_DIR
-    paths = sorted(cache.glob("*.csv"))
-    if args.limit:
-        paths = paths[:args.limit]
-    if not paths:
-        print(f"No CSVs in {cache} -- run scripts/data/fetch_backtest_data.py "
-              f"first, or pass --cache-dir.", file=sys.stderr)
+    cache = cache_dir_source.resolve(args)
+    frames = cache_dir_source.load_all(cache, limit=args.limit)
+    if not frames:
+        print(f"No frames in {cache_dir_source.describe(cache)} -- run "
+              f"scripts/data/fetch_backtest_data.py first, or pass --cache-dir.",
+              file=sys.stderr)
         return 1
-    frames = {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True)
-              for p in paths}
 
     if args.verify_ema:
         return 1 if verify_ema_precompute(frames) else 0
@@ -499,6 +496,7 @@ def main() -> int:
                              ("macro_agree", "adj_agree"))},
         }
         Path(args.json).write_text(json.dumps(out, indent=2))
+        training_data.write_provenance(args.json)
         print(f"\nWrote {args.json}", flush=True)
     return 0
 

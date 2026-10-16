@@ -45,7 +45,6 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
@@ -53,6 +52,10 @@ sys.path.insert(0, str(ROOT))
 from swingbot.core.backtesting.backtest_scenarios import replay_scenarios  # noqa: E402
 from swingbot.core.market.chart_patterns import dead_cat_bounce  # noqa: E402
 from swingbot.core.planning.plan_engine import simulate_exit  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cache_dir_source  # noqa: E402
 
 CACHE_DIR = ROOT / "data" / "backtest_cache"
 OUT_TRAIN = ROOT / "data" / "v68_train_dcb.json"
@@ -110,11 +113,8 @@ def load_frames(cache_dir: Path, watchlist: list, tickers: list | None,
         symbols = sorted(watchlist)[::sample_every]
     frames = {}
     for sym in symbols:
-        p = cache_dir / f"{sym}.csv"
-        if not p.exists():
-            continue
-        df = pd.read_csv(p, index_col="Date", parse_dates=True)
-        if len(df):
+        df = cache_dir_source.load_frame(cache_dir, sym)
+        if df is not None:
             frames[sym] = df
     return frames
 
@@ -243,7 +243,7 @@ def select_cell(scored: dict) -> tuple:
     return best, "selected"
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--train", action="store_true", help="the TRAIN window (default)")
@@ -260,16 +260,15 @@ def main() -> int:
                          "(smoke test)")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the table but do not write the JSON output")
-    ap.add_argument("--cache-dir", default=None,
-                    help="OHLCV CSV cache. Defaults to <repo>/data/backtest_cache, "
-                         "which is EMPTY inside a git worktree -- point this at the "
-                         "main checkout's cache when running from one.")
+    ap.add_argument("--cache-dir", default=None, help=cache_dir_source.CACHE_DIR_HELP)
     ap.add_argument("--json", default=None, help="override the output JSON path")
     ap.add_argument("--workers", type=int, default=None,
                     help="process-pool size for the replay pass (default: "
                          "ProcessPoolExecutor's own CPU-count default). "
                          "--workers 1 forces the serial path.")
-    args = ap.parse_args()
+    cache_dir_source.add_args(ap)
+    args = ap.parse_args(argv)
+    cache_dir = cache_dir_source.resolve(args)
 
     if args.validation and not args.cell:
         print("--validation requires --cell <id>", file=sys.stderr)
@@ -277,7 +276,6 @@ def main() -> int:
 
     window = VALIDATION if args.validation else TRAIN
     label = "VALIDATION" if args.validation else "TRAIN"
-    cache_dir = Path(args.cache_dir) if args.cache_dir else CACHE_DIR
     from swingbot.core.marketdata.watchlist import load_watchlist
     watchlist = load_watchlist()
 
@@ -287,7 +285,7 @@ def main() -> int:
 
     frames = load_frames(cache_dir, watchlist, tickers, sample_every)
     if not frames:
-        print(f"No frames loaded from {cache_dir} (watchlist table) -- "
+        print(f"No frames loaded from {cache_dir_source.describe(cache_dir)} (watchlist table) -- "
               f"run scripts/data/fetch_backtest_data.py or pass --cache-dir.",
               file=sys.stderr)
         return 1
@@ -348,6 +346,7 @@ def main() -> int:
             payload["rule"] = RULE
             payload["selected"], payload["selection_reason"] = select_cell(scored)
         out.write_text(json.dumps(payload, indent=2))
+        training_data.write_provenance(out)
         print(f"\nWrote {out}", flush=True)
 
     return 0

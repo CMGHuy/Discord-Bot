@@ -992,12 +992,22 @@ export interface JobStarted {
 /** `GET /jobs/:id/result` — a finished tuning job's grid.
  *
  *  `strategy` is null and `grid` empty while the job is still running: the
- *  endpoint answers 200 with the same three keys either way, so nothing here
- *  has to branch on which shape arrived (SR51). */
+ *  endpoint answers 200 with the same keys either way, so nothing here has to
+ *  branch on which shape arrived (SR51). `data_source` (v162) is the training
+ *  data the grid ran on: `"yfinance"` for a result written before v162, null
+ *  while there is no result yet. */
 export interface JobResult {
   job_id: string;
   strategy: string | null;
   grid: unknown[];
+  data_source: string | null;
+}
+
+/** `GET /jobs/tune/defaults` (v162) — the launcher's training-data picker:
+ *  the server's TRAINING_DATA_SOURCE and every value it accepts. */
+export interface TuneDefaults {
+  data_source: string;
+  choices: string[];
 }
 
 export interface ProposalList {

@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 from flask import jsonify, request
 
+from swingbot import config
 from swingbot.admin.jobs import build_tune_args
 from swingbot.admin.jobs import manager as job_manager
 
@@ -66,6 +67,12 @@ def get_job(job_id: str):
     return jsonify({**status, "log_tail": job_manager.tail(job_id, n=50)})
 
 
+def _result_data_source(result: dict) -> str:
+    """The training data a stored tuning result ran on (v162). A payload
+    written before v162 carries none, and every one of those ran on yfinance."""
+    return result.get("data_source") or "yfinance"
+
+
 @api_v1.route("/jobs/<job_id>/result", methods=["GET"])
 @require_auth
 def get_job_result(job_id: str):
@@ -92,7 +99,7 @@ def get_job_result(job_id: str):
         # 404 here would have the UI report a failure for the ordinary case of
         # "it has not finished". The caller distinguishes the two by the job's
         # own state, which it already has.
-        return jsonify({"job_id": job_id, "strategy": None, "grid": []})
+        return jsonify({"job_id": job_id, "strategy": None, "grid": [], "data_source": None})
 
     grid = [
         {**row, "row_index": index, "passes": _grid_row_passes(row)}
@@ -105,6 +112,7 @@ def get_job_result(job_id: str):
         # identifies a row by. Leaving the client to infer it from array
         # position would break the moment anything sorted or filtered the grid.
         "grid": grid,
+        "data_source": _result_data_source(result),
     })
 
 
@@ -117,15 +125,27 @@ def start_tune_job():
     try:
         args = build_tune_args(strategy, params)
     except ValueError as exc:
-        # build_tune_args also enforces TRAIN-only windows. A ValueError here
-        # can mean "you asked to tune against the validation window", which
-        # is a spent resource -- surface its message rather than a generic one.
+        # build_tune_args also enforces TRAIN-only windows and the data_source
+        # whitelist. A ValueError here can mean "you asked to tune against the
+        # validation window", which is a spent resource -- surface its message
+        # rather than a generic one.
         return error("invalid", str(exc), 400)
     try:
         job_id = job_manager.start("tune", args)
     except RuntimeError:
         return error("conflict", "Another job is already running.", 409)
     return jsonify({"job_id": job_id})
+
+
+@api_v1.route("/jobs/tune/defaults", methods=["GET"])
+@require_auth
+def tune_defaults():
+    """The Tuning launcher's source picker (v162): the configured default and
+    every allowed value. Read per request, so a SIGHUP reload of
+    TRAINING_DATA_SOURCE shows on the next page load."""
+    from swingbot.core.marketdata.training_data import DATA_SOURCES
+
+    return jsonify({"data_source": config.TRAINING_DATA_SOURCE, "choices": list(DATA_SOURCES)})
 
 
 # --- tuning proposals ----------------------------------------------------

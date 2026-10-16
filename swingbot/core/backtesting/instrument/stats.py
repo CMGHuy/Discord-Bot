@@ -116,6 +116,12 @@ LEDGER_FIELDS = ("id", "date", "hypothesis", "instrument", "n", "exp_r", "p",
 VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN",
             "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED")
 INSTRUMENTS = ("v1", "v2", "screen-v1")
+#: v162 adds one OPTIONAL field: the bars a verdict was measured on. Rows
+#: written before v162 have none and mean yfinance (ledger_data_source); they
+#: are never rewritten (schema-evolution.md: an added field, no upcasting
+#: beyond that one default).
+OPTIONAL_LEDGER_FIELDS = ("data_source",)
+LEDGER_DATA_SOURCES = ("alpaca", "yfinance")
 
 
 def _text(value) -> bool:
@@ -147,21 +153,29 @@ _FIELD_CHECKS = {
     "id": _text, "date": _iso_date, "hypothesis": _text,
     "instrument": INSTRUMENTS.__contains__, "n": _count, "exp_r": _real,
     "p": _probability, "verdict": VERDICTS.__contains__, "record": _text,
+    "data_source": LEDGER_DATA_SOURCES.__contains__,
 }
 
 
 def validate_ledger_row(row) -> None:
-    """Raise ValueError unless ``row`` has exactly LEDGER_FIELDS, each valid."""
+    """Raise ValueError unless ``row`` has exactly LEDGER_FIELDS plus any of
+    OPTIONAL_LEDGER_FIELDS, each valid."""
     if not isinstance(row, dict):
         raise ValueError("a ledger row must be a JSON object")
     missing = sorted(set(LEDGER_FIELDS) - set(row))
-    extra = sorted(set(row) - set(LEDGER_FIELDS))
+    extra = sorted(set(row) - set(LEDGER_FIELDS) - set(OPTIONAL_LEDGER_FIELDS))
     if missing or extra:
         raise ValueError(f"ledger row {row.get('id')!r}: missing {missing}, "
                          f"extra {extra}")
-    bad = [name for name in LEDGER_FIELDS if not _FIELD_CHECKS[name](row[name])]
+    present = [name for name in (*LEDGER_FIELDS, *OPTIONAL_LEDGER_FIELDS) if name in row]
+    bad = [name for name in present if not _FIELD_CHECKS[name](row[name])]
     if bad:
         raise ValueError(f"ledger row {row.get('id')!r}: invalid field(s) {bad}")
+
+
+def ledger_data_source(row: dict) -> str:
+    """The bars a ledger row was measured on; a row from before v162 means yfinance."""
+    return row.get("data_source") or "yfinance"
 
 
 def _parse_line(text: str, lineno: int, seen: set) -> dict:
@@ -198,7 +212,8 @@ def append_ledger_row(row: dict, path=LEDGER_PATH) -> list:
     if any(existing["id"] == row["id"] for existing in rows):
         raise ValueError(f"duplicate id {row['id']!r}: the ledger already "
                          "holds this pre-registration")
-    ordered = {name: row[name] for name in LEDGER_FIELDS}
+    ordered = {name: row[name] for name in (*LEDGER_FIELDS, *OPTIONAL_LEDGER_FIELDS)
+               if name in row}
     lead = "\n" if path.exists() and path.read_bytes()[-1:] not in (b"", b"\n") else ""
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(lead + json.dumps(ordered, ensure_ascii=False) + "\n")

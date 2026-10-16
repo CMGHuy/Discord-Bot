@@ -742,7 +742,7 @@ FIELDS: list[Field] = [
           help="v106. When on, live-path daily bars, 1h bars and last-trade prices for "
                "US equities/ETFs come from Alpaca (SIP bars >=15 min old, IEX last "
                "trade), falling back per symbol to yfinance. Off = exact pre-v106 "
-               "yfinance behaviour. Backtests never use Alpaca. Harmless with no "
+               "yfinance behaviour. Backtests read Alpaca only through the v162 history store (TRAINING_DATA_SOURCE). Harmless with no "
                "ALPACA_API_KEY_ID/SECRET set -- the router falls back to yfinance "
                "for everything until keys are added."),
     Field("ALPACA_API_KEY_ID", "ALPACA_API_KEY_ID", "Data Sources", "Alpaca API key ID",
@@ -780,6 +780,16 @@ FIELDS: list[Field] = [
     Field("ALPACA_BREAKER_COOLDOWN_SECONDS", "ALPACA_BREAKER_COOLDOWN_SECONDS",
           "Data Sources", "Alpaca breaker cool-down (s)", type="number", default="300",
           min=30, max=3600, step=30, help="How long Alpaca is skipped once the breaker opens."),
+    Field("TRAINING_DATA_SOURCE", "TRAINING_DATA_SOURCE", "Data Sources",
+          "Training data source", type="select", default="alpaca",
+          options=["alpaca", "yfinance"],
+          help="v162. Which daily bars every backtest, grid and the admin Tuning page train on. "
+               "'alpaca' = the history store data/market_data/ (Alpaca SIP, all adjustments, "
+               "from 2016; built by scripts/data/fetch_alpaca_history.py). 'yfinance' = the "
+               "legacy data/backtest_cache/. With 'alpaca' and no store a run stops with an "
+               "error naming the missing manifest -- never a zero-ticker run. A script's "
+               "--data-source overrides this; a set BACKTEST_CACHE_DIR means yfinance. Rollback "
+               "is this one line set to yfinance. The live scan and alerts never read it."),
     Field("SPOT_QUOTE_MAX_AGE_SECONDS", "SPOT_QUOTE_MAX_AGE_SECONDS", "Data Sources",
           "Max spot metals quote age (s)", type="number", default="900",
           min=60, max=86400, step=60,
@@ -1367,11 +1377,12 @@ _MODE_VALUES = {
     "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
     "COMPRESSION_SHORT_RESEARCH_MODE": ("off", "broad", "isolated"),
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
+    "TRAINING_DATA_SOURCE": ("alpaca", "yfinance"),
 }
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level
 # source), so a typo must land on the pre-v128 behaviour instead.
-_MODE_FALLBACK = {"FVG_LEVELS_MODE": "all"}
+_MODE_FALLBACK = {"FVG_LEVELS_MODE": "all", "TRAINING_DATA_SOURCE": "alpaca"}
 
 # Floats that must be finite and > 0. Anything else is a parse failure, so
 # _apply_env falls back to the field default and knobs.parse_knob refuses the arm.

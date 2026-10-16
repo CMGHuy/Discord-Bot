@@ -73,3 +73,7 @@ paths = ["tests/scripts/", "tests/hooks/", "tests/dev/"]
 [suites.config]
 description = "Config schema/keys -- the loose tests/test_*.py files (CI used to skip these)"
 paths = ["tests/test_*.py"]
+
+[suites.history-store]
+description = "v162 Alpaca history store: read seam, backfill, update, training switch"
+paths = ["tests/history_store/"]

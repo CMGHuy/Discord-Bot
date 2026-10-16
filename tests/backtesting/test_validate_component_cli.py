@@ -29,8 +29,10 @@ def write_arms(tmp_path, n_tickers=25, drop_from=8):
 
 
 def run(*args):
+    # v162: --data-source yfinance -- there is no Alpaca history store in tests.
     return subprocess.run([sys.executable, str(CLI), *args,
-                           "--bespoke-instrument", "pre-v100 unstamped test fixture"],
+                           "--bespoke-instrument", "pre-v100 unstamped test fixture",
+                           "--data-source", "yfinance"],
                           capture_output=True, text=True)
 
 

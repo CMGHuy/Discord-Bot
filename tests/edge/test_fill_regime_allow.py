@@ -12,6 +12,16 @@ import pytest
 from scripts.data.fill_regime_allow import decide, MIN_N_CELL, MIN_N_SUBFOLD, MIN_FOLD_AGREEMENT
 
 
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot import config
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
+
 def _trade(year, r, outcome="win"):
     return types.SimpleNamespace(entry_date=f"{year}-06-15", r_multiple=r, outcome=outcome)
 

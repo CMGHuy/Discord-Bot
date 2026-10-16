@@ -85,3 +85,24 @@ def test_verdict_choices_come_from_stats(tmp_path):
 def test_default_ledger_is_the_committed_file():
     args = cli.build_parser().parse_args(_args(Path("x"))[:-2])
     assert args.ledger == stats.LEDGER_PATH
+
+
+# --- v162: every new row names its data source -----------------------------------------
+
+def test_data_source_is_written_when_given(tmp_path):
+    ledger = tmp_path / "ledger.jsonl"
+    assert cli.main(_args(ledger, **{"--data-source": "yfinance"})) == 0
+    assert stats.load_ledger(ledger)[0]["data_source"] == "yfinance"
+
+
+def test_data_source_defaults_to_the_training_source(tmp_path, monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "alpaca", raising=False)
+    ledger = tmp_path / "ledger.jsonl"
+    assert cli.main(_args(ledger)) == 0
+    assert stats.load_ledger(ledger)[0]["data_source"] == "alpaca"
+
+
+def test_an_unknown_data_source_is_refused_by_argparse(tmp_path):
+    with pytest.raises(SystemExit):
+        cli.main(_args(tmp_path / "ledger.jsonl", **{"--data-source": "iex"}))

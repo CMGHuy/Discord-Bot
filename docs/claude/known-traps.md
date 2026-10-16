@@ -13,8 +13,52 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   `marketdata/data_store.py` → `market_data/` (grouped by candle timeframe:
   `{timeframe}/{TICKER}.csv`, e.g. `market_data/daily/AAPL.csv`, ~521 daily +
   78 hourly, what the edge-engine tasks depend on -- and, since v47, what
-  the live scan reads first). Both are gitignored.
+  the live scan reads first). Both are gitignored. A third, research-only store joined them in v162
+  (next bullet); it is the training data, not a cache.
   Check which one a script reads before pointing it at a path.
+- **The Alpaca history store is the third store (v162), and the training data.**
+  `data/market_data/{15min,hourly,daily}/{TICKER}.csv` sits under `data/`; it
+  is NOT the root `market_data/` live cache, although the folder names match.
+  Written only by `scripts/data/fetch_alpaca_history.py` (the VM backfill and
+  the Sunday `--mode update` cron, `scripts/ops/install_v162_history_cron.sh`),
+  read only through `core/marketdata/history_store.py` and
+  `core/marketdata/training_data.py`. The live scan, `data_refresh` and
+  `backtest_cache.ensure_cached` never touch it. SIP tape, `Adjustment.ALL`,
+  from 2016-01-04 or listing. Intraday index = naive America/New_York
+  wall-clock bar start (`Datetime`), daily = naive date (`Date`). `15min`
+  stores all sessions and readers keep regular hours unless asked for
+  `session="all"`; `hourly` is built from 30-minute bars, 09:30-anchored, and
+  its last bar (15:30-16:00) is a half-hour. Each timeframe has a
+  `_manifest.json` (per-ticker status, rows, SHA-256, identity check against
+  `data/backtest_cache/`); `scripts/data/check_history_store.py` checks row
+  counts against SPY's calendar and `--verify-hashes` the files. An update
+  that sees any stored daily close move (a new split or dividend rescales the
+  whole `Adjustment.ALL` history) refetches all three timeframes of that
+  ticker together.
+- **Which data a backtest reads is one switch (v162).** `TRAINING_DATA_SOURCE`
+  (`alpaca` default, `yfinance`) is read by `fetch_backtest_data.load_cached`
+  and `backtest_wf._frame_for`, so every training reader follows it;
+  `--data-source` overrides it per run and `TRAINING_DATA_SOURCE=yfinance` in
+  `.env` rolls everything back. Two cases mean yfinance without being told:
+  env `BACKTEST_CACHE_DIR` set (the ext-cache screens and the v162 snapshot
+  legs) and an explicit `--cache-dir`. `alpaca` with no `daily` manifest
+  (a worktree, CI, a fresh checkout) **stops with an error naming the path**,
+  never a zero-ticker run: pass `--data-source yfinance` or pull the store with
+  `scripts/ops/pull_history_store.sh`. Tickers whose manifest status is not
+  `ok` are left out, printed and written to the `<out>.provenance.json`
+  sidecar next to every `--json` result. A run never mixes sources.
+  `data/backtest_cache/` stays: it is the live bot's daily cache, the journal
+  backfill's source, the `yfinance` training source and the identity-check
+  reference.
+- **The history store holds the same tickers as `data/backtest_cache/`:** the
+  watchlist plus `MARKET_REGIME_TICKER`. The sector ETFs of
+  `data/universe/etfs.json` (QQQ, IWM, DIA, the XL* funds, GLD, TLT) are in
+  it only when they are on the watchlist, exactly as in `data/backtest_cache/`,
+  so `run_backtest_range`'s sector-relative context is equally thin on either
+  source. The weekly update follows the current watchlist: a ticker dropped
+  from it stops updating and `check_history_store.py` reports it as ending
+  early; a ticker fetched once with `--tickers` is not kept current unless the
+  cron line names it too.
 - **Spot metals are never cached under their own name (v109).** `XAUUSD` /
   `XAGUSD` bars are `GC=F` / `SI=F` bars × a live spot ratio
   (`marketdata/spot_metals.py`). Only the raw future is cached (`GC_F.csv`);
@@ -41,6 +85,8 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   1m ~30 days. "Since IPO" hourly data does not exist from this source at any
   tier — only daily and coarser reach the listing date. Do not write a task
   that assumes otherwise.
+  The research way past it is the v162 history store: Alpaca's SIP 15m and
+  1h bars back to 2016 (training only, never the live scan).
 
 ## Legacy shims and silent no-ops
 

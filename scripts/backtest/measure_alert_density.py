@@ -357,7 +357,7 @@ def load_frames(tickers, *, verbose=True, date_to=None):
             raw = raw.loc[:date_to]
         df = rbr._with_context(raw, date_to=date_to)
         if df is None:
-            excluded["uncached"].append((ticker, "not in backtest cache"))
+            excluded["uncached"].append((ticker, "not in training data"))
             continue
         reason = liquidity_reason(df)
         if reason is not None:
@@ -511,7 +511,7 @@ def spy_returns(date_from, date_to) -> dict:
     return out
 
 
-def main():
+def main(argv=None):
     import argparse
     import json
 
@@ -519,6 +519,8 @@ def main():
     from swingbot.core.backtesting.backtest import ALL_STRATEGIES
     from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES
     from swingbot.core.market.strategy_types import LEGACY_HORIZONS
+    from fetch_backtest_data import add_data_source_arg, apply_data_source
+    from swingbot.core.marketdata import training_data
 
     ap = argparse.ArgumentParser(
         description="Measure expectancy by entry-day trade density (plan v51).")
@@ -544,7 +546,9 @@ def main():
                     help="write every raw trade record here (provenance; kept "
                          "out of the committed summary, which would otherwise "
                          "be a multi-MB file in a repo that warns about them)")
-    args = ap.parse_args()
+    add_data_source_arg(ap)
+    args = ap.parse_args(argv)
+    apply_data_source(args)
 
     if args.train:
         date_from, date_to, label = *rbr.TRAIN, "TRAIN"
@@ -628,6 +632,7 @@ def main():
         with open(args.json_out, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
         print(f"\nSaved {args.json_out}")
+        training_data.write_provenance(args.json_out)
 
     if args.dump_trades:
         with open(args.dump_trades, "w", encoding="utf-8") as f:

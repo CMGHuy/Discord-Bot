@@ -62,6 +62,7 @@ import {
   TradeQuery,
   TradeRow,
   TradeJournal,
+  TuneDefaults,
   VersionHistory,
 } from './models';
 
@@ -329,6 +330,11 @@ export class ApiClient {
 
   startTuneJob(args: Record<string, unknown>): Observable<JobStarted> {
     return this.http.post<JobStarted>(`${this.base}/jobs/tune`, args);
+  }
+
+  /** v162 — the Tuning launcher's training-data default and choices. */
+  getTuneDefaults(): Observable<TuneDefaults> {
+    return this.http.get<TuneDefaults>(`${this.base}/jobs/tune/defaults`);
   }
 
   proposals(): Observable<ProposalList> {

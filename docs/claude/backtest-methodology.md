@@ -10,6 +10,15 @@ interpreting any backtest, grid, or validation result.
   component, results recorded as-is, never retuned after — a config that fails
   train never gets a validation shot. Treat the 2024–2025 window as tainted
   for any selection decision.
+- **A new data source resets no budget (v162).** A validation shot spent on
+  yfinance bars stays spent: `--data-source` on `--validation` gives no
+  component a second run, and 2024-2025 stays tainted. Every closed
+  pre-registration stays closed on Alpaca bars too (the same hypothesis on a
+  new dataset; v122, v127, v129, v135, v139 and v143 included). The v162
+  re-baseline describes a data change, is never quoted as a lift and decides
+  nothing: no switching back, no per-ticker or per-strategy source. Each new
+  pre-registration names its `data_source` in its frozen block before TRAIN
+  is read.
 
 ## Acceptance gate
 
@@ -204,6 +213,16 @@ edited; a re-measurement is a new pre-registration with a new id. The
 2026-10-06 backfill (v138) covers every row of the table below plus v118 and
 v119 (v124 and v127 are exempt: no spent budget or no enum verdict); `n`/`exp_r` are the decisive population the record names and `null`
 where it names none, and `p` is `null` wherever no p-value was recorded.
+
+**Data source on registry and ledger rows (v162).** New registry rows carry
+`data_source` and merge on `(source, strategy, horizon, data_source)`, so the
+yfinance and Alpaca populations sit side by side. New ledger rows may carry
+the optional field `data_source` (`OPTIONAL_LEDGER_FIELDS`). A row without
+the field means `yfinance`; old rows are never rewritten. `get_badge` takes
+the row of the active `TRAINING_DATA_SOURCE`, falls back to the `yfinance`
+row, logs which one it used, and never blends the two. Every `--json` result
+has a `<out>.provenance.json` sidecar (source, feed, adjustment, manifest
+hash, excluded tickers); the result JSON's own shape is unchanged.
 
 **The v72 procedure change does not reopen anything below.** A better
 instrument is not a new hypothesis. Every row in this table stays closed,

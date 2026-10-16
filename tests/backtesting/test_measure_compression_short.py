@@ -36,6 +36,15 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 import measure_arms as ma  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
 KNOB = "COMPRESSION_SHORT_RESEARCH_MODE"
 SIGNAL_POS = len(world.STOCK) - 1
 SIGNAL_DAY = dt.date(2019, 3, 1)

@@ -194,10 +194,12 @@ def test_build_tune_args_rejects_unknown_strategy():
         build_tune_args("Not A Real Strategy", None)
 
 
-def test_build_tune_args_passes_be_trigger_through():
+def test_build_tune_args_passes_be_trigger_through(monkeypatch):
+    from swingbot import config
     from swingbot.admin.jobs import build_tune_args
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "alpaca")
     args = build_tune_args("RSI", {"be_trigger": 0.6})
-    assert args == ["--strategy", "RSI", "--be-trigger", "0.6"]
+    assert args == ["--strategy", "RSI", "--data-source", "alpaca", "--be-trigger", "0.6"]
 
 
 def test_build_tune_args_rejects_non_dict_params():
