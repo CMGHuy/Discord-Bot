@@ -227,6 +227,60 @@ The legacy `_legacy_simple_alert` (taken only when `PLAN_ENGINE_V2` is not
 - **Price fetch failure:** `price unavailable`, never an exception.
 - The button never posts in the channel.
 
+### 4. Amendments from the code brief (2026-10-16, override §1–§3 where they differ)
+
+The plan brief (`.superpowers/briefs/2026-10-16-v170-simple-alerts-money-symbols-buttons.md`)
+checked §1–§3 against the code. Where a statement above differs, this section wins.
+
+- **A1 — Accessor.** `trades_repo().by_plan_id` (`db/repositories/trades.py:52`)
+  already matches any status. `TradeLog.trade_for_plan(plan_id)` is a thin wrapper
+  over it, placed beside `get_trade_by_id` (`tracking/performance.py:1239`). It does
+  not rescan.
+- **A2 — Settle order is already right.** Only plan_manager closes emit a feed
+  `closed` event, and every such route (`_persist_terminal`, the `_on_event`
+  fallback) calls `close_plan_trade`. That call settles the trade
+  (`TradeLog._settle_account_balance`, `performance.py:857`) before
+  `notify_plan_events` renders (`loops.py:520-522`). The other settle sites never
+  emit a feed message. No reorder is needed. The close-route tests cover each
+  `_persist_terminal` route, the `_on_event` fallback, and the unsettled cases
+  (no shares, `settle_legs` None, `apply_realized_pnl` raising, no linked open
+  trade). An unsettled close shows R only.
+- **A3 — Fractional shares.** The record's `shares` is a 2dp float. Messages print
+  `floor(shares)`. **Projected "if hit" $** use the printed whole shares, so
+  printed shares × printed move = printed $. **Realised $** (TP1 leg, close) come
+  from the record's own settle arithmetic, so they reflect the fractional count
+  and may differ from printed shares × move by under one share's move. Those
+  lines print no share count beside the $, so nothing on screen contradicts them.
+- **A4 — P&L now on every plan message** (partner decision, overrides §3's
+  ACTIVE/PARTIAL rule). `feed_view` always includes `PnlNowButton`, and the reply
+  adapts to the plan's status **at click time**:
+  - PENDING: last price vs the trigger, `not filled yet`;
+  - ACTIVE/PARTIAL: live unrealised plus banked legs (§3);
+  - closed: the final realised result from the record;
+  - cancelled or expired: `never filled`.
+  `feed_view(plan_id)` therefore drops its `open_` argument.
+- **A5 — Live $ and R are computed by the button.** `get_all_unrealized_pnl` and
+  `compute_unrealized_pnl` return a percentage only. The extracted single-trade
+  function returns the **price** (it keeps the batch price cache, because the
+  existing test forbids per-trade daily fetches). The button computes $ and R from
+  that price and the trade record.
+- **A6 — As-of.** No helper returns a quote timestamp. The reply prints the fetch
+  time (`as of HH:MM ET`), adds `daily close <date>` when the price came from the
+  daily fallback, and adds `market closed` from `session.is_regular_session()`.
+- **A7 — Buttons only on plan-backed feed messages.** The feed mirror also carries
+  strategy-signal embeds (`strategy_pass.py:299`) and the legacy mirror. A view is
+  attached only where the message has a plan id (the v2 ticket and lifecycle
+  events).
+- **A8 — Layering.** `core/scanning/lifecycle_embeds.py` gets `feed_view` through a
+  function-local import, the pattern that module already uses for its other
+  late imports. Core does not import `commands` at module level.
+- **A9 — Minus signs.** `tokens.fmt_r` keeps U+2212 and `fmt_money` keeps ASCII
+  `-`, both unchanged. Changing either would alter every existing surface that uses
+  them, and this spec does not reach those surfaces.
+- **A10 — `PLAN_BUTTONS` has five members** (`FollowingButton` too). That changes
+  nothing: `FEED_BUTTONS` is separate, and `feed_view` constructs Chart, Breakdown,
+  Watch and P&L now.
+
 ## Out of scope
 
 - The full-alert channel, closed-trades and retrospective embeds (they
