@@ -8,6 +8,7 @@ it is a D1 token or a D2 series, it is not confusable with gain or loss, and
 roles drawn together are distinct.
 """
 import ast
+import hashlib
 import itertools
 import json
 import math
@@ -35,6 +36,14 @@ D1_TOKENS = frozenset({
     "accent", "accent-fill", "info", "pos", "neg", "warn",
 })
 D2_SERIES = frozenset(f"chart-{i}" for i in range(1, 7))
+
+# (sha256(THEME)[:16], STYLE_VERSION), oldest first (spec v167 § 4). When THEME
+# changes, bump chart_style.STYLE_VERSION and APPEND a row; never edit a row.
+# The last row must match the live pair, so a THEME edit without a version
+# bump (or a bump without a THEME change) fails here.
+STYLE_PINS: tuple[tuple[str, str], ...] = (
+    ("fb0f840658155cd0", "v80"),
+)
 
 # constant -> the THEME key it must equal (the plan's D5 role table)
 COLOUR_CONSTANTS = {
@@ -212,3 +221,20 @@ def test_generate_trade_chart_smoke(tmp_path, monkeypatch):
     )
     assert out is not None
     assert_rendered(out)
+
+
+def _theme_digest() -> str:
+    return hashlib.sha256(json.dumps(cs.THEME, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def test_style_version_is_pinned_to_the_theme_digest():
+    """The chart cache keys on STYLE_VERSION (swingbot/core/charts/cache.py), so
+    a THEME change that keeps the old version would keep serving old PNGs."""
+    assert (_theme_digest(), cs.STYLE_VERSION) == STYLE_PINS[-1]
+
+
+def test_style_pins_never_reuse_a_version_or_digest():
+    digests = [digest for digest, _ in STYLE_PINS]
+    versions = [version for _, version in STYLE_PINS]
+    assert len(set(digests)) == len(digests)
+    assert len(set(versions)) == len(versions)

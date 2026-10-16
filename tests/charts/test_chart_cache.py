@@ -124,3 +124,27 @@ def test_purge_removes_stale_files(tmp_path):
     removed = purge(max_age_days=7, cache_dir=str(tmp_path))
     assert removed == 1
     assert not os.path.exists(p1)
+
+
+def test_style_version_changes_the_key(monkeypatch):
+    """Spec v167 § 4: the cache outlives a deploy on the ./exports volume, so
+    the chart palette is part of every key. A THEME change (STYLE_VERSION
+    bump) must miss every old entry, in both directions."""
+    from swingbot.core.charts import cache
+
+    key = {"kind": "equity_curve", "snapshot_built_at": "2026-10-16T00:00:00"}
+    before = cache._key_hash(key)
+    monkeypatch.setattr(cache, "STYLE_VERSION", "v-next")
+    assert cache._key_hash(key) != before
+
+
+def test_a_style_bump_re_renders_a_cached_chart(tmp_path, monkeypatch):
+    from swingbot.core.charts import cache
+
+    calls = []
+    key = {"trade_id": "T1", "v": 3}
+    first = cached_chart(key, _counting_render(calls), cache_dir=str(tmp_path))
+    monkeypatch.setattr(cache, "STYLE_VERSION", "v-next")
+    second = cached_chart(key, _counting_render(calls), cache_dir=str(tmp_path))
+    assert first != second
+    assert len(calls) == 2
