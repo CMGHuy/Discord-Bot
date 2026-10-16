@@ -600,9 +600,10 @@ def day_totals(day_rows: list[dict]) -> dict:
     calendar's arithmetic lives. `day_rows` must be in close order -- the
     drawdown walks them as the day happened.
     """
-    measured = [r["r_multiple"] for r in day_rows if r["r_multiple"] is not None]
-    winners = [r for r in day_rows if r["r_multiple"] is not None and r["r_multiple"] > 0]
-    losers = [r for r in day_rows if r["r_multiple"] is not None and r["r_multiple"] < 0]
+    measured_rows = [r for r in day_rows if r["r_multiple"] is not None]
+    measured = [r["r_multiple"] for r in measured_rows]
+    winners = [r for r in measured_rows if r["r_multiple"] > 0]
+    losers = [r for r in measured_rows if r["r_multiple"] < 0]
     return {
         # `trades` stays the route's list contract; this is its numeric
         # companion for the tiles.
