@@ -135,7 +135,7 @@ def _render_head(result: dict, params: dict, day: str) -> list:
     return [
         f"# v163 trail race A/A calibration -> {'within' if holds else '**over**'} "
         f"the {FALSE_PASS_MAX:.0%} false-pass limit", "",
-        "**Spec:** `docs/superpowers/specs/2026-10-15-v163-screen-trail-race-design.md` "
+        "**Spec:** `docs/superpowers/specs/implemented/2026-10-15-v163-screen-trail-race-design.md` "
         "§ Testing (A/A calibration).", "",
         f"**Run:** {day}; `{command}`; replicate r uses seed {params['seed']} + r; "
         f"{params['tickers']} tickers x {BARS} business days from {START}; bootstrap "
