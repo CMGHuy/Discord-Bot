@@ -1261,9 +1261,10 @@ def test_a_fresh_admin_request_bypasses_reuse_and_max_age_overrides(env):
     with fresh_request():
         layer.get(Q, ["AAPL"], fetcher({"AAPL": 2.0}, calls), asker=Asker.ADMIN_PAGE, provider="alpaca")
     repo.seed("MSFT", 1.0, age_s=3)
-    layer.get(Q, ["MSFT"], fetcher({"MSFT": 2.0}, calls), asker=Asker.SCAN, provider="alpaca",
-              max_age_s=1)
-    assert calls == [["AAPL"], ["MSFT"]]
+    layer.get(Q, ["MSFT"], fetcher({"MSFT": 2.0}, calls), asker=Asker.SCAN, provider="alpaca", max_age_s=1)
+    repo.seed("NVDA", 1.0, age_s=0)  # max_age_s=0.0 (V171-19 re-quote): `is not None`, never truthiness
+    layer.get(Q, ["NVDA"], fetcher({"NVDA": 2.0}, calls), asker=Asker.REQUOTE, provider="alpaca", max_age_s=0.0)
+    assert calls == [["AAPL"], ["MSFT"], ["NVDA"]]
 
 
 def test_a_waiter_gets_the_holders_result(env):
