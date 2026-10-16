@@ -160,3 +160,81 @@ def test_a_fixed_race_never_produces_a_trail_outcome():
 
 def test_an_empty_result_still_has_string_outcomes():
     assert race_mod.RaceResult.empty().outcome.dtype.kind == "U"
+
+
+from swingbot.core.backtesting.screen import indicators  # noqa: E402
+from swingbot.core.backtesting.screen import trail  # noqa: E402
+
+
+def test_race_for_returns_each_shape_race_function():
+    assert race_mod.race_for("fixed") is race_mod.race
+    assert race_mod.race_for("trail") is trail.race_trail
+    with pytest.raises(ValueError, match="race shape"):
+        race_mod.race_for("donchian")
+
+
+def _walk_book_inputs():
+    df = random_walk(900)
+    atr = indicators.atr(df)
+    events = np.random.default_rng(5).random(len(df)) < 0.05
+    member = np.ones(len(df), dtype=bool)
+    warm = race_mod.warm_mask(atr, indicators.sma(df["Close"], 200))
+    return df, events, member, warm, atr
+
+
+def _book_by_hand(race_fn, df, events, cap, member, warm, atr):
+    """The pre-v163 run_book body, spelled out with an explicit race function."""
+    cand, counts = race_mod.candidate_events(events, member, warm, cap)
+    raced = race_fn(df, cand, cap, atr=atr, slippage_bps=0.0, commission=0.0)
+    keep = race_mod.non_overlapping(raced.event_pos, raced.exit_pos)
+    counts["skipped_overlap"] = int((~keep).sum())
+    return raced.take(keep), counts
+
+
+def _same(a, b):
+    return all(np.array_equal(getattr(a, name), getattr(b, name))
+               for name in race_mod._FIELDS)
+
+
+@pytest.mark.parametrize("shape", ["fixed", "trail"])
+def test_run_book_races_through_the_shape_race(shape):
+    df, events, member, warm, atr = _walk_book_inputs()
+    race_fn = {"fixed": race_mod.race, "trail": trail.race_trail}[shape]
+    got, counts = race_mod.run_book(df, events, 60, member=member, warm=warm, atr=atr,
+                                    slippage_bps=0.0, commission=0.0, shape=shape)
+    want, want_counts = _book_by_hand(race_fn, df, events, 60, member, warm, atr)
+    assert len(got) > 5 and _same(got, want) and counts == want_counts
+
+
+def test_run_book_without_a_shape_is_the_fixed_book():
+    df, events, member, warm, atr = _walk_book_inputs()
+    a, a_counts = race_mod.run_book(df, events, 10, member=member, warm=warm, atr=atr,
+                                    slippage_bps=0.0, commission=0.0)
+    b, b_counts = race_mod.run_book(df, events, 10, member=member, warm=warm, atr=atr,
+                                    slippage_bps=0.0, commission=0.0, shape="fixed")
+    assert _same(a, b) and a_counts == b_counts
+
+
+def test_a_trail_book_counts_every_drop_and_skip_like_a_fixed_one():
+    df = _book_frame()
+    events = np.zeros(len(df), dtype=bool)
+    events[[2, 4, 7, 9, 20, 27]] = True
+    member = np.ones(len(df), dtype=bool)
+    member[9] = False
+    warm = np.ones(len(df), dtype=bool)
+    warm[20] = False
+    booked, counts = race_mod.run_book(
+        df, events, 5, member=member, warm=warm, atr=_atr(df),
+        slippage_bps=0.0, commission=0.0, shape="trail")
+    assert booked.event_pos.tolist() == [2, 7]           # quiet bars: both time out
+    assert booked.outcome.tolist() == ["timeout", "timeout"]
+    assert counts == {"dropped_nonmember": 1, "dropped_warmup": 1,
+                      "dropped_window": 1, "skipped_overlap": 1}
+
+
+def test_run_book_refuses_an_unknown_shape_even_with_no_events():
+    df = _book_frame()
+    none = np.zeros(len(df), dtype=bool)
+    with pytest.raises(ValueError, match="race shape"):
+        race_mod.run_book(df, none, 5, member=~none, warm=~none, atr=_atr(df),
+                          shape="donchian")

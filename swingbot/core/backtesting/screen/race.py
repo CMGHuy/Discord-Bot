@@ -17,6 +17,7 @@ its five rows.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -151,12 +152,27 @@ def non_overlapping(event_pos, exit_pos) -> np.ndarray:
     return keep
 
 
+def race_for(shape: str) -> Callable[..., RaceResult]:
+    """The race function of one shape: ``race`` (fixed) or
+    ``trail.race_trail`` (v163). ``trail`` imports this module, so it is
+    imported here, on first use, never at module level."""
+    if shape == "fixed":
+        return race
+    if shape == "trail":
+        from swingbot.core.backtesting.screen import trail
+        return trail.race_trail
+    raise ValueError(f"unknown race shape {shape!r}; expected one of "
+                     f"{tuple(SHAPE_OUTCOMES)}")
+
+
 def run_book(df, events, cap: int, *, member, warm, atr, slippage_bps=None,
-             commission=None):
-    """Race the eligible events, then keep one open race at a time."""
+             commission=None, shape: str = "fixed"):
+    """Race the eligible events under ``shape``, then keep one open race at a
+    time."""
+    race_fn = race_for(shape)
     cand, counts = candidate_events(events, member, warm, cap)
-    raced = race(df, cand, cap, atr=atr, slippage_bps=slippage_bps,
-                 commission=commission)
+    raced = race_fn(df, cand, cap, atr=atr, slippage_bps=slippage_bps,
+                    commission=commission)
     keep = non_overlapping(raced.event_pos, raced.exit_pos)
     counts["skipped_overlap"] = int((~keep).sum())
     return raced.take(keep), counts
