@@ -232,15 +232,15 @@ describe('DataTable', () => {
     // the original contract each would have passed total = rows.length, which
     // is the bug the `total` rule exists to prevent.
     expect(host.pagination()).toBeNull();
-    expect(el().querySelector('.pager')).toBeNull();
+    expect(el().querySelector('.bar')).toBeNull();
   });
 
   it('keeps the row count visible when everything fits on one page', () => {
     host.pagination.set({ total: 3, page: 1, perPage: 25 });
     fixture.detectChanges();
 
-    expect(el().querySelector('.pager .range')!.textContent).toContain('3 rows');
-    expect(el().querySelectorAll('.pager button')).toHaveLength(0);
+    expect(el().querySelector('.bar .range')!.textContent).toContain('3 rows');
+    expect(el().querySelectorAll('.bar button')).toHaveLength(0);
   });
 
   it('can omit filler rows for compact, short tables', () => {
@@ -255,15 +255,15 @@ describe('DataTable', () => {
     host.pagination.set({ total: 90, page: 2, perPage: 25 });
     fixture.detectChanges();
 
-    expect(el().querySelector('.pager .range')!.textContent).toContain('26–50 of 90');
-    expect(el().querySelector('.pager .of')!.textContent).toContain('/ 4');
+    expect(el().querySelector('.bar .range')!.textContent).toContain('26–50 of 90');
+    expect(el().querySelector('.bar .of')!.textContent).toContain('/ 4');
   });
 
   it('emits the requested page and disables the ends', () => {
     host.pagination.set({ total: 90, page: 1, perPage: 25 });
     fixture.detectChanges();
 
-    const [, previous, next] = [...el().querySelectorAll('.pager button')] as HTMLButtonElement[];
+    const [, previous, next] = [...el().querySelectorAll('.bar button')] as HTMLButtonElement[];
     expect(previous.disabled).toBe(true);
 
     next.click();
@@ -271,7 +271,7 @@ describe('DataTable', () => {
 
     host.pagination.set({ total: 90, page: 4, perPage: 25 });
     fixture.detectChanges();
-    const last = [...el().querySelectorAll('.pager button')][3] as HTMLButtonElement;
+    const last = [...el().querySelectorAll('.bar button')][3] as HTMLButtonElement;
     expect(last.disabled).toBe(true);
   });
 
@@ -279,7 +279,7 @@ describe('DataTable', () => {
     host.pagination.set({ total: 90, page: 1, perPage: 0 });
     fixture.detectChanges();
 
-    expect(el().querySelector('.pager .range')!.textContent).toContain('90 rows');
+    expect(el().querySelector('.bar .range')!.textContent).toContain('90 rows');
   });
 
   /* -- property 3: expansion is the caller's template --------------------- */
