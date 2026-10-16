@@ -14,7 +14,9 @@ export type ApiErrorCode =
   | 'not_found'
   | 'invalid'
   | 'conflict'
-  | 'unavailable';
+  | 'unavailable'
+  /** v148: too many failed sign-ins from this address; the message says when to retry. */
+  | 'rate_limited';
 
 export class ApiError extends Error {
   constructor(

@@ -47,6 +47,20 @@ const initial: SessionState = {
   redirectTo: null,
 };
 
+/** The login form's message for a rejected attempt.
+ *
+ *  A 429 (v148) carries the server's own text, which says when to retry.
+ *  It must not fall through to "Could not reach the admin": the admin answered. */
+function loginError(error: unknown): string {
+  if (error instanceof ApiError && error.code === 'rate_limited') {
+    return error.message;
+  }
+  if (error instanceof ApiError && error.isAuth) {
+    return 'Invalid username or password.';
+  }
+  return 'Could not reach the admin. Is it running?';
+}
+
 /**
  * Who is logged in, and the two operations that change it.
  *
@@ -125,10 +139,7 @@ export const SessionStore = signalStore(
           status: 'anonymous',
           username: null,
           submitting: false,
-          error:
-            error instanceof ApiError && error.isAuth
-              ? 'Invalid username or password.'
-              : 'Could not reach the admin. Is it running?',
+          error: loginError(error),
         });
       }
     },
