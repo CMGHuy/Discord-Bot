@@ -176,3 +176,102 @@ def test_module_is_a_leaf():
                 for alias in node.names]
     imported += [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
     assert not [name for name in imported if name.startswith("swingbot")]
+
+
+# ---------------------------------------------------------------------------
+# OH7: _run_bounded carries a spawned child's counts back to the parent
+# ---------------------------------------------------------------------------
+
+class _InlinePool:
+    """In-process stand-in for ProcessPoolExecutor: runs the submitted
+    callable here, like tests/scanning/conftest.py's _InlineProcessPool."""
+
+    def __init__(self, max_workers=None, mp_context=None):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def submit(self, fn, *args):
+        from concurrent.futures import Future
+        future = Future()
+        try:
+            future.set_result(fn(*args))
+        except Exception as exc:
+            future.set_exception(exc)
+        return future
+
+
+def _boom(_x):
+    raise RuntimeError("child exploded")
+
+
+def _probe():
+    from tests.infra import swallowed_probe
+    return swallowed_probe
+
+
+def test_counted_call_in_the_parent_returns_no_counts():
+    from swingbot.core.scanning import fetch
+
+    assert fetch._counted_call(_probe().count_then_return, 21) == (42, {})
+    assert swallowed_mod.snapshot()["probe.count_then_return"]["count"] == 2
+
+
+def test_counted_call_in_a_child_returns_its_snapshot(monkeypatch):
+    from swingbot.core.scanning import fetch
+    monkeypatch.setattr(fetch.multiprocessing, "parent_process", lambda: object())
+
+    result, counts = fetch._counted_call(_probe().count_then_return, 21)
+
+    assert result == 42
+    assert counts["probe.count_then_return"]["count"] == 2
+
+
+def test_inline_pool_keeps_the_return_shape_and_counts_once(monkeypatch):
+    from swingbot.core.scanning import fetch
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+
+    assert fetch._run_bounded(_probe().count_then_return, (21,), 5, "probe") == 42
+    assert fetch._run_bounded(dict, (), 5, "probe-dict") == {}
+    assert swallowed_mod.snapshot()["probe.count_then_return"]["count"] == 2
+
+
+def test_a_raising_child_is_counted_under_run_bounded(monkeypatch, caplog):
+    from swingbot.core.scanning import fetch
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+
+    with caplog.at_level(logging.ERROR, logger=fetch.log.name):
+        assert fetch._run_bounded(_boom, (1,), 5, "probe-fail") is None
+
+    entry = swallowed_mod.snapshot()["scan.run_bounded"]
+    assert entry["count"] == 1 and entry["last_error"] == "RuntimeError: child exploded"
+    [record] = [r for r in caplog.records if r.name == fetch.log.name]
+    assert record.getMessage() == "probe-fail failed: child exploded"
+    assert record.levelno == logging.ERROR and record.exc_info is not None
+
+
+@pytest.mark.slow
+def test_a_spawned_child_counts_travel_back():
+    from swingbot.core.scanning import fetch
+
+    out = fetch._run_bounded(_probe().count_then_return, (21,), 120, "probe-spawn")
+
+    assert out == 42
+    assert swallowed_mod.snapshot()["probe.count_then_return"]["count"] == 2
+
+
+@pytest.mark.slow
+def test_a_timeout_is_counted_under_run_bounded(caplog):
+    from swingbot.core.scanning import fetch
+
+    with caplog.at_level(logging.ERROR, logger=fetch.log.name):
+        assert fetch._run_bounded(_probe().sleep_forever, (), 0.5, "probe-stuck") is None
+
+    entry = swallowed_mod.snapshot()["scan.run_bounded"]
+    assert entry["count"] == 1 and entry["last_error"] == "TimeoutError: probe-stuck"
+    assert any("probe-stuck did not finish within 0.5s" in r.getMessage()
+               for r in caplog.records if r.name == fetch.log.name)
