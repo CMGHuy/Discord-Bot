@@ -1,0 +1,17 @@
+/* Tier 1: the palette (spec v167 § 1).
+ *
+ * Raw named colours. This is the ONLY file under frontend/src allowed to hold
+ * a hued colour literal. The exceptions are fixed and gated: --chart-1..6 and
+ * --quality-4 stay literal hex in tokens.css (jsdom and chart-palette.spec.ts
+ * read them, see the comment there), and index.html / manifest.webmanifest
+ * carry copies of the resolved --bg for the cold load.
+ *
+ * Names say what a colour IS (--navy-950, --mint-400-a12), never what it MEANS
+ * (--surface, --pos-soft): meaning is tier 2, in tokens.css, which refers to
+ * these through var(). Components never read this file's names directly.
+ *
+ * After every edit: `python scripts/dev/dump_tokens.py`, and commit
+ * tests/charts/resolved_tokens.json in the same commit.
+ */
+:root {
+}

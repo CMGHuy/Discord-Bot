@@ -1,6 +1,8 @@
 /* Global styles. Everything component-level lives with its component --
  * this file is tokens, the document base, and nothing else. */
 @import './styles/fonts.css';
+/* Tier 1 before tiers 2 and 3: tokens.css refers to these names (spec v167 § 1). */
+@import './styles/palette.css';
 @import './styles/tokens.css';
 
 *,

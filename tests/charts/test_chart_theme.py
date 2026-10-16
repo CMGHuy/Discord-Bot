@@ -1,15 +1,18 @@
 # tests/charts/test_chart_theme.py
-"""The Discord chart palette is the admin palette (spec v80 D5).
+"""The Discord chart palette is the admin palette (spec v80 D5, spec v167 § 4).
 
-`chart_style.THEME` copies the frontend tokens it names. This file reads
-`frontend/src/styles/tokens.css` and holds every chart colour to D5's rules:
+`chart_style.THEME` copies the frontend tokens it names. This file resolves
+them through scripts/dev/dump_tokens.py (palette.css then tokens.css, every
+var() hop followed to a literal) and holds every chart colour to D5's rules:
 it is a D1 token or a D2 series, it is not confusable with gain or loss, and
 roles drawn together are distinct.
 """
 import ast
 import itertools
+import json
 import math
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,7 +25,9 @@ from tests.conftest import assert_rendered
 pytestmark = pytest.mark.slow
 
 REPO = Path(__file__).resolve().parents[2]
-TOKENS_CSS = REPO / "frontend" / "src" / "styles" / "tokens.css"
+sys.path.insert(0, str(REPO / "scripts" / "dev"))
+
+import dump_tokens  # noqa: E402  (scripts/dev is not a package)
 
 D1_TOKENS = frozenset({
     "bg", "surface", "surface-raised", "surface-overlay", "border", "border-strong",
@@ -79,10 +84,13 @@ CO_OCCURRING = {
 }
 
 
-def _tokens() -> dict[str, str]:
-    css = TOKENS_CSS.read_text(encoding="utf-8")
-    return {name: value.lower()
-            for name, value in re.findall(r"^\s*--([\w-]+):\s*(#[0-9a-fA-F]{6});", css, flags=re.M)}
+def _resolve() -> dict[str, str]:
+    """Every admin token with its var() hops followed to a literal (spec v167 § 1).
+
+    Not a private regexp over tokens.css: once tier 2 is var(--palette-name),
+    a hex-only match finds nothing. One resolver per language, both held to
+    tests/charts/resolved_tokens.json."""
+    return {name: value.lower() for name, value in dump_tokens.resolve_tokens().items()}
 
 
 def _oklab(hex_colour: str) -> tuple[float, float, float]:
@@ -115,9 +123,17 @@ def test_theme_names_only_d1_tokens_and_d2_series():
 
 
 def test_theme_matches_the_admin_tokens_byte_for_byte():
-    tokens = _tokens()
+    tokens = _resolve()
     for name, value in cs.THEME.items():
         assert tokens[name] == value.lower(), name
+
+
+def test_resolver_reproduces_the_committed_fixture():
+    """frontend/src/app/ui/resolve-token.spec.ts holds the TypeScript resolver
+    to the same file, so the two resolvers cannot drift apart unnoticed and a
+    token edit without regenerating fails here (spec v167 § 1)."""
+    fixture = json.loads(dump_tokens.FIXTURE.read_text(encoding="utf-8"))
+    assert dump_tokens.resolve_tokens() == fixture
 
 
 @pytest.mark.parametrize("constant, token", sorted(COLOUR_CONSTANTS.items()))
