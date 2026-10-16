@@ -6,6 +6,7 @@ locally against fake logs through the SWING_BOT_DIR / BOOK_LOGS_DIR seams)."""
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -154,3 +155,55 @@ def test_an_unknown_mode_exits_two(source, tmp_path):
                           text=True, capture_output=True, timeout=30)
     assert done.returncode == 2
     assert "rows|rejections" in done.stderr
+
+
+@pytest.fixture
+def book_rows_db():
+    """Only synthetic rows; the real export SELECT runs without a VM/database service."""
+    with sqlite3.connect(":memory:") as conn:
+        conn.executescript("""
+            CREATE TABLE journal_entries (
+                trade_id TEXT, closed_at TEXT, outcome TEXT, doc TEXT
+            );
+            CREATE TABLE trades (
+                trade_id TEXT, ticker TEXT, strategy TEXT, horizon TEXT, direction TEXT,
+                opened_at TEXT, entry REAL, stop_loss REAL, doc TEXT
+            );
+            CREATE TABLE plans (
+                plan_id TEXT, ticker TEXT, strategy TEXT, horizon_key TEXT,
+                created_at TEXT, status TEXT, valid_session TEXT, doc TEXT
+            );
+            INSERT INTO plans (plan_id, doc) VALUES
+                ('closed-plan', '{}'), ('open-plan', '{}'), ('unfilled-plan', '{}'),
+                ('missing-journal-plan', '{}'), ('unclosed-journal-plan', '{}');
+            INSERT INTO trades (trade_id, doc) VALUES
+                ('closed-trade', '{"plan_id":"closed-plan"}'),
+                ('open-trade', '{"plan_id":"open-plan"}'),
+                ('another-open-trade', '{"plan_id":"closed-plan"}'),
+                ('missing-journal-trade', '{"plan_id":"missing-journal-plan"}'),
+                ('unclosed-journal-trade', '{"plan_id":"unclosed-journal-plan"}'),
+                ('orphan-closed-trade', '{}');
+            INSERT INTO journal_entries (trade_id, closed_at, doc) VALUES
+                ('closed-trade', '2026-10-15', '{}'),
+                ('unclosed-journal-trade', NULL, '{}'),
+                ('orphan-closed-trade', '2026-10-15', '{}');
+        """)
+        yield conn
+
+
+def test_rows_include_each_plan_and_preserve_closed_trades(source, book_rows_db):
+    """An open trade must not hide its plan from the issued-plan denominator."""
+    query = source.split("COPY (", 1)[1].split(") TO STDOUT", 1)[0]
+    # Adapt projection-only PostgreSQL syntax; relational joins/filters stay intact.
+    query = query.replace("::text", "").replace("->(-1)", "->'$[#-1]'")
+    cursor = book_rows_db.execute(query)
+    assert tuple(column[0] for column in cursor.description) == EXPECTED_COLUMNS
+    rows = [(row[0], row[1], row[2]) for row in cursor.fetchall()]
+    assert sorted(rows) == [
+        ("plan", None, "missing-journal-plan"),
+        ("plan", None, "open-plan"),
+        ("plan", None, "unclosed-journal-plan"),
+        ("plan", None, "unfilled-plan"),
+        ("trade", "closed-trade", "closed-plan"),
+        ("trade", "orphan-closed-trade", None),
+    ]
