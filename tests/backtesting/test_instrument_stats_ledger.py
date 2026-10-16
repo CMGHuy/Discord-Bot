@@ -158,3 +158,44 @@ def test_the_committed_ledger_still_loads_unchanged():
     rows = stats.load_ledger()
     assert len(rows) >= 57
     assert all(row["verdict"] in stats.VERDICTS for row in rows)
+
+
+# --- v162: optional data_source ----------------------------------------------------
+
+def test_data_source_is_an_optional_field_with_the_training_sources():
+    assert stats.OPTIONAL_LEDGER_FIELDS == ("data_source",)
+    assert stats.LEDGER_DATA_SOURCES == ("alpaca", "yfinance")   # = training_data.DATA_SOURCES
+    assert "data_source" not in stats.LEDGER_FIELDS
+
+
+@pytest.mark.parametrize("source", ["alpaca", "yfinance"])
+def test_a_row_with_a_data_source_validates(source):
+    stats.validate_ledger_row(_row(data_source=source))
+
+
+@pytest.mark.parametrize("value", ["iex", "", None, "Alpaca"])
+def test_a_bad_data_source_is_refused(value):
+    with pytest.raises(ValueError, match="'data_source'"):
+        stats.validate_ledger_row(_row(data_source=value))
+
+
+def test_a_row_without_data_source_still_validates_and_means_yfinance():
+    row = _row()
+    stats.validate_ledger_row(row)
+    assert stats.ledger_data_source(row) == "yfinance"
+    assert stats.ledger_data_source(_row(data_source="alpaca")) == "alpaca"
+
+
+def test_unknown_extra_fields_are_still_refused():
+    with pytest.raises(ValueError, match=r"extra \['note'\]"):
+        stats.validate_ledger_row(_row(data_source="alpaca", note="x"))
+
+
+def test_append_keeps_data_source_after_the_required_fields(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    stats.append_ledger_row(_row(id="old"), path=path)
+    stats.append_ledger_row(_row(id="new", data_source="alpaca"), path=path)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert list(json.loads(lines[0])) == list(stats.LEDGER_FIELDS)
+    assert list(json.loads(lines[1])) == [*stats.LEDGER_FIELDS, "data_source"]
+    assert [stats.ledger_data_source(r) for r in stats.load_ledger(path)] == ["yfinance", "alpaca"]

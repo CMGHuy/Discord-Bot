@@ -45,6 +45,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--p", type=_optional(float), default=None, help="float in [0,1] or null")
     p.add_argument("--verdict", choices=stats.VERDICTS, required=True)
     p.add_argument("--record", required=True, help="repo-relative results doc path")
+    from swingbot import config
+    p.add_argument("--data-source", choices=stats.LEDGER_DATA_SOURCES,
+                   default=getattr(config, "TRAINING_DATA_SOURCE", "yfinance"),
+                   help="bars the verdict was measured on; default TRAINING_DATA_SOURCE. "
+                        "Name it in the frozen block before TRAIN is read (v162)")
     p.add_argument("--ledger", type=Path, default=stats.LEDGER_PATH)
     return p
 
@@ -53,7 +58,8 @@ def row_from_args(args) -> dict:
     return {"id": args.id, "date": args.date or date.today().isoformat(),
             "hypothesis": args.hypothesis, "instrument": args.instrument,
             "n": args.n, "exp_r": args.exp_r, "p": args.p,
-            "verdict": args.verdict, "record": args.record}
+            "verdict": args.verdict, "record": args.record,
+            "data_source": args.data_source}
 
 
 def _fmt(value) -> str:

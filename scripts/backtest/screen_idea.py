@@ -367,7 +367,8 @@ def ledger_row(idea, v, record: str, day: str) -> dict:
             "instrument": INSTRUMENT, "n": v.n,
             "exp_r": None if v.delta_exp_r is None else round(v.delta_exp_r, 4),
             "p": None if v.p is None else round(v.p, 4),
-            "verdict": v.verdict, "record": record}
+            "verdict": v.verdict, "record": record,
+            "data_source": "yfinance"}   # the Stage -2 screen reads backtest_cache_ext (v162 leaves it)
 
 
 def _run_info(args, q) -> dict:
