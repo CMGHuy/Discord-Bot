@@ -252,7 +252,8 @@ def _fetch_one_ticker(ticker: str) -> tuple:
     try:
         return ticker, get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
     except Exception as exc:
-        log.error("Crawl: error fetching data for %s: %s", ticker, exc, exc_info=True)
+        swallowed(log, "scan.fetch_one_ticker", exc, "Crawl: error fetching data for %s: %s",
+                  ticker, exc, level=logging.ERROR, exc_info=True)
         return ticker, None
 
 
@@ -269,7 +270,8 @@ def _with_cached_depth(ticker: str, live):
         cached = data_store.load_normalized(ticker, "daily")
         return splice_cached_history(live, cached, ticker)
     except Exception as exc:
-        log.debug("Crawl: cache splice skipped for %s (%s)", ticker, exc)
+        swallowed(log, "scan.with_cached_depth", exc, "Crawl: cache splice skipped for %s (%s)",
+                  ticker, exc, level=logging.DEBUG)
         return live
 
 
@@ -396,7 +398,9 @@ def _load_cached_daily(ticker: str):
             return None
         return data_store.load_normalized(ticker, "daily")
     except Exception as exc:
-        log.debug("Crawl: cache lookup failed for %s (%s) -- treating as cold", ticker, exc)
+        swallowed(log, "scan.load_cached_daily", exc,
+                  "Crawl: cache lookup failed for %s (%s) -- treating as cold", ticker, exc,
+                  level=logging.DEBUG)
         return None
 
 
@@ -511,8 +515,10 @@ def _crawl_bounded(symbols, *, max_symbols: int, budget_s: float,
             return frames, "budget_exhausted"
         try:
             frames.update(_crawl_latest_data(batch, None))
-        except Exception:
-            log.warning("SHORT crawl: chunk of %d failed -- ending the extra queue", len(batch), exc_info=True)
+        except Exception as exc:
+            swallowed(log, "scan.crawl_bounded", exc,
+                      "SHORT crawl: chunk of %d failed -- ending the extra queue", len(batch),
+                      exc_info=True)
             return frames, "fetch_failed"
     return frames, None
 
@@ -628,7 +634,8 @@ def _daily_frame_for(symbol: str):
     try:
         return _with_cached_depth(symbol, get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD))
     except Exception as exc:
-        log.warning("Could not resolve daily frame for %s: %s", symbol, exc, exc_info=True)
+        swallowed(log, "scan.daily_frame_for", exc, "Could not resolve daily frame for %s: %s",
+                  symbol, exc, exc_info=True)
         return None
 
 
@@ -647,8 +654,9 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
     def safe(t):
         try:
             return fn(t)
-        except Exception:
-            log.exception("scan worker failed for %s", t)
+        except Exception as exc:
+            swallowed(log, "scan.map_tickers", exc, "scan worker failed for %s", t,
+                      level=logging.ERROR, exc_info=True)
             return None
 
     if n <= 1 or len(tickers) <= 1:
