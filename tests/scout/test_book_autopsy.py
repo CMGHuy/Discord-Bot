@@ -231,3 +231,22 @@ def test_report_records_frictions_for_direct_builds(tmp_path):
     header = _build(tmp_path)["header"]
     assert set(header["frictions"]) == {"slippage_bps", "commission_per_trade",
                                          "commission_risk_basis", "min_risk_fraction"}
+
+
+@pytest.mark.parametrize("mapping, expected", [
+    ({"AAA": "Technology", "UNUSED": "Energy"}, {"AAA": "Technology", "BBB": None}),
+    ({"AAA": "Financials"}, {"AAA": "Financials", "BBB": None}),
+    ({}, {"AAA": None, "BBB": None}),
+])
+def test_sector_snapshot_records_exact_mapping_used_once_for_the_cuts(
+        tmp_path, monkeypatch, mapping, expected):
+    available = iter([mapping])  # a second map load must not silently change the snapshot
+    monkeypatch.setattr(cuts, "load_sector_map", lambda: next(available))
+    data = _build(tmp_path)
+    assert data["header"]["sector_map"] == expected
+    sector_values = {cell["value"] for cell in data["cells"] if cell["cut"] == "sector_today"}
+    assert sector_values == {sector for sector in expected.values() if sector is not None}
+    digest = hashlib.sha256(json.dumps(expected, sort_keys=True).encode("utf-8")).hexdigest()
+    md = report.render_markdown(data)
+    assert f"Sector map snapshot SHA-256: {digest}" in md
+    assert len(md.splitlines()) <= report.MD_MAX_LINES

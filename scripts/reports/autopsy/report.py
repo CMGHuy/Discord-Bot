@@ -77,6 +77,13 @@ def _header(trades: list, covered_n: int, tested: int, *, n_resamples: int, seed
             "resamples": n_resamples, "seed": seed, "notes": _notes(trades, balance)}
 
 
+def _sector_snapshot(rows: list) -> dict:
+    """Freeze the one effective lookup, including unknown tickers, for cuts and provenance."""
+    sector_of = cuts.load_sector_map()
+    tickers = sorted({row.ticker for row in rows if row.ticker})
+    return {ticker: sector_of.get(ticker) for ticker in tickers}
+
+
 def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resamples: int,
                  seed: int, balance: float, frictions: dict | None = None,
                  input_fingerprints: dict | None = None, invocation: dict | None = None) -> dict:
@@ -84,13 +91,14 @@ def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resam
     inputs = dict(input_fingerprints or {})
     covered_n = bars.enrich_with_bars(rows, bars_dir, input_fingerprints=inputs)
     trades = closed_trades(rows)
-    cells = _cells(trades, covered_n, cuts.load_sector_map(), n_resamples=n_resamples,
+    sector_of = _sector_snapshot(rows)
+    cells = _cells(trades, covered_n, sector_of, n_resamples=n_resamples,
                    seed=seed, balance=balance)
     tested = apply_bh(cells)
     tallies = bars.fill_tallies(rows) + exits.alert_supply_tallies(rows, rejections)
     header = _header(trades, covered_n, tested, n_resamples=n_resamples, seed=seed, balance=balance)
     header.update(frictions=dict(frictions if frictions is not None else friction_settings()),
-                  input_fingerprints=inputs, invocation=invocation)
+                  input_fingerprints=inputs, invocation=invocation, sector_map=sector_of)
     return {"header": header,
             "cells": [c.to_json() for c in cells],
             "tallies": [t.to_json() for t in tallies],
@@ -105,16 +113,24 @@ def _pct(value) -> str:
     return "n/a" if value is None else f"{value * 100:.1f}%"
 
 
+def _json_digest(value) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode("utf-8")).hexdigest()
+
+
 def _provenance_lines(h: dict) -> list[str]:
     if "frictions" not in h:
         return []
     settings = json.dumps(h["frictions"], sort_keys=True)
     inputs = h["input_fingerprints"]
-    digest = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode("utf-8")).hexdigest()
+    digest = _json_digest(inputs)
+    sectors = h.get("sector_map", {})
+    unknown = sum(sector is None for sector in sectors.values())
     invocation = h.get("invocation")
     command = shlex.join(invocation["command"]) if invocation else "direct build (no CLI)"
     return [f"- Effective frictions: {settings}",
             f"- Input SHA-256 manifest: {digest} ({len(inputs)} files; file hashes in JSON)",
+            f"- Sector map snapshot SHA-256: {_json_digest(sectors)} "
+            f"({len(sectors)} tickers, {unknown} unknown; mapping in JSON)",
             f"- Invocation: {command}"]
 
 
