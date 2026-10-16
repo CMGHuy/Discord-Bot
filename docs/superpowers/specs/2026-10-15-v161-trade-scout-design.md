@@ -156,6 +156,8 @@ stored, dollar volume and ATR% at signal, alert hour.
   **every** cell tested (`bh_qvalues` in the same module). Stop-related cells
   also print stop distance in ATR and dollar loss at fixed 2% risk. A cell using
   bars prints bar-covered N beside total N.
+- The JSON preserves full precision for Δ, interval, p and q so the merge
+  checks decision boundaries on unrounded values; Markdown rounds only for display.
 - **`thin`:** N < 30 **or** fewer than 8 distinct weeks. Never ranked as evidence.
 - **Header:** window (first and last exit date), total N, pooled net ExpR and
   win rate, net-of-frictions flag, total cells tested. Roles quote only these and
@@ -277,7 +279,8 @@ section. **Drops** a row when:
   kebab-case), or a name in the closed-pre-registrations table parsed from
   `backtest-methodology.md` § Closed pre-registrations — do not re-run these;
 - its evidence cell is `thin`, or not present in the autopsy JSON (an invented
-  figure), unless `route` is a playbook `/screen`;
+  figure). A pure playbook `/screen` row with no cell citation needs no cell;
+  adding a playbook reference to cell evidence does not exempt that cell;
 - any quoted N, weeks, Δ, interval or q differs from that cell's JSON figures
   at the autopsy Markdown's three-decimal precision, or the unrounded JSON q
   is above 0.10 or non-finite; playbook `/screen` rows need no cell quote;
