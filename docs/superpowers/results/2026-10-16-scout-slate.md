@@ -70,3 +70,11 @@ None.
 - exit-harvester: NO ROWS. Eligible positive exit cells describe realised outcomes rather than a testable change; alternatives are thin or miss the evidence gate.
 - setup-scout: 3 rows returned.
 - regime-desk: 1 row returned.
+
+## Panel review
+
+Run 2026-10-16 over `6648d737` (quant-researcher on opus).
+
+- quant-researcher [ADVISORY]: Rank 1's issuance-hour cell does not measure the benefit of a premarket refresh or define its outcome and comparator. Row 1 withdrawn from the partner's choice pending a measurable design; the ranked output above remains an audit record.
+- quant-researcher [ADVISORY]: The timing comparison excludes records without issuance-hour data, so its association may not represent the full book. Noted for the withdrawn row.
+- Dispatch note: the named `scout` agent was unavailable in this session; the three roles ran serially through the plan's read-only general-agent fallback.
