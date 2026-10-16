@@ -544,13 +544,36 @@ def _registry_sort_key(rec: dict) -> tuple:
             data_source != "yfinance", data_source)
 
 
+def _is_validation_row(rec: dict) -> bool:
+    return rec.get("window") == f"{VALIDATION[0]}..{VALIDATION[1]}"
+
+
+def _refuse_spent_validation(existing: list, new_records: list) -> None:
+    """The VALIDATION budget is spent once per key and a new data source resets
+    nothing (backtest-methodology.md § Windows): a non-yfinance VALIDATION row
+    for a key whose yfinance VALIDATION row exists is refused, nothing written."""
+    spent = {registry_key(r)[:3] for r in existing
+             if registry_key(r)[3] == "yfinance" and _is_validation_row(r)}
+    for rec in new_records:
+        key = registry_key(rec)
+        if key[3] != "yfinance" and _is_validation_row(rec) and key[:3] in spent:
+            raise SystemExit(
+                f"error: refusing to emit a {key[3]} VALIDATION row for "
+                f"source={key[0]} strategy={key[1]} horizon={key[2]}: its yfinance "
+                "VALIDATION shot is spent and a new data source resets no budget "
+                "(backtest-methodology.md, Windows)")
+
+
 def merge_registry(path, new_records):
     """Merge records into the registry JSON, replacing same-key entries only.
 
     The key includes data_source, so an Alpaca row sits beside the yfinance
-    row of the same (source, strategy, horizon) instead of overwriting it."""
+    row of the same (source, strategy, horizon) instead of overwriting it.
+    An Alpaca VALIDATION row for a key whose yfinance VALIDATION shot is spent
+    is refused (SystemExit) before anything is written."""
     path = Path(path)
     existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    _refuse_spent_validation(existing, new_records)
     new_keys = {registry_key(r) for r in new_records}
     kept = [r for r in existing if registry_key(r) not in new_keys]
     merged = sorted(kept + new_records, key=_registry_sort_key)

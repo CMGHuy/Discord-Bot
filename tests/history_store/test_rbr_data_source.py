@@ -221,3 +221,43 @@ def test_train_run_writes_sidecars_naming_source_and_exclusions(store_root, tmp_
         assert side["data_source"] == "alpaca"
         assert side["excluded"]["BBB"] == "flagged: price-mismatch"
     assert "excluded BBB: flagged: price-mismatch" in capsys.readouterr().out
+
+
+# --- the spent VALIDATION shot: no second source buys a second look -------------------
+
+_VAL = "2024-01-01..2025-12-31"
+
+
+def _val_registry(tmp_path, existing):
+    path = tmp_path / "reg.json"
+    path.write_text(json.dumps(existing), encoding="utf-8")
+    return path
+
+
+def test_merge_refuses_an_alpaca_validation_row_when_the_yfinance_shot_is_spent(tmp_path):
+    path = _val_registry(tmp_path, [_row(window=_VAL)])
+    before = path.read_text(encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        rbr.merge_registry(path, [_row(window=_VAL, data_source="alpaca")])
+    assert "error:" in str(exc.value) and "RSI" in str(exc.value)
+    assert path.read_text(encoding="utf-8") == before            # nothing written
+
+
+def test_merge_allows_an_alpaca_validation_row_when_no_yfinance_shot_is_spent(tmp_path):
+    path = _val_registry(tmp_path, [_row(window="2020-01-01..2023-12-31")])
+    merged = rbr.merge_registry(path, [_row(window=_VAL, data_source="alpaca")])
+    assert len(merged) == 2
+    path = _val_registry(tmp_path, [])
+    assert len(rbr.merge_registry(path, [_row(window=_VAL, data_source="alpaca")])) == 1
+
+
+def test_merge_allows_an_alpaca_train_row_beside_a_spent_yfinance_row(tmp_path):
+    path = _val_registry(tmp_path, [_row(window=_VAL)])
+    merged = rbr.merge_registry(path, [_row(window="2020-01-01..2023-12-31", data_source="alpaca")])
+    assert len(merged) == 2
+
+
+def test_merge_still_lets_yfinance_re_emit_its_own_validation_row(tmp_path):
+    path = _val_registry(tmp_path, [_row(window=_VAL, n=1)])
+    merged = rbr.merge_registry(path, [_row(window=_VAL, n=2)])
+    assert [r["n"] for r in merged] == [2]
