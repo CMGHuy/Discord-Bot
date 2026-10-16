@@ -160,7 +160,8 @@ def test_job_result_is_empty_not_404_while_a_job_is_still_running(logged_in):
     body = logged_in.get("/api/v1/jobs/stillgoing/result").get_json()
     # The empty response carries the same three keys as a full one, so a
     # client never has to branch on which shape it got.
-    assert_shape(body, {"job_id": str, "strategy": type(None), "grid": list})
+    assert_shape(body, {"job_id": str, "strategy": type(None), "grid": list,
+                        "data_source": type(None)})
     assert body["grid"] == []
 
 
