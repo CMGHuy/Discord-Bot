@@ -132,8 +132,8 @@ export function sparkGeometry(series: SparkSeries, width = 120, height = 32): Sp
     .tick[data-kind='stop'] { stroke: var(--neg); }
     .tick[data-kind='tp1'], .tick[data-kind='tp2'] { stroke: var(--pos); }
     .exit { fill: var(--accent); }
-    .stale-note { color: var(--text-faint); font-size: var(--text-chip); white-space: nowrap; }
-    .spark-empty { color: var(--text-faint); font-family: var(--font-mono); }
+    .stale-note { color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
+    .spark-empty { color: var(--text-muted); font-family: var(--font-mono); }
   `,
 })
 export class TradeSparkline {
