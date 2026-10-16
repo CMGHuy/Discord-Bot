@@ -228,4 +228,35 @@ describe('CalendarDayStore', () => {
     expect(store.empty()).toBe(false);
     expect(store.loading()).toBe(false);
   });
+
+  it('keeps the figures through a same-URL refresh, and keeps them when that refresh fails', () => {
+    open('2026-08-05', 'VWAP', null);
+    backend.expectOne((r) => r.url === DAY_URL).flush(dayBody([trade()]));
+    monthReq('2026-08').flush(AUGUST);
+    backend.expectOne((r) => r.url === SPARK_URL).flush(
+      { as_of: 'x', date: '2026-08-05', truncated: false, series: {} });
+    const before = store.day();
+
+    open('2026-08-05', 'VWAP', null);                  // RouteRefreshService: same URL again
+    expect(store.day()).toBe(before);
+    expect(store.month()).not.toBeNull();
+    expect(store.sparklines()).not.toBeNull();
+    expect(store.prevDay()).toBe('2026-08-03');
+
+    backend.expectOne((r) => r.url === DAY_URL)
+      .flush({ error: { code: 'unavailable', message: 'x' } }, { status: 503, statusText: 'x' });
+    expect(store.day()).toBe(before);
+    expect(store.error()).not.toBeNull();
+    expect(store.empty()).toBe(false);
+  });
+
+  it('still clears the figures when the date or a filter changes', () => {
+    open('2026-08-05', 'VWAP', null);
+    backend.expectOne((r) => r.url === DAY_URL).flush(dayBody([trade()]));
+    monthReq('2026-08').flush(AUGUST);
+    store.setRoute('2026-08-05', 'EMA20', null);
+    expect(store.day()).toBeNull();
+    store.setRoute('2026-08-10', 'EMA20', null);
+    expect(store.month()).toBeNull();
+  });
 });

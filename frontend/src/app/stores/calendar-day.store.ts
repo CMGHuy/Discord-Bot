@@ -176,8 +176,13 @@ export const CalendarDayStore = signalStore(
       /** From the route: `:date` and the `strategy`/`horizon` query params. */
       setRoute(date: string | null, strategy: string | null, horizon: string | null): void {
         routeToken += 1;
+        const next = isIsoDate(date) ? date : null;
+        // A same-URL refresh (RouteRefreshService) keeps what is on screen:
+        // stale-while-revalidate. Only a changed date or filter clears.
+        if (next === store.date() && (strategy ?? '') === store.strategy()
+            && (horizon ?? '') === store.horizon()) return;
         patchState(store, {
-          date: isIsoDate(date) ? date : null,
+          date: next,
           strategy: strategy ?? '',
           horizon: horizon ?? '',
           day: null, month: null, sparklines: null,
