@@ -7,7 +7,7 @@
 **Bump:** minor
 **Edge:** none (integrity)
 
-Tasks in this part: V170-10 (the P&L-now reply module), V170-11 (the feed buttons and their registration), V170-12 (attaching the buttons at the two send sites), V170-13 (the `!help` legend), V170-14 (radon sweep, before/after render results note, the one full-suite run).
+Tasks in this part: V170-10 (the P&L-now reply module), V170-11 (the feed buttons and their registration), V170-12 (attaching the buttons at the two send sites), V170-13 (the `!help` legend). **V170-14** (radon sweep, before/after render results note, the one full-suite run) is in [`2026-10-16-v170-simple-alerts-money-symbols-buttons_4-render-suite.md`](2026-10-16-v170-simple-alerts-money-symbols-buttons_4-render-suite.md): with it this file would pass the 1500-line cap.
 
 **Contracts this part consumes from earlier parts** (ledger, final; verify each with `git -C $WT grep -n` before starting a task, and stop with `BLOCKED: <symbol> missing` if one is absent):
 
@@ -1231,6 +1231,92 @@ The v2 ticket mirror and every lifecycle instruction (feed and history
 copy, one view each) carry feed_view; other mirrors and the status
 embed do not. Core reaches views through a function-local import, and
 a panel failure never costs a ping.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C E:/Documents/Private/Projects/Discord-Bot status --short
+```
+
+Expected: the last command shows the main tree unchanged.
+
+# Phase 6: legend, render gate, full suite
+
+### Task V170-13: `!help` legend from `FEED_SYMBOLS`
+
+**Model:** haiku — one constant rebuilt from an existing function, one test; fully specified.
+
+**Files:**
+- Modify: `swingbot/commands/info.py:28` (`HELP_DESCRIPTION`) and its imports
+- Modify: `tests/commands/test_help_catalog.py`
+
+**Interfaces:**
+- Consumes: V170-1 `tokens.feed_legend() -> str` (`"Feed symbols: ▶ entry · … . Feed dollars: paper account, before fees, slippage and tax."`), `tokens.FEED_SYMBOLS`.
+- Produces (ledger contract, final): `info.HELP_DESCRIPTION = "Alerts only, never places trades. Prefix: `!`  •  Slash: `/`" + "\n" + tokens.feed_legend()`.
+
+Rules (spec §2 Legend, Global Constraints, index Decision 8): the legend is generated from `FEED_SYMBOLS` so it cannot drift from what the feed sends; it says "paper account, before fees, slippage and tax"; it lives in `HELP_DESCRIPTION` (the first embed's description), never as a field or a `COMMANDS_BY_CATEGORY` row (`test_help_catalog.py` pins the field list to the categories, and `help_line` would append a slash twin). The first embed stays within Discord's limits (description ≤ 4096, embed ≤ 6000).
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `$WT/tests/commands/test_help_catalog.py`:
+
+```python
+def test_help_description_carries_the_feed_legend_from_the_symbol_table():
+    from swingbot.core.presentation import tokens
+    assert info.HELP_DESCRIPTION == (
+        "Alerts only, never places trades. Prefix: `!`  •  Slash: `/`\n" + tokens.feed_legend())
+    for glyph in tokens.FEED_SYMBOLS.values():
+        assert glyph in info.HELP_DESCRIPTION
+    assert "paper account, before fees, slippage and tax" in info.HELP_DESCRIPTION
+    first = info.help_embeds()[0]
+    assert first.description == info.HELP_DESCRIPTION
+    assert len(first.description) <= 4096 and len(first) <= 6000
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `python $WT/scripts/dev/testrun.py file tests/commands/test_help_catalog.py`
+Expected: FAIL on `test_help_description_carries_the_feed_legend_from_the_symbol_table` (the description has no legend yet); every other test passes.
+
+- [ ] **Step 3: Write the implementation**
+
+In `$WT/swingbot/commands/info.py`, add beside `from swingbot.core import presentation as ui`:
+
+```python
+from swingbot.core.presentation import tokens
+```
+
+and replace line 28 (`HELP_DESCRIPTION = "Alerts only, never places trades. Prefix: `!`  •  Slash: `/`"`) with:
+
+```python
+#: The help embed's description; SP17's help_embeds() reuses it. v170: its
+#: second line is the execution feed's symbol legend, generated from
+#: tokens.FEED_SYMBOLS so it cannot drift from what the feed sends.
+HELP_DESCRIPTION = ("Alerts only, never places trades. Prefix: `!`  •  Slash: `/`\n"
+                    + tokens.feed_legend())
+```
+
+(Delete the old one-line `#: The help embed's description; SP17's help_embeds() reuses it.` comment above it; the new comment replaces it.)
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `python $WT/scripts/dev/testrun.py file tests/commands/test_help_catalog.py`
+Expected: PASS, `0 failed` (the existing `first.description == info.HELP_DESCRIPTION` and both-prefixes asserts still hold).
+
+Run: `python $WT/scripts/dev/testrun.py changed`
+Expected: `0 failed` (the `info_help` parity case compares the prefix and slash surfaces to each other, not to a golden text).
+
+- [ ] **Step 5: Complexity check**
+
+Run: `python -m radon cc -s -n C $WT/swingbot/commands/info.py`
+Expected: no new line (the change adds no function).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git -C $WT add swingbot/commands/info.py tests/commands/test_help_catalog.py
+git -C $WT commit -m "feat(v170): feed symbol legend in !help
+
+The help description's second line is generated from FEED_SYMBOLS plus
+the paper/gross cost-basis sentence.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git -C E:/Documents/Private/Projects/Discord-Bot status --short

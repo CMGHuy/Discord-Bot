@@ -104,7 +104,7 @@ Sequential edges forced by shared files (never run these pairs together): V170-3
 | V170-11 | `PnlNowButton`, `FEED_BUTTONS`, `feed_view`, registration | 3 | sonnet | M `swingbot/commands/views.py`, M `tests/commands/test_views_persistent.py`, C `tests/commands/test_views_feed.py` | `views.PnlNowButton` (`ACTION = "pnl"`, `LABEL = "💵 P&L now"`, template `plan:pnl:<uuid>`); `views.FEED_BUTTONS: tuple[type, ...] = (PnlNowButton,)`; `views.feed_view(plan_id: str) -> discord.ui.View` (Chart, Breakdown, Watch, P&L now; empty view for a non-persistable id); `register_persistent_views` calls `bot.add_dynamic_items(*PLAN_BUTTONS, *FEED_BUTTONS)` |
 | V170-12 | Attach `feed_view` to the feed ticket and every feed lifecycle send | 3 | sonnet | M `swingbot/commands/scanning/alerts.py`, M `swingbot/core/scanning/lifecycle_embeds.py`, C `tests/scanning/test_feed_buttons_attach.py` | `alerts._TICKET_KINDS = frozenset({Kind.TICKET_PLACE, Kind.TICKET_DO_NOT_PLACE})`; `alerts._ticket_view(simple_embed, plan) -> discord.ui.View \| None`; `lifecycle_embeds._feed_view(plan_id: str) -> discord.ui.View \| None`; `lifecycle_embeds._send_instruction(feed, history, embed, plan, event) -> bool` |
 | V170-13 | `!help` legend from `FEED_SYMBOLS` | 3 | haiku | M `swingbot/commands/info.py`, M `tests/commands/test_help_catalog.py` | `info.HELP_DESCRIPTION` = old text + `"\n"` + `tokens.feed_legend()` |
-| V170-14 | Radon sweep, before/after render results note, full suite once | 3 | sonnet | C `scripts/dev/render_feed_samples.py`, C `docs/superpowers/results/2026-10-16-v170-feed-before-after.md` | — |
+| V170-14 | Radon sweep, before/after render results note, full suite once | 4 | sonnet | C `scripts/dev/render_feed_samples.py`, C `docs/superpowers/results/2026-10-16-v170-feed-before-after.md` | — |
 
 ## Parts
 
@@ -112,7 +112,8 @@ Sequential edges forced by shared files (never run these pairs together): V170-3
 |---|---|---|---|
 | 1 | `docs/superpowers/plans/2026-10-16-v170-simple-alerts-money-symbols-buttons_1-money-ticket-lifecycle.md` | V170-1..V170-4 | Tokens and symbol table, `trade_for_plan`, `Money` and the ticket, lifecycle transitions with linked-record money |
 | 2 | `docs/superpowers/plans/2026-10-16-v170-simple-alerts-money-symbols-buttons_2-close-guards-plumbing.md` | V170-5..V170-9 | Close messages, close-route tests, glyph and verb guards, `push_kwargs` view, `!pnl` single-trade extraction |
-| 3 | `docs/superpowers/plans/2026-10-16-v170-simple-alerts-money-symbols-buttons_3-buttons-render.md` | V170-10..V170-14 | P&L-now reply, buttons and registration, send-site wiring, `!help` legend, radon + before/after render + full suite |
+| 3 | `docs/superpowers/plans/2026-10-16-v170-simple-alerts-money-symbols-buttons_3-buttons-render.md` | V170-10..V170-13 | P&L-now reply, buttons and registration, send-site wiring, `!help` legend |
+| 4 | `docs/superpowers/plans/2026-10-16-v170-simple-alerts-money-symbols-buttons_4-render-suite.md` | V170-14 | Radon sweep, before/after render results note, full suite once (split from part 3: the 1500-line cap) |
 
 ## Spec coverage
 
