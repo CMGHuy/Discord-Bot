@@ -223,8 +223,16 @@ whose ex-date is older than the overlap window. So:
   refetch. It never falls back to `history_splice.py`'s live-only path
   (lines 55-65), which drops depth. The frame never comes out shallower
   than before.
-- **The cache's adjustment basis is stated in the plan** (the same basis
-  the scan reads today), and the fingerprint is stored beside it.
+- **The cache's adjustment basis is stated in the plan**, and the
+  fingerprint is stored beside it. The brief found that `market_data/daily`
+  is written only by yfinance with `auto_adjust=True`, while cold frames
+  come from Alpaca SIP with `Adjustment.ALL`. Today's
+  `_with_cached_depth` splice refuses on that mismatch and returns the
+  shallow frame. The write-back and delta fetch must therefore keep one
+  basis per file (never splice across bases), and the plan states which.
+  The cache holds full history since listing, so a write-back unions with
+  the file, never overwrites it (`data_refresh._merge_save` is the existing
+  union writer).
 - **Weekly full re-anchor** per symbol, outside session, as a backstop
   only. It runs as a bot loop task on the VM.
 - **Parity test** (`testrun.py file`): fixtures with (a) a sub-1 % dividend
@@ -252,10 +260,12 @@ Settled after the builder check:
   rewrite-after-post. The scan's frames and level maps are still in memory
   there.
 - **Which paths (my call):** every path that posts a plan from a live
-  price: the main scan, the SHORT lane (`short_run.py`) and strategy alerts
-  (`strategy_pass.py`, shadow soak included, so shadow and live stay
-  comparable). **Not** the next-session outlook (`outlook_run.py`): it is
-  built from the last closed bar by design. Pre- and after-market scans
+  price: the main scan and the SHORT lane (`short_run.py`). **Not**
+  strategy alerts (`strategy_pass.py`): the brief found they use no live
+  price today and are built from the completed bar by design, so a rebuild
+  would change their signals and their running shadow soak. **Not** the
+  next-session outlook (`outlook_run.py`): it is built from the last closed
+  bar by design. (Both exclusions are my calls, corrected 2026-10-16.) Pre- and after-market scans
   rebuild too, from the freshest quote available.
 - **Which gates re-run (my call):** only the price-dependent ones (R:R,
   entry distance, 2 % dollar-risk sizing, any gate reading `current_price`).
@@ -317,7 +327,8 @@ and the event is logged (fail open).
 
 ### D7 — Index tape: shared real indices, ETF proxies when blank (partner's choice)
 
-The bot fetches `^GSPC ^NDX ^DJI ^VIX` and `SI=F` once a minute in session
+The bot fetches the SPA's fixed tape (`^GSPC ^NDX ^DJI ^VIX`), plus any
+user-flagged tape symbol such as `SI=F`, once a minute in session
 into the shared cache, through the layer. Admin tabs read only that copy
 and never call Yahoo for the tape themselves. When Yahoo comes back blank
 for a symbol, the tape shows the Alpaca proxy instead (SPY, QQQ, DIA, a VIX
