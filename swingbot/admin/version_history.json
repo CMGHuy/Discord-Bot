@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-16 15:28:16 UTC",
+  "generated_at": "2026-10-16 17:09:42 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.25.0",
-    "bot": "2.5.2"
+    "bot": "2.5.3"
   },
   "releases": [
     {
@@ -1681,6 +1681,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-16",
+      "last_seen": "2026-10-16",
+      "commit": "1ba2427d",
+      "subject": "release(bot): 2.5.3 -- Alpaca history store as the training data (v162)",
+      "versions": {
+        "ui": "1.25.0",
+        "bot": "2.5.3"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
