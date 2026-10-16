@@ -7,7 +7,7 @@ import {
 import { provideLocationMocks } from '@angular/common/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Routes, provideRouter, withComponentInputBinding } from '@angular/router';
+import { Router, Routes, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of } from 'rxjs';
 import { describe, expect, it } from 'vitest';
@@ -219,6 +219,7 @@ describe('CalendarDayPage', () => {
     const explained = [...el(fixture).querySelectorAll('.tiles sb-stat-tile')]
       .filter((tile) => tile.getAttribute('title') === R_TOOLTIP);
     expect(explained).toHaveLength(3);
+    expect(text(el(fixture), '.r-note')).toBe(R_TOOLTIP);   // touch has no hover
   });
 
   it('says once that scale-out legs count separately, only when there are legs', async () => {
@@ -289,6 +290,8 @@ describe('CalendarDayPage', () => {
     const cellOf = (root: HTMLElement) => root.querySelector('.breakdown-row .win');
     expect(cellOf(thin)?.textContent?.trim()).toBe('—');
     expect(cellOf(thin)?.classList.contains('withheld')).toBe(true);
+    expect(text(thin, '.win-note')).toBe('— : win % withheld, fewer than 5 rows');
+    expect(thin.querySelector('.breakdown thead th:last-child')?.getAttribute('aria-hidden')).toBe('true');
     const wide = el(await open('2026-08-05', dayBody({
       breakdown: { ...dayBody().breakdown,
         strategy: [{ key: 'EMA20', n: 5, pnl_amount: 40, r: 0.8, win_rate: 60 }] },
@@ -386,5 +389,45 @@ describe('calendar/:date route', () => {
     TestBed.inject(HttpTestingController).verify();
     expect(text(harness.routeNativeElement!, 'sb-empty-state .empty-title'))
       .toBe('No closed trades on 2026-02-30 under this filter');
+  });
+
+  it('keeps the tiles on screen when the same URL is resolved again', async () => {
+    configure(ROUTES);
+    const harness = await RouterTestingHarness.create();
+    const first = harness.navigateByUrl('/calendar/2026-08-05?strategy=EMA20');
+    (await take((r) => r.url === DAY_URL)).flush(dayBody());
+    (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
+    await first;
+    (await take((r) => r.url === SPARK_URL)).flush(SPARKS);
+    harness.detectChanges();
+    expect(harness.routeNativeElement!.querySelectorAll('.tiles sb-stat-tile')).toHaveLength(7);
+
+    const again = TestBed.inject(Router).navigateByUrl('/calendar/2026-08-05?strategy=EMA20',
+      { onSameUrlNavigation: 'reload', replaceUrl: true });
+    const day = await take((r) => r.url === DAY_URL);   // a refresh is in flight
+    harness.detectChanges();
+    expect(harness.routeNativeElement!.querySelectorAll('.tiles sb-stat-tile')).toHaveLength(7);
+    day.flush(dayBody());
+    (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
+    await again;
+  });
+
+  it('asks for the new day when the date in the URL changes', async () => {
+    configure(ROUTES);
+    const harness = await RouterTestingHarness.create();
+    const first = harness.navigateByUrl('/calendar/2026-08-05?strategy=EMA20');
+    (await take((r) => r.url === DAY_URL)).flush(dayBody());
+    (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
+    await first;
+    (await take((r) => r.url === SPARK_URL)).flush(SPARKS);
+
+    const second = harness.navigateByUrl('/calendar/2026-08-10?strategy=EMA20');
+    const day = await take((r) => r.url === DAY_URL);
+    expect(day.request.params.get('date')).toBe('2026-08-10');
+    day.flush(dayBody({ date: '2026-08-10' }));
+    (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
+    await second;
+    harness.detectChanges();
+    expect(text(harness.routeNativeElement!, '.long-date')).toBe('Monday, August 10, 2026');
   });
 });

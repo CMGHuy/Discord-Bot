@@ -136,6 +136,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
         <sb-stat-tile label="Average trade" [value]="r(day.avg_trade_r)" [sample]="day.trade_count" [attr.title]="rTooltip" />
         <sb-stat-tile label="Worst drawdown" [value]="r(day.worst_drawdown_r)" [sample]="day.trade_count" tone="neg" [attr.title]="rTooltip" />
       </div>
+      <p class="r-note">{{ rTooltip }}</p>
       @if (store.hasLegs()) {
         <p class="sample-note">{{ legsNote(day.trade_count) }}</p>
       }
@@ -182,7 +183,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
               <th class="num">P&amp;L</th>
               <th class="num r-head" [title]="rTooltip">R</th>
               <th class="num">Win %</th>
-              <th></th>
+              <th aria-hidden="true"></th>
             </tr>
           </thead>
           <tbody>
@@ -192,12 +193,13 @@ function sign(value: number | null): 'pos' | 'neg' | null {
                 <td class="num">{{ row.n }}</td>
                 <td class="num" [class.pos]="signOf(row.pnl_amount) === 'pos'" [class.neg]="signOf(row.pnl_amount) === 'neg'">{{ ccy(row.pnl_amount) }}</td>
                 <td class="num" [class.pos]="signOf(row.r) === 'pos'" [class.neg]="signOf(row.r) === 'neg'">{{ r(row.r) }}</td>
-                <td class="num win" [class.withheld]="breakdownWinRate(row) === absent">{{ breakdownWinRate(row) }}</td>
-                <td class="bar"><span class="fill" [class.pos]="signOf(row.pnl_amount) === 'pos'" [class.neg]="signOf(row.pnl_amount) === 'neg'" [style.width.%]="barWidth(row)"></span></td>
+                <td class="num win" [class.withheld]="breakdownWinRate(row) === absent" [attr.title]="breakdownWinRate(row) === absent ? winNote : null">{{ breakdownWinRate(row) }}</td>
+                <td class="bar" aria-hidden="true"><span class="fill" [class.pos]="signOf(row.pnl_amount) === 'pos'" [class.neg]="signOf(row.pnl_amount) === 'neg'" [style.width.%]="barWidth(row)"></span></td>
               </tr>
             }
           </tbody>
         </table></div>
+        <p class="win-note">{{ winNote }}</p>
       </sb-panel>
 
       <sb-panel [heading]="'Trades (' + day.trade_count + ')'" class="trades-panel">
@@ -221,8 +223,8 @@ function sign(value: number | null): 'pos' | 'neg' | null {
     .long-date { margin: 0; font-size: var(--text-h2, 1.25rem); font-weight: 600; }
     .steps { display: inline-flex; gap: var(--space-10); margin-left: auto; }
     .steps a { color: var(--accent); text-decoration: none; }
-    .steps .off { color: var(--text-secondary); opacity: 0.55; }
-    .caption, .sample-note, .caveat { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
+    .steps .off { color: var(--text-secondary); text-decoration: line-through; }
+    .caption, .sample-note, .caveat, .r-note, .win-note { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
     .stale { margin: 0; color: var(--warn); font-size: var(--text-table); }
     .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-8); }
     .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-14); }
@@ -245,7 +247,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
     .breakdown th, .breakdown td { padding: var(--space-4) var(--space-6); text-align: left; }
     .breakdown .num { text-align: right; font-family: var(--font-mono); }
     .breakdown .r-head { cursor: help; }
-    .breakdown .win.withheld { color: var(--text-secondary); opacity: 0.55; }
+    .breakdown .win.withheld { color: var(--text-secondary); }
     .breakdown .bar { width: 30%; }
     .breakdown .fill { display: block; height: 8px; border-radius: 2px; background: var(--text-faint); }
     .breakdown .fill.pos { background: var(--pos); }
@@ -264,6 +266,7 @@ export class CalendarDayPage {
   protected readonly caveat = ONE_DAY_CAVEAT;
   protected readonly rTooltip = R_TOOLTIP;
   protected readonly absent = ABSENT;
+  protected readonly winNote = '— : win % withheld, fewer than 5 rows';
   protected readonly tabs = TABS;
   protected readonly sorts = SORTS;
   protected readonly breakdownWinRate = breakdownWinRate;
