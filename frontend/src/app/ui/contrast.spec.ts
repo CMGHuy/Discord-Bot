@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const CSS = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
+import { resolveToken } from './testing/resolve-token';
 
-function token(name: string): string {
-  return CSS.match(new RegExp(`^\\s*${name}:\\s*(#[0-9a-fA-F]{6});`, 'm'))![1];
-}
+/**
+ * The tokens.css source, read only for the `--text-faint` documentation check
+ * below. Colour values come from `resolveToken()` (spec v167 § 1): tier 2 is
+ * `var(--palette-name)`, which a private hex regexp would not find.
+ */
+const CSS = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
 
 /** WCAG 2.1 relative luminance. */
 function luminance(hex: string): number {
@@ -37,7 +40,7 @@ describe('WCAG AA on every text/surface pair', () => {
   for (const fg of ['--text', '--text-secondary', '--text-muted']) {
     for (const bg of SURFACES) {
       it(`${fg} on ${bg} clears 4.5:1`, () => {
-        expect(ratio(token(fg), token(bg))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(resolveToken(fg), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
       });
     }
   }
@@ -57,11 +60,11 @@ describe('WCAG AA on every text/surface pair', () => {
 describe('accent legibility (v80 D1)', () => {
   for (const bg of SURFACES) {
     it(`--accent as text on ${bg} clears 4.5:1`, () => {
-      expect(ratio(token('--accent'), token(bg))).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(resolveToken('--accent'), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
     });
   }
 
   it('--on-accent on --accent-fill clears 4.5:1', () => {
-    expect(ratio(token('--on-accent'), token('--accent-fill'))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(resolveToken('--on-accent'), resolveToken('--accent-fill'))).toBeGreaterThanOrEqual(4.5);
   });
 });
