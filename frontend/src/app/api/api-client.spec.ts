@@ -107,4 +107,22 @@ describe('ApiClient — scope and analytics', () => {
     req.flush(body);
     expect(got).toEqual(body);
   });
+
+  it('calendarPnlDaySparklines GETs /calendar/pnl/day/sparklines with the date and only the set filters', () => {
+    let got: unknown;
+    api.calendarPnlDaySparklines({ date: '2026-08-03', strategy: 'VWAP' }).subscribe((r) => (got = r));
+    const req = http.expectOne((r) => r.url.endsWith('/calendar/pnl/day/sparklines'));
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.get('date')).toBe('2026-08-03');
+    expect(req.request.params.get('strategy')).toBe('VWAP');
+    expect(req.request.params.has('horizon')).toBe(false);
+    const body = {
+      as_of: '2026-08-10T12:00:00Z',
+      date: '2026-08-03',
+      truncated: false,
+      series: { ['a'.repeat(16) + ':0']: null },
+    };
+    req.flush(body);
+    expect(got).toEqual(body);
+  });
 });

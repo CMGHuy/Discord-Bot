@@ -1716,6 +1716,24 @@ export interface CalendarTrade {
    *  own, and the legs' `pnl_amount` sum to the trade's realized total. */
   leg_index: number;
   leg_total: number;
+  /** v165 D1 -- read from the leg part itself, never re-derived. Every
+   *  figure is null when its input is missing (never 0). */
+  entry_price: number | null;
+  /** The leg's own exit for a leg row, the trade exit for a whole trade. */
+  exit_price: number | null;
+  /** The final recorded stop (a trailed or break-even runner's stop moved). */
+  stop_price: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  /** Leg-scaled for a leg row. */
+  shares: number | null;
+  /** Null when either stamp is missing or the close precedes the open. */
+  held_hours: number | null;
+  /** Signed by direction: a short that fell is positive. Null on a missing or zero entry. */
+  return_pct: number | null;
+  /** One of metrics `EXIT_REASONS` (tp1, runner_tp2, runner_trail, runner_be,
+   *  stop, scratch, timeout, reversed, other). */
+  exit_reason: string;
 }
 
 /** `days`/`totals` are the requested month; `day_of_week`, `best_day`,
@@ -1751,6 +1769,72 @@ export interface CalendarDayTrades {
   worst_drawdown_r: number | null;
   contributors: Array<{ ticker: string | null; r: number }>;
   detractors: Array<{ ticker: string | null; r: number }>;
+  /** v165 D2 -- this day against the OTHER trading days under the filter. */
+  context: DayContext;
+  /** v165 D3 -- exactly the rows in `trades`, grouped four ways. */
+  breakdown: DayBreakdown;
+}
+
+/** A difference from a reference day. Null when either side has no figure. */
+export interface DayDelta {
+  pnl_amount: number | null;
+  r: number | null;
+}
+
+/** v165 D2. `percentile` is null below 20 other trading days (the page
+ *  says why with `history_days`); the day is never in its own reference set. */
+export interface DayContext {
+  percentile: number | null;
+  /** Other trading days with a non-null net P&L. */
+  history_days: number;
+  vs_avg_day: DayDelta;
+  vs_weekday_avg: DayDelta;
+}
+
+/** One group of a day's rows. `win_rate` is 0-100 and null for a group with
+ *  no decided rows; a null key arrives as `"unknown"`. */
+export interface DayBreakdownRow {
+  key: string;
+  n: number;
+  pnl_amount: number | null;
+  r: number | null;
+  win_rate: number | null;
+}
+
+export type DayBreakdownDimension = 'strategy' | 'horizon' | 'direction' | 'exit_reason';
+
+/** Each dimension sorted by P&L descending, nulls last. */
+export type DayBreakdown = Record<DayBreakdownDimension, DayBreakdownRow[]>;
+
+export interface SparkClose {
+  date: string;
+  close: number;
+}
+
+/** v165 D4. Daily closes from 3 bars before entry to at most 3 bars after
+ *  the exit bar (`exit_bar` indexes `closes`; later bars are context, drawn
+ *  dimmed). Ticks are the recorded prices -- all null when entry no longer
+ *  sits on the bars. `stale`: the cache ends before the exit day. */
+export interface SparkSeries {
+  closes: SparkClose[];
+  exit_bar: number;
+  last_bar: string;
+  stale: boolean;
+  entry: number | null;
+  stop: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  exit: number | null;
+  exit_date: string;
+}
+
+/** Keyed `"<trade_id>:<leg_index>"`. A null value: no cached bars (or a
+ *  spot metal); a missing key: the row was past the 50-row cap. */
+export interface CalendarDaySparklines {
+  as_of: string;
+  date: string;
+  truncated: boolean;
+  series: Record<string, SparkSeries | null>;
 }
 
 /* -- live tape ---------------------------------------------------------- */

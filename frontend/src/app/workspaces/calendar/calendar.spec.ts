@@ -281,6 +281,15 @@ const TRADE: CalendarTrade = {
   opened_at: '2026-08-01T14:30:00+00:00',
   leg_index: 0,
   leg_total: 1,
+  entry_price: 100,
+  exit_price: 110,
+  stop_price: 95,
+  tp1: 120,
+  tp2: null,
+  shares: 10,
+  held_hours: 53.5,
+  return_pct: 10,
+  exit_reason: 'tp1',
 };
 
 describe('Calendar day drawer', () => {
@@ -292,7 +301,11 @@ describe('Calendar day drawer', () => {
       .flush({ as_of: '2026-08-10T12:00:00Z', date: '2026-08-03', trades, trade_count: trades.length,
         winners: 0, losers: 0, total_r: null, total_ccy: null,
         win_rate: null, avg_trade_r: null, worst_drawdown_r: null,
-        contributors: [], detractors: [] });
+        contributors: [], detractors: [],
+        context: { percentile: null, history_days: 0,
+          vs_avg_day: { pnl_amount: null, r: null },
+          vs_weekday_avg: { pnl_amount: null, r: null } },
+        breakdown: { strategy: [], horizon: [], direction: [], exit_reason: [] } });
     await fixture.whenStable();
     fixture.detectChanges();
   };

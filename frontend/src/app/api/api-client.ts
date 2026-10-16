@@ -19,6 +19,7 @@ import {
   AnalyticsStrategies,
   BookScope,
   BotRestartResult,
+  CalendarDaySparklines,
   CalendarDayTrades,
   ChartResponse,
   ClearResult,
@@ -543,6 +544,21 @@ export class ApiClient {
     if (query.strategy) params = params.set('strategy', query.strategy);
     if (query.horizon) params = params.set('horizon', query.horizon);
     return this.http.get<CalendarDayTrades>(`${this.base}/calendar/pnl/day`, {
+      params,
+    });
+  }
+
+  /** Daily-close sparklines for one day's rows (v165 D4). Fetched after the
+   *  day itself so the page renders before any bar file is read. */
+  calendarPnlDaySparklines(query: {
+    date: string;
+    strategy?: string;
+    horizon?: string;
+  }): Observable<CalendarDaySparklines> {
+    let params = new HttpParams().set('date', query.date);
+    if (query.strategy) params = params.set('strategy', query.strategy);
+    if (query.horizon) params = params.set('horizon', query.horizon);
+    return this.http.get<CalendarDaySparklines>(`${this.base}/calendar/pnl/day/sparklines`, {
       params,
     });
   }
