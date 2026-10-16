@@ -86,6 +86,8 @@ interface ResearchSlice {
   filters: LedgerFilters;
   sort: SortSpec;
   page: number;
+  /** Rows per page; 0 = all. The workspace sets it from the saved choice. */
+  perPage: number;
   selectedId: string | null;
 }
 
@@ -105,6 +107,7 @@ export const ResearchStore = signalStore(
     filters: NO_FILTERS,
     sort: NEWEST_FIRST,
     page: 1,
+    perPage: LEDGER_PAGE_SIZE,
     selectedId: null,
   }),
   withComputed(({ data, filters, sort }) => ({
@@ -127,17 +130,18 @@ export const ResearchStore = signalStore(
       return (f.verdicts.length ? 1 : 0) + (f.instrument ? 1 : 0) + (f.search ? 1 : 0);
     }),
   })),
-  withComputed(({ data, matching, page, selectedId }) => {
+  withComputed(({ data, matching, page, perPage, selectedId }) => {
+    const size = computed(() => (perPage() > 0 ? perPage() : Math.max(1, matching().length)));
     const current = computed(() =>
-      Math.min(page(), Math.max(1, Math.ceil(matching().length / LEDGER_PAGE_SIZE))));
+      Math.min(page(), Math.max(1, Math.ceil(matching().length / size()))));
     return {
       visible: computed<LedgerRow[]>(() => {
-        const start = (current() - 1) * LEDGER_PAGE_SIZE;
-        return matching().slice(start, start + LEDGER_PAGE_SIZE);
+        const start = (current() - 1) * size();
+        return matching().slice(start, start + size());
       }),
       // The count BEFORE slicing; `visible().length` would show one page forever.
       pageSpec: computed<PageSpec>(() => ({
-        total: matching().length, page: current(), perPage: LEDGER_PAGE_SIZE,
+        total: matching().length, page: current(), perPage: perPage(),
       })),
       /** Looked up in the whole ledger, so a drawer survives a filter change. */
       selected: computed<LedgerRow | null>(() =>
@@ -170,6 +174,7 @@ export const ResearchStore = signalStore(
       hydrate(filters: LedgerFilters): void { patchState(store, { filters, page: 1 }); },
       setSort(sort: SortSpec): void { patchState(store, { sort, page: 1 }); },
       setPage(n: number): void { patchState(store, { page: Math.max(1, n) }); },
+      setPerPage(n: number): void { patchState(store, { perPage: n, page: 1 }); },
       select(id: string | null): void { patchState(store, { selectedId: id }); },
     };
   }),

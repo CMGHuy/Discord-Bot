@@ -98,36 +98,38 @@ describe('readTableDensity', () => {
 });
 
 describe('readTablePerPage', () => {
-  it('defaults to 25', () => {
-    expect(readTablePerPage({}, 'trades')).toBe(25);
+  it('defaults to 10 on desktop and 5 on tablet and phone', () => {
+    expect(readTablePerPage({}, 'trades')).toBe(10);
+    expect(readTablePerPage({}, 'trades', false)).toBe(10);
+    expect(readTablePerPage({}, 'trades', true)).toBe(5);
   });
 
-  it('uses a table-specific default without replacing a saved preference', () => {
-    expect(readTablePerPage({}, 'watchlist', 10)).toBe(10);
-    expect(readTablePerPage({ 'tables.watchlist.per_page': 50 }, 'watchlist', 10)).toBe(50);
+  it('keeps desktop and compact choices apart', () => {
+    const prefs: Preferences = { 'tables.trades.desktop.per_page': 50 };
+    expect(readTablePerPage(prefs, 'trades', false)).toBe(50);
+    expect(readTablePerPage(prefs, 'trades', true)).toBe(5);
   });
 
-  it('reads a stored value that the UI actually offers', () => {
-    expect(readTablePerPage({ 'tables.trades.per_page': 50 }, 'trades')).toBe(50);
+  it('ignores the pre-v167 single key', () => {
+    expect(readTablePerPage({ 'tables.trades.per_page': 50 }, 'trades')).toBe(10);
   });
 
   it('rejects a value outside the offered set', () => {
     // Otherwise a hand-edited preference asks the server for an unbounded page.
-    expect(readTablePerPage({ 'tables.trades.per_page': 5000 }, 'trades')).toBe(25);
+    expect(readTablePerPage({ 'tables.trades.desktop.per_page': 5000 }, 'trades')).toBe(10);
+    expect(readTablePerPage({ 'tables.trades.desktop.per_page': 25 }, 'trades')).toBe(10);
   });
 
   it('rejects a non-number', () => {
-    expect(readTablePerPage({ 'tables.trades.per_page': '50' } as Preferences, 'trades')).toBe(25);
+    expect(readTablePerPage({ 'tables.trades.desktop.per_page': '50' } as Preferences, 'trades')).toBe(10);
   });
 
-  it('offers 10 / 25 / 50 / All', () => {
-    // SR15 specifies this set and it is the task that renders the control,
-    // so it wins over SR12's provisional [10, 25, 50, 100].
-    expect([...PER_PAGE_OPTIONS]).toEqual([10, 25, 50, ALL_PER_PAGE]);
+  it('offers 5 / 10 / 20 / 50 / 100 / All', () => {
+    expect([...PER_PAGE_OPTIONS]).toEqual([5, 10, 20, 50, 100, ALL_PER_PAGE]);
   });
 
   it('accepts All as a stored value', () => {
-    expect(readTablePerPage({ 'tables.trades.per_page': ALL_PER_PAGE }, 'trades'))
+    expect(readTablePerPage({ 'tables.trades.compact.per_page': ALL_PER_PAGE }, 'trades', true))
       .toBe(ALL_PER_PAGE);
   });
 });
@@ -137,7 +139,7 @@ describe('the writers', () => {
     let prefs: Preferences = {};
     prefs = writeTableDensity(prefs, 'trades', 'full');
     prefs = writeTableColumns(prefs, 'trades', 'full', ['ticker', 'num']);
-    prefs = writeTablePerPage(prefs, 'trades', 50);
+    prefs = writeTablePerPage(prefs, 'trades', false, 50);
 
     expect(readTableDensity(prefs, 'trades')).toBe('full');
     expect(readTableColumns(prefs, 'trades', 'full', ['num', 'ticker'])).toEqual(['ticker', 'num']);

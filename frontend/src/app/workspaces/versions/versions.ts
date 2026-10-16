@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 
 import { Release } from '../../api/models';
+import { tablePerPage } from '../../ui/table-per-page';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ControlRow } from '../../ui/layout';
@@ -213,7 +214,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
         </ng-template>
       </sb-timeline>
 
-      <sb-pagination [pagination]="store.pageSpec()" (pageChange)="store.setPage($event)" />
+      <sb-pagination [pagination]="store.pageSpec()" [showPerPage]="true" [announce]="true" (pageChange)="store.setPage($event)" (perPageChange)="onPerPage($event)" />
     </sb-async>
   `,
   styles: `
@@ -362,6 +363,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 })
 export class Versions {
   protected readonly store = inject(VersionsStore);
+  private readonly perPageState = tablePerPage('versions');
+  private readonly syncPerPage = effect(() => this.store.setPerPage(this.perPageState.value()));
+  protected onPerPage(value: number): void { this.perPageState.set(value); }
   protected readonly num = num;
   protected readonly share = share;
   private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');

@@ -20,14 +20,13 @@ import { Async, asyncInputs } from '../../ui/async';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { Density } from '../../ui/data-table/data-table.types';
+import { tablePerPage } from '../../ui/table-per-page';
 import {
   perPageForApi,
   readTableColumns,
   readTableDensity,
-  readTablePerPage,
   writeTableColumns,
   writeTableDensity,
-  writeTablePerPage,
 } from '../../ui/table-prefs';
 import { TradesStore, toSortParam } from '../../stores/trades.store';
 import { Button } from '../../ui/button';
@@ -356,6 +355,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
         [pinned]="pinned"
         (reorder)="onReorder($event)"
         [showPerPage]="true"
+        [perPageChoice]="perPage()"
         (perPageChange)="onPerPage($event)"
       />
     </sb-async>
@@ -703,9 +703,8 @@ export class Trades {
   );
 
   /** Rows per page. 0 means "All", translated at the API boundary. */
-  protected readonly perPage = signal<number>(
-    readTablePerPage(this.preferences.values(), TRADES_TABLE_ID),
-  );
+  private readonly perPageState = tablePerPage(TRADES_TABLE_ID);
+  protected readonly perPage = this.perPageState.value;
 
   /**
    * Apply the saved layout once the server's preferences arrive.
@@ -725,7 +724,6 @@ export class Trades {
         readTableColumns(prefs, TRADES_TABLE_ID, density,
                          baselineColumns(density, this.viewport.isPhone())),
       );
-      this.perPage.set(readTablePerPage(prefs, TRADES_TABLE_ID));
     });
   });
 
@@ -748,8 +746,7 @@ export class Trades {
   }
 
   protected onPerPage(value: number): void {
-    this.perPage.set(value);
-    this.preferences.update((prefs) => writeTablePerPage(prefs, TRADES_TABLE_ID, value));
+    this.perPageState.set(value);
     // `per_page` must land in the URL, not just the local signal/prefs: this
     // route is server-paginated via a resolver (trades.routes.ts's
     // queryFor()) that reads `per_page` straight from the query params on

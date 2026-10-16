@@ -22,7 +22,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { FilterChip, FilterChips } from '../../ui/filter-bar';
 import { Freshness } from '../../ui/freshness';
-import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
+import { tablePerPage } from '../../ui/table-per-page';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { date, num, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
@@ -573,10 +573,9 @@ export class Watchlist {
   /** Watchlist is an at-a-glance index: ten alphabetised symbols leave room
    * for each row's price and signal detail without making the first page a
    * scroll. A saved preference continues to win over this initial default. */
-  protected readonly perPage = signal(
-    readTablePerPage(this.preferences.values(), Watchlist.TABLE_ID, 10),
-  );
-  protected onPerPage(value: number): void { this.perPage.set(value); this.preferences.update((prefs) => writeTablePerPage(prefs, Watchlist.TABLE_ID, value)); }
+  private readonly perPageState = tablePerPage(Watchlist.TABLE_ID);
+  protected readonly perPage = this.perPageState.value;
+  protected onPerPage(value: number): void { this.perPageState.set(value); }
 
   /** `store.empty()` means "not loaded yet" (a boolean, not nullable data),
    *  so the nullable `data` asyncInputs() expects is synthesised here rather

@@ -116,7 +116,7 @@ function maxDrawdown(values: readonly number[]): number | null {
             }
           </dl>
           @if (outcomeTableOpen()) {
-            <sb-data-table [rows]="outcomeTableRows()" [columns]="outcomeColumns" [visible]="outcomeVisible" [rowKey]="outcomeRowKey" />
+            <sb-data-table [rows]="outcomeTableRows()" [columns]="outcomeColumns" [visible]="outcomeVisible" [rowKey]="outcomeRowKey" clientPaging="analytics-outcomes" />
           }
         }
       </sb-panel>
@@ -126,7 +126,7 @@ function maxDrawdown(values: readonly number[]): number | null {
           hint="Every closed trade's realised R. The shape is the finding: a cluster of small losses with a tail of larger wins is a different book from a symmetric one." />
         <sb-histogram [bins]="rBins()" [isNegative]="negativeBin" />
         @if (rTableOpen()) {
-          <sb-data-table [rows]="rRows()" [columns]="rColumns" [visible]="rVisible" [rowKey]="rRowKey" />
+          <sb-data-table [rows]="rRows()" [columns]="rColumns" [visible]="rVisible" [rowKey]="rRowKey" clientPaging="analytics-r-buckets" />
         }
       </sb-panel>
 
@@ -135,7 +135,7 @@ function maxDrawdown(values: readonly number[]): number | null {
           hint="Realised result per calendar month of the scoped book. The day grid lives on the Calendar workspace." />
         <sb-bar-list [rows]="monthBars()" mode="signed" [format]="format" />
         @if (monthTableOpen()) {
-          <sb-data-table [rows]="monthRows()" [columns]="monthColumns" [visible]="monthVisible" [rowKey]="monthRowKey" />
+          <sb-data-table [rows]="monthRows()" [columns]="monthColumns" [visible]="monthVisible" [rowKey]="monthRowKey" clientPaging="analytics-months" />
         }
         <a routerLink="/calendar">Open the calendar</a>
       </sb-panel>

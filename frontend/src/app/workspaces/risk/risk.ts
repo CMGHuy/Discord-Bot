@@ -26,7 +26,7 @@ import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
 import { StatTile } from '../../ui/stat-tile';
-import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
+import { tablePerPage } from '../../ui/table-per-page';
 
 /**
  * Risk — exposure, heat against `PORTFOLIO_HEAT_CAP_PCT`, and the killswitch.
@@ -619,14 +619,9 @@ export class Risk {
   protected readonly sort = signal<SortSpec | null>(null);
   protected setSort(next: SortSpec): void { this.sort.set(next); }
 
-  protected readonly perPage = signal(
-    readTablePerPage(this.preferences.values(), Risk.TABLE_ID),
-  );
-
-  protected onPerPage(value: number): void {
-    this.perPage.set(value);
-    this.preferences.update((prefs) => writeTablePerPage(prefs, Risk.TABLE_ID, value));
-  }
+  private readonly perPageState = tablePerPage(Risk.TABLE_ID);
+  protected readonly perPage = this.perPageState.value;
+  protected onPerPage(value: number): void { this.perPageState.set(value); }
 
   protected readonly sortedPositions = computed(() => {
     const sort = this.sort();

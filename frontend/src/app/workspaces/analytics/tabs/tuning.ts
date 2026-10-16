@@ -6,7 +6,7 @@ import {
   signal,
   TemplateRef,
   viewChild,
-  WritableSignal,
+  Signal,
 } from '@angular/core';
 
 import { AnalyticsStore, GridRow, JobStatus, JobSummary, ProposalRow } from '../../../stores/analytics.store';
@@ -22,7 +22,7 @@ import { ABSENT, dateTime } from '../../../ui/format';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { PaginationComponent } from '../../../ui/pagination';
 import { PanelHeader } from '../../../ui/panel-header';
-import { readTablePerPage, writeTablePerPage } from '../../../ui/table-prefs';
+import { TablePerPage, tablePerPage } from '../../../ui/table-per-page';
 import { allKeys, expectancy, GRID_COLUMNS, PAST_JOBS_COLUMNS, rate } from '../analytics.columns';
 
 /** A proposal with its parameter diff already paired up for rendering. */
@@ -149,6 +149,8 @@ interface ProposalView extends ProposalRow {
             [visible]="pastJobsKeys"
             [rowKey]="pastJobRowKey"
             [pagination]="pastJobsPage.pageSpec()"
+            [showPerPage]="true"
+            (perPageChange)="onPerPage('past-jobs', $event)"
             (pageChange)="pastJobsPage.setPage($event)"
           />
         </sb-panel>
@@ -199,7 +201,7 @@ interface ProposalView extends ProposalRow {
           </button>
         </div>
       }
-      <sb-pagination [pagination]="proposalsPage.pageSpec()" (pageChange)="proposalsPage.setPage($event)" />
+      <sb-pagination [pagination]="proposalsPage.pageSpec()" [showPerPage]="true" [announce]="true" (pageChange)="proposalsPage.setPage($event)" (perPageChange)="onPerPage('proposals', $event)" />
     </sb-panel>
 
     <ng-template #gridPassesCell let-row>
@@ -377,19 +379,15 @@ export class TuningTab {
   protected readonly gridKeys = allKeys(GRID_COLUMNS);
   protected readonly pastJobsKeys = allKeys(PAST_JOBS_COLUMNS);
 
-  private readonly perPageSignals = new Map<string, WritableSignal<number>>();
-  private perPageFor(table: string) {
-    let current = this.perPageSignals.get(table);
-    if (!current) {
-      current = signal(readTablePerPage(this.preferences.values(), 'analytics-' + table));
-      this.perPageSignals.set(table, current);
-    }
-    return current;
-  }
-  protected onPerPage(table: string, value: number): void {
-    this.perPageFor(table).set(value);
-    this.preferences.update((prefs) => writeTablePerPage(prefs, 'analytics-' + table, value));
-  }
+  /** Created eagerly: `tablePerPage` injects, which only works here in the
+   *  field initialisers, not lazily from a template. */
+  private readonly perPageStates: Record<string, TablePerPage> = {
+    grid: tablePerPage('analytics-grid'),
+    'past-jobs': tablePerPage('analytics-past-jobs'),
+    proposals: tablePerPage('analytics-proposals'),
+  };
+  private perPageFor(table: string): Signal<number> { return this.perPageStates[table].value; }
+  protected onPerPage(table: string, value: number): void { this.perPageStates[table].set(value); }
 
   protected readonly gridRowKey = (row: GridRow) => String(row.row_index);
   protected readonly gridPage = createClientPage(() => this.store.grid(), () => this.perPageFor('grid')());
@@ -460,7 +458,7 @@ export class TuningTab {
   /** Each proposal is a card with its own nested diff table, not flat row
    *  data -- `sb-data-table` doesn't fit, so this gets its own small pager
    *  rather than the shared component. */
-  protected readonly proposalsPage = createClientPage(() => this.proposalViews(), 8);
+  protected readonly proposalsPage = createClientPage(() => this.proposalViews(), () => this.perPageFor('proposals')());
 
   protected readonly deleteConsequence = computed(() => {
     const proposal = this.pendingDelete();

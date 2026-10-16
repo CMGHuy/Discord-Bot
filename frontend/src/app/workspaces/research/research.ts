@@ -3,10 +3,12 @@ import {
   Component,
   TemplateRef,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
+import { tablePerPage } from '../../ui/table-per-page';
 import { Router } from '@angular/router';
 
 import { LedgerRow, StrategyRow } from '../../api/models';
@@ -84,6 +86,7 @@ const fixed = (value: number | null, digits: number): string | null =>
             [columns]="registryColumns()"
             [visible]="registryVisible"
             [rowKey]="strategyKey"
+            clientPaging="research-registry"
             [fillPage]="false"
           />
         </sb-async>
@@ -114,6 +117,8 @@ const fixed = (value: number | null, digits: number): string | null =>
           [rowKey]="ledgerKey"
           [sort]="store.sort()"
           [pagination]="store.pageSpec()"
+          [showPerPage]="true"
+          (perPageChange)="onPerPage($event)"
           [emptyState]="noMatch"
           (sortChange)="store.setSort($event)"
           (pageChange)="store.setPage($event)"
@@ -189,6 +194,9 @@ const fixed = (value: number | null, digits: number): string | null =>
 })
 export class Research {
   protected readonly store = inject(ResearchStore);
+  private readonly perPageState = tablePerPage('research-ledger');
+  private readonly syncPerPage = effect(() => this.store.setPerPage(this.perPageState.value()));
+  protected onPerPage(value: number): void { this.perPageState.set(value); }
   private readonly router = inject(Router);
 
   protected readonly disclaimer = DISCLAIMER;

@@ -51,6 +51,7 @@ const percent = (value: number | null): string =>
           [visible]="visible"
           [rowKey]="cellKey"
           [expansion]="detail"
+          clientPaging="reports-gates"
           [fillPage]="false"
         />
         <p class="footer">
