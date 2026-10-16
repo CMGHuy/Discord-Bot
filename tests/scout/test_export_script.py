@@ -105,7 +105,7 @@ def _bash() -> str:
 
 
 def test_bash_parses_the_script(source):
-    done = subprocess.run([_bash(), "-n"], input=source, text=True,
+    done = subprocess.run([_bash(), "-n"], input=source.encode("utf-8"),
                           capture_output=True, timeout=30)
     assert done.returncode == 0, done.stderr
 
