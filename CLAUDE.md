@@ -183,7 +183,7 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | File | Read before |
 |---|---|
 | `architecture.md` | touching `swingbot/core` or the scan pipeline — module map, NO-LOOKAHEAD |
-| `known-traps.md` | touching data caching or embeds — two OHLCV caches, silent no-ops, **empty tables that are measured answers** |
+| `known-traps.md` | touching data caching or embeds — OHLCV caches and the training-data store, silent no-ops, **empty tables that are measured answers** |
 | `backtest-methodology.md` | any backtest/grid/validation — acceptance gate, windows, **closed pre-registrations never re-run** |
 | `edge-priorities.md` | choosing what to work on — pooled numbers, the `Edge:` taxonomy |
 | `document-conventions.md` | writing any spec or plan — headers, `## Parallelisation`, split never compress |

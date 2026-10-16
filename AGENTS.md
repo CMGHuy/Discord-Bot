@@ -158,6 +158,15 @@ partner **trades real money off the alerts**, so a silent stop move, missing
 expiry or lost send on the alert channel is real-money divergence: that work is
 `Edge: harvest`, not cosmetics (`edge-priorities.md`).
 
+**Training data (v162).** Backtests and grids read `TRAINING_DATA_SOURCE`
+(default `alpaca`: the Alpaca history store under `data/market_data/`, not the
+root `market_data/` live cache). `--data-source yfinance` or that `.env` line
+rolls back; `BACKTEST_CACHE_DIR` or an explicit `--cache-dir` means yfinance.
+A missing store is an error, never an empty run. A new data source resets no
+validation budget and reopens no closed pre-registration; each new
+pre-registration names its `data_source`. Detail: `known-traps.md` § Two OHLCV
+caches, `backtest-methodology.md` § Windows.
+
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
 cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`; a screen
 fail is closed, never re-screened) and from v146 `**Panel:**` (1-3 role skills run
@@ -258,7 +267,7 @@ fit, tax drag, alert cadence; educational, not personal financial advice),
 open), `technical-analyst` (S/R, pattern and indicator logic),
 `fundamental-analyst` (earnings, catalysts, sector and macro concentration),
 `staff-engineer` (seams, migrations, VM ops, blast radius),
-`quant-engineer` (lookahead, numerics, the two OHLCV caches, reproducibility),
+`quant-engineer` (lookahead, numerics, the OHLCV caches and training-data store, reproducibility),
 `senior-engineer` (code-level quality and the complexity limit).
 A role raises cited `BLOCKING`/`ADVISORY` findings; it never decides and never
 lowers a gate.

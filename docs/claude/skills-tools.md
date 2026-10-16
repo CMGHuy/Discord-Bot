@@ -205,7 +205,7 @@ haiku -- reviewing means judging.
 | `technical-analyst` | sonnet | S/R, pattern and indicator logic: correct in code and true to how the setup is traded |
 | `fundamental-analyst` | sonnet | Earnings, catalysts, sector and macro concentration: the bot's blind spot |
 | `staff-engineer` | opus | Cross-cutting design: seams, migrations, VM ops, blast radius, long-run cost |
-| `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the two OHLCV caches, reproducibility |
+| `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the OHLCV caches and the v162 training-data store, reproducibility |
 | `senior-engineer` | sonnet | Code-level quality, the complexity limit, reads like its surroundings; `task-reviewer` preloads it |
 
 ## Which agent for what (v107)

@@ -7,10 +7,12 @@ across a frame preserves every percentage distance, indicator crossing and
 level ordering, so detection on XAUUSD equals detection on GC=F -- only the
 price scale differs (tests/marketdata/test_spot_scaling_parity.py).
 
-Cache rule (docs/claude/known-traps.md, two OHLCV caches): only the raw
+Cache rule (docs/claude/known-traps.md § Two OHLCV caches): only the raw
 futures frame is ever cached, under its own name (GC_F). A scaled frame is
 computed on read and never written under XAUUSD -- it would freeze one day's
 ratio into every later day's levels.
+The v162 Alpaca history store never holds a spot metal either: its backfill
+marks XAUUSD / XAGUSD `skipped: spot metal (built from futures)`.
 """
 import json
 import logging
