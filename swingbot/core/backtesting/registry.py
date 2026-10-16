@@ -15,11 +15,15 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 _PATH = Path(__file__).with_name("validation_registry.json")
 _CACHE: list | None = None
+log = logging.getLogger(__name__)
+#: (source, strategy, horizon, used data_source) already logged -- once per key.
+_LOGGED: set = set()
 
 # One and two missed quarterly re-verification cycles. They are not round
 # numbers picked for feel: evidence is re-derived quarterly, so a row that has
@@ -82,6 +86,7 @@ class Badge:
     window: str = ""
     run_date: str = ""
     decay: str = "unknown"   # derived at read time by decay_for; never persisted
+    data_source: str = "yfinance"   # v162: which population scored this badge
 
 
 def load_registry(path: Path | None = None) -> list:
@@ -94,6 +99,44 @@ def load_registry(path: Path | None = None) -> list:
 def reload_registry() -> None:
     global _CACHE
     _CACHE = None
+    _LOGGED.clear()
+
+
+def row_data_source(rec: dict) -> str:
+    """The bars a registry row was measured on; a row from before v162 means yfinance."""
+    return rec.get("data_source") or "yfinance"
+
+
+def _preferred_source() -> str:
+    from swingbot import config
+    return str(getattr(config, "TRAINING_DATA_SOURCE", "yfinance") or "yfinance").lower()
+
+
+def _pick(rows: list[dict], preferred: str) -> dict | None:
+    """The row measured on `preferred`, else the yfinance row of the same key,
+    else None. One whole row is returned: a badge is never a blend of sources."""
+    by_source: dict = {}
+    for rec in rows:
+        by_source.setdefault(row_data_source(rec), rec)
+    return by_source.get(preferred) or by_source.get("yfinance")
+
+
+def _find(records: list, preferred: str, src: str, strat: str, hz) -> dict | None:
+    rows = [r for r in records
+            if r["source"] == src and r["strategy"] == strat and r.get("horizon") == hz]
+    rec = _pick(rows, preferred)
+    if rec is not None:
+        _log_choice(src, strat, hz, preferred, row_data_source(rec))
+    return rec
+
+
+def _log_choice(src: str, strat: str, hz, preferred: str, used: str) -> None:
+    key = (src, strat, hz, used)
+    if key in _LOGGED:
+        return
+    _LOGGED.add(key)
+    log.info("registry badge %s/%s/%s: using the %s row (preferred %s)",
+             src, strat, hz, used, preferred)
 
 
 def get_badge(source: str, strategy: str, horizon_key: str | None = None) -> Badge:
@@ -111,25 +154,41 @@ def get_badge(source: str, strategy: str, horizon_key: str | None = None) -> Bad
     `strategy` here is already the plan's real primary confirming method
     (see primary_strategy_for), so before giving up, check whether that
     same strategy was independently OOS-validated on its own signal path --
-    that's real evidence about this plan too, not a coincidence."""
+    that's real evidence about this plan too, not a coincidence.
+
+    v162: each step of the chain picks the row measured on
+    TRAINING_DATA_SOURCE, else the yfinance row of the same key (_pick)."""
     records = load_registry()
+    preferred = _preferred_source()
 
-    def _find(src, strat, hz):
-        for r in records:
-            if r["source"] == src and r["strategy"] == strat and r.get("horizon") == hz:
-                return r
-        return None
+    def find(src, strat, hz):
+        return _find(records, preferred, src, strat, hz)
 
-    rec = (_find(source, strategy, horizon_key)
-           or _find(source, strategy, None)
+    rec = (find(source, strategy, horizon_key)
+           or find(source, strategy, None)
            or (source == "confluence" and (
-               _find("strategy", strategy, horizon_key)
-               or _find("strategy", strategy, None)))
-           or _find(source, "ALL", horizon_key)
-           or _find(source, "ALL", None))
+               find("strategy", strategy, horizon_key)
+               or find("strategy", strategy, None)))
+           or find(source, "ALL", horizon_key)
+           or find(source, "ALL", None))
     if rec is None:
         return Badge(status="WEAK", n=0, win_rate=0.0, expectancy_r=0.0)
     run_date = rec.get("run_date", "")
     return Badge(status=rec["status"], n=rec["n"], win_rate=rec["win_rate"],
                  expectancy_r=rec["expectancy_r"], window=rec.get("window", ""),
-                 run_date=run_date, decay=decay_for(run_date))
+                 run_date=run_date, decay=decay_for(run_date),
+                 data_source=row_data_source(rec))
+
+
+def active_rows(records: list | None = None, preferred: str | None = None) -> list[dict]:
+    """One registry row per (source, strategy, horizon): the row measured on
+    `preferred` (default TRAINING_DATA_SOURCE), else the yfinance row of the same
+    key (_pick); a key with neither is dropped. Keys keep the file order of their
+    first row. Every reader that walks the registry goes through this, so none
+    of them counts a key twice once Alpaca rows sit beside yfinance ones."""
+    records = load_registry() if records is None else records
+    preferred = preferred or _preferred_source()
+    groups: dict = {}
+    for rec in records:
+        groups.setdefault((rec["source"], rec["strategy"], rec.get("horizon")), []).append(rec)
+    return [rec for rows in groups.values() if (rec := _pick(rows, preferred)) is not None]
