@@ -98,6 +98,9 @@ export const CalendarDayStore = signalStore(
     hasLegs: computed(() => (day()?.trades ?? []).some((t) => t.leg_total > 1)),
   })),
   withMethods((store, api = inject(ApiClient)) => {
+    /** Bumped by every setRoute; each async answer compares the token its
+     *  request started under, so a superseded request is dropped silently. */
+    let routeToken = 0;
     const filters = (): Filters => ({
       strategy: store.strategy() || undefined,
       horizon: store.horizon() || undefined,
@@ -105,10 +108,10 @@ export const CalendarDayStore = signalStore(
 
     /** After the day, never blocking it; a late answer for a day the page
      *  has left is dropped. A failure leaves the cards on `—`. */
-    const loadSparklines = (date: string): void => {
+    const loadSparklines = (date: string, token: number): void => {
       api.calendarPnlDaySparklines({ date, ...filters() }).subscribe({
         next: (sparklines) => {
-          if (store.date() === date) patchState(store, { sparklines });
+          if (token === routeToken) patchState(store, { sparklines });
         },
         error: () => undefined,
       });
@@ -116,11 +119,11 @@ export const CalendarDayStore = signalStore(
 
     /** One lookup of the adjacent month, only when this month has no
      *  trading day on that side of `date`. */
-    const loadEdge = (date: string, data: PnlCalendar, step: 1 | -1): void => {
+    const loadEdge = (date: string, data: PnlCalendar, step: 1 | -1, token: number): void => {
       if (adjacentTradingDay(data.days, date, step) !== null) return;
       api.calendarPnl({ month: shiftMonth(monthOf(date), step), ...filters() }).subscribe({
         next: (other) => {
-          if (store.date() !== date) return;
+          if (token !== routeToken) return;
           const edge = adjacentTradingDay(other.days, date, step);
           patchState(store, step === 1 ? { nextEdge: edge } : { prevEdge: edge });
         },
@@ -130,6 +133,7 @@ export const CalendarDayStore = signalStore(
 
     const resolve = (): Observable<unknown> => {
       const date = store.date();
+      const token = routeToken;
       if (date === null) {
         patchState(store, { empty: true, loading: false });
         return of(undefined);
@@ -137,24 +141,32 @@ export const CalendarDayStore = signalStore(
       const day$ = api.calendarPnlDay({ date, ...filters() }).pipe(
         catchError(notFoundAsNull),
         tap((day) => {
+          if (token !== routeToken) return;
           patchState(store, { day, empty: day === null });
-          if (day) loadSparklines(date);
+          if (day) loadSparklines(date, token);
         }),
       );
       const month$ = api.calendarPnl({ month: monthOf(date), ...filters() }).pipe(
         tap((month) => {
+          if (token !== routeToken) return;
           patchState(store, { month });
-          loadEdge(date, month, -1);
-          loadEdge(date, month, 1);
+          loadEdge(date, month, -1, token);
+          loadEdge(date, month, 1, token);
         }),
       );
       return routeRequest(forkJoin([day$, month$]), {
         start: () => patchState(store, { loading: true, error: null }),
-        next: () => patchState(store, { loading: false }),
-        error: (error) => patchState(store, {
-          loading: false,
-          error: error.code === 'unavailable' ? UNAVAILABLE : error.message,
-        }),
+        next: () => {
+          if (token === routeToken) patchState(store, { loading: false });
+        },
+        error: (error) => {
+          if (token !== routeToken) return;
+          patchState(store, {
+            loading: false,
+            empty: false,
+            error: error.code === 'unavailable' ? UNAVAILABLE : error.message,
+          });
+        },
       });
     };
 
@@ -163,6 +175,7 @@ export const CalendarDayStore = signalStore(
 
       /** From the route: `:date` and the `strategy`/`horizon` query params. */
       setRoute(date: string | null, strategy: string | null, horizon: string | null): void {
+        routeToken += 1;
         patchState(store, {
           date: isIsoDate(date) ? date : null,
           strategy: strategy ?? '',

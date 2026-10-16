@@ -193,4 +193,39 @@ describe('CalendarDayStore', () => {
     late.flush({ as_of: 'x', date: '2026-08-05', truncated: false, series: {} });
     expect(store.sparklines()).toBeNull();
   });
+
+  it('leaves the new route untouched when a superseded request answers late', () => {
+    open('2026-08-05');
+    const oldDay = backend.expectOne((r) => r.url === DAY_URL);
+    const oldMonth = monthReq('2026-08');
+    store.setRoute('2026-09-02', null, null);
+    oldDay.flush(dayBody([trade()]));
+    oldMonth.flush(AUGUST);
+    expect(store.date()).toBe('2026-09-02');
+    expect(store.day()).toBeNull();
+    expect(store.month()).toBeNull();
+    expect(store.empty()).toBe(false);
+    backend.expectNone((r) => r.url === SPARK_URL);
+  });
+
+  it('drops an old sparklines answer when only the filter changed', () => {
+    open('2026-08-05', 'VWAP', null);
+    backend.expectOne((r) => r.url === DAY_URL).flush(dayBody([trade()]));
+    monthReq('2026-08').flush(AUGUST);
+    const late = backend.expectOne((r) => r.url === SPARK_URL);
+    store.setRoute('2026-08-05', 'EMA20', null);
+    late.flush({ as_of: 'x', date: '2026-08-05', truncated: false, series: {} });
+    expect(store.sparklines()).toBeNull();
+  });
+
+  it('shows the error and not the empty state when a 404 day is followed by a failing month', () => {
+    open('2026-08-04');
+    backend.expectOne((r) => r.url === DAY_URL)
+      .flush({ error: { code: 'not_found', message: 'none' } }, { status: 404, statusText: 'Not Found' });
+    monthReq('2026-08')
+      .flush({ error: { code: 'unavailable', message: 'nope' } }, { status: 503, statusText: 'x' });
+    expect(store.error()).toBe('The admin is not responding -- these figures may be stale.');
+    expect(store.empty()).toBe(false);
+    expect(store.loading()).toBe(false);
+  });
 });
