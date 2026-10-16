@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `grep -n "^### Task V163-6" -A 300 docs/superpowers/plans/2026-10-15-v163-screen-trail-race_2-screen-calibration.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v163-screen-trail-race-design.md`](../specs/2026-10-15-v163-screen-trail-race-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v163-screen-trail-race-design.md`](../../specs/implemented/2026-10-15-v163-screen-trail-race-design.md)
 **Bump:** none
 **Edge:** none (integrity)
 **Index:** [`2026-10-15-v163-screen-trail-race_0-index.md`](2026-10-15-v163-screen-trail-race_0-index.md) — Global Constraints, the controller's binding deviations, `## Parallelisation` and the task ledger live there and bind every task below.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V163-3" -A 300 docs/superpowers/plans/2026-10-15-v163-screen-trail-race_1-race-core.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v163-screen-trail-race-design.md`](../specs/2026-10-15-v163-screen-trail-race-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v163-screen-trail-race-design.md`](../../specs/implemented/2026-10-15-v163-screen-trail-race-design.md)
 **Index:** [`2026-10-15-v163-screen-trail-race_0-index.md`](2026-10-15-v163-screen-trail-race_0-index.md) carries the header, `## Global Constraints`, the binding deviations, `## Parallelisation` and the task ledger. Every task below implicitly includes those constraints.
 
 **Scope of this part:** `Idea.race_shape` and the trail cap floor (V163-1); the two appended outcome codes, the per-shape outcome table and the fixed-doc byte-identity pins (V163-2); the trail race itself (V163-3); the `race_for` dispatcher through `run_book` and `null.matched_null` (V163-4).

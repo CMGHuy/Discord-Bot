@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief V163-3` or `grep -n "^### Task V163-3" -A 300 docs/superpowers/plans/2026-10-15-v163-screen-trail-race_*.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v163-screen-trail-race-design.md`](../specs/2026-10-15-v163-screen-trail-race-design.md) (all sections; every applied `## Panel review` finding is a requirement)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v163-screen-trail-race-design.md`](../../specs/implemented/2026-10-15-v163-screen-trail-race-design.md) (all sections; every applied `## Panel review` finding is a requirement)
 **Bump:** none
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
@@ -15,7 +15,7 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Complete: V163-1..V163-10 merged to main. A/A calibration false-pass 6/200 = 3.0%, coverage 91.5%, mean N 794.3 (docs/superpowers/results/2026-10-16-trail-race-calibration.md). Panel (quant-researcher, quant-engineer, veteran-trader): no BLOCKING, advisories only.
 
 ## Where to work
 
