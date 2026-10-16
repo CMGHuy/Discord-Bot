@@ -47,6 +47,9 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   `scripts/ops/pull_history_store.sh`. Tickers whose manifest status is not
   `ok` are left out, printed and written to the `<out>.provenance.json`
   sidecar next to every `--json` result. A run never mixes sources.
+  Live badges (`get_badge`, the embed badge, the quality factor) always use the
+  yfinance registry row, whatever the switch says; `merge_registry` refuses an
+  alpaca VALIDATION row for a key whose yfinance VALIDATION shot is spent.
   `data/backtest_cache/` stays: it is the live bot's daily cache, the journal
   backfill's source, the `yfinance` training source and the identity-check
   reference.
