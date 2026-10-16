@@ -221,7 +221,10 @@ from dataclasses import dataclass, field  # noqa: E402  (grouped with its users)
 # regression.
 ESCALATE_PREFIXES = (
     "swingbot/core/charts/",
-    "frontend/src/styles/tokens.css",
+    # The whole token directory, not one file: palette.css (tier 1) and
+    # tokens.css (tiers 2 and 3) both feed test_chart_theme.py through the
+    # resolver (spec v167 § 1). fonts.css rides along; it is rarely edited.
+    "frontend/src/styles/",
 )
 
 # Reached by NAME, not by import -- a static graph structurally cannot see the
