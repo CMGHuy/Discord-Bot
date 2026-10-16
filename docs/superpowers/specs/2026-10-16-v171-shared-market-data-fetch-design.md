@@ -134,6 +134,28 @@ in Postgres. Bars stay in the existing on-disk daily cache, with write-back
 skill). The builder picks the exact table shape and lock mechanism (advisory
 locks are one option). It must stay cheap: one round trip per cache hit.
 
+Failure behaviour (panel, staff-engineer):
+
+- **Every Postgres touch fails open**, not only the budget: the cache read,
+  the single-flight lock and the budget. Each has a short per-call timeout
+  (well under the asker's deadline). On error or timeout the asker fetches
+  directly and logs it. A hung database never stalls stop monitoring or the
+  re-quote.
+- **A dead lock holder never strands waiters.** The lock is released when
+  its holder's connection dies (session-scoped) or expires on a lease. The
+  builder picks which.
+- **When a waiter's deadline passes:** priority 1-2 askers (D6) fetch for
+  themselves. Correct, fresh data beats "exactly one call". Priority 3-5
+  askers get the last cached value with its age, or fail as they do today.
+- **Connections:** each spawned worker uses at most one Postgres
+  connection, opened lazily. The plan states the per-scan connection count
+  and checks it against the 1 vCPU cap.
+- **CSV writes** (D3 write-back, D4 refetch, the refresh loop) go through
+  one writer that holds the key's lock and writes to a unique temp name
+  before the atomic rename. Today's fixed `path + ".tmp"`
+  (`data_store.py:419-421`) is replaced, so a lock that failed open cannot
+  make two writers share one temp file.
+
 ### D2 — Freshness windows per data kind (the clause the partner added)
 
 Each asker states how fresh it needs the data; a cached result older than
@@ -144,7 +166,8 @@ that is refetched, never served. Defaults:
 | Live quote | pre-post re-quote (D5) | **≤ 5 s** |
 | Live quote | trade monitor / plan manager (stops, fills) | ≤ 15 s |
 | Live quote | scan live-prices phase | ≤ 15 s |
-| Live quote | admin pages | ≤ 15 s (shown with its age) |
+| Live quote | admin **Dashboard** | ≤ 15 s: the page that always shows the latest price (partner) |
+| Live quote | every other admin page (Watchlist, Trades, Risk, Charts…) | **≤ 60 s** (partner), shown with its age: served from whatever any page or service already fetched, so moving Dashboard → Watchlist makes no new call |
 | Today's daily bar (forming) | scan, plan manager | refetched once per scan / per 60 s tick |
 | Closed daily bars | everyone | cached until a new session close, or until D4 sees an adjustment change |
 | Index quote (tape) | admin | ≤ 60 s |
@@ -152,7 +175,11 @@ that is refetched, never served. Defaults:
 | Ticker metadata | everyone | persistent (as today) |
 
 Every plan, alert and exit record stores the **timestamp of the quote** it
-was built from.
+was built from, plus the quote's kind (trade, bid/ask mid or scan price)
+and its last-trade or quote age. These are stored-record shape changes and
+follow `docs/claude/schema-evolution.md` (added fields, an Alembic revision
+where a table changes, no read-time upcasting). Rows written before v171
+carry no value, and readers show "n/a".
 
 ### D3 — Daily bars: cache closed history, refresh only today
 
@@ -171,15 +198,40 @@ was built from.
 
 ### D4 — The delta splice is proven or replaced by a full refetch
 
-- The recent window's overlap bars must match the cached bars within the
-  existing adjustment tolerance (`adjustments._ADJUSTMENT_MISMATCH_TOLERANCE`,
-  `_MIN_OVERLAP_BARS`). Any mismatch (split, dividend re-adjustment, data
-  correction) triggers a **full refetch** for that symbol, written back. The
-  frame never comes out shallower than before.
-- A periodic full refetch per symbol (default weekly, outside session)
-  re-anchors the cache.
-- **Parity test:** for a fixture set covering a split and a dividend, cache
-  plus delta equals a full fresh download, bar for bar.
+Revised after the panel (quant-engineer). Today's 1 % tolerance
+(`adjustments.py:8`, duplicated at `data_refresh.py:152`) cannot see an
+ordinary dividend re-adjustment: a quarterly dividend scales older history
+by about 0.25-0.5 %. And an overlap-only check cannot see a re-adjustment
+whose ex-date is older than the overlap window. So:
+
+- **Event trigger (primary).** Per symbol, the cache stores the date of its
+  last full fetch and an adjustment-basis fingerprint (for example a fixed
+  old anchor bar's adjusted close). Each delta fetch compares the
+  fingerprint against fresh data for that anchor bar, or against the
+  provider's split/dividend actions. Any split or ex-dividend date after the
+  last full fetch, or a fingerprint change of any size, forces a **full
+  refetch** for that symbol, written back.
+- **Overlap check (secondary).** At least 3 overlap bars must match the
+  cache within a tight, spec-owned tolerance of about 1e-4 relative per
+  close. That is rounding noise, since real end-of-day closes agree exactly.
+  Fewer than 3 overlap bars, or any mismatch, means full refetch. It never
+  means "no mismatch".
+- **One constant.** The tolerance lives in one place and the existing
+  copies import it. They do not become three coupled copies. Changing the
+  existing 1 % callers' behaviour is out of scope; they only import.
+- **A refusal never goes shallow.** A mismatch always ends in a full
+  refetch. It never falls back to `history_splice.py`'s live-only path
+  (lines 55-65), which drops depth. The frame never comes out shallower
+  than before.
+- **The cache's adjustment basis is stated in the plan** (the same basis
+  the scan reads today), and the fingerprint is stored beside it.
+- **Weekly full re-anchor** per symbol, outside session, as a backstop
+  only. It runs as a bot loop task on the VM.
+- **Parity test** (`testrun.py file`): fixtures with (a) a sub-1 % dividend
+  whose ex-date is older than the overlap window, the case today's check
+  misses; (b) a dividend inside the window; (c) a split; (d) an overlap of
+  fewer than 3 bars. Each asserts cache plus delta equals a full fresh
+  download bar for bar, including Volume (`adjustments.py:66` rescales it).
 
 ### D5 — Always rebuild before posting (partner's choice)
 
@@ -214,12 +266,36 @@ Settled after the builder check:
   **not** spliced into today's forming bar, so levels and indicators come
   from the same bars as before (the "no signal change" non-goal; no
   lookahead question).
-- **Stale feeds (partner's choice):** a thin name may have no trade within
-  5 s on any free feed. The rebuild then uses the freshest quote any free
-  feed returns (IEX, then yfinance), posts it, and shows the last trade's
-  age in the alert. The ≤ 5 s rule measures **quote fetch completed →
-  plan persisted**, which the bot controls. The last-trade age is recorded
-  beside it as information, not as a gate.
+- **Stale feeds (partner's choice, revised after the veteran-trader
+  panel):** the rebuild price is chosen in this order: (1) a last trade
+  under 60 s old; (2) the live **bid/ask midpoint**, if that quote is under
+  60 s old (a quote updates even when nothing trades); (3) otherwise the
+  scan's own price is kept, the alert is flagged **"price not confirmed
+  live"**, and the plan is never rebuilt from an older print. A delayed
+  yfinance value counts only if its own timestamp passes the 60 s rule.
+  Thin names still post. The record stores which kind was used and its age
+  (D2).
+- **The 5 s clock** starts when that symbol's quote fetch completes and ends
+  when the plan is persisted. A plan that misses 5 s is re-quoted once. If
+  it misses again it posts with its true age recorded, and that counts as
+  a miss in the success table.
+- **The re-run list includes the stop checks:** the stop floor and the 2 %
+  dollar-cap band (`known-traps.md` § Stop floor and 2 % cap), the
+  horizon-noise stop check, and gap/expiry validity. Together with R:R,
+  entry distance and sizing, these are the price-dependent gates. ATR and
+  stop distance come from the same frame the scan analysed; the rebuild
+  changes only the price input.
+- **One entry point (panel, staff-engineer):** the rebuild is one function
+  in `swingbot/core/planning/`, called by all three lanes. It never becomes
+  three call-site copies.
+- **What the user sees matches (panel, veteran-trader):** the embed, the
+  chart and the persisted record are all rendered from the rebuilt plan.
+  None of them uses the pre-rebuild levels.
+- **Posted plans are never altered by a rebuild.** The rebuild runs only
+  before a plan's first post. Follow-up messages after posting are out of
+  scope.
+- **Pre- and after-market:** same price order, and the alert shows the
+  session label (pre-market / after-hours) beside the price kind.
 
 ### D6 — One budget, money first (partner's choice)
 
@@ -228,11 +304,12 @@ by every process. The default Alpaca ceiling stays at today's 150/min. The
 yfinance pacing default is the builder's call, stated in the plan. When the
 budget is short, askers are served in this order:
 
-1. pre-post re-quote (D5) and open-trade / stop monitoring;
-2. the live scan;
-3. background: hourly refresh, earnings, history update;
-4. admin pages, which are served the cached value with its age instead of
-   waiting.
+1. open-trade / stop monitoring (real money in an open position);
+2. pre-post re-quote (D5), since an unposted alert can wait one more scan;
+3. the live scan;
+4. background: hourly refresh, earnings, history update;
+5. admin pages, which are served the cached value with its age instead of
+   waiting. The Dashboard keeps its 15 s window only while budget allows.
 
 The circuit breaker state is shared the same way, so a breaker opened by one
 process holds for all. If the budget store is unavailable, calls go through
@@ -245,7 +322,12 @@ into the shared cache, through the layer. Admin tabs read only that copy
 and never call Yahoo for the tape themselves. When Yahoo comes back blank
 for a symbol, the tape shows the Alpaca proxy instead (SPY, QQQ, DIA, a VIX
 ETF the builder names, and SLV for `SI=F`, my call), **clearly labelled as
-a proxy**. The tape's full symbol list is whatever `market.py` / 
+a proxy**. A proxy shows only its **change %**, never a level, so an ETF
+price is never read as an index level (panel, veteran-trader). If the
+bot's shared entry is older than 3 minutes (bot down or restarting), the
+admin fetches the tape itself through the layer at priority 5 and keeps
+showing the last good value with its age meanwhile (panel, staff-engineer).
+The tape's full symbol list is whatever `market.py` / 
 `tape_cache.py` show today; every Yahoo-only entry gets a proxy or is named
 in the plan as having none. A blank reply
 never overwrites the last good value. The tape shows each value's age.
@@ -299,8 +381,25 @@ recorded as such.
 - `.env` is the config source. New knobs (windows, budget, proxy symbols)
   are `swingbot/config.py` fields with today's behaviour as the fallback
   where sensible.
-- Production rollout follows `mirror-prod`. The layer ships behind a flag,
-  defaulting to count-only (D9), and is switched on after the baseline day.
+- Production rollout follows `mirror-prod`.
+
+## Rollout and rollback (panel, staff-engineer)
+
+- **One flag per part**, each in `swingbot/config.py`: the layer (off /
+  count-only / on), D3+D4 write-back and delta fetch, the D5 rebuild, and
+  the D7 tape move. Each flag-off restores today's code path.
+- The layer ships in **count-only** mode and is switched on only after the
+  **five-trading-day baseline** (D9).
+- **CSV safety:** write-back writes the same file format the scan already
+  reads, so files rewritten while a flag was on stay valid with it off.
+  Flag-off never needs a cache wipe.
+- **Migrations are additive** (a new table plus new nullable fields). On
+  rollback they stay in place and are never downgraded. The code rollback
+  is `scripts/ops/rollback_to.sh` per `docs/deploy/DEPLOY_HETZNER.md`.
+- **Removal:** the count-only mode and the per-part flags are removed by a
+  follow-up once the success week passes. The plan records that as
+  "What follows". The weekly re-anchor task (D4) stays; it is owned by the
+  bot's loop module.
 
 ## Left to the builder
 
@@ -319,3 +418,34 @@ recorded as such.
 - The v106 soak's unexplained in-session cold-fetch slowdown
   (`docs/superpowers/results/2026-10-11-v106-soak-attempt-3.md`) should be
   re-measured once D3 removes the cold scans.
+
+## Panel review
+
+Spec review on 8685bfe6, run serially: staff-engineer (opus), quant-engineer (sonnet), veteran-trader (sonnet). No seat returned CLEAN. Every BLOCKING finding was applied.
+
+- staff-engineer [BLOCKING]: fail-open only on the budget, not on the lock or cache, and no rule for a dead lock holder or a hung query -- applied (D1 Failure behaviour)
+- staff-engineer [BLOCKING]: quote timestamp and age are stored-record shape changes outside schema-evolution -- applied (D2)
+- staff-engineer [BLOCKING]: rollback is only "behind a flag" -- applied (## Rollout and rollback: one flag per part, CSV format unchanged, additive migrations, rollback_to.sh)
+- staff-engineer: baseline day vs baseline week inconsistent -- applied (five trading days)
+- staff-engineer: fixed `.tmp` name with concurrent CSV writers -- applied (single writer under lock, unique temp names)
+- staff-engineer: waiter-deadline outcome undefined -- applied (priority 1-2 fetch themselves; 3-5 get cached or fail)
+- staff-engineer: admin tape depends on the bot being up -- applied (admin self-fetches after 3 min stale)
+- staff-engineer: worker Postgres connection count unbounded -- applied (one lazy connection per worker; plan states the count)
+- staff-engineer: no owner or removal for flags and the re-anchor job -- applied (follow-up removes the flags; re-anchor is a bot loop task)
+- staff-engineer: rebuild spread over three lanes -- applied (one entry point in `planning/`)
+- staff-engineer, quant-engineer [BLOCKING, merged]: the 1 % tolerance is blind to ordinary dividends -- applied (D4 event trigger + fingerprint, 1e-4 overlap tolerance, one constant)
+- quant-engineer [BLOCKING]: an overlap-only check cannot see an ex-date older than the window; fewer than 3 common bars returns None -- applied (event trigger primary; under 3 bars means refetch)
+- quant-engineer [BLOCKING]: parity fixture does not discriminate -- applied (four named fixtures, Volume included)
+- quant-engineer: state the cache's adjustment basis; a refusal must not take the shallow live-only path -- applied (D4)
+- quant-engineer: rebuild must not mix a fresh-basis price with mis-adjusted history -- applied (follows from D4)
+- veteran-trader [BLOCKING]: chart and embed must use the rebuilt levels -- applied (D5)
+- veteran-trader [BLOCKING]: rebuilding from a stale print on thin names -- applied after asking the partner (trade < 60 s, then bid/ask mid < 60 s, else keep scan price flagged "price not confirmed live")
+- veteran-trader [BLOCKING]: stop floor, 2 % cap band and horizon-noise checks not in the re-run list -- applied (D5)
+- veteran-trader: extended-hours quotes should anchor to the last regular close -- rejected: the partner asked for plans to reflect current price action; mitigated by the same 60 s price order plus a session label
+- veteran-trader: 5 s clock start and miss handling undefined -- applied (per-symbol quote completion; one re-quote, then post with true age, counted as a miss)
+- veteran-trader: a rebuild must not alter posted plans -- applied (D5)
+- veteran-trader: stop monitoring should rank above the re-quote -- applied (D6 now has five tiers)
+- veteran-trader: ATR/stop consistency under the rebuild -- applied (same frame; only the price input changes)
+- veteran-trader: ETF proxies misread as index levels -- applied (proxies show change % only)
+
+Added after the panel, from the partner: admin Dashboard ≤ 15 s; every other admin page reuses any cached price ≤ 60 s old (D2).
