@@ -24,7 +24,7 @@ EXACT_ONLY = "="   # prefix: a name from a PASS row matches only an identical id
 _EDGES = ("expectancy", "harvest", "volume")
 _ROLE_RE = re.compile(r"^## role:\s*(\S+)\s*$")
 _START_RE = re.compile(r"^- idea:\s*(.*)$")
-_FIELD_RE = re.compile(r"^  ([a-z_]+):\s*(.*)$")
+_FIELD_RE = re.compile(r"^  ([^:]+):\s*(.*)$")
 _CELL_RE = re.compile(r"\bcell\s+([^;]+?)\s*(?:;|$)")
 _PLAYBOOK_RE = re.compile(r"\bplaybook:?\s+([a-z0-9][a-z0-9-]*)")
 _N_RE = re.compile(r"\bN\s+(\d+)")

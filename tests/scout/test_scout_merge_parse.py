@@ -81,6 +81,8 @@ def test_evidence_properties(evidence, cell, playbook, n):
     ({"edge": "expectancy | harvest | volume"}, "edge must be"),
     ({"divergence": "maybe"}, "divergence must be yes or no"),
     ({"extra": "  confidence: high\n"}, "unknown field confidence"),
+    ({"extra": "  Confidence: high\n"}, "unknown field Confidence"),
+    ({"extra": "  confidence-score: high\n"}, "unknown field confidence-score"),
     ({"extra": "  claim: again\n"}, "repeated field claim")])
 def test_malformed_rows_are_dropped_with_the_reason(kw, reason):
     rows, drops = sm.parse_rows(_doc(("regime-desk", [_block("opex-week-skip", **kw)])))
