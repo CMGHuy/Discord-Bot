@@ -4,6 +4,7 @@ Pinned: serial dispatch, the merge command, the partner gate before the
 production export, the panel step, the partner's pick, the removal
 condition, the read-only agent, and the one place the thresholds live."""
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -78,3 +79,15 @@ def test_docs_section_holds_the_thresholds_and_the_agent_row():
         assert f"`{role}`" in section, role
     agents = _section(text, "## Which agent for what (v107)")
     assert "| `scout` | sonnet |" in agents
+
+
+def test_autopsy_fetch_includes_warmup_before_the_first_plan():
+    _, body = _parsed(SKILL)
+    step = _section(body, "## Step 1 — The autopsy")
+    fetch = next(line for line in step.splitlines() if "fetch_backtest_data.py" in line)
+    warmup = re.search(r"--start <first plan date minus at least (\d+) calendar days>", fetch)
+    assert warmup, "The fetch command must include history before a young book's first plan"
+    assert int(warmup.group(1)) >= 550
+    assert "260 daily bars" in step
+    assert "BACKTEST_CACHE_DIR=<scratchpad>/autopsy_bars" in fetch
+    assert "--end today" in fetch

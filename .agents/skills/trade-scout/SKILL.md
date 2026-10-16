@@ -21,7 +21,7 @@ before the export: it is read-only but a production command, preferably run
 outside the US session and premarket. On yes, from the main tree:
 
 - `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && bash -s -- rows" < scripts/ops/export_book_rows.sh > <scratchpad>/rows.csv`, then the same with `rejections` into `<scratchpad>/rejections.csv`. Raw CSVs stay in the scratchpad, never committed.
-- Fetch bars for the book's tickers into a scratch cache: `BACKTEST_CACHE_DIR=<scratchpad>/autopsy_bars python scripts/data/fetch_backtest_data.py --tickers <list> --start <first plan date> --end today`. Never into `data/backtest_cache/`.
+- Fetch bars for the book's tickers into a scratch cache: `BACKTEST_CACHE_DIR=<scratchpad>/autopsy_bars python scripts/data/fetch_backtest_data.py --tickers <list> --start <first plan date minus at least 550 calendar days> --end today`. The fetcher requires 260 daily bars, so include this warm-up history even for a young book. Never into `data/backtest_cache/`.
 - `python scripts/reports/book_autopsy.py <scratchpad>/rows.csv <scratchpad>/rejections.csv --bars-dir <scratchpad>/autopsy_bars`.
 
 ## Step 2 — Dispatch the roles serially
