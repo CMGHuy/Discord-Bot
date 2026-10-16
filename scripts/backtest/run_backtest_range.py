@@ -278,11 +278,11 @@ def _scenario_stats(frames, date_from, date_to, *, scale_out, universe, membersh
 
 
 def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None, trades_jsonl=None,
-                      record_blocked=None):
+                      record_blocked=None, tickers_file=None):
     """--scenarios: replay the confluence scan itself (backtest_scenarios)
     instead of a named strategy, and print per-horizon + pooled rows in the
     standard table with strategy column `confluence/<horizon>`."""
-    tickers = _tickers_for_run(universe)
+    tickers = _tickers_for_run(universe, tickers_file)
     membership = _membership_for_run(universe, tickers)
     frames = {}
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block below
@@ -343,10 +343,25 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     print("\nSaved backtest_range_summary.txt")
 
 
-def _tickers_for_run(universe: str | None) -> list:
+def _tickers_from_file(path: str) -> list[str]:
+    """v162 §5: an explicit ticker list (one per line, '#' comments), so every
+    leg of a comparison runs on the same set, whatever the watchlist holds."""
+    from snapshot_backtest_cache import read_tickers_file
+    tickers = read_tickers_file(path)
+    if not tickers:
+        raise SystemExit(f"error: --tickers-file {path} names no ticker")
+    return tickers
+
+
+def _tickers_for_run(universe: str | None, tickers_file: str | None = None) -> list:
     """Ticker set for the scan: a named universe (e.g. 'etfs', Task E80)
     when given, else the watchlist -- same override seam as
-    backtest_wf._symbols_for_folds/run_folds' tickers= param."""
+    backtest_wf._symbols_for_folds/run_folds' tickers= param. v162: an
+    explicit --tickers-file replaces both and cannot be combined with a universe."""
+    if tickers_file:
+        if universe:
+            raise SystemExit("error: --tickers-file and --universe are exclusive")
+        return _tickers_from_file(tickers_file)
     if universe:
         from swingbot.core.marketdata.universe import universe_symbols
         return sorted(universe_symbols(universe))
@@ -553,6 +568,9 @@ def main():
     ap.add_argument("--universe", default=None,
                     help="scope tickers to a named universe (e.g. 'etfs', Task E80) via "
                          "swingbot.core.marketdata.universe.universe_symbols, instead of the watchlist")
+    ap.add_argument("--tickers-file", dest="tickers_file", default=None,
+                    help="v162: run exactly the tickers listed in this file (one per line, "
+                         "'#' comments) instead of the watchlist; exclusive with --universe")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--trades-jsonl", dest="trades_jsonl", default=None,
                     help="write one JSONL training row per windowed trade "
@@ -624,7 +642,7 @@ def main():
     if args.scenarios:
         run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out,
                           universe=args.universe, trades_jsonl=args.trades_jsonl,
-                          record_blocked=args.record_blocked)
+                          record_blocked=args.record_blocked, tickers_file=args.tickers_file)
         return
 
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
@@ -640,7 +658,7 @@ def main():
     show_runner_cols = args.exit_model == "v2" and args.scale_out
     tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
 
-    tickers = _tickers_for_run(args.universe)
+    tickers = _tickers_for_run(args.universe, args.tickers_file)
     # Context ranking is cross-sectional, so every cached frame must be loaded
     # before individual liquidity/data-quality exclusions are applied below.
     frames = {ticker: _with_context(load_cached(ticker)) for ticker in tickers}

@@ -161,7 +161,7 @@ def test_write_scenario_trades_jsonl_round_trips(tmp_path):
 def _stub_scenario_mode(monkeypatch, rr, tmp_path, seen):
     """run_scenario_mode with every loader and the replay itself faked."""
     monkeypatch.chdir(tmp_path)                 # it writes backtest_range_summary.txt to cwd
-    monkeypatch.setattr(rr, "_tickers_for_run", lambda universe: ["AAA", "BBB"])
+    monkeypatch.setattr(rr, "_tickers_for_run", lambda universe, tickers_file=None: ["AAA", "BBB"])
     monkeypatch.setattr(rr, "_membership_for_run", lambda universe, tickers: None)
     monkeypatch.setattr(rr, "load_cached", lambda ticker: f"frame-{ticker}")
     monkeypatch.setattr(rr, "_with_context", lambda df, **kw: df)
