@@ -63,3 +63,9 @@ Bars dropped before the identity reference's first bar: NBIS 2024-10-21, SNOW 20
 - `/opt/swing-bot/logs/v162_{backfill,check,update_noop}.log` and `logs/v162_backfill.started`: run logs.
 - `/opt/swing-bot/data/market_data_probe/`: the Step 4 smoke root, created and removed.
 - No crontab, `.env`, compose or image change. The weekly cron is installed by AH25 from the committed `scripts/ops/install_v162_history_cron.sh`.
+
+## Pulled to the dev machine (2026-10-16)
+
+`bash scripts/ops/pull_history_store.sh` (probe first: `probe PASS f8ae6d86343f9513cfaaccb32defb27edd4431ae3ad0d87406920e81f2975af2`), into `E:/Documents/Private/Projects/Discord-Bot/data/market_data/`, 488718592 bytes. Local manifest hashes equal the VM's, read back after the pull: daily `9e0a4e0ddd62886d5077f5d27aa86a6f1447b9285ad6af7d6b4af0c292a49b60`, hourly `12adebefeb766253dd25e984872697d946279d88d29280d4ecab39ff0ef9dca2`, 15min `5282956ba7bd6a86dae7f56fea4ce2e97e465018dcf15c9c7f609c6eda4ad06c` (the post-update 15min hash; `updated_at` daily/hourly `2026-10-16T07:42:27Z`, 15min `2026-10-16T10:56:15Z`; 78 tickers each). `check_history_store.py --verify-hashes` on the local copy: `check: 399 unexplained gap(s), 0 hash problem(s)`. That is the same verdict as the VM, and the same three accepted gap families listed under Checks. `training_data.select("alpaca")` on it: feed `sip`, adjustment `all`, 67 trainable tickers, 11 excluded. SPY daily runs 2016-01-04..2026-10-15.
+
+Plan defect found: the pull leaves `data/market_data.check.txt` next to the store (and `.prev/` / `.partial/` siblings on later or failed pulls). The unanchored `market_data/` pattern matches only the directory, so these showed in `git status`. Fixed on the branch with `data/market_data.*` in `.gitignore`.
