@@ -138,3 +138,25 @@ def test_a_bar_after_the_event_does_not_change_the_earlier_race():
     a = race_mod.race(full, [0], 3, atr=_atr(full), slippage_bps=0.0, commission=0.0)
     b = race_mod.race(cut, [0], 3, atr=_atr(cut), slippage_bps=0.0, commission=0.0)
     assert a.r.tolist() == b.r.tolist() and a.exit_pos.tolist() == b.exit_pos.tolist()
+
+
+from tests.backtesting.screen.helpers import random_walk  # noqa: E402
+
+
+def test_trail_codes_are_appended_so_fixed_codes_keep_their_indices():
+    assert race_mod.OUTCOMES[:5] == ("gap_stop", "gap_target", "stop", "target", "timeout")
+    assert race_mod.OUTCOMES.index("trail") == 5
+    assert race_mod.OUTCOMES.index("gap_trail") == 6
+    assert race_mod.SHAPE_OUTCOMES == {
+        "fixed": ("gap_stop", "gap_target", "stop", "target", "timeout"),
+        "trail": ("gap_stop", "stop", "gap_trail", "trail", "timeout")}
+
+
+def test_a_fixed_race_never_produces_a_trail_outcome():
+    df = random_walk(400)
+    out = race_mod.race(df, np.arange(20, 380, 7), 10)
+    assert len(out) and set(out.outcome.tolist()) <= set(race_mod.SHAPE_OUTCOMES["fixed"])
+
+
+def test_an_empty_result_still_has_string_outcomes():
+    assert race_mod.RaceResult.empty().outcome.dtype.kind == "U"

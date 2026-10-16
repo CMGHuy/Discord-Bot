@@ -299,19 +299,21 @@ def _render_verdict(v) -> list:
             f"N < {verdict.MIN_N} is `SCREEN-UNDERPOWERED` whatever the other clauses say."]
 
 
-def _mix(outcomes: Counter) -> list:
+def _mix(outcomes: Counter, names: tuple) -> list:
     total = sum(outcomes.values())
     return [f"{outcomes.get(name, 0)} ({100.0 * outcomes.get(name, 0) / total:.1f}%)"
-            if total else "0" for name in race.OUTCOMES]
+            if total else "0" for name in names]
 
 
-def _render_arms(summary) -> list:
+def _render_arms(summary, names: tuple) -> list:
+    """``names``: the idea's own outcomes (race.SHAPE_OUTCOMES[shape])."""
     lines = ["## Both arms", "",
              f"Mean R_event {_fmt(summary['mean_r_event'])}R; mean R_null (each event's "
              f"null mean, averaged) {_fmt(summary['mean_r_null'])}R. Both after costs.", "",
              "| Exit | event arm | null arm |", "|---|---|---|"]
     lines += [f"| {name} | {e} | {n} |" for name, e, n in
-              zip(race.OUTCOMES, _mix(summary["event_outcomes"]), _mix(summary["null_outcomes"]))]
+              zip(names, _mix(summary["event_outcomes"], names),
+                  _mix(summary["null_outcomes"], names))]
     return lines
 
 
@@ -346,8 +348,8 @@ def _render_drift(summary) -> list:
 def render_results(idea, summary, universe, run) -> str:
     v = summary["verdict"]
     sections = [_render_head(idea, v, run), _render_universe(universe, summary),
-                _render_verdict(v), _render_arms(summary), _render_years(v),
-                _render_drift(summary)]
+                _render_verdict(v), _render_arms(summary, race.SHAPE_OUTCOMES[idea.race_shape]),
+                _render_years(v), _render_drift(summary)]
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
 
 

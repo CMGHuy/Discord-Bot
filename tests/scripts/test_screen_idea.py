@@ -281,3 +281,163 @@ def test_results_doc_states_the_event_start_and_year_rule(tmp_path, capsys):
     out = capsys.readouterr().out
     assert (f"events count from {screen_idea.EVENT_START}" in out
             and f"{verdict.MIN_POSITIVE_YEARS} of {len(verdict.YEARS)} calendar years" in out)
+
+
+# --- v163: a fixed idea's results doc and ledger row stay byte-identical ---
+
+from swingbot.core.backtesting.screen import race  # noqa: E402
+
+
+def _fixed_doc_inputs():
+    """A hand-built fixed-idea summary: every section of the doc renders and
+    nothing depends on a bootstrap or a cache."""
+    idea = IDEAS["gap_volume"]
+    per_year = {year: (40 + year - 2011, 0.01 * (year - 2015)) for year in verdict.YEARS}
+    v = verdict.Verdict("SCREEN-FAIL", 412, 0.031234567, -0.01, 0.07, 0.2345678, 4,
+                        per_year, {"exp_r": False, "ci": False, "years": False, "n": True})
+    summary = {
+        "verdict": v,
+        "counters": Counter(dropped_nonmember=7, dropped_warmup=11, dropped_window=2,
+                            skipped_overlap=5, dropped_no_match=1),
+        "skipped": Counter(empty_frame=1),
+        "event_outcomes": Counter(gap_stop=12, stop=200, target=150, timeout=50),
+        "null_outcomes": Counter(gap_stop=200, gap_target=40, stop=4000, target=2900,
+                                 timeout=1100),
+        "mean_r_event": 0.1234567, "mean_r_null": 0.0921,
+        "drift": {5: (412, 0.05), 10: (412, -0.02), 20: (410, None), 60: (0, None)},
+        "rank": {5: {2011: 0.01, 2012: -0.03}, 10: {2011: None, 2012: 0.02}},
+    }
+    universe = screen_idea.Universe(intervals={}, members=["AAA", "BBB", "ZZZ"],
+                                    cached=["AAA", "BBB"], missing=["ZZZ"])
+    run = {"ledger_id": "screen-gap_volume", "q": 0.1234, "date": "2026-10-09",
+           "start": "2010-01-01", "end": "2019-12-31", "slippage_bps": 5.0,
+           "commission": 0.02}
+    return idea, summary, universe, run
+
+
+# Rendered on main @ 7fcccfed (screen code == 316c57e9), before v163. Never edit.
+FIXED_DOC = (
+    '# v140 screen: `gap_volume` -> SCREEN-FAIL\n'
+    '\n'
+    '**Ledger id:** `screen-gap_volume` (instrument `screen-v1`); BH q = 0.1234 across the ledger (reported, never gating).\n'
+    '\n'
+    '**Run:** 2026-10-09; window 2010-01-01..2019-12-31; events count from 2011-01-01 (earlier bars only prime the indicators); the year rule is 7 of 9 calendar years (2011-2019); `python scripts/backtest/screen_idea.py --idea gap_volume`; null K = 20, seed 42 per (idea, ticker); bootstrap 10,000 week resamples, seed 42.\n'
+    '\n'
+    '**Trigger:** open >= prior close + 1.0 x prior ATR14, volume >= 2 x the 50-bar mean volume ending the prior bar, close >= open (earnings/news gap drift; volume as the news proxy); params gap_atr=1.0, atr_n=14, volume_mult=2.0, volume_window=50; time cap 20 bars; long only.\n'
+    '\n'
+    '**Trade:** entry next open; stop 1.5 x ATR14; target 3.0 x ATR14; a gap through either level fills at the open; stop first on a bar touching both; costs 5.0 bps a side + 0.0200R commission.\n'
+    '\n'
+    '**Spec:** `docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md`\n'
+    '\n'
+    '## Universe and counters\n'
+    '\n'
+    '| | count |\n'
+    '|---|---|\n'
+    '| point-in-time S&P 500 members in the window | 3 |\n'
+    '| cached and screened | 2 |\n'
+    '| missing from the cache (survivorship that remains) | 1 |\n'
+    '| cached but empty inside the window | 1 |\n'
+    '| raw events | 438 |\n'
+    '| `dropped_nonmember` | 7 |\n'
+    '| `dropped_warmup` | 11 |\n'
+    '| `dropped_window` | 2 |\n'
+    '| `skipped_overlap` | 5 |\n'
+    '| `dropped_no_match` | 1 |\n'
+    '| **kept events (N)** | **412** |\n'
+    '\n'
+    'PIT members missing from the cache: ZZZ.\n'
+    '\n'
+    '## Verdict: SCREEN-FAIL\n'
+    '\n'
+    '| Clause | Measured | Rule | Holds |\n'
+    '|---|---|---|---|\n'
+    '| ΔExpR = mean(R_event − mean R_null) | +0.0312R | ≥ +0.10R | **no** |\n'
+    '| lower 95% bound, week-clustered bootstrap | -0.0100R (upper +0.0700R) | > 0 | **no** |\n'
+    '| years with mean(d) > 0 | 4 of 9 | ≥ 7 | **no** |\n'
+    '| kept events N | 412 | ≥ 300 | yes |\n'
+    '\n'
+    'One-sided bootstrap p (share of resamples ≤ 0): 0.2346. N < 300 is `SCREEN-UNDERPOWERED` whatever the other clauses say.\n'
+    '\n'
+    '## Both arms\n'
+    '\n'
+    "Mean R_event +0.1235R; mean R_null (each event's null mean, averaged) +0.0921R. Both after costs.\n"
+    '\n'
+    '| Exit | event arm | null arm |\n'
+    '|---|---|---|\n'
+    '| gap_stop | 12 (2.9%) | 200 (2.4%) |\n'
+    '| gap_target | 0 (0.0%) | 40 (0.5%) |\n'
+    '| stop | 200 (48.5%) | 4000 (48.5%) |\n'
+    '| target | 150 (36.4%) | 2900 (35.2%) |\n'
+    '| timeout | 50 (12.1%) | 1100 (13.3%) |\n'
+    '\n'
+    '## Per year\n'
+    '\n'
+    '| Year | N | mean(d) |\n'
+    '|---|---|---|\n'
+    '| 2011 | 40 | -0.0400R |\n'
+    '| 2012 | 41 | -0.0300R |\n'
+    '| 2013 | 42 | -0.0200R |\n'
+    '| 2014 | 43 | -0.0100R |\n'
+    '| 2015 | 44 | +0.0000R |\n'
+    '| 2016 | 45 | +0.0100R |\n'
+    '| 2017 | 46 | +0.0200R |\n'
+    '| 2018 | 47 | +0.0300R |\n'
+    '| 2019 | 48 | +0.0400R |\n'
+    '\n'
+    '## Forward drift (reported, never gating)\n'
+    '\n'
+    'Mean excess forward return in ATR14 units from the signal close, event minus its matched null.\n'
+    '\n'
+    '| h (bars) | events | mean excess (ATR) |\n'
+    '|---|---|---|\n'
+    '| 5 | 412 | +0.0500 |\n'
+    '| 10 | 412 | -0.0200 |\n'
+    '| 20 | 410 | n/a |\n'
+    '| 60 | 0 | n/a |\n'
+    '\n'
+    'Spearman rank correlation, raw event indicator vs h-bar forward return, member and warm bars pooled across tickers per year:\n'
+    '\n'
+    '| Year | h=5 | h=10 |\n'
+    '|---|---|---|\n'
+    '| 2011 | +0.0100 | n/a |\n'
+    '| 2012 | -0.0300 | +0.0200 |\n'
+)
+
+FIXED_HYPOTHESIS = (
+    'gap_volume: open >= prior close + 1.0 x prior ATR14, volume >= 2 x the 50-bar mean volume ending the prior bar'
+    ', close >= open; fixed 1.5/3.0 ATR race vs K=20 matched null, cap 20, PIT S&P 500 2010-2019, after costs (v140 screen)')
+
+
+def test_a_fixed_idea_renders_its_results_doc_byte_identical_to_v140():
+    idea, summary, universe, run = _fixed_doc_inputs()
+    assert idea.race_shape == "fixed"
+    assert screen_idea.render_results(idea, summary, universe, run) == FIXED_DOC
+
+
+def test_a_fixed_idea_ledger_row_is_unchanged():
+    idea, summary, _, _ = _fixed_doc_inputs()
+    row = screen_idea.ledger_row(idea, summary["verdict"], "docs/x.md", "2026-10-09")
+    stats.validate_ledger_row(row)
+    assert row == {"id": "screen-gap_volume", "date": "2026-10-09",
+                   "hypothesis": FIXED_HYPOTHESIS, "instrument": "screen-v1",
+                   "n": 412, "exp_r": 0.0312, "p": 0.2346,
+                   "verdict": "SCREEN-FAIL", "record": "docs/x.md",
+                   "data_source": "yfinance"}
+
+
+def test_mix_lists_one_cell_per_outcome_of_the_shape():
+    fixed = screen_idea._mix(Counter(stop=3, target=1), race.SHAPE_OUTCOMES["fixed"])
+    assert fixed == ["0 (0.0%)", "0 (0.0%)", "3 (75.0%)", "1 (25.0%)", "0 (0.0%)"]
+    assert screen_idea._mix(Counter(), race.SHAPE_OUTCOMES["trail"]) == ["0"] * 5
+
+
+def test_render_arms_lists_only_the_shape_outcomes():
+    summary = {"mean_r_event": 0.5, "mean_r_null": 0.1,
+               "event_outcomes": Counter(trail=2, gap_trail=1, stop=1),
+               "null_outcomes": Counter(timeout=4)}
+    rows = [line for line in screen_idea._render_arms(summary, race.SHAPE_OUTCOMES["trail"])
+            if line.startswith("| ") and not line.startswith("| Exit")]
+    assert [row.split(" | ")[0][2:] for row in rows] == [
+        "gap_stop", "stop", "gap_trail", "trail", "timeout"]
+    fixed = screen_idea._render_arms(summary, race.SHAPE_OUTCOMES["fixed"])
+    assert not any("trail" in line for line in fixed)

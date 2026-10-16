@@ -7,6 +7,12 @@ else an open at/above the target exits at the open; else a low touching the
 stop exits at the stop (checked first); else a high touching the target
 exits at the target. After bar t+cap, exit at its close. Costs: both fills
 worsened by SLIPPAGE_BPS, then commission_r() in R.
+
+Outcome codes index OUTCOMES. v163 appended ``trail`` (5) and ``gap_trail``
+(6) for the trail race (``trail.py``); a fixed race never produces them, a
+trail race never produces ``gap_target`` or ``target``. SHAPE_OUTCOMES is
+each shape's own list, in table order, so a fixed idea's results doc keeps
+its five rows.
 """
 from __future__ import annotations
 
@@ -20,7 +26,12 @@ from swingbot.core.edge.frictions import apply_frictions, commission_r
 
 STOP_ATR = 1.5
 REWARD_RISK = 2.0
-OUTCOMES = ("gap_stop", "gap_target", "stop", "target", "timeout")
+OUTCOMES = ("gap_stop", "gap_target", "stop", "target", "timeout",
+            "trail", "gap_trail")
+SHAPE_OUTCOMES: dict[str, tuple[str, ...]] = {
+    "fixed": OUTCOMES[:5],
+    "trail": ("gap_stop", "stop", "gap_trail", "trail", "timeout"),
+}
 COUNTERS = ("dropped_nonmember", "dropped_warmup", "dropped_window",
             "skipped_overlap")
 _FIELDS = ("event_pos", "exit_pos", "entry", "risk", "gross_r", "r", "outcome")
