@@ -26,8 +26,6 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-import pandas as pd
-
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -78,9 +76,11 @@ def _copy(path: Path, target: Path, start: str | None) -> None:
     if start is None:
         shutil.copyfile(path, target)
         return
-    frame = pd.read_csv(path, index_col=0, parse_dates=True)
-    frame = frame[frame.index >= pd.Timestamp(start)]
-    frame.to_csv(target, index_label=frame.index.name or "Date")
+    # Byte for byte: the header plus every line whose leading ISO date is >= start,
+    # so a truncated file is an exact line subset of its source (no float re-format).
+    lines = path.read_bytes().splitlines(keepends=True)
+    keep = [line for line in lines[1:] if line.split(b",", 1)[0].decode("ascii", "replace") >= start]
+    target.write_bytes(b"".join(lines[:1] + keep))
 
 
 def snapshot(src, out, *, start: str | None = None, tickers=None,
