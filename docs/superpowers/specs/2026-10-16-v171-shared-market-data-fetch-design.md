@@ -88,6 +88,13 @@ deliverable D9.
 
 ## Anti-goals (a failure even if call counts drop)
 
+- **Trade-plan issuing gets slower, staler or different because of the
+  sharing** (partner, 2026-10-16). The scan, the pre-post rebuild and stop
+  monitoring always rank above every admin request (D6). No admin action,
+  reloads included, can take budget from them.
+- **The admin UI feels heavier**: new spinners, veils or blank states where
+  today a value shows.
+
 - **Any plan, alert or exit decision built on a price older than its own
   run's fetch.** Sharing a result is allowed only if that result was fetched
   within the asker's freshness window (D2). A cached result is never
@@ -168,6 +175,29 @@ that is refetched, never served. Defaults:
 | Live quote | scan live-prices phase | ≤ 15 s |
 | Live quote | admin **Dashboard** | ≤ 15 s: the page that always shows the latest price (partner) |
 | Live quote | every other admin page (Watchlist, Trades, Risk, Charts…) | **≤ 60 s** (partner), shown with its age: served from whatever any page or service already fetched, so moving Dashboard → Watchlist makes no new call |
+| Live quote and page data | any admin page after an **intentional reload** (browser reload / F5, or the page's own refresh control) | **fresh**: the reload bypasses the 60 s reuse and fetches now (partner). In-app navigation between pages never counts as a reload. |
+
+Admin rules (partner, 2026-10-16):
+
+- **Reload means fresh, navigation means reuse.** The SPA marks the
+  requests a full page load makes (a browser reload, or a first load) and
+  any explicit refresh click as `fresh`. The server then skips the reuse
+  window for those keys. Requests from in-app route changes are unmarked
+  and reuse the shared cache under the windows above. The builder picks the
+  mechanism (a request header or query flag set once per app boot and on
+  refresh clicks; `performance.getEntriesByType('navigation')` tells reload
+  from first load if ever needed).
+- **A fresh request is still shared and budgeted.** Two tabs reloading
+  together make one call (D1 single-flight). It runs at admin priority
+  (D6, tier 5), so a reload storm can never delay stop monitoring, the
+  re-quote or the scan. When the budget is short, a reload gets the
+  freshest cached value with its age instead of waiting.
+- **UX stays light:** no new spinners or loading veils for cached data.
+  Pages render immediately from the cache. A price older than its page's
+  window shows a small age hint ("12 s ago" / "1 min ago") in the existing
+  styling, at mobile, tablet and desktop widths (`docs/claude/ui-design.md`).
+  The only new visible elements are that age hint, the proxy label (D7) and
+  "price not confirmed live" (D5).
 | Today's daily bar (forming) | scan, plan manager | refetched once per scan / per 60 s tick |
 | Closed daily bars | everyone | cached until a new session close, or until D4 sees an adjustment change |
 | Index quote (tape) | admin | ≤ 60 s |
