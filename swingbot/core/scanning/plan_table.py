@@ -4,12 +4,17 @@ The wide key:value table retired in v62 had 65--70 character rows that
 scrolled off a phone. The replacement is the two-line presentation headline.
 `plan_numbers_for_display` remains the legacy/v2 pricing cutover switch.
 """
+import logging
+
 from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_for
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.explain import stop_distance_pct, v2_stop_was_moved
 from swingbot.core.planning import account
 from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
 from swingbot.core.presentation.ansi import r_multiple
+
+log = logging.getLogger(__name__)
 
 
 def plan_numbers_for_display(plan, legacy: dict) -> dict:
@@ -126,7 +131,8 @@ def _sizing_snapshot(entry, plan) -> dict | None:
     same render-time-snapshot convention used everywhere in this module."""
     try:
         return account.compute_position_size(entry, plan.stop_loss)
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.sizing_snapshot", exc, level=logging.DEBUG)
         return None
 
 
