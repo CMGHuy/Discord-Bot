@@ -1,8 +1,8 @@
 # v161 Trade scout, part 1: VM export and autopsy core (TS1–TS3; TS4 is in `2026-10-15-v161-trade-scout_1b-categorical-cuts.md`)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task TS3" -A 400 docs/superpowers/plans/2026-10-15-v161-trade-scout_1-export-autopsy-core.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task TS3" -A 400 docs/superpowers/plans/implemented/2026-10-15-v161-trade-scout_1-export-autopsy-core.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v161-trade-scout-design.md`](../specs/2026-10-15-v161-trade-scout-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v161-trade-scout-design.md`](../../specs/implemented/2026-10-15-v161-trade-scout-design.md)
 **Index:** [`2026-10-15-v161-trade-scout_0-index.md`](2026-10-15-v161-trade-scout_0-index.md) — Global Constraints, Parallelisation, Shared contracts and the Task ledger live there and bind every task below.
 **Bump:** none
 **Edge:** none (integrity)

@@ -1,8 +1,8 @@
 # v161 Trade scout, part 2: bar cuts, exit and supply cuts
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. **Never read this plan whole:** pull one task with `grep -n "^### Task TS6" -A 300 docs/superpowers/plans/2026-10-15-v161-trade-scout_2-bars-exits-report-merge.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. **Never read this plan whole:** pull one task with `grep -n "^### Task TS6" -A 300 docs/superpowers/plans/implemented/2026-10-15-v161-trade-scout_2-bars-exits-report-merge.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v161-trade-scout-design.md`](../specs/2026-10-15-v161-trade-scout-design.md) (§ 1 cuts, statistics and output; § 6 merge drops; Data availability; Panel review)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v161-trade-scout-design.md`](../../specs/implemented/2026-10-15-v161-trade-scout-design.md) (§ 1 cuts, statistics and output; § 6 merge drops; Data availability; Panel review)
 **Bump:** none
 **Edge:** none (integrity)
 **Index:** [`2026-10-15-v161-trade-scout_0-index.md`](2026-10-15-v161-trade-scout_0-index.md) carries the Global Constraints, `## Parallelisation`, the shared contracts (Export columns, cell id, cut names, Autopsy JSON, Row format) and the task ledger. Every task below implicitly includes them. Ledger part 2 outgrew the 1500-line cap: TS5 and TS6 are here, TS7 and TS8 are in [`2026-10-15-v161-trade-scout_2b-report-merge-parse.md`](2026-10-15-v161-trade-scout_2b-report-merge-parse.md).

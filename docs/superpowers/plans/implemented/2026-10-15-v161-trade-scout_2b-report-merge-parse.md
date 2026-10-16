@@ -1,8 +1,8 @@
 # v161 Trade scout, part 2b: report and CLI, merge parsing
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. **Never read this plan whole:** pull one task with `grep -n "^### Task TS8" -A 300 docs/superpowers/plans/2026-10-15-v161-trade-scout_2b-report-merge-parse.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. **Never read this plan whole:** pull one task with `grep -n "^### Task TS8" -A 300 docs/superpowers/plans/implemented/2026-10-15-v161-trade-scout_2b-report-merge-parse.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v161-trade-scout-design.md`](../specs/2026-10-15-v161-trade-scout-design.md) (§ 1 output; § 6 merge; Panel review)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v161-trade-scout-design.md`](../../specs/implemented/2026-10-15-v161-trade-scout-design.md) (§ 1 output; § 6 merge; Panel review)
 **Bump:** none
 **Edge:** none (integrity)
 **Index:** [`2026-10-15-v161-trade-scout_0-index.md`](2026-10-15-v161-trade-scout_0-index.md) carries the Global Constraints, `## Parallelisation`, the shared contracts and the task ledger. This file holds ledger part 2's TS7 and TS8: part 2 outgrew the 1500-line cap, so it is split here (TS5 and TS6 stay in `2026-10-15-v161-trade-scout_2-bars-exits-report-merge.md`, whose header conventions — `$WT`, `$R`, the `autopsy` import form, the `_row` helper — apply to this file too).
@@ -506,7 +506,7 @@ role=quant-engineer
 target: the v161 book autopsy on branch 2026-10-15-v161-trade-scout, worktree
 E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-15-v161-trade-scout.
 Files: scripts/reports/autopsy/{rows,cells,cuts,bars,exits,report}.py, scripts/reports/book_autopsy.py.
-Spec: docs/superpowers/specs/2026-10-15-v161-trade-scout-design.md § 1 and § Data availability.
+Spec: docs/superpowers/specs/implemented/2026-10-15-v161-trade-scout-design.md § 1 and § Data availability.
 Check: lookahead in every bar read (dollar volume ends at the plan day; the fill-day open;
 the reversal walk reads only bars strictly after the exit day; risk_features are frozen at
 issuance), the two OHLCV caches (bars only from --bars-dir, never data/backtest_cache/),

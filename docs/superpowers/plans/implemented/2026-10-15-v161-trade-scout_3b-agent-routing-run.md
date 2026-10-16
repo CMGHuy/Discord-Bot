@@ -1,8 +1,8 @@
 # v161 Trade scout, part 3b: `scout` agent, `trade-scout` skill, routing, first live run, full suite (TS11–TS14)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole:** pull one task with `grep -n "^### Task TS12" -A 300 docs/superpowers/plans/2026-10-15-v161-trade-scout_3b-agent-routing-run.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole:** pull one task with `grep -n "^### Task TS12" -A 300 docs/superpowers/plans/implemented/2026-10-15-v161-trade-scout_3b-agent-routing-run.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v161-trade-scout-design.md`](../specs/2026-10-15-v161-trade-scout-design.md) (§ 4 `scout` agent, § 5 `trade-scout` skill, Retention and removal, Token budget, Codex mirror and docs, Testing)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v161-trade-scout-design.md`](../../specs/implemented/2026-10-15-v161-trade-scout-design.md) (§ 4 `scout` agent, § 5 `trade-scout` skill, Retention and removal, Token budget, Codex mirror and docs, Testing)
 **Index:** [`2026-10-15-v161-trade-scout_0-index.md`](2026-10-15-v161-trade-scout_0-index.md) — Global Constraints, `## Parallelisation`, the shared contracts and the Task ledger bind every task below. Split from part 3 (`2026-10-15-v161-trade-scout_3-slate-roles-run.md`, TS9–TS10) to stay under 1500 lines.
 **Bump:** none
 **Edge:** none (integrity)
@@ -765,7 +765,7 @@ Run:
 ```bash
 python -m radon cc -s -n C $WT/scripts/reports/autopsy/ $WT/scripts/reports/book_autopsy.py $WT/scripts/dev/scout_merge.py
 python $WT/scripts/dev/sync_codex.py --check
-python $WT/scripts/dev/plan_lint.py $R/docs/superpowers/plans/2026-10-15-v161-trade-scout_0-index.md
+python $WT/scripts/dev/plan_lint.py $R/docs/superpowers/plans/implemented/2026-10-15-v161-trade-scout_0-index.md
 git -C $WT diff --name-only main...HEAD
 ```
 Expected: radon prints nothing (every new function below complexity 15); `sync_codex --check` reports nothing; plan_lint prints `PASS`; the diff names no file under `swingbot/`, no `VERSION.json` and no `version_history.json` (Global Constraints: `Bump: none`), and no raw export CSV.
@@ -792,7 +792,7 @@ Expected: no file this plan's branch owns appears in the main tree (TS13's resul
 Append to `.superpowers/sdd/progress.md` (append only, never rewrite): `v161 TS14: full suite green on <branch HEAD sha> (<passed> passed, 0 failed, 0 xfailed)`. Update the index's `## Progress` block to "TS1–TS14 done; ready for merge, `/panel` pre-close-out (spec `Panel:` quant-researcher, veteran-trader, staff-engineer) and `/close-out`." Commit the index on `main`:
 
 ```bash
-git -C $R add docs/superpowers/plans/2026-10-15-v161-trade-scout_0-index.md
+git -C $R add docs/superpowers/plans/implemented/2026-10-15-v161-trade-scout_0-index.md
 git -C $R commit -m "docs(v161): plan progress -- full suite green
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"

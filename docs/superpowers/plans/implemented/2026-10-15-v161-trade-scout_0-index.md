@@ -1,8 +1,8 @@
 # v161 Trade scout: generator roles over a live-book autopsy. Implementation Plan, index
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief TS5` or `grep -n "^### Task TS5" -A 300 docs/superpowers/plans/2026-10-15-v161-trade-scout_*.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief TS5` or `grep -n "^### Task TS5" -A 300 docs/superpowers/plans/implemented/2026-10-15-v161-trade-scout_*.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v161-trade-scout-design.md`](../specs/2026-10-15-v161-trade-scout-design.md) (all sections; the "Data availability" block overrides the column list; every applied `## Panel review` finding is a requirement)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v161-trade-scout-design.md`](../../specs/implemented/2026-10-15-v161-trade-scout-design.md) (all sections; the "Data availability" block overrides the column list; every applied `## Panel review` finding is a requirement)
 **Bump:** none
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
@@ -15,7 +15,7 @@
 
 ## Progress
 
-TS1–TS14 implemented on `2026-10-15-v161-trade-scout`; the corrected live autopsy, slate, panel review and partner routes are committed on `main`. The full suite passed on branch `0732068a` (8,382 passed, 0 failed, 0 xfailed, 1,640 skipped). Ready for merge, pre-close-out panel and close-out.
+TS1–TS14 are implemented and merged to `main` as `8bf189cd`. The corrected live autopsy, slate, panel review and partner routes are committed. The full suite passed on branch `0732068a` (8,382 passed, 0 failed, 0 xfailed, 1,640 skipped); later panel fixes passed the 344-test scout suite and focused checks. Pre-close-out panel had no `BLOCKING` findings. `Bump: none` held: bot and UI behavior did not change. The v161 branch is deleted and Git no longer lists its worktree; Windows still holds its empty directory open until this chat releases it.
 
 ## Handoff
 
@@ -31,6 +31,7 @@ TS1–TS14 implemented on `2026-10-15-v161-trade-scout`; the corrected live auto
 - Pre-close-out veteran-trader review: no `BLOCKING` findings. Future `tight-base-breakout` screens must time volume so it is known before entry; the gap and near-stop autopsy cuts are descriptive, not order-survival evidence. These limits are recorded in the slate's partner pick.
 - Pre-close-out staff-engineer review: no `BLOCKING` findings. The rejection export could hide missing logs or grep errors behind an empty CSV; fixed on the branch in `b7aa80a9` (16 focused tests passed). All retained bar files matched their recorded hashes; raw CSV deletion follows the TS13 scratch-only boundary and limits exact reproduction without another approved export.
 - The partner approved one read-only rejection check after the staff fix. `rejections` through `scripts/ops/ssh-hetzner.sh` succeeded against readable host logs and returned the same header-only CSV. The corrected autopsy already has zero `rejection_reason` tallies, so no result regeneration was needed. The temporary CSV was removed from scratch.
+- Close-out: merge `8bf189cd`; no version bump from the current `VERSION.json`; all seven plan parts and the spec moved to `implemented/`. Git worktree registration and the merged branch were removed. The Codex app holds the empty former checkout directory open, so Windows could not remove that last directory entry during this chat.
 
 ## Where to work
 

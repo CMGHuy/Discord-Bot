@@ -1,8 +1,8 @@
 # v161 Trade scout, part 3: merge slate and generator roles (TS9–TS10; TS11–TS14 are in `2026-10-15-v161-trade-scout_3b-agent-routing-run.md`)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole:** pull one task with `grep -n "^### Task TS10" -A 400 docs/superpowers/plans/2026-10-15-v161-trade-scout_3-slate-roles-run.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole:** pull one task with `grep -n "^### Task TS10" -A 400 docs/superpowers/plans/implemented/2026-10-15-v161-trade-scout_3-slate-roles-run.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-15-v161-trade-scout-design.md`](../specs/2026-10-15-v161-trade-scout-design.md) (§ 2–6, Retention and removal, Codex mirror and docs, Testing, Panel review)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-15-v161-trade-scout-design.md`](../../specs/implemented/2026-10-15-v161-trade-scout-design.md) (§ 2–6, Retention and removal, Codex mirror and docs, Testing, Panel review)
 **Index:** [`2026-10-15-v161-trade-scout_0-index.md`](2026-10-15-v161-trade-scout_0-index.md) — Global Constraints, `## Parallelisation`, the shared contracts (Export columns, cell id, cut names, Autopsy JSON, Row format) and the Task ledger bind every task below.
 **Bump:** none
 **Edge:** none (integrity)
