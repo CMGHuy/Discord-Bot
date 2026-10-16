@@ -127,12 +127,16 @@ def _extra_text(c: dict) -> str:
     return "; ".join(parts)
 
 
+def _escape_table_text(text: str) -> str:
+    return text.replace("|", "\\|")
+
+
 def _cell_row(c: dict) -> str:
     ci = "n/a" if c["ci"] is None else f"[{c['ci'][0]:.3f}, {c['ci'][1]:.3f}]"
     delta = "n/a" if c["delta"] is None else f"{c['delta']:+.3f}"
-    return (f"| {c['id']} | {c['n']} | {c['weeks']} | {_pct(c['win_rate'])} | "
+    return (f"| {_escape_table_text(c['id'])} | {c['n']} | {c['weeks']} | {_pct(c['win_rate'])} | "
             f"{_fmt(c['net_expr'])} | {_fmt(c['gross_expr'])} | {delta} {ci} | "
-            f"{_fmt(c['q'])} | {_extra_text(c)} |")
+            f"{_fmt(c['q'])} | {_escape_table_text(_extra_text(c))} |")
 
 
 def _cell_lines(cells: list, budget: int) -> list[str]:

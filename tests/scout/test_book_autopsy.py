@@ -175,6 +175,17 @@ def test_render_markdown_cuts_the_cell_table_to_the_line_budget():
     assert "ticker 1" in md   # the thin count line
 
 
+def test_markdown_keeps_pipe_delimited_cell_ids_in_one_column():
+    data = _synthetic(1)
+    data["cells"][0].update(id="strategy_horizon=RSI|2w", cut="strategy_horizon", value="RSI|2w")
+    md = report.render_markdown(data)
+    line = next(line for line in md.splitlines() if line.startswith("| strategy_horizon="))
+    assert line == (
+        "| strategy_horizon=RSI\\|2w | 40 | 10 | 50.0% | 0.100 | 0.120 | "
+        "+0.050 [0.010, 0.090] | 0.080 | tickers 1; top share 100.0% |")
+    assert data["cells"][0]["id"] == "strategy_horizon=RSI|2w"
+
+
 @pytest.mark.parametrize("reason, outcome", [
     ("loss", "loss"), ("stop", "loss"), ("auto (price monitor)", "loss"),
     ("auto (price monitor)", "win"), ("tp1", "win"), ("", "loss"), ("auto (near-tp stall)", "win")])
