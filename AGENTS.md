@@ -243,6 +243,7 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | Changing the Postgres schema, a store's read/write path or a migration | `schema-change` |
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
+| Mining the live book for ranked hypotheses: `trade-scout` dispatches the read-only `scout` agent once per generator role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
 | Using the eToro Public API MCP (portfolio, instruments, real or demo trades) -- outside swingbot's paper-only scope | `etoro-public-api-operations` |
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
