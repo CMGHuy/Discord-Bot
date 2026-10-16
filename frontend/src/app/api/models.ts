@@ -153,6 +153,10 @@ export interface TradeRow {
   target_is_banked_tp1: boolean;
   stop_kind: 'risk' | 'trailing' | 'derived_floor';
   bar_kind: 'progress' | 'approach' | 'trailing' | 'none';
+  /** Best price since TP1 -- the 100% end of a trailing runner's bar (0% is
+   *  the trailing stop). Server-side input to `progress_pct`; null until the
+   *  runner has recorded one and on every row that is not a runner. */
+  runner_best?: number | null;
   floor_r: number | null;
   price_r: number | null;
   headroom_r: number | null;
