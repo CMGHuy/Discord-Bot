@@ -389,7 +389,9 @@ never overwrites the last good value. The tape shows each value's age.
 - The admin chart, risk page, watchlist warm-up and earnings warm-up go
   through the layer, so concurrent tabs collapse onto one call.
 - `data_refresh.refresh_all` batches symbols per timeframe where yfinance
-  allows it, and uses Alpaca for the timeframes Alpaca serves.
+  allows it. *Amended 2026-10-16 (plan part 3):* it stays on yfinance
+  only. Every file it writes is yfinance-basis, so Alpaca bars there would
+  cross caches (D4, one basis per file).
 - The guard test from D1.
 
 ### D9 — Measurement
