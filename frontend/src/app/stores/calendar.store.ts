@@ -7,6 +7,7 @@ import {
   withMethods,
   withState,
 } from '@ngrx/signals';
+import { Router } from '@angular/router';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
@@ -49,6 +50,26 @@ function currentMonth(now = new Date()): string {
 export function shiftMonth(month: string, delta: number): string {
   const [year, index] = month.split('-').map(Number);
   return currentMonth(new Date(year, index - 1 + delta, 1));
+}
+
+/** The calendar's URL state (v165 D6). `null` = absent from the query string. */
+export interface CalendarUrlParams {
+  month: string | null;
+  strategy: string | null;
+  horizon: string | null;
+}
+
+const MONTH_PARAM = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** The store state a URL stands for: an absent or malformed month is the
+ *  current month (what a bare `/calendar` has always shown), absent filters
+ *  are "any". */
+function urlState(params: CalendarUrlParams): { month: string; strategy: string; horizon: string } {
+  return {
+    month: params.month !== null && MONTH_PARAM.test(params.month) ? params.month : currentMonth(),
+    strategy: params.strategy ?? '',
+    horizon: params.horizon ?? '',
+  };
 }
 
 interface CalendarSlice {
@@ -121,7 +142,7 @@ export const CalendarStore = signalStore(
     /** This selector is account state, not a browser-local display whim. */
     preferredMetric: computed(() => preferenceMetric(preferences.values()['calendarMetric'])),
   })),
-  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore)) => {
+  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore), router = inject(Router)) => {
     const fetchDay = (date: string): void => {
       patchState(store, { dayLoading: true });
       api
@@ -171,13 +192,38 @@ export const CalendarStore = signalStore(
         });
     };
 
+    /** v165 D6: the month and filters live in the URL, so a filtered month is
+     *  a link and the day page's back link lands on it. The store has already
+     *  loaded for this state; the route's resolver sees URL == state and does
+     *  nothing (see calendar.routes.ts), so this costs no second request. */
+    const writeUrl = (): void => {
+      void router.navigate([], {
+        queryParams: {
+          month: store.month(),
+          strategy: store.strategy() || null,
+          horizon: store.horizon() || null,
+        },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+    };
+
+    const matchesUrl = (params: CalendarUrlParams): boolean => {
+      const next = urlState(params);
+      return next.month === store.month()
+        && next.strategy === store.strategy()
+        && next.horizon === store.horizon();
+    };
+
     return {
       resolve,
       load,
+      matchesUrl,
 
       setMonth(month: string): void {
         patchState(store, { month, selectedDay: null, dayDetail: null, dayTrades: null });
         load();
+        writeUrl();
       },
 
       stepMonth(delta: number): void {
@@ -187,6 +233,7 @@ export const CalendarStore = signalStore(
           dayDetail: null, dayTrades: null,
         });
         load();
+        writeUrl();
       },
 
       /** Metric is a pure view concern -- no refetch. The payload already
@@ -199,11 +246,25 @@ export const CalendarStore = signalStore(
       setStrategy(strategy: string): void {
         patchState(store, { strategy, selectedDay: null, dayDetail: null, dayTrades: null });
         load();
+        writeUrl();
       },
 
       setHorizon(horizon: string): void {
         patchState(store, { horizon, selectedDay: null, dayDetail: null, dayTrades: null });
         load();
+        writeUrl();
+      },
+
+      /** From the route, never a request: the resolver loads afterwards. An
+       *  equal state changes nothing, so an open drawer survives a no-op. */
+      applyUrl(params: CalendarUrlParams): void {
+        if (matchesUrl(params)) return;
+        patchState(store, {
+          ...urlState(params),
+          selectedDay: null,
+          dayDetail: null,
+          dayTrades: null,
+        });
       },
 
       /** Lazy by design: a month of drawer payloads nobody opens is 20-odd

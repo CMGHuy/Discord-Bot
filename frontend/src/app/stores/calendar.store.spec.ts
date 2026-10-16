@@ -11,7 +11,8 @@ import {
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { Router, provideRouter } from '@angular/router';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import {
@@ -77,6 +78,7 @@ describe('CalendarStore', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         provideHttpClient(
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
@@ -233,5 +235,70 @@ describe('CalendarStore', () => {
     respond({ totals: { ...RESPONSE.totals, trade_count: 9 } });
 
     expect(store.totals()?.trade_count).toBe(9);
+  });
+
+  it('applyUrl takes month and filters from the URL without a request', () => {
+    tick();
+    respond();
+
+    store.applyUrl({ month: '2026-03', strategy: 'VWAP', horizon: null });
+    expect(store.month()).toBe('2026-03');
+    expect(store.strategy()).toBe('VWAP');
+    expect(store.horizon()).toBe('');
+    backend.expectNone((r) => r.url === '/api/v1/calendar/pnl');
+  });
+
+  it('matchesUrl reads absent and malformed params as the defaults', () => {
+    tick();
+    respond();
+
+    const month = store.month();               // the current month on a fresh store
+    expect(store.matchesUrl({ month: null, strategy: null, horizon: null })).toBe(true);
+    expect(store.matchesUrl({ month, strategy: null, horizon: null })).toBe(true);
+    expect(store.matchesUrl({ month: '2026-13', strategy: null, horizon: null })).toBe(true);
+    expect(store.matchesUrl({ month: 'abc', strategy: null, horizon: null })).toBe(true);
+    expect(store.matchesUrl({ month: '1999-01', strategy: null, horizon: null })).toBe(false);
+    expect(store.matchesUrl({ month, strategy: 'EMA20', horizon: null })).toBe(false);
+  });
+
+  it('applyUrl with the state it already has leaves the open day alone', () => {
+    tick();
+    respond();
+    store.selectDay('2026-08-03');
+    backend.expectOne((r) => r.url === '/api/v1/calendar/pnl/day').flush({ date: '2026-08-03', trades: [] });
+
+    store.applyUrl({ month: store.month(), strategy: null, horizon: null });
+    expect(store.selectedDay()).toBe('2026-08-03');
+
+    store.applyUrl({ month: '2026-01', strategy: null, horizon: null });
+    expect(store.selectedDay()).toBeNull();
+  });
+
+  it('every setter writes month and filters to the URL, replacing history', () => {
+    tick();
+    respond();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+    store.setMonth('2026-08');
+    backend.expectOne((r) => r.params.get('month') === '2026-08').flush(RESPONSE);
+    store.setStrategy('EMA20');
+    backend.expectOne((r) => r.params.get('strategy') === 'EMA20').flush(RESPONSE);
+    store.setHorizon('4w');
+    backend.expectOne((r) => r.params.get('horizon') === '4w').flush(RESPONSE);
+    store.stepMonth(1);
+    backend.expectOne((r) => r.params.get('month') === '2026-09').flush(RESPONSE);
+
+    expect(navigate).toHaveBeenCalledTimes(4);
+    expect(navigate).toHaveBeenLastCalledWith([], {
+      queryParams: { month: '2026-09', strategy: 'EMA20', horizon: '4w' },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+    store.setStrategy('');
+    backend.expectOne((r) => r.url === '/api/v1/calendar/pnl').flush(RESPONSE);
+    // "Any strategy" is a null, which `merge` drops from the URL.
+    expect(navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
+      queryParams: { month: '2026-09', strategy: null, horizon: '4w' },
+    }));
   });
 });
