@@ -1,7 +1,7 @@
 """Book rows: the VM export CSV (scripts/ops/export_book_rows.sh) as typed rows.
 
 A ``trade`` row is one closed trade (journal x trades, left-joined to its
-plan); a ``plan`` row is a plan that never became a trade, its trade columns
+plan); a ``plan`` row is a plan not represented by a closed trade, its trade columns
 empty. Dates are US/Eastern ISO dates. Net R is MODELLED here with the backtest
 friction model: no live store holds a net figure (spec, Data availability).
 """
