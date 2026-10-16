@@ -176,3 +176,11 @@ def test_a_leg_rows_held_hours_is_its_own_span_not_the_whole_positions():
     assert rows[0]["held_hours"] == 29.0
     # leg 1 closed 2026-09-05T15:00 -- 102 hours after open
     assert rows[1]["held_hours"] == 102.0
+
+
+def test_risk_stop_is_the_plan_stop_while_stop_loss_is_the_working_stop():
+    """v166: the row publishes the original stop beside the working one."""
+    row = _row_from_plan(partial_plan(), None, set())
+    assert row["risk_stop"] == 90.0
+    assert round(row["stop_loss"], 4) == 113.3333
+    assert "_risk_stop" not in row

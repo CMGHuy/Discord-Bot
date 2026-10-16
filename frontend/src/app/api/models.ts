@@ -99,6 +99,13 @@ export interface TradeRow {
   quality_score: number | null;
   entry: number | null;
   stop_loss: number | null;
+  /** v166 -- the plan's ORIGINAL risk stop. `stop_loss` is the working
+   *  (trailing) stop once a plan is PARTIAL; this is the stop the position
+   *  was sized against, so risk per share and "$ at risk" read it first.
+   *  The API always sends it (null on a row with no stop). Optional here,
+   *  like `cohort_label`, so a typed fixture written before this field
+   *  existed is not forced to grow it. */
+  risk_stop?: number | null;
   target: number | null;
   target2: number | null;
   /** The TP1 leg's own fraction/fill-price/R once a PARTIAL plan has banked
