@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -44,6 +44,13 @@ DEFAULT_MEMBERSHIP = Path(config.DATA_DIR) / "universe" / "sp500_membership.csv"
 PROGRESS_EVERY = 25
 COUNTER_ORDER = ("dropped_nonmember", "dropped_warmup", "dropped_window",
                  "skipped_overlap", "dropped_no_match")
+STRESS_SLIPPAGE_FACTOR = 2   # v163: the trail book re-priced at 2 x slippage; printed, never gating
+
+
+def base_slippage(slippage_bps=None):
+    """The slippage a run is priced at: the passed value, else config's.
+    Never cast: the results doc prints it as config holds it."""
+    return getattr(config, "SLIPPAGE_BPS", 5.0) if slippage_bps is None else slippage_bps
 
 
 def load_frame(path, start: str = WINDOW_START, end: str = WINDOW_END):
@@ -85,6 +92,8 @@ class TickerScreen:
     null_outcomes: Counter
     excess: dict
     rank: pd.DataFrame
+    null_timeout_r: list = field(default_factory=list)   # v163: trail only, net R per null timeout
+    stressed: list | None = None                          # v163: trail only, 2 x slippage pairs
 
 
 def _event_rows(ticker, index, kept, null_mean_r) -> list:
@@ -104,23 +113,53 @@ def _rank_frame(index, raw, population, fwd) -> pd.DataFrame:
     return pd.DataFrame(columns)
 
 
+def _books(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
+    """The kept event book, its counters and its matched null at one cost
+    setting, both raced under the idea's own shape (v163)."""
+    cap, shape = idea.time_cap_bars, idea.race_shape
+    booked, counts = race.run_book(df, ctx["raw"], cap, member=ctx["member"],
+                                   warm=ctx["warm"], atr=ctx["atr"], shape=shape, **costs)
+    draw = null.matched_null(df, booked.event_pos,
+                             null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], cap),
+                             null.K, null.null_seed(idea.name, ticker), cap=cap,
+                             atr=ctx["atr"], trend=ctx["trend"], shape=shape, **costs)
+    counts["dropped_no_match"] = draw.dropped_no_match
+    return booked.take(np.isin(booked.event_pos, draw.event_pos)), counts, draw
+
+
+def _null_timeout_r(idea: Idea, draw) -> list:
+    """Trail only: net R of every null race that ran to its cap."""
+    if idea.race_shape != "trail":
+        return []
+    raced = draw.null_race
+    return [float(r) for r in raced.r[raced.outcome == "timeout"]]
+
+
+def _stressed(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
+    """Trail only: every kept event and its null mean re-raced at
+    STRESS_SLIPPAGE_FACTOR x the base slippage. Slippage never moves an exit
+    bar, so the overlap rule and the null draw (same seed) keep the same
+    events; only the R changes."""
+    if idea.race_shape != "trail":
+        return None
+    stress = {"slippage_bps": STRESS_SLIPPAGE_FACTOR * base_slippage(costs["slippage_bps"]),
+              "commission": costs["commission"]}
+    kept, _, draw = _books(idea, ticker, df, ctx, stress)
+    return [{"entry_date": row["entry_date"], "r_event": row["r_event"], "r_null": row["r_null"]}
+            for row in _event_rows(ticker, df.index, kept, draw.null_mean_r)]
+
+
 def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
                   slippage_bps=None, commission=None) -> TickerScreen:
     costs = {"slippage_bps": slippage_bps, "commission": commission}
-    cap = idea.time_cap_bars
     atr = indicators.atr(df)
     sma200 = indicators.sma(df["Close"], 200)
-    raw = np.asarray(idea.events(df).reindex(df.index, fill_value=False), dtype=bool)
     member = null.member_mask(df.index, spans)
     warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
-    booked, counts = race.run_book(df, raw, cap, member=member, warm=warm,
-                                   atr=atr, **costs)
-    draw = null.matched_null(df, booked.event_pos,
-                             null.eligible_mask(raw, member, warm, cap), null.K,
-                             null.null_seed(idea.name, ticker), cap=cap, atr=atr,
-                             trend=null.trend_state(df, sma200), **costs)
-    counts["dropped_no_match"] = draw.dropped_no_match
-    kept = booked.take(np.isin(booked.event_pos, draw.event_pos))
+    ctx = {"raw": np.asarray(idea.events(df).reindex(df.index, fill_value=False), dtype=bool),
+           "member": member, "warm": warm, "atr": atr,
+           "trend": null.trend_state(df, sma200)}
+    kept, counts, draw = _books(idea, ticker, df, ctx, costs)
     fwd = {h: forward.forward_atr(df, atr, h) for h in forward.HORIZONS}
     return TickerScreen(
         ticker=ticker, counters=Counter(counts),
@@ -128,7 +167,9 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         null_outcomes=Counter(draw.null_race.outcome.tolist()),
         excess={h: forward.excess_drift(fwd[h], draw.event_pos, draw.groups)
                 for h in forward.HORIZONS},
-        rank=_rank_frame(df.index, raw, member & warm, fwd))
+        rank=_rank_frame(df.index, ctx["raw"], member & warm, fwd),
+        null_timeout_r=_null_timeout_r(idea, draw),
+        stressed=_stressed(idea, ticker, df, ctx, costs))
 
 
 def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
@@ -227,6 +268,30 @@ def _rank(screens) -> dict:
             for h in forward.HORIZONS}
 
 
+def _book_timeouts(count: int, total: int, values) -> tuple:
+    return (count, count / total if total else None, _mean(values))
+
+
+def _timeouts(screens, events) -> dict:
+    """(count, share of the book, mean net R) of timeouts, event and null
+    books. The null mean is trail only: fixed screens keep no null R."""
+    event_r = [row["r_event"] for row in events if row["outcome"] == "timeout"]
+    null_mix = _sum_counters(screen.null_outcomes for screen in screens)
+    null_r = [r for screen in screens for r in screen.null_timeout_r]
+    return {"event": _book_timeouts(len(event_r), len(events), event_r),
+            "null": _book_timeouts(null_mix["timeout"], sum(null_mix.values()), null_r)}
+
+
+def _stress(screens):
+    """The 2 x slippage verdict over the trail pairs; None for a fixed idea."""
+    if all(screen.stressed is None for screen in screens):
+        return None
+    rows = [row for screen in screens if screen.stressed is not None
+            for row in screen.stressed]
+    return verdict.decide([verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
+                           for row in rows])
+
+
 def summarise(screens, skipped=None) -> dict:
     events = [row for screen in screens for row in screen.events]
     paired = [verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
@@ -238,7 +303,8 @@ def summarise(screens, skipped=None) -> dict:
             "null_outcomes": _sum_counters(screen.null_outcomes for screen in screens),
             "mean_r_event": _mean([row["r_event"] for row in events]),
             "mean_r_null": _mean([row["r_null"] for row in events]),
-            "drift": _drift(screens), "rank": _rank(screens)}
+            "drift": _drift(screens), "rank": _rank(screens),
+            "timeouts": _timeouts(screens, events), "stress": _stress(screens)}
 
 
 def _fmt(value, spec: str = "+.4f") -> str:
@@ -376,7 +442,7 @@ def ledger_row(idea, v, record: str, day: str) -> dict:
 def _run_info(args, q) -> dict:
     return {"ledger_id": ledger_id(args.idea), "q": q, "date": args.date,
             "start": args.start, "end": args.end,
-            "slippage_bps": getattr(config, "SLIPPAGE_BPS", 5.0),
+            "slippage_bps": base_slippage(None),
             "commission": commission_r()}
 
 

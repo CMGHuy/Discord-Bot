@@ -441,3 +441,121 @@ def test_render_arms_lists_only_the_shape_outcomes():
         "gap_stop", "stop", "gap_trail", "trail", "timeout"]
     fixed = screen_idea._render_arms(summary, race.SHAPE_OUTCOMES["fixed"])
     assert not any("trail" in line for line in fixed)
+
+
+# --- v163: the idea's shape reaches the race; trail-only timeout and stress data
+
+from swingbot.core.backtesting.screen import race as race_mod  # noqa: E402
+from swingbot.core.backtesting.screen.ideas import Idea  # noqa: E402
+
+
+def _trail_probe(cap=60):
+    """turn_of_month's trigger raced under the trail shape; never registered."""
+    return Idea(name="trail_probe", events=IDEAS["turn_of_month"].events,
+                time_cap_bars=cap, race_shape="trail", summary="probe", source="test")
+
+
+def test_base_slippage_reads_config_only_when_none(monkeypatch):
+    monkeypatch.setattr(screen_idea.config, "SLIPPAGE_BPS", 7.0, raising=False)
+    assert screen_idea.base_slippage(None) == 7.0
+    assert screen_idea.base_slippage(3.0) == 3.0
+    assert screen_idea.base_slippage(0.0) == 0.0
+    assert screen_idea.STRESS_SLIPPAGE_FACTOR == 2
+
+
+def test_screen_ticker_passes_the_idea_shape_to_book_and_null(monkeypatch):
+    shapes = {"book": [], "null": []}
+    real_book, real_null = race_mod.run_book, null.matched_null
+
+    def book_spy(*args, **kwargs):
+        shapes["book"].append(kwargs.get("shape"))
+        return real_book(*args, **kwargs)
+
+    def null_spy(*args, **kwargs):
+        shapes["null"].append(kwargs.get("shape"))
+        return real_null(*args, **kwargs)
+
+    monkeypatch.setattr(race_mod, "run_book", book_spy)
+    monkeypatch.setattr(null, "matched_null", null_spy)
+    df = random_walk(2600)
+    screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS)
+    assert shapes == {"book": ["fixed"], "null": ["fixed"]}
+    shapes["book"].clear()
+    shapes["null"].clear()
+    screen_idea.screen_ticker(_trail_probe(), "AAA", df, ALWAYS)
+    # the base book, then the 2 x slippage re-race
+    assert shapes == {"book": ["trail", "trail"], "null": ["trail", "trail"]}
+
+
+def test_a_fixed_idea_carries_no_trail_only_data():
+    out = screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", random_walk(2600), ALWAYS)
+    assert out.null_timeout_r == [] and out.stressed is None
+
+
+def test_a_trail_idea_races_only_trail_outcomes():
+    out = screen_idea.screen_ticker(_trail_probe(), "AAA", random_walk(2600), ALWAYS)
+    allowed = set(race_mod.SHAPE_OUTCOMES["trail"])
+    assert out.events
+    assert {row["outcome"] for row in out.events} <= allowed
+    assert set(out.null_outcomes) <= allowed
+    assert "target" not in out.null_outcomes and "gap_target" not in out.null_outcomes
+
+
+def test_trail_null_timeout_r_is_every_null_timeout():
+    out = screen_idea.screen_ticker(_trail_probe(), "AAA", random_walk(2600), ALWAYS)
+    assert out.null_outcomes["timeout"] > 0
+    assert len(out.null_timeout_r) == out.null_outcomes["timeout"]
+    assert all(np.isfinite(out.null_timeout_r))
+
+
+def test_stressed_rows_equal_a_rerun_at_twice_the_slippage():
+    df = random_walk(2600)
+    idea = _trail_probe()
+    base = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS, slippage_bps=5.0, commission=0.0)
+    double = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS, slippage_bps=10.0, commission=0.0)
+    assert base.stressed == [{"entry_date": r["entry_date"], "r_event": r["r_event"],
+                              "r_null": r["r_null"]} for r in double.events]
+    assert [r["entry_date"] for r in base.stressed] == [r["entry_date"] for r in base.events]
+    assert all(s["r_event"] < r["r_event"] for s, r in zip(base.stressed, base.events))
+
+
+def _screen(events, null_outcomes, *, null_timeout_r=(), stressed=None):
+    empty_rank = pd.DataFrame(columns=["year", "event"]
+                              + [f"fwd_{h}" for h in forward.HORIZONS])
+    return screen_idea.TickerScreen(
+        ticker="AAA", counters=Counter(), events=events,
+        null_outcomes=Counter(null_outcomes),
+        excess={h: [] for h in forward.HORIZONS}, rank=empty_rank,
+        null_timeout_r=list(null_timeout_r), stressed=stressed)
+
+
+def _row(day, r_event, r_null, outcome):
+    return {"ticker": "AAA", "entry_date": day, "exit_date": day,
+            "r_event": r_event, "r_null": r_null, "outcome": outcome}
+
+
+def test_summarise_reports_timeouts_per_book():
+    rows = [_row("2012-03-01", 2.0, 0.5, "timeout"), _row("2012-04-02", -1.0, 0.0, "stop"),
+            _row("2013-05-01", 4.0, 0.5, "timeout"), _row("2013-06-03", 1.5, 0.5, "trail")]
+    screen = _screen(rows, {"timeout": 2, "trail": 5, "stop": 3}, null_timeout_r=[0.5, 1.5])
+    out = screen_idea.summarise([screen])
+    assert out["timeouts"]["event"] == (2, 0.5, pytest.approx(3.0))
+    assert out["timeouts"]["null"] == (2, 0.2, pytest.approx(1.0))
+
+
+def test_summarise_timeouts_and_stress_are_empty_for_an_empty_book():
+    out = screen_idea.summarise([_screen([], {})])
+    assert out["timeouts"] == {"event": (0, None, None), "null": (0, None, None)}
+    assert out["stress"] is None
+
+
+def test_summarise_stress_verdict_pools_only_stressed_rows():
+    rows = [_row("2012-03-01", 2.0, 0.5, "timeout"), _row("2013-04-02", -1.0, 0.0, "stop")]
+    stressed = [{"entry_date": "2012-03-01", "r_event": 1.9, "r_null": 0.45},
+                {"entry_date": "2013-04-02", "r_event": -1.1, "r_null": -0.05}]
+    trail = _screen(rows, {"timeout": 1}, null_timeout_r=[0.3], stressed=stressed)
+    fixed = _screen([_row("2014-01-02", 1.0, 0.0, "target")], {"target": 1})
+    out = screen_idea.summarise([trail, fixed])
+    assert out["stress"].n == 2
+    assert out["stress"].delta_exp_r == pytest.approx(((1.9 - 0.45) + (-1.1 + 0.05)) / 2)
+    assert screen_idea.summarise([fixed])["stress"] is None
