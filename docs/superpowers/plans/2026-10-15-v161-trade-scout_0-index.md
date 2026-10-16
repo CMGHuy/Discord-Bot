@@ -15,7 +15,7 @@
 
 ## Progress
 
-TS1–TS13 implemented on `2026-10-15-v161-trade-scout`; the corrected live autopsy, slate, panel review and partner routes are committed on `main`. TS14 is pending.
+TS1–TS14 implemented on `2026-10-15-v161-trade-scout`; the corrected live autopsy, slate, panel review and partner routes are committed on `main`. The full suite passed on branch `0732068a` (8,382 passed, 0 failed, 0 xfailed, 1,640 skipped). Ready for merge, pre-close-out panel and close-out.
 
 ## Handoff
 
@@ -26,6 +26,7 @@ TS1–TS13 implemented on `2026-10-15-v161-trade-scout`; the corrected live auto
 - TS9 review correction: the merge now verifies every quoted cell figure against the JSON at Markdown precision and enforces finite unrounded q ≤ 0.10. This supersedes the narrower `_cell_reason` example in part 3; playbook `/screen` rows retain their exemption.
 - TS7 review correction: bar-cut cells now report coverage among their own members, bounded by cell N; the header still reports whole-book coverage. The first-run report remains provisional until regenerated with corrected code.
 - TS13 completed: the partner approved one corrected read-only `rows` export through `scripts/ops/ssh-hetzner.sh` after the TS1 fix. The corrected autopsy pair is `384b4b01`; the regenerated slate is `b389ca09`; quant review and the partner's three `/screen` choices are `dfe069ef`. The timing row was withdrawn because issuance-hour association does not measure extra opportunities from an evening pass. No screen was started. Raw CSV and temporary role files were removed from scratch.
+- TS14 completed: the full suite initially exposed Windows Bash selection and text-mode stdin issues. The v161 test fix is `0732068a`; all seven legacy shell failures passed with Git Bash first on PATH. The final elevated full suite passed on `0732068a` with 8,382 passed, 0 failed, 0 xfailed and 1,640 skipped (local test database unavailable). Static complexity, mirror, plan-lint and suite-manifest checks passed.
 
 ## Where to work
 
