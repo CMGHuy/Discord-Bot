@@ -392,3 +392,100 @@ def test_the_day_route_still_404s_before_computing_context(seed, logged_in):
     seed(trades=_context_book())
     assert_error(logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-09&strategy=EMA20"),
                  "not_found", 404)
+
+
+# ---- v165 D4: GET /calendar/pnl/day/sparklines -----------------------------
+
+_SPARK = "/api/v1/calendar/pnl/day/sparklines"
+
+
+@pytest.fixture
+def bars(monkeypatch):
+    """Cached daily bars: AAPL has 30 flat bars from Mon 2026-07-20 (close
+    100, High 101, Low 99); every other ticker is an uncached miss. Returns
+    the list of (ticker, interval) loads the route made."""
+    from swingbot.core.marketdata import data_store
+    from tests.helpers import make_ohlcv
+
+    calls = []
+
+    def _load(ticker, interval):
+        calls.append((ticker, interval))
+        return make_ohlcv([100.0] * 30, start="2026-07-20") if ticker == "AAPL" else None
+
+    def _never(*args, **kwargs):
+        pytest.fail("the sparklines route may read bars only through load_normalized")
+
+    monkeypatch.setattr(data_store, "load_normalized", _load)
+    monkeypatch.setattr(data_store, "load_from_disk", _never)
+    monkeypatch.setattr(data_store, "fetch_interval_data", _never)
+    return calls
+
+
+def test_sparklines_require_auth(client):
+    assert_error(client.get(f"{_SPARK}?date=2026-08-03"), "auth", 401)
+
+
+def test_sparklines_response_shape(seed, logged_in, bars):
+    """`_trade` opens Sat 08-01 (entry bar Mon 08-03 = i10) and closes 08-03
+    (exit bar i10): window i7..i13 = Wed 07-29..Thu 08-06."""
+    seed(trades=[_trade("a" * 16)])
+    body = logged_in.get(f"{_SPARK}?date=2026-08-03").get_json()
+    assert_shape(body, {"as_of": str, "date": str, "truncated": bool, "series": dict})
+    assert body["date"] == "2026-08-03"
+    assert body["truncated"] is False
+    series = body["series"]["a" * 16 + ":0"]
+    assert_shape(series, {
+        "closes": list, "exit_bar": int, "last_bar": str, "stale": bool,
+        "entry": NULLABLE_NUMBER, "stop": NULLABLE_NUMBER, "tp1": NULLABLE_NUMBER,
+        "tp2": NULLABLE_NUMBER, "exit": NULLABLE_NUMBER, "exit_date": str,
+    }, where="series")
+    assert_shape(series["closes"][0], {"date": str, "close": NULLABLE_NUMBER},
+                 where="close")
+    assert series["closes"][0]["date"] == "2026-07-29"
+    assert series["closes"][-1]["date"] == "2026-08-06"
+    assert (series["exit_bar"], series["exit_date"]) == (3, "2026-08-03")
+    assert (series["entry"], series["stop"], series["tp1"], series["tp2"],
+            series["exit"]) == (100.0, 95.0, 120.0, None, 110.0)
+    assert series["stale"] is False
+    assert bars == [("AAPL", "daily")]
+
+
+def test_a_spot_metal_sparkline_is_null_without_a_load(seed, logged_in, bars):
+    seed(trades=[{**_trade("a" * 16), "ticker": "XAUUSD"}])
+    body = logged_in.get(f"{_SPARK}?date=2026-08-03").get_json()
+    assert body["series"] == {"a" * 16 + ":0": None}
+    assert bars == []
+
+
+def test_an_uncached_ticker_sparkline_is_null(seed, logged_in, bars):
+    seed(trades=[{**_trade("a" * 16), "ticker": "MSFT"}])
+    body = logged_in.get(f"{_SPARK}?date=2026-08-03").get_json()
+    assert body["series"] == {"a" * 16 + ":0": None}
+    assert bars == [("MSFT", "daily")]
+
+
+def test_sparklines_respect_the_strategy_filter(seed, logged_in, bars):
+    seed(trades=[
+        _trade("a" * 16, sources=("EMA20",)),
+        _trade("b" * 16, closed_at="2026-08-03T21:00:00+00:00", sources=("VWAP",)),
+    ])
+    body = logged_in.get(f"{_SPARK}?date=2026-08-03&strategy=VWAP").get_json()
+    assert list(body["series"]) == ["b" * 16 + ":0"]
+
+
+def test_sparklines_for_a_day_with_no_closes_are_an_empty_200(seed, logged_in, bars):
+    seed(trades=[_trade("a" * 16)])
+    response = logged_in.get(f"{_SPARK}?date=2026-08-09")
+    assert response.status_code == 200
+    body = response.get_json()
+    assert (body["series"], body["truncated"]) == ({}, False)
+    assert bars == []
+
+
+def test_sparklines_reject_a_bad_date_or_an_unknown_parameter(seed, logged_in, bars):
+    seed(trades=[_trade("a" * 16)])
+    assert_error(logged_in.get(_SPARK), "invalid", 400)
+    assert_error(logged_in.get(f"{_SPARK}?date=2026-08"), "invalid", 400)
+    assert_error(logged_in.get(f"{_SPARK}?date=2026-02-30"), "invalid", 400)
+    assert_error(logged_in.get(f"{_SPARK}?date=2026-08-03&tickr=AAPL"), "invalid", 400)

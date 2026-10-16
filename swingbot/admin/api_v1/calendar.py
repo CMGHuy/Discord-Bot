@@ -157,3 +157,41 @@ def calendar_pnl_day():
         "context": pc.day_context(rows, date),
         "breakdown": pc.day_breakdown(day_rows),
     })
+
+
+@api_v1.route("/calendar/pnl/day/sparklines", methods=["GET"])
+@require_auth
+def calendar_pnl_day_sparklines():
+    """Daily-close sparklines for one day's rows -- the day page's cards.
+
+    Separate from `/calendar/pnl/day` so the tiles render before any CSV is
+    parsed. Bars come only from `data_store.load_normalized` (the bounded,
+    process-cached `market_data/` reader): never a network fetch, never
+    `backtest_cache`, never `load_from_disk`. Cost per view: one more
+    `load_rows()` plus <= 50 cached frame loads; a short-TTL memo of
+    `load_rows` is the named follow-up if it ever shows in admin latency.
+
+    A day with no rows is an empty 200, not a 404: the page asks only after
+    the day route answered, and an empty map already means "nothing to draw".
+    """
+    from swingbot.core.analytics import day_sparklines as ds
+    from swingbot.core.analytics import pnl_calendar as pc
+    from swingbot.core.marketdata import data_store
+
+    _reject_unknown_params()
+    date = _date_param()
+    strategy, horizon = _filter_args()
+
+    rows = pc.filter_rows(pc.load_rows(), strategy=strategy, horizon=horizon)
+    day_rows = [r for r in rows if r["day"] == date]
+    # Looked up on the module at call time, so the loader is the one
+    # function a test (or a future cache layer) swaps.
+    series, truncated = ds.sparklines_payload(
+        day_rows, lambda ticker: data_store.load_normalized(ticker, "daily"))
+
+    return jsonify({
+        "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "date": date,
+        "truncated": truncated,
+        "series": series,
+    })
