@@ -1,5 +1,5 @@
-"""v162 AH15: the badge comes from the row measured on TRAINING_DATA_SOURCE,
-falls back to the yfinance row of the same key, and is never a blend."""
+"""v162 AH15: a live badge is pinned to the yfinance row of its key and ignores
+TRAINING_DATA_SOURCE (training-only); active_rows still follows the training source."""
 import dataclasses
 import json
 import logging
@@ -50,13 +50,12 @@ def test_yfinance_only_registry_answers_as_before(use_registry):
     assert (badge.status, badge.n, badge.win_rate, badge.data_source) == ("VALIDATED", 99, 81.0, "yfinance")
 
 
-def test_the_active_source_row_wins_whole(use_registry):
+def test_get_badge_ignores_training_source_and_uses_the_yfinance_row(use_registry):
     rows = [_row(n=10, win_rate=50.0, expectancy_r=0.05),
             _row(n=20, win_rate=60.0, expectancy_r=0.20, window="a", data_source="alpaca")]
     use_registry(rows, "alpaca")
     badge = registry.get_badge("strategy", "RSI")
-    assert (badge.n, badge.win_rate, badge.expectancy_r, badge.window, badge.data_source) == \
-        (20, 60.0, 0.20, "a", "alpaca")
+    assert (badge.n, badge.win_rate, badge.expectancy_r, badge.window, badge.data_source) ==         (10, 50.0, 0.05, "w", "yfinance")
 
 
 def test_yfinance_preference_ignores_alpaca_rows(use_registry):
@@ -65,12 +64,19 @@ def test_yfinance_preference_ignores_alpaca_rows(use_registry):
     assert (badge.status, badge.n) == ("WEAK", 0)            # the default badge, not the Alpaca row
 
 
-def test_each_chain_step_picks_its_own_source(use_registry):
-    rows = [_row(horizon="4w", n=11),                                  # exact horizon, yfinance only
-            _row(horizon=None, n=22, data_source="alpaca")]           # pooled, alpaca
+def test_each_chain_step_uses_the_yfinance_row_under_an_alpaca_preference(use_registry):
+    rows = [_row(horizon="4w", n=11, data_source="alpaca"),
+            _row(horizon="4w", n=12),
+            _row(horizon=None, n=22, data_source="alpaca"),
+            _row(horizon=None, n=23)]
     use_registry(rows, "alpaca")
-    assert registry.get_badge("strategy", "RSI", "4w").n == 11        # exact key wins first
-    assert registry.get_badge("strategy", "RSI", "2m").n == 22        # pooled step, alpaca row
+    assert registry.get_badge("strategy", "RSI", "4w").n == 12        # exact key, yfinance row
+    assert registry.get_badge("strategy", "RSI", "2m").n == 23        # pooled step, yfinance row
+
+
+def test_an_alpaca_only_key_gives_the_default_badge_even_when_preferred(use_registry):
+    use_registry([_row(n=20, data_source="alpaca")], "alpaca")
+    assert (registry.get_badge("strategy", "RSI").n) == 0
 
 
 def test_the_choice_is_logged_once_per_key(use_registry, caplog):
@@ -79,7 +85,7 @@ def test_the_choice_is_logged_once_per_key(use_registry, caplog):
         registry.get_badge("strategy", "RSI")
         registry.get_badge("strategy", "RSI")
     lines = [r.getMessage() for r in caplog.records if "registry badge" in r.getMessage()]
-    assert lines == ["registry badge strategy/RSI/None: using the yfinance row (preferred alpaca)"]
+    assert lines == ["registry badge strategy/RSI/None: using the yfinance row (preferred yfinance)"]
 
 
 # --- the committed (yfinance-only) registry answers exactly as before v162 ---------------
