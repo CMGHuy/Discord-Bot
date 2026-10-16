@@ -15,7 +15,7 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Closed 2026-10-16: CD1-CD14 done, merged to main, ui 1.25.0.
 
 ## Where to work
 
