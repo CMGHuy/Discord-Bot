@@ -253,7 +253,8 @@ def _is_yes(text: str) -> bool:
 
 
 def _is_playbook_screen(row: ScoutRow) -> bool:
-    return row.playbook_id is not None and row.route.strip().startswith("/screen")
+    return (row.cell_id is None and row.playbook_id is not None
+            and row.route.strip().startswith("/screen"))
 
 
 def _lower_bound(cell: dict | None) -> float | None:

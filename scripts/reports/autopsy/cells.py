@@ -33,6 +33,10 @@ def _r4(value):
     return None if value is None else round(float(value), 4)
 
 
+def _raw(value):
+    return None if value is None else float(value)
+
+
 @dataclass
 class CellStats:
     id: str
@@ -56,9 +60,9 @@ class CellStats:
             "id": self.id, "cut": self.cut, "value": self.value,
             "n": self.n, "weeks": self.weeks, "win_rate": _r4(self.win_rate),
             "net_expr": _r4(self.net_expr), "gross_expr": _r4(self.gross_expr),
-            "delta": _r4(self.delta),
-            "ci": None if self.ci is None else [_r4(self.ci[0]), _r4(self.ci[1])],
-            "p": _r4(self.p), "q": _r4(self.q), "thin": self.thin,
+            "delta": _raw(self.delta),
+            "ci": None if self.ci is None else [_raw(self.ci[0]), _raw(self.ci[1])],
+            "p": _raw(self.p), "q": _raw(self.q), "thin": self.thin,
             "bar_covered_n": self.bar_covered_n, "extra": dict(self.extra),
         }
 

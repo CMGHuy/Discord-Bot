@@ -139,8 +139,18 @@ def test_cell_json_has_the_contract_keys_in_order():
     out = cell.to_json()
     assert list(out) == ["id", "cut", "value", "n", "weeks", "win_rate", "net_expr",
                          "gross_expr", "delta", "ci", "p", "q", "thin", "bar_covered_n", "extra"]
-    assert out["ci"] == [-0.1235, 0.6543] and out["p"] == 0.0123 and out["q"] is None
+    assert out["ci"] == [-0.123456, 0.654321] and out["p"] == 0.012345678 and out["q"] is None
     assert _bare("a=2", None).to_json()["ci"] is None
+
+
+def test_cell_json_preserves_inference_precision_at_gate_boundaries():
+    cell = _bare("a=1", 0.10004)
+    cell.q, cell.ci, cell.delta = 0.10004, (0.00004, 0.123456), 0.061748
+    out = cell.to_json()
+    assert out["q"] == 0.10004
+    assert out["p"] == 0.10004
+    assert out["ci"] == [0.00004, 0.123456]
+    assert out["delta"] == 0.061748
 
 
 def test_tally_json():

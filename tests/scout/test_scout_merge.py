@@ -125,6 +125,15 @@ def test_a_playbook_screen_row_needs_no_cell():
     assert [r.idea for r in kept] == ["gap-and-hold"] and drops == []
 
 
+def test_a_playbook_reference_does_not_exempt_a_quoted_thin_cell():
+    evidence = ("cell weekday=Fri; N 12; weeks 5; Δ net ExpR 0.2 "
+                "[0.05, 0.35]; q 0.04 | playbook gap-and-hold")
+    row = _row(idea="gap-and-hold", evidence=evidence, route="/screen gap-and-hold")
+    kept, drops = _screen([row])
+    assert kept == []
+    assert "thin" in drops[0].reason
+
+
 def test_a_playbook_row_routed_to_prereg_still_needs_a_cell():
     row = _row(idea="gap-and-hold", evidence="playbook gap-and-hold", route="/prereg")
     _, drops = _screen([row])
