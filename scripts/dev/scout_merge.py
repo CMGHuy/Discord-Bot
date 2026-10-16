@@ -8,7 +8,10 @@ docs/claude/backtest-methodology.md. TS9 adds the drops against the autopsy JSON
 the ranking, the slate and the CLI. Deterministic; no model, no network."""
 from __future__ import annotations
 
+import argparse
+import datetime as dt
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -209,3 +212,202 @@ def closed_match(idea: str, names: Iterable[str]) -> str | None:
         if bare == norm or (not name.startswith(EXACT_ONLY) and _contains(tokens, bare.split("-"))):
             return bare
     return None
+
+
+# ---- v161 TS9: drops, pinning, ranking, slate, CLI ------------------------
+
+# ROOT, LEDGER and METHODOLOGY are TS8's; the slate goes beside the ledger.
+DEFAULT_OUT_DIR = ROOT / "docs" / "superpowers" / "results"
+
+EDGE_ORDER = ("expectancy", "harvest", "volume")
+
+# Spec boundary 5, repeated on every slate.
+HOLDOUT_REMINDER = (
+    "Every autopsy-derived row is exploratory, and the holdout is protected: the "
+    "live-book window above overlaps the frozen holdout (HOLDOUT_START 2026-01-01, "
+    "scripts/backtest/measure_v104.py). A row picked from this slate and sent to "
+    "/prereg must freeze its thresholds and score them on TRAIN/VALIDATION windows "
+    "that end before the autopsy window starts, and its pre-registration records "
+    "that the holdout is contaminated for that idea (never spent as confirmation). "
+    "A /screen route is unaffected (PIT S&P 500 2010-2019 does not overlap)."
+)
+
+# Spec boundaries 1 and 2.
+BOUNDARY_NOTE = (
+    "A slate row is a hypothesis. No gate moves: it never edits code, config, "
+    "thresholds or live alerts, and never licenses a re-run of a closed "
+    "pre-registration. Every entry or filter idea still needs a `SCREEN-PASS` "
+    "row before its spec."
+)
+
+
+def _is_yes(text: str) -> bool:
+    return text.strip().lower() == "yes"
+
+
+def _is_playbook_screen(row: ScoutRow) -> bool:
+    return row.playbook_id is not None and row.route.strip().startswith("/screen")
+
+
+def _lower_bound(cell: dict | None) -> float | None:
+    if not cell or not cell.get("ci"):
+        return None
+    return float(cell["ci"][0])
+
+
+def _signed(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:+.3f}"
+
+
+def _identity_reason(row: ScoutRow, seen: dict[str, str], closed: set[str],
+                     ledger: dict[str, str]) -> str | None:
+    """Duplicate, ledger, closed-table and edge checks: they need no cell."""
+    key = normalise(row.idea)
+    if key in seen:
+        return f"duplicate of the {seen[key]} row with the same idea"
+    if key in ledger:
+        return f"matches ledger id {ledger[key]}"
+    hit = closed_match(row.idea, closed)
+    if hit is not None:
+        return f"matches closed pre-registration {hit}"
+    if row.edge.strip() not in EDGE_ORDER:
+        return f"edge {row.edge.strip()!r} is not one of {', '.join(EDGE_ORDER)}"
+    return None
+
+
+def _cell_reason(row: ScoutRow, cells: dict[str, dict]) -> str | None:
+    """Evidence checks against the autopsy JSON, the only source of figures."""
+    cid = row.cell_id
+    if cid is None:
+        return "cites no autopsy cell and is not a playbook /screen row"
+    cell = cells.get(cid)
+    if cell is None:
+        return f"cell {cid} is not in the autopsy JSON (invented figure)"
+    if cell.get("thin"):
+        return f"cell {cid} is thin (N {cell['n']}, {cell['weeks']} weeks)"
+    if row.quoted_n is not None and row.quoted_n != cell["n"]:
+        return f"quoted N {row.quoted_n} differs from the autopsy N {cell['n']} for {cid} (invented figure)"
+    if not _is_yes(row.exploratory):
+        return "autopsy evidence must be marked exploratory: yes (spec boundary 5)"
+    lower = _lower_bound(cell)
+    if lower is None or lower <= 0:
+        return f"cell {cid} Δ lower bound {_signed(lower)} is at or below zero"
+    return None
+
+
+def screen_rows(rows: list[ScoutRow], *, closed: set[str], ledger: dict[str, str],
+                cells: dict[str, dict]) -> tuple[list[ScoutRow], list[Drop]]:
+    """Drop closed, duplicate and unsupported rows; every drop keeps its reason."""
+    kept: list[ScoutRow] = []
+    drops: list[Drop] = []
+    seen: dict[str, str] = {}
+    for row in rows:
+        reason = _identity_reason(row, seen, closed, ledger)
+        if reason is None and not _is_playbook_screen(row):
+            reason = _cell_reason(row, cells)
+        if reason is not None:
+            drops.append(Drop(idea=row.idea, role=row.role, reason=reason))
+            continue
+        seen[normalise(row.idea)] = row.role
+        kept.append(row)
+    return kept, drops
+
+
+def _rank_key(row: ScoutRow, cells: dict[str, dict]) -> tuple:
+    cell = cells.get(row.cell_id) if row.cell_id else None
+    lower = _lower_bound(cell)
+    edge = row.edge.strip()
+    return (
+        not _is_yes(row.divergence),                       # divergence pinned first
+        EDGE_ORDER.index(edge) if edge in EDGE_ORDER else len(EDGE_ORDER),
+        row.manual_actions.strip().lower() != "none",      # manual action ranks down
+        -lower if lower is not None else math.inf,         # higher bound first
+        -(cell["n"] if cell else 0),                       # then larger N
+        normalise(row.idea),                               # deterministic tie-break
+    )
+
+
+def rank(rows: list[ScoutRow], cells: dict[str, dict]) -> list[ScoutRow]:
+    return sorted(rows, key=lambda row: _rank_key(row, cells))
+
+
+def _table_text(text: str) -> str:
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def _header_lines(header: dict, autopsy_path: str) -> list[str]:
+    window = header.get("window") or ["?", "?"]
+    return [
+        f"**Autopsy:** `{autopsy_path}`",
+        f"**Window:** {window[0]} to {window[1]} · **N:** {header.get('n')} · "
+        f"**Cells tested:** {header.get('cells_tested')} · "
+        f"**Net of frictions:** {header.get('net_of_frictions')}",
+    ]
+
+
+def _row_block(position: int, row: ScoutRow) -> list[str]:
+    pin = " — pinned: live diverges from the plan" if _is_yes(row.divergence) else ""
+    lines = [f"### {position}. {row.idea} ({row.role}){pin}", ""]
+    lines += [f"- {name}: {getattr(row, name)}" for name in ROW_FIELDS if name != "idea"]
+    return lines + [""]
+
+
+def _drop_lines(drops: list[Drop]) -> list[str]:
+    if not drops:
+        return ["None."]
+    lines = ["| Idea | Role | Reason |", "|---|---|---|"]
+    lines += [f"| {_table_text(d.idea)} | {_table_text(d.role)} | {_table_text(d.reason)} |"
+              for d in drops]
+    return lines
+
+
+def render_slate(ranked: list[ScoutRow], drops: list[Drop], header: dict, *,
+                 date: str, autopsy_path: str) -> str:
+    lines = [f"# Scout slate {date}", "", *_header_lines(header, autopsy_path), "",
+             f"> {HOLDOUT_REMINDER}", "", BOUNDARY_NOTE, "", "## Ranked", ""]
+    if not ranked:
+        lines += ["No row survived the merge.", ""]
+    for position, row in enumerate(ranked, start=1):
+        lines += _row_block(position, row)
+    lines += ["## Dropped", "", *_drop_lines(drops)]
+    return "\n".join(lines) + "\n"
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Merge scout role outputs into a ranked slate (v161).")
+    ap.add_argument("role_output", type=Path, help="role outputs grouped under '## role: <name>' lines")
+    ap.add_argument("--autopsy", type=Path, required=True, help="the *-book-autopsy.json of the same run")
+    ap.add_argument("--ledger", type=Path, default=LEDGER)
+    ap.add_argument("--methodology", type=Path, default=METHODOLOGY)
+    ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
+    ap.add_argument("--date", default=dt.date.today().isoformat())
+    return ap.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    report = json.loads(args.autopsy.read_text(encoding="utf-8"))
+    cells = {cell["id"]: cell for cell in report.get("cells", [])}
+    rows, parse_drops = parse_rows(args.role_output.read_text(encoding="utf-8"))
+    kept, drops = screen_rows(rows, closed=closed_names(args.methodology),
+                              ledger=ledger_names(args.ledger), cells=cells)
+    ranked = rank(kept, cells)
+    all_drops = parse_drops + drops
+    slate = render_slate(ranked, all_drops, report.get("header", {}), date=args.date,
+                         autopsy_path=_display_path(args.autopsy))
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    out = args.out_dir / f"{args.date}-scout-slate.md"
+    out.write_text(slate, encoding="utf-8", newline="\n")
+    print(f"scout_merge: {len(ranked)} ranked, {len(all_drops)} dropped -> {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
