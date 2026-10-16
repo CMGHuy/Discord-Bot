@@ -1175,6 +1175,9 @@ def test_trailing_runner_bar_spans_the_stop_to_the_best_price(seed, logged_in, p
     assert row["progress_pct"] == pytest.approx(50.0)
     assert row["progress_band"] == "neutral"
     assert row["runner_best"] == 52.0
+    # P&L vs the 60.67 short fill at the bar's two ends.
+    assert row["stop_pnl_pct"] == pytest.approx(2.75, abs=0.01)
+    assert row["best_pnl_pct"] == pytest.approx(14.3, abs=0.01)
     assert 0.6 <= row["blink_seconds"] <= 2.2
 
 

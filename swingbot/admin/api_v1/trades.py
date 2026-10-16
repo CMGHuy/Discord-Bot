@@ -987,10 +987,23 @@ def _trailing_status_fields(row: dict, price: float | None) -> dict:
              else "Near best price" if band == "toward_target" else "Trailing")
     # Pulse faster the nearer the stop, same urgency scale as trade_proximity.
     urgency = max(0.0, 1.0 - pos / 50.0)
-    return {"progress_pct": round(pos, 1),
-            "entry_pct": max(0.0, min(100.0, round(ent, 1))),
-            "progress_band": band, "blink_seconds": round(2.2 - 1.6 * urgency, 2),
-            "status_label": label}
+    out = {"progress_pct": round(pos, 1),
+           "entry_pct": max(0.0, min(100.0, round(ent, 1))),
+           "progress_band": band, "blink_seconds": round(2.2 - 1.6 * urgency, 2),
+           "status_label": label}
+    out.update(_trailing_pnl_ends(row, stop, best, is_bull))
+    return out
+
+
+def _trailing_pnl_ends(row: dict, stop: float, best: float, is_bull: bool) -> dict:
+    """P&L % (vs the original fill) at the bar's two ends: the trailing stop
+    being hit (0%) and the best price since TP1 (100%)."""
+    entry = row.get("entry")
+    if not isinstance(entry, (int, float)) or not entry:
+        return {"stop_pnl_pct": None, "best_pnl_pct": None}
+    sign = 1 if is_bull else -1
+    return {"stop_pnl_pct": round((stop - entry) * sign / entry * 100, 2),
+            "best_pnl_pct": round((best - entry) * sign / entry * 100, 2)}
 
 
 def _attach_status_fields(rows: list[dict]) -> None:
