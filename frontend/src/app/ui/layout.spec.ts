@@ -74,13 +74,12 @@ describe('sb-tab-bar overflow (v80 D4)', () => {
     expect(tabs[1].getAttribute('aria-label')).toBeNull();
   });
 
-  it('keeps the label at every width and drops only the icon on a phone, via CSS', () => {
-    // Icon-only tabs ("glyph + 11" x5) were unreadable on a phone: the word
-    // is the content there. The label carries the count already.
+  it('swaps the label for icon + count on a phone, via CSS', () => {
     const block = SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/);
     expect(block).not.toBeNull();
-    expect(block![1]).toContain('.tab.iconed sb-icon { display: none; }');
-    expect(SOURCE).not.toContain('.tab.iconed .label { display: none; }');
+    expect(block![1]).toContain('.tab.iconed .label { display: none; }');
+    expect(block![1]).toContain('.tab.iconed .count { display: inline; }');
+    expect(block![1]).not.toContain('sb-icon { display: none; }');
   });
 
   it('renders "· N" next to the icon when a count is given, hidden by default', () => {
@@ -235,8 +234,8 @@ describe('sb-panel force-expand guard', () => {
 /* -- v95 C4 -- tab counts survive icon-only ------------------------------- */
 
 describe('sb-tab-bar narrow widths', () => {
-  it('never hides the label, so the count inside it is never lost', () => {
-    expect(SOURCE).not.toMatch(/\.tab\.iconed \.label \{ display: none; \}/);
-    expect(SOURCE).not.toMatch(/\.tab\.iconed \.count \{ display: inline; \}/);
+  it('shows the count beside the icon once the label is hidden', () => {
+    expect(SOURCE).toMatch(/\.tab\.iconed \.label \{ display: none; \}/);
+    expect(SOURCE).toMatch(/\.tab\.iconed \.count \{ display: inline; \}/);
   });
 });

@@ -225,14 +225,13 @@ export interface Tab {
     .tab:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .active { color: var(--text); border-bottom-color: var(--accent); }
     .count { display: none; }
-    /* An iconed tab keeps its words at every width. It used to drop the
-       label below 1024 and show "icon + 11", which on a phone left five
-       glyphs nobody could tell apart. The label already carries the count
-       ("Open 11"), so what goes instead is the icon, and only where the
-       strip would otherwise have to scroll to fit five labels -- on a phone
-       the word is the content and the glyph is decoration. */
+    /* On a phone an iconed tab swaps its words for the glyph plus "· N"
+       (the label carried the count, so the count is shown separately). The
+       label stays as the tab's accessible name via title/aria-label. Tablet
+       and desktop keep icon + words. */
     @media (max-width: 639px) {
-      .tab.iconed sb-icon { display: none; }
+      .tab.iconed .label { display: none; }
+      .tab.iconed .count { display: inline; }
       .tab.iconed { padding: var(--space-8) var(--space-10); }
     }
     .strip::before, .strip::after {
