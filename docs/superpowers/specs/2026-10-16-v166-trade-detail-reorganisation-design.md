@@ -171,6 +171,30 @@ One grid rule replaces `.panels`:
 
 The chart itself, the Trades list, the plan detail page (`workspaces/plans/plan-detail.ts`), any store write path, and any change to a shared `why/` component. The only backend change is publishing `risk_stop`.
 
+## Amendments from the plan brief
+
+These override the sections above where they disagree (brief: `.superpowers/briefs/2026-10-16-v166-trade-detail-reorganisation.md`).
+
+1. **Breakpoints use the allowed set.** `ui/breakpoint-guard.spec.ts` allows only 639/640, 1023/1024, 1439/1440 and 1919/1920, including inside `@container`. So the grid is **3 columns at container width ≥ 1024 px, 2 at 640–1023 px, and 1 below 640 px**, and the `dl` two-column rule applies at ≥ 640 px. No EXEMPT entry, and no range syntax used to slip past the guard. (At a 1440 px viewport the content pane is about 1370 px → 3 columns. At 1024 px it is about 960 px → 2 columns. At 768 px → 2 columns. At 390 px → 1 column.)
+2. **PARTIAL figures are about the open runner.** On a PARTIAL row:
+   - `pnl_pct` and `r_multiple` are the runner's per-share move against the original entry and stop;
+   - `realized_pnl_amount` covers the open shares only;
+   - `shares` is the open count.
+
+   So on PARTIAL the Unrealised tile is labelled "**open shares**" (not "on position"), and Banked stays its own tile, so neither figure is added to the other. "$ at risk" is `shares × |entry − risk_stop|`; on PARTIAL it is labelled "open shares, at original stop". Risk per share everywhere uses `risk_stop` when present (today's `riskPerShare()` uses `stop_loss`, which is the trailing stop on PARTIAL), else `stop_loss`.
+3. **Card stretching.** `sb-panel` has no host display or height, so row-levelling uses the existing call-site precedent: a scoped `:host ::ng-deep .cell .panel { height: 100% }` rule, as in `calendar.ts:355-367`. `sb-panel` itself is not edited.
+4. **New trade-page components instead of reusing ones that don't fit.**
+   - `SizingPanel` always prints the snapshot sentence, so the Position card is new.
+   - `OutcomePath` prints raw leg reasons and its own Scale-out panel, so the Outcome card is new: label-mapped legs plus a timeline.
+   - `entryTypeWord` says "At market", so the Order wording comes from a new trade-page helper.
+
+   `SizingPanel`, `OutcomePath` and `LevelsBlock` stay as they are for the plan page; the trade page stops importing them. `IfItGetsThere` is still reused unchanged for the Next block.
+5. **`risk_stop` is optional in TypeScript** (`risk_stop?: number | null`, following `cohort_label?`), so the ~10 typed `TradeRow` literals keep compiling. In Python it is published by renaming the transient key, with no new branch in `_row_from_plan` (already complexity 15, which must not get worse). `TRADE_ROW` in `tests/admin/test_api_v1_trades.py:37` gains `"risk_stop": NULLABLE_NUMBER`.
+6. **Drift check details.** It compares the label table against `EXIT_REASONS` minus `"other"` (a bucket, not a reason) plus `_EXIT_REASON_ALIASES` keys. `stall_exit` is asserted separately, because the backend lists it in neither. The label lookup lower-cases and trims its key, since fixtures use `'TP1'`.
+7. **Badge chip vs the cohort tests.** The six cohort-chip tests select `.tags > sb-chip`, and the fixture carries `badge: 'VALIDATED'`. The badge chip renders as `sb-quality-chip` (the tier/Lv precedent), so those selectors keep meaning "the cohort chip".
+8. **Spec test scope.** 24 of the 40 cases in `trade-detail.spec.ts` mount `plan` or `live`; the brief lists each with its fate. The harness uses the real `TradeDetailStore` with `HttpTestingController`, and new cases follow it.
+9. **Frontend test command:** `npm --prefix frontend exec -- ng test --watch=false --include <spec>` (the frontend is not in `testrun.py`). The new pytest file under `tests/admin/` joins suite `admin` without a toml edit.
+
 ## Panel review
 
 Staff-engineer (10 ADVISORY):
