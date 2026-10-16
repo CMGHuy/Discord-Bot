@@ -74,7 +74,7 @@ describe('the panel primitives paint the panel tokens (v167 §3)', () => {
 
   it('sb-chart-container puts .sb-panel on its frame and paints .frame from the tokens', () => {
     const source = ui('chart-container.ts');
-    expect(source).toContain('<figure class="frame sb-panel"');
+    expect(source).toContain('<figure class="frame sb-panel" [style.height.px]="height()">');
     expectPanelRule(source.match(/\.frame\s*\{[^}]*\}/)![0]);
   });
 });
