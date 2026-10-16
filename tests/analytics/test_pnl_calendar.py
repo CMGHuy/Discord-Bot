@@ -543,3 +543,125 @@ def test_return_pct(entry, exit_price, direction, pct):
 ])
 def test_return_pct_is_none_when_it_cannot_be_signed(entry, exit_price, direction):
     assert return_pct(entry, exit_price, direction) is None
+
+
+# --- v165 D2: day context -------------------------------------------------
+#
+# Rows are built directly: day_context reads only day / pnl_amount /
+# r_multiple / outcome, exactly what day_summary (the cell rule) reads.
+
+import datetime as _dt
+
+from swingbot.core.analytics.pnl_calendar import PERCENTILE_MIN_DAYS, day_context
+
+_NULL_CONTEXT_DELTAS = {"pnl_amount": None, "r": None}
+
+
+def _net_row(day, pnl, r=None):
+    return {"day": day, "pnl_amount": pnl, "r_multiple": r,
+            "outcome": "win" if (pnl or 0) > 0 else "loss"}
+
+
+def _other_days(values, start="2026-05-01"):
+    """One single-row day per value, on consecutive calendar dates from
+    `start` -- weekday is irrelevant to the percentile."""
+    first = _dt.date.fromisoformat(start)
+    return [_net_row((first + _dt.timedelta(days=i)).isoformat(), value)
+            for i, value in enumerate(values)]
+
+
+def test_the_percentile_floor_is_twenty_other_days():
+    assert PERCENTILE_MIN_DAYS == 20
+
+
+def test_percentile_counts_ties_half_against_the_other_days_only():
+    # 20 other days: 10 at -10, 5 at +5, 5 at +20. This day: +5.
+    # Below: 10, ties: 5 -> (10 + 2.5) / 20 * 100 = 62.5.
+    # Were the day in its own set it would be (10 + 3) / 21 * 100 = 61.9.
+    others = _other_days([-10.0] * 10 + [5.0] * 5 + [20.0] * 5)
+    context = day_context(others + [_net_row("2026-08-10", 5.0)], "2026-08-10")
+    assert context["percentile"] == 62.5
+    assert context["history_days"] == 20
+
+
+def test_percentile_is_null_below_twenty_other_days():
+    nineteen = _other_days([1.0] * 19)
+    context = day_context(nineteen + [_net_row("2026-08-10", 5.0)], "2026-08-10")
+    assert context["percentile"] is None
+    assert context["history_days"] == 19
+
+    twenty = _other_days([1.0] * 20)
+    context = day_context(twenty + [_net_row("2026-08-10", 5.0)], "2026-08-10")
+    assert context["percentile"] == 100.0
+
+
+def test_null_net_days_are_left_out_of_the_reference_set():
+    others = _other_days([-10.0] * 10 + [5.0] * 5 + [20.0] * 5)
+    unknown = [_net_row("2026-07-01", None, 3.0), _net_row("2026-07-02", None),
+               _net_row("2026-07-03", None)]
+    context = day_context(others + unknown + [_net_row("2026-08-10", 5.0)], "2026-08-10")
+    # Same as without them: never counted as a $0 day.
+    assert context["percentile"] == 62.5
+    assert context["history_days"] == 20
+
+
+def test_vs_average_day_and_vs_same_weekday_compare_day_nets():
+    # 2026-08-10 and 2026-08-03 and 2026-07-27 are Mondays, 08-04 a Tuesday,
+    # 08-05 a Wednesday.
+    rows = [
+        _net_row("2026-08-10", 40.0, 2.0),            # this day
+        _net_row("2026-08-03", 10.0, 1.0),
+        _net_row("2026-07-27", 30.0, None),           # null R: out of R means only
+        _net_row("2026-08-04", -100.0, -5.0),
+        _net_row("2026-08-05", None, 9.0),            # null P&L: out of everything
+    ]
+    context = day_context(rows, "2026-08-10")
+    assert context["history_days"] == 3
+    assert context["percentile"] is None              # 3 < 20
+    # P&L mean of the 3 reference days: (10 + 30 - 100) / 3 = -20 -> 40 - -20.
+    # R mean of the 2 with an R: (1 - 5) / 2 = -2 -> 2 - -2.
+    assert context["vs_avg_day"] == {"pnl_amount": 60.0, "r": 4.0}
+    # Mondays: P&L mean (10 + 30) / 2 = 20; R mean over 08-03 only = 1.
+    assert context["vs_weekday_avg"] == {"pnl_amount": 20.0, "r": 1.0}
+
+
+def test_the_day_net_is_the_calendar_cells_rule():
+    # Partial-null day: the cell sums the computable rows (50, 1.0).
+    rows = [_net_row("2026-08-10", 50.0, 1.0), _net_row("2026-08-10", None, None),
+            _net_row("2026-08-03", 10.0, 0.5)]
+    context = day_context(rows, "2026-08-10")
+    assert context["vs_avg_day"] == {"pnl_amount": 40.0, "r": 0.5}
+    assert context["vs_weekday_avg"] == {"pnl_amount": 40.0, "r": 0.5}
+
+
+def test_deltas_are_rounded_to_two_places():
+    rows = [_net_row("2026-08-10", 10.0, 1.0), _net_row("2026-08-03", 1.0, 0.1),
+            _net_row("2026-08-04", 2.0, 0.2), _net_row("2026-08-05", 2.0, 0.2)]
+    context = day_context(rows, "2026-08-10")
+    # mean P&L 5/3 = 1.6667 -> 10 - 1.6667 = 8.3333; mean R 0.5/3 -> 0.8333.
+    assert context["vs_avg_day"] == {"pnl_amount": 8.33, "r": 0.83}
+
+
+def test_a_day_with_a_null_net_gets_null_context():
+    others = _other_days([10.0] * 25)
+    context = day_context(others + [_net_row("2026-08-10", None, 1.0)], "2026-08-10")
+    assert context == {
+        "percentile": None, "history_days": 25,
+        "vs_avg_day": _NULL_CONTEXT_DELTAS, "vs_weekday_avg": _NULL_CONTEXT_DELTAS,
+    }
+
+
+def test_a_date_with_no_rows_and_an_empty_book_are_null_not_errors():
+    assert day_context([], "2026-08-03") == {
+        "percentile": None, "history_days": 0,
+        "vs_avg_day": _NULL_CONTEXT_DELTAS, "vs_weekday_avg": _NULL_CONTEXT_DELTAS,
+    }
+    only_others = _other_days([10.0] * 3)
+    assert day_context(only_others, "2026-08-03")["vs_avg_day"] == _NULL_CONTEXT_DELTAS
+
+
+def test_a_weekday_with_no_other_days_has_a_null_weekday_delta():
+    rows = [_net_row("2026-08-10", 40.0, 2.0), _net_row("2026-08-04", 10.0, 1.0)]
+    context = day_context(rows, "2026-08-10")
+    assert context["vs_avg_day"] == {"pnl_amount": 30.0, "r": 1.0}
+    assert context["vs_weekday_avg"] == _NULL_CONTEXT_DELTAS

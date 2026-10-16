@@ -443,3 +443,79 @@ def day_streak(rows: list[dict]) -> dict:
             break
         days += 1
     return {"direction": direction, "days": days}
+
+
+# --- v165 D2: how one day compares with the rest of the book ---------------
+
+# Below this many other trading days a percentile is not shown at all: one
+# step of a 10-day percentile is 10 points, which reads as precision it is
+# not. The page bands it below 60 (CD8); the server only ever returns the
+# exact figure or None.
+PERCENTILE_MIN_DAYS = 20
+
+
+def _weekday_of(day: str) -> int | None:
+    try:
+        return _dt.date.fromisoformat(day).weekday()
+    except (TypeError, ValueError):
+        return None
+
+
+def _percentile(value: float, others: list[float]) -> float | None:
+    """Share of `others` strictly below `value`, ties counting half, x 100."""
+    if len(others) < PERCENTILE_MIN_DAYS:
+        return None
+    below = sum(1 for other in others if other < value)
+    ties = sum(1 for other in others if other == value)
+    return round((below + 0.5 * ties) / len(others) * 100, 1)
+
+
+def _delta(value: float | None, others: list[float]) -> float | None:
+    if value is None or not others:
+        return None
+    return round(value - sum(others) / len(others), 2)
+
+
+def _deltas(own: dict, reference: list[dict]) -> dict:
+    """This day's net minus the reference days' mean, P&L and R apiece.
+
+    `reference` already excludes null-P&L days; a day with a null net R is
+    dropped from the R mean only.
+    """
+    pnl = [s["net_pnl_amount"] for s in reference]
+    r = [s["net_r"] for s in reference if s["net_r"] is not None]
+    return {"pnl_amount": _delta(own["net_pnl_amount"], pnl),
+            "r": _delta(own["net_r"], r)}
+
+
+def day_context(rows: list[dict], date: str) -> dict:
+    """How `date` sits against every other trading day under the filter.
+
+    `rows` is the filtered ALL-HISTORY row set -- the same scope the weekday
+    table uses -- and each day's net is `day_summary`'s, the calendar cell's
+    own rule, so this can never disagree with the grid.
+
+    The reference set is the OTHER trading days with a known net P&L: a day
+    in its own reference set inflates its percentile, and a null-dollar day
+    counted as $0 drags every mean toward flat. When this day's own dollars
+    are unknown the whole context is None -- there is nothing to compare.
+    """
+    buckets = bucket_by_day(rows)
+    own = day_summary(date, buckets.get(date, []))
+    reference = [day_summary(day, group) for day, group in buckets.items()
+                 if day != date]
+    reference = [s for s in reference if s["net_pnl_amount"] is not None]
+    weekday = _weekday_of(date)
+    same_weekday = [s for s in reference
+                    if weekday is not None and _weekday_of(s["date"]) == weekday]
+    if own["net_pnl_amount"] is None:
+        nothing = {"pnl_amount": None, "r": None}
+        return {"percentile": None, "history_days": len(reference),
+                "vs_avg_day": dict(nothing), "vs_weekday_avg": dict(nothing)}
+    return {
+        "percentile": _percentile(own["net_pnl_amount"],
+                                  [s["net_pnl_amount"] for s in reference]),
+        "history_days": len(reference),
+        "vs_avg_day": _deltas(own, reference),
+        "vs_weekday_avg": _deltas(own, same_weekday),
+    }
