@@ -519,3 +519,51 @@ def day_context(rows: list[dict], date: str) -> dict:
         "vs_avg_day": _deltas(own, reference),
         "vs_weekday_avg": _deltas(own, same_weekday),
     }
+
+
+# --- v165 D3: what drove one day --------------------------------------------
+
+# The four ways the day page splits a day. Order is the page's tab order.
+BREAKDOWN_DIMENSIONS = ("strategy", "horizon", "direction", "exit_reason")
+
+
+def _breakdown_group(key: str, group: list[dict]) -> dict:
+    """One breakdown row: count, summed dollars and R, win rate.
+
+    Same rules as the day's tiles -- `_sum_or_none` (all-null is None, not
+    $0) and `metrics.win_rate` over outcomes (no decided row is None, not
+    0%) -- so the rows of a dimension add back up to the tiles.
+    """
+    return {
+        "key": key,
+        "n": len(group),
+        "pnl_amount": _sum_or_none([r["pnl_amount"] for r in group]),
+        "r": _sum_or_none([r["r_multiple"] for r in group]),
+        "win_rate": metrics.win_rate([{"status": r["outcome"]} for r in group]),
+    }
+
+
+def _breakdown_order(group: dict) -> tuple:
+    """P&L descending, unknown P&L last, then key -- deterministic on ties."""
+    pnl = group["pnl_amount"]
+    return (pnl is None, -(pnl or 0.0), group["key"])
+
+
+def day_breakdown(rows: list[dict]) -> dict[str, list[dict]]:
+    """The day split by strategy, horizon, direction and exit reason.
+
+    `rows` must be exactly the day's `trades` list, so each dimension's `n`
+    sums to `trade_count` and its non-null P&L / R to the tiles' totals. Not
+    `/analytics/by-dimension`: that scopes by trade, and on a scale-out day
+    it would disagree with these per-leg rows. A missing key is "unknown".
+    """
+    out: dict[str, list[dict]] = {}
+    for dimension in BREAKDOWN_DIMENSIONS:
+        groups: dict[str, list[dict]] = {}
+        for row in rows:
+            groups.setdefault(row.get(dimension) or "unknown", []).append(row)
+        out[dimension] = sorted(
+            (_breakdown_group(key, group) for key, group in groups.items()),
+            key=_breakdown_order,
+        )
+    return out

@@ -665,3 +665,88 @@ def test_a_weekday_with_no_other_days_has_a_null_weekday_delta():
     context = day_context(rows, "2026-08-10")
     assert context["vs_avg_day"] == {"pnl_amount": 30.0, "r": 1.0}
     assert context["vs_weekday_avg"] == _NULL_CONTEXT_DELTAS
+
+
+# --- v165 D3: what drove the day ------------------------------------------
+
+from swingbot.core.analytics.pnl_calendar import (BREAKDOWN_DIMENSIONS,
+                                                  _sum_or_none, day_breakdown)
+
+
+def _drove_row(strategy, horizon, direction, exit_reason, pnl, r, outcome):
+    return {"strategy": strategy, "horizon": horizon, "direction": direction,
+            "exit_reason": exit_reason, "pnl_amount": pnl, "r_multiple": r,
+            "outcome": outcome}
+
+
+def _drove_rows():
+    """Four rows on one day. Hand-computed groups are in the tests below."""
+    return [
+        _drove_row("EMA20", "4w", "bullish", "tp1", 50.0, 2.0, "win"),
+        _drove_row("EMA20", "3m", "bullish", "stop", -20.0, -0.8, "loss"),
+        _drove_row("VWAP", "4w", "bearish", "tp1", 30.0, 1.0, "win"),
+        # A manual close with no dollar figure and no R: counted, not $0.
+        _drove_row("VWAP", None, "bearish", "other", None, None, "closed"),
+    ]
+
+
+def test_breakdown_has_exactly_the_four_dimensions():
+    assert BREAKDOWN_DIMENSIONS == ("strategy", "horizon", "direction", "exit_reason")
+    assert tuple(day_breakdown(_drove_rows())) == BREAKDOWN_DIMENSIONS
+
+
+def test_breakdown_groups_sum_and_rate_each_dimension():
+    breakdown = day_breakdown(_drove_rows())
+    # EMA20: +50 -20 = +30, R 2.0 - 0.8 = 1.2, 1 win of 2 decided.
+    # VWAP: +30 (the null row adds nothing), R 1.0, 1 win of 1 decided.
+    # Equal P&L -> key order.
+    assert breakdown["strategy"] == [
+        {"key": "EMA20", "n": 2, "pnl_amount": 30.0, "r": 1.2, "win_rate": 50.0},
+        {"key": "VWAP", "n": 2, "pnl_amount": 30.0, "r": 1.0, "win_rate": 100.0},
+    ]
+    assert breakdown["direction"] == [
+        {"key": "bearish", "n": 2, "pnl_amount": 30.0, "r": 1.0, "win_rate": 100.0},
+        {"key": "bullish", "n": 2, "pnl_amount": 30.0, "r": 1.2, "win_rate": 50.0},
+    ]
+
+
+def test_a_null_key_is_unknown_and_an_all_null_group_sorts_last():
+    breakdown = day_breakdown(_drove_rows())
+    assert breakdown["horizon"] == [
+        {"key": "4w", "n": 2, "pnl_amount": 80.0, "r": 3.0, "win_rate": 100.0},
+        {"key": "3m", "n": 1, "pnl_amount": -20.0, "r": -0.8, "win_rate": 0.0},
+        # No decided row -> win_rate None, not 0; no dollars -> None, not 0.
+        {"key": "unknown", "n": 1, "pnl_amount": None, "r": None, "win_rate": None},
+    ]
+    assert breakdown["exit_reason"] == [
+        {"key": "tp1", "n": 2, "pnl_amount": 80.0, "r": 3.0, "win_rate": 100.0},
+        {"key": "stop", "n": 1, "pnl_amount": -20.0, "r": -0.8, "win_rate": 0.0},
+        {"key": "other", "n": 1, "pnl_amount": None, "r": None, "win_rate": None},
+    ]
+
+
+def test_every_dimension_sums_back_to_the_days_totals():
+    rows = _drove_rows()
+    total_pnl = _sum_or_none([r["pnl_amount"] for r in rows])
+    total_r = _sum_or_none([r["r_multiple"] for r in rows])
+    for dimension, groups in day_breakdown(rows).items():
+        assert sum(g["n"] for g in groups) == len(rows), dimension
+        assert sum(g["pnl_amount"] for g in groups
+                   if g["pnl_amount"] is not None) == pytest.approx(total_pnl), dimension
+        assert sum(g["r"] for g in groups if g["r"] is not None) == pytest.approx(total_r), dimension
+
+
+def test_an_empty_key_string_is_unknown_too():
+    rows = [_drove_row("", "4w", "bullish", "tp1", 10.0, 1.0, "win")]
+    assert day_breakdown(rows)["strategy"][0]["key"] == "unknown"
+
+
+def test_an_empty_day_breaks_down_into_empty_lists():
+    assert day_breakdown([]) == {d: [] for d in BREAKDOWN_DIMENSIONS}
+
+
+def test_breakdown_reads_the_d1_exit_reason_of_joined_rows():
+    trade = _scaled_trade("a" * 16, legs=({**_TP1, "reason": "tp1"},
+                                          {**_RUNNER, "reason": "runner_trail"}))
+    keys = {g["key"] for g in day_breakdown(joined_rows([trade], []))["exit_reason"]}
+    assert keys == {"tp1", "runner_trail"}
