@@ -72,11 +72,26 @@ interpreting any backtest, grid, or validation result.
   Answers "does this entry predict anything, after costs, beyond its own
   trend state?" before anyone writes a spec. Every event on the
   point-in-time S&P 500 (2010-01-01..2019-12-31, `data/backtest_cache_ext`)
-  races one fixed trade — entry next open, stop 1.5 × ATR14, target
-  3 × ATR14, gaps through either level filled at the open, an idea-specific
-  time cap, 5 bps slippage a side plus commission — against K = 20 random
-  non-event bars from the same ticker, month and trend state
-  (`close > SMA200`). Pass rule, all four: paired ΔExpR ≥ +0.10R; lower 95%
+  races the idea's one frozen **race shape** — `fixed` (v140: entry next
+  open, stop 1.5 × ATR14, target 3 × ATR14, gaps through either level
+  filled at the open, an idea-specific time cap) or `trail` (v163: same
+  entry and 1.5 × ATR14 initial stop, no target, a chandelier stop
+  3 × ATR14[t] under the highest high of the bars before the one tested,
+  never lowered, ATR frozen at the event bar, a gap through the stop filled
+  at the open, cap ≥ 60 bars; R always in the initial 1R) — with 5 bps
+  slippage a side plus commission, against K = 20 random non-event bars
+  from the same ticker, month and trend state (`close > SMA200`), raced
+  the same shape. **One shape per idea**: an idea module's `RACE` constant
+  (default `fixed`) is part of its frozen definition, pinned in
+  `tests/backtesting/screen/test_ideas_registry.py`; a changed shape is a
+  new idea with a new name, and the trigger of any closed idea never
+  returns under the other shape. The pass rule below is the same for both
+  shapes. A trail results doc also prints timeouts per book and the book
+  re-priced at 2 × slippage, never gating; the trail's A/A calibration is
+  `docs/superpowers/results/*-trail-race-calibration.md`. A trail fail is
+  "no edge under this exit", and closed; a trail pass is not tradeable
+  until a nightly stop-update path exists. Pass rule, all four: paired
+  ΔExpR ≥ +0.10R; lower 95%
   bound > 0 (week-clustered bootstrap, 10,000 resamples); same sign in ≥ 7
   of 9 calendar years, 2011–2019 (2010 is warm-up only; a year with no events counts against); N ≥ 300
   events (below that, `SCREEN-UNDERPOWERED`, closed like a fail). Forward

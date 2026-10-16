@@ -169,7 +169,9 @@ caches, `backtest-methodology.md` § Windows.
 
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
 cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`; a screen
-fail is closed, never re-screened) and from v146 `**Panel:**` (1-3 role skills run
+fail is closed, never re-screened under either race shape; each idea freezes one,
+`fixed` or v163 `trail` with cap >= 60, under the same pass rule) and from v146
+`**Panel:**` (1-3 role skills run
 through `panel`; an unresolved `BLOCKING` finding stops close-out). Feature
 acceptance is one gate (`swingbot/core/backtesting/acceptance.py`, driven by
 `scripts/backtest/validate_component.py --stage mde|walkforward|validation`):
