@@ -125,9 +125,19 @@ def test_every_cell_is_well_formed_and_bh_covers_all_of_them(tmp_path):
 
 
 def test_bar_cells_carry_bar_covered_n(tmp_path):
-    data = _build(tmp_path)
+    rows_csv, rej_csv, bars_dir = _files(tmp_path)
+    path = bars_dir / "AAA.csv"
+    path.write_text(path.read_text(encoding="utf-8").replace(
+        "2026-01-06,100,100.5,99.5,100,1000000",
+        "2026-01-06,101,101.5,99.5,100,1000000"), encoding="utf-8")
+    data = report.build_report(rows.load_rows(rows_csv), rows.load_rejections(rej_csv),
+                               bars_dir=bars_dir, n_resamples=200, seed=42, balance=10_000.0)
     bar_names = {name for name, _ in bars.bar_cuts()}
-    assert all(c["bar_covered_n"] == 24 for c in data["cells"] if c["cut"] in bar_names)
+    gaps = {c["value"]: (c["n"], c["bar_covered_n"])
+            for c in data["cells"] if c["cut"] == "open_gap_bucket"}
+    assert gaps == {"flat": (20, 20), "adverse_small": (4, 4)}
+    assert data["header"]["bar_covered_n"] == 24
+    assert all(c["bar_covered_n"] <= c["n"] for c in data["cells"] if c["cut"] in bar_names)
     assert all(c["bar_covered_n"] is None for c in data["cells"] if c["cut"] == "strategy_horizon")
 
 

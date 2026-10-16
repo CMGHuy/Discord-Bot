@@ -38,20 +38,20 @@ def _all_cuts(sector_of: dict) -> tuple:
     return (*cuts.categorical_cuts(sector_of), *bars.bar_cuts(), *exits.exit_cuts())
 
 
-def _decorate(cell, members: list, covered_n: int, balance: float) -> None:
+def _decorate(cell, members: list, balance: float) -> None:
     if cell.cut in BAR_CUT_NAMES:
-        cell.bar_covered_n = covered_n
+        cell.bar_covered_n = sum(bool(t.bars.get("covered")) for t in members)
     if cell.cut in exits.STOP_CUTS:
         cell.extra.update(exits.stop_extra(members, balance))
 
 
-def _cells(trades: list, covered_n: int, sector_of: dict, *, n_resamples: int, seed: int,
+def _cells(trades: list, sector_of: dict, *, n_resamples: int, seed: int,
            balance: float) -> list:
     out = []
     for name, key in _all_cuts(sector_of):
         for cell in cut_cells(name, trades, key, n_resamples=n_resamples, seed=seed):
             members = [t for t in trades if _key_text(key(t)) == cell.value]
-            _decorate(cell, members, covered_n, balance)
+            _decorate(cell, members, balance)
             out.append(cell)
     return out
 
@@ -92,7 +92,7 @@ def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resam
     covered_n = bars.enrich_with_bars(rows, bars_dir, input_fingerprints=inputs)
     trades = closed_trades(rows)
     sector_of = _sector_snapshot(rows)
-    cells = _cells(trades, covered_n, sector_of, n_resamples=n_resamples,
+    cells = _cells(trades, sector_of, n_resamples=n_resamples,
                    seed=seed, balance=balance)
     tested = apply_bh(cells)
     tallies = bars.fill_tallies(rows) + exits.alert_supply_tallies(rows, rejections)
