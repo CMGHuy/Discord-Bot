@@ -21,7 +21,8 @@ BAR_CUT_NAMES = frozenset(name for name, _ in bars.bar_cuts())
 NOTES = (
     "net R is modelled locally (apply_frictions slippage on both fills plus commission_r); "
     "live rows store gross R only",
-    f"bar cuts read only --bars-dir; a row is bar-covered when its plan-day close lies within "
+    f"bar cuts read only --bars-dir; anchor lag is at most {bars.MAX_ANCHOR_LAG_DAYS} "
+    f"calendar days (weekends/holidays included); its close must lie within "
     f"{bars.SPLIT_GUARD:.0%} of its planned entry",
     "alert hour has hour granularity: 09:00-09:29 ET counts as the regular session",
     "every row drawn from this report is exploratory: the window overlaps the 2026 holdout "

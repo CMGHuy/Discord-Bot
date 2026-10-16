@@ -317,3 +317,67 @@ def test_reversal_ignores_bars_after_its_ten_bar_window(tmp_path):
     bars.enrich_with_bars([truncated], _write(tmp_path, "AAA", series[:39]))
     assert _cut("near_stop_reversal", full) == "no_resolution"
     assert _cut("near_stop_reversal", truncated) == "no_resolution"
+
+
+@pytest.mark.parametrize("plan_day, entry_day, covered", [
+    ("2026-01-20", "2026-01-21", True),
+    (None, "2026-01-20", True),
+    ("2026-01-21", "2026-01-22", False),
+    (None, "2026-01-21", False),
+    ("2026-03-02", "2026-03-03", False)])
+def test_anchor_lag_is_bounded_but_accepts_a_holiday_weekend(tmp_path, plan_day, entry_day, covered):
+    # Friday Jan 16 -> Tuesday Jan 20 is four calendar days (MLK holiday Monday).
+    d = _write(tmp_path, "AAA", [["2026-01-16", 100, 101, 99, 100, 1000000]])
+    row = _trade(plan_date=plan_day, entry_date=entry_day)
+    assert bars.enrich_with_bars([row], d) == int(covered)
+    assert row.bars["covered"] is covered
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("column", [4, 5])
+def test_nonfinite_dollar_volume_observations_leave_liquidity_unknown(tmp_path, value, column):
+    series = _series()
+    series[10][column] = value
+    row = _trade()
+    bars.enrich_with_bars([row], _write(tmp_path, "AAA", series))
+    assert row.bars["dollar_volume"] is None
+    assert _cut("dollar_volume_bucket", row) is None
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_fill_open_leaves_gap_unknown(tmp_path, value):
+    series = _series()
+    series[25][1] = value
+    row = _trade()
+    bars.enrich_with_bars([row], _write(tmp_path, "AAA", series))
+    assert row.bars["fill_day_open"] is None
+    assert _cut("open_gap_bucket", row) is None
+    assert _cut("gapped_through_entry", row) is None
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_plan_window_high_leaves_expiry_unknown(tmp_path, value):
+    series = _series()
+    series[25][2] = value
+    row = _plan()
+    bars.enrich_with_bars([row], _write(tmp_path, "AAA", series))
+    assert row.bars["fill_status"] == "unknown"
+
+
+@pytest.mark.parametrize("column", [2, 3])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_reversal_bar_leaves_counterfactual_unknown(tmp_path, column, value):
+    series = _series()
+    series[30][column] = value
+    row = _stopped()
+    bars.enrich_with_bars([row], _write(tmp_path, "AAA", series))
+    assert row.bars["reversal"] is None
+    assert row.bars["wider_stop_lost"] is None
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_cut_values_are_uncovered(value):
+    row = _trade()
+    row.bars = {"dollar_volume": value, "open_gap_pct": value}
+    assert _cut("dollar_volume_bucket", row) is None
+    assert _cut("open_gap_bucket", row) is None

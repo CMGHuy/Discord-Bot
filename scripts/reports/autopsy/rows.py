@@ -99,7 +99,7 @@ def _float(raw: str | None) -> float | None:
     if value.lower() in _NULLS:
         return None
     number = float(value)
-    return None if math.isnan(number) else number
+    return number if math.isfinite(number) else None
 
 
 def _int(raw: str | None) -> int | None:

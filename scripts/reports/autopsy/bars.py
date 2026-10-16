@@ -5,12 +5,16 @@ Bars come only from ``bars_dir`` (files named like
 ``backtest_cache.cache_path``: ``<TICKER with = ^ / -> _>.csv``, columns
 ``Date,Open,High,Low,Close,Volume``); this module does no network I/O. A row
 is bar-covered when its file exists, it has an anchor bar and the anchor close
-lies within SPLIT_GUARD of the planned entry: the cache is split- and
+is no more than MAX_ANCHOR_LAG_DAYS calendar days old and lies within
+SPLIT_GUARD of the planned entry: the cache is split- and
 dividend-adjusted, so a row past the guard would compare prices on two scales.
 
 No lookahead: dollar volume ends at the plan day; the fill-day open is known
 at the fill; the reversal walk reads only bars strictly after the exit day."""
 from __future__ import annotations
+
+import datetime as dt
+import math
 
 from bisect import bisect_left, bisect_right
 from collections import Counter
@@ -26,6 +30,8 @@ SPLIT_GUARD = 0.25            # fraction: anchor close vs planned entry
 REVERSAL_BARS = 10            # bars after the exit day the reversal walk reads
 WIDER_STOP_ATR = 0.5          # how much wider the counterfactual stop is, in ATR
 DOLLAR_VOLUME_BARS = 20
+# Friday close may anchor Tuesday after a Monday holiday; older bars are stale.
+MAX_ANCHOR_LAG_DAYS = 4
 GAP_FLAT_PCT = 0.25           # |open gap| at or under this is "flat"
 GAP_LARGE_PCT = 1.0           # an adverse gap above this is "adverse_large"
 DOLLAR_VOLUME_EDGES = ((20e6, "lt_20m"), (50e6, "20m_50m"), (200e6, "50m_200m"))
@@ -83,28 +89,40 @@ def _index_of(days: list[str], day: str | None) -> int | None:
 
 
 def _anchor_index(days: list[str], row) -> int | None:
-    """The plan-day bar; a row without a plan day anchors on the last bar before its fill."""
+    """Latest bar by plan day (strictly before fill when no plan day), at most 4 days old."""
     if row.plan_date:
         i = bisect_right(days, _day(row.plan_date)) - 1
     elif row.entry_date:
         i = bisect_left(days, _day(row.entry_date)) - 1
     else:
         return None
-    return i if i >= 0 else None
+    if i < 0:
+        return None
+    reference = _day(row.plan_date or row.entry_date)
+    lag = (dt.date.fromisoformat(reference) - dt.date.fromisoformat(days[i])).days
+    return i if lag <= MAX_ANCHOR_LAG_DAYS else None
+
+
+def _all_finite(values) -> bool:
+    return all(math.isfinite(float(value)) for value in values)
 
 
 def _within_guard(df: pd.DataFrame, index: int, row) -> bool:
     ref = row.planned_entry if row.planned_entry is not None else row.entry
     if ref is None or ref <= 0:
         return False
-    return abs(float(df["Close"].iloc[index]) - ref) / ref <= SPLIT_GUARD
+    close = float(df["Close"].iloc[index])
+    return _all_finite((close, ref)) and abs(close - ref) / ref <= SPLIT_GUARD
 
 
 def _dollar_volume(df: pd.DataFrame, index: int) -> float | None:
     if index + 1 < DOLLAR_VOLUME_BARS:
         return None
     window = df.iloc[index + 1 - DOLLAR_VOLUME_BARS: index + 1]
-    return float((window["Close"] * window["Volume"]).mean())
+    if not _all_finite(window["Close"]) or not _all_finite(window["Volume"]):
+        return None
+    value = float((window["Close"] * window["Volume"]).mean())
+    return value if math.isfinite(value) else None
 
 
 def _gap(row, open_: float) -> tuple[float | None, bool | None]:
@@ -126,6 +144,8 @@ def _fill_day_fields(df: pd.DataFrame, days: list[str], row) -> dict:
     if i is None:
         return {}
     open_ = float(df["Open"].iloc[i])
+    if not math.isfinite(open_):
+        return {}
     pct, through = _gap(row, open_)
     return {"fill_day_open": open_, "open_gap_pct": pct, "gapped_through": through}
 
@@ -153,6 +173,8 @@ def _touched(df: pd.DataFrame, window: list[int], row) -> bool | None:
         return None
     column, at_or_above = rule
     prices = df[column].iloc[window]
+    if not _all_finite(prices):
+        return None
     hits = prices >= row.planned_entry if at_or_above else prices <= row.planned_entry
     return bool(hits.any())
 
@@ -217,7 +239,7 @@ def _reversal(df: pd.DataFrame, days: list[str], row) -> tuple[bool | None, bool
         return None, None
     start = bisect_right(days, _day(row.exit_date))   # strictly after the exit day
     after = df.iloc[start:start + REVERSAL_BARS]
-    if len(after) < REVERSAL_BARS:
+    if len(after) < REVERSAL_BARS or not _all_finite(after[["High", "Low"]].to_numpy().ravel()):
         return None, None
     return _walk_after(after, row, wider)
 
@@ -251,7 +273,7 @@ def enrich_with_bars(rows: list[BookRow], bars_dir: Path | None, *,
 
 def _open_gap_bucket(row) -> str | None:
     pct = row.bars.get("open_gap_pct")
-    if pct is None:
+    if pct is None or not math.isfinite(pct):
         return None
     if pct < -GAP_FLAT_PCT:
         return "favourable"
@@ -269,7 +291,7 @@ def _gapped_through_entry(row) -> str | None:
 
 def _dollar_volume_bucket(row) -> str | None:
     value = row.bars.get("dollar_volume")
-    if value is None:
+    if value is None or not math.isfinite(value):
         return None
     for edge, label in DOLLAR_VOLUME_EDGES:
         if value < edge:

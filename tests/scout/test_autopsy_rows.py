@@ -194,3 +194,14 @@ def test_explicit_friction_snapshot_controls_model_after_config_changes(monkeypa
     monkeypatch.setattr(config, "COMMISSION_PER_TRADE", 50.0)
     loaded = rows.load_rows(_write_csv(tmp_path, [TRADE]), frictions=settings)
     assert loaded[0].net_r == pytest.approx(2.0 - 0.021 - 0.02)
+
+
+@pytest.mark.parametrize("value", ["inf", "-inf", "Infinity", "-Infinity", "1e999", "nan"])
+def test_nonfinite_csv_numbers_are_missing_not_trade_or_bucket_inputs(tmp_path, value):
+    record = dict(TRADE, r_realized=value, planned_entry=value, atr_pct=value, expiry_bars=value)
+    [row] = rows.load_rows(_write_csv(tmp_path, [record]))
+    assert row.gross_r is None
+    assert row.planned_entry is None
+    assert row.atr_pct is None
+    assert row.expiry_bars is None
+    assert rows.closed_trades([row]) == []
