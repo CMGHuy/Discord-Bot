@@ -273,6 +273,10 @@ and the marketplace `skill-creator`. Codex has no counterpart to switch off;
 do not name their skills or agents (for example `feature-dev:code-reviewer`)
 as a next step.
 
+Drive any browser, including production at bomeo-capital.com, with Playwright
+(`npx playwright` from `frontend/`). For production, launch it headed and let
+the partner type the credentials; never script, ask for or store that login.
+
 ## Efficient repository navigation
 
 `.ignore` excludes `.claude/worktrees/`, `market_data/`, `data/` and `logs/`.

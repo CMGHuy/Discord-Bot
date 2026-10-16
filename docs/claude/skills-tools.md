@@ -53,8 +53,11 @@ Referenced from the root `CLAUDE.md`.
   look for.
 - Skip `frontend-design`/`dataviz` conventions for the admin UI unless asked —
   it follows the existing TradingView-style theme.
-- **Driving a browser (screenshot passes, UI verification): use Playwright,
-  never `claude-in-chrome`.** The extension isn't installed/connected in this
+- **Driving a browser (screenshot passes, UI verification, and every visit
+  to production at bomeo-capital.com): use Playwright, never
+  `claude-in-chrome`.** For bomeo-capital.com, launch it headed
+  (`headless: false`) and let the partner type the credentials into the
+  window — never script, ask for or store a production login. The extension isn't installed/connected in this
   repo's sessions, so trying it first is a wasted round trip every time — go
   straight to `npx playwright` (install a local copy with
   `npm install --no-save playwright` inside `frontend/`, then

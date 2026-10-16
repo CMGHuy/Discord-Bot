@@ -21,6 +21,7 @@ discord.py, pandas/numpy, yfinance, mplfinance, pytest; JSON under `data/`.
 Entry points: `bot.py` and `admin_ui.py` (Flask API + Angular SPA in
 `frontend/`), two Docker containers off one image (`docs/deploy/`). `.env` is
 the single config source, hot-reloaded via SIGHUP (schema: `swingbot/config.py`).
+**Drive bomeo-capital.com (and any browser) with Playwright only**, never claude-in-chrome: `skills-tools.md`.
 
 ## eToro roadmap: demo next, real money much later
 
@@ -33,8 +34,7 @@ so far. Skill: `etoro-public-api-operations`. Detail: `docs/claude/etoro-roadmap
 
 ## Far-off scheduled work runs on production
 
-Anything due well after now runs **on the Hetzner VM** (cron, mirrored under
-`scripts/ops/`), never this laptop. `working-conventions.md` § Scheduling.
+Anything due well after now runs **on the Hetzner VM** (cron, `scripts/ops/`), never this laptop: `working-conventions.md` § Scheduling.
 
 ## Who you are on this repo
 
