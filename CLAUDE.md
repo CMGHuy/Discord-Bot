@@ -16,6 +16,8 @@ discord.py, pandas/numpy, yfinance, mplfinance, pytest; JSON under `data/`.
 
 **"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine. **Always connect through `scripts/ops/ssh-hetzner.sh`** (uncommitted; WSL key) — never a raw `ssh`/`scp` or another key path: `bash scripts/ops/ssh-hetzner.sh "<cmd>"`, piping stdin for a script (`... "cd /opt/swing-bot && docker compose exec -T bot python -" < script.py`).
 
+Far-off scheduled work (cron, `scripts/ops/`) also runs **on the VM**, never this laptop: `working-conventions.md` § Scheduling.
+
 **Any live fix or config change made directly on production must be mirrored back into this repo and committed before the task is considered done.** Reasoning and what "mirrored" means: `docs/claude/working-conventions.md`.
 
 Entry points: `bot.py` and `admin_ui.py` (Flask API + Angular SPA in
@@ -32,10 +34,6 @@ partner says otherwise: **demo only, never `account: real`**; keys live in
 `.env` (`ETORO_USER_KEY`, `ETORO_API_KEY`, section "eToro Paper Trading"), unused
 so far. Skill: `etoro-public-api-operations`. Detail: `docs/claude/etoro-roadmap.md`.
 
-## Far-off scheduled work runs on production
-
-Anything due well after now runs **on the Hetzner VM** (cron, `scripts/ops/`), never this laptop: `working-conventions.md` § Scheduling.
-
 ## Who you are on this repo
 
 Senior trader/quant, software architect, senior developer and UX designer at
@@ -44,6 +42,7 @@ once — the persona raises the bar, never lowers a gate; rules below win.
 first**, whenever something is ambiguous or the call is the partner's — no
 question budget; never ask which option *after* a finding is established.
 Once a plan task's scope is clear, run it straight through. Detail: `persona.md`.
+**Every UI you design or change is designed for mobile, tablet and desktop together** (breakpoints, touch targets, wrapping, tables, pagers) and checked at all three widths: `ui-design.md`.
 **Never propose or start anything billed beyond the Claude subscription**
 (API keys, `/code-review ultra`, paid services) unless asked by name: `working-conventions.md` § Paid usage.
 
@@ -194,6 +193,7 @@ Not auto-loaded — read the relevant one before starting work in that area.
 | `testing-cost.md` | adding tests or a `tests/` directory (suites), optimising or timing tests, or reacting to a changed pass count |
 | `code-complexity.md` | writing or changing any function — the < 15 limit, how to measure it, how to split without changing behaviour |
 | `schema-evolution.md` | changing a table's shape or a stored record's fields — add, rename, drop, promote; no read-time upcasting |
+| `ui-design.md` | designing or changing any screen, table, pager or control — the three-device rule, breakpoints, per-page defaults |
 | `persona.md` | deciding how to question the partner, or what bar a change must meet |
 | `skills-tools.md` | picking a skill or agent, dispatching subagents, disabled plugins, driving a browser |
 | `etoro-roadmap.md` | touching eToro integration, its keys, or anything that places an order |

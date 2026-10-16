@@ -208,6 +208,10 @@ stages, no dual writes. Rollback is point-in-time: `scripts/ops/rollback_to.sh
 issuance pauses scanning (`StoreWriteHalt`); unpause from the admin UI.
 - `docs/claude/skills-tools.md` before choosing repo-specific skills or
   automation.
+- `docs/claude/ui-design.md` before designing or changing any screen, table or
+  pager: every UI is designed for mobile, tablet and desktop together and
+  checked at all three widths; tables page 5/10/20/50/100/All (10 desktop, 5
+  tablet/phone).
 
 ## Skills: the same ones Claude uses
 
