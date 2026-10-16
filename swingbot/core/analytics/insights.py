@@ -141,7 +141,7 @@ def edge_decay_report(closed: list[dict]) -> list[str]:
     a pure function of (closed, registry_entries) with no hidden load."""
     from swingbot.core.backtesting import registry
 
-    rows = calibration.badge_drift(closed, registry.load_registry())
+    rows = calibration.badge_drift(closed, registry.active_rows(registry.load_registry()))
     lines = []
     for r in rows:
         if not r["drift_alert"]:
