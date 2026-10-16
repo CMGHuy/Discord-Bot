@@ -1,5 +1,7 @@
 # v80 — Terminal foundation: TradingView Blue tokens and the canonical component set
 
+> **Superseded in part.** Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §2) for D1's palette; Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3) for D3's 2px radii and the hairline-only depth rule. The canonical component set stands.
+
 **Version:** ui 1.12.0 · bot 1.6.3
 **Bump:** ui minor, bot minor
 **Edge:** none (integrity)
@@ -29,7 +31,7 @@ chart image look different (`bot minor`), before any screen is migrated.
   the "feels flat" refresh is part of it.
 - **Pro-terminal direction C, "TradingView Blue"**, picked from side-by-side
   mockups (private artifact:
-  https://claude.ai/code/artifact/5069719a-3226-4b27-8f33-c10e33173801).
+  https://claude.ai/code/artifact/5069719a-3226-4b27-8f33-c10e33173801). *Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §2): the partner chose a refined terminal in Arctic Navy.*
 - **Two densities stay** (presentation / instrument registers, v54 D1).
 - **Every screen first-class on a phone.**
 - **Discord charts adopt the same palette.**
@@ -69,6 +71,8 @@ control (`settings-tab.ts:344`), one computed colour literal (`versions.ts:383`)
 ---
 
 ## D1 — Colour tokens
+
+> **Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §2):** the Arctic Navy palette replaces these values, and tier 2 now refers to tier-1 names in `palette.css`. Kept for the record.
 
 Every value below is in `frontend/src/styles/tokens.css`. This deliberately
 reopens v54's "no token churn" non-goal: choosing a new direction is what this
@@ -139,9 +143,9 @@ OKLab distance ×100**, the validator's metric.
   `max-width: 65ch`.
 - **Headline figure:** `--text-metric` 25px → **28px**, mono 500, tabular.
   20px below 640px. No other type-scale change.
-- **Radii:** `--radius` 4px → **2px**, `--radius-chip` 3px → **2px**.
+- **Radii:** `--radius` 4px → **2px**, `--radius-chip` 3px → **2px**. *Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3): `--panel-radius` 8px, `--control-radius` 6px, `--chip-radius` 999px, `--radius-sm` 2px.*
 - **Depth:** panels separate by hairlines, not cards. The one-shadow law
-  (overlays only) is unchanged.
+  (overlays only) is unchanged. *Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3): in-flow panels now cast `--panel-shadow` through `.sb-panel`; overlays keep `--shadow-overlay`.*
 - **Touch** (tokens media block `(pointer: coarse), (max-width: 639px)`):
   - `--control-h` 28 → 44px;
   - new `--row-h` 32 → 44px;
@@ -206,7 +210,7 @@ mockup that departed from them.
 
 | Component | Change | Phone / touch |
 |---|---|---|
-| `sb-chip` | Restyle: good / warn / info / neutral as outline or tint, mono, 2px. Capitals by default through a new `caps` input, which quality chips turn off so `Lv4` never renders as `LV4`. | 28px min-height |
+| `sb-chip` | Restyle: good / warn / info / neutral as outline or tint, mono, 2px (*Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3): pills use `--chip-radius` 999px*). Capitals by default through a new `caps` input, which quality chips turn off so `Lv4` never renders as `LV4`. | 28px min-height |
 | **`sb-status`** *(new)* | Trade status whose marker **shape** carries state: pending outline, active filled, partial half-filled, closed muted. Label in text tokens, never colour alone. | — |
 | `sb-confidence-cell`, `sb-quality-chip` | Restyle only; content per "Table cell contracts" | — |
 | `sb-empty-state` | Restyle: dashed hairline box; optional `reason` input ("Result: 0" / "Awaiting data"), matching `sb-async`'s two empties | — |
@@ -276,7 +280,7 @@ cell contract. A new component is not done until the gallery shows it.
    - defines every new token;
    - `--chart-7` and `--chart-8` are absent;
    - the touch block sets `--control-h`, `--row-h` and `--text-control` to 44px / 44px / 16px;
-   - `--radius` and `--radius-chip` are 2px.
+   - `--radius` and `--radius-chip` are 2px. *Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3): both tokens are deleted; four radius targets replace them.*
 2. **`contrast.spec.ts`:** every text/surface pair ≥ 4.5:1, now including
    `--accent` as text and `--on-accent` on `--accent-fill`; `--text-faint`
    still documented as non-text. `confidence-cell.spec.ts` pins `--info` to
