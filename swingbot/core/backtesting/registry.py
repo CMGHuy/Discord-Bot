@@ -156,13 +156,14 @@ def get_badge(source: str, strategy: str, horizon_key: str | None = None) -> Bad
     same strategy was independently OOS-validated on its own signal path --
     that's real evidence about this plan too, not a coincidence.
 
-    v162: each step of the chain picks the row measured on
-    TRAINING_DATA_SOURCE, else the yfinance row of the same key (_pick)."""
+    v162: a live badge is pinned to the yfinance row of each key, whatever
+    TRAINING_DATA_SOURCE says -- that setting is training-only and never
+    changes an alert, embed or live-scan decision. A key with only an Alpaca
+    row falls through the chain like a missing one."""
     records = load_registry()
-    preferred = _preferred_source()
 
     def find(src, strat, hz):
-        return _find(records, preferred, src, strat, hz)
+        return _find(records, "yfinance", src, strat, hz)
 
     rec = (find(source, strategy, horizon_key)
            or find(source, strategy, None)
