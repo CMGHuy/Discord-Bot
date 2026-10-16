@@ -9,57 +9,57 @@ A slate row is a hypothesis. No gate moves: it never edits code, config, thresho
 
 ## Ranked
 
-### 1. evening-alert-premarket-refresh (regime-desk)
+### 1. evening-resting-order-preparation (regime-desk)
 
-- claim: Test a premarket refresh of evening alerts to improve the ability to act on qualified plans before the next session.
+- claim: Test an additional evening preparation pass for still-valid setups to increase next-session opportunities that traders can prepare before the open.
 - evidence: cell alert_hour=20; N 434; weeks 12; Δ net ExpR +0.374 [0.162, 0.996]; q 0.007
 - exploratory: yes
-- edge: harvest
-- mechanism: Evening issuance leaves time to prepare resting orders; a premarket refresh could make still-valid plans easier to execute without continuous monitoring. The timing association supports investigation, but does not establish that reminders improve outcomes.
-- order_form: stop-buy / limit at the published entry, subject to the original validity and expiry
+- edge: volume
+- mechanism: Evening preparation may give traders time to place conditional orders before the next session. The association in the 2026-07-20 to 2026-10-15 window does not establish that changing issuance time improves outcomes.
+- order_form: stop-buy for bullish setups or corresponding sell-stop for bearish setups; valid for the next regular session, subject to plan invalidation.
 - manual_actions: none
 - pairs_with: n/a
 - divergence: no
-- route: /prereg
+- route: /screen evening-resting-order-preparation
 
 ### 2. gap-and-hold (setup-scout)
 
-- claim: Screen a continuation entry after a gap remains unfilled through the close, testing whether confirmed acceptance adds profitable setups.
+- claim: Screen a continuation entry after an unfilled gap holds through the close to test whether confirmed acceptance adds profitable opportunities.
 - evidence: playbook gap-and-hold
 - exploratory: yes
 - edge: volume
-- mechanism: An unfilled gap with a close near the session high may indicate sustained demand; entry requires a subsequent break above that session's high. Waiting for the gap day's completed close distinguishes this mechanism from the failed gap-day volume screen.
-- order_form: stop-buy above the completed gap day's high, valid next session only.
+- mechanism: A close above the prior session's high with the gap intact may show sustained demand. Entry requires a subsequent break above the completed gap bar; this differs from the failed gap-day volume-filter idea.
+- order_form: stop-buy above the gap bar's high, valid the next session.
 - manual_actions: none
 - pairs_with: n/a
 - divergence: no
 - route: /screen gap-and-hold
 
-### 3. rs-leader-index-pullback (setup-scout)
+### 3. three-bar-weekly-reversal (setup-scout)
 
-- claim: Screen a new entry that buys a relative-strength leader after it holds its prior low during an index pullback, testing whether this adds profitable setups.
-- evidence: playbook rs-leader-index-pullback
-- exploratory: yes
-- edge: volume
-- mechanism: Holding support while the index retreats may reveal persistent demand; a subsequent break above the pullback bar supplies an entry trigger. This tests index-relative resilience as a setup, distinct from the existing RS gate and own-RSI pullback.
-- order_form: stop-buy above the pullback day's high, valid next session only.
-- manual_actions: none
-- pairs_with: n/a
-- divergence: no
-- route: /screen rs-leader-index-pullback
-
-### 4. three-bar-weekly-reversal (setup-scout)
-
-- claim: Screen a daily reversal pattern at support drawn from completed weekly bars, testing whether this adds profitable setups absent from the strategy registry.
+- claim: Screen a completed three-bar daily reversal at a previously established weekly level to test whether it adds profitable reversal entries.
 - evidence: playbook three-bar-weekly-reversal
 - exploratory: yes
 - edge: volume
-- mechanism: A completed reversal at a previously known weekly support level may identify renewed demand with a defined invalidation point. The mechanism requires weekly support plus the daily reversal sequence, distinct from double patterns and Fibonacci confirmation.
-- order_form: stop-buy above the final reversal bar's high, valid next session only.
+- mechanism: A daily reversal at a weekly reference level may identify rejection across timeframes. The screen must isolate the completed three-bar pattern from Double Pattern and Fibonacci confirmation triggers.
+- order_form: stop-buy above the completed pattern's final bar high, valid the next session.
 - manual_actions: none
 - pairs_with: n/a
 - divergence: no
 - route: /screen three-bar-weekly-reversal
+
+### 4. tight-base-breakout (setup-scout)
+
+- claim: Screen a breakout from a contracting multi-week base to test whether a distinct consolidation setup adds profitable entries.
+- evidence: playbook tight-base-breakout
+- exploratory: yes
+- edge: volume
+- mechanism: Contracting ranges followed by a breakout on above-average volume may identify an imbalance after consolidation. The mechanism is a base breakout rather than a pullback volume dry-up gate or proximity to an annual high.
+- order_form: stop-buy above the completed base high, valid for a fixed session window frozen in the screen definition.
+- manual_actions: none
+- pairs_with: n/a
+- divergence: no
+- route: /screen tight-base-breakout
 
 ## Dropped
 
@@ -67,14 +67,7 @@ None.
 
 ## Generator results
 
-- exit-harvester: NO ROWS. Eligible positive exit cells describe realised outcomes rather than a testable change; alternatives are thin or miss the evidence gate.
+- exit-harvester: NO ROWS. Positive exit cells describe realised outcomes without an actionable prospective rule; alternatives are thin or lack the required cell statistics.
 - setup-scout: 3 rows returned.
 - regime-desk: 1 row returned.
-
-## Panel review
-
-Run 2026-10-16 over `6648d737` (quant-researcher on opus).
-
-- quant-researcher [ADVISORY]: Rank 1's issuance-hour cell does not measure the benefit of a premarket refresh or define its outcome and comparator. Row 1 withdrawn from the partner's choice pending a measurable design; the ranked output above remains an audit record.
-- quant-researcher [ADVISORY]: The timing comparison excludes records without issuance-hour data, so its association may not represent the full book. Noted for the withdrawn row.
-- Dispatch note: the named `scout` agent was unavailable in this session; the three roles ran serially through the plan's read-only general-agent fallback.
+- This slate uses the corrected 2026-10-16 export that includes plans linked to open trades. It supersedes the earlier same-date slate committed as `6648d737`.
