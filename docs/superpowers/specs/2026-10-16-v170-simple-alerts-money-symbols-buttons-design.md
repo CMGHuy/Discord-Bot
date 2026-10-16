@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — a clearer view of what each paper trade risks, banks and loses. It changes no signal, threshold, plan, stop, size or badge.
 **Screen:** exempt (integrity)
 **Panel:** veteran-trader, financial-advisor, senior-engineer
-**Status:** spec written 2026-10-16 from a brainstorm with the partner (money scope, interaction set, symbol depth and the design each approved in chat).
+**Status:** spec written 2026-10-16 from a brainstorm with the partner (money scope, interaction set, symbol depth and the design each approved in chat); revised the same day after the three-seat panel (see `## Panel review`).
 
 ## Why
 
@@ -29,11 +29,11 @@ cancel, time exit). The partner reads it on a phone. Three gaps:
 
 - **D1 — Money on every money moment.** Ticket, TP1 partial, stop move and
   close all carry a signed dollar figure beside the R.
-- **D2 — Symbols replace labels, never broker order verbs.** `BUY STOP`,
-  `SELL STOP`, `SELL LIMIT`, `BUY TO COVER AT MARKET` and the like stay as
-  words: they are what the reader types at the broker, and a misread order
-  type is a real-money error. Everything else that labels a value becomes a
-  symbol from one table.
+- **D2 — Symbols replace labels, never broker order words.** Every line a
+  reader turns into a broker action keeps its order verb as words: `BUY STOP`,
+  `SELL STOP`, `SELL LIMIT`, `BUY LIMIT`, `BUY TO COVER AT MARKET`, `CANCEL`,
+  and so on. A misread order type is a real-money error. Everything else that
+  labels a value becomes a symbol from one table.
 - **D3 — Two kinds of interaction:** the existing plan buttons (📊 Chart,
   🔍 Breakdown, ⭐ Watch) on feed messages, plus a new **💵 P&L now** button
   on messages of a plan that is still open. Every button reply is ephemeral.
@@ -53,142 +53,179 @@ A new frozen dataclass `Money` in `presentation/instructions.py`:
 | field | meaning |
 |---|---|
 | `currency` | `config.CURRENCY_SYMBOL` |
-| `shares` | whole shares of the position (the existing `_whole_shares` rule), or `None` |
-| `risk_amount` | dollars at risk from entry to the initial stop, or `None` |
+| `shares` | whole shares of the full position (the existing `_whole_shares` rule), or `None` |
 | `realized_amount` | the trade record's settled `realized_pnl_amount`, or `None` |
 
-The dollar value of any R is **`r × risk_amount`**. That covers the ticket's
-TP1 and TP2 projections, a TP1 leg (`leg r × fraction × risk_amount`) and a
-stop move's locked-in figure. One formula means one sign convention.
+**Two kinds of figure, never mixed:**
 
-**The close is the exception.** Its figure is `realized_amount`, the number
-`account._sum_realized_pnl` adds to the balance, so the feed and the account
-balance can never disagree. When the trade record is not settled yet
-(`realized_amount is None`), the close shows **R only**. It never shows an
-estimate dressed as a realised number.
+- **Projected ("if hit") $** — always `shares-in-play × price move`, signed
+  by direction, computed from the **same whole-share count the message
+  prints**. A reader who multiplies the printed shares by the printed move
+  gets the printed dollars. There is no separate `r × risk_amount` path that
+  could disagree with share rounding. This covers the ticket's stop/TP1/TP2
+  lines and a stop move's "if it fills" figure. A stop move adds the already
+  banked legs: `shares × fraction × (exit − entry)` per `legs_realized` leg.
+- **Realised $** — the TP1 leg banked (`tp1 shares × (fill − entry)`, the
+  same arithmetic the trade record's leg uses) and the **close**, whose
+  figure is `realized_amount`: the number `account._sum_realized_pnl` adds to
+  the balance. The feed and the account balance can never disagree. When the
+  record is not settled yet (`realized_amount is None`), the close shows
+  **R only**. It never shows an estimate dressed as a realised number.
+
+**Cost basis.** The paper tracker knows no fees, slippage or tax
+(`tracking/performance.py:15`). Both the R and the $ are therefore **gross,
+on one basis**. The close line and the P&L-now reply say so with
+`(paper, gross)`, and the `!help` legend says "paper account, before fees,
+slippage and tax".
 
 **Sources, per message:**
 
 - **Ticket:** `execution_embeds.build_ticket_embed` already calls
-  `_sizing_snapshot` (`account.compute_position_size`). `Money` is built from
-  that snapshot (`shares`, `risk_amount`). This is the same snapshot the paper
-  trade is logged with in the same scan, so the source is unchanged.
+  `_sizing_snapshot` (`account.compute_position_size`). `Money.shares` comes
+  from that snapshot. The paper trade is logged from the same snapshot in the
+  same scan, so the source is unchanged.
 - **Lifecycle events:** built in `execution_embeds.build_instruction_embed`
-  from the **paper-trade record linked to the plan** (its shares, its risk
-  amount, its `realized_pnl_amount`). Today this path calls `_sizing_snapshot`
-  at render time, so a trade opened at one balance gets sized against a later
-  one. The plan replaces that call for money, and also for the share counts the
-  TP1 and time-exit lines already print, so quantity and dollars come from one
-  record. When no linked record exists (a plan the bot did not log), it falls
-  back to today's snapshot behaviour for share counts and shows **no dollar
+  from the **paper-trade record linked to the plan** (`trade["plan_id"]`).
+  Today this path calls `_sizing_snapshot` at render time, so a trade opened
+  at one balance is sized against a later one. The plan replaces that call
+  for money, and also for the share counts the TP1 and time-exit lines
+  already print, so quantity and dollars come from one record. When no
+  linked record exists (a plan the bot did not log), it falls back to
+  today's snapshot behaviour for share counts and shows **no dollar
   figures**.
-- The plan brief must confirm (a) how a plan finds its trade record and
-  (b) whether `realized_pnl_amount` is written **before** the `closed` feed
-  event renders (`lifecycle_embeds.py` around line 460 against the settle path
-  in `tracking/performance.py` / `account._settle_account_balance`). If it is
-  written after, the plan must reorder delivery or read `settle_legs` on the
-  record's legs (the same fallback `account._sum_realized_pnl` uses). Shipping
-  a close that always says "R only" does not meet this spec.
+- **One new accessor**, `trade_for_plan(plan_id)` on the trade log, returns
+  the record **in any status**. The existing helpers (`append_leg_by_plan`,
+  `close_plan_trade`, `tracking/performance.py:684/797/841`) match only
+  `status == "open"`, so a closed trade cannot be found with them. Every
+  caller in this spec (the lifecycle money, the closed-plan P&L-now reply)
+  uses this one accessor. No ad hoc scans.
+- **Settle order.** On the main path, `close_plan_trade` calls
+  `_settle_account_balance` (which writes `realized_pnl_amount`,
+  `performance.py:909`) before `notify_plan_events` renders the `closed`
+  event (`lifecycle_embeds.py:449-479`, from `loops.py:522`). Other settle
+  sites exist (`performance.py:1040, 1298, 1444, 1474, 1557, 1738`). The plan
+  traces **every close route** and tests each one. A route that emits before
+  it settles is fixed by reading `settle_legs` on the record's legs (the
+  fallback `account._sum_realized_pnl` already uses), never by shipping a
+  close that always says "R only". The unsettled case stays a tested fallback.
 
 All dollar strings go through the existing `plan_table.signed_money`. It moves
-into `presentation/tokens.py` (as `fmt_money`, re-exported from `plan_table`
-so its three existing callers are unchanged), because `instructions.py` must
-not import from `scanning`. Risk is shown unsigned (`$250`); every P&L figure
-is signed (`+$181.00` / `-$250.00`).
+into `presentation/tokens.py` as `fmt_money`, and `plan_table.signed_money` is
+re-exported as the same object, because `instructions.py` must not import from
+`scanning`. A test pins `plan_table.signed_money is tokens.fmt_money`. Every
+figure, including the loss side, is signed (`+$181.00` / `-$250.00`).
 
 ### 2. Symbol table
 
-One table in `presentation/tokens.py`, `FEED_SYMBOLS`, owns every glyph. No
-glyph literal is written in `instructions.py`.
+One table in `presentation/tokens.py`, `FEED_SYMBOLS`, owns every glyph,
+including the direction-dependent comparison glyphs. No glyph literal is
+written in `instructions.py`. Each glyph has **one meaning only**.
 
 | key | glyph | replaces |
 |---|---|---|
 | `entry` | ▶ | the entry line's lead |
-| `risk` | ⚠ | `(risk $X)` |
 | `stop` | 🛑 | the stop line's lead |
 | `tp1` | 💰 | `TP1` label |
 | `runner` | 🏃 | `RUNNER` label |
 | `tp2` | 🎯 | `TP2` label |
 | `trail` | 〜 | `trail` |
 | `breakeven` | ⚖ | `Stop → entry once price reaches` |
-| `expiry` | ⏳ | `Cancel if: not triggered by the close of` |
-| `invalid` | ❌ | `or price reaches … first` |
-| `locked` | 🔒 | stop-move locked-in figure |
-| `pnl` | 💵 | a P&L figure's lead |
+| `expiry` | ⏳ | the time half of `Cancel if:` |
+| `invalid` | ⛔ | the price half of `Cancel if:` |
+| `if_fills` | 🔒 | a stop move's projected figure |
+| `pnl` | 🧾 | a P&L line's lead |
 | `win` / `loss` / `flat` | ✅ / ❌ / ➖ | close headline lead, by the same ±0.05R tone bands `_closed` already uses |
+| `at_or_above` / `at_or_below` | ≥ / ≤ | price comparisons; `instructions.py` picks by direction |
 
-Target layouts (approved). The broker verbs stay as words:
+The money glyphs (💰 a target, 🧾 a P&L line) are deliberately unlike each
+other. ⚠ stays reserved for the heat, cluster and kill-switch warnings, so a
+warning still reads as exceptional. Risk is shown as the stop line's
+"if hit" loss, not with a glyph.
+
+Target layouts (approved shape, revised by the panel). Every order line
+carries its broker verb. Long:
 
 ```
-▶ BUY STOP 182.40 · 54 sh · ⚠ $250
-🛑 SELL STOP 177.80
-💰 SELL LIMIT 189.10 · 27 sh → +$181.00 · +1.5R
-🏃 27 sh → 🎯 195.00 / 〜 2×ATR
-⚖ stop→entry at ≥ 185.00
-⏳ ≤ Thu 22 Oct (5) · ❌ if ≤ 177.80
+▶ BUY STOP 182.40 · 54 sh
+🛑 SELL STOP 177.80 · if hit -$248.40 · -1.0R
+💰 SELL LIMIT 189.10 · 27 sh · if hit +$180.90 · +1.5R
+🏃 27 sh: 🎯 SELL LIMIT 195.00 · if hit +$341.10 · +2.8R · 〜 trail 2×ATR, stop moves pinged here
+⚖ stop → entry at ≥ 185.00
+⏳ CANCEL after Thu 22 Oct (5 sessions) · ⛔ CANCEL if ≤ 177.80 first
 ```
+
+Short flips the verbs (`SELL STOP` entry, `BUY STOP` stop, `BUY LIMIT`
+targets) and the comparison glyphs (`⛔ CANCEL if ≥`, `⚖ at ≤`).
 
 ```
 ✅ EXITED @ 191.20 · 🎯 TP2
-💵 +$412.50 · +1.65R
+🧾 +$412.50 · +1.65R (paper, gross)
 ```
 
-- **TP1 partial:** `💰 TP1 FILLED 27 sh @ 189.10 · 💵 +$181.00 · +1.5R`, then
-  `🛑 MOVE STOP on the runner → 182.40 now (runner floor)`.
-- **Stop move:** `🛑 MOVE STOP → 186.00 now`, then `🔒 +$X · +R locked`. The
-  locked figure is the R of the remaining position if the new stop fills,
-  plus any banked legs. The plan brief derives it from
-  `legs_realized` and the new stop with `total_r`'s arithmetic. It is a
-  projection, so it uses `r × risk_amount`, never `realized_amount`.
-- **Ticket R projection:** TP1's R is `(tp1 − entry) / (entry − stop)`,
-  signed by direction. TP2 shows its R only when `plan.tp2` is set. The
-  runner's trail has no fixed price, so it gets no figure.
-- Short-side and `≤`/`≥` comparison glyphs flip with `direction` (a short's
-  stop is *above*: `❌ if ≥`, `⚖ at ≤`).
-- Warnings (heat, cluster, kill switch), cancel reasons, extended-hours and
-  time-exit text keep their current wording. They are rare, read carefully,
-  and are prose by nature. Only their lead label gets a symbol where the
-  table has one.
+- **Ticket "if hit" figures** are conditional by wording, and the loss side
+  (stop line) is always shown beside the gain side. TP2's figure appears only
+  when `plan.tp2` is set. The trail has no fixed price, so it gets no figure.
+  The R uses the ticket's `(level − entry) / (entry − stop)`, signed by
+  direction.
+- **TP1 partial:** `💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +$180.90 · +1.5R`, then
+  `🛑 MOVE SELL STOP on the runner → 182.40 now (runner floor)`.
+- **Stop move:** `🛑 MOVE SELL STOP → 186.00 now` (`BUY STOP` for a short),
+  then `🔒 if it fills: +$X · +R total`. That is a projection (gaps can fill
+  worse), worded as one. It never says "locked".
+- **Do-not-place ticket, cancels, warnings, extended-hours and time-exit
+  text** keep their current wording, apart from the stop/cancel verb rules
+  above. They are rare and read carefully. Only their lead label gets a
+  symbol where the table has one.
 - The phone push-preview line (`kinds.py` registry, v110) is **unchanged**.
-  It already leads with a kind glyph.
-- **Legend:** `!help` gains one line listing the table, generated from
-  `FEED_SYMBOLS`, so the legend cannot drift from what the feed sends.
+- **Legend:** `!help` gains one line generated from `FEED_SYMBOLS` plus the
+  cost-basis sentence, so the legend cannot drift from what the feed sends.
 
 The legacy `_legacy_simple_alert` (taken only when `PLAN_ENGINE_V2` is not
-`on`) is **out of scope**. Production runs v2. Its 🎯/💰/🛑 one-liner stays
-as is.
+`on`) is **out of scope**. Production runs v2.
 
 ### 3. Buttons
 
-- The feed ticket (`build_simple_alert` → `alerts.py` simple-channel post)
-  and every feed lifecycle message (`lifecycle_embeds.py`'s feed send) attach
-  a view built by a new `commands/views.py` factory, `feed_view(plan_id,
-  open_)`:
-  - always: the existing persistent `ChartButton`, `BreakdownButton` and
-    `WatchButton` DynamicItems, constructed exactly as `PlanActionView` does
+- A new tuple `FEED_BUTTONS` in `commands/views.py` holds only the new
+  `PnlNowButton`. It is registered with the bot's DynamicItems next to
+  `PLAN_BUTTONS` (`views.py:393`), but **`PLAN_BUTTONS` is not extended**.
+  `PlanActionView` iterates `PLAN_BUTTONS` (`views.py:347`), so extending it
+  would leak P&L now into the full-alert channel.
+- A factory `feed_view(plan_id, open_)` builds the feed's view:
+  - always: the existing `ChartButton`, `BreakdownButton` and `WatchButton`
+    DynamicItems, constructed exactly as `PlanActionView` does
     (`author_id=None`), so their handlers, custom_id templates and restart
     persistence are reused unchanged;
-  - when `open_` (plan status `ACTIVE` or `PARTIAL`): a new `PnlNowButton`
-    DynamicItem, `custom_id` = `custom_id_for("pnl", plan_id, None)`,
-    registered with the other DynamicItems at bot start.
+  - when `open_` (plan status `ACTIVE` or `PARTIAL`): `PnlNowButton`,
+    `custom_id = custom_id_for("pnl", plan_id, None)`.
 - **Dismiss is not added.** The feed is an order log, not a board to prune.
-- **💵 P&L now** replies **ephemerally** with: last price, unrealised move
-  in %, R and $ for the open fraction, banked R and $ from `legs_realized`,
-  and their total. The price comes from the same source `!pnl` uses
-  (`scan_run.get_all_unrealized_pnl`'s per-trade path, factored into a
-  single-trade function rather than duplicated). The money comes from the
-  linked trade record (§1). A closed or cancelled plan replies with its
-  final result instead of a live price. A price fetch failure replies
-  `price unavailable`, never an exception. The button never posts in the
-  channel.
-- **Sending with a view:** the plan brief checks whether
-  `ui.push_kwargs(embed)` accepts or forwards a `view`. If it does not, it is
-  extended to (`push_kwargs(embed, view=None)`), so the push-preview
-  `content` line survives (known-traps § Legacy shims: a bare
-  `send(embed=…)` drops it). The history-channel copy of a lifecycle message
-  gets the same view.
-- A message built before this ships has no buttons. Nothing is edited
-  retroactively.
+- The feed ticket (the simple-channel post in `commands/scanning/alerts.py`)
+  and every feed lifecycle message (`lifecycle_embeds.py`'s feed send, plus
+  its history-channel copy) attach `feed_view(...)`. A message built before
+  this ships has no buttons. Nothing is edited retroactively.
+- **`push_kwargs` gains a view.** Verified: `components.py:132`
+  `push_kwargs(embed)` returns only `embed` and `content`. It becomes
+  `push_kwargs(embed, view=None)` and adds the `view` key **only when a view
+  is given** (some discord.py send paths reject `view=None`). A test pins the
+  no-view output byte-for-byte unchanged, because nearly every send site
+  calls it.
+
+**💵 P&L now** replies **ephemerally**:
+
+- **Open plan:** last price with its **as-of time**, plus `market closed` or
+  `delayed` when that applies; unrealised move for the open shares in %, R and
+  $; banked legs in R and $; the total, labelled `(paper, gross)`.
+- **Price source:** the per-trade body of `scan_run.get_all_unrealized_pnl`
+  (`scan_run.py:1249-1285`, the price fallback plus `compute_unrealized_pnl`)
+  is extracted into one single-trade function. `get_all_unrealized_pnl`
+  calls it in its loop, so `!pnl`'s output is unchanged (refactor, no
+  behaviour change, its existing tests stay green). The button uses the same
+  function for the open-fraction figure, so `!pnl` and the button cannot
+  disagree on it. Banked legs are added by the button from the trade record
+  (`trade_for_plan`).
+- **Closed or cancelled plan:** its final result from the record, no live
+  price.
+- **Price fetch failure:** `price unavailable`, never an exception.
+- The button never posts in the channel.
 
 ## Out of scope
 
@@ -196,37 +233,84 @@ as is.
   already show money).
 - `_legacy_simple_alert` (non-v2 path).
 - Recording whether the reader placed the order (D3: not chosen).
+- Total open risk against the account on the feed (panel suggestion,
+  deferred: see `## Panel review`).
 - Any change to sizing, stops, targets or what gets alerted.
 
 ## Testing
 
-- **Projection unit tests** (`tests/` beside the existing
-  `test_simple_alerts.py` / instructions tests): `Money` with long and short,
-  win, loss, scratch, `None` shares, `None` risk, `None` realised (the close
-  shows R only), TP2 absent, a TP1 leg, a stop move with and without banked
-  legs. Signs are asserted on the rendered string.
-- **Symbol-table test:** every `FEED_SYMBOLS` key is used by at least one
-  rendered message, and no message carries a symbol glyph literal outside the
-  table (grep-style test over `instructions.py`).
-- **Broker-verb guard test:** every rendered ticket and lifecycle message
-  still contains its order verb as plain text (`BUY STOP`, `SELL LIMIT`, …).
-  This is D2's safety rule, enforced.
-- **Button tests:** `PnlNowButton` custom_id round-trip through its template;
-  `feed_view` includes P&L now only for `ACTIVE`/`PARTIAL`; the ephemeral
-  reply for an open, a closed and a price-unavailable plan.
+- **Projection unit tests**: `Money` for long and short, with win, loss and
+  scratch closes, `None` shares, `None` realised (the close shows R only), TP2
+  absent, a TP1 leg, and a stop move with and without banked legs. Signs are
+  asserted on the rendered string, and every projected $ equals printed
+  shares × printed move.
+- **Close-route tests:** one per settle site found in §1. Each asserts the
+  rendered close carries the record's `realized_pnl_amount`.
+- **Symbol-table tests:** every `FEED_SYMBOLS` key is used by at least one
+  rendered message; no glyph in the table is shared by two keys; no glyph
+  literal sits in `instructions.py` (a grep-style test).
+- **Broker-verb guard test:** **every order line** (not every message) of
+  every rendered ticket and lifecycle message carries a verb from the long
+  set (`BUY STOP`, `SELL STOP`, `SELL LIMIT`, …) or the short set (`SELL
+  STOP`, `BUY STOP`, `BUY LIMIT`, `BUY TO COVER …`) for its direction, and
+  every cancel line says `CANCEL`. This is D2, enforced.
+- **Button tests:** the `PnlNowButton` custom_id round-trip; `feed_view`
+  includes P&L now only for `ACTIVE`/`PARTIAL`; `PlanActionView` still renders
+  exactly `PLAN_BUTTONS` (no leak); the ephemeral reply for an open, a closed,
+  a price-unavailable and a market-closed plan;
+  `tests/commands/test_views_persistent.py` extended to cover `FEED_BUTTONS`.
+- **`push_kwargs`:** no-view output unchanged; with a view, the key is present.
+- **`!pnl` refactor:** the existing tests of `get_all_unrealized_pnl` pass
+  unchanged.
 - **alert-surface gate:** a rendered before/after for every feed message kind
-  (ticket place, ticket do-not-place, filled, be_moved, tp1_partial,
-  stop_moved, closed win, closed loss, closed unsettled, close at market,
-  cancel, time exit due), committed as a results note in the plan's final
-  task. A green suite alone does not pass this gate.
-- Complexity < 15 for every touched function (`radon cc`).
+  (ticket place long and short, ticket do-not-place, filled, be_moved,
+  tp1_partial, stop_moved, closed win, closed loss, closed unsettled, close at
+  market, cancel, time exit due), committed as a results note in the plan's
+  final task. A green suite alone does not pass this gate.
+- **Complexity:** the per-kind lead, glyph and verb choices in
+  `instructions.py` are table-driven, not added as branches. `radon cc` over
+  `instructions.py`, `execution_embeds.py` and `views.py` is an explicit
+  plan step; every touched function stays < 15.
 
 ## Parallelisation (guidance for the plan)
 
-- §1 Money (dataclass, `fmt_money` move, record lookup, settle-order fix) is
-  first. §2 symbols rewrite the same `instructions.py` lines, so they follow §1
-  rather than run beside it.
-- §3 buttons touch `commands/views.py`, `bot_core` registration and the two
-  send sites. They are independent of §2 and can run beside it once §1's
-  record lookup exists, because P&L now reuses it.
+- §1 Money (dataclass, `fmt_money` move, `trade_for_plan`, the close-route
+  trace) is first. §2 symbols rewrite the same `instructions.py` lines, so
+  they follow §1 rather than run beside it.
+- §3 buttons touch `commands/views.py`, the DynamicItem registration,
+  `push_kwargs` and the two send sites. They are independent of §2 and can run
+  beside it once `trade_for_plan` exists, because P&L now uses it.
 - The before/after render, `!help` legend and full suite come last.
+
+## Panel review
+
+Spec review 2026-10-16, three seats run serially (veteran-trader,
+financial-advisor, senior-engineer). Every finding, merged:
+
+**BLOCKING**
+
+- veteran-trader: runner target line carried no order verb, so it could not be placed as written -- applied (`🎯 SELL LIMIT` on the runner line; D2 now says every order line).
+- veteran-trader: the expiry/invalidation line lost the word "cancel", and `≤` meant both a date and a price -- applied (`⏳ CANCEL after <date>` · `⛔ CANCEL if ≤ <price> first`).
+- financial-advisor: realised $ and R had no stated cost basis -- applied (both verified gross, `tracking/performance.py:15`; labelled `(paper, gross)` and in the legend).
+- financial-advisor: projected ticket profits read like expectations, with no loss counterpart in $ -- applied ("if hit" wording; the stop line carries the loss $ beside the gains).
+
+**ADVISORY**
+
+- veteran-trader: the verb guard test checked one verb per message -- applied (every order line, both direction sets, plus `CANCEL`).
+- veteran-trader: "locked" reads as guaranteed through a gap -- applied (`🔒 if it fills: …`).
+- veteran-trader: `r × risk_amount` dollars can disagree with printed whole shares -- applied (all projected $ = printed shares × printed move; `risk_amount` dropped from `Money`).
+- veteran-trader: ❌ meant both "invalid" and "loss"; 💰 and 💵 look alike -- applied (⛔ for invalid; 🧾 for P&L lines; uniqueness test).
+- veteran-trader: P&L now showed no as-of time or market-closed state -- applied.
+- veteran-trader: the stop-move line had no stop verb -- applied (`MOVE SELL STOP` / `MOVE BUY STOP`).
+- financial-advisor: ⚠ as a risk lead blurred the warning cue -- applied (⚠ reserved for warnings).
+- financial-advisor: show total open risk against the account -- rejected: outside the scope the partner approved (per-trade money, symbols, buttons); a candidate for its own spec.
+- financial-advisor: say "paper" so dollars don't read as real money -- applied (`(paper, gross)` label and legend).
+- financial-advisor: unrealised $ in P&L now also needs a basis label -- applied (same label).
+- senior-engineer: `push_kwargs` takes no view (`components.py:132`); add the key only when given and pin no-view output -- applied.
+- senior-engineer: trade lookups match only open trades -- applied (one `trade_for_plan` accessor, any status).
+- senior-engineer: settle order varies by close route -- applied (trace every route, test each).
+- senior-engineer: `get_all_unrealized_pnl` is batch-shaped; pin who owns the open-fraction figure -- applied (extracted single-trade function used by both; banked legs from the record).
+- senior-engineer: adding to `PLAN_BUTTONS` would leak P&L now into the full-alert channel -- applied (separate `FEED_BUTTONS`, leak test).
+- senior-engineer: `signed_money` move needs an identity test; caller count was wrong -- applied (identity test; count claim removed).
+- senior-engineer: duplicate glyphs and literal `≤`/`≥` -- applied (unique glyphs, comparisons in the table).
+- senior-engineer: the new branches risk complexity ≥ 15 -- applied (table-driven, explicit radon step).
