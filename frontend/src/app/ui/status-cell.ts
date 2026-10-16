@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { share } from './format';
+import { Icon } from './icon';
 import { StatusIndicator } from './status-indicator';
 
 /**
@@ -60,15 +61,24 @@ export interface StatusCellRow {
  * **No per-status icon here, deliberately (2026-09-14).** That vocabulary
  * (`pending`/`opened`/`partial`/`closed`/`cancelled`) lives only in Recent
  * Activity now, on direct request -- this table keeps its dot+bar/chip
- * language instead of also carrying the icon.
+ * language instead of also carrying the icon. The one exception, on direct
+ * request (2026-10-16): a trailing-stop runner carries a partial + trailing
+ * icon pair, because its bar measures stop-to-best-price rather than
+ * stop-to-target and would otherwise read like any other PARTIAL bar.
  */
 @Component({
   selector: 'sb-status-cell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusIndicator],
+  imports: [Icon, StatusIndicator],
   template: `
     @if (bar(); as b) {
       <span class="cell">
+        @if (row().bar_kind === 'trailing') {
+          <!-- The only status icons in this table: a runner with no target
+               is told apart by what protects it, not by a different bar. -->
+          <sb-icon name="partial" title="Partial: TP1 banked" />
+          <sb-icon name="trailing" title="Trailing stop" />
+        }
         <span
           class="dot"
           [class]="b.band"
@@ -112,6 +122,7 @@ export interface StatusCellRow {
   `,
   styles: `
     .cell { display: inline-flex; align-items: center; gap: var(--space-6); }
+    sb-icon { color: var(--text-muted); cursor: help; }
 
     .track {
       position: relative;
