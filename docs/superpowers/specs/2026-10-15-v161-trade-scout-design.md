@@ -111,9 +111,11 @@ stored, dollar volume and ATR% at signal, alert hour.
 - **Net R:** nothing live stores it; `r_realized` is gross price R. The autopsy
   computes net R locally with `apply_frictions` and `commission_r`
   (`swingbot/core/edge/frictions.py:15,22`) and labels it *modelled* net.
-- **Fill status:** unfilled plans have no journal row; the export also selects
-  `plans` with `status` and the last `status_history` reason (`expired`,
-  `risk_cap`, `invalidated`). "Never touched" versus "expired unfilled" is
+- **Fill status:** plans without a closed-trade journal row, including plans
+  linked to still-open trades, need a plan row in the export so every issued
+  plan appears once in fill and alert-supply denominators. The export selects
+  their `status` and last `status_history` reason (`expired`, `risk_cap`,
+  `invalidated`). "Never touched" versus "expired unfilled" is
   derived locally from cached bars over the plan's validity, bar-covered N printed.
 - **Open price on the fill day, dollar volume:** from the local OHLCV cache by
   ticker and date (`known-traps.md` § the two OHLCV caches: the plan names which),

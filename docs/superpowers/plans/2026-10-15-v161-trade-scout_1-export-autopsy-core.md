@@ -244,7 +244,7 @@ Create `$WT/scripts/ops/export_book_rows.sh` (LF line endings; it runs on Linux)
 #
 # rows:       one psql session, opened READ ONLY, one COPY ... TO STDOUT (CSV
 #             with a header): every closed trade (journal x trades, left-joined
-#             to its plan), then every plan that never became a trade.
+#             to its plan), then every plan not represented by those rows.
 #             psql's \copy must fit on one line; COPY ... TO STDOUT sent from
 #             psql is the same client-side stream, and it is a read.
 # rejections: grep of the HOST logs for "plan rejected (", reduced to
@@ -344,7 +344,13 @@ COPY (
     NULL::text AS days_to_earnings,
     NULL::text AS rs_percentile
   FROM plans p
-  WHERE NOT EXISTS (SELECT 1 FROM trades t2 WHERE t2.doc->>'plan_id' = p.plan_id)
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM trades t2
+    JOIN journal_entries j2 ON j2.trade_id = t2.trade_id
+    WHERE t2.doc->>'plan_id' = p.plan_id
+      AND j2.closed_at IS NOT NULL
+  )
   ORDER BY 1 DESC, 21, 8, 2, 3
 ) TO STDOUT WITH (FORMAT csv, HEADER true);
 SQL
@@ -640,7 +646,7 @@ Create `$WT/scripts/reports/autopsy/rows.py`:
 """Book rows: the VM export CSV (scripts/ops/export_book_rows.sh) as typed rows.
 
 A ``trade`` row is one closed trade (journal x trades, left-joined to its
-plan); a ``plan`` row is a plan that never became a trade, its trade columns
+plan); a ``plan`` row is a plan not represented by a closed trade, its trade columns
 empty. Dates are US/Eastern ISO dates. Net R is MODELLED here with the backtest
 friction model: no live store holds a net figure (spec, Data availability).
 """

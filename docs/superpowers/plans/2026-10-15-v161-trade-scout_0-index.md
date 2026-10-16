@@ -22,6 +22,7 @@ TS1–TS12 implemented on `2026-10-15-v161-trade-scout`; TS13 first live run is 
 - TS13: the partner approved the read-only export, including a retry after the local command sandbox denied WSL startup. The retry used the same `scripts/ops/ssh-hetzner.sh` path and completed; the aggregated autopsy was committed on `main` as `1653056f`. Raw CSVs remain in scratch until TS13 finishes.
 - TS13 correction: `fetch_backtest_data.py` rejects frames shorter than 260 daily bars. Starting at the first plan date (2026-07-24) produced zero cached tickers; starting at 2025-01-01 in scratch produced 72 of 75. The TS13 instruction now leads the first plan date by 550 calendar days. Three unavailable symbols count as uncovered rather than being patched by hand.
 - TS13 correction: `cells_tested` counts cells with a p-value, not every listed cell. This run has one thin cell without a p-value; the validation instruction now checks the tested subset.
+- TS1 review correction: plans linked to open trades were absent from the first export because its plan arm selected only plans without any trade. The export must include every issued plan exactly once for fill and alert-supply denominators; the first-run autopsy and slate remain provisional until a corrected export is authorized and run.
 
 ## Where to work
 
@@ -75,7 +76,7 @@ Recommended order: TS1, then {TS2→TS3, TS8→TS9, TS10→TS11} with at most 2 
 
 **Export columns** (`rows` mode CSV header and `autopsy.rows.EXPORT_COLUMNS`, this exact order):
 `row_kind, trade_id, plan_id, ticker, strategy, horizon, direction, plan_created_at, plan_first_status_at, plan_status, plan_status_reason, entry_type, expiry_bars, valid_session, planned_entry, opened_at, entry, stop_loss, take_profit, target2, closed_at, exit_price, close_reason, last_leg_reason, outcome, r_realized, mfe_r, mae_r, exit_efficiency, holding_days, stop_width_atr, atr_pct, regime2_state, session_bucket, days_to_earnings, rs_percentile`.
-`row_kind` is `trade` (journal ⋈ trades ⟕ plans, one row per closed trade) or `plan` (plans with no trade, trade columns NULL). Rejections mode CSV header: `date,reason,count`.
+`row_kind` is `trade` (journal ⋈ trades ⟕ plans, one row per closed trade) or `plan` (plans not represented by a closed-trade row, including plans linked to an open trade; trade columns NULL). Rejections mode CSV header: `date,reason,count`.
 
 **Cell id:** `<cut>=<value>`, `cut` snake_case from the cut names below, `value` the cell's key text (may contain `|`, never `;`). Tally ids use the same form.
 
