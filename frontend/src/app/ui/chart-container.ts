@@ -40,7 +40,7 @@ import { EmptyStateComponent } from './empty-state';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EmptyStateComponent],
   template: `
-    <figure class="frame" [style.height.px]="height()">
+    <figure class="frame sb-panel"[style.height.px]="height()">
       @if (caption(); as text) {
         <figcaption>{{ text }}</figcaption>
       }
@@ -85,9 +85,9 @@ import { EmptyStateComponent } from './empty-state';
       position: relative;
       display: flex;
       flex-direction: column;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
+      background: var(--panel-bg);
+      border: var(--panel-border);
+      border-radius: var(--panel-radius);
       overflow: hidden;
     }
     figcaption {

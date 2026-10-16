@@ -135,14 +135,20 @@ describe('every allowlist entry is justified', () => {
 });
 
 /**
- * G3 — a non-inset box-shadow appears in exactly one rule, the L3 rule.
+ * G3 -- a non-inset box-shadow appears in exactly two rules, both global:
+ * .sb-panel (in flow, --panel-shadow) and .elev-overlay (out of flow,
+ * --shadow-overlay), in that order in styles.css.
+ *
+ * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+ * this gate used to allow exactly one shadow, the L3 rule (spec v54 D2's
+ * one-shadow law).
  *
  * `inset` is deliberately exempt and is not a loophole: an inset shadow is a
  * border drawn inside the box, not elevation. The four in this codebase are
  * the active-nav indicator, two focus/selection rings and the today marker,
  * and rewriting them as borders would change layout for no gain.
  */
-describe('G3: only L3 casts a shadow', () => {
+describe('G3: only the two elevation rules cast a shadow', () => {
   const shadows = (source: string) =>
     [...source.matchAll(/box-shadow:\s*([^;]+);/g)]
       .map(([, value]) => value.trim())
@@ -154,8 +160,8 @@ describe('G3: only L3 casts a shadow', () => {
     });
   }
 
-  it('ui/ casts exactly one, and it is the token', () => {
+  it('styles.css casts exactly two, both tokens, the panel first', () => {
     const global = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
-    expect(shadows(global)).toEqual(['var(--shadow-overlay)']);
+    expect(shadows(global)).toEqual(['var(--panel-shadow)', 'var(--shadow-overlay)']);
   });
 });
