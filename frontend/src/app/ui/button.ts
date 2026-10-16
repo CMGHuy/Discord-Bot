@@ -64,9 +64,16 @@ export type ButtonVariant =
        the one place the accent is allowed to carry weight. v80 D1 split the
        accent: --accent (#5593ff) is the text-safe blue and too light to carry
        white ink, so a filled button paints --accent-fill (#2962ff) with
-       --on-accent on top, 4.90:1. */
-    :host(.primary) { background: var(--accent-fill); color: var(--on-accent); }
-    :host(.primary:not([disabled]):hover) { background: color-mix(in srgb, var(--accent-fill) 85%, white); }
+       --on-accent on top, 4.90:1.
+       Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+       the fill is the tier-3 gradient --btn-fill, from --accent-fill-hi
+       (#2474d2, white 4.66:1) down to --accent-fill (#1c6dd0, white
+       5.06:1); --accent is now #7cc4ff. A gradient is an image, so it goes
+       in background, never background-color, and does not transition:
+       hover swaps to --btn-fill-hover, and v168 animates it with filter and
+       glow. */
+    :host(.primary) { background: var(--btn-fill); color: var(--on-accent); }
+    :host(.primary:not([disabled]):hover) { background: var(--btn-fill-hover); }
 
     /* A hairline on whatever ground it sits on. Panels separate by hairlines
        now (v80 D3), and a raised fill made every secondary look pressed. */
