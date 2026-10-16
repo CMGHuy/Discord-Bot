@@ -90,3 +90,5 @@ On 2026-10-16 the partner chose all three surviving setup ideas from this correc
 - `tight-base-breakout` -> `/screen tight-base-breakout`
 
 This records routing only; no screen was started. The earlier pick for the superseded slate does not carry forward its `rs-leader-index-pullback` row.
+
+For `tight-base-breakout`, freeze the volume condition using only information available before the stop triggers, or wait for a completed breakout bar and enter later. The opening-gap and post-exit near-stop cuts in the autopsy are descriptive; they do not establish that an order existed at the open or that a wider stop survived the exit bar.

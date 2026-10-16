@@ -89,6 +89,8 @@ docs/superpowers/results/<date>-scout-slate.md   (committed on main)
   the **host** (the host path; the container sees `/app/logs`,
   `docker-compose.yml:141`), split current versus rotated per
   `production-log-investigation`, reduced to `date,reason,count` on the VM.
+  No matching line is a valid empty result; missing or unreadable log files
+  and grep read errors fail the export instead of producing a valid CSV.
 - Both are written to local files under the scratchpad, never committed (raw
   production rows). A test pins that the export script contains `READ ONLY` and
   no `INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP|CREATE`.
