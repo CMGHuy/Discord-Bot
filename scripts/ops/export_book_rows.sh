@@ -122,13 +122,18 @@ SQL
 
 export_rejections() {
   local logs="${BOOK_LOGS_DIR:-/opt/swing-bot/logs}"
-  local f
+  local f first rc
+  local -a files=()
   for f in "$logs"/*.log*; do
     [ -f "$f" ] || continue
-    echo "export_book_rows: $f starts $(head -c 19 "$f")" >&2
+    [ -r "$f" ] || { echo "export_book_rows: unreadable log $f" >&2; return 2; }
+    first=$(head -c 19 "$f") || { echo "export_book_rows: cannot read log $f" >&2; return 2; }
+    files+=("$f")
+    echo "export_book_rows: $f starts $first" >&2
   done
+  [ "${#files[@]}" -gt 0 ] || { echo "export_book_rows: no readable log files in $logs" >&2; return 2; }
   echo "date,reason,count"
-  { grep -h "plan rejected (" "$logs"/*.log* || true; } \
+  { grep -h "plan rejected (" "${files[@]}" || { rc=$?; [ "$rc" -eq 1 ] || return "$rc"; }; } \
     | sed -n 's/^\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\) .*plan rejected (\([^,)]*\).*/\1,\2/p' \
     | LC_ALL=C sort | uniq -c \
     | awk '{ n = $1; sub(/^ *[0-9]+ /, ""); print $0 "," n }'

@@ -157,6 +157,32 @@ def test_an_unknown_mode_exits_two(source, tmp_path):
     assert "rows|rejections" in done.stderr
 
 
+def test_rejections_fail_when_no_log_files_exist(source, tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    env = dict(os.environ, SWING_BOT_DIR=tmp_path.as_posix(), BOOK_LOGS_DIR=logs.as_posix())
+    if not _seen_by_bash(env, "BOOK_LOGS_DIR"):
+        pytest.skip("this bash cannot see the Windows temp dir (WSL bash)")
+    done = subprocess.run([_bash(), "-s", "--", "rejections"], input=source.encode("utf-8"),
+                          env=env, capture_output=True, timeout=30)
+    assert done.returncode != 0
+    assert b"no readable log files" in done.stderr
+    assert done.stdout == b""
+
+
+def test_rejections_propagate_grep_read_failure(source, tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    _write_log(logs / "bot.log", ["2026-03-05 INFO scan finished"])
+    env = dict(os.environ, SWING_BOT_DIR=tmp_path.as_posix(), BOOK_LOGS_DIR=logs.as_posix())
+    if not _seen_by_bash(env, "BOOK_LOGS_DIR"):
+        pytest.skip("this bash cannot see the Windows temp dir (WSL bash)")
+    command = 'grep() { return 2; }; export -f grep; bash -s -- rejections'
+    done = subprocess.run([_bash(), "-c", command], input=source.encode("utf-8"),
+                          env=env, capture_output=True, timeout=30)
+    assert done.returncode != 0
+
+
 @pytest.fixture
 def book_rows_db():
     """Only synthetic rows; the real export SELECT runs without a VM/database service."""
