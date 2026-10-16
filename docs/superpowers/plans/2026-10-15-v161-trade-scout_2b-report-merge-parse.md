@@ -26,7 +26,7 @@
 
 **Rules this task freezes:**
 - Cuts run in the order categorical (TS4), bars (TS5), exits (TS6); **one** `apply_bh` over every cell of the run; `header.cells_tested` is its return value.
-- Bar cells set `bar_covered_n` to the run's bar-covered closed-trade count (the Markdown prints it beside the cell N). Cells of a cut in `STOP_CUTS` get `stop_extra(members, balance)` merged into `extra`, where members are the trades whose key text equals the cell value (`;` → `,` as `cut_cells` does).
+- Bar cells set `bar_covered_n` to the number of bar-covered trades in that cell (the Markdown prints it beside the cell N). The header separately carries the run's bar-covered closed-trade count. Cells of a cut in `STOP_CUTS` get `stop_extra(members, balance)` merged into `extra`, where members are the trades whose key text equals the cell value (`;` → `,` as `cut_cells` does).
 - Header `window` = first and last `exit_date` of the closed trades; `pooled_net_expr` = mean of `net_value` (net, or gross where net could not be modelled, counted in a note); `pooled_win_rate` = share with `gross_r > 0`; `notes` = the modelled-net note, the bar note, the hour-granularity note, the boundary-5 note, every `CUT_NOTES` entry as `<key>: <text>`, the gross-fallback count when non-zero, and the balance the dollar view uses.
 - Markdown (≤ `MD_MAX_LINES`): header block; a table of **non-thin** cells sorted by q, then |Δ|, cut to the line budget with a `- <k> more cells in the JSON` line; one line counting thin cells per cut; give-back; tallies (rejection reasons capped at `REJECTION_LINES = 8`).
 
@@ -163,7 +163,7 @@ def test_every_cell_is_well_formed_and_bh_covers_all_of_them(tmp_path):
 def test_bar_cells_carry_bar_covered_n_and_stop_cells_the_dollar_view(tmp_path):
     data = _build(tmp_path)
     bar_names = {name for name, _ in bars.bar_cuts()}
-    assert all(c["bar_covered_n"] == 24 for c in data["cells"] if c["cut"] in bar_names)
+    assert all(c["bar_covered_n"] <= c["n"] for c in data["cells"] if c["cut"] in bar_names)
     assert all(c["bar_covered_n"] is None for c in data["cells"] if c["cut"] == "strategy_horizon")
     stop = [c for c in data["cells"] if c["cut"] == "exit_reason"]
     assert stop
@@ -262,20 +262,20 @@ def _all_cuts(sector_of: dict) -> tuple:
     return (*cuts.categorical_cuts(sector_of), *bars.bar_cuts(), *exits.exit_cuts())
 
 
-def _decorate(cell, members: list, covered_n: int, balance: float) -> None:
+def _decorate(cell, members: list, balance: float) -> None:
     if cell.cut in BAR_CUT_NAMES:
-        cell.bar_covered_n = covered_n
+        cell.bar_covered_n = sum(bool(t.bars.get("covered")) for t in members)
     if cell.cut in exits.STOP_CUTS:
         cell.extra.update(exits.stop_extra(members, balance))
 
 
-def _cells(trades: list, covered_n: int, sector_of: dict, *, n_resamples: int, seed: int,
+def _cells(trades: list, sector_of: dict, *, n_resamples: int, seed: int,
            balance: float) -> list:
     out = []
     for name, key in _all_cuts(sector_of):
         for cell in cut_cells(name, trades, key, n_resamples=n_resamples, seed=seed):
             members = [t for t in trades if _key_text(key(t)) == cell.value]
-            _decorate(cell, members, covered_n, balance)
+            _decorate(cell, members, balance)
             out.append(cell)
     return out
 
@@ -306,7 +306,7 @@ def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resam
     """The Autopsy JSON (index § Shared contracts) for one export."""
     covered_n = bars.enrich_with_bars(rows, bars_dir)
     trades = closed_trades(rows)
-    cells = _cells(trades, covered_n, cuts.load_sector_map(), n_resamples=n_resamples,
+    cells = _cells(trades, cuts.load_sector_map(), n_resamples=n_resamples,
                    seed=seed, balance=balance)
     tested = apply_bh(cells)
     tallies = bars.fill_tallies(rows) + exits.alert_supply_tallies(rows, rejections)
