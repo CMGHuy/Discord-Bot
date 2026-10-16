@@ -189,3 +189,37 @@ Run 2026-10-16. senior-engineer reviewed commit `0d480ce8`.
 - senior-engineer: under Off, flash classes linger because `animationend` never fires -- applied (§3 #8).
 - senior-engineer (v169 panel, cross-spec): the stagger belongs in the shared `sb-panel-grid`, not per workspace -- applied (§3 #2).
 - senior-engineer: two ambient glows (v167 body plus v168 layer); gate must exclude spec files; `fill-mode: backwards`; "only transform…" claim too broad; `ResizeObserver` misses `--text-scale` -- applied (§3 #10, §2, §3 #1/#2, §3 last paragraph, §3 #6).
+
+## Amendments from the plan brief (2026-10-16)
+
+The plan-briefer's pass (`.superpowers/briefs/2026-10-16-v168-motion-system.md`) refuted several claims. These decisions bind the plan and override earlier text where they differ:
+
+1. **Count-up targets.**
+   - `<sb-figure>` is rendered only by `figure.ts` and `gallery.ts`, and only two specs render it (`figure.spec.ts`, `gallery.spec.ts`).
+   - The real KPI tiles are `stat-tile`, `metric-card` and `metric-chip`, used by calendar, trading-performance, risk and trade-detail. `[sbCountUp]` goes on the **headline value of those three primitives and of `figure.ts`**, each owning its text node.
+   - The plan re-counts the specs that render them. The global `off` default (amendment 5) keeps those specs synchronous.
+2. **Stagger reach.**
+   - The only non-spec user of `sb-panel-grid` is `gallery.ts`. Dashboard and the other workspaces use `.sb-stack`/`.sb-row` or hand-rolled grids.
+   - Stagger therefore becomes **CSS-only and host-driven**. When a route-entry claim succeeds, the routed host `div.workspace-content` (shell.html, about :160) gets `.sb-entering` for the entrance duration.
+   - `motion.css` gives direct children of the workspace's top-level `.sb-stack`, `.sb-row` and `sb-panel-grid` an `:nth-child(1..8)` delay (60ms steps, 40ms and cap 4 on phone).
+   - The `[sbStaggerIndex]` directive is **dropped**. v169 handles hand-rolled grids by switching them to these layout primitives.
+   - `panel-grid.spec.ts` reads `panel-grid.ts` as source text, so its minmax 220/320 and phone-query literals stay byte-identical.
+3. **Route-entry detection.** `BACKGROUND_REFRESH_INFO` is defined at `routing/route-loading.service.ts:15`. `RouteEntryService` reads `info` and the target path at **`NavigationStart`**, because `currentNavigation()` is null by `NavigationEnd`. It commits the new activation id on `NavigationEnd`. The existing `.route-pending` opacity transition on the same host element is kept, and the entrance animates via `animation`, not that `transition`.
+4. **Motion control.** The Text-size control is a cycle button (`profile-menu.ts:60-69`). The Motion control is an `sb-segmented` (`ui/segmented.ts`) with three options in the same menu.
+5. **Global test default.** `test-setup.ts` has no providers today, and `initTestEnvironment` is called by the Angular builder. The plan adds a global `beforeEach(() => TestBed.configureTestingModule({ providers: [provideMotion('off')] }))` to `test-setup.ts` (`vitest/globals` is on). Specs that need motion override it with `provideMotion('on')`. `flash.spec.ts` and `pnl-cell.spec.ts:74-76` (which assert the `flash-up` class) opt in.
+6. **Fallback corrections to the §1 table.**
+   - Scan sweep under Off keeps today's `width: 100%; opacity: .4`.
+   - The route spinner (`shell.css:373`) **stops** under reduced motion today. v168 deliberately changes it to spin slowly, because spinners are status, not decoration. Recorded as an intended behaviour change.
+7. **`pulse` merge.** The four `pulse` definitions have three different shapes. They consolidate by shape into `sb-pulse-soft` (.45), `sb-pulse-dim` (.35) and `sb-pulse-blink` (1 → .25 → 1), keeping each call site's current duration. Identical copies merge, and no visual changes.
+8. **Hover-lift shadow.** `.sb-lift`'s deeper shadow is a new tier-3 token `--panel-shadow-lift` (black rgba only, per v167's gate), applied only from `styles/motion.css`. `primitives.spec.ts` G3 is extended so that `motion.css` may cast exactly `var(--panel-shadow-lift)`.
+9. **Interplay with v167's code.**
+   - New `:root` tokens go **inside v167's tier-3 banner block** in `tokens.css`, not after it, and every commit that adds a token regenerates `tests/charts/resolved_tokens.json` (`scripts/dev/dump_tokens.py`).
+   - v167 AN9's `body { background: var(--glow-ambient), var(--bg) }` and its `elevation.spec.ts` case are edited when the glow moves to the shell layer.
+   - The button `.primary` hover is built on v167 AN10's `--btn-fill`/`--btn-fill-hover` lines.
+10. **Drawer spec.** `layout.spec.ts:112-119` asserts the drawer's phone rule `width: 100vw` as source text. The bottom-sheet task rewrites that assertion to the new geometry.
+11. **Nav indicator.** The nav is three `<ul class="nav">` groups inside a sticky, scrolling `.sidebar`, so the indicator lives in `.sidebar` and positions against it. `ResizeObserver` is undefined in jsdom, so the directive guards `typeof ResizeObserver`.
+12. **Toasts.** Angular 21.2's `animate.enter`/`animate.leave` need no provider (`@angular/animations` is not installed and is not needed). In jsdom a leaving toast is removed immediately, and the specs assert that.
+13. **Corrected citations and commands.**
+    - `flash.ts:37-47` is actually :41-46, and the Drawer class runs to about :443.
+    - Specs run with `cd frontend && npx ng test --watch=false --include '<glob>'`, not `npx vitest run`.
+    - TypeScript has no radon. Complexity < 15 is held by review.
