@@ -54,6 +54,20 @@ describe('StatusCell', () => {
     expect(el.textContent).not.toContain('no price');
   });
 
+  it('says how much of a trailing runner is still open', () => {
+    const el = render({
+      ...live, status: 'PARTIAL', progress_pct: null, progress_band: null,
+      blink_seconds: null, bar_kind: 'trailing', banked_fraction: 0.5,
+    });
+    expect(el.textContent).toContain('50% open');
+    expect(el.textContent).toContain('trailing');
+  });
+
+  it('shows the open share for a PARTIAL runner that still has a bar', () => {
+    const el = render({ ...live, status: 'PARTIAL', banked_fraction: 0.4 });
+    expect(el.textContent).toContain('60% open');
+  });
+
   it('shows the chip alone for a trade that has not opened', () => {
     const el = render({ ...live, status: 'PENDING', progress_pct: null, progress_band: null });
     expect(el.querySelector('.fill')).toBeNull();

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { share } from './format';
 import { StatusIndicator } from './status-indicator';
 
 /**
@@ -35,6 +36,8 @@ export interface StatusCellRow {
   /** 'trailing' = a PARTIAL runner with no TP2: there is no target to draw a
    *  bar toward, which is not the same as a failed price lookup. */
   bar_kind?: string;
+  /** Fraction of the position TP1 already closed (0-1); null until PARTIAL. */
+  banked_fraction?: number | null;
 }
 
 /**
@@ -88,6 +91,9 @@ export interface StatusCellRow {
           <span class="tick" [style.left.%]="b.entry" aria-hidden="true"></span>
         </span>
         <span class="pct">{{ b.pct }}%</span>
+        @if (openLabel(); as o) {
+          <span class="hint">{{ o }}</span>
+        }
         @if (row().current_price_stale) {
           <span
             class="hint stale"
@@ -198,6 +204,15 @@ export class StatusCell {
     if (NO_POSITION_YET.has(r.status)) return null;
     // A trailing runner has a price and a stop but no target, so the bar is
     // withheld by design -- saying "no price" there would be false.
-    return r.bar_kind === 'trailing' ? 'trailing' : 'no price';
+    if (r.bar_kind !== 'trailing') return 'no price';
+    return [this.openLabel(), 'trailing'].filter(Boolean).join(' · ');
+  });
+
+  /** How much of a PARTIAL position is still open ("50% open"), so the chip
+   *  says what is left rather than only that something was banked. */
+  protected readonly openLabel = computed(() => {
+    const r = this.row();
+    if (r.status !== 'PARTIAL' || r.banked_fraction == null) return null;
+    return `${share((1 - r.banked_fraction) * 100)} open`;
   });
 }

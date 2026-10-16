@@ -23,7 +23,7 @@ import { money, num, pct, rMultiple, share } from './format';
     <span class="plan" [title]="tooltip()">
       <span class="entry" [class.pending]="showsTrigger()">{{ fmt(first()) }}</span>
       <span class="sep">{{ ' → ' }}</span>
-      <span class="target">{{ fmt(target()) }}</span>
+      <span class="target">{{ targetText() }}</span>
       <span class="sep">{{ ' / ' }}</span>
       <span class="stop">{{ fmt(stop()) }}</span>
       <span class="sep">{{ ' (' }}</span><span class="rise">{{ fmtPct(risePct()) }}</span><span class="sep">{{ ' - ' }}</span><span class="drop">{{ fmtPct(dropPct()) }}</span><span class="sep">{{ ')' }}</span>
@@ -125,8 +125,20 @@ export class PlanCell {
    * magnitude alone tells the story -- rise is always the TP-side distance,
    * drop always the SL-side one, regardless of which way the position runs.
    */
-  protected readonly risePct = computed(() => this.movePct(this.target()));
+  protected readonly risePct = computed(() => this.movePct(this.shownTarget()));
   protected readonly dropPct = computed(() => this.movePct(this.stop()));
+
+  /** A trailing runner with no TP2 has no live target, so the slot shows the
+   *  TP point that was actually hit (the banked leg's fill) instead of a dash. */
+  private readonly bankedFill = computed(() =>
+    this.target() === null && this.targetIsBankedTp1() ? this.bankedEntry() : null,
+  );
+
+  private readonly shownTarget = computed(() => this.bankedFill() ?? this.target());
+
+  protected readonly targetText = computed(() =>
+    this.bankedFill() !== null ? `${this.fmt(this.bankedFill())} ✓` : this.fmt(this.target()),
+  );
 
   private movePct(level: number | null): number | null {
     const base = this.first();
