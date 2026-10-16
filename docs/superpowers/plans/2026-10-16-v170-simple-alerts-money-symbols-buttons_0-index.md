@@ -59,12 +59,14 @@ Only plan_manager closes emit a feed `closed` event, and each settles the trade 
 |---|---|---|---|
 | pre-TP1 stop | 106, 103 | `loss` | −28.29 |
 | break-even scratch | 106, 108.5, 105 | `scratch` | −9.43 |
-| runner trail | 106, 116, 140, 118 | `tp1_runner_trail` | 103.73 |
+| runner trail (`tp2=None`, `atr_fn` ATR 4.0; with the default tp2 105 it closes `tp1_runner_tp2` at 140) | 106, 116, 140, 118 | `tp1_runner_trail` | 103.73 |
 | runner TP2 (`tp2=120`) | 106, 111, 121 | `tp1_runner_tp2` | 94.30 |
 | runner floor (`tp2=120`) | 106, 111, 106.5, 105 | `tp1_runner_be` | 25.93 |
 | time exit (compression short, auction 98) | `test_compression_time_exit._short()` | `time_exit` | 20.00 (shares 10.0) |
 
 Reversal (`close_trade_reversed`), manual close, `backfill_exit_price`, `update_open_trades`, `close_if_live_price_hit` and `check_near_tp_timeout` settle but never emit a feed message (the last three skip plan-linked trades); they get no render test. V170-6 pins every row above, the `_on_event` fallback, and the unsettled cases.
+
+The figures depend on the wall clock (with a live tape a stop fills at the stop price, not the bar), so V170-6 passes `now=SATURDAY` to every poll and pins each figure per share against the record's own `shares` and `== settle_legs(record)`, not as the absolute amounts above (part 2 writer, re-verified on the test DB).
 
 ## Parallelisation
 
