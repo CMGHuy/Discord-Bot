@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { allSources, stripComments } from './testing/all-sources';
 import { callSites } from './testing/call-sites';
+import { resolveToken } from './testing/resolve-token';
 
 /**
  * Raw buttons that stay raw, each with the reason.
@@ -92,27 +94,122 @@ describe('no call site redefines a promoted composite', () => {
 });
 
 /**
- * Colour literals outside tokens.css.
+ * Colour literals outside the token files -- spec v167 §5, which extends
+ * the gate this block used to be (hex only, over callSites() only).
  *
- * Empty, and that is the point: `--chart-1..8` (wave `_4`) moved the last
- * eight out of `ui/line-chart.ts`. An entry here is a hue that escaped the
- * valence law.
+ * Scope: allSources() -- every .ts/.css/.html under src/, so ui/, every
+ * stylesheet, styles.css and index.html, minus specs and styles/.
+ * Pattern: a hex literal, or rgb()/rgba()/hsl()/hsla() in either the comma
+ * or the space syntax. (?<!&) keeps an HTML numeric character reference out
+ * (&#9650; in versions.ts is a triangle glyph, not a colour). Comments are
+ * stripped first, so a hex quoted in prose (button.ts's contrast note)
+ * stays legal.
+ *
+ * An entry here is a copy of a token that cannot read var(). The list of
+ * literals a file may hold is exact and in source order, so a third copy
+ * fails as surely as a new hue.
  */
-const HEX_ALLOWLIST = new Map<string, string>([]);
+const COLOUR_RE = /(?<!&)#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/g;
 
-describe('no colour is declared outside tokens.css', () => {
-  for (const { name, source } of callSites()) {
-    it(`${name} declares no hex literal`, () => {
-      const allowed = HEX_ALLOWLIST.get(name);
-      // (?<!&) -- an HTML numeric character reference (&#9650; is a
-      // triangle glyph, not a colour) matches this pattern just as well as
-      // a real hex literal whenever its digits happen to fall in a-f/0-9.
-      const hexes = [...source.matchAll(/(?<!&)#[0-9a-fA-F]{3,8}\b/g)]
-        .map(([hex]) => hex)
-        .filter((hex) => !(allowed && allowed.includes(hex)));
-      expect(hexes).toEqual([]);
+const HEX_ALLOWLIST = new Map<string, string[]>([
+  // The two cold-load copies of --bg: the theme-color meta and the inline
+  // html/body background paint before any stylesheet has loaded, so they
+  // cannot read var(--bg). 'the cold-load copies equal the resolved --bg'
+  // below fails the moment they drift from palette.css.
+  ['index.html', ['#070b14', '#070b14']],
+]);
+
+describe('no colour is declared outside the token files', () => {
+  for (const { name, source } of allSources()) {
+    it(`${name} declares no colour literal`, () => {
+      const found = [...stripComments(source).matchAll(COLOUR_RE)].map(([literal]) => literal);
+      expect(found).toEqual(HEX_ALLOWLIST.get(name) ?? []);
     });
   }
+});
+
+/**
+ * tokens.css under its own rules (spec v167 §5). palette.css is tier 1, the
+ * only file free to hold hued literals. tokens.css keeps hex only on the
+ * seven names jsdom and chart-palette.spec read as literals, and
+ * rgb()/rgba() only inside the three tier-3 shadow and scrim tokens, black
+ * or white at some alpha. A hued glow derives from a tier-2 token with
+ * color-mix(), so a palette change reaches it. hsl() is in neither file.
+ */
+const TOKENS_HEX_ALLOWED = new Set([
+  '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6', '--quality-4',
+]);
+const TIER3_RGB = new Set(['--panel-shadow', '--shadow-overlay', '--scrim-soft']);
+
+describe('tokens.css holds no hued literal (v167 §5)', () => {
+  const styles = (file: string) =>
+    stripComments(readFileSync(join(process.cwd(), 'src/styles', file), 'utf8'));
+  const TOKENS = styles('tokens.css');
+  const declarations = [...TOKENS.matchAll(/(--[\w-]+):\s*([^;]+);/g)]
+    .map(([, name, value]) => ({ name, value }));
+  const hexIn = (text: string) => text.match(/(?<!&)#[0-9a-fA-F]{3,8}\b/g) ?? [];
+  const rgbIn = (text: string) => text.match(/\brgba?\(/g) ?? [];
+  const count = (find: (text: string) => string[]) =>
+    declarations.reduce((n, { value }) => n + find(value).length, 0);
+
+  it('keeps hex only on the seven allowed names', () => {
+    const offenders = declarations
+      .filter(({ name, value }) => hexIn(value).length > 0 && !TOKENS_HEX_ALLOWED.has(name))
+      .map(({ name }) => name);
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps rgb()/rgba() inside the three tier-3 tokens only', () => {
+    const offenders = declarations
+      .filter(({ name, value }) => rgbIn(value).length > 0 && !TIER3_RGB.has(name))
+      .map(({ name }) => name);
+    expect(offenders).toEqual([]);
+  });
+
+  it('declares no colour outside a custom property', () => {
+    expect(hexIn(TOKENS)).toHaveLength(count(hexIn));
+    expect(rgbIn(TOKENS)).toHaveLength(count(rgbIn));
+  });
+
+  it('uses only black or white in those rgb()/rgba() calls', () => {
+    const channels = [...TOKENS.matchAll(/\brgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/g)]
+      .map(([, r, g, b]) => `${r} ${g} ${b}`);
+    expect(channels.length).toBeGreaterThan(0);
+    expect(channels.filter((rgb) => rgb !== '0 0 0' && rgb !== '255 255 255')).toEqual([]);
+  });
+
+  it('uses hsl() in neither token file', () => {
+    expect(TOKENS).not.toMatch(/\bhsla?\(/);
+    expect(styles('palette.css')).not.toMatch(/\bhsla?\(/);
+  });
+});
+
+/**
+ * The cold-load copies of --bg (spec v167 §7). They cannot read var(), so
+ * they are copies, and copies drift: before v167 all four said #0a0b10
+ * while --bg said #0c0f16. These cases make a palette change that forgets
+ * them fail here instead of flashing the old ground on a cold load and
+ * leaving a stale PWA title bar.
+ */
+describe('the cold-load copies equal the resolved --bg (v167 §7)', () => {
+  const bg = resolveToken('--bg').toLowerCase();
+  const read = (file: string) => readFileSync(join(process.cwd(), file), 'utf8');
+
+  it('index.html paints the theme-color meta in --bg', () => {
+    const meta = read('src/index.html').match(/<meta name="theme-color" content="([^"]+)">/);
+    expect(meta?.[1].toLowerCase()).toBe(bg);
+  });
+
+  it('index.html paints the inline cold-load ground in --bg', () => {
+    const inline = read('src/index.html').match(/<style>html, body \{ background: ([^;]+); \}<\/style>/);
+    expect(inline?.[1].toLowerCase()).toBe(bg);
+  });
+
+  it("the manifest's theme_color and background_color are --bg", () => {
+    const manifest = JSON.parse(read('public/manifest.webmanifest'));
+    expect(manifest.theme_color.toLowerCase()).toBe(bg);
+    expect(manifest.background_color.toLowerCase()).toBe(bg);
+  });
 });
 
 describe('every allowlist entry is justified', () => {

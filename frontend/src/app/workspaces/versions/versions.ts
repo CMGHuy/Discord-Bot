@@ -409,22 +409,27 @@ export class Versions {
    * for meaning (pos/neg/warn/accent/info) and calls a sixth "a review
    * defect" -- this is exactly the design system's own ordinal case (a
    * version's place in a time-ordered sequence, not a nominal identity), so
-   * it stays on the accent hue (252°) and varies only lightness. Hashed from
-   * the version string rather than the segment's position so the same
+   * it stays on the accent hue and varies only how much of it shows. Hashed
+   * from the version string rather than the segment's position so the same
    * version always reads the same shade if it reappears, and so the shade
    * does not shift under a reader's cursor as the strip re-measures.
+   *
+   * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §5):
+   * the shade used to be a computed `hsl(252, 65%, 38-62%)` literal, which
+   * no palette change could reach. It is now --accent mixed into --surface,
+   * so it follows the tokens and the colour gate holds.
    */
   protected versionTint(version: string): string {
     let hash = 0;
     for (let i = 0; i < version.length; i++) {
       hash = (hash * 31 + version.charCodeAt(i)) | 0;
     }
-    // 38-62%: dark enough to clear the light-band floor against --bg at the
-    // low end, and capped 5 points below --accent's own 67% lightness at the
-    // high end -- a hash landing near the top must still read as clearly
-    // dimmer than "current", never close enough to be mistaken for it.
-    const lightness = 38 + (Math.abs(hash) % 25);
-    return `hsl(252, 65%, ${lightness}%)`;
+    // 40-75% of --accent over --surface: at the low end still clearly a
+    // segment against the lane, and capped 25 points short of pure --accent
+    // (which is what the current segment paints) so a hash landing near the
+    // top never reads as "current".
+    const share = 40 + (Math.abs(hash) % 36);
+    return `color-mix(in oklab, var(--accent) ${share}%, var(--surface))`;
   }
 
   /** "1.2.4 → " for a bump, "· new " for a component's first appearance. The

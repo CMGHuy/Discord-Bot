@@ -30,7 +30,7 @@
   position: fixed;
   inset: 0;
   z-index: 25;
-  background: rgb(0 0 0 / 0.5);
+  background: var(--scrim-soft);
 }
 
 .menu-button {
