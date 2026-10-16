@@ -259,7 +259,14 @@ whose ex-date is older than the overlap window. So:
   come from Alpaca SIP with `Adjustment.ALL`. Today's
   `_with_cached_depth` splice refuses on that mismatch and returns the
   shallow frame. The write-back and delta fetch must therefore keep one
-  basis per file (never splice across bases), and the plan states which.
+  basis per file (never splice across bases). **Partner's choice
+  (2026-10-16): a separate Alpaca-basis daily cache** per symbol
+  (`Adjustment.ALL`, 10 years deep, Alpaca's limit and the depth the scan
+  gets today). The scan's Alpaca-served symbols read and delta-fetch from
+  it, so the scan stays on Alpaca with one small "today's bar" call per
+  scan. The existing yfinance-basis `market_data/daily` cache is unchanged
+  and keeps serving yfinance-only symbols and every other reader. The
+  fingerprint and the D4 rules apply to each file on its own basis.
   The cache holds full history since listing, so a write-back unions with
   the file, never overwrites it (`data_refresh._merge_save` is the existing
   union writer).
