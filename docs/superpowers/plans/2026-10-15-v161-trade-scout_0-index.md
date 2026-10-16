@@ -15,7 +15,13 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+TS1–TS12 implemented on `2026-10-15-v161-trade-scout`; TS13 first live run is in progress on 2026-10-16. TS14 is pending.
+
+## Handoff
+
+- TS13: the partner approved the read-only export, including a retry after the local command sandbox denied WSL startup. The retry used the same `scripts/ops/ssh-hetzner.sh` path and completed; the aggregated autopsy was committed on `main` as `1653056f`. Raw CSVs remain in scratch until TS13 finishes.
+- TS13 correction: `fetch_backtest_data.py` rejects frames shorter than 260 daily bars. Starting at the first plan date (2026-07-24) produced zero cached tickers; starting at 2025-01-01 in scratch produced 72 of 75. The TS13 instruction now leads the first plan date by 550 calendar days. Three unavailable symbols count as uncovered rather than being patched by hand.
+- TS13 correction: `cells_tested` counts cells with a p-value, not every listed cell. This run has one thin cell without a p-value; the validation instruction now checks the tested subset.
 
 ## Where to work
 

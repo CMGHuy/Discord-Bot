@@ -618,9 +618,11 @@ Expected: the rows header equals the index's **Export columns** in order; both `
 ```bash
 python - "$SCRATCH/rows.csv" <<'PY' > $SCRATCH/bars_args.txt
 import csv, sys
+from datetime import date, timedelta
 rows = list(csv.DictReader(open(sys.argv[1], encoding="utf-8", newline="")))
 tickers = sorted({r["ticker"] for r in rows if r["ticker"]})
-start = min(r["plan_created_at"][:10] for r in rows if r["plan_created_at"])
+first_plan_day = min(r["plan_created_at"][:10] for r in rows if r["plan_created_at"])
+start = (date.fromisoformat(first_plan_day) - timedelta(days=550)).isoformat()
 print(",".join(tickers))
 print(start)
 PY
@@ -628,7 +630,7 @@ BACKTEST_CACHE_DIR=$SCRATCH/autopsy_bars python $WT/scripts/data/fetch_backtest_
 ls $SCRATCH/autopsy_bars | wc -l
 git -C $R status --short data/ && git -C $WT status --short data/
 ```
-Expected: one CSV per ticker (a delisted or renamed ticker may be missing: the autopsy counts it as not bar-covered); both `git status --short data/` print nothing (the frozen `data/backtest_cache/` is untouched). The fetch can take several minutes; run it with a 600000 ms timeout.
+Expected: one CSV per ticker (a delisted or renamed ticker may be missing: the autopsy counts it as not bar-covered); both `git status --short data/` print nothing (the frozen `data/backtest_cache/` is untouched). The 550-day lead-in supplies the fetcher's minimum 260 daily bars even when the live book covers only a few months. The fetch can take several minutes; run it with a 600000 ms timeout.
 
 - [ ] **Step 5: Run the autopsy**
 
@@ -646,7 +648,7 @@ for key in ("window", "n", "pooled_net_expr", "pooled_win_rate", "net_of_frictio
             "cells_tested", "bar_covered_n", "resamples", "seed", "notes"):
     assert key in h, key
 assert h["net_of_frictions"] == "modelled" and h["resamples"] == 10000 and h["seed"] == 42
-assert h["cells_tested"] == len(report["cells"]), (h["cells_tested"], len(report["cells"]))
+assert h["cells_tested"] == sum(c["p"] is not None for c in report["cells"]), h["cells_tested"]
 md = open(sys.argv[2], encoding="utf-8").read().splitlines()
 assert len(md) <= 150, len(md)
 print("window", h["window"], "N", h["n"], "cells", h["cells_tested"], "bar-covered", h["bar_covered_n"])
