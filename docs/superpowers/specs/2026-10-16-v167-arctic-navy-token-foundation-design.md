@@ -106,6 +106,8 @@ The valence rule (one hue = one meaning; a sixth hue is a review defect) is **un
 --panel-bg: linear-gradient(180deg, var(--surface-raised), var(--surface));
 --panel-border: 1px solid var(--border);
 --panel-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 6px 18px rgba(0,0,0,.25);
+--panel-inner-bg: var(--surface-raised);   /* a panel nested in a panel: flat, no gradient */
+--panel-inner-radius: var(--control-radius);/* and no shadow -- one level of elevation per stack */
 --shadow-overlay: 0 16px 40px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
 
 --btn-fill: linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill));
@@ -150,7 +152,7 @@ The valence rule (one hue = one meaning; a sixth hue is a review defect) is **un
 
 **Two Python colour sources stay outside the lockstep, deliberately:**
 - **Discord embed stripes** (`swingbot/core/presentation/kinds.py:22-40`). They are tuned to read on Discord's own `#313338` dark and `#FFFFFF` light themes, not on the admin's ground, and they carry their own semantic ramp (setup level, result size). Moving them onto Arctic Navy would optimise them for a background they never sit on. "One palette everywhere" (D2) therefore means **the admin and the chart PNGs**.
-- **The export disclaimer grey** (`swingbot/core/marketdata/export_data.py:91`, `#5a6169`). It is a plain historical export, not an alert chart, and is logged as a v169 follow-up candidate.
+- **The export disclaimer grey** (`swingbot/core/marketdata/export_data.py:91`, `#5a6169`). It is a plain historical export, not an alert chart, and stays as it is. v169 is frontend-only and declines it too, and it is recorded as a standing follow-up in v169's plan index `## Handoff` (see v169 § Out of scope).
 
 **The chart cache outlives a deploy.** `swingbot/core/charts/cache.py` keys PNGs by content (e.g. `stats.py:242-245`, `:405-408`), not by style, and lives on the `./exports` host volume. Without a fix, `!stats` charts would keep the old palette for up to 7 days after deploy, and a rollback would serve navy PNGs for as long. Fix: `chart_style.py` exports a `STYLE_VERSION` string (bumped whenever `THEME` changes), and `cache.py` folds it into every key. `test_chart_theme.py` asserts that `STYLE_VERSION` changes whenever the `THEME` digest does: it pins the pair, so editing one without the other fails.
 
@@ -241,3 +243,4 @@ Run 2026-10-16. senior-engineer reviewed commit `e8a8e9bc`, and staff-engineer r
 - staff-engineer: v165 and v166 plan text uses tokens v167 deletes -- applied (required order, § Interaction with live plans).
 - staff-engineer: no deploy or rollback note -- applied (§ Deploy and rollback).
 - staff-engineer: two hand-kept resolvers with no cross-check -- applied (shared fixture `resolved_tokens.json`, §1).
+- senior-engineer (v169 panel, cross-spec): v169 needed a nested-panel token that only v167 may add -- applied (`--panel-inner-bg`/`--panel-inner-radius` in tier 3, §3).
