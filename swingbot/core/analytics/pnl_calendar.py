@@ -19,6 +19,7 @@ and is the repo's one shared R computation.
 from __future__ import annotations
 
 import datetime as _dt
+import math
 
 from swingbot.core.analytics import metrics
 from swingbot.core.tracking.performance import expand_realized_legs, primary_strategy_label
@@ -56,7 +57,7 @@ def day_of(closed_at: str | None) -> str | None:
 
 
 def _float_or_none(value) -> float | None:
-    """`float(value)`, or None for anything non-numeric.
+    """`float(value)`, or None for anything non-numeric or non-finite.
 
     A record written before a field existed carries None, and a hand-edited
     trades.json can carry a string. Neither should raise in an aggregation
@@ -65,9 +66,10 @@ def _float_or_none(value) -> float | None:
     if value is None or isinstance(value, bool):
         return None
     try:
-        return float(value)
+        out = float(value)
     except (TypeError, ValueError):
         return None
+    return out if math.isfinite(out) else None
 
 
 def _utc_stamp(value) -> _dt.datetime | None:

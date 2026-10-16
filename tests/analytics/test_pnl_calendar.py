@@ -802,3 +802,11 @@ def test_day_totals_drawdown_walks_the_rows_in_the_order_given():
     rows = [_tile_row("A", 1.0, 1.0, "win"), _tile_row("B", -2.0, -1.0, "loss"),
             _tile_row("C", 3.0, 1.0, "win"), _tile_row("D", -1.0, -1.0, "loss")]
     assert day_totals(rows)["worst_drawdown_r"] == 2.0
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), "nan", "-inf"])
+def test_float_or_none_rejects_non_finite_so_return_pct_stays_null(bad):
+    from swingbot.core.analytics.pnl_calendar import _float_or_none, return_pct
+
+    assert _float_or_none(bad) is None
+    assert return_pct(_float_or_none(bad), 10.0, "long") is None
