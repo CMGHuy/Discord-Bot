@@ -4,12 +4,15 @@ summary (at most MD_MAX_LINES lines) that is the only thing a generator role rea
 from __future__ import annotations
 
 import statistics
+import hashlib
+import json
+import shlex
 from collections import Counter
 from pathlib import Path
 
 from . import bars, cuts, exits
 from .cells import apply_bh, cut_cells, net_value
-from .rows import closed_trades
+from .rows import closed_trades, friction_settings
 
 MD_MAX_LINES = 150
 DEFAULT_BALANCE = 10_000.0
@@ -74,16 +77,20 @@ def _header(trades: list, covered_n: int, tested: int, *, n_resamples: int, seed
 
 
 def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resamples: int,
-                 seed: int, balance: float) -> dict:
+                 seed: int, balance: float, frictions: dict | None = None,
+                 input_fingerprints: dict | None = None, invocation: dict | None = None) -> dict:
     """The Autopsy JSON (index § Shared contracts) for one export."""
-    covered_n = bars.enrich_with_bars(rows, bars_dir)
+    inputs = dict(input_fingerprints or {})
+    covered_n = bars.enrich_with_bars(rows, bars_dir, input_fingerprints=inputs)
     trades = closed_trades(rows)
     cells = _cells(trades, covered_n, cuts.load_sector_map(), n_resamples=n_resamples,
                    seed=seed, balance=balance)
     tested = apply_bh(cells)
     tallies = bars.fill_tallies(rows) + exits.alert_supply_tallies(rows, rejections)
-    return {"header": _header(trades, covered_n, tested, n_resamples=n_resamples, seed=seed,
-                              balance=balance),
+    header = _header(trades, covered_n, tested, n_resamples=n_resamples, seed=seed, balance=balance)
+    header.update(frictions=dict(frictions if frictions is not None else friction_settings()),
+                  input_fingerprints=inputs, invocation=invocation)
+    return {"header": header,
             "cells": [c.to_json() for c in cells],
             "tallies": [t.to_json() for t in tallies],
             "giveback": exits.giveback_summary(trades)}
@@ -97,6 +104,19 @@ def _pct(value) -> str:
     return "n/a" if value is None else f"{value * 100:.1f}%"
 
 
+def _provenance_lines(h: dict) -> list[str]:
+    if "frictions" not in h:
+        return []
+    settings = json.dumps(h["frictions"], sort_keys=True)
+    inputs = h["input_fingerprints"]
+    digest = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode("utf-8")).hexdigest()
+    invocation = h.get("invocation")
+    command = shlex.join(invocation["command"]) if invocation else "direct build (no CLI)"
+    return [f"- Effective frictions: {settings}",
+            f"- Input SHA-256 manifest: {digest} ({len(inputs)} files; file hashes in JSON)",
+            f"- Invocation: {command}"]
+
+
 def _header_lines(h: dict) -> list[str]:
     w0, w1 = h["window"]
     lines = [f"# Book autopsy, {w0} to {w1}", "",
@@ -107,7 +127,7 @@ def _header_lines(h: dict) -> list[str]:
              f"- Net of frictions: {h['net_of_frictions']}",
              f"- Cells tested: {h['cells_tested']} (one BH pass over all of them); "
              f"bootstrap resamples {h['resamples']}, seed {h['seed']}"]
-    return lines + [f"- Note: {note}" for note in h["notes"]] + [""]
+    return lines + _provenance_lines(h) + [f"- Note: {note}" for note in h["notes"]] + [""]
 
 
 def _sort_key(c: dict) -> tuple:

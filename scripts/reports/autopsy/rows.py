@@ -10,10 +10,13 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import math
+import hashlib
+from io import StringIO
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from swingbot import config
 from swingbot.core.edge.frictions import apply_frictions, commission_r
 from swingbot.core.market.session import US_MARKET_TZ
 
@@ -175,11 +178,11 @@ def _journal_fields(raw: dict) -> dict:
     return out
 
 
-def _row(raw: dict) -> BookRow:
+def _row(raw: dict, frictions: dict | None = None) -> BookRow:
     ident = {name: _text(raw[name]) for name in
              ("row_kind", "trade_id", "plan_id", "ticker", "strategy", "horizon", "direction")}
     row = BookRow(**ident, **_plan_fields(raw), **_trade_fields(raw), **_journal_fields(raw))
-    row.net_r = modelled_net_r(row)
+    row.net_r = modelled_net_r(row, frictions=frictions)
     return row
 
 
@@ -192,12 +195,30 @@ def _check_header(found, expected: tuple[str, ...], label: str) -> None:
                          f"(missing {missing}, extra {extra})")
 
 
-def load_rows(path: Path) -> list[BookRow]:
-    """Every row of a ``rows`` export, net R modelled. Refuses any other header."""
-    with Path(path).open(encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh)
-        _check_header(reader.fieldnames, EXPORT_COLUMNS, str(path))
-        return [_row(raw) for raw in reader]
+def read_input(path: Path, input_fingerprints: dict | None = None) -> str:
+    """Read once so the fingerprint describes exactly the bytes being parsed."""
+    path = Path(path)
+    data = path.read_bytes()
+    if input_fingerprints is not None:
+        input_fingerprints[str(path.resolve())] = hashlib.sha256(data).hexdigest()
+    return data.decode("utf-8")
+
+
+def friction_settings() -> dict:
+    """Effective defaults consumed by the local net model, frozen once per CLI run."""
+    return {"slippage_bps": getattr(config, "SLIPPAGE_BPS", 5.0),
+            "commission_per_trade": getattr(config, "COMMISSION_PER_TRADE", 1.0),
+            "commission_risk_basis": getattr(config, "COMMISSION_RISK_BASIS", 100.0),
+            "min_risk_fraction": MIN_RISK_FRACTION}
+
+
+def load_rows(path: Path, *, frictions: dict | None = None,
+              input_fingerprints: dict | None = None) -> list[BookRow]:
+    """Every export row, using one explicit friction snapshot and exact input hash."""
+    settings = frictions if frictions is not None else friction_settings()
+    reader = csv.DictReader(StringIO(read_input(path, input_fingerprints), newline=""))
+    _check_header(reader.fieldnames, EXPORT_COLUMNS, str(path))
+    return [_row(raw, settings) for raw in reader]
 
 
 def closed_trades(rows) -> list[BookRow]:
@@ -208,28 +229,31 @@ def plan_rows(rows) -> list[BookRow]:
     return [r for r in rows if r.row_kind == "plan"]
 
 
-def _slip(price: float, side: str) -> float:
-    return abs(apply_frictions(price, side) - price)
+def _slip(price: float, side: str, bps: float) -> float:
+    return abs(apply_frictions(price, side, slippage_bps=bps) - price)
 
 
-def modelled_net_r(row: BookRow) -> float | None:
+def modelled_net_r(row: BookRow, *, frictions: dict | None = None) -> float | None:
     """Gross R less modelled slippage on both fills and the round-trip commission."""
     if row.gross_r is None or row.entry is None or row.stop is None:
         return None
+    settings = frictions if frictions is not None else friction_settings()
     risk = abs(row.entry - row.stop)
-    if risk < MIN_RISK_FRACTION * abs(row.entry) or risk == 0:
+    if risk < settings["min_risk_fraction"] * abs(row.entry) or risk == 0:
         return None
     short = (row.direction or "").lower() in _SHORT
     side_in, side_out = ("sell", "buy") if short else ("buy", "sell")
     exit_price = row.exit_price if row.exit_price is not None else row.entry
-    slippage = _slip(row.entry, side_in) + _slip(exit_price, side_out)
-    return row.gross_r - slippage / risk - commission_r()
+    bps = settings["slippage_bps"]
+    slippage = _slip(row.entry, side_in, bps) + _slip(exit_price, side_out, bps)
+    commission = commission_r(risk_dollars=settings["commission_risk_basis"],
+                              commission=settings["commission_per_trade"])
+    return row.gross_r - slippage / risk - commission
 
 
-def load_rejections(path: Path) -> list[RejectionCount]:
+def load_rejections(path: Path, *, input_fingerprints: dict | None = None) -> list[RejectionCount]:
     """A ``rejections`` export: one count per (date, reason)."""
-    with Path(path).open(encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh)
-        _check_header(reader.fieldnames, REJECTION_COLUMNS, str(path))
-        return [RejectionCount(r["date"].strip(), r["reason"].strip(), int(r["count"]))
-                for r in reader]
+    reader = csv.DictReader(StringIO(read_input(path, input_fingerprints), newline=""))
+    _check_header(reader.fieldnames, REJECTION_COLUMNS, str(path))
+    return [RejectionCount(r["date"].strip(), r["reason"].strip(), int(r["count"]))
+            for r in reader]

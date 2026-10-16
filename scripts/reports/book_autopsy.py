@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts" / "reports")]
 
 from autopsy.report import DEFAULT_BALANCE, build_report, render_markdown  # noqa: E402
-from autopsy.rows import load_rejections, load_rows  # noqa: E402
+from autopsy.rows import friction_settings, load_rejections, load_rows  # noqa: E402
 from swingbot.core.backtesting.instrument.stats import (  # noqa: E402
     WEEK_BOOTSTRAP_RESAMPLES, WEEK_BOOTSTRAP_SEED)
 
@@ -43,10 +43,18 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
     args = _parser().parse_args(argv)
-    report = build_report(load_rows(args.rows), load_rejections(args.rejections),
+    frictions = friction_settings()
+    inputs = {}
+    loaded = load_rows(args.rows, frictions=frictions, input_fingerprints=inputs)
+    rejections = load_rejections(args.rejections, input_fingerprints=inputs)
+    invocation = {"command": [sys.executable, str(Path(__file__).resolve()), *argv],
+                  "options": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}}
+    report = build_report(loaded, rejections,
                           bars_dir=args.bars_dir, n_resamples=args.resamples,
-                          seed=args.seed, balance=args.balance)
+                          seed=args.seed, balance=args.balance, frictions=frictions,
+                          input_fingerprints=inputs, invocation=invocation)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     json_path = args.out_dir / f"{args.date}-book-autopsy.json"
     md_path = args.out_dir / f"{args.date}-book-autopsy.md"

@@ -186,3 +186,11 @@ def test_a_wrong_rejections_header_is_refused(tmp_path):
     path.write_bytes(b"day,reason,n\n2026-03-04,risk_cap,2\n")
     with pytest.raises(ValueError, match="date,reason,count"):
         rows.load_rejections(path)
+
+
+def test_explicit_friction_snapshot_controls_model_after_config_changes(monkeypatch, tmp_path):
+    settings = rows.friction_settings()
+    monkeypatch.setattr(config, "SLIPPAGE_BPS", 100.0)
+    monkeypatch.setattr(config, "COMMISSION_PER_TRADE", 50.0)
+    loaded = rows.load_rows(_write_csv(tmp_path, [TRADE]), frictions=settings)
+    assert loaded[0].net_r == pytest.approx(2.0 - 0.021 - 0.02)

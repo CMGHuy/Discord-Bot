@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import hashlib
 import json
 import sys
 from datetime import date, timedelta
@@ -142,8 +143,14 @@ def test_stop_cells_carry_the_dollar_view_and_report_has_supply_tallies(tmp_path
 
 
 def test_two_runs_with_one_seed_are_identical(tmp_path):
-    first = json.dumps(_build(tmp_path / "a"), sort_keys=True)
-    assert json.dumps(_build(tmp_path / "b"), sort_keys=True) == first
+    rows_csv, rej_csv, bars_dir = _files(tmp_path)
+
+    def run():
+        data = report.build_report(rows.load_rows(rows_csv), rows.load_rejections(rej_csv),
+                                   bars_dir=bars_dir, n_resamples=200, seed=42, balance=10_000.0)
+        return json.dumps(data, sort_keys=True)
+
+    assert run() == run()
 
 
 def test_many_tickers_still_fit_the_markdown_budget(tmp_path):
@@ -192,3 +199,35 @@ def test_markdown_keeps_pipe_delimited_cell_ids_in_one_column():
 def test_the_bar_and_exit_modules_share_one_stop_exit_rule(reason, outcome):
     row = rows.BookRow(row_kind="trade", close_reason=reason, outcome=outcome)
     assert bars._stopped_out(row) is exits.is_stop_exit(row)
+
+
+def test_cli_records_input_hashes_effective_frictions_and_resolved_invocation(tmp_path, monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "SLIPPAGE_BPS", 17.0)
+    monkeypatch.setattr(config, "COMMISSION_PER_TRADE", 2.5)
+    monkeypatch.setattr(config, "COMMISSION_RISK_BASIS", 250.0)
+    rows_csv, rej_csv, bars_dir = _files(tmp_path)
+    (bars_dir / "UNUSED.csv").write_text("not consumed", encoding="utf-8")
+    out = tmp_path / "results"
+    argv = [str(rows_csv), str(rej_csv), "--bars-dir", str(bars_dir),
+            "--out-dir", str(out), "--date", "2026-10-15", "--balance", "25000", *FAST]
+    assert script.main(argv) == 0
+    data = json.loads((out / "2026-10-15-book-autopsy.json").read_text(encoding="utf-8"))
+    header = data["header"]
+    assert header["frictions"] == {"slippage_bps": 17.0, "commission_per_trade": 2.5,
+                                    "commission_risk_basis": 250.0, "min_risk_fraction": 0.001}
+    expected = {str(path.resolve()): hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in (rows_csv, rej_csv, bars_dir / "AAA.csv")}
+    assert header["input_fingerprints"] == expected
+    assert header["invocation"]["command"][2:] == argv
+    assert header["invocation"]["options"]["balance"] == 25000.0
+    assert header["invocation"]["options"]["seed"] == 42
+    md = (out / "2026-10-15-book-autopsy.md").read_text(encoding="utf-8")
+    assert "SHA-256" in md and "17.0" in md and "Invocation:" in md
+    assert len(md.splitlines()) <= report.MD_MAX_LINES
+
+
+def test_report_records_frictions_for_direct_builds(tmp_path):
+    header = _build(tmp_path)["header"]
+    assert set(header["frictions"]) == {"slippage_bps", "commission_per_trade",
+                                         "commission_risk_basis", "min_risk_fraction"}

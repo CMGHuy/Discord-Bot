@@ -15,11 +15,12 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from collections import Counter
 from pathlib import Path
+from io import StringIO
 
 import pandas as pd
 
 from .cells import Tally
-from .rows import BookRow
+from .rows import BookRow, read_input
 
 SPLIT_GUARD = 0.25            # fraction: anchor close vs planned entry
 REVERSAL_BARS = 10            # bars after the exit day the reversal walk reads
@@ -47,14 +48,15 @@ def _cache_name(ticker: str) -> str:
     return ticker.replace("=", "_").replace("^", "_").replace("/", "_")
 
 
-def load_bars(bars_dir: Path | None, ticker: str) -> pd.DataFrame | None:
+def load_bars(bars_dir: Path | None, ticker: str, *,
+              input_fingerprints: dict | None = None) -> pd.DataFrame | None:
     """The ticker's daily bars sorted by day, with an ISO ``day`` column; None when absent."""
     if bars_dir is None or not ticker:
         return None
     path = Path(bars_dir) / f"{_cache_name(ticker)}.csv"
     if not path.exists():
         return None
-    df = pd.read_csv(path)
+    df = pd.read_csv(StringIO(read_input(path, input_fingerprints)))
     if df.empty or "Date" not in df.columns:
         return None
     df["day"] = df["Date"].astype(str).str[:10]
@@ -234,13 +236,14 @@ def _row_bars(row, df: pd.DataFrame | None) -> dict:
     return out
 
 
-def enrich_with_bars(rows: list[BookRow], bars_dir: Path | None) -> int:
+def enrich_with_bars(rows: list[BookRow], bars_dir: Path | None, *,
+                     input_fingerprints: dict | None = None) -> int:
     """Fill every row's ``bars`` dict; return how many closed trades are bar-covered."""
     cache: dict[str, pd.DataFrame | None] = {}
     covered = 0
     for row in rows:
         if row.ticker not in cache:
-            cache[row.ticker] = load_bars(bars_dir, row.ticker)
+            cache[row.ticker] = load_bars(bars_dir, row.ticker, input_fingerprints=input_fingerprints)
         row.bars = _row_bars(row, cache[row.ticker])
         covered += int(row.bars["covered"] and _is_closed_trade(row))
     return covered
