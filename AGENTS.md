@@ -162,7 +162,9 @@ expiry or lost send on the alert channel is real-money divergence: that work is
 (default `alpaca`: the Alpaca history store under `data/market_data/`, not the
 root `market_data/` live cache). `--data-source yfinance` or that `.env` line
 rolls back; `BACKTEST_CACHE_DIR` or an explicit `--cache-dir` means yfinance.
-A missing store is an error, never an empty run. A new data source resets no
+A missing store is an error, never an empty run. Live badges always use the
+yfinance registry row, and `merge_registry` refuses an alpaca VALIDATION row
+whose yfinance shot is spent. A new data source resets no
 validation budget and reopens no closed pre-registration; each new
 pre-registration names its `data_source`. Detail: `known-traps.md` § Two OHLCV
 caches, `backtest-methodology.md` § Windows.

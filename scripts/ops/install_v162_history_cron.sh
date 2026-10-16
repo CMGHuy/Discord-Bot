@@ -6,7 +6,7 @@
 # to logs/history_store_cron.log; a non-zero check is something to read, not
 # a failure of the cron.
 #
-# Plan v162 (docs/superpowers/plans/2026-10-15-v162-alpaca-history-store_0-index.md),
+# Plan v162 (docs/superpowers/plans/implemented/2026-10-15-v162-alpaca-history-store_0-index.md),
 # task AH20; installed by AH25 after the merge, because `compose run` uses
 # the deployed image (SWING_BOT_IMAGE from /opt/swing-bot/.env).
 #

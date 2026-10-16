@@ -1,6 +1,6 @@
 # v162 history store: production backfill (2026-10-16)
 
-**Spec:** [v162 design](../specs/2026-10-15-v162-alpaca-history-store-design.md) · **Plan:** [v162 index](../plans/2026-10-15-v162-alpaca-history-store_0-index.md), task AH21
+**Spec:** [v162 design](../specs/implemented/2026-10-15-v162-alpaca-history-store-design.md) · **Plan:** [v162 index](../plans/implemented/2026-10-15-v162-alpaca-history-store_0-index.md), task AH21
 **Code:** branch `2026-10-15-v162-alpaca-history-store` at `69a74788072121ccd2b6bc4c2edd6bcdb5a6c4e1`, staged read-only at `/opt/swing-bot/staging/v162/` (528 files, equal to `git ls-files swingbot scripts`) over the deployed image `sha-b22e799e1c59`
 **Run:** `docker compose run --rm` on the VM, `--mode full`, defaults (15min, hourly, daily; start 2016-01-01; watchlist plus SPY, 78 tickers), started `2026-10-16T07:42:16Z` (03:42 ET, Friday), finished `2026-10-16T09:24:48Z`, `2508` requests. Exit 0; `written 228, unchanged 0, refetched 0, skipped 2, flagged 9, requests 2508`.
 
