@@ -278,6 +278,9 @@ section. **Drops** a row when:
   `backtest-methodology.md` § Closed pre-registrations — do not re-run these;
 - its evidence cell is `thin`, or not present in the autopsy JSON (an invented
   figure), unless `route` is a playbook `/screen`;
+- any quoted N, weeks, Δ, interval or q differs from that cell's JSON figures
+  at the autopsy Markdown's three-decimal precision, or the unrounded JSON q
+  is above 0.10 or non-finite; playbook `/screen` rows need no cell quote;
 - its evidence `Δ` lower bound is at or below zero (no evidence to rank).
 
 **Pins** every `divergence: yes` row to the top (real-money divergence is
