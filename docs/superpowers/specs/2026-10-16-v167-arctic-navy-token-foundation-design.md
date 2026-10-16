@@ -5,7 +5,7 @@
 **Edge:** none (integrity). This is a visual and maintainability change. It touches no signal, threshold, plan, sizing or badge.
 **Screen:** exempt (integrity)
 **Panel:** senior-engineer, staff-engineer
-**Status:** spec written 2026-10-16 from a brainstorm with the partner. Direction, palette and approach were approved in chat, and the palette was picked from live mockups in the visual companion. This is the first of three specs: **v167 Foundation → v168 Motion system → v169 Polish sweep**, run in that order.
+**Status:** spec written 2026-10-16 from a brainstorm with the partner. Direction, palette and approach were approved in chat, and the palette was picked from live mockups in the visual companion. Revised the same day after the panel (see `## Panel review`). This is the first of three specs: **v167 Foundation → v168 Motion system → v169 Polish sweep**, run in that order.
 
 ## Why
 
@@ -13,8 +13,10 @@ The partner asked for a more elegant, more professional dark theme that stays bl
 
 The admin (`frontend/`, Angular 21) already has a single token file, `frontend/src/styles/tokens.css`, which about 100 components consume through `var(--…)`. Three things stand in the way of the request:
 
-1. **There is no palette layer.** Semantic tokens (`--surface`, `--accent`) hold raw hex directly. Changing "the blue" means editing meaning-level tokens one by one, and nothing stops a component from writing hex of its own.
-2. **There is no component layer.** "How a panel looks" (background, border, radius, shadow) is spelled out again in each component's `styles:`. The `var(--radius)` call sites (42) and `var(--radius-chip)` call sites (11) share one 2px value, and 12 further sites hard-code `border-radius: 2px`/`3px`/`4px`.
+1. **There is no palette layer.** Semantic tokens (`--surface`, `--accent`) hold raw hex directly. Changing "the blue" means editing meaning-level tokens one by one.
+2. **There is no component layer.** "How a panel looks" (background, border, radius, shadow) is spelled out again in each component's `styles:`.
+   - About 44 `var(--radius)` call sites and 12 `var(--radius-chip)` call sites share one 2px value, whether the element is a panel, a control or a 3px-high bar.
+   - About 18 further sites hard-code `border-radius: <n>px`.
 3. **The current look is a deliberate "pro terminal".** Spec v80 D1 ("TradingView Blue", `#2962ff`), 2px corners (v80 D3), and v18's "one shadow, overlays only" elevation rule all produce it. The partner chose a **refined terminal** instead: keep the density and the data-first layout, but soften the geometry and use a richer navy palette.
 
 ## Decisions taken in the brainstorm
@@ -33,15 +35,21 @@ The admin (`frontend/`, Angular 21) already has a single token file, `frontend/s
 
 ```
 frontend/src/styles/
-  palette.css    tier 1 -- raw named colours. THE ONLY FILE WITH HEX.
+  palette.css    tier 1 -- raw named colours. THE ONLY FILE WITH HEX (one exception, below).
   tokens.css     tier 2 -- semantic (--bg, --accent, --pos ...), each var(--palette-name)
-                 tier 3 -- component tokens (--panel-*, --control-*, --chip-*, --glow-*)
+                 tier 3 -- component tokens (--panel-*, --control-*, --chip-*, --radius-sm, --glow-*)
   fonts.css      unchanged
 ```
 
 `styles.css` imports `palette.css` before `tokens.css`. Tier 3 lives at the bottom of `tokens.css` under its own banner rather than in a fourth file. It is short, and keeping it beside tier 2 keeps the "what does a panel look like" answer one file away from "what does surface mean".
 
-**Exception, kept from today:** `--chart-1…6` and `--quality-4` stay **literal hex inside `tokens.css`**. `line-chart.ts` reads them through `getComputedStyle` under jsdom, which does not resolve a nested `var()`. `chart-palette.spec.ts` also parses the file as text. The hex gate (§5) allow-lists exactly these seven names.
+**Exception, kept from today:** `--chart-1…6` and `--quality-4` stay **literal hex inside `tokens.css`**. `line-chart.ts` reads them through `getComputedStyle` under jsdom, which does not resolve a nested `var()`. `chart-palette.spec.ts` also parses the file as text. The colour gate (§5) allow-lists exactly these seven names.
+
+**One shared token resolver for the specs.** `contrast.spec.ts:8-10`, `chart-palette.spec.ts:7-11` and `tests/charts/test_chart_theme.py:_tokens()` each match only `--name: #hex;` in `tokens.css`. Once tier 2 is `var(--palette-x)`, all three throw. The fix is one helper per language:
+- `frontend/src/app/ui/testing/resolve-token.ts`, which reads `palette.css` and `tokens.css` and follows `var()` hops until it reaches a literal;
+- a matching `_resolve()` in `test_chart_theme.py`.
+
+Both vitest specs import the TS helper. Nobody keeps a private copy.
 
 ### 2. Arctic Navy palette (tier 1 values, tier 2 mapping)
 
@@ -60,27 +68,31 @@ frontend/src/styles/
 | `--text-faint` (divider only) | `#4e5361` | `#3a4a66` | ~2:1, never text |
 | `--accent` | `#5593ff` | `#7cc4ff` | 8.10:1 |
 | `--accent-fill` | `#2962ff` | `#1c6dd0` | `--on-accent` white 5.06:1 |
-| `--accent-fill-hi` (new, gradient top stop) | — | `#2474d2` | white ≥ 4.5:1 (gate) |
+| `--accent-fill-hi` (new, gradient top stop) | — | `#2474d2` | white 4.66:1. That is a thin margin, so the gate checks this stop explicitly. |
 | `--pos` | `#17c98e` | `#3ddc97` | 8.59:1 |
 | `--neg` | `#ff5470` | `#ff6f7d` | 5.66:1 |
 | `--warn` | `#ffb43d` | `#ffc266` | 9.52:1 |
 | `--info` | `#b39ddb` | `#c3a6ff` | 7.39:1 |
-| `--*-soft` tints | 12% of the old hue | the same alphas, re-derived from the new hues. `--accent-soft` is 16% of `--accent-fill` | — |
+| `--pos-soft`, `--neg-soft`, `--warn-soft` | 12% | 12% of the new hue | — |
+| `--info-soft` | 14% | 14% of the new hue | — |
+| `--accent-soft` | 18% of `--accent-fill` | **18%** of the new `--accent-fill` (unchanged alpha; the brainstorm mockup's 16% was a mockup value) | — |
 | `--quality-4` | `#9acd32` | unchanged | — |
-| `--chart-1…6` | — | **unchanged.** All are ≥ 4.82:1 on the new `--surface`. `chart-palette.spec.ts` re-validates OKLCH band and ΔE against the new surface, and a failure there reopens this table rather than loosening the gate | — |
+| `--chart-1…6` | — | **unchanged** | — |
 
-The contrast figures were computed during the brainstorm. `contrast.spec.ts` is the gate that must agree with them.
+Notes on the table:
+- **The contrast figures** were computed during the brainstorm and re-derived independently by the panel. `contrast.spec.ts` is the gate that must agree with them.
+- **The `--chart-1…6` floor holds on `--surface` only.** They are ≥ 4.82:1 there, but on `--surface-overlay` chart-6 is 3.94:1 and chart-3 is 4.14:1. Chart series render on `--surface` (`chart-container.ts`, the PNG `CHART_BG`), and **a series colour on `--surface-overlay` (e.g. a tooltip swatch) carries no text**. `chart-palette.spec.ts` re-validates OKLCH band and ΔE against the new `--surface`, and a failure there reopens this table rather than loosening the gate.
+- **The perceptual margins are thin but pass.** The panel measured `--info` vs chart-3 at ΔE 15.7, `--text-muted` vs chart-5 at ΔE 10.1 (the `KC_COLOR` / `TRENDLINE_SUPPORT_COLOR` pair in `test_chart_theme.py`), and the nearest chart colour to the new pos/neg at ΔE 14.5 (chart-2 vs neg). They are recorded so a later tweak knows how little room there is.
 
 The valence rule (one hue = one meaning; a sixth hue is a review defect) is **unchanged**. The palette swaps values only.
 
 ### 3. Geometry and elevation (tier 3)
 
 ```css
---panel-radius: 8px;
+--panel-radius: 8px;            /* panels, cards, drawers' inner sections, dialogs */
 --control-radius: 6px;          /* buttons, inputs, selects, segmented controls */
 --chip-radius: 999px;           /* pills */
---radius: var(--control-radius);      /* alias -- the 42 existing call sites follow */
---radius-chip: var(--chip-radius);    /* alias -- the 11 existing call sites follow */
+--radius-sm: 2px;               /* thin bars, cells, swatches, tracks: anything under ~12px tall */
 
 --panel-bg: linear-gradient(180deg, var(--surface-raised), var(--surface));
 --panel-border: 1px solid var(--border);
@@ -88,48 +100,75 @@ The valence rule (one hue = one meaning; a sixth hue is a review defect) is **un
 --shadow-overlay: 0 16px 40px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
 
 --btn-fill: linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill));
+--btn-fill-hover: linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white),
+                                          color-mix(in srgb, var(--accent-fill) 88%, white));
 --glow-accent: 0 4px 14px rgba(28,109,208,.35);
 --glow-ambient: radial-gradient(120% 60% at 0% 0%, rgba(28,109,208,.12), transparent 60%);
+--scrim-soft: rgb(0 0 0 / 0.5);   /* shell.css:33's mobile-nav scrim, given a name */
 ```
 
-The `rgba(...)` values above are shadow and glow geometry. Under the hex gate (§5) they may appear **only in `tokens.css` tier 3 and `palette.css`**.
+**Radius call sites are classified, not aliased.**
+- An alias `--radius: var(--control-radius)` would silently move every existing call site from 2px to 6px, including inner panels (`layout.ts:68`, `chart-container.ts:90,121`) that should be 8px.
+- So the plan **inventories** every `var(--radius)`, `var(--radius-chip)` and raw `border-radius: <n>px` site and assigns each to exactly one of `--panel-radius`, `--control-radius`, `--chip-radius` or `--radius-sm`. Examples of `--radius-sm` sites: `magnitude.ts:25-26` (a 3px bar), `bar-list.ts`, `donut.ts`, `heat-grid.ts` cells, `share-bar.ts`, `histogram.ts:106,115`, `status-cell.ts:114`, `status-indicator.ts:90`, `scan-progress.css:39`, the 1px swatches `chart-tooltip.ts:27` and `status.ts:5`.
+- `--radius-chip` sites in dense table cells are checked individually; a pill only where it reads as a tag.
+- `--radius` and `--radius-chip` are **deleted** at the end of the migration, so no un-classified site survives.
+- `border-radius: 50%` (dots) and `0` (the drawer's flush edge, `layout.ts:381`) stay as they are.
 
-- **Elevation moves from one level to two.** v18's rule ("one non-inset shadow, L3 only") becomes: `--panel-shadow` for an in-flow panel (L1/L2) and `--shadow-overlay` for anything out of flow (L3). `elevation.spec.ts` is updated to allow **exactly these two tokens** as non-inset shadows and to keep failing on any raw shadow.
-- The 12 raw `border-radius: <n>px` sites are migrated to a tier-3 token. `50%` (dots, avatars) and `0` stay as they are.
-- The body background becomes `var(--glow-ambient), var(--bg)`, a faint blue glow in the top-left.
-- Primitives that paint a panel (the panel and card primitives in `ui/layout.ts`, `figure.ts`, `chart-container.ts`) read `--panel-bg/--panel-border/--panel-radius/--panel-shadow`. Primary `button.ts` reads `--btn-fill/--glow-accent/--control-radius`. `chip.ts` reads `--chip-radius`.
+**Elevation moves from one level to two.**
+- v18's rule ("one non-inset shadow, L3 only"), enforced by **`primitives.spec.ts` G3** (`:137-160`), becomes:
+  - `--panel-shadow` for an in-flow panel (L1/L2);
+  - `--shadow-overlay` for anything out of flow (L3).
+- Both are applied through **global classes in `styles.css`**: `.sb-panel` (new) and the existing `.elev-overlay` (`styles.css:158`). Components never write `box-shadow` themselves, so G3's per-component "zero non-inset shadows" assertion stays as it is.
+- G3's `styles.css` assertion changes from exactly `['var(--shadow-overlay)']` to exactly `['var(--panel-shadow)', 'var(--shadow-overlay)']`.
+- `elevation.spec.ts` (which only regex-matches the `.elev-overlay`/`.elev-scrim` rules) gains a matching check for `.sb-panel`.
+
+**Panels and buttons.**
+- Panel primitives (`layout.ts`, `figure.ts`, `chart-container.ts`) add the `.sb-panel` class and read `--panel-bg/--panel-border/--panel-radius` for the rest.
+- `--panel-bg` and `--btn-fill` are **gradients, i.e. images**. They are used only in `background`/`background-image`, never `background-color`.
+- The primary `button.ts` swaps its hover `color-mix()` on a flat colour (`button.ts:67-68`) for `--btn-fill-hover`.
+- `background` between two gradients does not transition. That is acceptable here, and v168 handles button hover with `filter: brightness()` and the glow, which do animate.
+
+**Body background.** It becomes `var(--glow-ambient), var(--bg)`, a faint blue glow in the top-left.
 
 ### 4. Discord chart lockstep
 
-`swingbot/core/charts/chart_style.py:THEME` copies, byte for byte, every token it names (`bg`, `surface`, `surface-raised`, `border`, `border-strong`, `text`, `text-muted`, `text-faint`, `pos`, `neg`, `warn`, `info`, `chart-*`). Its new values land **in the same commit** as `palette.css`/`tokens.css`. `tests/charts/test_chart_theme.py` keeps comparing the two, and it now resolves a tier-2 `var(--x)` through `palette.css` before comparing. Discord alert charts turn navy.
-
-`--text-faint` in a PNG is used for fine rules only, so the same "never text" rule holds there.
+- `swingbot/core/charts/chart_style.py:THEME` copies, byte for byte, every token it names: `bg`, `surface`, `surface-raised`, `border`, `border-strong`, `text`, `text-muted`, `text-faint`, `pos`, `neg`, `warn`, `info` and `chart-*`.
+- Its new values land **in the same commit** as `palette.css`/`tokens.css`.
+- `tests/charts/test_chart_theme.py` keeps comparing the two through the new `_resolve()` (§1). Its `D1_TOKENS` set and the keys `THEME` names stay exactly as they are. The test only checks keys present in `THEME`, so adding a token to the admin never forces a PNG change.
+- Discord alert charts turn navy.
+- `--text-faint` in a PNG is used for fine rules only, so the same "never text" rule holds there.
 
 ### 5. Gates (new or changed)
 
 | Gate | Rule |
 |---|---|
-| `ui/no-raw-colour.spec.ts` (new) | No hex and no `rgb(`/`rgba(`/`hsl(` colour literal in any `frontend/src/**/*.{ts,css}` outside `styles/palette.css` and `styles/tokens.css`. Spec files and comments are excluded. Inside `tokens.css`, hex is allowed only on the seven allow-listed names (§1). |
-| `ui/no-raw-radius.spec.ts` (new) | No `border-radius: <n>px` outside `styles/`. `50%` and `0` are allowed. |
-| `elevation.spec.ts` (changed) | Non-inset `box-shadow` may only be `var(--panel-shadow)` or `var(--shadow-overlay)`. |
-| `contrast.spec.ts` (unchanged rule) | Re-run on the new values: text tokens ≥ 4.5:1 on all four surfaces. White on `--accent-fill` **and** `--accent-fill-hi` ≥ 4.5:1 (the second stop is new). |
-| `chart-palette.spec.ts` (unchanged rule) | Re-validates `--chart-*` against the new `--surface`. |
-| `test_chart_theme.py` (changed) | Python `THEME` equals the resolved token values. |
+| `primitives.spec.ts` "no colour is declared outside tokens.css" (**extended**, not duplicated) | Today it matches `(?<!&)#hex` in every `ui/` call site, with an empty `HEX_ALLOWLIST`. It is extended in three ways. **Scope:** every `frontend/src/**/*.{ts,css}` and `frontend/src/index.html`, excluding specs, `styles/palette.css`, and `styles/tokens.css` (checked separately: hex only on the seven allow-listed names of §1, `rgb(a)` only inside tier-3 shadow and glow tokens). **Pattern:** also `rgb(`/`rgba(`/`hsl(` in both comma and space syntax, so `shell.css:33`'s `rgb(0 0 0 / 0.5)` is caught (it migrates to `--scrim-soft`). It keeps the `(?<!&)` guard for `&#9650;` (`versions.ts:151`). **Comments:** `/* … */` and `//` comments are stripped before matching, so `button.ts:65-66`'s documentary hex stays legal. |
+| `primitives.spec.ts` **raw radius** (new describe block, same file and helpers) | No `border-radius: <n>px` outside `styles/`. `50%` and `0` are allowed. No `var(--radius)`/`var(--radius-chip)` remains. |
+| `primitives.spec.ts` **G3** (changed) | As §3: components cast no non-inset shadow, and `styles.css` casts exactly `var(--panel-shadow)` and `var(--shadow-overlay)`. |
+| `elevation.spec.ts` (changed) | Also checks the `.sb-panel` rule. |
+| `contrast.spec.ts` (**helper changed**, rule unchanged) | It resolves through `resolve-token.ts`. Text tokens must be ≥ 4.5:1 on all four surfaces, and white must be ≥ 4.5:1 on `--accent-fill` **and** on `--accent-fill-hi` (new). |
+| `chart-palette.spec.ts` (**helper changed**, rule unchanged) | It resolves through `resolve-token.ts` and re-validates `--chart-*` against the new `--surface`. |
+| `test_chart_theme.py` (**helper changed**) | Python `THEME` must equal the resolved token values. |
 
 ### 6. Superseded rules
 
-The superseded passages are marked in place, not deleted (this repo's convention):
+The superseded passages are marked in place, not deleted (this repo's convention). Each mark points at v167. They are:
 - spec v80 D1 (TradingView Blue palette) and D3's 2px radius;
 - v18's single-shadow elevation rule;
-- the "radii, motion" comment block in `tokens.css` ("Tight radii: terminal, not consumer app").
+- `tokens.css:14-17` and `:56-67`, the "TradingView Blue" header and the "ONE shadow … primitives.spec.ts enforces that" block;
+- the `tokens.css` "radii, motion" comment ("Tight radii: terminal, not consumer app");
+- `styles.css:145-154`, the one-shadow comment;
+- `chart_style.py:19-27`, the "TradingView Blue / terminal" comment.
 
-Each mark points at v167.
+### 7. Devices (`docs/claude/ui-design.md`) and the cold-load colour
 
-### 7. Devices (`docs/claude/ui-design.md`)
+- Nothing in the new tokens depends on viewport width. `--control-h` keeps its 44px `pointer: coarse` / `< 640` override, and `--control-radius` holds at 6px at every height.
+- `#0a0b10` appears in three places outside `styles/`, and all three move to `--bg` `#070b14`:
+  - `index.html:21` (`theme-color`);
+  - `index.html:42` (the inline `html, body { background }` that prevents a cold-load flash);
+  - `manifest.webmanifest` (`theme_color` and `background_color`).
 
-Nothing in the new tokens depends on viewport width. `--control-h` keeps its 44px `pointer: coarse` / `< 640` override, and `--control-radius` holds at 6px at every height. Before and after screenshots at **390 / 768 / 1440** of the dashboard, trades list and a drawer are the evidence for this spec. The full every-workspace pass is v169.
-
-`index.html` `theme-color` and `manifest.webmanifest` `theme_color`/`background_color` (both `#0a0b10` today) move to `--bg` `#070b14`, so the PWA title bar matches.
+  `index.html` is in the colour gate's scope with an allow-list entry for exactly those two hex values, each with its comment. The cold-load style cannot use `var()`, because the stylesheet has not loaded yet.
 
 ## Out of scope
 
@@ -140,11 +179,27 @@ Nothing in the new tokens depends on viewport width. `--control-h` keeps its 44p
 
 ## Interaction with live plans
 
-- **v165 (calendar day page)** and **v166 (trade detail reorganisation)** add components. They must use tokens, not hex, which v165/v166 already require. Whichever lands second rebases. The new gates will name any stray literal.
+- **v165 (calendar day page)** and **v166 (trade detail reorganisation)** add components. They must use tokens, not hex, which they already must under the existing `primitives.spec.ts` hex gate. Whichever lands second rebases. The extended gates will name any stray literal or raw radius.
 
-## Testing
+## Testing and evidence
 
-- The gates in §5. This spec introduces two of them and changes two.
-- `python scripts/dev/testrun.py file tests/charts/test_chart_theme.py` covers the Python side.
-- Frontend: `npx vitest run src/app/ui` while iterating, then the plan's single full-suite task.
-- Playwright screenshots at three widths (§7), stored under `docs/superpowers/results/v167/`.
+- The gates in §5.
+- Each plan task quotes the **verdict line** of its narrow run. "Should pass" is not evidence. The narrow runs are:
+  - `python scripts/dev/testrun.py file tests/charts/test_chart_theme.py`;
+  - `npx vitest run src/app/ui` (from `frontend/`).
+- Then the plan's single full-suite task.
+- **Screenshots** with Playwright (`scripts/browse.mjs`) at **390 / 768 / 1440** of the dashboard, the trades list and an open drawer, before and after, stored under `docs/superpowers/results/v167/`. **Pass criterion:** at each width, no horizontal page scroll, no text clipped by a new radius, every panel shows the gradient ground and hairline, and the partner signs the set off in chat. The screenshots are the evidence the partner reviews. They are not an automated diff.
+
+## Panel review
+
+Run 2026-10-16 on commit `e8a8e9bc`.
+
+- senior-engineer: the shadow gate is `primitives.spec.ts` G3, not `elevation.spec.ts` (which only matches two rules) -- applied (§3, §5).
+- senior-engineer: `contrast.spec.ts` and `chart-palette.spec.ts` token helpers are hex-only and will throw on `var()` tier-2 tokens -- applied (§1 shared resolver, §5).
+- senior-engineer: a hex gate already exists in `primitives.spec.ts` (`HEX_ALLOWLIST`, `(?<!&)` guard); `shell.css:33` uses space-syntax `rgb()`; comment stripping unstated; `index.html:42` missed -- applied (§5 extends the existing gate, `--scrim-soft`, §7).
+- senior-engineer: there are about 18 raw radius sites, not 12, and many are small bars or swatches that 6px would turn into pills -- applied (`--radius-sm`, §3 inventory).
+- senior-engineer: the `--radius` alias silently moves 44 sites to 6px, including inner panels -- applied (classify every site, delete the aliases).
+- senior-engineer: `--accent-soft` alpha contradiction; `--accent-fill-hi` margin unstated; chart floor holds on `--surface` only; thin ΔE margins -- applied (§2 notes).
+- senior-engineer: gradients cannot be `background-color`; button hover `color-mix` needs a gradient token; gradient backgrounds do not transition -- applied (`--btn-fill-hover`, §3).
+- senior-engineer: `chart_style.py:19-27` and `tokens.css` comments need supersede marks; keep `D1_TOKENS` unchanged -- applied (§4, §6).
+- senior-engineer: tasks must quote narrow-run verdict lines; screenshots need a pass criterion -- applied (Testing and evidence).
