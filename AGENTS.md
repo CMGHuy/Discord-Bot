@@ -192,41 +192,33 @@ investigating live bugs read the bind-mounted `/opt/swing-bot/logs/*.log*`, not
 `docker logs` (a deploy empties it), and split findings into still-firing versus
 historical (`working-conventions.md`).
 
-Read before acting:
-
-- `docs/claude/architecture.md` before changing `swingbot/core`, plan engine or
-  scan pipeline.
-- `docs/claude/known-traps.md` before changing data caching, scan output,
-  embeds, the 2% stop cap/clamp or the liquidity floor, or editing production
-  `.env` (edit in place, never `sed -i`).
-- `docs/claude/backtest-methodology.md` before running or interpreting a
-  backtest, grid or validation.
-- `docs/claude/edge-priorities.md` before choosing strategy work.
-- `docs/claude/document-conventions.md` before authoring a spec or plan.
-- `docs/claude/document-lifecycle.md` before closing a plan.
-- `docs/claude/working-conventions.md` before committing, changing
-  `VERSION.json`, mirroring a production change or investigating production.
-- `docs/claude/git-safety.md` before deleting branches or force-pushing.
-- `docs/claude/testing-cost.md` before optimizing, timing or interpreting a
-  changed test count.
-- `docs/claude/code-complexity.md` before writing or changing any function.
-- `docs/claude/model-routing.md` before writing a plan or dispatching a plan
-  task: the `**Model:**` tier rubric and the escalation ladder.
-- `docs/claude/schema-evolution.md` before changing a table's shape or the
-  fields a stored record carries (add, rename, drop, promote).
-
 Every trading and operational store is Postgres-only (v116): no JSON copy, no
 stages, no dual writes. Rollback is point-in-time: `scripts/ops/rollback_to.sh
 "<UTC>" [--dry-run]` on the VM (30 days; scanning restarts paused), with
 `pg_dump` files (90 days) as the day-level second method
 (`docs/deploy/DEPLOY_HETZNER.md`, `DB_RESTORE.md`). A DB write failure at
 issuance pauses scanning (`StoreWriteHalt`); unpause from the admin UI.
-- `docs/claude/skills-tools.md` before choosing repo-specific skills or
-  automation.
-- `docs/claude/ui-design.md` before designing or changing any screen, table or
-  pager: every UI is designed for mobile, tablet and desktop together and
-  checked at all three widths; tables page 5/10/20/50/100/All (10 desktop, 5
-  tablet/phone).
+
+Read the `docs/claude/` file before acting:
+
+- `architecture.md`: changing `swingbot/core`, plan engine or scan pipeline.
+- `known-traps.md`: data caching, scan output, embeds, the 2% stop cap/clamp,
+  the liquidity floor, or editing production `.env` (in place, never `sed -i`).
+- `backtest-methodology.md`: running or interpreting a backtest, grid or
+  validation. `edge-priorities.md`: choosing strategy work.
+- `document-conventions.md`: authoring a spec or plan.
+  `document-lifecycle.md`: closing a plan.
+- `working-conventions.md`: committing, `VERSION.json`, mirroring or
+  investigating production. `git-safety.md`: branch deletion, force-push.
+- `testing-cost.md`: optimizing, timing or a changed test count.
+- `code-complexity.md`: writing or changing any function.
+- `model-routing.md`: writing a plan or dispatching a plan task (the
+  `**Model:**` tier rubric and the escalation ladder).
+- `schema-evolution.md`: changing a table's shape or a stored record's fields.
+- `skills-tools.md`: choosing repo-specific skills or automation.
+- `ui-design.md`: any screen, table or pager: designed for mobile, tablet and
+  desktop together and checked at all three widths; tables page
+  5/10/20/50/100/All (10 desktop, 5 tablet/phone).
 
 ## Skills: the same ones Claude uses
 
@@ -359,23 +351,20 @@ make up / make logs / make restart                    # docker compose lifecycle
 
 ## Testing and long-running work
 
-Use the wrapper rather than the raw suite; it prints a one-line verdict instead
-of ~1150 progress lines. Never re-run the full suite to check a local change.
+Use the wrapper, not raw pytest: a one-line verdict, not ~1150 progress
+lines. Never re-run the full suite to check a local change.
 
-- `python scripts/dev/testrun.py changed` — runs only the tests reaching your
-  diff, and widens to the full suite whenever it cannot be sure (registry
-  dispatch, an unplaceable file type, a failed git call). Inner loop only:
-  it is not a gate, and the plan-final full run is unchanged. `--dry-run`
-  prints the selection without running it, even when it widens to full.
-  `--audit` runs the selection then the full suite and reports failures the
-  selection missed (exit 1 on a miss; SKIPPED when it already widened;
-  UNKNOWN, exit 2, when the full run did not complete).
-- `python scripts/dev/testrun.py file tests/test_foo.py` while iterating.
-- `python scripts/dev/testrun.py fast` for broader, non-render-heavy checks.
-- `python scripts/dev/testrun.py suite <name>` runs one feature's suite (`suites`
-  lists them); suites are defined in `tests/suites.toml`.
-- `python scripts/dev/testrun.py full` once as final verification of an entire
-  plan; do not rerun it after a clean merge unless conflicts were resolved.
+All via `python scripts/dev/testrun.py <mode>`:
+
+- `changed` runs only the tests reaching your diff and widens to full whenever
+  it cannot be sure (registry dispatch, an unplaceable file type, a failed git
+  call). Inner loop only, not a gate. `--dry-run` prints the selection;
+  `--audit` runs it then the full suite and reports misses (exit 1 on a miss;
+  SKIPPED when it already widened; UNKNOWN, exit 2, if full did not complete).
+- `file tests/test_foo.py` while iterating; `fast` for broader checks.
+- `suite <name>` runs one feature's suite; `suites` lists them.
+- `full` once as final verification of an entire plan; not again after a clean
+  merge unless conflicts were resolved.
 - Same cadence for the frontend: `npm test -- --include <spec>` per task, a bare
   `cd frontend && npm test` only once as the plan's final verification if it
   touches `frontend/`. A full run to chase an already-observed failure is
@@ -383,8 +372,8 @@ of ~1150 progress lines. Never re-run the full suite to check a local change.
 
 **Tests live in suites** (`tests/suites.toml`). A new `tests/` directory joins
 exactly one suite in the same commit; a suite past `max_tests` is split by
-feature, never the limit raised. CI builds one job per suite from that file, so
-never hand-list a job in `deploy.yml`; `tests/dev/test_suites.py` enforces this.
+feature, never the limit raised. CI builds one job per suite from that file;
+never hand-list one in `deploy.yml` (`tests/dev/test_suites.py` enforces).
 Detail: `docs/claude/testing-cost.md` § Test suites.
 
 **A failed test is fixed and re-run alone** (`testrun.py file ...` or
@@ -397,9 +386,8 @@ failure; read the output rather than assuming. Prove correctness and move on:
 timings here swing 2-4x with machine load, so do not re-measure to justify a
 change. Backtests and grids run for minutes to hours; chunk them per strategy
 and do not launch broad sweeps casually. Any script past a couple of minutes
-must print flushed per-unit progress; past 15 minutes that record must resolve
-to a percent-complete figure (rewritten each unit, not summed by the reader) in
-a log deleted on completion, so "how far along" is answered with a number.
+prints flushed per-unit progress; past 15 minutes, a percent-complete figure
+rewritten each unit (never summed by the reader) in a log deleted on completion.
 
 Use at most one subagent at a time by default: dispatch it, wait for its result,
 then decide whether another is needed. Parallel subagents need the human
@@ -413,11 +401,10 @@ same work to them so bulk output stays out of your context:
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
 from a `task-brief`), `plan-briefer` (gathers a spec's code context into
 `.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
-approved spec and that brief, in two phases: `mode=index` writes the index and task ledger first, then one
-`mode=part <N>` run per part, one at a time here; each run appends task by
-task to disk rather than writing the file at the end; at most 2 plans in
-progress per session, and a plan cut off mid-write is resumed from its first
-missing task, never skipped or restarted. The SessionStart hook prints
+approved spec and that brief: `mode=index` (index and task ledger) first,
+then one `mode=part <N>` per part, one at a time here, each appending task by
+task to disk; at most 2 plans in progress per session; a plan cut off
+mid-write resumes from its first missing task, never skipped or restarted. The SessionStart hook prints
 `PLAN WIP` for such a plan: resume it before new work. Record partner
 decisions in the index's `## Handoff` section as they are made, and commit
 the index, each part and any partial files (`docs(vN): plan WIP`) as you
