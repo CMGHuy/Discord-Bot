@@ -217,6 +217,14 @@ SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<good-sha> ./deploy/deploy.sh
 Find the tag under **your profile → Packages → <repo> → versions**, or in
 the "Publishing as …" line of the run that shipped it.
 
+**The admin's server is chosen inside the image (v148).** Compose runs the
+admin as `python admin_ui.py`, and it must keep doing so. A v148+ image execs
+gunicorn from there (`deploy/gunicorn.conf.py`, one gthread worker); an older
+image runs Flask's `app.run`. Rolling back to a pre-v148 tag therefore needs no
+compose edit. Never point the admin's compose `command:` at gunicorn: a
+pre-v148 image has neither gunicorn nor `admin_wsgi.py`, and the admin would
+crash-loop. Which one is running: `docker compose exec admin ps -o pid,args`.
+
 That leaves `main` ahead of production, which is deliberate — it's a
 stop-the-bleeding move. Follow it with the real fix:
 
@@ -323,6 +331,11 @@ bash scripts/ops/ssh-hetzner.sh "scripts/ops/rollback_to.sh '2026-10-14 13:05:00
 
 `--dry-run` prints the artifacts the target resolves to and refuses an
 unrestorable target. Run it again without `--dry-run` to roll back.
+
+A point-in-time rollback restores the images of that moment under the compose
+file already on the VM. Before v148 the admin image runs `app.run`, from v148
+on it runs gunicorn; both start from compose's `python admin_ui.py`, so no
+compose edit is needed either way (see "Rolling back").
 
 **Backups.** Installed by `scripts/ops/install_pitr_crons.sh` (idempotent):
 
