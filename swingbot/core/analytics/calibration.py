@@ -15,12 +15,23 @@ VALIDATION run measured legacy vs unified gating, not a per-level band), so
 inventing one would be exactly the kind of ungrounded number this repo's
 TRAIN-derived-weights discipline exists to prevent. level_calibration()
 reports n/win_rate/expectancy per level, same shape as score_deciles(),
-without a pass/fail column."""
+without a pass/fail column.
+
+v164: match_live_rows() buckets the live population of every registry row
+(both ledgers, regular lane, entered on or after EXPR_WATCH_START) for the
+pre-registered live loss watch; LW2's live_loss_watch() turns the buckets
+into rows. Day boundaries are Berlin dates read from BERLIN_TZ directly:
+this module must never import tracking.retrospective (it imports us).
+"""
 from __future__ import annotations
 
-from collections import defaultdict
+import datetime as dt
+from collections import defaultdict, namedtuple
+from dataclasses import dataclass
 
 from swingbot.core.analytics import metrics
+from swingbot.core.market.session import BERLIN_TZ
+from swingbot.core.tracking import origin
 
 
 def _decile_label(score: float) -> str:
@@ -136,3 +147,109 @@ def badge_drift(closed: list[dict], registry_entries: list[dict]) -> list[dict]:
                      "live_n": live_n, "live_wr": live_wr, "delta_wr": delta,
                      "drift_alert": alert})
     return rows
+
+
+# ---------------------------------------------------------------------------
+# v164 live loss watch, D1: population and matching (pre-registered)
+# ---------------------------------------------------------------------------
+
+EXPR_WATCH_START = dt.date(2026, 10, 16)   # Berlin date of opened_at, on or after
+WATCH_STATUSES = ("win", "loss", "closed")
+WATCH_COUNT_KEYS = ("no_source", "unknown_strategy", "no_r", "manual_close", "no_entry_date")
+
+#: The bootstrap adapter: stats.group_by_week reads `entry_date` with getattr,
+#: so a plain trade dict cannot be passed. entry_date is the Berlin-date ISO
+#: string, never the UTC timestamp (iso_week_key slices [:10]).
+LiveTrade = namedtuple("LiveTrade", "entry_date r status")
+
+RowKey = tuple  # (source, strategy, horizon | None)
+
+
+@dataclass(frozen=True)
+class MatchResult:
+    """One bucket per registry row key (empty when nothing matched) plus the
+    per-reason counts of trades that were reported rather than bucketed."""
+    buckets: dict
+    counts: dict
+
+
+def row_key(entry: dict) -> RowKey:
+    """(source, strategy, horizon) of a registry row; horizon None = pooled."""
+    return (entry.get("source"), entry.get("strategy"), entry.get("horizon"))
+
+
+def berlin_entry_date(trade: dict) -> str | None:
+    """Berlin date of `opened_at` as "YYYY-MM-DD"; naive reads as UTC (as
+    retrospective._to_berlin does). None when missing or unparseable."""
+    raw = trade.get("opened_at")
+    if not raw:
+        return None
+    try:
+        stamp = dt.datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=dt.timezone.utc)
+    return stamp.astimezone(BERLIN_TZ).date().isoformat()
+
+
+def _pooled_key(trade: dict) -> RowKey:
+    source = trade.get("source")
+    strategy = "ALL" if source == "confluence" else trade.get("strategy")
+    return (source, strategy, None)
+
+
+def _target_keys(trade: dict, buckets: dict) -> list:
+    """The exact-horizon row when it exists, and always the pooled row."""
+    pooled = _pooled_key(trade)
+    exact = (pooled[0], pooled[1], trade.get("horizon_key"))
+    if exact == pooled or exact not in buckets:
+        return [pooled]
+    return [exact, pooled]
+
+
+def _in_population(trade: dict) -> bool:
+    return trade.get("status") in WATCH_STATUSES and origin.is_regular(trade)
+
+
+def _exclusion(trade: dict, buckets: dict, r: float | None) -> str | None:
+    """The count key a population trade is reported under instead of being
+    bucketed, first hit wins; None = keep it."""
+    if not trade.get("source"):
+        return "no_source"
+    if _pooled_key(trade) not in buckets:
+        return "unknown_strategy"
+    if r is None:
+        return "no_r"
+    return None
+
+
+def match_live_rows(trades: list[dict], registry_entries: list[dict]) -> MatchResult:
+    """Bucket the pre-registered live population (spec D1) per registry row.
+
+    A trade counts toward its exact-horizon row and the pooled row of its
+    (source, strategy'); two aggregation levels, never two strategies.
+    Status/origin/start-date filtering defines the population and is not
+    counted; every other exclusion is counted by reason, never dropped."""
+    buckets = {row_key(entry): [] for entry in registry_entries}
+    counts = dict.fromkeys(WATCH_COUNT_KEYS, 0)
+    for trade in trades:
+        if not _in_population(trade):
+            continue
+        entry_date = berlin_entry_date(trade)
+        if entry_date is None:
+            counts["no_entry_date"] += 1
+            continue
+        if dt.date.fromisoformat(entry_date) < EXPR_WATCH_START:
+            continue
+        r = metrics.r_multiple(trade)
+        reason = _exclusion(trade, buckets, r)
+        if reason is not None:
+            counts[reason] += 1
+            continue
+        if trade["status"] == "closed":
+            counts["manual_close"] += 1
+        live = LiveTrade(entry_date, r, trade["status"])
+        for key in _target_keys(trade, buckets):
+            buckets[key].append(live)
+    return MatchResult(buckets=buckets, counts=counts)
