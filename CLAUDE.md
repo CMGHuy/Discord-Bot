@@ -163,9 +163,9 @@ plan's existing `.claude/worktrees/` worktree if `git worktree list` shows one
 ## Keep every function under complexity 15
 
 Every function and method you write or change ends at cyclomatic complexity
-**< 15** (`python -m radon cc -s -n C <files>`): split into named helpers,
-table-drive `if/elif` chains, return early. A legacy function already >= 15
-never gets worse. A refactor never changes behaviour. Detail: `code-complexity.md`.
+**< 15**, enforced by `scripts/dev/complexity_gate.py` against
+`complexity_baseline.json` (`testrun.py full` and CI; `--update` only shrinks it):
+split into named helpers, table-drive `if/elif` chains, return early. A legacy function already >= 15 never gets worse. A refactor never changes behaviour. Detail: `code-complexity.md`.
 
 ## Never delete a branch whose name contains "backup"
 

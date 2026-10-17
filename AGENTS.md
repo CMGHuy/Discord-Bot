@@ -422,9 +422,13 @@ each step in `.superpowers/sdd/progress.md`.
 ## Function complexity limit
 
 Every function and method you write or change ends at cyclomatic complexity
-**below 15**, measured with `python -m radon cc -s -n C <files>` (install radon
-once; it is not a project dependency). It covers `swingbot/`, `bot.py`,
-`admin_ui.py`, `scripts/` and `tests/`, and holds for urgent fixes too.
+**below 15**. It is enforced by `python scripts/dev/complexity_gate.py` against
+`scripts/dev/complexity_baseline.json`, in `testrun.py full` and in CI (radon is
+pinned in `requirements.txt`); use `python -m radon cc -s -n C <files>` while
+iterating. The gate fails on `new`, `risen`, `improved` and `gone`; run
+`--update` in the same commit for the last two. `--update` only shrinks the
+baseline, and closures are measured on their own. It covers `swingbot/`,
+`bot.py`, `admin_ui.py`, `scripts/` and `tests/`, and holds for urgent fixes too.
 
 - Split at a real seam (gather, decide, render), table-drive an `if/elif` chain
   keyed on a value, use guard clauses, and name conditions as helpers. A helper

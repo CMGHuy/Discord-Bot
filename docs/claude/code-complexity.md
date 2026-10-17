@@ -24,6 +24,8 @@ scored above 20, and the worst were the ones that matter most:
 | `tracking/retrospective.build_daily_retrospective` | 106 | 317 |
 | `backtesting/backtest.run_backtest` | 59 | 267 |
 
+Current scores are in `scripts/dev/complexity_baseline.json`; this table is the 2026-09-24 audit.
+
 Nobody holds 108 branches in their head, and a unit test cannot reach one
 branch without dragging in the other 107. A fix in the live scan path or the
 backtest engine is exactly where a silent behaviour change costs money or
@@ -31,14 +33,45 @@ invalidates a comparison. Figures drift; re-measure rather than quote them.
 
 ## Measuring
 
+The limit is enforced by `scripts/dev/complexity_gate.py`. radon is pinned in
+`requirements.txt`, so it is installed with everything else.
+
 ```bash
-python -m pip install radon                       # once; not a project dependency
-python -m radon cc -s -n C <files you touched>    # every block scoring 11+, with its number
+python scripts/dev/complexity_gate.py             # the gate: every tracked .py file against the baseline
+python -m radon cc -s -n C <files you touched>    # while iterating: every block scoring 11+, with its number
 ```
 
-Any block you wrote or changed that prints `(15)` or higher is a violation.
-Radon counts closures and comprehensions, so a nested helper does not hide its
-branches from the parent's score.
+The gate compares every function scoring 15 or more with
+`scripts/dev/complexity_baseline.json` and fails on any difference:
+
+| Verdict | Meaning | What to do |
+|---|---|---|
+| `new` | a function at 15 or more that is not in the baseline | split it |
+| `risen` | a baseline function scores higher than recorded | move the new logic into a helper |
+| `improved` | a baseline function scores lower, still 15 or more | `--update`, same commit |
+| `gone` | a baseline function is now under 15 or no longer exists | `--update`, same commit |
+
+`improved` and `gone` fail on purpose: a baseline left at the old score would
+let the function climb back to it unnoticed. **`--update` only shrinks the
+baseline.** It never adds a key and never raises a score, so it cannot accept
+a regression.
+
+It runs in `python scripts/dev/testrun.py full` (a `slow` test,
+`tests/dev/test_complexity_gate.py`) and as the "Complexity gate" step in the
+`backend-lint-gate` CI job, where a red result blocks the production deploy. A
+hotfix that lowers a legacy function's score runs `--update` in the same commit.
+
+**Moving or renaming a legacy function** shows up as a `gone` key plus a
+`new` key with the same score, and the gate prints a hint naming the pair.
+Hand-edit the key in the baseline first, then run `--update`; it refuses
+while such a pair exists. The diff is one renamed key with an unchanged
+score, which review confirms.
+
+**Closures count on their own.** radon does not add a closure's branches to
+its parent's score, and `radon cc` on the command line does not list
+closures at all. The gate walks them and keys each as `module:outer.inner`,
+so wrapping branches in an inner function is not a way under the limit.
+Comprehensions are counted in the function that contains them.
 
 ## Getting under the limit
 
@@ -58,6 +91,9 @@ same branches, or a `# noqa`. If the pieces cannot be named for what they do,
 the seam is wrong; look for another.
 
 ## Legacy functions already at 15 or more
+
+`scripts/dev/complexity_baseline.json` is the record of which functions are
+legacy and at what score. A function not in it has no allowance.
 
 Do not raise a legacy function's score, and do not grow it: put your new
 logic in a helper under the limit and call it. Fully decomposing a legacy
