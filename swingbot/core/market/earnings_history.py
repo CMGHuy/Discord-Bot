@@ -8,12 +8,16 @@ watchlist's earnings context.
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.events import get_earnings_datetimes
+
+log = logging.getLogger(__name__)
 
 
 def _path() -> str:
@@ -44,7 +48,8 @@ def refresh_watchlist_earnings(symbols: list[str], *, now: dt.datetime | None = 
             symbol = futures[future]
             try:
                 dates = future.result()
-            except Exception:
+            except Exception as exc:
+                swallowed(log, "earnings.history_refresh", exc, level=logging.DEBUG)
                 continue
             if not dates:
                 continue
