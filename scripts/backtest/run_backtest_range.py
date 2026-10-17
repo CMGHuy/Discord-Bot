@@ -5,6 +5,10 @@ pools results per strategy over an entry-date window.
     python scripts/backtest/run_backtest_range.py --train        # 2020-01-01 .. 2023-12-31
     python scripts/backtest/run_backtest_range.py --validation   # 2024-01-01 .. 2025-12-31 (run ONCE, at the end)
     python scripts/backtest/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
+    python scripts/backtest/run_backtest_range.py --train --instrument v2 --exit-model v2 --tp2 none
+        # instrument v2 (v158): the contract's research span on its point-in-time
+        # universe, membership and a causal liquidity floor checked on the signal
+        # day, plus the watchlist slice; --validation is the sealed holdout and exits
     python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl   # v147 TRAIN gate rows
 
 Legacy reporting gate: win_rate >= 80; the live decision bar is 50 (see
@@ -29,7 +33,7 @@ import numpy as np
 from fetch_backtest_data import add_data_source_arg, apply_data_source, load_cached, load_watchlist
 from swingbot import config
 from swingbot.core.market import market_context
-from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES, _uses_live_constructor, run_backtest
 from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
 from swingbot.core.backtesting.blocked_recorder import require_train_window, write_gate_rows
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
@@ -37,6 +41,8 @@ from swingbot.core.marketdata.universe import data_quality_issues, liquidity_rea
 from swingbot.core.marketdata import training_data
 from swingbot.core.marketdata.history_store import MissingStoreError
 from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
+from swingbot.core.backtesting.instrument import cli as instrument_cli
+from swingbot.core.backtesting.instrument import universe_gate
 
 _SPY_CACHE: dict = {}
 
@@ -414,6 +420,108 @@ def member_trades(trades, spans) -> list:
     return [t for t in trades if is_member(t.entry_date, spans)]
 
 
+def _instrument_frame(df, spec):
+    """The price frame a run may read. v1: unchanged (rule 1). v2: truncated at
+    the research span's end, so no trade -- not even one whose exit walk runs
+    past research_end -- reads a sealed-holdout bar (folds.py's caller rule)."""
+    if df is None or spec.version == "v1":
+        return df
+    return df.loc[:spec.research_span[1]]
+
+
+def _v2_window_trades(summary, date_from, date_to, spans, df, spec) -> list:
+    """v2: the entry-date window, then PIT membership and the causal liquidity
+    floor checked on each trade's SIGNAL day (universe_gate, v136 section 1)."""
+    return universe_gate.eligible_trades(window_trades(summary, date_from, date_to),
+                                         spans, df, spec.liquidity_floor)
+
+
+def _windowed_trades(summary, date_from, date_to, spans, df, spec) -> list:
+    """The trades a run keeps for one (ticker, strategy, horizon). v1 is exactly
+    today's entry-date mask (rule 1); v2 goes through the signal-day gate."""
+    if spec.version == "v1":
+        return member_trades(window_trades(summary, date_from, date_to), spans)
+    return _v2_window_trades(summary, date_from, date_to, spans, df, spec)
+
+
+def _resolve_window(args, spec) -> tuple[str, str, int, str]:
+    """(date_from, date_to, min_n, label), windows from the instrument contract.
+    v1: today's --train/--validation/--from-to exactly. v2: --train is the
+    research span, --validation is the sealed holdout (exits), and --from/--to
+    must lie inside the research span. ValueError when no window is given."""
+    if args.train:
+        return (*instrument_cli.window_for(spec, "train"), 30, "TRAIN")
+    if args.validation:
+        return (*instrument_cli.window_for(spec, "validation"), 15, "VALIDATION")
+    if not (args.date_from and args.date_to):
+        raise ValueError("need --train, --validation, or --from/--to")
+    instrument_cli.check_inside_research(spec, args.date_from, args.date_to)
+    return args.date_from, args.date_to, 15, "CUSTOM"
+
+
+# (args attribute, what to name, the phase that wires it under v2)
+_V2_UNWIRED = (
+    ("scenarios", "run_backtest_range.py --scenarios", "phase 5 (scan replay under v2)"),
+    ("emit_registry", "run_backtest_range.py --emit-registry",
+     "phase 6 (registry instrument_version column)"),
+    ("from_json", "run_backtest_range.py --from-json",
+     "phase 6 (registry instrument_version column)"),
+)
+
+
+def _instrument_guards(args, spec) -> None:
+    """Under v2: refuse the paths a later phase owns, pin the contract's
+    universe, and check run_backtest's v2 refusals ONCE, before the ticker
+    loop (inside it main catches every exception per run, so a refusal there
+    would silently empty the table). Under v1: no-op."""
+    if spec.version == "v1":
+        return
+    for attr, script, owner in _V2_UNWIRED:
+        if getattr(args, attr):
+            instrument_cli.require_v1(spec, script, owner)
+    if args.universe not in (None, spec.universe):
+        raise SystemExit(f"--instrument {spec.version} runs on the contract's universe "
+                         f"{spec.universe!r}; got --universe {args.universe!r}")
+    args.universe = spec.universe
+    tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
+    try:
+        _uses_live_constructor(spec, args.exit_model, tp2_mode)
+    except ValueError as exc:
+        raise SystemExit(f"--instrument {spec.version}: {exc}") from None
+
+
+def _watchlist_slice(trade_rows, watchlist) -> tuple[str, dict]:
+    """The watchlist slice of a run's rows (v136 section 1): the report text and
+    {status, n, expectancy_r}. `trade_rows` are main's (ticker, strategy, hk,
+    trade) tuples; N is pool()'s n_eval, the N every gate here uses."""
+    members = set(watchlist)
+    stats = pool([trade for ticker, _strat, _hk, trade in trade_rows if ticker in members])
+    verdict = universe_gate.watchlist_slice_verdict(stats["n_eval"], stats["expectancy_r"])
+    exp_r = "n/a" if verdict.expectancy_r is None else f"{verdict.expectancy_r:+.3f}"
+    line = f"N={verdict.n} ExpR={exp_r} -> {verdict.status.upper()}"
+    return line, {"status": verdict.status, "n": verdict.n, "expectancy_r": verdict.expectancy_r}
+
+
+def _instrument_report(spec, trade_rows, strategies) -> tuple[list[str], dict]:
+    """Report lines and JSON keys a v2 run adds: the instrument line and the
+    per-strategy watchlist slice. v1 adds nothing (byte-identical output)."""
+    if spec.version == "v1":
+        return [], {}
+    watchlist = sorted(load_watchlist())
+    lines = ["",
+             f"-- instrument {spec.version}: universe {spec.universe}; PIT membership and the "
+             f"causal liquidity floor checked on the signal day --",
+             f"-- watchlist slice (same run, {len(watchlist)} watchlist tickers): FAIL here "
+             f"fails the strategy's verdict whatever PASS says; ExpR < 0 with "
+             f"N >= {universe_gate.WATCHLIST_SLICE_MIN_N} fails, fewer is THIN --"]
+    slices = {}
+    for strat in strategies:
+        rows = [row for row in trade_rows if row[1] == strat]
+        line, slices[strat] = _watchlist_slice(rows, watchlist)
+        lines.append(f"{strat:22s} {line}")
+    return lines, {"_watchlist_slice": slices}
+
+
 # Hard gates on the registry emit path. A run that fails any of these produces
 # NO row rather than a row that looks like evidence -- half a row is worse than
 # none, being indistinguishable from evidence downstream. Tokens are stable
@@ -632,19 +740,19 @@ def main():
                          "output instead of running the backtest (honors the "
                          "run-once validation budget); requires --emit-registry")
     add_data_source_arg(ap)
+    instrument_cli.add_instrument_arg(ap)
     args = ap.parse_args()
     if args.emit_registry and not args.run_date:
         ap.error("--emit-registry requires --run-date")
+    # Instrument refusals (sealed holdout, unwired paths, v2 exit knobs) come
+    # before the data source: a refused run never depends on a store existing.
+    spec = instrument_cli.spec_from_args(args)
+    _instrument_guards(args, spec)
+    try:
+        date_from, date_to, min_n, label = _resolve_window(args, spec)
+    except ValueError as exc:
+        ap.error(str(exc))
     data_source = _resolve_data_source(args)
-
-    if args.train:
-        date_from, date_to, min_n, label = *TRAIN, 30, "TRAIN"
-    elif args.validation:
-        date_from, date_to, min_n, label = *VALIDATION, 15, "VALIDATION"
-    else:
-        if not (args.date_from and args.date_to):
-            ap.error("need --train, --validation, or --from/--to")
-        date_from, date_to, min_n, label = args.date_from, args.date_to, 15, "CUSTOM"
     _check_record_blocked(args, date_from, date_to)
 
     if args.from_json:
@@ -687,7 +795,8 @@ def main():
     tickers = _tickers_for_run(args.universe, args.tickers_file)
     # Context ranking is cross-sectional, so every cached frame must be loaded
     # before individual liquidity/data-quality exclusions are applied below.
-    frames = {ticker: _with_context(load_cached(ticker)) for ticker in tickers}
+    frames = {ticker: _instrument_frame(_with_context(load_cached(ticker)), spec)
+              for ticker in tickers}
     frames = {ticker: frame for ticker, frame in frames.items() if frame is not None}
     _report_exclusions()
     asof_map = _build_asof_map(tickers, frames, args.universe) if args.context == "on" else {}
@@ -712,11 +821,12 @@ def main():
                     s = run_backtest(ticker, df, strat, hk, one_at_a_time=True,
                                       exit_model=args.exit_model, scale_out=args.scale_out,
                                       tp2_mode=tp2_mode, frictions=(args.frictions == "on"),
-                                      asof=asof_map.get(ticker))
+                                      asof=asof_map.get(ticker),
+                                      instrument=instrument_cli.run_instrument(spec))
                 except Exception as e:
                     print(f"    ! {strat}/{hk}: {e}")
                     continue
-                tr = member_trades(window_trades(s, date_from, date_to), spans)
+                tr = _windowed_trades(s, date_from, date_to, spans, df, spec)
                 by_strategy[strat].extend(tr)
                 by_combo[(strat, hk)].extend(tr)
                 trade_rows.extend((ticker, strat, hk, trade) for trade in tr)
@@ -789,12 +899,15 @@ def main():
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
         lines.append(f"{strat:22s} {hk:6s} {st['n_eval']:5d} {wr:>6s} {er:>7s}")
 
+    instrument_lines, instrument_json = _instrument_report(spec, trade_rows, strategies)
+    lines.extend(instrument_lines)
     report = "\n".join(lines)
     print("\n" + report)
     Path("backtest_range_summary.txt").write_text(report, encoding="utf-8")
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(
-            {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, indent=2))
+            {**{k: {kk: vv for kk, vv in v.items()} for k, v in results.items()},
+             **instrument_json}, indent=2))
     if args.trades_jsonl:
         write_trades_jsonl(trade_rows, args.trades_jsonl)
         print(f"Wrote {len(trade_rows)} trade rows to {args.trades_jsonl}")
