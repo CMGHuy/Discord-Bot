@@ -20,7 +20,7 @@ Scripts call these units. They define no dates. `run_backtest_range.py` and `tun
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Closed 2026-10-17, bot 2.8.0. All twelve tasks done on `main`. Deviations: WC3's refetch ran locally (the VM holds no `backtest_cache_ext`) and covered the benchmark plus `sp500_pit` only: 492 covered, 120 late, 219 missing (delisted), see the results doc's `## Refetch`; WC11 classified 28 scripts onto ALLOW (incl. `screen_idea.py`, the standing Stage -2 runner, per the brief), 4 NO_REPLAY, 12 wired; `tests/scripts/` backtest tests moved to `tests/backtest_scripts/` (new `backtest-scripts` suite) because `tooling` passed 1200; final-review fixes: v2 lists dropped universe members, NaN-volume floor refusal, `--tickers-file` refusal, census reads the flag. Bump: predicted bot minor, delivered 2.8.0. Edge: none (integrity), as predicted.
 
 ## Where to work
 
