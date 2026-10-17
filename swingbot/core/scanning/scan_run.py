@@ -4,7 +4,8 @@ import logging
 import math
 import hashlib
 import time
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, timezone
 
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
@@ -32,7 +33,7 @@ from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.planning import account as account_module
-from swingbot.core.planning.account import compute_unrealized_pnl, load_account_config
+from swingbot.core.planning.account import UnrealizedPnL, compute_unrealized_pnl, load_account_config
 from swingbot.core.planning.plan_manager import log_plan_armed
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
@@ -1276,44 +1277,88 @@ async def _run_scan_in_context(horizon_filter, require_confirmation, bot, progre
     return alerts
 
 
-def get_all_unrealized_pnl() -> list:
-    open_trades = trade_log.get_trades(status="open", limit=100)
-    log.info("Computing unrealized P/L for %d open trade(s)", len(open_trades))
-    results = []
-    # This backs a display/report command, not a fill decision, so the batch
-    # helper's short resilient cache is appropriate.  More importantly, it
-    # turns N serial Yahoo calls into one request for all open positions.
-    tickers = list(dict.fromkeys(
-        trade.get("ticker") for trade in open_trades if trade.get("ticker")
-    ))
+@dataclass(frozen=True)
+class TradeQuote:
+    """The price one open trade is marked at, and where it came from: a live
+    batch quote (``daily_close`` None) or the last daily bar's close
+    (``daily_close`` = that bar's date). ``price`` None = no price at all.
+    No price helper returns a quote timestamp, so this is the only as-of the
+    data layer can give (v170 A6)."""
+
+    price: float | None
+    daily_close: date | None = None
+
+
+def _batch_prices(tickers: list) -> dict:
+    """One live-price request for every ticker; {} when it fails.
+
+    This backs a display/report command, not a fill decision, so the batch
+    helper's short resilient cache is appropriate. More importantly, it turns
+    N serial Yahoo calls into one request for all open positions."""
     try:
-        price_cache = fetch.get_current_price_batch(tickers)
+        return fetch.get_current_price_batch(tickers)
     except Exception as exc:
         swallowed(log, "scan.unrealized_pnl.batch", exc,
                   "get_all_unrealized_pnl: batch price fetch failed: %s", exc, exc_info=True)
-        price_cache = {}
+        return {}
+
+
+def _daily_close(ticker: str) -> tuple[float | None, date | None]:
+    """The last daily close and its bar date: the fallback when the batch has
+    no live price (incl. premarket/aftermarket) for ``ticker``."""
+    try:
+        df = fetch.get_daily_data(ticker, period="5d")
+        if df is None or df.empty:
+            return None, None
+        last = df.index[-1]
+        return float(df["Close"].iloc[-1]), (last.date() if hasattr(last, "date") else None)
+    except Exception as exc:
+        swallowed(log, "scan.unrealized_pnl.ticker", exc,
+                  "get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc,
+                  exc_info=True)
+        return None, None
+
+
+def unrealized_for_trade(trade: dict, price_cache: dict,
+                         daily_dates: dict) -> tuple[TradeQuote, UnrealizedPnL | None]:
+    """!pnl's per-trade body: the trade's price (live from ``price_cache``,
+    else the last daily close) and its unrealised % move. ``price_cache`` and
+    ``daily_dates`` are shared across one batch and filled in place, so a
+    second trade on the same ticker never refetches. ``pnl`` is None when
+    there is no price."""
+    ticker = trade["ticker"]
+    if not price_cache.get(ticker):
+        price_cache[ticker], daily_dates[ticker] = _daily_close(ticker)
+    quote = TradeQuote(price_cache[ticker], daily_dates.get(ticker))
+    if quote.price is None:
+        return quote, None
+    return quote, compute_unrealized_pnl(
+        entry=trade["entry"],
+        stop_loss=trade["stop_loss"],
+        take_profit=trade["take_profit"],
+        direction=trade["direction"],
+        current_price=quote.price,
+    )
+
+
+def quote_trade(trade: dict) -> tuple[TradeQuote, UnrealizedPnL | None]:
+    """One trade marked exactly as !pnl marks it, through a one-ticker batch
+    (the v170 P&L-now button). A price failure is a quote with no price."""
+    return unrealized_for_trade(trade, _batch_prices([trade["ticker"]]), {})
+
+
+def get_all_unrealized_pnl() -> list:
+    open_trades = trade_log.get_trades(status="open", limit=100)
+    log.info("Computing unrealized P/L for %d open trade(s)", len(open_trades))
+    tickers = list(dict.fromkeys(
+        trade.get("ticker") for trade in open_trades if trade.get("ticker")
+    ))
+    price_cache = _batch_prices(tickers)
+    daily_dates: dict = {}
+    results = []
     for t in open_trades:
-        ticker = t["ticker"]
-        if not price_cache.get(ticker):
-            # Prefer live price (incl. premarket/aftermarket); fall back to last daily close
-            try:
-                df = fetch.get_daily_data(ticker, period="5d")
-                price_cache[ticker] = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
-            except Exception as exc:
-                swallowed(log, "scan.unrealized_pnl.ticker", exc,
-                          "get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc,
-                          exc_info=True)
-                price_cache[ticker] = None
-        current_price = price_cache[ticker]
-        if current_price is None:
-            continue
-        pnl = compute_unrealized_pnl(
-            entry=t["entry"],
-            stop_loss=t["stop_loss"],
-            take_profit=t["take_profit"],
-            direction=t["direction"],
-            current_price=current_price,
-        )
-        results.append({"trade": t, "pnl": pnl})
+        _quote, pnl = unrealized_for_trade(t, price_cache, daily_dates)
+        if pnl is not None:
+            results.append({"trade": t, "pnl": pnl})
     return results
 
