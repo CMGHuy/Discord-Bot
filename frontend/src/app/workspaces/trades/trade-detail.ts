@@ -36,6 +36,8 @@ import { OutcomePath } from './why/outcome-path';
 import { PlanChart } from './why/plan-chart';
 import { SizingPanel } from './why/sizing-panel';
 import { WHY_SECTIONS, WhyPanel, WhySection } from './why/why-panel';
+import { OutcomeStrip } from './outcome-strip';
+import { outcomeTiles } from './outcome-tiles';
 
 /** Plan · Live · Chart · Notes · Strategy — spec 3's five, in its order. */
 const TABS: Tab[] = [
@@ -109,6 +111,7 @@ function cameFromPlan(): boolean {
     SizingPanel,
     OutcomePath,
     PlanChart,
+    OutcomeStrip,
   ],
   template: `
     <header class="head">
@@ -169,6 +172,10 @@ function cameFromPlan(): boolean {
         <p class="trade-title loading-title" role="status">Loading…</p>
       }
     </header>
+
+    @if (store.trade()) {
+      <sb-outcome-strip [tiles]="stripTiles()" />
+    }
 
     <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
 
@@ -790,6 +797,18 @@ export class TradeDetail {
   private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
   protected readonly chart = inject(ChartStore);
+
+  protected readonly stripTiles = computed(() => {
+    const trade = this.store.trade();
+    if (!trade) return [];
+    return outcomeTiles({
+      trade, legs: this.store.legs(),
+      history: this.store.timeline().filter(event => event.status !== 'CREATED'),
+      riskPerShare: this.store.riskPerShare(), banked: this.store.bankedLeg(),
+      bankedStats: this.store.bankedStats(), expiresOn: this.store.expiresOn(),
+      timeExitOn: this.store.timeExitOn(), now: new Date(),
+    });
+  });
 
   protected readonly async = computed(() => asyncInputs(this.store, { isEmpty: () => false }));
 

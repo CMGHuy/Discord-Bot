@@ -219,21 +219,6 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
     expect(text).toContain(ID);
   });
 
-  // 2026-09-18 -- the MRNA incident. A fast_info fallback echoed yesterday's
-  // close during premarket; the Now panel's Price field must say the number
-  // is not necessarily a live tick instead of rendering it with full
-  // confidence, since this is the ONE page a trader opens to check a
-  // specific position after an alert (e.g. the MRNA trade this pins).
-  it('flags a stale current price on the Now panel', () => {
-    const text = render('live', DETAIL, 'ACTIVE', { current_price_stale: true });
-    expect(text).toContain('delayed');
-  });
-
-  it('does not flag a fresh current price on the Now panel', () => {
-    const text = render('live', DETAIL, 'ACTIVE', { current_price_stale: false });
-    expect(text).not.toContain('delayed');
-  });
-
   it('labels the stop "Trailing stop" once TP1 has banked (PARTIAL)', () => {
     // A PARTIAL short's stop legitimately sits BELOW entry (it protects the
     // profit TP1 already locked in, not the original risk), which reads as
@@ -531,6 +516,49 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
+
+  it.each([
+    ['CLOSED', ['result', 'pnl', 'entry-exit', 'held', 'exit']],
+    ['ACTIVE', ['price', 'unrealised', 'progress', 'held']],
+    ['PENDING', ['trigger', 'distance', 'expires', 'created']],
+    ['CANCELLED', ['status', 'created', 'trigger', 'fill']],
+  ])('renders the %s strip directly after the header on every tab', (status, ids) => {
+    const el = mount('notes', DETAIL, status as string);
+    const strip = el.querySelector('header.head + sb-outcome-strip');
+    expect(strip).toBeTruthy();
+    expect([...strip!.querySelectorAll('[data-tile]')].map(t => t.getAttribute('data-tile'))).toEqual(ids);
+    expect(strip!.querySelectorAll('.strip-foot').length).toBe(1);
+    expect(strip!.textContent).toContain('Paper fills at plan levels; real fills and slippage may differ.');
+  });
+
+  it('keeps a partial runner open and separates its banked result', () => {
+    const el = mount('plan', { ...DETAIL, legs_realized: [
+      { fraction: 0.5, exit_price: 110, r: 2, reason: 'tp1' },
+    ] }, 'PARTIAL', { exit_price: 110, stop_loss: 101, target: 118, r_multiple: -0.5 });
+    const strip = el.querySelector('sb-outcome-strip')!;
+    expect(strip.querySelector('[data-tile="result"]')).toBeNull();
+    expect(strip.querySelector('[data-tile="unrealised"]')?.textContent).toContain('on open shares');
+    expect(strip.querySelector('[data-tile="banked"]')?.textContent).toContain('50% @ 110.00');
+    expect(strip.querySelectorAll('.tile-caption').length).toBe(2);
+    expect(strip.querySelector('[data-tile="progress"] sb-status-indicator')).toBeTruthy();
+  });
+
+  it('flags a stale current price and unrealised result in the outcome strip', () => {
+    const el = mount('plan', DETAIL, 'ACTIVE', { current_price_stale: true });
+    const strip = el.querySelector('sb-outcome-strip')!;
+    expect(strip.querySelector('[data-tile="price"] .stale-flag')?.textContent).toContain('delayed');
+    expect(strip.querySelector('[data-tile="unrealised"] .stale-flag')?.textContent).toContain('delayed');
+  });
+
+  it('does not flag a fresh current price in the outcome strip', () => {
+    const el = mount('live', DETAIL, 'ACTIVE', { current_price_stale: false });
+    expect(el.querySelector('sb-outcome-strip .stale-flag')).toBeNull();
+  });
+
+  it('excludes synthetic created reasons from an unfilled strip', () => {
+    const el = mount('plan', { ...DETAIL, status_history: [] }, 'CANCELLED');
+    expect(el.querySelector('[data-tile="status"] .tile-sub')).toBeNull();
+  });
 
   it('hosts the levels block, the two plan panels and the Why panel on the Plan tab', () => {
     const el = mount('plan');
