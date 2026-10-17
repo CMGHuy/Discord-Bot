@@ -77,14 +77,6 @@ def _price(x: float | None) -> str:
     return tokens.fmt_price(x)
 
 
-def _whole_shares(sizing: dict | None) -> int | None:
-    """compute_position_size returns fractional shares (2dp); a broker order
-    is whole shares, so the ticket rounds down. None when unsized."""
-    if not sizing or not sizing.get("shares"):
-        return None
-    return math.floor(sizing["shares"]) or None
-
-
 def signed_r(x: float) -> str:
     """``+0.8R`` / ``−1.1R`` / ``0.0R`` -- the feed signs every non-zero R."""
     text = tokens.fmt_r(x)
@@ -316,6 +308,60 @@ def _stop_kind(plan, new_stop: float) -> str:
     return "runner floor" if math.isclose(new_stop, floor, abs_tol=1e-6) else "trail"
 
 
+#: _stop_kind's word -> its FEED_SYMBOLS key.
+_STOP_KIND_KEYS = {"break-even": "breakeven", "runner floor": "runner", "trail": "trail"}
+
+
+def _leg_qty(money: Money | None, fraction: float) -> str:
+    """Printed shares of one leg (floor of the printed position × fraction),
+    or the fraction as a percentage when unsized."""
+    whole = money.shares if money is not None else None
+    return f"{math.floor(whole * fraction):,} sh" if whole is not None else f"{fraction:.0%}"
+
+
+def _leg_dollars(plan, entry: float, leg: dict, money: Money) -> float:
+    """A realised leg in record arithmetic (v170 A3): the paper record's own
+    shares × fraction × (exit − entry), signed -- the figure the trade log
+    banks, so it can differ from printed shares × move by under one share."""
+    return (money.record_shares * leg["fraction"] * (leg["exit_price"] - entry)
+            * _sign(plan.direction))
+
+
+def _open_whole(money: Money, legs: list) -> int:
+    """Printed shares still open: the printed position less each banked leg's printed count."""
+    return max(0, money.shares - sum(math.floor(money.shares * leg["fraction"]) for leg in legs))
+
+
+def stop_projection(plan, new_stop: float, money: Money | None) -> tuple[float | None, float]:
+    """What the whole position totals if ``new_stop`` fills (v170 §2):
+    ($ or None when unpriced, total R). Banked legs plus the open part
+    stopped at ``new_stop``; the open part is printed shares × printed move,
+    the banked legs are record arithmetic (the TP1 message's own figure).
+    A projection -- a gap can fill worse -- and worded as one."""
+    entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
+    legs = list(plan.legs_realized or [])
+    open_fraction = max(0.0, 1.0 - sum(leg["fraction"] for leg in legs))
+    r_total = (sum(leg["fraction"] * leg["r"] for leg in legs)
+               + open_fraction * (_r_at(plan, entry, new_stop) or 0.0))
+    r_total = round(r_total, 4) + 0.0           # float noise must not print '−0.0R'
+    if not _priced(money):
+        return None, r_total
+    open_usd = (_open_whole(money, legs) * (_printed(new_stop) - _printed(entry))
+                * _sign(plan.direction))
+    return open_usd + sum(_leg_dollars(plan, entry, leg, money) for leg in legs), r_total
+
+
+def _if_fills_line(plan, new_stop: float, money: Money | None) -> str:
+    usd, r_total = stop_projection(plan, new_stop, money)
+    figures = _join(_dollars(usd, money) if usd is not None else "", f"{signed_r(r_total)} total")
+    return f"{_S['if_fills']} if it fills: {figures}"
+
+
+def _move_stop_headline(side: dict, stop: float) -> str:
+    """D2: a stop move names the broker order, MOVE SELL STOP / MOVE BUY STOP."""
+    return f"{_S['stop']} MOVE {side['stop']} → {_price(stop)} now"
+
+
 def _market_close_headline(detail: dict) -> str:
     if detail.get("reason") in _MARKET_EXIT_REASONS:
         return f"CLOSE AT MARKET now — {_EXIT_WORDS[detail['reason']]}"
@@ -369,7 +415,7 @@ def _auction_clock(stamp: str | None) -> str:
         return str(stamp)
 
 
-def _time_exit(plan, event, side: dict, common: dict, sizing: dict | None) -> Instruction:
+def _time_exit(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
     """v119 ten-session time exit: the due notice (cover at the close auction)
     and the unresolved notice (no official price, nothing was closed)."""
     detail = event.detail
@@ -382,80 +428,118 @@ def _time_exit(plan, event, side: dict, common: dict, sizing: dict | None) -> In
         return Instruction(
             verb=CLOSE_AT_MARKET, headline="TIME EXIT UNRESOLVED — no official close price",
             lines=tuple(lines), tone="bad", **common)
-    whole = _whole_shares(sizing)
-    fraction = detail.get("cover_fraction", 1.0)
-    qty = f"{math.floor(whole * fraction):,} sh" if whole is not None else f"{fraction:.0%}"
+    qty = _leg_qty(money, detail.get("cover_fraction", 1.0))
     headline, lines = short_notice.compression_due_lines(
         side["exit"], qty, detail, _auction_clock(detail.get("auction_time")))
     return Instruction(verb=CLOSE_AT_MARKET, headline=headline, lines=lines,
                        tone="neutral", **common)
 
 
-def _closed_event(plan, event, side: dict, common: dict, sizing: dict | None) -> Instruction:
+def _closed_event(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
     return _closed(plan, event.detail, side, common)
 
 
-#: transitions whose instruction is a whole builder of its own.
-_BUILDERS = {"time_exit_due": _time_exit, "time_exit_unresolved": _time_exit,
-             "closed": _closed_event}
+def _filled(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
+    fill = _price(event.detail["entry_price"])
+    return Instruction(
+        verb=FILLED, headline=f"{_S['entry']} FILLED @ {fill} (bot)",
+        lines=(f"Confirm your broker filled; the bot's R is measured from {fill}",
+               f"Resting: {_S['stop']} {side['stop']} {_price(plan.stop_loss)} · "
+               f"{_S['tp1']} {side['limit']} {_price(plan.tp1)}"),
+        **common)
 
 
-def instruction_for(plan, event, *, sizing: dict | None = None) -> Instruction:
+def _be_moved(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
+    stop = event.detail["working_stop"]
+    return Instruction(
+        verb=MOVE_STOP, headline=_move_stop_headline(side, stop),
+        lines=(f"{_S['breakeven']} break-even", _if_fills_line(plan, stop, money)),
+        **common)
+
+
+def _realised_leg(plan, leg: dict, money: Money | None) -> str:
+    """A banked leg's dollars (record arithmetic), or '' when unpriced."""
+    if not _priced(money) or plan.entry_price is None:
+        return ""
+    return _dollars(_leg_dollars(plan, plan.entry_price, leg, money), money)
+
+
+def _tp1_partial(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
+    detail = event.detail
+    pnl = _join(_realised_leg(plan, detail, money), signed_r(detail["r"]))
+    return Instruction(
+        verb=MOVE_STOP,
+        headline=(f"{_S['tp1']} TP1 FILLED {_leg_qty(money, detail['fraction'])} @ "
+                  f"{_price(detail['exit_price'])} · {_S['pnl']} {pnl}"),
+        lines=(f"{_S['stop']} MOVE {side['stop']} on the runner → "
+               f"{_price(detail['working_stop'])} now (runner floor)",),
+        tone="good", **common)
+
+
+def _stop_moved(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
+    new = event.detail["new"]
+    kind = _stop_kind(plan, new)
+    return Instruction(
+        verb=MOVE_STOP, headline=_move_stop_headline(side, new),
+        lines=(f"{_S[_STOP_KIND_KEYS[kind]]} {kind}; {signed_r(event.detail['r_moved'])} "
+               "since the last ping",
+               _if_fills_line(plan, new, money)),
+        **common)
+
+
+#: cancel transition -> its headline's FEED_SYMBOLS key ('' = no glyph, v170 Decision 4).
+_CANCEL_LEADS = {"cancelled_expired": "expiry", "cancelled_invalidated": "invalid",
+                 "cancelled_risk_cap": ""}
+
+
+def _cancel_why(plan, transition: str, detail: dict) -> str:
+    if detail.get("reason_message"):
+        return detail["reason_message"]             # v144: an outlook plan states its reason
+    if short_notice.is_compression(plan) and transition != "cancelled_invalidated":
+        return short_notice.compression_cancel_why(plan, transition, detail)
+    if transition == "cancelled_expired":
+        return f"not triggered within {plan.expiry_bars} sessions"
+    if transition == "cancelled_invalidated":
+        return f"price reached the stop {_price(plan.stop_loss)} before triggering"
+    return (f"triggered at {_price(detail['entry_price'])} but risked "
+            f"{detail['planned_loss_pct']:.1f}% against stop "
+            f"{_price(detail['stop_loss'])} -- above the "
+            f"{detail['max_planned_loss_pct']:.1f}% cap; never filled")
+
+
+def _cancelled(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
+    key = _CANCEL_LEADS[event.transition]
+    lead = f"{_S[key]} " if key else ""
+    return Instruction(
+        verb=CANCEL,
+        headline=f"{lead}CANCEL {side['entry_stop']} {_price(plan.trigger_price)}",
+        lines=(_cancel_why(plan, event.transition, event.detail),), tone="inert", **common)
+
+
+#: Every feed transition's builder; each takes (plan, event, side, common, money).
+_BUILDERS = {
+    "filled": _filled,
+    "be_moved": _be_moved,
+    "tp1_partial": _tp1_partial,
+    "stop_moved": _stop_moved,
+    "cancelled_expired": _cancelled,
+    "cancelled_invalidated": _cancelled,
+    "cancelled_risk_cap": _cancelled,
+    "time_exit_due": _time_exit,
+    "time_exit_unresolved": _time_exit,
+    "closed": _closed_event,
+}
+
+
+def instruction_for(plan, event, *, money: Money | None = None) -> Instruction:
     """The execution-feed instruction for one plan_manager PlanEvent (v81 D2,
     D3). Every live stop is read from ``event.detail``, which plan_manager
     stamps -- never recomputed here, so the feed cannot quote a stop the
-    manager is not holding."""
-    side = _sides(plan.direction)
-    detail = event.detail
+    manager is not holding. v170: ``money`` (the linked paper record, or an
+    unpriced snapshot) supplies share counts and dollars; every transition
+    is one entry of _BUILDERS."""
+    builder = _BUILDERS.get(event.transition)
+    if builder is None:
+        raise ValueError(f"no execution-feed instruction for {event.transition!r}")
     common = dict(ticker=plan.ticker, direction=plan.direction, plan_id=plan.plan_id)
-    transition = event.transition
-    if transition in _BUILDERS:
-        return _BUILDERS[transition](plan, event, side, common, sizing)
-    if transition == "filled":
-        fill = _price(detail["entry_price"])
-        return Instruction(
-            verb=FILLED, headline=f"FILLED @ {fill} (bot)",
-            lines=(f"Confirm your broker filled; the bot's R is measured from {fill}",
-                   f"Resting: {side['stop']} {_price(plan.stop_loss)} · "
-                   f"TP1 {side['limit']} {_price(plan.tp1)}"),
-            **common)
-    if transition == "be_moved":
-        return Instruction(
-            verb=MOVE_STOP,
-            headline=f"MOVE STOP → {_price(detail['working_stop'])} now",
-            lines=("break-even",), **common)
-    if transition == "tp1_partial":
-        whole = _whole_shares(sizing)
-        qty = (f"{math.floor(whole * detail['fraction']):,} sh" if whole is not None
-               else f"{detail['fraction']:.0%}")
-        return Instruction(
-            verb=MOVE_STOP,
-            headline=(f"TP1 FILLED {qty} @ {_price(detail['exit_price'])} "
-                      f"({signed_r(detail['r'])})"),
-            lines=(f"MOVE STOP on the runner → {_price(detail['working_stop'])} now "
-                   "(runner floor)",),
-            tone="good", **common)
-    if transition == "stop_moved":
-        return Instruction(
-            verb=MOVE_STOP, headline=f"MOVE STOP → {_price(detail['new'])} now",
-            lines=(f"{_stop_kind(plan, detail['new'])}; {signed_r(detail['r_moved'])} "
-                   "since the last ping",),
-            **common)
-    if transition in ("cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap"):
-        if detail.get("reason_message"):
-            why = detail["reason_message"]          # v144: an outlook plan states its reason
-        elif short_notice.is_compression(plan) and transition != "cancelled_invalidated":
-            why = short_notice.compression_cancel_why(plan, transition, detail)
-        elif transition == "cancelled_expired":
-            why = f"not triggered within {plan.expiry_bars} sessions"
-        elif transition == "cancelled_invalidated":
-            why = f"price reached the stop {_price(plan.stop_loss)} before triggering"
-        else:
-            why = (f"triggered at {_price(detail['entry_price'])} but risked "
-                   f"{detail['planned_loss_pct']:.1f}% against stop "
-                   f"{_price(detail['stop_loss'])} -- above the "
-                   f"{detail['max_planned_loss_pct']:.1f}% cap; never filled")
-        return Instruction(
-            verb=CANCEL, headline=f"CANCEL {side['entry_stop']} {_price(plan.trigger_price)}",
-            lines=(why,), tone="inert", **common)
-    raise ValueError(f"no execution-feed instruction for {transition!r}")
+    return builder(plan, event, _sides(plan.direction), common, money)

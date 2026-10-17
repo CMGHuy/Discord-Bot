@@ -10,7 +10,6 @@ from swingbot.core.planning.plan_manager import PlanEvent
 from swingbot.core.presentation import instructions as ins
 from tests.planning.test_plan_engine_model import _plan
 
-SIZING = {"shares": 2439.02, "risk_amount": 10000.0}
 MONEY = ins.money_from(2439.02, "$")
 
 
@@ -204,30 +203,60 @@ def test_signed_r(value, expected):
 
 # --- lifecycle instructions --------------------------------------------------
 
+def _tp1_leg():
+    """The spec example's banked TP1 leg: half at 189.10 from 182.40 (risk 4.60)."""
+    return {"fraction": 0.5, "exit_price": 189.1, "r": 6.7 / 4.6, "reason": "tp1"}
+
+
 def test_filled():
     plan = _long_pending(status="ACTIVE", entry_price=102.61)
     i = ins.instruction_for(plan, _event("filled", entry_price=102.61))
-    assert (i.verb, i.headline) == (ins.FILLED, "FILLED @ 102.61 (bot)")
+    assert (i.verb, i.headline) == (ins.FILLED, "▶ FILLED @ 102.61 (bot)")
     assert i.lines == (
         "Confirm your broker filled; the bot's R is measured from 102.61",
-        "Resting: SELL STOP 98.40 · TP1 SELL LIMIT 106.00",
+        "Resting: 🛑 SELL STOP 98.40 · 💰 SELL LIMIT 106.00",
     )
 
 
-def test_break_even_is_effective_immediately():
+def test_break_even_is_effective_immediately_and_projects_flat():
+    plan = _long_pending(status="ACTIVE", entry_price=102.61, working_stop=102.61)
+    i = ins.instruction_for(plan, _event("be_moved", working_stop=102.61), money=MONEY)
+    assert (i.verb, i.headline) == (ins.MOVE_STOP, "🛑 MOVE SELL STOP → 102.61 now")
+    assert i.lines == ("⚖ break-even", "🔒 if it fills: +$0.00 · 0.0R total")
+
+
+def test_break_even_without_money_projects_r_only():
     plan = _long_pending(status="ACTIVE", entry_price=102.61, working_stop=102.61)
     i = ins.instruction_for(plan, _event("be_moved", working_stop=102.61))
-    assert (i.verb, i.headline) == (ins.MOVE_STOP, "MOVE STOP → 102.61 now")
-    assert i.lines == ("break-even",)
+    assert i.lines == ("⚖ break-even", "🔒 if it fills: 0.0R total")
 
 
-def test_tp1_partial_names_the_filled_shares_and_the_runner_stop():
+def test_tp1_partial_names_the_filled_shares_the_realised_dollars_and_the_runner_stop():
     plan = _long_pending(status="PARTIAL", entry_price=102.61, working_stop=104.87)
     i = ins.instruction_for(plan, _event("tp1_partial", fraction=0.5, exit_price=106.0,
-                                         r=0.8052, working_stop=104.87), sizing=SIZING)
+                                         r=0.8052, working_stop=104.87), money=MONEY)
     assert (i.verb, i.tone) == (ins.MOVE_STOP, "good")
-    assert i.headline == "TP1 FILLED 1,219 sh @ 106.00 (+0.8R)"
-    assert i.lines == ("MOVE STOP on the runner → 104.87 now (runner floor)",)
+    # realised = record 2439.02 × 0.5 × (106.00 − 102.61) = 4,134.14 (record arithmetic, A3)
+    assert i.headline == "💰 TP1 FILLED 1,219 sh @ 106.00 · 🧾 +$4,134.14 · +0.8R"
+    assert i.lines == ("🛑 MOVE SELL STOP on the runner → 104.87 now (runner floor)",)
+
+
+def test_the_spec_example_tp1_uses_the_records_fractional_shares():
+    plan = _spec_long(status="PARTIAL", entry_price=182.4, working_stop=186.87)
+    event = _event("tp1_partial", working_stop=186.87, **_tp1_leg())
+    i = ins.instruction_for(plan, event, money=ins.money_from(54.41, "$"))
+    # 27 sh printed (floor of 54 × 0.5); $ = 54.41 × 0.5 × 6.70 = 182.27, not 27 × 6.70
+    assert i.headline == "💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +$182.27 · +1.5R"
+
+
+@pytest.mark.parametrize("money,expected", [
+    (ins.money_from(54.41, "$", priced=False), "💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +1.5R"),
+    (None, "💰 TP1 FILLED 50% @ 189.10 · 🧾 +1.5R"),
+])
+def test_tp1_without_a_linked_record_prints_no_dollars(money, expected):
+    plan = _spec_long(status="PARTIAL", entry_price=182.4, working_stop=186.87)
+    event = _event("tp1_partial", working_stop=186.87, **_tp1_leg())
+    assert ins.instruction_for(plan, event, money=money).headline == expected
 
 
 def test_a_trail_move():
@@ -235,8 +264,8 @@ def test_a_trail_move():
                  working_stop=115.0)
     i = ins.instruction_for(plan, _event("stop_moved", old=106.67, new=115.0,
                                          r_moved=1.666, effective="now"))
-    assert i.headline == "MOVE STOP → 115.00 now"
-    assert i.lines == ("trail; +1.7R since the last ping",)
+    assert i.headline == "🛑 MOVE SELL STOP → 115.00 now"
+    assert i.lines == ("〜 trail; +1.7R since the last ping", "🔒 if it fills: +3.0R total")
 
 
 def test_a_resent_runner_floor_is_labelled_as_the_floor():
@@ -245,8 +274,9 @@ def test_a_resent_runner_floor_is_labelled_as_the_floor():
                  working_stop=floor)
     i = ins.instruction_for(plan, _event("stop_moved", old=95.0, new=floor,
                                          r_moved=2.333, effective="now"))
-    assert i.headline == "MOVE STOP → 106.67 now"
-    assert i.lines == ("runner floor; +2.3R since the last ping",)
+    assert i.headline == "🛑 MOVE SELL STOP → 106.67 now"
+    assert i.lines == ("🏃 runner floor; +2.3R since the last ping",
+                       "🔒 if it fills: +1.3R total")
 
 
 def test_a_resent_break_even_is_effective_now():
@@ -256,19 +286,50 @@ def test_a_resent_break_even_is_effective_now():
                  working_stop=100.0)
     i = ins.instruction_for(plan, _event("stop_moved", old=95.0, new=100.0,
                                          r_moved=1.0, effective="now"))
-    assert i.headline == "MOVE STOP → 100.00 now"
-    assert i.lines == ("break-even; +1.0R since the last ping",)
+    assert i.headline == "🛑 MOVE SELL STOP → 100.00 now"
+    assert i.lines == ("⚖ break-even; +1.0R since the last ping", "🔒 if it fills: 0.0R total")
+
+
+def test_a_stop_move_projection_adds_the_banked_leg():
+    plan = _spec_long(status="PARTIAL", entry_price=182.4, working_stop=186.0,
+                      legs_realized=[_tp1_leg()])
+    money = ins.money_from(54.41, "$")
+    usd, r_total = ins.stop_projection(plan, 186.0, money)
+    # open 27 sh × (186.00 − 182.40) = 97.20, banked 54.41 × 0.5 × 6.70 = 182.2735
+    assert usd == pytest.approx(279.4735, abs=1e-6)
+    # 0.5 × 1.4565 banked + 0.5 × 0.7826 open
+    assert r_total == pytest.approx(1.1196, abs=1e-4)
+    i = ins.instruction_for(plan, _event("stop_moved", old=185.0, new=186.0, r_moved=0.78,
+                                         effective="now"), money=money)
+    assert i.lines == ("〜 trail; +0.8R since the last ping",
+                       "🔒 if it fills: +$279.47 · +1.1R total")
+
+
+def test_a_short_stop_move_says_buy_stop_and_signs_a_loss():
+    plan = _short_pending(status="ACTIVE", entry_price=97.5, working_stop=99.0)
+    i = ins.instruction_for(plan, _event("stop_moved", old=101.6, new=99.0, r_moved=0.63,
+                                         effective="now"), money=ins.money_from(30.6, "$"))
+    assert i.headline == "🛑 MOVE BUY STOP → 99.00 now"
+    # 30 sh × (99.00 − 97.50) against a short = −45.00; R −1.5/4.1 = −0.37
+    assert i.lines == ("⚖ break-even; +0.6R since the last ping",
+                       "🔒 if it fills: -$45.00 · −0.4R total")
+
+
+def test_an_unpriced_projection_is_r_only():
+    plan = _spec_long(status="PARTIAL", entry_price=182.4, legs_realized=[_tp1_leg()])
+    usd, r_total = ins.stop_projection(plan, 186.0, ins.money_from(54.41, "$", priced=False))
+    assert usd is None and r_total == pytest.approx(1.1196, abs=1e-4)
 
 
 def test_cancellations_name_the_order_to_cancel():
     expired = ins.instruction_for(_long_pending(), _event("cancelled_expired", bars_waited=6))
     assert (expired.verb, expired.tone) == (ins.CANCEL, "inert")
-    assert expired.headline == "CANCEL BUY STOP 102.50"
+    assert expired.headline == "⏳ CANCEL BUY STOP 102.50"
     assert expired.lines == ("not triggered within 5 sessions",)
 
     invalidated = ins.instruction_for(_short_pending(),
                                       _event("cancelled_invalidated", live_price=101.7))
-    assert invalidated.headline == "CANCEL SELL STOP 97.50"
+    assert invalidated.headline == "⛔ CANCEL SELL STOP 97.50"
     assert invalidated.lines == ("price reached the stop 101.60 before triggering",)
 
     risk_capped = ins.instruction_for(_long_pending(), _event(

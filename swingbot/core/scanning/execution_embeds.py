@@ -5,6 +5,8 @@ the v110 registry kind for each message, adds the ANSI price block where the
 kind carries one (NEW SETUP ticket, ENTRY fill, RESULT close), and applies the
 shared chrome.
 """
+import logging
+
 import discord
 
 from swingbot import config
@@ -16,6 +18,8 @@ from swingbot.core.presentation.instructions import (CLOSE_AT_MARKET, DO_NOT_PLA
 from swingbot.core.presentation.kinds import Family, Kind
 
 from .plan_table import _sizing_snapshot
+
+log = logging.getLogger(__name__)
 
 
 #: feed transition -> registry kind; "filled" and "closed" are styled in _event_style.
@@ -107,8 +111,37 @@ def _event_style(plan, event, instruction: Instruction) -> tuple:
     return _EVENT_KINDS.get(event.transition, Kind.PLAN_UPDATE), None, None
 
 
+def _linked_trade(plan_id: str) -> dict | None:
+    """The plan's paper-trade record in any status (TradeLog.trade_for_plan),
+    or None. Never raises: a failed lookup renders the message without $.
+    Imported here, not at module level, to keep scanning's import graph as
+    it was."""
+    if not plan_id:
+        return None
+    try:
+        from swingbot.core.tracking.performance import TradeLog
+        return TradeLog().trade_for_plan(plan_id)
+    except Exception:
+        log.warning("execution feed: trade lookup failed for plan %s", plan_id, exc_info=True)
+        return None
+
+
+def _event_money(plan) -> Money:
+    """Lifecycle money from the plan's linked paper record (v170 §1): share
+    counts and dollars from one record, so a trade opened at one balance is
+    never re-sized against a later one. No linked record (or one without
+    shares): today's sizing snapshot for the share counts, as before v170,
+    and no dollar figure at all."""
+    trade = _linked_trade(plan.plan_id)
+    if trade and trade.get("shares"):
+        return money_from(trade["shares"], config.CURRENCY_SYMBOL,
+                          realized_amount=trade.get("realized_pnl_amount"))
+    sizing = _sizing_snapshot(_entry(plan), plan) or {}
+    return money_from(sizing.get("shares"), config.CURRENCY_SYMBOL, priced=False)
+
+
 def build_instruction_embed(plan, event) -> discord.Embed:
     """Render one lifecycle event for the execution feed."""
-    instruction = instruction_for(plan, event, sizing=_sizing_snapshot(_entry(plan), plan))
+    instruction = instruction_for(plan, event, money=_event_money(plan))
     kind, block, r = _event_style(plan, event, instruction)
     return render(instruction, kind, block=block, r=r)
