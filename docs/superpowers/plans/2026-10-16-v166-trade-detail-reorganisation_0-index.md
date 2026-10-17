@@ -15,7 +15,9 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Part 1 complete in `codex/v166-trade-detail-reorganisation`: TD1–TD4 committed
+(`6bfa1c88`, `917e3260`, `094a0803`, `96bc2d4b`). TD2–TD4 task reviews
+returned CLEAN. TD5 is next.
 
 ## Where to work
 
