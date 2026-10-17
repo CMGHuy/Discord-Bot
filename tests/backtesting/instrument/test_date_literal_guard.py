@@ -94,15 +94,29 @@ def date_literals(text: str) -> list[tuple[int, object]]:
             if isinstance(node, ast.Constant) and id(node) not in skip and _is_date(node.value)]
 
 
-def takes_instrument_flag(text: str) -> bool:
-    """True when the script calls add_instrument_arg (bare or as an attribute)."""
+#: instrument.cli functions that READ the parsed flag. A script that only adds
+#: --instrument and never reads it would accept v2 and silently run v1.
+FLAG_READERS = frozenset({"spec_from_args", "require_v1", "run_instrument"})
+
+
+def called_names(text: str) -> set[str]:
+    """Every function name the script calls, bare or as an attribute."""
+    names = set()
     for node in ast.walk(ast.parse(text)):
         if isinstance(node, ast.Call):
             func = node.func
-            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-            if name == "add_instrument_arg":
-                return True
-    return False
+            names.add(func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None))
+    return names - {None}
+
+
+def takes_instrument_flag(text: str) -> bool:
+    """True when the script calls add_instrument_arg (bare or as an attribute)."""
+    return "add_instrument_arg" in called_names(text)
+
+
+def reads_instrument_flag(text: str) -> bool:
+    """True when the script calls one of FLAG_READERS on the parsed arguments."""
+    return bool(FLAG_READERS & called_names(text))
 
 
 def _scripts() -> dict[str, str]:
@@ -148,6 +162,19 @@ def test_every_live_script_takes_the_instrument_flag():
     missing = [rel for rel, text in _scripts().items()
                if rel not in ALLOW and rel not in NO_REPLAY and not takes_instrument_flag(text)]
     assert missing == [], "call instrument.cli.add_instrument_arg (v136 rule 2)"
+
+
+def test_every_live_script_reads_the_instrument_flag():
+    unread = [rel for rel, text in _scripts().items()
+              if rel not in ALLOW and rel not in NO_REPLAY and not reads_instrument_flag(text)]
+    assert unread == [], ("a script takes --instrument but never reads it: call "
+                          "spec_from_args, require_v1 or run_instrument (v136 rule 2)")
+
+
+def test_the_reader_check_needs_a_reader_call_not_just_the_flag():
+    assert not reads_instrument_flag("instrument_cli.add_instrument_arg(parser)\n")
+    assert reads_instrument_flag("spec = instrument_cli.spec_from_args(args)\n")
+    assert reads_instrument_flag("require_v1(spec, 'x.py', 'phase 5')\n")
 
 
 def test_closed_and_non_replay_scripts_stay_v1_only():
