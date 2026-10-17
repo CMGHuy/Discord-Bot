@@ -39,7 +39,7 @@ def _sign(direction: str) -> int:
 
 def _clean(r: float) -> float:
     """Float noise must not print '−0.0R'."""
-    return round(r, 4) + 0.0
+    return 0.0 if round(r, 1) == 0 else round(r, 4) + 0.0
 
 
 def _head(plan) -> str:
@@ -79,6 +79,7 @@ def _figures(r: float, usd: float, shares: float | None) -> str:
     """'<$> · <R>' -- the $ only when a record with shares backs it."""
     if shares is None:
         return signed_r(r)
+    usd = 0.0 if round(usd, 2) == 0 else usd
     return f"{tokens.fmt_money(usd, config.CURRENCY_SYMBOL)} · {signed_r(r)}"
 
 
@@ -106,7 +107,7 @@ def _open_reply(plan, trade, quote, pnl, clock, market_open) -> list[str]:
     shares = _record_shares(trade)
     entry = _entry(plan, trade)
     banked_r, banked_usd = _banked(plan, entry, shares)
-    banked = [f"banked: {_figures(_clean(banked_r), banked_usd, shares)}"] if plan.legs_realized else []
+    banked = [f"banked: {_figures(_clean(banked_r), banked_usd, shares)} {tokens.COST_BASIS}"] if plan.legs_realized else []
     if quote is None or quote.price is None:
         return [UNAVAILABLE, *banked]
     fraction, open_r, open_usd = _open_part(plan, entry, shares, quote.price)

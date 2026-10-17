@@ -100,7 +100,7 @@ def test_a_partial_adds_the_banked_leg_so_open_plus_banked_is_the_total():
         "AAPL long · PARTIAL",
         "last 112.00 · as of 10:30 ET",
         "open 50%: +12.0% · +$123.00 · +1.2R",
-        "banked: +$102.50 · +1.0R",
+        "banked: +$102.50 · +1.0R (paper, gross)",
         "🧾 total +$225.50 · +2.2R (paper, gross)",
     ]
 
@@ -126,7 +126,8 @@ def test_market_closed_and_a_daily_close_fallback_are_both_said():
 def test_a_price_that_could_not_be_fetched_says_so_and_keeps_the_banked_leg():
     plan = _long(PlanStatus.PARTIAL, legs_realized=[dict(TP1_LEG)])
     assert _render(plan, _trade(), _quote(None), None).splitlines() == [
-        "AAPL long · PARTIAL", "price unavailable", "banked: +$102.50 · +1.0R"]
+        "AAPL long · PARTIAL", "price unavailable",
+        "banked: +$102.50 · +1.0R (paper, gross)"]
     assert _render(_long(), _trade(), None, None).splitlines() == [
         "AAPL long · ACTIVE", "price unavailable"]
 
@@ -261,3 +262,9 @@ def test_linked_trade_never_raises(monkeypatch):
         raise RuntimeError("db down")
     monkeypatch.setattr(performance.TradeLog, "trade_for_plan", boom)
     assert pnl_now._linked_trade(PID) is None
+
+
+def test_a_near_flat_open_plan_never_prints_a_signed_zero():
+    for price in (99.9996, 100.0004, 100.03):
+        text = _render(_long(), _trade(), _quote(price), _pnl(price))
+        assert "−0.0R" not in text and "-$0.00" not in text
