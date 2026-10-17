@@ -368,7 +368,8 @@ def stop_projection(plan, new_stop: float, money: Money | None) -> tuple[float |
 def _if_fills_line(plan, new_stop: float, money: Money | None) -> str:
     usd, r_total = stop_projection(plan, new_stop, money)
     figures = _join(_dollars(usd, money) if usd is not None else "", f"{signed_r(r_total)} total")
-    return f"{_S['if_fills']} if it fills: {figures}"
+    basis = f" {tokens.COST_BASIS}" if usd is not None else ""   # dollars carry their cost basis
+    return f"{_S['if_fills']} if it fills: {figures}{basis}"
 
 
 def _move_stop_headline(side: dict, stop: float) -> str:
@@ -514,7 +515,10 @@ def _realised_leg(plan, leg: dict, money: Money | None) -> str:
 
 def _tp1_partial(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
     detail = event.detail
-    pnl = _join(_realised_leg(plan, detail, money), signed_r(detail["r"]))
+    banked = _realised_leg(plan, detail, money)
+    pnl = _join(banked, signed_r(detail["r"]))
+    if banked:                                   # dollars carry their cost basis
+        pnl = f"{pnl} {tokens.COST_BASIS}"
     return Instruction(
         verb=MOVE_STOP,
         headline=(f"{_S['tp1']} TP1 FILLED {_leg_qty(money, detail['fraction'])} @ "

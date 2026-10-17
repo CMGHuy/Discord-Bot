@@ -170,7 +170,7 @@ def test_lifecycle_money_comes_from_the_linked_record(monkeypatch):
     plan = make_plan_v2()          # entry 100, stop 95, TP1 110
     embed = execution_embeds.build_instruction_embed(plan, _tp1_event(plan))
     # 10 sh printed, 5 at TP1; realised = 10.5 × 0.5 × 10.00 = 52.50
-    assert "**💰 TP1 FILLED 5 sh @ 110.00 · 🧾 +$52.50 · +2.0R**" in embed.description
+    assert "**💰 TP1 FILLED 5 sh @ 110.00 · 🧾 +$52.50 · +2.0R (paper, gross)**" in embed.description
 
 
 def test_without_a_linked_record_shares_come_from_the_snapshot_and_no_dollars(monkeypatch):
@@ -217,7 +217,7 @@ def test_be_moved_embed_projects_from_the_record(monkeypatch):
     embed = execution_embeds.build_instruction_embed(
         plan, PlanEvent(plan.plan_id, "be_moved", {"working_stop": 100.0}))
     assert embed.description.splitlines() == [
-        "**🛑 MOVE SELL STOP → 100.00 now**", "⚖ break-even", "🔒 if it fills: +$0.00 · 0.0R total"]
+        "**🛑 MOVE SELL STOP → 100.00 now**", "⚖ break-even", "🔒 if it fills: +$0.00 · 0.0R total (paper, gross)"]
 
 
 def _closed_loss(plan):

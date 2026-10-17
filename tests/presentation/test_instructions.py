@@ -227,7 +227,7 @@ def test_break_even_is_effective_immediately_and_projects_flat():
     plan = _long_pending(status="ACTIVE", entry_price=102.61, working_stop=102.61)
     i = ins.instruction_for(plan, _event("be_moved", working_stop=102.61), money=MONEY)
     assert (i.verb, i.headline) == (ins.MOVE_STOP, "🛑 MOVE SELL STOP → 102.61 now")
-    assert i.lines == ("⚖ break-even", "🔒 if it fills: +$0.00 · 0.0R total")
+    assert i.lines == ("⚖ break-even", "🔒 if it fills: +$0.00 · 0.0R total (paper, gross)")
 
 
 def test_break_even_without_money_projects_r_only():
@@ -242,7 +242,7 @@ def test_tp1_partial_names_the_filled_shares_the_realised_dollars_and_the_runner
                                          r=0.8052, working_stop=104.87), money=MONEY)
     assert (i.verb, i.tone) == (ins.MOVE_STOP, "good")
     # realised = record 2439.02 × 0.5 × (106.00 − 102.61) = 4,134.14 (record arithmetic, A3)
-    assert i.headline == "💰 TP1 FILLED 1,219 sh @ 106.00 · 🧾 +$4,134.14 · +0.8R"
+    assert i.headline == "💰 TP1 FILLED 1,219 sh @ 106.00 · 🧾 +$4,134.14 · +0.8R (paper, gross)"
     assert i.lines == ("🛑 MOVE SELL STOP on the runner → 104.87 now (runner floor)",)
 
 
@@ -251,7 +251,7 @@ def test_the_spec_example_tp1_uses_the_records_fractional_shares():
     event = _event("tp1_partial", working_stop=186.87, **_tp1_leg())
     i = ins.instruction_for(plan, event, money=ins.money_from(54.41, "$"))
     # 27 sh printed (floor of 54 × 0.5); $ = 54.41 × 0.5 × 6.70 = 182.27, not 27 × 6.70
-    assert i.headline == "💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +$182.27 · +1.5R"
+    assert i.headline == "💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +$182.27 · +1.5R (paper, gross)"
 
 
 @pytest.mark.parametrize("money,expected", [
@@ -307,7 +307,7 @@ def test_a_stop_move_projection_adds_the_banked_leg():
     i = ins.instruction_for(plan, _event("stop_moved", old=185.0, new=186.0, r_moved=0.78,
                                          effective="now"), money=money)
     assert i.lines == ("〜 trail; +0.8R since the last ping",
-                       "🔒 if it fills: +$279.47 · +1.1R total")
+                       "🔒 if it fills: +$279.47 · +1.1R total (paper, gross)")
 
 
 def test_a_short_stop_move_says_buy_stop_and_signs_a_loss():
@@ -317,7 +317,7 @@ def test_a_short_stop_move_says_buy_stop_and_signs_a_loss():
     assert i.headline == "🛑 MOVE BUY STOP → 99.00 now"
     # 30 sh × (99.00 − 97.50) against a short = −45.00; R −1.5/4.1 = −0.37
     assert i.lines == ("⚖ break-even; +0.6R since the last ping",
-                       "🔒 if it fills: -$45.00 · −0.4R total")
+                       "🔒 if it fills: -$45.00 · −0.4R total (paper, gross)")
 
 
 def test_an_unpriced_projection_is_r_only():
