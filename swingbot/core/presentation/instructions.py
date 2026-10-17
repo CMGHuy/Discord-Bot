@@ -408,7 +408,8 @@ def pnl_line(r: float, money: Money | None) -> str:
     parts = [_S["pnl"]]
     if money is not None and money.realized_amount is not None:
         parts.append(f"{tokens.fmt_money(money.realized_amount, money.currency)} ·")
-    return " ".join([*parts, signed_r(r), tokens.COST_BASIS])
+    scratch = round(r, 1) == 0  # a scratch prints a plain 0.0R, never +-0.0R / -0.0R
+    return " ".join([*parts, signed_r(0.0 if scratch else r), tokens.COST_BASIS])
 
 
 def _exit_word(reason: str | None) -> str:

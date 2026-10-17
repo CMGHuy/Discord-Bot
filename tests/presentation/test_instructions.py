@@ -471,3 +471,10 @@ def test_pnl_line_signs_both_figures_and_states_the_cost_basis():
     assert ins.pnl_line(-1.0, _settled(None)) == "🧾 −1.0R (paper, gross)"
     assert ins.pnl_line(0.4, None) == "🧾 +0.4R (paper, gross)"
 
+
+
+@pytest.mark.parametrize("r", [-0.0, 0.0, 0.01, -0.01, -0.04, 0.04])
+def test_pnl_line_prints_a_scratch_as_plain_zero_r(r):
+    line = ins.pnl_line(r, _settled(0.0))
+    assert line == "🧾 +$0.00 · 0.0R (paper, gross)"
+    assert "+-" not in line and "−−" not in line
