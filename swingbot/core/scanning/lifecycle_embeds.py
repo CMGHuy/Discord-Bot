@@ -458,6 +458,51 @@ def _delivery(plan, event):
     return Delivery(plan.plan_id, "notice", event.detail.get("notice_id", event.transition))
 
 
+def _feed_view(plan_id: str):
+    """The feed panel for one lifecycle message, or None. Imported here, not
+    at module level: core never imports commands at import time (v170 A8).
+    Never raises: a panel that cannot be built leaves the message without
+    buttons, never without its delivery."""
+    try:
+        from swingbot.commands.views import feed_view
+        view = feed_view(plan_id)
+    except Exception as exc:
+        swallowed(log, "scan.feed_view", exc,
+                  "execution feed: posting plan %s without buttons", plan_id, exc_info=True)
+        return None
+    return view if view.children else None
+
+
+async def _send_instruction(feed, history, embed, plan, event) -> bool:
+    """Feed send (notifies), then the history copy (silent once the feed
+    landed). Each send builds its own panel: a View belongs to one message.
+    True once any channel took the message."""
+    from swingbot.core.infra.silent_channel import silence
+
+    pinged = False
+    if feed is not None:
+        try:
+            await feed.send(**ui.push_kwargs(embed, view=_feed_view(plan.plan_id)))
+            log_posted(embed, plan.ticker, feed)
+            pinged = True
+        except Exception as exc:
+            swallowed(log, "scan.notify_plan_events.feed", exc, level=logging.DEBUG)
+            _warn_throttled(plan.plan_id, "execution feed: %s for plan %s failed "
+                            "on feed (%s); history will notify instead",
+                            event.transition, plan.plan_id, exc)
+    if history is not None:
+        try:
+            await (silence(history) if pinged else history).send(
+                **ui.push_kwargs(embed, view=_feed_view(plan.plan_id)))
+            log_posted(embed, plan.ticker, history)
+            pinged = True
+        except Exception as exc:
+            swallowed(log, "scan.notify_plan_events.history", exc, level=logging.DEBUG)
+            _warn_throttled(plan.plan_id, "execution feed: history copy of %s for "
+                            "plan %s failed: %s", event.transition, plan.plan_id, exc)
+    return pinged
+
+
 async def notify_plan_events(bot, events) -> list:
     """Post lifecycle instructions to the execution feed and report delivery.
 
@@ -465,7 +510,6 @@ async def notify_plan_events(bot, events) -> list:
     or fails, the history copy deliberately notifies instead. Non-feed events
     keep their existing history-only status embed and are never acknowledged.
     """
-    from swingbot.core.infra.silent_channel import silence
     from swingbot.core.planning.plan_manager import FOLLOW_ONLY_EVENTS, NOTICE_EVENTS, STOP_EVENTS
     from swingbot.core.planning.plan_store import PlanStore
     from swingbot.core.planning.time_exit import TIME_EVENTS
@@ -489,26 +533,7 @@ async def notify_plan_events(bot, events) -> list:
                     log_posted(status_embed, plan.ticker, history)
                 continue
             embed = build_instruction_embed(plan, event)
-            pinged = False
-            if feed is not None:
-                try:
-                    await feed.send(**ui.push_kwargs(embed))
-                    log_posted(embed, plan.ticker, feed)
-                    pinged = True
-                except Exception as exc:
-                    swallowed(log, "scan.notify_plan_events.feed", exc, level=logging.DEBUG)
-                    _warn_throttled(plan.plan_id, "execution feed: %s for plan %s failed "
-                                    "on feed (%s); history will notify instead",
-                                    event.transition, plan.plan_id, exc)
-            if history is not None:
-                try:
-                    await (silence(history) if pinged else history).send(**ui.push_kwargs(embed))
-                    log_posted(embed, plan.ticker, history)
-                    pinged = True
-                except Exception as exc:
-                    swallowed(log, "scan.notify_plan_events.history", exc, level=logging.DEBUG)
-                    _warn_throttled(plan.plan_id, "execution feed: history copy of %s for "
-                                    "plan %s failed: %s", event.transition, plan.plan_id, exc)
+            pinged = await _send_instruction(feed, history, embed, plan, event)
             if pinged:
                 log.info("execution feed: delivered %s for plan %s",
                           event.transition, plan.plan_id)

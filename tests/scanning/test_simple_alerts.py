@@ -124,7 +124,7 @@ def test_simple_alert_shows_trail_when_v2_plan_has_no_hard_tp2(monkeypatch, unsi
     item.plan_v2.tp2 = None
     item.paper_logged = True
     embed = build_simple_alert(item)
-    assert "RUNNER 50% → trail 2×ATR" in embed.description
+    assert "🏃 50%: 〜 trail 2×ATR" in embed.description
 
 
 def test_simple_alert_carries_no_chart_or_image_reference():
@@ -164,10 +164,10 @@ def test_v2_ticket_quotes_the_plans_own_levels(monkeypatch, unsized):
     item = make_item(plan_v2=make_plan_v2())
     item.paper_logged = True
     text = build_simple_alert(item).description
-    assert "**BUY AT MARKET ~100.00 · size n/a**" in text
-    assert "SELL STOP 95.00" in text
-    assert "TP1 SELL LIMIT 110.00 · 50%" in text
-    assert "TP2 120.00" in text
+    assert "**▶ BUY AT MARKET ~100.00 · size n/a**" in text
+    assert "🛑 SELL STOP 95.00" in text
+    assert "💰 SELL LIMIT 110.00 · 50%" in text
+    assert "🎯 SELL LIMIT 120.00" in text
     assert "115.00" not in text
 
 

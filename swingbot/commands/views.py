@@ -10,6 +10,11 @@ setup_hook, so a press on an alert posted before a restart still works.
 LegacyPlanPanel answers the static ids pre-v152 alerts carry. PlanBoardView
 keeps the TradesPaginator author-lock / timeout pattern
 (swingbot/commands/trades.py:83).
+
+v170: the execution feed (simple-alerts channel) carries its own panel,
+feed_view: Chart, Breakdown and Watch as above plus PnlNowButton, whose
+ephemeral reply is commands/pnl_now.py. P&L now lives in FEED_BUTTONS,
+never in PLAN_BUTTONS, so the full-alert panel cannot grow it.
 """
 import asyncio
 import datetime as dt
@@ -20,6 +25,7 @@ import re
 import discord
 
 from swingbot import config
+from swingbot.commands import pnl_now
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, generate_trade_chart
@@ -326,6 +332,20 @@ class DismissButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
         await interaction.response.edit_message(view=None)
 
 
+class PnlNowButton(_PlanButtonMixin, discord.ui.DynamicItem[discord.ui.Button],
+                   template=_template("pnl")):
+    """v170: the feed's live P&L for one plan, answered for its status at
+    click time (commands/pnl_now.py). Ephemeral; never posts in the channel."""
+
+    ACTION = "pnl"
+    LABEL = "💵 P&L now"
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        reply = await asyncio.to_thread(pnl_now.reply_for, self.plan_id)
+        await interaction.followup.send(reply, ephemeral=True)
+
+
 PLAN_BUTTONS: tuple[type, ...] = (ChartButton, BreakdownButton, WatchButton, FollowingButton, DismissButton)
 
 
@@ -354,6 +374,30 @@ def chart_only_view(plan_id: str) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     if _persistable(plan_id, None):
         view.add_item(ChartButton(plan_id))
+    return view
+
+
+#: v170: the feed's own DynamicItems, registered beside PLAN_BUTTONS. Never
+#: appended to PLAN_BUTTONS: PlanActionView iterates that tuple.
+FEED_BUTTONS: tuple[type, ...] = (PnlNowButton,)
+
+#: the feed panel, in order: the plan buttons it reuses, then its own.
+_FEED_PANEL: tuple[type, ...] = (ChartButton, BreakdownButton, WatchButton, *FEED_BUTTONS)
+
+
+def feed_view(plan_id: str) -> discord.ui.View:
+    """The execution feed's persistent panel (v170 §3, A4): Chart,
+    Breakdown, Watch and P&L now, for every plan message whatever its
+    status -- P&L now answers for the status at click time. No Dismiss: the
+    feed is an order log. Empty when the plan id cannot form a persistent
+    custom_id."""
+    view = discord.ui.View(timeout=None)
+    if not _persistable(plan_id, None):
+        log.warning("feed panel: plan %r cannot form a persistent custom_id"
+                    " -- posting without buttons", plan_id)
+        return view
+    for button_cls in _FEED_PANEL:
+        view.add_item(button_cls(plan_id))
     return view
 
 
@@ -389,8 +433,9 @@ class LegacyPlanPanel(discord.ui.View):
 
 def register_persistent_views(bot) -> None:
     """Called once from bot_core.setup_hook, before the gateway connects.
-    Reads PLAN_BUTTONS at call time, so a button appended later registers too."""
-    bot.add_dynamic_items(*PLAN_BUTTONS)
+    Reads PLAN_BUTTONS and FEED_BUTTONS at call time, so a button appended
+    later registers too."""
+    bot.add_dynamic_items(*PLAN_BUTTONS, *FEED_BUTTONS)
     bot.add_view(LegacyPlanPanel())
 
 

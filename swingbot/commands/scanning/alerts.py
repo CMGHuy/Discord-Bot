@@ -10,6 +10,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.scanning.short_candidates import admitted_short_modes
 from swingbot.core.infra.posted_log import log_posted
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
 from swingbot.core.analytics.rank import rank_plans
@@ -192,13 +193,35 @@ def _destination(destination, firehose_channel, firehose_id: str, plan, route_by
     return firehose_channel if target_id == firehose_id else destination
 
 
+#: v170 A7: the feed panel rides only on the plan-backed v2 ticket.
+_TICKET_KINDS = frozenset({Kind.TICKET_PLACE, Kind.TICKET_DO_NOT_PLACE})
+
+
+def _ticket_view(simple_embed, plan):
+    """The feed panel for a v2 ticket mirror, else None: a strategy-signal or
+    legacy mirror has no plan for the buttons to answer for. Never raises: a
+    panel that cannot be built posts the ticket without buttons rather than
+    costing the mirror its ping."""
+    try:
+        if plan is None or getattr(simple_embed, "kind", None) not in _TICKET_KINDS:
+            return None
+        from swingbot.commands.views import feed_view
+        view = feed_view(plan.plan_id)
+    except Exception as exc:
+        swallowed(log, "scan.ticket_view", exc, "simple ticket for %s: posting without buttons",
+                  getattr(plan, "ticker", "?"), exc_info=True)
+        return None
+    return view if view.children else None
+
+
 async def _mirror(simple_channel, simple_embed, plan) -> bool:
     """Post the simple-channel mirror with its content line; True once it
     landed. A failure never costs the real alert -- it keeps its ping."""
     if simple_channel is None or not simple_embed:
         return False
     try:
-        await simple_channel.send(**ui.push_kwargs(simple_embed))
+        await simple_channel.send(**ui.push_kwargs(simple_embed,
+                                                   view=_ticket_view(simple_embed, plan)))
         log_posted(simple_embed, getattr(plan, "ticker", None), simple_channel)
     except Exception as exc:
         log.warning("Could not post simple alert for %s to channel %s: %s "

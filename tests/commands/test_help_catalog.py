@@ -101,3 +101,15 @@ def test_handle_help_sends_every_embed_on_both_surfaces(monkeypatch):
     assert [event[0] for event in run.ctx_events] == ["send"] * count
     assert all(event[5] for event in run.inter_events)  # ephemeral on /help
     assert not run.ctx_reply.failed and not run.inter_reply.failed
+
+
+def test_help_description_carries_the_feed_legend_from_the_symbol_table():
+    from swingbot.core.presentation import tokens
+    assert info.HELP_DESCRIPTION == (
+        "Alerts only, never places trades. Prefix: `!`  •  Slash: `/`\n" + tokens.feed_legend())
+    for glyph in tokens.FEED_SYMBOLS.values():
+        assert glyph in info.HELP_DESCRIPTION
+    assert "paper account, before fees, slippage and tax" in info.HELP_DESCRIPTION
+    first = info.help_embeds()[0]
+    assert first.description == info.HELP_DESCRIPTION
+    assert len(first.description) <= 4096 and len(first) <= 6000

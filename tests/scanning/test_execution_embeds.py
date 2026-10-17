@@ -1,17 +1,21 @@
 """v81 execution embed rendering uses the shared presentation kit."""
 import pytest
 
+from swingbot import config
 from swingbot.core.planning.plan_manager import PlanEvent
 from swingbot.core.presentation import ansi, kinds, tokens
-from swingbot.core.presentation.instructions import Instruction
+from swingbot.core.presentation.instructions import Instruction, Money
 from swingbot.core.presentation.kinds import Kind
 from swingbot.core.scanning import execution_embeds
 from tests.scanning.test_embeds_v3 import make_item, make_plan_v2
+
+_REAL_LINKED_TRADE = execution_embeds._linked_trade      # captured before the autouse patch
 
 
 @pytest.fixture(autouse=True)
 def _unsized(monkeypatch):
     monkeypatch.setattr(execution_embeds, "_sizing_snapshot", lambda entry, plan: None)
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: None)
 
 
 def _instruction(**kwargs):
@@ -59,7 +63,7 @@ def test_ticket_and_event_embeds():
     ticket = execution_embeds.build_ticket_embed(item, item.plan_v2)
     assert ticket.title == "🆕 ▲ LONG NVDA · PLACE"
     assert ticket.description.startswith("```ansi\n")
-    assert "**BUY STOP 101.00 · size n/a**" in ticket.description
+    assert "**▶ BUY STOP 101.00 · size n/a**" in ticket.description
     assert ticket.footer.text.startswith(tokens.DISCLAIMER)
     event = execution_embeds.build_instruction_embed(
         item.plan_v2, PlanEvent(item.plan_v2.plan_id, "cancelled_expired", {"bars_waited": 6}))
@@ -131,3 +135,108 @@ def test_expired_and_invalidated_post_as_grey_result_never_scratch(transition, w
     assert "SCRATCH" not in embed.title and "⚪" not in embed.title
     assert "SCRATCH" not in embed.push_text
     assert embed.color.value == kinds.RESULT_GREY
+
+
+def test_ticket_money_comes_from_the_sizing_snapshot(monkeypatch):
+    monkeypatch.setattr(execution_embeds, "_sizing_snapshot",
+                        lambda entry, plan: {"shares": 10.7, "risk_amount": 50.0})
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    item = make_item(plan_v2=make_plan_v2(entry_type="stop_entry", trigger_price=101.0))
+    item.paper_logged = True
+    text = execution_embeds.build_ticket_embed(item, item.plan_v2).description
+    # make_plan_v2: entry_price 100, stop 95, TP1 110, TP2 120 -> 10 sh, 5 + 5
+    assert "**▶ BUY STOP 101.00 · 10 sh**" in text
+    assert "🛑 SELL STOP 95.00 · if hit -$50.00 · −1.0R" in text
+    assert "💰 SELL LIMIT 110.00 · 5 sh · if hit +$50.00 · +2.0R" in text
+    assert "🏃 5 sh: 🎯 SELL LIMIT 120.00 · if hit +$100.00 · +4.0R" in text
+
+
+def test_ticket_money_without_a_snapshot_is_unsized(monkeypatch):
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    assert execution_embeds._ticket_money(make_plan_v2()) == Money(currency="$", shares=None)
+
+
+def _tp1_event(plan):
+    return PlanEvent(plan.plan_id, "tp1_partial", {
+        "fraction": 0.5, "exit_price": 110.0, "r": 2.0, "working_stop": 106.67})
+
+
+def test_lifecycle_money_comes_from_the_linked_record(monkeypatch):
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: {
+        "plan_id": plan_id, "shares": 10.5, "realized_pnl_amount": None})
+    monkeypatch.setattr(execution_embeds, "_sizing_snapshot",
+                        lambda entry, plan: pytest.fail("re-sized at render time"))
+    plan = make_plan_v2()          # entry 100, stop 95, TP1 110
+    embed = execution_embeds.build_instruction_embed(plan, _tp1_event(plan))
+    # 10 sh printed, 5 at TP1; realised = 10.5 × 0.5 × 10.00 = 52.50
+    assert "**💰 TP1 FILLED 5 sh @ 110.00 · 🧾 +$52.50 · +2.0R (paper, gross)**" in embed.description
+
+
+def test_without_a_linked_record_shares_come_from_the_snapshot_and_no_dollars(monkeypatch):
+    monkeypatch.setattr(execution_embeds, "_sizing_snapshot", lambda entry, plan: {"shares": 10.5})
+    plan = make_plan_v2()
+    embed = execution_embeds.build_instruction_embed(plan, _tp1_event(plan))
+    assert "**💰 TP1 FILLED 5 sh @ 110.00 · 🧾 +2.0R**" in embed.description
+    assert "$" not in embed.description
+
+
+def test_event_money_carries_the_records_settled_amount(monkeypatch):
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: {
+        "shares": 54.41, "realized_pnl_amount": 412.5})
+    assert execution_embeds._event_money(make_plan_v2()) == Money(
+        currency="$", shares=54, realized_amount=412.5, record_shares=54.41)
+
+
+def test_a_record_without_shares_falls_back_to_the_unpriced_snapshot(monkeypatch):
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: {
+        "shares": None, "realized_pnl_amount": None})
+    monkeypatch.setattr(execution_embeds, "_sizing_snapshot", lambda entry, plan: {"shares": 7.9})
+    assert execution_embeds._event_money(make_plan_v2()) == Money(currency="$", shares=7)
+
+
+def test_linked_trade_never_raises(monkeypatch):
+    from swingbot.core.tracking import performance
+
+    class _Boom:
+        def trade_for_plan(self, plan_id):
+            raise RuntimeError("db down")
+
+    monkeypatch.setattr(performance, "TradeLog", _Boom)
+    assert _REAL_LINKED_TRADE("plan-1") is None
+    assert _REAL_LINKED_TRADE("") is None
+
+
+def test_be_moved_embed_projects_from_the_record(monkeypatch):
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: {
+        "shares": 10.5, "realized_pnl_amount": None})
+    plan = make_plan_v2()
+    embed = execution_embeds.build_instruction_embed(
+        plan, PlanEvent(plan.plan_id, "be_moved", {"working_stop": 100.0}))
+    assert embed.description.splitlines() == [
+        "**🛑 MOVE SELL STOP → 100.00 now**", "⚖ break-even", "🔒 if it fills: +$0.00 · 0.0R total (paper, gross)"]
+
+
+def _closed_loss(plan):
+    return PlanEvent(plan.plan_id, "closed",
+                     {"reason": "loss", "exit_price": 95.0, "session": "regular"})
+
+
+def test_a_close_prints_the_linked_records_settled_dollars(monkeypatch):
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: {
+        "plan_id": plan_id, "shares": 9.43, "realized_pnl_amount": -47.15,
+        "status": "loss", "legs": []})
+    plan = make_plan_v2()          # entry 100, stop 95
+    embed = execution_embeds.build_instruction_embed(plan, _closed_loss(plan))
+    money = tokens.fmt_money(-47.15, config.CURRENCY_SYMBOL)
+    assert f"🧾 {money} · −1.0R (paper, gross)" in embed.description.splitlines()
+
+
+def test_a_close_without_a_linked_record_prints_r_only(monkeypatch):
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: None)
+    plan = make_plan_v2()
+    embed = execution_embeds.build_instruction_embed(plan, _closed_loss(plan))
+    assert "🧾 −1.0R (paper, gross)" in embed.description.splitlines()
