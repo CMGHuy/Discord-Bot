@@ -1,6 +1,7 @@
 """The complexity ratchet (spec v149 H1): scripts/dev/complexity_gate.py."""
 import importlib.util
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -298,3 +299,19 @@ def test_rename_pairs_match_by_score_one_to_one(gate):
                 F("new", "b:f", None, 15), F("new", "b:h", None, 22),
                 F("risen", "c:f", 15, 16)]
     assert gate.rename_pairs(findings) == [("a:f", "b:f")]
+
+
+# -- the real tree ----------------------------------------------------------
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    bool(os.environ.get("CI")),
+    reason="CI runs the gate as its own named step in backend-test-misc")
+def test_committed_tree_matches_the_baseline(gate):
+    """~20 s warm, so `slow`: `testrun.py full` runs it, `fast` does not.
+
+    A failure here means a function crossed 15, rose, improved or went away.
+    Run `python scripts/dev/complexity_gate.py` for the list.
+    """
+    current = gate.measure(gate.REPO, gate.python_files(gate.REPO))
+    assert gate.compare(current, gate.load_baseline(gate.BASELINE)) == []
