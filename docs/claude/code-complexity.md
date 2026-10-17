@@ -61,6 +61,24 @@ It runs in `python scripts/dev/testrun.py full` (a `slow` test,
 `backend-lint-gate` CI job, where a red result blocks the production deploy. A
 hotfix that lowers a legacy function's score runs `--update` in the same commit.
 
+The local pre-commit command for this gate is `python scripts/dev/complexity_gate.py`:
+the `fast` and `changed` test tiers do not run the slow real-tree test. Without
+git (the Docker image has no `.git`) the gate prints `VERDICT: SKIP` and exits 0,
+except when the `CI` environment variable is set: there it prints `VERDICT: FAIL`
+and exits 1, so a CI job that cannot measure never passes.
+
+### Frontend lint
+
+The frontend side is `npm run lint`, run from `frontend/`. It is the only lint
+entry point: `ng lint` (its `angular.json` target was added by the schematic) is
+not used and may not honour suppressions. Today's violations are frozen in
+`frontend/eslint-suppressions.json`. A fix that removes a suppressed violation
+runs `npx eslint --prune-suppressions` (from `frontend/`) in the same commit,
+mirroring `--update` above; otherwise ESLint exits non-zero on the now-unused
+suppression. The Lint step gates `publish-image`, so a hotfix that touches
+suppressed code does this too. One known unsuppressible warning (an unused
+`max-len` disable in `trade-detail.store.ts`) exits 0.
+
 **Moving or renaming a legacy function** shows up as a `gone` key plus a
 `new` key with the same score, and the gate prints a hint naming the pair.
 Hand-edit the key in the baseline first, then run `--update`; it refuses
