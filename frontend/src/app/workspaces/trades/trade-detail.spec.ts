@@ -531,6 +531,13 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(strip!.textContent).toContain('Paper fills at plan levels; real fills and slippage may differ.');
   });
 
+  it.each(['ACTIVE', 'PARTIAL'])('renders the %s outcome progress bar between the working stop and target', status => {
+    const el = mount('plan', DETAIL, status, { current_price: 105, stop_loss: 101, target: 109 });
+    const bar = el.querySelector('[data-tile="progress"] [role="progressbar"]');
+    expect(bar).toBeTruthy();
+    expect(bar!.getAttribute('aria-valuenow')).toBe('50');
+  });
+
   it('keeps a partial runner open and separates its banked result', () => {
     const el = mount('plan', { ...DETAIL, legs_realized: [
       { fraction: 0.5, exit_price: 110, r: 2, reason: 'tp1' },

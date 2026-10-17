@@ -86,7 +86,7 @@ function openTiles(ctx: StripContext): OutcomeTile[] {
       sub: `${pct(t.pnl_pct)} ${t.status === 'PARTIAL' ? 'on open shares' : 'on position'}`,
     }),
     tile('progress', 'Progress', ABSENT, { indicator: {
-      status: t.status, current, entry: t.entry ?? null, stop: t.stop_loss ?? null, target: t.target ?? null,
+      status: 'open', current, entry: t.entry ?? null, stop: t.stop_loss ?? null, target: t.target ?? null,
     } }),
     tile('held', 'Held', held(t.held_hours), { sub: days === null ? null : `time exit in ${days}d` }),
   ];
