@@ -27,8 +27,9 @@ from swingbot.core.marketdata.history_store import MissingStoreError
 import swingbot.core.backtesting.backtest as bt
 import swingbot.core.market.entry_filters as ef
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
 
-TRAIN = ("2020-01-01", "2023-12-31")
+TRAIN = resolve_instrument("v1").train_window   # v1 contract alias (v158 WC7)
 
 PARAM_GRID = {
     # Rescue (Task 108): grid the new pullback entry-mode gate (Task 107),

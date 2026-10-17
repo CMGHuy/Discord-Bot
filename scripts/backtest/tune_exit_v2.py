@@ -19,9 +19,10 @@ from swingbot.core.planning import plan_engine
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES
 from swingbot.core.marketdata import training_data
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
 from fetch_backtest_data import add_data_source_arg, apply_data_source
 
-TRAIN = ("2020-01-01", "2023-12-31")
+TRAIN = resolve_instrument("v1").train_window   # v1 contract alias (v158 WC7)
 BREAKOUT_CLASS = {"Break & Retest", "Support/Resistance", "EMA Crossover"}
 GRID_TRAIL = [2.0, 2.5, 3.0]
 GRID_TP2 = ["levels", "none"]

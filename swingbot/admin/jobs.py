@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from swingbot import config
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
 
 # The out-of-sample window already consumed by round-1 validation
 # (docs/superpowers/results/2026-07-validation.md). Reusing it for
@@ -31,13 +32,13 @@ from swingbot.core.backtesting.backtest import ALL_STRATEGIES
 # is no longer really out-of-sample. Tuning stays on TRAIN below;
 # VALIDATION is run once, manually, via the CLI (scripts/backtest/run_backtest_range.py
 # --validation), never through this admin UI.
-VALIDATION_WINDOW = ("2024-01-01", "2025-12-31")
+VALIDATION_WINDOW = resolve_instrument("v1").validation_window   # v1 contract (v158 WC7)
 
 # What scripts/backtest/tune_strategy.py itself hard-codes as TRAIN today (see this
 # plan's ground-truth deviation #3 -- the script has no date CLI flag at
 # all yet; this constant is shown on the Tuning page so the window is
 # visible even though it can't be changed from here).
-TRAIN_WINDOW = ("2020-01-01", "2023-12-31")
+TRAIN_WINDOW = resolve_instrument("v1").train_window   # v1 contract (v158 WC7)
 
 _DATE_LIKE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 _BANNED_DATE_FLAGS = {"--from", "--to", "--validation"}

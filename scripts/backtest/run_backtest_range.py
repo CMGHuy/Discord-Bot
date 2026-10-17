@@ -36,6 +36,7 @@ from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
 from swingbot.core.marketdata import training_data
 from swingbot.core.marketdata.history_store import MissingStoreError
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
 
 _SPY_CACHE: dict = {}
 
@@ -154,8 +155,10 @@ def _with_context(df, *, date_to=None):
         print(f"    ! market_context.attach failed: {e}", flush=True)
         return df
 
-TRAIN = ("2020-01-01", "2023-12-31")
-VALIDATION = ("2024-01-01", "2025-12-31")
+# v1's windows live in the instrument contract (v158 WC7). The names stay as
+# aliases: measure_* scripts import them.
+TRAIN = resolve_instrument("v1").train_window
+VALIDATION = resolve_instrument("v1").validation_window
 
 
 def window_trades(summary, date_from, date_to):

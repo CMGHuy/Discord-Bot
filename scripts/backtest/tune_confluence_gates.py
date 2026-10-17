@@ -32,9 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"
 from swingbot.core.backtesting.backtest_scenarios import _aggregate, replay_scenarios
 from swingbot.core.planning.plan_engine import simulate_exit
 from swingbot.core.marketdata import training_data
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
 from fetch_backtest_data import add_data_source_arg, apply_data_source
 
-TRAIN = ("2020-01-01", "2023-12-31")
+TRAIN = resolve_instrument("v1").train_window   # v1 contract alias (v158 WC7)
 HORIZONS_TO_TEST = ["4w", "2m", "3m", "4m", "6m"]
 GRID_CONFL = [2, 3, 4]
 GRID_RR = [0.0, 0.3]
