@@ -3,6 +3,8 @@
 Pure functions, plain dict fixtures, no DB. Trade timestamps are UTC ISO like
 `performance.log_trade` writes them; every day boundary is a Berlin date."""
 import datetime as dt
+import re
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -484,3 +486,23 @@ def test_null_distribution_has_mean_zero():
 @pytest.mark.parametrize("n", [20, 50, 100])
 def test_null_false_flag_rate_is_the_documented_behaviour(n):
     assert _false_flag_rate(n) == pytest.approx(NULL_FALSE_FLAG_RATES[n], abs=1e-9)
+
+
+_COLUMNS_TS = (Path(__file__).resolve().parents[2]
+               / "frontend/src/app/workspaces/analytics/analytics.columns.ts")
+
+
+def _ts_string_const(source: str, name: str) -> str:
+    """The value of `export const NAME = '...';`, TS escapes undone."""
+    match = re.search(rf"export const {name} =\s*'((?:[^'\\]|\\.)*)';", source)
+    assert match, f"{name} not found as a single-quoted string in analytics.columns.ts"
+    return re.sub(r"\\(.)", r"\1", match.group(1))
+
+
+@pytest.mark.parametrize("name", ["LIVE_LOSS_MEANING", "LIVE_LOSS_LOOKS_CAVEAT",
+                                  "REGISTRY_CONTEXT_LABEL"])
+def test_edge_tab_wording_matches_the_digest_wording(name):
+    """The pre-registered wording lives in calibration.py and in the Edge tab's
+    analytics.columns.ts; neither copy may drift alone."""
+    source = _COLUMNS_TS.read_text(encoding="utf-8")
+    assert _ts_string_const(source, name) == getattr(calibration, name)
