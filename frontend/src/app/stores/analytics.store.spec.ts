@@ -401,6 +401,37 @@ describe('AnalyticsStore', () => {
     expect(store.tiers()[0].level).toBe(3);
   });
 
+  it('exposes the live loss watch rows and counts, in the order the server sent them (v164)', () => {
+    const rows = [
+      { source: 'confluence', strategy: 'ALL', horizon: '4w', live_n: 24, live_wr: 41.7, live_expr: -0.25,
+        bound_upper: -0.04, alert: true, registry_status: 'WEAK', registry_window_kind: 'VALIDATION',
+        registry_run_date: '2026-05-01', registry_expr: -0.05 },
+      { source: 'confluence', strategy: 'ALL', horizon: '2w', live_n: 3, live_wr: null, live_expr: 0.1,
+        bound_upper: 0.6, alert: false, registry_status: 'WEAK', registry_window_kind: 'VALIDATION',
+        registry_run_date: '2026-05-01', registry_expr: -0.02 },
+    ];
+    tick();
+    respondOverview();
+    store.setTab('edge');
+    tick();
+    respondEdge({ live_loss_watch: { rows, counts: { no_source: 2, manual_close: 1 } } });
+
+    expect(store.liveLossWatch().map((row) => row.horizon)).toEqual(['4w', '2w']);
+    expect(store.liveLossWatch()[0].alert).toBe(true);
+    expect(store.liveLossCounts()).toEqual({ no_source: 2, manual_close: 1 });
+  });
+
+  it('reads a calibration body cached before v164 as an empty live loss watch', () => {
+    tick();
+    respondOverview();
+    store.setTab('edge');
+    tick();
+    respondEdge();   // CALIBRATION carries no live_loss_watch key
+
+    expect(store.liveLossWatch()).toEqual([]);
+    expect(store.liveLossCounts()).toEqual({});
+  });
+
   it('exposes deciles as a fixed-0-100 histogram', () => {
     tick();
     respondOverview();

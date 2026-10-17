@@ -25,6 +25,8 @@ import {
   AnalyticsStrategies,
   AnalyticsUnit,
   BookScope,
+  LiveLossRow,
+  LiveLossWatch,
   TuneDefaults,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
@@ -600,6 +602,10 @@ export const AnalyticsStore = signalStore(
     deciles: computed<DecileRow[]>(() => (calibration()?.deciles ?? []) as DecileRow[]),
     tiers: computed<TierRow[]>(() => (calibration()?.levels ?? []) as TierRow[]),
     drift: computed<DriftRow[]>(() => (calibration()?.drift ?? []) as DriftRow[]),
+    /** v164 D4: the live loss watch, in the server's order. A body cached
+     *  before the deploy has no key, which reads as an empty watch. */
+    liveLossWatch: computed<LiveLossRow[]>(() => calibration()?.live_loss_watch?.rows ?? []),
+    liveLossCounts: computed<LiveLossWatch['counts']>(() => calibration()?.live_loss_watch?.counts ?? {}),
 
     /* -- tuning -------------------------------------------------------- */
 

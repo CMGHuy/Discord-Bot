@@ -621,10 +621,42 @@ export interface AnalyticsStrategies extends Scoped {
   cumulative: Record<string, { date: string; cum_r: number }[]>;
 }
 
+/** v164: one row of the pre-registered live loss watch (spec D2), as
+ *  `calibration.live_loss_watch` emits it. `alert` means live ExpR for this
+ *  row is below zero with ~90% one-sided confidence; the `registry_*` fields
+ *  are backtest context only, never comparable with the live figures. */
+export interface LiveLossRow {
+  source: string;
+  strategy: string;
+  /** `null` is the pooled row of its `(source, strategy)`. */
+  horizon: string | null;
+  live_n: number;
+  /** 0–100 over wins and losses only; `null` when there is neither. */
+  live_wr: number | null;
+  live_expr: number | null;
+  /** 90th percentile of the week-clustered bootstrap of mean R. */
+  bound_upper: number | null;
+  alert: boolean;
+  registry_status: string | null;
+  registry_window_kind: 'TRAIN' | 'VALIDATION' | null;
+  registry_run_date: string | null;
+  registry_expr: number | null;
+}
+
+/** Rows already ordered by the server (alerts first, then confluence by
+ *  horizon with the pooled row last, then strategies by name). */
+export interface LiveLossWatch {
+  rows: LiveLossRow[];
+  counts: Record<string, number>;
+}
+
 export interface AnalyticsCalibration {
   deciles: unknown[];
   levels: unknown[];
   drift: unknown[];
+  /** Absent on a snapshot cached before v164; the API then sends the empty
+   *  shape, but the client tolerates the key missing as well. */
+  live_loss_watch?: LiveLossWatch;
   scope: 'all-time';
 }
 

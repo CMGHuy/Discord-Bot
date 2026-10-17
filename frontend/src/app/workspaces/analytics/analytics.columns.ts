@@ -1,4 +1,4 @@
-import { AnalyticsByDimensionRow, AnalyticsUnit } from '../../api/models';
+import { AnalyticsByDimensionRow, AnalyticsUnit, LiveLossRow } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
 import { ABSENT, date, dateTime, money, rMultiple, share, signed } from '../../ui/format';
 import {
@@ -178,7 +178,55 @@ export const DRIFT_COLUMNS: ColumnDef<DriftRow>[] = [
   { key: 'live_n', header: 'Live N', numeric: true, value: (r) => count(r.live_n) },
   { key: 'live_wr', header: 'Live WR', numeric: true, value: (r) => rate(r.live_wr) },
   { key: 'delta_wr', header: 'Δ', numeric: true, value: (r) => delta(r.delta_wr) },
-  { key: 'drift_alert', header: 'Decay' },
+  // v164: the Edge tab renders this table now; a plain value, no cell slot.
+  { key: 'drift_alert', header: 'Decay', value: (r) => (r.drift_alert ? 'DECAY' : ABSENT) },
+];
+
+/* -- live loss watch (v164) ------------------------------------------------
+ *
+ * The wording below is pre-registered with the rule (spec v164 D2) and is the
+ * same text the Discord digest and the ops-channel flag carry
+ * (`swingbot/core/analytics/calibration.py`). Change one, change all three.
+ */
+
+export const LIVE_LOSS_MEANING =
+  'live ExpR for this row is below zero with ~90% one-sided confidence — not "the edge decayed versus its backtest"';
+export const LIVE_LOSS_LOOKS_CAVEAT =
+  '11 correlated looks per week; flags are prompts to investigate, not verdicts';
+export const REGISTRY_CONTEXT_LABEL = 'backtest context — not comparable';
+
+/** `confluence / ALL / 4w`; the `horizon: null` row is the pooled one. */
+export function liveLossLabel(row: LiveLossRow): string {
+  return `${row.source} / ${row.strategy} / ${row.horizon ?? 'pooled'}`;
+}
+
+/** Every exclusion is counted, never dropped (spec D1); a zero is shown as
+ *  a zero. Manual closes are in the population, so they read as included. */
+const EXCLUDED_COUNTS: readonly (readonly [string, string])[] = [
+  ['no_source', 'no source'],
+  ['unknown_strategy', 'unknown strategy'],
+  ['no_r', 'no R'],
+  ['no_entry_date', 'no entry date'],
+];
+
+export function liveLossCountsLine(counts: Record<string, number>): string {
+  const excluded = EXCLUDED_COUNTS.map(([key, label]) => `${label} ${counts[key] ?? 0}`).join(' · ');
+  return `Excluded, counted: ${excluded}. Manual closes included: ${counts['manual_close'] ?? 0}.`;
+}
+
+/** Live figures first, then the registry's, each headed "Registry …": the
+ *  panel states once that those are backtest context, not comparable. */
+export const LIVE_LOSS_COLUMNS: ColumnDef<LiveLossRow>[] = [
+  { key: 'row', header: 'Row', value: (r) => liveLossLabel(r) },
+  { key: 'live_n', header: 'Live N', numeric: true, value: (r) => count(r.live_n) },
+  { key: 'live_wr', header: 'Live WR', numeric: true, value: (r) => rate(r.live_wr) },
+  { key: 'live_expr', header: 'Live ExpR', numeric: true, value: (r) => expectancy(r.live_expr) },
+  { key: 'bound_upper', header: 'ExpR 90% upper', numeric: true, value: (r) => expectancy(r.bound_upper) },
+  { key: 'alert', header: 'Alert', value: (r) => (r.alert ? 'BELOW ZERO' : ABSENT) },
+  { key: 'registry_status', header: 'Registry badge', value: (r) => r.registry_status ?? ABSENT },
+  { key: 'registry_window_kind', header: 'Registry window', value: (r) => r.registry_window_kind ?? ABSENT },
+  { key: 'registry_run_date', header: 'Registry run', value: (r) => (r.registry_run_date ? date(r.registry_run_date) : ABSENT) },
+  { key: 'registry_expr', header: 'Registry ExpR', numeric: true, value: (r) => expectancy(r.registry_expr) },
 ];
 
 /* -- tuning grid --------------------------------------------------------- */
