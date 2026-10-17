@@ -62,7 +62,8 @@ def test_record_blocked_takes_instrument_v1_and_refuses_v2_before_loading_anythi
     out = tmp_path / "rows.jsonl"
     with pytest.raises(SystemExit) as exc:
         ma.cli(["--record-blocked", str(out), "--instrument", "v2"])
-    assert exc.value.code != 0 and "v147" in str(exc.value) and not out.exists()
+    assert exc.value.code != 0 and not out.exists()
+    assert "phase 5 (scan replay under v2)" in str(exc.value) and "v147" not in str(exc.value)
     monkeypatch.setattr(ma, "cached_universe", lambda: [])
     monkeypatch.setattr(cr, "offline_context", lambda: "ctx")
     assert ma.cli(["--record-blocked", str(out), "--instrument", "v1"]) == 0

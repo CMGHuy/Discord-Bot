@@ -298,7 +298,7 @@ def record_blocked_main(argv) -> int:
     instrument_cli.add_instrument_arg(parser)
     args = parser.parse_args(argv)
     instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_arms.py --record-blocked",
-                              "v147")
+                              "phase 5 (scan replay under v2)")
     require_train_window(args.date_from, args.date_to, validation=args.validation)
     context = cr.offline_context()
     universe = cached_universe()
