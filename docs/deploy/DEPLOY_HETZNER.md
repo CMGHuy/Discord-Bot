@@ -346,6 +346,14 @@ compose edit is needed either way (see "Rolling back").
 | `0 4 1 * *` | `pitr_verify.sh` | monthly proof both repositories are readable (`pgbackrest verify`, `restic check`) |
 | `0 3 * * *` | `backup_db.sh` | nightly `pg_dump` into `data/backups/db/`, kept 90 days (second, day-level method) |
 
+**Liveness (v148).** Installed by `scripts/ops/install_heartbeat_watch_cron.sh` (idempotent). It is permanent and owned by the partner (ops):
+
+| Cron (VM time) | Script | What |
+|---|---|---|
+| `*/5 * * * *` | `heartbeat_watch.sh` | reads the bot's last heartbeat (`bot_heartbeat.doc->>'timestamp'`, written only by the bot). When it is stale past max(15 min, 3 × `SCAN_INTERVAL_MINUTES`), or cannot be read, the script posts once to `OPS_ALERT_WEBHOOK_URL`, and once more on recovery. One verdict line per run goes to `logs/heartbeat_watch.log` (last 2000 lines kept), and the state goes to `logs/heartbeat_watch.state` |
+
+`bash scripts/ops/heartbeat_watch.sh --test` forces one post, to check the webhook. `--dry-run --age <s>` prints the verdict for a given age without touching Postgres, the webhook or the state. With no webhook set, it logs and exits 0 and posts the incident once a URL is set. It dies with the VM: a monitor outside the VM would need its own spec.
+
 `backups/` layout: `pitr/` (pgBackRest repository, outside `pgdata`), `restic/`
 (market-data repository), `env/` (one `.env` version per save) and
 `deploys.jsonl` (one line per deploy: git sha, bot and db images).
