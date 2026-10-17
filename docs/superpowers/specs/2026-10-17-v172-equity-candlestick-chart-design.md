@@ -123,14 +123,16 @@ the hours it prices trades.
 `scripts/data/backfill_equity_samples.py`. Dry-run by default, `--apply` to
 write.
 
-**Bars:** daily bars from `swingbot/core/marketdata/backtest_cache.py`, the
-backtest CSV cache, and never `market_data/` (`known-traps.md` § The
-market_data cache never self-heals). Those bars are adjusted, and entry
-prices are raw fills. Each bar is rebased to the raw basis with
-`swingbot/core/marketdata/adjustments.py` before any P&L is computed. A
-position whose span contains a corporate action that cannot be rebased is
-left out of every day it spans and counted in `skipped_n`. It is never
-priced on the adjusted basis.
+**Bars (partner decision, 2026-10-17):** **unadjusted** daily bars,
+fetched once by the script through yfinance with `auto_adjust=False`, for
+traded tickers only, over the days each was held. They are kept in the
+run's output directory, never in any shared cache. Entry and exit prices
+are raw fills, so raw bars match them without any rebase. Neither
+`backtest_cache.py` (adjusted, `auto_adjust=True`) nor `market_data/`
+(`known-traps.md` § The market_data cache never self-heals) is read. The
+repo has no split or dividend data, so the rebase the first revision of
+this spec named had no code behind it. A ticker whose fetch fails or comes
+back short is handled by the coverage gate below.
 
 **Per trading day `D`**, from the earliest `opened_at` to the day before
 the first `live` sample, with session open = 09:30 and close = 16:00
@@ -290,6 +292,46 @@ figure and the "today" change line above it stay.
 No horizontal page scroll at any width. The chart fills its panel's width,
 and `lightweight-charts`' time scale handles candle density.
 
+## Corrections from the code brief (2026-10-17)
+
+The plan brief (`.superpowers/briefs/2026-10-17-v172-equity-candlestick-chart.md`
+§ 0) checked this spec against the code. These corrections win over any
+earlier wording above:
+
+1. **Revision id** is `v172_001` (file `v172_001_equity_samples.py`), as the
+   regex in `tests/db/test_migrations.py` requires.
+2. **Table contract:** the table also carries `doc` and `updated_at`,
+   registers through `register(...)`, and adds a `PROMOTION_REASONS` line per
+   promoted column and a case in
+   `tests/db/test_unknown_field_round_trip.py::CASES`. Money columns are
+   `double precision`, matching `p6_001`'s house convention, not
+   `numeric(14,2)`. The values are still computed in `Decimal` and rounded
+   to 2 dp once, at the write.
+3. **Market hours:** `trade_monitor` runs around the clock, so the recorder
+   writes only while the US market is open, using the existing market-hours
+   check. That is about 78 rows a session day, about 20k a year.
+4. **Open positions** exclude PENDING placeholders. The § 0 module applies
+   the same plan-status filter as `_live_positions` (plan `ACTIVE` or
+   `PARTIAL`).
+5. **`_open_shares`** moves from `swingbot/admin/api_v1/trades.py` into
+   `swingbot/core/tracking/equity.py`, and the admin re-imports it.
+6. **Hook point:** the recorder runs after `run_manager_tick` inside
+   `trade_monitor`, since TP1 and plan closes happen there, as one helper
+   call so `trade_monitor` stays under the complexity limit.
+7. **Costs:** `realized_pnl_amount` is `shares × (exit − entry)` and carries
+   no costs, so the account label reads "Paper account · before tax and
+   costs".
+8. **Currency** is `config.CURRENCY_SYMBOL` (`€`/`$`/`£`), and the API
+   field is `currency_symbol`. The SPA already has it as
+   `connection.currency()`.
+9. **Viewer preferences** (timeframe, basis) go through the server-backed
+   `PreferencesStore` with a `ui/*-prefs.ts` helper, never localStorage.
+10. **Existing test:** `portfolio-value.spec.ts` asserts there is no `1W`
+    button. That assertion is replaced.
+11. **Test suites:** tracking and db tests go in `storage`, the endpoint in
+    `admin`, the recorder in `discord` (`tests/commands/`), the backfill in
+    `tooling` (`tests/scripts/`). `suites.toml` needs no change.
+
 ## Error handling
 
 | Failure | Behaviour |
@@ -297,7 +339,7 @@ and `lightweight-charts`' time scale handles candle density.
 | Sample write fails in the monitor | caught, logged, sample skipped; monitor unaffected |
 | Position unpriced or unsized | left out of `unrealized_pnl`, counted in `skipped_n` |
 | Backfill bar missing | `--apply` refuses; with `--allow-gaps`, left out that day and counted |
-| Corporate action not rebasable | position left out of its whole span, counted |
+| Raw-bar fetch fails for a ticker | treated as a coverage gap: `--apply` refuses unless `--allow-gaps` |
 | Bad `tf` / `basis` / `limit` | 400 with the allowed values |
 | Table empty (fresh install) | `candles: []`; the UI shows the empty state |
 
@@ -322,8 +364,8 @@ and `lightweight-charts`' time scale handles candle density.
   `_attach_unrealized_pnl`'s amount for it, and the sample's
   `realized_balance` equals the realized walk at the same time.
 - **Backfill:** a two-position fixture over three days with an entry day
-  and an exit day checks the clamping and the four rows per day. A split
-  inside a span is rebased, or the position is skipped when it cannot be. A
+  and an exit day checks the clamping and the four rows per day. The fetch is
+  mocked to return raw bars, and the test asserts `auto_adjust=False`. A
   re-run writes nothing new, `--replace` rewrites every row with the new
   `backfill_run`, the coverage gate refuses a gap, and
   `--recompute-realized` updates only the realized columns.
