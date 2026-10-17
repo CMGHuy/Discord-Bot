@@ -5,7 +5,7 @@ import { orderWording, pctFrom, Tone } from './trade-figures';
 import { PAPER_LINE } from './why/levels-block';
 
 export interface PlanFigures {
-  direction: string | null; status: string | null; entryType: string | null;
+  direction: string | null; status: string; entryType: string | null;
   trigger: number | null; entry: number | null; riskStop: number | null;
   stopLoss: number | null; workingStop: number | null; target1: number | null;
   target2: number | null; acceptance: number | null; riskReward: number | null;
@@ -35,7 +35,7 @@ export function planRows(f: PlanFigures): PlanRow[] {
   return rows;
 }
 export function restingStopLine(f: PlanFigures): string | null {
-  if (!['ACTIVE', 'PARTIAL'].includes(f.status ?? '') || !workingStopDiffers(f)) return null;
+  if (!['ACTIVE', 'PARTIAL'].includes(f.status) || !workingStopDiffers(f)) return null;
   return `Move your resting stop to ${num(f.workingStop)}`;
 }
 export function rrLine(f: PlanFigures): string | null {
@@ -56,12 +56,12 @@ export function rrLine(f: PlanFigures): string | null {
             @for (row of rows(); track row.level) {
               <tr [attr.data-level]="row.level">
                 <th scope="row">{{ row.level }}</th>
-                <td class="num" [class.pos]="row.tone === 'pos'" [class.neg]="row.tone === 'neg'">
+                <td class="num price" [class.pos]="row.tone === 'pos'" [class.neg]="row.tone === 'neg'">
                   @if (row.level === 'Order') { {{ row.note }} } @else {
                     {{ fmt(row.price) }} @if (row.note) { <span class="muted">{{ row.note }}</span> }
                   }
                 </td>
-                <td class="num">{{ fmtPct(row.pctFromEntry) }}</td>
+                <td class="num from">@if (row.pctFromEntry !== null) { {{ fmtPct(row.pctFromEntry) }} }</td>
               </tr>
             }
           </tbody>

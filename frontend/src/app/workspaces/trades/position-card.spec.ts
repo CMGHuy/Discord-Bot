@@ -23,7 +23,7 @@ describe('PositionCard', () => {
     expect(positionRows({ ...base, status: 'ACTIVE' })[2].sub).toBeNull();
   });
   it('hides null rows while retaining real zeros', () => {
-    const absent = Object.fromEntries(Object.keys(base).map(key => [key, null])) as unknown as PositionFigures;
+    const absent = { ...Object.fromEntries(Object.keys(base).map(key => [key, null])), status: 'ACTIVE' } as unknown as PositionFigures;
     expect(positionRows(absent)).toEqual([]);
     expect(positionRows({ ...absent, shares: 0, dollarAtRisk: 0, tp1Pct: 0, holdCapBars: 0 }).map(row => row.value)).toEqual(['0', '0.00', '0%', '0 bars']);
   });

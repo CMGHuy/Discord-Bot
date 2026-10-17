@@ -4,7 +4,7 @@ import { date, num, share, text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 
 export interface PositionFigures {
-  status: string | null; shares: number | null; positionValue: number | null;
+  status: string; shares: number | null; positionValue: number | null;
   dollarAtRisk: number | null; sizingMode: string | null; gapP90Pct: number | null;
   gapFragile: boolean | null; tp1Pct: number | null; breakevenTriggerPct: number | null;
   trailAtrMult: number | null; expiresOn: string | null; timeExitOn: string | null;

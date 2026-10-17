@@ -36,6 +36,19 @@ describe('PlanCard', () => {
     expect(rrLine({ ...base, rewardPerShare: null })).toBe('R:R 2.18');
     expect(rrLine({ ...base, riskReward: null })).toBeNull();
   });
+  it('leaves Order and Entry distances empty while preserving priced row distances', () => {
+    const f = TestBed.createComponent(PlanCard);
+    f.componentRef.setInput('figures', base); f.detectChanges();
+    const el: HTMLElement = f.nativeElement;
+    for (const level of ['Order', 'Entry']) {
+      const cells = el.querySelectorAll(`[data-level="${level}"] td`);
+      expect(cells[1].textContent?.trim()).toBe('');
+      expect(cells[0].classList.contains('price')).toBe(true);
+      expect(cells[1].classList.contains('from')).toBe(true);
+      expect([...cells].every(cell => cell.classList.contains('num'))).toBe(true);
+    }
+    expect(el.querySelector('[data-level="Stop"] td.from')?.textContent?.trim()).toBe('-5.00%');
+  });
   it('renders one panel with actionable notes and table-local scrolling', () => {
     const f = TestBed.createComponent(PlanCard);
     f.componentRef.setInput('figures', base); f.detectChanges();
