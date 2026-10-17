@@ -65,7 +65,7 @@ expected while they are still being written — ignore only those.
 2. Decide the layout: estimate lines per task (recent tasks run 150–300).
    **≤ ~1300 lines total → single file; otherwise split into parts.**
 3. Write the index **before any task body** — this is your first file write:
-   the header block, goal, architecture, `## Global Constraints`,
+   the header block, goal (a short explanatory paragraph block, not one sentence: why the work exists, what changes once shipped, how it works in idea, what it leaves alone, how success is measured; `document-conventions.md` § The plan's Goal section), architecture, `## Global Constraints`,
    `## Parallelisation`, and a **task ledger** table with one row per task:
    id · title · part · `Model:` tier · files created/modified · symbols it
    creates that a later task consumes (name, signature or shape). Put it

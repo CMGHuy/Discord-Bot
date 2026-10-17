@@ -125,6 +125,27 @@ describe('SessionStore', () => {
     expect(store.error()).toContain('Could not reach');
   });
 
+  it('shows the server message when sign-ins are rate limited', async () => {
+    await boot(false, null);
+
+    const done = store.login('admin', 'admin');
+    backend.expectOne('/api/v1/session').flush(
+      {
+        error: {
+          code: 'rate_limited',
+          message: 'Too many failed sign-ins. Try again in 15 minutes.',
+        },
+      },
+      { status: 429, statusText: 'Too Many Requests', headers: { 'Retry-After': '900' } },
+    );
+    await done;
+
+    // Not "Could not reach the admin": the admin answered, and said when to retry.
+    expect(store.isAuthenticated()).toBe(false);
+    expect(store.error()).toBe('Too many failed sign-ins. Try again in 15 minutes.');
+    expect(store.submitting()).toBe(false);
+  });
+
   it('clears a previous error when a login is retried', async () => {
     await boot(false, null);
 

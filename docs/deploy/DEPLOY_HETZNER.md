@@ -217,6 +217,14 @@ SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<good-sha> ./deploy/deploy.sh
 Find the tag under **your profile → Packages → <repo> → versions**, or in
 the "Publishing as …" line of the run that shipped it.
 
+**The admin's server is chosen inside the image (v148).** Compose runs the
+admin as `python admin_ui.py`, and it must keep doing so. A v148+ image execs
+gunicorn from there (`deploy/gunicorn.conf.py`, one gthread worker); an older
+image runs Flask's `app.run`. Rolling back to a pre-v148 tag therefore needs no
+compose edit. Never point the admin's compose `command:` at gunicorn: a
+pre-v148 image has neither gunicorn nor `admin_wsgi.py`, and the admin would
+crash-loop. Which one is running: `docker compose exec admin ps -o pid,args`.
+
 That leaves `main` ahead of production, which is deliberate — it's a
 stop-the-bleeding move. Follow it with the real fix:
 
@@ -324,6 +332,11 @@ bash scripts/ops/ssh-hetzner.sh "scripts/ops/rollback_to.sh '2026-10-14 13:05:00
 `--dry-run` prints the artifacts the target resolves to and refuses an
 unrestorable target. Run it again without `--dry-run` to roll back.
 
+A point-in-time rollback restores the images of that moment under the compose
+file already on the VM. Before v148 the admin image runs `app.run`, from v148
+on it runs gunicorn; both start from compose's `python admin_ui.py`, so no
+compose edit is needed either way (see "Rolling back").
+
 **Backups.** Installed by `scripts/ops/install_pitr_crons.sh` (idempotent):
 
 | Cron (VM time) | Script | What |
@@ -332,6 +345,14 @@ unrestorable target. Run it again without `--dry-run` to roll back.
 | `7 * * * *` | `restic_hourly.sh` | hourly restic snapshot of `market_data/`, forgets past 30 days (snapshots tagged `stable` are kept) |
 | `0 4 1 * *` | `pitr_verify.sh` | monthly proof both repositories are readable (`pgbackrest verify`, `restic check`) |
 | `0 3 * * *` | `backup_db.sh` | nightly `pg_dump` into `data/backups/db/`, kept 90 days (second, day-level method) |
+
+**Liveness (v148).** Installed by `scripts/ops/install_heartbeat_watch_cron.sh` (idempotent). It is permanent and owned by the partner (ops):
+
+| Cron (VM time) | Script | What |
+|---|---|---|
+| `*/5 * * * *` | `heartbeat_watch.sh` | reads the bot's last heartbeat (`bot_heartbeat.doc->>'timestamp'`, written only by the bot). When it is stale past max(15 min, 3 × `SCAN_INTERVAL_MINUTES`), or cannot be read, the script posts once to `OPS_ALERT_WEBHOOK_URL`, and once more on recovery. One verdict line per run goes to `logs/heartbeat_watch.log` (last 2000 lines kept), and the state goes to `logs/heartbeat_watch.state` |
+
+`bash scripts/ops/heartbeat_watch.sh --test` forces one post, to check the webhook. `--dry-run --age <s>` prints the verdict for a given age without touching Postgres, the webhook or the state. With no webhook set, it logs and exits 0 and posts the incident once a URL is set. It dies with the VM: a monitor outside the VM would need its own spec.
 
 `backups/` layout: `pitr/` (pgBackRest repository, outside `pgdata`), `restic/`
 (market-data repository), `env/` (one `.env` version per save) and

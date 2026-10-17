@@ -1,6 +1,11 @@
 import datetime as dt
+import logging
 
 from swingbot.bot_core import in_session
+from swingbot.core.infra import swallowed as swallowed_mod
+from swingbot.core.infra.swallowed import swallowed
+
+log = logging.getLogger(__name__)
 
 
 def _read_heartbeat() -> dict:
@@ -10,28 +15,31 @@ def _read_heartbeat() -> dict:
     try:
         from swingbot.core.db.repositories.heartbeat import heartbeat_repo
         return heartbeat_repo().last() or {}
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "runstate.read_heartbeat", exc, level=logging.DEBUG)
         return {}
 
 
 def _update_heartbeat(fields: dict) -> None:
-    """Merge `fields` into the heartbeat row, preserving everything else."""
+    """Merge `fields` into the heartbeat row key by key (`doc || fields` in
+    SQL, v148): no read first, so the bot and the admin never write a stale
+    whole-doc view over each other's keys. A failed write is counted and
+    logged, never raised -- the heartbeat must not take down a tick."""
     try:
         from swingbot.core.db.repositories.heartbeat import heartbeat_repo
-        current = heartbeat_repo().last() or {}
-        current.update(fields)
-        heartbeat_repo().beat(current)
-    except Exception:
-        pass
+        heartbeat_repo().merge(fields)
+    except Exception as exc:
+        swallowed(log, "runstate.update_heartbeat", exc, "heartbeat write failed")
 
 
 def _write_heartbeat() -> None:
     """
-    Stamps a small JSON file that the admin UI reads to show a blinking
-    bot-liveness dot on the Dashboard. Written on every session_scan tick
-    (including off-hours / paused ticks) so the dot goes dark only when the
-    bot process itself stops responding, not just because it's outside the
-    trading session window.
+    Stamps the bot_heartbeat row that the admin UI reads to show a blinking
+    bot-liveness dot on the Dashboard, and flushes this process's
+    swallowed-error counts (v148 O5) for the System → Scan panel. Written
+    on every session_scan tick (including off-hours / paused ticks) so the
+    dot goes dark only when the bot process itself stops responding, not
+    just because it's outside the trading session window.
 
     This is LIVENESS ONLY, and it is written before the tick does any work --
     so on its own it cannot distinguish "working" from "crashing every tick",
@@ -42,6 +50,8 @@ def _write_heartbeat() -> None:
         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
         "session_active": in_session(),
         "scan_paused": is_scan_paused(),
+        "swallowed": {"since": swallowed_mod.STARTED_AT,
+                      "counts": swallowed_mod.snapshot()},
     })
 
 
@@ -74,6 +84,25 @@ def get_alert_active() -> bool:
 
 def set_alert_active(active: bool) -> None:
     _update_heartbeat({"alert_active": bool(active)})
+
+
+def get_stale_alert_active() -> bool:
+    """v148 O3: a stale-scan alert is open (ops_watch.scan_watchdog). Kept in
+    the heartbeat row so a restart neither re-posts nor forgets it."""
+    return bool(_read_heartbeat().get("stale_alert_active"))
+
+
+def set_stale_alert_active(active: bool) -> None:
+    _update_heartbeat({"stale_alert_active": bool(active)})
+
+
+def get_provider_alert_active() -> bool:
+    """v148 O4: a provider-degradation alert is open (ops_watch.check_provider_health)."""
+    return bool(_read_heartbeat().get("provider_alert_active"))
+
+
+def set_provider_alert_active(active: bool) -> None:
+    _update_heartbeat({"provider_alert_active": bool(active)})
 
 
 def last_success_iso() -> str | None:

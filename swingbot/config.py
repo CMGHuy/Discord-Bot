@@ -797,6 +797,25 @@ FIELDS: list[Field] = [
                "updatedAt is older than this is treated exactly like a missing one: the scan "
                "skips new signals for that metal and open plans are not stepped until a fresh "
                "quote arrives. Never falls back to unscaled futures prices."),
+    # v148: ops alerts (spec O3/O4).
+    Field("PROVIDER_FALLBACK_ALERT_PCT", "PROVIDER_FALLBACK_ALERT_PCT", "Data Sources",
+          "Ops alert: provider fallback above (%)", type="number", default="20",
+          min=1, max=100, step=1,
+          help="v148. A scheduled scan whose Alpaca-to-yfinance fallback rate "
+               "(yfinance-fallback / (alpaca + yfinance-fallback)) exceeds this posts a "
+               "provider-degraded notice to the ops channel, once per incident, and a "
+               "recovery notice when a later scan is back under both thresholds."),
+    Field("EMPTY_SYMBOLS_ALERT_PCT", "EMPTY_SYMBOLS_ALERT_PCT", "Data Sources",
+          "Ops alert: empty symbols above (%)", type="number", default="5",
+          min=1, max=100, step=1,
+          help="v148. A scheduled scan in which more than this share of tickers came back "
+               "with no price frame, or an empty one, posts the same provider-degraded notice."),
+    Field("OPS_ALERT_WEBHOOK_URL", "OPS_ALERT_WEBHOOK_URL", "Data Sources",
+          "Ops alert webhook URL (heartbeat cron)", type="password", default="",
+          sensitive=True, hot_reloadable=False,
+          help="Read from .env by the heartbeat_watch cron on the VM "
+               "(scripts/ops/heartbeat_watch.sh), not by the bot or the admin; the cron "
+               "picks a change up on its next run."),
 
     # --- Admin UI (affects the admin container, not the bot -- see docstring) ---
     Field("ADMIN_USERNAME", "ADMIN_USERNAME", "Admin UI", "Admin username",

@@ -5,6 +5,8 @@ import logging
 import re
 from logging.handlers import RotatingFileHandler
 
+import pytest
+
 import admin_ui
 from swingbot import config
 
@@ -70,3 +72,52 @@ def test_lazy_bot_core_import_leaves_the_admin_handler_alone(tmp_path):
     out = subprocess.run([sys.executable, "-c", script], cwd=root, capture_output=True,
                          text=True, check=True).stdout.strip().splitlines()[-1]
     assert out.endswith("admin.log") and "bot.log" not in out
+
+
+@pytest.fixture
+def restore_gunicorn_loggers():
+    """setup_logging attaches handlers to gunicorn's loggers; put them back."""
+    saved = {}
+    for name in admin_ui.GUNICORN_LOGGERS:
+        logger = logging.getLogger(name)
+        saved[name] = (logger.handlers[:], logger.level, logger.propagate)
+    yield
+    for name, (handlers, level, propagate) in saved.items():
+        logger = logging.getLogger(name)
+        logger.handlers[:] = handlers
+        logger.setLevel(level)
+        logger.propagate = propagate
+
+
+def test_gunicorn_request_lines_reach_admin_log_under_a_warning_level(
+        tmp_path, monkeypatch, restore_root_logging, restore_gunicorn_loggers):
+    """v148 O1: under gunicorn the Logs page keeps showing admin requests."""
+    path = tmp_path / "admin.log"
+    monkeypatch.setattr(config, "ADMIN_LOG_FILE", str(path))
+    monkeypatch.setattr(config, "LOG_LEVEL", "WARNING")
+    access = logging.getLogger("gunicorn.access")
+    access.propagate = False   # what gunicorn's glogging.Logger sets on both loggers
+
+    admin_ui.setup_logging()
+
+    for name in admin_ui.GUNICORN_LOGGERS:
+        assert logging.getLogger(name).getEffectiveLevel() == logging.INFO
+    access.info('10.0.0.1 - - "GET /api/v1/health HTTP/1.1" 200 51')
+    _owned_file_handler(restore_root_logging).flush()
+    assert re.search(r"\[INFO\] \[-\] gunicorn\.access: .*GET /api/v1/health", path.read_text())
+
+
+def test_setting_up_twice_leaves_one_live_file_handler_on_each_gunicorn_logger(
+        tmp_path, monkeypatch, restore_root_logging, restore_gunicorn_loggers):
+    monkeypatch.setattr(config, "ADMIN_LOG_FILE", str(tmp_path / "admin.log"))
+
+    admin_ui.setup_logging()
+    admin_ui.setup_logging()
+
+    live = _owned_file_handler(restore_root_logging)
+    for name in admin_ui.GUNICORN_LOGGERS:
+        owned = [h for h in logging.getLogger(name).handlers
+                 if getattr(h, "_swingbot_logsetup", False)]
+        # Only the file handler: gunicorn already writes these to stdout itself,
+        # and the console handler would print every request twice.
+        assert owned == [live]

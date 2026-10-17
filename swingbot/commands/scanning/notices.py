@@ -171,3 +171,52 @@ def retrospective_embeds(messages: list[str]) -> list:
     total = len(chunks)
     return [system_embed(Kind.RETROSPECTIVE, f"{index}/{total}" if total > 1 else "", chunk)
             for index, chunk in enumerate(chunks, 1)]
+
+
+# --- v148 O3/O4: ops-watch notices --------------------------------------------
+
+def _rate(rate) -> str:
+    return "—" if rate is None else f"{rate * 100:.1f}%"
+
+
+def _value(value) -> str:
+    return "—" if value is None else str(value)
+
+
+def stale_scan_embed(age_min: int, last_success: str):
+    """v148 O3: the bot is up but no scan tick has completed -- a wedged tick.
+    A dead bot cannot post this; the VM's heartbeat_watch cron reports that."""
+    return system_embed(Kind.HEALTH_ALERT, f"no completed scan tick for {age_min} min", (
+        f"• Last successful tick: {last_success}\n"
+        "• The bot is up, but its scheduled scan has not finished a tick.\n"
+        "No alerts are being produced until this clears."))
+
+
+def stale_scan_recovered_embed(last_success: str):
+    return system_embed(Kind.HEALTH_RECOVERED, "scan ticks completing again",
+                        f"• Last successful tick: {last_success}")
+
+
+def _provider_lines(row: dict) -> tuple[str, str]:
+    fallback = f"• Alpaca fallback: {_rate(row.get('provider_fallback_rate'))}"
+    empty = (f"• Empty symbols: {_value(row.get('empty_symbols'))} of "
+             f"{_value(row.get('tickers'))} ({_rate(row.get('empty_rate'))})")
+    return fallback, empty
+
+
+def provider_degraded_embed(row: dict, fallback_pct: float, empty_pct: float):
+    """v148 O4: the newest scan breached a provider threshold."""
+    fallback, empty = _provider_lines(row)
+    return system_embed(Kind.HEALTH_ALERT, "market-data provider degraded", (
+        f"{fallback}, alert above {fallback_pct:g}%\n"
+        f"{empty}, alert above {empty_pct:g}%\n"
+        f"• Stale symbols: {_value(row.get('stale_symbols'))}\n"
+        f"• Scan at: {_value(row.get('at'))}\n"
+        "Scans continue: fallback tickers ran on yfinance data, empty ones were skipped."))
+
+
+def provider_recovered_embed(row: dict):
+    """v148 O4: a scan is back under both provider thresholds."""
+    fallback, empty = _provider_lines(row)
+    return system_embed(Kind.HEALTH_RECOVERED, "market-data provider healthy again",
+                        f"{fallback}\n{empty}\n• Scan at: {_value(row.get('at'))}")

@@ -20,9 +20,10 @@ from swingbot import config
 # The app/helpers MODULES, not names out of them -- see the note in auth.py.
 from swingbot.admin import app as _app
 from swingbot.admin import helpers as _helpers
+from swingbot.admin import login_limiter
 
 from . import api_v1, error
-from .auth import require_auth
+from .auth import rate_limited, require_auth
 
 
 def _identity() -> dict:
@@ -51,9 +52,14 @@ def session_get():
 @api_v1.route("/session", methods=["POST"])
 def session_create():
     payload = request.get_json(silent=True) or {}
-    username = payload.get("username", "")
-    password = payload.get("password", "")
-    if username != _app.ADMIN_USERNAME or password != _app.ADMIN_PASSWORD:
+    username = str(payload.get("username") or "")
+    password = str(payload.get("password") or "")
+    # v148: constant-time, and gated by the login limiter all three
+    # credential checks share. A locked client is refused before comparing.
+    outcome = login_limiter.attempt(username, password, _app.credentials_match)
+    if outcome.retry_after is not None:
+        return rate_limited(outcome.retry_after)
+    if not outcome.ok:
         return error("auth", "Invalid username or password.", 401)
     # Same four lines as login_submit() in app.py: clear first so a partially
     # populated older session cannot survive, then pin the credential hash so

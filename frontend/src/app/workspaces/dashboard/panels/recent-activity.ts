@@ -52,7 +52,7 @@ const STATUS_LABEL: Record<string, string> = {
     .event {
       display: grid;
       grid-template-columns: auto auto auto 1fr auto;
-      align-items: baseline;
+      align-items: center;
       gap: var(--space-8);
       font-size: var(--text-table);
     }

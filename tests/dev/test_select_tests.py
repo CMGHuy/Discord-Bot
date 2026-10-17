@@ -273,7 +273,7 @@ def test_inert_path_alone_runs_nothing(sel, tmp_path):
 
 def test_inert_path_does_not_suppress_a_real_one(sel, tmp_path):
     result = sel.select(
-        ["README.md", "tests/planning/test_plan_engine.py"], _repo(tmp_path)
+        ["docs/guides/setup.md", "tests/planning/test_plan_engine.py"], _repo(tmp_path)
     )
     assert (result.full, result.targets) == (False, ["tests/planning/test_plan_engine.py"])
 
@@ -434,6 +434,8 @@ def _with_readers(repo: pathlib.Path) -> pathlib.Path:
                 "tests/hooks/test_role_skills.py",
                 "tests/hooks/test_doc_sections.py", "tests/dev/test_doc_section.py",
                 "tests/dev/test_testrun_ci_invocations.py",
+                "tests/dev/test_readme_paths.py",
+                "tests/dev/test_complexity_gate.py",
                 "tests/scout/test_generator_roles.py",
                 "tests/scout/test_trade_scout_skill.py",
                 "tests/scout/test_scout_merge_parse.py",
@@ -453,6 +455,8 @@ def _with_readers(repo: pathlib.Path) -> pathlib.Path:
      ["tests/hooks/", "tests/scout/test_trade_scout_skill.py"]),
     ("CLAUDE.md", ["tests/hooks/"]),
     ("AGENTS.md", ["tests/hooks/", "tests/scout/test_generator_roles.py"]),
+    ("README.md", ["tests/dev/test_readme_paths.py"]),
+    ("scripts/dev/complexity_baseline.json", ["tests/dev/test_complexity_gate.py"]),
     ("docs/claude/backtest-methodology.md",
      ["tests/dev/test_doc_section.py", "tests/hooks/test_codex_mirror.py",
       "tests/hooks/test_doc_sections.py", "tests/hooks/test_guardrails.py",

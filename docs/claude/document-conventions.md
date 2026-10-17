@@ -100,6 +100,16 @@ in the old format. Every document numbered before a numbering-scheme change
 the number it already has — each change governs what a *new* document does
 going forward, never a retroactive renumbering.
 
+## The plan's Goal section explains, it does not label
+
+A plan's `**Goal:**` is a short paragraph block, not one sentence. It carries,
+in plain prose: **why** the work exists (the problem or measured gap, with the
+number or incident that showed it), **what changes** for the bot, the admin UI
+or the operator once it ships, **how** it works at the level of the idea (the
+approach, not the task list), **what it deliberately does not touch**
+(non-goals), and **how we will know it worked** (the spec's `## Success`). A
+reader who has not read the spec must be able to judge the plan from the Goal.
+
 ## The header block
 
 Every new spec and plan carries three lines above its body.

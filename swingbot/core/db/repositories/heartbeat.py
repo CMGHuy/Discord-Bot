@@ -21,6 +21,15 @@ class HeartbeatRepository(Repository):
             **fields,
         }, conn=conn)
 
+    def merge(self, fields: dict, *, conn=None) -> None:
+        """Write only `fields` (and a fresh `ts`): `doc || fields` in SQL, so
+        two writers with disjoint keys -- the bot's tick, the admin's unpause,
+        the alert flags -- never drop each other's keys (v148 O3). `patch`
+        returns None when the row does not exist yet; `beat` creates it."""
+        stamped = {"ts": dt.datetime.now(dt.timezone.utc).isoformat(), **fields}
+        if self.patch(KEY, stamped, conn=conn) is None:
+            self.beat(fields, conn=conn)
+
     def last(self, *, conn=None) -> dict | None:
         row = self.get(KEY, conn=conn)
         if row is None:

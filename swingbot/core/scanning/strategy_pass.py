@@ -15,6 +15,7 @@ from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.edge.gates import (HEADROOM_REASON, PULLBACK_VOLUME_REASON, headroom_active,
                                       headroom_blocks_plan, pullback_dryup_blocks)
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.levels import build_level_map
 from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.scanning.alert_embeds import (build_strategy_alert_embed,
@@ -53,9 +54,9 @@ def strategy_signals(df_completed: pd.DataFrame, horizon_key: str, *, spy_df) ->
     for strategy in ENTRY_FUNCS:
         try:
             bullish, bearish = entries_for(strategy, frame, horizon_key)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).warning("strategy pass: %s/%s raised -- skipped", strategy, horizon_key, exc_info=True)
+        except Exception as exc:
+            swallowed(log, "scan.strategy_signals", exc,
+                      "strategy pass: %s/%s raised -- skipped", strategy, horizon_key, exc_info=True)
             continue
         if len(bullish) and bool(bullish.iloc[-1]):
             fired.append((strategy, "bullish"))
@@ -305,8 +306,9 @@ def _shadow_step(result: PassResult, frame, *, ticker, horizon, deps: _PassDeps,
     try:
         record = compression_shadow_record(frame, ticker=ticker, horizon=horizon, deps=deps,
                                            result=result, seen=seen)
-    except Exception:
-        log.warning("compression shadow: %s/%s failed -- continuing", ticker, horizon, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.shadow_step", exc,
+                  "compression shadow: %s/%s failed -- continuing", ticker, horizon, exc_info=True)
         return
     if record is not None:
         result.compression_shadow.append(record)
@@ -339,6 +341,7 @@ def run_strategy_pass(tickers, fresh_data, *, now, horizons, spy_df, regimes,
                                  horizon=horizon, bar_date=bar_date, regime=regime, deps=deps)
                 _shadow_step(result, frame, ticker=ticker, horizon=horizon, deps=deps,
                              seen=shadow_seen)
-        except Exception:
-            log.warning("strategy pass: %s failed -- continuing", ticker, exc_info=True)
+        except Exception as exc:
+            swallowed(log, "scan.run_strategy_pass", exc,
+                      "strategy pass: %s failed -- continuing", ticker, exc_info=True)
     return result

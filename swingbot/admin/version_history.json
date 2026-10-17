@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-17 08:46:13 UTC",
+  "generated_at": "2026-10-17 09:47:53 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.26.0",
-    "bot": "2.7.0"
+    "ui": "1.26.1",
+    "bot": "2.7.1"
   },
   "releases": [
     {
@@ -1730,6 +1730,32 @@
       "versions": {
         "ui": "1.26.0",
         "bot": "2.7.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "9d5177df",
+      "subject": "release(ui): 1.26.1 -- System > Scan provider-health and swallowed-errors panels, login rate-limit message (v148)",
+      "versions": {
+        "ui": "1.26.1",
+        "bot": "2.7.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "6d7b5409",
+      "subject": "release(bot): 2.7.1 -- gunicorn admin, constant-time login with limiter, swallowed-error counters, heartbeat watchdog and health endpoint (v148)",
+      "versions": {
+        "ui": "1.26.1",
+        "bot": "2.7.1"
       },
       "changed": [
         "bot"
