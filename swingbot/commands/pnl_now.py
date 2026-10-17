@@ -15,6 +15,7 @@ import datetime as dt
 import logging
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.session import is_regular_session, now_et
 from swingbot.core.planning.plan_types import PlanStatus
 from swingbot.core.presentation import tokens
@@ -170,8 +171,9 @@ def _linked_trade(plan_id: str) -> dict | None:
     try:
         from swingbot.core.tracking.performance import TradeLog
         return TradeLog().trade_for_plan(plan_id)
-    except Exception:
-        log.warning("P&L now: trade lookup failed for plan %s", plan_id, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.pnl_now.trade", exc,
+                  "P&L now: trade lookup failed for plan %s", plan_id, exc_info=True)
         return None
 
 
@@ -190,8 +192,9 @@ def _quote(plan, trade: dict | None):
     try:
         from swingbot.core.scanning import scan_run
         return scan_run.quote_trade(_quote_input(plan, trade))
-    except Exception:
-        log.warning("P&L now: price fetch failed for %s", plan.ticker, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.pnl_now.quote", exc,
+                  "P&L now: price fetch failed for %s", plan.ticker, exc_info=True)
         return None, None
 
 
@@ -207,6 +210,7 @@ def reply_for(plan_id: str, *, now: dt.datetime | None = None) -> str:
         clock = now or dt.datetime.now(dt.timezone.utc)
         return render_reply(plan, trade, quote, pnl, clock=clock,
                             market_open=is_regular_session(clock))
-    except Exception:
-        log.warning("P&L now: could not answer for plan %s", plan_id, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.pnl_now.reply", exc,
+                  "P&L now: could not answer for plan %s", plan_id, exc_info=True)
         return FAILED

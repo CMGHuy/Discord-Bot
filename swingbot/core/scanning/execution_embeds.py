@@ -10,6 +10,7 @@ import logging
 import discord
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core import presentation as ui
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.instructions import (CLOSE_AT_MARKET, DO_NOT_PLACE, Instruction,
@@ -121,8 +122,9 @@ def _linked_trade(plan_id: str) -> dict | None:
     try:
         from swingbot.core.tracking.performance import TradeLog
         return TradeLog().trade_for_plan(plan_id)
-    except Exception:
-        log.warning("execution feed: trade lookup failed for plan %s", plan_id, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.linked_trade", exc,
+                  "execution feed: trade lookup failed for plan %s", plan_id, exc_info=True)
         return None
 
 

@@ -466,8 +466,9 @@ def _feed_view(plan_id: str):
     try:
         from swingbot.commands.views import feed_view
         view = feed_view(plan_id)
-    except Exception:
-        log.warning("execution feed: posting plan %s without buttons", plan_id, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.feed_view", exc,
+                  "execution feed: posting plan %s without buttons", plan_id, exc_info=True)
         return None
     return view if view.children else None
 
