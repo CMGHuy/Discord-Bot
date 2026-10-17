@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — three guards that stop the codebase silently getting worse. They issue no signal, move no threshold and change no live path; any effect on expectancy is indirect (fewer regressions in the scan and backtest code) and is not claimed.
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, senior-engineer
-**Status:** spec written 2026-10-09; plan: [`2026-10-09-v149-hygiene-gates.md`](../plans/2026-10-09-v149-hygiene-gates.md).
+**Status:** implemented and merged 2026-10-17 (merge 837e358c); plan: [`2026-10-09-v149-hygiene-gates.md`](../../plans/implemented/2026-10-09-v149-hygiene-gates.md). Deviations: the complexity step runs in CI job `backend-lint-gate` (the plan's `backend-test-misc` no longer exists), ESLint 10.13.0 installed, one legacy offender (`collect_portfolio_state`, 22) baselined as moved code. Open: CI duration of the "Complexity gate" step to record after the first push to main; Linux baseline and `npm ci` unverified until then.
 
 ## Why
 
