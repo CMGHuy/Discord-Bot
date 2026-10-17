@@ -129,7 +129,13 @@ def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
     return embed
 
 
-def push_kwargs(embed) -> dict:
-    """send() kwargs for one pushed embed: the embed, plus its content line if it has one."""
+def push_kwargs(embed, view=None) -> dict:
+    """send() kwargs for one pushed embed: the embed, plus its content line if
+    it has one, plus ``view`` only when one is given -- a send with no view
+    gets exactly the kwargs it always did (some discord.py send paths reject
+    ``view=None``)."""
     text = getattr(embed, "push_text", None)
-    return {"embed": embed, "content": text} if text else {"embed": embed}
+    kwargs = {"embed": embed, "content": text} if text else {"embed": embed}
+    if view is not None:
+        kwargs["view"] = view
+    return kwargs
