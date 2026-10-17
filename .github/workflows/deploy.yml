@@ -87,12 +87,6 @@ jobs:
       - name: Compile every module
         run: python -m compileall -q swingbot bot.py admin_ui.py scripts tests
 
-      # The ratchet: fails on any function that crossed 15, rose, improved or
-      # went away since scripts/dev/complexity_baseline.json. A named step so a
-      # regression shows up as what it is. `--update` only shrinks the baseline.
-      - name: Complexity gate
-        run: python scripts/dev/complexity_gate.py
-
       - name: Test suite (${{ matrix.suite }})
         run: python scripts/dev/testrun.py suite ${{ matrix.suite }}
 
@@ -129,6 +123,12 @@ jobs:
 
       - name: Undefined-name gate
         run: python scripts/dev/testrun.py lint
+
+      # The ratchet: fails on any function that crossed 15, rose, improved or
+      # went away since scripts/dev/complexity_baseline.json. A named step so a
+      # regression shows up as what it is. `--update` only shrinks the baseline.
+      - name: Complexity gate
+        run: python scripts/dev/complexity_gate.py
 
   # ── 2b. The frontend ───────────────────────────────────────────────────────
   # The Angular suite and a real production build. The build is not redundant
