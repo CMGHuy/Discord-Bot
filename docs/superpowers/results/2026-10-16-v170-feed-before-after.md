@@ -428,3 +428,21 @@ ignore this if you already exited on a stop or target
 ## Full suite
 
 One full run on the branch at `1cd33c39`: 11450 passed, 2 failed, 4 skipped, 0 xfailed. Both failures were `tests/infra/test_swallowed_ratchet.py` (six new untagged `except Exception` handlers: 249 against BASELINE 243). Commit `0168a485` routed all six through `swallowed()`; the ratchet file was re-run alone (10 passed, count back to 243), as were the test files of every file that commit touched. No second full run, per the one-run-per-plan rule.
+
+## Panel review (pre-close-out)
+
+Roles: veteran-trader, financial-advisor, senior-engineer, over `0fd32eda..HEAD`. Nothing below is applied on this branch unless it says so; every item is carried to the partner.
+
+**BLOCKING (1)**
+
+- financial-advisor: the realised TP1 line (`🧾 +$182.07 · +1.5R`) and the `🔒 if it fills:` lines print dollars with no `(paper, gross)`, while the close lines and P&L now carry it -- rejected for this plan: spec §2 pins those two layouts without the suffix and the plan's Global Constraints scope the cost basis to close P&L lines and P&L-now totals; adding it rewrites every pinned string for those two kinds. The `!help` legend states the basis for all feed dollars. Flagged to the partner as a follow-up (add `tokens.COST_BASIS` in `tp1_partial` and `_if_fills_line`).
+
+**ADVISORY**
+
+- veteran-trader: expiry line dropped the old "≈ ... by the close of" and prints a precise date (`instructions.py:256`, `approx_last_trigger_session` is approximate: no holiday calendar) -- not applied, follow-up.
+- veteran-trader: ticket stop line "if hit -$248.40" carries no gap/gross caveat -- not applied, follow-up (same family as the BLOCKING above).
+- veteran-trader: `🔒` reads as a guarantee on a projected fill -- not applied, follow-up.
+- veteran-trader: "SELL AT MARKET at market" repetition (pre-v170) -- not applied, follow-up.
+- veteran-trader: P&L now quote has no "delayed" marker (`pnl_now.py:52-65`) -- not applied, follow-up.
+- financial-advisor: ticket "if hit" dollars carry no gross/paper tag; ticket dropped "(risk $250)" so the account assumption is no longer visible; P&L now `total` should say "unrealised" for the open part; unsettled close prints R only with no "$ pending" hint; `GONE` reply could say "check your broker" -- not applied, follow-ups.
+- senior-engineer: duplicated `_linked_trade`, `_sign`, banked/open arithmetic, direction-to-side map between `pnl_now.py`, `instructions.py`, `execution_embeds.py`, `views.py`; `_send_instruction` builds the feed view twice; `fmt_money` docstring narrates history; `_REPLIES` has a silent `lambda *_: []` fallback with no test that every `PlanStatus` has an entry; dev script monkeypatch has no restore comment; `trade_for_plan` is unordered when two records share a plan id (`performance.py:1242-1254`) -- not applied, follow-ups. The plan's Decision 7 chose the unordered thin wrapper on purpose.
