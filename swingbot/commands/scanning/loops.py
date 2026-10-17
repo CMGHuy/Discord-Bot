@@ -233,7 +233,10 @@ async def _session_scan_tick():
     from swingbot.core.charts.cache import purge
     await asyncio.to_thread(purge)
 
-    _refresh_snapshot_safely()
+    # Off the event loop: build_snapshot bootstraps every live-loss-watch row
+    # (seconds of pure Python). The trade-close paths already run it in worker
+    # threads (close_if_live_price_hit / check_near_tp_timeout via to_thread).
+    await asyncio.to_thread(_refresh_snapshot_safely)
     await ops_watch.check_provider_health()
 
     f = progress.funnel

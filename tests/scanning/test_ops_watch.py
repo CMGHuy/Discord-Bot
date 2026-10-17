@@ -299,4 +299,5 @@ def test_a_failing_provider_check_never_raises(heartbeat, channel, monkeypatch):
 def test_the_scan_tick_checks_providers_after_the_scan():
     source = inspect.getsource(loops._session_scan_tick)
     check = source.index("await ops_watch.check_provider_health()")
-    assert source.index("_refresh_snapshot_safely()") < check < source.index("f = progress.funnel")
+    assert (source.index("await asyncio.to_thread(_refresh_snapshot_safely)") < check
+            < source.index("f = progress.funnel"))
