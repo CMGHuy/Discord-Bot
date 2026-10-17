@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-17 08:46:13 UTC",
+  "generated_at": "2026-10-17 09:47:28 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.26.0",
+    "ui": "1.26.1",
     "bot": "2.7.0"
   },
   "releases": [
@@ -1733,6 +1733,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "9d5177df",
+      "subject": "release(ui): 1.26.1 -- System > Scan provider-health and swallowed-errors panels, login rate-limit message (v148)",
+      "versions": {
+        "ui": "1.26.1",
+        "bot": "2.7.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
