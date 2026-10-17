@@ -23,7 +23,10 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   (offline replay, walk-forward and the validation registry —
   `backtest.py`, `backtest_wf.py`, `backtest_scenarios.py`, `registry.py`,
   `shadow_log.py`), `core/tracking/` (the trade log's write path —
-  `performance.py`, `retrospective.py`, `risk_metrics.py`), `core/infra/`
+  `performance.py`, `retrospective.py`, `risk_metrics.py`; v172 `equity.py`,
+  the one equity definition — main-book realized legs walk plus
+  open-position unrealized — shared by the equity recorder, the backfill
+  and the admin), `core/infra/`
   (JSON, locks and delivery channels — `jsonio.py`, `state.py`,
   `notifier.py`, `silent_channel.py`), plus the four that predate the
   restructure: `core/edge/`, `core/scanning/`, `core/analytics/`,
