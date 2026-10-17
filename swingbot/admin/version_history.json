@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-17 13:28:27 UTC",
+  "generated_at": "2026-10-17 21:19:36 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.27.0",
-    "bot": "2.9.0"
+    "bot": "2.10.0"
   },
   "releases": [
     {
@@ -1798,6 +1798,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "172f31f4",
+      "subject": "release(bot): 2.10.0 -- simple alerts: signed dollars beside R, one symbol table with broker verbs kept, persistent Chart/Breakdown/Watch/P&L-now buttons (v170)",
+      "versions": {
+        "ui": "1.27.0",
+        "bot": "2.10.0"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
