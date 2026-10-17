@@ -54,7 +54,8 @@ interface Tile {
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
   template: `
-    <div class="lane" role="region" aria-label="Market tape">
+    <div class="lane" role="region" aria-label="Market tape"
+         [attr.title]="asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()">
       <div class="cap">mkt</div>
       <div class="viewport">
         <div class="track" #track [style.animation-duration.s]="duration()">
@@ -82,13 +83,6 @@ interface Tile {
           }
         </div>
       </div>
-      <!-- Outside .track, deliberately -- a badge inside the moving element
-           scrolls out of view, so the freshness signal would blink in and
-           out and be absent exactly when someone glances at it. -->
-      <span class="cap end as-of" [attr.title]="asOf()"
-            [attr.aria-label]="'Tape data as of ' + asOfTime()">
-        <span aria-hidden="true">◷</span> {{ asOfTime() }}
-      </span>
     </div>
   `,
 })
@@ -97,6 +91,7 @@ export class Tape {
   private readonly tape = inject(TapeStore);
   protected readonly num = num;
   protected readonly pct = pct;
+  protected readonly ABSENT = ABSENT;
 
   private readonly trackRef = viewChild<ElementRef<HTMLElement>>('track');
   /** Measured from the track's own rendered width (after every render the

@@ -45,7 +45,7 @@ describe('Tape', () => {
     expect(el.querySelectorAll('.tile').length).toBe(4);
   });
 
-  it('never shows the word "live" -- only the as-of clock', () => {
+  it('never shows the word "live" ', () => {
     const el = setup([index], [stock]).nativeElement as HTMLElement;
     expect(el.textContent?.toLowerCase()).not.toContain('live');
   });
@@ -55,10 +55,10 @@ describe('Tape', () => {
     expect(el.textContent).toContain('S&P 500');
   });
 
-  it('keeps the as-of badge outside the animated track', () => {
+  it('carries the as-of time in a tooltip, not as visible text', () => {
     const el = setup([index], [stock]).nativeElement as HTMLElement;
-    const badge = el.querySelector('.as-of')!;
-    expect(badge.closest('.track')).toBeNull();
+    expect(el.querySelector('.as-of')).toBeNull();
+    expect(el.querySelector('.lane')!.getAttribute('title')).toContain('as of');
   });
 
   it('shows a placeholder rather than dropping an unpriced symbol', () => {
