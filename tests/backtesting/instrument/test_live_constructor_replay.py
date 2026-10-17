@@ -91,11 +91,11 @@ def test_v2_trade_rows_carry_the_live_plans_levels(monkeypatch, frame):
     index_of = {str(day.date()): k for k, day in enumerate(frame.index)}
     assert summary.trades
     for trade in summary.trades:
-        plan = bt._live_plan_at(frame, index_of[trade.entry_date], ticker=TICKER,
+        plan = bt._live_plan_at(frame, index_of[trade.signal_date], ticker=TICKER,
                                 strategy=STRATEGY, horizon_key=HORIZON,
                                 direction=trade.direction)
-        assert (trade.entry, trade.stop_loss, trade.take_profit) == (
-            round(plan.trigger_price, 4), round(plan.stop_loss, 4), round(plan.tp1, 4))
+        assert (trade.stop_loss, trade.take_profit) == (
+            round(plan.stop_loss, 4), round(plan.tp1, 4))
 
 
 def test_v2_summary_is_built_by_the_shared_summariser(monkeypatch, frame):

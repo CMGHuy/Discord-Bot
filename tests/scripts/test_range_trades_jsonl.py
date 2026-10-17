@@ -20,4 +20,4 @@ def test_write_trades_jsonl_one_row_per_trade(tmp_path):
                      "exit_date": "2021-03-05", "direction": "bullish", "entry": 100.0, "stop_loss": 95.0,
                      "take_profit": 110.0, "outcome": "win", "exit_price": 110.0, "return_pct": 10.0,
                      "r_multiple": 2.0, "holding_days": 4, "runner_outcome": None,
-                     "context": {"rsi_14": 40.0}}]
+                     "context": {"rsi_14": 40.0}, "signal_date": "2021-03-01"}]

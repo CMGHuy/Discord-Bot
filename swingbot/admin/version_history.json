@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-16 18:07:47 UTC",
+  "generated_at": "2026-10-17 08:46:13 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.25.0",
-    "bot": "2.6.0"
+    "ui": "1.26.0",
+    "bot": "2.7.0"
   },
   "releases": [
     {
@@ -1704,6 +1704,32 @@
       "versions": {
         "ui": "1.25.0",
         "bot": "2.6.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-16",
+      "last_seen": "2026-10-16",
+      "commit": "b9c7fb23",
+      "subject": "release(ui): 1.26.0 -- data-source card and watchlist price-source badge (v106)",
+      "versions": {
+        "ui": "1.26.0",
+        "bot": "2.6.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "831e3c3b",
+      "subject": "release(bot): 2.7.0 -- instrument v2 fills and costs: gap-through, next-open entries, slippage and commission in R (v157)",
+      "versions": {
+        "ui": "1.26.0",
+        "bot": "2.7.0"
       },
       "changed": [
         "bot"

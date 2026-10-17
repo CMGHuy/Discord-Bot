@@ -60,6 +60,8 @@ def golden_records(**extra):
             case = [ticker, strategy, horizon, name]
             yield {"case": case, "summary": summary}
             for k, trade in enumerate(trades):
+                # v157 field: a v1 row's signal_date is its entry_date; kept out of the golden bytes.
+                assert trade.pop("signal_date") == trade["entry_date"]
                 yield {"case": case, "trade": k, "row": trade}
 
 

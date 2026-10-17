@@ -54,12 +54,11 @@ describe('StatusCell', () => {
     expect(el.textContent).not.toContain('no price');
   });
 
-  it('draws the bar with a single trailing-stop icon and P&L at both ends', () => {
+  it('draws the bar with P&L at both ends and no icon (the icon lives in the ID cell)', () => {
     const el = render({ ...live, status: 'PARTIAL', bar_kind: 'trailing', banked_fraction: 0.5,
       stop_pnl_pct: 1.25, best_pnl_pct: 6 });
     expect(el.querySelector('.fill')).not.toBeNull();
-    expect(el.querySelectorAll('sb-icon').length).toBe(1);
-    expect(el.querySelector('sb-icon[title="Trailing stop"]')).not.toBeNull();
+    expect(el.querySelectorAll('sb-icon').length).toBe(0);
     expect(el.querySelector('.end.neg')!.textContent).toBe('+1.3%');
     expect(el.querySelector('.end.pos')!.textContent).toBe('+6.0%');
   });

@@ -15,26 +15,30 @@ class ArmEngine(Protocol):
                    params) -> list: ...
 
 
-def get_engine(engine_id: str) -> ArmEngine:
-    """Construct a registered engine without importing inactive engines."""
+def get_engine(engine_id: str, *, instrument=None) -> ArmEngine:
+    """Construct a registered engine without importing inactive engines.
+    ``instrument`` (v157): None is v1; any other spec walks every trade under
+    its fills and costs (exit_sim.simulate_exit's seam)."""
     if engine_id == "confluence":
         from swingbot.core.backtesting.arms.confluence_engine import ConfluenceEngine
-        return ConfluenceEngine()
+        return ConfluenceEngine(instrument=instrument)
     if engine_id == "strategy":
         from swingbot.core.backtesting.arms.strategy_engine import StrategyEngine
-        return StrategyEngine()
+        return StrategyEngine(instrument=instrument)
     raise ValueError(f"unknown engine {engine_id!r}; expected one of {DEFAULT_ENGINES}")
 
 
-def run_arm(ticker: str, df, engine_ids, horizons, signal_window, delta: dict) -> list:
-    """Run one ticker arm, applying its config globals inside this worker."""
+def run_arm(ticker: str, df, engine_ids, horizons, signal_window, delta: dict, *,
+            instrument=None) -> list:
+    """Run one ticker arm, applying its config globals inside this worker.
+    ``instrument`` goes to every engine (get_engine); None is v1."""
     from swingbot.scan_params import ScanParams
 
     with apply_knobs(delta):
         params = ScanParams.from_config()
         out: list = []
         for engine_id in engine_ids:
-            out.extend(get_engine(engine_id).run_ticker(
+            out.extend(get_engine(engine_id, instrument=instrument).run_ticker(
                 ticker, df, horizons, signal_window, params))
     return out
 

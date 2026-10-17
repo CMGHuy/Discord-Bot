@@ -10,7 +10,6 @@ import { ColumnDef, EmptyState } from '../../ui/data-table/data-table.types';
 import { STATUS_ICON } from '../../ui/icon';
 import { Tab, TabBar } from '../../ui/layout';
 import { Async, asyncInputs } from '../../ui/async';
-import { Freshness } from '../../ui/freshness';
 import { tablePerPage } from '../../ui/table-per-page';
 import { perPageForApi } from '../../ui/table-prefs';
 
@@ -53,7 +52,7 @@ const EMPTY_STATES: Record<string, EmptyState> = {
 @Component({
   selector: 'sb-positions-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Freshness, TabBar, DataTable, RouterLink],
+  imports: [Async, TabBar, DataTable, RouterLink],
   providers: [TradesStore],
   template: `
     <sb-tab-bar [tabs]="tabs()" [active]="active()" (activeChange)="choose($event)" />
@@ -67,9 +66,6 @@ const EMPTY_STATES: Record<string, EmptyState> = {
         <a class="all-link" routerLink="/trades" [queryParams]="{ status: active() }">
           View in Trades →
         </a>
-        <!-- The trades collection has no source timestamp. Mark that fact
-             rather than implying the arrival time is market-data freshness. -->
-        <sb-freshness [at]="trades.pricesAsOf()" />
         <ng-content select="[table-actions]" />
       </div>
 

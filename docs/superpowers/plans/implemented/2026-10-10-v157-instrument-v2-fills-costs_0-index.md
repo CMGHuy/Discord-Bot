@@ -14,7 +14,7 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Done 2026-10-17: FC1-FC9 implemented, merged to `main` (a77017e9, fast-forward after merging `main` into the branch), released as bot 2.7.0. Full suite 9059 passed, 0 failed, 0 xfailed. Prediction (`Bump: bot minor`, `Edge: none (integrity)`) held.
 
 ## Where to work
 

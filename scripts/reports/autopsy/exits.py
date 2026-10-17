@@ -2,14 +2,14 @@
 the alert-supply tallies (alerts per day, alert hour against the session,
 issued-before-the-open, rejected-plan reasons).
 
-The exit bucket is the live book's own rule (``metrics._exit_reason_bucket``),
+The exit bucket is the live book's own rule (``metrics.exit_reason_bucket``),
 so the autopsy and ``/stats`` speak one vocabulary."""
 from __future__ import annotations
 
 import statistics
 from collections import Counter, defaultdict
 
-from swingbot.core.analytics.metrics import _exit_reason_bucket
+from swingbot.core.analytics.metrics import exit_reason_bucket
 
 from .cells import Tally
 
@@ -45,7 +45,7 @@ def is_stop_exit(row) -> bool:
 
 
 def _exit_reason(row) -> str | None:
-    return _exit_reason_bucket({"close_reason": row.close_reason or ""})
+    return exit_reason_bucket({"close_reason": row.close_reason or ""})
 
 
 def _near_tp_close(row) -> str | None:

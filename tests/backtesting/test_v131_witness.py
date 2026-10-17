@@ -62,10 +62,14 @@ def _trade_rows(symbol, frame, strategy, horizon):
     summary = run_backtest(symbol, frame, strategy, horizon, exit_model="v2",
                            scale_out=True, tp2_mode="levels")
     # context is entry_context's feature snapshot -- v131 does not touch it, and
-    # it is most of the bytes; every priced and scored field is kept.
-    return [[symbol, strategy, horizon,
-             {k: v for k, v in dataclasses.asdict(trade).items() if k != "context"}]
-            for trade in summary.trades]
+    # it is most of the bytes; every priced and scored field is kept. signal_date
+    # (v157) equals entry_date on every v1 row and is kept out of the pre-v157 golden.
+    rows = []
+    for trade in summary.trades:
+        record = {k: v for k, v in dataclasses.asdict(trade).items() if k != "context"}
+        assert record.pop("signal_date") == record["entry_date"]
+        rows.append([symbol, strategy, horizon, record])
+    return rows
 
 
 def snapshot() -> dict:

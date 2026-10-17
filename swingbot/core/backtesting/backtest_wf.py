@@ -106,8 +106,26 @@ def _frame_for(symbol: str):
         return None
 
 
+#: The E22 harness call, unchanged since E39. ``frictions=True`` is a no-op
+#: there: run_backtest's exit_model="v2" walk never books slippage or
+#: commission (frictions reach only the frozen v1 exit loop), so these numbers
+#: carry no costs.
+_V1_EXIT_KWARGS = {"frictions": True, "exit_model": "v2", "scale_out": True, "tp2_mode": "levels"}
+
+
+def _exit_kwargs(instrument) -> dict:
+    """run_backtest_daterange's exit keywords for one fold run (v157). None or
+    the v1 spec: exactly the E22 harness call. Any other instrument: its own
+    fills and costs (exit_sim_v2), with tp2_mode="none" because the live
+    constructor refuses the v1 "levels" knob (v137)."""
+    if instrument is None or instrument.version == "v1":
+        return dict(_V1_EXIT_KWARGS)
+    return {"exit_model": "v2", "scale_out": True, "tp2_mode": "none",
+            "instrument": instrument}
+
+
 def _default_run(start: str, end: str, overrides: dict,
-                 strategies=None, horizons=None, tickers=None) -> dict:
+                 strategies=None, horizons=None, tickers=None, instrument=None) -> dict:
     """Pooled expectancy over the cached universe for one window.
 
     Overrides are NOT applied here -- `run_folds` wraps every run function
@@ -117,6 +135,9 @@ def _default_run(start: str, end: str, overrides: dict,
     lookup entirely -- an explicit scope for one-off runs (e.g. an ETF-only
     fold sweep) that doesn't require flipping the account's live SCAN_UNIVERSE
     setting just to run a backtest.
+
+    `instrument` (v157): None is the v1 harness call; any other spec runs
+    under its fills and costs (`_exit_kwargs`).
     """
     import numpy as np
     from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest_daterange
@@ -136,28 +157,32 @@ def _default_run(start: str, end: str, overrides: dict,
                 # The plan's own snippet omitted horizon_key entirely and
                 # was never callable: run_backtest_daterange is
                 # (ticker, df, strategy, horizon_key, date_from, date_to).
-                # exit_model/scale_out/tp2_mode match what the E22
-                # friction-adjusted baseline was measured with
-                # (run_backtest_range.py defaults --tp2 levels), or fold
-                # deltas would be comparing against a different exit model.
+                # Under v1, exit_model/scale_out/tp2_mode match what the E22
+                # baseline was measured with (run_backtest_range.py defaults
+                # --tp2 levels), or fold deltas would be comparing against a
+                # different exit model; that walk books no costs, whatever
+                # the frictions flag says (`_exit_kwargs`).
                 #
                 # tp2_mode="levels" is also what makes level-sourced
                 # components VISIBLE here at all: with "none" the backtest
                 # never calls build_level_map, so AVWAP and HVN/LVN change
                 # nothing and their folds would score a meaningless 0.0000.
+                # The v2 instrument has no "levels" knob (v137): a
+                # level-sourced component cannot be judged under v2 here.
                 s = run_backtest_daterange(sym, df, strat, hk, start, end,
-                                           frictions=True, exit_model="v2",
-                                           scale_out=True, tp2_mode="levels")
+                                           **_exit_kwargs(instrument))
                 rs.extend(t.r_multiple for t in (s.trades or [])
                           if t.r_multiple is not None)
     return {"expectancy_r": float(np.mean(rs)) if rs else None, "n": len(rs)}
 
 
 def run_folds(overrides: dict, folds=ANCHORED_FOLDS, tickers=None,
-              run_fn=None) -> dict:
+              run_fn=None, instrument=None) -> dict:
+    """Baseline vs component expectancy per fold. `instrument` (v157) reaches
+    the default run only; an injected `run_fn` is used as is."""
     if run_fn is None:
         def _scoped_default_run(start, end, ov):
-            return _default_run(start, end, ov, tickers=tickers)
+            return _default_run(start, end, ov, tickers=tickers, instrument=instrument)
         run = _guarded(_scoped_default_run)
     else:
         run = run_fn
@@ -456,13 +481,15 @@ def _trades_similar(a, b, tol_pct: float) -> bool:
             and _close(a.take_profit, b.take_profit))
 
 
-def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=None) -> list:
+def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=None,
+                              instrument=None) -> list:
     """Build a chronological signal list for `portfolio_replay` from real
     fold-run trades. Mirrors `_default_run`'s iteration structure (same
-    symbol universe, same liquidity screen, same frictions/exit_model/
-    scale_out/tp2_mode) so the portfolio numbers stay comparable to the
-    E22 friction-adjusted baseline -- see `_frame_for` and `_default_run`
-    docstrings for why those specific arguments are frozen.
+    symbol universe, same liquidity screen, same exit keywords via
+    `_exit_kwargs`, including `instrument`) so the portfolio numbers stay
+    comparable to the E22 baseline -- see `_frame_for` and `_default_run`
+    docstrings for why those specific arguments are frozen. Signals are
+    dated by each trade's entry_date: under v2 that is the fill bar.
 
     Only trades with both an `r_multiple` and an `exit_date` become
     signals -- open/unresolved trades can't be replayed under capital
@@ -515,8 +542,7 @@ def collect_portfolio_signals(start: str, end: str, strategies=None, horizons=No
         for strat in strategies:
             for hk in horizons:
                 s = run_backtest_daterange(sym, df, strat, hk, start, end,
-                                           frictions=True, exit_model="v2",
-                                           scale_out=True, tp2_mode="levels")
+                                           **_exit_kwargs(instrument))
                 for t in (s.trades or []):
                     if t.r_multiple is not None and t.exit_date is not None:
                         candidates.append((strat, t))

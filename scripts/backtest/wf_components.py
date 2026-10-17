@@ -1,6 +1,6 @@
 """Run every registerable Phase-E2 component through the anchored walk-forward gate (Task E33).
 
-One component at a time, against the friction-adjusted baseline. The gate
+One component at a time, against the E22 baseline. The gate
 is PRE-REGISTERED (Global Constraints): pooled test expectancy_r improves
 in >= 2 of 3 folds, no fold degrades baseline by > 0.05R, N >= 30 per
 fold. Components that fail are documented and DROPPED -- no second grid
@@ -180,8 +180,9 @@ def _render(results, universe, symbols, strategies, horizons, elapsed) -> str:
         "",
         f"- Universe: `{universe}` — {len(symbols)} symbols, "
         f"{len(strategies)} strategies × {len(horizons)} horizons",
-        "- Exit model: v2 + scale-out, `tp2_mode=levels`, frictions ON "
-        "(matches the E22 friction-adjusted baseline tooling's own defaults)",
+        "- Exit model: v2 + scale-out, `tp2_mode=levels`, frictions flag on "
+        "(the E22 baseline tooling's own defaults; the v2 exit walk books no "
+        "slippage or commission, so these numbers carry no costs)",
         f"- OHLCV: `{training_data.active()}` training data (v162 switch; the E22 baseline "
         "was measured on `yfinance`)",
         "- Each (symbol, strategy, horizon) backtested once per leg; folds sliced by entry_date",

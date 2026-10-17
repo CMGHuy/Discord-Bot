@@ -106,6 +106,14 @@ class BacktestTrade:
     holding_days: int | None
     runner_outcome: str | None = None
     context: dict | None = None
+    # v157: the signal bar's date. Under the v2 instrument entry_date is the
+    # fill bar (next open, stop or limit fill) and this is the bar the plan
+    # was built on; v1 fills on its signal bar, so v1 rows carry entry_date.
+    signal_date: str | None = None
+
+    def __post_init__(self):
+        if self.signal_date is None:
+            self.signal_date = self.entry_date
 
 
 @dataclass
@@ -416,29 +424,36 @@ def _live_plan_at(df, i, *, ticker, strategy, horizon_key, direction):
 
 
 def _live_trade(df, i, plan, res, horizon_key, asof) -> BacktestTrade:
-    """One v2-instrument trade row, in exactly the shape the v1 instrument's
-    exit_model="v2" branch writes (planned entry; fills arrive in phase 2)."""
-    entry, stop_loss, take_profit = plan.trigger_price, plan.stop_loss, plan.tp1
+    """One v2-instrument trade row (v157): entry_date and entry are the fill
+    (res.entry_index / res.entry_price, raw: costs show only in r_multiple),
+    signal_date is the signal bar i, holding_days counts from the fill. The
+    entry context is the signal bar's, where the plan was built, and is keyed on
+    the PLANNED entry (plan.trigger_price), never the slipped fill."""
+    entry, stop_loss, take_profit = res.entry_price, plan.stop_loss, plan.tp1
     risk_per_share = abs(entry - stop_loss)
-    exit_i = res.exit_index
+    entry_i, exit_i = res.entry_index, res.exit_index
     return BacktestTrade(
-        entry_date=str(df.index[i].date()), exit_date=str(df.index[exit_i].date()),
+        entry_date=str(df.index[entry_i].date()), exit_date=str(df.index[exit_i].date()),
         direction=plan.direction, entry=round(entry, 4), stop_loss=round(stop_loss, 4),
         take_profit=round(take_profit, 4), outcome=res.outcome,
         exit_price=round(res.legs[-1]["exit_price"], 4),
         return_pct=round(res.r_total * (risk_per_share / entry) * 100, 3),
-        r_multiple=round(res.r_total, 3), holding_days=exit_i - i,
+        r_multiple=round(res.r_total, 3), holding_days=exit_i - entry_i,
         runner_outcome=res.runner_outcome,
         context=entry_context(df.iloc[:i + 1], direction=plan.direction, horizon_key=horizon_key,
                               stop=stop_loss, target=take_profit,
-                              asof=asof_row(asof, df.index[i]), entry=entry),
+                              asof=asof_row(asof, df.index[i]),
+                              entry=plan.trigger_price),
+        signal_date=str(df.index[i].date()),
     )
 
 
-def _replay_live_constructor(ticker, df, strategy, horizon_key, *, one_at_a_time, scale_out, asof):
+def _replay_live_constructor(ticker, df, strategy, horizon_key, *, one_at_a_time, scale_out, asof,
+                             instrument):
     """The v2 instrument's replay: same signals, warm-up and one-at-a-time rule
     as the v1 loop, but every plan comes from _live_plan_at and every trade is
-    walked by simulate_exit. Returns (total_signals, trades, runner_counts)."""
+    walked by simulate_exit under ``instrument`` (its fills and costs, v157).
+    Returns (total_signals, trades, runner_counts)."""
     bullish, bearish = _signal_masks(df, strategy, horizon_key)
     min_bars = MIN_BARS[horizon_key]
     trades, runner_counts, total_signals, open_until = [], {}, 0, -1
@@ -453,7 +468,7 @@ def _replay_live_constructor(ticker, df, strategy, horizon_key, *, one_at_a_time
                              horizon_key=horizon_key, direction=direction)
         if plan is None:
             continue
-        res = simulate_exit(df, i, plan, scale_out=scale_out)
+        res = simulate_exit(df, i, plan, scale_out=scale_out, instrument=instrument)
         if res.outcome in _NO_TRADE:
             continue
         open_until = res.exit_index
@@ -564,7 +579,9 @@ def run_backtest(
     ``exit_model="v2"`` and ``tp2_mode="none"``. It refuses to run with
     DATA_DRIVEN_STOPS_ENABLED, STALL_EXIT_ENABLED or OPEX_CAUTION_ENABLED on,
     because the live journal or the wall clock is lookahead in a replay (phase 5
-    lifts this). It ignores ``frictions``; costs arrive in v136 phase 2.
+    lifts this). It ignores ``frictions``: fills and costs come from ``instrument``
+    (exit_sim_v2, v157), and each row's entry_date is its fill bar while
+    signal_date is the signal bar.
     """
     _refuse_compression(strategy)
     live = _uses_live_constructor(instrument, exit_model, tp2_mode)
@@ -580,7 +597,7 @@ def run_backtest(
     if live:
         total_signals, trades, runner_counts = _replay_live_constructor(
             ticker, df, strategy, horizon_key, one_at_a_time=one_at_a_time,
-            scale_out=scale_out, asof=asof)
+            scale_out=scale_out, asof=asof, instrument=instrument)
         return _summarize(ticker, strategy, horizon_key, total_signals, trades, runner_counts)
 
     bullish_entries, bearish_entries = _signal_masks(df, strategy, horizon_key)

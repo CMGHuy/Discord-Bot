@@ -21,7 +21,7 @@
 
 ## Progress
 
-Not started. OH1 records its single-worker finding here before OH2 starts.
+- OH1 (2026-10-16): one worker safe — secret key created at module import (app.py:76 -> helpers.py:270), once per boot in the worker only, never lazily per request (preload_app False, master never imports swingbot.admin.app); broker singleton under _BROKER_LOCK, 8-stream cap < 16 threads (broker.py:58,286-295); DB listener started lazily on first subscribe inside the worker (broker.py:241 -> db_listener.py:98-104), not at import; job watchers persist state via _write_jobs under JobManager._lock (jobs.py:270-287), _WATCHED is a lock-guarded per-process set (jobs.py:156-157); caches thread-safe (versions.py:42,61 lru_cache; risk.py:153-155 _cache_lock + per-key locks; watchlist_rows.py:60-61 _signal_cache_lock); SSE ping 20s (stream.py:50) < timeout 60, gthread heartbeat is independent of request threads; before_request _reload_env_if_changed (app.py:178) is as threaded as app.run; app.main() extra = yf_safe.set_default_lock_timeout only (app.py:382, covered by admin_wsgi).
 
 ## Cross-plan coordination (audit 2026-10-10)
 

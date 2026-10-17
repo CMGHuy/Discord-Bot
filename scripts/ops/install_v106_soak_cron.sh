@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs (idempotently) a weekday crontab entry on the Hetzner VM that runs
 # scripts/ops/v106_soak_cron.sh at 21:15 UTC, after the US close, for v106
-# soak (plan docs/superpowers/plans/2026-09-26-v106-alpaca-data-provider.md,
+# soak (plan docs/superpowers/plans/implemented/2026-09-26-v106-alpaca-data-provider.md,
 # T13 Step 6, window given as START END). Read-only checks;
 # the next Claude session reads logs/v106_soak_cron.log and acts on the FINAL
 # verdict. The job removes its own line after the END-day run.

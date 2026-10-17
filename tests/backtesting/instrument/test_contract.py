@@ -1,4 +1,4 @@
-"""v136 phase 1: the instrument contract skeleton (fill/cost fields only)."""
+"""v136 phases 1-2: the instrument contract (v157 sets v2's fills and costs)."""
 import dataclasses
 
 import pytest
@@ -23,10 +23,29 @@ def test_v2_builds_through_the_live_constructor():
     assert resolve("v2").live_constructor is True
 
 
-def test_phase_one_v2_stub_carries_v1_fills_and_costs():
-    """Phase 2 sets v2's values from spec section 2 and rewrites this test."""
-    assert resolve("v2").fill_model == resolve("v1").fill_model
-    assert resolve("v2").cost_model == resolve("v1").cost_model
+def test_v2_carries_spec_section_two_fills_and_costs():
+    spec = resolve("v2")
+    assert spec.fill_model == FillModel(market_entry="next_open", gap_through=True,
+                                        same_bar="stop_first")
+    assert spec.cost_model == CostModel(commission_per_share=0.0, slippage_bps=5.0,
+                                        stop_slippage_bps=10.0)
+    assert spec.fill_model is contract.V2_FILLS
+    assert spec.cost_model is contract.V2_COSTS
+
+
+def test_v1_keeps_its_own_constants_untouched():
+    assert resolve("v1").fill_model is contract.V1_FILLS
+    assert resolve("v1").cost_model is contract.ZERO_COSTS
+    assert contract.V2_FILLS != contract.V1_FILLS
+    assert contract.V2_COSTS != contract.ZERO_COSTS
+
+
+def test_fill_and_cost_models_keep_their_phase_one_fields():
+    """v157 adds no field: the three of each carry every spec section 2 rule."""
+    assert [f.name for f in dataclasses.fields(FillModel)] == [
+        "market_entry", "gap_through", "same_bar"]
+    assert [f.name for f in dataclasses.fields(CostModel)] == [
+        "commission_per_share", "slippage_bps", "stop_slippage_bps"]
 
 
 def test_unknown_version_is_refused():
