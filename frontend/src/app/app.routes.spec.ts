@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideLocationMocks } from '@angular/common/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -105,15 +108,18 @@ describe('routing, authenticated', () => {
     expect(await children[0]!.loadComponent!()).toBeDefined();
   });
 
-  it('exposes Research and Reports as guarded, titled lazy stubs', async () => {
+  it('serves Research and Reports as real pages, with no placeholder left', async () => {
     for (const path of ['research', 'reports']) {
       const route = routes.find((item) => item.path === path);
-      expect(route?.canMatch).toEqual([authGuard]);
       expect(route?.title).toBeTruthy();
-      expect(route?.data?.['subtitle']).toBeTruthy();
+      expect(String(route?.data?.['subtitle'])).not.toMatch(/planned/i);
+      // The stub routes carried a `planned` blurb in their data.
       const children = await route!.loadChildren!() as Routes;
-      expect(children[0].loadComponent).toBeTypeOf('function');
+      expect(children[0].data?.['planned']).toBeUndefined();
+      expect(await children[0].loadComponent!()).toBeDefined();
     }
+    expect(readFileSync(join(process.cwd(), 'src/app/app.routes.ts'), 'utf8'))
+      .not.toContain('workspaces/stubs');
   });
 });
 
@@ -121,7 +127,7 @@ describe('routing, authenticated', () => {
 describe('route data readiness contract', () => {
   const expected = [
     'dashboard', 'trades', 'trades/:id', 'plans/:id', 'analytics', 'calendar', 'watchlist',
-    'watchlist/:symbol', 'risk', 'system', 'versions',
+    'watchlist/:symbol', 'risk', 'system', 'versions', 'research', 'reports',
   ] as const;
 
   it('keeps every authenticated workspace lazy, scoped, and resolver-backed', async () => {

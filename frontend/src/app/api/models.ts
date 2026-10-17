@@ -153,6 +153,14 @@ export interface TradeRow {
   target_is_banked_tp1: boolean;
   stop_kind: 'risk' | 'trailing' | 'derived_floor';
   bar_kind: 'progress' | 'approach' | 'trailing' | 'none';
+  /** Best price since TP1 -- the 100% end of a trailing runner's bar (0% is
+   *  the trailing stop). Server-side input to `progress_pct`; null until the
+   *  runner has recorded one and on every row that is not a runner. */
+  runner_best?: number | null;
+  /** Trailing runner only: P&L % vs the original fill if the trailing stop
+   *  is hit (bar 0%) and at the best price since TP1 (bar 100%). */
+  stop_pnl_pct?: number | null;
+  best_pnl_pct?: number | null;
   floor_r: number | null;
   price_r: number | null;
   headroom_r: number | null;
@@ -687,6 +695,35 @@ export interface AnalyticsHeatGrid extends Scoped {
   min_cell_n: number;
 }
 
+/** One row of `_registry_rows()`: the committed out-of-sample badge for a
+ *  strategy, joined against how that strategy is actually doing live. */
+export interface StrategyRow {
+  strategy: string;
+  /** `VALIDATED` or `WEAK` — whether it cleared its one-shot OOS bar. */
+  status: string;
+  /** OOS sample and result, from the committed validation registry. */
+  n: number;
+  win_rate: number;
+  expectancy_r: number;
+  window: string | null;
+  run_date: string | null;
+  /** Live counterparts. Null until there are closed trades to measure. */
+  live_n: number | null;
+  live_wr: number | null;
+  delta_vs_oos: number | null;
+  /** Pre-registered decay rule: live_n >= 20 and live_wr < oos_wr - 10. */
+  decayed: boolean;
+  /** Age of the evidence itself, derived server-side from `run_date` at read
+   *  time and never stored: `fresh` | `aging` | `stale` | `unknown`. A
+   *  different fact from `decayed` above, which is live-vs-OOS win-rate drift.
+   *  Display only — nothing is gated on it. */
+  evidence_decay: string;
+  gate_description: string | null;
+  /** Rolling 10-trade win rate, oldest first. Carries nulls for windows the
+   *  server could not compute, which the sparkline cannot plot. */
+  win_rate_series: (number | null)[];
+}
+
 /** `GET /analytics/registry`.
  *
  *  It really is this one key. The `{strategies, horizons, cells}` shape this
@@ -696,7 +733,247 @@ export interface AnalyticsHeatGrid extends Scoped {
  *  read three keys the endpoint has never sent. Same failure as the `ohlcv`
  *  envelope: it type-checks and returns `undefined`. */
 export interface AnalyticsRegistry {
-  registry: unknown[];
+  registry: StrategyRow[];
+}
+
+/* -- research (v150) ---------------------------------------------------- */
+
+/** Which docs folder a ledger row's `record` points into. */
+export type LedgerRecordKind = 'results' | 'specs' | 'plans' | 'other';
+
+/** One pre-registration: the nine fields the ledger stores, plus three the
+ *  endpoint derives. `n`, `exp_r` and `p` are null on most historical rows —
+ *  a null is "not recorded", never zero. */
+export interface LedgerRow {
+  id: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  hypothesis: string;
+  instrument: string;
+  n: number | null;
+  exp_r: number | null;
+  p: number | null;
+  verdict: string;
+  /** Repo-relative path of the results doc, spec or plan that records it. */
+  record: string;
+  /** BH q-value across every ledger row with a p-value. Reported, never
+   *  gating; null when `p` is null. Filters do not change it. */
+  q: number | null;
+  /** Whether `record` resolves in the deployed build. */
+  record_exists: boolean;
+  record_kind: LedgerRecordKind;
+}
+
+/** `GET /research/ledger`. The vocabularies come from the server so a
+ *  verdict added to the ledger later appears as a filter without a release. */
+export interface ResearchLedger {
+  rows: LedgerRow[];
+  /** How many rows have a p-value: the BH family size behind every `q`. */
+  q_family_m: number;
+  verdicts: string[];
+  instruments: string[];
+}
+
+/* -- reports (v150) ----------------------------------------------------- */
+
+/** The envelope both `GET /reports/*` endpoints return. `not_run` is a
+ *  state the page renders ("Not yet run"), not an error. */
+export interface ReportEnvelope<T> {
+  status: 'ok' | 'not_run';
+  generated_at: string | null;
+  result: T | null;
+}
+
+/* Field names below are v146's and v147's, pinned 2026-10-15 from the
+ * builders' own output (`report-fixtures.spec.ts` holds the key lists). Units
+ * differ between the two reports: v146 `win_rate` is a PERCENT (0-100), v147
+ * `*_win_rate` and `fill_rate` are FRACTIONS (0-1). */
+
+/** The verdict that counts: fixed at the first qualifying run and carried
+ *  forward unchanged by every later one. */
+export interface VerdictOfRecord {
+  verdict: string;
+  /** `YYYY-MM-DD` of the run that fixed it. */
+  date: string;
+  /** v146: rows that entered the verdict, live + TRAIN. v147: the cell's
+   *  distinct filled blocked setups at that run. */
+  n: number;
+}
+
+/** p25 / median / p75 of the planned risk:reward ratio; all null when no
+ *  row carried one. */
+export interface AttributionQuartiles {
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+}
+
+/** v146: does confidence order R? Spearman rho plus the top-minus-bottom
+ *  tercile ExpR with its week-clustered 95% interval. The interval and p are
+ *  null when a tercile is under v146's floor. */
+export interface AttributionMonotonicity {
+  /** Rows with a confidence score. */
+  n: number;
+  spearman_rho: number | null;
+  tercile_spread: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  p: number | null;
+  /** The interval lies wholly below zero. Reported inside NOT PREDICTIVE. */
+  inverted: boolean;
+  /** Rows per tercile: [bottom, middle, top]. */
+  tercile_n: number[];
+  /** R:R quartiles per tercile, same order as `tercile_n`. */
+  rr_by_tercile: AttributionQuartiles[];
+}
+
+/** v146: ExpR where a confidence factor scored > 0, minus where it scored 0.
+ *  `key` is the factor's display name (e.g. `MACD momentum`). */
+export interface AttributionFactor {
+  key: string;
+  /** `n_pos + n_zero`. */
+  n: number;
+  n_pos: number;
+  n_zero: number;
+  delta: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  p: number | null;
+  /** BH q over every look on the report. */
+  q: number | null;
+}
+
+export interface AttributionBucket {
+  label: string;
+  n: number;
+  /** PERCENT (0-100); a win is net `r > 0`. */
+  win_rate: number | null;
+  /** Net of frictions. */
+  exp_r: number | null;
+  exp_r_gross: number | null;
+  /** v146 sets this on every bucket below its floor. The page never tests N. */
+  thin: boolean;
+  /** This bucket's ExpR minus the rest of its grouping's, with its interval
+   *  and p (null on a thin bucket or a thin rest). */
+  delta: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  p: number | null;
+  q: number | null;
+  /** `confidence_decile` buckets only. */
+  unevaluated_n?: number;
+  /** `confidence_decile` buckets only. */
+  rr?: AttributionQuartiles;
+}
+
+/** ISO Mondays of the first and last entry week in the population. */
+export interface AttributionWindow {
+  first_week: string;
+  last_week: string;
+}
+
+export interface AttributionPopulation {
+  window: AttributionWindow;
+  n: number;
+  monotonicity: AttributionMonotonicity;
+  factors: AttributionFactor[];
+  /** Grouping -> its buckets, in the report's own order. Groupings:
+   *  confidence_decile, confidence_level, confluence, regime2_state,
+   *  rs_quintile, direction, horizon, earnings, earnings_in_hold. */
+  buckets: Record<string, AttributionBucket[]>;
+  /** The monotonicity table again per direction (`bullish` / `bearish`) and
+   *  per horizon key (`2w`, `3m`, ...). */
+  splits: {
+    direction: Record<string, AttributionMonotonicity>;
+    horizon: Record<string, AttributionMonotonicity>;
+  };
+  /** Fixed caveats for this population, in order. */
+  notes: string[];
+}
+
+/** `load_latest()` of `swingbot/core/infra/expectancy_attribution_store.py`. */
+export interface ExpectancyAttribution {
+  generated_at: string;
+  /** The latest run's reading. Descriptive once a verdict of record exists. */
+  verdict: string;
+  verdict_of_record: VerdictOfRecord;
+  /** The BH family size behind every q on this report. */
+  looks: number;
+  seed: number;
+  /** Earnings file set, TRAIN input, frictions, resamples. Shown as-is. */
+  provenance: Record<string, unknown>;
+  /** Never pooled. Either side may be absent from a run. */
+  populations: {
+    live: AttributionPopulation | null;
+    train: AttributionPopulation | null;
+  };
+}
+
+/** v147: one verdict cell, gate x population. Five verdict cells, then three
+ *  note cells (`rs`/train, `no_qualifying_target`/live and /train). */
+export interface GateCell {
+  /** `rs`, `risk_cap`, `compression` or `no_qualifying_target`. */
+  gate: string;
+  population: 'live' | 'train';
+  /** The latest reading: GATE EARNS | GATE COSTS | INCONCLUSIVE | WAITING.
+   *  Always WAITING when `note` is set. */
+  verdict: string;
+  /** Distinct filled blocked setups. v147 counts it; the page never does. */
+  n: number;
+  /** Distinct filled setups in the taken arm. */
+  taken_n: number;
+  /** Null until the first reading at or above v147's floor. */
+  verdict_of_record: VerdictOfRecord | null;
+  /** Blocked ExpR minus taken ExpR, its interval, p and BH q over the five
+   *  verdict cells. Null when the cell had no eligible reading. */
+  latest: { difference: number; ci_low: number; ci_high: number; q: number; p: number } | null;
+  in_sample: boolean;
+  /** A fixed non-verdict state persisted by v147: "no TRAIN population",
+   *  "no verdict — no-plan", "no TRAIN taken arm — no as-of earnings
+   *  archive", or "taken arm below the floor (...)". */
+  note: string | null;
+}
+
+/** v147: one detail row, gate x reason x population. */
+export interface GateCounterfactualRow {
+  gate: string;
+  reason: string;
+  population: 'live' | 'train';
+  blocked_n: number;
+  no_plan_n: number;
+  /** FRACTION (0-1) of tried blocked setups that filled. */
+  fill_rate: number | null;
+  blocked_exp_r: number | null;
+  /** FRACTION (0-1). */
+  blocked_win_rate: number | null;
+  /** Filled setups in the taken arm. */
+  taken_n: number;
+  taken_exp_r: number | null;
+  /** FRACTION (0-1). */
+  taken_win_rate: number | null;
+  /** The taken arm's booked R, beside the re-walk; never the taken ExpR. */
+  taken_realised_exp_r: number | null;
+  near_miss_n: number | null;
+  near_miss_exp_r: number | null;
+  rest_n: number | null;
+  rest_exp_r: number | null;
+  /** `risk_cap` rows only: the fixed-dollar-risk figure beside R. */
+  dollar_risk: number | null;
+  over_cap: boolean;
+  in_sample: boolean;
+}
+
+/** `load_report()` of `swingbot/core/infra/gate_counterfactual_store.py`. */
+export interface GateCounterfactual {
+  generated_at: string;
+  live_window: string | null;
+  /** The BH family size: the five verdict cells. */
+  bh_family: number;
+  seed: number;
+  /** Fixed caveats, in order. */
+  limitations: string[];
+  cells: GateCell[];
+  rows: GateCounterfactualRow[];
 }
 
 /* -- jobs and tuning ---------------------------------------------------- */
@@ -723,12 +1000,22 @@ export interface JobStarted {
 /** `GET /jobs/:id/result` — a finished tuning job's grid.
  *
  *  `strategy` is null and `grid` empty while the job is still running: the
- *  endpoint answers 200 with the same three keys either way, so nothing here
- *  has to branch on which shape arrived (SR51). */
+ *  endpoint answers 200 with the same keys either way, so nothing here has to
+ *  branch on which shape arrived (SR51). `data_source` (v162) is the training
+ *  data the grid ran on: `"yfinance"` for a result written before v162, null
+ *  while there is no result yet. */
 export interface JobResult {
   job_id: string;
   strategy: string | null;
   grid: unknown[];
+  data_source: string | null;
+}
+
+/** `GET /jobs/tune/defaults` (v162) — the launcher's training-data picker:
+ *  the server's TRAINING_DATA_SOURCE and every value it accepts. */
+export interface TuneDefaults {
+  data_source: string;
+  choices: string[];
 }
 
 export interface ProposalList {
@@ -1439,6 +1726,32 @@ export interface CalendarTrade {
   exit_efficiency: number | null;
   tags: string[];
   auto_lesson: string | null;
+  /** A scaled-out position is one row per realized leg, each on the day
+   *  that leg closed -- the same split the Trades table makes (v79), so a
+   *  banked TP1 partial counts on its own day. 0/1 for an unsplit trade.
+   *  `leg_total` includes a runner that is still open. A leg is counted
+   *  as an individual trade: its `outcome` and `r_multiple` are the leg's
+   *  own, and the legs' `pnl_amount` sum to the trade's realized total. */
+  leg_index: number;
+  leg_total: number;
+  /** v165 D1 -- read from the leg part itself, never re-derived. Every
+   *  figure is null when its input is missing (never 0). */
+  entry_price: number | null;
+  /** The leg's own exit for a leg row, the trade exit for a whole trade. */
+  exit_price: number | null;
+  /** The final recorded stop (a trailed or break-even runner's stop moved). */
+  stop_price: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  /** Leg-scaled for a leg row. */
+  shares: number | null;
+  /** Null when either stamp is missing or the close precedes the open. */
+  held_hours: number | null;
+  /** Signed by direction: a short that fell is positive. Null on a missing or zero entry. */
+  return_pct: number | null;
+  /** One of metrics `EXIT_REASONS` (tp1, runner_tp2, runner_trail, runner_be,
+   *  stop, scratch, timeout, reversed, other). */
+  exit_reason: string;
 }
 
 /** `days`/`totals` are the requested month; `day_of_week`, `best_day`,
@@ -1474,6 +1787,72 @@ export interface CalendarDayTrades {
   worst_drawdown_r: number | null;
   contributors: Array<{ ticker: string | null; r: number }>;
   detractors: Array<{ ticker: string | null; r: number }>;
+  /** v165 D2 -- this day against the OTHER trading days under the filter. */
+  context: DayContext;
+  /** v165 D3 -- exactly the rows in `trades`, grouped four ways. */
+  breakdown: DayBreakdown;
+}
+
+/** A difference from a reference day. Null when either side has no figure. */
+export interface DayDelta {
+  pnl_amount: number | null;
+  r: number | null;
+}
+
+/** v165 D2. `percentile` is null below 20 other trading days (the page
+ *  says why with `history_days`); the day is never in its own reference set. */
+export interface DayContext {
+  percentile: number | null;
+  /** Other trading days with a non-null net P&L. */
+  history_days: number;
+  vs_avg_day: DayDelta;
+  vs_weekday_avg: DayDelta;
+}
+
+/** One group of a day's rows. `win_rate` is 0-100 and null for a group with
+ *  no decided rows; a null key arrives as `"unknown"`. */
+export interface DayBreakdownRow {
+  key: string;
+  n: number;
+  pnl_amount: number | null;
+  r: number | null;
+  win_rate: number | null;
+}
+
+export type DayBreakdownDimension = 'strategy' | 'horizon' | 'direction' | 'exit_reason';
+
+/** Each dimension sorted by P&L descending, nulls last. */
+export type DayBreakdown = Record<DayBreakdownDimension, DayBreakdownRow[]>;
+
+export interface SparkClose {
+  date: string;
+  close: number;
+}
+
+/** v165 D4. Daily closes from 3 bars before entry to at most 3 bars after
+ *  the exit bar (`exit_bar` indexes `closes`; later bars are context, drawn
+ *  dimmed). Ticks are the recorded prices -- all null when entry no longer
+ *  sits on the bars. `stale`: the cache ends before the exit day. */
+export interface SparkSeries {
+  closes: SparkClose[];
+  exit_bar: number;
+  last_bar: string;
+  stale: boolean;
+  entry: number | null;
+  stop: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  exit: number | null;
+  exit_date: string;
+}
+
+/** Keyed `"<trade_id>:<leg_index>"`. A null value: no cached bars (or a
+ *  spot metal); a missing key: the row was past the 50-row cap. */
+export interface CalendarDaySparklines {
+  as_of: string;
+  date: string;
+  truncated: boolean;
+  series: Record<string, SparkSeries | null>;
 }
 
 /* -- live tape ---------------------------------------------------------- */

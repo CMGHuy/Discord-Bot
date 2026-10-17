@@ -9,15 +9,29 @@
   pointer-events: none;
 }
 
+/* A hairline, not a banner. The old strip was a 40px opaque band with a
+   caption, and because it floats over the workspace it sat on top of section
+   headers, the Today/All-days toggle and the Analytics tab bar for as long as
+   a scan ran (most of the day). The caption is still in the DOM -- screen
+   readers get it, and `title` shows it on hover -- and comes back visually
+   only when the scan has stalled, which is the one state that must be read. */
 .strip {
   display: grid;
   gap: var(--space-4);
+  padding: 0 var(--space-14);
+  animation: scan-strip-in var(--transition) ease-out;
+}
+.strip.stalled {
   padding: var(--space-8) var(--space-14);
-  /* Legible over whatever it covers without hiding it outright. */
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(2px);
-  animation: scan-strip-in var(--transition) ease-out;
+}
+.strip:not(.stalled) .caption {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .track {

@@ -82,31 +82,25 @@ def _symbols_for_folds() -> list:
 
 
 def _frame_for(symbol: str):
-    """Daily bars for one symbol, or None.
+    """Daily bars for one symbol from the selected training data, or None.
 
-    Reads `data/backtest_cache/` -- NOT `market_data/`. This repo has two
-    parallel OHLCV caches and they are not interchangeable. The choice
-    matters twice over here:
-
-      * COMPARABILITY. Every number these folds are judged against (the
-        E22 baseline) came from scripts/run_backtest_
-        range.py, which reads this cache. Folds measured on the other one
-        would be comparing against a different dataset.
-      * WARM-UP DEPTH. market_data/ starts 2018-06 (measured), i.e. right
-        at the folds' own anchor, leaving indicators no warm-up before
-        the first train window. backtest_cache goes back to 2000. On AAPL
-        the same strategies produce 13 trades from backtest_cache vs 1
-        from market_data over identical windows -- the fold N would have
-        been starved by the data source alone.
+    v162: reads through swingbot.core.marketdata.training_data -- the Alpaca
+    history store (data/market_data/daily/) by default, or data/backtest_cache/
+    under TRAINING_DATA_SOURCE=yfinance, a script's --data-source yfinance, or
+    a set BACKTEST_CACHE_DIR. Never the root market_data/ cache: it starts
+    2018-06, leaving the folds no warm-up (on AAPL 13 trades from
+    backtest_cache vs 1 from market_data over identical windows). Folds compare
+    a component against a baseline, so both legs read the one selected source;
+    a run never mixes them. A missing Alpaca store raises MissingStoreError
+    instead of producing a zero-ticker fold.
     """
-    from swingbot.core.marketdata.backtest_cache import CACHE_DIR
-    import pandas as pd
+    from swingbot.core.marketdata import training_data
+    from swingbot.core.marketdata.history_store import MissingStoreError
 
-    path = CACHE_DIR / f"{symbol}.csv"
-    if not path.exists():
-        return None
     try:
-        return pd.read_csv(path, index_col=0, parse_dates=True)
+        return training_data.load_daily(symbol)
+    except MissingStoreError:
+        raise
     except Exception as exc:
         log.warning("fold frame unreadable for %s: %s", symbol, exc, exc_info=True)
         return None

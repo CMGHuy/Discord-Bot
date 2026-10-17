@@ -6,6 +6,8 @@ import { isInline } from '../../ui/priority';
 import {
   COMPACT_COLUMNS,
   FULL_COLUMNS,
+  PHONE_COMPACT_COLUMNS,
+  baselineColumns,
   PINNED_COLUMNS,
   STATUS_CHIPS,
   chipQuery,
@@ -195,5 +197,19 @@ describe('Trades column floors', () => {
     // is gone; everything else is one tap on the row's expand arrow.
     const xs = tradeColumns().filter((c) => isInline(c.inlineFrom, 'xs')).map((c) => c.key);
     expect(xs.sort()).toEqual(['plan', 'pnl_pct', 'ticker']);
+  });
+});
+
+describe('phone column baseline', () => {
+  it('shows the same compact set, with P&L ahead of the 12rem Plan cell', () => {
+    expect([...PHONE_COMPACT_COLUMNS].sort()).toEqual([...COMPACT_COLUMNS].sort());
+    expect(PHONE_COMPACT_COLUMNS.indexOf('pnl_pct')).toBeLessThan(PHONE_COMPACT_COLUMNS.indexOf('plan'));
+    expect(PHONE_COMPACT_COLUMNS.slice(0, 4)).toEqual(['status', 'ticker', 'pnl_pct', 'plan']);
+  });
+
+  it('only re-orders compact: full is an explicit request for width', () => {
+    expect(baselineColumns('full', true)).toBe(FULL_COLUMNS);
+    expect(baselineColumns('compact', false)).toBe(COMPACT_COLUMNS);
+    expect(baselineColumns('compact', true)).toBe(PHONE_COMPACT_COLUMNS);
   });
 });

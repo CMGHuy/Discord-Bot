@@ -55,6 +55,13 @@ on the Hetzner VM as cron (scripts under `scripts/ops/` with an idempotent
 laptop. Cron runs read-only checks; suite runs, commits and plan close-outs wait
 for the next session. Detail: `docs/claude/working-conventions.md` § Scheduling.
 
+## No paid usage
+
+Commit in several scoped commits, never one big one.
+Never propose or start anything billed beyond the subscription (API keys,
+`/code-review ultra`, paid services) unless the partner asks by name. Detail:
+`docs/claude/working-conventions.md` § Paid usage.
+
 ## Project and production boundary
 
 Swingbot is a Discord swing-trade alert bot. It scans stock and ETF watchlists
@@ -70,7 +77,9 @@ Angular SPA served by Flask's `/api/v1/*` API.
 via the Public API alongside bomeo-capital.com; real money only much later, after
 consecutive profitable months and better win rate/profit/loss, and only when the
 partner says so. eToro stays the broker for both stages (decided 2026-10-11;
-IBKR, Trading 212, Saxo, Alpaca compared and not chosen). Until then demo only,
+IBKR, Trading 212, Saxo, Alpaca compared and not chosen), built as the first
+adapter behind a broker-neutral interface (`BROKER` in `.env`; v160 § Amendment,
+2026-10-16). Until then demo only,
 never `account: real`. Keys are
 `ETORO_USER_KEY` / `ETORO_API_KEY` in `.env`, unused so far. Detail:
 `docs/claude/etoro-roadmap.md`.
@@ -151,42 +160,29 @@ partner **trades real money off the alerts**, so a silent stop move, missing
 expiry or lost send on the alert channel is real-money divergence: that work is
 `Edge: harvest`, not cosmetics (`edge-priorities.md`).
 
-Specs numbered above v140 carry a `**Screen:**` header line under `Edge:`. An
-`expectancy` or `volume` spec adding an entry strategy or a filter cites
-`<ledger-id> SCREEN-PASS`, earned once per idea with `python
-scripts/backtest/screen_idea.py --idea <name>` (PIT S&P 500 2010-2019; a fixed
-1.5/3 ATR trade against a matched random baseline; ΔExpR ≥ +0.10R after
-costs, lower 95% bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300). A stop/target
-or `harvest` spec cites `harvest-headroom <results path>`; integrity work says
-`exempt (integrity)`. A screen fail is closed and never re-screened.
-`tests/hooks/test_spec_screen_header.py` enforces the line.
-Specs numbered v146 or above also carry `**Panel:**` directly below
-`**Screen:**`: one to three expert role skills (defaults by subject in
-`document-conventions.md`), run through `panel` after the spec is committed
-and again over the plan's diff before close-out, where an unresolved
-`BLOCKING` finding stops the close. `tests/hooks/test_spec_panel_header.py`
-enforces it.
+**Training data (v162).** Backtests and grids read `TRAINING_DATA_SOURCE`
+(default `alpaca`: the Alpaca history store under `data/market_data/`, not the
+root `market_data/` live cache). `--data-source yfinance` or that `.env` line
+rolls back; `BACKTEST_CACHE_DIR` or an explicit `--cache-dir` means yfinance.
+A missing store is an error, never an empty run. Live badges always use the
+yfinance registry row, and `merge_registry` refuses an alpaca VALIDATION row
+whose yfinance shot is spent. A new data source resets no
+validation budget and reopens no closed pre-registration; each new
+pre-registration names its `data_source`. Detail: `known-traps.md` § Two OHLCV
+caches, `backtest-methodology.md` § Windows.
 
-Feature acceptance runs through one gate (`swingbot/core/backtesting/
-acceptance.py`), driven by `python scripts/backtest/validate_component.py
---stage mde|walkforward|validation`. Within that gate win rate is the objective
-and expectancy a non-inferiority constraint. Six clauses, all applicable ones
-must pass: mix-standardised ΔWR > 0 at one-sided p < 0.05 on a ticker-cluster
-bootstrap; ΔExpR lower 95% bound > −0.01R; median planned RR and mean win R each
-fall no more than 2%; accepted-alert count cut no more than 25%; permutation
-p < 0.05; and, for a subset feature, the removed trades must be the bad ones
-(removed WR < retained WR and removed ExpR ≤ 0). Two free stages stand in front
-of the one-shot VALIDATION budget: an MDE precheck that refuses an unanswerable
-question with the budget intact, and a fold-test consistency gate (≥ 2 of 3 fold
-years improving, none worse than −1.0pp, N ≥ 30 per fold). The absolute
-`win_rate >= 50` floor no longer gates acceptance; it survives only as a
-strategy-badge threshold. `Edge: harvest` features are out of scope for this
-funnel and must name the gate they use instead. Every pre-registration verdict
-appends one row to `docs/superpowers/results/preregistration-ledger.jsonl` with
-`python scripts/reports/preregistration_ledger.py`, which prints a
-Benjamini–Hochberg q-value across the ledger; the q-value is reported, never
-gating, and ledger rows are never edited. v124 and v127 are exempt from the
-backfill (no spent budget or no enum verdict).
+Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
+cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`; a screen
+fail is closed, never re-screened under either race shape; each idea freezes one,
+`fixed` or v163 `trail` with cap >= 60, under the same pass rule) and from v146
+`**Panel:**` (1-3 role skills run
+through `panel`; an unresolved `BLOCKING` finding stops close-out). Feature
+acceptance is one gate (`swingbot/core/backtesting/acceptance.py`, driven by
+`scripts/backtest/validate_component.py --stage mde|walkforward|validation`):
+win rate is the objective, expectancy a non-inferiority constraint, and every
+verdict appends a row to `preregistration-ledger.jsonl`. Clauses, thresholds and
+stages: `docs/claude/backtest-methodology.md`, `document-conventions.md`;
+`tests/hooks/test_spec_screen_header.py` and `test_spec_panel_header.py` enforce.
 
 **Never quote a pooled figure (ExpR, win rate, N, badge tier) from a document.**
 Re-derive it from the live book. A dev database's `journal_entries`, `trades`
@@ -196,37 +192,33 @@ investigating live bugs read the bind-mounted `/opt/swing-bot/logs/*.log*`, not
 `docker logs` (a deploy empties it), and split findings into still-firing versus
 historical (`working-conventions.md`).
 
-Read before acting:
-
-- `docs/claude/architecture.md` before changing `swingbot/core`, plan engine or
-  scan pipeline.
-- `docs/claude/known-traps.md` before changing data caching, scan output,
-  embeds, the 2% stop cap/clamp or the liquidity floor, or editing production
-  `.env` (edit in place, never `sed -i`).
-- `docs/claude/backtest-methodology.md` before running or interpreting a
-  backtest, grid or validation.
-- `docs/claude/edge-priorities.md` before choosing strategy work.
-- `docs/claude/document-conventions.md` before authoring a spec or plan.
-- `docs/claude/document-lifecycle.md` before closing a plan.
-- `docs/claude/working-conventions.md` before committing, changing
-  `VERSION.json`, mirroring a production change or investigating production.
-- `docs/claude/git-safety.md` before deleting branches or force-pushing.
-- `docs/claude/testing-cost.md` before optimizing, timing or interpreting a
-  changed test count.
-- `docs/claude/code-complexity.md` before writing or changing any function.
-- `docs/claude/model-routing.md` before writing a plan or dispatching a plan
-  task: the `**Model:**` tier rubric and the escalation ladder.
-- `docs/claude/schema-evolution.md` before changing a table's shape or the
-  fields a stored record carries (add, rename, drop, promote).
-
 Every trading and operational store is Postgres-only (v116): no JSON copy, no
 stages, no dual writes. Rollback is point-in-time: `scripts/ops/rollback_to.sh
 "<UTC>" [--dry-run]` on the VM (30 days; scanning restarts paused), with
 `pg_dump` files (90 days) as the day-level second method
 (`docs/deploy/DEPLOY_HETZNER.md`, `DB_RESTORE.md`). A DB write failure at
 issuance pauses scanning (`StoreWriteHalt`); unpause from the admin UI.
-- `docs/claude/skills-tools.md` before choosing repo-specific skills or
-  automation.
+
+Read the `docs/claude/` file before acting:
+
+- `architecture.md`: changing `swingbot/core`, plan engine or scan pipeline.
+- `known-traps.md`: data caching, scan output, embeds, the 2% stop cap/clamp,
+  the liquidity floor, or editing production `.env` (in place, never `sed -i`).
+- `backtest-methodology.md`: running or interpreting a backtest, grid or
+  validation. `edge-priorities.md`: choosing strategy work.
+- `document-conventions.md`: authoring a spec or plan.
+  `document-lifecycle.md`: closing a plan.
+- `working-conventions.md`: committing, `VERSION.json`, mirroring or
+  investigating production. `git-safety.md`: branch deletion, force-push.
+- `testing-cost.md`: optimizing, timing or a changed test count.
+- `code-complexity.md`: writing or changing any function.
+- `model-routing.md`: writing a plan or dispatching a plan task (the
+  `**Model:**` tier rubric and the escalation ladder).
+- `schema-evolution.md`: changing a table's shape or a stored record's fields.
+- `skills-tools.md`: choosing repo-specific skills or automation.
+- `ui-design.md`: any screen, table or pager: designed for mobile, tablet and
+  desktop together and checked at all three widths; tables page
+  5/10/20/50/100/All (10 desktop, 5 tablet/phone).
 
 ## Skills: the same ones Claude uses
 
@@ -245,13 +237,15 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | Changing the Postgres schema, a store's read/write path or a migration | `schema-change` |
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
+| Mining the live book for ranked hypotheses: `trade-scout` dispatches the read-only `scout` agent once per generator role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
 | Using the eToro Public API MCP (portfolio, instruments, real or demo trades) -- outside swingbot's paper-only scope | `etoro-public-api-operations` |
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 (extract one plan task with its trap preflight), `deploy` (Hetzner deploy
 sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
-backup pull), `result-digest` (two backtest `--json` files through
+backup pull), `replicate-prod-db` (read-only copy of the production database
+into a local replica database), `result-digest` (two backtest `--json` files through
 `compare_backtest_json.py`, output returned verbatim, never judged),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
@@ -276,7 +270,7 @@ fit, tax drag, alert cadence; educational, not personal financial advice),
 open), `technical-analyst` (S/R, pattern and indicator logic),
 `fundamental-analyst` (earnings, catalysts, sector and macro concentration),
 `staff-engineer` (seams, migrations, VM ops, blast radius),
-`quant-engineer` (lookahead, numerics, the two OHLCV caches, reproducibility),
+`quant-engineer` (lookahead, numerics, the OHLCV caches and training-data store, reproducibility),
 `senior-engineer` (code-level quality and the complexity limit).
 A role raises cited `BLOCKING`/`ADVISORY` findings; it never decides and never
 lowers a gate.
@@ -290,6 +284,11 @@ the `chrome-devtools-mcp` and `playwright` MCP plugins, and (v154)
 and the marketplace `skill-creator`. Codex has no counterpart to switch off;
 do not name their skills or agents (for example `feature-dev:code-reviewer`)
 as a next step.
+
+Drive any browser, including production at bomeo-capital.com, with Playwright
+(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile, so one
+sign-in lasts; paths without a leading slash). For production, launch it headed and let
+the partner type the credentials; never script, ask for or store that login.
 
 ## Efficient repository navigation
 
@@ -352,25 +351,30 @@ make up / make logs / make restart                    # docker compose lifecycle
 
 ## Testing and long-running work
 
-Use the wrapper rather than the raw suite; it prints a one-line verdict instead
-of ~1150 progress lines. Never re-run the full suite to check a local change.
+Use the wrapper, not raw pytest: a one-line verdict, not ~1150 progress
+lines. Never re-run the full suite to check a local change.
 
-- `python scripts/dev/testrun.py changed` — runs only the tests reaching your
-  diff, and widens to the full suite whenever it cannot be sure (registry
-  dispatch, an unplaceable file type, a failed git call). Inner loop only:
-  it is not a gate, and the plan-final full run is unchanged. `--dry-run`
-  prints the selection without running it, even when it widens to full.
-  `--audit` runs the selection then the full suite and reports failures the
-  selection missed (exit 1 on a miss; SKIPPED when it already widened;
-  UNKNOWN, exit 2, when the full run did not complete).
-- `python scripts/dev/testrun.py file tests/test_foo.py` while iterating.
-- `python scripts/dev/testrun.py fast` for broader, non-render-heavy checks.
-- `python scripts/dev/testrun.py full` once as final verification of an entire
-  plan; do not rerun it after a clean merge unless conflicts were resolved.
+All via `python scripts/dev/testrun.py <mode>`:
+
+- `changed` runs only the tests reaching your diff and widens to full whenever
+  it cannot be sure (registry dispatch, an unplaceable file type, a failed git
+  call). Inner loop only, not a gate. `--dry-run` prints the selection;
+  `--audit` runs it then the full suite and reports misses (exit 1 on a miss;
+  SKIPPED when it already widened; UNKNOWN, exit 2, if full did not complete).
+- `file tests/test_foo.py` while iterating; `fast` for broader checks.
+- `suite <name>` runs one feature's suite; `suites` lists them.
+- `full` once as final verification of an entire plan; not again after a clean
+  merge unless conflicts were resolved.
 - Same cadence for the frontend: `npm test -- --include <spec>` per task, a bare
   `cd frontend && npm test` only once as the plan's final verification if it
   touches `frontend/`. A full run to chase an already-observed failure is
   debugging, not a second verification step.
+
+**Tests live in suites** (`tests/suites.toml`). A new `tests/` directory joins
+exactly one suite in the same commit; a suite past `max_tests` is split by
+feature, never the limit raised. CI builds one job per suite from that file;
+never hand-list one in `deploy.yml` (`tests/dev/test_suites.py` enforces).
+Detail: `docs/claude/testing-cost.md` § Test suites.
 
 **A failed test is fixed and re-run alone** (`testrun.py file ...` or
 `pytest path::test`), never by re-running the whole suite; a fix touching other
@@ -382,9 +386,8 @@ failure; read the output rather than assuming. Prove correctness and move on:
 timings here swing 2-4x with machine load, so do not re-measure to justify a
 change. Backtests and grids run for minutes to hours; chunk them per strategy
 and do not launch broad sweeps casually. Any script past a couple of minutes
-must print flushed per-unit progress; past 15 minutes that record must resolve
-to a percent-complete figure (rewritten each unit, not summed by the reader) in
-a log deleted on completion, so "how far along" is answered with a number.
+prints flushed per-unit progress; past 15 minutes, a percent-complete figure
+rewritten each unit (never summed by the reader) in a log deleted on completion.
 
 Use at most one subagent at a time by default: dispatch it, wait for its result,
 then decide whether another is needed. Parallel subagents need the human
@@ -398,11 +401,10 @@ same work to them so bulk output stays out of your context:
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
 from a `task-brief`), `plan-briefer` (gathers a spec's code context into
 `.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
-approved spec and that brief, in two phases: `mode=index` writes the index and task ledger first, then one
-`mode=part <N>` run per part, one at a time here; each run appends task by
-task to disk rather than writing the file at the end; at most 2 plans in
-progress per session, and a plan cut off mid-write is resumed from its first
-missing task, never skipped or restarted. The SessionStart hook prints
+approved spec and that brief: `mode=index` (index and task ledger) first,
+then one `mode=part <N>` per part, one at a time here, each appending task by
+task to disk; at most 2 plans in progress per session; a plan cut off
+mid-write resumes from its first missing task, never skipped or restarted. The SessionStart hook prints
 `PLAN WIP` for such a plan: resume it before new work. Record partner
 decisions in the index's `## Handoff` section as they are made, and commit
 the index, each part and any partial files (`docs(vN): plan WIP`) as you

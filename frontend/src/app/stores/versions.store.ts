@@ -97,6 +97,8 @@ interface VersionsSlice {
   loading: boolean;
   error: string | null;
   page: number;
+  /** Rows per page; 0 = all. The workspace sets it from the saved choice. */
+  perPage: number;
   filter: VersionFilter;
   /** Measured by the component. The floor is a PIXEL rule, so the geometry
    *  cannot be computed without knowing how wide the strip actually is. A
@@ -123,6 +125,7 @@ export const VersionsStore = signalStore(
     loading: false,
     error: null,
     page: 1,
+    perPage: PAGE_SIZE,
     filter: null,
     stripWidth: 800,
   }),
@@ -156,10 +159,11 @@ export const VersionsStore = signalStore(
       return all.filter((r) => r.versions[active.component] === active.version);
     }),
   })),
-  withComputed(({ matching, page }) => ({
+  withComputed(({ matching, page, perPage }) => ({
     visible: computed<Release[]>(() => {
-      const start = (page() - 1) * PAGE_SIZE;
-      return matching().slice(start, start + PAGE_SIZE);
+      if (perPage() <= 0) return matching();
+      const start = (page() - 1) * perPage();
+      return matching().slice(start, start + perPage());
     }),
 
     pageSpec: computed<PageSpec>(() => ({
@@ -167,7 +171,7 @@ export const VersionsStore = signalStore(
       // show a single page however much history is behind it.
       total: matching().length,
       page: page(),
-      perPage: PAGE_SIZE,
+      perPage: perPage(),
     })),
   })),
   withComputed(({ data, components, visible, stripWidth }) => ({
@@ -288,6 +292,7 @@ export const VersionsStore = signalStore(
       resolve,
       load(): void { resolve().subscribe({ error: () => undefined }); },
       setPage(n: number): void { patchState(store, { page: Math.max(1, n) }); },
+      setPerPage(n: number): void { patchState(store, { perPage: n, page: 1 }); },
       setStripWidth(px: number): void { patchState(store, { stripWidth: Math.max(1, Math.round(px)) }); },
       toggleFilter(component: string, version: string): void {
         const active = store.filter(); const same = active?.component === component && active?.version === version;

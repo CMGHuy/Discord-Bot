@@ -34,7 +34,8 @@ from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.planning.account import load_account_config
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, lane_overlap, qualify, runstate, scan_run, short_funnel, telemetry
+from . import (analyze, dedup, fetch, lane_overlap, qualify, rejection_recorder, runstate, scan_run,
+               short_funnel, telemetry)
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
 from .short_candidates import admitted_short_modes, extra_symbols
@@ -151,6 +152,7 @@ def _qualified_items(items, require_confirmation, frames, lane) -> list:
     for item in items:
         verdict = qualify.qualify_short_item(item.candidate_context, item, context)
         qualify.record_verdict(lane.get("funnel"), verdict)
+        rejection_recorder.record_short_verdict(verdict, frames)
         if isinstance(verdict, qualify.Accepted):
             kept.append(item)
     return kept
@@ -191,7 +193,8 @@ def _log_trade(item, nums, explanation, fit, alerts, origin=None):
         cohort_label=plan_v2.cohort_label if plan_v2 is not None else None,
         cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
         risk_features=plan_v2.risk_features if plan_v2 is not None else None,
-        entry_context=plan_v2.entry_context if plan_v2 is not None else None, origin=origin)
+        entry_context=plan_v2.entry_context if plan_v2 is not None else None, origin=origin,
+        **scan_run._confidence_point_kwargs(conf))
 
 
 def _render_chart(item, nums, df, frames, spy_df, trade_id, fit):

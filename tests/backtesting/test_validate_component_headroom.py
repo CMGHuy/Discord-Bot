@@ -9,6 +9,7 @@ from swingbot.core.backtesting.arms.headroom_clauses import Reading
 from swingbot.core.backtesting.arms.provenance import build_stamp
 from swingbot.core.backtesting.arms.windows import ALL_HORIZONS, STAGES
 from tests.backtesting.test_validate_component_stamps import UNIVERSE, rows, vc
+from tests.backtesting.test_validate_component_stamps import _legacy_source  # noqa: F401 v162 pin
 
 NEAR, CLEAR = Reading((0.5, 2.0), 3), Reading(None, 3)   # 0.25R away: inside every grid value
 

@@ -30,6 +30,16 @@ def write(tmp_path, stage, knobs, baseline, component, universe=UNIVERSE):
 @pytest.fixture(autouse=True)
 def universe(monkeypatch): monkeypatch.setattr(vc, "_full_universe", lambda: UNIVERSE)
 
+
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot import config
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
 def test_reachability_passes_a_reachable_knob_that_changed_trades(tmp_path, capsys):
     assert vc.main(["--stage", "reachability", "--arms", str(write(tmp_path, "pilot", {"MIN_REWARD_PCT": 4.0}, *rows())), "--title", "t", "--window", "pilot"]) == 0
     assert "REACHABLE" in capsys.readouterr().out

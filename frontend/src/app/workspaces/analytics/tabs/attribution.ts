@@ -146,7 +146,7 @@ export const TAKEN_CAPTION =
         <sb-panel-error [message]="error" (retry)="store.reload('byDimension')" />
       } @else {
         <sb-data-table [rows]="dimensionRows()" [columns]="dimensionCols()" [visible]="dimensionVisible()"
-                       [rowKey]="dimensionRowKey" />
+                       [rowKey]="dimensionRowKey" clientPaging="analytics-attribution" />
       }
     </sb-panel>
   `,

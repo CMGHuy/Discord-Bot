@@ -11,6 +11,9 @@ Profiles (see docs/claude/testing-cost.md for the measurements behind them):
     python scripts/dev/testrun.py fast              # -m "not slow", serial   ~27s
     python scripts/dev/testrun.py full              # -n 4                    ~40s
     python scripts/dev/testrun.py full tests/charts/ tests/admin/  # shard, -n 4
+    python scripts/dev/testrun.py suite charts      # one suite from tests/suites.toml, -n 4
+    python scripts/dev/testrun.py suites            # list the suites (--matrix: CI JSON)
+    python scripts/dev/testrun.py lint              # only the undefined-name gate
     python scripts/dev/testrun.py file tests/x.py   # one path, serial         ~7s
     python scripts/dev/testrun.py lf                # --lf, serial          seconds
     python scripts/dev/testrun.py changed          # only tests reaching your diff
@@ -52,6 +55,7 @@ WORKERS = "4"
 # loads it via spec_from_file_location. Insert explicitly so both work.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from select_tests import ESCALATE_PREFIXES, Selection, select  # noqa: E402
+import suites  # noqa: E402
 
 # 127.0.0.1, not localhost: docker publishes the port on IPv4 only, and on Windows
 # "localhost" tries IPv6 first and stalls ~5s per connection before falling back.
@@ -64,7 +68,7 @@ TEST_DB_URL_DEFAULT = "postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/sw
 # conclude "passed". -v gives per-test node IDs, which is what the progress
 # tracker keys off; it is verbose on purpose because it lands in the log,
 # not in anyone's context.
-BASE = ["-o", "addopts=", "-v", "--tb=short", "-rf", "-p", "no:cacheprovider"]
+BASE = ["-o", "addopts=", "-v", "--tb=short", "-rfE", "-p", "no:cacheprovider"]
 
 # Matches the node id in both serial (`tests/x.py::test_y PASSED [ 5%]`) and
 # xdist (`[gw2] [ 5%] PASSED tests/x.py::test_y`) verbose output.
@@ -198,12 +202,25 @@ def _pyflakes_undefined(paths: list[str]) -> list[str]:
     return [line for line in result.stdout.splitlines() if "undefined name" in line]
 
 
+def suite_paths(target: list[str] | None) -> list[str]:
+    """`suite <name>` -> the pytest paths for that suite (exits on a bad name)."""
+    if not target or len(target) != 1:
+        sys.exit("testrun.py suite <name>: exactly one suite name; "
+                 f"known: {', '.join(suites.names())}")
+    try:
+        return suites.paths_for(target[0])
+    except KeyError as exc:
+        sys.exit(str(exc.args[0]))
+
+
 def build_args(profile: str, target: list[str] | None,
                targets: list[str] | None = None) -> list[str]:
     if profile == "fast":
         return BASE + ["-m", "not slow", "tests/"]
     if profile == "full":
         return BASE + ["-n", WORKERS, "--dist", "worksteal", *(target or ["tests/"])]
+    if profile == "suite":
+        return BASE + ["-n", WORKERS, "--dist", "worksteal", *suite_paths(target)]
     if profile == "lf":
         return BASE + ["--lf", "tests/"]
     if profile == "changed":
@@ -362,10 +379,13 @@ def build_parser() -> argparse.ArgumentParser:
     real strings, not hand-picked ones.
     """
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("profile", choices=["fast", "full", "file", "lf", "changed"])
+    ap.add_argument("profile", choices=["fast", "full", "file", "lf", "changed", "suite", "suites", "lint"])
     ap.add_argument("target", nargs="*",
                     help="`file`: one or more paths. `full`: shard to these "
-                         "paths instead of all of tests/. Ignored otherwise.")
+                         "paths instead of all of tests/. `suite`: the suite name. "
+                         "Ignored otherwise.")
+    ap.add_argument("--matrix", action="store_true",
+                    help="`suites`: print the GitHub Actions `matrix=` output line")
     ap.add_argument("--no-escalate", action="store_true",
                     help="keep `fast` narrow even if chart/template files changed")
     ap.add_argument("--skip-lint-gate", action="store_true",
@@ -421,9 +441,22 @@ def report(counts: dict[str, int], failed: list[str], elapsed: float, rc: int,
     return 1
 
 
+def run_no_pytest_profile(profile: str, matrix: bool) -> int:
+    """`suites` (list them) and `lint` (the undefined-name gate alone)."""
+    if profile == "lint":
+        return lint_gate() or 0
+    print(suites.github_matrix() if matrix else "\n".join(suites.names()))
+    return 0
+
+
 def main() -> int:
     args = build_parser().parse_args()
+    if args.profile in ("suites", "lint"):
+        return run_no_pytest_profile(args.profile, args.matrix)
+    return run_pytest_profile(args)
 
+
+def run_pytest_profile(args) -> int:
     profile = args.profile
     targets: list[str] | None = None
 

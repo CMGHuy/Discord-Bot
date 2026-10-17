@@ -241,7 +241,7 @@ describe('Risk gauge, budget and correlation matrix', () => {
     const el = (await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52 } }))
       .nativeElement as HTMLElement;
     expect(el.querySelector('sb-gauge')).toBeNull();
-    expect(el.querySelector('.heat-note')!.textContent).toContain('52% of the 6.0% cap');
+    expect(el.querySelector('.heat-note')!.textContent).toContain('52% of the risk budget is used');
   });
 
   it('shows a utilisation past the cap truthfully', async () => {

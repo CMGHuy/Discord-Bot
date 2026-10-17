@@ -21,8 +21,6 @@ import { Density } from './data-table/data-table.types';
  * migration of everything already saved.
  */
 
-const DEFAULT_PER_PAGE = 25;
-
 /** "All" — the UI's word for it, and 0 on the wire between the selector and
  *  the store. Never sent to the API; see `perPageForApi`. */
 export const ALL_PER_PAGE = 0;
@@ -36,9 +34,18 @@ export const API_MAX_PER_PAGE = 200;
  *  this set is treated as absent — it would otherwise let a hand-edited
  *  preference ask the server for an unbounded page.
  *
- *  SR12 originally listed 100 here; SR15 specifies 10/25/50/All, and SR15 is
- *  the task that actually renders the control, so its set wins. */
-export const PER_PAGE_OPTIONS = [10, 25, 50, ALL_PER_PAGE] as const;
+ *  v167: 5/10/20/50/100/All. */
+export const PER_PAGE_OPTIONS = [5, 10, 20, 50, 100, ALL_PER_PAGE] as const;
+
+/** Rows per page when nothing is saved: a phone or tablet shows 5 so the
+ *  pager stays on screen, a desktop shows 10. */
+export const DEFAULT_PER_PAGE_DESKTOP = 10;
+export const DEFAULT_PER_PAGE_COMPACT = 5;
+
+/** The default for a device class (`compact` = tablet and phone). */
+export function defaultPerPage(compact: boolean): number {
+  return compact ? DEFAULT_PER_PAGE_COMPACT : DEFAULT_PER_PAGE_DESKTOP;
+}
 
 /**
  * What to actually send as `per_page`.
@@ -105,23 +112,31 @@ export function writeTableColumns(
   return { ...prefs, [key(tableId, density, 'columns')]: [...columns] };
 }
 
+function perPageKey(tableId: string, compact: boolean): string {
+  return `tables.${tableId}.${compact ? 'compact' : 'desktop'}.per_page`;
+}
+
+/** Saved per table AND per device class, so choosing 50 on a laptop does not
+ *  put 50 rows on a phone. `compact` is tablet and phone. */
 export function readTablePerPage(
   prefs: Preferences,
   tableId: string,
-  defaultPerPage = DEFAULT_PER_PAGE,
+  compact = false,
+  fallback = defaultPerPage(compact),
 ): number {
-  const stored = prefs[`tables.${tableId}.per_page`];
+  const stored = prefs[perPageKey(tableId, compact)];
   return typeof stored === 'number' && (PER_PAGE_OPTIONS as readonly number[]).includes(stored)
     ? stored
-    : defaultPerPage;
+    : fallback;
 }
 
 export function writeTablePerPage(
   prefs: Preferences,
   tableId: string,
+  compact: boolean,
   perPage: number,
 ): Preferences {
-  return { ...prefs, [`tables.${tableId}.per_page`]: perPage };
+  return { ...prefs, [perPageKey(tableId, compact)]: perPage };
 }
 
 /**

@@ -11,10 +11,8 @@ import { STATUS_ICON } from '../../ui/icon';
 import { Tab, TabBar } from '../../ui/layout';
 import { Async, asyncInputs } from '../../ui/async';
 import { Freshness } from '../../ui/freshness';
-
-/** The Dashboard keeps every lifecycle tab scannable while still making the
- * full set reachable through the table's pager. */
-export const OPEN_POSITIONS_PER_PAGE = 5;
+import { tablePerPage } from '../../ui/table-per-page';
+import { perPageForApi } from '../../ui/table-prefs';
 
 /** Lifecycle order, not size order: this is the order a plan moves through,
  *  and sorting by count would reshuffle the strip every time a trade closed.
@@ -25,8 +23,8 @@ export const OPEN_POSITIONS_PER_PAGE = 5;
  *  different surface -- it names a whole group, not one row's status, and
  *  is exactly what a mobile-width icon-only tab needs to stay legible). */
 export const POSITION_TABS: (Tab & { status: string; scoped: boolean })[] = [
-  { id: 'ACTIVE',    label: 'Open',      icon: STATUS_ICON['ACTIVE'],    status: 'ACTIVE',    scoped: false },
   { id: 'PENDING',   label: 'Pending',   icon: STATUS_ICON['PENDING'],   status: 'PENDING',   scoped: false },
+  { id: 'ACTIVE',    label: 'Open',      icon: STATUS_ICON['ACTIVE'],    status: 'ACTIVE',    scoped: false },
   { id: 'PARTIAL',   label: 'Partial',   icon: STATUS_ICON['PARTIAL'],   status: 'PARTIAL',   scoped: false },
   { id: 'CLOSED',    label: 'Closed',    icon: STATUS_ICON['CLOSED'],    status: 'CLOSED',    scoped: true  },
   { id: 'CANCELLED', label: 'Cancelled', icon: STATUS_ICON['CANCELLED'], status: 'CANCELLED', scoped: true  },
@@ -84,6 +82,9 @@ const EMPTY_STATES: Record<string, EmptyState> = {
         [emptyState]="emptyState()"
         [pagination]="trades.pagination()"
         [fillPage]="false"
+        [showPerPage]="true"
+        [perPageChoice]="perPage()"
+        (perPageChange)="onPerPage($event)"
         (rowActivate)="rowActivate.emit($event)"
         (reorder)="reorder.emit($event)"
         (pageChange)="goToPage($event)"
@@ -116,7 +117,10 @@ export class PositionsTable {
   readonly visibleFor = input.required<(tab: string) => string[]>();
   readonly pinned = input<string[]>([]);
   readonly rowKey = input.required<(row: TradeRow) => string>();
-  readonly perPage = input(OPEN_POSITIONS_PER_PAGE);
+  /** Rows per page: saved per device class, 10 on desktop and 5 on tablet
+   *  and phone (v167). "All" is sent as the API's cap. */
+  private readonly perPageState = tablePerPage('dashboard-positions');
+  protected readonly perPage = this.perPageState.value;
 
   readonly rowActivate = output<TradeRow>();
   readonly reorder = output<string[]>();
@@ -152,6 +156,11 @@ export class PositionsTable {
     this.page.set(page);
   }
 
+  protected onPerPage(value: number): void {
+    this.perPageState.set(value);
+    this.page.set(1);
+  }
+
   constructor() {
     // Page resets on tab change: landing on page 3 of a table you just
     // switched to shows a slice of something you have not seen the start of.
@@ -169,7 +178,7 @@ export class PositionsTable {
         today: tab?.scoped ? (this.today() ?? undefined) : undefined,
         sort: '-opened_at',
         page: this.page(),
-        per_page: this.perPage(),
+        per_page: perPageForApi(this.perPage()),
       });
     });
   }

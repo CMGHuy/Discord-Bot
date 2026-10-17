@@ -97,6 +97,15 @@ class TradePlanV2:
     # quality_score -- optional because not every _apply_quality caller
     # (e.g. the offline decile-audit script) has a live scan's conf in hand.
     confidence_level: int | None = None
+    # v146 I1: the integer each scored confidence factor added, keyed as the
+    # trade's confidence_breakdown is, and the factors whose reading was a
+    # neutral fallback for a missing input. Set where confidence_level is
+    # set (_apply_quality, from the live scan's item.conf). None for every
+    # replayed plan, every caller with no live conf, and every record
+    # persisted before v146 -- plans are never backfilled, there is no
+    # source text to parse.
+    confidence_points: dict | None = None
+    confidence_unevaluated: list | None = None
     # The ET session dates on which break-even and runner-floor protections
     # armed. None marks legacy plans whose persisted record predates v64.
     be_armed_session: str | None = None
@@ -129,6 +138,14 @@ class TradePlanV2:
     # Set only by an enabled acceptance arm (planning/acceptance_levels.py);
     # None = no close exit. Read by exit_sim.acceptance_exit.
     acceptance_close_below: float | None = None
+    # v139 arm S: the planned-loss ceiling (percent) this plan is held to --
+    # the c of CONFLUENCE_STRUCTURAL_STOP_PCT it was built under, when it kept
+    # a structural stop past the 2% cap. None = today's ceiling
+    # (stop_scope.plan_stop_ceiling: 2% for confluence, the v104 scope
+    # ceiling for strategy plans). Set only by
+    # builders.confluence_stop_geometry; read by plan_stop_ceiling,
+    # risk_sizing_ok and analyze.attach_plan_v2.
+    stop_ceiling_pct: float | None = None
     # v119 ten-session time exit (planning/time_exit.py). pending_time_notices:
     # the due / unresolved notices not yet acknowledged, one dict per notice
     # {"id", "transition", "detail", "at", "acked"}; a list because a due notice

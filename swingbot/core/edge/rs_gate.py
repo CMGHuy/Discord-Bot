@@ -48,3 +48,13 @@ def rs_verdict(symbol: str, direction: str, rs_value: float,
     return {"status": "block",
             "reason": f"RS {rs_value:.0f} above the "
                       f"{config.RS_LAGGARD_PERCENTILE:.0f} laggard threshold"}
+
+
+def rs_margin(rs_value: float) -> float:
+    """v147: signed distance of an RS reading past the bearish laggard line.
+
+    Positive = the blocked side. The only live arm of this gate is bearish
+    (module docstring), so the margin is measured against the laggard
+    threshold, read at call time like rs_verdict reads it. Measurement only:
+    nothing decides on this value."""
+    return float(rs_value) - float(config.RS_LAGGARD_PERCENTILE)

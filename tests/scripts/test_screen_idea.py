@@ -281,3 +281,370 @@ def test_results_doc_states_the_event_start_and_year_rule(tmp_path, capsys):
     out = capsys.readouterr().out
     assert (f"events count from {screen_idea.EVENT_START}" in out
             and f"{verdict.MIN_POSITIVE_YEARS} of {len(verdict.YEARS)} calendar years" in out)
+
+
+# --- v163: a fixed idea's results doc and ledger row stay byte-identical ---
+
+from swingbot.core.backtesting.screen import race  # noqa: E402
+
+
+def _fixed_doc_inputs():
+    """A hand-built fixed-idea summary: every section of the doc renders and
+    nothing depends on a bootstrap or a cache."""
+    idea = IDEAS["gap_volume"]
+    per_year = {year: (40 + year - 2011, 0.01 * (year - 2015)) for year in verdict.YEARS}
+    v = verdict.Verdict("SCREEN-FAIL", 412, 0.031234567, -0.01, 0.07, 0.2345678, 4,
+                        per_year, {"exp_r": False, "ci": False, "years": False, "n": True})
+    summary = {
+        "verdict": v,
+        "counters": Counter(dropped_nonmember=7, dropped_warmup=11, dropped_window=2,
+                            skipped_overlap=5, dropped_no_match=1),
+        "skipped": Counter(empty_frame=1),
+        "event_outcomes": Counter(gap_stop=12, stop=200, target=150, timeout=50),
+        "null_outcomes": Counter(gap_stop=200, gap_target=40, stop=4000, target=2900,
+                                 timeout=1100),
+        "mean_r_event": 0.1234567, "mean_r_null": 0.0921,
+        "drift": {5: (412, 0.05), 10: (412, -0.02), 20: (410, None), 60: (0, None)},
+        "rank": {5: {2011: 0.01, 2012: -0.03}, 10: {2011: None, 2012: 0.02}},
+    }
+    universe = screen_idea.Universe(intervals={}, members=["AAA", "BBB", "ZZZ"],
+                                    cached=["AAA", "BBB"], missing=["ZZZ"])
+    run = {"ledger_id": "screen-gap_volume", "q": 0.1234, "date": "2026-10-09",
+           "start": "2010-01-01", "end": "2019-12-31", "slippage_bps": 5.0,
+           "commission": 0.02}
+    return idea, summary, universe, run
+
+
+# Rendered on main @ 7fcccfed (screen code == 316c57e9), before v163. Never edit.
+FIXED_DOC = (
+    '# v140 screen: `gap_volume` -> SCREEN-FAIL\n'
+    '\n'
+    '**Ledger id:** `screen-gap_volume` (instrument `screen-v1`); BH q = 0.1234 across the ledger (reported, never gating).\n'
+    '\n'
+    '**Run:** 2026-10-09; window 2010-01-01..2019-12-31; events count from 2011-01-01 (earlier bars only prime the indicators); the year rule is 7 of 9 calendar years (2011-2019); `python scripts/backtest/screen_idea.py --idea gap_volume`; null K = 20, seed 42 per (idea, ticker); bootstrap 10,000 week resamples, seed 42.\n'
+    '\n'
+    '**Trigger:** open >= prior close + 1.0 x prior ATR14, volume >= 2 x the 50-bar mean volume ending the prior bar, close >= open (earnings/news gap drift; volume as the news proxy); params gap_atr=1.0, atr_n=14, volume_mult=2.0, volume_window=50; time cap 20 bars; long only.\n'
+    '\n'
+    '**Trade:** entry next open; stop 1.5 x ATR14; target 3.0 x ATR14; a gap through either level fills at the open; stop first on a bar touching both; costs 5.0 bps a side + 0.0200R commission.\n'
+    '\n'
+    '**Spec:** `docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md`\n'
+    '\n'
+    '## Universe and counters\n'
+    '\n'
+    '| | count |\n'
+    '|---|---|\n'
+    '| point-in-time S&P 500 members in the window | 3 |\n'
+    '| cached and screened | 2 |\n'
+    '| missing from the cache (survivorship that remains) | 1 |\n'
+    '| cached but empty inside the window | 1 |\n'
+    '| raw events | 438 |\n'
+    '| `dropped_nonmember` | 7 |\n'
+    '| `dropped_warmup` | 11 |\n'
+    '| `dropped_window` | 2 |\n'
+    '| `skipped_overlap` | 5 |\n'
+    '| `dropped_no_match` | 1 |\n'
+    '| **kept events (N)** | **412** |\n'
+    '\n'
+    'PIT members missing from the cache: ZZZ.\n'
+    '\n'
+    '## Verdict: SCREEN-FAIL\n'
+    '\n'
+    '| Clause | Measured | Rule | Holds |\n'
+    '|---|---|---|---|\n'
+    '| ΔExpR = mean(R_event − mean R_null) | +0.0312R | ≥ +0.10R | **no** |\n'
+    '| lower 95% bound, week-clustered bootstrap | -0.0100R (upper +0.0700R) | > 0 | **no** |\n'
+    '| years with mean(d) > 0 | 4 of 9 | ≥ 7 | **no** |\n'
+    '| kept events N | 412 | ≥ 300 | yes |\n'
+    '\n'
+    'One-sided bootstrap p (share of resamples ≤ 0): 0.2346. N < 300 is `SCREEN-UNDERPOWERED` whatever the other clauses say.\n'
+    '\n'
+    '## Both arms\n'
+    '\n'
+    "Mean R_event +0.1235R; mean R_null (each event's null mean, averaged) +0.0921R. Both after costs.\n"
+    '\n'
+    '| Exit | event arm | null arm |\n'
+    '|---|---|---|\n'
+    '| gap_stop | 12 (2.9%) | 200 (2.4%) |\n'
+    '| gap_target | 0 (0.0%) | 40 (0.5%) |\n'
+    '| stop | 200 (48.5%) | 4000 (48.5%) |\n'
+    '| target | 150 (36.4%) | 2900 (35.2%) |\n'
+    '| timeout | 50 (12.1%) | 1100 (13.3%) |\n'
+    '\n'
+    '## Per year\n'
+    '\n'
+    '| Year | N | mean(d) |\n'
+    '|---|---|---|\n'
+    '| 2011 | 40 | -0.0400R |\n'
+    '| 2012 | 41 | -0.0300R |\n'
+    '| 2013 | 42 | -0.0200R |\n'
+    '| 2014 | 43 | -0.0100R |\n'
+    '| 2015 | 44 | +0.0000R |\n'
+    '| 2016 | 45 | +0.0100R |\n'
+    '| 2017 | 46 | +0.0200R |\n'
+    '| 2018 | 47 | +0.0300R |\n'
+    '| 2019 | 48 | +0.0400R |\n'
+    '\n'
+    '## Forward drift (reported, never gating)\n'
+    '\n'
+    'Mean excess forward return in ATR14 units from the signal close, event minus its matched null.\n'
+    '\n'
+    '| h (bars) | events | mean excess (ATR) |\n'
+    '|---|---|---|\n'
+    '| 5 | 412 | +0.0500 |\n'
+    '| 10 | 412 | -0.0200 |\n'
+    '| 20 | 410 | n/a |\n'
+    '| 60 | 0 | n/a |\n'
+    '\n'
+    'Spearman rank correlation, raw event indicator vs h-bar forward return, member and warm bars pooled across tickers per year:\n'
+    '\n'
+    '| Year | h=5 | h=10 |\n'
+    '|---|---|---|\n'
+    '| 2011 | +0.0100 | n/a |\n'
+    '| 2012 | -0.0300 | +0.0200 |\n'
+)
+
+FIXED_HYPOTHESIS = (
+    'gap_volume: open >= prior close + 1.0 x prior ATR14, volume >= 2 x the 50-bar mean volume ending the prior bar'
+    ', close >= open; fixed 1.5/3.0 ATR race vs K=20 matched null, cap 20, PIT S&P 500 2010-2019, after costs (v140 screen)')
+
+
+def test_a_fixed_idea_renders_its_results_doc_byte_identical_to_v140():
+    idea, summary, universe, run = _fixed_doc_inputs()
+    assert idea.race_shape == "fixed"
+    assert screen_idea.render_results(idea, summary, universe, run) == FIXED_DOC
+
+
+def test_a_fixed_idea_ledger_row_is_unchanged():
+    idea, summary, _, _ = _fixed_doc_inputs()
+    row = screen_idea.ledger_row(idea, summary["verdict"], "docs/x.md", "2026-10-09")
+    stats.validate_ledger_row(row)
+    assert row == {"id": "screen-gap_volume", "date": "2026-10-09",
+                   "hypothesis": FIXED_HYPOTHESIS, "instrument": "screen-v1",
+                   "n": 412, "exp_r": 0.0312, "p": 0.2346,
+                   "verdict": "SCREEN-FAIL", "record": "docs/x.md",
+                   "data_source": "yfinance"}
+
+
+def test_mix_lists_one_cell_per_outcome_of_the_shape():
+    fixed = screen_idea._mix(Counter(stop=3, target=1), race.SHAPE_OUTCOMES["fixed"])
+    assert fixed == ["0 (0.0%)", "0 (0.0%)", "3 (75.0%)", "1 (25.0%)", "0 (0.0%)"]
+    assert screen_idea._mix(Counter(), race.SHAPE_OUTCOMES["trail"]) == ["0"] * 5
+
+
+def test_render_arms_lists_only_the_shape_outcomes():
+    summary = {"mean_r_event": 0.5, "mean_r_null": 0.1,
+               "event_outcomes": Counter(trail=2, gap_trail=1, stop=1),
+               "null_outcomes": Counter(timeout=4)}
+    rows = [line for line in screen_idea._render_arms(summary, race.SHAPE_OUTCOMES["trail"])
+            if line.startswith("| ") and not line.startswith("| Exit")]
+    assert [row.split(" | ")[0][2:] for row in rows] == [
+        "gap_stop", "stop", "gap_trail", "trail", "timeout"]
+    fixed = screen_idea._render_arms(summary, race.SHAPE_OUTCOMES["fixed"])
+    assert not any("trail" in line for line in fixed)
+
+
+# --- v163: the idea's shape reaches the race; trail-only timeout and stress data
+
+from swingbot.core.backtesting.screen import race as race_mod  # noqa: E402
+from swingbot.core.backtesting.screen.ideas import Idea  # noqa: E402
+
+
+def _trail_probe(cap=60):
+    """turn_of_month's trigger raced under the trail shape; never registered."""
+    return Idea(name="trail_probe", events=IDEAS["turn_of_month"].events,
+                time_cap_bars=cap, race_shape="trail", summary="probe", source="test")
+
+
+def test_base_slippage_reads_config_only_when_none(monkeypatch):
+    monkeypatch.setattr(screen_idea.config, "SLIPPAGE_BPS", 7.0, raising=False)
+    assert screen_idea.base_slippage(None) == 7.0
+    assert screen_idea.base_slippage(3.0) == 3.0
+    assert screen_idea.base_slippage(0.0) == 0.0
+    assert screen_idea.STRESS_SLIPPAGE_FACTOR == 2
+
+
+def test_screen_ticker_passes_the_idea_shape_to_book_and_null(monkeypatch):
+    shapes = {"book": [], "null": []}
+    real_book, real_null = race_mod.run_book, null.matched_null
+
+    def book_spy(*args, **kwargs):
+        shapes["book"].append(kwargs.get("shape"))
+        return real_book(*args, **kwargs)
+
+    def null_spy(*args, **kwargs):
+        shapes["null"].append(kwargs.get("shape"))
+        return real_null(*args, **kwargs)
+
+    monkeypatch.setattr(race_mod, "run_book", book_spy)
+    monkeypatch.setattr(null, "matched_null", null_spy)
+    df = random_walk(2600)
+    screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS)
+    assert shapes == {"book": ["fixed"], "null": ["fixed"]}
+    shapes["book"].clear()
+    shapes["null"].clear()
+    screen_idea.screen_ticker(_trail_probe(), "AAA", df, ALWAYS)
+    # the base book, then the 2 x slippage re-race
+    assert shapes == {"book": ["trail", "trail"], "null": ["trail", "trail"]}
+
+
+def test_a_fixed_idea_carries_no_trail_only_data():
+    out = screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", random_walk(2600), ALWAYS)
+    assert out.null_timeout_r == [] and out.stressed is None
+
+
+def test_a_trail_idea_races_only_trail_outcomes():
+    out = screen_idea.screen_ticker(_trail_probe(), "AAA", random_walk(2600), ALWAYS)
+    allowed = set(race_mod.SHAPE_OUTCOMES["trail"])
+    assert out.events
+    assert {row["outcome"] for row in out.events} <= allowed
+    assert set(out.null_outcomes) <= allowed
+    assert "target" not in out.null_outcomes and "gap_target" not in out.null_outcomes
+
+
+def test_trail_null_timeout_r_is_every_null_timeout():
+    out = screen_idea.screen_ticker(_trail_probe(), "AAA", random_walk(2600), ALWAYS)
+    assert out.null_outcomes["timeout"] > 0
+    assert len(out.null_timeout_r) == out.null_outcomes["timeout"]
+    assert all(np.isfinite(out.null_timeout_r))
+
+
+def test_stressed_rows_equal_a_rerun_at_twice_the_slippage():
+    df = random_walk(2600)
+    idea = _trail_probe()
+    base = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS, slippage_bps=5.0, commission=0.0)
+    double = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS, slippage_bps=10.0, commission=0.0)
+    assert base.stressed == [{"entry_date": r["entry_date"], "r_event": r["r_event"],
+                              "r_null": r["r_null"]} for r in double.events]
+    assert [r["entry_date"] for r in base.stressed] == [r["entry_date"] for r in base.events]
+    assert all(s["r_event"] < r["r_event"] for s, r in zip(base.stressed, base.events))
+
+
+def _screen(events, null_outcomes, *, null_timeout_r=(), stressed=None):
+    empty_rank = pd.DataFrame(columns=["year", "event"]
+                              + [f"fwd_{h}" for h in forward.HORIZONS])
+    return screen_idea.TickerScreen(
+        ticker="AAA", counters=Counter(), events=events,
+        null_outcomes=Counter(null_outcomes),
+        excess={h: [] for h in forward.HORIZONS}, rank=empty_rank,
+        null_timeout_r=list(null_timeout_r), stressed=stressed)
+
+
+def _row(day, r_event, r_null, outcome):
+    return {"ticker": "AAA", "entry_date": day, "exit_date": day,
+            "r_event": r_event, "r_null": r_null, "outcome": outcome}
+
+
+def test_summarise_reports_timeouts_per_book():
+    rows = [_row("2012-03-01", 2.0, 0.5, "timeout"), _row("2012-04-02", -1.0, 0.0, "stop"),
+            _row("2013-05-01", 4.0, 0.5, "timeout"), _row("2013-06-03", 1.5, 0.5, "trail")]
+    screen = _screen(rows, {"timeout": 2, "trail": 5, "stop": 3}, null_timeout_r=[0.5, 1.5])
+    out = screen_idea.summarise([screen])
+    assert out["timeouts"]["event"] == (2, 0.5, pytest.approx(3.0))
+    assert out["timeouts"]["null"] == (2, 0.2, pytest.approx(1.0))
+
+
+def test_summarise_timeouts_and_stress_are_empty_for_an_empty_book():
+    out = screen_idea.summarise([_screen([], {})])
+    assert out["timeouts"] == {"event": (0, None, None), "null": (0, None, None)}
+    assert out["stress"] is None
+
+
+def test_summarise_stress_verdict_pools_only_stressed_rows():
+    rows = [_row("2012-03-01", 2.0, 0.5, "timeout"), _row("2013-04-02", -1.0, 0.0, "stop")]
+    stressed = [{"entry_date": "2012-03-01", "r_event": 1.9, "r_null": 0.45},
+                {"entry_date": "2013-04-02", "r_event": -1.1, "r_null": -0.05}]
+    trail = _screen(rows, {"timeout": 1}, null_timeout_r=[0.3], stressed=stressed)
+    fixed = _screen([_row("2014-01-02", 1.0, 0.0, "target")], {"target": 1})
+    out = screen_idea.summarise([trail, fixed])
+    assert out["stress"].n == 2
+    assert out["stress"].delta_exp_r == pytest.approx(((1.9 - 0.45) + (-1.1 + 0.05)) / 2)
+    assert screen_idea.summarise([fixed])["stress"] is None
+
+
+# --- v163: trail rendering
+
+from swingbot.core.backtesting.screen import trail as trail_mod  # noqa: E402
+
+RUN_INFO = {"ledger_id": "screen-trail_probe", "q": None, "date": "2026-10-15",
+            "start": screen_idea.WINDOW_START, "end": screen_idea.WINDOW_END,
+            "slippage_bps": 5.0, "commission": 0.02}
+
+
+def _trail_render_inputs():
+    rows = [_row("2012-03-01", 2.0, 0.5, "timeout"), _row("2013-04-02", -1.0, 0.0, "stop"),
+            _row("2014-05-01", 1.2, 0.1, "trail"), _row("2015-06-01", 0.4, -0.2, "gap_trail")]
+    stressed = [{"entry_date": r["entry_date"], "r_event": r["r_event"] - 0.05,
+                 "r_null": r["r_null"] - 0.04} for r in rows]       # every d falls by 0.01
+    screen = _screen(rows, {"timeout": 3, "trail": 9, "stop": 6, "gap_stop": 1, "gap_trail": 1},
+                     null_timeout_r=[0.2, 0.4, 0.9], stressed=stressed)
+    screen.counters.update(skipped_overlap=7)
+    universe = screen_idea.Universe(intervals={}, members=["AAA"], cached=["AAA"], missing=[])
+    return screen_idea.summarise([screen]), universe
+
+
+def test_fixed_trade_line_is_unchanged():
+    assert screen_idea._render_trade(IDEAS["turn_of_month"], RUN_INFO) == (
+        "**Trade:** entry next open; stop 1.5 x ATR14; target 3.0 x ATR14; a gap "
+        "through either level fills at the open; stop first on a bar touching both; "
+        "costs 5.0 bps a side + 0.0200R commission.")
+
+
+def test_trail_trade_line_names_the_trail_and_no_target():
+    line = screen_idea._render_trade(_trail_probe(), RUN_INFO)
+    assert line.startswith("**Trade:** entry next open; initial stop 1.5 x ATR14")
+    assert "no target" in line and "chandelier" in line
+    assert f"{trail_mod.TRAIL_ATR} x ATR14[t]" in line
+    assert "60 bars" in line and "initial 1R" in line
+    assert line.endswith("costs 5.0 bps a side + 0.0200R commission.")
+    assert "chandelier" in screen_idea.__doc__
+
+
+def test_trail_doc_has_the_trail_section_and_only_trail_exits():
+    summary, universe = _trail_render_inputs()
+    doc = screen_idea.render_results(_trail_probe(), summary, universe, RUN_INFO)
+    assert (doc.index("## Both arms") < doc.index("## Trail race (reported, never gating)")
+            < doc.index("## Per year"))
+    for name in race_mod.SHAPE_OUTCOMES["trail"]:
+        assert f"| {name} |" in doc, name
+    assert "| target |" not in doc and "| gap_target |" not in doc
+    assert "(`skipped_overlap`) = 7" in doc
+    assert "| races | 4 | 20 |" in doc
+    assert "| timeouts (share) | 1 (25.0%) | 3 (15.0%) |" in doc
+    assert "| mean timeout R, after costs | +2.0000R | +0.5000R |" in doc
+    assert "At 10.0 bps a side (2 x slippage, both fills)" in doc
+    assert "change vs the base book -0.0100R" in doc
+    assert "no target" in doc
+
+
+def test_a_fixed_doc_has_no_trail_section_and_no_trail_rows():
+    summary, universe = _trail_render_inputs()
+    doc = screen_idea.render_results(IDEAS["turn_of_month"], summary, universe, RUN_INFO)
+    assert "## Trail race" not in doc
+    assert "| gap_trail |" not in doc and "| trail |" not in doc
+    assert "| target |" in doc
+
+
+def test_the_stress_line_says_so_when_there_are_no_stressed_pairs():
+    summary, universe = _trail_render_inputs()
+    summary["stress"] = None
+    lines = screen_idea._render_trail(summary, RUN_INFO)
+    assert lines[0] == "## Trail race (reported, never gating)"
+    assert lines[-1] == "At 10.0 bps a side (2 x slippage): no stressed pairs."
+
+
+def test_trail_hypothesis_names_the_shape_and_cap():
+    idea = _trail_probe()
+    text = screen_idea.hypothesis(idea)
+    assert "chandelier 3.0 ATR trail race, initial stop 1.5 ATR, cap 60" in text
+    assert "fixed" not in text
+    v = verdict.Verdict("SCREEN-FAIL", 412, 0.03, -0.01, 0.07, 0.2, 6, {}, {})
+    row = screen_idea.ledger_row(idea, v, "docs/superpowers/results/x.md", "2026-10-15")
+    stats.validate_ledger_row(row)
+    assert row["hypothesis"] == text
+
+
+def test_fixed_hypothesis_is_unchanged():
+    idea = IDEAS["gap_volume"]
+    assert screen_idea.hypothesis(idea) == (
+        f"gap_volume: {idea.summary}; fixed 1.5/3.0 ATR race vs K=20 matched null, "
+        "cap 20, PIT S&P 500 2010-2019, after costs (v140 screen)")

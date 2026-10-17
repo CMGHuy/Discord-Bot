@@ -8,6 +8,7 @@ import {
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
+import { StrategyRow } from '../api/models';
 import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
 import { Observable } from 'rxjs';
@@ -24,6 +25,7 @@ import {
   AnalyticsStrategies,
   AnalyticsUnit,
   BookScope,
+  TuneDefaults,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
 import { BarRow } from '../ui/bar-list';
@@ -45,34 +47,9 @@ import { PreferencesStore } from './preferences.store';
  * than fifteen template expressions.
  */
 
-/** One row of `_registry_rows()`: the committed out-of-sample badge for a
- *  strategy, joined against how that strategy is actually doing live. */
-export interface StrategyRow {
-  strategy: string;
-  /** `VALIDATED` or `WEAK` — whether it cleared its one-shot OOS bar. */
-  status: string;
-  /** OOS sample and result, from the committed validation registry. */
-  n: number;
-  win_rate: number;
-  expectancy_r: number;
-  window: string | null;
-  run_date: string | null;
-  /** Live counterparts. Null until there are closed trades to measure. */
-  live_n: number | null;
-  live_wr: number | null;
-  delta_vs_oos: number | null;
-  /** Pre-registered decay rule: live_n >= 20 and live_wr < oos_wr - 10. */
-  decayed: boolean;
-  /** Age of the evidence itself, derived server-side from `run_date` at read
-   *  time and never stored: `fresh` | `aging` | `stale` | `unknown`. A
-   *  different fact from `decayed` above, which is live-vs-OOS win-rate drift.
-   *  Display only — nothing is gated on it. */
-  evidence_decay: string;
-  gate_description: string | null;
-  /** Rolling 10-trade win rate, oldest first. Carries nulls for windows the
-   *  server could not compute, which the sparkline cannot plot. */
-  win_rate_series: (number | null)[];
-}
+/** Moved to `api/models.ts` (v150): the Research workspace reads the same
+ *  rows. Re-exported so every existing Analytics import keeps working. */
+export type { StrategyRow } from '../api/models';
 
 export interface HeatmapCell {
   strategy: string;
@@ -270,8 +247,8 @@ export interface Streaks {
   worstLoss: number | null;
 }
 
-/** Every dimension `aggregate.DIMENSIONS` serves, including v93's ledger.
- *  `tier` stays retired -- it would 400. */
+/** Every dimension `aggregate.DIMENSIONS` serves, including v93's ledger and
+ *  v146's confluence (target-source count) and RS quintile. `tier` stays retired -- it would 400. */
 export const BREAKDOWN_DIMENSIONS = [
   { value: 'strategy', label: 'Strategy' },
   { value: 'horizon', label: 'Horizon' },
@@ -280,6 +257,8 @@ export const BREAKDOWN_DIMENSIONS = [
   { value: 'month', label: 'Month' },
   { value: 'badge', label: 'Badge' },
   { value: 'confidence', label: 'Confidence' },
+  { value: 'confluence', label: 'Confluence' },
+  { value: 'rs_quintile', label: 'RS quintile' },
   { value: 'source', label: 'Source' },
   { value: 'ledger', label: 'Ledger' },
   // v152 D2: trades whose plan had a Following follower vs the rest. Intent,
@@ -402,6 +381,12 @@ interface AnalyticsSlice {
    *  Empty while it is still running, which the endpoint answers with a 200
    *  rather than a 404 so this never has to mean "something failed". */
   gridStrategy: string | null;
+  /** v162 — the training data the tracked job's grid ran on. */
+  gridDataSource: string | null;
+  /** v162 — the launcher's source picker. Fetched once: the default only
+   *  changes on a config reload, and a running grid raises a `jobs` event per
+   *  log flush. Null until it arrives, or when it failed (picker hidden). */
+  tuneDefaults: TuneDefaults | null;
   grid: GridRow[];
   /** The row currently being staged, by index — so only its own button shows
    *  a pending state rather than the whole table going quiet. */
@@ -480,6 +465,8 @@ export const AnalyticsStore = signalStore(
       plans: null, plansError: null,
       partials: null, partialsError: null,
       gridStrategy: null,
+      gridDataSource: null,
+      tuneDefaults: null,
       grid: [],
       proposing: null,
       proposeError: null,
@@ -782,12 +769,22 @@ export const AnalyticsStore = signalStore(
         next: (result) =>
           patchState(store, {
             gridStrategy: result.strategy,
+            gridDataSource: result.data_source ?? null,
             grid: toGridRows(result.grid ?? []),
           }),
         // Deliberately quiet. A missing result file is the ordinary state of a
         // running or failed job, and the panel renders nothing rather than
         // claiming an error the job's own state already explains.
-        error: () => patchState(store, { grid: [], gridStrategy: null }),
+        error: () => patchState(store, { grid: [], gridStrategy: null, gridDataSource: null }),
+      });
+    };
+
+    /** v162. Quiet on failure, like the result fetch: without defaults the
+     *  picker is hidden and the server applies its own default. */
+    const loadTuneDefaults = (): void => {
+      api.getTuneDefaults().subscribe({
+        next: (defaults) => patchState(store, { tuneDefaults: defaults }),
+        error: () => undefined,
       });
     };
 
@@ -813,6 +810,7 @@ export const AnalyticsStore = signalStore(
       // refetching the whole registry each time would turn a progress update
       // into two payloads, one of which cannot have changed.
       if (store.strategies() === null) loadStrategies();
+      if (store.tuneDefaults() === null) loadTuneDefaults();
     };
 
     /**
@@ -872,6 +870,7 @@ export const AnalyticsStore = signalStore(
         patchState(store, { loading: true });
         loadProposals();
         if (store.strategies() === null) loadStrategies();
+        if (store.tuneDefaults() === null) loadTuneDefaults();
       },
       next: (list) => {
         const jobs = (list.jobs ?? []) as JobSummary[];
@@ -1011,17 +1010,19 @@ export const AnalyticsStore = signalStore(
       loadTuning,
 
       /**
-       * Launch a TRAIN-window grid search.
+       * Launch a TRAIN-window grid search on the chosen training data (v162).
        *
        * No date argument is sent, and none can be: `build_tune_args` accepts
-       * only `--strategy` and an optional `--be-trigger`, and asserts the
-       * window is TRAIN. That firewall is what keeps the VALIDATION badges on
-       * the Strategies tab meaningful, so the UI must not offer a way around
-       * it — hence a strategy picker and nothing else.
+       * only `--strategy`, `--data-source` and an optional `--be-trigger`, and
+       * asserts the window is TRAIN. That firewall keeps the VALIDATION badges
+       * on the Strategies tab meaningful, so the UI offers a strategy and a
+       * data source and nothing else. An empty `dataSource` sends no params:
+       * the server then uses TRAINING_DATA_SOURCE.
        */
-      startTune(strategy: string): void {
+      startTune(strategy: string, dataSource: string): void {
         patchState(store, { launching: true, launchError: null });
-        api.startTuneJob({ strategy }).subscribe({
+        const body = dataSource ? { strategy, params: { data_source: dataSource } } : { strategy };
+        api.startTuneJob(body).subscribe({
           next: () => {
             patchState(store, { launching: false });
             // One refetch, because the user just acted and expects to see the

@@ -198,6 +198,23 @@ FIELDS: list[Field] = [
                "the min reward:risk ratio. Off: the stop stays where the levels put it and any plan "
                "beyond 2% is rejected (risk_cap), which at a 2.0% stop floor posts almost nothing. "
                "Historical replay clamps too. An unmeasured live change (v115, Edge: volume)."),
+    Field("CONFLUENCE_STRUCTURAL_STOP_PCT", "CONFLUENCE_STRUCTURAL_STOP_PCT", "Trade Filters & Risk",
+          "Confluence structural-stop ceiling % (v139 arm S)",
+          type="float", default="0", min=0, max=11, step=0.5,
+          help="v139 arm S. 0 = off: today's 1.75% clamp. Above 0, a confluence stop the clamp "
+               "would move stays at its level when that level is within this ceiling less 0.25% "
+               "headroom; the target is re-chosen against the wider risk, the plan stores this "
+               "ceiling, and the position must be sized to fixed dollar risk (risk_pct). No target "
+               "inside the reward:risk band rolls the plan back to the clamp. Closed: "
+               "NO_ELIGIBLE_CELL at Stage 1 (every cell lost ExpR) -- see the v139 closed row in "
+               "docs/claude/backtest-methodology.md. Keep 0."),
+    Field("CONFLUENCE_STOP_DROP_PCT", "CONFLUENCE_STOP_DROP_PCT", "Trade Filters & Risk",
+          "Confluence stop drop ceiling % (v139 arm D)",
+          type="float", default="0", min=0, max=11, step=0.5,
+          help="v139 arm D. 0 = off. Above 0, a confluence setup whose structural stop sits "
+               "further than this from the entry gets no plan (stop_beyond_confluence_ceiling) "
+               "instead of the 1.75% clamp. Closed: REFUSED at Stage 0 in every cell (effect below "
+               "MDE) -- see the v139 closed row in docs/claude/backtest-methodology.md. Keep 0."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
@@ -725,7 +742,7 @@ FIELDS: list[Field] = [
           help="v106. When on, live-path daily bars, 1h bars and last-trade prices for "
                "US equities/ETFs come from Alpaca (SIP bars >=15 min old, IEX last "
                "trade), falling back per symbol to yfinance. Off = exact pre-v106 "
-               "yfinance behaviour. Backtests never use Alpaca. Harmless with no "
+               "yfinance behaviour. Backtests read Alpaca only through the v162 history store (TRAINING_DATA_SOURCE). Harmless with no "
                "ALPACA_API_KEY_ID/SECRET set -- the router falls back to yfinance "
                "for everything until keys are added."),
     Field("ALPACA_API_KEY_ID", "ALPACA_API_KEY_ID", "Data Sources", "Alpaca API key ID",
@@ -763,6 +780,16 @@ FIELDS: list[Field] = [
     Field("ALPACA_BREAKER_COOLDOWN_SECONDS", "ALPACA_BREAKER_COOLDOWN_SECONDS",
           "Data Sources", "Alpaca breaker cool-down (s)", type="number", default="300",
           min=30, max=3600, step=30, help="How long Alpaca is skipped once the breaker opens."),
+    Field("TRAINING_DATA_SOURCE", "TRAINING_DATA_SOURCE", "Data Sources",
+          "Training data source", type="select", default="alpaca",
+          options=["alpaca", "yfinance"],
+          help="v162. Which daily bars every backtest, grid and the admin Tuning page train on. "
+               "'alpaca' = the history store data/market_data/ (Alpaca SIP, all adjustments, "
+               "from 2016; built by scripts/data/fetch_alpaca_history.py). 'yfinance' = the "
+               "legacy data/backtest_cache/. With 'alpaca' and no store a run stops with an "
+               "error naming the missing manifest -- never a zero-ticker run. A script's "
+               "--data-source overrides this; a set BACKTEST_CACHE_DIR means yfinance. Rollback "
+               "is this one line set to yfinance. The live scan and alerts never read it."),
     Field("SPOT_QUOTE_MAX_AGE_SECONDS", "SPOT_QUOTE_MAX_AGE_SECONDS", "Data Sources",
           "Max spot metals quote age (s)", type="number", default="900",
           min=60, max=86400, step=60,
@@ -1300,6 +1327,7 @@ _SEARCH_CLASSES = {
         "SHORT_UNIVERSE_RESEARCH_MODE",
         "COMPRESSION_SHORT_RESEARCH_MODE",
         "FVG_LEVELS_MODE", "FVG_DISPLACEMENT_ATR_K",
+        "CONFLUENCE_STRUCTURAL_STOP_PCT", "CONFLUENCE_STOP_DROP_PCT",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
@@ -1349,11 +1377,12 @@ _MODE_VALUES = {
     "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
     "COMPRESSION_SHORT_RESEARCH_MODE": ("off", "broad", "isolated"),
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
+    "TRAINING_DATA_SOURCE": ("alpaca", "yfinance"),
 }
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level
 # source), so a typo must land on the pre-v128 behaviour instead.
-_MODE_FALLBACK = {"FVG_LEVELS_MODE": "all"}
+_MODE_FALLBACK = {"FVG_LEVELS_MODE": "all", "TRAINING_DATA_SOURCE": "alpaca"}
 
 # Floats that must be finite and > 0. Anything else is a parse failure, so
 # _apply_env falls back to the field default and knobs.parse_knob refuses the arm.

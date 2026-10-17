@@ -10,12 +10,13 @@ import {
 } from '@angular/core';
 
 import { Release } from '../../api/models';
+import { tablePerPage } from '../../ui/table-per-page';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ControlRow } from '../../ui/layout';
 import { PaginationComponent } from '../../ui/pagination';
 import { SectionHead } from '../../ui/section-head';
-import { StatTile } from '../../ui/stat-tile';
+import { num, share } from '../../ui/format';
 import { Timeline, TimelineItem } from '../../ui/timeline';
 import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
@@ -43,7 +44,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 @Component({
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, PaginationComponent, SectionHead, Async, StatTile, Timeline],
+  imports: [Button, ControlRow, PaginationComponent, SectionHead, Async, Timeline],
   // v54 D1: this workspace is a lane strip plus a change stream -- both
   // dense, repeating rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -196,11 +197,16 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                 @if (release.provenance?.spec; as spec) { <a [href]="spec">{{ spec.split('/').at(-1) }}</a> }
               </div>
               @if (release.telemetry; as telemetry) {
-                <div class="telemetry-cards">
-                  <sb-stat-tile label="Uptime" [value]="telemetry.uptime_pct === null ? '—' : telemetry.uptime_pct.toFixed(2) + '%'" [sample]="telemetry.n_days" />
-                  <sb-stat-tile label="Error rate" [value]="telemetry.error_rate === null ? '—' : (telemetry.error_rate * 100).toFixed(2) + '%'" [sample]="telemetry.n_days" />
-                  <sb-stat-tile label="Median scan" [value]="telemetry.median_scan_sec === null ? '—' : telemetry.median_scan_sec.toFixed(1) + 's'" [sample]="telemetry.n_days" />
-                </div>
+                <!-- One line of the figures that exist. Three tiles per release
+                     -- two of them "—" with "N=1 thin sample" on nearly every
+                     release -- made this page ~6,400px of mostly empty boxes. -->
+                <p class="telemetry-cards">
+                  @if (telemetry.uptime_pct !== null) { <span>Uptime <strong>{{ share(telemetry.uptime_pct, 2) }}</strong></span> }
+                  @if (telemetry.error_rate !== null) { <span>Error rate <strong>{{ share(telemetry.error_rate * 100, 2) }}</strong></span> }
+                  @if (telemetry.median_scan_sec !== null) { <span>Median scan <strong>{{ num(telemetry.median_scan_sec, 1) }}s</strong></span> }
+                  @if (telemetry.uptime_pct === null && telemetry.error_rate === null && telemetry.median_scan_sec === null) { <span>No uptime or error data for this release</span> }
+                  <span class="n">N={{ telemetry.n_days }} day{{ telemetry.n_days === 1 ? '' : 's' }}</span>
+                </p>
                 <p class="release-meta">Telemetry: {{ telemetry.source === 'marker' ? 'measured' : 'inferred' }}</p>
               } @else { <p class="release-meta">Telemetry: window unknown</p> }
             </div>
@@ -208,7 +214,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
         </ng-template>
       </sb-timeline>
 
-      <sb-pagination [pagination]="store.pageSpec()" (pageChange)="store.setPage($event)" />
+      <sb-pagination [pagination]="store.pageSpec()" [showPerPage]="true" [announce]="true" (pageChange)="store.setPage($event)" (perPageChange)="onPerPage($event)" />
     </sb-async>
   `,
   styles: `
@@ -261,7 +267,9 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .chip.quiet { color: var(--text-faint); cursor: default; }
     .release-meta, .provenance { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-faint); font-size: var(--text-micro); }
     .provenance a { color: var(--accent); }
-    .telemetry-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin-top: var(--space-8); }
+    .telemetry-cards { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-14); margin: var(--space-8) 0 0; font-size: var(--text-table); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .telemetry-cards strong { color: var(--text); font-weight: 600; }
+    .telemetry-cards .n { color: var(--text-faint); font-size: var(--text-micro); }
 
     .strip { display: flex; flex-direction: column; gap: var(--space-6);
               position: relative; overflow-x: auto; }
@@ -355,6 +363,11 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 })
 export class Versions {
   protected readonly store = inject(VersionsStore);
+  private readonly perPageState = tablePerPage('versions');
+  private readonly syncPerPage = effect(() => this.store.setPerPage(this.perPageState.value()));
+  protected onPerPage(value: number): void { this.perPageState.set(value); }
+  protected readonly num = num;
+  protected readonly share = share;
   private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');
 
   protected readonly async = computed(() =>

@@ -14,20 +14,22 @@ git push origin main
         │
         ▼
 GitHub Actions (.github/workflows/deploy.yml)
-  1. test          -- the Python suite
+  1. backend-test  -- one job per suite in tests/suites.toml (+ the lint gate)
   2. frontend      -- ng test + a real production build of the SPA
   2c. compose-lint -- docker-compose.yml still parses, default profile AND
                       the `tunnel` profile (catches a broken cloudflared
                       service before it ever reaches the server)
   3. container-healthcheck
-        builds the image ONCE, starts it, runs the auth/route/SPA smoke
-        tests against that exact image, and only then pushes it to GHCR as
-        ghcr.io/<owner>/<repo>:sha-<12> and :latest
+        pulls the candidate image docker-build pushed (ci-<12>, as soon as it
+        exists, in parallel with the tests) and runs the auth/route/SPA smoke tests
+     publish-image
+        waits on 1, 2 and 3, then retags that exact digest in GHCR as
+        ghcr.io/<owner>/<repo>:sha-<12> and :latest (no rebuild, no reload)
   4. cleanup   -- starts immediately alongside 1-3 (needs nothing they
                   build) and prunes old sha-* images already on the
                   Hetzner box, so disk is freed BEFORE deploy asks it
                   to pull a new one
-  5. deploy    -- waits on container-healthcheck, cleanup AND compose-lint,
+  5. deploy    -- waits on publish-image, cleanup AND compose-lint,
                   then SSHes in as `deploy` and runs deploy.sh with
                   SWING_BOT_IMAGE pinned to the sha- tag just published
         │
@@ -296,8 +298,10 @@ Every trading and operational store is a Postgres table; there is no JSON copy,
 no per-store stage and no import step. Only `analytics_snapshot.json`,
 `scan_snapshots.json`, `scan_telemetry.jsonl` and `.env` remain files.
 
-- **Schema.** `docker compose exec bot alembic upgrade head`. A shape change is
-  an Alembic revision (`docs/claude/schema-evolution.md`).
+- **Schema.** `deploy/deploy.sh` runs `docker compose exec -T bot alembic upgrade
+  head` after `up --wait` (the bot never migrates at startup); run it by hand only
+  for an out-of-band fix. A shape change is an Alembic revision
+  (`docs/claude/schema-evolution.md`).
 - **Write failures.** A database write failure at issuance pauses scanning
   (`StoreWriteHalt`); fix the database, then unpause from the admin UI.
 - **Editing `.env`.** `python3 scripts/ops/env_set.py KEY value` edits it in
@@ -439,3 +443,25 @@ it rewrites in place.
 **Remote commands through `ssh-hetzner.sh`.** The wrapper runs `wsl ssh "<cmd>"`, so `$(...)` and
 `$VAR` inside the quoted command expand on the dev machine, not the VM. Pipe a script on stdin
 (`... "bash -s" < script.sh`) whenever the command needs the VM's own values.
+
+**Running the Reports workspace's reports (v146, v147).** The live trade book is on this VM, so
+both report scripts run here, inside the bot container, and write `/opt/swing-bot/data/reports/`.
+`data/` is bind-mounted into both containers, so the admin shows a new result without a rebuild
+or a restart:
+
+```bash
+bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/reports/<script>.py"
+```
+
+`<script>` is the v146 or v147 report script; each one's own spec names its arguments. The TRAIN
+half of each report is a backtest produced on the dev machine. Upload its JSONL inputs first, over
+ssh stdin (never `scp`, never another key path):
+
+```bash
+bash scripts/ops/ssh-hetzner.sh "mkdir -p /opt/swing-bot/data/reports/inputs"
+bash scripts/ops/ssh-hetzner.sh "cat > /opt/swing-bot/data/reports/inputs/<file>" < <local file>
+```
+
+Each run overwrites its one result file; there is no history beyond the latest. A report that has
+never run shows as "Not yet run" on the page, which is a state, not a fault. These runs are manual:
+nothing schedules them.

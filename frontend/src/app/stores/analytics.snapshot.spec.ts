@@ -93,6 +93,7 @@ describe('AnalyticsStore — the tuning grid', () => {
   const GRID = {
     job_id: 'job1',
     strategy: 'RSI Divergence',
+    data_source: 'alpaca',
     grid: [
       { row_index: 0, params: { rsi_reclaim: 30, atr_mult: 1.5 }, n_eval: 40,
         win_rate: 82, expectancy_r: 0.4, excluded_share: 0.2, passes: true },
@@ -136,12 +137,24 @@ describe('AnalyticsStore — the tuning grid', () => {
     backend.expectOne('/api/v1/analytics/tuning/proposals').flush({ proposals: [] });
     backend.expectOne((req) => req.url === '/api/v1/analytics/strategies')
       .flush({ strategies: [], registry_scope: 'all-time', contribution: [], cumulative: {}, scope: SCOPE, n: 0 });
+    backend.expectOne('/api/v1/jobs/tune/defaults')
+      .flush({ data_source: 'alpaca', choices: ['alpaca', 'yfinance'] });
   }
 
   it('fetches the tracked job result and reads its rows', () => {
     openTuning();
     expect(store.gridStrategy()).toBe('RSI Divergence');
     expect(store.grid()).toHaveLength(2);
+  });
+
+  it('reads which training data the grid ran on', () => {
+    openTuning();
+    expect(store.gridDataSource()).toBe('alpaca');
+  });
+
+  it('has no grid source while a job is still running', () => {
+    openTuning({ job_id: 'job1', strategy: null, grid: [], data_source: null });
+    expect(store.gridDataSource()).toBeNull();
   });
 
   it('flattens the parameters into one label', () => {

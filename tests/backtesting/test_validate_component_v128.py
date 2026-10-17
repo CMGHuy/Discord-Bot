@@ -14,6 +14,16 @@ from tests.backtesting.test_validate_component_cli import write_arms, write_fold
 BESPOKE = ["--bespoke-instrument", "v128 unit fixture"]
 
 
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot import config
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
+
 def _run(*args):
     return vc.main([*args, *BESPOKE])
 

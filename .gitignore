@@ -29,10 +29,16 @@ data/admin_session_secret
 # ==========================================================================
 exports/
 market_data/
+# v162 pull_history_store.sh siblings: the verdict file, the previous store
+# kept for rollback, and a failed pull's partial copy.
+data/market_data.*
 data/backtest_cache/
 # v102's extended 2010-2025 OHLCV cache (BACKTEST_CACHE_DIR); rebuilt by
 # scripts/data/fetch_backtest_data.py --start 2010-01-01 --end 2025-12-31.
 data/backtest_cache_ext/
+# v162 section 5: the frozen yfinance inputs of the re-baseline (and its
+# 2016-truncated copy), rebuilt by scripts/data/snapshot_backtest_cache.py.
+data/backtest_cache_snapshot_v162*/
 data/backups/
 # v116 point-in-time recovery: pgBackRest repo, .env versions, restic repo,
 # deploys.jsonl. VM-only; never committed.
@@ -159,3 +165,6 @@ data/scan_snapshots.json
 
 
 .superpowers/brainstorm/.last-*
+
+# v146 expectancy attribution: run output (TRAIN rows, latest report)
+data/reports/

@@ -49,6 +49,13 @@
    of it instead of under it. */
 .shell.overlay .topbar {
   padding-left: calc(var(--space-10) + var(--control-h) + var(--space-10));
+  /* The menu button is `position: fixed`, so it stays on screen while the
+     bar scrolled away -- leaving a lone hamburger floating over table rows
+     and paragraphs. Keep the bar with it. */
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: var(--bg);
 }
 
 /* On the rail: icons only, centred, labels hidden but still in the DOM so
@@ -382,6 +389,9 @@
 @media (max-width: 639px) {
   .clock { display: none; }
   .topbar { gap: var(--space-10); }
-  .topbar-tape { flex-basis: 7rem; max-width: 7rem; }
-  .topbar-lead { flex-basis: 9rem; }
+  /* 7rem showed one clipped "MKT" and nothing a reader could use, while
+     squeezing the status cluster until its clock read "15:2(". The tape is
+     a glance-at-a-quote strip; on a phone the title and the live state win. */
+  .topbar-tape { display: none; }
+  .topbar-lead { flex: 1 1 auto; }
 }

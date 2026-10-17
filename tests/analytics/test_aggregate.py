@@ -1,6 +1,6 @@
 import pytest
 
-from swingbot.core.analytics.aggregate import DIMENSIONS, StatRow, stats_by
+from swingbot.core.analytics.aggregate import DIMENSIONS, StatRow, rs_quintile_label, stats_by
 
 
 def _t(strategy_sources, status, pnl, direction="bullish", entry=100.0, stop_loss=95.0, exit_price=None):
@@ -51,10 +51,12 @@ def test_all_dimensions_present():
     """v32 Task 11: "tier" (A/B/C) retired -- "confidence" already covered
     the same role, so DIMENSIONS dropped from 10 to 9. v93 then added
     "ledger" (main/weak) as its own grouping dimension, back to 10; v152
-    adds "taken" (followed/paper): 11."""
+    adds "taken" (followed/paper): 11. v146 I4 adds "confluence"
+    (target-source count) and "rs_quintile" (entry RS percentile in
+    20-point bands): 13."""
     assert set(DIMENSIONS) == {"strategy", "horizon", "badge", "confidence",
                                "direction", "dow", "month", "ticker", "source", "ledger",
-                               "taken"}
+                               "taken", "confluence", "rs_quintile"}
 
 
 def test_dimension_extractors():
@@ -102,3 +104,40 @@ def test_group_by_is_public_and_row_for_matches_stats_by():
     groups = group_by(closed, "strategy")
     assert set(groups) == {"EMA20"} and len(groups["EMA20"]) == 2
     assert row_for("EMA20", groups["EMA20"]) == stats_by(closed, "strategy")[0]
+
+
+# --- v146 I4: confluence and rs_quintile ---------------------------------
+
+def test_confluence_counts_target_sources():
+    two = dict(_full_trade(), target_sources=["EMA20", "Fib 61.8%"])
+    assert stats_by([two], "confluence")[0].key == "2"
+    assert stats_by([_full_trade()], "confluence")[0].key == "1"
+
+
+def test_confluence_empty_list_reads_zero_and_missing_reads_unknown():
+    empty = dict(_full_trade(), target_sources=[])
+    assert stats_by([empty], "confluence")[0].key == "0"
+    missing = {k: v for k, v in _full_trade().items() if k != "target_sources"}
+    assert stats_by([missing], "confluence")[0].key == "unknown"
+
+
+def test_rs_quintile_reads_entry_context():
+    trade = dict(_full_trade(), entry_context={"rs_pctile": 64.0})
+    assert stats_by([trade], "rs_quintile")[0].key == "Q4"
+
+
+def test_rs_quintile_unknown_without_entry_context():
+    assert stats_by([_full_trade()], "rs_quintile")[0].key == "unknown"
+    assert stats_by([dict(_full_trade(), entry_context=None)], "rs_quintile")[0].key == "unknown"
+    assert stats_by([dict(_full_trade(), entry_context={})], "rs_quintile")[0].key == "unknown"
+    assert stats_by([dict(_full_trade(), entry_context="garbage")], "rs_quintile")[0].key == "unknown"
+
+
+@pytest.mark.parametrize("value, label", [
+    (0.0, "Q1"), (19.999, "Q1"), (20.0, "Q2"), (39.9, "Q2"), (40.0, "Q3"),
+    (59.9, "Q3"), (60.0, "Q4"), (79.9, "Q4"), (80.0, "Q5"), (100.0, "Q5"),
+    (-3.0, "Q1"), (104.0, "Q5"),
+    (None, "unknown"), (float("nan"), "unknown"), ("n/a", "unknown"),
+])
+def test_rs_quintile_label_edges(value, label):
+    assert rs_quintile_label(value) == label

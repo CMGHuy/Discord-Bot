@@ -46,9 +46,7 @@ def test_the_db_image_is_linked_to_the_repo_so_ghcr_can_prune_it():
     assert "org.opencontainers.image.source=" in text
 
 
-def test_every_backend_shard_runs_the_test_database():
-    jobs = _load("deploy.yml")["jobs"]
-    shards = [name for name in jobs if name.startswith("backend-test-")]
-    assert len(shards) == 5
-    for name in shards:
-        assert jobs[name]["services"]["db-test"]["image"] == "postgres:18-alpine", name
+def test_every_backend_suite_runs_the_test_database():
+    # One matrix job covers every suite in tests/suites.toml, so one service block does.
+    job = _load("deploy.yml")["jobs"]["backend-test"]
+    assert job["services"]["db-test"]["image"] == "postgres:18-alpine"

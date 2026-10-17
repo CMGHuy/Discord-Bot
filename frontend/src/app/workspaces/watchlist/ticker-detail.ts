@@ -22,7 +22,7 @@ import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { elapsedHours, held, num, pct } from '../../ui/format';
 import { CLOCK } from '../../ui/clock';
-import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
+import { tablePerPage } from '../../ui/table-per-page';
 import { Panel } from '../../ui/layout';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
@@ -162,8 +162,9 @@ export class TickerDetail {
   static readonly TABLE_ID = 'ticker-trades';
   protected readonly sort = signal<SortSpec | null>(null);
   protected setSort(next: SortSpec): void { this.sort.set(next); }
-  protected readonly perPage = signal(readTablePerPage(this.preferences.values(), TickerDetail.TABLE_ID));
-  protected onPerPage(value: number): void { this.perPage.set(value); this.preferences.update((prefs) => writeTablePerPage(prefs, TickerDetail.TABLE_ID, value)); }
+  private readonly perPageState = tablePerPage(TickerDetail.TABLE_ID);
+  protected readonly perPage = this.perPageState.value;
+  protected onPerPage(value: number): void { this.perPageState.set(value); }
   protected readonly sortedTrades = computed(() => { const sort = this.sort(); const rows = [...this.trades.rows()]; if (!sort) return rows; const dir = sort.direction === 'asc' ? 1 : -1; return rows.sort((a, b) => { const left=(a as unknown as Record<string, unknown>)[sort.key]; const right=(b as unknown as Record<string, unknown>)[sort.key]; if(left == null) return 1; if(right == null) return -1; return left < right ? -dir : left > right ? dir : 0; }); });
   protected readonly tradesPage = createClientPage(() => this.sortedTrades(), () => this.perPage());
   protected readonly chart = inject(ChartStore);

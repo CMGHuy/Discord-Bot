@@ -4,7 +4,7 @@ import { Subject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
-import { RouteLoadingService } from './route-loading.service';
+import { RouteLoadingService, BACKGROUND_REFRESH_INFO } from './route-loading.service';
 import { routeData } from './route-metadata';
 import { RouteRefreshService } from './route-refresh.service';
 
@@ -25,7 +25,7 @@ describe('RouteRefreshService', () => {
     vi.advanceTimersByTime(299);
     expect(navigateByUrl).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
-    expect(navigateByUrl).toHaveBeenCalledWith('/dashboard', { onSameUrlNavigation: 'reload', replaceUrl: true });
+    expect(navigateByUrl).toHaveBeenCalledWith('/dashboard', { onSameUrlNavigation: 'reload', replaceUrl: true, info: BACKGROUND_REFRESH_INFO });
     vi.useRealTimers();
   });
 });

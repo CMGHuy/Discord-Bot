@@ -8,7 +8,7 @@ this very module and would otherwise close a circular import.
 """
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
-from swingbot.core.market import levels, trendlines
+from swingbot.core.market import earnings_calendar, levels, trendlines
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
@@ -33,7 +33,9 @@ from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
-from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
+from swingbot.core.planning.builders import confluence_stop_dropped
+from swingbot.core.planning.stop_scope import plan_stop_ceiling, risk_sizing_ok
+from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
 
@@ -83,6 +85,8 @@ class ScanItem:
     htf_bias: str | None = None       # "bullish"/"bearish" from the same get_htf_bias() call, always stored (not just on counter-trend like htf_info) so attach_plan_v2/_build_quality_inputs can reuse it instead of recomputing
     plan_v2: object = None            # TradePlanV2 | None
     plan_v2_rejected: str | None = None  # e.g. "no_qualifying_target" (v31 Task 6) -- distinguishes a real "no trade here" from a builder exception
+    plan_v2_rejected_plan: dict | None = None     # v147: plan_to_dict of a risk_cap-rejected plan, for gate_rejections
+    plan_v2_rejected_margin: float | None = None  # v147: planned loss % past plan_stop_ceiling (risk_cap only)
     level_map: tuple = None           # (supports, resistances); staged in _scan_one for attach_plan_v2, called later in _sync_run_scan once confirmation is decided (Task E20 fix)
     rs_percentile: float | None = None  # percentile (0-100) of relative return vs the scanned universe; None when the RS benchmark fetch fails (Task E25)
     sector_rs_percentile: float | None = None  # percentile (0-100) of this ticker's sector ETF vs SPY; None when the sector is unknown or its ETF frame wasn't fetched this scan (v34 Task 5)
@@ -120,9 +124,29 @@ def paper_trade_decision(item: ScanItem, already_open: bool) -> tuple[bool, str 
     return allowed, reason
 
 
-def _reject_plan(item, reason: str, ticker: str, horizon_key: str) -> None:
-    """Record why no v2 plan was attached; say so at DEBUG (per symbol, per scan)."""
+def _plan_snapshot(plan) -> dict | None:
+    """v147: plan_to_dict for the gate-rejection record (None without a plan); a failure costs
+    the snapshot only."""
+    if plan is None:
+        return None
+    try:
+        from swingbot.core.planning.plan_types import plan_to_dict
+        return plan_to_dict(plan)
+    except Exception:   # noqa: BLE001 -- measurement only, never the rejection itself
+        log.debug("gate: plan snapshot failed", exc_info=True)
+        return None
+
+
+def _reject_plan(item, reason: str, ticker: str, horizon_key: str, *, plan=None,
+                 margin: float | None = None) -> None:
+    """Record why no v2 plan was attached; say so at DEBUG (per symbol, per scan).
+
+    v147: also stamp the rejected plan (when one was built) and its margin past
+    the gate, which the v147 gate-rejection recorder stores. Both are reset
+    on every rejection, so no stale stamp survives."""
     item.plan_v2_rejected = reason
+    item.plan_v2_rejected_plan = _plan_snapshot(plan)
+    item.plan_v2_rejected_margin = margin
     log.debug("gate: %s (%s) plan rejected -- %s", ticker, horizon_key, reason)
 
 
@@ -285,6 +309,7 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
             volume_ratio = float(df["Volume"].iloc[-1] / avg_vol)
     target_confluence = getattr(item, "target_confluence", None)
     confluence_count = target_confluence[0] if target_confluence else 0
+    conf = getattr(item, "conf", None)
     return {
         "regime": regime.trend if regime else None,
         # item.htf_bias was already computed once by _scan_one's own
@@ -303,6 +328,11 @@ def _build_quality_inputs(item, scenario, df, horizon_key, *, regime=None,
         # comment. item.conf is set in _scan_one, well before attach_plan_v2
         # (and this function) run in _sync_run_scan's later merge loop.
         "confidence_level": item.conf.level if getattr(item, "conf", None) else None,
+        # v146 I1: ride along beside confidence_level and are popped with it
+        # in _apply_quality. getattr with a None default: a stand-in conf
+        # without `points` is a plan without factor points.
+        "confidence_points": getattr(conf, "points", None),
+        "confidence_unevaluated": getattr(conf, "unevaluated", None),
     }
 
 
@@ -312,6 +342,26 @@ def _atr_for(df) -> float:
     if atr_series.empty:
         return 0.0
     return float(atr_series.iloc[-1])
+
+
+# A daily regime row lands only once its session settles, so a scan on TODAY's
+# bar finds the series ending the prior session. Up to this many calendar days
+# past the series end (a long weekend plus a day) the last settled label is
+# the most the bar can know; beyond it the series is stale -- a data fault.
+REGIME_LAG_DAYS = 4
+
+
+def _label_past_series_end(regimes, when):
+    """The series' last label when `when` is a bar past its end by at most
+    REGIME_LAG_DAYS, else None. Causal: the row returned is dated BEFORE `when`.
+    Only the series END is bridged -- a gap inside the span stays unknown."""
+    import pandas as pd
+    idx = regimes.index.normalize()
+    last = idx.max()
+    gap = (pd_normalize(when) - last).days
+    if gap < 1 or gap > REGIME_LAG_DAYS:
+        return None
+    return str(regimes[idx == last].iloc[0])
 
 
 def _regime_at(regimes, when) -> str | None:
@@ -333,6 +383,12 @@ def _regime_at(regimes, when) -> str | None:
                         when, len(regimes), exc_info=True)
         return None
     if hit.empty:
+        try:
+            lagged = _label_past_series_end(regimes, when) if len(regimes) > 0 else None
+        except Exception:       # same stance as the lookup above: never raise into a scan
+            lagged = None
+        if lagged is not None:
+            return lagged
         if len(regimes) > 0:
             log.warning("_regime_at found no regime row for bar %s "
                         "(regime series spans %s..%s) -- plan stamps COHORT_UNKNOWN",
@@ -344,6 +400,51 @@ def _regime_at(regimes, when) -> str | None:
 def pd_normalize(when):
     import pandas as pd
     return pd.Timestamp(when).normalize()
+
+
+def _no_plan_reason(scenario, level_map) -> str:
+    """Why build_confluence_plan returned None: v139 arm D's ceiling, or no
+    level paying MIN_RISK_REWARD_RATIO."""
+    if confluence_stop_dropped(scenario, level_map):
+        return "stop_beyond_confluence_ceiling"
+    return "no_qualifying_target"
+
+
+def _earnings_source():
+    """The cache-only earnings calendar (earnings_calendar.CachedSource): the
+    fresh in-process events cache, else the weekly on-disk ledger -- never a
+    Yahoo call, so the stamp adds no network latency to the scan loop and a
+    cold cache (a restart, a ticker outside the ledger) stamps None. A
+    function rather than a module constant so tests swap it
+    (tests/scanning/conftest.py)."""
+    return earnings_calendar.CachedSource()
+
+
+def _decision_session_date(df) -> date:
+    """ET session date of the decision bar -- the frame's last row. A
+    tz-aware index is converted to America/New_York first; a naive daily
+    index already is the session date."""
+    import pandas as pd
+    ts = pd.Timestamp(df.index[-1])
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("America/New_York")
+    return ts.date()
+
+
+def _days_to_earnings(ticker: str, df) -> int | None:
+    """v146 I2: NYSE sessions from the decision bar to the next earnings
+    reaction session (earnings_calendar's own unit, the one v82's exposure
+    rule uses). Reads already-warmed data only (_earnings_source); None --
+    never an exception -- means unknown: not cached, no upcoming report in
+    the cache, a fund, a bad frame or anything else. A recorded field must
+    never block a plan. NO-LOOKAHEAD: live only; the as-of answer IS today's
+    calendar."""
+    try:
+        return earnings_calendar.sessions_to_reaction(
+            ticker, _decision_session_date(df), source=_earnings_source())
+    except Exception:
+        log.debug("days_to_earnings unavailable for %s", ticker, exc_info=True)
+        return None
 
 
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
@@ -376,16 +477,27 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # the legacy scenario numbers (which is what plan_numbers_for_display
             # does for plan=None, and would silently re-post the very prices
             # this change exists to stop posting).
-            _reject_plan(item, "no_qualifying_target", ticker, horizon_key)
+            _reject_plan(item, _no_plan_reason(scenario, level_map), ticker, horizon_key)
             return
-        if planned_loss_pct(plan.trigger_price, plan.stop_loss) > HARD_MAX_PLANNED_LOSS_PCT + 1e-9:
+        ceiling = plan_stop_ceiling(plan)
+        loss_pct = planned_loss_pct(plan.trigger_price, plan.stop_loss)
+        if loss_pct > ceiling + 1e-9:
             # Scenario building keeps the horizon's wider stop ceiling so
             # historical replay evaluates the same candidates (90e3ddef), but
-            # PlanManager refuses to open any plan beyond the hard cap -- a
+            # PlanManager refuses to open any plan beyond its ceiling -- a
             # stop_entry plan is cancelled_risk_cap on fill and a market plan
             # would open in breach of the 2% rule. Posting it only issues an
             # alert the bot then cancels seconds later (GC=F, 2026-09-28).
-            _reject_plan(item, "risk_cap", ticker, horizon_key)
+            # v139: the ceiling is plan_stop_ceiling -- 2% unless arm S stored one.
+            _reject_plan(item, "risk_cap", ticker, horizon_key, plan=plan,
+                         margin=loss_pct - ceiling)
+            return
+        if plan.stop_ceiling_pct is not None and not risk_sizing_ok(plan):
+            # v139 arm S: a structural stop past 2% is honest only when the
+            # position is sized to fixed dollar risk (spec Arm S). Checked
+            # only for such plans: a confluence plan's strategy is its primary
+            # attribution, which in_scope() could otherwise match.
+            _reject_plan(item, "risk_sizing", ticker, horizon_key)
             return
         # item.plan_v2 is set BEFORE risk_features stamping (below) is even
         # attempted -- a render-only feature's stamping failure must never
@@ -418,6 +530,10 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                 atr_val=_atr_for(df),
                 close=float(df["Close"].iloc[-1]),
                 rs_percentile=rs_percentile,
+                # v146 I2: live wall clock only. A historical replay supplies
+                # issued_at, and the live calendar would answer for TODAY,
+                # not for its decision date -- that replay records None.
+                days_to_earnings=(_days_to_earnings(ticker, df) if issued_at is None else None),
                 now=now or now_et(),
             )
         except Exception:

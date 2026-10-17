@@ -65,3 +65,12 @@ def test_v129_acceptance_fields_ride_in_the_doc(repo, db_conn):
     record = _plan("P1", acceptance_level=97.5, acceptance_close_below=97.0)
     repo.insert(record, conn=db_conn)
     assert diff_records(record, repo.get("P1", conn=db_conn)) == []
+
+
+def test_v139_stop_ceiling_pct_rides_in_the_doc(repo, db_conn):
+    """v139 used schema-evolution's ADD path: no column, no revision -- the
+    arm S ceiling lives in plans.doc and must survive the repository."""
+    from tests.db_diff import diff_records
+    record = _plan("P1", source="confluence", stop_ceiling_pct=4.0)
+    repo.insert(record, conn=db_conn)
+    assert diff_records(record, repo.get("P1", conn=db_conn)) == []

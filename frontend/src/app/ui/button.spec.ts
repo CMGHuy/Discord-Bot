@@ -33,7 +33,7 @@ describe('Button variants', () => {
     });
   }
 
-  it('paints danger-icon as icon geometry in the negative colour', () => {
+  it('paints danger-icon as icon geometry, quiet until hovered or focused', () => {
     const el = render('danger-icon');
     expect(el.classList).toContain('danger-icon');
   });

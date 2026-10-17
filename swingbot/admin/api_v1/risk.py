@@ -22,6 +22,10 @@ rather than assuming a key is present.
 """
 from __future__ import annotations
 
+import threading
+import time
+from typing import Any, Callable
+
 from flask import jsonify, request
 
 from swingbot import config
@@ -136,6 +140,41 @@ def _scan_health() -> dict:
         "slowdown": bool(slowdown),
         "data_sources": data_sources,
     }
+
+
+#: How long the two expensive halves of `GET /risk` are reused. Measured on
+#: production (2026-10-15): `collect_portfolio_state` 4.1s and the metric /
+#: correlation set 1.8s alone, but 15-52s under a scan, because the Risk page,
+#: its live refreshes and other tabs asked for them concurrently on a 2-CPU
+#: box. Fifteen seconds is shorter than any decision made off this page, and
+#: the killswitch -- the one field that must never be stale -- is read fresh.
+_RISK_TTL_S = 15.0
+
+_cache_lock = threading.Lock()
+_cache: dict[str, tuple[float, Any]] = {}
+_key_locks: dict[str, threading.Lock] = {}
+
+
+def _cached(key: str, compute: Callable[[], Any]) -> Any:
+    """Reuse `compute()` for `_RISK_TTL_S`; concurrent callers share one run.
+
+    Single-flight, not just a TTL: the slow case is several requests arriving
+    together, and a plain TTL would let all of them miss and compute at once.
+    """
+    with _cache_lock:
+        lock = _key_locks.setdefault(key, threading.Lock())
+    with lock:
+        hit = _cache.get(key)
+        if hit is not None and time.monotonic() - hit[0] < _RISK_TTL_S:
+            return hit[1]
+        value = compute()
+        _cache[key] = (time.monotonic(), value)
+        return value
+
+
+def _invalidate_cache() -> None:
+    with _cache_lock:
+        _cache.clear()
 
 
 def _metric(value: float | None, n: int) -> dict:
@@ -279,7 +318,9 @@ def get_risk():
     from swingbot.admin import dashboard as dash
     from swingbot.core.edge.portfolio_state import collect_portfolio_state
 
-    state = collect_portfolio_state()
+    from swingbot.core.edge import throttle
+
+    state = _cached("portfolio_state", collect_portfolio_state)
 
     try:
         account_cfg = dash.load_account_config()
@@ -298,7 +339,7 @@ def get_risk():
     )
 
     throttle_mult = state.get("throttle_mult")
-    metrics, correlation = _risk_metrics_and_correlation()
+    metrics, correlation = _cached("metrics", _risk_metrics_and_correlation)
     return jsonify({
         "heat": {
             "open_pct": open_pct,
@@ -320,11 +361,32 @@ def get_risk():
             "multiplier": 1.0 if throttle_mult is None else throttle_mult,
             "paused": bool(state.get("paused")),
         },
-        "killswitch": _kill_block(state.get("kill") or {}),
+        # Fresh, never from the cache: an engaged killswitch must show at once.
+        "killswitch": _kill_block(_fresh_kill(throttle, state)),
         "scan_health": _scan_health(),
         "metrics": metrics,
         "correlation": correlation,
     })
+
+
+def _fresh_kill(throttle, state: dict) -> dict:
+    try:
+        return throttle.kill_state()
+    except Exception:
+        return state.get("kill") or {}
+
+
+@api_v1.route("/risk/killswitch", methods=["GET"])
+@require_auth
+def get_killswitch():
+    """The killswitch alone, for the shell's banner on every page.
+
+    The shell used to read it from `GET /risk`, which rebuilds the whole
+    exposure picture (seconds of work) to answer one boolean.
+    """
+    from swingbot.core.edge import throttle
+
+    return jsonify({"killswitch": _kill_block(throttle.kill_state())})
 
 
 @api_v1.route("/risk/killswitch", methods=["POST"])
@@ -352,4 +414,5 @@ def set_killswitch():
         return error("invalid", "Body must contain 'on' as a boolean.", 400)
 
     reason = str(payload.get("reason") or "admin panel")
+    _invalidate_cache()
     return jsonify({"killswitch": _kill_block(throttle.set_kill(on, reason=reason))})

@@ -250,3 +250,26 @@ def test_merge_save_survives_cached_csv_with_mixed_utc_offsets(tmp_path):
     assert isinstance(merged.index, pd.DatetimeIndex)
     assert merged.index.is_unique and merged.index.is_monotonic_increasing
     assert added == 1
+
+
+# --- a fresh pair must cost no CSV parse (2026-10-15 budget-burn finding) ----------
+
+def test_a_fresh_pair_is_not_parsed_off_disk(tmp_path):
+    """Production hit its 120s market_data_refresh budget on every hourly wake
+    while updating ~1 pair: refresh_symbol and _record each parsed the whole CSV
+    for every pair even when it was inside its staleness window, so ~500 fresh
+    pairs burned the budget without a single fetch. A fresh pair must read
+    nothing from disk and must keep its stored coverage record."""
+    data_store.save_to_disk(_price_frame("2024-01-01", "2024-01-10", close=100.0), "AAA", "daily",
+                            base_dir=str(tmp_path))
+    state = {refresh_mod._key("AAA", "daily"): {
+        "last_status": "incremental", "rows": 10, "earliest": "2024-01-01",
+        "latest": "2024-01-10", "fail_count": 0}}
+    with patch.object(refresh_mod, "load_from_disk",
+                      side_effect=AssertionError("fresh pair parsed its CSV")):
+        r = refresh_mod.refresh_symbol("AAA", "daily", base_dir=str(tmp_path), state=state)
+        _record(state, "AAA", "daily", r, str(tmp_path))
+    rec = state[refresh_mod._key("AAA", "daily")]
+    assert r["status"] == "fresh"
+    assert (rec["rows"], rec["earliest"], rec["latest"]) == (10, "2024-01-01", "2024-01-10")
+    assert rec["last_status"] == "fresh"

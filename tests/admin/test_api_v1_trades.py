@@ -66,6 +66,7 @@ TRADE_ROW = {
     "target_is_banked_tp1": bool,
     "stop_kind": str,
     "bar_kind": str,
+    "runner_best": NULLABLE_NUMBER,
     "distance_to_trigger_r": NULLABLE_NUMBER,
     "bars_to_expiry": NULLABLE_NUMBER,
     "floor_r": NULLABLE_NUMBER,
@@ -1140,6 +1141,65 @@ def test_partial_plan_falls_back_when_the_runner_fields_are_unset(seed, logged_i
     assert row["target"] is None
     assert row["target_is_banked_tp1"] is True
     assert row["stop_loss"] == pytest.approx(107.0)
+
+
+def _trailing_short(best=52.0):
+    """RKLB-shaped runner: a short, TP1 banked, no TP2, stop trailing down."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"direction": "bearish", "entry_price": 60.67, "stop_loss": 61.85,
+                 "tp1": 58.33, "tp2": None, "working_stop": 59.0,
+                 "runner_high_close": best,
+                 "legs_realized": [{"fraction": 0.5, "exit_price": 54.0,
+                                    "r": 5.6, "reason": "tp1"}]})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    trade.update({"direction": "bearish", "entry": 60.67})
+    return plan, trade
+
+
+def _runner_row(client):
+    """The open runner row -- the plan also expands into a realized TP1 leg row."""
+    items = client.get("/api/v1/trades").get_json()["items"]
+    return next(r for r in items if r["status"] == "PARTIAL")
+
+
+def test_trailing_runner_bar_spans_the_stop_to_the_best_price(seed, logged_in, priced):
+    """No TP2, so the bar's 100% end is the best price since TP1: 0% = at the
+    trailing stop (about to be stopped out), 100% = at the best price."""
+    plan, trade = _trailing_short(best=52.0)
+    seed(plans=[plan], trades=[trade])
+    priced(55.5)                       # stop 59.0 .. best 52.0 -> halfway
+
+    row = _runner_row(logged_in)
+
+    assert row["bar_kind"] == "trailing"
+    assert row["progress_pct"] == pytest.approx(50.0)
+    assert row["progress_band"] == "neutral"
+    assert row["runner_best"] == 52.0
+    # P&L vs the 60.67 short fill at the bar's two ends.
+    assert row["stop_pnl_pct"] == pytest.approx(2.75, abs=0.01)
+    assert row["best_pnl_pct"] == pytest.approx(14.29, abs=0.01)
+    assert 0.6 <= row["blink_seconds"] <= 2.2
+
+
+def test_trailing_runner_at_a_new_low_is_full_and_near_stop_is_empty(seed, logged_in, priced):
+    plan, trade = _trailing_short(best=52.0)
+    seed(plans=[plan], trades=[trade])
+    priced(51.0)                       # past the recorded best: clamps to 100
+    assert _runner_row(logged_in)["progress_pct"] == 100.0
+    priced(58.9)                       # a hair under the stop
+    row = _runner_row(logged_in)
+    assert row["progress_pct"] < 5.0
+    assert row["progress_band"] == "toward_stop"
+
+
+def test_trailing_runner_without_a_best_price_keeps_the_plain_chip(seed, logged_in, priced):
+    plan, trade = _trailing_short(best=None)
+    seed(plans=[plan], trades=[trade])
+    priced(55.5)
+
+    row = _runner_row(logged_in)
+    assert row["progress_pct"] is None
+    assert row["status_label"] == "PARTIAL"
 
 
 def test_active_plan_is_unaffected_by_the_partial_fields(seed, logged_in):

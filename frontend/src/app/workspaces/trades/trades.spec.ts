@@ -259,8 +259,8 @@ describe('Trades — the count footer', () => {
   it('leaves the non-empty range to the pager, printed once', () => {
     const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
     expect(el.querySelector('p.count')).toBeNull();
-    expect(el.querySelectorAll('.pager .range')).toHaveLength(1);
-    expect(el.querySelector('.pager .range')!.textContent).toContain('1–12 of 142');
+    expect(el.querySelectorAll('.bar .range')).toHaveLength(1);
+    expect(el.querySelector('.bar .range')!.textContent).toContain('1–12 of 142');
   });
 
   it('distinguishes a filter that matched nothing from an empty log', () => {

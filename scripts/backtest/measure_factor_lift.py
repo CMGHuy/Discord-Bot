@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts" / "data"))
 
 from swingbot import config
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
@@ -29,8 +30,15 @@ from swingbot.core.planning import quality
 from swingbot.core.scanning.confidence import level_for_score
 from swingbot.core.scanning.factors import FACTORS, FactorContext, run_factors
 from swingbot.core.scanning.regime import get_htf_bias
+from swingbot.core.marketdata import training_data
+from fetch_backtest_data import add_data_source_arg, apply_data_source
 
-CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
+def _training_frames() -> dict:
+    """{ticker: daily frame} for every ticker the selected training data holds."""
+    return {t: f for t in training_data.available_tickers()
+            if (f := training_data.load_daily(t)) is not None}
+
+
 TRAIN = ("2020-01-01", "2023-12-31")
 
 
@@ -150,8 +158,7 @@ def collect_train_trades() -> list:
     documented limitation.
     """
     rows = []
-    frames = {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True)
-              for p in sorted(CACHE_DIR.glob("*.csv"))}
+    frames = _training_frames()
     for ticker, df in frames.items():
         vol_ratio_series = df["Volume"] / df["Volume"].rolling(20).mean()
         date_to_idx = {str(d.date()): k for k, d in enumerate(df.index)}
@@ -204,18 +211,9 @@ def collect_train_trades() -> list:
                         target_count=target_confluence[0], target_families=list(target_confluence[1]),
                         stop_count=stop_confluence[0], stop_families=list(stop_confluence[1]),
                     )
-                    score_raw, breakdown_points = run_factors(FACTORS, ctx)
+                    score_raw, _breakdown, points = run_factors(FACTORS, ctx)
                     score = max(0, min(100, score_raw))
                     level, _label = level_for_score(score, target_confluence[0])
-
-                    # run_factors() returns {name: line}; re-derive the raw
-                    # points per factor for the median split above (the
-                    # line string embeds them but isn't meant to be parsed).
-                    points = {}
-                    for fn in FACTORS:
-                        r = fn(ctx)
-                        if r is not None:
-                            points[r.name] = r.points
 
                     rows.append({
                         "ticker": ticker, "horizon": hk, "strategy": strategy,
@@ -227,11 +225,13 @@ def collect_train_trades() -> list:
     return rows
 
 
-if __name__ == "__main__":
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--train", action="store_true")
     ap.add_argument("--json", default=None)
-    args = ap.parse_args()
+    add_data_source_arg(ap)
+    args = ap.parse_args(argv)
+    apply_data_source(args)
 
     trades = collect_train_trades()
     print(f"\nTotal TRAIN trades: {len(trades)}", flush=True)
@@ -262,4 +262,10 @@ if __name__ == "__main__":
         out = {"n_trades": len(trades), "factor_lift": lift,
               "level_table": levels_table, "trades": raw_trades}
         Path(args.json).write_text(json.dumps(out, indent=2, default=list))
+        training_data.write_provenance(args.json)
         print(f"\nWrote {args.json}", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -53,8 +53,19 @@ Referenced from the root `CLAUDE.md`.
   look for.
 - Skip `frontend-design`/`dataviz` conventions for the admin UI unless asked —
   it follows the existing TradingView-style theme.
-- **Driving a browser (screenshot passes, UI verification): use Playwright,
-  never `claude-in-chrome`.** The extension isn't installed/connected in this
+- **Driving a browser (screenshot passes, UI verification, and every visit
+  to production at bomeo-capital.com): use Playwright, never
+  `claude-in-chrome`.** For bomeo-capital.com, launch it headed
+  (`headless: false`) and let the partner type the credentials into the
+  window — never script, ask for or store a production login. **Use
+  `frontend/scripts/browse.mjs`** (Playwright is a `frontend` devDependency,
+  so `npm ci` keeps it; Chromium lives in `%LOCALAPPDATA%\ms-playwright`): it
+  opens a persistent profile under `%LOCALAPPDATA%\swingbot-playwright`, so
+  one sign-in lasts until the session cookie expires. `node
+  frontend/scripts/browse.mjs shots --out <dir> --path "trades/<id>?tab=live"
+  --widths 1440,820,390` writes full-height PNG + text per width; `... api
+  --path "api/v1/trades/<id>"` prints JSON. Write paths without the leading
+  slash (Git Bash rewrites `/trades/...`). The extension isn't installed/connected in this
   repo's sessions, so trying it first is a wasted round trip every time — go
   straight to `npx playwright` (install a local copy with
   `npm install --no-save playwright` inside `frontend/`, then
@@ -106,6 +117,7 @@ wrapper; it reads flags only from the shell segment that runs
 | `deploy` | 2 | slash-only (`/deploy`) | none — Step 1 reads `docs/deploy/DEPLOY_HETZNER.md` and `docs/deploy/DOCKER.md`, not `docs/claude/` |
 | `stable-snapshot` | 2 | slash-only (`/stable-snapshot`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 | `backup-pull` | 2 | slash-only (`/backup-pull`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
+| `replicate-prod-db` | 2 | slash-only (`/replicate-prod-db`) | none — Step 1 reads `docs/deploy/DB_RESTORE.md` and `DEPLOY_HETZNER.md` § PostgreSQL, not `docs/claude/` |
 | `result-digest` | 2 | slash-only (`/result-digest`) | none — runs `scripts/backtest/compare_backtest_json.py` on the two files it is given, reads no `docs/claude/` file |
 | `handoff` | 2 | slash-only (`/handoff`) | `skills-tools.md` — only the "Handing a plan to another session or account" paragraph of § Plan writing, by `grep` |
 | `screen` | 2 | slash-only (`/screen <idea>`) | `backtest-methodology.md` — Step 1 reads the `Funnel stages` section with `doc_section.py` |
@@ -122,8 +134,8 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry no Trigger table — they are
 checklists for an explicit slash command. `/deploy`, `/stable-snapshot`,
-`/backup-pull`, `/result-digest`, `/handoff`, `/screen`, `/prereg` and
-`/data-check` also carry
+`/backup-pull`, `/replicate-prod-db`, `/result-digest`, `/handoff`, `/screen`,
+`/prereg` and `/data-check` also carry
 `disable-model-invocation: true`: the model never decides to run them. `/new-doc` and `/close-out` do not (the partner let
 Claude run both, 2026-10-08): Claude invokes `new-doc` right before creating a
 numbered spec or plan, and `close-out` once a plan's final full-suite task is
@@ -131,6 +143,10 @@ green and its results are recorded. `MODEL_RUN_RITUALS` in
 `tests/hooks/test_skill_shape.py` pins the split.
 
 ## Proving a skill fires: the eval suites
+
+**Never run these unless the partner asks by name** — each case is a billed
+child `claude` run (`working-conventions.md` § Paid usage). The suites are kept
+as the written record of each trigger table.
 
 Every Tier 1 and Tier 3 trigger table is wired into a runnable suite under
 `.claude/skills/<skill>/evals/` — one case per table row, `fire-*` for a
@@ -200,8 +216,53 @@ haiku -- reviewing means judging.
 | `technical-analyst` | sonnet | S/R, pattern and indicator logic: correct in code and true to how the setup is traded |
 | `fundamental-analyst` | sonnet | Earnings, catalysts, sector and macro concentration: the bot's blind spot |
 | `staff-engineer` | opus | Cross-cutting design: seams, migrations, VM ops, blast radius, long-run cost |
-| `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the two OHLCV caches, reproducibility |
+| `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the OHLCV caches and the v162 training-data store, reproducibility |
 | `senior-engineer` | sonnet | Code-level quality, the complexity limit, reads like its surroundings; `task-reviewer` preloads it |
+
+## Generator roles (v161)
+
+Three role skills propose instead of review: `exit-harvester` (exits, trails,
+stops, give-back), `setup-scout` (entries, fills, liquidity, rejected plans,
+and the setup playbook at `.claude/skills/setup-scout/references/playbook.md`)
+and `regime-desk` (regime, calendar, events, alert timing). They share the
+reviewer roles' file shape but open with `## Generator lens`, so
+`tests/hooks/test_role_skills.py` never counts them as reviewers;
+`tests/scout/test_generator_roles.py` pins their shape. `/trade-scout` runs
+them through the read-only `scout` agent (sonnet), one role per dispatch,
+serially, over one book autopsy (`scripts/reports/book_autopsy.py`, fed by the
+read-only VM export `scripts/ops/export_book_rows.sh`); then
+`scripts/dev/scout_merge.py` drops and ranks their rows into
+`docs/superpowers/results/<date>-scout-slate.md`.
+
+**Evidence rule** -- the thresholds the role skills point at:
+
+- A cell is **thin** when N < 30 or it spans fewer than 8 distinct ISO weeks
+  (`THIN_MIN_N`, `THIN_MIN_WEEKS` in `scripts/reports/autopsy/cells.py`).
+  A thin cell is tested and counted, never ranked as evidence; the merge
+  drops a row that cites one.
+- A row's cell needs a Δ interval (cell minus its complement, week-cluster
+  bootstrap) that excludes zero and a Benjamini–Hochberg **q ≤ 0.10** across
+  every cell tested. The merge drops any row whose Δ lower bound is ≤ 0;
+  the q cut-off is the roles' filter, and `quant-researcher` checks it on the
+  slate.
+- Every autopsy-derived row carries `exploratory: yes`: the live-book window
+  overlaps the 2026 holdout, so a `/prereg` built on one freezes its
+  thresholds on windows ending before the autopsy window and records the
+  holdout as contaminated for that idea. A `/screen` route is unaffected.
+- A row quotes only figures printed in the autopsy Markdown
+  (`pooled-numbers`); a playbook row routed to `/screen` needs no cell.
+
+**Boundaries:** a slate row is a hypothesis. No gate moves, nothing edits
+code, config, thresholds or live alerts, and no closed pre-registration is
+re-run. Every entry or filter idea still needs a `SCREEN-PASS` row before its
+spec. No paid usage: the export, autopsy and merge are scripts; the roles run
+as subagents.
+
+**Retention:** raw export CSVs stay in the session scratchpad. Each run
+commits one `*-book-autopsy.{json,md}` and one `*-scout-slate.md` on `main`.
+If three consecutive slates send no row to `/screen` or `/prereg`, the next
+session records that in the latest slate and asks the partner whether to
+retire the tooling.
 
 ## Which agent for what (v107)
 
@@ -213,6 +274,7 @@ Serial, one at a time — except plan parts (§ Plan writing below). Opus
 | Implement one plan task from `/task-brief` | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
 | Review that task's commits | `task-reviewer` | sonnet |
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
+| Propose hypotheses from a book autopsy through one generator role (via `/trade-scout`) | `scout` | sonnet |
 | Gather a plan's code context into one brief | `plan-briefer` | sonnet |
 | Draft a plan from an approved spec — index, then parts two at a time | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |

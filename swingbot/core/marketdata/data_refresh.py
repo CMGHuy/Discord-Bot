@@ -261,11 +261,16 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
     """
     tf = timeframe_name(timeframe)
     out = {"symbol": symbol, "timeframe": tf, "rows": 0, "added": 0}
+
+    # Staleness is decided from the file's mtime BEFORE anything is parsed: a
+    # fresh pair is the common case (hundreds per tick) and must cost no CSV
+    # read. "unchanged" tells _record to keep the stored coverage record rather
+    # than re-reading the file to rebuild it.
+    if not force and not is_stale(symbol, tf, base_dir=base_dir, state=state):
+        return {**out, "status": "fresh", "unchanged": True}
+
     existing = load_from_disk(symbol, tf, base_dir=base_dir)
     have = 0 if existing is None else len(existing)
-
-    if not force and not is_stale(symbol, tf, base_dir=base_dir, state=state):
-        return {**out, "status": "fresh", "rows": have}
 
     # Cold, or forced: pull the deepest history this timeframe allows.
     # NOTE force no longer discards `existing` -- it re-pulls full depth and
@@ -311,7 +316,14 @@ def _record(state: dict, symbol: str, tf: str, r: dict, base_dir: str) -> None:
     rec = dict(state.get(k) or {})
     rec["last_status"] = r["status"]
     rec["last_attempt"] = int(time.time())
-    if r["status"] == "failed":
+    if r.get("unchanged"):
+        # Inside its staleness window: nothing was fetched or read, so the
+        # stored rows/earliest/latest are still the truth. Re-parsing the CSV
+        # here cost the whole refresh budget on a mostly-fresh watchlist.
+        rec["fail_count"] = 0
+        rec.pop("last_error", None)
+        rec["last_success"] = rec["last_attempt"]
+    elif r["status"] == "failed":
         rec["fail_count"] = int(rec.get("fail_count", 0)) + 1
         rec["last_error"] = str(r.get("error", ""))[:200]
     else:

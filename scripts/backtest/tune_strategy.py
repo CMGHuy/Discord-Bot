@@ -21,7 +21,9 @@ sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
 import numpy as np
 
-from fetch_backtest_data import load_cached, load_watchlist
+from fetch_backtest_data import add_data_source_arg, apply_data_source, load_cached, load_watchlist
+from swingbot.core.marketdata import training_data
+from swingbot.core.marketdata.history_store import MissingStoreError
 import swingbot.core.backtesting.backtest as bt
 import swingbot.core.market.entry_filters as ef
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
@@ -110,7 +112,21 @@ def report_gate(rows: list, qualifying: list) -> dict:
     return {"gated": gated, "n_qualifying": len(qualifying), "n_rows": len(rows), "headline": headline}
 
 
-def main():
+def _select_source(args) -> str:
+    """Pick the training bars before any is read. A missing Alpaca store stops
+    the grid with an error naming the path (spec §3), never a zero-ticker grid."""
+    try:
+        return apply_data_source(args)
+    except MissingStoreError as exc:
+        raise SystemExit(f"error: {exc}") from exc
+
+
+def _report_exclusions() -> None:
+    for line in training_data.exclusion_lines():
+        print(line, flush=True)
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--strategy", required=True)
     ap.add_argument("--be-trigger", type=float, default=None)
@@ -124,7 +140,9 @@ def main():
     ap.add_argument("--scale-out", dest="scale_out", action="store_true")
     ap.add_argument("--json", type=str, default=None,
                     help="Write results (grid + best) as JSON to this path.")
-    args = ap.parse_args()
+    add_data_source_arg(ap)
+    args = ap.parse_args(argv)
+    data_source = _select_source(args)
     strategy = args.strategy
     if args.grid:
         grid_override = {}
@@ -140,7 +158,8 @@ def main():
         bt.BREAKEVEN_TRIGGER_FRACTION = args.be_trigger
 
     dfs = {t: d for t in sorted(load_watchlist()) if (d := load_cached(t)) is not None}
-    print(f"{len(dfs)} tickers loaded from cache")
+    print(f"{len(dfs)} tickers loaded from {data_source} training data")
+    _report_exclusions()
 
     grid = PARAM_GRID[strategy]
     keys = list(grid)
@@ -177,8 +196,11 @@ def main():
             "gate": gate_report,
             "grid": [{"params": p, **s} for p, s in rows],
             "best": ({"params": best[0], **best[1]} if best else None),
+            "data_source": data_source,
+            "provenance": training_data.provenance(),
         }
         Path(args.json).write_text(json.dumps(payload, indent=2))
+        training_data.write_provenance(args.json)
         print(f"Wrote results to {args.json}")
 
 

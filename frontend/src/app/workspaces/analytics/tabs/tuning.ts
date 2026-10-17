@@ -3,10 +3,11 @@ import {
   Component,
   computed,
   inject,
+  linkedSignal,
   signal,
   TemplateRef,
   viewChild,
-  WritableSignal,
+  Signal,
 } from '@angular/core';
 
 import { AnalyticsStore, GridRow, JobStatus, JobSummary, ProposalRow } from '../../../stores/analytics.store';
@@ -22,7 +23,7 @@ import { ABSENT, dateTime } from '../../../ui/format';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { PaginationComponent } from '../../../ui/pagination';
 import { PanelHeader } from '../../../ui/panel-header';
-import { readTablePerPage, writeTablePerPage } from '../../../ui/table-prefs';
+import { TablePerPage, tablePerPage } from '../../../ui/table-per-page';
 import { allKeys, expectancy, GRID_COLUMNS, PAST_JOBS_COLUMNS, rate } from '../analytics.columns';
 
 /** A proposal with its parameter diff already paired up for rendering. */
@@ -58,6 +59,8 @@ interface ProposalView extends ProposalRow {
         never the VALIDATION window the badges on the Strategies tab are
         measured against. That firewall is what keeps those badges honest,
         so no date input exists here or anywhere in this workbench.
+        Training data defaults to the server's setting; the choice is recorded
+        with the job, shown on its results, and grants no validation run.
       </p>
 
       @if (store.jobActive()) {
@@ -73,6 +76,13 @@ interface ProposalView extends ProposalRow {
             [(value)]="strategy"
             [options]="strategyOptions()"
           />
+          @if (dataSourceOptions().length) {
+            <sb-select
+              label="Training data"
+              [(value)]="dataSource"
+              [options]="dataSourceOptions()"
+            />
+          }
           <button
             sb-button
             type="button"
@@ -149,6 +159,8 @@ interface ProposalView extends ProposalRow {
             [visible]="pastJobsKeys"
             [rowKey]="pastJobRowKey"
             [pagination]="pastJobsPage.pageSpec()"
+            [showPerPage]="true"
+            (perPageChange)="onPerPage('past-jobs', $event)"
             (pageChange)="pastJobsPage.setPage($event)"
           />
         </sb-panel>
@@ -199,7 +211,7 @@ interface ProposalView extends ProposalRow {
           </button>
         </div>
       }
-      <sb-pagination [pagination]="proposalsPage.pageSpec()" (pageChange)="proposalsPage.setPage($event)" />
+      <sb-pagination [pagination]="proposalsPage.pageSpec()" [showPerPage]="true" [announce]="true" (pageChange)="proposalsPage.setPage($event)" (perPageChange)="onPerPage('proposals', $event)" />
     </sb-panel>
 
     <ng-template #gridPassesCell let-row>
@@ -342,6 +354,23 @@ export class TuningTab {
       .map((c) => ({ value: c.strategy, label: c.strategy })),
   );
 
+  /** v162. Seeded from the server's default and re-seeded if that changes;
+   *  the user's pick overrides it until then. */
+  protected readonly dataSource = linkedSignal(() => this.store.tuneDefaults()?.data_source ?? '');
+
+  /** The server's default first: `sb-select` binds its value before its
+   *  options render, so the browser shows the first option until a pick, and
+   *  that has to be the value `dataSource` holds. */
+  protected readonly dataSourceOptions = computed(() => {
+    const defaults = this.store.tuneDefaults();
+    if (!defaults) return [];
+    const ordered = [defaults.data_source, ...defaults.choices.filter((c) => c !== defaults.data_source)];
+    return ordered.map((value) => ({
+      value,
+      label: (SOURCE_LABELS[value] ?? value) + (value === defaults.data_source ? ' (default)' : ''),
+    }));
+  });
+
   protected jobStateLabel(job: JobStatus): string {
     const state = job.state.toUpperCase();
     return job.returncode === null || job.returncode === undefined
@@ -359,7 +388,7 @@ export class TuningTab {
 
   protected launch(): void {
     const strategy = this.strategy();
-    if (strategy) this.store.startTune(strategy);
+    if (strategy) this.store.startTune(strategy, this.dataSource());
   }
 
   /* -- SR51: the grid results --------------------------------------------- */
@@ -377,19 +406,15 @@ export class TuningTab {
   protected readonly gridKeys = allKeys(GRID_COLUMNS);
   protected readonly pastJobsKeys = allKeys(PAST_JOBS_COLUMNS);
 
-  private readonly perPageSignals = new Map<string, WritableSignal<number>>();
-  private perPageFor(table: string) {
-    let current = this.perPageSignals.get(table);
-    if (!current) {
-      current = signal(readTablePerPage(this.preferences.values(), 'analytics-' + table));
-      this.perPageSignals.set(table, current);
-    }
-    return current;
-  }
-  protected onPerPage(table: string, value: number): void {
-    this.perPageFor(table).set(value);
-    this.preferences.update((prefs) => writeTablePerPage(prefs, 'analytics-' + table, value));
-  }
+  /** Created eagerly: `tablePerPage` injects, which only works here in the
+   *  field initialisers, not lazily from a template. */
+  private readonly perPageStates: Record<string, TablePerPage> = {
+    grid: tablePerPage('analytics-grid'),
+    'past-jobs': tablePerPage('analytics-past-jobs'),
+    proposals: tablePerPage('analytics-proposals'),
+  };
+  private perPageFor(table: string): Signal<number> { return this.perPageStates[table].value; }
+  protected onPerPage(table: string, value: number): void { this.perPageStates[table].set(value); }
 
   protected readonly gridRowKey = (row: GridRow) => String(row.row_index);
   protected readonly gridPage = createClientPage(() => this.store.grid(), () => this.perPageFor('grid')());
@@ -401,7 +426,9 @@ export class TuningTab {
 
   protected readonly gridHeading = computed(() => {
     const strategy = this.store.gridStrategy();
-    return strategy ? `Grid results — ${strategy}` : 'Grid results';
+    const source = this.store.gridDataSource();
+    const head = strategy ? `Grid results — ${strategy}` : 'Grid results';
+    return source ? `${head} · training data: ${source}` : head;
   });
 
   protected askPropose(row: GridRow): void {
@@ -460,7 +487,7 @@ export class TuningTab {
   /** Each proposal is a card with its own nested diff table, not flat row
    *  data -- `sb-data-table` doesn't fit, so this gets its own small pager
    *  rather than the shared component. */
-  protected readonly proposalsPage = createClientPage(() => this.proposalViews(), 8);
+  protected readonly proposalsPage = createClientPage(() => this.proposalViews(), () => this.perPageFor('proposals')());
 
   protected readonly deleteConsequence = computed(() => {
     const proposal = this.pendingDelete();
@@ -476,6 +503,12 @@ export class TuningTab {
     this.pendingDelete.set(null);
   }
 }
+
+/** v162 picker labels. An unknown value from a newer server shows as-is. */
+const SOURCE_LABELS: Record<string, string> = {
+  alpaca: 'Alpaca history store',
+  yfinance: 'yfinance cache',
+};
 
 /** The templates are declared once per table on this workspace, so they
  *  cannot be typed to one row shape at their declaration site. The cast is

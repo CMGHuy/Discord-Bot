@@ -816,7 +816,28 @@ def risk_reward_split(closed: list[dict]) -> list[dict]:
                     "avg_return_pct": round(sum(returns) / len(returns), 4) if returns else None})
     return out
 
-def _exit_reason_bucket(trade: dict) -> str:
+def _bucket_for_text(text: str) -> str | None:
+    """The EXIT_REASONS bucket an already-normalised reason text names
+    exactly -- the name itself, else its `_EXIT_REASON_ALIASES` entry --
+    or None. No substring rule, ever (see `exit_reason_bucket`)."""
+    if text in _EXIT_REASON_SET:
+        return text
+    return _EXIT_REASON_ALIASES.get(text)
+
+
+def exit_reason_bucket_text(text: str | None) -> str | None:
+    """Which EXIT_REASONS bucket a bare reason text names, or None.
+
+    The text-only half of `exit_reason_bucket`, for a reason that has no
+    trade around it -- one realized leg's `reason` (v165's calendar rows).
+    Stripped and lowercased, then exact name or alias. None, never "other",
+    when nothing matches: there is no status to fall back on, and the caller
+    decides what an unmatched text means.
+    """
+    return _bucket_for_text((text or "").strip().lower())
+
+
+def exit_reason_bucket(trade: dict) -> str:
     """Which EXIT_REASONS bucket a closed trade belongs to.
 
     Exact match on the raw reason text first, so "runner_tp2" cannot be
@@ -825,13 +846,13 @@ def _exit_reason_bucket(trade: dict) -> str:
     "scratch exit" means scratch; then "other". Never a fuzzy fallback beyond
     those two -- absorbing an unknown string into whichever bucket it happens to
     share letters with is how a table like this starts lying.
+
+    The text is `close_reason_text` as-is (lowercased, NOT stripped): that is
+    this function's output since v89, and v165 keeps it byte-identical.
     """
-    text = close_reason_text(trade)
-    if text in _EXIT_REASON_SET:
-        return text
-    alias = _EXIT_REASON_ALIASES.get(text)
-    if alias is not None:
-        return alias
+    bucket = _bucket_for_text(close_reason_text(trade))
+    if bucket is not None:
+        return bucket
     outcome = resolve_outcome(trade)
     if outcome in _EXIT_REASON_SET:
         return outcome
@@ -862,7 +883,7 @@ def exit_reason_split(closed: list[dict]) -> list[dict]:
         return []
     buckets: dict[str, list[dict]] = {reason: [] for reason in EXIT_REASONS}
     for trade in closed:
-        buckets[_exit_reason_bucket(trade)].append(trade)
+        buckets[exit_reason_bucket(trade)].append(trade)
     out = []
     for reason in EXIT_REASONS:
         members = buckets[reason]
@@ -884,7 +905,7 @@ def unmapped_exit_reasons(closed: list[dict], limit: int = 10) -> list[dict]:
     """
     counts: dict[tuple[str, str], int] = {}
     for trade in closed:
-        if _exit_reason_bucket(trade) != "other":
+        if exit_reason_bucket(trade) != "other":
             continue
         key = (str(trade.get("status") or ""), close_reason_text(trade))
         counts[key] = counts.get(key, 0) + 1

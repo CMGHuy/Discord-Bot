@@ -36,7 +36,8 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
-from . import analyze, dedup, fetch, lane_overlap, progress_store, runstate, short_funnel, strategy_pass, telemetry
+from . import (analyze, dedup, fetch, lane_overlap, progress_store, rejection_recorder, runstate,
+               short_funnel, strategy_pass, telemetry)
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
 from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
@@ -246,6 +247,16 @@ def get_regime(regime_df=None):
     except Exception as e:
         log.warning("Could not fetch market regime: %s", e, exc_info=True)
         return None
+
+def _confidence_point_kwargs(conf) -> dict:
+    """v146 I1: the two log_trade kwargs carrying the scorer's numeric points.
+
+    Read with a None default: a stand-in `conf` that has no `points` (the
+    stats-command placeholder, test doubles) is a trade without factor
+    points, which the record spells as None."""
+    return {"confidence_points": getattr(conf, "points", None),
+            "confidence_unevaluated": getattr(conf, "unevaluated", None)}
+
 
 def _logged_plan_fields(plan_v2, scenario, level_map, direction: str) -> tuple[list, float]:
     """Attribution and R:R for the exact prices persisted to a trade row."""
@@ -672,6 +683,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                               item.result.trend, rs_result["reason"])
                     rs_blocked += 1
                     funnel.record_item(item, "rs", "rs_blocked")
+                    rejection_recorder.record_item_block(item, fresh_data, "rs", "rs_blocked",
+                                                         source="confluence")
                     continue
             funnel.record_item(item, "rs")
 
@@ -697,6 +710,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                     filtered_by_rr += 1
                     funnel.record_item(item, "plan", item.plan_v2_rejected)
                     _skip_rejected_plan(item, require_confirmation)
+                    rejection_recorder.record_item_block(item, fresh_data, "plan_rejected",
+                                                         item.plan_v2_rejected, source="confluence")
                     continue          # never reaches scan_items -> never alerts
                 funnel.record_item(item, "plan")
             scan_items.append(item)
@@ -995,6 +1010,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
                 risk_features=plan_v2.risk_features if plan_v2 is not None else None,
                 entry_context=plan_v2.entry_context if plan_v2 is not None else None,
+                **_confidence_point_kwargs(conf),
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
         else:

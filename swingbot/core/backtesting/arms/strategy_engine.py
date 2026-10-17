@@ -14,9 +14,13 @@ for offline scripts and tests only, never a live scan thread -- and every
 candidate passes the same pre-entry decision the live pass calls
 (``compression_context.decide_compression_entry``). Under the knob only that one
 weakness mode is admitted, so a broad run and an isolated run are separate cohorts.
+
+v147: an optional `blocked_sink` records every counted compression decision (rejected -> "blocked",
+passed -> "taken") for the gate counterfactual; it never changes a trade or a counter.
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 from collections import Counter
 from dataclasses import dataclass
@@ -43,6 +47,26 @@ _CANCEL_REASONS = {"expired": "expired", "risk_cap": "gap_risk_cancel", "invalid
 #: Fixed, never the horizon being replayed, so no legacy horizon opens with it.
 RESEARCH_CELL = {"directions": (), "cells": {("bearish", "2w")}}
 RESEARCH_KNOB = "COMPRESSION_SHORT_RESEARCH_MODE"
+
+#: v147: decide reasons that are research-universe masks, not the compression gate -- never a gate row.
+_NOT_A_GATE_REASONS = frozenset({"not_pit_member"})
+
+
+def _sink_candidate(ticker, window, strategy, horizon_key, direction, params, *, reason=None, plan=None):
+    """v147: one compression candidate as a BlockedCandidate, from the signal-bar window only.
+
+    `scan_params` mirrors the engine's own build call exactly: no override pinned (the engine passes
+    none either) and the run's ScanParams, so a rebuilt blocked plan uses the constructor the taken
+    arm used. With DATA_DRIVEN_STOPS_ENABLED on, V147-3 refuses the rebuild (no-data), as the
+    replays refuse live-state flags."""
+    from swingbot.core.backtesting.gate_counterfactual import PIN_KEYS, BlockedCandidate
+    from swingbot.core.planning.plan_types import plan_to_dict
+    scan_params = {**dict.fromkeys(PIN_KEYS), "params": dataclasses.asdict(params) if params is not None else None}
+    return BlockedCandidate(
+        ticker=ticker, gate="compression", reason=reason, source="strategy", strategy=strategy,
+        horizon=horizon_key, direction=direction, signal_date=str(window.index[-1].date()),
+        plan=plan_to_dict(plan) if plan is not None else None, scan_params=scan_params,
+        signal_close=float(window["Close"].iloc[-1]))
 
 
 def research_mode() -> str:
@@ -92,11 +116,16 @@ class StrategyEngine:
     engine_id = "strategy"
 
     def __init__(self, strategies=None, compression_context: CompressionResearchContext | None = None,
-                 instrument=None):
+                 instrument=None, *, blocked_sink: list | None = None,
+                 compression_allowlist: tuple | None = None):
         self.strategies = tuple(strategies or bt.ALL_STRATEGIES)
         self.compression_context = compression_context
         # v157: the backtest instrument every simulate_exit call runs under; None is v1.
         self.instrument = instrument
+        # v147, record-only: (arm, BlockedCandidate) per counted compression decision; None = off.
+        self.blocked_sink = blocked_sink
+        # v147: the decision's mode allowlist; None keeps the research-knob derivation below.
+        self.compression_allowlist = compression_allowlist
         self.compression_reasons: Counter = Counter()
         self.compression_reasons_by_mode: Counter = Counter()
         # Supplemental research diagnostics -- never part of a stamped ArmTrade row.
@@ -177,10 +206,17 @@ class StrategyEngine:
         mode, why = cc.compression_mode_for(window, context.spy, context.sector_for(ticker, bar_day),
                                             now=decided_at)
         snapshot = context.snapshot_of(ticker, decided_at) if mode is not None else None
-        knob = research_mode()
-        allowlist = (knob,) if knob in cc.COMPRESSION_MODES else cc.COMPRESSION_MODES
+        allowlist = self._allowlist(cc)
         return cc.decide_compression_entry(ticker, window, mode=mode, mode_reason=why,
                                            snapshot=snapshot, now=decided_at, allowlist=allowlist)
+
+    def _allowlist(self, cc) -> tuple:
+        """The explicit allowlist when one was given (v147 records under the live one); otherwise one
+        research mode under the knob, every mode when it is off."""
+        if self.compression_allowlist is not None:
+            return tuple(self.compression_allowlist)
+        knob = research_mode()
+        return (knob,) if knob in cc.COMPRESSION_MODES else cc.COMPRESSION_MODES
 
     def _count(self, stamp, reason) -> None:
         """Count one excluded compression candidate and list it (the candidate `_candidate_plan` set)."""
@@ -236,6 +272,7 @@ class StrategyEngine:
             self._candidate = (ticker, str(window.index[-1].date()))
             stamp, reason = self._compression_stamp(ticker, window)
             if reason is not None:
+                self._note_blocked(ticker, window, strategy, horizon_key, direction, params, reason, counted)
                 if counted:
                     self._count(stamp, reason)
                 return None, stamp
@@ -250,7 +287,22 @@ class StrategyEngine:
             return None, stamp
         if stamp:
             plan.entry_context = {**(plan.entry_context or {}), **stamp}
+        self._note_taken(ticker, window, strategy, horizon_key, direction, params, plan, counted)
         return plan, stamp
+
+    def _note_blocked(self, ticker, window, strategy, horizon_key, direction, params, reason, counted) -> None:
+        """v147 record-only: a counted compression reject to the sink (research masks skipped)."""
+        if self.blocked_sink is None or not counted or reason in _NOT_A_GATE_REASONS:
+            return
+        self.blocked_sink.append(
+            ("blocked", _sink_candidate(ticker, window, strategy, horizon_key, direction, params, reason=reason)))
+
+    def _note_taken(self, ticker, window, strategy, horizon_key, direction, params, plan, counted) -> None:
+        """v147 record-only: a counted compression plan that passed the decision, as the engine built it."""
+        if self.blocked_sink is None or not counted or strategy != COMPRESSION_SHORT:
+            return
+        self.blocked_sink.append(
+            ("taken", _sink_candidate(ticker, window, strategy, horizon_key, direction, params, plan=plan)))
 
     @staticmethod
     def _gated_plan(window, index, *, ticker, strategy, horizon_key, direction,

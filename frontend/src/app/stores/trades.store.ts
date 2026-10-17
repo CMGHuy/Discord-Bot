@@ -14,7 +14,7 @@ import { routeRequest } from '../routing/route-request';
 import { TradeCollection, TradeQuery, TradeRow } from '../api/models';
 import { PageSpec, SortSpec } from '../ui/data-table/data-table.types';
 
-export const DEFAULT_PER_PAGE = 25;
+export const DEFAULT_PER_PAGE = 10;
 
 interface TradesSlice {
   data: TradeCollection | null;

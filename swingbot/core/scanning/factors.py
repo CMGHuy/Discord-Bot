@@ -59,18 +59,21 @@ Factor = Callable[[FactorContext], "FactorResult | None"]
 FACTORS: list[Factor] = []
 
 
-def run_factors(factors: list[Factor], ctx: FactorContext) -> tuple[int, dict]:
-    """Returns (total_points, {name: line}). Factors returning None are
-    omitted from both."""
+def run_factors(factors: list[Factor], ctx: FactorContext) -> tuple[int, dict, dict]:
+    """Returns (total_points, {name: line}, {name: points}). Factors returning
+    None are omitted from all three -- v146 I1 reads the third map so no
+    caller ever has to parse a line for its integer."""
     total = 0
     breakdown: dict[str, str] = {}
+    points: dict[str, int] = {}
     for fn in factors:
         result = fn(ctx)
         if result is None:
             continue
         total += result.points
         breakdown[result.name] = result.line
-    return total, breakdown
+        points[result.name] = int(result.points)
+    return total, breakdown, points
 
 
 # --- confidence.py factors (Task 3) -----------------------------------

@@ -105,3 +105,43 @@ def test_shorts_are_always_checked(monkeypatch):
     monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "", raising=False)
     short = _plan(strategy=SHORT_STRATEGIES[0], direction="bearish", stop=109.0)
     assert not ss.risk_sizing_ok(short, sizing_fn=lambda entry, stop: _sizing(mode="account_pct"))
+
+
+def test_a_stored_ceiling_wins_for_any_source():
+    confluence = SimpleNamespace(source="confluence", strategy="S/R Confluence",
+                                 direction="bullish", horizon_key="4w", stop_ceiling_pct=4.0)
+    assert ss.plan_stop_ceiling(confluence) == 4.0
+
+
+def test_no_stored_ceiling_keeps_todays_answer(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "", raising=False)
+    confluence = SimpleNamespace(source="confluence", strategy="S/R Confluence",
+                                 direction="bullish", horizon_key="4w", stop_ceiling_pct=None)
+    assert ss.plan_stop_ceiling(confluence) == HARD_MAX_PLANNED_LOSS_PCT
+
+
+def test_a_plan_with_a_stored_ceiling_is_always_sizing_checked(monkeypatch):
+    monkeypatch.setattr(config, "STRUCTURAL_STOP_SCOPE", "", raising=False)
+    plan = SimpleNamespace(strategy="S/R Confluence", direction="bullish",
+                           trigger_price=100.0, stop_loss=96.0, stop_ceiling_pct=4.25)
+    assert not ss.risk_sizing_ok(plan, sizing_fn=lambda e, s: _sizing(mode="account_pct", stop=96.0))
+    assert ss.risk_sizing_ok(plan, sizing_fn=lambda e, s: _sizing(stop=96.0))
+
+
+@pytest.mark.parametrize("d", [2.5, 4.0, 4.75])
+def test_risk_pct_sizing_holds_the_dollar_loss_at_risk_per_trade(d, monkeypatch):
+    from swingbot.core.market import opex
+    from swingbot.core.planning import account
+    monkeypatch.setattr(opex, "size_mult", lambda: 1.0)
+    cfg = {"balance": 1_000_000.0, "risk_pct": config.RISK_PER_TRADE_PCT, "sizing_mode": "risk_pct",
+           "max_position_pct": 100.0, "max_position_value_absolute": 0,
+           "max_risk_amount_absolute": 0}
+    entry = 100.0
+    plan = SimpleNamespace(strategy="S/R Confluence", direction="bullish", trigger_price=entry,
+                           stop_loss=entry * (1 - d / 100), stop_ceiling_pct=5.0)
+    sizing = account.compute_position_size(entry, plan.stop_loss, cfg)
+    budget = cfg["balance"] * config.RISK_PER_TRADE_PCT / 100
+    distance = entry - plan.stop_loss
+    assert sizing["mode"] == "risk_pct"
+    assert sizing["shares"] * distance == pytest.approx(budget, abs=0.01 * distance)
+    assert ss.risk_sizing_ok(plan, sizing_fn=lambda e, s: account.compute_position_size(e, s, cfg))

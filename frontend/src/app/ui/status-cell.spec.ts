@@ -43,6 +43,46 @@ describe('StatusCell', () => {
     expect(el.textContent).toContain('no price');
   });
 
+  it('says "trailing", not "no price", for a runner with no target', () => {
+    const el = render({
+      ...live, status: 'PARTIAL', progress_pct: null, progress_band: null,
+      blink_seconds: null, bar_kind: 'trailing',
+    });
+    expect(el.querySelector('.fill')).toBeNull();
+    expect(el.textContent).toContain('PARTIAL');
+    expect(el.textContent).toContain('trailing');
+    expect(el.textContent).not.toContain('no price');
+  });
+
+  it('draws the bar with a single trailing-stop icon and P&L at both ends', () => {
+    const el = render({ ...live, status: 'PARTIAL', bar_kind: 'trailing', banked_fraction: 0.5,
+      stop_pnl_pct: 1.25, best_pnl_pct: 6 });
+    expect(el.querySelector('.fill')).not.toBeNull();
+    expect(el.querySelectorAll('sb-icon').length).toBe(1);
+    expect(el.querySelector('sb-icon[title="Trailing stop"]')).not.toBeNull();
+    expect(el.querySelector('.end.neg')!.textContent).toBe('+1.3%');
+    expect(el.querySelector('.end.pos')!.textContent).toBe('+6.0%');
+  });
+
+  it('adds no icons to an ordinary PARTIAL row with a TP2 bar', () => {
+    const el = render({ ...live, status: 'PARTIAL', bar_kind: 'progress', banked_fraction: 0.5 });
+    expect(el.querySelectorAll('sb-icon').length).toBe(0);
+  });
+
+  it('says how much of a trailing runner is still open', () => {
+    const el = render({
+      ...live, status: 'PARTIAL', progress_pct: null, progress_band: null,
+      blink_seconds: null, bar_kind: 'trailing', banked_fraction: 0.5,
+    });
+    expect(el.textContent).toContain('50% open');
+    expect(el.textContent).toContain('trailing');
+  });
+
+  it('shows the open share for a PARTIAL runner that still has a bar', () => {
+    const el = render({ ...live, status: 'PARTIAL', banked_fraction: 0.4 });
+    expect(el.textContent).toContain('60% open');
+  });
+
   it('shows the chip alone for a trade that has not opened', () => {
     const el = render({ ...live, status: 'PENDING', progress_pct: null, progress_band: null });
     expect(el.querySelector('.fill')).toBeNull();

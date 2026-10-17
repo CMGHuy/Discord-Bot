@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
-import { Viewport } from '../../ui/breakpoints';
+import { Viewport, ViewportService } from '../../ui/breakpoints';
 
 import { CloseScope, TradeRow } from '../../api/models';
 import { ApiClient } from '../../api/api-client';
@@ -36,9 +36,8 @@ import {
   writeTableDensity,
 } from '../../ui/table-prefs';
 import {
-  COMPACT_COLUMNS,
   DASHBOARD_TABLE_ID,
-  FULL_COLUMNS,
+  baselineColumns,
   PINNED_COLUMNS,
   openedAt,
   tradeColumns,
@@ -257,7 +256,7 @@ export const DASHBOARD_COLUMNS = tradeColumns();
              entry) that closing only one of them is a real, distinct
              action, not a convenience shortcut for the combined one. -->
         <div class="close-all-menu" table-actions #closeAllMenu>
-          <button sb-button variant="secondary" type="button"
+          <button sb-button variant="danger" type="button"
                   data-action="close-all"
                   [attr.aria-expanded]="closeAllMenuOpen()"
                   aria-haspopup="menu"
@@ -761,6 +760,7 @@ export class Dashboard {
   private readonly actionsCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('actionsCell');
   private readonly preferences = inject(PreferencesStore);
+  private readonly viewportService = inject(ViewportService);
 
   protected readonly tableId = DASHBOARD_TABLE_ID;
   protected readonly pinned = PINNED_COLUMNS;
@@ -778,7 +778,7 @@ export class Dashboard {
   );
 
   protected readonly defaultColumns = computed(() =>
-    this.density() === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS,
+    baselineColumns(this.density(), this.viewportService.isPhone()),
   );
 
   protected readonly visible = signal<string[]>(
@@ -786,9 +786,7 @@ export class Dashboard {
       this.preferences.values(),
       DASHBOARD_TABLE_ID,
       readTableDensity(this.preferences.values(), DASHBOARD_TABLE_ID),
-      readTableDensity(this.preferences.values(), DASHBOARD_TABLE_ID) === 'full'
-        ? FULL_COLUMNS
-        : COMPACT_COLUMNS,
+      baselineColumns(readTableDensity(this.preferences.values(), DASHBOARD_TABLE_ID), this.viewportService.isPhone()),
     ),
   );
 
@@ -808,7 +806,7 @@ export class Dashboard {
       this.density.set(density);
       this.visible.set(
         readTableColumns(prefs, DASHBOARD_TABLE_ID, density,
-                         density === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
+                         baselineColumns(density, this.viewportService.isPhone())),
       );
     });
   });
@@ -819,7 +817,7 @@ export class Dashboard {
     this.preferences.update((prefs) => writeTableDensity(prefs, DASHBOARD_TABLE_ID, next));
     this.visible.set(
       readTableColumns(this.preferences.values(), DASHBOARD_TABLE_ID, next,
-                       next === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
+                       baselineColumns(next, this.viewportService.isPhone())),
     );
   }
 

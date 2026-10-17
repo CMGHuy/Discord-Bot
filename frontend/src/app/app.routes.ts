@@ -115,13 +115,13 @@ export const routes: Routes = [
   },
   {
     path: 'research', canMatch: [authGuard], title: 'Research',
-    data: { subtitle: 'Deeper symbol research, planned' },
-    loadChildren: () => import('./workspaces/stubs/research.routes').then((m) => m.researchRoutes),
+    data: { subtitle: 'Every pre-registration and its verdict' },
+    loadChildren: () => import('./workspaces/research/research.routes').then((m) => m.researchRoutes),
   },
   {
     path: 'reports', canMatch: [authGuard], title: 'Reports',
-    data: { subtitle: 'Scheduled reports and exports, planned' },
-    loadChildren: () => import('./workspaces/stubs/reports.routes').then((m) => m.reportsRoutes),
+    data: { subtitle: 'What the measurements say about entries and gates' },
+    loadChildren: () => import('./workspaces/reports/reports.routes').then((m) => m.reportsRoutes),
   },
   {
     path: 'ui',

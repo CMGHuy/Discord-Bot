@@ -1,9 +1,11 @@
-# v160 eToro demo mirror: plan events become demo-account trades. Part 3: the executor (EM8–EM9)
+# v160 eToro demo mirror: plan events become demo-account trades. Part 3: the executor (EM8)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this part whole**: `grep -n "^### Task EM8" -A 700 <this file>`.
 
 **Spec:** `docs/superpowers/specs/etoro-migration/2026-10-11-v160-etoro-demo-mirror-design.md` (§ Executor rules, § Sizing and order checks, § Daily reconciliation, § Testing `test_executor.py`)
 **Index:** `docs/superpowers/plans/etoro-migration/2026-10-11-v160-etoro-demo-mirror_0-index.md`. Its `## Global Constraints`, `## Parallelisation` and `## Task ledger` apply to every task below and win over anything here.
+
+**EM9 lives in `2026-10-11-v160-etoro-demo-mirror_3b-close-and-reconcile.md`**: the index assigns it to part 3, but EM8 alone brings this file to the 1500-line cap (same split as part 1 / 1b).
 
 **Conventions for every task in this part**
 
@@ -858,4 +860,593 @@ def test_get_executor_is_a_process_singleton(monkeypatch):
 
 Run: `python "$WT/scripts/dev/testrun.py" file tests/broker/test_executor.py`
 Expected: FAIL, collection error `ModuleNotFoundError: No module named 'swingbot.core.broker.executor'`.
+
+- [ ] **Step 5: Write the executor**
+
+Create `swingbot/core/broker/executor.py`. Notes for the implementer: `checks.CheckConfig.from_config` takes the sizer's `risk_pct` (EM4's real signature; `compute_position_size` returns it in its result dict, `account.py:405`); the stubbed test sizer omits it, so the read is `sized.get("risk_pct", 0.0)`, which fails closed (`dollar_risk`) if a sizer ever drops it. `MirrorBook.open_trades` holds the raw `open_positions()` rows; EM5's heat checks convert them with `heat_trades`.
+
+```python
+"""The eToro demo mirror's executor (v160 EM8): broker_orders rows in, demo orders out.
+
+One tick (`run_tick`) queues one row per translated action ("no row, no
+send"), then advances the queue in per-plan seq order until SEND_BUDGET_S is
+spent. Every request id is uuid5(NAMESPACE, "plan:action:key"), so a resend
+after a crash, timeout or 5xx is deduplicated by eToro. A mirror store
+failure is logged and the action is not sent; it never raises StoreWriteHalt,
+which would pause alert issuance. Demo only: run_tick calls
+guard.assert_demo("demo") before anything else.
+"""
+from __future__ import annotations
+
+import datetime as dt
+import logging
+import math
+import threading
+import time
+import uuid
+from itertools import groupby
+
+from swingbot import config
+from swingbot.core.broker import checks, guard, mirror, sizing
+from swingbot.core.db import write_failure
+from swingbot.core.db.repositories.broker_orders import FINAL_STATUSES
+from swingbot.core.planning.plan_types import PlanStatus
+
+log = logging.getLogger(__name__)
+
+NAMESPACE = uuid.UUID("5b0c1f0e-7a4d-5c2b-9e61-3d8f2a6c1e47")   # never change once shipped
+SEND_BUDGET_S = 20.0
+STALE_FILL_MINUTES = 30
+DEFAULT_RETRY_S = 60.0
+STALE_FILL = "stale_fill"
+NO_POSITION = "no_position"
+ZERO_UNITS = "zero_units"
+PENDING_STATUSES = ("queued", "sending", "in_flight")
+WRITE_SCOPE, READ_SCOPE, RATES_SCOPE = "demo:write", "demo:read", "market-data:read"
+
+_FILLED_IDS = frozenset({3, 5, 9})
+_REJECTED_IDS = frozenset({4, 7, 8, 10})
+_BROKER_CLOSED_CODES = frozenset({631, 632})
+_AUTH_CODES = frozenset({401, 403})
+_LIVE_PLAN_STATUSES = frozenset({PlanStatus.ACTIVE, PlanStatus.PARTIAL})
+_QUIET_STATUSES = frozenset({"queued", "sending", "skipped"})   # no outcome line
+_NO_QUOTE = checks.Quote(bid=math.nan, ask=math.nan, at="")    # ineligible: never read a rate
+
+_AUTH_WARNED: set[str] = set()
+_EXECUTOR: "Executor | None" = None
+
+
+# --- ids, status ids, times -------------------------------------------------------
+
+def request_id_for(plan_id: str, action: str, event_key: str) -> str:
+    """The x-request-id of one action: stable across ticks, restarts and resends."""
+    return str(uuid.uuid5(NAMESPACE, f"{plan_id}:{action}:{event_key}"))
+
+
+def outcome_for(status_id: object) -> str:
+    """orders:lookup status.id -> "filled" | "rejected" | "in_flight" (index table)."""
+    if not isinstance(status_id, int) or isinstance(status_id, bool):
+        return "in_flight"
+    if status_id in _FILLED_IDS:
+        return "filled"
+    if status_id in _REJECTED_IDS:
+        return "rejected"
+    return "in_flight"
+
+
+def _parse_time(text) -> dt.datetime | None:
+    """ISO-8601 -> aware datetime (naive means UTC); None when unparseable."""
+    if not text:
+        return None
+    try:
+        parsed = dt.datetime.fromisoformat(str(text))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+
+
+def fill_time(plan) -> dt.datetime | None:
+    """The `at` of the plan's latest ACTIVE status_history entry (its paper fill)."""
+    entries = [entry for entry in (getattr(plan, "status_history", None) or [])
+               if isinstance(entry, dict) and entry.get("status") == PlanStatus.ACTIVE]
+    return _parse_time(entries[-1].get("at")) if entries else None
+
+
+def is_fresh_fill(plan, now: dt.datetime) -> bool:
+    """True only for a live plan filled at most STALE_FILL_MINUTES before now."""
+    if plan is None or plan.status not in _LIVE_PLAN_STATUSES:
+        return False
+    filled = fill_time(plan)
+    return filled is not None and now - filled <= dt.timedelta(minutes=STALE_FILL_MINUTES)
+
+
+# --- response parsing ---------------------------------------------------------------
+
+def _float(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _int_or_none(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _status_block(body) -> dict:
+    block = body.get("status") if isinstance(body, dict) else None
+    return block if isinstance(block, dict) else {}
+
+
+def _error_code(body) -> int | None:
+    if not isinstance(body, dict):
+        return None
+    code = body.get("errorCode")
+    if code is None:
+        code = _status_block(body).get("errorCode")
+    return _int_or_none(code)
+
+
+def _error_message(body) -> str:
+    if not isinstance(body, dict):
+        return str(body or "")[:300]
+    message = (body.get("errorMessage") or _status_block(body).get("errorMessage")
+               or body.get("message") or "")
+    return str(message)[:300]
+
+
+def _order_id(body):
+    if not isinstance(body, dict):
+        return None
+    if "orderId" in body:
+        return body["orderId"]
+    close = body.get("orderForClose")
+    return close.get("orderID") if isinstance(close, dict) else None
+
+
+def _fill_changes(row: dict, body, now_iso: str) -> dict:
+    """What a filled lookup records; only an open carries the position's numbers."""
+    changes = {"filled_at": now_iso}
+    if row["action"] != mirror.ACTION_OPEN:
+        return changes
+    executions = body.get("positionExecutions") if isinstance(body, dict) else None
+    first = executions[0] if isinstance(executions, list) and executions else {}
+    first = first if isinstance(first, dict) else {}
+    opening = first.get("openingData") if isinstance(first.get("openingData"), dict) else {}
+    changes.update(position_id=_int_or_none(first.get("positionId")),
+                   avg_price=_float(opening.get("avgPrice")),
+                   units_filled=_float(opening.get("units")),
+                   fees=_float(opening.get("fees")))
+    return changes
+
+
+def _quote_from(body, instrument_id: int) -> checks.Quote | None:
+    results = body.get("results") if isinstance(body, dict) else None
+    for item in results if isinstance(results, list) else []:
+        if not isinstance(item, dict) or _int_or_none(item.get("instrumentId")) != instrument_id:
+            continue
+        bid, ask = _float(item.get("bid")), _float(item.get("ask"))
+        if bid and ask and bid > 0 and ask > 0:
+            return checks.Quote(bid=bid, ask=ask, at=str(item.get("date") or ""))
+    return None
+
+
+def open_body(row: dict, eligibility: checks.Eligibility, units: float) -> dict:
+    """The exact v3 open body: market, leverage 1, fixed stop, settlement from eligibility."""
+    body = {"action": "open",
+            "transaction": "buy" if row["direction"] == "bullish" else "sellShort",
+            "instrumentId": eligibility.instrument_id, "units": units, "orderType": "mkt",
+            "leverage": 1, "stopLossRate": row["stop_sent"], "stopLossType": "fixed",
+            "settlementType": eligibility.settlement_type}
+    if row.get("tp_sent") is not None:
+        body["takeProfitRate"] = row["tp_sent"]
+    return body
+
+
+def _open_record(row: dict, sized: dict, size, eligibility, quote) -> dict:
+    record = {"plan_units": size.plan_units, "units_requested": size.units,
+              "scale_factor": size.scale_factor, "plan_notional": size.plan_notional,
+              "capped_notional": size.capped_notional,
+              "sizing_balance": _float(sized.get("balance"))}
+    if eligibility is not None:
+        record.update(instrument_id=eligibility.instrument_id,
+                      unit_decimals=eligibility.unit_decimals,
+                      settlement_type=eligibility.settlement_type)
+    if quote is not _NO_QUOTE:
+        record.update(quote_at_send=checks.order_price(row["direction"], quote),
+                      quote_at=quote.at)
+    return record
+
+
+def _close_request(row: dict, opened: dict) -> tuple[float | None, dict]:
+    """(units to close or None for all, row changes) for a close_units/close_all row."""
+    if row["action"] == mirror.ACTION_CLOSE_ALL:
+        return None, {"units_requested": None}
+    held = _float(opened.get("units_filled")) or 0.0
+    decimals = _int_or_none(opened.get("unit_decimals")) or sizing.WHOLE_UNIT_DECIMALS
+    units = sizing.round_down(held * (_float(row.get("fraction")) or 0.0), decimals)
+    return units, {"units_requested": units,
+                   "fraction_closed": units / held if held > 0 else 0.0}
+
+
+def _who(row: dict) -> str:
+    return f"{row.get('ticker')} {row['plan_id']}"
+
+
+def _warn_auth(scope: str) -> None:
+    """One WARNING per process per scope (demo:write, demo:read, market-data:read)."""
+    if scope in _AUTH_WARNED:
+        return
+    _AUTH_WARNED.add(scope)
+    log.warning("etoro mirror: eToro refused the key (401/403); it needs the %s scope", scope)
+
+
+def _default_sizer(entry: float, stop: float) -> dict | None:
+    from swingbot.core.planning.account import compute_position_size
+    return compute_position_size(entry, stop)
+
+
+def _default_market(tickers: list[str]) -> tuple[dict, dict | None]:
+    from swingbot.core.marketdata import universe
+    from swingbot.core.marketdata.data import get_daily_data
+    dfs = {}
+    for ticker in tickers:
+        try:
+            dfs[ticker] = get_daily_data(ticker)
+        except Exception as exc:   # a missing frame only weakens correlated heat
+            log.info("etoro mirror: no daily data for %s: %s", ticker, exc)
+    try:
+        sectors = universe.sector_map(getattr(config, "SCAN_UNIVERSE", "watchlist") or "watchlist")
+    except Exception as exc:
+        log.info("etoro mirror: no sector map: %s", exc)
+        sectors = None
+    return dfs, sectors
+
+
+# --- the executor ---------------------------------------------------------------
+
+class Executor:
+    """Turns plan events into broker_orders rows and rows into demo orders."""
+
+    def __init__(self, client, repo, plans, *, clock=time.monotonic, now_fn=None,
+                 sizer=None, market=None):
+        self.client, self.repo, self.plans = client, repo, plans
+        self._clock = clock
+        self._now_fn = now_fn or (lambda: dt.datetime.now(dt.timezone.utc))
+        self._sizer = sizer or _default_sizer
+        self._market = market or _default_market
+        self._lock = threading.Lock()
+
+    def _now(self) -> dt.datetime:
+        return self._now_fn()
+
+    # tick ---------------------------------------------------------------------
+    def run_tick(self, events: list) -> None:
+        guard.assert_demo("demo")
+        if not self._lock.acquire(blocking=False):
+            log.info("etoro mirror: previous tick still running; skipping this one")
+            return
+        try:
+            self.enqueue(list(events or []))
+            self.advance(self._clock() + SEND_BUDGET_S)
+        finally:
+            self._lock.release()
+
+    def enqueue(self, events: list) -> int:
+        """Queue one row per new action; returns the number of rows inserted."""
+        inserted = 0
+        for event in events or []:
+            try:
+                inserted += self._enqueue_one(event)
+            except Exception as exc:
+                self._store_problem("enqueue", getattr(event, "plan_id", "?"), exc)
+        return inserted
+
+    def _enqueue_one(self, event) -> int:
+        plan = self.plans.get(event.plan_id)
+        if plan is None:
+            return 0
+        sent = mirror.sent_state_from_rows(self.repo.for_plan(event.plan_id))
+        inserted = 0
+        for action in mirror.actions_for(event, plan, sent):
+            if self.repo.insert_new(self._record(action)) is not None:
+                inserted += 1
+        return inserted
+
+    def _record(self, action: mirror.BrokerAction) -> dict:
+        return {"plan_id": action.plan_id, "action": action.action,
+                "event_key": action.event_key,
+                "request_id": request_id_for(action.plan_id, action.action, action.event_key),
+                "ticker": action.ticker, "direction": action.direction,
+                "event_at": self._now().isoformat(), "stop_sent": action.stop_rate,
+                "tp_sent": action.tp_rate, "fraction": action.fraction}
+
+    def advance(self, deadline: float) -> None:
+        """Move each plan's lowest-seq pending row until the clock reaches deadline."""
+        try:
+            rows = self.repo.with_status(PENDING_STATUSES)
+        except Exception as exc:
+            self._store_problem("read queue", "-", exc)
+            return
+        for plan_id, plan_rows in groupby(rows, key=lambda row: row["plan_id"]):
+            if self._clock() >= deadline:
+                return
+            try:
+                self._advance_plan(list(plan_rows), deadline)
+            except Exception as exc:
+                log.warning("etoro mirror tick failed for %s: %s", plan_id, exc, exc_info=True)
+
+    def _advance_plan(self, plan_rows: list[dict], deadline: float) -> None:
+        for row in plan_rows:
+            if self._clock() >= deadline or self._waiting(row):
+                return
+            if self._step(row) not in FINAL_STATUSES:
+                return
+
+    def _waiting(self, row: dict) -> bool:
+        not_before = _parse_time(row.get("not_before"))
+        return not_before is not None and not_before > self._now()
+
+    def _step(self, row: dict) -> str:
+        if row["status"] == "queued":
+            return self._send(row)
+        if row["status"] == "sending":
+            return self._recover(row)
+        return self._poll(row)
+
+    # sending --------------------------------------------------------------------
+    def _send(self, row: dict) -> str:
+        if row["action"] == mirror.ACTION_OPEN:
+            return self._send_open(row)
+        return self._send_follower(row)
+
+    def _send_open(self, row: dict) -> str:
+        plan = self.plans.get(row["plan_id"])
+        if not is_fresh_fill(plan, self._now()):
+            return self._skip(row, STALE_FILL)
+        sized = self._plan_size(plan)
+        if sized is None:
+            return self._skip(row, ZERO_UNITS)
+        reads = self._open_reads(row)
+        if reads is None:
+            return row["status"]                     # transient read failure: stays queued
+        eligibility, quote = reads
+        precision = eligibility.unit_decimals if eligibility else sizing.WHOLE_UNIT_DECIMALS
+        size = sizing.mirror_units(float(sized["shares"]), float(plan.entry_price),
+                                   float(config.ETORO_MAX_TRADE_USD), precision)
+        record = _open_record(row, sized, size, eligibility, quote)
+        order = checks.OpenOrder(ticker=row["ticker"], direction=row["direction"],
+                                 entry=float(plan.entry_price), stop=row.get("stop_sent"),
+                                 units=size.units)
+        book = self._book(row["ticker"], _float(sized.get("balance")) or 0.0)
+        cfg = checks.CheckConfig.from_config(sized.get("risk_pct", 0.0))
+        reason = checks.check_open(order, quote, eligibility, book, cfg)
+        if reason is not None:
+            return self._skip(row, reason, record)
+        body = open_body(row, eligibility, size.units)
+        return self._dispatch(row, {**record, "requested": body},
+                              lambda: self.client.open_order(body, row["request_id"]))
+
+    def _plan_size(self, plan) -> dict | None:
+        if plan.entry_price is None:
+            return None
+        sized = self._sizer(float(plan.entry_price), float(plan.stop_loss))
+        return sized if sized and _float(sized.get("shares")) else None
+
+    def _open_reads(self, row: dict):
+        """(eligibility, quote); (None, _NO_QUOTE) when ineligible; None on a failed read."""
+        result = self.client.eligibility(row["ticker"])
+        if not result.ok:
+            self._read_failed(result, READ_SCOPE, _who(row))
+            return None
+        eligibility = checks.parse_eligibility(result.body, row["ticker"], row["direction"])
+        if eligibility is None:
+            return None, _NO_QUOTE
+        rates = self.client.rates(eligibility.instrument_id)
+        quote = _quote_from(rates.body, eligibility.instrument_id) if rates.ok else None
+        if quote is None:
+            self._read_failed(rates, RATES_SCOPE, _who(row))
+            return None
+        return eligibility, quote
+
+    def _book(self, ticker: str, balance: float) -> checks.MirrorBook:
+        rows = tuple(self.repo.open_positions())
+        if not rows:
+            return checks.MirrorBook(open_trades=(), balance=balance, dfs={}, sectors=None)
+        others = (row.get("ticker") for row in rows if row.get("ticker"))
+        tickers = list(dict.fromkeys([ticker, *others]))
+        dfs, sectors = self._market(tickers)
+        return checks.MirrorBook(open_trades=rows, balance=balance, dfs=dfs, sectors=sectors)
+
+    def _send_follower(self, row: dict) -> str:
+        opened = self._open_row(row["plan_id"])
+        if opened is None:
+            return self._skip(row, NO_POSITION)
+        position_id, request_id = int(opened["position_id"]), row["request_id"]
+        if row["action"] == mirror.ACTION_MOVE_STOP:
+            stop = float(row["stop_sent"])
+            return self._dispatch(row, {"position_id": position_id},
+                                  lambda: self.client.update_stop(position_id, stop, request_id))
+        units, changes = _close_request(row, opened)
+        if units is not None and units <= 0:
+            return self._skip(row, ZERO_UNITS, changes)
+        instrument_id = int(opened["instrument_id"])
+        return self._dispatch(row, {**changes, "position_id": position_id},
+                              lambda: self.client.close_position(position_id, instrument_id,
+                                                                 units, request_id))
+
+    def _dispatch(self, row: dict, changes: dict, send) -> str:
+        """No row, no send: the row is `sending` in the store before the request."""
+        changes = {**changes, "sent_at": self._now().isoformat()}
+        if self._set(row, "sending", changes) != "sending":
+            return row["status"]
+        return self._apply_send_result(row, send())
+
+    def _apply_send_result(self, row: dict, result) -> str:
+        retry = self._retry_status(row, result)
+        if retry is not None:
+            return retry
+        if result.ok:
+            return self._accepted(row, result)
+        return self._refused(row, result)
+
+    def _retry_status(self, row: dict, result) -> str | None:
+        if result.deferred:
+            return self._set(row, "queued", {"not_before": self._now().isoformat()})
+        code = result.status_code
+        if code == 429:
+            wait = float(result.retry_after) if result.retry_after else DEFAULT_RETRY_S
+            not_before = self._now() + dt.timedelta(seconds=wait)
+            return self._set(row, "queued", {"not_before": not_before.isoformat()})
+        if code == 0 or code >= 500:
+            log.warning("etoro mirror %s unanswered (%s): %s; looked up next tick",
+                        row["action"], result.error or code, _who(row))
+            return "sending"
+        return None
+
+    def _accepted(self, row: dict, result) -> str:
+        if row["action"] == mirror.ACTION_MOVE_STOP:      # nothing to look up
+            return self._set(row, "filled", {"filled_at": self._now().isoformat()})
+        return self._set(row, "in_flight", {"order_id": _order_id(result.body)})
+
+    def _refused(self, row: dict, result) -> str:
+        code = _error_code(result.body)
+        if row["action"] != mirror.ACTION_OPEN and (
+                result.status_code == 409 or code in _BROKER_CLOSED_CODES):
+            return self._set(row, "closed_by_broker", {"error_code": code})
+        if result.status_code in _AUTH_CODES:
+            _warn_auth(WRITE_SCOPE)
+        return self._set(row, "rejected", {
+            "error_code": code if code is not None else result.status_code,
+            "error_message": _error_message(result.body)})
+
+    # lookups ----------------------------------------------------------------------
+    def _recover(self, row: dict) -> str:
+        """A `sending` row: eToro may or may not have it. Look up, never resend blind."""
+        if row["action"] == mirror.ACTION_MOVE_STOP:
+            return self._set(row, "queued", None)
+        result = self.client.lookup(row["request_id"])
+        if result.status_code == 404 or (result.ok and not _status_block(result.body)):
+            return self._set(row, "queued", None)
+        if not result.ok:
+            self._read_failed(result, READ_SCOPE, _who(row))
+            return row["status"]
+        return self._apply_lookup(row, result.body)
+
+    def _poll(self, row: dict) -> str:
+        result = self.client.lookup(row["request_id"])
+        if not result.ok:
+            self._read_failed(result, READ_SCOPE, _who(row))
+            return row["status"]
+        return self._apply_lookup(row, result.body)
+
+    def _apply_lookup(self, row: dict, body) -> str:
+        block = _status_block(body)
+        outcome = outcome_for(block.get("id"))
+        if outcome == "filled":
+            return self._set(row, "filled", _fill_changes(row, body, self._now().isoformat()))
+        if outcome == "rejected":
+            code = _int_or_none(block.get("errorCode"))
+            broker_closed = row["action"] != mirror.ACTION_OPEN and code in _BROKER_CLOSED_CODES
+            return self._set(row, "closed_by_broker" if broker_closed else "rejected",
+                             {"error_code": code,
+                              "error_message": str(block.get("errorMessage") or "")})
+        if row["status"] != "in_flight":
+            return self._set(row, "in_flight", None)
+        return "in_flight"
+
+    # rows -------------------------------------------------------------------------
+    def _open_row(self, plan_id: str) -> dict | None:
+        """The plan's `open` row when it is filled with a position id, else None."""
+        for row in self.repo.for_plan(plan_id):
+            if row["action"] == mirror.ACTION_OPEN:
+                filled = row["status"] == "filled" and row.get("position_id") is not None
+                return row if filled else None
+        return None
+
+    def _skip(self, row: dict, reason: str, changes: dict | None = None) -> str:
+        log.info("etoro mirror skipped (%s): %s", reason, _who(row))
+        return self._set(row, "skipped", {**(changes or {}), "skip_reason": reason})
+
+    def _set(self, row: dict, status: str, changes: dict | None) -> str:
+        """Write status+changes; returns the row's status afterwards (unchanged on failure)."""
+        changes = dict(changes or {})
+        try:
+            self.repo.set_status(row["request_id"], status, changes)
+        except Exception as exc:
+            self._store_problem(f"set {status}", row["plan_id"], exc)
+            return row["status"]
+        row.update(changes)
+        row["status"] = status
+        if status not in _QUIET_STATUSES:
+            log.info("etoro mirror %s %s: %s", row["action"], status, _who(row))
+        if status in FINAL_STATUSES:
+            self._after_final(row)
+        return status
+
+    def _store_problem(self, what: str, plan_id: str, exc: Exception) -> None:
+        """Log a mirror store failure; never StoreWriteHalt (that pauses issuance)."""
+        if write_failure.is_store_write_failure(exc):
+            log.warning("etoro mirror store write failure (%s): %s: %s", what, plan_id, exc)
+        else:
+            log.warning("etoro mirror %s failed: %s: %s", what, plan_id, exc, exc_info=True)
+
+    def _read_failed(self, result, scope: str, who: str) -> None:
+        if result.status_code in _AUTH_CODES:
+            _warn_auth(scope)
+            return
+        log.info("etoro mirror read failed (%s): %s: %s", scope, who,
+                 result.error or result.status_code)
+
+    def _after_final(self, row: dict) -> None:
+        """Hook run on every final status; EM9 persists close economics here."""
+
+
+def get_executor() -> Executor:
+    """The process singleton over the real client, repository and plan store."""
+    global _EXECUTOR
+    if _EXECUTOR is None:
+        from swingbot.core.broker.etoro_client import EtoroClient
+        from swingbot.core.db.repositories.broker_orders import broker_orders_repo
+        from swingbot.core.planning.plan_store import PlanStore
+        _EXECUTOR = Executor(EtoroClient(), broker_orders_repo(), PlanStore())
+    return _EXECUTOR
+```
+
+- [ ] **Step 6: Run the tests to verify they pass**
+
+Run: `python "$WT/scripts/dev/testrun.py" file tests/broker/test_executor.py`
+Expected: PASS, `0 failed`, `0 xfailed`.
+
+Run: `python "$WT/scripts/dev/testrun.py" file tests/broker/test_guard.py`
+Expected: PASS. `executor.py` is allow-listed and `run_tick` calls `guard.assert_demo`, so v159's AST scan accepts the lazy `etoro_client` import.
+
+Run: `python "$WT/scripts/dev/testrun.py" file tests/broker/test_demo_only_paths.py`
+Expected: PASS (no route string in `executor.py`).
+
+- [ ] **Step 7: Complexity**
+
+Run: `python -m radon cc -s -n C "$WT/swingbot/core/broker/executor.py" "$WT/tests/broker/fakes.py"`
+Expected: no output. The busiest functions (`_send_open`, `_fill_changes`, `_apply_lookup`) are B; if one reaches C, split it into a named helper without changing behaviour.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git -C "$WT" add swingbot/core/broker/executor.py tests/broker/fakes.py tests/broker/test_executor.py
+git -C "$WT" commit -m "feat(v160): EM8 -- broker executor: no row no send, per-plan order, recovery
+
+run_tick queues one broker_orders row per translated action (deduplicated on
+plan/action/event key, uuid5 request ids), then advances each plan's
+lowest-seq pending row under a 20 s budget. The row is written sending
+before any request; an unanswered send is recovered by orders:lookup, never
+resent blind. Opens go out only for fills at most 30 minutes old, sized by
+mirror_units and gated by check_open on a fresh quote. Store failures log
+and never raise StoreWriteHalt.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
 

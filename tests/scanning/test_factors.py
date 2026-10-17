@@ -24,32 +24,35 @@ def test_run_factors_sums_points_and_collects_breakdown():
     def f_b(ctx):
         return FactorResult("b", 3, "b (+3)")
 
-    total, breakdown = run_factors([f_a, f_b], _ctx())
+    total, breakdown, points = run_factors([f_a, f_b], _ctx())
     assert total == 8
     assert breakdown == {"a": "a (+5)", "b": "b (+3)"}
+    assert points == {"a": 5, "b": 3}
 
 
 def test_run_factors_skips_factors_returning_none():
     """A factor whose input is absent returns None and must not appear in the
     breakdown at all -- an absent reading must never render as a real one that
-    happened to score zero."""
+    happened to score zero. The same holds for the numeric points map."""
     def f_present(ctx):
         return FactorResult("present", 4, "present (+4)")
 
     def f_absent(ctx):
         return None
 
-    total, breakdown = run_factors([f_present, f_absent], _ctx())
+    total, breakdown, points = run_factors([f_present, f_absent], _ctx())
     assert total == 4
     assert "absent" not in breakdown
+    assert points == {"present": 4}
 
 
 def test_run_factors_propagates_negative_points():
     def f_penalty(ctx):
         return FactorResult("penalty", -10, "penalty (-10)")
 
-    total, _ = run_factors([f_penalty], _ctx())
+    total, _, points = run_factors([f_penalty], _ctx())
     assert total == -10
+    assert points == {"penalty": -10}
 
 
 # --- Task 3: confidence.py factors -----------------------------------

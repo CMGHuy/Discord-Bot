@@ -292,6 +292,9 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "target_is_banked_tp1": view.target_is_banked_tp1,
         "stop_kind": view.stop_kind,
         "bar_kind": view.bar_kind,
+        # Best price since TP1: the 100% end of a trailing runner's bar, which
+        # has no target to measure toward (see `_trailing_status_fields`).
+        "runner_best": plan.get("runner_high_close"),
         "distance_to_trigger_r": view.distance_to_trigger_r,
         "bars_to_expiry": view.bars_to_expiry,
         "floor_r": view.floor_r,
@@ -492,6 +495,7 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "target_is_banked_tp1": False,
         "stop_kind": "risk",
         "bar_kind": "none",
+        "runner_best": None,
         "distance_to_trigger_r": None,
         "bars_to_expiry": None,
         "floor_r": None,
@@ -957,6 +961,51 @@ def _status_fields(row: dict, price: float | None) -> dict:
     }
 
 
+def _trailing_status_fields(row: dict, price: float | None) -> dict:
+    """The status bar for a PARTIAL runner that has no TP2.
+
+    There is no target to measure toward, so the bar runs from the trailing
+    stop (0% -- one more tick against the runner and it is stopped out) to the
+    best price since TP1 (100% -- a new extreme). Without a live price or a
+    recorded best price there is nothing honest to draw, and the cell falls
+    back to its chip.
+    """
+    chip = {"progress_pct": None, "entry_pct": None, "progress_band": None,
+            "blink_seconds": None, "status_label": row["status"]}
+    stop, best = row.get("stop_loss"), row.get("runner_best")
+    if price is None or not all(isinstance(v, (int, float)) for v in (stop, best)):
+        return chip
+    is_bull = row.get("direction") != "bearish"
+    span = (best - stop) if is_bull else (stop - best)
+    if span <= 0:
+        return chip
+    pos = max(0.0, min(100.0, ((price - stop) if is_bull else (stop - price)) / span * 100))
+    leg = row.get("banked_exit_price")
+    ent = ((leg - stop) if is_bull else (stop - leg)) / span * 100 if isinstance(leg, (int, float)) else 0.0
+    band = "toward_target" if pos >= 66 else "toward_stop" if pos <= 33 else "neutral"
+    label = ("Near trailing stop" if band == "toward_stop"
+             else "Near best price" if band == "toward_target" else "Trailing")
+    # Pulse faster the nearer the stop, same urgency scale as trade_proximity.
+    urgency = max(0.0, 1.0 - pos / 50.0)
+    out = {"progress_pct": round(pos, 1),
+           "entry_pct": max(0.0, min(100.0, round(ent, 1))),
+           "progress_band": band, "blink_seconds": round(2.2 - 1.6 * urgency, 2),
+           "status_label": label}
+    out.update(_trailing_pnl_ends(row, stop, best, is_bull))
+    return out
+
+
+def _trailing_pnl_ends(row: dict, stop: float, best: float, is_bull: bool) -> dict:
+    """P&L % (vs the original fill) at the bar's two ends: the trailing stop
+    being hit (0%) and the best price since TP1 (100%)."""
+    entry = row.get("entry")
+    if not isinstance(entry, (int, float)) or not entry:
+        return {"stop_pnl_pct": None, "best_pnl_pct": None}
+    sign = 1 if is_bull else -1
+    return {"stop_pnl_pct": round((stop - entry) * sign / entry * 100, 2),
+            "best_pnl_pct": round((best - entry) * sign / entry * 100, 2)}
+
+
 def _attach_status_fields(rows: list[dict]) -> None:
     """Merge the status-bar fields into every row, terminal ones included.
 
@@ -965,8 +1014,9 @@ def _attach_status_fields(rows: list[dict]) -> None:
     second one only runs on data nobody tests with.
     """
     for row in rows:
-        if (row["status"] in _TERMINAL or row["status"] == "PENDING"
-                or row.get("bar_kind") == "trailing"):
+        if row.get("bar_kind") == "trailing" and row["status"] not in _TERMINAL:
+            row.update(_trailing_status_fields(row, row.get("current_price")))
+        elif row["status"] in _TERMINAL or row["status"] == "PENDING":
             # Nothing has opened, or it is already over: there is no position
             # to place on a bar. The label is the status itself, which is what
             # the cell shows in place of the bar.

@@ -121,16 +121,20 @@ def _date_param() -> str:
 @api_v1.route("/calendar/pnl/day", methods=["GET"])
 @require_auth
 def calendar_pnl_day():
-    """Every trade closed on one day -- the grid's drill-down drawer.
+    """Every trade closed on one day -- the drawer and the `/calendar/:date`
+    page.
 
     404 rather than an empty 200 when the day holds nothing: every date the
     grid emits has at least one close (days with none are omitted), so an
     empty result means the client asked for a day that is not in the book,
     which is a different answer from "that day was flat".
 
-    Ordered by close time so the drawer reads as the day happened.
+    Ordered by close time so the list -- and the tiles' running-R drawdown
+    -- read as the day happened. The tiles and `breakdown` are computed from
+    exactly `trades`, so a filtered grid cannot open a day that tells a
+    different story; `context` compares the day against every OTHER trading
+    day under the same filter (all history, like the grid's weekday table).
     """
-    from swingbot.core.analytics import metrics
     from swingbot.core.analytics import pnl_calendar as pc
 
     _reject_unknown_params()
@@ -145,46 +149,49 @@ def calendar_pnl_day():
     if not day_rows:
         raise ApiError("not_found", f"no closed trades on {date}", 404)
 
-    # Keep the individual trade rows: the existing drawer uses them for its
-    # journal detail.  The summary alongside them is deliberately computed
-    # from that exact same population, so a strategy/horizon-filtered grid
-    # cannot open a pane that tells a different story about the day.
-    measured = [r["r_multiple"] for r in day_rows if r["r_multiple"] is not None]
-    winners = [r for r in day_rows if r["r_multiple"] is not None and r["r_multiple"] > 0]
-    losers = [r for r in day_rows if r["r_multiple"] is not None and r["r_multiple"] < 0]
-
-    running = 0.0
-    peak = 0.0
-    worst_drawdown = 0.0
-    for value in measured:
-        running += value
-        peak = max(peak, running)
-        worst_drawdown = max(worst_drawdown, peak - running)
-
-    def leaders(rows: list[dict]) -> list[dict]:
-        return [
-            {"ticker": row["ticker"], "r": row["r_multiple"]}
-            for row in sorted(rows, key=lambda row: abs(row["r_multiple"]), reverse=True)[:5]
-        ]
-
     return jsonify({
         "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "date": date,
         "trades": day_rows,
-        # `trades` remains the established list contract; `trade_count` is
-        # its explicit numeric companion for the day-detail metric tiles.
-        "trade_count": len(day_rows),
-        "winners": len(winners),
-        "losers": len(losers),
-        "total_r": round(sum(measured), 2) if measured else None,
-        "total_ccy": (
-            round(sum(r["pnl_amount"] for r in day_rows if r["pnl_amount"] is not None), 2)
-            if any(r["pnl_amount"] is not None for r in day_rows)
-            else None
-        ),
-        "win_rate": metrics.win_rate([{"status": r["outcome"]} for r in day_rows]),
-        "avg_trade_r": round(sum(measured) / len(measured), 2) if measured else None,
-        "worst_drawdown_r": round(worst_drawdown, 2) if measured else None,
-        "contributors": leaders(winners),
-        "detractors": leaders(losers),
+        **pc.day_totals(day_rows),
+        "context": pc.day_context(rows, date),
+        "breakdown": pc.day_breakdown(day_rows),
+    })
+
+
+@api_v1.route("/calendar/pnl/day/sparklines", methods=["GET"])
+@require_auth
+def calendar_pnl_day_sparklines():
+    """Daily-close sparklines for one day's rows -- the day page's cards.
+
+    Separate from `/calendar/pnl/day` so the tiles render before any CSV is
+    parsed. Bars come only from `data_store.load_normalized` (the bounded,
+    process-cached `market_data/` reader): never a network fetch, never
+    `backtest_cache`, never `load_from_disk`. Cost per view: one more
+    `load_rows()` plus <= 50 cached frame loads; a short-TTL memo of
+    `load_rows` is the named follow-up if it ever shows in admin latency.
+
+    A day with no rows is an empty 200, not a 404: the page asks only after
+    the day route answered, and an empty map already means "nothing to draw".
+    """
+    from swingbot.core.analytics import day_sparklines as ds
+    from swingbot.core.analytics import pnl_calendar as pc
+    from swingbot.core.marketdata import data_store
+
+    _reject_unknown_params()
+    date = _date_param()
+    strategy, horizon = _filter_args()
+
+    rows = pc.filter_rows(pc.load_rows(), strategy=strategy, horizon=horizon)
+    day_rows = [r for r in rows if r["day"] == date]
+    # Looked up on the module at call time, so the loader is the one
+    # function a test (or a future cache layer) swaps.
+    series, truncated = ds.sparklines_payload(
+        day_rows, lambda ticker: data_store.load_normalized(ticker, "daily"))
+
+    return jsonify({
+        "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "date": date,
+        "truncated": truncated,
+        "series": series,
     })

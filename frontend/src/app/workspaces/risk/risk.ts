@@ -26,7 +26,7 @@ import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
 import { StatTile } from '../../ui/stat-tile';
-import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
+import { tablePerPage } from '../../ui/table-per-page';
 
 /**
  * Risk — exposure, heat against `PORTFOLIO_HEAT_CAP_PCT`, and the killswitch.
@@ -172,6 +172,14 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
             <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
           }
         </div>
+        <!-- Sharpe and drawdown here are over every closed trade, in R; the
+             Analytics tiles of the same name cover the selected date range
+             and annualise returns. Both are right, so say which is which. -->
+        <p class="metrics-scope">
+          Sharpe and max drawdown are per-trade R over all closed trades. The other four use
+          daily returns of the open book, so they differ from the Analytics tiles of the same name,
+          which follow that page's date range.
+        </p>
       </div>
     </sb-panel>
     </sb-async>
@@ -538,6 +546,7 @@ import { readTablePerPage, writeTablePerPage } from '../../ui/table-prefs';
     .risk-budget .remaining { font-weight: 600; }
     .budget-note { margin-top: var(--space-6); font-size: var(--text-micro); }
 
+    .metrics-scope { margin: var(--space-10) 0 0; font-size: var(--text-micro); color: var(--text-faint); }
     /* -- risk metrics -- */
     .metrics { display: grid; gap: var(--space-8); }
     .metric-grid {
@@ -610,14 +619,9 @@ export class Risk {
   protected readonly sort = signal<SortSpec | null>(null);
   protected setSort(next: SortSpec): void { this.sort.set(next); }
 
-  protected readonly perPage = signal(
-    readTablePerPage(this.preferences.values(), Risk.TABLE_ID),
-  );
-
-  protected onPerPage(value: number): void {
-    this.perPage.set(value);
-    this.preferences.update((prefs) => writeTablePerPage(prefs, Risk.TABLE_ID, value));
-  }
+  private readonly perPageState = tablePerPage(Risk.TABLE_ID);
+  protected readonly perPage = this.perPageState.value;
+  protected onPerPage(value: number): void { this.perPageState.set(value); }
 
   protected readonly sortedPositions = computed(() => {
     const sort = this.sort();
@@ -702,7 +706,9 @@ export class Risk {
   }
 
   private fmtDrawdownR(value: number | null): string {
-    return value === null ? '—' : `${num(value, 2)}R`;
+    // A drawdown is a loss: shown negative, not as an unsigned magnitude
+    // that reads like a gain next to "+120.66R" elsewhere.
+    return value === null ? '—' : `${value === 0 ? '' : '−'}${num(Math.abs(value), 2)}R`;
   }
 
   /** Six tiles over R8-01's metrics, each carrying the sample it was
@@ -755,7 +761,13 @@ export class Risk {
       return `${num(utilisation, utilisation >= 10 ? 0 : 1)}% of the cap — over budget. New entries are blocked until heat falls.`;
     }
     const used = num(utilisation, utilisation >= 10 ? 0 : 1);
-    return cap === null ? `${used}% of the risk budget in use.` : `${used}% of the ${num(cap, 1)}% cap in use.`;
+    // Two different percentages sit on this panel -- heat (0.02%, of the
+    // account) and how much of the budget that is (0.4%). "0.4% of the 6.0%
+    // cap" read as a contradiction of the 0.02% above it, so the sentence now
+    // says which one it is and what the heat figure is measured against.
+    return cap === null
+      ? `${used}% of the risk budget is used.`
+      : `${used}% of the risk budget is used (heat is measured against a ${num(cap, 1)}% cap).`;
   });
 
   /** Who engaged it and when, when the server recorded it. */

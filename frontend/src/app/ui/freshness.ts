@@ -56,7 +56,9 @@ export class Freshness {
     // how fresh the underlying bar actually is. Print the date itself
     // instead of a fabricated time.
     if (raw !== null && /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-    return d.toISOString().slice(11, 19);
+    // UTC, and says so: the top bar clock beside it is local, and an
+    // unlabelled "as of 13:05:42" under a 15:06 clock read as two hours stale.
+    return `${d.toISOString().slice(11, 19)} UTC`;
   });
 
   protected readonly stale = computed(() => {

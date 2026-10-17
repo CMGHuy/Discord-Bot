@@ -181,6 +181,8 @@ const FINISHED_JOB = {
   returncode: 0,
 };
 
+const TUNE_DEFAULTS = { data_source: 'alpaca', choices: ['alpaca', 'yfinance'] };
+
 describe('AnalyticsStore', () => {
   let store: InstanceType<typeof AnalyticsStore>;
   let backend: HttpTestingController;
@@ -260,6 +262,8 @@ describe('AnalyticsStore', () => {
     respondJobs(jobs);
     respondProposals();
     respondStrategies();
+    // v162: the launcher's source picker, fetched once on the first Tuning load.
+    backend.expectOne('/api/v1/jobs/tune/defaults').flush(TUNE_DEFAULTS);
     if (jobs.length) {
       const id = (jobs[0] as { id: string }).id;
       backend
@@ -595,12 +599,12 @@ describe('AnalyticsStore', () => {
     respondOverview();
     openTuning([]);
 
-    store.startTune('RSI');
+    store.startTune('RSI', 'yfinance');
     const posted = backend.expectOne('/api/v1/jobs/tune');
     expect(posted.request.method).toBe('POST');
-    // Strategy only. No date argument exists, because the window is TRAIN
-    // and the server refuses anything else.
-    expect(posted.request.body).toEqual({ strategy: 'RSI' });
+    // Strategy and training data. No date argument exists, because the window
+    // is TRAIN and the server refuses anything else.
+    expect(posted.request.body).toEqual({ strategy: 'RSI', params: { data_source: 'yfinance' } });
     posted.flush({ job_id: 'abc123' });
 
     respondJobs([RUNNING_JOB]);
@@ -611,12 +615,44 @@ describe('AnalyticsStore', () => {
     expect(store.job()?.id).toBe('abc123');
   });
 
+  it('sends no params when no source was chosen, so the server default applies', () => {
+    tick();
+    respondOverview();
+    openTuning([]);
+
+    store.startTune('RSI', '');
+    const posted = backend.expectOne('/api/v1/jobs/tune');
+    expect(posted.request.body).toEqual({ strategy: 'RSI' });
+  });
+
+  it('fetches the tuning defaults once, not on every jobs event', () => {
+    tick();
+    respondOverview();
+    openTuning();
+    expect(store.tuneDefaults()).toEqual(TUNE_DEFAULTS);
+
+    events.raise('jobs');
+    store.load();
+    respondJobs([RUNNING_JOB]);
+    respondProposals();
+    backend.expectOne('/api/v1/jobs/abc123').flush({ ...RUNNING_JOB, log_tail: '' });
+    backend.expectNone('/api/v1/jobs/tune/defaults');
+  });
+
+  it("loads the tune defaults when the route resolver opens the Tuning tab", () => {
+    tick();
+    respondOverview();
+    store.resolveTab('tuning').subscribe();
+    backend.expectOne('/api/v1/jobs/tune/defaults').flush(TUNE_DEFAULTS);
+    expect(store.tuneDefaults()).toEqual(TUNE_DEFAULTS);
+  });
+
   it('reports a launch conflict separately from a stale-data error', () => {
     tick();
     respondOverview();
     openTuning([]);
 
-    store.startTune('RSI');
+    store.startTune('RSI', 'alpaca');
     backend
       .expectOne('/api/v1/jobs/tune')
       .flush(
@@ -738,8 +774,10 @@ describe('AnalyticsStore', () => {
     it('carries the unit and offers every server-supported scoped breakdown', () => {
       expect(BREAKDOWN_DIMENSIONS.map((dimension) => dimension.value)).toEqual([
         'strategy', 'horizon', 'direction', 'dow', 'month', 'badge',
-        'confidence', 'source', 'ledger', 'taken', 'ticker',
+        'confidence', 'confluence', 'rs_quintile', 'source', 'ledger', 'taken', 'ticker',
       ]);
+      expect(BREAKDOWN_DIMENSIONS.find((d) => d.value === 'confluence')?.label).toBe('Confluence');
+      expect(BREAKDOWN_DIMENSIONS.find((d) => d.value === 'rs_quintile')?.label).toBe('RS quintile');
       expect(BREAKDOWN_DIMENSIONS.find((d) => d.value === 'taken')?.label).toBe('Followed vs paper');
       expect(BREAKDOWN_DIMENSIONS.map((d) => d.value)).toContain('ledger');
       expect(BREAKDOWN_DIMENSIONS.map((d) => d.value)).toContain('strategy');

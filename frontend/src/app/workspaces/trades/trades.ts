@@ -1,3 +1,4 @@
+import { ViewportService } from '../../ui/breakpoints';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -19,14 +20,13 @@ import { Async, asyncInputs } from '../../ui/async';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { Density } from '../../ui/data-table/data-table.types';
+import { tablePerPage } from '../../ui/table-per-page';
 import {
   perPageForApi,
   readTableColumns,
   readTableDensity,
-  readTablePerPage,
   writeTableColumns,
   writeTableDensity,
-  writeTablePerPage,
 } from '../../ui/table-prefs';
 import { TradesStore, toSortParam } from '../../stores/trades.store';
 import { Button } from '../../ui/button';
@@ -57,8 +57,7 @@ import {
   runTradeAction,
 } from './trade-actions';
 import {
-  COMPACT_COLUMNS,
-  FULL_COLUMNS,
+  baselineColumns,
   PINNED_COLUMNS,
   TRADES_TABLE_ID,
   openedAt,
@@ -301,7 +300,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
       <button
         slot="clear-open"
         sb-button
-        variant="ghost"
+        variant="danger"
         type="button"
         (click)="bulk.set('open')"
       >
@@ -310,7 +309,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
       <button
         slot="clear-history"
         sb-button
-        variant="ghost"
+        variant="danger"
         type="button"
         (click)="bulk.set('history')"
       >
@@ -356,6 +355,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
         [pinned]="pinned"
         (reorder)="onReorder($event)"
         [showPerPage]="true"
+        [perPageChoice]="perPage()"
         (perPageChange)="onPerPage($event)"
       />
     </sb-async>
@@ -587,6 +587,7 @@ export class Trades {
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);
   private readonly preferences = inject(PreferencesStore);
+  private readonly viewport = inject(ViewportService);
   protected readonly store = inject(TradesStore);
   /** For the currency symbol alone, same as the Dashboard's own use of it. */
   protected readonly connection = inject(ConnectionStore);
@@ -645,7 +646,7 @@ export class Trades {
 
   /** What "Reset to default" restores, for whichever density is showing. */
   protected readonly defaultColumns = computed(() =>
-    this.density() === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS,
+    baselineColumns(this.density(), this.viewport.isPhone()),
   );
   protected readonly rowKey = (row: TradeRow) => `${row.id}:${row.leg_index}`;
 
@@ -697,16 +698,13 @@ export class Trades {
       this.preferences.values(),
       TRADES_TABLE_ID,
       readTableDensity(this.preferences.values(), TRADES_TABLE_ID),
-      readTableDensity(this.preferences.values(), TRADES_TABLE_ID) === 'full'
-        ? FULL_COLUMNS
-        : COMPACT_COLUMNS,
+      baselineColumns(readTableDensity(this.preferences.values(), TRADES_TABLE_ID), this.viewport.isPhone()),
     ),
   );
 
   /** Rows per page. 0 means "All", translated at the API boundary. */
-  protected readonly perPage = signal<number>(
-    readTablePerPage(this.preferences.values(), TRADES_TABLE_ID),
-  );
+  private readonly perPageState = tablePerPage(TRADES_TABLE_ID);
+  protected readonly perPage = this.perPageState.value;
 
   /**
    * Apply the saved layout once the server's preferences arrive.
@@ -724,9 +722,8 @@ export class Trades {
       this.density.set(density);
       this.visible.set(
         readTableColumns(prefs, TRADES_TABLE_ID, density,
-                         density === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
+                         baselineColumns(density, this.viewport.isPhone())),
       );
-      this.perPage.set(readTablePerPage(prefs, TRADES_TABLE_ID));
     });
   });
 
@@ -737,7 +734,7 @@ export class Trades {
     // Load the other density's saved arrangement, not this one's.
     this.visible.set(
       readTableColumns(this.preferences.values(), TRADES_TABLE_ID, next,
-                       next === 'full' ? FULL_COLUMNS : COMPACT_COLUMNS),
+                       baselineColumns(next, this.viewport.isPhone())),
     );
   }
 
@@ -749,8 +746,7 @@ export class Trades {
   }
 
   protected onPerPage(value: number): void {
-    this.perPage.set(value);
-    this.preferences.update((prefs) => writeTablePerPage(prefs, TRADES_TABLE_ID, value));
+    this.perPageState.set(value);
     // `per_page` must land in the URL, not just the local signal/prefs: this
     // route is server-paginated via a resolver (trades.routes.ts's
     // queryFor()) that reads `per_page` straight from the query params on

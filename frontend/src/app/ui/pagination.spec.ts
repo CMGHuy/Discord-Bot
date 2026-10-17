@@ -128,10 +128,36 @@ describe('PaginationComponent per-page selector', () => {
     expect(el.querySelector('select')).toBeNull();
   });
 
-  it('offers 10 / 25 / 50 / All', () => {
+  it('offers 5 / 10 / 20 / 50 / 100 / All', () => {
     const el = build(25, 100, true).nativeElement as HTMLElement;
     const options = [...el.querySelectorAll('option')].map((o) => o.textContent!.trim());
-    expect(options).toEqual(['10', '25', '50', 'All']);
+    expect(options).toEqual(['5', '10', '20', '50', '100', 'All']);
+  });
+
+  it('sits in the same bar as the page controls', () => {
+    const el = build(10, 100, true).nativeElement as HTMLElement;
+    const bar = el.querySelector('.bar')!;
+    expect(bar.querySelector('.per-page select')).not.toBeNull();
+    expect(bar.querySelector('.nav button')).not.toBeNull();
+  });
+
+  it('marks a capped All on a server-paged table', () => {
+    const f = TestBed.createComponent(PaginationComponent);
+    f.componentRef.setInput('pagination', { page: 1, perPage: 200, total: 1340 });
+    f.componentRef.setInput('showPerPage', true);
+    f.componentRef.setInput('perPageChoice', 0);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('.range')!.textContent!.trim()).toBe('1–200 of 1340 (capped)');
+    expect((el.querySelector('select') as HTMLSelectElement).value).toBe('0');
+  });
+
+  it('does not say capped when everything fits', () => {
+    const f = TestBed.createComponent(PaginationComponent);
+    f.componentRef.setInput('pagination', { page: 1, perPage: 200, total: 150 });
+    f.componentRef.setInput('perPageChoice', 0);
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).not.toContain('capped');
   });
 
   it('emits 0 for All', () => {
@@ -148,31 +174,19 @@ describe('PaginationComponent per-page selector', () => {
     // The trap this guards: nested inside the pager, choosing All removes the
     // pager and with it the only control that could undo the choice.
     const el = build(0, 3, true).nativeElement as HTMLElement;
-    expect(el.querySelector('.pager')).not.toBeNull();
+    expect(el.querySelector('.bar')).not.toBeNull();
     expect(el.querySelector('select')).not.toBeNull();
   });
 });
 
-describe('PaginationComponent per-page alignment', () => {
-  // .per-page (the "Rows" selector) had no horizontal padding while .pager
-  // (the range/prev/next row) and every table's th/td cells all use
-  // var(--space-10) -- so the selector sat flush at the section edge while
-  // everything else was inset, reading as misaligned.
-  beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+describe('PaginationComponent narrow layout (v167)', () => {
+  it('re-flows on its own container width, not the viewport', () => {
+    expect(SOURCE).toContain('container: pager / inline-size');
+    expect(SOURCE).toContain('@container pager (max-width: 639px)');
   });
 
-  it('insets the per-page row by the same amount as the pager row', () => {
-    const f = TestBed.createComponent(PaginationComponent);
-    f.componentRef.setInput('pagination', { page: 1, perPage: 25, total: 100 });
-    f.componentRef.setInput('showPerPage', true);
-    f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-
-    const perPagePadding = getComputedStyle(el.querySelector('.per-page')!).paddingLeft;
-    const pagerPadding = getComputedStyle(el.querySelector('.pager')!).paddingLeft;
-    expect(perPagePadding).toBe(pagerPadding);
-    expect(perPagePadding).not.toBe('0px');
+  it('gives phone and tablet prev/next a 44px target', () => {
+    expect(SOURCE).toMatch(/@container pager \(max-width: 639px\)[\s\S]*min-height: 2\.75rem/);
   });
 });
 

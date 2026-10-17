@@ -1,0 +1,30 @@
+{
+ "stage": 0,
+ "arm": "S",
+ "verdict": "POWERED",
+ "mde_ceiling_r": 0.1,
+ "power": 0.8,
+ "cells": [
+  {
+   "cell": "c3",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.028544269553177095,
+   "powered": true
+  },
+  {
+   "cell": "c4",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.04078320557118937,
+   "powered": true
+  },
+  {
+   "cell": "c5",
+   "observed_n": 8089,
+   "target_n": 4044,
+   "mde_r": 0.04293602038453096,
+   "powered": true
+  }
+ ]
+}

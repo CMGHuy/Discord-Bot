@@ -15,6 +15,8 @@ import { EmptyStateComponent } from '../empty-state';
 import { PaginationComponent } from '../pagination';
 import { Viewport, ViewportService } from '../breakpoints';
 import { isInline } from '../priority';
+import { PreferencesStore } from '../../stores/preferences.store';
+import { readTablePerPage, writeTablePerPage } from '../table-prefs';
 import {
   ColumnDef,
   EmptyState,
@@ -67,8 +69,8 @@ const PIN_KEYS = ['ticker', 'symbol'];
       @if (showSpinner()) {
         <span class="loading-spinner" aria-hidden="true"></span>
       }
-      @if (showHeaderPager() && pagination(); as page) {
-        <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: true }" />
+      @if (showHeaderPager() && activePagination(); as page) {
+        <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: false }" />
       }
       @if (sortOptions().length) {
         <label class="phone-sort">
@@ -119,7 +121,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
         </thead>
 
         <tbody>
-          @for (row of rows(); track rowKey()(row)) {
+          @for (row of shownRows(); track rowKey()(row)) {
             <tr class="row" [class]="rowClass()(row)" (click)="activate(row, $event)">
               @if (hasDetail()) {
                 <td class="expander-cell detail-cell">
@@ -193,14 +195,15 @@ const PIN_KEYS = ['ticker', 'symbol'];
         <sb-empty-state [title]="state.title" [hint]="state.hint" />
       }
 
-      @if (pagination(); as page) {
-        <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: false }" />
+      @if (activePagination(); as page) {
+        <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: true }" />
       }
     </div>
 
     <ng-template #pagerTemplate let-page let-announce="announce">
-      <sb-pagination [pagination]="page" [showPerPage]="showPerPage()" [announce]="announce" [navOnly]="!announce"
-        (pageChange)="pageChange.emit($event)" (perPageChange)="perPageChange.emit($event)" />
+      <sb-pagination [pagination]="page" [showPerPage]="activeShowPerPage()" [announce]="announce" [navOnly]="!announce"
+        [perPageChoice]="perPageChoice()"
+        (pageChange)="onPage($event)" (perPageChange)="onPerPage($event)" />
     </ng-template>  `,
   styles: `
     th[draggable='true'] { cursor: grab; }
@@ -425,6 +428,53 @@ export class DataTable<T> {
    *  it renders the control and passes the choice back up. */
   readonly showPerPage = input(false);
   readonly perPageChange = output<number>();
+  /** What the user picked, for a server-paged table whose `pagination.perPage`
+   *  is not it ("All" comes back as the API's cap). Forwarded to the pager. */
+  readonly perPageChoice = input<number | null>(null);
+
+  /**
+   * Opt-in client-side paging over `rows`, keyed by this table id (v167).
+   * For tables whose data is already fully in hand and whose call site does
+   * not page. The table then slices `rows` itself, owns the rows-per-page
+   * choice (saved per table and device class) and shows the pager -- so
+   * property 1 above holds for every server-paged or caller-paged table, and
+   * this is the one deliberate, explicit exception.
+   */
+  readonly clientPaging = input<string | null>(null);
+  private readonly preferences = inject(PreferencesStore);
+  private readonly requestedPage = signal(1);
+  private readonly clientPerPage = computed(() => {
+    const id = this.clientPaging();
+    return id === null ? null : readTablePerPage(this.preferences.values(), id, this.viewportService.isNarrow());
+  });
+  /** Smallest option: at or below it there is nothing to page or resize. */
+  private static readonly MIN_PAGEABLE = 5;
+  protected readonly activePagination = computed<PageSpec | null>(() => {
+    const perPage = this.clientPerPage();
+    if (perPage === null) return this.pagination();
+    const total = this.rows().length;
+    if (total <= DataTable.MIN_PAGEABLE) return null;
+    const pages = perPage > 0 ? Math.max(1, Math.ceil(total / perPage)) : 1;
+    return { total, page: Math.min(this.requestedPage(), pages), perPage };
+  });
+  protected readonly activeShowPerPage = computed(() => this.clientPerPage() !== null || this.showPerPage());
+  protected readonly shownRows = computed(() => {
+    const rows = this.rows();
+    const page = this.activePagination();
+    if (this.clientPerPage() === null || !page || page.perPage <= 0) return rows;
+    const start = (page.page - 1) * page.perPage;
+    return rows.slice(start, start + page.perPage);
+  });
+  protected onPage(page: number): void {
+    if (this.clientPaging() === null) this.pageChange.emit(page);
+    else this.requestedPage.set(page);
+  }
+  protected onPerPage(perPage: number): void {
+    const id = this.clientPaging();
+    if (id === null) { this.perPageChange.emit(perPage); return; }
+    this.requestedPage.set(1);
+    this.preferences.update((prefs) => writeTablePerPage(prefs, id, this.viewportService.isNarrow(), perPage));
+  }
 
   /** The key currently being dragged, or null. Signal rather than a field so
    *  the header can style itself while the drag is in flight. */
@@ -656,9 +706,9 @@ export class DataTable<T> {
     () => this.inlineColumns().length + (this.hasDetail() ? 1 : 0),
   );
   protected readonly fillerRows = computed<number[]>(() => {
-    const page = this.pagination();
+    const page = this.activePagination();
     if (!this.fillPage() || !page || page.perPage <= 0) return [];
-    const missing = page.perPage - this.rows().length;
+    const missing = page.perPage - this.shownRows().length;
     return missing > 0 ? Array.from({ length: missing }, (_, i) => i) : [];
   });
 
@@ -667,7 +717,7 @@ export class DataTable<T> {
   );
 
   protected footerText(column: ColumnDef<T>): string {
-    const value = column.footer?.(this.rows());
+    const value = column.footer?.(this.shownRows());
     return value === null || value === undefined ? '' : String(value);
   }
 

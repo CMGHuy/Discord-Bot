@@ -6,6 +6,7 @@ resolution helper with no file I/O of its own (see its docstring)."""
 from __future__ import annotations
 
 import datetime as dt
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -100,12 +101,44 @@ def stats_by(closed: list[dict], dimension: str) -> list[StatRow]:
     return rows
 
 
+#: RS percentile band width for the rs_quintile dimension (v146 I4).
+_RS_BAND = 20.0
+
+
+def rs_quintile_label(value) -> str:
+    """'Q1'..'Q5' for an entry RS percentile (0-100) at 20-point cuts --
+    [0,20) Q1 ... [80,100] Q5, out-of-range values clamped -- or 'unknown'
+    when there is no usable reading. Public: the v146 expectancy study
+    buckets RS with this exact function so both views agree."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "unknown"
+    if math.isnan(number):
+        return "unknown"
+    band = min(4, max(0, int(number // _RS_BAND)))
+    return f"Q{band + 1}"
+
+
+def _confluence_key(t: dict) -> str:
+    """How many target sources confirmed the trade (len(target_sources));
+    an empty list is '0', a record without the field 'unknown'."""
+    sources = t.get("target_sources")
+    return "unknown" if sources is None else str(len(sources))
+
+
+def _rs_quintile_key(t: dict) -> str:
+    context = t.get("entry_context")
+    return rs_quintile_label(context.get("rs_pctile") if isinstance(context, dict) else None)
+
+
 # v32 Task 11: "tier" (A/B/C, quality.py's own 0-100 quality_score bands)
 # retired -- "confidence" (1-5 confidence level, the number that actually
 # gates whether an alert fires) already existed as a separate dimension and
 # covers the same "group trades by a quality classification" role.
 DIMENSIONS = ("strategy", "horizon", "badge", "confidence",
-             "direction", "dow", "month", "ticker", "source", "ledger", "taken")
+             "direction", "dow", "month", "ticker", "source", "ledger", "taken",
+             "confluence", "rs_quintile")
 
 # Replaces the Task A13 stub -- now a plain module global, not populated
 # via any self-import.
@@ -124,4 +157,6 @@ _EXTRACTORS = {
     "ticker": lambda t: t.get("ticker") or "unknown",
     "dow": _dow_key,
     "month": _month_key,
+    "confluence": _confluence_key,
+    "rs_quintile": _rs_quintile_key,
 }

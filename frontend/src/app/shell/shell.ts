@@ -289,8 +289,8 @@ export class Shell {
   }
 
   protected refreshKillswitch(): void {
-    this.api.risk().subscribe({
-      next: (risk) => this.killswitchOn.set(risk.killswitch.on),
+    this.api.killswitch().subscribe({
+      next: (result) => this.killswitchOn.set(result.killswitch.on),
       // Silent: a failure here means the risk endpoint is unhappy, which
       // the Risk workspace will report properly. A toast on every shell
       // load would be noise on top of an error that is already visible.

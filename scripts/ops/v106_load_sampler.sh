@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One minute's sample of VM CPU load for the v106 (a) slowdown diagnosis
-# (plan docs/superpowers/plans/2026-09-26-v106-alpaca-data-provider.md, T13c).
+# (plan docs/superpowers/plans/implemented/2026-09-26-v106-alpaca-data-provider.md, T13c).
 # Read-only. Appends one block to logs/v106_load_sampler.log: vmstat's 1 s
 # us/sy/id/wa/st (st = hypervisor steal), loadavg, per-container CPU/mem and
 # the top host processes. Runs only on the trading days START..END (UTC dates)

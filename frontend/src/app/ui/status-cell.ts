@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { share } from './format';
+import { Icon } from './icon';
 import { StatusIndicator } from './status-indicator';
 
 /**
@@ -32,6 +34,15 @@ export interface StatusCellRow {
    *  real, computed position -- the point is to say the number backing it
    *  might be stale, not to hide it. */
   current_price_stale: boolean;
+  /** 'trailing' = a PARTIAL runner with no TP2: there is no target to draw a
+   *  bar toward, which is not the same as a failed price lookup. */
+  bar_kind?: string;
+  /** Fraction of the position TP1 already closed (0-1); null until PARTIAL. */
+  banked_fraction?: number | null;
+  /** Trailing runner only: P&L % if the trailing stop is hit (the bar's 0%)
+   *  and at the best price since TP1 (its 100%), both vs the original fill. */
+  stop_pnl_pct?: number | null;
+  best_pnl_pct?: number | null;
 }
 
 /**
@@ -54,15 +65,23 @@ export interface StatusCellRow {
  * **No per-status icon here, deliberately (2026-09-14).** That vocabulary
  * (`pending`/`opened`/`partial`/`closed`/`cancelled`) lives only in Recent
  * Activity now, on direct request -- this table keeps its dot+bar/chip
- * language instead of also carrying the icon.
+ * language instead of also carrying the icon. The one exception, on direct
+ * request (2026-10-16): a trailing-stop runner carries a trailing-stop
+ * icon, because its bar measures stop-to-best-price rather than
+ * stop-to-target and would otherwise read like any other PARTIAL bar.
  */
 @Component({
   selector: 'sb-status-cell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusIndicator],
+  imports: [Icon, StatusIndicator],
   template: `
     @if (bar(); as b) {
       <span class="cell">
+        @if (row().bar_kind === 'trailing') {
+          <!-- The only status icons in this table: a runner with no target
+               is told apart by what protects it, not by a different bar. -->
+          <sb-icon name="trailing" title="Trailing stop" />
+        }
         <span
           class="dot"
           [class]="b.band"
@@ -70,6 +89,9 @@ export interface StatusCellRow {
           [style.animation-duration]="b.blink"
           aria-hidden="true"
         ></span>
+        @if (ends(); as e) {
+          <span class="end neg" title="P&L if the trailing stop is hit">{{ e.stop }}</span>
+        }
         <span
           class="track"
           role="progressbar"
@@ -84,7 +106,14 @@ export interface StatusCellRow {
                position relative to this mark rather than a separate column. -->
           <span class="tick" [style.left.%]="b.entry" aria-hidden="true"></span>
         </span>
-        <span class="pct">{{ b.pct }}%</span>
+        @if (ends(); as e) {
+          <span class="end pos" title="P&L at the best price since TP1">{{ e.best }}</span>
+        } @else {
+          <span class="pct">{{ b.pct }}%</span>
+        }
+        @if (openLabel(); as o) {
+          <span class="hint">{{ o }}</span>
+        }
         @if (row().current_price_stale) {
           <span
             class="hint stale"
@@ -103,6 +132,7 @@ export interface StatusCellRow {
   `,
   styles: `
     .cell { display: inline-flex; align-items: center; gap: var(--space-6); }
+    sb-icon { color: var(--text-muted); cursor: help; }
 
     .track {
       position: relative;
@@ -156,6 +186,9 @@ export interface StatusCellRow {
       .fill { transition: none; }
     }
 
+    .end { font-family: var(--font-mono); font-size: var(--text-chip); }
+    .end.neg { color: var(--neg); }
+    .end.pos { color: var(--pos); }
     .pct { font-family: var(--font-mono); font-size: var(--text-table); color: var(--text-secondary); }
     .hint { font-size: var(--text-chip); color: var(--text-faint); }
     /* --warn is the design system's designated token for stale data (see
@@ -190,7 +223,28 @@ export class StatusCell {
    * still has no bar means the price lookup failed, and that is worth
    * distinguishing from a quiet trade.
    */
-  protected readonly hint = computed(() =>
-    NO_POSITION_YET.has(this.row().status) ? null : 'no price',
-  );
+  protected readonly hint = computed(() => {
+    const r = this.row();
+    if (NO_POSITION_YET.has(r.status)) return null;
+    // A trailing runner has a price and a stop but no target, so the bar is
+    // withheld by design -- saying "no price" there would be false.
+    if (r.bar_kind !== 'trailing') return 'no price';
+    return [this.openLabel(), 'trailing'].filter(Boolean).join(' · ');
+  });
+
+  /** Signed P&L % at both ends of a trailing runner's bar, or null. */
+  protected readonly ends = computed(() => {
+    const r = this.row();
+    if (r.bar_kind !== 'trailing' || r.stop_pnl_pct == null || r.best_pnl_pct == null) return null;
+    const f = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
+    return { stop: f(r.stop_pnl_pct), best: f(r.best_pnl_pct) };
+  });
+
+  /** How much of a PARTIAL position is still open ("50% open"), so the chip
+   *  says what is left rather than only that something was banked. */
+  protected readonly openLabel = computed(() => {
+    const r = this.row();
+    if (r.status !== 'PARTIAL' || r.banked_fraction == null) return null;
+    return `${share((1 - r.banked_fraction) * 100)} open`;
+  });
 }

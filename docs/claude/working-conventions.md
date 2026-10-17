@@ -6,6 +6,10 @@ Referenced from the root `CLAUDE.md`.
 budgets, parallelisation, `implemented/` — lives in `document-conventions.md`.**
 This file is session hygiene: commits, shared state, and versioning.
 
+- **Always split a change into several scoped commits, never one big one**
+  (fix + its test; backend vs frontend; docs vs code; CI vs tooling). Stage by
+  path per group, one message per group. A diff touching unrelated areas is a
+  sign to split, not to summarise.
 - Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`), one
   commit per task; the task's own narrow test run
   (`scripts/dev/testrun.py file ...`, or `fast` when it crosses files) plus
@@ -333,3 +337,15 @@ The check proves *coverage*, not *meaning*: a changed rule inside
 hand-edit a generated file; a new Claude hook or a changed matcher needs a
 matching `.codex/hooks.json` entry, and Codex runs it only after the partner
 trusts it in `/hooks`.
+
+## Paid usage
+
+Added 2026-10-14 at the partner's request. The only cost allowed is the Claude
+subscription. Never propose, start, schedule or script anything billed on top
+of it unless the partner asks for it by name in that message: API-key LLM calls (`ANTHROPIC_API_KEY` etc.), `/code-review ultra` (billed), paid
+data or hosting services. The per-skill `evals/` suites stay in the repo (files
+cost nothing), but `claude plugin eval` is **never run** unless the partner asks
+for it by name, since each case is a billed child `claude` run; a skill
+`description:` edit is checked against its trigger table and
+`tests/hooks/test_role_skills.py` (free). Subagents
+on the subscription (`Agent`, `/panel`) are not extra cost.

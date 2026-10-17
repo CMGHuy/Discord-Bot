@@ -6,8 +6,10 @@ df.iloc[:i+1] only."""
 from __future__ import annotations
 
 import dataclasses
+import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
+from typing import NamedTuple
 
 import numpy as np
 
@@ -22,6 +24,8 @@ from swingbot.core.marketdata.pit_membership import is_member
 from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS, MIN_BARS
 from swingbot.core.scanning.gating import passes_confluence, scenario_gate_inputs
 from swingbot.scan_params import ScanParams
+
+log = logging.getLogger(__name__)
 
 # Levels move slowly; recomputing the full multi-source level map every bar
 # is ~5x the cost for near-identical output. One recompute per 5 bars is the
@@ -58,6 +62,34 @@ CONFLUENCE_GATES = {
     "cooldown_bars": 5,
     "horizons": ["4w", "2m", "3m", "4m", "6m"],  # grid coverage, not a pass
 }
+
+
+#: Tolerance the replay counts confirming strategies with (the live default,
+#: CONFLUENCE_DEVIATION_PCT, is also 5.0). Named in v146 so the TRAIN
+#: score's stop confluence (scenario_rows) uses the same one.
+REPLAY_CONFLUENCE_TOLERANCE_PCT = 5.0
+_REPLAY_COOLDOWN_BARS = 5
+
+
+class ReplayHit(NamedTuple):
+    """One accepted replay signal. The first two fields are the legacy
+    (signal_index, plan) pair, so hit[0] / hit[1] read like the old tuples;
+    scenario and target_confluence are what v146's TRAIN row needs."""
+    i: int
+    plan: object
+    scenario: object
+    target_confluence: tuple
+
+
+@dataclasses.dataclass
+class _ReplayScope:
+    """Per-call constants of one replay, so the helpers stay small."""
+    ticker: str
+    horizon_key: str
+    h: dict
+    params: ScanParams
+    legacy_gates: bool
+    asof: object
 
 
 def levels_asof(ticker: str, df, bar_index: int, horizon_key: str, cache: dict):
@@ -122,13 +154,74 @@ def _headroom_kept(scenarios, supports, resistances) -> list:
     return edge_gates.filter_headroom(scenarios, supports, resistances)[0]
 
 
-def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
-                     gates: dict | None = None,
-                     dcb_params: dict | None = None, asof=None) -> list:
-    """(signal_index, TradePlanV2) for every bar where the confluence scan
-    WOULD have emitted a plan, under `gates`, with a per-direction cooldown.
+def _replay_params(params: ScanParams | None, gates: dict | None) -> tuple:
+    """(params, legacy_gates): a legacy gates dict overrides the admission
+    fields of ScanParams, exactly as before the v146 split."""
+    if params is None:
+        params = ScanParams.from_config()
+    if gates is None:
+        return params, False
+    return dataclasses.replace(
+        params,
+        min_reward_pct=gates.get("min_reward_pct", params.min_reward_pct),
+        min_stop_distance_pct=gates.get("min_stop_distance_pct", params.min_stop_distance_pct),
+        max_stop_loss_pct=gates.get("max_stop_distance_pct", params.max_stop_loss_pct),
+        min_risk_reward_ratio=gates.get("min_risk_reward", params.min_risk_reward_ratio),
+        min_target_confluence_count=gates.get("min_confluence", params.min_target_confluence_count),
+    ), True
 
-    No lookahead: every computation below is scoped to `window = df.iloc[:i+1]`
+
+def _note_blocked(blocked: list | None, index: int, scenario) -> None:
+    """v147 record-only: remember a scenario whose plan build found no qualifying target.
+    A helper so `replay_scenarios` (C 15, legacy) gains no branch."""
+    if blocked is not None:
+        blocked.append((index, scenario))
+
+
+def _bar_scenarios(scope: _ReplayScope, df, i: int, cache: dict, dcb_params: dict | None) -> tuple:
+    """(window, price, level_map, scenarios) for bar i after the dry-up and
+    headroom gates -- every computation on window = df.iloc[:i+1]
+    (scenarios_at / levels_asof enforce the same slice)."""
+    window, price, supports, resistances, scenarios = scenarios_at(
+        scope.ticker, df, i, scope.horizon_key, scope.params, cache, dcb_params)
+    scenarios = _headroom_kept(_dryup_kept(scenarios, window), supports, resistances)
+    return window, price, (supports, resistances), scenarios
+
+
+def _accept_scenario(scope: _ReplayScope, i: int, window, price: float, level_map: tuple,
+                     sc, last_accepted: dict, blocked: list | None = None) -> ReplayHit | None:
+    """The confluence gate, the per-direction cooldown and the plan build
+    for one scenario; None when any of them says no. A scenario whose plan
+    build finds no qualifying target is noted in `blocked` (v147)."""
+    n_confl, families = levels.count_confirming_strategies(
+        window, scope.h, price, sc.take_profit, tolerance_pct=REPLAY_CONFLUENCE_TOLERANCE_PCT)
+    if not passes_confluence(n_confl, scope.params):
+        return None
+    last = last_accepted.get(sc.direction)
+    if last is not None and i - last < _REPLAY_COOLDOWN_BARS:
+        return None
+    plan = build_confluence_plan(
+        sc, window, ticker=scope.ticker, horizon_key=scope.horizon_key,
+        primary_strategy=primary_strategy_for(sc),
+        level_map=level_map,
+        # Legacy callers historically used their dict only for
+        # scenario admission; target construction still read config.
+        # Keep that compatibility while callers migrate to params.
+        params=ScanParams.from_config() if scope.legacy_gates else scope.params)
+    if plan is None:
+        _note_blocked(blocked, i, sc)
+        return None          # no qualifying target -> no trade, same as live
+    stamp_entry_context(plan, window, asof_row(scope.asof, window.index[-1]))
+    return ReplayHit(i, plan, sc, (n_confl, families))
+
+
+def replay_scenarios_detailed(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
+                              gates: dict | None = None, dcb_params: dict | None = None,
+                              asof=None, blocked: list | None = None) -> list[ReplayHit]:
+    """A ReplayHit for every bar where the confluence scan WOULD have emitted
+    a plan, under `gates`, with a per-direction cooldown.
+
+    No lookahead: every computation is scoped to `window = df.iloc[:i+1]`
     (or `levels_asof`, which enforces the same slice internally) -- never
     `df.iloc[-1]` or any index beyond `i`.
 
@@ -137,53 +230,39 @@ def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | 
     sets in one process, and a config read would make them a global the
     workers fight over. `None` is the baseline arm and must not pay for the
     detector at all.
-    """
-    if params is None:
-        params = ScanParams.from_config()
-    legacy_gates = gates is not None
-    if legacy_gates:
-        params = dataclasses.replace(
-            params,
-            min_reward_pct=gates.get("min_reward_pct", params.min_reward_pct),
-            min_stop_distance_pct=gates.get("min_stop_distance_pct", params.min_stop_distance_pct),
-            max_stop_loss_pct=gates.get("max_stop_distance_pct", params.max_stop_loss_pct),
-            min_risk_reward_ratio=gates.get("min_risk_reward", params.min_risk_reward_ratio),
-            min_target_confluence_count=gates.get("min_confluence", params.min_target_confluence_count),
-        )
-    h = HORIZONS[horizon_key]
-    warmup = MIN_BARS[horizon_key]
-    cooldown = 5
-    cache: dict = {}
-    out: list = []
-    last_accepted: dict = {}   # direction -> bar index
 
-    for i in range(warmup, len(df)):
-        window, price, supports, resistances, scenarios = scenarios_at(
-            ticker, df, i, horizon_key, params, cache, dcb_params)
-        scenarios = _dryup_kept(scenarios, window)
-        scenarios = _headroom_kept(scenarios, supports, resistances)
+    `blocked` (v147, record-only): when a list, every scenario whose
+    `build_confluence_plan` returned None is appended as `(signal_index,
+    scenario)` -- the confluence `no_qualifying_target` block. The return
+    value, the cooldown state and every plan are unchanged.
+    """
+    params, legacy_gates = _replay_params(params, gates)
+    scope = _ReplayScope(ticker, horizon_key, HORIZONS[horizon_key], params, legacy_gates, asof)
+    cache: dict = {}
+    out: list[ReplayHit] = []
+    last_accepted: dict = {}   # direction -> bar index
+    for i in range(MIN_BARS[horizon_key], len(df)):
+        window, price, level_map, scenarios = _bar_scenarios(scope, df, i, cache, dcb_params)
         for sc in scenarios:
-            n_confl, families = levels.count_confirming_strategies(
-                window, h, price, sc.take_profit, tolerance_pct=5.0)
-            if not passes_confluence(n_confl, params):
-                continue
-            last = last_accepted.get(sc.direction)
-            if last is not None and i - last < cooldown:
-                continue
-            plan = build_confluence_plan(
-                sc, window, ticker=ticker, horizon_key=horizon_key,
-                primary_strategy=primary_strategy_for(sc),
-                level_map=(supports, resistances),
-                # Legacy callers historically used their dict only for
-                # scenario admission; target construction still read config.
-                # Keep that compatibility while callers migrate to params.
-                params=ScanParams.from_config() if legacy_gates else params)
-            if plan is None:
-                continue          # no qualifying target -> no trade, same as live
-            stamp_entry_context(plan, window, asof_row(asof, window.index[-1]))
-            last_accepted[sc.direction] = i
-            out.append((i, plan))
+            hit = _accept_scenario(scope, i, window, price, level_map, sc, last_accepted,
+                                   blocked)
+            if hit is not None:
+                last_accepted[sc.direction] = i
+                out.append(hit)
     return out
+
+
+def replay_scenarios(ticker: str, df, horizon_key: str, *, params: ScanParams | None = None,
+                     gates: dict | None = None,
+                     dcb_params: dict | None = None, asof=None,
+                     blocked: list | None = None) -> list:
+    """(signal_index, TradePlanV2) for every bar where the confluence scan
+    WOULD have emitted a plan -- the projection of replay_scenarios_detailed
+    that every pre-v146 caller unpacks. Same arguments (v147's `blocked`
+    included), same no-lookahead contract."""
+    return [(hit.i, hit.plan) for hit in replay_scenarios_detailed(
+        ticker, df, horizon_key, params=params, gates=gates, dcb_params=dcb_params, asof=asof,
+        blocked=blocked)]
 
 
 def _aggregate(results: list) -> dict:
@@ -211,6 +290,11 @@ def _aggregate(results: list) -> dict:
 
 
 def _replay_ticker(args) -> dict:
+    """All horizons for ONE ticker: {horizon_key: [exit_result, ...]} (see `_replay_ticker_gate_rows`)."""
+    return _replay_ticker_gate_rows(args)[0]
+
+
+def _replay_ticker_gate_rows(args) -> tuple[dict, list]:
     """All horizons for ONE ticker -- the process-pool entry point, so it must
     be module-level and take a single picklable argument.
 
@@ -221,21 +305,109 @@ def _replay_ticker(args) -> dict:
     cannot use anyway. At 300-500 tickers there are already far more tasks
     than cores.
 
-    Returns {horizon_key: [exit_result, ...]}. The horizon travels in the
-    RESULT rather than being inferred from completion order, which is what
-    makes the pooled path order-independent.
+    Returns ({horizon_key: [exit_result, ...]}, gate_rows). The horizon travels
+    in the RESULT rather than being inferred from completion order, which is what
+    makes the pooled path order-independent. `args[11]` (v147, optional) asks for
+    the record-only gate rows; without it the row list is always empty. `args[10]`
+    is v146's SPY slot and is not read here.
     """
+    exits, gate_rows = _replay_exits(args, replay_scenarios)
+    return _results_only(exits), gate_rows
+
+
+def _results_only(exits: dict) -> dict:
+    """{horizon_key: [(hit, ExitResult), ...]} -> {horizon_key: [ExitResult, ...]}."""
+    return {hk: [result for _, result in pairs] for hk, pairs in exits.items()}
+
+
+def _replay_exits(args, replay) -> tuple:
+    """({horizon_key: [(hit, ExitResult), ...]}, gate_rows) for one ticker --
+    the loop _replay_ticker_gate_rows and _replay_ticker_rows share. `replay`
+    yields (i, plan) pairs or ReplayHits; both read as hit[0], hit[1].
+    args[10] (SPY) is not read here: only the row builder needs it; args[11]
+    asks for v147's record-only gate rows."""
     ticker, df, horizons, start, end, gates, scale_out, dcb_params = args[:8]
     asof_df = args[8] if len(args) > 8 else None
     member_spans = args[9] if len(args) > 9 else None
+    record = bool(args[11]) if len(args) > 11 else False
     out = {hk: [] for hk in horizons}
+    rows: list = []
     for hk in horizons:
-        for i, plan in replay_scenarios(ticker, df, hk, gates=gates,
-                                        dcb_params=dcb_params, asof=asof_df):
-            if not _signal_in_scope(str(df.index[i].date()), start, end, member_spans):
+        blocked = [] if record else None
+        for hit in replay(ticker, df, hk, gates=gates, dcb_params=dcb_params, asof=asof_df,
+                          blocked=blocked):
+            if not _signal_in_scope(_bar_date(df, hit[0]), start, end, member_spans):
                 continue
-            out[hk].append(simulate_exit(df, i, plan, scale_out=scale_out))
-    return out
+            out[hk].append((hit, simulate_exit(df, hit[0], hit[1], scale_out=scale_out)))
+        if record:
+            taken = [(hit[0], hit[1], result) for hit, result in out[hk]]
+            rows.extend(_safe_gate_rows(ticker, df, hk, taken, blocked, (start, end, member_spans)))
+    return out, rows
+
+
+def _bar_date(df, index: int) -> str:
+    return str(df.index[index].date())
+
+
+def _safe_gate_rows(ticker, df, horizon_key, taken, blocked, scope) -> list[dict]:
+    """Measurement only: a failing row builder costs this (ticker, horizon)'s rows, never the replay."""
+    try:
+        return _horizon_gate_rows(ticker, df, horizon_key, taken, blocked, scope)
+    except Exception as exc:  # noqa: BLE001 -- record-only path must never change replay results
+        log.warning("v147 gate rows skipped for %s/%s: %s", ticker, horizon_key, exc, exc_info=True)
+        return []
+
+
+def _horizon_gate_rows(ticker, df, horizon_key, taken, blocked, scope) -> list[dict]:
+    """v147 T2 + T3 for one (ticker, horizon): in-scope no-target scenarios, then every replayed plan."""
+    start, end, member_spans = scope
+    rows = [_no_target_row(ticker, df, horizon_key, i, sc) for i, sc in blocked
+            if _signal_in_scope(_bar_date(df, i), start, end, member_spans)]
+    rows.extend(_plan_gate_row(ticker, df, horizon_key, i, plan, result) for i, plan, result in taken)
+    return rows
+
+
+def _no_target_row(ticker, df, horizon_key, index, scenario) -> dict:
+    """T2: `build_confluence_plan` returned None -- nothing to simulate, so `no-plan`."""
+    from swingbot.core.backtesting import blocked_recorder
+    return blocked_recorder.gate_row(
+        population="train", arm="blocked", source="confluence", ticker=ticker,
+        strategy=primary_strategy_for(scenario), horizon=horizon_key, direction=scenario.direction,
+        signal_date=_bar_date(df, index), gate="plan_rejected", reason="no_qualifying_target",
+        margin=None, cf_status="no-plan", cf_r=None, win=None)
+
+
+def _plan_gate_row(ticker, df, horizon_key, index, plan, result) -> dict:
+    """T3: the record-only shadow of attach_plan_v2's plan-time 2% check on one replayed plan.
+    Over the cap -> `blocked`/`risk_cap` (an over-cap counterfactual, never tradable); else `taken`.
+    The outcome is the replay's own ExitResult -- nothing is re-simulated."""
+    from swingbot.core.backtesting import blocked_recorder
+    from swingbot.core.risk_limits import planned_loss_pct
+    capped = blocked_recorder.over_cap(plan)
+    return blocked_recorder.row_from_exit(
+        result, plan, population="train", arm="blocked" if capped else "taken", source="confluence",
+        ticker=ticker, strategy=plan.strategy, horizon=horizon_key, direction=plan.direction,
+        signal_date=_bar_date(df, index), gate="plan_rejected",
+        reason="risk_cap" if capped else None,
+        margin=blocked_recorder.risk_cap_margin(plan) if capped else None,
+        planned_loss_pct=planned_loss_pct(plan.trigger_price, plan.stop_loss) if capped else None,
+        in_sample=False)
+
+
+def _replay_ticker_rows(args) -> tuple:
+    """_replay_ticker_gate_rows plus one v146 TRAIN row per CLOSED exit:
+    (exits, rows, gate_rows). args is the same task tuple with the benchmark
+    frame in args[10]. The whole SPY frame travels; scenario_rows slices it
+    to each signal bar (no lookahead), and nothing here indexes it."""
+    # Imported here: scenario_rows imports this module.
+    from swingbot.core.backtesting import scenario_rows
+    ticker, df = args[0], args[1]
+    spy_df = args[10] if len(args) > 10 else None
+    exits, gate_rows = _replay_exits(args, replay_scenarios_detailed)
+    rows = [scenario_rows.scenario_trade_row(ticker, hk, df, hit, result, spy_df)
+            for hk, pairs in exits.items() for hit, result in pairs
+            if result.outcome != "not_triggered"]
+    return _results_only(exits), rows, gate_rows
 
 
 def _signal_in_scope(signal_date: str, start, end, member_spans) -> bool:
@@ -259,10 +431,41 @@ def _resolve_replay_workers(workers: int | None) -> int:
     return max(1, (os.cpu_count() or 2) - 1)
 
 
+def _run_replay_tasks(worker, tasks: list, workers, on_ticker_done=None) -> list:
+    """worker over every task, sequentially or across the process pool, in
+    task order. on_ticker_done(done, total) fires as each result arrives
+    (pool.map yields in task order, so the count is monotone but can lag a
+    slow early ticker)."""
+    n = _resolve_replay_workers(workers)
+    if n <= 1 or len(tasks) <= 1:
+        return _drain(map(worker, tasks), len(tasks), on_ticker_done)
+    with ProcessPoolExecutor(max_workers=n) as pool:
+        return _drain(pool.map(worker, tasks), len(tasks), on_ticker_done)
+
+
+def _drain(results, total: int, on_ticker_done) -> list:
+    out = []
+    for result in results:
+        out.append(result)
+        if on_ticker_done is not None:
+            on_ticker_done(len(out), total)
+    return out
+
+
+def _replay_with_rows(tasks: list, workers, on_ticker_done) -> tuple:
+    """(per-ticker (exits, gate_rows) pairs, flat trade rows): the
+    row-collecting twin of the plain run. SPY already rides in args[10]."""
+    results = _run_replay_tasks(_replay_ticker_rows, tasks, workers, on_ticker_done)
+    return ([(exits, gate_rows) for exits, _, gate_rows in results],
+            [row for _, ticker_rows, _ in results for row in ticker_rows])
+
+
 def run_scenario_backtest(frames: dict, start, end, *, gates,
                           scale_out=True, horizons=None, workers=None,
                           dcb_params: dict | None = None, asof_map: dict | None = None,
-                          membership: dict | None = None) -> dict:
+                          membership: dict | None = None, spy_df=None,
+                          collect_rows: bool = False, on_ticker_done=None,
+                          record_blocked: bool = False) -> dict:
     """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
     dates -- the exit walk may run past `end`, same convention as
     run_backtest_daterange.
@@ -281,28 +484,48 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     `membership` ({ticker: [(start, end_exclusive), ...]}, from
     pit_membership.membership_map) masks signals to the dates each ticker was
     an index member; None (every non-`_pit` universe) leaves them unmasked.
+
+    v146: `collect_rows=True` adds "rows" -- one TRAIN row per closed exit
+    (scenario_rows.scenario_trade_row) -- and ships `spy_df` to the workers
+    in args[10] (None otherwise); "pooled" and "by_horizon" are identical either way.
+    `on_ticker_done(done, total)` is called after each ticker returns.
+
+    `record_blocked` (v147): also return "gate_rows", the record-only TRAIN gate
+    rows (`_horizon_gate_rows`); "pooled"/"by_horizon" are identical either way.
     """
     horizons = horizons or list(LEGACY_HORIZONS)
-    results_by_hz: dict = {hk: [] for hk in horizons}
 
     tasks = [
         (ticker, df, horizons, start, end, gates, scale_out, dcb_params,
          asof_map.get(ticker) if asof_map else None,
-         membership.get(ticker, []) if membership is not None else None)
+         membership.get(ticker, []) if membership is not None else None,
+         spy_df if collect_rows else None,   # args[10]: v146's SPY frame (row worker only)
+         record_blocked)                     # args[11]: v147 record flag
         for ticker, df in frames.items()
     ]
 
-    n = _resolve_replay_workers(workers)
-    if n <= 1 or len(tasks) <= 1:
-        per_ticker_results = [_replay_ticker(t) for t in tasks]
+    if collect_rows:
+        per_ticker_results, rows = _replay_with_rows(tasks, workers, on_ticker_done)
     else:
-        with ProcessPoolExecutor(max_workers=n) as pool:
-            per_ticker_results = list(pool.map(_replay_ticker, tasks))
+        per_ticker_results, rows = _run_replay_tasks(
+            _replay_ticker_gate_rows, tasks, workers, on_ticker_done), None
+    stats = _scenario_result(per_ticker_results, horizons, record_blocked)
+    if rows is not None:
+        stats["rows"] = rows
+    return stats
 
-    for per_ticker in per_ticker_results:
+
+def _scenario_result(per_ticker_results, horizons, record_blocked: bool) -> dict:
+    """Merge the per-ticker (results, rows) pairs strictly after every task returned."""
+    results_by_hz: dict = {hk: [] for hk in horizons}
+    gate_rows: list = []
+    for per_ticker, rows in per_ticker_results:
+        gate_rows.extend(rows)
         for hk, results in per_ticker.items():
             results_by_hz[hk].extend(results)
-
     all_results = [r for rs in results_by_hz.values() for r in rs]
-    return {"pooled": _aggregate(all_results),
-            "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
+    out = {"pooled": _aggregate(all_results),
+           "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
+    if record_blocked:
+        out["gate_rows"] = gate_rows
+    return out

@@ -116,7 +116,7 @@ function maxDrawdown(values: readonly number[]): number | null {
             }
           </dl>
           @if (outcomeTableOpen()) {
-            <sb-data-table [rows]="outcomeTableRows()" [columns]="outcomeColumns" [visible]="outcomeVisible" [rowKey]="outcomeRowKey" />
+            <sb-data-table [rows]="outcomeTableRows()" [columns]="outcomeColumns" [visible]="outcomeVisible" [rowKey]="outcomeRowKey" clientPaging="analytics-outcomes" />
           }
         }
       </sb-panel>
@@ -126,7 +126,7 @@ function maxDrawdown(values: readonly number[]): number | null {
           hint="Every closed trade's realised R. The shape is the finding: a cluster of small losses with a tail of larger wins is a different book from a symmetric one." />
         <sb-histogram [bins]="rBins()" [isNegative]="negativeBin" />
         @if (rTableOpen()) {
-          <sb-data-table [rows]="rRows()" [columns]="rColumns" [visible]="rVisible" [rowKey]="rRowKey" />
+          <sb-data-table [rows]="rRows()" [columns]="rColumns" [visible]="rVisible" [rowKey]="rRowKey" clientPaging="analytics-r-buckets" />
         }
       </sb-panel>
 
@@ -135,7 +135,7 @@ function maxDrawdown(values: readonly number[]): number | null {
           hint="Realised result per calendar month of the scoped book. The day grid lives on the Calendar workspace." />
         <sb-bar-list [rows]="monthBars()" mode="signed" [format]="format" />
         @if (monthTableOpen()) {
-          <sb-data-table [rows]="monthRows()" [columns]="monthColumns" [visible]="monthVisible" [rowKey]="monthRowKey" />
+          <sb-data-table [rows]="monthRows()" [columns]="monthColumns" [visible]="monthVisible" [rowKey]="monthRowKey" clientPaging="analytics-months" />
         }
         <a routerLink="/calendar">Open the calendar</a>
       </sb-panel>
@@ -266,9 +266,13 @@ export class OverviewTab {
       fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
       fixedTile('Profit factor', num(profitFactor, 2), this.store.scopeN(), null,
         'Gross realised win ÷ gross realised loss.'),
-      tile('Max drawdown', drawdownR, null, drawdownMoney, equityCurve?.points_n ?? null, null,
-        'Largest peak-to-trough decline in the scope.'),
-      fixedTile('Sharpe', signed(sharpe, 2), this.store.scopeN(), null, 'Annualised, from realised returns.'),
+      // Negated: a drawdown is a loss, and an unsigned magnitude rendered
+      // "+120.66R" -- the same sign as a gain, in the same row as Total R.
+      tile('Max drawdown', drawdownR === null ? null : -drawdownR, null,
+        drawdownMoney === null ? null : -drawdownMoney, equityCurve?.points_n ?? null, null,
+        'Largest peak-to-trough decline in the selected range (Risk shows all closed trades).'),
+      fixedTile('Sharpe', signed(sharpe, 2), this.store.scopeN(), null,
+        'Annualised, from realised returns in the selected range (Risk shows per-trade R, all-time).'),
     ];
   });
 
@@ -315,7 +319,10 @@ export class OverviewTab {
   });
 
   readonly rBins = computed(() => (this.store.performance()?.distributions.r_multiples ?? [])
-    .map((b) => ({ label: `${b.lo}R`, count: b.count })));
+    // Rounded to 1 place: the server's bin edges are the span divided by the
+    // bin count, so "-4.688333R" and "-3.346667R" were shipped as floats.
+    // `-0` is normalised so a bin starting at zero is not marked negative.
+    .map((b) => ({ label: `${(Math.round(b.lo * 10) / 10 || 0).toFixed(1)}R`, count: b.count })));
   readonly monthBars = computed(() => (this.store.performance()?.calendar ?? [])
     .map((m) => ({ label: m.month, value: m.return_pct, n: m.n })));
   readonly negativeBin = (bin: { label: string }) => bin.label.startsWith('-');

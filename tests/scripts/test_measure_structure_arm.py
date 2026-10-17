@@ -17,6 +17,16 @@ from tests.helpers import make_ohlcv  # noqa: E402
 ONE_CELL = (StructCell(MSB, 10, 0.5),)
 
 
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot import config
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
+
 def _cache(tmp_path):
     """tests/scripts/test_measure_armed_entries.py's trend + box frame. On
     horizon 4w under MSB-N10-k0.50 it arms five times and issues once."""

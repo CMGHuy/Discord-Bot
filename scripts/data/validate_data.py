@@ -2,7 +2,9 @@
 """Report data-quality issues (Task E16) across the local OHLCV cache.
 
 Dual-mode, mirroring the E15 precedent in fetch_backtest_data.py's
---universe flag -- two caches exist in this repo and they are NOT unified:
+--universe flag -- two caches exist in this repo and they are NOT unified
+(v162 added a third store, data/market_data/, which
+scripts/data/check_history_store.py checks instead):
 
   * default (no flag): validates data/backtest_cache/ (owned by
     swingbot.core.marketdata.backtest_cache, flat {TICKER}.csv files) -- the cache

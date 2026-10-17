@@ -10,6 +10,15 @@ interpreting any backtest, grid, or validation result.
   component, results recorded as-is, never retuned after — a config that fails
   train never gets a validation shot. Treat the 2024–2025 window as tainted
   for any selection decision.
+- **A new data source resets no budget (v162).** A validation shot spent on
+  yfinance bars stays spent: `--data-source` on `--validation` gives no
+  component a second run, and 2024-2025 stays tainted. Every closed
+  pre-registration stays closed on Alpaca bars too (the same hypothesis on a
+  new dataset; v122, v127, v129, v135, v139 and v143 included). The v162
+  re-baseline describes a data change, is never quoted as a lift and decides
+  nothing: no switching back, no per-ticker or per-strategy source. Each new
+  pre-registration names its `data_source` in its frozen block before TRAIN
+  is read.
 
 ## Acceptance gate
 
@@ -63,11 +72,26 @@ interpreting any backtest, grid, or validation result.
   Answers "does this entry predict anything, after costs, beyond its own
   trend state?" before anyone writes a spec. Every event on the
   point-in-time S&P 500 (2010-01-01..2019-12-31, `data/backtest_cache_ext`)
-  races one fixed trade — entry next open, stop 1.5 × ATR14, target
-  3 × ATR14, gaps through either level filled at the open, an idea-specific
-  time cap, 5 bps slippage a side plus commission — against K = 20 random
-  non-event bars from the same ticker, month and trend state
-  (`close > SMA200`). Pass rule, all four: paired ΔExpR ≥ +0.10R; lower 95%
+  races the idea's one frozen **race shape** — `fixed` (v140: entry next
+  open, stop 1.5 × ATR14, target 3 × ATR14, gaps through either level
+  filled at the open, an idea-specific time cap) or `trail` (v163: same
+  entry and 1.5 × ATR14 initial stop, no target, a chandelier stop
+  3 × ATR14[t] under the highest high of the bars before the one tested,
+  never lowered, ATR frozen at the event bar, a gap through the stop filled
+  at the open, cap ≥ 60 bars; R always in the initial 1R) — with 5 bps
+  slippage a side plus commission, against K = 20 random non-event bars
+  from the same ticker, month and trend state (`close > SMA200`), raced
+  the same shape. **One shape per idea**: an idea module's `RACE` constant
+  (default `fixed`) is part of its frozen definition, pinned in
+  `tests/backtesting/screen/test_ideas_registry.py`; a changed shape is a
+  new idea with a new name, and the trigger of any closed idea never
+  returns under the other shape. The pass rule below is the same for both
+  shapes. A trail results doc also prints timeouts per book and the book
+  re-priced at 2 × slippage, never gating; the trail's A/A calibration is
+  `docs/superpowers/results/*-trail-race-calibration.md`. A trail fail is
+  "no edge under this exit", and closed; a trail pass is not tradeable
+  until a nightly stop-update path exists. Pass rule, all four: paired
+  ΔExpR ≥ +0.10R; lower 95%
   bound > 0 (week-clustered bootstrap, 10,000 resamples); same sign in ≥ 7
   of 9 calendar years, 2011–2019 (2010 is warm-up only; a year with no events counts against); N ≥ 300
   events (below that, `SCREEN-UNDERPOWERED`, closed like a fail). Forward
@@ -205,6 +229,16 @@ edited; a re-measurement is a new pre-registration with a new id. The
 v119 (v124 and v127 are exempt: no spent budget or no enum verdict); `n`/`exp_r` are the decisive population the record names and `null`
 where it names none, and `p` is `null` wherever no p-value was recorded.
 
+**Data source on registry and ledger rows (v162).** New registry rows carry
+`data_source` and merge on `(source, strategy, horizon, data_source)`, so the
+yfinance and Alpaca populations sit side by side. New ledger rows may carry
+the optional field `data_source` (`OPTIONAL_LEDGER_FIELDS`). A row without
+the field means `yfinance`; old rows are never rewritten. `get_badge` takes
+the row of the active `TRAINING_DATA_SOURCE`, falls back to the `yfinance`
+row, logs which one it used, and never blends the two. Every `--json` result
+has a `<out>.provenance.json` sidecar (source, feed, adjustment, manifest
+hash, excluded tickers); the result JSON's own shape is unchanged.
+
 **The v72 procedure change does not reopen anything below.** A better
 instrument is not a new hypothesis. Every row in this table stays closed,
 and the features shipped on-by-default under the old gates
@@ -215,6 +249,9 @@ current defaults without a re-run.
 
 | Component | Outcome | Record |
 |---|---|---|
+| Confidence score as a ranker of realised R: top-minus-bottom tercile ExpR on the live book and on the TRAIN confluence replay, never pooled (v146 read-only measurement) | **NOT PREDICTIVE; pre-registered verdict, computed once, no budget spent.** Live n=891, top-minus-bottom tercile -0.015R, 95% CI [-0.1526, 0.0814]. TRAIN n=5558, top-minus-bottom tercile +0.077R, 95% CI [-0.1071, 0.2634]. Rule: PREDICTIVE needs a CI lower bound above 0 and a point estimate of at least +0.10R in both populations, WEAK in exactly one; a tercile under N=30 fails its population. 113 looks, seed 42, R net of frictions. Closes "raise the confidence floor" as a measured no; any bucket candidate stands on its own and needs its own Stage -2 screen. Later runs are descriptive and never revise this verdict; a new verdict needs a new spec. | `results/2026-10-15-v146-expectancy-attribution.md` |
+| Confluence structural stop, arm S — keep the confluence level as the stop up to c ∈ {3, 4, 5}% less 0.25 headroom, target re-chosen, sized to fixed dollar risk (v139) | **NO_ELIGIBLE_CELL at Stage 1, budget intact.** TRAIN 2020-2023, 75 tickers, N=8089 baseline trades (Stage 0 POWERED, paired MDE 0.029 / 0.041 / 0.043R). Paired ΔExpR at c = 3 / 4 / 5 is -0.0328R [-0.0477, -0.0182] / -0.0264R [-0.0498, -0.0022] / -0.0313R [-0.0562, -0.0059]: the interval excludes zero on the losing side in every cell, so `expectancy_gain` fails (win-rate floor and volume pass; win rate +0.2 / +1.2 / +1.3pp, median planned RR 2.50 → 2.19 / 2.01 / 1.98). Stages 2 and 3 never ran. Reopening needs "a stop rule other than the confluence level itself up to a ceiling c, sized to fixed dollar risk". Another grid, window or MDE ceiling is not a new mechanism. | `results/2026-10-08-v139-armS.md`, `results/2026-10-08-v139-preregistration.md` |
+| Confluence stop drop, arm D — no plan when the structural stop is beyond c ∈ {3, 4, 5}% (v139) | **REFUSED at Stage 0 in all three cells, budget intact.** Fold-train 2018-06-01..2022-12-31, 75 tickers, 10838 baseline rows (9091 closed). TRAIN ΔWR +0.172 / -0.011 / +0.074pp against paired MDEs 1.482 / 0.664 / 0.539pp; ΔExpR +0.0017 / -0.0034 / +0.0002R. Removed 862 / 241 / 105, added 175 / 49 / 45 (not a subset, clause 6 SKIPPED), 0 changed; pooled volume cut 6.3% / 1.8% / 0.6%. Stages 1-3 never ran. Reopening needs "a drop rule other than structural distance beyond c". Another grid, window or MDE ceiling is not a new mechanism. | `results/2026-10-08-v139-armD.md`, `results/2026-10-08-v139-preregistration.md` |
 | Role coverage vs level-vote count, descriptive (v133): does `role_coverage` (0-1 / 2 / 3-4) separate confluence outcomes better than the target confluence count (2 / 3 / 4+)? | **NOT MORE INFORMATIVE on TRAIN; measurement only, no VALIDATION budget involved, NOT merged to `main`.** TRAIN 2020-01-01..2023-12-31, 72 tickers, 12,207 closed trades. Bullish confluence: `spread_roles` -0.0597R against `spread_votes` +0.0659R; clauses 1 / 2 / 3 = False / False / True; bearish `spread_roles` +0.4913R against `spread_votes` +0.3207R, not thin, clauses 1 / 2 / 3 = False / True / True; clause 4 = False. Bullish fails clauses 1 and 2 and the sign of the bearish spread does not agree with it, so clause 4 fails. The ten snapshot keys and the report stay on the branch. Do not re-run; a follow-on needs a different role definition or a different control, pre-registered on its own | `results/2026-10-06-v133-role-coverage.md`, `plans/no-lift/2026-10-06-v133-liquidity-role-coverage_0-index.md`, branch `2026-10-06-v133-liquidity-role-coverage` |
 | Headroom veto, confluence scope (every confluence scenario, both directions; `HEADROOM_MIN_R` threshold), `h ∈ {0.5, 0.75, 1.0}` (v135) | **UNREACHABLE at Stage −1 (`refused:zero-diff`); VALIDATION not spent, remains available.** Pilot at `h = 1.0` (the widest cut), 20 tickers, 2018-06-01..2020-12-31, both engines: 493 baseline rows, 493 component rows, 0 removed / 0 added / 0 changed. Stages 0-3 never ran, no cell beyond the pilot was measured, so there is no ΔWR, ΔExpR, clause-6 reading or `no_map` / `unreadable` share for this component. The result is a measured zero, not a wiring finding: live/replay parity and the replay call sites are pinned by tests, and the V135-4 funnel counts were not read. `HEADROOM_SCOPE` stays `off`; the code remains merged and inert. Reopening needs a mechanism other than "an opposing level with ≥ 2 source families nearer than `h ∈ {0.5, 0.75, 1.0}` × risk". | `results/2026-10-06-v135-preregistration.md`, `results/2026-10-06-v135-confluence.md` |
 | Headroom veto, strategy scope (EMA Crossover, VWAP, Fibonacci, Support/Resistance, RSI, Elliott Wave, MA Ribbon, Break & Retest, RSI Divergence; `HEADROOM_MIN_R` threshold), `h ∈ {0.5, 0.75, 1.0}` (v135) | **NO-LIFT at Stage 0; VALIDATION not spent, remains available.** Pilot at `h = 1.0` was REACHABLE (20 tickers: 493 → 343 rows, 150 removed, 0 added). Across 72 cached tickers, ten horizons and both engines, 10,541 baseline rows become 9,305 / 8,743 / 8,193 component rows (`h` = 0.5 / 0.75 / 1.0). The three fold-train ΔWR values are +0.134 / +0.412 / +0.321 pp, below paired MDEs 1.657 / 2.428 / 3.021 pp; ΔExpR is −0.0171 / −0.0302 / −0.0397R. Removed / replacement counts are 1,303 / 67, 1,869 / 71 and 2,407 / 59 (no surviving outcomes changed); trade-count cuts 11.7% / 17.1% / 22.3% of baseline rows. Baseline reading (3,637 in-scope trades, `no_map` 0, `unreadable` 0): flagged WR 37.44% / 38.01% / 38.17% against retained 38.49% / 38.23% / 38.02%, flagged ExpR +0.2509 / +0.2854 / +0.2709R, so clause 6 would have failed in every cell (flagged trades earn positive expectancy). More than 80% of removals are bullish in every cell (1,145 of 1,303, 1,652 of 1,869, 2,120 of 2,407); top-two horizon share 0.336 / 0.334 / 0.339. Gate (live and replay) and clause-6 flags all read the level map built at each trade's signal bar. `HEADROOM_SCOPE` stays `off`; the code remains merged and inert. Reopening needs a mechanism other than "an opposing level with ≥ 2 source families nearer than `h ∈ {0.5, 0.75, 1.0}` × risk". | `results/2026-10-06-v135-preregistration.md`, `results/2026-10-06-v135-strategy.md` |

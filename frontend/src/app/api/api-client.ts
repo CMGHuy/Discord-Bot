@@ -19,6 +19,7 @@ import {
   AnalyticsStrategies,
   BookScope,
   BotRestartResult,
+  CalendarDaySparklines,
   CalendarDayTrades,
   ChartResponse,
   ClearResult,
@@ -27,6 +28,8 @@ import {
   Dashboard,
   DashboardScope,
   Collection,
+  ExpectancyAttribution,
+  GateCounterfactual,
   Health,
   Identity,
   Job,
@@ -40,6 +43,8 @@ import {
   Preferences,
   Proposal,
   ProposalList,
+  ReportEnvelope,
+  ResearchLedger,
   Risk,
   ScanCommandResult,
   ScanStatus,
@@ -58,6 +63,7 @@ import {
   TradeQuery,
   TradeRow,
   TradeJournal,
+  TuneDefaults,
   VersionHistory,
 } from './models';
 
@@ -282,6 +288,25 @@ export class ApiClient {
     return this.http.get<AnalyticsPlans>(`${this.base}/analytics/plans`);
   }
 
+  /* -- research ---------------------------------------------------------- */
+
+  /** The whole pre-registration ledger. Filtering and paging are client-side. */
+  researchLedger(): Observable<ResearchLedger> {
+    return this.http.get<ResearchLedger>(`${this.base}/research/ledger`);
+  }
+
+  /* -- reports ----------------------------------------------------------- */
+
+  /** v146's latest result, or `status: 'not_run'`. Never recomputed here. */
+  reportExpectancyAttribution(): Observable<ReportEnvelope<ExpectancyAttribution>> {
+    return this.http.get<ReportEnvelope<ExpectancyAttribution>>(`${this.base}/reports/expectancy-attribution`);
+  }
+
+  /** v147's latest result, or `status: 'not_run'`. */
+  reportGateCounterfactual(): Observable<ReportEnvelope<GateCounterfactual>> {
+    return this.http.get<ReportEnvelope<GateCounterfactual>>(`${this.base}/reports/gate-counterfactual`);
+  }
+
   /* -- jobs and tuning proposals ---------------------------------------- */
 
   jobs(): Observable<JobList> {
@@ -306,6 +331,11 @@ export class ApiClient {
 
   startTuneJob(args: Record<string, unknown>): Observable<JobStarted> {
     return this.http.post<JobStarted>(`${this.base}/jobs/tune`, args);
+  }
+
+  /** v162 — the Tuning launcher's training-data default and choices. */
+  getTuneDefaults(): Observable<TuneDefaults> {
+    return this.http.get<TuneDefaults>(`${this.base}/jobs/tune/defaults`);
   }
 
   proposals(): Observable<ProposalList> {
@@ -359,6 +389,12 @@ export class ApiClient {
 
   risk(): Observable<Risk> {
     return this.http.get<Risk>(`${this.base}/risk`);
+  }
+
+  /** The killswitch alone, for the shell banner on every page -- `risk()`
+   *  rebuilds the whole exposure picture server-side to answer one boolean. */
+  killswitch(): Observable<KillswitchResult> {
+    return this.http.get<KillswitchResult>(`${this.base}/risk/killswitch`);
   }
 
   /** Returns the killswitch alone, not the whole risk resource: rebuilding
@@ -514,6 +550,21 @@ export class ApiClient {
     if (query.strategy) params = params.set('strategy', query.strategy);
     if (query.horizon) params = params.set('horizon', query.horizon);
     return this.http.get<CalendarDayTrades>(`${this.base}/calendar/pnl/day`, {
+      params,
+    });
+  }
+
+  /** Daily-close sparklines for one day's rows (v165 D4). Fetched after the
+   *  day itself so the page renders before any bar file is read. */
+  calendarPnlDaySparklines(query: {
+    date: string;
+    strategy?: string;
+    horizon?: string;
+  }): Observable<CalendarDaySparklines> {
+    let params = new HttpParams().set('date', query.date);
+    if (query.strategy) params = params.set('strategy', query.strategy);
+    if (query.horizon) params = params.set('horizon', query.horizon);
+    return this.http.get<CalendarDaySparklines>(`${this.base}/calendar/pnl/day/sparklines`, {
       params,
     });
   }

@@ -39,6 +39,17 @@ def no_network(monkeypatch):
                         lambda *a, **k: {}, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def fresh_risk_cache():
+    """`GET /risk` reuses its two expensive halves for a few seconds; every
+    test here seeds its own book, so none may read the previous test's."""
+    import swingbot.admin.app  # noqa: F401 -- api_v1 imports resolve through the app
+    from swingbot.admin.api_v1 import risk
+    risk._invalidate_cache()
+    yield
+    risk._invalidate_cache()
+
+
 def _open_trade(trade_id, ticker="AAPL", entry=100.0, stop=95.0, shares=10):
     return {
         "id": trade_id, "ticker": ticker, "status": "open", "direction": "bullish",
@@ -468,6 +479,36 @@ def test_a_rejected_toggle_does_not_change_state(logged_in):
     assert throttle.kill_state()["on"] is True, (
         "a 400 must leave the killswitch exactly as it was"
     )
+
+
+def test_killswitch_can_be_read_without_the_whole_risk_resource(logged_in):
+    logged_in.post("/api/v1/risk/killswitch", json={"on": True, "reason": "test"})
+    resp = logged_in.get("/api/v1/risk/killswitch")
+    assert resp.status_code == 200
+    assert resp.get_json()["killswitch"]["on"] is True
+
+
+def test_killswitch_read_requires_auth(client):
+    assert client.get("/api/v1/risk/killswitch").status_code == 401
+
+
+def test_concurrent_risk_reads_share_one_portfolio_build(logged_in, monkeypatch):
+    calls = []
+
+    def counting_state():
+        calls.append(1)
+        return {}
+
+    monkeypatch.setattr("swingbot.core.edge.portfolio_state.collect_portfolio_state", counting_state)
+    logged_in.get("/api/v1/risk")
+    logged_in.get("/api/v1/risk")
+    assert len(calls) == 1
+
+
+def test_a_cached_risk_read_still_shows_a_fresh_killswitch(logged_in):
+    assert logged_in.get("/api/v1/risk").get_json()["killswitch"]["on"] is False
+    logged_in.post("/api/v1/risk/killswitch", json={"on": True, "reason": "test"})
+    assert logged_in.get("/api/v1/risk").get_json()["killswitch"]["on"] is True
 
 
 def test_killswitch_requires_auth(client):

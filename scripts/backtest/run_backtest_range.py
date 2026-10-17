@@ -5,6 +5,7 @@ pools results per strategy over an entry-date window.
     python scripts/backtest/run_backtest_range.py --train        # 2020-01-01 .. 2023-12-31
     python scripts/backtest/run_backtest_range.py --validation   # 2024-01-01 .. 2025-12-31 (run ONCE, at the end)
     python scripts/backtest/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
+    python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl   # v147 TRAIN gate rows
 
 Legacy reporting gate: win_rate >= 80; the live decision bar is 50 (see
 docs/claude/backtest-methodology.md). expectancy_r > 0, N >= 30 (train) / 15
@@ -25,15 +26,25 @@ sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
 import numpy as np
 
-from fetch_backtest_data import load_cached, load_watchlist
+from fetch_backtest_data import add_data_source_arg, apply_data_source, load_cached, load_watchlist
 from swingbot import config
 from swingbot.core.market import market_context
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
+from swingbot.core.backtesting.blocked_recorder import require_train_window, write_gate_rows
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
+from swingbot.core.marketdata import training_data
+from swingbot.core.marketdata.history_store import MissingStoreError
 
 _SPY_CACHE: dict = {}
+
+#: Printed on every --validation run (spec § Research discipline): the switch
+#: never buys a component a second VALIDATION shot.
+VALIDATION_SOURCE_NOTICE = (
+    "NOTE: a new data source resets no VALIDATION budget. A component whose "
+    "validation shot was spent on yfinance has spent it, and every closed "
+    "pre-registration stays closed (backtest-methodology.md).")
 
 
 def write_trades_jsonl(rows, path) -> None:
@@ -46,6 +57,54 @@ def write_trades_jsonl(rows, path) -> None:
             handle.write(json.dumps(row, default=str) + "\n")
 
 
+def _jsonable(value):
+    """numpy scalars become Python numbers (default=str would write an
+    np.int64 as a string); anything else falls back to str."""
+    return value.item() if isinstance(value, np.generic) else str(value)
+
+
+def write_scenario_trades_jsonl(rows, path) -> None:
+    """Write one self-contained TRAIN row per closed confluence-replay exit
+    (v146 I3; row shape: scenario_rows.ROW_KEYS)."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, default=_jsonable) + "\n")
+
+
+def _progress_path(trades_jsonl) -> Path:
+    return Path(str(trades_jsonl) + ".progress")
+
+
+def _scenario_progress(trades_jsonl):
+    """Per-ticker progress for the long row-collecting replay: a flushed
+    line and a percent figure in <trades_jsonl>.progress, which
+    _scenario_stats deletes on completion. None when no rows are collected."""
+    if not trades_jsonl:
+        return None
+    target = _progress_path(trades_jsonl)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    def on_ticker_done(done: int, total: int) -> None:
+        pct = 100.0 * done / total
+        target.write_text(f"{pct:.1f}% ({done}/{total} tickers)\n", encoding="utf-8")
+        print(f"  replay {done}/{total} tickers ({pct:.1f}%)", flush=True)
+
+    return on_ticker_done
+
+
+def _context_symbols(symbols) -> list:
+    """Context-only symbols (sector ETFs) the selected training data holds.
+    One absent from the store is skipped rather than loaded: loading it would
+    record a 'not in store' exclusion for a ticker the run never trades
+    (yfinance's cache lacks them too), burying the real exclusions in the
+    provenance sidecar. Under yfinance the list is the cache's own files, so
+    nothing changes there."""
+    available = set(training_data.available_tickers())
+    return [symbol for symbol in symbols if symbol in available]
+
+
 def _build_asof_map(tickers: list, frames: dict, universe: str | None):
     """Build every loaded ticker's point-in-time cross-sectional context once."""
     from swingbot.core.backtesting.asof_context import build_asof
@@ -56,7 +115,7 @@ def _build_asof_map(tickers: list, frames: dict, universe: str | None):
         print("    ! no SPY frame -- as-of context disabled for this run", flush=True)
         return {}
     sector_of_etf = sector_map("etfs")
-    etf_frames = {etf: frame for etf in sector_of_etf
+    etf_frames = {etf: frame for etf in _context_symbols(sector_of_etf)
                   if (frame := load_cached(etf)) is not None}
     sector_of_ticker = sector_map(universe or "watchlist")
     return build_asof(frames, spy, sector_of_ticker=sector_of_ticker,
@@ -163,11 +222,67 @@ def _scenario_row_stats(agg):
     }
 
 
-def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None):
+def _check_record_blocked(args, date_from, date_to) -> None:
+    """v147: `--record-blocked` is TRAIN-only, confluence-scenarios-only and needs the scale-out walk.
+
+    Compression blocks are recorded by `measure_arms.py --record-blocked` (StrategyEngine), because
+    `run_backtest` refuses the compression short; RS is never recorded on TRAIN (v34 closed).
+    Exits 2 before any data is loaded."""
+    if not args.record_blocked:
+        return
+    if getattr(args, "trades_jsonl", None):
+        print("refused: --record-blocked and --trades-jsonl are exclusive (run them as two replays)",
+              file=sys.stderr)
+        raise SystemExit(2)
+    if not args.scenarios:
+        print("refused: --record-blocked needs --scenarios (confluence no_qualifying_target + risk_cap shadow); "
+              "compression rows come from scripts/backtest/measure_arms.py --record-blocked", file=sys.stderr)
+        raise SystemExit(2)
+    if not args.scale_out:
+        print("refused: --record-blocked needs --scale-out (the counterfactual walk is scale_out=True)",
+              file=sys.stderr)
+        raise SystemExit(2)
+    require_train_window(date_from, date_to, validation=args.validation)
+
+
+def _write_blocked(stats: dict, path) -> None:
+    """v147: write the replay's record-only gate rows when --record-blocked asked for them."""
+    if not path:
+        return
+    count = write_gate_rows(stats.get("gate_rows", []), path)
+    print(f"Wrote {count} gate rows to {path}", flush=True)
+
+
+def _scenario_stats(frames, date_from, date_to, *, scale_out, universe, membership, trades_jsonl,
+                    record_blocked=None) -> dict:
+    """run_scenario_mode's replay call. v146 I3: every scenario run builds
+    the as-of map, so entry_context carries rs_pctile / regime2_state (it
+    feeds stamp_entry_context only -- the table cannot move). With
+    --trades-jsonl it also ships SPY to the workers, collects one row per
+    closed exit, writes them and deletes the progress file. v147's
+    --record-blocked rides the same call (gate rows written by _write_blocked)."""
+    stats = run_scenario_backtest(
+        frames, date_from, date_to, gates=CONFLUENCE_GATES, scale_out=scale_out,
+        horizons=list(LEGACY_HORIZONS), membership=membership,
+        asof_map=_build_asof_map(list(frames), frames, universe),
+        spy_df=_market_frame() if trades_jsonl else None,
+        collect_rows=bool(trades_jsonl), on_ticker_done=_scenario_progress(trades_jsonl),
+        record_blocked=bool(record_blocked))
+    _write_blocked(stats, record_blocked)
+    if trades_jsonl:
+        rows = stats.pop("rows")
+        write_scenario_trades_jsonl(rows, trades_jsonl)
+        _progress_path(trades_jsonl).unlink(missing_ok=True)
+        print(f"Wrote {len(rows)} trade rows to {trades_jsonl}", flush=True)
+    return stats
+
+
+def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None, trades_jsonl=None,
+                      record_blocked=None, tickers_file=None):
     """--scenarios: replay the confluence scan itself (backtest_scenarios)
     instead of a named strategy, and print per-horizon + pooled rows in the
     standard table with strategy column `confluence/<horizon>`."""
-    tickers = _tickers_for_run(universe)
+    tickers = _tickers_for_run(universe, tickers_file)
     membership = _membership_for_run(universe, tickers)
     frames = {}
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block below
@@ -182,13 +297,15 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
             target.append((ticker, excluded[1]))
             continue
         frames[ticker] = df
+    _report_exclusions()
     print(f"loaded {len(frames)}/{len(tickers)} cached tickers "
           f"({len(excluded_illiquid)} excluded illiquid, "
           f"{len(excluded_bad_data)} excluded bad data)", flush=True)
 
-    stats = run_scenario_backtest(frames, date_from, date_to,
-                                  gates=CONFLUENCE_GATES, scale_out=scale_out,
-                                  horizons=list(LEGACY_HORIZONS), membership=membership)
+    stats = _scenario_stats(frames, date_from, date_to, scale_out=scale_out, universe=universe,
+                            membership=membership, trades_jsonl=trades_jsonl,
+                            record_blocked=record_blocked)
+    _write_provenance(trades_jsonl)
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
     lines = []
@@ -226,10 +343,25 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     print("\nSaved backtest_range_summary.txt")
 
 
-def _tickers_for_run(universe: str | None) -> list:
+def _tickers_from_file(path: str) -> list[str]:
+    """v162 §5: an explicit ticker list (one per line, '#' comments), so every
+    leg of a comparison runs on the same set, whatever the watchlist holds."""
+    from snapshot_backtest_cache import read_tickers_file
+    tickers = read_tickers_file(path)
+    if not tickers:
+        raise SystemExit(f"error: --tickers-file {path} names no ticker")
+    return tickers
+
+
+def _tickers_for_run(universe: str | None, tickers_file: str | None = None) -> list:
     """Ticker set for the scan: a named universe (e.g. 'etfs', Task E80)
     when given, else the watchlist -- same override seam as
-    backtest_wf._symbols_for_folds/run_folds' tickers= param."""
+    backtest_wf._symbols_for_folds/run_folds' tickers= param. v162: an
+    explicit --tickers-file replaces both and cannot be combined with a universe."""
+    if tickers_file:
+        if universe:
+            raise SystemExit("error: --tickers-file and --universe are exclusive")
+        return _tickers_from_file(tickers_file)
     if universe:
         from swingbot.core.marketdata.universe import universe_symbols
         return sorted(universe_symbols(universe))
@@ -318,14 +450,58 @@ def registry_refusal(result, *, min_n=15):
     return None
 
 
+def _replay_data_source(json_in: str) -> str:
+    """The source a previous --json output was measured on: its sidecar's
+    data_source, or yfinance for a file written before v162 (no sidecar)."""
+    sidecar = training_data.provenance_path(json_in)
+    if not sidecar.exists():
+        return "yfinance"
+    return json.loads(sidecar.read_text(encoding="utf-8")).get("data_source") or "yfinance"
+
+
+def _resolve_data_source(args) -> str:
+    """The run's one training-data source (spec §3), chosen before any bar is
+    read. --from-json replays what its sidecar recorded and reads no bars; every
+    other mode selects --data-source (else TRAINING_DATA_SOURCE) and stops with
+    an error naming the missing path when the Alpaca store is absent."""
+    if args.from_json:
+        replayed = _replay_data_source(args.from_json)
+        if args.data_source not in (None, replayed):
+            raise SystemExit(f"error: {args.from_json} was measured on {replayed}; "
+                             f"--data-source {args.data_source} cannot relabel it")
+        return replayed
+    try:
+        source = apply_data_source(args)
+    except MissingStoreError as exc:
+        raise SystemExit(f"error: {exc}") from exc
+    if args.validation:
+        print(VALIDATION_SOURCE_NOTICE, flush=True)
+    return source
+
+
+def _report_exclusions() -> None:
+    """Every ticker the training data left out, with its reason (spec §3)."""
+    for line in training_data.exclusion_lines():
+        print(line, flush=True)
+
+
+def _write_provenance(json_out: str | None) -> None:
+    """<out>.provenance.json next to a result file; the result shape is unchanged."""
+    if not json_out:
+        return
+    path = training_data.write_provenance(json_out)
+    print(f"Wrote provenance to {path}", flush=True)
+
+
 def build_registry_records(summaries, *, source, window, run_date,
-                           horizon=None, pass_wr=80.0, min_n=15):
+                           horizon=None, pass_wr=80.0, min_n=15, data_source="yfinance"):
     """Turn pooled per-strategy summaries into validation-registry records.
 
     A record is VALIDATED only when it clears the acceptance gates on the
     window it was measured on; everything else is WEAK. A cell that fails a
     hard gate (see registry_refusal) yields no record at all -- refusal is
     per-row, so one unhealthy cell never discards the healthy cells beside it.
+    `data_source` (v162) names the bars the summaries were measured on.
     """
     recs = []
     for s in summaries:
@@ -346,19 +522,61 @@ def build_registry_records(summaries, *, source, window, run_date,
                      "n": s["n"],
                      "win_rate": round(wr, 1),
                      "expectancy_r": round(er, 3),
-                     "window": window, "run_date": run_date})
+                     "window": window, "run_date": run_date,
+                     "data_source": data_source})
     return recs
 
 
+def registry_key(rec: dict) -> tuple:
+    """(source, strategy, horizon, data_source); a row with no data_source was
+    measured before v162 and means yfinance (schema-evolution: an added field,
+    old rows never rewritten)."""
+    return (rec["source"], rec["strategy"], rec.get("horizon"),
+            rec.get("data_source") or "yfinance")
+
+
+def _registry_sort_key(rec: dict) -> tuple:
+    """(source, strategy, str(horizon)), then yfinance before any other
+    data_source: the pre-v162 row of a key stays first, so today's
+    yfinance-only file keeps its order."""
+    data_source = registry_key(rec)[3]
+    return (rec["source"], rec["strategy"], str(rec.get("horizon")),
+            data_source != "yfinance", data_source)
+
+
+def _is_validation_row(rec: dict) -> bool:
+    return rec.get("window") == f"{VALIDATION[0]}..{VALIDATION[1]}"
+
+
+def _refuse_spent_validation(existing: list, new_records: list) -> None:
+    """The VALIDATION budget is spent once per key and a new data source resets
+    nothing (backtest-methodology.md § Windows): a non-yfinance VALIDATION row
+    for a key whose yfinance VALIDATION row exists is refused, nothing written."""
+    spent = {registry_key(r)[:3] for r in existing
+             if registry_key(r)[3] == "yfinance" and _is_validation_row(r)}
+    for rec in new_records:
+        key = registry_key(rec)
+        if key[3] != "yfinance" and _is_validation_row(rec) and key[:3] in spent:
+            raise SystemExit(
+                f"error: refusing to emit a {key[3]} VALIDATION row for "
+                f"source={key[0]} strategy={key[1]} horizon={key[2]}: its yfinance "
+                "VALIDATION shot is spent and a new data source resets no budget "
+                "(backtest-methodology.md, Windows)")
+
+
 def merge_registry(path, new_records):
-    """Merge records into the registry JSON, replacing same-key entries."""
+    """Merge records into the registry JSON, replacing same-key entries only.
+
+    The key includes data_source, so an Alpaca row sits beside the yfinance
+    row of the same (source, strategy, horizon) instead of overwriting it.
+    An Alpaca VALIDATION row for a key whose yfinance VALIDATION shot is spent
+    is refused (SystemExit) before anything is written."""
     path = Path(path)
     existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-    new_keys = {(r["source"], r["strategy"], r.get("horizon")) for r in new_records}
-    kept = [r for r in existing
-            if (r["source"], r["strategy"], r.get("horizon")) not in new_keys]
-    merged = sorted(kept + new_records,
-                    key=lambda r: (r["source"], r["strategy"], str(r.get("horizon"))))
+    _refuse_spent_validation(existing, new_records)
+    new_keys = {registry_key(r) for r in new_records}
+    kept = [r for r in existing if registry_key(r) not in new_keys]
+    merged = sorted(kept + new_records, key=_registry_sort_key)
     path.write_text(json.dumps(merged, indent=1) + "\n", encoding="utf-8")
     return merged
 
@@ -373,9 +591,16 @@ def main():
     ap.add_argument("--universe", default=None,
                     help="scope tickers to a named universe (e.g. 'etfs', Task E80) via "
                          "swingbot.core.marketdata.universe.universe_symbols, instead of the watchlist")
+    ap.add_argument("--tickers-file", dest="tickers_file", default=None,
+                    help="v162: run exactly the tickers listed in this file (one per line, "
+                         "'#' comments) instead of the watchlist; exclusive with --universe")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--trades-jsonl", dest="trades_jsonl", default=None,
-                    help="write one JSONL training row per windowed trade")
+                    help="write one JSONL training row per windowed trade "
+                         "(with --scenarios: one row per closed confluence-replay exit)")
+    ap.add_argument("--record-blocked", dest="record_blocked", default=None,
+                    help="v147: write one JSONL gate row per blocked/taken confluence candidate "
+                         "(TRAIN window only; needs --scenarios --scale-out)")
     ap.add_argument("--context", choices=["on", "off"], default="on",
                     help="build cross-sectional entry context (default: on)")
     ap.add_argument("--emit-registry", dest="emit_registry", default=None,
@@ -403,9 +628,11 @@ def main():
                     help="replay per-strategy summaries from a previous --json "
                          "output instead of running the backtest (honors the "
                          "run-once validation budget); requires --emit-registry")
+    add_data_source_arg(ap)
     args = ap.parse_args()
     if args.emit_registry and not args.run_date:
         ap.error("--emit-registry requires --run-date")
+    data_source = _resolve_data_source(args)
 
     if args.train:
         date_from, date_to, min_n, label = *TRAIN, 30, "TRAIN"
@@ -415,6 +642,7 @@ def main():
         if not (args.date_from and args.date_to):
             ap.error("need --train, --validation, or --from/--to")
         date_from, date_to, min_n, label = args.date_from, args.date_to, 15, "CUSTOM"
+    _check_record_blocked(args, date_from, date_to)
 
     if args.from_json:
         # Registry regeneration WITHOUT re-running the window (run-once
@@ -428,14 +656,16 @@ def main():
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
-            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr))
+            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr,
+            data_source=data_source))
         print(f"Merged {len(summaries)} records into {args.emit_registry} "
               f"(replayed from {args.from_json}, no backtest run)")
         return
 
     if args.scenarios:
         run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out,
-                          universe=args.universe)
+                          universe=args.universe, trades_jsonl=args.trades_jsonl,
+                          record_blocked=args.record_blocked, tickers_file=args.tickers_file)
         return
 
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
@@ -451,11 +681,12 @@ def main():
     show_runner_cols = args.exit_model == "v2" and args.scale_out
     tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
 
-    tickers = _tickers_for_run(args.universe)
+    tickers = _tickers_for_run(args.universe, args.tickers_file)
     # Context ranking is cross-sectional, so every cached frame must be loaded
     # before individual liquidity/data-quality exclusions are applied below.
     frames = {ticker: _with_context(load_cached(ticker)) for ticker in tickers}
     frames = {ticker: frame for ticker, frame in frames.items() if frame is not None}
+    _report_exclusions()
     asof_map = _build_asof_map(tickers, frames, args.universe) if args.context == "on" else {}
     membership = _membership_for_run(args.universe, tickers)
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
@@ -564,12 +795,15 @@ def main():
     if args.trades_jsonl:
         write_trades_jsonl(trade_rows, args.trades_jsonl)
         print(f"Wrote {len(trade_rows)} trade rows to {args.trades_jsonl}")
+    _write_provenance(args.json_out)
+    _write_provenance(args.trades_jsonl)
     if args.emit_registry:
         summaries = [{"strategy": k, "n": v["n_eval"], "win_rate": v["win_rate"],
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
-            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr))
+            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr,
+            data_source=data_source))
         print(f"Merged {len(summaries)} records into {args.emit_registry}")
     print("\nSaved backtest_range_summary.txt")
 

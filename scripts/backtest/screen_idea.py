@@ -4,11 +4,15 @@
     python scripts/backtest/screen_idea.py --idea high52w \
         --cache-dir E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache_ext
 
-Every event races a fixed trade (entry next open, stop 1.5 x ATR14, target
-3 x ATR14, idea-specific time cap, costs) against K = 20 matched random bars
-(same ticker, month and trend state). verdict.decide applies the four-clause
-pass rule; the script writes docs/superpowers/results/<date>-screen-<idea>.md
-and appends ledger row screen-<idea>. It refuses an idea already in the
+Every event races the idea's frozen shape (v163): ``fixed`` (entry next
+open, stop 1.5 x ATR14, target 3 x ATR14, idea-specific time cap, costs) or
+``trail`` (same entry and initial stop, no target, a chandelier stop
+3 x ATR14[t] under the highest high of the bars before, cap >= 60 bars)
+against K = 20 matched random bars raced the same way (same ticker, month
+and trend state). verdict.decide applies the four-clause pass rule, the
+same for both shapes; the script writes
+docs/superpowers/results/<date>-screen-<idea>.md and appends ledger row
+screen-<idea>. It refuses an idea already in the
 ledger (one shot per idea) and a window end after 2019-12-31. --dry-run
 prints the results doc and writes nothing; --tickers needs --dry-run.
 """
@@ -17,7 +21,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -29,7 +33,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from swingbot import config  # noqa: E402
-from swingbot.core.backtesting.screen import forward, indicators, null, race, verdict  # noqa: E402,F401
+from swingbot.core.backtesting.screen import forward, indicators, null, race, trail, verdict  # noqa: E402,F401
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from swingbot.core.edge.frictions import commission_r  # noqa: E402
@@ -44,6 +48,13 @@ DEFAULT_MEMBERSHIP = Path(config.DATA_DIR) / "universe" / "sp500_membership.csv"
 PROGRESS_EVERY = 25
 COUNTER_ORDER = ("dropped_nonmember", "dropped_warmup", "dropped_window",
                  "skipped_overlap", "dropped_no_match")
+STRESS_SLIPPAGE_FACTOR = 2   # v163: the trail book re-priced at 2 x slippage; printed, never gating
+
+
+def base_slippage(slippage_bps=None):
+    """The slippage a run is priced at: the passed value, else config's.
+    Never cast: the results doc prints it as config holds it."""
+    return getattr(config, "SLIPPAGE_BPS", 5.0) if slippage_bps is None else slippage_bps
 
 
 def load_frame(path, start: str = WINDOW_START, end: str = WINDOW_END):
@@ -85,6 +96,8 @@ class TickerScreen:
     null_outcomes: Counter
     excess: dict
     rank: pd.DataFrame
+    null_timeout_r: list = field(default_factory=list)   # v163: trail only, net R per null timeout
+    stressed: list | None = None                          # v163: trail only, 2 x slippage pairs
 
 
 def _event_rows(ticker, index, kept, null_mean_r) -> list:
@@ -104,23 +117,53 @@ def _rank_frame(index, raw, population, fwd) -> pd.DataFrame:
     return pd.DataFrame(columns)
 
 
+def _books(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
+    """The kept event book, its counters and its matched null at one cost
+    setting, both raced under the idea's own shape (v163)."""
+    cap, shape = idea.time_cap_bars, idea.race_shape
+    booked, counts = race.run_book(df, ctx["raw"], cap, member=ctx["member"],
+                                   warm=ctx["warm"], atr=ctx["atr"], shape=shape, **costs)
+    draw = null.matched_null(df, booked.event_pos,
+                             null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], cap),
+                             null.K, null.null_seed(idea.name, ticker), cap=cap,
+                             atr=ctx["atr"], trend=ctx["trend"], shape=shape, **costs)
+    counts["dropped_no_match"] = draw.dropped_no_match
+    return booked.take(np.isin(booked.event_pos, draw.event_pos)), counts, draw
+
+
+def _null_timeout_r(idea: Idea, draw) -> list:
+    """Trail only: net R of every null race that ran to its cap."""
+    if idea.race_shape != "trail":
+        return []
+    raced = draw.null_race
+    return [float(r) for r in raced.r[raced.outcome == "timeout"]]
+
+
+def _stressed(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
+    """Trail only: every kept event and its null mean re-raced at
+    STRESS_SLIPPAGE_FACTOR x the base slippage. Slippage never moves an exit
+    bar, so the overlap rule and the null draw (same seed) keep the same
+    events; only the R changes."""
+    if idea.race_shape != "trail":
+        return None
+    stress = {"slippage_bps": STRESS_SLIPPAGE_FACTOR * base_slippage(costs["slippage_bps"]),
+              "commission": costs["commission"]}
+    kept, _, draw = _books(idea, ticker, df, ctx, stress)
+    return [{"entry_date": row["entry_date"], "r_event": row["r_event"], "r_null": row["r_null"]}
+            for row in _event_rows(ticker, df.index, kept, draw.null_mean_r)]
+
+
 def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
                   slippage_bps=None, commission=None) -> TickerScreen:
     costs = {"slippage_bps": slippage_bps, "commission": commission}
-    cap = idea.time_cap_bars
     atr = indicators.atr(df)
     sma200 = indicators.sma(df["Close"], 200)
-    raw = np.asarray(idea.events(df).reindex(df.index, fill_value=False), dtype=bool)
     member = null.member_mask(df.index, spans)
     warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
-    booked, counts = race.run_book(df, raw, cap, member=member, warm=warm,
-                                   atr=atr, **costs)
-    draw = null.matched_null(df, booked.event_pos,
-                             null.eligible_mask(raw, member, warm, cap), null.K,
-                             null.null_seed(idea.name, ticker), cap=cap, atr=atr,
-                             trend=null.trend_state(df, sma200), **costs)
-    counts["dropped_no_match"] = draw.dropped_no_match
-    kept = booked.take(np.isin(booked.event_pos, draw.event_pos))
+    ctx = {"raw": np.asarray(idea.events(df).reindex(df.index, fill_value=False), dtype=bool),
+           "member": member, "warm": warm, "atr": atr,
+           "trend": null.trend_state(df, sma200)}
+    kept, counts, draw = _books(idea, ticker, df, ctx, costs)
     fwd = {h: forward.forward_atr(df, atr, h) for h in forward.HORIZONS}
     return TickerScreen(
         ticker=ticker, counters=Counter(counts),
@@ -128,7 +171,9 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         null_outcomes=Counter(draw.null_race.outcome.tolist()),
         excess={h: forward.excess_drift(fwd[h], draw.event_pos, draw.groups)
                 for h in forward.HORIZONS},
-        rank=_rank_frame(df.index, raw, member & warm, fwd))
+        rank=_rank_frame(df.index, ctx["raw"], member & warm, fwd),
+        null_timeout_r=_null_timeout_r(idea, draw),
+        stressed=_stressed(idea, ticker, df, ctx, costs))
 
 
 def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
@@ -227,6 +272,30 @@ def _rank(screens) -> dict:
             for h in forward.HORIZONS}
 
 
+def _book_timeouts(count: int, total: int, values) -> tuple:
+    return (count, count / total if total else None, _mean(values))
+
+
+def _timeouts(screens, events) -> dict:
+    """(count, share of the book, mean net R) of timeouts, event and null
+    books. The null mean is trail only: fixed screens keep no null R."""
+    event_r = [row["r_event"] for row in events if row["outcome"] == "timeout"]
+    null_mix = _sum_counters(screen.null_outcomes for screen in screens)
+    null_r = [r for screen in screens for r in screen.null_timeout_r]
+    return {"event": _book_timeouts(len(event_r), len(events), event_r),
+            "null": _book_timeouts(null_mix["timeout"], sum(null_mix.values()), null_r)}
+
+
+def _stress(screens):
+    """The 2 x slippage verdict over the trail pairs; None for a fixed idea."""
+    if all(screen.stressed is None for screen in screens):
+        return None
+    rows = [row for screen in screens if screen.stressed is not None
+            for row in screen.stressed]
+    return verdict.decide([verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
+                           for row in rows])
+
+
 def summarise(screens, skipped=None) -> dict:
     events = [row for screen in screens for row in screen.events]
     paired = [verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
@@ -238,7 +307,8 @@ def summarise(screens, skipped=None) -> dict:
             "null_outcomes": _sum_counters(screen.null_outcomes for screen in screens),
             "mean_r_event": _mean([row["r_event"] for row in events]),
             "mean_r_null": _mean([row["r_null"] for row in events]),
-            "drift": _drift(screens), "rank": _rank(screens)}
+            "drift": _drift(screens), "rank": _rank(screens),
+            "timeouts": _timeouts(screens, events), "stress": _stress(screens)}
 
 
 def _fmt(value, spec: str = "+.4f") -> str:
@@ -247,6 +317,23 @@ def _fmt(value, spec: str = "+.4f") -> str:
 
 def _yes(ok: bool) -> str:
     return "yes" if ok else "**no**"
+
+
+def _render_trade(idea, run) -> str:
+    """The trade line for the idea's shape; the fixed text is today's, byte for byte."""
+    costs = (f"costs {run['slippage_bps']} bps a side + {run['commission']:.4f}R "
+             "commission.")
+    if idea.race_shape == "trail":
+        return (f"**Trade:** entry next open; initial stop {race.STOP_ATR} x ATR14[t] (1R); "
+                "no target; chandelier trail: the stop on bar j is the higher of the "
+                "initial stop and the highest high of bars t+1..j-1 minus "
+                f"{trail.TRAIL_ATR} x ATR14[t], never lowered, ATR frozen at the signal "
+                "bar; a gap through the stop fills at the open; no exit after "
+                f"{idea.time_cap_bars} bars -> out at that close; R in the initial 1R; "
+                + costs)
+    return (f"**Trade:** entry next open; stop {race.STOP_ATR} x ATR14; target "
+            f"{race.STOP_ATR * race.REWARD_RISK} x ATR14; a gap through either level "
+            "fills at the open; stop first on a bar touching both; " + costs)
 
 
 def _render_head(idea, v, run) -> list:
@@ -264,10 +351,7 @@ def _render_head(idea, v, run) -> list:
         f"week resamples, seed {stats.WEEK_BOOTSTRAP_SEED}.", "",
         f"**Trigger:** {idea.summary} ({idea.source}); params {params}; time cap "
         f"{idea.time_cap_bars} bars; {idea.direction} only.", "",
-        f"**Trade:** entry next open; stop {race.STOP_ATR} x ATR14; target "
-        f"{race.STOP_ATR * race.REWARD_RISK} x ATR14; a gap through either level "
-        f"fills at the open; stop first on a bar touching both; costs "
-        f"{run['slippage_bps']} bps a side + {run['commission']:.4f}R commission.", "",
+        _render_trade(idea, run), "",
         "**Spec:** `docs/superpowers/specs/implemented/2026-10-08-v140-idea-screen-design.md`",
     ]
 
@@ -299,20 +383,56 @@ def _render_verdict(v) -> list:
             f"N < {verdict.MIN_N} is `SCREEN-UNDERPOWERED` whatever the other clauses say."]
 
 
-def _mix(outcomes: Counter) -> list:
+def _mix(outcomes: Counter, names: tuple) -> list:
     total = sum(outcomes.values())
     return [f"{outcomes.get(name, 0)} ({100.0 * outcomes.get(name, 0) / total:.1f}%)"
-            if total else "0" for name in race.OUTCOMES]
+            if total else "0" for name in names]
 
 
-def _render_arms(summary) -> list:
+def _render_arms(summary, names: tuple) -> list:
+    """``names``: the idea's own outcomes (race.SHAPE_OUTCOMES[shape])."""
     lines = ["## Both arms", "",
              f"Mean R_event {_fmt(summary['mean_r_event'])}R; mean R_null (each event's "
              f"null mean, averaged) {_fmt(summary['mean_r_null'])}R. Both after costs.", "",
              "| Exit | event arm | null arm |", "|---|---|---|"]
     lines += [f"| {name} | {e} | {n} |" for name, e, n in
-              zip(race.OUTCOMES, _mix(summary["event_outcomes"]), _mix(summary["null_outcomes"]))]
+              zip(names, _mix(summary["event_outcomes"], names),
+                  _mix(summary["null_outcomes"], names))]
     return lines
+
+
+def _share(share) -> str:
+    return "n/a" if share is None else f"{100.0 * share:.1f}%"
+
+
+def _render_stress(summary, run) -> str:
+    """The trail book re-priced at STRESS_SLIPPAGE_FACTOR x slippage (spec
+    § Costs): printed beside the verdict, never a clause of it."""
+    stressed, base = summary["stress"], summary["verdict"]
+    bps = STRESS_SLIPPAGE_FACTOR * run["slippage_bps"]
+    if stressed is None or stressed.delta_exp_r is None:
+        return f"At {bps} bps a side ({STRESS_SLIPPAGE_FACTOR} x slippage): no stressed pairs."
+    change = None if base.delta_exp_r is None else stressed.delta_exp_r - base.delta_exp_r
+    return (f"At {bps} bps a side ({STRESS_SLIPPAGE_FACTOR} x slippage, both fills): "
+            f"ΔExpR {_fmt(stressed.delta_exp_r)}R, 95% week-clustered interval "
+            f"{_fmt(stressed.ci_low)}R to {_fmt(stressed.ci_high)}R; change vs the base "
+            f"book {_fmt(change)}R. Printed, never gating.")
+
+
+def _render_trail(summary, run) -> list:
+    """Trail ideas only: N beside the overlap skips, timeouts per book (the cap
+    is the trail's main free parameter), and the 2 x slippage line."""
+    v, t = summary["verdict"], summary["timeouts"]
+    null_n = sum(summary["null_outcomes"].values())
+    return ["## Trail race (reported, never gating)", "",
+            f"Kept events N = {v.n}; skipped as overlapping an open race "
+            f"(`skipped_overlap`) = {summary['counters']['skipped_overlap']}.", "",
+            "| | event book | null book |", "|---|---|---|",
+            f"| races | {v.n} | {null_n} |",
+            f"| timeouts (share) | {t['event'][0]} ({_share(t['event'][1])}) | "
+            f"{t['null'][0]} ({_share(t['null'][1])}) |",
+            f"| mean timeout R, after costs | {_fmt(t['event'][2])}R | {_fmt(t['null'][2])}R |",
+            "", _render_stress(summary, run)]
 
 
 def _render_years(v) -> list:
@@ -346,8 +466,11 @@ def _render_drift(summary) -> list:
 def render_results(idea, summary, universe, run) -> str:
     v = summary["verdict"]
     sections = [_render_head(idea, v, run), _render_universe(universe, summary),
-                _render_verdict(v), _render_arms(summary), _render_years(v),
-                _render_drift(summary)]
+                _render_verdict(v),
+                _render_arms(summary, race.SHAPE_OUTCOMES[idea.race_shape])]
+    if idea.race_shape == "trail":
+        sections.append(_render_trail(summary, run))
+    sections += [_render_years(v), _render_drift(summary)]
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
 
 
@@ -359,21 +482,32 @@ def record_path(path) -> str:
         return path.as_posix()
 
 
+def hypothesis(idea) -> str:
+    """The ledger hypothesis, naming the shape and cap; the fixed text is
+    today's, byte for byte."""
+    if idea.race_shape == "trail":
+        return (f"{idea.name}: {idea.summary}; chandelier {trail.TRAIL_ATR} ATR trail race, "
+                f"initial stop {race.STOP_ATR} ATR, cap {idea.time_cap_bars} vs K={null.K} "
+                "matched null, PIT S&P 500 2010-2019, after costs (v163 trail screen)")
+    return (f"{idea.name}: {idea.summary}; fixed {race.STOP_ATR}/{race.STOP_ATR * race.REWARD_RISK} ATR race vs K={null.K} "
+            f"matched null, cap {idea.time_cap_bars}, PIT S&P 500 "
+            "2010-2019, after costs (v140 screen)")
+
+
 def ledger_row(idea, v, record: str, day: str) -> dict:
     return {"id": ledger_id(idea.name), "date": day,
-            "hypothesis": (f"{idea.name}: {idea.summary}; fixed {race.STOP_ATR}/{race.STOP_ATR * race.REWARD_RISK} ATR race vs K={null.K} "
-                           f"matched null, cap {idea.time_cap_bars}, PIT S&P 500 "
-                           "2010-2019, after costs (v140 screen)"),
+            "hypothesis": hypothesis(idea),
             "instrument": INSTRUMENT, "n": v.n,
             "exp_r": None if v.delta_exp_r is None else round(v.delta_exp_r, 4),
             "p": None if v.p is None else round(v.p, 4),
-            "verdict": v.verdict, "record": record}
+            "verdict": v.verdict, "record": record,
+            "data_source": "yfinance"}   # the Stage -2 screen reads backtest_cache_ext (v162 leaves it)
 
 
 def _run_info(args, q) -> dict:
     return {"ledger_id": ledger_id(args.idea), "q": q, "date": args.date,
             "start": args.start, "end": args.end,
-            "slippage_bps": getattr(config, "SLIPPAGE_BPS", 5.0),
+            "slippage_bps": base_slippage(None),
             "commission": commission_r()}
 
 

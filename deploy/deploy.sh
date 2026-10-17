@@ -179,6 +179,15 @@ echo "==> Starting services"
 # while a container is still crash-looping.
 docker compose up -d --no-build --wait
 
+# Schema migrations are NOT run by the bot at startup, so a deploy that ships a
+# new Alembic revision must apply it here. Skipping this left production on
+# v144_001 while the image shipped v152_001: alert_posts / plan_followers were
+# missing and ~140 UndefinedTable errors fired from 2026-10-13 until the manual
+# `alembic upgrade head` of 2026-10-15. Idempotent (no-op at head); set -e makes
+# a failed migration fail the deploy loudly instead of passing silently.
+echo "==> Applying database migrations (alembic upgrade head)"
+docker compose exec -T bot alembic upgrade head
+
 # v116: .env is the record of what runs, so it is pinned only now that the
 # containers have switched -- a failed pull or `up` under set -e leaves the
 # previous pin in place. Pinned in place (env_set.py never renames the

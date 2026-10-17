@@ -22,7 +22,7 @@
 discord.py==2.7.1
 yfinance==0.2.66
 # v106: live-path US bars/quotes from Alpaca, yfinance fallback; see
-# docs/superpowers/specs/2026-09-26-v106-alpaca-data-provider-design.md
+# docs/superpowers/specs/implemented/2026-09-26-v106-alpaca-data-provider-design.md
 alpaca-py==0.44.0
 pandas==2.3.3
 numpy==2.4.6
@@ -94,6 +94,9 @@ pytest>=8.0
 # Parallel test execution. Opt-in via `pytest -n auto` (12 cores -> ~3min suite
 # drops well under a minute); deliberately NOT in pytest.ini addopts, see that file.
 pytest-xdist>=3.8
+# tests/dev/test_suites.py parses .github/workflows/deploy.yml with yaml.safe_load;
+# CI installs only this file, so an unpinned import there is a collection error.
+PyYAML==6.0.3
 
 # Static crash-class gate used by `python scripts/dev/testrun.py full`.
 pyflakes==3.4.0

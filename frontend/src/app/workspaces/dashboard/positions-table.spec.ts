@@ -56,7 +56,7 @@ describe('positions table', () => {
     const labels = [...(f.nativeElement as HTMLElement).querySelectorAll('[role="tab"] .label')]
       .map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
     expect(labels).toEqual([
-      'Open 1', 'Pending 0', 'Partial 0', 'Closed 0', 'Cancelled 0',
+      'Pending 0', 'Open 1', 'Partial 0', 'Closed 0', 'Cancelled 0',
     ]);
   });
 
@@ -64,32 +64,32 @@ describe('positions table', () => {
     const f = mount();
     const counts = [...(f.nativeElement as HTMLElement).querySelectorAll('[role="tab"] .count')]
       .map((el) => el.textContent?.trim());
-    expect(counts).toEqual(['· 1', '· 0', '· 0', '· 0', '· 0']);
+    expect(counts).toEqual(['· 0', '· 1', '· 0', '· 0', '· 0']);
   });
 
   it('queries only the active tab, not all five', () => {
     mount();
     expect(setQuery).toHaveBeenCalledTimes(1);
-    expect(setQuery.mock.calls[0][0]).toMatchObject({ status: 'ACTIVE', page: 1, per_page: 5 });
+    expect(setQuery.mock.calls[0][0]).toMatchObject({ status: 'ACTIVE', page: 1, per_page: 10 });
   });
 
   it('re-queries with the new status when a tab is chosen', () => {
     const f = mount();
     setQuery.mockClear();
     (f.nativeElement as HTMLElement)
-      .querySelectorAll<HTMLButtonElement>('[role="tab"]')[1].click();
+      .querySelectorAll<HTMLButtonElement>('[role="tab"]')[0].click();
     f.detectChanges();
     expect(setQuery).toHaveBeenCalledTimes(1);
     expect(setQuery.mock.calls[0][0]).toMatchObject({ status: 'PENDING' });
   });
 
-  it('uses five rows per page for every lifecycle tab', () => {
+  it('uses the device default rows per page (10 on desktop) for every lifecycle tab', () => {
     const f = mount();
     for (const tab of POSITION_TABS) clickTab(f, tab.id);
 
-    expect(setQuery.mock.calls.map(([query]) => query.per_page)).toEqual(
-      Array(POSITION_TABS.length).fill(5),
-    );
+    const statuses = new Set(setQuery.mock.calls.map(([query]) => query.status));
+    expect([...statuses].sort()).toEqual(POSITION_TABS.map((t) => t.status).sort());
+    expect(setQuery.mock.calls.every(([query]) => query.per_page === 10)).toBe(true);
   });
 
   it('re-queries the selected tab when its pager changes page', () => {
@@ -98,7 +98,7 @@ describe('positions table', () => {
     (f.componentInstance as unknown as { goToPage(page: number): void }).goToPage(2);
     f.detectChanges();
 
-    expect(setQuery).toHaveBeenCalledWith(expect.objectContaining({ page: 2, per_page: 5 }));
+    expect(setQuery).toHaveBeenCalledWith(expect.objectContaining({ page: 2, per_page: 10 }));
   });
 
   it('passes the Today scope only to the closed and cancelled tabs', () => {
