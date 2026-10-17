@@ -690,6 +690,26 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(el.querySelector('sb-trade-outcome-card sb-if-it-gets-there')?.textContent).toContain('101.00');
   });
 
+  it('omits a working stop change for a PARTIAL row without its original risk stop', () => {
+    const el = mount('overview', { ...DETAIL, working_stop: 101 }, 'PARTIAL',
+      { stop_loss: 101, shares: 5, position_value: 500 });
+    const plan = el.querySelector('sb-trade-plan-card')!;
+    expect(plan).toBeTruthy();
+    expect(plan.querySelector('[data-level="Stop"]')?.textContent).toContain('101.00');
+    expect(plan.querySelector('[data-level="Working stop"]')).toBeNull();
+    expect(plan.textContent).not.toContain('Move your resting stop');
+  });
+
+  it('omits a working stop change when an ACTIVE row has equal original and working stops', () => {
+    const el = mount('overview', { ...DETAIL, working_stop: 95 }, 'ACTIVE',
+      { risk_stop: 95, stop_loss: 95 });
+    const plan = el.querySelector('sb-trade-plan-card')!;
+    expect(plan).toBeTruthy();
+    expect(plan.querySelector('[data-level="Stop"]')?.textContent).toContain('95.00');
+    expect(plan.querySelector('[data-level="Working stop"]')).toBeNull();
+    expect(plan.textContent).not.toContain('Move your resting stop');
+  });
+
   it('shows the final tab labels and preserves the Journal body', () => {
     const el = mount('journal');
     expect([...el.querySelectorAll('[role="tab"]')].map(tab => tab.textContent?.trim()))
