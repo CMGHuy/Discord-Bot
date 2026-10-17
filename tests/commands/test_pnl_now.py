@@ -203,7 +203,8 @@ def test_reply_for_a_closed_or_cancelled_plan_fetches_no_price(seams):
 
 def test_reply_for_a_pruned_plan_says_it_is_gone(seams):
     seams["plan"] = None
-    assert pnl_now.reply_for(PID, now=WED) == pnl_now.GONE == "This plan no longer exists."
+    assert pnl_now.reply_for(PID, now=WED) == pnl_now.GONE == (
+        "This plan is not tracked (never placed, or pruned).")
 
 
 def test_reply_for_never_raises(seams, monkeypatch):

@@ -23,7 +23,7 @@ from swingbot.core.presentation.instructions import money_from, pnl_line, signed
 
 log = logging.getLogger(__name__)
 
-GONE = "This plan no longer exists."
+GONE = "This plan is not tracked (never placed, or pruned)."
 UNAVAILABLE = "price unavailable"
 NOT_FILLED = "not filled yet"
 NEVER_FILLED = "never filled"
