@@ -284,6 +284,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
       text-align: left;
       border-bottom: 1px solid var(--border);
       overflow-wrap: break-word;
+      vertical-align: middle;
     }
     /* Figures are the exception and have to be. A price broken across two
        lines stops reading as one number, and the right-alignment that makes
