@@ -23,7 +23,12 @@ confirmed the findings addressed.
 Parts 3 and 3b complete: TD7–TD8 committed (`36241419`, `ff4ad589`),
 with review fixes (`6e1f4349`, `fb7f47cc`) confirmed by scoped re-review.
 Part 4 complete: TD9–TD10 committed (`cc6bd7a2`, `ef363d70`), with scoped
-review fixes (`bfd70e43`, `4a51cc3e`) confirmed. TD11 is next.
+review fixes (`bfd70e43`, `4a51cc3e`) confirmed.
+TD11 responsive grid committed (`e4a59187`) and its two review findings fixed
+(`ba5c2874`), with scoped re-review confirming both addressed. TD12 visual
+verification awaits local admin sign-in; its first browser wait timed out before
+trade data or screenshots could be read. The local API and frontend will be
+restarted for the next sign-in attempt.
 
 ## Where to work
 
