@@ -30,6 +30,7 @@ its own hand-rolled requests to Yahoo's chart API:
      history more than once a day is pure waste.
 """
 import concurrent.futures
+import logging
 import os
 import time
 
@@ -39,8 +40,11 @@ import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import yf_safe
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
+
+log = logging.getLogger(__name__)
 
 # How many tickers to fetch from Yahoo Finance at once during a bulk
 # watchlist scrape. Each fetch is network-bound (waiting on Yahoo's
@@ -62,7 +66,8 @@ def fetch_full_history(ticker: str) -> pd.DataFrame:
         tried.append(candidate)
         try:
             df = yf_safe.download(candidate, period="max", interval="1d", progress=False, auto_adjust=True)
-        except Exception:
+        except Exception as exc:
+            swallowed(log, "marketdata.full_history.candidate", exc, level=logging.DEBUG)
             continue
         if df is not None and not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
@@ -213,13 +218,14 @@ def scrape_watchlist_history(tickers: list, out_dir: str, max_workers: int = BUL
             info["error"] = None
             ok = True
         except Exception as e:
+            swallowed(log, "marketdata.export_worker", e, level=logging.DEBUG)
             info = {"ticker": ticker, "error": str(e)}
             ok = False
         if on_ticker_done:
             try:
                 on_ticker_done(ticker, ok)
-            except Exception:
-                pass
+            except Exception as exc:
+                swallowed(log, "marketdata.export_worker.progress", exc, level=logging.DEBUG)
         return i, info
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
