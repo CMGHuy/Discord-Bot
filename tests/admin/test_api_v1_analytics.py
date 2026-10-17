@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from tests.admin.api_v1_contract import NULLABLE_NUMBER, assert_error, assert_shape
+from tests.admin.api_v1_contract import NULLABLE_NUMBER, NULLABLE_STR, assert_error, assert_shape
 from tests.admin.test_api_v1_trades import _trade
 from tests.store_seed import seed_store
 
@@ -205,8 +205,10 @@ def test_performance_window_balance_is_the_real_unscoped_account_balance(seed, t
 
 def test_calibration_shape(seed, logged_in):
     seed()
-    assert_shape(logged_in.get("/api/v1/analytics/calibration").get_json(),
-                 {"deciles": list, "levels": list, "drift": list, "scope": str})
+    body = logged_in.get("/api/v1/analytics/calibration").get_json()
+    assert_shape(body, {"deciles": list, "levels": list, "drift": list,
+                        "live_loss_watch": dict, "scope": str})
+    assert_shape(body["live_loss_watch"], {"rows": list, "counts": dict}, where="live_loss_watch")
 
 
 def test_exit_quality_is_scoped_and_echoes(seed, logged_in):
@@ -388,3 +390,62 @@ def test_by_dimension_strategy_rows_carry_soak_key(seed, logged_in):
     seed(trades=[_closed("a" * 16)])
     row = logged_in.get("/api/v1/analytics/by-dimension?dim=strategy").get_json()["rows"][0]
     assert "soak" in row
+
+
+# ---------------------------------------------------------------------------
+# v164 LW5: the live loss watch on /analytics/calibration
+# ---------------------------------------------------------------------------
+_LIVE_LOSS_ROW = {
+    "source": str, "strategy": str, "horizon": NULLABLE_STR,
+    "live_n": int, "live_wr": NULLABLE_NUMBER, "live_expr": NULLABLE_NUMBER,
+    "bound_upper": NULLABLE_NUMBER, "alert": bool,
+    "registry_status": NULLABLE_STR, "registry_window_kind": NULLABLE_STR,
+    "registry_run_date": NULLABLE_STR, "registry_expr": NULLABLE_NUMBER,
+}
+
+
+def _served_watch():
+    """A real watch from the real producer, so the contract is pinned on what
+    calibration.live_loss_watch emits rather than on a hand-made dict."""
+    from swingbot.core.analytics import calibration
+
+    def row(horizon):
+        return {"source": "confluence", "strategy": "ALL", "horizon": horizon, "status": "WEAK",
+                "n": 300, "win_rate": 52.0, "expectancy_r": -0.05,
+                "window": "2024-01-01..2025-12-31", "run_date": "2026-05-01"}
+    trade = {"status": "loss", "direction": "bullish", "entry": 100.0, "stop_loss": 95.0,
+             "exit_price": 95.0, "opened_at": "2026-10-20T10:00:00+00:00",
+             "source": "confluence", "strategy": "S/R Confluence", "horizon_key": "4w"}
+    return calibration.live_loss_watch([trade], [row("4w"), row(None)], n_resamples=200)
+
+
+def test_calibration_serves_the_live_loss_watch(seed, logged_in, monkeypatch):
+    import swingbot.admin.api_v1.analytics as analytics_api
+    from swingbot.core.analytics import calibration
+
+    seed()
+    watch = _served_watch()
+    snapshot = {"calibration": {"deciles": [], "levels": [], "drift": [], "live_loss_watch": watch}}
+    monkeypatch.setattr(analytics_api, "_snapshot", lambda fresh=False: snapshot)
+
+    body = logged_in.get("/api/v1/analytics/calibration").get_json()
+
+    assert body["live_loss_watch"] == watch
+    rows = body["live_loss_watch"]["rows"]
+    assert [r["horizon"] for r in rows] == ["4w", None]       # Deviation 5: pooled row last
+    for i, row in enumerate(rows):
+        assert_shape(row, _LIVE_LOSS_ROW, where=f"live_loss_watch.rows[{i}]")
+    assert set(body["live_loss_watch"]["counts"]) == set(calibration.WATCH_COUNT_KEYS)
+
+
+def test_calibration_serves_an_empty_watch_from_a_pre_deploy_snapshot(seed, logged_in, monkeypatch):
+    import swingbot.admin.api_v1.analytics as analytics_api
+
+    seed()
+    snapshot = {"calibration": {"deciles": [], "levels": [], "drift": []}}   # cached before v164
+    monkeypatch.setattr(analytics_api, "_snapshot", lambda fresh=False: snapshot)
+
+    body = logged_in.get("/api/v1/analytics/calibration").get_json()
+
+    assert body["live_loss_watch"] == {"rows": [], "counts": {}}
+    assert body["drift"] == [] and body["scope"] == "all-time"

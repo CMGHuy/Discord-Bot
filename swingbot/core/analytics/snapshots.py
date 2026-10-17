@@ -61,6 +61,9 @@ def build_snapshot(closed: list[dict], starting_balance: float, registry_entries
         "deciles": calibration.score_deciles(closed),
         "levels": calibration.level_calibration(closed),
         "drift": calibration.badge_drift(closed, registry_entries),
+        # v164 D4: the pre-registered live loss watch, over BOTH ledgers
+        # (spec D1); report-only, never feeds a badge. A JSON key, no schema.
+        "live_loss_watch": calibration.live_loss_watch([*closed, *weak_closed], registry_entries),
     }
 
     return {
