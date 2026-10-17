@@ -176,7 +176,7 @@ content: 🛡️ MANAGE · ▲ LONG AAPL · BREAK-EVEN
 title: 🛡️ ▲ LONG AAPL · BREAK-EVEN
 **🛑 MOVE SELL STOP → 182.40 now**
 ⚖ break-even
-🔒 if it fills: +$0.00 · 0.0R total
+🔒 if it fills: +$0.00 · 0.0R total (paper, gross)
 ~~~
 
 ## tp1_partial
@@ -195,7 +195,7 @@ After:
 ~~~
 content: 💰 MANAGE · ▲ LONG AAPL · TP1
 title: 💰 ▲ LONG AAPL · TP1
-**💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +$182.07 · +1.5R**
+**💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +$182.07 · +1.5R (paper, gross)**
 🛑 MOVE SELL STOP on the runner → 182.40 now (runner floor)
 ~~~
 
@@ -217,7 +217,7 @@ content: ✂️ MANAGE · ▲ LONG AAPL · MOVE STOP
 title: ✂️ ▲ LONG AAPL · MOVE STOP
 **🛑 MOVE SELL STOP → 186.00 now**
 〜 trail; +0.8R since the last ping
-🔒 if it fills: +$279.27 · +1.1R total
+🔒 if it fills: +$279.27 · +1.1R total (paper, gross)
 ~~~
 
 ## closed win
@@ -412,8 +412,8 @@ ignore this if you already exited on a stop or target
 - [x] Ticket long: `▶ BUY STOP 182.40 · 54 sh`; stop `🛑 SELL STOP 177.80 · if hit -$248.40 · −1.0R`; TP1 `💰 SELL LIMIT 189.10 · 27 sh · if hit +$180.90 · +1.5R` (the TP1 line also carries its R, an addition to the spec figure); runner `🏃 27 sh: 🎯 SELL LIMIT 195.00 · if hit +$340.20 · +2.7R · 〜 trail 2×ATR, stop moves pinged here`; `⚖` and `⏳ CANCEL` / `⛔ CANCEL` lines present.
 - [x] Ticket short flips every verb (`SELL STOP` entry, `BUY STOP` stop, `BUY LIMIT` targets) and the comparison glyphs (`⛔ CANCEL if ≥ 52.00`, `⚖ stop → entry at ≤ 48.00`).
 - [x] Do-not-place ticket keeps its wording and shows no "if hit" $.
-- [x] Filled leads `▶ FILLED`; be_moved and stop_moved say `MOVE SELL STOP` and carry `🔒 if it fills: … total`; never "locked". Deviation: be_moved at the entry prints `🔒 if it fills: +$0.00 · 0.0R total` (R is plain `0.0R`, never `+-0.0R`; the money zero keeps its `+`).
-- [x] TP1 partial: `💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +$182.07 · +1.5R`, then `🛑 MOVE SELL STOP on the runner → 182.40 now (runner floor)`.
+- [x] Filled leads `▶ FILLED`; be_moved and stop_moved say `MOVE SELL STOP` and carry `🔒 if it fills: … total` (with `(paper, gross)` after any dollar figure); never "locked". Deviation: be_moved at the entry prints `🔒 if it fills: +$0.00 · 0.0R total (paper, gross)` (R is plain `0.0R`, never `+-0.0R`; the money zero keeps its `+`).
+- [x] TP1 partial: `💰 TP1 FILLED 27 sh @ 189.10 · 🧾 +$182.07 · +1.5R (paper, gross)`, then `🛑 MOVE SELL STOP on the runner → 182.40 now (runner floor)`.
 - [x] Closed win / loss: `✅ EXITED @ 191.20 · 🎯 TP2` / `❌ EXITED @ 177.80 · 🛑 stop`, then `🧾 +$421.21 · +1.7R (paper, gross)` / `🧾 -$250.01 · −1.0R (paper, gross)` (the record's settled amount).
 - [x] Closed unsettled: `🧾 −1.0R (paper, gross)`, no $.
 - [x] Close at market and time exit due: broker verb words on every order line; wording otherwise unchanged from Before (the existing "SELL AT MARKET at market" repetition is pre-v170).
@@ -431,11 +431,11 @@ One full run on the branch at `1cd33c39`: 11450 passed, 2 failed, 4 skipped, 0 x
 
 ## Panel review (pre-close-out)
 
-Roles: veteran-trader, financial-advisor, senior-engineer, over `0fd32eda..HEAD`. Nothing below is applied on this branch unless it says so; every item is carried to the partner.
+Roles: veteran-trader, financial-advisor, senior-engineer, over `0fd32eda..HEAD`. Nothing below is applied on this branch unless it says so (the BLOCKING item was applied afterwards); every item is carried to the partner.
 
 **BLOCKING (1)**
 
-- financial-advisor: the realised TP1 line (`🧾 +$182.07 · +1.5R`) and the `🔒 if it fills:` lines print dollars with no `(paper, gross)`, while the close lines and P&L now carry it -- rejected for this plan: spec §2 pins those two layouts without the suffix and the plan's Global Constraints scope the cost basis to close P&L lines and P&L-now totals; adding it rewrites every pinned string for those two kinds. The `!help` legend states the basis for all feed dollars. Flagged to the partner as a follow-up (add `tokens.COST_BASIS` in `tp1_partial` and `_if_fills_line`).
+- financial-advisor: the realised TP1 line (`🧾 +$182.07 · +1.5R`) and the `🔒 if it fills:` lines printed dollars with no `(paper, gross)`, while the close lines and P&L carry it -- APPLIED in `fda83ab9`: `tp1_partial` and `_if_fills_line` now append `tokens.COST_BASIS` whenever the line carries a dollar figure (none without a linked record); the pinned strings and the After blocks above were regenerated. Ticket "if hit" lines are not covered.
 
 **ADVISORY**
 
