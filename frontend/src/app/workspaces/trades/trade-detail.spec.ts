@@ -21,12 +21,14 @@ import {
 } from '../../api/interceptors';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { TradeDetail, arrivalBanner } from './trade-detail';
 
 // The Chart tab now mounts the shared chart, which asks for matchMedia the
 // moment a chart exists. See the polyfill for why.
 installMatchMediaPolyfill();
+installDialogPolyfill();
 
 /* SR49 — the rendering half.
  *
@@ -269,10 +271,93 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
     expect(text).not.toContain('Quality breakdown');
   });
 
+});
+
+describe('TradeDetail — identity line (v166 TD6)', () => {
+  let backend: HttpTestingController;
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  function mount(status = 'ACTIVE', overrides: object = {}, days: number | null = 3, tab = 'plan') {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', tab);
+    fixture.detectChanges();
+    const detail = { ...DETAIL, gates: [{ key: 'earnings', label: 'Earnings', value: days }] };
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(detail, status, overrides));
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it.each([['bullish', 'Long'], ['SHORT', 'Short']])('names the ACTIVE %s side beside its ticker and status', (direction, side) => {
+    const { el } = mount('ACTIVE', { direction });
+    const title = el.querySelector('header.head > .identity > .trade-title');
+    expect(title?.querySelector('.ticker')?.textContent).toBe('AAPL');
+    expect(title?.querySelector('.side')?.textContent).toBe(side);
+    expect(title?.querySelector('sb-status-indicator')).toBeTruthy();
+  });
+
+  it('keeps the complete trade identity and badge together', () => {
+    const tags = mount().el.querySelector('.identity > .tags');
+    expect([...tags!.querySelectorAll('.tag')].map(tag => tag.textContent)).toEqual(['4w', 'RSI Divergence']);
+    expect([...tags!.querySelectorAll('sb-quality-chip')].map(chip => chip.textContent?.trim())).toEqual(['Tier A', 'Lv4', 'VALIDATED']);
+    expect(tags?.querySelector('.trade-id')?.textContent).toBe(ID);
+    expect(tags?.querySelector('.origin')).toBeNull();
+  });
+
+  it('identifies a legacy record', () => {
+    expect(mount('ACTIVE', { origin: 'legacy' }).el.querySelector('.identity .origin')?.textContent).toBe('legacy');
+  });
+
+  it.each(['ACTIVE', 'PARTIAL', 'PENDING'])('shows upcoming earnings for %s', status => {
+    expect(mount(status).el.querySelector('.tags > .earnings > sb-chip')?.textContent).toContain('Earnings in 3d');
+  });
+
+  it.each(['CLOSED', 'CANCELLED', 'EXPIRED'])('omits earnings for %s', status => {
+    expect(mount(status).el.querySelector('.earnings')).toBeNull();
+  });
+
+  it('omits an absent earnings gate value', () => {
+    expect(mount('ACTIVE', {}, null).el.querySelector('.earnings')).toBeNull();
+  });
+
+  it('shows an earnings event today without treating zero as absent', () => {
+    expect(mount('PENDING', {}, 0).el.querySelector('.earnings')?.textContent).toContain('Earnings in 0d');
+  });
+
+  it.each([
+    ['ACTIVE', ['Close', 'Delete']], ['PARTIAL', ['Close', 'Delete']],
+    ['PENDING', ['Cancel plan', 'Delete']], ['CLOSED', ['Delete']],
+  ])('offers the %s commands in the header', (status, labels) => {
+    const { el } = mount(status as string, {}, 3, 'live');
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('.identity > .actions > button[sb-button]')];
+    expect(buttons.map(button => button.textContent?.trim())).toEqual(labels);
+    expect(buttons.at(-1)?.classList).toContain('danger');
+    expect([...el.querySelectorAll('sb-panel')].some(panel => panel.getAttribute('heading') === 'Actions')).toBe(false);
+  });
+
   it('offers Close on a live position (SR48, through the real component)', () => {
-    // SR48 fixed availableActions; this is the same fix seen from the screen,
-    // which is where the absence was invisible for a whole phase.
-    expect(render('live')).toContain('Close');
+    const { fixture, el } = mount();
+    const close = el.querySelector<HTMLButtonElement>('.identity .actions button');
+    expect(close?.textContent).toContain('Close');
+    close!.click();
+    fixture.detectChanges();
+    expect(el.querySelector('sb-confirm-dialog')?.textContent).toContain('Close trade');
+    expect(el.querySelector('sb-confirm-dialog')?.textContent).toContain('AAPL');
   });
 });
 

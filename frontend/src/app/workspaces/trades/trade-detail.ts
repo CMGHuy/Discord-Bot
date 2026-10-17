@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  Signal,
   computed,
   effect,
   inject,
@@ -20,7 +21,7 @@ import { Chip, ChipTone, QualityChip } from '../../ui/chip';
 import { MetricChip } from '../../ui/metric-chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime, held, num, pct, rMultiple, share, text } from '../../ui/format';
-import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { Panel, Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
 import {
   ACTION_LABELS,
@@ -38,6 +39,7 @@ import { SizingPanel } from './why/sizing-panel';
 import { WHY_SECTIONS, WhyPanel, WhySection } from './why/why-panel';
 import { OutcomeStrip } from './outcome-strip';
 import { outcomeTiles } from './outcome-tiles';
+import { sideLabel, statusGroup } from './trade-figures';
 
 /** Plan · Live · Chart · Notes · Strategy — spec 3's five, in its order. */
 const TABS: Tab[] = [
@@ -97,7 +99,6 @@ function cameFromPlan(): boolean {
     RouterLink,
     TabBar,
     Panel,
-    ControlRow,
     StatusIndicator,
     QualityChip,
     Button,
@@ -121,46 +122,67 @@ function cameFromPlan(): boolean {
       }
 
       @if (store.trade(); as trade) {
-        <div class="trade-title" role="heading" aria-level="2">
-          <span class="ticker">{{ trade.ticker }}</span>
-          <sb-status-indicator
-            [status]="trade.status"
-            [current]="trade.current_price"
-            [entry]="trade.entry"
-            [stop]="trade.stop_loss"
-            [target]="trade.target"
-          />
-        </div>
-        <div class="tags">
-          <!-- The id a Discord command (!trade ID) or the API needs to name
-               this exact trade -- previously only visible in the Trades
-               list's # column (and truncated there, see shortId()), so
-               reaching this page by clicking a row lost the one thing
-               someone might come here to copy. -->
-          <span class="trade-id" [title]="'Trade ID: ' + trade.id">{{ trade.id }}</span>
-          @if (trade.horizon) {
-            <span class="tag">{{ trade.horizon }}</span>
-          }
-          @if (trade.strategy) {
-            <span class="tag">{{ trade.strategy }}</span>
-          }
-          @if (trade.tier) {
-            <sb-quality-chip [value]="trade.tier" [label]="'Tier ' + trade.tier" />
-          }
-          @if (trade.confidence_level !== null) {
-            <sb-quality-chip
-              [value]="trade.confidence_level"
-              [label]="'Lv' + trade.confidence_level"
+        <div class="identity">
+          <div class="trade-title" role="heading" aria-level="2">
+            <span class="ticker">{{ trade.ticker }}</span>
+            @if (side(); as label) {
+              <span class="side">{{ label }}</span>
+            }
+            <sb-status-indicator
+              [status]="trade.status"
+              [current]="trade.current_price"
+              [entry]="trade.entry"
+              [stop]="trade.stop_loss"
+              [target]="trade.target"
             />
-          }
-          <!-- v86 -- the cohort risk verdict. COHORT_TYPICAL renders no
-               chip at all (the brief's own token guidance): "typical" is
-               the silent default every other label is judged against, and a
-               chip for it would just be visual noise on every ordinary
-               trade. -->
-          @if (cohortTone(); as tone) {
-            <sb-chip [label]="cohortChipLabel()" [tone]="tone" [title]="cohortTooltip()" />
-          }
+          </div>
+          <div class="tags">
+            @if (trade.horizon) {
+              <span class="tag">{{ trade.horizon }}</span>
+            }
+            @if (trade.strategy) {
+              <span class="tag">{{ trade.strategy }}</span>
+            }
+            @if (trade.tier) {
+              <sb-quality-chip [value]="trade.tier" [label]="'Tier ' + trade.tier" />
+            }
+            @if (trade.confidence_level !== null) {
+              <sb-quality-chip
+                [value]="trade.confidence_level"
+                [label]="'Lv' + trade.confidence_level"
+              />
+            }
+            @if (trade.badge) {
+              <sb-quality-chip [value]="trade.badge" [label]="trade.badge" />
+            }
+            <!-- v86 -- the cohort risk verdict. COHORT_TYPICAL renders no
+                 chip at all (the brief's own token guidance): "typical" is
+                 the silent default every other label is judged against, and a
+                 chip for it would just be visual noise on every ordinary
+                 trade. -->
+            @if (cohortTone(); as tone) {
+              <sb-chip [label]="cohortChipLabel()" [tone]="tone" [title]="cohortTooltip()" />
+            }
+            @if (earningsChip(); as label) {
+              <span class="earnings"><sb-chip [label]="label" tone="warn" [caps]="false" /></span>
+            }
+            @if (trade.origin !== 'plan') {
+              <span class="origin">{{ trade.origin }}</span>
+            }
+            <span class="trade-id" [title]="'Trade ID: ' + trade.id">{{ trade.id }}</span>
+          </div>
+          <div class="actions">
+            @for (kind of actionsFor(trade.status); track kind) {
+              <button
+                sb-button
+                [variant]="kind === 'delete' ? 'danger' : 'secondary'"
+                type="button"
+                (click)="ask(kind)"
+              >
+                {{ actionLabels[kind] }}
+              </button>
+            }
+          </div>
         </div>
       } @else if (store.error(); as message) {
         <p class="trade-title" role="status">{{ message }}</p>
@@ -411,21 +433,6 @@ function cameFromPlan(): boolean {
                 </dl>
               </sb-panel>
             }
-
-            <sb-panel heading="Actions">
-              <sb-control-row class="commands">
-                @for (kind of actionsFor(trade.status); track kind) {
-                  <button
-                    sb-button
-                    [variant]="kind === 'delete' ? 'danger' : 'secondary'"
-                    type="button"
-                    (click)="ask(kind)"
-                  >
-                    {{ actionLabels[kind] }}
-                  </button>
-                }
-              </sb-control-row>
-            </sb-panel>
           </div>
 
           <sb-outcome-path [legs]="store.legs()" [timeline]="store.timeline()" />
@@ -627,10 +634,28 @@ function cameFromPlan(): boolean {
       font-size: var(--text-table);
     }
 
+    .identity {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--space-10);
+      min-width: 0;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-8);
+      margin-left: auto;
+    }
+    .side, .origin {
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+    }
     .trade-title {
       margin: 0;
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: var(--space-10);
       font-size: var(--text-title);
       font-weight: 600;
@@ -709,8 +734,6 @@ function cameFromPlan(): boolean {
     .progress {
       margin-bottom: var(--space-10);
     }
-    /* .commands keeps its class as a marker only -- sb-control-row supplies
-       display, alignment, wrap and gap. */
 
     .notes, .strategy {}
     .note-label {
@@ -797,6 +820,19 @@ export class TradeDetail {
   private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
   protected readonly chart = inject(ChartStore);
+
+  protected readonly side: Signal<'Long' | 'Short' | null> = computed(() =>
+    sideLabel(this.store.trade()?.direction ?? null),
+  );
+
+  protected readonly earningsChip: Signal<string | null> = computed(() => {
+    const trade = this.store.trade();
+    if (!trade) return null;
+    const group = statusGroup(trade.status, trade.exit_price ?? null);
+    const days = this.store.earningsDays();
+    if ((group !== 'open' && group !== 'pending') || days === null) return null;
+    return `Earnings in ${days}d`;
+  });
 
   protected readonly stripTiles = computed(() => {
     const trade = this.store.trade();
