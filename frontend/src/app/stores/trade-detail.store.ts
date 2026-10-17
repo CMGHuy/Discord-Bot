@@ -222,6 +222,12 @@ function toSources(raw: unknown): string[] {
   return [...seen];
 }
 
+function originalRiskPerShare(trade: TradeDetail | null): number | null {
+  const entry = asNumber(trade?.entry);
+  const stop = asNumber(trade?.risk_stop) ?? asNumber(trade?.stop_loss);
+  return entry === null || stop === null ? null : Math.abs(entry - stop);
+}
+
 interface TradeDetailSlice {
   id: string | null;
   data: TradeDetail | null;
@@ -322,13 +328,14 @@ export const TradeDetailStore = signalStore(
       return typeof value === 'boolean' ? value : null;
     }),
 
-    /** Risk and reward per share, from the plan's own levels. Null unless
-     *  both sides are known — half an R:R is not an R:R. */
-    riskPerShare: computed(() => {
-      const trade = data();
-      if (!trade || trade.entry === null || trade.stop_loss === null) return null;
-      return Math.abs(trade.entry - trade.stop_loss);
-    }),
+    /** Original plan risk stays fixed when a PARTIAL position's working stop
+     *  moves. Older rows fall back to their recorded stop_loss. */
+    riskStop: computed(() => asNumber(data()?.risk_stop)),
+    riskPerShare: computed(() => originalRiskPerShare(data())),
+    workingStop: computed(() => asNumber(data()?.detail?.working_stop)),
+    trailAtrMult: computed(() => asNumber(data()?.detail?.trail_atr_mult)),
+    sizingMode: computed(() => asText(data()?.detail?.sizing_mode)),
+    entryType: computed(() => asText(data()?.detail?.entry_type)),
     rewardPerShare: computed(() => {
       const trade = data();
       if (!trade || trade.entry === null || trade.target === null) return null;
@@ -540,6 +547,15 @@ export const TradeDetailStore = signalStore(
       const rows = (strategies()?.strategies ?? []) as StrategyRow[];
       return rows.find((row) => row.strategy === name) ?? null;
     }),
+  })),
+  withComputed(({ data, riskPerShare, gates }) => ({
+    /** Remaining open shares carry the original plan risk per share. */
+    dollarAtRisk: computed(() => {
+      const shares = asNumber(data()?.shares);
+      const risk = riskPerShare();
+      return shares === null || risk === null ? null : shares * risk;
+    }),
+    earningsDays: computed(() => asNumber(gates().find((gate) => gate.key === 'earnings')?.value)),
   })),
   withMethods((store, api = inject(ApiClient)) => ({
     /** Setting the id is what triggers the load. */
