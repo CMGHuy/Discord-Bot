@@ -75,7 +75,7 @@ def _all_trades() -> list[dict]:
 
 def _registry_entries() -> list[dict]:
     from swingbot.core.backtesting import registry
-    return registry.load_registry()
+    return registry.active_rows(registry.load_registry())
 
 
 def load_watch(*, n_resamples: int = calibration.EXPR_WATCH_RESAMPLES) -> dict:

@@ -122,3 +122,21 @@ def test_load_watch_runs_the_real_rule_over_both_ledgers(monkeypatch):
     assert rows["4w"]["live_n"] == 4          # main + weak ledger
     assert rows[None]["live_n"] == 4          # and the pooled row
     assert set(watch["counts"]) <= set(calibration.WATCH_COUNT_KEYS)
+
+
+def test_registry_loader_sees_the_same_rows_as_the_snapshot_path(monkeypatch):
+    """A key measured on two sources is one row, the same one the snapshot's
+    registry_entries (registry.active_rows over load_registry) picks."""
+    from swingbot import config
+    from swingbot.core.backtesting import registry
+    yf, alpaca = {**_reg("4w"), "data_source": "yfinance"}, {**_reg("4w"), "data_source": "alpaca"}
+    monkeypatch.setattr(registry, "load_registry", lambda path=None: [yf, alpaca, _reg(None)])
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "alpaca", raising=False)
+
+    rows = lw._registry_entries()
+
+    snapshot_rows = registry.active_rows(registry.load_registry())
+    keys = [(r["source"], r["strategy"], r.get("horizon")) for r in rows]
+    assert keys == [(r["source"], r["strategy"], r.get("horizon")) for r in snapshot_rows]
+    assert rows == snapshot_rows
+    assert [r.get("data_source") for r in rows] == ["alpaca", None]
