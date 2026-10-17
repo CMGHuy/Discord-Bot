@@ -67,8 +67,12 @@ description = "slash commands, embeds/presentation, infra"
 paths = ["tests/commands/", "tests/presentation/", "tests/infra/"]
 
 [suites.tooling]
-description = "scripts, hooks and the dev tooling itself (incl. this file's guard)"
-paths = ["tests/scripts/", "tests/hooks/", "tests/dev/"]
+description = "operational and analysis scripts under scripts/"
+paths = ["tests/scripts/"]
+
+[suites.dev-setup]
+description = "Claude/Codex hooks and the dev tooling itself (incl. this file's guard)"
+paths = ["tests/hooks/", "tests/dev/"]
 
 [suites.config]
 description = "Config schema/keys -- the loose tests/test_*.py files (CI used to skip these)"
