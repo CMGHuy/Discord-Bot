@@ -12,7 +12,21 @@ module at its top; the ops channel is looked up at call time instead
 """
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
+import logging
+
+from discord.ext import tasks
+
+from swingbot import config
+from swingbot.bot_core import in_session
+from swingbot.core import presentation as ui
+from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.scanning import telemetry
+
+from . import notices, runstate
+
+log = logging.getLogger(__name__)
 
 #: Process boot (UTC). The watchdog stays quiet until the process has been up
 #: STALE_FACTOR x SCAN_INTERVAL_MINUTES, so a morning restart after an
@@ -79,3 +93,86 @@ def provider_verdict(row: dict | None, *, fallback_pct: float, empty_pct: float,
     if breach == alert_active:
         return None
     return "alert" if breach else "recover"
+
+
+# --- v148 OH18: the sends, the watchdog loop and the provider check -----------
+
+def _channel():
+    """``loops._ops_channel()``, looked up at call time (``loops`` imports us)."""
+    from . import loops
+    return loops._ops_channel()
+
+
+async def _post(embed) -> bool:
+    """False when no ops channel is configured. A failed send raises, so the
+    caller's flag stays unset and the next tick retries (as escalation does)."""
+    channel = _channel()
+    if channel is None:
+        return False
+    await channel.send(**ui.push_kwargs(embed))
+    return True
+
+
+def _stale_embed(verdict: str, now: dt.datetime, last_success: str):
+    if verdict == "recover":
+        return notices.stale_scan_recovered_embed(last_success)
+    age_min = int((now - parse_moment(last_success)).total_seconds() // 60)
+    return notices.stale_scan_embed(age_min, last_success)
+
+
+async def watchdog_tick(now: dt.datetime | None = None) -> str | None:
+    """One stale-scan decision; returns the verdict it posted, or None."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    last = runstate.last_success_iso()
+    verdict = stale_scan_verdict(
+        now, last, int(config.SCAN_INTERVAL_MINUTES), BOOTED_AT,
+        in_session=in_session(), paused=runstate.is_scan_paused(),
+        failure_alert_active=runstate.get_alert_active(),
+        stale_alert_active=runstate.get_stale_alert_active())
+    if verdict is None or not await _post(_stale_embed(verdict, now, last)):
+        return None
+    runstate.set_stale_alert_active(verdict == "alert")
+    return verdict
+
+
+@tasks.loop(minutes=1)
+async def scan_watchdog():
+    """v148 O3: the wedged tick the failure streak cannot see (a dead process
+    is the VM cron's). Never raises: that would stop the loop for good."""
+    try:
+        await watchdog_tick()
+    except Exception as exc:
+        swallowed(log, "ops.scan_watchdog", exc, "scan watchdog tick failed",
+                  level=logging.ERROR, exc_info=True)
+
+
+async def _latest_scan_row() -> dict | None:
+    rows = await asyncio.to_thread(telemetry.recent_scan_telemetry, 1)
+    return rows[-1] if rows else None
+
+
+async def _provider_check(row: dict | None) -> str | None:
+    row = row if row is not None else await _latest_scan_row()
+    fallback_pct = float(config.PROVIDER_FALLBACK_ALERT_PCT)
+    empty_pct = float(config.EMPTY_SYMBOLS_ALERT_PCT)
+    verdict = provider_verdict(row, fallback_pct=fallback_pct, empty_pct=empty_pct,
+                               alert_active=runstate.get_provider_alert_active())
+    if verdict is None:
+        return None
+    embed = (notices.provider_degraded_embed(row, fallback_pct, empty_pct)
+             if verdict == "alert" else notices.provider_recovered_embed(row))
+    if not await _post(embed):
+        return None
+    runstate.set_provider_alert_active(verdict == "alert")
+    return verdict
+
+
+async def check_provider_health(row: dict | None = None) -> str | None:
+    """v148 O4: one notice per provider incident, one on recovery, from the
+    newest scan row (or `row`). Never raises into the scan tick."""
+    try:
+        return await _provider_check(row)
+    except Exception as exc:
+        swallowed(log, "ops.provider_health", exc, "provider health check failed",
+                  level=logging.ERROR, exc_info=True)
+        return None
