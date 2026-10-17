@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-17 09:47:53 UTC",
+  "generated_at": "2026-10-17 11:06:21 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.26.1",
-    "bot": "2.7.1"
+    "bot": "2.8.0"
   },
   "releases": [
     {
@@ -1756,6 +1756,19 @@
       "versions": {
         "ui": "1.26.1",
         "bot": "2.7.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "edcf62db",
+      "subject": "release(bot): 2.8.0 -- instrument v2 window contract: contract-owned spans, purged anchored folds, causal PIT universe gate, --instrument on every live backtest script (v158)",
+      "versions": {
+        "ui": "1.26.1",
+        "bot": "2.8.0"
       },
       "changed": [
         "bot"
