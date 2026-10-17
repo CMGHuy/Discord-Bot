@@ -218,3 +218,25 @@ def test_be_moved_embed_projects_from_the_record(monkeypatch):
         plan, PlanEvent(plan.plan_id, "be_moved", {"working_stop": 100.0}))
     assert embed.description.splitlines() == [
         "**🛑 MOVE SELL STOP → 100.00 now**", "⚖ break-even", "🔒 if it fills: +$0.00 · 0.0R total"]
+
+
+def _closed_loss(plan):
+    return PlanEvent(plan.plan_id, "closed",
+                     {"reason": "loss", "exit_price": 95.0, "session": "regular"})
+
+
+def test_a_close_prints_the_linked_records_settled_dollars(monkeypatch):
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: {
+        "plan_id": plan_id, "shares": 9.43, "realized_pnl_amount": -47.15,
+        "status": "loss", "legs": []})
+    plan = make_plan_v2()          # entry 100, stop 95
+    embed = execution_embeds.build_instruction_embed(plan, _closed_loss(plan))
+    money = tokens.fmt_money(-47.15, config.CURRENCY_SYMBOL)
+    assert f"🧾 {money} · −1.0R (paper, gross)" in embed.description.splitlines()
+
+
+def test_a_close_without_a_linked_record_prints_r_only(monkeypatch):
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: None)
+    plan = make_plan_v2()
+    embed = execution_embeds.build_instruction_embed(plan, _closed_loss(plan))
+    assert "🧾 −1.0R (paper, gross)" in embed.description.splitlines()

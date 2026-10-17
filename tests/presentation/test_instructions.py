@@ -35,6 +35,11 @@ def _event(transition, **detail):
     return PlanEvent("p1", transition, detail)
 
 
+def _settled(amount, *, shares=9, record_shares=9.9):
+    """A close's money as V170-4 builds it from a linked, settled record."""
+    return ins.Money(currency="$", shares=shares, realized_amount=amount,
+                     record_shares=record_shares)
+
 def _spec_long(**kw):
     """The spec's §2 example ticket: 54 sh between 182.40 / 177.80 / 189.10 / 195.00."""
     base = dict(trigger_price=182.4, stop_loss=177.8, tp1=189.1, tp2=195.0,
@@ -342,14 +347,17 @@ def test_cancellations_name_the_order_to_cancel():
         "never filled",)
 
 
+# --- closes (v170: outcome lead, exit glyph, settled $ beside R) -------------
+
 def test_a_regular_session_stop_out():
     plan = _plan(status="CLOSED", entry_price=100.0, stop_loss=95.0, tp1=110.0)
     i = ins.instruction_for(plan, _event("closed", reason="loss", exit_price=94.5,
                                          session="regular", notified_stop=95.0,
-                                         bot_stop=95.0))
+                                         bot_stop=95.0), money=_settled(-49.5))
     assert (i.verb, i.tone) == (ins.EXITED, "bad")
-    assert i.headline == "EXITED @ 94.50 — stop · −1.1R total"
-    assert i.lines == ("If your broker order did not fill: SELL AT MARKET",)
+    assert i.headline == "❌ EXITED @ 94.50 · 🛑 stop"
+    assert i.lines == ("🧾 -$49.50 · −1.1R (paper, gross)",
+                       "If your broker order did not fill: SELL AT MARKET")
 
 
 def test_an_extended_hours_exit_says_close_at_market():
@@ -358,11 +366,12 @@ def test_an_extended_hours_exit_says_close_at_market():
     i = ins.instruction_for(plan, _event("closed", reason="loss", exit_price=105.5,
                                          session="extended", notified_stop=105.0,
                                          bot_stop=105.0))
-    assert (i.verb, i.headline) == (ins.CLOSE_AT_MARKET, "CLOSE AT MARKET now")
+    assert (i.verb, i.tone) == (ins.CLOSE_AT_MARKET, "bad")
+    assert i.headline == "❌ CLOSE AT MARKET now"
     assert i.lines == (
         "BUY TO COVER AT MARKET: the bot exited on an extended-hours print @ 105.50; "
         "resting stop orders do not fire outside regular hours",
-        "−1.1R total",
+        "🧾 −1.1R (paper, gross)",
     )
 
 
@@ -374,10 +383,11 @@ def test_a_trail_exit_warns_when_the_readers_stop_lagged():
                                  "reason": "tp1_runner_trail"}])
     i = ins.instruction_for(plan, _event("closed", reason="tp1_runner_trail", exit_price=115.0,
                                          session="regular", notified_stop=113.9,
-                                         bot_stop=115.0))
+                                         bot_stop=115.0), money=_settled(250.0))
     assert (i.verb, i.tone) == (ins.EXITED, "good")
-    assert i.headline == "EXITED @ 115.00 — trail · +2.5R total"
+    assert i.headline == "✅ EXITED @ 115.00 · 〜 trail"
     assert i.lines == (
+        "🧾 +$250.00 · +2.5R (paper, gross)",
         "If your broker order did not fill: SELL AT MARKET",
         "your last pinged stop was 113.90 — that order may still be open",
     )
@@ -397,5 +407,67 @@ def test_progress_stall_close_says_close_at_market():
     i = ins.instruction_for(plan, _event("closed", reason="tp1_runner_progress_stall",
                                          exit_price=112.0, session="regular"))
     assert i.verb == ins.CLOSE_AT_MARKET
-    assert "higher high failed" in i.headline
+    assert i.headline.startswith("✅ CLOSE AT MARKET now — higher high failed")
     assert "no resting order covers this exit" in i.lines[0]
+    assert i.lines[1] == "🧾 +2.2R (paper, gross)"
+
+
+
+def test_a_break_even_scratch_leads_flat_and_prints_zero_dollars_signed():
+    plan = _plan(status="CLOSED", entry_price=100.0, stop_loss=95.0, tp1=110.0)
+    i = ins.instruction_for(plan, _event("closed", reason="scratch", exit_price=100.0,
+                                         session="regular"), money=_settled(0.0))
+    assert (i.verb, i.tone) == (ins.EXITED, "neutral")
+    assert i.headline == "➖ EXITED @ 100.00 · ⚖ break-even"
+    assert i.lines[0] == "🧾 +$0.00 · 0.0R (paper, gross)"
+
+
+def test_a_short_runner_tp2_win_flips_the_exit_verb():
+    plan = _plan(direction="bearish", status="CLOSED", entry_price=100.0, stop_loss=105.0,
+                 tp1=94.0, tp2=90.0,
+                 legs_realized=[{"fraction": 0.5, "exit_price": 94.0, "r": 1.2, "reason": "tp1"},
+                                {"fraction": 0.5, "exit_price": 90.0, "r": 2.0,
+                                 "reason": "tp1_runner_tp2"}])
+    i = ins.instruction_for(plan, _event("closed", reason="tp1_runner_tp2", exit_price=90.0,
+                                         session="regular"),
+                            money=_settled(80.0, shares=10, record_shares=10.0))
+    assert (i.verb, i.tone) == (ins.EXITED, "good")
+    assert i.headline == "✅ EXITED @ 90.00 · 🎯 TP2"
+    assert i.lines == ("🧾 +$80.00 · +1.6R (paper, gross)",
+                       "If your broker order did not fill: BUY TO COVER AT MARKET")
+
+
+@pytest.mark.parametrize("money", [None, _settled(None)],
+                         ids=["no linked record", "record not settled"])
+def test_an_unsettled_close_prints_r_only_never_an_estimate(money):
+    plan = _plan(status="CLOSED", entry_price=100.0, stop_loss=95.0, tp1=110.0)
+    i = ins.instruction_for(plan, _event("closed", reason="loss", exit_price=94.5,
+                                         session="regular"), money=money)
+    assert i.lines[0] == "🧾 −1.1R (paper, gross)"
+    assert not any("$" in text for text in (i.headline, *i.lines))
+
+
+@pytest.mark.parametrize("reason,word", [
+    ("loss", "🛑 stop"), ("scratch", "⚖ break-even"), ("win", "🎯 target"),
+    ("tp1_runner_be", "🏃 runner floor"), ("tp1_runner_trail", "〜 trail"),
+    ("tp1_runner_tp2", "🎯 TP2"), ("time_exit", "ten-session time exit"),
+])
+def test_every_exit_word_gets_its_glyph_where_the_table_has_one(reason, word):
+    plan = _plan(status="CLOSED", entry_price=100.0, stop_loss=95.0, tp1=110.0)
+    i = ins.instruction_for(plan, _event("closed", reason=reason, exit_price=104.0,
+                                         session="regular"))
+    assert i.headline == f"✅ EXITED @ 104.00 · {word}"
+
+
+@pytest.mark.parametrize("r,key", [(0.06, "win"), (0.05, "flat"), (0.0, "flat"),
+                                   (-0.05, "flat"), (-0.06, "loss")])
+def test_outcome_key_uses_the_close_tone_bands(r, key):
+    assert ins.outcome_key(r) == key
+
+
+def test_pnl_line_signs_both_figures_and_states_the_cost_basis():
+    assert ins.pnl_line(1.66, _settled(412.5)) == "🧾 +$412.50 · +1.7R (paper, gross)"
+    assert ins.pnl_line(-1.0, _settled(-250.0)) == "🧾 -$250.00 · −1.0R (paper, gross)"
+    assert ins.pnl_line(-1.0, _settled(None)) == "🧾 −1.0R (paper, gross)"
+    assert ins.pnl_line(0.4, None) == "🧾 +0.4R (paper, gross)"
+

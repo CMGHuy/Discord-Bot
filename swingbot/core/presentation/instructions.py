@@ -44,6 +44,20 @@ _EXIT_WORDS = {
 #: the reader must act at market, exactly like an extended-hours exit.
 _MARKET_EXIT_REASONS = frozenset({"tp1_runner_progress_stall"})
 
+#: close reason -> the FEED_SYMBOLS key that leads its exit word in the close
+#: headline (v170). Reasons with no key keep their bare word.
+_EXIT_GLYPH_KEYS = {
+    "loss": "stop",
+    "scratch": "breakeven",
+    "win": "tp2",
+    "tp1_runner_be": "runner",
+    "tp1_runner_trail": "trail",
+    "tp1_runner_tp2": "tp2",
+}
+
+#: close outcome -> Instruction.tone (the bands the close always used).
+_OUTCOME_TONES = {"win": "good", "loss": "bad", "flat": "neutral"}
+
 
 @dataclass(frozen=True)
 class Instruction:
@@ -376,24 +390,57 @@ def _market_close_line(side: dict, exit_price, detail: dict) -> str:
             f"{_price(exit_price)}; resting stop orders do not fire outside regular hours")
 
 
-def _closed(plan, detail: dict, side: dict, common: dict) -> Instruction:
+def outcome_key(r: float) -> str:
+    """The FEED_SYMBOLS key that leads a close headline: the same +-0.05R
+    bands the close's tone has always used."""
+    if r > 0.05:
+        return "win"
+    if r < -0.05:
+        return "loss"
+    return "flat"
+
+
+def pnl_line(r: float, money: Money | None) -> str:
+    """A close's P&L line. The $ is the trade record's settled
+    realized_pnl_amount -- the figure the account balance moved by -- and is
+    printed only once the record is settled; otherwise R alone. Both are
+    gross figures on the paper account (tokens.COST_BASIS)."""
+    parts = [_S["pnl"]]
+    if money is not None and money.realized_amount is not None:
+        parts.append(f"{tokens.fmt_money(money.realized_amount, money.currency)} ·")
+    return " ".join([*parts, signed_r(r), tokens.COST_BASIS])
+
+
+def _exit_word(reason: str | None) -> str:
+    word = _EXIT_WORDS.get(reason, reason or "closed")
+    key = _EXIT_GLYPH_KEYS.get(reason)
+    return f"{_S[key]} {word}" if key else word
+
+
+def _close_head(detail: dict, side: dict, exit_price, lead: str,
+                pnl: str) -> tuple[str, str, list[str]]:
+    """(verb, headline, first lines) of a close: at market when no resting
+    order covers the exit, else EXITED with the broker fallback line."""
+    if detail.get("session") == "extended" or detail.get("reason") in _MARKET_EXIT_REASONS:
+        return (CLOSE_AT_MARKET, f"{lead} {_market_close_headline(detail)}",
+                [_market_close_line(side, exit_price, detail), pnl])
+    headline = f"{lead} EXITED @ {_price(exit_price)} · {_exit_word(detail.get('reason'))}"
+    return EXITED, headline, [pnl, f"If your broker order did not fill: {side['exit']}"]
+
+
+def _closed(plan, detail: dict, side: dict, common: dict,
+            money: Money | None = None) -> Instruction:
     exit_price = detail.get("exit_price")
     r = total_r(plan, exit_price)
-    tone = "good" if r > 0.05 else "bad" if r < -0.05 else "neutral"
-    if detail.get("session") == "extended" or detail.get("reason") in _MARKET_EXIT_REASONS:
-        verb, headline = CLOSE_AT_MARKET, _market_close_headline(detail)
-        lines = [_market_close_line(side, exit_price, detail),
-                 f"{signed_r(r)} total"]
-    else:
-        word = _EXIT_WORDS.get(detail.get("reason"), detail.get("reason") or "closed")
-        verb = EXITED
-        headline = f"EXITED @ {_price(exit_price)} — {word} · {signed_r(r)} total"
-        lines = [f"If your broker order did not fill: {side['exit']}"]
+    outcome = outcome_key(r)
+    verb, headline, lines = _close_head(detail, side, exit_price, _S[outcome],
+                                        pnl_line(r, money))
     told, held = detail.get("notified_stop"), detail.get("bot_stop")
     if told is not None and held is not None and not math.isclose(told, held, abs_tol=1e-6):
         lines.append(f"your last pinged stop was {_price(told)} — that order may still be open")
     lines.extend(_staged_order_lines(plan, detail, side))
-    return Instruction(verb=verb, headline=headline, lines=tuple(lines), tone=tone, **common)
+    return Instruction(verb=verb, headline=headline, lines=tuple(lines),
+                       tone=_OUTCOME_TONES[outcome], **common)
 
 
 def _staged_order_lines(plan, detail: dict, side: dict) -> list[str]:
@@ -436,7 +483,7 @@ def _time_exit(plan, event, side: dict, common: dict, money: Money | None) -> In
 
 
 def _closed_event(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
-    return _closed(plan, event.detail, side, common)
+    return _closed(plan, event.detail, side, common, money)
 
 
 def _filled(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
