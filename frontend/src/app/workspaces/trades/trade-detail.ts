@@ -479,7 +479,7 @@ function cameFromPlan(): boolean {
     .card-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); align-items: stretch; grid-template-areas: var(--areas-1); }
     .cell { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); container-type: inline-size; gap: var(--section-gap); }
     .cell[data-area="context"] { grid-template-rows: auto 1fr; gap: var(--section-gap); }
-    :host ::ng-deep .cell > * > sb-panel:only-child,
+    :host ::ng-deep .cell > * > sb-panel:only-child { display: block; height: 100%; }
     :host ::ng-deep .cell > * > sb-panel:only-child .panel { height: 100%; }
 
     @container cards (min-width: 640px) {

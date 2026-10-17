@@ -58,9 +58,6 @@ export function positionRows(f: PositionFigures): PositionRow[] {
   `,
   styles: `
     :host { display: block; min-width: 0; overflow-wrap: anywhere; }
-    @container (min-width: 640px) {
-      dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-20); }
-    }
     dl { display: grid; gap: var(--space-6); margin: 0; }
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); min-width: 0; }
     dt { color: var(--text-secondary); }
@@ -68,6 +65,9 @@ export function positionRows(f: PositionFigures): PositionRow[] {
     dd { margin: 0; text-align: right; }
     .row-sub { display: block; }
     sb-chip { display: inline-block; margin-left: var(--space-6); }
+    @container (min-width: 640px) {
+      dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-20); }
+    }
   `,
 })
 export class PositionCard {

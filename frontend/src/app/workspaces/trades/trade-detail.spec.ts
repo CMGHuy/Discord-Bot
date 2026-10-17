@@ -996,7 +996,8 @@ describe('TradeDetail — responsive card layout (v166 TD11)', () => {
   });
 
   it('stretches one-panel cards while preserving the two context rows', () => {
-    expect(styles).toMatch(/:host ::ng-deep \.cell > \* > sb-panel:only-child\s*,\s*:host ::ng-deep \.cell > \* > sb-panel:only-child \.panel\s*\{\s*height:\s*100%/);
+    expect(styles).toMatch(/:host ::ng-deep \.cell > \* > sb-panel:only-child\s*\{[^}]*display:\s*block[^}]*height:\s*100%/);
+    expect(styles).toMatch(/:host ::ng-deep \.cell > \* > sb-panel:only-child \.panel\s*\{[^}]*height:\s*100%/);
     expect(styles).toMatch(/\.cell\[data-area="context"\]\s*\{[^}]*grid-template-rows:\s*auto 1fr[^}]*gap:\s*var\(--section-gap\)/);
   });
 
@@ -1009,6 +1010,10 @@ describe('TradeDetail — responsive card layout (v166 TD11)', () => {
     'lets %s use two definition columns only when its cell has room', name => {
       const card = readFileSync(join(process.cwd(), `src/app/workspaces/trades/${name}.ts`), 'utf8');
       expect(card).toMatch(/@container \(min-width: 640px\)\s*\{\s*dl\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[^}]*column-gap:\s*var\(--space-20\)/);
+      const cardStyles = card.split('styles: `')[1].split('`,')[0];
+      // Keep the wide-cell override last: a later base gap shorthand would
+      // reset its column-gap even though the container query still matches.
+      expect(cardStyles).toMatch(/@container \(min-width: 640px\)\s*\{\s*dl\s*\{[^}]+\}\s*\}\s*$/);
     },
   );
 });

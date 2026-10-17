@@ -26,15 +26,15 @@ export function confirmationText(confirmation: Confirmation): string {
   `,
   styles: `
     :host { display: block; min-width: 0; overflow-wrap: anywhere; }
-    @container (min-width: 640px) {
-      dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-20); }
-    }
     dl { display: grid; gap: var(--space-10); margin: 0; }
     dl > div { min-width: 0; }
     dt { color: var(--text-secondary); }
     dt, dd { font-size: var(--text-table); }
     dd { margin: var(--space-4) 0 0; }
     ul { margin: 0; padding-inline-start: var(--space-20); }
+    @container (min-width: 640px) {
+      dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-20); }
+    }
   `,
 })
 export class LevelSourcesCard {

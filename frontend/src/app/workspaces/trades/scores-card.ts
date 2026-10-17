@@ -28,9 +28,6 @@ export function scoreWidth(value: number | null): number | null {
   `,
   styles: `
     :host { display: block; min-width: 0; overflow-wrap: anywhere; }
-    @container (min-width: 640px) {
-      dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-20); }
-    }
     dl { display: grid; gap: var(--space-10); margin: 0; }
     dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
     dt { color: var(--text-secondary); }
@@ -39,6 +36,9 @@ export function scoreWidth(value: number | null): number | null {
     .track { grid-column: 1 / -1; height: 4px; background: var(--surface-raised); }
     .fill { display: block; height: 100%; background: var(--text-secondary); }
     .scores-foot { margin: var(--space-10) 0 0; font-size: var(--text-chip); }
+    @container (min-width: 640px) {
+      dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-20); }
+    }
   `,
 })
 export class ScoresCard {

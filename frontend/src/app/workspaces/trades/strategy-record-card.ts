@@ -33,9 +33,6 @@ import { Panel } from '../../ui/layout';
   `,
   styles: `
     :host { display: block; min-width: 0; overflow-wrap: anywhere; }
-    @container (min-width: 640px) {
-      dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-20); }
-    }
     dl { display: grid; gap: var(--space-6); margin: 0; }
     dl > div { display: flex; justify-content: space-between; gap: var(--space-10); min-width: 0; }
     dt { color: var(--text-secondary); }
@@ -43,6 +40,9 @@ import { Panel } from '../../ui/layout';
     dd { margin: 0; text-align: right; }
     .record-state { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
     .decayed { margin-top: var(--space-10); color: var(--warn); font-size: var(--text-table); }
+    @container (min-width: 640px) {
+      dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-20); }
+    }
   `,
 })
 export class StrategyRecordCard {
