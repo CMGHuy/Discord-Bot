@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-17 13:27:53 UTC",
+  "generated_at": "2026-10-17 13:28:27 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.26.1",
+    "ui": "1.27.0",
     "bot": "2.9.0"
   },
   "releases": [
@@ -1785,6 +1785,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "43550e79",
+      "subject": "release(ui): 1.27.0 -- Analytics Edge tab shows the live loss watch table and the win-rate drift table (v164)",
+      "versions": {
+        "ui": "1.27.0",
+        "bot": "2.9.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
