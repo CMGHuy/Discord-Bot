@@ -136,14 +136,17 @@ def _load_universe(spec) -> tuple[dict, dict]:
     """(frames, spans). v1: today's watchlist frames, no spans. v2: the
     contract's point-in-time universe through run_backtest_range's seams, minus
     missing frames and frames failing its data-quality checks (the non-causal
-    liquidity floor is skipped for PIT runs there), with membership spans."""
+    liquidity floor is skipped for PIT runs there), with membership spans.
+    Each v2 frame is cut at research_end BEFORE that check (as in
+    run_backtest_range's v2 path), so a holdout-only glitch never decides the
+    universe."""
     if spec.version == "v1":
         return {t: d for t in sorted(load_watchlist()) if (d := load_cached(t)) is not None}, {}
     tickers = rbr._tickers_for_run(spec.universe)
     membership = rbr._membership_for_run(spec.universe, tickers)
     frames, spans = {}, {}
     for ticker in tickers:
-        df = load_cached(ticker)
+        df = rbr._instrument_frame(load_cached(ticker), spec)
         if df is None or rbr._exclusion_reason(df, ticker, pit=membership is not None):
             continue
         frames[ticker], spans[ticker] = df, rbr._spans_for(membership, ticker)

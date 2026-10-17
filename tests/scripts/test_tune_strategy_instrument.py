@@ -147,6 +147,7 @@ def test_v2_loads_the_contract_pit_universe_with_spans(monkeypatch):
     monkeypatch.setattr(ts.rbr, "_tickers_for_run", tickers)
     monkeypatch.setattr(ts.rbr, "_membership_for_run", membership)
     monkeypatch.setattr(ts.rbr, "_exclusion_reason", exclusion)
+    monkeypatch.setattr(ts.rbr, "_instrument_frame", lambda df, spec: df)   # string frames
     monkeypatch.setattr(ts, "load_cached", lambda t: None if t == "DDD" else t)
     frames, spans = ts._load_universe(V2)
     assert seen == {"tickers": "sp500_pit",
@@ -154,6 +155,26 @@ def test_v2_loads_the_contract_pit_universe_with_spans(monkeypatch):
     assert pits == [True, True, True]          # the PIT branch: no non-causal floor
     assert frames == {"AAA": "AAA", "BBB": "BBB"}
     assert spans == {"AAA": ALWAYS, "BBB": []}  # no membership row = never a member
+
+
+def test_v2_universe_checks_data_quality_on_the_research_span_only(monkeypatch):
+    """A glitch only in sealed-holdout bars must not decide the PIT universe:
+    the frame is cut at research_end BEFORE the exclusion check, as in
+    run_backtest_range's v2 path."""
+    research_end = pd.Timestamp(V2.research_span[1])
+
+    def exclusion(df, ticker, pit):
+        if df.index.max() > research_end:
+            return ("bad data", "glitch in 2026 bars")
+        return None
+
+    monkeypatch.setattr(ts.rbr, "_tickers_for_run", lambda universe: ["AAA"])
+    monkeypatch.setattr(ts.rbr, "_membership_for_run", lambda universe, t: {"AAA": ALWAYS})
+    monkeypatch.setattr(ts.rbr, "_exclusion_reason", exclusion)
+    monkeypatch.setattr(ts, "load_cached", lambda t: _frame(end="2026-06-30"))
+    frames, spans = ts._load_universe(V2)
+    assert list(frames) == ["AAA"] and spans == {"AAA": ALWAYS}
+    assert frames["AAA"].index.max() == research_end
 
 
 # --- _v2_trades -----------------------------------------------------------------------------
