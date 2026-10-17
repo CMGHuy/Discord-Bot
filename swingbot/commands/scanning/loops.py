@@ -16,6 +16,7 @@ from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
 from swingbot.core.db import write_failure
 from swingbot.core.infra import pitr_watch
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
@@ -732,8 +733,10 @@ async def _post_live_loss_flags(today: dt.date) -> int:
     tasks.loop body would stop the loop."""
     try:
         return await _send_live_loss_flags(today)
-    except Exception:
-        log.exception("daily_recap: live loss watch flags failed, none posted")
+    except Exception as exc:
+        swallowed(log, "scan.post_live_loss_flags", exc,
+                  "daily_recap: live loss watch flags failed, none posted",
+                  level=logging.ERROR, exc_info=True)
         return 0
 
 
