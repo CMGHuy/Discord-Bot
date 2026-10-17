@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from swingbot.core.analytics.metrics import r_multiple  # noqa: E402
 from swingbot.core.backtesting.cohort_registry import cohort_key  # noqa: E402
 from swingbot.core.market.session import now_et  # noqa: E402
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
 
 
 # Real trade records (performance.py's log_trade) use these three
@@ -146,7 +147,10 @@ def main() -> int:
     parser.add_argument("--backtest", required=True, help="confluence replay trades JSON")
     parser.add_argument("--spy", default="market_data/SPY.csv")
     parser.add_argument("--out", default="swingbot/core/backtesting/cohort_registry.json")
+    instrument_cli.add_instrument_arg(parser)
     args = parser.parse_args()
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "emit_cohort_registry.py",
+                              "phase 6 (registry instrument_version column)")
 
     from swingbot.core.edge.regime2 import regime_series
 

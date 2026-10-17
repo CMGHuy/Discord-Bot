@@ -50,6 +50,7 @@ from swingbot.core.marketdata.watchlist import load_watchlist  # noqa: E402
 from swingbot.core.marketdata import training_data  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cache_dir_source  # noqa: E402
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
 
 # Components the backtest can actually observe. Verified empirically
 # before registering (flip the flag, same windows, compare expectancy).
@@ -223,7 +224,10 @@ def main(argv=None) -> int:
     ap.add_argument("--limit-symbols", type=int, default=None)
     ap.add_argument("--out", default="docs/superpowers/results/2026-07-26-edge-folds.md")
     cache_dir_source.add_args(ap)
+    instrument_cli.add_instrument_arg(ap)
     args = ap.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "wf_components.py",
+                              "phase 6 (cutover: walk-forward on the v2 folds)")
     cache_dir_source.resolve(args)
 
     def log(msg):

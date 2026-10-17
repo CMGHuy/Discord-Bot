@@ -33,6 +33,7 @@ from swingbot.core.backtesting.backtest_scenarios import _aggregate, replay_scen
 from swingbot.core.planning.plan_engine import simulate_exit
 from swingbot.core.marketdata import training_data
 from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
+from swingbot.core.backtesting.instrument import cli as instrument_cli
 from fetch_backtest_data import add_data_source_arg, apply_data_source
 
 TRAIN = resolve_instrument("v1").train_window   # v1 contract alias (v158 WC7)
@@ -85,7 +86,11 @@ def _sampled_frames() -> tuple[dict, int]:
 def main(argv=None):
     ap = argparse.ArgumentParser(description="confluence-gate grid over TRAIN")
     add_data_source_arg(ap)
-    apply_data_source(ap.parse_args(argv))
+    instrument_cli.add_instrument_arg(ap)
+    args = ap.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "tune_confluence_gates.py",
+                              "phase 5 (scan replay under v2)")
+    apply_data_source(args)
     frames, total = _sampled_frames()
     print(f"tickers: {len(frames)} of {total} (every {SAMPLE_EVERY}th, "
           f"alphabetical) = {sorted(frames)}\ntrain: {TRAIN}  rule: {RULE}\n")

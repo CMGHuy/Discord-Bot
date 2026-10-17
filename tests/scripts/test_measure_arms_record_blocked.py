@@ -54,3 +54,15 @@ def test_writes_one_jsonl_file_from_the_backtest_cache_frames(monkeypatch, tmp_p
 def test_cli_without_the_flag_is_main_unchanged(monkeypatch):
     monkeypatch.setattr(ma, "main", lambda argv: ("main", argv))
     assert ma.cli(["--knob", "X=1", "--stage", "pilot"]) == ("main", ["--knob", "X=1", "--stage", "pilot"])
+
+
+def test_record_blocked_takes_instrument_v1_and_refuses_v2_before_loading_anything(monkeypatch, tmp_path):
+    monkeypatch.setattr(ma, "cached_universe", lambda: pytest.fail("loaded the universe"))
+    monkeypatch.setattr(cr, "offline_context", lambda: pytest.fail("built the context"))
+    out = tmp_path / "rows.jsonl"
+    with pytest.raises(SystemExit) as exc:
+        ma.cli(["--record-blocked", str(out), "--instrument", "v2"])
+    assert exc.value.code != 0 and "v147" in str(exc.value) and not out.exists()
+    monkeypatch.setattr(ma, "cached_universe", lambda: [])
+    monkeypatch.setattr(cr, "offline_context", lambda: "ctx")
+    assert ma.cli(["--record-blocked", str(out), "--instrument", "v1"]) == 0

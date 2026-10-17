@@ -24,6 +24,7 @@ from swingbot.core.backtesting.arms.knobs import apply_knobs, parse_knob  # noqa
 from swingbot.core.backtesting.arms.pairing import changed_outcomes  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import build_stamp, code_hash  # noqa: E402
 from swingbot.core.backtesting.backtest_scenarios import _resolve_replay_workers  # noqa: E402
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
 from swingbot.core.marketdata import training_data  # noqa: E402
 
 LOG_DIR = ROOT / "logs"
@@ -249,7 +250,10 @@ def main(argv=None) -> int:
     parser.add_argument("--preregistration", type=Path, default=None)
     from fetch_backtest_data import add_data_source_arg, apply_data_source
     add_data_source_arg(parser)
+    instrument_cli.add_instrument_arg(parser)
     args = parser.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_arms.py",
+                              "phase 5 (v2 stage table)")
     apply_data_source(args)
     try:
         delta = dict(parse_knob(knob) for knob in args.knob)
@@ -291,7 +295,10 @@ def record_blocked_main(argv) -> int:
     parser.add_argument("--from", dest="date_from", default=TRAIN_WINDOW[0])
     parser.add_argument("--to", dest="date_to", default=TRAIN_WINDOW[1])
     parser.add_argument("--validation", action="store_true", help="refused: --record-blocked is TRAIN-only")
+    instrument_cli.add_instrument_arg(parser)
     args = parser.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_arms.py --record-blocked",
+                              "v147")
     require_train_window(args.date_from, args.date_to, validation=args.validation)
     context = cr.offline_context()
     universe = cached_universe()

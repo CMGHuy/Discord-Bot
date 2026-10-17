@@ -20,6 +20,7 @@ from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES
 from swingbot.core.marketdata import training_data
 from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
+from swingbot.core.backtesting.instrument import cli as instrument_cli
 from fetch_backtest_data import add_data_source_arg, apply_data_source
 
 TRAIN = resolve_instrument("v1").train_window   # v1 contract alias (v158 WC7)
@@ -63,7 +64,10 @@ def main(argv=None):
                     help="strategy names (default: all). Operational only: lets the grid "
                          "run in per-strategy chunks; the grid and selection rule are unchanged")
     add_data_source_arg(ap)
+    instrument_cli.add_instrument_arg(ap)
     args = ap.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "tune_exit_v2.py",
+                              "phase 6 (cutover: v2 exit tuning on the purged folds)")
     apply_data_source(args)
     # The grid explores trail/tp2 via the module defaults, so the adopted
     # Task 31 per-strategy overrides must not shadow the axes on a rerun.

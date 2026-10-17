@@ -32,6 +32,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
+
 HISTORY_PATH = ROOT / "docs" / "superpowers" / "results" / "quarterly_revalidation_history.json"
 ADOPTED_PATH = ROOT / "docs" / "superpowers" / "results" / "adopted_components.json"
 
@@ -169,7 +171,10 @@ def main() -> int:
     p.add_argument("--skip-refresh", action="store_true",
                    help="skip the cache refresh step (already fresh)")
     p.add_argument("--permutation-n", type=int, default=200)
+    instrument_cli.add_instrument_arg(p)
     args = p.parse_args()
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "quarterly_revalidation.py",
+                              "phase 6 (cutover: walk-forward on the v2 folds)")
 
     print(f"=== Quarterly re-validation, {datetime.date.today().isoformat()} ===")
     if not args.skip_refresh:

@@ -20,6 +20,7 @@ from swingbot.core.backtesting.backtest_wf import (  # noqa: E402
     ANCHORED_FOLDS, _default_run, _guarded, collect_portfolio_signals, gate,
     portfolio_replay, run_folds,
 )
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
 
 
 def main() -> int:
@@ -64,7 +65,10 @@ def main() -> int:
                         "if it does. For pre-registered one-shot validations (Task "
                         "E92) that must never silently re-run on the same window; "
                         "pass the same path you're appending results into.")
+    instrument_cli.add_instrument_arg(p)
     args = p.parse_args()
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "wf_run.py",
+                              "phase 6 (cutover: walk-forward on the v2 folds)")
 
     if args.once_guard and os.path.exists(args.once_guard):
         with open(args.once_guard, encoding="utf-8") as fh:
