@@ -10,8 +10,8 @@ import {
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Router, provideRouter } from '@angular/router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../../api/event-stream';
 import {
@@ -187,7 +187,7 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
   });
 
   it('renders the trigger price and the two fractions unsigned', () => {
-    const text = render('plan');
+    const text = render('overview');
     expect(text).toContain('Trigger');
     expect(text).toContain('101.50');
     // "TP1 closes +50%" would read as a gain. It means half the position.
@@ -196,8 +196,8 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
     expect(text).toContain('60%');
   });
 
-  it('renders the timeline on the Live tab', () => {
-    const text = render('live');
+  it('renders the timeline on Overview', () => {
+    const text = render('overview');
     expect(text).toContain('Timeline');
     // Creation is prepended -- status_history does not contain it.
     expect(text).toContain('CREATED');
@@ -205,32 +205,34 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
     expect(text).toContain('trigger filled');
   });
 
-  it('renders the scale-out legs, saying which is still open', () => {
-    const text = render('live');
-    expect(text).toContain('Scale-out');
+  it('renders settled exit legs in the Outcome card', () => {
+    const text = render('overview', DETAIL, 'CLOSED', { exit_price: 110 });
+    expect(text).toContain('Exit legs');
     expect(text).toContain('110.00');
     expect(text).toContain('+1.20R');
-    expect(text).toContain('still open');
   });
 
   it('shows the trade id in the header', () => {
     // Previously only visible (truncated) in the Trades list's # column --
     // reaching this page by clicking a row lost the one thing someone might
     // come here to copy (e.g. for `!trade ID`).
-    const text = render('plan');
+    const text = render('overview');
     expect(text).toContain(ID);
   });
 
-  it('labels the stop "Trailing stop" once TP1 has banked (PARTIAL)', () => {
+  it('keeps the original Stop beside the Working stop once TP1 has banked', () => {
     // A PARTIAL short's stop legitimately sits BELOW entry (it protects the
     // profit TP1 already locked in, not the original risk), which reads as
     // backwards unless the label says why.
-    const text = render('plan', DETAIL, 'PARTIAL');
-    expect(text).toContain('Trailing stop');
+    const text = render('overview', DETAIL, 'PARTIAL', { risk_stop: 95, stop_loss: 99 });
+    expect(text).toContain('Stop');
+    expect(text).toContain('95.00');
+    expect(text).toContain('Working stop');
+    expect(text).toContain('(was 95.00)');
   });
 
   it('labels the stop plain "Stop" before any TP1 (ACTIVE)', () => {
-    const text = render('plan', DETAIL, 'ACTIVE');
+    const text = render('overview', DETAIL, 'ACTIVE');
     expect(text).toContain('Stop');
     expect(text).not.toContain('Trailing stop');
   });
@@ -238,7 +240,7 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
   it('does not show a Scale-out panel for a position with one leg', () => {
     // One leg is not a scale-out, and a panel saying "First 100%" is noise on
     // every ordinary trade.
-    const text = render('live', { ...DETAIL, legs: [{ fraction: 1, exit_price: null }] });
+    const text = render('overview', { ...DETAIL, legs: [{ fraction: 1, exit_price: null }] });
     expect(text).not.toContain('Scale-out');
   });
 
@@ -292,7 +294,7 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
     backend = TestBed.inject(HttpTestingController);
   });
 
-  function mount(status = 'ACTIVE', overrides: object = {}, days: number | null = 3, tab = 'plan') {
+  function mount(status = 'ACTIVE', overrides: object = {}, days: number | null = 3, tab = 'overview') {
     const fixture = TestBed.createComponent(TradeDetail);
     fixture.componentRef.setInput('id', ID);
     fixture.componentRef.setInput('tab', tab);
@@ -474,7 +476,7 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
   });
 });
 
-describe('TradeDetail — partial position panel (v58)', () => {
+describe('TradeDetail — banked leg and open runner', () => {
   let backend: HttpTestingController;
 
   beforeEach(() => {
@@ -499,7 +501,7 @@ describe('TradeDetail — partial position panel (v58)', () => {
   ]) {
     const fixture = TestBed.createComponent(TradeDetail);
     fixture.componentRef.setInput('id', ID);
-    fixture.componentRef.setInput('tab', 'live');
+    fixture.componentRef.setInput('tab', 'overview');
     fixture.detectChanges();
     backend.expectOne(`/api/v1/trades/${ID}`).flush(
       tradeResponse({ ...DETAIL, legs_realized: legsRealized, working_stop: 101.33 },
@@ -511,10 +513,11 @@ describe('TradeDetail — partial position panel (v58)', () => {
 
   it('shows the runner as its own position once PARTIAL', () => {
     const text = renderPartial();
-    expect(text).toContain('Partial position');
-    expect(text).toContain('110.00');   // the TP1 leg's own fill, as "Entry"
+    expect(text).toContain('Position');
+    expect(text).toContain('Open shares');
+    expect(text).toContain('110.00');   // banked TP1 fill in the strip
     expect(text).toContain('50%');
-    expect(text).toContain('+2.00R');
+    expect(text).toContain('50% @ 110.00');
   });
 
   it('shows the pct and dollar figures for the banked leg', () => {
@@ -524,18 +527,20 @@ describe('TradeDetail — partial position panel (v58)', () => {
     expect(text).toContain('+50.00');
   });
 
-  it('does not render the panel before anything has banked', () => {
-    expect(renderPartial([])).not.toContain('Partial position');
+  it('omits the Banked tile before anything has banked', () => {
+    expect(renderPartial([])).not.toContain('Banked');
   });
 
-  it('does not render the panel outside PARTIAL', () => {
+  it('uses ordinary Shares outside PARTIAL', () => {
     const fixture = TestBed.createComponent(TradeDetail);
     fixture.componentRef.setInput('id', ID);
-    fixture.componentRef.setInput('tab', 'live');
+    fixture.componentRef.setInput('tab', 'overview');
     fixture.detectChanges();
     backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, 'ACTIVE'));
     fixture.detectChanges();
-    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Partial position');
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-row="Open shares"]')).toBeNull();
+    expect(el.querySelector('[data-row="Shares"]')).toBeTruthy();
   });
 });
 
@@ -615,7 +620,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     ['PENDING', ['trigger', 'distance', 'expires', 'created']],
     ['CANCELLED', ['status', 'created', 'trigger', 'fill']],
   ])('renders the %s strip directly after the header on every tab', (status, ids) => {
-    const el = mount('notes', DETAIL, status as string);
+    const el = mount('journal', DETAIL, status as string);
     const strip = el.querySelector('header.head + sb-outcome-strip');
     expect(strip).toBeTruthy();
     expect([...strip!.querySelectorAll('[data-tile]')].map(t => t.getAttribute('data-tile'))).toEqual(ids);
@@ -624,14 +629,14 @@ describe('TradeDetail — the shared Why components (v151)', () => {
   });
 
   it.each(['ACTIVE', 'PARTIAL'])('renders the %s outcome progress bar between the working stop and target', status => {
-    const el = mount('plan', DETAIL, status, { current_price: 105, stop_loss: 101, target: 109 });
+    const el = mount('overview', DETAIL, status, { current_price: 105, stop_loss: 101, target: 109 });
     const bar = el.querySelector('[data-tile="progress"] [role="progressbar"]');
     expect(bar).toBeTruthy();
     expect(bar!.getAttribute('aria-valuenow')).toBe('50');
   });
 
   it('keeps a partial runner open and separates its banked result', () => {
-    const el = mount('plan', { ...DETAIL, legs_realized: [
+    const el = mount('overview', { ...DETAIL, legs_realized: [
       { fraction: 0.5, exit_price: 110, r: 2, reason: 'tp1' },
     ] }, 'PARTIAL', { exit_price: 110, stop_loss: 101, target: 118, r_multiple: -0.5 });
     const strip = el.querySelector('sb-outcome-strip')!;
@@ -643,29 +648,83 @@ describe('TradeDetail — the shared Why components (v151)', () => {
   });
 
   it('flags a stale current price and unrealised result in the outcome strip', () => {
-    const el = mount('plan', DETAIL, 'ACTIVE', { current_price_stale: true });
+    const el = mount('overview', DETAIL, 'ACTIVE', { current_price_stale: true });
     const strip = el.querySelector('sb-outcome-strip')!;
     expect(strip.querySelector('[data-tile="price"] .stale-flag')?.textContent).toContain('delayed');
     expect(strip.querySelector('[data-tile="unrealised"] .stale-flag')?.textContent).toContain('delayed');
   });
 
   it('does not flag a fresh current price in the outcome strip', () => {
-    const el = mount('live', DETAIL, 'ACTIVE', { current_price_stale: false });
+    const el = mount('overview', DETAIL, 'ACTIVE', { current_price_stale: false });
     expect(el.querySelector('sb-outcome-strip .stale-flag')).toBeNull();
   });
 
   it('excludes synthetic created reasons from an unfilled strip', () => {
-    const el = mount('plan', { ...DETAIL, status_history: [] }, 'CANCELLED');
+    const el = mount('overview', { ...DETAIL, status_history: [] }, 'CANCELLED');
     expect(el.querySelector('[data-tile="status"] .tile-sub')).toBeNull();
   });
 
-  it('hosts the levels block, the two plan panels and the Why panel on the Plan tab', () => {
-    const el = mount('plan');
-    expect(el.querySelector('sb-levels-block')).toBeTruthy();
-    expect(el.querySelector('sb-if-it-gets-there')).toBeTruthy();
-    expect(el.querySelector('sb-sizing-panel')).toBeTruthy();
-    expect(el.querySelector('sb-why-panel')).toBeTruthy();
+  it('hosts all Overview cards in reading order and responsive grid areas', () => {
+    const el = mount('overview');
+    const grid = el.querySelector<HTMLElement>('div.grid-host > div.card-grid.overview-grid')!;
+    expect(grid).toBeTruthy();
+    expect([...grid.children].map(cell => cell.getAttribute('data-area'))).toEqual(['plan', 'position', 'outcome']);
+    for (const cell of [...grid.children] as HTMLElement[]) expect(cell.style.gridArea).toBe(cell.dataset['area']);
+    expect(grid.style.getPropertyValue('--areas-1')).toBe('"plan" "position" "outcome"');
+    expect(grid.style.getPropertyValue('--areas-2')).toBe('"plan position" "outcome outcome"');
+    expect(grid.style.getPropertyValue('--areas-3')).toBe('"plan position outcome"');
+    expect(grid.querySelector('sb-trade-plan-card')).toBeTruthy();
+    expect(grid.querySelector('sb-trade-position-card')).toBeTruthy();
+    expect(grid.querySelector('sb-trade-outcome-card')).toBeTruthy();
+    expect(el.querySelector('sb-why-panel')).toBeNull();
     expect(el.textContent).toContain('Paper plan — this page places no orders.');
+  });
+
+  it('uses the current stop in the Outcome next block and original risk in Position', () => {
+    const el = mount('overview', { ...DETAIL, working_stop: 101 }, 'PARTIAL',
+      { risk_stop: 95, stop_loss: 101, shares: 5, position_value: 500 });
+    const position = el.querySelector('sb-trade-position-card')!;
+    expect(position.querySelector('[data-row="Open shares"]')?.textContent).toContain('5');
+    expect(position.querySelector('[data-row="$ at risk"]')?.textContent).toContain('25.00');
+    expect(position.querySelector('[data-row="Deployed"]')?.textContent).toContain('500.00');
+    expect(el.querySelector('sb-trade-outcome-card sb-if-it-gets-there')?.textContent).toContain('101.00');
+  });
+
+  it('shows the final tab labels and preserves the Journal body', () => {
+    const el = mount('journal');
+    expect([...el.querySelectorAll('[role="tab"]')].map(tab => tab.textContent?.trim()))
+      .toEqual(['Overview', 'Why', 'Chart', 'Journal']);
+    expect(el.querySelector('.notes')).toBeTruthy();
+    expect(el.querySelector('.note-field')).toBeTruthy();
+  });
+
+  it.each([
+    ['plan', null, 'Overview'], ['live', null, 'Overview'],
+    ['notes', 'journal', 'Journal'], ['strategy', 'why', 'Why'],
+  ])('renders and replaces legacy tab %s immediately', (legacy, target, label) => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const el = mount(legacy!);
+    expect(el.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain(label);
+    expect(navigate).toHaveBeenCalledWith([], {
+      queryParams: { tab: target }, queryParamsHandling: 'merge', replaceUrl: true,
+    });
+  });
+
+  it.each([undefined, 'unknown'])('falls back to Overview without rewriting tab %s', requested => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const el = mount(requested as string);
+    expect(el.querySelector('.overview-grid')).toBeTruthy();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('removes the tab parameter when Overview is selected', () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const el = mount('journal');
+    const overview = [...el.querySelectorAll<HTMLButtonElement>('[role="tab"]')][0];
+    overview.click();
+    expect(navigate).toHaveBeenCalledWith([], {
+      queryParams: { tab: null }, queryParamsHandling: 'merge', replaceUrl: true,
+    });
   });
 
   it('renders Why cards in reading order with areas for all device classes', () => {
@@ -681,7 +740,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(grid.style.getPropertyValue('--areas-2')).toBe('"why why" "scores context" "sources sources" "breakdown breakdown" "gates gates"');
     expect(grid.style.getPropertyValue('--areas-3')).toBe('"why why scores" "sources sources sources" "breakdown breakdown breakdown" "gates gates context"');
     expect(grid.querySelector('[data-area="context"] sb-trade-strategy-record')).toBeTruthy();
-    expect(el.querySelectorAll('[role="tab"]')[4]?.textContent).toContain('Why');
+    expect(el.querySelectorAll('[role="tab"]')[1]?.textContent).toContain('Why');
   });
 
   it('uses a shrinkable single-column track for the initial Why layout', () => {
@@ -755,7 +814,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     fixture.detectChanges();
     backend.expectOne('/api/v1/analytics/strategies').flush({ strategies: [] });
     fixture.detectChanges();
-    fixture.componentRef.setInput('tab', 'live');
+    fixture.componentRef.setInput('tab', 'overview');
     fixture.detectChanges();
     fixture.componentRef.setInput('tab', 'why');
     fixture.detectChanges();
@@ -801,10 +860,10 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(text).not.toContain('Quality breakdown');
   });
 
-  it('hosts the outcome path on the Live tab', () => {
-    const el = mount('live');
+  it('hosts the outcome path on Overview', () => {
+    const el = mount('overview');
     expect(el.querySelector('sb-outcome-path')).toBeTruthy();
-    expect(el.textContent).toContain('Scale-out');
+    expect(el.querySelector('sb-trade-outcome-card')).toBeTruthy();
     expect(el.textContent).toContain('Timeline');
   });
 
