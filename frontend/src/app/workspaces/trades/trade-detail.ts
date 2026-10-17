@@ -686,7 +686,7 @@ function cameFromPlan(): boolean {
     }
 
     .grid-host { min-width: 0; }
-    .card-grid { display: grid; gap: var(--section-gap); align-items: start; grid-template-areas: var(--areas-1); }
+    .card-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); align-items: start; grid-template-areas: var(--areas-1); }
     .cell { min-width: 0; display: grid; gap: var(--section-gap); }
 
     .panels {

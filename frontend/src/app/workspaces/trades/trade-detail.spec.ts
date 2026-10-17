@@ -684,6 +684,49 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(el.querySelectorAll('[role="tab"]')[4]?.textContent).toContain('Why');
   });
 
+  it('uses a shrinkable single-column track for the initial Why layout', () => {
+    const el = mount('why');
+    const grid = el.querySelector<HTMLElement>('.why-grid')!;
+    expect(getComputedStyle(grid).gridTemplateColumns).toBe('minmax(0, 1fr)');
+    expect(getComputedStyle(grid.parentElement!).minWidth).toBe('0px');
+    for (const cell of [...grid.children]) {
+      expect(getComputedStyle(cell).minWidth).toBe('0px');
+    }
+  });
+
+  it.each([
+    ['why', { explanation: null }, {}],
+    ['scores', {}, { confidence_score: null, confidence_level: null, quality_score: null, badge: null }],
+    ['sources', { confirmed_by: [], target_sources: [], stop_sources: [], target2_sources: [] }, {}],
+    ['breakdown', { confidence_points: null, confidence_breakdown: null, quality_breakdown: [] }, {}],
+  ])('omits only the %s card when its own data is absent', (absent, detail, trade) => {
+    const el = mount('why', { ...DETAIL, ...detail }, 'ACTIVE', trade);
+    expect(el.querySelector(`[data-area="${absent}"]`)).toBeNull();
+    expect(el.querySelectorAll('.why-grid > .cell').length).toBe(5);
+    expect(el.querySelector('.no-detail')).toBeNull();
+    expect(el.querySelector('[data-area="gates"]')).toBeTruthy();
+    expect(el.querySelector('[data-area="context"]')).toBeTruthy();
+  });
+
+  it('keeps each WhyPanel cell restricted to its own section', () => {
+    const el = mount('why');
+    const sections = [
+      ['why', 'Why this trade'],
+      ['breakdown', 'Confidence breakdown'],
+      ['gates', "Gate margins (vs today's thresholds)"],
+      ['context', 'Calendar in the holding window'],
+    ];
+    for (const [area, heading] of sections) {
+      const cell = el.querySelector(`[data-area="${area}"]`)!;
+      expect(cell.querySelectorAll('sb-why-panel').length).toBe(1);
+      expect([...cell.querySelectorAll('sb-why-panel h2')].map(node => node.textContent))
+        .toEqual([heading]);
+    }
+    expect(el.textContent).not.toContain('Levels & methods');
+    expect(el.querySelector('[data-area="scores"]')?.textContent)
+      .toContain('Scores rank setups; they are not win probabilities.');
+  });
+
   it('omits absent reasoning cards and compacts the area bindings', () => {
     const el = mount('why', { ...DETAIL, explanation: null, confirmed_by: [],
       target_sources: [], stop_sources: [], confidence_breakdown: null, quality_breakdown: [], status_history: [] },
