@@ -26,6 +26,7 @@ from swingbot import config
 from swingbot.core.db import write_failure
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import regime2
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import opex
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.session import US_MARKET_TZ, session_close
@@ -125,15 +126,17 @@ def _sector_inputs(tickers: list, bar_date: dt.date, now: dt.datetime) -> tuple[
         etf_of = fetch._etf_symbol_of_sector()
         sector_of, needed = fetch._sector_etfs_for_tickers(tickers)
         return sector_of, etf_of, (closed_frames(needed, bar_date, now) if needed else {})
-    except Exception:
-        log.warning("outlook: sector ETFs unavailable -- ticker-only RS", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.outlook_run.sector_inputs", exc,
+                  "outlook: sector ETFs unavailable -- ticker-only RS", exc_info=True)
         return {}, {}, {}
 
 
 def _regimes(spy):
     try:
         return regime2.regime_series(spy)
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.outlook_run.regimes", exc, level=logging.DEBUG)
         return None
 
 
@@ -196,7 +199,8 @@ def _plan_line(item, plan, risk: float | None = None) -> OutlookLine:
 def _risk_dollars(plan) -> float | None:
     try:
         sizing = account_module.compute_position_size(plan.trigger_price, plan.stop_loss)
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.outlook_run.risk_dollars", exc, level=logging.DEBUG)
         return None
     if not sizing or not sizing.get("shares"):
         return None
@@ -244,7 +248,8 @@ def _issue(item, plan, result: OutlookResult, frames: dict, spy) -> None:
 def _hourly(ticker: str):
     try:
         return data_store.load_from_disk(ticker, "hourly")
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.outlook_run.hourly", exc, level=logging.DEBUG)
         return None                    # display-only context; never fails a card
 
 

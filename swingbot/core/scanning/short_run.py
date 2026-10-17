@@ -25,6 +25,7 @@ from swingbot.core.edge import regime2
 from swingbot.core.edge import throttle
 from swingbot.core.infra.logsetup import new_scan_id, scan_context
 from swingbot.core.infra.notifier import notify_secondary
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import market_context, opex
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.session import session_date
@@ -53,8 +54,10 @@ def _stamp_context(frames: dict, spy_df) -> dict:
     for ticker, df in frames.items():
         try:
             stamped[ticker] = market_context.attach(df, spy_df=spy_df)
-        except Exception:
-            log.exception("market_context.attach failed for %s", ticker)
+        except Exception as exc:
+            swallowed(log, "scan.short_run.stamp_context", exc,
+                      "market_context.attach failed for %s", ticker,
+                      level=logging.ERROR, exc_info=True)
             stamped[ticker] = df
     return stamped
 
@@ -166,8 +169,9 @@ def _fit_trendline(df, plan, h, trend):
     try:
         return fit_trendline(df, lookback=h.get("fib_lookback", DEFAULT_TRENDLINE_LOOKBACK_DAYS),
                              current_price=plan.entry, is_bull=trend == "bullish")
-    except Exception:
-        log.warning("Trendline fit failed for %s", plan, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.short_run.fit_trendline", exc, "Trendline fit failed for %s", plan,
+                  exc_info=True)
         return None
 
 
@@ -219,7 +223,8 @@ def _render_chart(item, nums, df, frames, spy_df, trade_id, fit):
             market_price=plan.market_price, trendline_fit=fit)
         return path, filename
     except Exception as exc:
-        log.warning("Could not generate trade chart for %s: %s", result.ticker, exc, exc_info=True)
+        swallowed(log, "scan.short_run.render_chart", exc,
+                  "Could not generate trade chart for %s: %s", result.ticker, exc, exc_info=True)
         return None, None
 
 
@@ -265,7 +270,9 @@ def _stamp_intraday(item) -> None:
     try:
         item.intraday = rs_factors.intraday_confirms(item.result.ticker, item.result.trend)
     except Exception as exc:
-        log.debug("Intraday confirmation unavailable for %s: %s", item.result.ticker, exc)
+        swallowed(log, "scan.short_run.stamp_intraday", exc,
+                  "Intraday confirmation unavailable for %s: %s", item.result.ticker, exc,
+                  level=logging.DEBUG)
         item.intraday = None
 
 
@@ -353,8 +360,9 @@ def _lane_state(reference, snapshot, regime) -> dict:
     regimes = None
     try:
         regimes = regime2.regime_series(reference.spy)
-    except Exception:
-        log.debug("regime_series computation failed", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.short_run.lane_state", exc, "regime_series computation failed",
+                  level=logging.DEBUG, exc_info=True)
     return {"sector_of": snapshot.sector_of, "etf_symbol_of": fetch._etf_symbol_of_sector(),
             "sector_frames": dict(reference.sector_frames), "spy": reference.spy,
             "regime": regime, "regimes": regimes}
@@ -377,8 +385,10 @@ def _log_funnel(funnel: ShortFunnel, alerts: int) -> None:
     try:
         telemetry.log_scan_telemetry({"type": "short_funnel", "alerts": alerts,
                                       "short_funnel": funnel.snapshot()})
-    except Exception:
-        log.exception("SHORT funnel telemetry failed -- not blocking the lane")
+    except Exception as exc:
+        swallowed(log, "scan.short_run.log_funnel", exc,
+                  "SHORT funnel telemetry failed -- not blocking the lane",
+                  level=logging.ERROR, exc_info=True)
 
 
 def _sync_run_short_scan(require_confirmation: bool, progress=None) -> tuple:
@@ -434,8 +444,9 @@ async def run_short_universe_scan(require_confirmation: bool = True, bot=None, p
                     _sync_run_short_scan, require_confirmation, progress)
             except write_failure.StoreWriteHalt:
                 raise
-            except Exception:
-                log.warning("SHORT extra lane failed -- base scan unaffected", exc_info=True)
+            except Exception as exc:
+                swallowed(log, "scan.short_run.extra_lane", exc,
+                          "SHORT extra lane failed -- base scan unaffected", exc_info=True)
                 return []
             finally:
                 runstate._mark_running(False)

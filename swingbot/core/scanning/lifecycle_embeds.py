@@ -12,6 +12,7 @@ from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core import presentation as ui
 from swingbot.core.infra.posted_log import log_posted
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.instructions import total_r
 from swingbot.core.presentation.kinds import Kind
@@ -58,7 +59,9 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
                         "mae": (mae_date, mae_price), "mae_r": entry.get("mae_r"),
                     }
         except Exception as _je:
-            log.debug("Could not compute MFE/MAE markers for trade %s: %s", trade.get("id"), _je)
+            swallowed(log, "scan.regenerate_chart.markers", _je,
+                      "Could not compute MFE/MAE markers for trade %s: %s", trade.get("id"), _je,
+                      level=logging.DEBUG)
 
         return generate_trade_chart(
             trade["ticker"], df, trade["entry"], trade["stop_loss"], trade["take_profit"],
@@ -82,7 +85,8 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
             trendline_fit=trade.get("trendline_fit"),
         )
     except Exception as e:
-        log.warning("Could not regenerate chart for trade %s: %s", trade.get("id"), e, exc_info=True)
+        swallowed(log, "scan.regenerate_chart", e, "Could not regenerate chart for trade %s: %s",
+                  trade.get("id"), e, exc_info=True)
         return None
 
 
@@ -162,8 +166,8 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
         closed_ = datetime.fromisoformat(trade["closed_at"])
         days    = max(0, (closed_ - opened).days)
         embed.add_field(name="Held", value=f"{days}d  ({trade['opened_at'][:10]} → {trade['closed_at'][:10]})", inline=False)
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.closed_trade_embed.held", exc, level=logging.DEBUG)
 
     # Lesson learned / original explanation
     explanation = trade.get("explanation") or ""
@@ -195,8 +199,8 @@ def build_closed_trade_embed(trade: dict) -> discord.Embed:
         opened_dt = datetime.fromisoformat(trade["opened_at"])
         closed_dt = datetime.fromisoformat(trade["closed_at"])
         held_phrase = f" after being held {_format_duration_hms(max(0.0, (closed_dt - opened_dt).total_seconds()))}"
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.closed_trade_embed.held_phrase", exc, level=logging.DEBUG)
     exit_phrase = f"{cur}{exit_price:.2f}" if exit_price is not None else "an unrecorded price"
     what_happened = (
         f"This {dir_word} trade opened at {cur}{entry:.2f} and was {reason_phrase}{held_phrase}, "
@@ -227,7 +231,9 @@ async def notify_closed_trades(bot, newly_closed: list):
         try:
             channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
         except Exception as _ce:
-            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce, exc_info=True)
+            swallowed(log, "scan.notify_closed_trades.channel", _ce,
+                      "Could not resolve closed-trades channel %s: %s",
+                      config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce, exc_info=True)
             return
     for trade in newly_closed:
         status = trade.get("status", "")
@@ -239,7 +245,9 @@ async def notify_closed_trades(bot, newly_closed: list):
             await channel.send(**ui.push_kwargs(embed))
             log_posted(embed, trade.get("ticker"), channel)
         except Exception as e:
-            log.warning("Could not post closed-trade notification for %s: %s", trade.get("id"), e, exc_info=True)
+            swallowed(log, "scan.notify_closed_trades.post", e,
+                      "Could not post closed-trade notification for %s: %s", trade.get("id"), e,
+                      exc_info=True)
 
 
 def build_near_close_embed(warning: dict) -> discord.Embed:
@@ -275,7 +283,9 @@ async def notify_near_close(bot, warnings: list):
         try:
             channel = await bot.fetch_channel(int(config.DISCORD_CHANNEL_TRADES_HISTORY_ID))
         except Exception as _ce:
-            log.warning("Could not resolve closed-trades channel %s: %s", config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce, exc_info=True)
+            swallowed(log, "scan.notify_near_close.channel", _ce,
+                      "Could not resolve closed-trades channel %s: %s",
+                      config.DISCORD_CHANNEL_TRADES_HISTORY_ID, _ce, exc_info=True)
             return
     for warning in warnings:
         try:
@@ -283,7 +293,9 @@ async def notify_near_close(bot, warnings: list):
             await channel.send(**ui.push_kwargs(embed))
             log_posted(embed, warning["trade"].get("ticker"), channel)
         except Exception as e:
-            log.warning("Could not post near-close warning for %s: %s", warning["trade"].get("id"), e, exc_info=True)
+            swallowed(log, "scan.notify_near_close.post", e,
+                      "Could not post near-close warning for %s: %s", warning["trade"].get("id"), e,
+                      exc_info=True)
 
 
 #: v2 plan transition -> registry kind (v110 §2). "closed" is keyed by reason below.
@@ -484,6 +496,7 @@ async def notify_plan_events(bot, events) -> list:
                     log_posted(embed, plan.ticker, feed)
                     pinged = True
                 except Exception as exc:
+                    swallowed(log, "scan.notify_plan_events.feed", exc, level=logging.DEBUG)
                     _warn_throttled(plan.plan_id, "execution feed: %s for plan %s failed "
                                     "on feed (%s); history will notify instead",
                                     event.transition, plan.plan_id, exc)
@@ -493,6 +506,7 @@ async def notify_plan_events(bot, events) -> list:
                     log_posted(embed, plan.ticker, history)
                     pinged = True
                 except Exception as exc:
+                    swallowed(log, "scan.notify_plan_events.history", exc, level=logging.DEBUG)
                     _warn_throttled(plan.plan_id, "execution feed: history copy of %s for "
                                     "plan %s failed: %s", event.transition, plan.plan_id, exc)
             if pinged:
@@ -503,6 +517,7 @@ async def notify_plan_events(bot, events) -> list:
                 _warn_throttled(plan.plan_id, "execution feed: %s for plan %s reached no "
                                 "channel; it will be re-sent", event.transition, plan.plan_id)
         except Exception as exc:
+            swallowed(log, "scan.notify_plan_events.event", exc, level=logging.DEBUG)
             _warn_throttled(event.plan_id, "execution feed: could not post %s for plan %s: %s",
                             event.transition, event.plan_id, exc)
     return deliveries
