@@ -104,3 +104,75 @@ def fmt_r(x: float | None) -> str:
     if x < 0:
         return f"{_MINUS}{abs(x):.1f}R"
     return f"{x:.1f}R"
+
+
+def fmt_money(amount: float, currency: str) -> str:
+    """'+$500.00' / '-$500.00' -- an explicitly signed currency figure.
+
+    One helper because this exact format string had been hand-copied into
+    three surfaces (the two-leg sizing block, the TP1-hit alert and the
+    !liveplans board) and got the sign wrong twice on the way: once as a
+    hardcoded '+' with no abs() ('+$-500.00'), and once as a bare '' for the
+    negative branch, which renders a banked *loss* as a positive-looking
+    '$500.00'. The sign is the whole point of the figure, so it lives in
+    exactly one place. v170 moved it here from scanning/plan_table.py
+    (``signed_money`` there is this same object) so presentation/instructions
+    can use it without importing scanning. The minus is ASCII, unlike
+    fmt_r's U+2212 (v170 A9: changing either would alter every surface)."""
+    return f"{'+' if amount >= 0 else '-'}{currency}{abs(amount):,.2f}"
+
+
+#: v170: the execution feed's one table of symbols. Every glyph the feed
+#: prints comes from here (presentation/instructions.py holds no glyph
+#: literal), each glyph has exactly one meaning, and the !help legend is
+#: generated from it. The warning sign stays reserved for block warnings.
+FEED_SYMBOLS: dict[str, str] = {
+    "entry": "▶",          # ▶
+    "stop": "\U0001f6d1",       # 🛑
+    "tp1": "\U0001f4b0",        # 💰
+    "runner": "\U0001f3c3",     # 🏃
+    "tp2": "\U0001f3af",        # 🎯
+    "trail": "〜",          # 〜
+    "breakeven": "⚖",      # ⚖ (no variation selector)
+    "expiry": "⏳",         # ⏳
+    "invalid": "⛔",        # ⛔
+    "if_fills": "\U0001f512",   # 🔒
+    "pnl": "\U0001f9fe",        # 🧾
+    "win": "✅",            # ✅
+    "loss": "❌",           # ❌
+    "flat": "➖",           # ➖
+    "at_or_above": "≥",    # ≥
+    "at_or_below": "≤",    # ≤
+}
+
+#: The legend's word for each FEED_SYMBOLS key, same keys, same order.
+FEED_SYMBOL_WORDS: dict[str, str] = {
+    "entry": "entry",
+    "stop": "stop",
+    "tp1": "first target (TP1)",
+    "runner": "runner",
+    "tp2": "second target (TP2)",
+    "trail": "trailing stop",
+    "breakeven": "stop to break-even",
+    "expiry": "time limit",
+    "invalid": "invalidation",
+    "if_fills": "if the stop fills",
+    "pnl": "profit and loss",
+    "win": "win",
+    "loss": "loss",
+    "flat": "flat",
+    "at_or_above": "at or above",
+    "at_or_below": "at or below",
+}
+
+#: Every feed P&L figure is paper and gross: the tracker knows no fees,
+#: slippage or tax (tracking/performance.py module docstring).
+COST_BASIS = "(paper, gross)"
+COST_BASIS_SENTENCE = "Feed dollars: paper account, before fees, slippage and tax."
+
+
+def feed_legend() -> str:
+    """The !help legend line, built from FEED_SYMBOLS so it cannot drift."""
+    pairs = " · ".join(f"{glyph} {FEED_SYMBOL_WORDS[key]}"
+                       for key, glyph in FEED_SYMBOLS.items())
+    return f"Feed symbols: {pairs}. {COST_BASIS_SENTENCE}"
