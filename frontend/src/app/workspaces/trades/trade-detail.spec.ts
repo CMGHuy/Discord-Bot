@@ -319,6 +319,13 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
     expect(tags?.querySelector('.origin')).toBeNull();
   });
 
+  it('omits an absent badge while retaining tier and confidence', () => {
+    const tags = mount('ACTIVE', { badge: null }).el.querySelector('.identity > .tags');
+    const chips = [...tags!.querySelectorAll('sb-quality-chip')];
+    expect(chips.map(chip => chip.textContent?.trim())).toEqual(['Tier A', 'Lv4']);
+    expect(tags?.textContent).not.toContain('VALIDATED');
+  });
+
   it('identifies a legacy record', () => {
     expect(mount('ACTIVE', { origin: 'legacy' }).el.querySelector('.identity .origin')?.textContent).toBe('legacy');
   });

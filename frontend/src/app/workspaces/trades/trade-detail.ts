@@ -669,6 +669,8 @@ function cameFromPlan(): boolean {
 
     .tags {
       display: flex;
+      flex: 1 1 240px;
+      min-width: 0;
       align-items: center;
       gap: var(--space-6);
       flex-wrap: wrap;
