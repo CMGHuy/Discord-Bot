@@ -19,7 +19,7 @@ from swingbot.core.infra import pitr_watch
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
-from . import cooldown, notices, outlook, presence, recap, runstate
+from . import cooldown, notices, ops_watch, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
@@ -232,6 +232,7 @@ async def _session_scan_tick():
     await asyncio.to_thread(purge)
 
     _refresh_snapshot_safely()
+    await ops_watch.check_provider_health()
 
     f = progress.funnel
     if alerts:
@@ -1044,7 +1045,8 @@ def _always_on_loops() -> tuple:
     """Loops on_ready starts unconditionally, in start order."""
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
             weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
-            pitr_watch_loop, next_session_scan, next_session_wrapup)
+            pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
+            next_session_wrapup)
 
 
 def _start_background_loops() -> None:
