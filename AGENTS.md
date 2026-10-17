@@ -422,24 +422,21 @@ each step in `.superpowers/sdd/progress.md`.
 ## Function complexity limit
 
 Every function and method you write or change ends at cyclomatic complexity
-**below 15**. It is enforced by `python scripts/dev/complexity_gate.py` against
-`scripts/dev/complexity_baseline.json`, in `testrun.py full` and in CI (radon is
-pinned in `requirements.txt`); use `python -m radon cc -s -n C <files>` while
-iterating. The gate fails on `new`, `risen`, `improved` and `gone`; run
-`--update` in the same commit for the last two. `--update` only shrinks the
-baseline, and closures are measured on their own. It covers `swingbot/`,
-`bot.py`, `admin_ui.py`, `scripts/` and `tests/`, and holds for urgent fixes too.
+**below 15**: `python scripts/dev/complexity_gate.py` enforces it against
+`scripts/dev/complexity_baseline.json` (`testrun.py full`, CI), failing on new,
+risen, improved, gone; `--update` (only shrinks) in the same commit for the last
+two. Closures count alone. Covers `swingbot/`, `scripts/`, `tests/` and the two
+entry points; urgent fixes too.
 
 - Split at a real seam (gather, decide, render), table-drive an `if/elif` chain
-  keyed on a value, use guard clauses, and name conditions as helpers. A helper
-  that takes ten parameters and returns nine of them, a giant comprehension
-  holding the same branches, or a `# noqa` does not count.
-- A legacy function already at 15 or more never gets worse: put your new logic in
-  a helper under the limit. Decomposing a legacy function is its own commit.
-- A refactor never changes behaviour: have tests around it first (for a chart,
-  compare rendered bytes before and after), commit it separately from behaviour
-  changes, and route anything that could move a backtest number through
-  `backtest-gate`. A plan task written before this rule loses to it.
+  keyed on a value, use guard clauses, name conditions as helpers. Ten-parameter
+  helpers, giant comprehensions and `# noqa` do not count.
+- A legacy function already at 15 or more never gets worse: put new logic in a
+  helper under it. Decomposing a legacy function is its own commit.
+- A refactor never changes behaviour: have tests around it first (charts: compare
+  bytes), commit it separately from behaviour changes, and route
+  anything that could move a backtest number through `backtest-gate`. An older plan
+  task loses to this rule.
 
 Detail: `docs/claude/code-complexity.md`.
 
