@@ -365,9 +365,10 @@ def test_watch_orders_alerts_then_confluence_by_horizon_then_strategies():
 
 def test_order_without_alerts_puts_pooled_last_among_confluence_rows():
     rows = [{"source": "confluence", "strategy": "ALL", "horizon": h, "alert": False}
-            for h in (None, "9m", "1w", "2m")]
+            for h in (None, "12y", "9m", "1w", "2m")]
     ordered = order_live_loss_rows(rows)
-    assert [r["horizon"] for r in ordered] == ["1w", "2m", "9m", None]
+    # a horizon outside horizon_order() sorts after every known one, still before pooled
+    assert [r["horizon"] for r in ordered] == ["1w", "2m", "9m", "12y", None]
 
 
 def test_watch_passes_counts_through_and_dedupes_registry_keys():

@@ -355,12 +355,17 @@ def live_loss_row(entry: dict, live: list, *,
     }
 
 
+def _horizon_position(horizon, horizons: list) -> int:
+    """Known horizons in vocabulary order, then any unknown one, then pooled (None)."""
+    if horizon is None:
+        return len(horizons) + 1
+    return horizons.index(horizon) if horizon in horizons else len(horizons)
+
+
 def _row_rank(row: dict, horizons: list) -> tuple:
     first = 0 if row.get("alert") else 1
     if row.get("source") == "confluence":
-        horizon = row.get("horizon")
-        position = horizons.index(horizon) if horizon in horizons else len(horizons)
-        return (first, 0, position, "")
+        return (first, 0, _horizon_position(row.get("horizon"), horizons), "")
     return (first, 1, 0, str(row.get("strategy")))
 
 
