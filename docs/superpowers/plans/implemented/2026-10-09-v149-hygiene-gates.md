@@ -4,7 +4,7 @@
 
 **Bump:** none
 **Edge:** none (integrity)
-**Spec:** [`docs/superpowers/specs/2026-10-09-v149-hygiene-gates-design.md`](../specs/2026-10-09-v149-hygiene-gates-design.md)
+**Spec:** [`docs/superpowers/specs/2026-10-09-v149-hygiene-gates-design.md`](../../specs/implemented/2026-10-09-v149-hygiene-gates-design.md)
 
 **Goal:** Turn three prose rules into failing checks: a ratcheting cyclomatic-complexity gate (H1), ESLint on the Angular frontend with a frozen baseline (H2), and a test that every `.py` path `README.md` names exists (H3).
 
