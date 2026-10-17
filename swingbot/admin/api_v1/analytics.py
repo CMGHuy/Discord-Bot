@@ -721,6 +721,9 @@ def analytics_calibration():
         "deciles": calibration.get("deciles", []),
         "levels": calibration.get("levels", []),
         "drift": calibration.get("drift", []),
+        # v164 D4: {"rows": [...], "counts": {...}}. A snapshot cached before
+        # the deploy has no key; serve the empty shape, never a 500.
+        "live_loss_watch": calibration.get("live_loss_watch") or {"rows": [], "counts": {}},
         "scope": "all-time",
     })
 

@@ -23,7 +23,7 @@ def test_build_snapshot_has_every_documented_key():
                                     "profit_factor", "sharpe", "sortino", "max_drawdown_pct",
                                     "total_pnl", "streaks"}
     assert set(snap["by"]) == set(DIMENSIONS)
-    assert set(snap["calibration"]) == {"deciles", "levels", "drift"}
+    assert set(snap["calibration"]) == {"deciles", "levels", "drift", "live_loss_watch"}
     assert snap["overall"]["n"] == 5
 
 
@@ -114,3 +114,68 @@ def test_refresh_snapshot_excludes_open_trades_from_all_analytics(tmp_path, monk
     for rows in snap["by"].values():
         assert all(row["n"] == row["wins"] + row["losses"] for row in rows)
     assert all(row["key"] != "unknown" for name in ("dow", "month") for row in snap["by"][name])
+
+
+# ---------------------------------------------------------------------------
+# v164 LW5: calibration.live_loss_watch, computed from BOTH ledgers
+# ---------------------------------------------------------------------------
+from swingbot.core.analytics import calibration as calibration_mod
+
+
+def _watch_registry():
+    """A confluence 4w row, the confluence pooled row, and one strategy row."""
+    def row(source, strategy, horizon):
+        return {"source": source, "strategy": strategy, "horizon": horizon, "status": "WEAK",
+                "n": 300, "win_rate": 52.0, "expectancy_r": -0.05,
+                "window": "2024-01-01..2025-12-31", "run_date": "2026-05-01"}
+    return [row("confluence", "ALL", "4w"), row("confluence", "ALL", None),
+            row("strategy", "RSI", None)]
+
+
+def _watch_trade(i, status="loss", **over):
+    """A closed trade inside the live-loss-watch population (opened after
+    calibration.EXPR_WATCH_START = 2026-10-16, Berlin date)."""
+    trade = _t(1, status)
+    trade.update({"id": f"w{i}", "opened_at": f"2026-10-{19 + i:02d}T10:00:00+00:00",
+                  "closed_at": f"2026-10-{20 + i:02d}T10:00:00+00:00"})
+    trade.update(over)
+    return trade
+
+
+def _rows_by_key(watch):
+    return {(r["source"], r["strategy"], r["horizon"]): r for r in watch["rows"]}
+
+
+def test_snapshot_live_loss_watch_pools_both_ledgers():
+    registry = _watch_registry()
+    closed = [_t(1), _watch_trade(1), _watch_trade(2, "win")]   # _t(1) opened 2026-03: before the start
+    weak_closed = [_watch_trade(3, source="strategy", strategy="RSI", horizon_key=None, ledger="weak")]
+
+    snap = build_snapshot(closed, 10_000.0, registry, weak_closed=weak_closed)
+
+    watch = snap["calibration"]["live_loss_watch"]
+    assert watch == calibration_mod.live_loss_watch([*closed, *weak_closed], registry)
+    rows = _rows_by_key(watch)
+    assert rows[("confluence", "ALL", "4w")]["live_n"] == 2
+    assert rows[("confluence", "ALL", None)]["live_n"] == 2
+    assert rows[("strategy", "RSI", None)]["live_n"] == 1      # the weak-ledger trade counts
+    assert set(watch["counts"]) == set(calibration_mod.WATCH_COUNT_KEYS)
+    # badge_drift is unchanged: still the main ledger only, same call as before.
+    assert snap["calibration"]["drift"] == calibration_mod.badge_drift(closed, registry)
+
+
+def test_refresh_snapshot_threads_the_weak_ledger_into_the_watch(tmp_path, monkeypatch):
+    snap_path = str(tmp_path / "analytics_snapshot.json")
+    monkeypatch.setattr("swingbot.core.analytics.snapshots.DEFAULT_PATH", snap_path)
+    trades = [_watch_trade(1), _watch_trade(2, "open"),
+              _watch_trade(3, source="strategy", strategy="RSI", horizon_key=None, ledger="weak")]
+
+    with patch("swingbot.core.tracking.performance.TradeLog") as MockLog, \
+         patch("swingbot.core.planning.account.load_account_config", return_value={"base_balance": 10_000.0}), \
+         patch("swingbot.core.backtesting.registry.load_registry", return_value=_watch_registry()):
+        MockLog.return_value.get_trades.return_value = trades
+        refresh_snapshot()
+
+    rows = _rows_by_key(load_snapshot(path=snap_path)["calibration"]["live_loss_watch"])
+    assert rows[("confluence", "ALL", "4w")]["live_n"] == 1     # the open trade is not in the population
+    assert rows[("strategy", "RSI", None)]["live_n"] == 1       # weak ledger reached the watch
