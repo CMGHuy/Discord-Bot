@@ -244,7 +244,20 @@ def test_check_fails_on_an_unparseable_source_file(gate, tmp_path, capsys):
     assert "scripts/broken.py" in capsys.readouterr().out
 
 
-def test_check_skips_without_git(gate, tmp_path, capsys):
+def test_check_skips_without_git(gate, tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("CI", raising=False)
+    assert _run(gate, tmp_path) == 0
+    assert capsys.readouterr().out.startswith("VERDICT: SKIP")
+
+
+def test_check_fails_closed_without_git_in_ci(gate, tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("CI", "true")
+    assert _run(gate, tmp_path) == 1
+    assert capsys.readouterr().out.startswith("VERDICT: FAIL")
+
+
+def test_empty_ci_variable_still_skips(gate, tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("CI", "")
     assert _run(gate, tmp_path) == 0
     assert capsys.readouterr().out.startswith("VERDICT: SKIP")
 
@@ -306,7 +319,7 @@ def test_rename_pairs_match_by_score_one_to_one(gate):
 @pytest.mark.slow
 @pytest.mark.skipif(
     bool(os.environ.get("CI")),
-    reason="CI runs the gate as its own named step in backend-test-misc")
+    reason="CI runs the gate as its own named step in backend-lint-gate")
 def test_committed_tree_matches_the_baseline(gate):
     """~20 s warm, so `slow`: `testrun.py full` runs it, `fast` does not.
 

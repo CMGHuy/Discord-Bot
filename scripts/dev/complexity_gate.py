@@ -19,12 +19,14 @@ way around the gate.
 Known limit, shared with radon's own CLI: methods of a class nested inside
 another class are not listed.
 
-Exit codes: 0 pass (or skipped: no git), 1 findings or a gate error.
+Exit codes: 0 pass (or skipped: no git, outside CI), 1 findings or a gate error.
+With the `CI` environment variable set, no git is a FAIL (exit 1), never a skip.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -45,7 +47,7 @@ class GateError(Exception):
 
 
 class GitUnavailable(Exception):
-    """No git or no .git (the Docker image has neither): the gate skips."""
+    """No git or no .git (the Docker image has neither): the gate skips, or fails in CI."""
 
 
 @dataclass(frozen=True)
@@ -280,6 +282,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return run(args.repo, args.baseline)
     except GitUnavailable as exc:
+        if os.environ.get("CI"):       # a gate that cannot measure must not pass in CI
+            print(f"VERDICT: FAIL  git unavailable in CI, nothing measured: {exc}")
+            return 1
         print(f"VERDICT: SKIP  git unavailable, nothing measured: {exc}")
         return 0
     except GateError as exc:
