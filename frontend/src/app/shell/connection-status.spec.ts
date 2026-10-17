@@ -51,11 +51,12 @@ describe('ConnectionStatus', () => {
     expect(failing!.classList.contains('bot')).toBe(true);
   });
 
-  it('labels the dot Live when the stream is connected', () => {
+  it('shows no Live word, only a tooltip and aria-label, when connected', () => {
     fixture.componentRef.setInput('state', 'live');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.state')!.textContent!.trim()).toBe('Live');
+    expect(el.querySelector('.state')).toBeNull();
+    expect(el.querySelector('.status')!.getAttribute('aria-label')).toBe('Live');
   });
 
   it('says what is live, not that the data is fresh', () => {
