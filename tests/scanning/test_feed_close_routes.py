@@ -125,6 +125,7 @@ def test_the_time_exit_route_renders_the_records_settled_dollars(trade_log):
     closed = [e for e in mgr.poll(now=_at(STD_TENTH, 16, 0, 20)) if e.transition == "closed"]
     assert [e.detail["reason"] for e in closed] == ["time_exit"]
     record = trade_log.trade_for_plan("p1")
+    assert record["realized_pnl_amount"] == settle_legs(record)
     assert record["realized_pnl_amount"] == pytest.approx(
         round(record["shares"] * 2.0, 2), abs=0.01)           # short 100 -> 98
     _assert_renders_settled(store, closed[0], record)
@@ -143,6 +144,7 @@ def test_the_on_event_fallback_settles_before_the_close_renders(trade_log):
     mgr._on_event(store.get("p1"), event)
     record = trade_log.trade_for_plan("p1")
     assert record["status"] == "loss"
+    assert record["realized_pnl_amount"] == settle_legs(record)
     assert record["realized_pnl_amount"] == pytest.approx(
         round(record["shares"] * -3.0, 2), abs=0.01)
     money = tokens.fmt_money(record["realized_pnl_amount"], config.CURRENCY_SYMBOL)
