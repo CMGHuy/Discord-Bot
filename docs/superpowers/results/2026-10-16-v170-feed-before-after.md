@@ -424,3 +424,7 @@ ignore this if you already exited on a stop or target
 ## Complexity
 
 `python -m radon cc -s -n C` over every file the plan touched printed only legacy functions no v170 commit changed (checked with `git diff 0fd32eda HEAD`): `TradeLog.check_near_tp_timeout` F 42, `update_open_trades` E 31, `get_extended_stats` D 25, `get_stats` D 21, `close_if_live_price_hit` C 20, `get_trades` C 18, `log_trade` C 15, `closed_r_multiple` C 14, `_shadow_sizing` C 14, `weak_summary` C 12, `close_trade_manual` C 11 (all `performance.py`; v170 only added `trade_for_plan`); `_sync_run_scan` F 100 (`scan_run.py`); `breakdown_embed` C 12 (`views.py`); `build_closed_trade_embed` C 17, `regenerate_chart_for_trade` C 12 (`lifecycle_embeds.py`). `instruction_for` and `notify_plan_events` do not appear.
+
+## Full suite
+
+One full run on the branch at `1cd33c39`: 11450 passed, 2 failed, 4 skipped, 0 xfailed. Both failures were `tests/infra/test_swallowed_ratchet.py` (six new untagged `except Exception` handlers: 249 against BASELINE 243). Commit `0168a485` routed all six through `swallowed()`; the ratchet file was re-run alone (10 passed, count back to 243), as were the test files of every file that commit touched. No second full run, per the one-run-per-plan rule.
