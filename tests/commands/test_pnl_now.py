@@ -268,3 +268,12 @@ def test_a_near_flat_open_plan_never_prints_a_signed_zero():
     for price in (99.9996, 100.0004, 100.03):
         text = _render(_long(), _trade(), _quote(price), _pnl(price))
         assert "−0.0R" not in text and "-$0.00" not in text
+
+
+def test_a_flat_open_plan_prints_no_signed_zero_in_any_unit():
+    sym = config.CURRENCY_SYMBOL
+    for price in (99.9999, 99.97, 100.0001):
+        text = _render(_long(), _trade(), _quote(price), _pnl(price))
+        assert f"-{sym}0.00" not in text and "+-" not in text
+        assert "−0.0R" not in text and "−0.0%" not in text
+    assert "open 100%: 0.0% · " in _render(_long(), _trade(), _quote(99.97), _pnl(99.97))

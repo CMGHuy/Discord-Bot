@@ -75,6 +75,13 @@ def _entry(plan, trade: dict | None) -> float:
     return plan.trigger_price
 
 
+def _pct(pnl) -> str:
+    """The `!pnl` percentage; a sub-0.05% move prints '0.0%', never a signed zero."""
+    if pnl is None:
+        return tokens.fmt_pct(None)
+    return tokens.fmt_pct(0.0 if round(pnl.pct_change, 1) == 0 else pnl.pct_change)
+
+
 def _figures(r: float, usd: float, shares: float | None) -> str:
     """'<$> · <R>' -- the $ only when a record with shares backs it."""
     if shares is None:
@@ -111,7 +118,7 @@ def _open_reply(plan, trade, quote, pnl, clock, market_open) -> list[str]:
     if quote is None or quote.price is None:
         return [UNAVAILABLE, *banked]
     fraction, open_r, open_usd = _open_part(plan, entry, shares, quote.price)
-    pct = tokens.fmt_pct(pnl.pct_change if pnl is not None else None)
+    pct = _pct(pnl)
     total = _figures(_clean(open_r + banked_r), open_usd + banked_usd, shares)
     return [_as_of(quote, clock, market_open),
             f"open {fraction:.0%}: {pct} · {_figures(_clean(open_r), open_usd, shares)}",
