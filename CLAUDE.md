@@ -139,10 +139,9 @@ creation** from one repo-wide counter (doc filenames + commit log), recomputed
 right before the commit. `Bump:` states a level only, never a version number.
 **No plan file over 1500 lines** — split into `_N` parts, never compress a
 task. **Full suite once per plan, as its final task.** Specs and plans are
-committed on `main`; branch only to implement. Run `/new-doc`; detail:
-`document-conventions.md`, `document-lifecycle.md`.
+committed on `main` **the moment written (each plan index/part once `plan_lint.py` passes), never left uncommitted**; branch only to implement. Run `/new-doc`; detail: `document-conventions.md`, `document-lifecycle.md`.
 **Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
-into one brief: `plan-writer` `mode=index`, then one
+into one brief: `plan-writer` `mode=index`, then one (its **Goal** explains *why* and *what changes*: `document-conventions.md`)
 `mode=part <N>` per part, **at most 2 part writers at once**; each writer appends task by
 task to disk; `scripts/dev/plan_lint.py` must pass. **At most 2 plans in progress per session**; a plan cut off by
 tokens is resumed from its first missing task, never skipped or restarted.
@@ -158,7 +157,7 @@ From v146, **specs carry a `Panel:` line** (1–3 expert role skills under
 **"Implement plan vN" with nothing more means: in a worktree.** Reuse the
 plan's existing `.claude/worktrees/` worktree if `git worktree list` shows one
 (resume at its first uncommitted task); otherwise create it, named per
-`document-lifecycle.md`. Implementing on `main` only when told so explicitly.
+`document-lifecycle.md`. Implementing on `main` only when told so explicitly. **Standing permission: run `/close-out` yourself once every task is merged**, no waiting for the partner (`document-lifecycle.md`).
 
 ## Keep every function under complexity 15
 

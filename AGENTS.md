@@ -498,6 +498,10 @@ one spec). Full cadence: `document-conventions.md`.
 existing `.claude/worktrees/` worktree if one exists, else create it; implement
 on `main` only when told so explicitly.
 
+Standing permission: once every task of a plan is merged, run `close-out` yourself; do not wait for the partner (`docs/claude/document-lifecycle.md`).
+
+A plan's `**Goal:**` is an explanatory paragraph block, not one sentence: why the work exists, what changes once shipped, how it works in idea, what it leaves alone, how success is measured (`docs/claude/document-conventions.md`).
+
 Write specs and plans directly on `main` and commit them as soon as they are
 finished: no feature branch, no worktree, no approval gate for the commit. Branch
 or create a worktree only to implement a plan. When work stops being live, move
