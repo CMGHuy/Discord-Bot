@@ -479,6 +479,9 @@ def _instrument_guards(args, spec) -> None:
     for attr, script, owner in _V2_UNWIRED:
         if getattr(args, attr):
             instrument_cli.require_v1(spec, script, owner)
+    if args.tickers_file:
+        raise SystemExit(f"--instrument {spec.version} runs on the contract's universe "
+                         f"{spec.universe!r}; --tickers-file would replace it and is refused")
     if args.universe not in (None, spec.universe):
         raise SystemExit(f"--instrument {spec.version} runs on the contract's universe "
                          f"{spec.universe!r}; got --universe {args.universe!r}")
@@ -488,6 +491,32 @@ def _instrument_guards(args, spec) -> None:
         _uses_live_constructor(spec, args.exit_model, tp2_mode)
     except ValueError as exc:
         raise SystemExit(f"--instrument {spec.version}: {exc}") from None
+
+
+MISSING_FRAME = "no cached frame"
+
+
+def _missing_frames(tickers, frames, spec) -> list:
+    """v2 data precondition (v136): a universe member without a cached frame is
+    listed, never silently dropped -- one progress line each, as exclusions
+    print. v1 lists nothing (byte-identical output)."""
+    if spec.version == "v1":
+        return []
+    missing = []
+    for ti, ticker in enumerate(tickers, 1):
+        if ticker not in frames:
+            print(f"[{ti}/{len(tickers)}] {ticker}: excluded (missing frame) -- {MISSING_FRAME}",
+                  flush=True)
+            missing.append(ticker)
+    return missing
+
+
+def _missing_block(missing, total) -> list[str]:
+    """The report's header block for `_missing_frames`; empty when none is missing."""
+    if not missing:
+        return []
+    return [f"-- excluded (missing frame): {len(missing)} of {total} ticker(s) --",
+            *(f"  {ticker}: {MISSING_FRAME}" for ticker in missing), ""]
 
 
 def _watchlist_slice(trade_rows, watchlist) -> tuple[str, dict]:
@@ -502,16 +531,19 @@ def _watchlist_slice(trade_rows, watchlist) -> tuple[str, dict]:
     return line, {"status": verdict.status, "n": verdict.n, "expectancy_r": verdict.expectancy_r}
 
 
-def _instrument_report(spec, trade_rows, strategies) -> tuple[list[str], dict]:
+def _instrument_report(spec, trade_rows, strategies, tickers) -> tuple[list[str], dict]:
     """Report lines and JSON keys a v2 run adds: the instrument line and the
-    per-strategy watchlist slice. v1 adds nothing (byte-identical output)."""
+    per-strategy watchlist slice. `tickers` is the run's universe: only the
+    watchlist names inside it can score. v1 adds nothing (byte-identical output)."""
     if spec.version == "v1":
         return [], {}
     watchlist = sorted(load_watchlist())
+    in_universe = len(set(watchlist) & set(tickers))
     lines = ["",
              f"-- instrument {spec.version}: universe {spec.universe}; PIT membership and the "
              f"causal liquidity floor checked on the signal day --",
-             f"-- watchlist slice (same run, {len(watchlist)} watchlist tickers): FAIL here "
+             f"-- watchlist slice (same run, {in_universe}/{len(watchlist)} watchlist tickers "
+             f"in the run's universe): FAIL here "
              f"fails the strategy's verdict whatever PASS says; ExpR < 0 with "
              f"N >= {universe_gate.WATCHLIST_SLICE_MIN_N} fails, fewer is THIN --"]
     slices = {}
@@ -798,6 +830,7 @@ def main():
     frames = {ticker: _instrument_frame(_with_context(load_cached(ticker)), spec)
               for ticker in tickers}
     frames = {ticker: frame for ticker, frame in frames.items() if frame is not None}
+    missing = _missing_frames(tickers, frames, spec)
     _report_exclusions()
     asof_map = _build_asof_map(tickers, frames, args.universe) if args.context == "on" else {}
     membership = _membership_for_run(args.universe, tickers)
@@ -845,7 +878,7 @@ def main():
     if show_runner_cols:
         header += f" {'tp2%':>6s} {'trail%':>6s} {'be%':>6s} {'rto%':>6s}"
     header += "  PASS"
-    lines = []
+    lines = _missing_block(missing, len(tickers))
     if excluded_illiquid:
         lines.append(f"-- excluded (illiquid, Task E12): {len(excluded_illiquid)} of {len(tickers)} ticker(s) --")
         lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_illiquid)
@@ -899,7 +932,7 @@ def main():
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
         lines.append(f"{strat:22s} {hk:6s} {st['n_eval']:5d} {wr:>6s} {er:>7s}")
 
-    instrument_lines, instrument_json = _instrument_report(spec, trade_rows, strategies)
+    instrument_lines, instrument_json = _instrument_report(spec, trade_rows, strategies, tickers)
     lines.extend(instrument_lines)
     report = "\n".join(lines)
     print("\n" + report)

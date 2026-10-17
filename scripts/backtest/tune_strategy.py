@@ -132,6 +132,13 @@ def _instrument_guards(args, spec) -> None:
         raise SystemExit(f"--instrument {spec.version}: {exc}") from None
 
 
+def _drop_reason(df, ticker, pit) -> tuple[str, str] | None:
+    """(kind, reason) when a v2 universe member leaves the run, else None."""
+    if df is None:
+        return "missing frame", rbr.MISSING_FRAME
+    return rbr._exclusion_reason(df, ticker, pit=pit)
+
+
 def _load_universe(spec) -> tuple[dict, dict]:
     """(frames, spans). v1: today's watchlist frames, no spans. v2: the
     contract's point-in-time universe through run_backtest_range's seams, minus
@@ -139,7 +146,8 @@ def _load_universe(spec) -> tuple[dict, dict]:
     liquidity floor is skipped for PIT runs there), with membership spans.
     Each v2 frame is cut at research_end BEFORE that check (as in
     run_backtest_range's v2 path), so a holdout-only glitch never decides the
-    universe."""
+    universe. Every dropped v2 member is printed with its reason (v136 data
+    precondition: list gaps, never shrink the universe silently)."""
     if spec.version == "v1":
         return {t: d for t in sorted(load_watchlist()) if (d := load_cached(t)) is not None}, {}
     tickers = rbr._tickers_for_run(spec.universe)
@@ -147,7 +155,9 @@ def _load_universe(spec) -> tuple[dict, dict]:
     frames, spans = {}, {}
     for ticker in tickers:
         df = rbr._instrument_frame(load_cached(ticker), spec)
-        if df is None or rbr._exclusion_reason(df, ticker, pit=membership is not None):
+        dropped = _drop_reason(df, ticker, membership is not None)
+        if dropped is not None:
+            print(f"  {ticker}: excluded ({dropped[0]}) -- {dropped[1]}", flush=True)
             continue
         frames[ticker], spans[ticker] = df, rbr._spans_for(membership, ticker)
     return frames, spans

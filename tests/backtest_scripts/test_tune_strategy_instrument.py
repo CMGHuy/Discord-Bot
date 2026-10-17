@@ -334,3 +334,29 @@ def test_v2_with_the_default_exit_model_exits_before_any_ticker(harness):
     with pytest.raises(SystemExit, match="needs exit_model='v2'"):
         harness.run("--instrument", "v2")
     assert harness.calls == []
+
+
+def _dropping_universe(monkeypatch):
+    monkeypatch.setattr(ts.rbr, "_tickers_for_run", lambda universe: ["AAA", "CCC", "DDD"])
+    monkeypatch.setattr(ts.rbr, "_membership_for_run", lambda universe, t: {"AAA": ALWAYS})
+    monkeypatch.setattr(ts.rbr, "_exclusion_reason", lambda df, ticker, pit: (
+        ("bad data", "bad bars") if ticker == "CCC" else None))
+    monkeypatch.setattr(ts.rbr, "_instrument_frame", lambda df, spec: df)
+    monkeypatch.setattr(ts, "load_cached", lambda t: None if t == "DDD" else t)
+
+
+def test_v2_universe_prints_every_dropped_ticker_with_its_reason(monkeypatch, capsys):
+    _dropping_universe(monkeypatch)
+    frames, _ = ts._load_universe(V2)
+    assert list(frames) == ["AAA"]
+    out = capsys.readouterr().out
+    assert "CCC: excluded (bad data) -- bad bars" in out
+    assert "DDD: excluded (missing frame) -- no cached frame" in out
+    assert "AAA" not in out
+
+
+def test_v1_universe_prints_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(ts, "load_watchlist", lambda: ["AAA", "CCC"])
+    monkeypatch.setattr(ts, "load_cached", lambda t: None if t == "CCC" else t)
+    ts._load_universe(V1)
+    assert capsys.readouterr().out == ""

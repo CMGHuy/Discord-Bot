@@ -27,7 +27,7 @@ ALWAYS = [("2010-01-01", "9999-12-31")]
 
 def _args(**over):
     base = dict(train=False, validation=False, date_from=None, date_to=None, universe=None,
-                scenarios=False, emit_registry=None, from_json=None,
+                scenarios=False, emit_registry=None, from_json=None, tickers_file=None,
                 exit_model="v2", tp2="none")
     base.update(over)
     return SimpleNamespace(**base)
@@ -109,6 +109,15 @@ def test_v2_pins_the_contract_universe(live_flags_off):
 def test_v2_refuses_a_different_universe(live_flags_off):
     with pytest.raises(SystemExit, match="sp500_pit"):
         rbr._instrument_guards(_args(universe="etfs"), V2)
+
+
+@pytest.mark.parametrize("universe", [None, "sp500_pit", "etfs"])
+def test_v2_refuses_a_tickers_file_naming_the_contract_universe(live_flags_off, universe):
+    with pytest.raises(SystemExit) as exc:
+        rbr._instrument_guards(_args(tickers_file="names.txt", universe=universe), V2)
+    message = str(exc.value)
+    assert "--tickers-file" in message and "sp500_pit" in message
+    assert "--instrument v2" in message
 
 
 @pytest.mark.parametrize("over, owner", [
@@ -324,3 +333,28 @@ def test_v2_main_hands_run_backtest_no_bar_after_research_end(harness, monkeypat
     monkeypatch.setattr(rbr, "run_backtest", spy)
     harness.run("--train", *V2_FLAGS)
     assert seen_ends and all(end <= pd.Timestamp("2025-12-31") for end in seen_ends)
+
+
+# --- data precondition and slice header (final-review fixes) ------------------------
+
+def test_v2_main_lists_a_universe_member_without_a_cached_frame(harness, monkeypatch, capsys):
+    frame = rbr.load_cached("AAA")
+    monkeypatch.setattr(rbr, "load_cached", lambda ticker: None if ticker == "BBB" else frame)
+    _, report = harness.run("--train", *V2_FLAGS)
+    out = capsys.readouterr().out
+    assert "BBB: excluded (missing frame) -- no cached frame" in out
+    assert "-- excluded (missing frame): 1 of 2 ticker(s) --" in report
+    assert "  BBB: no cached frame" in report
+
+
+def test_v1_main_output_ignores_a_missing_frame_as_today(harness, monkeypatch, capsys):
+    frame = rbr.load_cached("AAA")
+    monkeypatch.setattr(rbr, "load_cached", lambda ticker: None if ticker == "BBB" else frame)
+    _, report = harness.run("--train")
+    assert "missing frame" not in capsys.readouterr().out + report
+
+
+def test_v2_slice_header_counts_watchlist_names_inside_the_universe(harness, monkeypatch):
+    monkeypatch.setattr(rbr, "load_watchlist", lambda: ["AAA", "ZZZ"])
+    _, report = harness.run("--train", *V2_FLAGS)
+    assert "1/2 watchlist tickers in the run's universe" in report
