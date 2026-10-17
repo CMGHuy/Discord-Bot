@@ -182,9 +182,9 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot
 bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/data/backfill_equity_samples.py --apply"
 ```
 
-The `backtest_cache` mount must be current on the VM first. If the
-coverage report shows gaps, refresh the cache before `--apply` rather than
-passing `--allow-gaps`.
+The VM needs network access to yfinance for the raw-bar fetch. If the
+coverage report shows gaps, re-run the dry run, since a fetch can fail
+transiently, before considering `--allow-gaps`.
 
 ### 4. API: `GET /api/v1/equity/candles`
 
