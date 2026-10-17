@@ -137,3 +137,7 @@ Recommended order: OH1; then {OH2, OH3, OH5, OH6} with at most 2 implementers at
 | 4b | `2026-10-09-v148-ops-hardening_4b-watchdog-wiring.md` | OH18 | Phase D: watchdog loop, provider check and loop wiring (part 4 split only to stay under 1500 lines) |
 | 5 | `2026-10-09-v148-ops-hardening_5-cron-admin-ui-suite.md` | OH19–OH21 | Phase E: VM cron, health endpoint, store wiring |
 | 5b | `2026-10-09-v148-ops-hardening_5b-panels-suite-rollout.md` | OH22–OH24 | Phase E: frontend panels, full suites, production rollout (part 5 split only to stay under 1500 lines) |
+
+## Close-out note (2026-10-17)
+
+OH1..OH23 merged to main (f0798e5a); released ui 1.26.1, bot 2.7.1. **OH24 (production rollout) was not run** when this closed out at the partner's request: the heartbeat cron is not installed on the VM, `OPS_ALERT_WEBHOOK_URL` is unset, and no `--test` post has been delivered. Panel advisories to weigh first (external probe of :1234 for the limiter's CF-Connecting-IP trust, stale thresholds vs measured tick duration, `ps` missing in the image) are in `.superpowers/sdd/progress.md` under "2026-10-17 v148".
