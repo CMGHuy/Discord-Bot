@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -965,4 +967,48 @@ describe('arrivalBanner', () => {
     expect(arrivalBanner('PARTIAL', null)).toBe('');
     expect(arrivalBanner(null, null)).toBe('');
   });
+});
+
+describe('TradeDetail — responsive card layout (v166 TD11)', () => {
+  const source = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trade-detail.ts'), 'utf8');
+  const styles = source.split('styles: `')[1].split('`,')[0];
+
+  it('sizes the cards container independently of the viewport', () => {
+    expect(styles).toMatch(/\.grid-host\s*\{[^}]*container:\s*cards\s*\/\s*inline-size/);
+    expect(styles).toMatch(/\.card-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*align-items:\s*stretch[^}]*grid-template-areas:\s*var\(--areas-1\)/);
+  });
+
+  it('switches named areas only at the tablet and desktop container floors', () => {
+    expect(styles).toMatch(/@container cards \(min-width: 640px\)\s*\{\s*\.card-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[^}]*grid-template-areas:\s*var\(--areas-2\)/);
+    expect(styles).toMatch(/@container cards \(min-width: 1024px\)\s*\{\s*\.card-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)[^}]*grid-template-areas:\s*var\(--areas-3\)/);
+    expect(styles.match(/@container[^\{]+/g)?.map(query => query.trim())).toEqual([
+      '@container cards (min-width: 640px)', '@container cards (min-width: 1024px)',
+    ]);
+    expect(styles).not.toMatch(/@media|@container[^\{]*[<>]/);
+  });
+
+  it('gives every cell a shrinkable single track and its own inline size', () => {
+    const cell = styles.match(/\.cell\s*\{([^}]+)\}/)?.[1];
+    expect(cell).toMatch(/container-type:\s*inline-size/);
+    expect(cell).toMatch(/display:\s*grid/);
+    expect(cell).toMatch(/min-width:\s*0/);
+    expect(cell).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+  });
+
+  it('stretches one-panel cards while preserving the two context rows', () => {
+    expect(styles).toMatch(/:host ::ng-deep \.cell > \* > sb-panel:only-child\s*,\s*:host ::ng-deep \.cell > \* > sb-panel:only-child \.panel\s*\{\s*height:\s*100%/);
+    expect(styles).toMatch(/\.cell\[data-area="context"\]\s*\{[^}]*grid-template-rows:\s*auto 1fr[^}]*gap:\s*var\(--section-gap\)/);
+  });
+
+  it('keeps obsolete panel and definition-list rules out of the page', () => {
+    expect(source.split('template: `')[1].split('styles: `')[0]).not.toMatch(/<dl\b|class="panels"/);
+    expect(styles).not.toMatch(/\.panels\b|(?:^|\})\s*(?:dl|dt|dd)\b/);
+  });
+
+  it.each(['position-card', 'strategy-record-card', 'level-sources-card', 'scores-card'])(
+    'lets %s use two definition columns only when its cell has room', name => {
+      const card = readFileSync(join(process.cwd(), `src/app/workspaces/trades/${name}.ts`), 'utf8');
+      expect(card).toMatch(/@container \(min-width: 640px\)\s*\{\s*dl\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[^}]*column-gap:\s*var\(--space-20\)/);
+    },
+  );
 });

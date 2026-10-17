@@ -475,9 +475,19 @@ function cameFromPlan(): boolean {
       color: var(--text-faint);
     }
 
-    .grid-host { min-width: 0; }
-    .card-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); align-items: start; grid-template-areas: var(--areas-1); }
-    .cell { min-width: 0; display: grid; gap: var(--section-gap); }
+    .grid-host { min-width: 0; container: cards / inline-size; }
+    .card-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); align-items: stretch; grid-template-areas: var(--areas-1); }
+    .cell { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); container-type: inline-size; gap: var(--section-gap); }
+    .cell[data-area="context"] { grid-template-rows: auto 1fr; gap: var(--section-gap); }
+    :host ::ng-deep .cell > * > sb-panel:only-child,
+    :host ::ng-deep .cell > * > sb-panel:only-child .panel { height: 100%; }
+
+    @container cards (min-width: 640px) {
+      .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: var(--areas-2); }
+    }
+    @container cards (min-width: 1024px) {
+      .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: var(--areas-3); }
+    }
 
     .no-detail {
       max-width: 68ch;
