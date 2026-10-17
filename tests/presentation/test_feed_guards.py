@@ -160,17 +160,19 @@ def _texts(instruction: Instruction) -> tuple[str, ...]:
 
 
 def _order_glyph_hits(instruction: Instruction) -> list[tuple[str, str]]:
-    """(key, text right after the glyph) for every order glyph in the message."""
+    """(key, text right after the glyph) for every order glyph in the message.
+    A close's headline glyphs the exit word by design, so only its body lines count."""
+    texts = (instruction.lines if instruction.verb in _CLOSE_VERBS
+             else _texts(instruction))
     return [(key, after.lstrip())
-            for text in _texts(instruction)
+            for text in texts
             for key in _ORDER_KEYS
             for after in text.split(S[key])[1:]]
 
 
 FEED = rendered_feed()
-#: every message but the closes, whose headline glyphs the exit word by design
-#: (their order line, the exit verb, is checked separately).
-ORDERED = [(d, i) for d, i in FEED if i.verb not in _CLOSE_VERBS]
+#: every message; a close's headline is skipped inside _order_glyph_hits.
+ORDERED = list(FEED)
 
 
 # --- the symbol table ---------------------------------------------------------
