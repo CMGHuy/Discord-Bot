@@ -8,9 +8,9 @@ import { Panel } from '../../ui/layout';
   template: `
     <sb-panel heading="Strategy record">
       @if (error()) {
-        <p class="not-journaled">{{ error() }}</p>
+        <p class="record-state">{{ error() }}</p>
       } @else if (!strategy()) {
-        <p class="not-journaled">This position has no strategy recorded.</p>
+        <p class="record-state">This position has no strategy recorded.</p>
       } @else if (row(); as row) {
         <dl>
           <div><dt>Strategy</dt><dd>{{ row.strategy }}</dd></div>
@@ -27,7 +27,7 @@ import { Panel } from '../../ui/layout';
           <p class="decayed">Live results have decayed against this strategy's out-of-sample record.</p>
         }
       } @else {
-        <p class="not-journaled">The registry has no entry for {{ fmtText(strategy()) }}.</p>
+        <p class="record-state">The registry has no entry for {{ fmtText(strategy()) }}.</p>
       }
     </sb-panel>
   `,
@@ -38,7 +38,7 @@ import { Panel } from '../../ui/layout';
     dt { color: var(--text-secondary); }
     dt, dd { min-width: 0; font-size: var(--text-table); }
     dd { margin: 0; text-align: right; }
-    .not-journaled { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
+    .record-state { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
     .decayed { margin-top: var(--space-10); color: var(--warn); font-size: var(--text-table); }
   `,
 })

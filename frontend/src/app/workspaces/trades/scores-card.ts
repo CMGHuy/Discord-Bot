@@ -33,8 +33,8 @@ export function scoreWidth(value: number | null): number | null {
     dt { color: var(--text-secondary); }
     dt, dd { min-width: 0; font-size: var(--text-table); }
     dd { margin: 0; text-align: right; }
-    .track { grid-column: 1 / -1; height: 4px; background: var(--bg); }
-    .fill { display: block; height: 100%; background: var(--text-faint); }
+    .track { grid-column: 1 / -1; height: 4px; background: var(--surface-raised); }
+    .fill { display: block; height: 100%; background: var(--text-secondary); }
     .scores-foot { margin: var(--space-10) 0 0; font-size: var(--text-chip); }
   `,
 })

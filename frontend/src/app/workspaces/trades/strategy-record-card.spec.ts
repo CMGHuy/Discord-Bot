@@ -22,11 +22,11 @@ describe('StrategyRecordCard', () => {
   it('prioritises errors, then missing strategy, then missing registry entry', () => {
     const f = TestBed.createComponent(StrategyRecordCard); f.detectChanges();
     const el: HTMLElement = f.nativeElement;
-    expect(el.textContent).toContain('This position has no strategy recorded.');
+    expect(el.querySelector('.record-state')?.textContent).toBe('This position has no strategy recorded.');
     f.componentRef.setInput('strategy', 'VWAP'); f.detectChanges();
-    expect(el.textContent).toContain('The registry has no entry for VWAP.');
+    expect(el.querySelector('.record-state')?.textContent).toBe('The registry has no entry for VWAP.');
     f.componentRef.setInput('error', 'Registry unavailable'); f.componentRef.setInput('row', row); f.detectChanges();
-    expect(el.textContent).toContain('Registry unavailable');
+    expect(el.querySelector('.record-state')?.textContent).toBe('Registry unavailable');
     expect(el.querySelector('dl')).toBeNull();
   });
 });
