@@ -201,9 +201,9 @@ def _ticket_view(simple_embed, plan):
     legacy mirror has no plan for the buttons to answer for. Never raises: a
     panel that cannot be built posts the ticket without buttons rather than
     costing the mirror its ping."""
-    if plan is None or getattr(simple_embed, "kind", None) not in _TICKET_KINDS:
-        return None
     try:
+        if plan is None or getattr(simple_embed, "kind", None) not in _TICKET_KINDS:
+            return None
         from swingbot.commands.views import feed_view
         view = feed_view(plan.plan_id)
     except Exception:
