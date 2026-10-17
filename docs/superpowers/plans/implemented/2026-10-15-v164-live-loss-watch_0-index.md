@@ -15,7 +15,7 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Implemented: merged as 774dce63, released bot 2.9.0 / ui 1.27.0. Panel (quant-researcher, quant-engineer) raised only ADVISORY findings; follow-ups: week-floor degeneracy at 1-2 entry weeks, looks-count caveat vs six flag looks per week, Sunday digest runs load_watch on the event loop.
 
 ## Where to work
 
