@@ -20,6 +20,9 @@ Part 1 complete in `codex/v166-trade-detail-reorganisation`: TD1–TD4 committed
 returned CLEAN. Part 2 complete: TD5–TD6 committed (`84c97619`, `71ab7e20`),
 and review fixes committed (`97804e2c`, `88d8dd90`). Both scoped re-reviews
 confirmed the findings addressed. TD7 is next.
+Parts 3 and 3b complete: TD7–TD8 committed (`36241419`, `ff4ad589`),
+with review fixes (`6e1f4349`, `fb7f47cc`) confirmed by scoped re-review.
+TD9 is next.
 
 ## Where to work
 
