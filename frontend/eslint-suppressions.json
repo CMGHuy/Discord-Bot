@@ -1,0 +1,148 @@
+{
+  "src/app/api/api-client.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/app/api/interceptors.spec.ts": {
+    "@typescript-eslint/no-wrapper-object-types": {
+      "count": 1
+    }
+  },
+  "src/app/pwa/pwa-update.service.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/shell/shell.html": {
+    "@angular-eslint/template/click-events-have-key-events": {
+      "count": 1
+    },
+    "@angular-eslint/template/interactive-supports-focus": {
+      "count": 1
+    }
+  },
+  "src/app/stores/analytics.store.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/stores/system.store.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/stores/tape.store.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/stores/trades.store.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "src/app/ui/button.spec.ts": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "src/app/ui/button.ts": {
+    "@angular-eslint/component-selector": {
+      "count": 1
+    }
+  },
+  "src/app/ui/chart/chart-prefs.ts": {
+    "@angular-eslint/prefer-inject": {
+      "count": 1
+    }
+  },
+  "src/app/ui/chart/indicator-panes.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/ui/chart/primitives/legend-primitive.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/app/ui/control-bar.spec.ts": {
+    "@angular-eslint/template/table-scope": {
+      "count": 1
+    }
+  },
+  "src/app/ui/heat-grid.ts": {
+    "@angular-eslint/template/eqeqeq": {
+      "count": 4
+    }
+  },
+  "src/app/ui/hint.spec.ts": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "src/app/ui/histogram.spec.ts": {
+    "no-regex-spaces": {
+      "count": 1
+    }
+  },
+  "src/app/ui/layout.ts": {
+    "@angular-eslint/template/click-events-have-key-events": {
+      "count": 1
+    },
+    "@angular-eslint/template/interactive-supports-focus": {
+      "count": 2
+    }
+  },
+  "src/app/ui/small-multiples.ts": {
+    "@angular-eslint/template/eqeqeq": {
+      "count": 1
+    }
+  },
+  "src/app/ui/spacing.spec.ts": {
+    "no-useless-escape": {
+      "count": 2
+    }
+  },
+  "src/app/workspaces/analytics/tabs/execution.spec.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/app/workspaces/calendar/calendar.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/workspaces/dashboard/panels/exposure-by-horizon.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/workspaces/system/logs-tab.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/workspaces/system/settings-tab.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/app/workspaces/trades/trade-actions.ts": {
+    "no-fallthrough": {
+      "count": 1
+    }
+  },
+  "src/app/workspaces/versions/versions.ts": {
+    "@angular-eslint/template/elements-content": {
+      "count": 1
+    }
+  },
+  "src/app/workspaces/watchlist/earnings-calendar.spec.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  }
+}

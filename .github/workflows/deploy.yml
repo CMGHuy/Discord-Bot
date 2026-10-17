@@ -124,6 +124,12 @@ jobs:
       - name: Undefined-name gate
         run: python scripts/dev/testrun.py lint
 
+      # The ratchet: fails on any function that crossed 15, rose, improved or
+      # went away since scripts/dev/complexity_baseline.json. A named step so a
+      # regression shows up as what it is. `--update` only shrinks the baseline.
+      - name: Complexity gate
+        run: python scripts/dev/complexity_gate.py
+
   # ── 2b. The frontend ───────────────────────────────────────────────────────
   # The Angular suite and a real production build. The build is not redundant
   # with the Docker one below: this fails in ~1 minute with a readable
@@ -151,6 +157,11 @@ jobs:
       # was tested is not the thing that ships.
       - name: Install
         run: npm ci
+
+      # Seconds, and it fails before the slower test run and build. Today's
+      # violations are frozen in frontend/eslint-suppressions.json.
+      - name: Lint
+        run: npm run lint
 
       - name: Unit tests
         run: npx ng test --watch=false

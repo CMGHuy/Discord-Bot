@@ -104,3 +104,5 @@ PyYAML==6.0.3
 
 # Static crash-class gate used by `python scripts/dev/testrun.py full`.
 pyflakes==3.4.0
+# Cyclomatic-complexity ratchet: scripts/dev/complexity_gate.py.
+radon==6.0.1
