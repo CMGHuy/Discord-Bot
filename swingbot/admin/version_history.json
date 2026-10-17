@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-16 18:08:30 UTC",
+  "generated_at": "2026-10-17 08:46:13 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.26.0",
-    "bot": "2.6.0"
+    "bot": "2.7.0"
   },
   "releases": [
     {
@@ -1720,6 +1720,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "831e3c3b",
+      "subject": "release(bot): 2.7.0 -- instrument v2 fills and costs: gap-through, next-open entries, slippage and commission in R (v157)",
+      "versions": {
+        "ui": "1.26.0",
+        "bot": "2.7.0"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
