@@ -14,6 +14,8 @@ import logging
 import threading
 from datetime import datetime, timezone
 
+from swingbot.core.infra.swallowed import swallowed
+
 log = logging.getLogger(__name__)
 
 #: Seconds between republishes. Comfortably finer than the admin watcher's
@@ -82,8 +84,10 @@ def _write_row(record: dict) -> None:
     try:
         from swingbot.core.db.repositories.scan_progress import scan_progress_repo
         scan_progress_repo().publish(record)
-    except Exception:  # noqa: BLE001
-        log.debug("Could not publish scan progress to the database", exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        swallowed(log, "scan.progress_store.write", exc,
+                  "Could not publish scan progress to the database",
+                  level=logging.DEBUG, exc_info=True)
 
 
 def publish(progress) -> None:
@@ -95,8 +99,10 @@ def _read_row() -> dict | None:
     try:
         from swingbot.core.db.repositories.scan_progress import scan_progress_repo
         return scan_progress_repo().read()
-    except Exception:  # noqa: BLE001
-        log.debug("Could not read scan progress from the database", exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        swallowed(log, "scan.progress_store.read", exc,
+                  "Could not read scan progress from the database",
+                  level=logging.DEBUG, exc_info=True)
         return None
 
 
@@ -114,8 +120,10 @@ def clear() -> None:
     try:
         from swingbot.core.db.repositories.scan_progress import scan_progress_repo
         scan_progress_repo().clear()
-    except Exception:  # noqa: BLE001
-        log.debug("Could not clear scan progress in the database", exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        swallowed(log, "scan.progress_store.clear", exc,
+                  "Could not clear scan progress in the database",
+                  level=logging.DEBUG, exc_info=True)
 
 
 @contextlib.contextmanager

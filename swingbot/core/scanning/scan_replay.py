@@ -34,6 +34,7 @@ Instrument conventions (each is recorded in the pre-registration):
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -44,6 +45,7 @@ from swingbot.core.backtesting.acceptance import ArmTrade, planned_rr
 from swingbot.core.edge import factors as rs_factors
 from swingbot.core.edge import regime2
 from swingbot.core.infra.state import StateStore
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import opex
 from swingbot.core.marketdata import universe
 from swingbot.core.planning.plan_engine import simulate_exit
@@ -51,6 +53,8 @@ from swingbot.core.planning.plan_engine import simulate_exit
 from . import analyze, dedup, fetch, qualify, scan_run, short_run
 from .short_candidates import extra_symbols
 from .short_reference import etf_for_sector
+
+log = logging.getLogger(__name__)
 
 LANE_BASE = "base"
 LANE_EXTRA = "short_universe"
@@ -168,7 +172,8 @@ def _offline_io(spec: ReplaySpec) -> analyze.ScanIO:
 def _regimes(spy):
     try:
         return regime2.regime_series(spy)
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.scan_replay.regimes", exc, level=logging.DEBUG)
         return None
 
 

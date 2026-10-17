@@ -88,7 +88,9 @@ def _data_sources_summary(rows: list) -> dict:
     yfinance-fallback over everything Alpaca was asked for (hits + misses),
     daily frames and live-price answers pooled, across the last
     `_DATA_SOURCE_WINDOW` scans that logged `data_sources`;
-    None when none of them asked Alpaca for anything.
+    None when none of them asked Alpaca for anything. The formula is
+    telemetry.fallback_rate, shared with each scan's provider_fallback_rate
+    (v148 O4).
 
     `breaker_open` is this admin process's own router -- the bot's scans run
     their fetches in spawned children whose breaker never reaches here, so
@@ -96,6 +98,7 @@ def _data_sources_summary(rows: list) -> dict:
     one.
     """
     from swingbot.core.marketdata.providers import router
+    from swingbot.core.scanning.telemetry import fallback_rate
 
     tagged = [r for r in rows if isinstance(r.get("data_sources"), dict)]
     tagged = tagged[-_DATA_SOURCE_WINDOW:]
@@ -103,13 +106,12 @@ def _data_sources_summary(rows: list) -> dict:
     # symbol-fetches Alpaca was asked for (clause (b) of the v106 soak).
     counts = [r["data_sources"] for r in tagged]
     counts += [r["price_sources"] for r in tagged if isinstance(r.get("price_sources"), dict)]
-    hits = sum(int(d.get("alpaca", 0)) for d in counts)
-    misses = sum(int(d.get("yfinance-fallback", 0)) for d in counts)
+    rate = fallback_rate(counts)
     return {
         "enabled": bool(config.ALPACA_ENABLED),
         "feed": str(config.ALPACA_DATA_FEED_LIVE),
         "breaker_open": bool(router.stats()["breaker_open"]),
-        "fallback_rate": round(misses / (hits + misses), 4) if hits + misses else None,
+        "fallback_rate": None if rate is None else round(rate, 4),
         "scans": len(tagged),
     }
 

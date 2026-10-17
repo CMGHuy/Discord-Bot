@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.tracking.origin import NEXT_SESSION, origin_of
 
 log = logging.getLogger(__name__)
@@ -33,8 +34,9 @@ def _risk_text(trade: dict) -> str:
 def overlap_line(ticker: str, *, viewer_origin: str | None) -> str | None:
     try:
         others = _other_lane_trades(ticker, viewer_origin)
-    except Exception:
-        log.debug("overlap line unavailable for %s", ticker, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.overlap_line", exc, "overlap line unavailable for %s", ticker,
+                  level=logging.DEBUG, exc_info=True)
         return None
     if not others:
         return None

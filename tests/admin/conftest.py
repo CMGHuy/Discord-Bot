@@ -126,3 +126,15 @@ def client(admin_app):
 def auth():
     token = base64.b64encode(b"admin:admin").decode("ascii")
     return {"Authorization": f"Basic {token}"}
+
+
+@pytest.fixture(autouse=True)
+def _clear_login_limiter():
+    """v148: login_limiter is NOT in _RELOAD_MODULES (nothing in it bakes a
+    path), so its module-level LIMITER would carry one test's failed sign-ins
+    into the next and lock it out. Cleared before and after every admin test."""
+    from swingbot.admin import login_limiter
+
+    login_limiter.LIMITER.reset()
+    yield
+    login_limiter.LIMITER.reset()

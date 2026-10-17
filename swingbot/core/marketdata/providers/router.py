@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 from swingbot import config
 from swingbot.core.infra.logsetup import with_current_context
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.providers.alpaca_provider import (
     AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
@@ -152,6 +153,7 @@ def _wait(future, deadline: float):
             return None, exc
         return None, DeadlineExpired(str(exc) or "deadline expired")
     except Exception as exc:  # AlpacaMiss, anything the provider raised
+        swallowed(log, "marketdata.router.wait", exc, level=logging.DEBUG)
         return None, exc
 
 

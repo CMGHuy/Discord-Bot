@@ -21,6 +21,7 @@ import os
 import time
 
 from swingbot.core.infra.retry import with_retry
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.adjustments import merge_adjusted
 from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.data_store import (
@@ -73,7 +74,8 @@ def load_state() -> dict:
         from swingbot.core.db.repositories.market_data_state import market_data_state_repo
         return market_data_state_repo().load()
     except Exception as exc:            # never let bookkeeping break a refresh
-        log.warning("could not read market-data state: %s", exc, exc_info=True)
+        swallowed(log, "marketdata.load_state", exc, "could not read market-data state: %s", exc,
+                  exc_info=True)
         return {}
 
 
@@ -105,7 +107,8 @@ def save_state(state: dict) -> None:
         from swingbot.core.db.repositories.market_data_state import market_data_state_repo
         market_data_state_repo().save(state)
     except Exception as exc:            # never let bookkeeping break a refresh
-        log.warning("could not save market-data state: %s", exc, exc_info=True)
+        swallowed(log, "marketdata.save_state", exc, "could not save market-data state: %s", exc,
+                  exc_info=True)
 
 
 def _key(symbol: str, timeframe: str) -> str:
@@ -281,7 +284,8 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
                             attempts=RETRY_ATTEMPTS, base_delay=RETRY_BASE_DELAY,
                             label=f"{symbol}/{tf} full")
         except Exception as exc:
-            log.warning("refresh %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
+            swallowed(log, "marketdata.refresh_symbol.full", exc,
+                      "refresh %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
             return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
         merged, added = _merge_save(existing, df, symbol, tf, base_dir)
         return {**out, "status": "full" if have == 0 else "incremental",
@@ -294,7 +298,8 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
                            attempts=RETRY_ATTEMPTS, base_delay=RETRY_BASE_DELAY,
                            label=f"{symbol}/{tf} incremental")
     except Exception as exc:
-        log.warning("incremental %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
+        swallowed(log, "marketdata.refresh_symbol.incremental", exc,
+                  "incremental %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
         return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
 
     if fresh is None or len(fresh) == 0:
@@ -361,8 +366,8 @@ def _record(state: dict, symbol: str, tf: str, r: dict, base_dir: str) -> None:
                         "(history was lost, not merged)", symbol, tf, prev, earliest)
                 rec["earliest"] = earliest
                 rec["latest"] = str(df.index.max())[:10]
-        except Exception:
-            pass
+        except Exception as exc:
+            swallowed(log, "marketdata.record_coverage", exc, level=logging.DEBUG)
     state[k] = rec
 
 
@@ -404,7 +409,8 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
                 r = refresh_symbol(symbol, tf, base_dir=base_dir, force=force,
                                    state=state)
             except Exception as exc:      # belt-and-braces: loop must survive
-                log.warning("refresh %s/%s crashed: %s", symbol, tf, exc, exc_info=True)
+                swallowed(log, "marketdata.refresh_all.pair", exc, "refresh %s/%s crashed: %s",
+                          symbol, tf, exc, exc_info=True)
                 r = {"symbol": symbol, "timeframe": tf, "status": "failed",
                      "rows": 0, "added": 0, "error": str(exc)[:200]}
             bucket = summary[tf]
@@ -416,8 +422,8 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
             if on_progress:
                 try:
                     on_progress(r)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    swallowed(log, "marketdata.refresh_all.on_progress", exc, level=logging.DEBUG)
             if sleep_seconds and r["status"] not in ("fresh", "skipped"):
                 time.sleep(sleep_seconds)
 

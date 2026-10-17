@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.providers.base import SOURCE_SPOT_SCALED
 
 log = logging.getLogger(__name__)
@@ -126,6 +127,7 @@ def _fetch_quote(key: str):
     try:
         quote = _parse_quote(_raw_get(QUOTE_URL.format(code=SPOT_PAIRS[key][0])))
     except Exception as exc:
+        swallowed(log, "marketdata.spot_quote", exc, level=logging.DEBUG)
         _note_failure(key, f"{type(exc).__name__}: {exc}")
         return None
     if quote is None:
