@@ -973,6 +973,11 @@ describe('TradeDetail — responsive card layout (v166 TD11)', () => {
   const source = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trade-detail.ts'), 'utf8');
   const styles = source.split('styles: `')[1].split('`,')[0];
 
+  it('gives back navigation the shared control height for phone touch targets', () => {
+    const backStyles = styles.match(/\.back\s*\{([^}]+)\}/)?.[1] ?? '';
+    expect(backStyles).toMatch(/min-height:\s*var\(--control-h\)/);
+  });
+
   it('sizes the cards container independently of the viewport', () => {
     expect(styles).toMatch(/\.grid-host\s*\{[^}]*container:\s*cards\s*\/\s*inline-size/);
     expect(styles).toMatch(/\.card-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*align-items:\s*stretch[^}]*grid-template-areas:\s*var\(--areas-1\)/);

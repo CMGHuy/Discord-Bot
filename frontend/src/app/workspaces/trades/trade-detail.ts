@@ -401,6 +401,9 @@ function cameFromPlan(): boolean {
       gap: var(--space-8);
     }
     .back {
+      display: flex;
+      align-items: center;
+      min-height: var(--control-h);
       color: var(--accent);
       font-size: var(--text-table);
       text-decoration: none;
