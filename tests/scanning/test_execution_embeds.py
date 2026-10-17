@@ -1,9 +1,10 @@
 """v81 execution embed rendering uses the shared presentation kit."""
 import pytest
 
+from swingbot import config
 from swingbot.core.planning.plan_manager import PlanEvent
 from swingbot.core.presentation import ansi, kinds, tokens
-from swingbot.core.presentation.instructions import Instruction
+from swingbot.core.presentation.instructions import Instruction, Money
 from swingbot.core.presentation.kinds import Kind
 from swingbot.core.scanning import execution_embeds
 from tests.scanning.test_embeds_v3 import make_item, make_plan_v2
@@ -59,7 +60,7 @@ def test_ticket_and_event_embeds():
     ticket = execution_embeds.build_ticket_embed(item, item.plan_v2)
     assert ticket.title == "🆕 ▲ LONG NVDA · PLACE"
     assert ticket.description.startswith("```ansi\n")
-    assert "**BUY STOP 101.00 · size n/a**" in ticket.description
+    assert "**▶ BUY STOP 101.00 · size n/a**" in ticket.description
     assert ticket.footer.text.startswith(tokens.DISCLAIMER)
     event = execution_embeds.build_instruction_embed(
         item.plan_v2, PlanEvent(item.plan_v2.plan_id, "cancelled_expired", {"bars_waited": 6}))
@@ -131,3 +132,22 @@ def test_expired_and_invalidated_post_as_grey_result_never_scratch(transition, w
     assert "SCRATCH" not in embed.title and "⚪" not in embed.title
     assert "SCRATCH" not in embed.push_text
     assert embed.color.value == kinds.RESULT_GREY
+
+
+def test_ticket_money_comes_from_the_sizing_snapshot(monkeypatch):
+    monkeypatch.setattr(execution_embeds, "_sizing_snapshot",
+                        lambda entry, plan: {"shares": 10.7, "risk_amount": 50.0})
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    item = make_item(plan_v2=make_plan_v2(entry_type="stop_entry", trigger_price=101.0))
+    item.paper_logged = True
+    text = execution_embeds.build_ticket_embed(item, item.plan_v2).description
+    # make_plan_v2: entry_price 100, stop 95, TP1 110, TP2 120 -> 10 sh, 5 + 5
+    assert "**▶ BUY STOP 101.00 · 10 sh**" in text
+    assert "🛑 SELL STOP 95.00 · if hit -$50.00 · −1.0R" in text
+    assert "💰 SELL LIMIT 110.00 · 5 sh · if hit +$50.00 · +2.0R" in text
+    assert "🏃 5 sh: 🎯 SELL LIMIT 120.00 · if hit +$100.00 · +4.0R" in text
+
+
+def test_ticket_money_without_a_snapshot_is_unsized(monkeypatch):
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
+    assert execution_embeds._ticket_money(make_plan_v2()) == Money(currency="$", shares=None)

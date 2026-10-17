@@ -1,6 +1,7 @@
 """v81: the execution feed's instructions, as pure data. Every string a reader
 places an order from is pinned here."""
 import datetime as dt
+import re
 
 import pytest
 
@@ -10,6 +11,7 @@ from swingbot.core.presentation import instructions as ins
 from tests.planning.test_plan_engine_model import _plan
 
 SIZING = {"shares": 2439.02, "risk_amount": 10000.0}
+MONEY = ins.money_from(2439.02, "$")
 
 
 def _long_pending(**kw):
@@ -34,55 +36,130 @@ def _event(transition, **detail):
     return PlanEvent("p1", transition, detail)
 
 
+def _spec_long(**kw):
+    """The spec's §2 example ticket: 54 sh between 182.40 / 177.80 / 189.10 / 195.00."""
+    base = dict(trigger_price=182.4, stop_loss=177.8, tp1=189.1, tp2=195.0,
+                trail_atr_mult=2.0, created_at="2026-10-15")
+    base.update(kw)
+    return _long_pending(**base)
+
+
+def _usd(line: str) -> float:
+    """The signed dollar figure after 'if hit' in one line."""
+    sign, digits = re.search(r"if hit ([+-])\$([\d,]+\.\d\d)", line).groups()
+    return (1 if sign == "+" else -1) * float(digits.replace(",", ""))
+
+
+# --- money ------------------------------------------------------------------
+
+def test_money_from_floors_shares_and_keeps_the_record_count():
+    assert ins.money_from(54.41, "$", realized_amount=12.5) == ins.Money(
+        currency="$", shares=54, realized_amount=12.5, record_shares=54.41)
+    assert ins.money_from(None, "$") == ins.Money(currency="$", shares=None)
+    assert ins.money_from(0.4, "$").shares is None             # under one share: unsized
+
+
+def test_unpriced_money_keeps_the_share_count_and_drops_every_dollar():
+    assert ins.money_from(54.41, "$", realized_amount=1.0, priced=False) == ins.Money(
+        currency="$", shares=54, realized_amount=None, record_shares=None)
+
+
 # --- the order ticket --------------------------------------------------------
 
 def test_a_long_stop_entry_ticket_is_a_complete_bracket():
     t = ins.ticket_for(_long_pending(), logged=True, not_logged_reason=None,
-                       sizing=SIZING, currency="$", level=5)
+                       money=MONEY, level=5)
     assert (t.verb, t.tone, t.level, t.ticker, t.plan_id) == (ins.PLACE, "level", 5, "AAPL", "p1")
-    assert t.headline == "BUY STOP 102.50 · 2,439 sh (risk $10,000)"
+    assert t.headline == "▶ BUY STOP 102.50 · 2,439 sh"
     assert t.lines == (
-        "SELL STOP 98.40",
-        "TP1 SELL LIMIT 106.00 · 1,219 sh (50%)",
-        "RUNNER 1,220 sh → TP2 110.00 / trail 3×ATR — stop moves are pinged here",
-        "Stop → entry once price reaches 104.25",
-        "Cancel if: not triggered by the close of ≈ Thu 17 Sep (5 sessions), "
-        "or price reaches 98.40 first",
+        "🛑 SELL STOP 98.40 · if hit -$9,999.90 · −1.0R",
+        "💰 SELL LIMIT 106.00 · 1,219 sh · if hit +$4,266.50 · +0.9R",
+        "🏃 1,220 sh: 🎯 SELL LIMIT 110.00 · if hit +$9,150.00 · +1.8R · "
+        "〜 trail 3×ATR, stop moves pinged here",
+        "⚖ stop → entry at ≥ 104.25",
+        "⏳ CANCEL after Thu 17 Sep (5 sessions) · ⛔ CANCEL if ≤ 98.40 first",
     )
     assert t.warnings == ()
 
 
-def test_a_short_ticket_swaps_every_side_and_survives_missing_sizing():
-    t = ins.ticket_for(_short_pending(), logged=True, not_logged_reason=None,
-                       sizing=None, level=4)
-    assert t.headline == "SELL STOP 97.50 · size n/a"
+def test_the_spec_example_ticket():
+    t = ins.ticket_for(_spec_long(), logged=True, not_logged_reason=None,
+                       money=ins.money_from(54.9, "$"))
+    assert t.headline == "▶ BUY STOP 182.40 · 54 sh"
     assert t.lines == (
-        "BUY STOP 101.60",
-        "TP1 BUY LIMIT 94.00 · 50%",
-        "RUNNER 50% → trail 2.5×ATR — stop moves are pinged here",
-        "Stop → entry once price reaches 95.75",
-        "Cancel if: not triggered by the close of ≈ Wed 16 Sep (3 sessions), "
-        "or price reaches 101.60 first",
+        "🛑 SELL STOP 177.80 · if hit -$248.40 · −1.0R",
+        "💰 SELL LIMIT 189.10 · 27 sh · if hit +$180.90 · +1.5R",
+        "🏃 27 sh: 🎯 SELL LIMIT 195.00 · if hit +$340.20 · +2.7R · "
+        "〜 trail 2×ATR, stop moves pinged here",
+        "⚖ stop → entry at ≥ 185.75",
+        "⏳ CANCEL after Thu 22 Oct (5 sessions) · ⛔ CANCEL if ≤ 177.80 first",
     )
+
+
+@pytest.mark.parametrize("index,shares,level", [(0, 54, 177.80), (1, 27, 189.10), (2, 27, 195.00)])
+def test_every_projected_dollar_is_printed_shares_times_printed_move(index, shares, level):
+    t = ins.ticket_for(_spec_long(), logged=True, not_logged_reason=None,
+                       money=ins.money_from(54.9, "$"))
+    assert _usd(t.lines[index]) == pytest.approx(shares * (level - 182.40), abs=0.005)
+
+
+def test_a_sized_short_ticket_flips_verbs_comparisons_and_signs():
+    t = ins.ticket_for(_short_pending(tp2=90.0), logged=True, not_logged_reason=None,
+                       money=ins.money_from(30.6, "$"))
+    assert t.headline == "▶ SELL STOP 97.50 · 30 sh"
+    assert t.lines == (
+        "🛑 BUY STOP 101.60 · if hit -$123.00 · −1.0R",
+        "💰 BUY LIMIT 94.00 · 15 sh · if hit +$52.50 · +0.9R",
+        "🏃 15 sh: 🎯 BUY LIMIT 90.00 · if hit +$112.50 · +1.8R · "
+        "〜 trail 2.5×ATR, stop moves pinged here",
+        "⚖ stop → entry at ≤ 95.75",
+        "⏳ CANCEL after Wed 16 Sep (3 sessions) · ⛔ CANCEL if ≥ 101.60 first",
+    )
+
+
+def test_a_short_ticket_survives_missing_sizing_with_r_only():
+    t = ins.ticket_for(_short_pending(), logged=True, not_logged_reason=None, level=4)
+    assert t.headline == "▶ SELL STOP 97.50 · size n/a"
+    assert t.lines == (
+        "🛑 BUY STOP 101.60 · if hit −1.0R",
+        "💰 BUY LIMIT 94.00 · 50% · if hit +0.9R",
+        "🏃 50%: 〜 trail 2.5×ATR, stop moves pinged here",
+        "⚖ stop → entry at ≤ 95.75",
+        "⏳ CANCEL after Wed 16 Sep (3 sessions) · ⛔ CANCEL if ≥ 101.60 first",
+    )
+
+
+def test_unpriced_money_prints_shares_but_no_dollars():
+    t = ins.ticket_for(_spec_long(), logged=True, not_logged_reason=None,
+                       money=ins.money_from(54.9, "$", priced=False))
+    assert t.headline == "▶ BUY STOP 182.40 · 54 sh"
+    assert not any("$" in line for line in t.lines)
+    assert t.lines[1] == "💰 SELL LIMIT 189.10 · 27 sh · if hit +1.5R"
+
+
+def test_no_tp2_means_no_runner_figure():
+    t = ins.ticket_for(_spec_long(tp2=None), logged=True, not_logged_reason=None,
+                       money=ins.money_from(54.9, "$"))
+    assert t.lines[2] == "🏃 27 sh: 〜 trail 2×ATR, stop moves pinged here"
 
 
 def test_a_market_entry_ticket_has_no_cancel_clause():
     t = ins.ticket_for(_long_pending(entry_type="market", trigger_price=100.0,
                                      stop_loss=95.0, tp1=110.0),
-                       logged=True, not_logged_reason=None, sizing=None)
-    assert t.headline == "BUY AT MARKET ~100.00 · size n/a"
-    assert not any(line.startswith("Cancel if") for line in t.lines)
+                       logged=True, not_logged_reason=None)
+    assert t.headline == "▶ BUY AT MARKET ~100.00 · size n/a"
+    assert not any("CANCEL" in line for line in t.lines)
 
 
 def test_a_short_market_entry_says_sell_short():
     t = ins.ticket_for(_short_pending(entry_type="market"), logged=True,
-                       not_logged_reason=None, sizing=None)
-    assert t.headline.startswith("SELL SHORT AT MARKET ~97.50")
+                       not_logged_reason=None)
+    assert t.headline.startswith("▶ SELL SHORT AT MARKET ~97.50")
 
 
 def test_an_unlogged_alert_says_do_not_place_and_why():
     t = ins.ticket_for(_long_pending(), logged=False, not_logged_reason="already open",
-                       sizing=SIZING, currency="$")
+                       money=MONEY)
     assert (t.verb, t.tone) == (ins.DO_NOT_PLACE, "inert")
     assert t.headline == "DO NOT PLACE — already open"
     assert t.lines == ("levels: entry 102.50 · stop 98.40 · TP1 106.00",)
@@ -102,7 +179,7 @@ def test_cap_blocks_keep_place_and_are_named_above_the_orders():
         "⚠ kill switch on (3 consecutive losses) — the bot tracks this at full size",
     )
     t = ins.ticket_for(_long_pending(), logged=True, not_logged_reason=None,
-                       sizing=SIZING, warnings=warnings)
+                       money=MONEY, warnings=warnings)
     assert t.verb == ins.PLACE
     assert t.warnings == warnings
 

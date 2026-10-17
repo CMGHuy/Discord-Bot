@@ -3,9 +3,11 @@
 Every message the simple-alerts channel sends -- an alert's order ticket and
 each plan lifecycle event -- is projected here into the verb and the order
 lines a reader places at a broker. No discord import, no I/O, no clock:
-sizing, block annotations and every live stop arrive as arguments or in the
-event's detail, which plan_manager stamps. core/scanning/execution_embeds.py
-is the only thing that turns an Instruction into a Discord embed.
+money (v170: a frozen Money), block annotations and every live stop arrive
+as arguments or in the event's detail, which plan_manager stamps. Every
+glyph comes from tokens.FEED_SYMBOLS; none is written here as a literal.
+core/scanning/execution_embeds.py is the only thing that turns an
+Instruction into a Discord embed.
 """
 from __future__ import annotations
 
@@ -89,6 +91,98 @@ def signed_r(x: float) -> str:
     return text if x < 0 or text == "0.0R" else f"+{text}"
 
 
+_S = tokens.FEED_SYMBOLS
+
+
+@dataclass(frozen=True)
+class Money:
+    """The dollar inputs of one feed message (v170 §1, A3), as data.
+
+    ``shares`` is the whole-share count the message prints (the floor of the
+    position); ``record_shares`` the paper record's unrounded count, used
+    only for realised figures (the record's own arithmetic).
+    ``realized_amount`` is the record's settled ``realized_pnl_amount``.
+    ``record_shares is None`` means no paper record backs the message: it
+    still prints share counts but no dollar figure."""
+
+    currency: str
+    shares: int | None
+    realized_amount: float | None = None
+    record_shares: float | None = None
+
+
+def money_from(shares: float | None, currency: str, *,
+               realized_amount: float | None = None, priced: bool = True) -> Money:
+    """The one constructor callers use. ``priced=False`` keeps the share
+    count (a lifecycle message with no linked record sizes from today's
+    snapshot, as before v170) and drops every dollar figure."""
+    whole = math.floor(shares) if shares else 0
+    return Money(currency=currency, shares=whole or None,
+                 realized_amount=realized_amount if priced else None,
+                 record_shares=float(shares) if priced and shares else None)
+
+
+def _sign(direction: str) -> int:
+    return 1 if direction == "bullish" else -1
+
+
+def _printed(x: float) -> float:
+    """``x`` as the message prints it, so printed shares × printed move is
+    exactly the printed dollars (v170 §1)."""
+    return float(_price(x))
+
+
+def _r_at(plan, entry: float | None, level: float | None) -> float | None:
+    """R of ``level`` measured from ``entry`` against the plan's stop, signed
+    by direction; None when there is no entry, level or risk."""
+    if entry is None or level is None:
+        return None
+    risk = abs(entry - plan.stop_loss)
+    if not risk:
+        return None
+    return (level - entry) * _sign(plan.direction) / risk
+
+
+def _join(*parts: str) -> str:
+    """Join the non-empty parts with the feed's ' · ' separator."""
+    return " · ".join(part for part in parts if part)
+
+
+def _priced(money: Money | None) -> bool:
+    """True when the message may print dollars: shares known and record-backed."""
+    return money is not None and money.shares is not None and money.record_shares is not None
+
+
+def _toward(direction: str) -> str:
+    """The comparison glyph for price moving the trade's way."""
+    return _S["at_or_above"] if direction == "bullish" else _S["at_or_below"]
+
+
+def _against(direction: str) -> str:
+    """The comparison glyph for price moving against the trade."""
+    return _S["at_or_below"] if direction == "bullish" else _S["at_or_above"]
+
+
+def _dollars(amount: float, money: Money) -> str:
+    return tokens.fmt_money(amount, money.currency)
+
+
+def _projected(plan, entry, level, shares: int | None, money: Money | None) -> str:
+    """'If hit' dollars: printed shares × printed move, signed by direction;
+    '' when the message is unpriced."""
+    if not _priced(money) or shares is None or entry is None or level is None:
+        return ""
+    return _dollars(shares * (_printed(level) - _printed(entry)) * _sign(plan.direction), money)
+
+
+def _if_hit(plan, entry, level, shares: int | None, money: Money | None) -> str:
+    """'if hit <$> · <R>' for one ticket level; whichever figures exist."""
+    r = _r_at(plan, entry, level)
+    figures = _join(_projected(plan, entry, level, shares, money),
+                    signed_r(r) if r is not None else "")
+    return f"if hit {figures}" if figures else ""
+
+
 def approx_last_trigger_session(created_at: str, expiry_bars: int) -> dt.date:
     """The last session a pending plan can still trigger in: ``created_at``
     plus ``expiry_bars`` weekdays (lifecycle.pending_expired is strictly
@@ -124,11 +218,48 @@ def block_warnings(*, heat: dict | None, cluster: dict | None,
     return tuple(warnings)
 
 
+def _leg_sizes(plan, money: Money | None) -> tuple:
+    """(size, TP1 qty, runner qty, TP1 shares, runner shares) for the ticket;
+    percentages and None share counts when unsized."""
+    whole = money.shares if money is not None else None
+    if whole is None:
+        return ("size n/a", f"{plan.tp1_fraction:.0%}", f"{1 - plan.tp1_fraction:.0%}",
+                None, None)
+    tp1_shares = math.floor(whole * plan.tp1_fraction)
+    runner = whole - tp1_shares
+    return f"{whole:,} sh", f"{tp1_shares:,} sh", f"{runner:,} sh", tp1_shares, runner
+
+
+def _runner_line(plan, entry, side: dict, qty: str, shares: int | None,
+                 money: Money | None) -> str:
+    """The runner's TP2 order (with its 'if hit' figures) and its trail."""
+    trail = f"{_S['trail']} trail {plan.trail_atr_mult:g}×ATR, stop moves pinged here"
+    target = ""
+    if plan.tp2 is not None:
+        target = _join(f"{_S['tp2']} {side['limit']} {_price(plan.tp2)}",
+                       _if_hit(plan, entry, plan.tp2, shares, money))
+    return f"{_S['runner']} {qty}: {_join(target, trail)}"
+
+
+def _cancel_line(plan) -> str:
+    """A stop entry's two cancel conditions, each saying CANCEL (v170 panel)."""
+    sessions = plan_view(plan, bars_since_created=0).bars_to_expiry
+    if sessions is None:
+        sessions = plan.expiry_bars
+    last = approx_last_trigger_session(plan.created_at, plan.expiry_bars)
+    return _join(f"{_S['expiry']} CANCEL after {last:%a %d %b} ({sessions} sessions)",
+                 f"{_S['invalid']} CANCEL if {_against(plan.direction)} "
+                 f"{_price(plan.stop_loss)} first")
+
+
 def ticket_for(plan, *, logged: bool, not_logged_reason: str | None,
-               sizing: dict | None, currency: str = "",
-               warnings: tuple[str, ...] = (), level: int | None = None) -> Instruction:
+               money: Money | None = None, warnings: tuple[str, ...] = (),
+               level: int | None = None) -> Instruction:
     """The order ticket for a new alert (v81 D1, D2, D4). ``logged`` is
-    scan_run's own paper-trade decision; the verb mirrors it."""
+    scan_run's own paper-trade decision; the verb mirrors it. v170: every
+    order line keeps its broker verb and carries its 'if hit' R and, when
+    ``money`` is priced, its dollars; the stop line's loss sits beside the
+    gains."""
     side = _sides(plan.direction)
     entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
     common = dict(ticker=plan.ticker, direction=plan.direction,
@@ -141,39 +272,25 @@ def ticket_for(plan, *, logged: bool, not_logged_reason: str | None,
                    f"TP1 {_price(plan.tp1)}",),
             tone="inert", **common)
 
-    whole = _whole_shares(sizing)
-    if whole is None:
-        size = "size n/a"
-        tp1_qty = f"{plan.tp1_fraction:.0%}"
-        runner_qty = f"{1 - plan.tp1_fraction:.0%}"
-    else:
-        tp1_shares = math.floor(whole * plan.tp1_fraction)
-        size = f"{whole:,} sh (risk {currency}{sizing['risk_amount']:,.0f})"
-        tp1_qty = f"{tp1_shares:,} sh ({plan.tp1_fraction:.0%})"
-        runner_qty = f"{whole - tp1_shares:,} sh"
-
+    size, tp1_qty, runner_qty, tp1_shares, runner_shares = _leg_sizes(plan, money)
+    whole = money.shares if money is not None else None
     if plan.entry_type == "stop_entry":
-        headline = f"{side['entry_stop']} {_price(plan.trigger_price)} · {size}"
+        order = f"{side['entry_stop']} {_price(plan.trigger_price)}"
     else:
-        headline = f"{side['entry_market']} ~{_price(plan.trigger_price)} · {size}"
-    trail = f"trail {plan.trail_atr_mult:g}×ATR"
-    runner_to = f"TP2 {_price(plan.tp2)} / {trail}" if plan.tp2 is not None else trail
+        order = f"{side['entry_market']} ~{_price(plan.trigger_price)}"
     lines = [
-        f"{side['stop']} {_price(plan.stop_loss)}",
-        f"TP1 {side['limit']} {_price(plan.tp1)} · {tp1_qty}",
-        f"RUNNER {runner_qty} → {runner_to} — stop moves are pinged here",
-        f"Stop → entry once price reaches {_price(breakeven_trigger(plan, entry))}",
+        _join(f"{_S['stop']} {side['stop']} {_price(plan.stop_loss)}",
+              _if_hit(plan, entry, plan.stop_loss, whole, money)),
+        _join(f"{_S['tp1']} {side['limit']} {_price(plan.tp1)}", tp1_qty,
+              _if_hit(plan, entry, plan.tp1, tp1_shares, money)),
+        _runner_line(plan, entry, side, runner_qty, runner_shares, money),
+        f"{_S['breakeven']} stop → entry at {_toward(plan.direction)} "
+        f"{_price(breakeven_trigger(plan, entry))}",
     ]
     if plan.entry_type == "stop_entry":
-        sessions = plan_view(plan, bars_since_created=0).bars_to_expiry
-        if sessions is None:
-            sessions = plan.expiry_bars
-        last = approx_last_trigger_session(plan.created_at, plan.expiry_bars)
-        lines.append(f"Cancel if: not triggered by the close of ≈ {last:%a %d %b} "
-                     f"({sessions} sessions), or price reaches "
-                     f"{_price(plan.stop_loss)} first")
-    return Instruction(verb=PLACE, headline=headline, lines=tuple(lines),
-                       warnings=tuple(warnings), tone="level", **common)
+        lines.append(_cancel_line(plan))
+    return Instruction(verb=PLACE, headline=f"{_S['entry']} {order} · {size}",
+                       lines=tuple(lines), warnings=tuple(warnings), tone="level", **common)
 
 
 def total_r(plan, exit_price: float | None) -> float:

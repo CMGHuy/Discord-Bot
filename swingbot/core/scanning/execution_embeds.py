@@ -11,8 +11,8 @@ from swingbot import config
 from swingbot.core import presentation as ui
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.instructions import (CLOSE_AT_MARKET, DO_NOT_PLACE, Instruction,
-                                                     block_warnings, instruction_for,
-                                                     ticket_for, total_r)
+                                                     Money, block_warnings, instruction_for,
+                                                     money_from, ticket_for, total_r)
 from swingbot.core.presentation.kinds import Family, Kind
 
 from .plan_table import _sizing_snapshot
@@ -74,11 +74,18 @@ def plan_result_block(plan, exit_price: float | None, r: float | None) -> str:
                               pct=_move_pct(plan.entry_price, exit_price, plan.direction), r=r)
 
 
+def _ticket_money(plan) -> Money:
+    """The ticket's money: the same sizing snapshot scan_run logs the paper
+    trade from in the same scan (v170 §1); unsized when there is none."""
+    sizing = _sizing_snapshot(_entry(plan), plan) or {}
+    return money_from(sizing.get("shares"), config.CURRENCY_SYMBOL)
+
+
 def build_ticket_embed(item, plan) -> discord.Embed:
     """Render a new v2 alert's order ticket."""
     instruction = ticket_for(
         plan, logged=item.paper_logged, not_logged_reason=item.not_logged_reason,
-        sizing=_sizing_snapshot(_entry(plan), plan), currency=config.CURRENCY_SYMBOL,
+        money=_ticket_money(plan),
         warnings=block_warnings(heat=getattr(item, "heat_blocked", None),
                                 cluster=getattr(item, "cluster_blocked", None),
                                 kill=getattr(item, "kill_switch_blocked", None)),
