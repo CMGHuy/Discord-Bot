@@ -109,3 +109,4 @@ Implementers share one worktree; parallel tasks must own disjoint files.
 
 - **v167 was not merged when this plan was written** (2026-10-16: plan committed, no implementation on `main`). MO1 re-checks; if v167 is still unmerged it appends the date and state here and the plan waits. It never edits v167's worktree or plan text.
 - **Evidence (MO18) needs the partner**: they type the login into the headed Playwright window; the session cookie then serves both local ports.
+- **2026-10-17, MO1:** v167 not merged (tier-3 banner, `palette.css`, `dump_tokens.py`, `all-sources.ts` all missing on main; branch `2026-10-16-v167-arctic-navy-token-foundation` is 12 commits ahead of main). v168 waits; nothing else changed.
