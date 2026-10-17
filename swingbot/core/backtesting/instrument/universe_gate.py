@@ -48,14 +48,19 @@ def _bars_through(df: pd.DataFrame, day: str, count: int) -> pd.DataFrame:
 
 def causal_liquidity_reason(df: pd.DataFrame, day: str, floor: LiquidityFloor) -> str | None:
     """None when the ticker cleared `floor` on `day`, else a loggable reason.
-    Reads only the `floor.lookback_bars` bars dated on or before `day`."""
+    Reads only the `floor.lookback_bars` bars dated on or before `day`. A NaN
+    Close or Volume in that window refuses the day like a short history: the
+    mean never silently averages fewer than `lookback_bars` bars."""
     window = _bars_through(df, day, floor.lookback_bars)
     if len(window) < floor.lookback_bars:
         return f"insufficient history (<{floor.lookback_bars} bars) at {day}"
+    dollar = window["Close"] * window["Volume"]
+    if int(dollar.notna().sum()) < floor.lookback_bars:
+        return f"insufficient history (<{floor.lookback_bars} valid bars) at {day}"
     close = float(window["Close"].iloc[-1])
     if not close >= floor.min_price:
         return f"price {close:.2f} < {floor.min_price:.2f} floor at {day}"
-    dollar_vol = float((window["Close"] * window["Volume"]).mean())
+    dollar_vol = float(dollar.mean())
     if not dollar_vol >= floor.min_avg_dollar_vol:
         return (f"avg dollar vol ${dollar_vol / 1e6:.1f}M < "
                 f"${floor.min_avg_dollar_vol / 1e6:.0f}M floor at {day}")

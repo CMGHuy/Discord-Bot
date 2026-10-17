@@ -197,3 +197,16 @@ def test_slice_min_n_is_overridable():
 def test_a_full_slice_without_a_finite_expectancy_is_an_error(exp_r):
     with pytest.raises(ValueError, match="no finite ExpR"):
         ug.watchlist_slice_verdict(30, exp_r)
+
+
+def test_nan_volume_inside_the_window_is_refused_as_insufficient_history():
+    """A NaN Volume must not be skipped by the mean (that would average fewer
+    than lookback_bars bars): the day is refused like a short history."""
+    volumes = [1_000_000.0] * 40
+    volumes[25] = float("nan")
+    df = _frame([50.0] * 40, volumes)
+    assert ug.causal_liquidity_reason(df, _day(df, 30), FLOOR).startswith(
+        "insufficient history (<20 valid bars)")
+    assert ug.causal_liquidity_reason(df, _day(df, 24), FLOOR) is None    # before the NaN
+    assert ug.causal_liquidity_reason(df, _day(df, 39), FLOOR).startswith(
+        "insufficient history")                                         # NaN still in window
