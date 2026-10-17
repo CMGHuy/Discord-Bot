@@ -258,6 +258,8 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("CLAUDE.md", ("tests/hooks/",)),
     # Every `.py` path the README names must exist (v149 H3).
     ("README.md", ("tests/dev/test_readme_paths.py",)),
+    # The complexity ratchet's baseline is compared against the real tree.
+    ("scripts/dev/complexity_baseline.json", ("tests/dev/test_complexity_gate.py",)),
     # Codex mirror outputs, compared against a fresh render by test_codex_mirror.
     # v161: test_generator_roles pins the scout row, the .agents/ copies and
     # the 32 KiB Codex cap.
