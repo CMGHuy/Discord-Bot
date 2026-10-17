@@ -175,3 +175,126 @@ def test_bad_baseline_fails_naming_its_path(gate, tmp_path, content):
         path.write_text(content, encoding="utf-8")
     with pytest.raises(gate.GateError, match="baseline.json"):
         gate.load_baseline(path)
+
+
+# -- modes ------------------------------------------------------------------
+
+def _run(gate, repo, *flags):
+    return gate.main([*flags, "--repo", str(repo),
+                      "--baseline", str(repo / "baseline.json")])
+
+
+def _baseline(gate, repo, scores):
+    gate.write_baseline(repo / "baseline.json", scores)
+
+
+def test_check_passes_on_a_tree_that_matches(gate, tmp_path, capsys):
+    repo = _repo(tmp_path, {"scripts/a.py": _fn("main", 15)})
+    _baseline(gate, repo, {"scripts.a:main": 15})
+    assert _run(gate, repo) == 0
+    assert capsys.readouterr().out.startswith("VERDICT: PASS")
+
+
+@pytest.mark.parametrize("baseline, expected", [
+    ({}, "new      scripts.a:main  15"),
+    ({"scripts.a:main": 14}, "risen    scripts.a:main  14 -> 15"),
+    ({"scripts.a:main": 20}, "improved scripts.a:main  20 -> 15  (run --update)"),
+    ({"scripts.a:main": 15, "scripts.a:old": 30},
+     "gone     scripts.a:old  30  (run --update)"),
+])
+def test_check_fails_on_each_kind(gate, tmp_path, capsys, baseline, expected):
+    repo = _repo(tmp_path, {"scripts/a.py": _fn("main", 15)})
+    _baseline(gate, repo, baseline)
+    assert _run(gate, repo) == 1
+    out = capsys.readouterr().out
+    assert out.startswith("VERDICT: FAIL  1 finding(s)")
+    assert expected in out
+
+
+def test_check_prints_at_most_twenty_findings(gate, tmp_path, capsys):
+    source = "".join(_fn(f"f{i:02d}", 15) for i in range(25))
+    repo = _repo(tmp_path, {"scripts/a.py": source})
+    _baseline(gate, repo, {})
+    assert _run(gate, repo) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "VERDICT: FAIL  25 finding(s)"
+    assert len([line for line in lines if line.startswith("new ")]) == 20
+    assert "... and 5 more" in lines
+
+
+def test_check_hints_at_a_move_or_rename(gate, tmp_path, capsys):
+    repo = _repo(tmp_path, {"scripts/b.py": _fn("main", 15)})
+    _baseline(gate, repo, {"scripts.a:main": 15})
+    assert _run(gate, repo) == 1
+    assert ("hint: scripts.a:main -> scripts.b:main looks like a move or rename "
+            "(score 15)") in capsys.readouterr().out
+
+
+def test_check_fails_on_a_missing_baseline(gate, tmp_path, capsys):
+    repo = _repo(tmp_path, {"scripts/a.py": ""})
+    assert _run(gate, repo) == 1
+    assert "baseline.json" in capsys.readouterr().out
+
+
+def test_check_fails_on_an_unparseable_source_file(gate, tmp_path, capsys):
+    repo = _repo(tmp_path, {"scripts/broken.py": "def f(:\n"})
+    _baseline(gate, repo, {})
+    assert _run(gate, repo) == 1
+    assert "scripts/broken.py" in capsys.readouterr().out
+
+
+def test_check_skips_without_git(gate, tmp_path, capsys):
+    assert _run(gate, tmp_path) == 0
+    assert capsys.readouterr().out.startswith("VERDICT: SKIP")
+
+
+def test_update_locks_in_a_gain(gate, tmp_path, capsys):
+    repo = _repo(tmp_path, {"scripts/a.py": _fn("main", 15)})
+    _baseline(gate, repo, {"scripts.a:main": 20, "scripts.a:old": 30})
+    assert _run(gate, repo, "--update") == 0
+    assert gate.load_baseline(repo / "baseline.json") == {"scripts.a:main": 15}
+    assert capsys.readouterr().out.startswith("VERDICT: PASS")
+
+
+def test_update_writes_the_shrink_but_fails_on_new_or_risen(gate, tmp_path, capsys):
+    source = _fn("main", 15) + _fn("fresh", 16) + _fn("worse", 21)
+    repo = _repo(tmp_path, {"scripts/a.py": source})
+    _baseline(gate, repo, {"scripts.a:main": 20, "scripts.a:worse": 20})
+    assert _run(gate, repo, "--update") == 1
+    # The gain is locked in; the regressions are neither added nor raised.
+    assert gate.load_baseline(repo / "baseline.json") == {
+        "scripts.a:main": 15, "scripts.a:worse": 20}
+    out = capsys.readouterr().out
+    assert "new      scripts.a:fresh  16" in out
+    assert "risen    scripts.a:worse  20 -> 21" in out
+
+
+def test_update_refuses_while_a_rename_pair_exists(gate, tmp_path, capsys):
+    repo = _repo(tmp_path, {"scripts/b.py": _fn("main", 15)})
+    _baseline(gate, repo, {"scripts.a:main": 15})
+    before = (repo / "baseline.json").read_bytes()
+    assert _run(gate, repo, "--update") == 1
+    assert (repo / "baseline.json").read_bytes() == before     # nothing written
+    assert "hand-edit the baseline key first" in capsys.readouterr().out
+
+
+def test_init_writes_the_first_baseline(gate, tmp_path, capsys):
+    repo = _repo(tmp_path, {"scripts/a.py": _fn("main", 15) + _fn("small", 3)})
+    assert _run(gate, repo, "--init") == 0
+    assert gate.load_baseline(repo / "baseline.json") == {"scripts.a:main": 15}
+
+
+def test_init_refuses_when_the_baseline_exists(gate, tmp_path, capsys):
+    repo = _repo(tmp_path, {"scripts/a.py": _fn("main", 15)})
+    _baseline(gate, repo, {})
+    assert _run(gate, repo, "--init") == 1
+    assert gate.load_baseline(repo / "baseline.json") == {}
+    assert "already exists" in capsys.readouterr().out
+
+
+def test_rename_pairs_match_by_score_one_to_one(gate):
+    F = gate.Finding
+    findings = [F("gone", "a:f", 15, None), F("gone", "a:g", 15, None),
+                F("new", "b:f", None, 15), F("new", "b:h", None, 22),
+                F("risen", "c:f", 15, 16)]
+    assert gate.rename_pairs(findings) == [("a:f", "b:f")]
