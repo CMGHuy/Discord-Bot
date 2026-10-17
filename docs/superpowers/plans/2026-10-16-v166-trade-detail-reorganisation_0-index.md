@@ -30,9 +30,13 @@ local-replica pass captured 48 page/width shots and 12 ready-chart supplements
 (`.superpowers/v166-shots/report.md`): card grids and scroll checks passed;
 the Back touch target was fixed (`2aac4ae3`). PENDING was absent locally. A
 shared `WhyPanel` factor-row overlap was found at 390–1024 px; the partner
-approved its direct fix before merge. That focused fix and Why re-shot are in
-progress. The local replica's stale scan banner covering Back is recorded as a
+approved its direct fix, committed as `1aea3b25`. The Why re-shot (closed d8554942,
+partial 47f7fd16, cancelled 65cac42a, at 1440/1024/768/390; 14/14 DOM checks, no
+confidence-text collisions, no page or grid overflow) was signed off by the partner
+in chat on 2026-10-18. PENDING was not in the local data: covered by the production
+re-shot after deploy. The local replica's stale scan banner covering Back is recorded as a
 separate shell/data limitation for the production re-shot.
+- **Next:** TD13, the full suite.
 
 ## Where to work
 
@@ -121,3 +125,4 @@ The 24 `trade-detail.spec.ts` cases that mount `plan`/`live` (brief § 3) are re
 ## Handoff
 
 - Visual pass data (TD12): the local stack (`python admin_ui.py` on :1234 + `ng serve --port 4123`) serves the local database, which may lack a closed two-leg trade, a PARTIAL/ACTIVE trade or a PENDING plan. TD12 shoots every group it finds and records the missing ones; those are covered by the production re-shot after deploy (spec § Testing), never by editing data.
+- **After deploy (from TD12):** re-shoot production with `node frontend/scripts/browse.mjs shots --out <dir> --widths 1440,1024,768,390 --path "trades/<SPCX id>" --path "trades/<SPCX id>?tab=why"` (the closed two-leg SPCX trade whose id starts `f48c80e2`; `browse.mjs api --path "api/v1/trades?ticker=SPCX"` finds it) plus an open/partial trade and a pending plan, and check the same rule; production publishes `risk_stop`, so the PARTIAL Plan card's working-stop row and resting-stop line show there for the first time.
