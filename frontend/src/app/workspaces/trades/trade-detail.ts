@@ -37,17 +37,21 @@ import { OutcomePath } from './why/outcome-path';
 import { PlanChart } from './why/plan-chart';
 import { SizingPanel } from './why/sizing-panel';
 import { WHY_SECTIONS, WhyPanel, WhySection } from './why/why-panel';
+import { ScoresCard } from './scores-card';
+import { hasLevelSources, LevelSourcesCard } from './level-sources-card';
+import { StrategyRecordCard } from './strategy-record-card';
+import { CardAreas, WhyCard, whyAreas } from './why-areas';
 import { OutcomeStrip } from './outcome-strip';
 import { outcomeTiles } from './outcome-tiles';
 import { sideLabel, statusGroup } from './trade-figures';
 
-/** Plan · Live · Chart · Notes · Strategy — spec 3's five, in its order. */
+/** Interim Plan, Live, Chart, Notes and Why tabs. */
 const TABS: Tab[] = [
   { id: 'plan', label: 'Plan' },
   { id: 'live', label: 'Live' },
   { id: 'chart', label: 'Chart' },
   { id: 'notes', label: 'Notes' },
-  { id: 'strategy', label: 'Strategy' },
+  { id: 'why', label: 'Why' },
 ];
 
 const TAB_IDS = new Set(TABS.map((tab) => tab.id));
@@ -56,6 +60,10 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
  *  recorded" is a measured answer and is never hidden (spec v151 § Edge
  *  cases). The reasoning sections stay out, exactly as before. */
 const ABSENT_SECTIONS: readonly WhySection[] = ['gates', 'calendar'];
+
+const CELL_SECTIONS = {
+  why: ['explanation'], breakdown: ['confidence'], gates: ['gates'], calendar: ['calendar'],
+} as const satisfies Record<string, readonly WhySection[]>;
 
 const ARRIVAL_SUFFIX = ' — this is its trade record.';
 
@@ -82,7 +90,7 @@ function cameFromPlan(): boolean {
 
 /**
  * One trade — the shell and the Plan tab (NG43). Live is NG44, Chart NG45,
- * Notes and Strategy NG46.
+ * Notes NG46, with reasoning and the registry in Why.
  *
  * **The active tab is a query parameter**, for the same reason the Trades
  * list keeps its filters there: a tab held only in component state cannot be
@@ -113,6 +121,9 @@ function cameFromPlan(): boolean {
     OutcomePath,
     PlanChart,
     OutcomeStrip,
+    ScoresCard,
+    LevelSourcesCard,
+    StrategyRecordCard,
   ],
   template: `
     <header class="head">
@@ -522,68 +533,52 @@ function cameFromPlan(): boolean {
           </p>
         </div>
       }
-      @case ('strategy') {
-        <div class="strategy">
-          @if (store.strategiesError()) {
-            <p class="not-journaled">{{ store.strategiesError() }}</p>
-          } @else if (!store.trade()?.strategy) {
-            <p class="not-journaled">This position has no strategy recorded.</p>
-          } @else if (store.strategyRow(); as row) {
-            <!-- Read-only on purpose: this is a window into the registry, and
-                 the place to change a strategy's numbers is a validation run,
-                 not a trade. -->
-            <dl>
-              <div>
-                <dt>Strategy</dt>
-                <dd>{{ row.strategy }}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{{ row.status }}</dd>
-              </div>
-              <div>
-                <dt>OOS sample</dt>
-                <dd>{{ fmt(row.n) }}</dd>
-              </div>
-              <div>
-                <dt>OOS win rate</dt>
-                <dd>{{ fmtPct(row.win_rate) }}</dd>
-              </div>
-              <div>
-                <dt>OOS expectancy</dt>
-                <dd>{{ fmt(row.expectancy_r) }}R</dd>
-              </div>
-              <div>
-                <dt>Live sample</dt>
-                <dd>{{ fmt(row.live_n) }}</dd>
-              </div>
-              <div>
-                <dt>Live win rate</dt>
-                <dd>{{ fmtPct(row.live_wr) }}</dd>
-              </div>
-              <div>
-                <dt>Live vs OOS</dt>
-                <dd>{{ fmtPct(row.delta_vs_oos) }}</dd>
-              </div>
-              <div>
-                <dt>Window</dt>
-                <dd>{{ fmtText(row.window) }}</dd>
-              </div>
-            </dl>
-            @if (row.decayed) {
-              <!-- The pre-registered decay rule fired. This belongs on the
-                   trade, not only on the Analytics page: it is the reason to
-                   distrust this position's edge. -->
-              <p class="decayed">
-                Live results have decayed against this strategy's out-of-sample record.
-              </p>
-            }
-          } @else {
-            <p class="not-journaled">
-              The registry has no entry for {{ fmtText(store.trade()?.strategy) }}.
-            </p>
+      @case ('why') {
+        @if (store.trade(); as trade) {
+          @if (store.detailAbsent()) {
+            <p class="no-detail">This trade was logged before the admin UI captured the full alert detail — only its gate rows and calendar are available here; its levels are on Overview.</p>
           }
-        </div>
+          <div class="grid-host">
+            <div class="card-grid why-grid" [style.--areas-1]="whyGrid().one"
+              [style.--areas-2]="whyGrid().two" [style.--areas-3]="whyGrid().three">
+              @if (whyPresent().has('why')) {
+                <div class="cell" data-area="why" style="grid-area: why">
+                  <sb-why-panel [sections]="cellSections.why" [explanation]="store.explanation()" />
+                </div>
+              }
+              @if (whyPresent().has('scores')) {
+                <div class="cell" data-area="scores" style="grid-area: scores">
+                  <sb-trade-scores-card [confidence]="trade.confidence_score" [level]="trade.confidence_level"
+                    [quality]="trade.quality_score" [badge]="trade.badge" />
+                </div>
+              }
+              @if (whyPresent().has('sources')) {
+                <div class="cell" data-area="sources" style="grid-area: sources">
+                  <sb-trade-level-sources [target]="store.targetSources()" [stop]="store.stopSources()"
+                    [target2]="store.target2Sources()" [confirmedBy]="store.confirmedBy()" />
+                </div>
+              }
+              @if (whyPresent().has('breakdown')) {
+                <div class="cell" data-area="breakdown" style="grid-area: breakdown">
+                  <sb-why-panel [sections]="cellSections.breakdown" [confidencePoints]="store.confidencePoints()"
+                    [confidenceUnevaluated]="store.confidenceUnevaluated()"
+                    [confidenceFactors]="store.confidenceFactors()" [qualityFactors]="store.qualityFactors()" />
+                </div>
+              }
+              @if (whyPresent().has('gates')) {
+                <div class="cell" data-area="gates" style="grid-area: gates">
+                  <sb-why-panel [sections]="cellSections.gates" [gates]="store.gates()" [status]="trade.status"
+                    [barsToExpiry]="trade.bars_to_expiry" [sessionsSinceCreated]="store.sessionsSinceCreated()" />
+                </div>
+              }
+              <div class="cell" data-area="context" style="grid-area: context">
+                <sb-why-panel [sections]="cellSections.calendar" [calendar]="store.calendar()" />
+                <sb-trade-strategy-record [strategy]="trade.strategy" [row]="store.strategyRow()"
+                  [error]="store.strategiesError()" />
+              </div>
+            </div>
+          </div>
+        }
       }
     }
     </sb-async>
@@ -690,6 +685,10 @@ function cameFromPlan(): boolean {
       color: var(--text-faint);
     }
 
+    .grid-host { min-width: 0; }
+    .card-grid { display: grid; gap: var(--section-gap); align-items: start; grid-template-areas: var(--areas-1); }
+    .cell { min-width: 0; display: grid; gap: var(--section-gap); }
+
     .panels {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -737,7 +736,7 @@ function cameFromPlan(): boolean {
       margin-bottom: var(--space-10);
     }
 
-    .notes, .strategy {}
+    .notes {}
     .note-label {
       display: block;
       margin-bottom: var(--space-6);
@@ -804,11 +803,7 @@ function cameFromPlan(): boolean {
       color: var(--text-secondary);
       font-size: var(--text-table);
     }
-    .decayed {
-      margin-top: var(--space-10);
-      color: var(--warn);
-      font-size: var(--text-table);
-    }
+
 
     .todo {
       margin-top: var(--space-14);
@@ -870,6 +865,23 @@ export class TradeDetail {
     this.store.detailAbsent() ? ABSENT_SECTIONS : WHY_SECTIONS,
   );
 
+  protected readonly cellSections = CELL_SECTIONS;
+  protected readonly whyPresent = computed<ReadonlySet<WhyCard>>(() => {
+    const present = new Set<WhyCard>(['context']);
+    const sections = this.whySections();
+    const trade = this.store.trade();
+    if (sections.includes('explanation') && this.store.explanation() !== null) present.add('why');
+    if (trade && [trade.confidence_score, trade.confidence_level, trade.quality_score, trade.badge]
+      .some(value => value != null)) present.add('scores');
+    if (sections.includes('levels') && hasLevelSources(this.store.targetSources(), this.store.stopSources(),
+      this.store.target2Sources(), this.store.confirmedBy())) present.add('sources');
+    if (sections.includes('confidence') && [Object.keys(this.store.confidencePoints() ?? {}),
+      this.store.confidenceFactors(), this.store.qualityFactors()].some(rows => rows.length > 0)) present.add('breakdown');
+    if (sections.includes('gates')) present.add('gates');
+    return present;
+  });
+  protected readonly whyGrid = computed<CardAreas>(() => whyAreas(this.whyPresent()));
+
   protected readonly tabs = TABS;
 
   /** "Stop" vs "Trailing stop" -- a PARTIAL position's `stop_loss` field is
@@ -915,7 +927,7 @@ export class TradeDetail {
 
   /** The numbers behind the chip -- same facts `cohort_line()` puts in the
    *  Discord alert (`swingbot/core/scanning/plan_table.py`), so hovering the
-   *  chip answers "why" without a trip to the Strategy tab.
+   *  chip answers "why" without a trip to the Why tab.
    *
    *  Empty when `cohort_stats` itself is `{}` (a pre-registry/unstamped
    *  plan). For `COHORT_UNKNOWN` -- or any cell whose combined n is 0 --
@@ -1013,7 +1025,7 @@ export class TradeDetail {
     // every trade -- so it is fetched on first arrival at the tab rather than
     // with the trade.
     effect(() => {
-      if (this.activeTab() === 'strategy' && this.store.strategies() === null) {
+      if (this.activeTab() === 'why' && this.store.strategies() === null) {
         untracked(() => this.store.loadStrategies());
       }
     });

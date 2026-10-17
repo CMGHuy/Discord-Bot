@@ -154,29 +154,29 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
     return (fixture.nativeElement as HTMLElement).textContent ?? '';
   }
 
-  it('renders the explanation on the Plan tab', () => {
-    expect(render('plan')).toContain(
+  it('renders the explanation on the Why tab', () => {
+    expect(render('why')).toContain(
       'Price reclaimed the 50-day after a three-week base.',
     );
   });
 
   it('renders what confirmed the setup', () => {
-    const text = render('plan');
+    const text = render('why');
     expect(text).toContain('Confirmed by');
     expect(text).toContain('VWAP');
     expect(text).toContain('2w');
   });
 
   it('renders what justifies each level', () => {
-    const text = render('plan');
-    expect(text).toContain('Target confirmed by');
+    const text = render('why');
+    expect(text).toContain('Level sources');
     expect(text).toContain('Fib 1.618');
-    expect(text).toContain('Stop confirmed by');
+    expect(text).toContain('Stop');
     expect(text).toContain('Swing low');
   });
 
   it('renders both breakdowns', () => {
-    const text = render('plan');
+    const text = render('why');
     expect(text).toContain('Confidence breakdown');
     expect(text).toContain('Trend alignment');
     expect(text).toContain('Quality breakdown');
@@ -243,7 +243,7 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
   });
 
   it('says a legacy record has no detail rather than showing blank panels', () => {
-    const text = render('plan', {
+    const text = render('why', {
       trade_id: ID,
       note: null,
       created_at: null,
@@ -668,14 +668,67 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(el.textContent).toContain('Paper plan — this page places no orders.');
   });
 
-  it('renders the level sources exactly once', () => {
-    const text = mount('plan').textContent ?? '';
-    expect(text.split('Target confirmed by').length - 1).toBe(1);
-    expect(text.split('Stop confirmed by').length - 1).toBe(1);
+  it('renders Why cards in reading order with areas for all device classes', () => {
+    const el = mount('why');
+    const grid = el.querySelector<HTMLElement>('div.grid-host > div.card-grid.why-grid')!;
+    expect(grid).toBeTruthy();
+    expect([...grid.children].map(cell => cell.getAttribute('data-area')))
+      .toEqual(['why', 'scores', 'sources', 'breakdown', 'gates', 'context']);
+    for (const cell of [...grid.children] as HTMLElement[]) {
+      expect(cell.style.gridArea).toBe(cell.dataset['area']);
+    }
+    expect(grid.style.getPropertyValue('--areas-1')).toBe('"why" "scores" "sources" "breakdown" "gates" "context"');
+    expect(grid.style.getPropertyValue('--areas-2')).toBe('"why why" "scores context" "sources sources" "breakdown breakdown" "gates gates"');
+    expect(grid.style.getPropertyValue('--areas-3')).toBe('"why why scores" "sources sources sources" "breakdown breakdown breakdown" "gates gates context"');
+    expect(grid.querySelector('[data-area="context"] sb-trade-strategy-record')).toBeTruthy();
+    expect(el.querySelectorAll('[role="tab"]')[4]?.textContent).toContain('Why');
   });
 
-  it('shows the gate margins section with its caveat on the Plan tab', () => {
-    const text = mount('plan').textContent ?? '';
+  it('omits absent reasoning cards and compacts the area bindings', () => {
+    const el = mount('why', { ...DETAIL, explanation: null, confirmed_by: [],
+      target_sources: [], stop_sources: [], confidence_breakdown: null, quality_breakdown: [], status_history: [] },
+      'ACTIVE', { confidence_score: null, confidence_level: null, quality_score: null, badge: null });
+    const grid = el.querySelector<HTMLElement>('.why-grid')!;
+    expect([...grid.children].map(cell => cell.getAttribute('data-area'))).toEqual(['gates', 'context']);
+    expect(grid.style.getPropertyValue('--areas-3')).toBe('"gates gates context"');
+    expect(el.querySelector('p.no-detail + div.grid-host')).toBeTruthy();
+  });
+
+  it('retains a zero score and a points-only breakdown', () => {
+    const el = mount('why', { ...DETAIL, confidence_breakdown: null, quality_breakdown: [],
+      confidence_points: { Trend: 0 } }, 'ACTIVE', { confidence_score: 0 });
+    expect(el.querySelector('[data-area="scores"]')?.textContent).toContain('0');
+    expect(el.querySelector('[data-area="breakdown"]')?.textContent).toContain('Trend');
+  });
+
+  it('loads the registry only on first arrival at Why', () => {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL));
+    fixture.detectChanges();
+    backend.expectNone('/api/v1/analytics/strategies');
+    fixture.componentRef.setInput('tab', 'why');
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/analytics/strategies').flush({ strategies: [] });
+    fixture.detectChanges();
+    fixture.componentRef.setInput('tab', 'live');
+    fixture.detectChanges();
+    fixture.componentRef.setInput('tab', 'why');
+    fixture.detectChanges();
+    backend.expectNone('/api/v1/analytics/strategies');
+    expect((fixture.nativeElement as HTMLElement).querySelector('sb-trade-strategy-record')?.textContent)
+      .toContain('The registry has no entry for RSI Divergence');
+  });
+
+  it('renders the level sources exactly once', () => {
+    const text = mount('why').textContent ?? '';
+    expect(text.split('Fib 1.618').length - 1).toBe(1);
+    expect(text.split('Swing low').length - 1).toBe(1);
+  });
+
+  it('shows the gate margins section with its caveat on the Why tab', () => {
+    const text = mount('why').textContent ?? '';
     expect(text).toContain("Gate margins (vs today's thresholds)");
     expect(text).toContain(
       "Margins are measured against today's thresholds, not the ones in force when this plan was issued.",
@@ -684,7 +737,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
   });
 
   it('keeps the gate rows on a legacy record that has no detail', () => {
-    const el = mount('plan', {
+    const el = mount('why', {
       ...DETAIL,
       explanation: null,
       confirmed_by: [],
