@@ -34,7 +34,7 @@ import numpy as np
 from swingbot.core.analytics import metrics
 from swingbot.core.backtesting.instrument import stats
 from swingbot.core.market.session import BERLIN_TZ
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import horizon_order
 from swingbot.core.tracking import origin
 
 
@@ -367,7 +367,7 @@ def _row_rank(row: dict, horizons: list) -> tuple:
 def order_live_loss_rows(rows: list[dict]) -> list[dict]:
     """Alert rows first; then confluence rows in HORIZONS order, pooled last;
     then strategy rows by name. The digest and the UI share this order."""
-    horizons = list(HORIZONS)
+    horizons = list(horizon_order())
     return sorted(rows, key=lambda row: _row_rank(row, horizons))
 
 

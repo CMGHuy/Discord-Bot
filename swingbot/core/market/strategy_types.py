@@ -315,6 +315,13 @@ def admits(strategy: str, direction: str, horizon_key: str) -> bool:
     return permitted is None or horizon_key in permitted
 
 
+def horizon_order() -> tuple[str, ...]:
+    """Every horizon key (masked ones included) in vocabulary order, for sorting
+    rows that may carry any horizon. Never a scan list: use LEGACY_HORIZONS or
+    live_horizons() for that."""
+    return tuple(HORIZONS)
+
+
 def live_horizons() -> tuple[str, ...]:
     """The strategy vocabulary, in HORIZONS order: LEGACY_HORIZONS plus any
     masked-by-default horizon at least one "cells" pair admits. Read at call
