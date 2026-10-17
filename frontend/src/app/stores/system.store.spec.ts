@@ -113,6 +113,31 @@ const SCAN = {
   bot_scan_paused: false,
 };
 
+const HEALTH = {
+  providers: [
+    {
+      at: '2026-10-09T14:05:00+00:00',
+      tickers: 150,
+      provider_fallback_rate: 0.04,
+      stale_symbols: 0,
+      empty_symbols: 2,
+      empty_rate: 0.0133,
+    },
+  ],
+  thresholds: { fallback_pct: 20, empty_pct: 5 },
+  swallowed: [
+    {
+      process: 'bot' as const,
+      tag: 'scan.run_bounded',
+      count: 3,
+      first_at: '2026-10-09T13:00:00+00:00',
+      last_at: '2026-10-09T14:00:00+00:00',
+      last_error: 'TimeoutError: cold-fetch chunk 2',
+    },
+  ],
+  bot_counts_since: '2026-10-09T06:00:00+00:00',
+};
+
 describe('SystemStore', () => {
   let store: InstanceType<typeof SystemStore>;
   let backend: HttpTestingController;
@@ -152,6 +177,7 @@ describe('SystemStore', () => {
       content: 'started',
     });
     backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    backend.expectOne('/api/v1/system/health').flush(HEALTH);
   };
 
   /* -- the schema-driven form -------------------------------------------- */
@@ -202,6 +228,7 @@ describe('SystemStore', () => {
         source: 'bot', lines, path: '/app/logs/bot.log', content,
       });
       backend.expectOne('/api/v1/system/scan').flush(SCAN);
+      backend.expectOne('/api/v1/system/health').flush(HEALTH);
     };
 
     it('reloads at the chosen line count', () => {
@@ -729,5 +756,50 @@ describe('SystemStore', () => {
     expect(store.restartUnavailable()).toBe(true);
     expect(store.restartMessage()).toContain('Docker socket');
     expect(store.restarting()).toBe(false);
+  });
+
+  /* -- v148: system health ------------------------------------------------ */
+
+  it('resolves health together with the scan status', () => {
+    store.resolveScan().subscribe();
+    backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    backend.expectOne('/api/v1/system/health').flush(HEALTH);
+
+    expect(store.health()).toEqual(HEALTH);
+    expect(store.healthError()).toBeNull();
+  });
+
+  it('refreshes health with the scan tab, so scan and bot events update both panels', () => {
+    store.resolveTab('scan').subscribe();
+    backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    backend.expectOne('/api/v1/system/health').flush({ ...HEALTH, swallowed: [] });
+
+    expect(store.health()?.swallowed).toEqual([]);
+    backend.expectNone('/api/v1/system/settings');
+  });
+
+  it('keeps the scan status and finishes the route when health fails', () => {
+    let finished = 0;
+    store.resolveScan().subscribe({ complete: () => { finished += 1; } });
+    backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    backend.expectOne('/api/v1/system/health').flush(
+      { error: { code: 'unavailable', message: 'down' } },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+
+    expect(store.botAlive()).toBe(true);
+    expect(store.health()).toBeNull();
+    expect(store.healthError()).toBe('The admin is not responding.');
+    expect(finished).toBe(1);
+  });
+
+  it('shows the server message for a health error that is not unavailability', () => {
+    store.resolveHealth().subscribe();
+    backend.expectOne('/api/v1/system/health').flush(
+      { error: { code: 'invalid', message: 'bad telemetry row' } },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    expect(store.healthError()).toBe('bad telemetry row');
   });
 });

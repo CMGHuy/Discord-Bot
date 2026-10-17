@@ -52,6 +52,7 @@ import {
   SettingsImportResult,
   SettingsPreview,
   SettingsSaveResult,
+  SystemHealth,
   TapeResponse,
   TickerAddResult,
   TickerList,
@@ -465,6 +466,11 @@ export class ApiClient {
 
   scanStatus(): Observable<ScanStatus> {
     return this.http.get<ScanStatus>(`${this.base}/system/scan`);
+  }
+
+  /** v148 — provider rows and swallowed-error counts for System → Scan. */
+  systemHealth(): Observable<SystemHealth> {
+    return this.http.get<SystemHealth>(`${this.base}/system/health`);
   }
 
   triggerScan(): Observable<ScanCommandResult> {

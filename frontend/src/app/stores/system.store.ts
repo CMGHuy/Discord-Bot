@@ -10,7 +10,7 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
-import { Observable, of } from 'rxjs';
+import { Observable, forkJoin, map, of } from 'rxjs';
 import {
   Logs,
   ScanStatus,
@@ -18,6 +18,7 @@ import {
   Settings,
   SettingsDiffRow,
   SettingsSaveResult,
+  SystemHealth,
 } from '../api/models';
 
 /** The two log sources the API accepts. `bot` is the default; a typo'd
@@ -94,6 +95,12 @@ interface SystemSlice {
   /** Which command is in flight, so one button locks rather than all four. */
   scanPending: ScanCommand | null;
   scanMessage: string | null;
+  /** v148 — provider rows and swallowed-error counts for the Scan tab's two
+   *  health panels. Null until the first answer. A failed refresh keeps the
+   *  last good payload and says so in `healthError`: a stale table that is
+   *  labelled stale beats an empty one. */
+  health: SystemHealth | null;
+  healthError: string | null;
 
   /* bot restart */
   restarting: boolean;
@@ -304,6 +311,8 @@ export const SystemStore = signalStore(
     scanError: null,
     scanPending: null,
     scanMessage: null,
+    health: null,
+    healthError: null,
 
     restarting: false,
     restartMessage: null,
@@ -466,7 +475,7 @@ export const SystemStore = signalStore(
       },
     );
 
-    const resolveScan = (): Observable<void> => routeRequest(api.scanStatus(), {
+    const resolveScanStatus = (): Observable<void> => routeRequest(api.scanStatus(), {
       start: () => undefined,
       next: (scan) => patchState(store, { scan, scanError: null }),
       error: (error) => patchState(store, {
@@ -474,6 +483,22 @@ export const SystemStore = signalStore(
           ? 'The admin is not responding.' : error.message,
       }),
     });
+
+    const resolveHealth = (): Observable<void> => routeRequest(api.systemHealth(), {
+      start: () => undefined,
+      next: (health) => patchState(store, { health, healthError: null }),
+      error: (error) => patchState(store, {
+        healthError: error.code === 'unavailable'
+          ? 'The admin is not responding.' : error.message,
+      }),
+    });
+
+    /** v148: the Scan tab is the status AND the two health panels. One
+     *  resolver for both means the route's existing `scan`/`bot` refresh
+     *  updates all three; `routeRequest` turns a non-auth failure into a
+     *  completed `undefined`, so a health failure never blocks the status. */
+    const resolveScan = (): Observable<void> =>
+      forkJoin([resolveScanStatus(), resolveHealth()]).pipe(map(() => undefined));
 
     const resolveTab = (tab: SystemTab): Observable<void> =>
       ({ settings: resolveSettings, logs: resolveLogs, scan: resolveScan })[tab]();
@@ -485,6 +510,7 @@ export const SystemStore = signalStore(
       resolveSettings,
       resolveLogs,
       resolveScan,
+      resolveHealth,
       resolveTab,
       loadSettings,
       loadLogs,

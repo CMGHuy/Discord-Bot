@@ -1356,6 +1356,47 @@ export interface ScanCommandResult {
   scan: ScanStatus;
 }
 
+/* -- system health (v148) ------------------------------------------------ */
+
+/** One scheduled scan's provider figures, from `GET /system/health`.
+ *  Rates are fractions (0.05 = 5%). The four figures are null on a row
+ *  written before v148 -- render "—", never 0. */
+export interface ProviderHealthRow {
+  at: string;
+  tickers: number;
+  /** yfinance-fallback / (alpaca + yfinance-fallback), daily frames and live
+   *  prices pooled; null when Alpaca was asked for nothing. */
+  provider_fallback_rate: number | null;
+  /** Frames whose last bar is before the previous NYSE session. Display
+   *  only: no alert reads it. */
+  stale_symbols: number | null;
+  empty_symbols: number | null;
+  empty_rate: number | null;
+}
+
+/** Errors a process caught and carried on from, per call-site tag. */
+export interface SwallowedRow {
+  process: 'bot' | 'admin';
+  tag: string;
+  count: number;
+  first_at: string | null;
+  last_at: string | null;
+  /** `Type: message`, at most 200 characters; no traceback. */
+  last_error: string | null;
+}
+
+export interface SystemHealth {
+  /** Newest first, at most 20. */
+  providers: ProviderHealthRow[];
+  /** Percent (1-100): the levels the ops-channel alert fires above. */
+  thresholds: { fallback_pct: number; empty_pct: number };
+  /** Highest count first. */
+  swallowed: SwallowedRow[];
+  /** When the bot's counts began (its process start); null when the bot has
+   *  not yet written them. */
+  bot_counts_since: string | null;
+}
+
 /* -- market: the interactive chart (SR33, v25) -------------------------- */
 
 /** A bar in `GET /market/chart/:ticker`.
