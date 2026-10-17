@@ -56,6 +56,13 @@ def test_folds_refuse_fewer_than_four_training_years():
         folds.anchored_folds(spec)
 
 
+def test_folds_refuse_a_mid_year_research_start_short_of_four_full_training_years():
+    """2010-07-01 .. 2013-12-31 is 3.5 years, not 4: calendar-year subtraction misses it."""
+    spec = dataclasses.replace(V2, research_start="2010-07-01", fold_test_years=(2014, 2015))
+    with pytest.raises(ValueError, match="4 training years"):
+        folds.anchored_folds(spec)
+
+
 def test_folds_refuse_a_test_year_inside_the_sealed_holdout():
     spec = dataclasses.replace(V2, fold_test_years=tuple(range(2014, 2027)))
     with pytest.raises(ValueError, match="holdout"):
@@ -167,6 +174,15 @@ def test_embargo_days_is_each_horizons_maximum_holding_period():
     assert folds.embargo_days_for("9m") == 270
     for hk in LEGACY_HORIZONS:
         assert folds.embargo_days_for(hk) == HORIZONS[hk]["max_holding_days"]
+
+
+def test_embargo_days_for_is_the_bar_count_and_documents_it():
+    """Partner decision 2 pins the value to max_holding_days, which backtest.py counts in
+    trading BARS; used as calendar days it is a lower bound, and the docstrings say so."""
+    for hk in HORIZONS:
+        assert folds.embargo_days_for(hk) == HORIZONS[hk]["max_holding_days"]
+    for fn in (folds.embargo_days_for, folds.split_fold):
+        assert "bars" in fn.__doc__ and "lower bound" in fn.__doc__
 
 
 def test_the_contract_field_is_the_largest_per_horizon_embargo():

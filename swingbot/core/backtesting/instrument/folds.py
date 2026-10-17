@@ -58,7 +58,7 @@ def _check_years(spec) -> None:
         raise ValueError("fold_scheme 'anchored_yearly' needs fold_test_years")
     if list(years) != sorted(set(years)):
         raise ValueError(f"fold_test_years must be strictly increasing: {years}")
-    if years[0] - int(spec.research_start[:4]) < MIN_TRAIN_YEARS:
+    if f"{years[0] - MIN_TRAIN_YEARS}-01-01" < spec.research_start:
         raise ValueError(f"first test year {years[0]} leaves fewer than "
                          f"{MIN_TRAIN_YEARS} training years after {spec.research_start}")
     if f"{years[-1]}-12-31" > spec.research_end:
@@ -79,7 +79,15 @@ def anchored_folds(spec) -> tuple[Fold, ...]:
 
 
 def embargo_days_for(horizon_key: str) -> int:
-    """The horizon's maximum holding period (strategy_types.HORIZONS)."""
+    """The horizon's maximum holding period (strategy_types.HORIZONS), fixed by
+    partner decision 2 as ``max_holding_days``.
+
+    That number counts trading bars (backtest.py walks ``i + max_holding_days``
+    bars), not calendar days. ``split_fold`` applies the embargo in calendar
+    days, so this value is a lower bound on the true holding window (about 30%
+    short). That gap has no effect under anchored folds, where the embargo
+    never fires.
+    """
     try:
         return int(HORIZONS[horizon_key]["max_holding_days"])
     except KeyError:
@@ -116,7 +124,12 @@ def split_fold(trades, fold: Fold, *, embargo_days: int,
                purge: bool = True) -> tuple[list, list]:
     """(train, test) for one fold. Test = entered inside the test window.
     Train = entered inside the train window and outside the test window,
-    minus purged and embargoed trades. Input order is preserved."""
+    minus purged and embargoed trades. Input order is preserved.
+
+    ``embargo_days`` is applied as calendar days after ``test_end``. A value from
+    ``embargo_days_for`` is a count of trading bars, so as calendar days it is a
+    lower bound on the holding window. That gap has no effect under anchored
+    folds, where no train trade enters after the test end."""
     if embargo_days < 0:
         raise ValueError(f"embargo_days must be >= 0, got {embargo_days}")
     embargo_end = (date.fromisoformat(fold.test_end) + timedelta(days=embargo_days)).isoformat()
@@ -137,7 +150,11 @@ def out_of_fold(trades_by_config: Mapping[Any, Sequence], folds,
                 select: Callable[[Mapping[Any, list]], Any], *, embargo_days: int,
                 purge: bool = True) -> OutOfFold:
     """Per fold: `select` sees {config: train trades} only and returns a config;
-    that config's test trades join the pool. Each trade counts once."""
+    that config's test trades join the pool. Each trade counts once.
+
+    Test-side trades are not truncated: a test trade may exit after its test
+    window, including past ``research_end``. Callers must truncate price data at
+    ``research_end`` so that no trade reads sealed-holdout prices."""
     _check_disjoint(folds)
     choices, pooled = [], []
     for fold in folds:
