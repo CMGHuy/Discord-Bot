@@ -26,6 +26,7 @@ from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.market_events import get_market_events
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
+from swingbot.core.market.session import market_today
 from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS, live_horizons
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.marketdata import data_store, universe
@@ -64,6 +65,19 @@ def _count_sources(frames) -> dict:
         source = df.attrs.get("source") if df is not None else None
         counts[source if source in counts else "cache"] += 1
     return counts
+
+
+def _provider_health_fields(tickers: list, frames: dict, stats: dict) -> dict:
+    """v148 O4: the four provider-degradation fields for this scan's telemetry
+    row, from the source counts already in `stats`. Guarded here, not by the
+    row's own try: a failure costs these four fields, never the row."""
+    try:
+        return telemetry.provider_health(tickers, frames, stats.get("data_sources"),
+                                         stats.get("price_sources"), market_today())
+    except Exception as exc:
+        swallowed(log, "scan.provider_health", exc, "provider health metrics failed",
+                  exc_info=True)
+        return {}
 
 
 def _skip_rejected_plan(item, require_confirmation: bool) -> None:
@@ -1188,6 +1202,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "short_funnel": funnel.snapshot(),
             **fetch.fetch_stats(),
         }
+        scan_stats.update(_provider_health_fields(tickers, fresh_data, scan_stats))
         telemetry.log_scan_telemetry(scan_stats)
         if telemetry.scan_slowdown():
             log.warning("Scan health: latest scan took %.1fs, more than 2x the median of "
