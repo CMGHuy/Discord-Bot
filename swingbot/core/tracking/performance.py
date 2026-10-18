@@ -555,6 +555,20 @@ def _confidence_point_fields(points, unevaluated) -> dict:
     }
 
 
+def _quote_field(quote: dict | None) -> dict:
+    """v171 D2: the trade record's `quote` stamp ({"at", "kind", "age_s",
+    "session", "confirmed"}), copied so the record never aliases the caller's
+    dict. None writes no key, so an unstamped trade is byte-identical to a
+    pre-v171 one."""
+    return {} if quote is None else {"quote": dict(quote)}
+
+
+def format_quote_age(quote: dict | None) -> str:
+    """The reader side of the v171 trade quote stamp; n/a for pre-v171 rows."""
+    age_s = (quote or {}).get("age_s")
+    return "n/a" if age_s is None else f"{age_s:.1f} s"
+
+
 def _db_record(trade: dict) -> dict:
     """Translate a JSON-store trade dict for the normalized trades table."""
     rest = {key: value for key, value in trade.items()
@@ -660,7 +674,8 @@ class TradeLog:
                   badge=None, quality_score=None, source=None,
                   trendline_fit=None, cohort_label=None, cohort_stats=None,
                   risk_features=None, ledger=None, entry_context=None, origin=None,
-                  confidence_points=None, confidence_unevaluated=None) -> str:
+                  confidence_points=None, confidence_unevaluated=None,
+                  quote=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -738,6 +753,7 @@ class TradeLog:
         # optional forever.
         if trendline_fit:
             record[TRENDLINE_FIT_KEY] = trendline_fit
+        record.update(_quote_field(quote))   # v171 D2: present only when stamped
 
         # Snapshot position sizing NOW, at the moment the trade is opened --
         # not recomputed later from whatever the account balance happens to

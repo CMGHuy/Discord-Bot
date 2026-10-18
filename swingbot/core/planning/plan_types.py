@@ -182,6 +182,19 @@ class TradePlanV2:
     # v144: the one-line reason an outlook plan was cancelled (the catalogue
     # message in planning/session_expiry.py). None for every other plan.
     cancel_reason_message: str | None = None
+    # v171 D2: the quote this plan was built from (planning/rebuild.py stamps it
+    # before the first post). quote_at: ISO time of the print or bid/ask quote;
+    # quote_kind: "trade" | "mid" | "yf-1m" | "scan"; quote_age_s: seconds from
+    # that quote's fetch completing to this plan being persisted;
+    # quote_session: "regular" | "pre-market" | "after-hours" | "closed";
+    # price_confirmed: False = built on the scan price ("price not confirmed
+    # live"). None everywhere = written before v171 or with the rebuild off;
+    # readers show n/a and never infer a value.
+    quote_at: str | None = None
+    quote_kind: str | None = None
+    quote_age_s: float | None = None
+    quote_session: str | None = None
+    price_confirmed: bool | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
