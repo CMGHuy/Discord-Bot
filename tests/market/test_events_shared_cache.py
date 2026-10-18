@@ -165,3 +165,34 @@ def test_count_mode_counts_each_legacy_fetch(monkeypatch, fake_yf):
 def test_warm_up_is_one_layer_call_at_admin_page(on_layer):
     events.warm_earnings_cache_background(["AAPL", "MSFT"]).join(5)
     assert [(c["symbols"], c["asker"]) for c in on_layer] == [(["AAPL", "MSFT"], Asker.ADMIN_PAGE)]
+
+
+def test_the_compression_gate_snapshot_runs_at_the_scan_tier(monkeypatch):
+    from swingbot.core.scanning import scan_run
+    seen = {}
+    monkeypatch.setattr(events, "earnings_snapshot", lambda t, **kw: seen.update(kw))
+    _, snapshot_of = scan_run._compression_hooks(NOW, None, {}, {}, {})
+    snapshot_of("AAPL")
+    assert seen["asker"] is Asker.SCAN
+
+
+def test_a_stale_served_doc_keeps_its_true_age(monkeypatch):
+    """BudgetDeferred path: layer serves the old doc; observed_at and the peek stamp show its age."""
+    import time
+    monkeypatch.setattr(config, "MARKETDATA_LAYER", "on")
+    old = NOW - dt.timedelta(hours=7)
+    monkeypatch.setattr(layer, "get", lambda kind, symbols, fetch, **kw: {
+        s: Entry(value=dict(DOC), fetched_at=old, source="yfinance", outcome="budget-deferred")
+        for s in symbols})
+    snap = events.earnings_snapshot("AAPL")
+    assert abs((snap.observed_at - old).total_seconds()) < 1
+    _, stamp = events._earnings_datetime_cache["AAPL"]
+    assert time.monotonic() - stamp > 6 * 3600                    # already past the 6 h peek window
+    assert events.peek_cached_earnings_datetime("AAPL") is events._NOT_CACHED
+
+
+def test_nothing_cached_reads_as_query_not_ok(monkeypatch):
+    monkeypatch.setattr(config, "MARKETDATA_LAYER", "on")
+    monkeypatch.setattr(layer, "get", lambda *a, **k: {})
+    snap = events.earnings_snapshot("AAPL")
+    assert snap.query_ok is False and snap.reports == ()

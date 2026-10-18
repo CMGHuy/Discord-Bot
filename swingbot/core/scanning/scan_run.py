@@ -162,8 +162,10 @@ def _compression_seen() -> set:
 
 def _compression_hooks(now, spy_df, sector_of_ticker, etf_symbol_of_sector, sector_etf_frames):
     """The compression short's live context: market mode from SPY plus the dated sector ETF frame, and a
-    fresh typed earnings snapshot per candidate (called only when the raw signal fires)."""
+    typed earnings snapshot per candidate at the scan tier (called only when the raw signal fires;
+    in `on` mode it can be up to the 6 h earnings window old)."""
     from swingbot.core.market.events import earnings_snapshot
+    from swingbot.core.marketdata.shared.kinds import Asker
     from swingbot.core.scanning import compression_context as cc
 
     def sector_frame(ticker):
@@ -173,7 +175,7 @@ def _compression_hooks(now, spy_df, sector_of_ticker, etf_symbol_of_sector, sect
     def compression_of(ticker, frame):
         return cc.compression_mode_for(frame, spy_df, sector_frame(ticker), now=now)
 
-    return compression_of, lambda ticker: earnings_snapshot(ticker, now=now)
+    return compression_of, lambda ticker: earnings_snapshot(ticker, now=now, asker=Asker.SCAN)
 
 
 def _record_compression_shadow(result) -> None:

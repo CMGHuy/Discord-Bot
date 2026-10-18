@@ -309,7 +309,7 @@ class EarningsSnapshot:
 
 def earnings_snapshot(ticker: str, *, now: dt.datetime | None = None,
                       asker: Asker = Asker.BACKGROUND) -> EarningsSnapshot:
-    """Typed, uncached earnings observation. The display API above is untouched.
+    """Typed earnings observation (fresh fetch in off/count; in `on` mode up to the 6 h window old). The display API above is untouched.
 
     A fund or spot metal is answered explicitly as `nonreporting_instrument`;
     a stock whose every fetch raised is `query_ok=False`, never an empty clear.
