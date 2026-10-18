@@ -367,7 +367,10 @@ price on the same session gives `delta_r == 0`.
 - Frontend spec: the panel, each badge state's copy, the caption, the
   empty state and the card layout.
 
-Every test uses fixture data. No pooled figure comes from the dev DB.
+Every test uses fixture data and never the database, including the local
+production replica. Any pooled figure a plan or results doc quotes is
+re-derived from the live production book with its N, window and source
+(`pooled-numbers`). A replica is a snapshot, not the live book.
 
 ## Risks
 
