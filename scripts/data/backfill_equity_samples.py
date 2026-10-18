@@ -15,11 +15,12 @@ clamped to the time it was held: entry day = entry price .. bar close; exit
 day = bar open .. exit price (realized at the close); a same-day round trip
 = entry .. exit; other days = the bar's O/H/L/C. On an exit day the
 extremes are measured net of the exit price, because realized(D) already
-holds that leg. The high and low are outer bounds, never measured values:
-every candle built from these rows is approx.
+holds that leg. On entry and exit days only the endpoints are used, so the
+wick may UNDER-state the real intraday range; it is an estimate, never a
+measured value: every candle built from these rows is approx.
 
-Bars are UNADJUSTED daily bars this script fetches itself (yfinance,
-auto_adjust=False) for traded tickers only, saved under
+Bars are daily bars this script fetches itself (yfinance, auto_adjust=False,
+which is still split-adjusted while fills are raw) for traded tickers only, saved under
 data/backfill_equity_samples/<run_id>/<TICKER>.csv. Never read here:
 backtest_cache.py (adjusted), market_data/, training_data.load_daily,
 fetch_backtest_data.load_cached.
@@ -59,7 +60,9 @@ ROOT = Path(__file__).resolve().parents[2]
 DRY_RUN_NOTE = "Dry run only -- pass --apply to write."
 SESSION_OPEN = time(9, 30)
 SESSION_CLOSE = time(16, 0)
-GAP_REASONS = ("fetch failed", "no bar")
+SPLIT_REASON = "bar mismatch (split?)"
+GAP_REASONS = ("fetch failed", "no bar", SPLIT_REASON)
+BAR_TOLERANCE = 0.05
 ZERO = Decimal("0")
 _HELD_STATUSES = ("open", "win", "loss", "closed")
 _LIVE_PLAN_STATUSES = ("ACTIVE", "PARTIAL")
@@ -196,6 +199,17 @@ def _unpriceable(pos: dict, day: date) -> str | None:
     return None
 
 
+def _outside(price: float | None, bar: Bar) -> bool:
+    return price is not None and not (bar.low * (1 - BAR_TOLERANCE) <= price
+                                      <= bar.high * (1 + BAR_TOLERANCE))
+
+
+def _fill_off_bar(pos: dict, bar: Bar, day: date) -> bool:
+    """A raw fill far outside its own day's bar: the bar is split-adjusted, the fill is not."""
+    return ((pos["entry_day"] == day and _outside(pos["entry"], bar))
+            or (pos["exit_day"] == day and _outside(pos["exit_price"], bar)))
+
+
 def _priceable(pos: dict, frame: pd.DataFrame | None, day: date) -> tuple[str | None, Bar | None]:
     reason = _unpriceable(pos, day)
     if reason:
@@ -203,6 +217,8 @@ def _priceable(pos: dict, frame: pd.DataFrame | None, day: date) -> tuple[str | 
     bar = bar_for(frame, day)
     if bar is None:
         return ("fetch failed" if frame is None or frame.empty else "no bar"), None
+    if _fill_off_bar(pos, bar, day):
+        return SPLIT_REASON, None
     return None, bar
 
 
@@ -252,8 +268,9 @@ def new_run_id() -> str:
 
 
 def fetch_raw_bars(ticker: str, start: date, end: date) -> pd.DataFrame:
-    """UNADJUSTED daily bars, start..end inclusive (yfinance's `end` is exclusive).
-    Entries and exits are raw fills, so raw bars match them with no rebase."""
+    """Daily bars (auto_adjust=False), start..end inclusive (yfinance's `end` is exclusive).
+    auto_adjust=False skips dividend adjustment only; prices stay split-adjusted
+    while fills are raw, so `_fill_off_bar` flags a fill far outside its day's bar."""
     frame = yf.download(ticker, start=start.isoformat(), end=(end + timedelta(days=1)).isoformat(),
                         interval="1d", auto_adjust=False, progress=False)
     if frame is None or frame.empty:
@@ -384,6 +401,10 @@ def _apply(args, repo, rows: list[dict], gaps: int) -> int:
     if gaps and not args.allow_gaps:
         print(f"REFUSED: {gaps} coverage gap(s). Re-run the dry run (a fetch can fail "
               "transiently) before considering --allow-gaps.")
+        return 0
+    if args.replace and not rows:
+        print("REFUSED: --replace built no rows; it would delete every backfill row "
+              "and insert nothing.")
         return 0
     written = _write(repo, rows, replace=args.replace)
     print(f"APPLIED: written={written}")

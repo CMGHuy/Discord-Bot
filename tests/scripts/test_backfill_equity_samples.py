@@ -309,3 +309,49 @@ def test_a_pending_placeholder_is_never_fetched_or_written(monkeypatch, repo, ac
                     trades=[AAPL, MSFT, pending], frames={**BARS})
     assert summary["written"] == 12 and summary["gaps"] == 0
     assert "NVDA" not in {c[0] for c in calls}
+
+
+def test_replace_with_zero_built_rows_refuses_and_keeps_existing_rows(
+        monkeypatch, repo, account, tmp_path, capsys):
+    _main(monkeypatch, ["--apply"], repo, tmp_path)
+    summary = _main(monkeypatch, ["--apply", "--replace"], repo, tmp_path,
+                    run_id="20261009T090000Z", trades=[])
+    assert summary["written"] == 0
+    assert len(repo.list_rows(sources=("backfill",))) == 12
+    assert "REFUSED: --replace built no rows" in capsys.readouterr().out
+
+
+SPLIT_BARS = {**BARS, "AAPL": _frame({MON: (49.5, 52, 49, 51), TUE: (51, 53, 50.5, 52.5),
+                                      WED: (52.5, 56, 52, 55.5)})}      # 2:1 split-adjusted
+
+
+def test_an_entry_price_outside_the_entry_day_bar_is_a_split_gap():
+    with pytest.raises(bes.CoverageGap):
+        _rows(MON, bars=SPLIT_BARS)
+    rows, skips = _rows(MON, bars=SPLIT_BARS, allow_gaps=True)
+    assert skips == [bes.Skip(MON, "a1", "AAPL", "bar mismatch (split?)")]
+    assert rows[0]["skipped_n"] == 1
+
+
+def test_an_exit_price_outside_the_exit_day_bar_is_a_split_gap():
+    bars = {**BARS, "AAPL": _frame({MON: (99, 104, 98, 102), TUE: (102, 106, 101, 105),
+                                    WED: (52.5, 56, 52, 55.5)})}
+    _, skips = _rows(WED, bars=bars, allow_gaps=True)
+    assert [s.reason for s in skips] == ["bar mismatch (split?)"]
+
+
+def test_an_entry_within_five_percent_of_the_bar_is_not_a_gap():
+    bars = {**BARS, "AAPL": _frame({MON: (96, 99, 95.5, 97), TUE: (102, 106, 101, 105),
+                                    WED: (105, 112, 104, 111)})}      # entry 100 is 1% above the high
+    _, skips = _rows(MON, bars=bars)
+    assert skips == []
+
+
+def test_the_coverage_gate_refuses_a_split_mismatch_unless_allowed(
+        monkeypatch, repo, account, tmp_path, capsys):
+    summary = _main(monkeypatch, ["--apply"], repo, tmp_path, frames=SPLIT_BARS)
+    assert (summary["gaps"], summary["written"]) == (2, 0)           # entry day and exit day
+    assert repo.list_rows() == []
+    assert "bar mismatch (split?)" in capsys.readouterr().out
+    assert _main(monkeypatch, ["--apply", "--allow-gaps"], repo, tmp_path,
+                 frames=SPLIT_BARS)["written"] == 12
