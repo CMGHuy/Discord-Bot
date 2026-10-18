@@ -45,6 +45,22 @@ def test_a_dropped_short_revokes_through_the_lane_path(monkeypatch):
     assert not out.kept and revoked == ["rebuild:no_scenario"]
 
 
+def test_a_dropped_short_representative_revokes_its_siblings(monkeypatch):
+    revoked = []
+    store = SimpleNamespace(revoke_confirmation=lambda k, v, p: revoked.append((k, v, p)))
+    monkeypatch.setattr(short_run.rebuild, "rebuild_before_post",
+                        lambda item, price, **kw: RebuildOutcome(False, "rebuild:no_scenario", price))
+    monkeypatch.setattr(qualify, "_revoke", lambda item, ctx: None)
+    sib = SimpleNamespace(result=SimpleNamespace(state_key="k", state_value="v"),
+                          previous_confirmed=3)
+    item = _item()
+    item.cluster_siblings = [sib]
+    ctx = qualify.QualifyContext(frames={}, spy=None, sector_of={}, etf_symbol_of={},
+                                 sector_frames={}, regime=None, regimes=None, confirmations=store)
+    short_run._rebuild_fn({}, ctx)(item, PRICE)
+    assert revoked == [("k", "v", 3)]
+
+
 @pytest.fixture
 def lane(monkeypatch):
     posted = []

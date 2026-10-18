@@ -185,7 +185,8 @@ def _log_trade(item, nums, explanation, fit, alerts, origin=None, requote=None):
     if plan_v2 is not None:
         scan_run._persist_plan_v2(plan_v2, alerts, requote)
     return trade_log.log_trade(
-        quote=scan_run._trade_quote(requote, result.ticker), ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
+        quote=scan_run._trade_quote(requote, result.ticker),
+        ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
         direction=result.trend, confidence_level=conf.level, confidence_label=conf.label,
         entry=nums["entry"], stop_loss=nums["stop_loss"], take_profit=nums["take_profit"],
         target2=nums["target2"], confidence_score=conf.score, confidence_breakdown=conf.breakdown,
@@ -338,6 +339,7 @@ def _rebuild_fn(frames, context):
         if not outcome.kept:
             item.plan_v2_rejected = outcome.reason
             qualify._revoke(item, context)
+            qualify.revoke_cluster_siblings(item, context)
         return outcome
     return run
 
