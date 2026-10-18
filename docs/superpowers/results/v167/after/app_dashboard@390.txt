@@ -1,0 +1,124 @@
+page-scroll-x: 0
+Dashboard
+Watchlist
+Risk
+Trades
+Calendar
+Analytics
+Research
+Reports
+System
+Versions
+
+Trade smarter. Build further.
+
+ui
+1.28.0
+bot
+2.10.0
+updated 2026-10-18 08:28 UTC
+Dashboard
+Connecting
+bot offline
+TRADING PERFORMANCE
+Today
+All days
+Portfolio
+997,752.70 €
+Today
++0.01%
+Open
+7
+Risk
++0.01%
+Win rate
+—
+Expectancy
+—
+Payoff
+—
+Realised today
+—
+OPEN POSITIONS
+?
+· 0
+· 6
+· 1
+· 0
+· 0
+View in Trades →
+Close all open/partial
+SORT
+Unsorted
+Ticker ↑
+Ticker ↓
+P&L % ↑
+P&L % ↓
+Show more
+	
+TICKER
+	
+P&L %
+	PLAN
+▸	
+SNDK
+	-1.65% (-16.44 €)	1,314.06 → 1,362.31 / 1,288.42 (3.7% - 2.0%)
+▸	
+PANW
+	+0.48% (+4.79 €)	340.37 → 355.26 / 334.41 (4.4% - 1.8%)
+▸	
+EBAY
+	-0.65% (-6.53 €)	121.07 → 124.46 / 118.94 (2.8% - 1.8%)
+▸	
+DDOG
+	-0.17% (-1.71 €)	246.34 → 256.23 / 242.03 (4.0% - 1.7%)
+▸	
+FTNT
+	-0.85% (-8.53 €)	169.60 → 177.14 / 166.58 (4.4% - 1.8%)
+▸	
+XAGUSD
+	-1.64% (-16.45 €)	58.07 → 59.96 / 57.01 (3.2% - 1.8%)
+6 rows
+ROWS
+5
+10
+20
+50
+100
+All
+Page 1 of 1, showing 6 rows
+RECENT ACTIVITY
+View all
+▲
+INTC
+Closed at -1.00R
+16 Oct, 21:44
+▲
+AMD
+Closed at -1.00R
+16 Oct, 21:07
+▲
+AMAT
+Closed at -1.00R
+16 Oct, 21:07
+▲
+SNDK
+at 1,314.06
+16 Oct, 20:59
+▲
+PANW
+at 340.37
+16 Oct, 19:19
+▲
+AMD
+at 538.65
+16 Oct, 19:14
+MARKET MOVERS
+Top gainers
+Top losers
+JPM
++1.15%
+HD
++0.27%
+AAPL
++0.18%

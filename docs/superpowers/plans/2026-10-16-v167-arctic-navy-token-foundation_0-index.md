@@ -15,7 +15,9 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+- **Phases 1-3 (AN1-AN13):** done on branch `2026-10-16-v167-arctic-navy-token-foundation`.
+- **Visual pass (AN14), 2026-10-18:** 18 shots in `docs/superpowers/results/v167/{before,after}/` at 390 / 768 / 1440 (dashboard, trades, calendar with the day drawer open; the drawer does not exist at 390, where the calendar is a non-interactive agenda, in either look). `page-scroll-x: 0` on every after shot; no text clipped by a new radius; panels show the gradient ground and hairline. Signed off by the partner in chat on 2026-10-18.
+- **Next:** AN15, the full suite.
 
 ## Where to work
 
@@ -120,3 +122,5 @@ Known v165/v166 constructs (from their plan text; their final lines come from th
 
 - **v165 and v166 were not merged when this plan was written** (2026-10-16: no branch, no worktree, no code on `main`). AN1-AN11 do not depend on them. AN12 Step 1 re-checks; if either is still unmerged, AN12 stops, appends the date and state here, and the plan waits (AN12-AN15 stay open). It never edits another plan's worktree or plan text.
 - **Visual pass (AN14) needs the partner**: they type the login into the headed Playwright window; the session cookie then serves both local ports.
+- **For v169 (from AN14):** `sb-figure-strip` carries `.sb-panel` and paints `--panel-bg`, but each Figure cell paints `background: var(--surface)` over it, so the strip's gradient does not show. Nested-panel case: the cells should read `--panel-inner-bg` (or go transparent).
+- **How the shots were taken (AN14):** the dev servers never settled on non-dashboard routes, so both trees were built (`ng build --base-href /app/`) and served statically behind the API proxy (before on :4126, after on :4127; `--base-href /app/` needs `MSYS_NO_PATHCONV=1` under Git Bash). A cold load of any route but the dashboard lands on the dashboard (the session guard races), so `browse.mjs` loads `/app/dashboard` and `--click`s the sidebar link. The API read a `replicate_prod_db.sh` copy of production (`swingbot_prod_replica`).

@@ -1,0 +1,156 @@
+page-scroll-x: 0
+Dashboard
+Watchlist
+Risk
+Trades
+Calendar
+Analytics
+Research
+Reports
+System
+Versions
+
+Trade smarter. Build further.
+
+ui
+1.28.0
+bot
+2.10.0
+updated 2026-10-18 08:28 UTC
+Calendar
+Connecting
+bot offline
+‹
+October 2026
+›
+€
+R
+Trades
+Win rate
+STRATEGY
+Any strategy
+Bollinger lower
+Bollinger upper
+Donchian high
+Donchian low
+EMA100
+EMA14
+EMA150
+EMA20
+EMA200
+EMA21
+EMA250
+EMA30
+EMA35
+EMA40
+EMA50
+EMA60
+EMA70
+EMA80
+EMA9
+FVG (bearish)
+FVG (bullish)
+Fib 23.6%
+Fib 38.2%
+Fib 50.0%
+Fib 61.8%
+Fib 78.6%
+Floor Pivot
+Floor R1
+Floor R2
+Floor S1
+Floor S2
+Pivot high
+Pivot low
+Rolling resistance
+Rolling support
+Swing high
+Swing low
+Trendline (10x touch)
+Trendline (11x touch)
+Trendline (2x touch)
+Trendline (3x touch)
+Trendline (4x touch)
+Trendline (5x touch)
+Trendline (6x touch)
+Trendline (7x touch)
+Trendline (8x touch)
+Trendline (9x touch)
+VWAP
+Volume Profile HVN
+HORIZON
+Any horizon
+2m
+2w
+3m
+4m
+4w
+5m
+6m
+7m
+8m
+9m
+
+thin sample — N=12
+
+NET THIS MONTH
+374.89€
+TRADES
+145
+WIN RATE
+55.6%
+WINNING DAYS
+10 (83%)
+N=12 · thin sample
+AVERAGE DAY
++31.24 €
+N=12 · thin sample
+BEST DAY
++173.48 €
+N=12 · thin sample
+WORST DAY
+-73.33 €
+N=12 · thin sample
+2026-10-01
+-35
+2 trades
+2026-10-02
++33
+9 trades
+2026-10-05
++143
+8 trades
+2026-10-06
++58
+12 trades
+2026-10-07
++13
+3 trades
+2026-10-08
++32
+12 trades
+2026-10-09
++101
+12 trades
+2026-10-12
++14
+3 trades
+2026-10-13
+-18
+10 trades
+2026-10-14
+-73
+9 trades
+2026-10-15
++173
+36 trades
+2026-10-16
+-67
+29 trades
+BY WEEKDAY (ALL HISTORY)
+DAY	AVG	WIN RATE	N
+Mon	-1.83 €	43%	167
+Tue	-2.53 €	50%	228
+Wed	-1.92 €	55%	237
+Thu	-2.94 €	55%	221
+Fri	-1.05 €	53%	214
