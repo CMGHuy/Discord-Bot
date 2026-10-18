@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-18 18:46:07 UTC",
+  "generated_at": "2026-10-18 18:46:33 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.30.0",
-    "bot": "2.10.1"
+    "bot": "2.11.0"
   },
   "releases": [
     {
@@ -1863,6 +1863,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "13fa9ee0",
+      "subject": "release(bot): 2.11.0 -- equity samples recorded by the trade monitor, equity candles API, raw-bar backfill script (v172)",
+      "versions": {
+        "ui": "1.30.0",
+        "bot": "2.11.0"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
