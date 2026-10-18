@@ -1959,3 +1959,47 @@ export interface TapeResponse {
   as_of: string;
   rows: TapeRow[];
 }
+
+/* -- equity candles (v172) ------------------------------------------------ */
+
+/** Candle width. Buckets are New York wall clock: 4H starts at
+ *  00/04/08/12/16/20 NY, 1W on Monday. */
+export type EquityTimeframe = '1H' | '4H' | '1D' | '1W';
+
+/** `mtm` = realized balance + open positions' unrealized P&L ("Open +
+ *  closed"); `realized` = closed legs only ("Closed trades only"). */
+export type EquityBasis = 'mtm' | 'realized';
+
+/** One equity candle — mirrors `tests/admin/test_api_v1_equity.py`.
+ *
+ *  `t` is the bucket start: `YYYY-MM-DD` for 1D/1W, an ISO datetime with the
+ *  New York offset for 1H/4H. `change`/`change_pct` are measured against the
+ *  previous candle's close (the first candle against its own open);
+ *  `change_pct` is null when that base is 0. `approx` marks a candle built
+ *  from backfilled daily bars, whose high/low are outer bounds. `skipped` is
+ *  the most open positions any sample in the bucket left unpriced. */
+export interface EquityCandle {
+  t: string;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  change: number;
+  change_pct: number | null;
+  samples: number;
+  skipped: number;
+  approx: boolean;
+}
+
+/** `GET /api/v1/equity/candles`. `recording_since` is the first live sample
+ *  (ISO UTC) or null before the monitor has recorded one. The SPA shows the
+ *  currency from `ConnectionStore.currency()`; `currency_symbol` is the same
+ *  config value, carried for API consumers. */
+export interface EquityCandlesResponse {
+  tf: EquityTimeframe;
+  basis: EquityBasis;
+  currency_symbol: string;
+  candles: EquityCandle[];
+  recording_since: string | null;
+  as_of: string;
+}

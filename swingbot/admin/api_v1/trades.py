@@ -40,6 +40,7 @@ from flask import jsonify, request
 from swingbot.admin import dashboard as dash
 from swingbot.admin.trade_why import legacy_why_fields, plan_why_fields
 from swingbot.core.tracking.performance import TradeLog
+from swingbot.core.tracking.equity import open_shares as _open_shares  # v172: moved to core
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.presentation.plan_view import plan_view
 
@@ -183,27 +184,6 @@ def _held_hours(opened_at, closed_at) -> float | None:
 def _first_set(*values):
     """First value that is not None -- 0 is a real confidence level."""
     return next((v for v in values if v is not None), None)
-
-
-def _open_shares(shares: float | None, legs_realized: list) -> float | None:
-    """The share count still exposed to price movement right now.
-
-    `shares` alone is the ORIGINAL size at open, and stays that number even
-    after a TP1 partial has already closed part of the position -- it is a
-    snapshot of what was bought, not what is still held. Unrealized P&L on
-    the remaining position needs the remainder: a plan that closed half at
-    TP1 has half the shares left to move, so its live dollar P&L is half
-    what the same price move would be on the original size, even though the
-    live PERCENTAGE (which is priced off one share, not the count) is
-    unaffected. `legs_realized` is `plan.legs_realized` -- each leg's
-    `fraction` is the share of the ORIGINAL position that leg closed (see
-    `plan_manager.py`'s `_step_active`/`_close_runner`), so summing them is
-    the total fraction gone and `1 -` that is what remains.
-    """
-    if shares is None:
-        return None
-    closed_fraction = sum(leg.get("fraction", 0) for leg in legs_realized)
-    return round(shares * max(0.0, 1.0 - closed_fraction), 4)
 
 
 def _in_today_scope(status: str, closed_at: str | None) -> bool:

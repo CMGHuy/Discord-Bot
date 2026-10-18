@@ -28,6 +28,9 @@ import {
   Dashboard,
   DashboardScope,
   Collection,
+  EquityBasis,
+  EquityCandlesResponse,
+  EquityTimeframe,
   ExpectancyAttribution,
   GateCounterfactual,
   Health,
@@ -531,6 +534,14 @@ export class ApiClient {
     if (!symbols.length) return of({ as_of: new Date().toISOString(), rows: [] });
     const query = encodeURIComponent(symbols.join(','));
     return this.http.get<TapeResponse>(`${this.base}/market/tape?symbols=${query}`);
+  }
+
+  /** Equity candles for the Dashboard chart (v172). `limit` is left to the
+   *  server's default (120) unless given. */
+  equityCandles(tf: EquityTimeframe, basis: EquityBasis, limit?: number): Observable<EquityCandlesResponse> {
+    let params = new HttpParams().set('tf', tf).set('basis', basis);
+    if (limit !== undefined) params = params.set('limit', String(limit));
+    return this.http.get<EquityCandlesResponse>(`${this.base}/equity/candles`, { params });
   }
 
   /** One month of daily P&L, plus the all-history context beside it. */

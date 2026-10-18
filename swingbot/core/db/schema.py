@@ -271,6 +271,27 @@ gate_rejections = register(sa.Table("gate_rejections", METADATA,
     sa.Index("gate_rejections_status_idx", "cf_status")),
     ("ticker", "gate", "strategy", "horizon", "signal_date", "cf_status", "created_at", "resolved_at"))
 
+# v172: raw equity samples behind the Dashboard candle chart. `live` rows are written by the
+# trade monitor's recorder (one `point` per 5 minutes in regular hours); `backfill` rows by
+# scripts/data/backfill_equity_samples.py (four per session day). Candles are built on request
+# (admin/api_v1/equity.py); nothing is pre-aggregated. No SSE event (not in TABLE_CHANNELS).
+equity_samples = register(sa.Table("equity_samples", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("realized_balance", sa.Float(53), nullable=False),
+    sa.Column("unrealized_pnl", sa.Float(53), nullable=False),
+    sa.Column("equity", sa.Float(53), nullable=False),
+    sa.Column("open_n", sa.Integer, nullable=False),
+    sa.Column("skipped_n", sa.Integer, nullable=False),
+    sa.Column("source", sa.Text, nullable=False),
+    sa.Column("kind", sa.Text, nullable=False),
+    sa.Column("backfill_run", sa.Text),
+    *standard_columns(),
+    sa.UniqueConstraint("at", "source", "kind", name="equity_samples_at_source_kind_uq"),
+    sa.Index("equity_samples_source_at_idx", "source", "at")),
+    ("at", "realized_balance", "unrealized_pnl", "equity", "open_n", "skipped_n", "source", "kind",
+     "backfill_run"))
+
 
 #: Why each promoted column is a column and not a `doc` field. A promotion
 #: costs a migration forever after, so each names what needs it: identity,
@@ -376,5 +397,16 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "cf_status": "gate_rejections_status_idx; the resolver's WHERE cf_status = 'pending'",
         "created_at": "NOT NULL write time; resolver due order and the report's live window",
         "resolved_at": "when the outcome was filled once; NULL while pending",
+    },
+    "equity_samples": {
+        "at": "equity_samples_at_source_kind_uq and equity_samples_source_at_idx; the bucket time",
+        "realized_balance": "NOT NULL money the realized basis and --recompute-realized rewrite",
+        "unrealized_pnl": "NOT NULL measured money; kept when --recompute-realized rewrites the rest",
+        "equity": "NOT NULL money every mark-to-market candle's O/H/L/C is read from",
+        "open_n": "NOT NULL count of positions priced into the sample",
+        "skipped_n": "NOT NULL count of positions left out; the candle's skipped note",
+        "source": "equity_samples_at_source_kind_uq and the range index; live vs backfill filter",
+        "kind": "equity_samples_at_source_kind_uq; point vs day_high/day_low, o/c read points only",
+        "backfill_run": "names the run and bar date a backfill row was built from; NULL on live rows",
     },
 }
