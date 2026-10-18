@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION, JSONB
 
 from swingbot.core.db.codec import RESERVED_KEYS
 
@@ -272,6 +272,41 @@ gate_rejections = register(sa.Table("gate_rejections", METADATA,
     ("ticker", "gate", "strategy", "horizon", "signal_date", "cf_status", "created_at", "resolved_at"))
 
 
+# v171: the shared market-data layer (spec D1/D6/D9). No SSE event; none in TABLE_CHANNELS.
+market_cache = register(sa.Table("market_cache", METADATA,
+    sa.Column("key", sa.Text, primary_key=True),
+    sa.Column("kind", sa.Text, nullable=False),
+    sa.Column("symbol", sa.Text, nullable=False),
+    sa.Column("fetched_at", sa.TIMESTAMP(timezone=True)),
+    sa.Column("source", sa.Text),
+    sa.Column("lease_holder", sa.Text),
+    sa.Column("lease_until", sa.TIMESTAMP(timezone=True)),
+    *standard_columns()),
+    ("key", "kind", "symbol", "fetched_at", "source", "lease_holder", "lease_until"))
+
+provider_budget = register(sa.Table("provider_budget", METADATA,
+    sa.Column("provider", sa.Text, primary_key=True),
+    sa.Column("tokens", DOUBLE_PRECISION, nullable=False),
+    sa.Column("stamp", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("breaker_failures", sa.Integer, nullable=False, server_default=sa.text("0")),
+    sa.Column("breaker_open_until", sa.TIMESTAMP(timezone=True)),
+    *standard_columns()),
+    ("provider", "tokens", "stamp", "breaker_failures", "breaker_open_until"))
+
+market_fetch_counts = register(sa.Table("market_fetch_counts", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("hour", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("provider", sa.Text, nullable=False),
+    sa.Column("kind", sa.Text, nullable=False),
+    sa.Column("asker", sa.Text, nullable=False),
+    sa.Column("outcome", sa.Text, nullable=False),
+    sa.Column("n", sa.BigInteger, nullable=False),
+    *standard_columns(),
+    sa.UniqueConstraint("hour", "provider", "kind", "asker", "outcome",
+                        name="market_fetch_counts_key_uq")),
+    ("hour", "provider", "kind", "asker", "outcome", "n"))
+
+
 #: Why each promoted column is a column and not a `doc` field. A promotion
 #: costs a migration forever after, so each names what needs it: identity,
 #: a foreign key, an index a hot query uses, or a NOT NULL the database must
@@ -376,5 +411,29 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "cf_status": "gate_rejections_status_idx; the resolver's WHERE cf_status = 'pending'",
         "created_at": "NOT NULL write time; resolver due order and the report's live window",
         "resolved_at": "when the outcome was filled once; NULL while pending",
+    },
+    "market_cache": {
+        "key": "natural key; the batched read's WHERE key = ANY(:keys) and every upsert's conflict target",
+        "kind": "NOT NULL data kind; the report and pruning scope rows by it",
+        "symbol": "NOT NULL symbol the entry belongs to; per-symbol lookups and pruning",
+        "fetched_at": "freshness compared against each asker's max age; NULL on a lease-only row",
+        "source": "provider that produced the value; the report's per-provider split",
+        "lease_holder": "single-flight claim compared in the lease UPDATE's WHERE and the release",
+        "lease_until": "single-flight claim compared in the lease UPDATE's WHERE",
+    },
+    "provider_budget": {
+        "provider": "natural key; one shared token bucket and breaker per provider",
+        "tokens": "atomic refill-and-take arithmetic in one UPDATE",
+        "stamp": "elapsed-time refill computed in the same UPDATE; NOT NULL",
+        "breaker_failures": "increment-and-compare in the breaker upsert",
+        "breaker_open_until": "open window set in the breaker upsert's CASE; NULL when closed",
+    },
+    "market_fetch_counts": {
+        "hour": "market_fetch_counts_key_uq and the report's time range",
+        "provider": "market_fetch_counts_key_uq; the report's per-provider cells",
+        "kind": "market_fetch_counts_key_uq; the report's per-kind cells",
+        "asker": "market_fetch_counts_key_uq; the report's per-asker cells",
+        "outcome": "market_fetch_counts_key_uq; the report's per-outcome cells",
+        "n": "upsert increment in SQL",
     },
 }
