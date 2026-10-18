@@ -19,6 +19,7 @@ from swingbot.core.market.session import (RTH_OPEN, US_MARKET_TZ, is_quiet_hours
                                           is_regular_session, is_tape_open, now_et,
                                           nyse_calendar, session_close, session_date)
 from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS
+from swingbot.core.marketdata.shared.kinds import Asker, QuoteDetail
 from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.planning import time_exit as te
 from swingbot.core.planning.exit_sim import runner_structure_frame, runner_structure_step
@@ -59,6 +60,54 @@ class PlanEvent:
                          # "closed"|"pyramid_add"; close reasons include
                          # "tp1_runner_progress_stall" (v123 structure exit)
     detail: dict = field(default_factory=dict)
+
+
+#: v171 D2: exit transitions whose event carries the quote they were decided on.
+EXIT_TRANSITIONS = frozenset({"closed", "tp1_partial"})
+
+
+class QuotePrices(dict):
+    """{ticker: price} for poll(), plus the QuoteDetail each price came from."""
+
+    def __init__(self, prices: dict, details: dict):
+        super().__init__(prices)
+        self.details = details
+
+
+def _session_label(now) -> str:
+    if is_regular_session(now):
+        return "regular"
+    if not is_tape_open(now):
+        return "closed"
+    return "pre-market" if now_et(now).time() < RTH_OPEN else "after-hours"
+
+
+def quote_stamp(q, now) -> dict | None:
+    """The stored quote stamp (D2) of one monitor quote, or None."""
+    if q is None or q.price is None:
+        return None
+    age = (now - q.trade_at).total_seconds() if q.trade_at else None
+    return {"at": q.trade_at.isoformat() if q.trade_at else None,
+            "kind": "yf-1m" if q.source == "yfinance-1m" else "trade",
+            "age_s": round(age, 1) if age is not None else None,
+            "session": _session_label(now),
+            "confirmed": age is not None and age <= float(config.REBUILD_PRICE_MAX_AGE_S)}
+
+
+def _stamp_exit_quote(event: PlanEvent, quote, now) -> None:
+    """Attach the quote stamp to an exit event. Never raises: a stamping
+    failure must not skip the event's handler (stop monitoring on real
+    positions)."""
+    if event.transition not in EXIT_TRANSITIONS or quote is None or "quote" in event.detail:
+        return
+    try:
+        event.detail["quote"] = quote_stamp(quote, now or datetime.now(timezone.utc))
+    except Exception:
+        log.debug("could not stamp the exit quote", exc_info=True)
+
+
+def _quote_suffix(stamp) -> str:
+    return f" quote={stamp['kind']} {stamp['age_s']}s" if stamp else ""
 
 
 # v81 execution feed. Stop events tell the reader where to rest the stop and
@@ -118,7 +167,8 @@ def log_plan_event(plan, event: PlanEvent) -> None:
         if event.transition == "closed" and reason in _STOPPED_REASONS:
             label = "stopped"
         price = event.detail.get(price_key) if price_key else None
-        _plan_line(label, plan, price, f" reason={reason}" if reason else "")
+        _plan_line(label, plan, price, (f" reason={reason}" if reason else "")
+                   + _quote_suffix(event.detail.get("quote")))
     except Exception:
         log.debug("could not write the plan-transition line", exc_info=True)
 
@@ -535,6 +585,7 @@ class PlanManager:
                 # stale or serial quote requests that delay every plan.
                 log.debug("poll: batch price fetch failed: %s", exc)
                 prices = {}
+        details = getattr(prices, "details", {})
         for plan in open_plans:
             if prices is not None:
                 price = prices.get(plan.ticker)
@@ -583,6 +634,7 @@ class PlanManager:
                     self.store.update(plan)
                 self._last_seen[plan.plan_id] = (session_date(now), price)
             for event in new_events:
+                _stamp_exit_quote(event, details.get(plan.ticker), now)
                 log_plan_event(plan, event)
                 self._on_event(plan, event)
             events.extend(self._feed_bookkeeping(plan, new_events, regular, now))
@@ -1357,10 +1409,10 @@ def _price_fn(ticker):                      # module-level so tests can patch it
     # Never a stale cached print: this feeds live stop/target decisions, and
     # a repeated cached value would read as a fresh tick confirming a level
     # the tape may have left minutes ago.
-    return get_current_price(ticker, allow_stale=False)
+    return get_current_price(ticker, allow_stale=False, asker=Asker.STOP_MONITOR)
 
 
-def _price_batch_fn(tickers):
+def _legacy_price_batch(tickers):
     """Fresh-only price map for plan transitions; never fall back to UI data.
 
     Routed through scanning.fetch._run_bounded (2026-09-17): a hung
@@ -1389,6 +1441,45 @@ def _price_batch_fn(tickers):
     result = _run_bounded(fn, (tickers,), timeout,
                           label=f"plan manager: live-price batch of {len(tickers)} ticker(s)")
     return result or {}
+
+
+def _monitor_quote_worker(tickers: list) -> tuple:
+    """Spawned-worker body: fresh-only STOP_MONITOR quotes as docs, plus this
+    process's D9 counter rows (the worker exits after the call)."""
+    from swingbot.core.marketdata.data import get_quote_batch
+    from swingbot.core.marketdata.shared import counters
+    quotes = get_quote_batch(tickers, asker=Asker.STOP_MONITOR, fresh_only=True)
+    return {t: q.to_doc() for t, q in quotes.items() if q.price}, counters.snapshot_and_clear()
+
+
+def monitor_quotes(tickers: list) -> dict:
+    """v171 D8: the one quote fetch trade_monitor and the plan manager share.
+    Process-bounded like every live-price path (_run_bounded's docstring)."""
+    if not tickers:
+        return {}
+    if config.MARKETDATA_LAYER == "off":
+        return {t: QuoteDetail(symbol=t, price=p, trade_at=None, bid=None, ask=None,
+                               quote_at=None, source="legacy")
+                for t, p in _legacy_price_batch(tickers).items()}
+    from swingbot.core.marketdata.shared import counters
+    from swingbot.core.scanning import fetch
+    out = fetch._run_bounded(_monitor_quote_worker, (list(tickers),),
+                             float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
+                             label=f"stop monitor: shared quote batch of {len(tickers)} ticker(s)")
+    if not out:
+        return {}
+    docs, rows = out
+    counters.merge(rows)
+    return {t: QuoteDetail.from_doc(d) for t, d in docs.items()}
+
+
+def _price_batch_fn(tickers):
+    """Fresh-only price map for plan transitions (see _legacy_price_batch).
+    v171: count/on read monitor_quotes and keep each price's QuoteDetail."""
+    if config.MARKETDATA_LAYER == "off":
+        return _legacy_price_batch(tickers)
+    details = monitor_quotes(tickers)
+    return QuotePrices({t: q.price for t, q in details.items() if q.price}, details)
 
 
 # Retain the serial seam for deterministic callers/tests that replace

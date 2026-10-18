@@ -570,6 +570,23 @@ async def _resend_plan_notices() -> None:
 
 
 async def _live_price_batch(tickers: list) -> dict:
+    """Fresh-only live prices for the trade monitor, or {} on failure (see
+    _legacy_live_price_batch). v171: count/on use plan_manager.monitor_quotes,
+    the fetch the plan manager's tick then reuses from the shared cache."""
+    if not tickers:
+        return {}
+    if config.MARKETDATA_LAYER == "off":
+        return await _legacy_live_price_batch(tickers)
+    from swingbot.core.planning import plan_manager
+    try:
+        quotes = await asyncio.to_thread(plan_manager.monitor_quotes, tickers)
+    except Exception as exc:
+        log.warning("trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        return {}
+    return {t: q.price for t, q in quotes.items() if q.price}
+
+
+async def _legacy_live_price_batch(tickers: list) -> dict:
     """Fresh-only live prices for the trade monitor, or {} on failure.
 
     One Yahoo request for the whole open book avoids a serial minute-history
