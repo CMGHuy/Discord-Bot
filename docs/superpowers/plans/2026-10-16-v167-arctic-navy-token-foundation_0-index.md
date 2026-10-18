@@ -17,7 +17,8 @@
 
 - **Phases 1-3 (AN1-AN13):** done on branch `2026-10-16-v167-arctic-navy-token-foundation`.
 - **Visual pass (AN14), 2026-10-18:** 18 shots in `docs/superpowers/results/v167/{before,after}/` at 390 / 768 / 1440 (dashboard, trades, calendar with the day drawer open; the drawer does not exist at 390, where the calendar is a non-interactive agenda, in either look). `page-scroll-x: 0` on every after shot; no text clipped by a new radius; panels show the gradient ground and hairline. Signed off by the partner in chat on 2026-10-18.
-- **Next:** AN15, the full suite.
+- **AN15 (2026-10-18), the plan's single full-suite run:** Python `testrun.py full`: `VERDICT: PASS  11482 passed, 4 skipped in 508.3s`, 0 failed, 0 xfailed. Whole frontend (`npm --prefix frontend run test -- --watch=false`): `Test Files 188 passed (188)`, `Tests 4028 passed (4028)`. `dump_tokens.py --check`: `resolved_tokens.json is current (102 tokens)`. `py_compile` clean. radon `-n C` on `dump_tokens.py` and `cache.py`: no output; on `select_tests.py` / `chart_style.py`: only legacy `_from_import_names` (C, 11), not touched by v167. After merging `main` into the branch (12 upstream commits, one frontend file, `browse.mjs`): `--check` current and the 7 gate specs `Tests 1363 passed`. Merged to `main` as `5f973fc9`.
+- **Next:** `/close-out`.
 
 ## Where to work
 
