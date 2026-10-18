@@ -31,7 +31,7 @@ import { isInline } from './priority';
   selector: 'sb-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="panel">
+    <section class="panel sb-panel">
       @if (heading(); as text) {
         <header>
           <h2 class="sb-label">{{ text }}</h2>
@@ -63,9 +63,9 @@ import { isInline } from './priority';
   `,
   styles: `
     .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
+      background: var(--panel-bg);
+      border: var(--panel-border);
+      border-radius: var(--panel-radius);
       overflow: hidden;
     }
     header {

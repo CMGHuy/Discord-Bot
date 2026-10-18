@@ -3,8 +3,8 @@
   "short_name": "Bomeo Capital",
   "description": "Swing-trade alert bot admin dashboard",
   "display": "standalone",
-  "theme_color": "#0a0b10",
-  "background_color": "#0a0b10",
+  "theme_color": "#070b14",
+  "background_color": "#070b14",
   "scope": "/",
   "start_url": "/dashboard",
   "icons": [

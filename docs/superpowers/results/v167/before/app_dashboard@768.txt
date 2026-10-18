@@ -1,0 +1,415 @@
+page-scroll-x: 0
+Dashboard
+Watchlist
+Risk
+Trades
+Calendar
+Analytics
+Research
+Reports
+System
+Versions
+
+Trade smarter. Build further.
+
+ui
+1.28.0
+bot
+2.10.0
+updated 2026-10-18 08:28 UTC
+Dashboard
+MKT
+S&P 500
+7,659.44
+-1.09%
+Nasdaq 100
+29,187.55
+-2.50%
+Dow Jones
+52,002.41
+-0.34%
+VIX
+19.98
++21.39%
+AAPL
+342.62
++0.18%
+ABNB
+173.20
+-0.62%
+AMD
+527.09
+-6.25%
+AMZN
+248.98
+-2.27%
+ARM
+227.00
+-7.27%
+ASML
+1,640.41
+-1.03%
+ASTS
+40.65
+-8.57%
+AVGO
+330.30
+-4.07%
+CEG
+269.76
+-1.91%
+CRM
+239.56
+-2.91%
+CRWD
+226.40
+-7.43%
+CRWV
+60.99
+-12.48%
+DELL
+449.00
+-5.15%
+GC=F
+no price
+GEV
+918.00
+-0.91%
+GLW
+131.26
+-5.18%
+GOOGL
+339.22
+-2.86%
+GS
+877.71
+-1.52%
+HD
+309.08
++0.27%
+HIMS
+28.05
+-4.53%
+HOOD
+98.55
+-5.23%
+HPQ
+30.00
+-2.76%
+IBM
+231.20
+-1.25%
+INTC
+89.33
+-6.33%
+INTU
+324.59
+-1.69%
+IREN
+26.96
+-11.29%
+ISRG
+423.00
+-1.14%
+JPM
+339.40
++1.15%
+META
+705.32
+-4.26%
+MRNA
+215.34
+-8.95%
+MRVL
+226.90
+-5.94%
+MSFT
+526.83
+-2.34%
+MSTR
+135.50
+-10.44%
+MU
+875.98
+-5.93%
+NBIS
+165.45
+-12.19%
+NFLX
+70.33
+-3.14%
+NKE
+37.14
+0.00%
+NOW
+141.48
+-4.77%
+NVDA
+213.75
+-1.60%
+ORCL
+127.80
+-4.96%
+S&P 500
+7,659.44
+-1.09%
+Nasdaq 100
+29,187.55
+-2.50%
+Dow Jones
+52,002.41
+-0.34%
+VIX
+19.98
++21.39%
+AAPL
+342.62
++0.18%
+ABNB
+173.20
+-0.62%
+AMD
+527.09
+-6.25%
+AMZN
+248.98
+-2.27%
+ARM
+227.00
+-7.27%
+ASML
+1,640.41
+-1.03%
+ASTS
+40.65
+-8.57%
+AVGO
+330.30
+-4.07%
+CEG
+269.76
+-1.91%
+CRM
+239.56
+-2.91%
+CRWD
+226.40
+-7.43%
+CRWV
+60.99
+-12.48%
+DELL
+449.00
+-5.15%
+GC=F
+no price
+GEV
+918.00
+-0.91%
+GLW
+131.26
+-5.18%
+GOOGL
+339.22
+-2.86%
+GS
+877.71
+-1.52%
+HD
+309.08
++0.27%
+HIMS
+28.05
+-4.53%
+HOOD
+98.55
+-5.23%
+HPQ
+30.00
+-2.76%
+IBM
+231.20
+-1.25%
+INTC
+89.33
+-6.33%
+INTU
+324.59
+-1.69%
+IREN
+26.96
+-11.29%
+ISRG
+423.00
+-1.14%
+JPM
+339.40
++1.15%
+META
+705.32
+-4.26%
+MRNA
+215.34
+-8.95%
+MRVL
+226.90
+-5.94%
+MSFT
+526.83
+-2.34%
+MSTR
+135.50
+-10.44%
+MU
+875.98
+-5.93%
+NBIS
+165.45
+-12.19%
+NFLX
+70.33
+-3.14%
+NKE
+37.14
+0.00%
+NOW
+141.48
+-4.77%
+NVDA
+213.75
+-1.60%
+ORCL
+127.80
+-4.96%
+Connecting
+bot offline
+Sun, Oct 18, 2026 16:50
+TRADING PERFORMANCE
+Today
+All days
+
+997,752.70 €
+
++0.01% today
+
+OPEN P&L
+1.65%
+35.22 €
+WIN RATE
+—
+N=0
+EXPECTANCY
+—
+N=0
+PAYOFF RATIO
+—
+none closed today
+REALISED TODAY
+—
+none closed today
+OPEN TRADES
+7
+AVG CONFIDENCE
+4.0
+RISK USED
+0.01%
+of 6.0% cap
+OPEN POSITIONS
+?
+Pending 0
+Open 6
+Partial 1
+Closed 0
+Cancelled 0
+View in Trades →
+Close all open/partial
+Show more
+	#	
+TICKER
+	NOW	PLAN	
+P&L %
+	
+R
+	
+HELD
+
+▸	
+22d3cd
+	
+SNDK
+	1,292.43	1,314.06 → 1,362.31 / 1,288.42 (3.7% - 2.0%)	-1.65% (-16.44 €)	−0.84
+	1d 19h 51m
+▸	
+068969
+	
+PANW
+	342.00	340.37 → 355.26 / 334.41 (4.4% - 1.8%)	+0.48% (+4.79 €)	+0.27
+	1d 21h 31m
+▸	
+1139ba
+	
+EBAY
+	120.28	121.07 → 124.46 / 118.94 (2.8% - 1.8%)	-0.65% (-6.53 €)	−0.37
+	1d 22h 26m
+▸	
+fe4687
+	
+DDOG
+	245.92	246.34 → 256.23 / 242.03 (4.0% - 1.7%)	-0.17% (-1.71 €)	−0.10
+	1d 22h 46m
+▸	
+502527
+	
+FTNT
+	168.16	169.60 → 177.14 / 166.58 (4.4% - 1.8%)	-0.85% (-8.53 €)	−0.48
+	1d 23h 15m
+▸	
+549c75
+	
+XAGUSD
+	57.12	58.07 → 59.96 / 57.01 (3.2% - 1.8%)	-1.64% (-16.45 €)	−0.90
+	2d 5h 34m
+6 rows
+ROWS
+5
+10
+20
+50
+100
+All
+Page 1 of 1, showing 6 rows
+RECENT ACTIVITY
+View all
+▲
+INTC
+Closed at -1.00R
+16 Oct, 21:44
+▲
+AMD
+Closed at -1.00R
+16 Oct, 21:07
+▲
+AMAT
+Closed at -1.00R
+16 Oct, 21:07
+▲
+SNDK
+at 1,314.06
+16 Oct, 20:59
+▲
+PANW
+at 340.37
+16 Oct, 19:19
+▲
+AMD
+at 538.65
+16 Oct, 19:14
+MARKET MOVERS
+Top gainers
+Top losers
+JPM
++1.15%
+HD
++0.27%
+AAPL
++0.18%

@@ -16,9 +16,9 @@
      * build on `node:path` and `process` — it belongs to tsconfig.spec.json,
      * which has the node types, and is listed there. */
     "src/test-setup.ts",
-    /* Same reason as test-setup.ts above: reads source files off disk with
-     * `node:fs`/`node:path`/`process` for the gate specs. Not a `.spec.ts`
-     * itself, so it isn't caught by the pattern above. */
-    "src/app/ui/testing/call-sites.ts"
+    /* Test-only helpers (resolver, source walker, call-site scan): they read
+     * files off disk with `node:fs`/`node:path`/`process`, which the app build
+     * (`"types": []`) cannot see. Only specs import them. */
+    "src/app/ui/testing/**"
   ]
 }

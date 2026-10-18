@@ -69,7 +69,7 @@
 .tile { display: inline-flex; align-items: baseline; gap: var(--space-6);
         padding: 0 var(--space-14); border-right: 1px solid var(--border);
         font-size: var(--text-table); text-decoration: none; color: inherit;
-        border-radius: var(--radius-chip); }
+        border-radius: var(--control-radius); }
 .sym { font-weight: 650; color: var(--text); }
 .px { color: var(--text-secondary); }
 .up { color: var(--pos); } .down { color: var(--neg); }

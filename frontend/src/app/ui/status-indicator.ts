@@ -87,7 +87,7 @@ export function slToTpProgress(
       position: relative;
       width: 48px;
       height: 3px;
-      border-radius: 2px;
+      border-radius: var(--radius-sm);
       background: var(--border-strong);
       overflow: hidden;
     }

@@ -40,19 +40,32 @@
    * platform renders direction this way — breaking the convention to satisfy
    * an internal rule would be worse, not more consistent.
    */
-  /* v80 D1: direction C, "TradingView Blue". The surface ladder steps far
+  /* Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §2):
+   * v80 D1: direction C, "TradingView Blue". The surface ladder steps far
    * enough apart (0c0f16 -> 131722 -> 1c212d -> 242936) that panels read as
    * separate objects without a shadow; --surface is TradingView's own chart
    * pane, so the admin and the Discord charts sit on one ground. */
-  --bg: #0c0f16;
-  --surface: #131722;
-  --surface-raised: #1c212d;
-  --surface-overlay: #242936;
-  --overlay-dim: rgba(12, 15, 22, .72);
-  --border: #2a2e39;
-  --border-strong: #363a45;
+  /* v167 §2, Arctic Navy. The ground steps 070b14 -> 0c1320 -> 121b2d ->
+   * 1a2540. Every colour in this tier is a var() into styles/palette.css
+   * (tier 1): a tier-2 token names a MEANING and never holds a hue.
+   * --surface is still the Discord chart ground (chart_style.CHART_BG). */
+  --bg: var(--navy-950);
+  --surface: var(--navy-900);
+  --surface-raised: var(--navy-850);
+  --surface-overlay: var(--navy-800);
+  --overlay-dim: var(--navy-950-a72);
+  --border: var(--navy-750);
+  --border-strong: var(--navy-700);
 
   /* -- elevation --------------------------------------------------------
+   * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+   * the one-shadow law below (spec v54 D2) is now two levels. In-flow
+   * panels (L1/L2) cast --panel-shadow through the global .sb-panel class;
+   * out-of-flow elements (L3) cast --shadow-overlay through .elev-overlay.
+   * Both tokens live in tier 3 at the end of this file, and
+   * primitives.spec.ts G3 holds styles.css to exactly those two. An inset
+   * box-shadow is still a border, not elevation. Original text, kept:
+   *
    * ONE shadow, and it means one thing: this element is not part of the
    * page flow.
    *
@@ -66,53 +79,60 @@
    * (the active-nav indicator, a focus ring, the today marker) and stays
    * allowed. The gate in primitives.spec.ts checks non-inset shadows only.
    */
-  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 — shadow values have no natural expression via the closed --space-* scale. */
-  --shadow-overlay: 0 8px 24px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .4);
 
   /* Alias for the dim behind a MODAL L3 element. --overlay-dim is the raw
    * colour; this names what it is for, so a scrim stops being hand-rolled
    * (versions.ts faked one with a 9999px spread). */
   --scrim: var(--overlay-dim);
 
-  --text: #d9dce4;
-  --text-secondary: #9ea2ad;
+  --text: var(--slate-100);
+  --text-secondary: var(--slate-300);
   /* v80 D1: direction C's first muted grey (#888c97) measured 4.32:1 on
    * --surface-overlay -- under the 4.5:1 gate contrast.spec.ts enforces on
    * all four surfaces, for real readable labels at --text-micro (nav group
    * headers, chip captions, .sb-label). #9195a0 is the smallest lift that
    * clears it with v54's safety margin: worst case 4.85:1 on
    * --surface-overlay. v54 Task 42 made the same kind of measured,
-   * single-token change for the previous palette. */
-  --text-muted: #9195a0;
-  /* --text-faint is a RULE AND DIVIDER colour (~2.3:1 on --surface) -- never
+   * single-token change for the previous palette.
+   * v167 §2: now --slate-400, worst case 5.54:1 (on --surface-overlay). */
+  --text-muted: var(--slate-400);
+  /* --text-faint is a RULE AND DIVIDER colour (~2:1 on --surface) -- never
    * text that must be read. contrast.spec.ts's `no-text-uses-text-faint`
    * assumes this and this comment is what it checks for. */
-  --text-faint: #4e5361;
+  --text-faint: var(--navy-600);
 
-  --pos: #17c98e;
-  --neg: #ff5470;
-  --warn: #ffb43d;
+  --pos: var(--mint-400);
+  --neg: var(--coral-400);
+  --warn: var(--amber-300);
   /* v80 D1: the accent is two tokens. --accent is the colour of interactive
    * TEXT and state -- links, the active tab, the sort arrow, focus -- and
    * #5593ff clears 4.85:1 on every surface. --accent-fill is the deeper
    * TradingView blue a filled button paints, with --on-accent on top at
-   * 4.90:1; the text-safe blue is too light to carry white ink. */
-  --accent: #5593ff;
-  --accent-fill: #2962ff;
-  --on-accent: #ffffff;
+   * 4.90:1; the text-safe blue is too light to carry white ink.
+   * v167 §2: --accent is --sky-300 (8.10:1 worst case); --accent-fill is
+   * --sky-600 (white 5.06:1); --accent-fill-hi (new) is --sky-550, the top
+   * stop of the primary button's gradient (tier 3 --btn-fill), white 4.66:1.
+   * That margin is thin, so contrast.spec.ts checks it by name. */
+  --accent: var(--sky-300);
+  --accent-fill: var(--sky-600);
+  --accent-fill-hi: var(--sky-550);
+  --on-accent: var(--white);
   /* v80 D1: info moved off sky blue. Under direction C the accent took the
-   * blue, and two blues would make "neutral" read as "interactive". */
-  --info: #b39ddb;
+   * blue, and two blues would make "neutral" read as "interactive".
+   * v167 §2: still violet (--violet-300), 7.39:1 worst case. */
+  --info: var(--violet-300);
 
   /* 12% tints, for cell and chip backgrounds, hover states and the chart's
-   * risk/reward bands. Literal rgba rather than colour-mix() so the values
-   * survive without a fallback path. --accent-soft is 18% of the FILL blue:
-   * the selected-segment ground needs to separate from --surface-raised. */
-  --pos-soft: rgba(23, 201, 142, 0.12);
-  --neg-soft: rgba(255, 84, 112, 0.12);
-  --warn-soft: rgba(255, 180, 61, 0.12);
-  --accent-soft: rgba(41, 98, 255, 0.18);
-  --info-soft: rgba(179, 157, 219, 0.14);
+   * risk/reward bands; --info-soft is 14%. --accent-soft is 18% of the FILL
+   * blue: the selected-segment ground needs to separate from
+   * --surface-raised. v167 amendment 2: each is a tier-1 alpha entry in
+   * palette.css (literal rgba of the hue), so jsdom and lightweight-charts
+   * still receive a plain colour string and this file holds no hued rgba. */
+  --pos-soft: var(--mint-400-a12);
+  --neg-soft: var(--coral-400-a12);
+  --warn-soft: var(--amber-300-a12);
+  --accent-soft: var(--sky-600-a18);
+  --info-soft: var(--violet-300-a14);
 
   /* Quality ramp — confidence Lv1-5 and tier A/B/C.
    *
@@ -250,6 +270,10 @@
 
   /* -- radii, motion ---------------------------------------------------
    * Tight radii: terminal, not consumer app.
+   * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+   * the corners are the four targets in the tier-3 block at the end of this
+   * file (--panel-radius 8px, --control-radius 6px, --chip-radius 999px,
+   * --radius-sm 2px); --radius and --radius-chip are deleted.
    *
    * Three durations, replacing the single 120ms. The previous rule was
    * "120ms on state change and nothing on entrance", on the reasoning that
@@ -264,9 +288,11 @@
    *   --dur-base     state change, value flash, bar easing
    *   --dur-slow     layout: sidebar, panel reflow, route transition
    */
-  /* v80 D3: 2px, was 4px / 3px -- a pro terminal's corners, not a card's. */
-  --radius: 2px;
-  --radius-chip: 2px;
+  /* v80 D3: 2px, was 4px / 3px -- a pro terminal's corners, not a card's.
+     Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+     --radius and --radius-chip are deleted. Every corner is classified onto
+     one of the four tier-3 radius targets, and primitives.spec.ts fails a
+     raw px radius or either old name anywhere outside styles/. */
 
   --dur-instant: 90ms;
   --dur-base: 160ms;
@@ -322,4 +348,58 @@
     transition-duration: 0ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ===== Tier 3: component tokens (spec v167 §3) ===== */
+/* What a panel, a control, a chip and a button LOOK like, named once, so a
+ * component reads these instead of re-spelling background + border +
+ * radius + shadow. Every colour here derives from tier 2 by var() or
+ * color-mix(): a palette change reaches it. The only rgb()/rgba() literals
+ * are black or white at an alpha, inside --panel-shadow, --shadow-overlay
+ * and --scrim-soft (the colour gate, primitives.spec.ts).
+ *
+ * --panel-bg, --btn-fill, --btn-fill-hover and --glow-ambient are
+ * GRADIENTS, i.e. images: `background` / `background-image` only, never
+ * `background-color` (tokens.spec.ts checks styles.css and ui/). A
+ * background between two gradients does not transition; v168 animates
+ * button hover with filter and glow instead.
+ *
+ * Last block in the file on purpose: scripts/dev/dump_tokens.py and
+ * resolve-token.ts read every top-level :root, and tokens.spec.ts slices
+ * tier 3 from this banner to the end. */
+:root {
+  /* The four radius targets. Every border-radius in the app is one of
+   * these, or 50% (dots), 0 (flush edges) or inherit. */
+  --panel-radius: 8px;     /* panels, cards, drawers' inner sections, dialogs */
+  --control-radius: 6px;   /* buttons, inputs, selects, segmented controls */
+  --chip-radius: 999px;    /* pills */
+  --radius-sm: 2px;        /* thin bars, cells, swatches, tracks: under ~12px tall */
+
+  /* The panel (L1/L2), painted by sb-panel, sb-figure-strip and
+   * sb-chart-container; the shadow comes from the global .sb-panel class. */
+  --panel-bg: linear-gradient(180deg, var(--surface-raised), var(--surface));
+  --panel-border: 1px solid var(--border);
+  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 -- shadow values have no natural expression via the closed --space-* scale. */
+  --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 6px 18px rgba(0, 0, 0, .25);
+  /* A panel nested in a panel: flat, no gradient, and no shadow -- one
+   * level of elevation per stack. */
+  --panel-inner-bg: var(--surface-raised);
+  --panel-inner-radius: var(--control-radius);
+
+  /* Out of flow (L3): dropdown, popover, tooltip, toast, drawer, dialog,
+   * through the global .elev-overlay class. */
+  --shadow-overlay: 0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4);
+
+  /* The primary button. Top stop --accent-fill-hi (white 4.66:1), bottom
+   * --accent-fill (white 5.06:1); contrast.spec.ts checks both. */
+  --btn-fill: linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill));
+  --btn-fill-hover: linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white), color-mix(in srgb, var(--accent-fill) 88%, white));
+
+  /* Glows are hued, so they derive from the fill blue, never an rgba. */
+  --glow-accent: 0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent);
+  --glow-ambient: radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%);
+
+  /* The mobile-nav scrim (shell.css), given a name. Softer than --scrim,
+   * which dims behind a modal. */
+  --scrim-soft: rgb(0 0 0 / 0.5);
 }

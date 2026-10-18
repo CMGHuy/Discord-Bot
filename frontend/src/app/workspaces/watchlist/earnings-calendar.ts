@@ -130,7 +130,7 @@ interface DayCell {
       gap: 1px;
       background: var(--border);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
       overflow: hidden;
     }
     .weekday {
@@ -164,7 +164,7 @@ interface DayCell {
       gap: 1px;
       padding: var(--space-4);
       background: var(--surface);
-      border-radius: var(--radius);
+      border-radius: var(--radius-sm);
     }
     .symbol { color: var(--text); font-family: var(--font-mono); font-size: var(--text-chip); font-weight: 600; }
     .time {
@@ -190,7 +190,7 @@ interface DayCell {
         min-height: 0;
         margin-bottom: var(--space-8);
         border: 1px solid var(--border);
-        border-radius: var(--radius);
+        border-radius: var(--radius-sm);
       }
     }
   `,

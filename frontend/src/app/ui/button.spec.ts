@@ -53,9 +53,19 @@ const rule = (selector: string) =>
  * jsdom does not resolve var() inside a shorthand, so a computed-style
  * assertion here would be about jsdom rather than about the button. */
 describe('v80 D4: the button restyle', () => {
-  it('fills primary with the fill blue and its own ink', () => {
-    expect(rule(':host(.primary)')).toContain('background: var(--accent-fill)');
-    expect(rule(':host(.primary)')).toContain('color: var(--on-accent)');
+  /* v167 §3: the fill is the tier-3 gradient. A gradient is an image, so it
+   * must be `background`, never `background-color` (which would drop it). */
+  it('fills primary with the button gradient and its own ink', () => {
+    const primary = rule(':host(.primary)');
+    expect(primary).toContain('background: var(--btn-fill)');
+    expect(primary).toContain('color: var(--on-accent)');
+    expect(primary).not.toContain('background-color');
+  });
+
+  it('hovers primary onto the lighter gradient, not a flat color-mix', () => {
+    const hover = rule(':host(.primary:not([disabled]):hover)');
+    expect(hover).toContain('background: var(--btn-fill-hover)');
+    expect(hover).not.toContain('color-mix');
   });
 
   it('draws secondary as a hairline, not a raised fill', () => {

@@ -377,7 +377,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
       white-space: nowrap;
     }
     .phone-sort { display: none; align-items: center; gap: var(--space-8); padding: var(--space-8) var(--space-10); }
-    .phone-sort select { height: var(--control-h); padding: 0 var(--space-8); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); color: var(--text); font: inherit; font-size: var(--text-control); }
+    .phone-sort select { height: var(--control-h); padding: 0 var(--space-8); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--control-radius); color: var(--text); font: inherit; font-size: var(--text-control); }
     .phone .phone-sort { display: flex; }
     .phone .pin { position: sticky; left: 0; z-index: 1; background: var(--surface); }
     .phone thead th.pin { z-index: 3; }

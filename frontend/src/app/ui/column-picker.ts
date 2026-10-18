@@ -91,7 +91,7 @@ export interface PickableColumn {
       padding: var(--space-4) var(--space-10);
       background: var(--surface-raised);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       color: var(--text);
       font: inherit;
       font-size: var(--text-table);

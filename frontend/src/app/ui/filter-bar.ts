@@ -103,7 +103,7 @@ export class FilterBar {
       padding: var(--space-4) var(--space-10);
       background: transparent;
       border: 1px solid var(--border);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       color: var(--text-secondary);
       font: inherit;
       font-size: var(--text-table);

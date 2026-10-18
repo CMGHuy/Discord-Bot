@@ -2,20 +2,41 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief TD5` or `grep -n "^### Task TD5:" -A 300 docs/superpowers/plans/2026-10-16-v166-trade-detail-reorganisation_*.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-16-v166-trade-detail-reorganisation-design.md`](../specs/2026-10-16-v166-trade-detail-reorganisation-design.md) (sections 1-7, Edge cases, Testing; **`## Amendments from the plan brief` overrides earlier sections where they disagree**; every applied `## Panel review` finding is a requirement)
+**Spec:** [`docs/superpowers/specs/2026-10-16-v166-trade-detail-reorganisation-design.md`](../specs/2026-10-16-v166-trade-detail-reorganisation-design.md) (sections 1-7, Edge cases, Testing; **`## Amendments from the plan brief` and `## TD12 visual amendment` override earlier sections where they disagree**; every applied `## Panel review` finding is a requirement)
 **Bump:** ui minor; bot none
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 
 **Goal:** Reorganise the admin trade page (`/trades/:id`) into an identity line with header actions, a status-driven outcome strip, four tabs (Overview, Why, Chart, Journal) and a container-query card grid that never leaves a lone narrow card beside empty space, and publish the plan's original stop as `risk_stop` on the trades API.
 
-**Architecture:** The backend renames the transient `_risk_stop` row key to a public `risk_stop` (no new branch in `_row_from_plan`). The frontend gains pure, separately tested helpers (`exit-reasons.ts`, `trade-figures.ts`, `outcome-tiles.ts`, `why-areas.ts`), a few small `TradeDetailStore` computeds, and new trade-page presentational components (outcome strip, Plan / Position / Outcome cards, Scores / Level sources / Strategy record cards). `trade-detail.ts` keeps the header, tabs and grid, mounts the new pieces, and reuses the shared `why/` components (`WhyPanel` per grid cell, `IfItGetsThere`, `OutcomePath` for its timeline) unchanged. Grid areas are computed strings bound as CSS custom properties and switched by `@container` queries at the allowed breakpoints.
+**Architecture:** The backend renames the transient `_risk_stop` row key to a public `risk_stop` (no new branch in `_row_from_plan`). The frontend gains pure, separately tested helpers (`exit-reasons.ts`, `trade-figures.ts`, `outcome-tiles.ts`, `why-areas.ts`), a few small `TradeDetailStore` computeds, and new trade-page presentational components (outcome strip, Plan / Position / Outcome cards, Scores / Level sources / Strategy record cards). `trade-detail.ts` keeps the header, tabs and grid, mounts the new pieces, and reuses the shared `why/` components (`WhyPanel` per grid cell, `IfItGetsThere`, `OutcomePath` for its timeline). TD12's approved visual exception corrects only `WhyPanel` confidence-factor row layout. Grid areas are computed strings bound as CSS custom properties and switched by `@container` queries at the allowed breakpoints.
 
 **Tech Stack:** Python 3.11, Flask, pytest via `scripts/dev/testrun.py`; Angular ~21.2 (standalone, zoneless, OnPush, signals), @ngrx/signals, vitest via `ng test`; Playwright via `frontend/scripts/browse.mjs` for the visual pass.
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Part 1 complete in `codex/v166-trade-detail-reorganisation`: TD1–TD4 committed
+(`6bfa1c88`, `917e3260`, `094a0803`, `96bc2d4b`). TD2–TD4 task reviews
+returned CLEAN. Part 2 complete: TD5–TD6 committed (`84c97619`, `71ab7e20`),
+and review fixes committed (`97804e2c`, `88d8dd90`). Both scoped re-reviews
+confirmed the findings addressed.
+Parts 3 and 3b complete: TD7–TD8 committed (`36241419`, `ff4ad589`),
+with review fixes (`6e1f4349`, `fb7f47cc`) confirmed by scoped re-review.
+Part 4 complete: TD9–TD10 committed (`cc6bd7a2`, `ef363d70`), with scoped
+review fixes (`bfd70e43`, `4a51cc3e`) confirmed.
+TD11 responsive grid committed (`e4a59187`) and its two review findings fixed
+(`ba5c2874`), with scoped re-review confirming both addressed. TD12's first
+local-replica pass captured 48 page/width shots and 12 ready-chart supplements
+(`.superpowers/v166-shots/report.md`): card grids and scroll checks passed;
+the Back touch target was fixed (`2aac4ae3`). PENDING was absent locally. A
+shared `WhyPanel` factor-row overlap was found at 390–1024 px; the partner
+approved its direct fix, committed as `1aea3b25`. The Why re-shot (closed d8554942,
+partial 47f7fd16, cancelled 65cac42a, at 1440/1024/768/390; 14/14 DOM checks, no
+confidence-text collisions, no page or grid overflow) was signed off by the partner
+in chat on 2026-10-18. PENDING was not in the local data: covered by the production
+re-shot after deploy. The local replica's stale scan banner covering Back is recorded as a
+separate shell/data limitation for the production re-shot.
+- **Next:** TD13, the full suite.
 
 ## Where to work
 
@@ -26,7 +47,7 @@ Not started. Update this block when a phase closes.
 
 ## Global Constraints
 
-- **Not edited:** `frontend/src/app/workspaces/trades/why/*.ts` (`WhyPanel`, `LevelsBlock`, `IfItGetsThere`, `SizingPanel`, `OutcomePath`), `frontend/src/app/workspaces/plans/plan-detail.ts`, `frontend/src/app/workspaces/trades/trade-actions.ts`, anything under `frontend/src/app/ui/` except spec allowlists named in a task, `sb-panel`. The trade page stops importing `SizingPanel`, `LevelsBlock` (component) and keeps importing `WhyPanel`, `IfItGetsThere`, `OutcomePath`; importing the `PAPER_LINE` constant from `why/levels-block.ts` is allowed. `why/*.spec.ts` and `plan-detail.spec.ts` stay green unchanged.
+- **Not edited, except the approved TD12 confidence-row fix:** `frontend/src/app/workspaces/trades/why/*.ts` (`WhyPanel`, `LevelsBlock`, `IfItGetsThere`, `SizingPanel`, `OutcomePath`), `frontend/src/app/workspaces/plans/plan-detail.ts`, `frontend/src/app/workspaces/trades/trade-actions.ts`, anything under `frontend/src/app/ui/` except spec allowlists named in a task, `sb-panel`. The exception permits only `why/why-panel.ts` and its focused spec to correct visually overlapping confidence labels and notes. The trade page stops importing `SizingPanel`, `LevelsBlock` (component) and keeps importing `WhyPanel`, `IfItGetsThere`, `OutcomePath`; importing the `PAPER_LINE` constant from `why/levels-block.ts` is allowed. `plan-detail.spec.ts` stays green unchanged.
 - **Backend change is one key:** `risk_stop` (float or null, the plan's original stop) on every `/api/v1/trades` list row, leg row and the `/api/v1/trades/<id>` row; published by renaming the transient `_risk_stop` key in `_row_from_plan` and `_row_from_trade`, never by a new branch. `_row_from_plan` is radon C(15) and must not get worse. No schema change, no stored-record change.
 - **TypeScript:** `TradeRow.risk_stop?: number | null` (optional, the `cohort_label?` precedent), so no existing `TradeRow` literal changes.
 - **Breakpoints (amendment 1):** only 639/640, 1023/1024, 1439/1440, 1919/1920 may appear in any `(min-width|max-width: Npx)`, including inside `@container`. Grid: **3 columns at container width >= 1024 px, 2 at 640-1023 px, 1 below 640 px**; `dl` flows into two columns when its cell is >= 640 px. No range syntax (`width >= ...`) and no EXEMPT entry used to slip past `breakpoint-guard.spec.ts`.
@@ -76,7 +97,7 @@ Not started. Update this block when a phase closes.
 | TD9 | Why tab: replaces Strategy; per-cell `WhyPanel` sections, Scores, Level sources, Context; lazy registry on `why`; Why-tab spec rewrites | 4 | sonnet — template restructuring in one component, layout fixed by the spec | M `frontend/src/app/workspaces/trades/trade-detail.ts`, M `frontend/src/app/workspaces/trades/trade-detail.spec.ts` | `TABS` becomes plan, live, chart, notes, why (interim); `TradeDetail.whyPresent: Signal<ReadonlySet<WhyCard>>`, `TradeDetail.whyGrid: Signal<CardAreas>`; Why tab DOM: `div.grid-host > div.card-grid.why-grid[style]` with one `div.cell[data-area="<card>"]` per present card (`style.grid-area` set to the card name) |
 | TD10 | Overview tab replaces Plan and Live; final four tabs; legacy `?tab=` rewrite; Journal rename; remaining spec rewrites | 4 | sonnet — template restructuring in one component, routes fixed by the spec | M `frontend/src/app/workspaces/trades/trade-detail.ts`, M `frontend/src/app/workspaces/trades/trade-detail.spec.ts` | Final `TABS` (`overview`, `why`, `chart`, `journal`); exported `LEGACY_TABS: Readonly<Record<string, string \| null>>` (`plan`/`live` -> null, `notes` -> `journal`, `strategy` -> `why`); Overview DOM: `div.grid-host > div.card-grid.overview-grid[style]` with cells `plan`, `position`, `outcome` |
 | TD11 | Responsive grid: container queries at 640/1024, area maps, stretch, two-column `dl`; `.panels` removed | 5 | sonnet — CSS in one component plus source-pinning specs | M `frontend/src/app/workspaces/trades/trade-detail.ts`, M `frontend/src/app/workspaces/trades/trade-detail.spec.ts`, M `frontend/src/app/workspaces/trades/position-card.ts`, M `frontend/src/app/workspaces/trades/strategy-record-card.ts`, M `frontend/src/app/workspaces/trades/level-sources-card.ts`, M `frontend/src/app/workspaces/trades/scores-card.ts` | Grid CSS contract: `.grid-host { container: cards / inline-size }`, `.card-grid` uses `var(--areas-1)` by default, `var(--areas-2)` in `@container cards (min-width: 640px)`, `var(--areas-3)` in `@container cards (min-width: 1024px)`; `.cell { container-type: inline-size; min-width: 0 }`; cards' `dl` two-column at `@container (min-width: 640px)` |
-| TD12 | Playwright visual pass at 1440/1024/768/390 on local `ng serve --port 4123` | 5 | sonnet — runs the stack and judges screenshots against the acceptance rule | M `docs/superpowers/plans/2026-10-16-v166-trade-detail-reorganisation_0-index.md` (records the pass under `## Progress`); any CSS fix lands in `frontend/src/app/workspaces/trades/trade-detail.ts` | — |
+| TD12 | Playwright visual pass at 1440/1024/768/390 on local `ng serve --port 4123` | 5 | sonnet — runs the stack and judges screenshots against the acceptance rule | M `docs/superpowers/plans/2026-10-16-v166-trade-detail-reorganisation_0-index.md` (records the pass); CSS fix in `trade-detail.ts` and its spec; approved confidence-row exception in `why/why-panel.ts` and its spec | — |
 | TD13 | Full Python suite, whole frontend spec run, radon check | 5 | haiku — runs commands, no code | — | — |
 
 ## Parts
@@ -104,3 +125,5 @@ The 24 `trade-detail.spec.ts` cases that mount `plan`/`live` (brief § 3) are re
 ## Handoff
 
 - Visual pass data (TD12): the local stack (`python admin_ui.py` on :1234 + `ng serve --port 4123`) serves the local database, which may lack a closed two-leg trade, a PARTIAL/ACTIVE trade or a PENDING plan. TD12 shoots every group it finds and records the missing ones; those are covered by the production re-shot after deploy (spec § Testing), never by editing data.
+- **After deploy (from TD12):** re-shoot production with `node frontend/scripts/browse.mjs shots --out <dir> --widths 1440,1024,768,390 --path "trades/<SPCX id>" --path "trades/<SPCX id>?tab=why"` (the closed two-leg SPCX trade whose id starts `f48c80e2`; `browse.mjs api --path "api/v1/trades?ticker=SPCX"` finds it) plus an open/partial trade and a pending plan, and check the same rule; production publishes `risk_stop`, so the PARTIAL Plan card's working-stop row and resting-stop line show there for the first time.
+- **Panel (pre-close-out, 2026-10-18; staff-engineer, financial-advisor, veteran-trader):** no BLOCKING. Open ADVISORY for a follow-up: (1) a PARTIAL plan with null `working_stop` (derived runner floor) shows `risk_stop` as Stop and drops the Working-stop row and resting-stop cue (`plan-card.ts:19-38`, `trade-detail.store.ts:335`; fall back to `stop_loss`); (2) `test_surface_agreement.py:48` does not cover the trade page; (3) `exit-reasons.ts` needs a `DATA_READERS` row in `scripts/dev/select_tests.py`; (4) Strategy record lists win rate before expectancy and lacks a pre-cost caption (`strategy-record-card.ts:17-20`); (5) "Stop (gapped)" is inferred from R < -1.05 (`exit-reasons.ts`), friction can mimic a gap. Add a PARTIAL with no `working_stop` to the post-deploy re-shot.
