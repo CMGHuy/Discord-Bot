@@ -17,6 +17,11 @@ export const BASIS_LABEL: Record<EquityBasis, string> = {
  *  commission, so the label states both exclusions. */
 export const ACCOUNT_LABEL = 'Paper account · before tax and costs';
 export const SEAM_LABEL = 'Recording started';
+const CHANGE_PART_SUFFIX = 'vs prev close';
+
+/** True for the readout part that carries the % change (it gets the tooltip). */
+export const isChangePart = (part: string): boolean => part.endsWith(CHANGE_PART_SUFFIX);
+
 export const CHANGE_PCT_TOOLTIP = "Change from the previous candle's close, not a return on capital";
 
 const NY = 'America/New_York';
@@ -99,7 +104,7 @@ export function readoutParts(
     `L ${num(candle.l)}`,
     `C ${num(candle.c)}`,
     money(candle.change, currency),
-    `${pct(candle.change_pct)} vs prev close`,
+    `${pct(candle.change_pct)} ${CHANGE_PART_SUFFIX}`,
     BASIS_LABEL[basis],
   ];
   if (candle.approx) parts.push('approx');

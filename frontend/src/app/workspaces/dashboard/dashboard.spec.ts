@@ -9,20 +9,43 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
   errorInterceptor,
   loadingInterceptor,
 } from '../../api/interceptors';
-import { Dashboard as DashboardData, TradeRow } from '../../api/models';
+import { Dashboard as DashboardData, EquityCandlesResponse, TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { ToastService } from '../../shell/toast.service';
+import { EquityCandlesStore } from '../../stores/equity-candles.store';
+import { equityCandlesStoreStub } from '../../testing/equity-candles-store.stub';
+import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
+
+installMatchMediaPolyfill();
+
+/** Answered, so sb-equity-candles shows its chart and not a loading skeleton
+ *  (several tests here assert the page has no skeleton once loaded). */
+const CANDLES: EquityCandlesResponse = {
+  tf: '1D', basis: 'mtm', currency_symbol: '€', recording_since: '2026-10-20T13:35:00Z',
+  as_of: '2026-10-21T14:35:00Z',
+  candles: [{ t: '2026-10-20', o: 100, h: 120, l: 90, c: 110, change: 10, change_pct: 10,
+              samples: 4, skipped: 0, approx: false }],
+};
+
+// The whole Dashboard now mounts a real sb-equity-candles chart. jsdom has no
+// canvas, so lightweight-charts' animation-frame draw would throw "Value is
+// null" after an awaited test; nothing here asserts on pixels, so frames are
+// dropped.
+beforeEach(() => {
+  vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0);
+});
+afterEach(() => vi.restoreAllMocks());
 
 // v85: the explanatory drawers are real <dialog> elements (sb-drawer); jsdom
 // has no showModal()/close(). See the polyfill for why <dialog> stays.
@@ -81,6 +104,7 @@ function seed(): { fixture: ComponentFixture<Dashboard>; backend: HttpTestingCon
       DashboardStore,
       { provide: ConnectionStore, useValue: connectionStub },
       { provide: PreferencesStore, useValue: preferencesStub },
+      { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
     ],
   });
   const fixture = TestBed.createComponent(Dashboard);
@@ -280,13 +304,14 @@ describe('Dashboard explanatory help', () => {
 const THIRTY_POINTS = { points: Array.from({ length: 30 }, (_, i) => i) } as never;
 
 describe('Dashboard portfolio value', () => {
-  it('shows its one honest 30-day series without a range picker', async () => {
+  it('draws equity candles with timeframe chips instead of the 30-day sparkline (v172)', async () => {
     const fixture = await loaded({ equity_30d: THIRTY_POINTS });
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('sb-portfolio-value sb-sparkline')).not.toBeNull();
-    expect(el.textContent).not.toContain('1W');
-    expect(el.textContent).not.toContain('1M');
-    expect(el.textContent).not.toContain('ALL');
+    expect(el.querySelector('sb-portfolio-value sb-equity-candles')).not.toBeNull();
+    expect(el.querySelector('sb-portfolio-value sb-sparkline')).toBeNull();
+    const chips = [...el.querySelectorAll('sb-equity-candles [aria-label="Candle timeframe"] button')]
+      .map((b) => b.textContent!.trim());
+    expect(chips).toEqual(['1H', '4H', '1D', '1W']);
   });
 });
 

@@ -138,4 +138,39 @@ describe('sb-equity-candles', () => {
     fixture.detectChanges();
     expect(readout(el)).toContain('+7.00 £');
   });
+
+  function buttons(el: HTMLElement, group: string): HTMLButtonElement[] {
+    return [...el.querySelectorAll<HTMLButtonElement>(`[aria-label="${group}"] button`)];
+  }
+
+  it('offers the four timeframes with the stored one pressed', () => {
+    const { el } = render(response(MIXED));
+    const chips = buttons(el, 'Candle timeframe');
+    expect(chips.map((b) => b.textContent!.trim())).toEqual(['1H', '4H', '1D', '1W']);
+    expect(chips.find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent?.trim()).toBe('1D');
+  });
+
+  it('switches timeframe through the store', () => {
+    const { fixture, el, stub } = render(response(MIXED));
+    buttons(el, 'Candle timeframe').find((b) => b.textContent!.trim() === '1W')!.click();
+    fixture.detectChanges();
+    expect(stub.calls.tf).toEqual(['1W']);
+    expect(buttons(el, 'Candle timeframe').find((b) => b.getAttribute('aria-pressed') === 'true')
+      ?.textContent?.trim()).toBe('1W');
+  });
+
+  it('offers the two bases by name and switches through the store', () => {
+    const { fixture, el, stub } = render(response(MIXED));
+    const toggle = buttons(el, 'Equity basis');
+    expect(toggle.map((b) => b.textContent!.trim())).toEqual(['Open + closed', 'Closed trades only']);
+    toggle[1].click();
+    fixture.detectChanges();
+    expect(stub.calls.basis).toEqual(['realized']);
+  });
+
+  it('keeps the controls when there is nothing to draw', () => {
+    const { el } = render(response([], { tf: '1H' }));
+    expect(buttons(el, 'Candle timeframe').length).toBe(4);
+    expect(buttons(el, 'Equity basis').length).toBe(2);
+  });
 });

@@ -5,11 +5,21 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach } from 'vitest';
 
+import { EquityCandlesStore } from '../../../stores/equity-candles.store';
+import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
+import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
 import { TradingPerformance } from './trading-performance';
+
+installMatchMediaPolyfill();
 
 describe('trading performance panel', () => {
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
+      ],
+    });
   });
 
   function render(inputs: Record<string, unknown>) {

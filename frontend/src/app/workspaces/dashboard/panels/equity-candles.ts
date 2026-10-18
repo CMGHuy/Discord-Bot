@@ -20,14 +20,18 @@ import {
   createChart,
 } from 'lightweight-charts';
 
-import { EquityCandlesResponse } from '../../../api/models';
+import { EquityBasis, EquityCandlesResponse, EquityTimeframe } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { Async } from '../../../ui/async';
 import { chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
 import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
+import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
+import { SegmentOption, Segmented } from '../../../ui/segmented';
 import {
   ACCOUNT_LABEL,
+  BASIS_LABEL,
   CHANGE_PCT_TOOLTIP,
+  isChangePart,
   SEAM_LABEL,
   approxCaption,
   emptyMessage,
@@ -54,13 +58,28 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
 @Component({
   selector: 'sb-equity-candles',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async],
+  imports: [Async, Segmented],
   template: `
-    <div class="controls"></div>
+    <div class="controls">
+      <sb-segmented
+        class="timeframe"
+        label="Candle timeframe"
+        [options]="timeframeOptions"
+        [value]="store.tf()"
+        (valueChange)="onTimeframe($event)"
+      />
+      <sb-segmented
+        class="basis"
+        label="Equity basis"
+        [options]="basisOptions"
+        [value]="store.basis()"
+        (valueChange)="onBasis($event)"
+      />
+    </div>
     @if (readout().length) {
       <p class="readout">
         @for (part of readout(); track $index) {
-          <span class="part" [attr.title]="part.endsWith('vs prev close') ? changeTooltip : null">{{ part }}</span>
+          <span class="part" [attr.title]="isChangePart(part) ? changeTooltip : null">{{ part }}</span>
         }
       </p>
     }
@@ -84,9 +103,29 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
     <p class="account">{{ accountLabel }}</p>
   `,
   styles: `
-    :host { display: block; min-width: 0; }
+    /* Grid areas carry the three-device order (spec v172 § 5): readout above
+       the chart on tablet, inline right of the controls on desktop, under the
+       chart on phone. minmax(0, 1fr) keeps a long readout from widening the
+       panel: it wraps instead, so the page never scrolls sideways. */
+    :host {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "controls" "readout" "chart" "states" "caption" "account";
+      row-gap: var(--space-6);
+      min-width: 0;
+    }
+    .controls {
+      grid-area: controls;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-6) var(--space-10);
+      min-width: 0;
+    }
     .readout {
-      margin: 0 0 var(--space-6);
+      grid-area: readout;
+      margin: 0;
+      min-width: 0;
       font-size: var(--text-table);
       color: var(--text-secondary);
       font-variant-numeric: tabular-nums;
@@ -94,13 +133,34 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
     }
     .part + .part::before { content: '·'; margin: 0 var(--space-4); color: var(--text-faint); }
     .part[title] { text-decoration: underline dotted; cursor: help; }
-    .chart { width: 100%; height: 200px; }
+    .states { grid-area: states; }
+    .chart { grid-area: chart; width: 100%; min-width: 0; height: 200px; }
     .chart.hidden { display: none; }
-    .caption, .account { margin: var(--space-6) 0 0; font-size: var(--text-chip); }
-    .caption { color: var(--text-muted); }
-    .account { color: var(--text-faint); }
+    .caption, .account { margin: 0; font-size: var(--text-chip); }
+    .caption { grid-area: caption; color: var(--text-muted); }
+    .account { grid-area: account; color: var(--text-faint); }
+
+    /* Phone: the two controls on their own lines (44px targets come from
+       --control-h in tokens.css), readout and caption under the chart. */
     @media (max-width: 639px) {
+      :host { grid-template-areas: "controls" "chart" "states" "readout" "caption" "account"; }
+      .controls sb-segmented { flex: 1 1 100%; }
       .chart { height: 160px; }
+    }
+
+    /* Desktop: the readout sits inline at the right of the controls. */
+    @media (min-width: 1024px) {
+      :host {
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+          "controls readout"
+          "chart chart"
+          "states states"
+          "caption caption"
+          "account account";
+        column-gap: var(--space-10);
+      }
+      .readout { align-self: center; justify-self: end; text-align: right; }
     }
   `,
 })
@@ -110,12 +170,31 @@ export class EquityCandles {
   protected readonly store = inject(EquityCandlesStore);
   protected readonly accountLabel = ACCOUNT_LABEL;
   protected readonly changeTooltip = CHANGE_PCT_TOOLTIP;
+  protected readonly isChangePart = isChangePart;
+  protected readonly timeframeOptions: SegmentOption[] =
+    EQUITY_TIMEFRAMES.map((tf) => ({ value: tf, label: tf }));
+  protected readonly basisOptions: SegmentOption[] =
+    EQUITY_BASES.map((basis) => ({ value: basis, label: BASIS_LABEL[basis] }));
+
+  /** `sb-segmented` speaks strings; only a known value reaches the store,
+   *  which writes it to the server-backed preferences. */
+  protected onTimeframe(value: string): void {
+    const tf = EQUITY_TIMEFRAMES.find((option) => option === value);
+    if (tf) this.store.setTimeframe(tf as EquityTimeframe);
+  }
+
+  protected onBasis(value: string): void {
+    const basis = EQUITY_BASES.find((option) => option === value);
+    if (basis) this.store.setBasis(basis as EquityBasis);
+  }
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
   private chart: IChartApi | null = null;
   private series: ISeriesApi<'Candlestick'> | null = null;
   protected seam: VLinePrimitive | null = null;
   private renderedView = '';
+  private pendingView = '';
+  private resizeObserver: ResizeObserver | null = null;
 
   /** Read once: chart colours come from the tokens at creation, as in
    *  `TradeChart`. `--text-faint` is the hollow candle's wick. */
@@ -185,6 +264,7 @@ export class EquityCandles {
     });
 
     destroyRef.onDestroy(() => {
+      this.resizeObserver?.disconnect();
       this.chart?.remove();
       this.chart = null;
       this.series = null;
@@ -220,6 +300,10 @@ export class EquityCandles {
       this.visible.set(range ? { from: range.from, to: range.to } : null));
     this.chart = chart;
     this.series = series;
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.fitWhenVisible());
+      this.resizeObserver.observe(element);
+    }
   }
 
   private render(data: EquityCandlesResponse | null, points: CandlestickData<Time>[]): void {
@@ -234,9 +318,18 @@ export class EquityCandles {
       ? { time: points[seam].time, label: SEAM_LABEL, color: this.colors.faint, textColor: this.colors.muted }
       : null);
     const view = data ? `${data.tf}/${data.basis}` : '';
-    if (view && view !== this.renderedView) {
-      chart.timeScale().fitContent();
-      this.renderedView = view;
-    }
+    if (view && view !== this.renderedView) this.pendingView = view;
+    this.fitWhenVisible();
+  }
+
+  /** The host is display:none while the first answer loads, so a fit run
+   *  then would measure a 0-width chart and never repeat. The fit waits
+   *  until the host has a width; the ResizeObserver retries it on unhide. */
+  private fitWhenVisible(): void {
+    const view = this.pendingView;
+    if (!view || !this.chart || this.host().nativeElement.clientWidth === 0) return;
+    this.chart.timeScale().fitContent();
+    this.renderedView = view;
+    this.pendingView = '';
   }
 }
