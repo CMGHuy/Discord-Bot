@@ -501,7 +501,7 @@ import { tablePerPage } from '../../ui/table-per-page';
       margin-top: var(--space-10);
       max-width: 520px;
       background: var(--bg);
-      border-radius: 3px;
+      border-radius: var(--radius-sm);
       overflow: hidden;
     }
     .fill { display: block; height: 100%; background: var(--text-muted); }
@@ -518,7 +518,7 @@ import { tablePerPage } from '../../ui/table-per-page';
     .state {
       padding: 1px var(--space-6);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--chip-radius);
       color: var(--text-secondary);
       /* --text-micro, not --register-label: this is an eyebrow tag, not a
          caption, and --register-label grows to --text-table in the

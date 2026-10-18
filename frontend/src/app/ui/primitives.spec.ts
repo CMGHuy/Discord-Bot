@@ -262,3 +262,38 @@ describe('G3: only the two elevation rules cast a shadow', () => {
     expect(shadows(global)).toEqual(['var(--panel-shadow)', 'var(--shadow-overlay)']);
   });
 });
+
+/**
+ * No raw or retired radius -- spec v167 §3 and §5. Every corner outside
+ * styles/ reads one of the four tier-3 targets: --panel-radius,
+ * --control-radius, --chip-radius or --radius-sm. A px value is a corner
+ * nobody classified. var(--radius) and var(--radius-chip) are retired:
+ * tokens.css no longer declares them, so either would resolve to nothing
+ * and the browser would silently square the corner. 50%, 0 and inherit
+ * carry no px and stay legal.
+ *
+ * The value stops at `;` or `}`: one-line `styles:` strings end a rule with
+ * `}` and no `;`, and running on to the next `;` would read the next
+ * rule's px as this corner's.
+ */
+const RADIUS_DECL_RE = /border(?:-[a-z]+)*-radius:\s*([^;}]+)[;}]/g;
+const RETIRED_RADIUS_RE = /var\(--radius(?:-chip)?\)/g;
+
+describe('no raw or retired radius (v167 §3)', () => {
+  for (const { name, source } of allSources()) {
+    it(`${name} rounds every corner with a radius token`, () => {
+      const code = stripComments(source);
+      const raw = [...code.matchAll(RADIUS_DECL_RE)]
+        .map(([, value]) => value.trim())
+        .filter((value) => /\d+(\.\d+)?px/.test(value));
+      expect(raw).toEqual([]);
+      expect(code.match(RETIRED_RADIUS_RE) ?? []).toEqual([]);
+    });
+  }
+
+  it('tokens.css declares neither --radius nor --radius-chip', () => {
+    const tokens = stripComments(readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8'));
+    expect(tokens).not.toMatch(/--radius:/);
+    expect(tokens).not.toMatch(/--radius-chip:/);
+  });
+});

@@ -218,7 +218,7 @@ export const LOG_CONTROLS: ToolbarControl[] = [
       padding: var(--space-10);
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
       color: var(--text-secondary);
       font-family: var(--font-mono);
       font-size: var(--text-chip);

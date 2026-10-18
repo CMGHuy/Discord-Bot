@@ -335,9 +335,14 @@ describe('v80 D3: type, shape and touch', () => {
     expect(CSS).toMatch(/^\s*--text-hero:\s*calc\(44px \* var\(--text-scale\)\);/m);
   });
 
-  it('tightens both radii to 2px', () => {
-    expect(CSS).toMatch(/^\s*--radius:\s*2px;/m);
-    expect(CSS).toMatch(/^\s*--radius-chip:\s*2px;/m);
+  /* v167 §3 supersedes v80 D3's single 2px: four targets, all in tier 3,
+   * and the two old tokens are gone so no unclassified corner survives. */
+  it('defines the four radius targets', () => {
+    expect(TIER3).toMatch(/^\s*--panel-radius:\s*8px;/m);
+    expect(TIER3).toMatch(/^\s*--control-radius:\s*6px;/m);
+    expect(TIER3).toMatch(/^\s*--chip-radius:\s*999px;/m);
+    expect(TIER3).toMatch(/^\s*--radius-sm:\s*2px;/m);
+    expect(CSS).not.toMatch(/^\s*--radius(?:-chip)?:/m);
   });
 
   it('defines one row height and one form-control text size', () => {

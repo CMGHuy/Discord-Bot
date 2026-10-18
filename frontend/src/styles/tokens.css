@@ -270,6 +270,10 @@
 
   /* -- radii, motion ---------------------------------------------------
    * Tight radii: terminal, not consumer app.
+   * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+   * the corners are the four targets in the tier-3 block at the end of this
+   * file (--panel-radius 8px, --control-radius 6px, --chip-radius 999px,
+   * --radius-sm 2px); --radius and --radius-chip are deleted.
    *
    * Three durations, replacing the single 120ms. The previous rule was
    * "120ms on state change and nothing on entrance", on the reasoning that
@@ -284,9 +288,11 @@
    *   --dur-base     state change, value flash, bar easing
    *   --dur-slow     layout: sidebar, panel reflow, route transition
    */
-  /* v80 D3: 2px, was 4px / 3px -- a pro terminal's corners, not a card's. */
-  --radius: 2px;
-  --radius-chip: 2px;
+  /* v80 D3: 2px, was 4px / 3px -- a pro terminal's corners, not a card's.
+     Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+     --radius and --radius-chip are deleted. Every corner is classified onto
+     one of the four tier-3 radius targets, and primitives.spec.ts fails a
+     raw px radius or either old name anywhere outside styles/. */
 
   --dur-instant: 90ms;
   --dur-base: 160ms;

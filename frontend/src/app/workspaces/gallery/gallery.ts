@@ -733,7 +733,7 @@ interface ContractRow {
       display: grid; place-items: center;
       width: 96px; height: 64px; text-align: center;
       font-size: var(--text-micro); color: var(--text-secondary);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
     }
     .elev-step.level-0 { background: var(--bg); }
     .elev-step.level-1 { background: var(--surface); border: 1px solid var(--border); }

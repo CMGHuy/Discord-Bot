@@ -282,14 +282,14 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        which is why it is inset rather than added stroke width. Every segment
        gets one, current included, so the seam is consistent end to end. */
     .segment { position: absolute; top: 0; height: 100%; border: 0; padding: 0;
-               border-radius: 2px;
+               border-radius: var(--radius-sm);
                box-shadow: inset 0 0 0 1px var(--bg); }
     .segment.current { background: var(--accent); }
     .absent { position: absolute; top: 0; height: 100%;
-              border: 1px dashed var(--border-strong); border-radius: 2px; }
+              border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
     .bracket-row { position: relative; height: 12px; margin-left: calc(var(--lane-w) + var(--space-8)); }
     .bracket { position: absolute; top: 0; height: 100%; border: 1px solid var(--text-faint);
-               border-radius: 3px; background: var(--surface-raised); }
+               border-radius: var(--radius-sm); background: var(--surface-raised); }
 
     /* Track-aligned, same left offset as .bracket-row -- an absolutely
        positioned block with only left/right set (no width) auto-sizes to
@@ -319,7 +319,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        clipped by .strip's own overflow: hidden. */
     .tooltip { position: absolute; padding: var(--space-6) var(--space-8);
                 background: var(--surface-overlay); border: 1px solid var(--border-strong);
-                border-radius: var(--radius); font-size: var(--text-micro); color: var(--text);
+                border-radius: var(--control-radius); font-size: var(--text-micro); color: var(--text);
                 display: flex; flex-direction: column; gap: var(--space-4);
                 pointer-events: none; }
     .tooltip .when { color: var(--text-faint); }
@@ -331,7 +331,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
       margin-left: calc(var(--lane-w) + var(--space-8));
     }
     .legend span { display: flex; align-items: center; gap: var(--space-6); }
-    .sw { display: inline-block; width: .8rem; height: .5rem; border-radius: 2px; }
+    .sw { display: inline-block; width: .8rem; height: .5rem; border-radius: var(--radius-sm); }
     .sw.seg { background: var(--accent-soft); }
     .sw.abs { background: none; border: 1px dashed var(--border-strong); }
     .sw.cur { background: var(--accent); }

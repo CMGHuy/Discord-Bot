@@ -33,7 +33,7 @@ import { COST_CAPTION, OutcomeTile, PAPER_FILLS_LINE, STALE_FLAG } from './outco
     .tile {
       flex: 1 1 120px; min-width: 0; display: flex; flex-direction: column;
       gap: var(--space-6); padding: var(--space-14);
-      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--panel-radius);
     }
     .tile-value { font-size: var(--text-title); overflow-wrap: anywhere; }
     .tile-sub { color: var(--text-secondary); font-size: var(--text-table); }

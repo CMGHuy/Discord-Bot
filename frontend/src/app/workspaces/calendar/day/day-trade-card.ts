@@ -112,7 +112,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
     .tag {
       padding: 1px var(--space-6);
       border: 1px solid var(--border);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       color: var(--text-secondary);
       font-size: var(--text-chip);
     }
