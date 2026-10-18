@@ -9,7 +9,7 @@
  * fills, asks for or stores them.
  *
  *   node scripts/browse.mjs shots --out <dir> --path "/trades/ID?tab=live" [--path ...]
- *                                 [--widths 1440,1024,768,390] [--base URL] [--click <css selector>]
+ *                                 [--widths 1440,1024,768,390] [--base URL] [--click <css selector>] [--settle <ms, default 1500>]
  *   node scripts/browse.mjs api   --path /api/v1/trades?status=CLOSED   # prints JSON
  *   node scripts/browse.mjs login                                        # just sign in
  *
@@ -31,7 +31,7 @@ const PROFILE = join(process.env.LOCALAPPDATA ?? join(homedir(), '.cache'), 'swi
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
 
 function parseArgs(argv) {
-  const opts = { cmd: argv[0] ?? 'login', paths: [], widths: [1440, 1024, 768, 390], base: 'https://bomeo-capital.com', out: null, clicks: [] };
+  const opts = { cmd: argv[0] ?? 'login', paths: [], widths: [1440, 1024, 768, 390], base: 'https://bomeo-capital.com', out: null, clicks: [], settle: 1500 };
   for (let i = 1; i < argv.length; i += 2) {
     const [flag, value] = [argv[i], argv[i + 1]];
     // Leading slash optional: Git Bash rewrites "/trades/x" into a Windows
@@ -41,6 +41,7 @@ function parseArgs(argv) {
     else if (flag === '--base') opts.base = value.replace(/\/$/, '');
     else if (flag === '--out') opts.out = value;
     else if (flag === '--click') opts.clicks.push(value);
+    else if (flag === '--settle') opts.settle = Number(value);
     else throw new Error(`unknown flag ${flag}`);
   }
   return opts;
@@ -74,11 +75,14 @@ function slug(path) {
  *  empty page does not cost the rest of the set. */
 async function clickFirst(page, selector, path) {
   const target = page.locator(selector).first();
+  await target.waitFor({ timeout: 10_000 }).catch(() => {}); // lazy routes and their data arrive late
   if ((await target.count()) === 0) {
     console.error(`--click matched nothing on ${path}: ${selector}`);
     return;
   }
-  await target.click();
+  // DOM click, not a pointer click: at 390px the sidebar links sit in a closed
+  // drawer, and Playwright refuses to click what is outside the viewport.
+  await target.evaluate((el) => el.click());
   await page.waitForTimeout(800);
 }
 
@@ -107,7 +111,7 @@ async function shots(page, opts) {
         return main.innerText.trim().length > 200 && !/Loading/.test(document.body.innerText);
       }, null, { timeout: 30_000 })
         .catch(() => console.error(`still loading after 30s: ${path}`));
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(opts.settle);
       for (const selector of opts.clicks) await clickFirst(page, selector, path);
       const scrollX = await pageScrollX(page);
       const name = join(opts.out, `${slug(path)}@${width}`);
