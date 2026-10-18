@@ -109,3 +109,30 @@ def test_a_pair_inside_its_window_is_not_batched(base, downloads, per_symbol):
     os.utime(data_store.cache_path("BBB", "daily", base_dir=base), (now, now))
     _run(base)
     assert [c[0] for c in downloads] == [["AAA", "CCC"]] and per_symbol == ["BBB"]
+
+
+def test_a_merge_error_on_one_pair_leaves_the_others_and_falls_back(monkeypatch, base, downloads, per_symbol):
+    real = rf._merge_save
+
+    def merge(existing, fresh, symbol, tf, base_dir):
+        if symbol == "BBB":
+            raise OSError("disk")
+        return real(existing, fresh, symbol, tf, base_dir)
+    monkeypatch.setattr(rf, "_merge_save", merge)
+    out = _run(base)
+    assert per_symbol == ["BBB"]
+    assert out["summary"]["daily"]["incremental"] == 2 and out["summary"]["daily"]["failed"] == 0
+    assert len(data_store.load_from_disk("CCC", "daily", base_dir=base)) == 22
+
+
+def test_prefetch_stops_starting_chunks_after_the_deadline(base, downloads):
+    got = rf._prefetch(["AAA", "BBB", "CCC"], "daily", base, state={}, force=False,
+                       started=time.monotonic(), deadline_seconds=0)
+    assert got == {} and downloads == []
+
+
+def test_a_single_ticker_flat_reply_is_accepted(monkeypatch, base, per_symbol):
+    monkeypatch.setattr(yf_safe, "download", lambda *a, **k: _frame("2026-09-28", 3))
+    out = _run(base, symbols=("AAA",))
+    assert per_symbol == [] and out["summary"]["daily"]["incremental"] == 1
+    assert len(data_store.load_from_disk("AAA", "daily", base_dir=base)) == 22

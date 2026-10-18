@@ -433,10 +433,16 @@ def _refresh_timeframe_batch(symbols: list[str], timeframe: str, base_dir: str, 
                   "batched refresh %s of %d symbol(s) failed: %s", tf, len(loaded), exc,
                   exc_info=True)
         return {}
-    return {s: _apply_incremental(
+    results = {}
+    for s, frame in frames.items():
+        try:
+            results[s] = _apply_incremental(
                 s, tf, base_dir, loaded[s], _since(frame, lasts[s]),
                 {"symbol": s, "timeframe": tf, "rows": 0, "added": 0, "batched": True})
-            for s, frame in frames.items()}
+        except Exception as exc:   # omitted: refresh_symbol and its guard take the pair
+            swallowed(log, "marketdata.refresh_batch.apply", exc,
+                      "batched merge %s/%s failed: %s", s, tf, exc, exc_info=True)
+    return results
 
 
 def _prefetch(symbols, tf: str, base_dir: str, *, state, force: bool, started: float,
