@@ -65,9 +65,10 @@ Referenced from the root `CLAUDE.md`.
   arguments, never write them to another file. **A local testing instance
   you spawn (`admin_ui.py`, `docker compose`, `ng serve` + API) is built and
   started with those same `.env` values**, so the `admin`/`admin` default is
-  never what it runs on. `browse.mjs` still waits for a manual sign-in on its
-  persistent profile; until it fills from `.env`, sign in with an ad-hoc
-  Node script on the same profile. **Use
+  never what it runs on. `browse.mjs` does this for you: with no live
+  session it makes one `POST /api/v1/session` from the `.env` values (one
+  attempt, since the login limiter counts failures), and falls back to a
+  manual sign-in in the window only when they are missing or refused. **Use
   `frontend/scripts/browse.mjs`** (Playwright is a `frontend` devDependency,
   so `npm ci` keeps it; Chromium lives in `%LOCALAPPDATA%\ms-playwright`): it
   opens a persistent profile under `%LOCALAPPDATA%\swingbot-playwright`, so
