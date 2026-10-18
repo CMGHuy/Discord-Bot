@@ -6,6 +6,7 @@ this module is a pass-through that only adds source tags.
 Config is read at call time; the provider is cached per (key_id, secret) so
 rotated keys take effect on the next call in any process -- the admin
 container has no on_config_reload hook."""
+import dataclasses
 import logging
 import threading
 import time
@@ -20,8 +21,10 @@ from swingbot.core.marketdata.providers.alpaca_provider import (
     AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
 from swingbot.core.marketdata.providers.base import (
     SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_SPOT, SOURCE_YF, is_alpaca_eligible)
+from swingbot.core.marketdata.shared.kinds import QuoteDetail
 
 log = logging.getLogger(__name__)
+_QUOTE_METHODS = frozenset({"latest_prices", "latest_quotes"})
 _provider_factory = AlpacaProvider
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="alpaca")
 # Quotes get their own workers: a slow bulk-bars call must never starve the
@@ -181,7 +184,7 @@ def _attempt(method: str, *args, timeout: float = None):
     if prov is None or not _bucket.take():
         return None
     deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS if timeout is None else timeout)
-    pool = _quote_pool if method == "latest_prices" else _pool
+    pool = _quote_pool if method in _QUOTE_METHODS else _pool
     return _collect(pool.submit(with_current_context(getattr(prov, method)), *args), method, deadline)
 
 
@@ -384,6 +387,51 @@ def latest_prices(tickers, yf_fetch):
     _stats["yfinance"] += len(rest)
     _stats["fallback"] += len(misses)
     out.update(_spot_prices(spot))
+    return out
+
+
+def _with_alpaca_quote(fallback: QuoteDetail, alpaca: QuoteDetail | None) -> QuoteDetail:
+    """The fallback's price, the Alpaca IEX bid/ask (the D5 midpoint source)."""
+    if alpaca is None or alpaca.quote_at is None:
+        return fallback
+    return dataclasses.replace(fallback, bid=alpaca.bid, ask=alpaca.ask, quote_at=alpaca.quote_at)
+
+
+def _spot_quotes(spot) -> dict:
+    """v171: spot_metals' quote as a QuoteDetail -- never cached here, never Alpaca."""
+    out = {}
+    for ticker in spot:
+        quote, reason = spot_metals.quote_with_reason(ticker)
+        if quote is None:
+            _spot_miss[str(ticker).upper().strip()] = reason
+            continue
+        out[ticker] = QuoteDetail(symbol=ticker, trade_price=quote.price, trade_at=quote.updated_at,
+                                  bid=None, ask=None, quote_at=None, source="spot")
+        _last_source[ticker] = SOURCE_SPOT
+    return out
+
+
+def latest_quotes(tickers, yf_fetch):
+    """v171: latest_prices' routing with timestamps. A symbol whose Alpaca
+    answer has no fresh trade price is re-asked from yfinance, keeping the
+    Alpaca bid/ask on the merged detail."""
+    spot, tickers = spot_metals.split_spot(tickers)
+    wanted, rest = _split(tickers)
+    got = (_attempt("latest_quotes", wanted,
+                    int(config.ALPACA_MAX_TRADE_AGE_SECONDS)) or {}) if wanted else {}
+    priced = {t: q for t, q in got.items() if q.trade_price is not None}
+    misses = [t for t in wanted if t not in priced]
+    _log_fallback("latest_quotes", misses)
+    out = dict(got)
+    for group, source in ((rest, SOURCE_YF), (misses, SOURCE_FALLBACK)):
+        fetched = yf_fetch(group) if group else {}
+        out.update({t: _with_alpaca_quote(q, got.get(t)) for t, q in fetched.items()})
+        _last_source.update({t: source for t in fetched})
+    _last_source.update({t: SOURCE_ALPACA for t in priced})
+    _stats["alpaca"] += len(priced)
+    _stats["yfinance"] += len(rest)
+    _stats["fallback"] += len(misses)
+    out.update(_spot_quotes(spot))
     return out
 
 

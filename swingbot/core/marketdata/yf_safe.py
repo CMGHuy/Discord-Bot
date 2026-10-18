@@ -22,7 +22,9 @@ import threading
 
 import yfinance as yf
 
-log = logging.getLogger(__name__)
+from swingbot.core.marketdata.shared.budget import BudgetDeferred  # noqa: F401  (raised from V171-8 on)
+
+log =logging.getLogger(__name__)
 
 _DOWNLOAD_LOCK = threading.Lock()
 

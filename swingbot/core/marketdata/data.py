@@ -14,6 +14,7 @@ from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals, yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.providers.base import SOURCE_YF, is_alpaca_eligible
+from swingbot.core.marketdata.shared.kinds import QuoteDetail
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger(__name__)
@@ -223,6 +224,42 @@ def _fresh_batch_prices(tickers: list, now: float) -> dict:
         if (cached := _last_good_batch_price.get(ticker))
         and now - cached[1] < _BATCH_PRICE_CACHE_TTL_SECONDS
     }
+
+
+def _bar_time_utc(ts):
+    stamp = pd.Timestamp(ts)
+    return (stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")).to_pydatetime()
+
+
+def _last_minute_quote(raw, ticker):
+    try:
+        closes = raw[ticker]["Close"].dropna()
+    except KeyError:
+        return None
+    if closes.empty or float(closes.iloc[-1]) <= 0:
+        return None
+    return QuoteDetail(symbol=ticker, trade_price=float(closes.iloc[-1]),
+                       trade_at=_bar_time_utc(closes.index[-1]), bid=None, ask=None,
+                       quote_at=None, source="yfinance-1m")
+
+
+def _yf_quote_details(tickers: list) -> dict:
+    """v171: _yf_batch_prices with each price's own bar timestamp (D5: a
+    delayed yfinance value counts only if its own timestamp passes 60 s)."""
+    try:
+        raw = yf_safe.download(" ".join(tickers), period="1d", interval="1m",
+                               group_by="ticker", prepost=True, progress=False)
+    except yf_safe.BudgetDeferred:
+        raise
+    except yf_safe.DownloadBusy as exc:
+        log.info("yfinance busy, skipped %d ticker(s): %s", len(tickers), exc)
+        return {}
+    except Exception as exc:
+        log.error("_yf_quote_details failed for %d ticker(s): %s", len(tickers), exc, exc_info=True)
+        return {}
+    if raw is None or raw.empty:
+        return {}
+    return {t: q for t in tickers if (q := _last_minute_quote(raw, t)) is not None}
 
 
 def _yf_batch_prices(tickers: list) -> dict:

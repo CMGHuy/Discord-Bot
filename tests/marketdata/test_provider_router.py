@@ -9,8 +9,9 @@ def _df():
     return pd.DataFrame({"Close": [1.0]}, index=pd.DatetimeIndex(["2026-09-25"]))
 
 class FakeProvider:
-    def __init__(self, daily=None, prices=None, exc=None, sleep=0):
+    def __init__(self, daily=None, prices=None, exc=None, sleep=0, quotes=None):
         self.daily, self.prices, self.exc, self.sleep, self.calls = daily or {}, prices or {}, exc, sleep, 0
+        self.quotes = quotes or {}
     def _maybe(self):
         self.calls += 1
         if self.sleep: time.sleep(self.sleep)
@@ -19,6 +20,8 @@ class FakeProvider:
         self._maybe(); return {t: _df() for t in tickers if t in self.daily}
     def latest_prices(self, tickers, max_age):
         self._maybe(); return {t: p for t, p in self.prices.items() if t in tickers}
+    def latest_quotes(self, tickers, max_age):
+        self._maybe(); return {t: q for t, q in self.quotes.items() if t in tickers}
     def intraday_bars(self, t, iv):
         self._maybe(); return None
 
@@ -159,3 +162,108 @@ def test_miss_log_names_timeout(enabled, monkeypatch, caplog):
     _use(monkeypatch, FakeProvider(daily={"AAPL"}, sleep=2)); caplog.set_level("DEBUG")
     router.daily_bars(["AAPL"], "2y", yf_daily([]))
     assert "TimeoutError" in caplog.text
+
+
+from datetime import datetime, timezone
+from swingbot.core.marketdata.shared.kinds import QuoteDetail
+
+_T = datetime(2026, 10, 16, 15, 0, tzinfo=timezone.utc)
+
+
+def _q(sym, price, source="alpaca-iex", bid=None, ask=None):
+    return QuoteDetail(symbol=sym, trade_price=price, trade_at=_T if price else None,
+                       bid=bid, ask=ask, quote_at=_T if bid else None, source=source)
+
+
+def yf_quotes(calls, prices):
+    def f(tickers):
+        calls.append(list(tickers))
+        return {t: _q(t, prices[t], source="yfinance-1m") for t in tickers if t in prices}
+    return f
+
+
+def test_latest_quotes_alpaca_hit_makes_no_yfinance_call(enabled, monkeypatch):
+    _use(monkeypatch, FakeProvider(quotes={"AAPL": _q("AAPL", 190.0)})); calls = []
+    out = router.latest_quotes(["AAPL"], yf_quotes(calls, {}))
+    assert calls == [] and out["AAPL"].trade_price == 190.0
+    assert router.last_source("AAPL") == "alpaca"
+
+
+def test_latest_quotes_stale_trade_falls_back_and_keeps_alpaca_bid_ask(enabled, monkeypatch):
+    stale = _q("AAPL", None, bid=189.0, ask=191.0)
+    _use(monkeypatch, FakeProvider(quotes={"AAPL": stale})); calls = []
+    out = router.latest_quotes(["AAPL"], yf_quotes(calls, {"AAPL": 190.4}))
+    assert calls == [["AAPL"]]
+    q = out["AAPL"]
+    assert (q.trade_price, q.source) == (190.4, "yfinance-1m")
+    assert (q.bid, q.ask, q.quote_at) == (189.0, 191.0, _T)
+    assert router.last_source("AAPL") == "yfinance-fallback"
+
+
+def test_latest_quotes_fallback_miss_keeps_the_alpaca_quote_only(enabled, monkeypatch):
+    stale = _q("AAPL", None, bid=189.0, ask=191.0)
+    _use(monkeypatch, FakeProvider(quotes={"AAPL": stale})); calls = []
+    out = router.latest_quotes(["AAPL"], yf_quotes(calls, {}))
+    assert out["AAPL"] == stale
+
+
+def test_latest_quotes_ineligible_symbol_is_plain_yfinance(enabled, monkeypatch):
+    _use(monkeypatch, FakeProvider()); calls = []
+    out = router.latest_quotes(["SAP.DE"], yf_quotes(calls, {"SAP.DE": 50.0}))
+    assert calls == [["SAP.DE"]] and out["SAP.DE"].source == "yfinance-1m"
+    assert router.last_source("SAP.DE") == "yfinance"
+
+
+def test_latest_quotes_spot_metal_takes_the_spot_quote(enabled, monkeypatch):
+    from swingbot.core.marketdata import spot_metals
+    prov = FakeProvider(); _use(monkeypatch, prov); calls = []
+    monkeypatch.setattr(spot_metals, "quote_with_reason",
+                        lambda t, **k: (spot_metals.SpotQuote(2400.0, _T), None))
+    out = router.latest_quotes(["XAUUSD"], yf_quotes(calls, {}))
+    assert prov.calls == 0 and calls == []
+    assert out["XAUUSD"] == QuoteDetail(symbol="XAUUSD", trade_price=2400.0, trade_at=_T,
+                                        bid=None, ask=None, quote_at=None, source="spot")
+
+
+def test_latest_quotes_runs_on_the_quote_pool(enabled, monkeypatch):
+    import threading
+    seen = []
+
+    class Probe(FakeProvider):
+        def latest_quotes(self, tickers, max_age):
+            seen.append(threading.current_thread().name)
+            return {}
+    _use(monkeypatch, Probe())
+    router.latest_quotes(["AAPL"], yf_quotes([], {}))
+    assert seen and seen[0].startswith("alpaca-quote")
+
+
+def test_yf_quote_details_stamps_the_last_bar_in_utc(monkeypatch):
+    from swingbot.core.marketdata import data, yf_safe
+    idx = pd.DatetimeIndex(["2026-10-16 10:58", "2026-10-16 10:59"]).tz_localize("America/New_York")
+    cols = pd.MultiIndex.from_product([["AAPL"], ["Close"]])
+    raw = pd.DataFrame([[190.0], [190.5]], index=idx, columns=cols)
+    monkeypatch.setattr(yf_safe, "download", lambda *a, **k: raw)
+    q = data._yf_quote_details(["AAPL", "MSFT"])
+    assert set(q) == {"AAPL"}
+    assert q["AAPL"].trade_price == 190.5 and q["AAPL"].source == "yfinance-1m"
+    assert q["AAPL"].trade_at == datetime(2026, 10, 16, 14, 59, tzinfo=timezone.utc)
+
+
+def test_yf_quote_details_busy_lock_is_empty(monkeypatch):
+    from swingbot.core.marketdata import data, yf_safe
+
+    def busy(*a, **k):
+        raise yf_safe.DownloadBusy("busy")
+    monkeypatch.setattr(yf_safe, "download", busy)
+    assert data._yf_quote_details(["AAPL"]) == {}
+
+
+def test_yf_quote_details_reraises_budget_deferred(monkeypatch):
+    from swingbot.core.marketdata import data, yf_safe
+
+    def deferred(*a, **k):
+        raise yf_safe.BudgetDeferred("tier 5")
+    monkeypatch.setattr(yf_safe, "download", deferred)
+    with pytest.raises(yf_safe.BudgetDeferred):
+        data._yf_quote_details(["AAPL"])

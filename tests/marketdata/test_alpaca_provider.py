@@ -185,3 +185,53 @@ def test_history_bars_rate_limit_is_a_miss_with_the_status_on_the_cause():
         _prov(FakeClient(exc=err)).history_bars("AAPL", "1d", H_START, H_END)
     assert not isinstance(info.value, ap.AlpacaAuthError)
     assert info.value.__cause__.status_code == 429
+
+
+from swingbot.core.marketdata.shared.kinds import QuoteDetail
+
+
+def _qsnap(price, trade_ts, bid=None, ask=None, quote_ts=None):
+    trade = None if price is None else SimpleNamespace(price=price, timestamp=trade_ts)
+    quote = (None if bid is None and ask is None
+             else SimpleNamespace(bid_price=bid, ask_price=ask, timestamp=quote_ts))
+    return SimpleNamespace(latest_trade=trade, latest_quote=quote)
+
+
+def test_latest_quotes_carries_trade_and_quote_timestamps():
+    t_trade = NOW - pd.Timedelta(seconds=3)
+    t_quote = NOW - pd.Timedelta(seconds=1)
+    c = FakeClient(snaps={"AAPL": _qsnap(190.0, t_trade, 189.9, 190.1, t_quote)})
+    out = _prov(c).latest_quotes(["AAPL"], 300)
+    assert out == {"AAPL": QuoteDetail(symbol="AAPL", trade_price=190.0, trade_at=t_trade,
+                                       bid=189.9, ask=190.1, quote_at=t_quote,
+                                       source="alpaca-iex")}
+    assert str(c.requests[0].feed.value) == "iex"
+
+
+def test_latest_quotes_stale_trade_in_session_keeps_the_quote():
+    t_quote = NOW - pd.Timedelta(seconds=2)
+    c = FakeClient(snaps={"AAPL": _qsnap(190.0, NOW - pd.Timedelta(minutes=20),
+                                         189.0, 191.0, t_quote)})
+    q = _prov(c).latest_quotes(["AAPL"], 300)["AAPL"]
+    assert q.trade_price is None and q.trade_at is None
+    assert (q.bid, q.ask, q.quote_at) == (189.0, 191.0, t_quote)
+    assert q.mid() == 190.0
+
+
+def test_latest_quotes_symbol_with_no_price_and_one_sided_quote_is_absent():
+    c = FakeClient(snaps={"AAPL": _qsnap(None, None, 0.0, 191.0, NOW)})
+    assert _prov(c).latest_quotes(["AAPL"], 300) == {}
+
+
+def test_latest_quotes_rekeys_class_shares():
+    c = FakeClient(snaps={"BRK.B": _qsnap(410.0, NOW - pd.Timedelta(seconds=5))})
+    assert set(_prov(c).latest_quotes(["BRK-B"], 300)) == {"BRK-B"}
+
+
+def test_latest_quotes_old_trade_outside_session_is_kept_with_its_timestamp():
+    sat = datetime(2026, 9, 26, 15, 0, tzinfo=timezone.utc)
+    friday_close = sat - pd.Timedelta(hours=23)
+    c = FakeClient(snaps={"AAPL": _qsnap(190.0, friday_close)})
+    prov = ap.AlpacaProvider("k", "s", "iex", client=c, now=lambda: sat)
+    q = prov.latest_quotes(["AAPL"], 300)["AAPL"]
+    assert q.trade_price == 190.0 and q.trade_at == friday_close
