@@ -23,7 +23,8 @@ Far-off scheduled work (cron, `scripts/ops/`) also runs **on the VM**, never thi
 Entry points: `bot.py` and `admin_ui.py` (Flask API + Angular SPA in
 `frontend/`), two Docker containers off one image (`docs/deploy/`). `.env` is
 the single config source, hot-reloaded via SIGHUP (schema: `swingbot/config.py`).
-**Drive bomeo-capital.com (and any browser) with Playwright only**, never claude-in-chrome: `skills-tools.md`.
+**Drive bomeo-capital.com (and any browser) with Playwright only**, never claude-in-chrome. **Log in (bomeo-capital.com or a local instance) with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded inside the script and never printed or echoed; build any local test instance from those same `.env` values**, never the `admin`/`admin` default: `skills-tools.md`.
+**A task that runs tests against the database runs `/replicate-prod-db` first** (sync the production data into the local replica): `skills-tools.md`.
 
 ## eToro roadmap: demo next, real money much later
 
