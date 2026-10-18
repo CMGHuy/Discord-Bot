@@ -10,6 +10,7 @@ import yfinance as yf
 
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals, yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.providers.base import SOURCE_YF, is_alpaca_eligible
@@ -53,7 +54,8 @@ def get_daily_data(ticker: str, period: str = "2y") -> pd.DataFrame:
                             progress=False, auto_adjust=True,
                             attempts=FETCH_RETRY_ATTEMPTS, base_delay=FETCH_RETRY_BASE_DELAY,
                             label=f"get_daily_data({candidate})")
-        except Exception:
+        except Exception as exc:
+            swallowed(log, "marketdata.daily_data.candidate", exc, level=logging.DEBUG)
             continue
         if df is not None and not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
@@ -122,8 +124,9 @@ def _yf_daily_batch(tickers: list, period: str) -> dict:
         log.info("yfinance busy, skipped %d ticker(s): %s", len(tickers), exc)
         return {}
     except Exception as exc:
-        log.error("get_daily_data_batch failed for %d ticker(s) after %d attempt(s): %s",
-                   len(tickers), FETCH_RETRY_ATTEMPTS, exc, exc_info=True)
+        swallowed(log, "marketdata.daily_batch", exc,
+                  "get_daily_data_batch failed for %d ticker(s) after %d attempt(s): %s",
+                  len(tickers), FETCH_RETRY_ATTEMPTS, exc, level=logging.ERROR, exc_info=True)
         return {}
     if raw is None or raw.empty:
         return {}
@@ -233,7 +236,9 @@ def _yf_batch_prices(tickers: list) -> dict:
         log.info("yfinance busy, skipped %d ticker(s): %s", len(tickers), exc)
         return {}
     except Exception as exc:
-        log.error("get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc, exc_info=True)
+        swallowed(log, "marketdata.price_batch", exc,
+                  "get_current_price_batch failed for %d ticker(s): %s", len(tickers), exc,
+                  level=logging.ERROR, exc_info=True)
         return {}
     if raw is None or raw.empty:
         return {}
@@ -280,9 +285,10 @@ def warm_batch_price_cache_background(tickers: list) -> threading.Thread:
     def _run():
         try:
             get_current_price_batch(tickers, allow_stale=False)
-        except Exception:
-            log.debug("background price warm-up failed for %d ticker(s)",
-                      len(tickers), exc_info=True)
+        except Exception as exc:
+            swallowed(log, "marketdata.price_warmup", exc,
+                      "background price warm-up failed for %d ticker(s)", len(tickers),
+                      level=logging.DEBUG, exc_info=True)
 
     t = threading.Thread(target=_run, name="price-cache-warm", daemon=True)
     t.start()
@@ -362,8 +368,9 @@ def _save_ticker_meta_cache():
             "currency_symbols": _currency_cache,
             "company_names": _company_name_cache,
         })
-    except Exception:
-        log.debug("Could not save ticker_meta_cache.json", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.save_ticker_meta", exc, "Could not save ticker_meta_cache.json",
+                  level=logging.DEBUG, exc_info=True)
 
 
 _load_ticker_meta_cache()
@@ -400,7 +407,8 @@ def get_company_name(ticker: str) -> str | None:
             name = info.get("longName") or info.get("shortName")
             if name:
                 break
-        except Exception:
+        except Exception as exc:
+            swallowed(log, "marketdata.company_name", exc, level=logging.DEBUG)
             continue
 
     _company_name_cache[ticker_key] = name
@@ -418,7 +426,8 @@ def _resolve_currency_code(ticker: str) -> str | None:
             code = fast_info.get("currency") if hasattr(fast_info, "get") else getattr(fast_info, "currency", None)
             if code:
                 return str(code).upper()
-        except Exception:
+        except Exception as exc:
+            swallowed(log, "marketdata.currency_code", exc, level=logging.DEBUG)
             continue
     return None
 
@@ -493,7 +502,8 @@ def _fast_info_price(fi) -> float | None:
             val = fi.get(attr) if hasattr(fi, "get") else getattr(fi, attr, None)
             if val is not None and float(val) > 0:
                 return float(val)
-        except Exception:
+        except Exception as exc:
+            swallowed(log, "marketdata.fast_info_price", exc, level=logging.DEBUG)
             continue
     return None
 
@@ -584,8 +594,8 @@ def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SE
                 if price > 0:
                     _price_cache[ticker_key] = (price, now, False)
                     return PriceQuote(price, False)
-        except Exception:
-            pass
+        except Exception as exc:
+            swallowed(log, "marketdata.price_detail.history", exc, level=logging.DEBUG)
 
         # Fallback: fast_info is cheaper but may be stale during extended hours
         try:
@@ -594,7 +604,8 @@ def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SE
             if price:
                 _price_cache[ticker_key] = (price, now, True)
                 return PriceQuote(price, True)
-        except Exception:
+        except Exception as exc:
+            swallowed(log, "marketdata.price_detail.fast_info", exc, level=logging.DEBUG)
             continue
 
     # Serve last known-good price on transient failure rather than blanking
@@ -665,7 +676,8 @@ def prefetch_prices(tickers: list[str], max_workers: int = 10) -> None:
     try:
         prices = get_current_price_batch(unique)
     except Exception as exc:
-        log.warning("prefetch_prices batch failed: %s", exc, exc_info=True)
+        swallowed(log, "marketdata.prefetch_prices", exc, "prefetch_prices batch failed: %s", exc,
+                  exc_info=True)
         return
     now = time.monotonic()
     for ticker, price in prices.items():

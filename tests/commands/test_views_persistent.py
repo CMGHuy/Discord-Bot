@@ -16,6 +16,7 @@ from discord.ext import commands
 
 from swingbot.commands import views
 from swingbot.commands.views import (
+    FEED_BUTTONS,
     LEGACY_REPLY,
     PLAN_BUTTONS,
     ChartButton,
@@ -29,6 +30,8 @@ from swingbot.commands.views import (
 PID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 AUTHOR = 123456789012345678
 OTHER = 876543210987654321
+#: every DynamicItem the bot registers: the full-alert panel's and the feed's.
+ALL_BUTTONS = (*PLAN_BUTTONS, *FEED_BUTTONS)
 
 
 def _interaction(user_id: int) -> MagicMock:
@@ -53,12 +56,12 @@ def test_custom_id_carries_the_plan_and_optionally_the_author():
 
 
 def test_every_custom_id_fits_discords_100_char_limit():
-    longest = max(len(custom_id_for(cls.ACTION, PID, 10 ** 19)) for cls in PLAN_BUTTONS)
+    longest = max(len(custom_id_for(cls.ACTION, PID, 10 ** 19)) for cls in ALL_BUTTONS)
     assert longest <= 100
 
 
 def test_each_button_rebuilds_from_its_custom_id_alone_without_author():
-    for cls in PLAN_BUTTONS:
+    for cls in ALL_BUTTONS:
         item = _rebuild(cls, custom_id_for(cls.ACTION, PID, None))
         assert isinstance(item, cls)
         assert (item.plan_id, item.author_id) == (PID, None)
@@ -66,7 +69,7 @@ def test_each_button_rebuilds_from_its_custom_id_alone_without_author():
 
 
 def test_each_button_rebuilds_with_its_author_segment():
-    for cls in PLAN_BUTTONS:
+    for cls in ALL_BUTTONS:
         item = _rebuild(cls, custom_id_for(cls.ACTION, PID, AUTHOR))
         assert (item.plan_id, item.author_id) == (PID, AUTHOR)
 
@@ -88,7 +91,7 @@ def test_an_alert_panel_with_no_author_accepts_anyone_after_a_rebuild():
 def test_the_legacy_static_ids_match_no_dynamic_template():
     for legacy in ("plan:chart", "plan:breakdown", "plan:watch", "plan:dismiss"):
         assert all(cls.__discord_ui_compiled_template__.fullmatch(legacy) is None
-                   for cls in PLAN_BUTTONS)
+                   for cls in ALL_BUTTONS)
 
 
 def test_plan_action_view_is_persistent_and_holds_one_button_per_action():
@@ -140,7 +143,7 @@ def test_legacy_dismiss_still_removes_the_panel():
 def test_register_persistent_views_adds_every_dynamic_item_and_the_legacy_panel():
     bot = MagicMock()
     register_persistent_views(bot)
-    bot.add_dynamic_items.assert_called_once_with(*PLAN_BUTTONS)
+    bot.add_dynamic_items.assert_called_once_with(*PLAN_BUTTONS, *FEED_BUTTONS)
     (legacy,), _ = bot.add_view.call_args
     assert isinstance(legacy, LegacyPlanPanel)
 
@@ -150,7 +153,7 @@ def test_register_persistent_views_is_accepted_by_a_real_bot():
     register_persistent_views(bot)
     assert any(isinstance(view, LegacyPlanPanel) for view in bot.persistent_views)
     registered = set(bot._connection._view_store._dynamic_items.values())
-    assert registered == set(PLAN_BUTTONS)
+    assert registered == set(ALL_BUTTONS)
 
 
 def test_bot_core_setup_hook_registers_the_persistent_views(monkeypatch):

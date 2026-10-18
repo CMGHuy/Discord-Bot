@@ -47,6 +47,7 @@ from swingbot.core.scanning.engine import is_scan_running
 # `docker_sdk` is re-exported: api_v1/system.py imports it from here rather
 # than from helpers, so it is used even though nothing in this file calls it.
 from .helpers import docker_sdk, _load_or_create_secret_key  # noqa: F401
+from . import login_limiter
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -146,6 +147,19 @@ def _session_authenticated() -> bool:
     )
 
 
+def credentials_match(username: str, password: str) -> bool:
+    """Constant-time check of a username/password pair (v148, spec O2).
+
+    Both fields are always compared, with no short-circuit on a wrong
+    username, so the response time does not say which one was wrong. Read
+    ADMIN_USERNAME/ADMIN_PASSWORD at call time: the conftest reloads this
+    module per test, and api_v1 reaches this function as
+    `_app.credentials_match`."""
+    user_ok = hmac.compare_digest(username.encode("utf-8"), ADMIN_USERNAME.encode("utf-8"))
+    pass_ok = hmac.compare_digest(password.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8"))
+    return user_ok and pass_ok
+
+
 def require_auth(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -156,8 +170,16 @@ def require_auth(view):
             # Client explicitly attempted Basic Auth (e.g. a script, or this
             # suite's `auth` fixture) -- keep the original challenge behavior
             # for that path rather than redirecting it to an HTML login page.
-            if auth.username == ADMIN_USERNAME and auth.password == ADMIN_PASSWORD:
+            # v148: constant-time, and gated by the shared login limiter.
+            outcome = login_limiter.attempt(auth.username or "", auth.password or "",
+                                            credentials_match)
+            if outcome.ok:
                 return view(*args, **kwargs)
+            if outcome.retry_after is not None:
+                return Response(
+                    login_limiter.rate_limited_message(outcome.retry_after), 429,
+                    {"Retry-After": str(outcome.retry_after)}, mimetype="text/plain",
+                )
             return Response(
                 "Authentication required.", 401,
                 {"WWW-Authenticate": 'Basic realm="Swing Bot Admin"'},

@@ -56,7 +56,7 @@ def _view_stub(monkeypatch):
 
 
 def _send(monkeypatch, chan, member, simple=None, plan=None, simple_embed=None):
-    monkeypatch.setattr(ui, "push_kwargs", lambda embed: {"embed": embed})
+    monkeypatch.setattr(ui, "push_kwargs", lambda embed, view=None: {"embed": embed})
     monkeypatch.setattr(alerts, "_simple_alert_channel", lambda: simple)
     monkeypatch.setattr(config, "MAX_ALERTS_PER_SCAN", 10)
     embed = SimpleNamespace(kind=member, footer=None)
@@ -120,7 +120,7 @@ def _bot(**channels):
 
 def test_closed_trade_notices_log_only_when_the_send_succeeds(monkeypatch, caplog):
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_HISTORY_ID", "5")
-    monkeypatch.setattr(ui, "push_kwargs", lambda embed: {"embed": embed})
+    monkeypatch.setattr(ui, "push_kwargs", lambda embed, view=None: {"embed": embed})
     monkeypatch.setattr(life, "build_closed_trade_embed",
                         lambda trade: SimpleNamespace(kind=Kind.WIN))
     trades = [{"id": "t1", "ticker": "AAPL", "status": "win"}]
@@ -133,7 +133,7 @@ def test_closed_trade_notices_log_only_when_the_send_succeeds(monkeypatch, caplo
 
 def test_near_close_notices_log_the_warning_ticker(monkeypatch, caplog):
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_HISTORY_ID", "5")
-    monkeypatch.setattr(ui, "push_kwargs", lambda embed: {"embed": embed})
+    monkeypatch.setattr(ui, "push_kwargs", lambda embed, view=None: {"embed": embed})
     monkeypatch.setattr(life, "build_near_close_embed",
                         lambda warning: SimpleNamespace(kind=Kind.NEAR_STOP))
     warnings = [{"trade": {"id": "t1", "ticker": "TSLA"}}]
@@ -149,7 +149,7 @@ def _plan_events_env(monkeypatch, transition):
     monkeypatch.setattr(plan_store, "PlanStore", lambda: SimpleNamespace(get=lambda pid: plan))
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_SIMPLE_ID", "1")
     monkeypatch.setattr(config, "DISCORD_CHANNEL_TRADES_HISTORY_ID", "2")
-    monkeypatch.setattr(ui, "push_kwargs", lambda embed: {"embed": embed})
+    monkeypatch.setattr(ui, "push_kwargs", lambda embed, view=None: {"embed": embed})
     monkeypatch.setattr(life, "build_plan_event_embed",
                         lambda p, e: SimpleNamespace(kind=Kind.EXPIRED))
     monkeypatch.setattr(execution_embeds, "build_instruction_embed",

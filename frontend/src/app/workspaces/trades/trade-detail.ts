@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  Signal,
   computed,
   effect,
   inject,
@@ -19,8 +20,7 @@ import { Button } from '../../ui/button';
 import { Chip, ChipTone, QualityChip } from '../../ui/chip';
 import { MetricChip } from '../../ui/metric-chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { dateTime, held, num, pct, rMultiple, share, text } from '../../ui/format';
-import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
 import {
   ACTION_LABELS,
@@ -30,20 +30,29 @@ import {
   availableActions,
   runTradeAction,
 } from './trade-actions';
-import { IfItGetsThere } from './why/if-it-gets-there';
-import { LevelsBlock } from './why/levels-block';
-import { OutcomePath } from './why/outcome-path';
 import { PlanChart } from './why/plan-chart';
-import { SizingPanel } from './why/sizing-panel';
 import { WHY_SECTIONS, WhyPanel, WhySection } from './why/why-panel';
+import { ScoresCard } from './scores-card';
+import { hasLevelSources, LevelSourcesCard } from './level-sources-card';
+import { StrategyRecordCard } from './strategy-record-card';
+import { CardAreas, OVERVIEW_AREAS, WhyCard, whyAreas } from './why-areas';
+import { OutcomeStrip } from './outcome-strip';
+import { outcomeTiles } from './outcome-tiles';
+import { sideLabel, statusGroup, StatusGroup } from './trade-figures';
 
-/** Plan · Live · Chart · Notes · Strategy — spec 3's five, in its order. */
+import { PlanCard, PlanFigures } from './plan-card';
+import { PositionCard, PositionFigures } from './position-card';
+import { OutcomeCard } from './outcome-card';
+
+export const LEGACY_TABS: Readonly<Record<string, string | null>> = {
+  plan: null, live: null, notes: 'journal', strategy: 'why',
+};
+
 const TABS: Tab[] = [
-  { id: 'plan', label: 'Plan' },
-  { id: 'live', label: 'Live' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'why', label: 'Why' },
   { id: 'chart', label: 'Chart' },
-  { id: 'notes', label: 'Notes' },
-  { id: 'strategy', label: 'Strategy' },
+  { id: 'journal', label: 'Journal' },
 ];
 
 const TAB_IDS = new Set(TABS.map((tab) => tab.id));
@@ -52,6 +61,10 @@ const TAB_IDS = new Set(TABS.map((tab) => tab.id));
  *  recorded" is a measured answer and is never hidden (spec v151 § Edge
  *  cases). The reasoning sections stay out, exactly as before. */
 const ABSENT_SECTIONS: readonly WhySection[] = ['gates', 'calendar'];
+
+const CELL_SECTIONS = {
+  why: ['explanation'], breakdown: ['confidence'], gates: ['gates'], calendar: ['calendar'],
+} as const satisfies Record<string, readonly WhySection[]>;
 
 const ARRIVAL_SUFFIX = ' — this is its trade record.';
 
@@ -77,8 +90,7 @@ function cameFromPlan(): boolean {
 }
 
 /**
- * One trade — the shell and the Plan tab (NG43). Live is NG44, Chart NG45,
- * Notes and Strategy NG46.
+ * One trade — Overview, Why, Chart and Journal within a shared shell.
  *
  * **The active tab is a query parameter**, for the same reason the Trades
  * list keeps its filters there: a tab held only in component state cannot be
@@ -94,8 +106,6 @@ function cameFromPlan(): boolean {
   imports: [
     RouterLink,
     TabBar,
-    Panel,
-    ControlRow,
     StatusIndicator,
     QualityChip,
     Button,
@@ -104,11 +114,14 @@ function cameFromPlan(): boolean {
     Chip,
     Async,
     WhyPanel,
-    LevelsBlock,
-    IfItGetsThere,
-    SizingPanel,
-    OutcomePath,
     PlanChart,
+    OutcomeStrip,
+    PlanCard,
+    PositionCard,
+    OutcomeCard,
+    ScoresCard,
+    LevelSourcesCard,
+    StrategyRecordCard,
   ],
   template: `
     <header class="head">
@@ -118,46 +131,67 @@ function cameFromPlan(): boolean {
       }
 
       @if (store.trade(); as trade) {
-        <div class="trade-title" role="heading" aria-level="2">
-          <span class="ticker">{{ trade.ticker }}</span>
-          <sb-status-indicator
-            [status]="trade.status"
-            [current]="trade.current_price"
-            [entry]="trade.entry"
-            [stop]="trade.stop_loss"
-            [target]="trade.target"
-          />
-        </div>
-        <div class="tags">
-          <!-- The id a Discord command (!trade ID) or the API needs to name
-               this exact trade -- previously only visible in the Trades
-               list's # column (and truncated there, see shortId()), so
-               reaching this page by clicking a row lost the one thing
-               someone might come here to copy. -->
-          <span class="trade-id" [title]="'Trade ID: ' + trade.id">{{ trade.id }}</span>
-          @if (trade.horizon) {
-            <span class="tag">{{ trade.horizon }}</span>
-          }
-          @if (trade.strategy) {
-            <span class="tag">{{ trade.strategy }}</span>
-          }
-          @if (trade.tier) {
-            <sb-quality-chip [value]="trade.tier" [label]="'Tier ' + trade.tier" />
-          }
-          @if (trade.confidence_level !== null) {
-            <sb-quality-chip
-              [value]="trade.confidence_level"
-              [label]="'Lv' + trade.confidence_level"
+        <div class="identity">
+          <div class="trade-title" role="heading" aria-level="2">
+            <span class="ticker">{{ trade.ticker }}</span>
+            @if (side(); as label) {
+              <span class="side">{{ label }}</span>
+            }
+            <sb-status-indicator
+              [status]="trade.status"
+              [current]="trade.current_price"
+              [entry]="trade.entry"
+              [stop]="trade.stop_loss"
+              [target]="trade.target"
             />
-          }
-          <!-- v86 -- the cohort risk verdict. COHORT_TYPICAL renders no
-               chip at all (the brief's own token guidance): "typical" is
-               the silent default every other label is judged against, and a
-               chip for it would just be visual noise on every ordinary
-               trade. -->
-          @if (cohortTone(); as tone) {
-            <sb-chip [label]="cohortChipLabel()" [tone]="tone" [title]="cohortTooltip()" />
-          }
+          </div>
+          <div class="tags">
+            @if (trade.horizon) {
+              <span class="tag">{{ trade.horizon }}</span>
+            }
+            @if (trade.strategy) {
+              <span class="tag">{{ trade.strategy }}</span>
+            }
+            @if (trade.tier) {
+              <sb-quality-chip [value]="trade.tier" [label]="'Tier ' + trade.tier" />
+            }
+            @if (trade.confidence_level !== null) {
+              <sb-quality-chip
+                [value]="trade.confidence_level"
+                [label]="'Lv' + trade.confidence_level"
+              />
+            }
+            @if (trade.badge) {
+              <sb-quality-chip [value]="trade.badge" [label]="trade.badge" />
+            }
+            <!-- v86 -- the cohort risk verdict. COHORT_TYPICAL renders no
+                 chip at all (the brief's own token guidance): "typical" is
+                 the silent default every other label is judged against, and a
+                 chip for it would just be visual noise on every ordinary
+                 trade. -->
+            @if (cohortTone(); as tone) {
+              <sb-chip [label]="cohortChipLabel()" [tone]="tone" [title]="cohortTooltip()" />
+            }
+            @if (earningsChip(); as label) {
+              <span class="earnings"><sb-chip [label]="label" tone="warn" [caps]="false" /></span>
+            }
+            @if (trade.origin !== 'plan') {
+              <span class="origin">{{ trade.origin }}</span>
+            }
+            <span class="trade-id" [title]="'Trade ID: ' + trade.id">{{ trade.id }}</span>
+          </div>
+          <div class="actions">
+            @for (kind of actionsFor(trade.status); track kind) {
+              <button
+                sb-button
+                [variant]="kind === 'delete' ? 'danger' : 'secondary'"
+                type="button"
+                (click)="ask(kind)"
+              >
+                {{ actionLabels[kind] }}
+              </button>
+            }
+          </div>
         </div>
       } @else if (store.error(); as message) {
         <p class="trade-title" role="status">{{ message }}</p>
@@ -169,6 +203,10 @@ function cameFromPlan(): boolean {
         <p class="trade-title loading-title" role="status">Loading…</p>
       }
     </header>
+
+    @if (store.trade()) {
+      <sb-outcome-strip [tiles]="stripTiles()" />
+    }
 
     <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
 
@@ -192,236 +230,24 @@ function cameFromPlan(): boolean {
       (retry)="store.load()"
     >
     @switch (activeTab()) {
-      @case ('plan') {
+      @case ('overview') {
         @if (store.trade(); as trade) {
-          <div class="panels">
-            <sb-levels-block
-              [direction]="trade.direction"
-              [entryType]="store.detail()?.entry_type ?? null"
-              [trigger]="store.triggerPrice()"
-              [entry]="trade.entry"
-              [stop]="trade.stop_loss"
-              [stopLabel]="stopLabel()"
-              [target1]="trade.target"
-              [target2]="trade.target2"
-              [riskReward]="trade.risk_reward"
-              [acceptanceLevel]="store.acceptanceLevel()"
-              [tp1Pct]="store.tp1Pct()"
-              [breakevenTriggerPct]="store.breakevenTriggerPct()"
-            />
-
-            <sb-panel heading="Per share">
-              <dl>
-                <div>
-                  <dt>Risk</dt>
-                  <dd class="num">{{ fmt(store.riskPerShare()) }}</dd>
-                </div>
-                <div>
-                  <dt>Reward</dt>
-                  <dd class="num">{{ fmt(store.rewardPerShare()) }}</dd>
-                </div>
-                <div>
-                  <dt>Direction</dt>
-                  <dd>{{ fmtText(trade.direction) }}</dd>
-                </div>
-                <div>
-                  <dt>Origin</dt>
-                  <dd>{{ fmtText(trade.origin) }}</dd>
-                </div>
-              </dl>
-            </sb-panel>
-
-            <sb-if-it-gets-there
-              [direction]="trade.direction"
-              [target2]="trade.target2"
-              [stopLoss]="trade.stop_loss"
-            />
-
-            <sb-sizing-panel
-              [shares]="trade.shares"
-              [positionValue]="trade.position_value"
-              [sizingMode]="store.detail()?.sizing_mode ?? null"
-              [workingStop]="store.detail()?.working_stop ?? null"
-              [gapP90Pct]="store.gapP90Pct()"
-              [gapFragile]="store.gapFragile()"
-            />
-
-            <sb-panel heading="Opened">
-              <dl>
-                <div>
-                  <dt>At</dt>
-                  <dd>{{ fmtDate(trade.opened_at) }}</dd>
-                </div>
-                <div>
-                  <dt>Closed</dt>
-                  <dd>{{ fmtDate(trade.closed_at) }}</dd>
-                </div>
-                <div>
-                  <dt>Entry type</dt>
-                  <dd>{{ fmtText(store.detail()?.entry_type ?? null) }}</dd>
-                </div>
-                <div>
-                  <dt>P&L</dt>
-                  <dd class="num">{{ fmtPct(trade.pnl_pct) }}</dd>
-                </div>
-              </dl>
-            </sb-panel>
-          </div>
-
-          <!-- The reasoning. Everything above is a number; the Why panel is
-               the only part of the screen that says why any of them were
-               chosen, and the one place level sources render (v151). -->
-          @if (store.detailAbsent()) {
-            <!-- Not an error and not an empty panel per field: this record
-                 predates the detail capture entirely, and nine em dashes read
-                 as a failed load rather than as a fact about an old trade. -->
-            <p class="no-detail">
-              This trade was logged before the admin UI captured the full alert
-              detail — only the plan above is available for it.
-            </p>
-          }
-          <sb-why-panel
-            [sections]="whySections()"
-            [status]="trade.status"
-            [barsToExpiry]="trade.bars_to_expiry"
-            [sessionsSinceCreated]="store.sessionsSinceCreated()"
-            [entry]="trade.entry"
-            [trigger]="store.triggerPrice()"
-            [stop]="trade.stop_loss"
-            [stopLabel]="stopLabel()"
-            [target1]="trade.target"
-            [target2]="trade.target2"
-            [acceptanceLevel]="store.acceptanceLevel()"
-            [targetSources]="store.targetSources()"
-            [stopSources]="store.stopSources()"
-            [target2Sources]="store.target2Sources()"
-            [confirmedBy]="store.confirmedBy()"
-            [confidencePoints]="store.confidencePoints()"
-            [confidenceUnevaluated]="store.confidenceUnevaluated()"
-            [confidenceFactors]="store.confidenceFactors()"
-            [qualityFactors]="store.qualityFactors()"
-            [gates]="store.gates()"
-            [calendar]="store.calendar()"
-            [explanation]="store.explanation()"
-          />
-        }
-      }
-      @case ('live') {
-        @if (store.trade(); as trade) {
-          <div class="panels">
-            <sb-panel heading="Now">
-              <dl>
-                <div>
-                  <dt>Price</dt>
-                  <dd class="num">
-                    {{ fmt(trade.current_price) }}
-                    @if (trade.current_price_stale) {
-                      <span
-                        class="stale-flag"
-                        title="This position's price could not be freshly fetched -- the number shown may be delayed."
-                      >delayed</span>
-                    }
-                  </dd>
-                </div>
-                <div>
-                  <dt>Unrealised</dt>
-                  <dd class="num" [class]="pnlClass(trade.pnl_pct)">{{ fmtPct(trade.pnl_pct) }}</dd>
-                </div>
-                <div>
-                  <dt>Amount</dt>
-                  <dd class="num" [class]="pnlClass(trade.realized_pnl_amount)">
-                    {{ fmt(trade.realized_pnl_amount) }}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Held</dt>
-                  <dd class="num">{{ fmtHeld(trade.held_hours) }}</dd>
-                </div>
-              </dl>
-            </sb-panel>
-
-            <sb-panel heading="Stop to target">
-              <div class="progress">
-                <sb-status-indicator
-                  [status]="trade.status"
-                  [current]="trade.current_price"
-                  [entry]="trade.entry"
-                  [stop]="trade.stop_loss"
-                  [target]="trade.target"
-                />
+          <div class="grid-host">
+            <div class="card-grid overview-grid" [style.--areas-1]="overviewAreas.one"
+              [style.--areas-2]="overviewAreas.two" [style.--areas-3]="overviewAreas.three">
+              <div class="cell" data-area="plan" style="grid-area: plan">
+                @if (planFigures(); as figures) { <sb-trade-plan-card [figures]="figures" /> }
               </div>
-              <dl>
-                <div>
-                  <dt>{{ stopLabel() }}</dt>
-                  <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
-                </div>
-                <div>
-                  <dt>Entry</dt>
-                  <dd class="num">{{ fmt(trade.entry) }}</dd>
-                </div>
-                <div>
-                  <dt>Target</dt>
-                  <dd class="num pos">{{ fmt(trade.target) }}</dd>
-                </div>
-              </dl>
-            </sb-panel>
-
-            @if (trade.status === 'PARTIAL' && store.bankedLeg(); as banked) {
-              <sb-panel heading="Partial position">
-                <dl>
-                  <div>
-                    <dt>Entry</dt>
-                    <dd class="num">{{ fmt(banked.exitPrice) }}</dd>
-                  </div>
-                  <div>
-                    <dt>Target</dt>
-                    <dd class="num pos">{{ fmt(trade.target) }}</dd>
-                  </div>
-                  <div>
-                    <dt>Trailing stop</dt>
-                    <dd class="num neg">{{ fmt(trade.stop_loss) }}</dd>
-                  </div>
-                  <div>
-                    <dt>Banked</dt>
-                    <dd class="num">
-                      @if (banked.fraction !== null) {
-                        {{ fmtShare(banked.fraction * 100) }}
-                      }
-                      @ {{ fmt(banked.exitPrice) }}
-                      @if (banked.r !== null) {
-                        <span [class]="pnlClass(banked.r)">{{ fmtR(banked.r) }}</span>
-                      }
-                      @if (store.bankedStats(); as stats) {
-                        <span class="muted muted-gap">{{ fmtPct(stats.pct) }}</span>
-                        @if (stats.amount !== null) {
-                          <span class="muted muted-gap" [class]="pnlClass(stats.amount)">
-                            {{ stats.amount > 0 ? '+' : '' }}{{ fmt(stats.amount) }}
-                          </span>
-                        }
-                      }
-                    </dd>
-                  </div>
-                </dl>
-              </sb-panel>
-            }
-
-            <sb-panel heading="Actions">
-              <sb-control-row class="commands">
-                @for (kind of actionsFor(trade.status); track kind) {
-                  <button
-                    sb-button
-                    [variant]="kind === 'delete' ? 'danger' : 'secondary'"
-                    type="button"
-                    (click)="ask(kind)"
-                  >
-                    {{ actionLabels[kind] }}
-                  </button>
-                }
-              </sb-control-row>
-            </sb-panel>
+              <div class="cell" data-area="position" style="grid-area: position">
+                @if (positionFigures(); as figures) { <sb-trade-position-card [figures]="figures" /> }
+              </div>
+              <div class="cell" data-area="outcome" style="grid-area: outcome">
+                <sb-trade-outcome-card [group]="outcomeGroup()" [direction]="trade.direction"
+                  [target2]="trade.target2" [stopLoss]="trade.stop_loss"
+                  [legs]="store.legs()" [timeline]="store.timeline()" />
+              </div>
+            </div>
           </div>
-
-          <sb-outcome-path [legs]="store.legs()" [timeline]="store.timeline()" />
         }
       }
       @case ('chart') {
@@ -429,7 +255,7 @@ function cameFromPlan(): boolean {
           <sb-plan-chart [ticker]="store.trade()?.ticker ?? null" [tradeId]="store.trade()?.id ?? null" />
         </div>
       }
-      @case ('notes') {
+      @case ('journal') {
         <div class="notes">
           <!-- SR55. The excursions sit ABOVE the note and beside it, not on
                Analytics: they are the evidence the note is about. "Went 1.4R
@@ -508,68 +334,52 @@ function cameFromPlan(): boolean {
           </p>
         </div>
       }
-      @case ('strategy') {
-        <div class="strategy">
-          @if (store.strategiesError()) {
-            <p class="not-journaled">{{ store.strategiesError() }}</p>
-          } @else if (!store.trade()?.strategy) {
-            <p class="not-journaled">This position has no strategy recorded.</p>
-          } @else if (store.strategyRow(); as row) {
-            <!-- Read-only on purpose: this is a window into the registry, and
-                 the place to change a strategy's numbers is a validation run,
-                 not a trade. -->
-            <dl>
-              <div>
-                <dt>Strategy</dt>
-                <dd>{{ row.strategy }}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{{ row.status }}</dd>
-              </div>
-              <div>
-                <dt>OOS sample</dt>
-                <dd>{{ fmt(row.n) }}</dd>
-              </div>
-              <div>
-                <dt>OOS win rate</dt>
-                <dd>{{ fmtPct(row.win_rate) }}</dd>
-              </div>
-              <div>
-                <dt>OOS expectancy</dt>
-                <dd>{{ fmt(row.expectancy_r) }}R</dd>
-              </div>
-              <div>
-                <dt>Live sample</dt>
-                <dd>{{ fmt(row.live_n) }}</dd>
-              </div>
-              <div>
-                <dt>Live win rate</dt>
-                <dd>{{ fmtPct(row.live_wr) }}</dd>
-              </div>
-              <div>
-                <dt>Live vs OOS</dt>
-                <dd>{{ fmtPct(row.delta_vs_oos) }}</dd>
-              </div>
-              <div>
-                <dt>Window</dt>
-                <dd>{{ fmtText(row.window) }}</dd>
-              </div>
-            </dl>
-            @if (row.decayed) {
-              <!-- The pre-registered decay rule fired. This belongs on the
-                   trade, not only on the Analytics page: it is the reason to
-                   distrust this position's edge. -->
-              <p class="decayed">
-                Live results have decayed against this strategy's out-of-sample record.
-              </p>
-            }
-          } @else {
-            <p class="not-journaled">
-              The registry has no entry for {{ fmtText(store.trade()?.strategy) }}.
-            </p>
+      @case ('why') {
+        @if (store.trade(); as trade) {
+          @if (store.detailAbsent()) {
+            <p class="no-detail">This trade was logged before the admin UI captured the full alert detail — only its gate rows and calendar are available here; its levels are on Overview.</p>
           }
-        </div>
+          <div class="grid-host">
+            <div class="card-grid why-grid" [style.--areas-1]="whyGrid().one"
+              [style.--areas-2]="whyGrid().two" [style.--areas-3]="whyGrid().three">
+              @if (whyPresent().has('why')) {
+                <div class="cell" data-area="why" style="grid-area: why">
+                  <sb-why-panel [sections]="cellSections.why" [explanation]="store.explanation()" />
+                </div>
+              }
+              @if (whyPresent().has('scores')) {
+                <div class="cell" data-area="scores" style="grid-area: scores">
+                  <sb-trade-scores-card [confidence]="trade.confidence_score" [level]="trade.confidence_level"
+                    [quality]="trade.quality_score" [badge]="trade.badge" />
+                </div>
+              }
+              @if (whyPresent().has('sources')) {
+                <div class="cell" data-area="sources" style="grid-area: sources">
+                  <sb-trade-level-sources [target]="store.targetSources()" [stop]="store.stopSources()"
+                    [target2]="store.target2Sources()" [confirmedBy]="store.confirmedBy()" />
+                </div>
+              }
+              @if (whyPresent().has('breakdown')) {
+                <div class="cell" data-area="breakdown" style="grid-area: breakdown">
+                  <sb-why-panel [sections]="cellSections.breakdown" [confidencePoints]="store.confidencePoints()"
+                    [confidenceUnevaluated]="store.confidenceUnevaluated()"
+                    [confidenceFactors]="store.confidenceFactors()" [qualityFactors]="store.qualityFactors()" />
+                </div>
+              }
+              @if (whyPresent().has('gates')) {
+                <div class="cell" data-area="gates" style="grid-area: gates">
+                  <sb-why-panel [sections]="cellSections.gates" [gates]="store.gates()" [status]="trade.status"
+                    [barsToExpiry]="trade.bars_to_expiry" [sessionsSinceCreated]="store.sessionsSinceCreated()" />
+                </div>
+              }
+              <div class="cell" data-area="context" style="grid-area: context">
+                <sb-why-panel [sections]="cellSections.calendar" [calendar]="store.calendar()" />
+                <sb-trade-strategy-record [strategy]="trade.strategy" [row]="store.strategyRow()"
+                  [error]="store.strategiesError()" />
+              </div>
+            </div>
+          </div>
+        }
       }
     }
     </sb-async>
@@ -586,22 +396,14 @@ function cameFromPlan(): boolean {
   `,
   styles: `
     :host { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--section-gap); }
-    /* --warn is the design system's designated token for stale data (see
-       tokens.css's own legend) -- the price itself still renders, this just
-       says the number might not be a live tick (the MRNA incident,
-       2026-09-18: a fast_info fallback echoed yesterday's close). */
-    .stale-flag {
-      display: inline-block;
-      margin-left: var(--space-6);
-      font-size: var(--text-chip);
-      font-weight: normal;
-      color: var(--warn);
-    }
     .head {
       display: grid;
       gap: var(--space-8);
     }
     .back {
+      display: flex;
+      align-items: center;
+      min-height: var(--control-h);
       color: var(--accent);
       font-size: var(--text-table);
       text-decoration: none;
@@ -620,10 +422,28 @@ function cameFromPlan(): boolean {
       font-size: var(--text-table);
     }
 
+    .identity {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--space-10);
+      min-width: 0;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-8);
+      margin-left: auto;
+    }
+    .side, .origin {
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+    }
     .trade-title {
       margin: 0;
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: var(--space-10);
       font-size: var(--text-title);
       font-weight: 600;
@@ -637,6 +457,8 @@ function cameFromPlan(): boolean {
 
     .tags {
       display: flex;
+      flex: 1 1 240px;
+      min-width: 0;
       align-items: center;
       gap: var(--space-6);
       flex-wrap: wrap;
@@ -656,30 +478,19 @@ function cameFromPlan(): boolean {
       color: var(--text-faint);
     }
 
-    .panels {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: var(--section-gap);
-      align-items: start;
+    .grid-host { min-width: 0; container: cards / inline-size; }
+    .card-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); align-items: stretch; grid-template-areas: var(--areas-1); }
+    .cell { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); container-type: inline-size; gap: var(--section-gap); }
+    .cell[data-area="context"] { grid-template-rows: auto 1fr; gap: var(--section-gap); }
+    :host ::ng-deep .cell > * > sb-panel:only-child { display: block; height: 100%; }
+    :host ::ng-deep .cell > * > sb-panel:only-child .panel { height: 100%; }
+
+    @container cards (min-width: 640px) {
+      .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: var(--areas-2); }
     }
-    dl {
-      display: grid;
-      gap: var(--space-6);
+    @container cards (min-width: 1024px) {
+      .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: var(--areas-3); }
     }
-    dl > div {
-      display: flex;
-      justify-content: space-between;
-      gap: var(--space-10);
-    }
-    dt {
-      color: var(--text-secondary);
-      font-size: var(--text-table);
-    }
-    dd {
-      color: var(--text);
-      font-size: var(--text-table);
-    }
-    /* -- SR49: the plan's reasoning ------------------------------------- */
 
     .no-detail {
       max-width: 68ch;
@@ -688,24 +499,6 @@ function cameFromPlan(): boolean {
       line-height: 1.6;
     }
 
-    /* v54: dropped this call site's own .muted rule entirely -- the gate
-       forbids redefining that selector at all, not just its colour (which
-       was color: var(--text-faint), a drift off the global .muted's
-       var(--text-muted), now fixed by using the global unmodified). The
-       inline gap it used to add is .muted-gap, a second class alongside
-       .muted in the markup so the two concerns stay separately named. */
-    .muted-gap {
-      margin-left: var(--space-6);
-    }
-
-    .chart {}
-    .progress {
-      margin-bottom: var(--space-10);
-    }
-    /* .commands keeps its class as a marker only -- sb-control-row supplies
-       display, alignment, wrap and gap. */
-
-    .notes, .strategy {}
     .note-label {
       display: block;
       margin-bottom: var(--space-6);
@@ -772,11 +565,7 @@ function cameFromPlan(): boolean {
       color: var(--text-secondary);
       font-size: var(--text-table);
     }
-    .decayed {
-      margin-top: var(--space-10);
-      color: var(--warn);
-      font-size: var(--text-table);
-    }
+
 
     .todo {
       margin-top: var(--space-14);
@@ -790,6 +579,59 @@ export class TradeDetail {
   private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
   protected readonly chart = inject(ChartStore);
+
+  protected readonly side: Signal<'Long' | 'Short' | null> = computed(() =>
+    sideLabel(this.store.trade()?.direction ?? null),
+  );
+
+  protected readonly earningsChip: Signal<string | null> = computed(() => {
+    const trade = this.store.trade();
+    if (!trade) return null;
+    const group = statusGroup(trade.status, trade.exit_price ?? null);
+    const days = this.store.earningsDays();
+    if ((group !== 'open' && group !== 'pending') || days === null) return null;
+    return `Earnings in ${days}d`;
+  });
+
+  protected readonly stripTiles = computed(() => {
+    const trade = this.store.trade();
+    if (!trade) return [];
+    return outcomeTiles({
+      trade, legs: this.store.legs(),
+      history: this.store.timeline().filter(event => event.status !== 'CREATED'),
+      riskPerShare: this.store.riskPerShare(), banked: this.store.bankedLeg(),
+      bankedStats: this.store.bankedStats(), expiresOn: this.store.expiresOn(),
+      timeExitOn: this.store.timeExitOn(), now: new Date(),
+    });
+  });
+
+  protected readonly overviewAreas = OVERVIEW_AREAS;
+  protected readonly planFigures: Signal<PlanFigures | null> = computed(() => {
+    const trade = this.store.trade();
+    if (!trade) return null;
+    return {
+      direction: trade.direction, status: trade.status, entryType: this.store.entryType(),
+      trigger: this.store.triggerPrice(), entry: trade.entry, riskStop: this.store.riskStop(),
+      stopLoss: trade.stop_loss, workingStop: this.store.workingStop(), target1: trade.target,
+      target2: trade.target2, acceptance: this.store.acceptanceLevel(), riskReward: trade.risk_reward,
+      riskPerShare: this.store.riskPerShare(), rewardPerShare: this.store.rewardPerShare(),
+    };
+  });
+  protected readonly positionFigures: Signal<PositionFigures | null> = computed(() => {
+    const trade = this.store.trade();
+    if (!trade) return null;
+    return {
+      status: trade.status, shares: trade.shares, positionValue: trade.position_value,
+      dollarAtRisk: this.store.dollarAtRisk(), sizingMode: this.store.sizingMode(),
+      gapP90Pct: this.store.gapP90Pct(), gapFragile: this.store.gapFragile(),
+      tp1Pct: this.store.tp1Pct(), breakevenTriggerPct: this.store.breakevenTriggerPct(),
+      trailAtrMult: this.store.trailAtrMult(), expiresOn: this.store.expiresOn(),
+      timeExitOn: this.store.timeExitOn(), holdCapBars: this.store.holdCapBars(),
+    };
+  });
+  protected readonly outcomeGroup: Signal<StatusGroup> = computed(() =>
+    statusGroup(this.store.trade()?.status ?? null, this.store.trade()?.exit_price ?? null),
+  );
 
   protected readonly async = computed(() => asyncInputs(this.store, { isEmpty: () => false }));
 
@@ -813,19 +655,24 @@ export class TradeDetail {
     this.store.detailAbsent() ? ABSENT_SECTIONS : WHY_SECTIONS,
   );
 
-  protected readonly tabs = TABS;
+  protected readonly cellSections = CELL_SECTIONS;
+  protected readonly whyPresent = computed<ReadonlySet<WhyCard>>(() => {
+    const present = new Set<WhyCard>(['context']);
+    const sections = this.whySections();
+    const trade = this.store.trade();
+    if (sections.includes('explanation') && this.store.explanation() !== null) present.add('why');
+    if (trade && [trade.confidence_score, trade.confidence_level, trade.quality_score, trade.badge]
+      .some(value => value != null)) present.add('scores');
+    if (sections.includes('levels') && hasLevelSources(this.store.targetSources(), this.store.stopSources(),
+      this.store.target2Sources(), this.store.confirmedBy())) present.add('sources');
+    if (sections.includes('confidence') && [Object.keys(this.store.confidencePoints() ?? {}),
+      this.store.confidenceFactors(), this.store.qualityFactors()].some(rows => rows.length > 0)) present.add('breakdown');
+    if (sections.includes('gates')) present.add('gates');
+    return present;
+  });
+  protected readonly whyGrid = computed<CardAreas>(() => whyAreas(this.whyPresent()));
 
-  /** "Stop" vs "Trailing stop" -- a PARTIAL position's `stop_loss` field is
-   *  no longer the original risk-defining level (the API returns the
-   *  runner's own working_stop there once TP1 has banked). For a short
-   *  that trailing stop legitimately sits BELOW entry -- it protects profit
-   *  already locked in by TP1, not the original risk -- which reads as
-   *  backwards (a short's stop "should" be above entry) unless the label
-   *  says why. A closed PARTIAL-turned-win/loss keeps showing "Stop" since
-   *  by then it is simply what the position actually exited against. */
-  protected readonly stopLabel = computed(() =>
-    this.store.trade()?.status === 'PARTIAL' ? 'Trailing stop' : 'Stop',
-  );
+  protected readonly tabs = TABS;
 
   /* -- v86: the cohort risk chip --------------------------------------- */
 
@@ -858,7 +705,7 @@ export class TradeDetail {
 
   /** The numbers behind the chip -- same facts `cohort_line()` puts in the
    *  Discord alert (`swingbot/core/scanning/plan_table.py`), so hovering the
-   *  chip answers "why" without a trip to the Strategy tab.
+   *  chip answers "why" without a trip to the Why tab.
    *
    *  Empty when `cohort_stats` itself is `{}` (a pre-registry/unstamped
    *  plan). For `COHORT_UNKNOWN` -- or any cell whose combined n is 0 --
@@ -885,19 +732,12 @@ export class TradeDetail {
     );
   });
 
-  protected readonly fmt = num;
-  protected readonly fmtText = text;
-  protected readonly fmtDate = dateTime;
-  protected readonly fmtPct = pct;
-  protected readonly fmtHeld = held;
-  protected readonly fmtShare = share;
-  protected readonly fmtR = rMultiple;
-
-  /** An unknown or absent `?tab=` falls back to Plan rather than rendering
-   *  nothing, so a hand-edited or stale URL still shows the trade. */
+  /** Unknown query values retain their URL while rendering the default. */
   protected readonly activeTab = computed(() => {
     const requested = this.tab();
-    return requested && TAB_IDS.has(requested) ? requested : 'plan';
+    if (!requested) return 'overview';
+    if (TAB_IDS.has(requested)) return requested;
+    return Object.hasOwn(LEGACY_TABS, requested) ? LEGACY_TABS[requested] ?? 'overview' : 'overview';
   });
 
   protected readonly actionLabels = ACTION_LABELS;
@@ -951,12 +791,21 @@ export class TradeDetail {
 
   constructor() {
     effect(() => this.store.setId(this.id()));
+    effect(() => {
+      const requested = this.tab();
+      if (requested && Object.hasOwn(LEGACY_TABS, requested)) {
+        this.router.navigate([], {
+          queryParams: { tab: LEGACY_TABS[requested] },
+          queryParamsHandling: 'merge', replaceUrl: true,
+        });
+      }
+    });
 
     // The registry is only needed by one tab, and it is the same request for
     // every trade -- so it is fetched on first arrival at the tab rather than
     // with the trade.
     effect(() => {
-      if (this.activeTab() === 'strategy' && this.store.strategies() === null) {
+      if (this.activeTab() === 'why' && this.store.strategies() === null) {
         untracked(() => this.store.loadStrategies());
       }
     });
@@ -977,13 +826,6 @@ export class TradeDetail {
       const trade = this.store.trade();
       this.chart.setTarget(trade?.ticker ?? null, trade?.id ?? null);
     });
-  }
-
-  protected pnlClass(value: number | null | undefined): string {
-    if (value === null || value === undefined) return '';
-    if (value > 0) return 'pos';
-    if (value < 0) return 'neg';
-    return '';
   }
 
   protected ask(kind: TradeActionKind): void {
@@ -1017,7 +859,7 @@ export class TradeDetail {
     // replaceUrl: flipping between tabs should not fill the history with
     // steps, but the tab must still be in the URL so it can be linked to.
     this.router.navigate([], {
-      queryParams: { tab: tab === 'plan' ? null : tab },
+      queryParams: { tab: tab === 'overview' ? null : tab },
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });

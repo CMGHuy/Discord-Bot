@@ -9,7 +9,17 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 import run_backtest_range as rr  # noqa: E402
 
+from swingbot import config  # noqa: E402
 from swingbot.core.backtesting.blocked_recorder import gate_row  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
 
 
 def _main(monkeypatch, *argv):

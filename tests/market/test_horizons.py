@@ -1,5 +1,5 @@
 import pytest
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import HORIZONS, horizon_order
 
 
 def test_every_horizon_defines_an_rs_window():
@@ -23,3 +23,9 @@ def test_rs_windows_increase_with_horizon_length():
 def test_shortest_and_longest_windows_are_sane():
     assert HORIZONS["2w"]["rs_window"] == 21      # ~1 trading month
     assert HORIZONS["9m"]["rs_window"] == 189     # ~9 trading months
+
+
+def test_horizon_order_is_every_horizon_key_in_vocabulary_order():
+    """Live loss watch rows sort by this; a masked key like 1w must stay in it."""
+    assert horizon_order() == tuple(HORIZONS)
+    assert "1w" in horizon_order()

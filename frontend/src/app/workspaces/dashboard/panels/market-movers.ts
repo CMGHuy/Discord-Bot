@@ -36,8 +36,15 @@ type MoverTab = 'gainers' | 'losers';
   `,
   styles: `
     :host { display: block; }
-    .movers { margin: var(--space-8) 0 0; padding: 0; list-style: none; display: grid; gap: var(--space-6); }
-    .movers li { display: flex; justify-content: space-between; font-size: var(--text-table); }
+    /* Columns, not one full-width list: a symbol and its change at opposite
+       ends of a wide panel leave the eye a long blank run to cross. Narrow
+       panels (phone) collapse to a single column on their own. */
+    .movers {
+      margin: var(--space-8) 0 0; padding: 0; list-style: none; display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+      gap: var(--space-4) var(--space-14);
+    }
+    .movers li { display: flex; justify-content: space-between; gap: var(--space-8); font-size: var(--text-table); }
     .symbol { font-family: var(--font-mono); color: var(--text); }
     .change { font-variant-numeric: tabular-nums; }
     .change.pos { color: var(--pos); }
@@ -47,7 +54,7 @@ type MoverTab = 'gainers' | 'losers';
 })
 export class MarketMovers {
   readonly rows = input<readonly TapeRow[]>([]);
-  readonly limit = input(5);
+  readonly limit = input(10);
 
   protected readonly active = signal<MoverTab>('gainers');
   protected readonly tabs = [

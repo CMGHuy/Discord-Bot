@@ -1,6 +1,7 @@
 # scripts/backtest/ablation.py
 """Leave-one-out ablation over the adopted component set.
 Run: python scripts/backtest/ablation.py"""
+import argparse
 import json
 import os
 import sys
@@ -8,10 +9,17 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from swingbot.core.backtesting.backtest_wf import run_folds  # noqa: E402
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
 
 ADOPTED_PATH = "docs/superpowers/results/adopted_components.json"
 
-if __name__ == "__main__":
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    instrument_cli.add_instrument_arg(ap)
+    args = ap.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "ablation.py",
+                              "phase 6 (cutover: walk-forward on the v2 folds)")
     with open(ADOPTED_PATH, encoding="utf-8") as f:
         adopted: dict = json.load(f)          # {"REGIME_GATES_ENABLED": true, ...}
 
@@ -27,3 +35,8 @@ if __name__ == "__main__":
     rows.sort(key=lambda x: x[1])
     weak = [k for k, c in rows if c < 0.01]
     print("\nremoval candidates (<0.01R):", weak or "none")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

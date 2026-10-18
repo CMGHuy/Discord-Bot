@@ -273,7 +273,7 @@ def test_inert_path_alone_runs_nothing(sel, tmp_path):
 
 def test_inert_path_does_not_suppress_a_real_one(sel, tmp_path):
     result = sel.select(
-        ["README.md", "tests/planning/test_plan_engine.py"], _repo(tmp_path)
+        ["docs/guides/setup.md", "tests/planning/test_plan_engine.py"], _repo(tmp_path)
     )
     assert (result.full, result.targets) == (False, ["tests/planning/test_plan_engine.py"])
 
@@ -433,7 +433,13 @@ def _with_readers(repo: pathlib.Path) -> pathlib.Path:
     for rel in ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.py",
                 "tests/hooks/test_role_skills.py",
                 "tests/hooks/test_doc_sections.py", "tests/dev/test_doc_section.py",
-                "tests/dev/test_testrun_ci_invocations.py"):
+                "tests/dev/test_testrun_ci_invocations.py",
+                "tests/dev/test_readme_paths.py",
+                "tests/dev/test_complexity_gate.py",
+                "tests/scout/test_generator_roles.py",
+                "tests/scout/test_trade_scout_skill.py",
+                "tests/scout/test_scout_merge_parse.py",
+                "tests/scout/test_scout_merge.py"):
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text("X = 1\n", encoding="utf-8")
     return repo
@@ -442,14 +448,20 @@ def _with_readers(repo: pathlib.Path) -> pathlib.Path:
 @pytest.mark.parametrize("path, expected", [
     (".github/workflows/deploy.yml", ["tests/dev/test_testrun_ci_invocations.py"]),
     (".claude/settings.json", ["tests/hooks/"]),
-    (".claude/skills/gate/SKILL.md", ["tests/hooks/"]),
-    (".claude/agents/test-runner.md", ["tests/hooks/"]),
+    (".claude/skills/gate/SKILL.md",
+     ["tests/hooks/", "tests/scout/test_generator_roles.py",
+      "tests/scout/test_trade_scout_skill.py"]),
+    (".claude/agents/test-runner.md",
+     ["tests/hooks/", "tests/scout/test_trade_scout_skill.py"]),
     ("CLAUDE.md", ["tests/hooks/"]),
-    ("AGENTS.md", ["tests/hooks/"]),
+    ("AGENTS.md", ["tests/hooks/", "tests/scout/test_generator_roles.py"]),
+    ("README.md", ["tests/dev/test_readme_paths.py"]),
+    ("scripts/dev/complexity_baseline.json", ["tests/dev/test_complexity_gate.py"]),
     ("docs/claude/backtest-methodology.md",
      ["tests/dev/test_doc_section.py", "tests/hooks/test_codex_mirror.py",
       "tests/hooks/test_doc_sections.py", "tests/hooks/test_guardrails.py",
-      "tests/hooks/test_role_skills.py"]),
+      "tests/hooks/test_role_skills.py", "tests/scout/test_scout_merge.py",
+      "tests/scout/test_scout_merge_parse.py"]),
     ("tests/hooks/fixtures/broken_frontmatter_SKILL.md",
      ["tests/dev/test_skill_frontmatter.py", "tests/hooks/test_codex_mirror.py",
       "tests/hooks/test_skill_shape.py"]),
@@ -673,4 +685,5 @@ def test_targets_inside_a_selected_directory_are_collapsed(sel, tmp_path):
     result = sel.select(["AGENTS.md", "docs/claude/testing-cost.md"],
                         _with_readers(_repo(tmp_path)))
     assert (result.full, result.targets) == (
-        False, ["tests/dev/test_doc_section.py", "tests/hooks/"])
+        False, ["tests/dev/test_doc_section.py", "tests/hooks/",
+                "tests/scout/test_generator_roles.py"])

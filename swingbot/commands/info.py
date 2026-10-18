@@ -14,6 +14,7 @@ from discord import app_commands
 
 from swingbot import config
 from swingbot.core import presentation as ui
+from swingbot.core.presentation import tokens
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.bot_core import bot, CONFIDENCE_EXPLAINER, COMMANDS_BY_CATEGORY
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
@@ -24,8 +25,11 @@ from swingbot.commands.slash import HORIZON_CHOICES
 
 log = logging.getLogger(__name__)
 
-#: The help embed's description; SP17's help_embeds() reuses it.
-HELP_DESCRIPTION = "Alerts only, never places trades. Prefix: `!`  •  Slash: `/`"
+#: The help embed's description; SP17's help_embeds() reuses it. v170: its
+#: second line is the execution feed's symbol legend, generated from
+#: tokens.FEED_SYMBOLS so it cannot drift from what the feed sends.
+HELP_DESCRIPTION = ("Alerts only, never places trades. Prefix: `!`  •  Slash: `/`\n"
+                    + tokens.feed_legend())
 
 HELP_TITLE = "📖 Swing Trade Bot — Commands"
 CONT = " (cont.)"

@@ -100,15 +100,15 @@ def test_leg_reason_drives_the_bucket():
 def test_production_close_reasons_map_by_exact_text(text, status, bucket):
     trade = {"status": status, "close_reason": text, "entry": 100.0, "stop_loss": 99.0,
              "direction": "bullish", "exit_price": 100.0}
-    assert metrics._exit_reason_bucket(trade) == bucket
+    assert metrics.exit_reason_bucket(trade) == bucket
 
 
 def test_an_unlisted_text_that_merely_contains_a_mapped_word_is_still_other():
-    # Exact match only (metrics._exit_reason_bucket docstring): a substring
+    # Exact match only (metrics.exit_reason_bucket docstring): a substring
     # rule is how a table like this starts lying.
     trade = {"status": "win", "close_reason": "not a stop at all", "entry": 100.0,
              "stop_loss": 99.0, "direction": "bullish", "exit_price": 101.0}
-    assert metrics._exit_reason_bucket(trade) == "other"
+    assert metrics.exit_reason_bucket(trade) == "other"
 
 
 @pytest.mark.parametrize(("text", "status"), [
@@ -127,4 +127,67 @@ def test_production_texts_with_no_matching_bucket_stay_other(text, status):
     # closes with no EXIT_REASONS bucket of their own.
     trade = {"status": status, "close_reason": text, "entry": 100.0, "stop_loss": 99.0,
              "direction": "bullish", "exit_price": 100.0}
-    assert metrics._exit_reason_bucket(trade) == "other"
+    assert metrics.exit_reason_bucket(trade) == "other"
+
+
+# --- v165: public name, and the text-only half for scale-out legs ----------
+#
+# The P&L calendar's day page buckets each realized LEG by the leg's own
+# reason (`trade["legs"][i]["reason"]`), while a whole trade keeps the
+# trade-level bucket. The text half is split out so the leg path and the
+# trade path cannot drift apart on what an exact name or an alias means.
+
+
+def test_the_private_name_is_gone_with_no_alias():
+    assert not hasattr(metrics, "_exit_reason_bucket")
+
+
+@pytest.mark.parametrize("name", list(metrics.EXIT_REASONS))
+def test_every_exit_reason_name_buckets_to_itself_from_text(name):
+    assert metrics.exit_reason_bucket_text(name) == name
+
+
+@pytest.mark.parametrize(("text", "bucket"), [
+    pytest.param("loss", "stop", id="alias-loss"),
+    pytest.param("tp1_runner_be", "runner_be", id="alias-runner-be"),
+    pytest.param("tp1_runner_tp2", "runner_tp2", id="alias-runner-tp2"),
+    pytest.param("auto (near-tp stall)", "timeout", id="alias-near-tp-stall"),
+    pytest.param("time_exit", "timeout", id="alias-time-exit"),
+])
+def test_text_aliases_resolve_like_the_trade_level_bucket(text, bucket):
+    assert metrics.exit_reason_bucket_text(text) == bucket
+
+
+def test_text_is_stripped_and_lowercased_before_the_lookup():
+    assert metrics.exit_reason_bucket_text("  TP1 ") == "tp1"
+    assert metrics.exit_reason_bucket_text("Runner_Trail") == "runner_trail"
+
+
+@pytest.mark.parametrize("text", [
+    pytest.param(None, id="none"),
+    pytest.param("", id="empty"),
+    pytest.param("   ", id="blank"),
+    pytest.param("not a stop at all", id="substring-only"),
+    pytest.param("auto (price monitor)", id="ambiguous-text"),
+    pytest.param("scratch exit", id="prose-needs-status"),
+])
+def test_text_with_no_exact_name_or_alias_is_none_not_a_guess(text):
+    # None, not "other": the caller decides what an unmatched leg means.
+    # "scratch exit" is resolve_outcome's job on a whole trade, and a leg
+    # has no status of its own to resolve against.
+    assert metrics.exit_reason_bucket_text(text) is None
+
+
+def test_the_trade_level_bucket_does_not_gain_the_texts_stripping():
+    # Pins "output unchanged": close_reason_text only lowercases, so a
+    # padded reason on a whole trade stayed "other" before v165 and must
+    # stay "other" after it. Only the leg path normalises whitespace.
+    trade = {"status": "loss", "close_reason": " loss ", "entry": 100.0,
+             "stop_loss": 99.0, "direction": "bullish", "exit_price": 99.0}
+    assert metrics.exit_reason_bucket(trade) == "other"
+
+
+def test_the_trade_level_bucket_still_falls_back_to_resolve_outcome():
+    trade = {"status": "closed", "close_reason": "scratch exit", "entry": 100.0,
+             "stop_loss": 99.0, "direction": "bullish", "exit_price": 100.0}
+    assert metrics.exit_reason_bucket(trade) == "scratch"

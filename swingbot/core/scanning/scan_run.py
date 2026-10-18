@@ -4,7 +4,8 @@ import logging
 import math
 import hashlib
 import time
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, timezone
 
 from swingbot import config
 from swingbot.config import auto_reload_if_changed
@@ -20,17 +21,19 @@ from swingbot.core.edge import throttle
 from swingbot.core.edge.rs_gate import rs_verdict
 from swingbot.core.infra.logsetup import apply_log_level, new_scan_id, scan_context
 from swingbot.core.infra.notifier import notify_secondary
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import market_context, opex
 from swingbot.core.market.events import earnings_within_window
 from swingbot.core.market.explain import build_explanation
 from swingbot.core.market.market_events import get_market_events
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
+from swingbot.core.market.session import market_today
 from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS, live_horizons
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.planning import account as account_module
-from swingbot.core.planning.account import compute_unrealized_pnl, load_account_config
+from swingbot.core.planning.account import UnrealizedPnL, compute_unrealized_pnl, load_account_config
 from swingbot.core.planning.plan_manager import log_plan_armed
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.performance import TradeLog
@@ -63,6 +66,19 @@ def _count_sources(frames) -> dict:
         source = df.attrs.get("source") if df is not None else None
         counts[source if source in counts else "cache"] += 1
     return counts
+
+
+def _provider_health_fields(tickers: list, frames: dict, stats: dict) -> dict:
+    """v148 O4: the four provider-degradation fields for this scan's telemetry
+    row, from the source counts already in `stats`. Guarded here, not by the
+    row's own try: a failure costs these four fields, never the row."""
+    try:
+        return telemetry.provider_health(tickers, frames, stats.get("data_sources"),
+                                         stats.get("price_sources"), market_today())
+    except Exception as exc:
+        swallowed(log, "scan.provider_health", exc, "provider health metrics failed",
+                  exc_info=True)
+        return {}
 
 
 def _skip_rejected_plan(item, require_confirmation: bool) -> None:
@@ -135,8 +151,9 @@ def _compression_seen() -> set:
     from swingbot.core.backtesting import shadow_log
     try:
         return shadow_log.compression_recorded_keys()
-    except Exception:    # noqa: BLE001 -- a damaged audit log must never stop a scan or its Discord alerts
-        log.warning("compression shadow log unreadable -- dedup disabled this scan", exc_info=True)
+    except Exception as exc:    # noqa: BLE001 -- a damaged audit log must never stop a scan or its Discord alerts
+        swallowed(log, "scan.compression_seen", exc,
+                  "compression shadow log unreadable -- dedup disabled this scan", exc_info=True)
         return set()
 
 
@@ -245,7 +262,7 @@ def get_regime(regime_df=None):
             return None
         return get_market_regime(regime_df, ticker)
     except Exception as e:
-        log.warning("Could not fetch market regime: %s", e, exc_info=True)
+        swallowed(log, "scan.get_regime", e, "Could not fetch market regime: %s", e, exc_info=True)
         return None
 
 def _confidence_point_kwargs(conf) -> dict:
@@ -321,7 +338,8 @@ def _earnings_in_window(ticker: str, max_holding_days: int):
     try:
         earnings_info = earnings_within_window(ticker, max_holding_days)
     except Exception as e:
-        log.debug("Earnings check failed for %s: %s", ticker, e)
+        swallowed(log, "scan.earnings_in_window", e, "Earnings check failed for %s: %s", ticker, e,
+                  level=logging.DEBUG)
         return None
     if earnings_info:
         log.info("%s has earnings %s (%dd away) inside this trade's holding window -- "
@@ -453,7 +471,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if spy_df is not None:
             rs_cache = rs_factors.refresh_rs_cache(fresh_data, spy_df)
     except Exception as e:
-        log.warning("Could not compute relative-strength cache: %s", e, exc_info=True)
+        swallowed(log, "scan.run_scan.rs_cache", e,
+                  "Could not compute relative-strength cache: %s", e, exc_info=True)
         spy_df = None
         rs_cache = None
 
@@ -478,7 +497,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         if needed_sector_etfs:
             sector_etf_frames = fetch._fetch_frames(needed_sector_etfs)
     except Exception as e:
-        log.warning("Could not fetch sector ETFs for relative-strength: %s", e, exc_info=True)
+        swallowed(log, "scan.run_scan.sector_etfs", e,
+                  "Could not fetch sector ETFs for relative-strength: %s", e, exc_info=True)
         sector_of_ticker = {}
         etf_symbol_of_sector = {}
         sector_etf_frames = {}
@@ -502,8 +522,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             try:
                 fresh_data[_t] = market_context.attach(_df, spy_df=spy_df)
                 stamped += 1
-            except Exception:
-                log.exception("market_context.attach failed for %s", _t)
+            except Exception as exc:
+                swallowed(log, "scan.run_scan.market_context", exc,
+                          "market_context.attach failed for %s", _t,
+                          level=logging.ERROR, exc_info=True)
         log.info("Market context attached to %d/%d frames", stamped, len(fresh_data))
     elif getattr(config, "REGIME_GATES_ENABLED", False):
         log.error(
@@ -517,8 +539,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     if spy_df is not None:
         try:
             regimes = regime2.regime_series(spy_df)
-        except Exception:
-            log.debug("regime_series computation failed", exc_info=True)
+        except Exception as exc:
+            swallowed(log, "scan.run_scan.regime_series", exc, "regime_series computation failed",
+                      level=logging.DEBUG, exc_info=True)
 
     account_cfg = load_account_config()
     # V118-4: the SHORT extra lane is NOT part of this scan: it runs afterwards
@@ -892,8 +915,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             try:
                 df = fetch.get_daily_data(result.ticker, period=config.DEFAULT_HISTORY_PERIOD)
             except Exception as exc:
-                log.warning("Could not fetch chart data for %s; posting without chart: %s",
-                            result.ticker, exc, exc_info=True)
+                swallowed(log, "scan.run_scan.chart_data", exc,
+                          "Could not fetch chart data for %s; posting without chart: %s",
+                          result.ticker, exc, exc_info=True)
 
         log.info(
             "%s %s (%s): entry=%.2f stop=%.2f target1=%.2f (+%.1f%%)%s conf=Lv%d(%d/100) all_requirements_met=%s",
@@ -973,9 +997,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                         current_price=plan.entry,
                         is_bull=result.trend == "bullish",
                     )
-                except Exception:
-                    log.warning("Trendline fit failed for %s (%s) -- trade stores no fit",
-                                result.ticker, result.horizon_key, exc_info=True)
+                except Exception as exc:
+                    swallowed(log, "scan.run_scan.trendline_fit", exc,
+                              "Trendline fit failed for %s (%s) -- trade stores no fit",
+                              result.ticker, result.horizon_key, exc_info=True)
 
             if plan_v2 is not None:
                 # Task-review fix: attach_plan_v2() builds the plan and the
@@ -1058,7 +1083,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 )
             log.info("Chart generated for %s -> %s", result.ticker, chart_filename)
         except Exception as e:
-            log.warning("Could not generate trade chart for %s: %s", result.ticker, e, exc_info=True)
+            swallowed(log, "scan.run_scan.trade_chart", e,
+                      "Could not generate trade chart for %s: %s", result.ticker, e, exc_info=True)
             chart_path, chart_filename = None, None
 
         # Portfolio heat cap (Edge plan E7): flagged, never hidden -- the
@@ -1104,7 +1130,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         try:
             item.intraday = rs_factors.intraday_confirms(result.ticker, result.trend)
         except Exception as e:
-            log.debug("Intraday confirmation unavailable for %s: %s", result.ticker, e)
+            swallowed(log, "scan.run_scan.intraday", e,
+                      "Intraday confirmation unavailable for %s: %s", result.ticker, e,
+                      level=logging.DEBUG)
             item.intraday = None
 
         embed = build_embed(item, explanation, perf_stats, warning, chart_filename,
@@ -1175,13 +1203,16 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "short_funnel": funnel.snapshot(),
             **fetch.fetch_stats(),
         }
+        scan_stats.update(_provider_health_fields(tickers, fresh_data, scan_stats))
         telemetry.log_scan_telemetry(scan_stats)
         if telemetry.scan_slowdown():
             log.warning("Scan health: latest scan took %.1fs, more than 2x the median of "
                         "the prior 20 -- possible slowdown (network, cache, or universe "
                         "size growth).", scan_stats["duration_s"])
-    except Exception:
-        log.exception("Scan health telemetry failed -- not blocking the scan result")
+    except Exception as exc:
+        swallowed(log, "scan.run_scan.telemetry", exc,
+                  "Scan health telemetry failed -- not blocking the scan result",
+                  level=logging.ERROR, exc_info=True)
 
     return alerts, all_newly_closed, all_near_close_warnings
 
@@ -1246,41 +1277,88 @@ async def _run_scan_in_context(horizon_filter, require_confirmation, bot, progre
     return alerts
 
 
+@dataclass(frozen=True)
+class TradeQuote:
+    """The price one open trade is marked at, and where it came from: a live
+    batch quote (``daily_close`` None) or the last daily bar's close
+    (``daily_close`` = that bar's date). ``price`` None = no price at all.
+    No price helper returns a quote timestamp, so this is the only as-of the
+    data layer can give (v170 A6)."""
+
+    price: float | None
+    daily_close: date | None = None
+
+
+def _batch_prices(tickers: list) -> dict:
+    """One live-price request for every ticker; {} when it fails.
+
+    This backs a display/report command, not a fill decision, so the batch
+    helper's short resilient cache is appropriate. More importantly, it turns
+    N serial Yahoo calls into one request for all open positions."""
+    try:
+        return fetch.get_current_price_batch(tickers)
+    except Exception as exc:
+        swallowed(log, "scan.unrealized_pnl.batch", exc,
+                  "get_all_unrealized_pnl: batch price fetch failed: %s", exc, exc_info=True)
+        return {}
+
+
+def _daily_close(ticker: str) -> tuple[float | None, date | None]:
+    """The last daily close and its bar date: the fallback when the batch has
+    no live price (incl. premarket/aftermarket) for ``ticker``."""
+    try:
+        df = fetch.get_daily_data(ticker, period="5d")
+        if df is None or df.empty:
+            return None, None
+        last = df.index[-1]
+        return float(df["Close"].iloc[-1]), (last.date() if hasattr(last, "date") else None)
+    except Exception as exc:
+        swallowed(log, "scan.unrealized_pnl.ticker", exc,
+                  "get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc,
+                  exc_info=True)
+        return None, None
+
+
+def unrealized_for_trade(trade: dict, price_cache: dict,
+                         daily_dates: dict) -> tuple[TradeQuote, UnrealizedPnL | None]:
+    """!pnl's per-trade body: the trade's price (live from ``price_cache``,
+    else the last daily close) and its unrealised % move. ``price_cache`` and
+    ``daily_dates`` are shared across one batch and filled in place, so a
+    second trade on the same ticker never refetches. ``pnl`` is None when
+    there is no price."""
+    ticker = trade["ticker"]
+    if not price_cache.get(ticker):
+        price_cache[ticker], daily_dates[ticker] = _daily_close(ticker)
+    quote = TradeQuote(price_cache[ticker], daily_dates.get(ticker))
+    if quote.price is None:
+        return quote, None
+    return quote, compute_unrealized_pnl(
+        entry=trade["entry"],
+        stop_loss=trade["stop_loss"],
+        take_profit=trade["take_profit"],
+        direction=trade["direction"],
+        current_price=quote.price,
+    )
+
+
+def quote_trade(trade: dict) -> tuple[TradeQuote, UnrealizedPnL | None]:
+    """One trade marked exactly as !pnl marks it, through a one-ticker batch
+    (the v170 P&L-now button). A price failure is a quote with no price."""
+    return unrealized_for_trade(trade, _batch_prices([trade["ticker"]]), {})
+
+
 def get_all_unrealized_pnl() -> list:
     open_trades = trade_log.get_trades(status="open", limit=100)
     log.info("Computing unrealized P/L for %d open trade(s)", len(open_trades))
-    results = []
-    # This backs a display/report command, not a fill decision, so the batch
-    # helper's short resilient cache is appropriate.  More importantly, it
-    # turns N serial Yahoo calls into one request for all open positions.
     tickers = list(dict.fromkeys(
         trade.get("ticker") for trade in open_trades if trade.get("ticker")
     ))
-    try:
-        price_cache = fetch.get_current_price_batch(tickers)
-    except Exception as exc:
-        log.warning("get_all_unrealized_pnl: batch price fetch failed: %s", exc, exc_info=True)
-        price_cache = {}
+    price_cache = _batch_prices(tickers)
+    daily_dates: dict = {}
+    results = []
     for t in open_trades:
-        ticker = t["ticker"]
-        if not price_cache.get(ticker):
-            # Prefer live price (incl. premarket/aftermarket); fall back to last daily close
-            try:
-                df = fetch.get_daily_data(ticker, period="5d")
-                price_cache[ticker] = float(df["Close"].iloc[-1]) if df is not None and not df.empty else None
-            except Exception as exc:
-                log.warning("get_all_unrealized_pnl: could not fetch price for %s: %s", ticker, exc, exc_info=True)
-                price_cache[ticker] = None
-        current_price = price_cache[ticker]
-        if current_price is None:
-            continue
-        pnl = compute_unrealized_pnl(
-            entry=t["entry"],
-            stop_loss=t["stop_loss"],
-            take_profit=t["take_profit"],
-            direction=t["direction"],
-            current_price=current_price,
-        )
-        results.append({"trade": t, "pnl": pnl})
+        _quote, pnl = unrealized_for_trade(t, price_cache, daily_dates)
+        if pnl is not None:
+            results.append({"trade": t, "pnl": pnl})
     return results
 

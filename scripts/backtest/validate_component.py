@@ -19,6 +19,8 @@ from swingbot.core.backtesting.arms import dryup_clauses, headroom_clauses, reac
 from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cache_dir_source  # noqa: E402
 DECIDED = ("win", "loss")
 
 def load_arms(path):
@@ -365,7 +367,9 @@ def main(argv=None):
     parser.add_argument("--grid-arms", action="append", default=[])
     parser.add_argument("--mde-refused", action="append", type=float, default=[])
     parser.add_argument('--dryup-mechanism', action='store_true'); parser.add_argument('--headroom-mechanism', action='store_true'); parser.add_argument("--mechanism-json", default=None)
+    cache_dir_source.add_args(parser)
     args = parser.parse_args(argv)
+    cache_dir_source.resolve(args)
     if args.dryup_mechanism and args.headroom_mechanism:
         parser.error("--dryup-mechanism and --headroom-mechanism are different clause-6 readings; pass one")
     if args.mechanism_json and args.gate == "harvest":

@@ -24,10 +24,14 @@ import { ConnectionState } from '../stores/connection.store';
   selector: 'sb-connection-status',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="status" [class]="state()" [title]="hint()">
+    <div class="status" [class]="state()" [title]="hint()" [attr.aria-label]="label()">
       <span class="dot" [class]="state()" [class.resting]="resting()"
             [class.bot-up]="botUp()" [class.bot-down]="botDown()"></span>
-      <span class="state">{{ label() }}</span>
+      <!-- "Live" is the normal case: the pulsing dot says it, and the word
+           moves to the tooltip. Every other state keeps its word. -->
+      @if (state() !== 'live') {
+        <span class="state">{{ label() }}</span>
+      }
       @if (botAlive() === false) {
         <span class="bot">bot offline</span>
       } @else if (botHealthy() === false) {

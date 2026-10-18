@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from swingbot import config
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
 
 # The out-of-sample window already consumed by round-1 validation
 # (docs/superpowers/results/2026-07-validation.md). Reusing it for
@@ -31,13 +32,13 @@ from swingbot.core.backtesting.backtest import ALL_STRATEGIES
 # is no longer really out-of-sample. Tuning stays on TRAIN below;
 # VALIDATION is run once, manually, via the CLI (scripts/backtest/run_backtest_range.py
 # --validation), never through this admin UI.
-VALIDATION_WINDOW = ("2024-01-01", "2025-12-31")
+VALIDATION_WINDOW = resolve_instrument("v1").validation_window   # v1 contract (v158 WC7)
 
 # What scripts/backtest/tune_strategy.py itself hard-codes as TRAIN today (see this
 # plan's ground-truth deviation #3 -- the script has no date CLI flag at
 # all yet; this constant is shown on the Tuning page so the window is
 # visible even though it can't be changed from here).
-TRAIN_WINDOW = ("2020-01-01", "2023-12-31")
+TRAIN_WINDOW = resolve_instrument("v1").train_window   # v1 contract (v158 WC7)
 
 _DATE_LIKE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
 _BANNED_DATE_FLAGS = {"--from", "--to", "--validation"}
@@ -70,26 +71,43 @@ def assert_train_only(args: list[str]) -> None:
                 raise ValueError(f"tuning args may not reference a date >= {VALIDATION_WINDOW[0]} ({candidate!r})")
 
 
+def _be_trigger_args(params: dict | None) -> list[str]:
+    """`--be-trigger <float>` when params carry one, else nothing."""
+    if not params or "be_trigger" not in params:
+        return []
+    be_trigger = params["be_trigger"]
+    try:
+        be_trigger = float(be_trigger)
+    except (TypeError, ValueError):
+        raise ValueError(f"be_trigger must be a number, got {be_trigger!r}")
+    return ["--be-trigger", str(be_trigger)]
+
+
+def _data_source_args(params: dict | None) -> list[str]:
+    """`--data-source <v>` (v162): the param when given, else
+    TRAINING_DATA_SOURCE read now (it is hot-reloadable). Always emitted, so a
+    stored job's argv names the data it ran on even after the default flips."""
+    from swingbot.core.marketdata.training_data import DATA_SOURCES
+
+    value = (params or {}).get("data_source") or config.TRAINING_DATA_SOURCE
+    if not isinstance(value, str) or value not in DATA_SOURCES:
+        raise ValueError(f"data_source must be one of {list(DATA_SOURCES)}, got {value!r}")
+    return ["--data-source", value]
+
+
 def build_tune_args(strategy: str, params: dict | None) -> list[str]:
     """THE only constructor of a tuning job's argv. Whitelists strategy
     against backtest.ALL_STRATEGIES, appends only the flags
-    scripts/backtest/tune_strategy.py actually accepts today (--strategy,
-    optional --be-trigger), and accepts no date argument at all. Every
-    call site (api.py's /api/jobs/tune) must route through this. Also the
-    single place that validates params' own shape -- callers only need to
-    catch ValueError, never TypeError, for any malformed input."""
+    scripts/backtest/tune_strategy.py accepts (--strategy, --data-source
+    always, optional --be-trigger), and accepts no date argument at all.
+    Every call site (api_v1/jobs.py's POST /jobs/tune) must route through
+    this. Also the single place that validates params' own shape -- callers
+    only need to catch ValueError, never TypeError, for any malformed input."""
     if strategy not in ALL_STRATEGIES:
         raise ValueError(f"unknown strategy {strategy!r}; must be one of {ALL_STRATEGIES}")
     if params is not None and not isinstance(params, dict):
         raise ValueError(f"params must be a dict or null, got {type(params).__name__}")
-    args = ["--strategy", strategy]
-    if params and "be_trigger" in params:
-        be_trigger = params["be_trigger"]
-        try:
-            be_trigger = float(be_trigger)
-        except (TypeError, ValueError):
-            raise ValueError(f"be_trigger must be a number, got {be_trigger!r}")
-        args += ["--be-trigger", str(be_trigger)]
+    args = ["--strategy", strategy, *_data_source_args(params), *_be_trigger_args(params)]
     assert_train_only(args)
     return args
 

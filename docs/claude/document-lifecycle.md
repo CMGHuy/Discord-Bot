@@ -138,6 +138,14 @@ programme can be read in one place.
 - **A new program folder is a partner decision**, not a filing preference;
   record it in this section when one is created.
 
+## Close-out needs no go-ahead
+
+**The partner has standing-authorised `/close-out`:** once every task of a plan
+is merged to `main` (final full-suite task green, results recorded), run
+`/close-out` yourself. Do not stop to ask or wait for a "go". It still obeys
+every other rule (unresolved `BLOCKING` panel finding, backup branches, a
+concurrent session on the branch: `git-safety.md`, `worktree-lifecycle`).
+
 ## Worktrees are named after the plan
 
 **A worktree created to execute a plan takes the plan's file stem**, so the

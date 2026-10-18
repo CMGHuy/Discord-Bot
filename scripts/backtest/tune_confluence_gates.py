@@ -20,20 +20,23 @@ this is auditable, not silently smaller. Confirmed against a completed
 full-universe run of the confl=2/rr=0.0 point (N=6686, WR=56.6%, all
 horizons fail) before this reduction was introduced -- see
 docs/superpowers/results/2026-07-confluence-train-grid.txt history."""
+import argparse
 import itertools
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import pandas as pd
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts" / "data"))
 
 from swingbot.core.backtesting.backtest_scenarios import _aggregate, replay_scenarios
 from swingbot.core.planning.plan_engine import simulate_exit
+from swingbot.core.marketdata import training_data
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
+from swingbot.core.backtesting.instrument import cli as instrument_cli
+from fetch_backtest_data import add_data_source_arg, apply_data_source
 
-CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
-TRAIN = ("2020-01-01", "2023-12-31")
+TRAIN = resolve_instrument("v1").train_window   # v1 contract alias (v158 WC7)
 HORIZONS_TO_TEST = ["4w", "2m", "3m", "4m", "6m"]
 GRID_CONFL = [2, 3, 4]
 GRID_RR = [0.0, 0.3]
@@ -71,12 +74,25 @@ def _run_grid_point(frames, start, end, *, gates, scale_out, horizons):
             "by_horizon": {hk: _aggregate(rs) for hk, rs in results_by_hz.items()}}
 
 
-def main():
-    all_paths = sorted(CACHE_DIR.glob("*.csv"))
-    sampled_paths = all_paths[::SAMPLE_EVERY]
-    frames = {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True)
-              for p in sampled_paths}
-    print(f"tickers: {len(frames)} of {len(all_paths)} (every {SAMPLE_EVERY}th, "
+def _sampled_frames() -> tuple[dict, int]:
+    """({ticker: frame} for every SAMPLE_EVERY-th training ticker, alphabetical,
+    and the size of the full list)."""
+    tickers = training_data.available_tickers()
+    frames = {t: f for t in tickers[::SAMPLE_EVERY]
+              if (f := training_data.load_daily(t)) is not None}
+    return frames, len(tickers)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="confluence-gate grid over TRAIN")
+    add_data_source_arg(ap)
+    instrument_cli.add_instrument_arg(ap)
+    args = ap.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "tune_confluence_gates.py",
+                              "phase 5 (scan replay under v2)")
+    apply_data_source(args)
+    frames, total = _sampled_frames()
+    print(f"tickers: {len(frames)} of {total} (every {SAMPLE_EVERY}th, "
           f"alphabetical) = {sorted(frames)}\ntrain: {TRAIN}  rule: {RULE}\n")
 
     for confl, rr in itertools.product(GRID_CONFL, GRID_RR):

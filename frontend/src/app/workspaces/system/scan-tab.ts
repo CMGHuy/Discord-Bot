@@ -7,6 +7,8 @@ import { dateTime } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { Freshness } from '../../ui/freshness';
 import { Toolbar, ToolbarControl } from '../../ui/toolbar';
+import { ProviderHealthPanel } from './provider-health-panel';
+import { SwallowedErrorsPanel } from './swallowed-errors-panel';
 
 /**
  * Three short commands, nothing to demote. `sb-control-row` force-stacks
@@ -39,7 +41,9 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
 @Component({
   selector: 'sb-scan-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, ConfirmDialog, Toolbar, Freshness],
+  imports: [
+    Panel, Button, ConfirmDialog, Toolbar, Freshness, ProviderHealthPanel, SwallowedErrorsPanel,
+  ],
   template: `
     <sb-panel heading="Scan">
       <div class="states">
@@ -158,6 +162,12 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
         </p>
       }
     </sb-panel>
+
+    <sb-provider-health-panel [health]="store.health()" />
+    <sb-swallowed-errors-panel [health]="store.health()" />
+    @if (store.healthError(); as message) {
+      <p class="error" role="alert">Health panels: {{ message }}</p>
+    }
 
     <sb-confirm-dialog
       [open]="asking()"

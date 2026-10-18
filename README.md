@@ -50,41 +50,41 @@ swingbot/
   admin/                  the admin web UI (Flask)
 ```
 
-**`swingbot/core/` (no Discord dependency):**
-- `levels.py` — the live engine: multi-method support/resistance detection, level clustering, dual-scenario (bullish/bearish) builder with target 1 + target 2
-- `trendlines.py` — diagonal trendline support/resistance (trendln library), one more independent confluence source alongside the horizontal methods in `levels.py`
-- `volatility.py` — the three extra 5%-move filters: annualized volatility floor, Bollinger Band squeeze detection, volume breakout confirmation
-- `candlestick_patterns.py` — classic candlestick pattern recognition (engulfing, hammer, morning star, etc. via pandas-ta-classic), used as a small confidence bonus when a pattern confirms the scenario's direction
-- `strategy.py` — legacy per-indicator crossover strategies (EMA, VWAP, Fibonacci, Support/Resistance, RSI, Elliott Wave), still used by `!backtest`/`!ticker`
-- `indicators.py` — EMA / RSI / rolling VWAP / Fibonacci levels / ATR / zigzag pivots
-- `confidence.py` — 5-factor (+1 bonus factor), 5-level confidence scoring from level confluence
-- `performance.py` — paper-trade log (log/update/clear/clear-open/delete/stats)
-- `risk_metrics.py` — Sharpe/Sortino/max-drawdown/Calmar/profit-factor on the closed-trade track record (via QuantStats), feeding `!performance`
-- `backtest.py` — vectorized historical backtesting engine (legacy indicator strategies)
-- `account.py` — account config storage (informational only) + unrealized % P/L
-- `events.py` — per-ticker earnings-date awareness
-- `market_events.py` — broad market-wide events (FOMC, US jobs report, US CPI release)
-- `regime.py` — broad market regime detection
-- `explain.py` — short per-alert "why this trade" text
-- `export_data.py` — full daily-history CSV + candlestick chart generation (single-ticker via `!charts`) and bulk concurrent/cached "all time" watchlist scraping (`!scrapeall`)
-- `trade_chart.py` — per-alert annotated chart image (entry/stop/target1/target2)
-- `data_store.py` — local intraday data cache
-- `ticker_utils.py` — ticker alias resolution
-- `data.py` — Yahoo Finance daily-bar fetch + per-ticker currency detection
-- `watchlist.py` / `state.py` — watchlist storage / signal confirmation debounce
-- `scanning/engine.py` — the core scan/dedup/confidence-filter/alert-building logic, shared by the automatic scan and `!check`
+**`swingbot/core/` (no Discord dependency; the full package map is in [`docs/claude/architecture.md`](docs/claude/architecture.md)):**
+- `swingbot/core/market/levels.py` — the live engine: multi-method support/resistance detection, level clustering, dual-scenario (bullish/bearish) builder with target 1 + target 2
+- `swingbot/core/market/trendlines.py` — diagonal trendline support/resistance (trendln library), one more independent confluence source alongside the horizontal methods in `swingbot/core/market/levels.py`
+- `swingbot/core/market/volatility.py` — the three extra 5%-move filters: annualized volatility floor, Bollinger Band squeeze detection, volume breakout confirmation
+- `swingbot/core/market/candlestick_patterns.py` — classic candlestick pattern recognition (engulfing, hammer, morning star, etc. via pandas-ta-classic), used as a small confidence bonus when a pattern confirms the scenario's direction
+- `swingbot/core/market/strategy.py` — legacy per-indicator crossover strategies (EMA, VWAP, Fibonacci, Support/Resistance, RSI, Elliott Wave), still used by `!backtest`/`!ticker`
+- `swingbot/core/market/indicators.py` — EMA / RSI / rolling VWAP / Fibonacci levels / ATR / zigzag pivots
+- `swingbot/core/scanning/confidence.py` — 5-factor (+1 bonus factor), 5-level confidence scoring from level confluence
+- `swingbot/core/tracking/performance.py` — paper-trade log (log/update/clear/clear-open/delete/stats)
+- `swingbot/core/tracking/risk_metrics.py` — Sharpe/Sortino/max-drawdown/Calmar/profit-factor on the closed-trade track record (via QuantStats), feeding `!performance`
+- `swingbot/core/backtesting/backtest.py` — vectorized historical backtesting engine (legacy indicator strategies)
+- `swingbot/core/planning/account.py` — account config storage (informational only) + unrealized % P/L
+- `swingbot/core/market/events.py` — per-ticker earnings-date awareness
+- `swingbot/core/market/market_events.py` — broad market-wide events (FOMC, US jobs report, US CPI release)
+- `swingbot/core/scanning/regime.py` — broad market regime detection
+- `swingbot/core/market/explain.py` — short per-alert "why this trade" text
+- `swingbot/core/marketdata/export_data.py` — full daily-history CSV + candlestick chart generation (single-ticker via `!charts`) and bulk concurrent/cached "all time" watchlist scraping (`!scrapeall`)
+- `swingbot/core/charts/trade_chart.py` — per-alert annotated chart image (entry/stop/target1/target2)
+- `swingbot/core/marketdata/data_store.py` — local intraday data cache
+- `swingbot/core/marketdata/ticker_utils.py` — ticker alias resolution
+- `swingbot/core/marketdata/data.py` — Yahoo Finance daily-bar fetch + per-ticker currency detection
+- `swingbot/core/marketdata/watchlist.py` / `swingbot/core/infra/state.py` — watchlist storage / signal confirmation debounce
+- `swingbot/core/scanning/engine.py` — the core scan/dedup/confidence-filter/alert-building logic, shared by the automatic scan and `!check`
 
 **`swingbot/commands/` (Discord command handlers):**
-- `scanning.py` — `!check`, `!session`, `!status`, the background scan loop
-- `watchlist.py` — `!watchlist` and subcommands
-- `info.py` — `!strategies`, `!confidence`, `!regime`, `!ticker`, `!commands`, `!ping`
-- `trades.py` — `!trades`, `!trade`, `!tradecharts`, `!performance` (win rate + risk-adjusted stats), `!pnl`
-- `backtest.py` — `!backtest`, `!backtestwatchlist`
-- `account.py` — `!account` and subcommands
-- `data.py` — `!charts`, `!scrapeall`, `!download`, `!cached`
+- `swingbot/commands/scanning/commands.py` — `!check`, `!session`, `!status`, the background scan loop
+- `swingbot/commands/watchlist.py` — `!watchlist` and subcommands
+- `swingbot/commands/info.py` — `!strategies`, `!confidence`, `!regime`, `!ticker`, `!commands`, `!ping`
+- `swingbot/commands/trades.py` — `!trades`, `!trade`, `!tradecharts`, `!performance` (win rate + risk-adjusted stats), `!pnl`
+- `swingbot/commands/backtest.py` — `!backtest`, `!backtestwatchlist`
+- `swingbot/commands/account.py` — `!account` and subcommands
+- `swingbot/commands/data.py` — `!charts`, `!scrapeall`, `!download`, `!cached`
 
 **`swingbot/admin/`:**
-- `app.py` — the admin web UI (see [DOCKER.md](docs/deploy/DOCKER.md)), three pages via a sidebar: **Dashboard** (open trades, auto-refreshing every 5s so trades logged by `!check` show up without a manual reload, click any for full detail with chart + confidence breakdown, clear all open trades), **Settings** (every `.env` variable as a compact input field, hot-reloads the bot on save), **Logs** (live-updating tail of the bot's log file).
+- `swingbot/admin/app.py` — the admin web UI (see [DOCKER.md](docs/deploy/DOCKER.md)), three pages via a sidebar: **Dashboard** (open trades, auto-refreshing every 5s so trades logged by `!check` show up without a manual reload, click any for full detail with chart + confidence breakdown, clear all open trades), **Settings** (every `.env` variable as a compact input field, hot-reloads the bot on save), **Logs** (live-updating tail of the bot's log file).
 
 **Data files (created on first run, under `data/`):** `analytics_snapshot.json`,
 `scan_snapshots.json`, `scan_telemetry.jsonl`; trades, plans, state, account and the
@@ -96,7 +96,7 @@ watchlist are Postgres tables. Chart images go under `exports/`; the bot's rotat
 - `swingbot/core/market/trendlines.py` → `MIN_TRENDLINE_STRENGTH`, `MAX_TRENDLINES_PER_SIDE`, fit method
 - `swingbot/core/market/volatility.py` → Bollinger window/std-dev, squeeze lookback window, squeeze tolerance
 - `swingbot/core/market/candlestick_patterns.py` → `BULLISH_PATTERNS`/`BEARISH_PATTERNS` lists, `CHECK_LAST_N_BARS`
-- `swingbot/core/market/strategy.py` → `HORIZONS` (per-horizon EMA/VWAP/Fibonacci/structure settings, shared by both engines)
+- `swingbot/core/market/strategy_types.py` → `HORIZONS` (per-horizon EMA/VWAP/Fibonacci/structure settings, shared by both engines)
 - `swingbot/core/scanning/confidence.py` → point weights for each of the 5+1 scoring factors, the honesty-gate thresholds
 - `swingbot/core/tracking/risk_metrics.py` → `MIN_CLOSED_TRADES` (how many closed trades before Sharpe/Sortino/etc. are shown)
 - `swingbot/config.py` (or the admin UI's Settings page) → `MIN_ALERT_CONFIDENCE_LEVEL`, `MIN_REWARD_PCT`, `MAX_STOP_LOSS_PCT`, `MIN_RISK_REWARD_RATIO`, `MAX_RISK_REWARD_RATIO`, `MIN_ANNUALIZED_VOLATILITY_PCT`, `DEDUP_TOLERANCE_PCT`, `DEFAULT_HISTORY_PERIOD`, session/scan timing

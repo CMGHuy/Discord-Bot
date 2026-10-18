@@ -4,12 +4,18 @@ The wide key:value table retired in v62 had 65--70 character rows that
 scrolled off a phone. The replacement is the two-line presentation headline.
 `plan_numbers_for_display` remains the legacy/v2 pricing cutover switch.
 """
+import logging
+
 from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_for
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.explain import stop_distance_pct, v2_stop_was_moved
 from swingbot.core.planning import account
 from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
+from swingbot.core.presentation import tokens
 from swingbot.core.presentation.ansi import r_multiple
+
+log = logging.getLogger(__name__)
 
 
 def plan_numbers_for_display(plan, legacy: dict) -> dict:
@@ -126,21 +132,15 @@ def _sizing_snapshot(entry, plan) -> dict | None:
     same render-time-snapshot convention used everywhere in this module."""
     try:
         return account.compute_position_size(entry, plan.stop_loss)
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.sizing_snapshot", exc, level=logging.DEBUG)
         return None
 
 
-def signed_money(amount: float, currency: str) -> str:
-    """'+$500.00' / '-$500.00' -- an explicitly signed currency figure.
-
-    One helper because this exact format string has now been hand-copied
-    into three surfaces (the two-leg sizing block, the TP1-hit alert and
-    the !liveplans board) and got the sign wrong twice on the way: once as
-    a hardcoded '+' with no abs() ('+$-500.00'), and once as a bare '' for
-    the negative branch, which renders a banked *loss* as a positive-looking
-    '$500.00'. The sign is the whole point of the figure, so it lives in
-    exactly one place now."""
-    return f"{'+' if amount >= 0 else '-'}{currency}{abs(amount):,.2f}"
+#: v170: moved to presentation/tokens.py as fmt_money; this name stays for
+#: every existing importer (scanning/embeds.py, lifecycle_embeds.py,
+#: commands/plans.py and leg_rows below). Same object, not a wrapper.
+signed_money = tokens.fmt_money
 
 
 def leg_rows(plan, currency: str, force_zero: bool = False) -> tuple[str, str]:

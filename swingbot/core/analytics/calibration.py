@@ -15,12 +15,27 @@ VALIDATION run measured legacy vs unified gating, not a per-level band), so
 inventing one would be exactly the kind of ungrounded number this repo's
 TRAIN-derived-weights discipline exists to prevent. level_calibration()
 reports n/win_rate/expectancy per level, same shape as score_deciles(),
-without a pass/fail column."""
+without a pass/fail column.
+
+v164: match_live_rows() buckets the live population of every registry row
+(both ledgers, regular lane, entered on or after EXPR_WATCH_START) for the
+pre-registered live loss watch; LW2's live_loss_watch() turns the buckets
+into rows. Day boundaries are Berlin dates read from BERLIN_TZ directly:
+this module must never import tracking.retrospective (it imports us).
+"""
 from __future__ import annotations
 
-from collections import defaultdict
+import datetime as dt
+from collections import defaultdict, namedtuple
+from dataclasses import dataclass
+
+import numpy as np
 
 from swingbot.core.analytics import metrics
+from swingbot.core.backtesting.instrument import stats
+from swingbot.core.market.session import BERLIN_TZ
+from swingbot.core.market.strategy_types import horizon_order
+from swingbot.core.tracking import origin
 
 
 def _decile_label(score: float) -> str:
@@ -136,3 +151,244 @@ def badge_drift(closed: list[dict], registry_entries: list[dict]) -> list[dict]:
                      "live_n": live_n, "live_wr": live_wr, "delta_wr": delta,
                      "drift_alert": alert})
     return rows
+
+
+# ---------------------------------------------------------------------------
+# v164 live loss watch, D1: population and matching (pre-registered)
+# ---------------------------------------------------------------------------
+
+EXPR_WATCH_START = dt.date(2026, 10, 16)   # Berlin date of opened_at, on or after
+WATCH_STATUSES = ("win", "loss", "closed")
+WATCH_COUNT_KEYS = ("no_source", "unknown_strategy", "no_r", "manual_close", "no_entry_date")
+
+#: The bootstrap adapter: stats.group_by_week reads `entry_date` with getattr,
+#: so a plain trade dict cannot be passed. entry_date is the Berlin-date ISO
+#: string, never the UTC timestamp (iso_week_key slices [:10]).
+LiveTrade = namedtuple("LiveTrade", "entry_date r status")
+
+RowKey = tuple  # (source, strategy, horizon | None)
+
+
+@dataclass(frozen=True)
+class MatchResult:
+    """One bucket per registry row key (empty when nothing matched) plus the
+    per-reason counts of trades that were reported rather than bucketed."""
+    buckets: dict
+    counts: dict
+
+
+def row_key(entry: dict) -> RowKey:
+    """(source, strategy, horizon) of a registry row; horizon None = pooled."""
+    return (entry.get("source"), entry.get("strategy"), entry.get("horizon"))
+
+
+def berlin_entry_date(trade: dict) -> str | None:
+    """Berlin date of `opened_at` as "YYYY-MM-DD"; naive reads as UTC (as
+    retrospective._to_berlin does). None when missing or unparseable."""
+    raw = trade.get("opened_at")
+    if not raw:
+        return None
+    try:
+        stamp = dt.datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=dt.timezone.utc)
+    return stamp.astimezone(BERLIN_TZ).date().isoformat()
+
+
+def _pooled_key(trade: dict) -> RowKey:
+    source = trade.get("source")
+    strategy = "ALL" if source == "confluence" else trade.get("strategy")
+    return (source, strategy, None)
+
+
+def _target_keys(trade: dict, buckets: dict) -> list:
+    """The exact-horizon row when it exists, and always the pooled row."""
+    pooled = _pooled_key(trade)
+    exact = (pooled[0], pooled[1], trade.get("horizon_key"))
+    if exact == pooled or exact not in buckets:
+        return [pooled]
+    return [exact, pooled]
+
+
+def _in_population(trade: dict) -> bool:
+    return trade.get("status") in WATCH_STATUSES and origin.is_regular(trade)
+
+
+def _exclusion(trade: dict, buckets: dict, r: float | None) -> str | None:
+    """The count key a population trade is reported under instead of being
+    bucketed, first hit wins; None = keep it."""
+    if not trade.get("source"):
+        return "no_source"
+    if _pooled_key(trade) not in buckets:
+        return "unknown_strategy"
+    if r is None:
+        return "no_r"
+    return None
+
+
+def match_live_rows(trades: list[dict], registry_entries: list[dict]) -> MatchResult:
+    """Bucket the pre-registered live population (spec D1) per registry row.
+
+    A trade counts toward its exact-horizon row and the pooled row of its
+    (source, strategy'); two aggregation levels, never two strategies.
+    Status/origin/start-date filtering defines the population and is not
+    counted; every other exclusion is counted by reason, never dropped."""
+    buckets = {row_key(entry): [] for entry in registry_entries}
+    counts = dict.fromkeys(WATCH_COUNT_KEYS, 0)
+    for trade in trades:
+        if not _in_population(trade):
+            continue
+        entry_date = berlin_entry_date(trade)
+        if entry_date is None:
+            counts["no_entry_date"] += 1
+            continue
+        if dt.date.fromisoformat(entry_date) < EXPR_WATCH_START:
+            continue
+        r = metrics.r_multiple(trade)
+        reason = _exclusion(trade, buckets, r)
+        if reason is not None:
+            counts[reason] += 1
+            continue
+        if trade["status"] == "closed":
+            counts["manual_close"] += 1
+        live = LiveTrade(entry_date, r, trade["status"])
+        for key in _target_keys(trade, buckets):
+            buckets[key].append(live)
+    return MatchResult(buckets=buckets, counts=counts)
+
+
+# ---------------------------------------------------------------------------
+# v164 live loss watch, D2: the loss rule (PRE-REGISTERED)
+# ---------------------------------------------------------------------------
+# Fixed in spec v164 before any trade it judges existed (EXPR_WATCH_START is
+# the day after the spec's commit). Never loosened or tightened after seeing
+# what it flags; a change is a new spec written before looking. The baseline
+# is zero, not the registry: registry rows carry no exit-model, scale-out or
+# friction provenance, so they are shown as labelled context only.
+
+EXPR_WATCH_LIVE_N_FLOOR = 20
+EXPR_WATCH_CONFIDENCE = 0.90      # one-sided
+EXPR_WATCH_RESAMPLES = 10_000
+
+LIVE_LOSS_MEANING = ('live ExpR for this row is below zero with ~90% one-sided '
+                     'confidence — not "the edge decayed versus its backtest"')
+LIVE_LOSS_LOOKS_CAVEAT = ("11 correlated looks per week; flags are prompts to "
+                          "investigate, not verdicts")
+REGISTRY_CONTEXT_LABEL = "backtest context — not comparable"
+
+#: backtest-methodology.md windows, matched by exact string; never guessed.
+_WINDOW_KINDS = {
+    "2020-01-01..2023-12-31": "TRAIN",
+    "2024-01-01..2025-12-31": "VALIDATION",
+}
+_BOUND_PERCENTILE = round(EXPR_WATCH_CONFIDENCE * 100, 6)   # 90.0, not 90.00000000000001
+
+
+def registry_window_kind(window: str | None) -> str | None:
+    """TRAIN / VALIDATION for the two methodology windows, else None."""
+    return _WINDOW_KINDS.get(window) if window else None
+
+
+def _canonical(live: list) -> list:
+    """Input-order-free ordering, so float sums and the bootstrap are
+    bit-identical however the trades arrive."""
+    return sorted(live, key=lambda t: (t.entry_date, t.r, t.status))
+
+
+def _mean_r(draw: list, _component=()) -> float | None:
+    """Bootstrap statistic: mean R of one week draw; None (dropped) when empty."""
+    if not draw:
+        return None
+    return sum(t.r for t in draw) / len(draw)
+
+
+def live_expr_bound(live: list, *, n_resamples: int = EXPR_WATCH_RESAMPLES) -> float | None:
+    """One-sided upper bound on live ExpR: the 90th percentile of the
+    week-clustered bootstrap of mean R (stats.week_cluster_bootstrap, its
+    named seed, a fresh generator per call). None when there is nothing to
+    resample, and a row without a bound cannot trip."""
+    if not live:
+        return None
+    draws = stats.week_cluster_bootstrap(_canonical(live), (), _mean_r,
+                                         n_resamples=n_resamples,
+                                         seed=stats.WEEK_BOOTSTRAP_SEED)
+    if draws.size == 0:
+        return None
+    return float(np.percentile(draws, _BOUND_PERCENTILE))
+
+
+def loss_rule_trips(live_n: int, bound_upper: float | None) -> bool:
+    """The pre-registered rule: live_n >= 20 and bound_upper < 0."""
+    return (bound_upper is not None and live_n >= EXPR_WATCH_LIVE_N_FLOOR
+            and bound_upper < 0)
+
+
+def _live_stats(live: list) -> tuple:
+    """(live_n, live_wr, live_expr) of one bucket; WR over win/loss only."""
+    live_n = len(live)
+    live_wr = metrics.win_rate([{"status": t.status} for t in live])
+    live_expr = (sum(t.r for t in _canonical(live)) / live_n) if live_n else None
+    return live_n, live_wr, live_expr
+
+
+def live_loss_row(entry: dict, live: list, *,
+                  n_resamples: int = EXPR_WATCH_RESAMPLES) -> dict:
+    """One output row (spec D2). The registry_* columns are backtest context
+    (REGISTRY_CONTEXT_LABEL), never an input to `alert`."""
+    live_n, live_wr, live_expr = _live_stats(live)
+    bound = live_expr_bound(live, n_resamples=n_resamples)
+    return {
+        "source": entry.get("source"),
+        "strategy": entry.get("strategy"),
+        "horizon": entry.get("horizon"),
+        "live_n": live_n,
+        "live_wr": live_wr,
+        "live_expr": live_expr,
+        "bound_upper": bound,
+        "alert": loss_rule_trips(live_n, bound),
+        "registry_status": entry.get("status"),
+        "registry_window_kind": registry_window_kind(entry.get("window")),
+        "registry_run_date": entry.get("run_date"),
+        "registry_expr": entry.get("expectancy_r"),
+    }
+
+
+def _horizon_position(horizon, horizons: list) -> int:
+    """Known horizons in vocabulary order, then any unknown one, then pooled (None)."""
+    if horizon is None:
+        return len(horizons) + 1
+    return horizons.index(horizon) if horizon in horizons else len(horizons)
+
+
+def _row_rank(row: dict, horizons: list) -> tuple:
+    first = 0 if row.get("alert") else 1
+    if row.get("source") == "confluence":
+        return (first, 0, _horizon_position(row.get("horizon"), horizons), "")
+    return (first, 1, 0, str(row.get("strategy")))
+
+
+def order_live_loss_rows(rows: list[dict]) -> list[dict]:
+    """Alert rows first; then confluence rows in HORIZONS order, pooled last;
+    then strategy rows by name. The digest and the UI share this order."""
+    horizons = list(horizon_order())
+    return sorted(rows, key=lambda row: _row_rank(row, horizons))
+
+
+def _unique_entries(registry_entries: list[dict]) -> list[dict]:
+    """First registry row per (source, strategy, horizon) key."""
+    seen: dict = {}
+    for entry in registry_entries:
+        seen.setdefault(row_key(entry), entry)
+    return list(seen.values())
+
+
+def live_loss_watch(trades: list[dict], registry_entries: list[dict], *,
+                    n_resamples: int = EXPR_WATCH_RESAMPLES) -> dict:
+    """D1 + D2: {"rows": ordered rows, one per registry row key, "counts":
+    the matcher's exclusion counts}. Pure; report-only."""
+    match = match_live_rows(trades, registry_entries)
+    rows = [live_loss_row(entry, match.buckets[row_key(entry)], n_resamples=n_resamples)
+            for entry in _unique_entries(registry_entries)]
+    return {"rows": order_live_loss_rows(rows), "counts": dict(match.counts)}

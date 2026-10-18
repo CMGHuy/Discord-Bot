@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 import yfinance as yf
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.spot_metals import is_spot_metal
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.universe import is_etf
@@ -61,7 +62,8 @@ def get_next_earnings_date(ticker: str) -> dt.date | None:
         try:
             calendar = yf.Ticker(candidate).calendar
         except Exception as e:
-            log.debug("Calendar fetch failed for %s: %s", candidate, e)
+            swallowed(log, "earnings.next_date", e, "Calendar fetch failed for %s: %s", candidate, e,
+                      level=logging.DEBUG)
             continue
 
         if not calendar:
@@ -152,8 +154,10 @@ def warm_earnings_cache_background(tickers: list[str]) -> threading.Thread:
                 ticker = futures[fut]
                 try:
                     fut.result()
-                except Exception:
-                    log.debug("background earnings warm-up failed for %s", ticker, exc_info=True)
+                except Exception as exc:
+                    swallowed(log, "earnings.warmup", exc,
+                              "background earnings warm-up failed for %s", ticker,
+                              level=logging.DEBUG, exc_info=True)
 
     t = threading.Thread(target=_run, name="earnings-cache-warm", daemon=True)
     t.start()
@@ -168,7 +172,8 @@ def _fetch_next_earnings_datetime(ticker: str) -> dt.datetime | None:
         try:
             earnings = yf.Ticker(candidate).get_earnings_dates(limit=6)
         except Exception as e:
-            log.debug("Earnings-dates fetch failed for %s: %s", candidate, e)
+            swallowed(log, "earnings.next_datetime", e, "Earnings-dates fetch failed for %s: %s",
+                      candidate, e, level=logging.DEBUG)
             continue
         if earnings is None or earnings.empty:
             continue
@@ -198,7 +203,8 @@ def get_earnings_datetimes(ticker: str, *, refresh: bool = False) -> list[dt.dat
         try:
             frame = yf.Ticker(candidate).get_earnings_dates(limit=8)
         except Exception as exc:
-            log.debug("Earnings-dates fetch failed for %s: %s", candidate, exc)
+            swallowed(log, "earnings.datetimes", exc, "Earnings-dates fetch failed for %s: %s",
+                      candidate, exc, level=logging.DEBUG)
             continue
         if frame is not None and not frame.empty:
             result = sorted(ts.to_pydatetime() for ts in frame.index)
@@ -265,7 +271,8 @@ def earnings_snapshot(ticker: str, *, now: dt.datetime | None = None) -> Earning
         try:
             frame = yf.Ticker(candidate).get_earnings_dates(limit=8)
         except Exception as exc:
-            log.debug("Earnings snapshot fetch failed for %s: %s", candidate, exc)
+            swallowed(log, "earnings.snapshot", exc, "Earnings snapshot fetch failed for %s: %s",
+                      candidate, exc, level=logging.DEBUG)
             continue
         reports = () if frame is None or frame.empty else tuple(ts.to_pydatetime() for ts in frame.index)
         return EarningsSnapshot(observed, reports, True, "yahoo")

@@ -1,5 +1,7 @@
 """v140 idea registry: four frozen triggers, one parameter set each."""
 import dataclasses
+import sys
+import types
 
 import pytest
 
@@ -58,3 +60,60 @@ def test_an_idea_refuses_a_short_direction_and_a_zero_cap():
         Idea(name="x", events=events, time_cap_bars=5, direction="short")
     with pytest.raises(ValueError):
         Idea(name="x", events=events, time_cap_bars=0)
+
+
+def test_every_registered_idea_is_raced_under_one_pinned_shape():
+    """One shape per idea, frozen with the idea (v163 spec § One shape per
+    idea). Flipping a shape means editing this pin in the same diff."""
+    assert ideas.RACE_SHAPES == ("fixed", "trail")
+    assert {n: i.race_shape for n, i in IDEAS.items()} == {
+        "high52w": "fixed", "uptrend_pullback": "fixed", "gap_volume": "fixed",
+        "turn_of_month": "fixed", "turtle_soup": "fixed", "quiet_pullback": "fixed"}
+
+
+def _events(df):
+    return df["Close"] > 0
+
+
+def test_an_idea_defaults_to_the_fixed_shape():
+    assert Idea(name="x", events=_events, time_cap_bars=5).race_shape == "fixed"
+
+
+def test_an_unknown_race_shape_is_refused():
+    with pytest.raises(ValueError, match="race shape"):
+        Idea(name="x", events=_events, time_cap_bars=60, race_shape="donchian")
+
+
+def test_a_trail_idea_needs_a_cap_of_at_least_sixty_bars():
+    assert ideas.TRAIL_MIN_CAP == 60
+    with pytest.raises(ValueError, match="at least 60"):
+        Idea(name="x", events=_events, time_cap_bars=59, race_shape="trail")
+    assert Idea(name="x", events=_events, time_cap_bars=60,
+                race_shape="trail").race_shape == "trail"
+
+
+def test_a_fixed_idea_keeps_any_cap_of_one_bar_or_more():
+    assert Idea(name="x", events=_events, time_cap_bars=4).time_cap_bars == 4
+
+
+def _fake_module(monkeypatch, name, **attrs):
+    module = types.ModuleType(f"{ideas.__name__}.{name}")
+    module.CAP, module.PARAMS = attrs.pop("CAP"), {"k": 1}
+    module.SUMMARY, module.SOURCE, module.events = "s", "src", _events
+    for key, value in attrs.items():
+        setattr(module, key, value)
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    return name
+
+
+def test_load_reads_the_race_constant_and_defaults_to_fixed(monkeypatch):
+    plain = _fake_module(monkeypatch, "fake_plain", CAP=10)
+    trail = _fake_module(monkeypatch, "fake_trail", CAP=60, RACE="trail")
+    assert ideas._load(plain).race_shape == "fixed"
+    assert ideas._load(trail).race_shape == "trail"
+
+
+def test_load_refuses_a_trail_module_with_a_short_cap(monkeypatch):
+    short = _fake_module(monkeypatch, "fake_short_trail", CAP=20, RACE="trail")
+    with pytest.raises(ValueError, match="at least 60"):
+        ideas._load(short)

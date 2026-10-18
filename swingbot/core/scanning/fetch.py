@@ -12,6 +12,8 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as 
 
 from swingbot import config
 from swingbot.core.infra.logsetup import with_current_context
+from swingbot.core.infra import swallowed as swallowed_mod
+from swingbot.core.infra.swallowed import swallowed
 # `get_current_price` is re-exported: scan_run.py calls it as
 # `fetch.get_current_price`, so it is used even though nothing here calls it.
 from swingbot.core.marketdata.data import get_current_price  # noqa: F401
@@ -145,6 +147,22 @@ def _chunked(items: list, size: int) -> list:
 _SPAWN_CTX = multiprocessing.get_context("spawn")
 
 
+def _counted_call(fn, *args):
+    """Run fn(*args) and return (result, the swallowed counts it produced).
+
+    _run_bounded submits this in place of fn (v148 O5). A spawned child starts
+    with an empty swallowed counter, so its snapshot() is exactly that child's
+    delta, carried back with the result the way price_sources already is. Run
+    in the parent process -- the in-process fake pools in tests/scanning/ --
+    the counts already landed in the parent's own counter, so it returns {}
+    rather than count them twice. Module-level so spawn can pickle it.
+    """
+    result = fn(*args)
+    if multiprocessing.parent_process() is None:
+        return result, {}
+    return result, swallowed_mod.snapshot()
+
+
 def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
     """Runs fn(*args) in a single-process pool with a hard wall-clock
     budget. Returns fn's result, or None if the budget is exceeded (or fn
@@ -171,19 +189,30 @@ def _run_bounded(fn, args: tuple, timeout_seconds: float, label: str):
     shutdown(wait=False) alone only cancels futures that never started --
     it does not stop one mid-flight, so a still-running worker is force-
     killed outright.
+
+    v148 O5: fn runs inside _counted_call, which hands back (result, the
+    child's swallowed counts). Those counts are merged here on success only:
+    a raising or killed child loses its own counts (its log lines remain),
+    and both failure paths below are counted under "scan.run_bounded" in
+    this, the parent, process. The return shape is unchanged for every
+    caller -- fn's own result, or None.
     """
     with ProcessPoolExecutor(max_workers=1, mp_context=_SPAWN_CTX) as pool:
-        future = pool.submit(fn, *args)
+        future = pool.submit(_counted_call, fn, *args)
         done, _ = _futures_wait([future], timeout=timeout_seconds)
         if future in done:
             try:
-                return future.result()
+                result, counts = future.result()
             except Exception as exc:
-                log.error("%s failed: %s", label, exc, exc_info=True)
+                swallowed(log, "scan.run_bounded", exc, "%s failed: %s", label, exc,
+                          level=logging.ERROR, exc_info=True)
                 return None
-        log.error(
-            "%s did not finish within %ss -- killing the worker process and "
-            "treating this as a failed fetch", label, timeout_seconds)
+            swallowed_mod.merge(counts)
+            return result
+        swallowed(log, "scan.run_bounded", TimeoutError(label),
+                  "%s did not finish within %ss -- killing the worker process and "
+                  "treating this as a failed fetch", label, timeout_seconds,
+                  level=logging.ERROR)
         for proc in pool._processes.values():
             proc.kill()
         # wait=True (v56, was False): confirmed live on production 2026-08-24
@@ -223,7 +252,8 @@ def _fetch_one_ticker(ticker: str) -> tuple:
     try:
         return ticker, get_daily_data(ticker, period=config.DEFAULT_HISTORY_PERIOD)
     except Exception as exc:
-        log.error("Crawl: error fetching data for %s: %s", ticker, exc, exc_info=True)
+        swallowed(log, "scan.fetch_one_ticker", exc, "Crawl: error fetching data for %s: %s",
+                  ticker, exc, level=logging.ERROR, exc_info=True)
         return ticker, None
 
 
@@ -240,7 +270,8 @@ def _with_cached_depth(ticker: str, live):
         cached = data_store.load_normalized(ticker, "daily")
         return splice_cached_history(live, cached, ticker)
     except Exception as exc:
-        log.debug("Crawl: cache splice skipped for %s (%s)", ticker, exc)
+        swallowed(log, "scan.with_cached_depth", exc, "Crawl: cache splice skipped for %s (%s)",
+                  ticker, exc, level=logging.DEBUG)
         return live
 
 
@@ -367,7 +398,9 @@ def _load_cached_daily(ticker: str):
             return None
         return data_store.load_normalized(ticker, "daily")
     except Exception as exc:
-        log.debug("Crawl: cache lookup failed for %s (%s) -- treating as cold", ticker, exc)
+        swallowed(log, "scan.load_cached_daily", exc,
+                  "Crawl: cache lookup failed for %s (%s) -- treating as cold", ticker, exc,
+                  level=logging.DEBUG)
         return None
 
 
@@ -482,8 +515,10 @@ def _crawl_bounded(symbols, *, max_symbols: int, budget_s: float,
             return frames, "budget_exhausted"
         try:
             frames.update(_crawl_latest_data(batch, None))
-        except Exception:
-            log.warning("SHORT crawl: chunk of %d failed -- ending the extra queue", len(batch), exc_info=True)
+        except Exception as exc:
+            swallowed(log, "scan.crawl_bounded", exc,
+                      "SHORT crawl: chunk of %d failed -- ending the extra queue", len(batch),
+                      exc_info=True)
             return frames, "fetch_failed"
     return frames, None
 
@@ -599,7 +634,8 @@ def _daily_frame_for(symbol: str):
     try:
         return _with_cached_depth(symbol, get_daily_data(symbol, period=config.DEFAULT_HISTORY_PERIOD))
     except Exception as exc:
-        log.warning("Could not resolve daily frame for %s: %s", symbol, exc, exc_info=True)
+        swallowed(log, "scan.daily_frame_for", exc, "Could not resolve daily frame for %s: %s",
+                  symbol, exc, exc_info=True)
         return None
 
 
@@ -618,8 +654,9 @@ def map_tickers(fn, tickers: list, workers: int | None = None) -> list:
     def safe(t):
         try:
             return fn(t)
-        except Exception:
-            log.exception("scan worker failed for %s", t)
+        except Exception as exc:
+            swallowed(log, "scan.map_tickers", exc, "scan worker failed for %s", t,
+                      level=logging.ERROR, exc_info=True)
             return None
 
     if n <= 1 or len(tickers) <= 1:

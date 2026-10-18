@@ -10,6 +10,7 @@ import logging
 from swingbot.core import presentation as ui
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
+from swingbot.core.analytics import calibration
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +80,31 @@ def bot_online_embed(*, now_text: str, session_start: int, session_end: int, int
 
 def config_notice_embed(detail: str, note: str = ""):
     return system_embed(Kind.CONFIG_CHANGE, detail, note or None)
+
+
+def _r_text(value) -> str:
+    return "—" if value is None else f"{value:+.2f}R"
+
+
+def live_loss_flag_embed(row: dict):
+    """v164 D3: the instant flag for one live-loss-watch row (posted once per
+    episode, latched in scheduled_jobs). Rides the RETROSPECTIVE kind with
+    detail ``live loss watch`` -- no new Kind, so no registry change."""
+    wr = row.get("live_wr")
+    wr_text = "—" if wr is None else f"{wr:.0f}%"
+    horizon = row.get("horizon") or "pooled"
+    body = (
+        f"**{row['source']} / {row['strategy']} / {horizon}**\n"
+        f"• Live N {row.get('live_n', 0)} · WR {wr_text} · ExpR {_r_text(row.get('live_expr'))} · "
+        f"90% upper bound {_r_text(row.get('bound_upper'))}\n"
+        f"• Meaning: {calibration.LIVE_LOSS_MEANING}.\n"
+        f"• {calibration.REGISTRY_CONTEXT_LABEL}: {row.get('registry_status') or '—'} · "
+        f"{row.get('registry_window_kind') or '—'} · ExpR {_r_text(row.get('registry_expr'))} "
+        f"(run {row.get('registry_run_date') or '—'})\n"
+        "• Posted once per episode; the Sunday retrospective re-arms it once the "
+        "upper bound is back at or above zero."
+    )
+    return system_embed(Kind.RETROSPECTIVE, "live loss watch", body)
 
 
 def scan_gap_note(funnel: dict) -> str:
@@ -171,3 +197,52 @@ def retrospective_embeds(messages: list[str]) -> list:
     total = len(chunks)
     return [system_embed(Kind.RETROSPECTIVE, f"{index}/{total}" if total > 1 else "", chunk)
             for index, chunk in enumerate(chunks, 1)]
+
+
+# --- v148 O3/O4: ops-watch notices --------------------------------------------
+
+def _rate(rate) -> str:
+    return "—" if rate is None else f"{rate * 100:.1f}%"
+
+
+def _value(value) -> str:
+    return "—" if value is None else str(value)
+
+
+def stale_scan_embed(age_min: int, last_success: str):
+    """v148 O3: the bot is up but no scan tick has completed -- a wedged tick.
+    A dead bot cannot post this; the VM's heartbeat_watch cron reports that."""
+    return system_embed(Kind.HEALTH_ALERT, f"no completed scan tick for {age_min} min", (
+        f"• Last successful tick: {last_success}\n"
+        "• The bot is up, but its scheduled scan has not finished a tick.\n"
+        "No alerts are being produced until this clears."))
+
+
+def stale_scan_recovered_embed(last_success: str):
+    return system_embed(Kind.HEALTH_RECOVERED, "scan ticks completing again",
+                        f"• Last successful tick: {last_success}")
+
+
+def _provider_lines(row: dict) -> tuple[str, str]:
+    fallback = f"• Alpaca fallback: {_rate(row.get('provider_fallback_rate'))}"
+    empty = (f"• Empty symbols: {_value(row.get('empty_symbols'))} of "
+             f"{_value(row.get('tickers'))} ({_rate(row.get('empty_rate'))})")
+    return fallback, empty
+
+
+def provider_degraded_embed(row: dict, fallback_pct: float, empty_pct: float):
+    """v148 O4: the newest scan breached a provider threshold."""
+    fallback, empty = _provider_lines(row)
+    return system_embed(Kind.HEALTH_ALERT, "market-data provider degraded", (
+        f"{fallback}, alert above {fallback_pct:g}%\n"
+        f"{empty}, alert above {empty_pct:g}%\n"
+        f"• Stale symbols: {_value(row.get('stale_symbols'))}\n"
+        f"• Scan at: {_value(row.get('at'))}\n"
+        "Scans continue: fallback tickers ran on yfinance data, empty ones were skipped."))
+
+
+def provider_recovered_embed(row: dict):
+    """v148 O4: a scan is back under both provider thresholds."""
+    fallback, empty = _provider_lines(row)
+    return system_embed(Kind.HEALTH_RECOVERED, "market-data provider healthy again",
+                        f"{fallback}\n{empty}\n• Scan at: {_value(row.get('at'))}")

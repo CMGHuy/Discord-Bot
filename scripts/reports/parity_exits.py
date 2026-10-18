@@ -24,6 +24,7 @@ simulate_exit bug. The unrounded approach removes that ambiguity entirely.
 
     python scripts/reports/parity_exits.py
 """
+import argparse
 import sys
 import warnings
 from pathlib import Path
@@ -33,7 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
-from fetch_backtest_data import load_cached, load_watchlist
+from fetch_backtest_data import add_data_source_arg, apply_data_source, load_cached, load_watchlist
 from swingbot.core.backtesting.backtest import (ALL_STRATEGIES, _plan_series,
                                                _v1_plan_levels, run_backtest)
 from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2, simulate_exit
@@ -67,7 +68,10 @@ def window_trades(summary, date_from, date_to):
     return [t for t in summary.trades if date_from <= t.entry_date <= date_to]
 
 
-def main():
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="simulate_exit vs the legacy exit loop, TRAIN window")
+    add_data_source_arg(ap)
+    apply_data_source(ap.parse_args(argv))
     tickers = sorted(load_watchlist())
     n = 0
     m = 0

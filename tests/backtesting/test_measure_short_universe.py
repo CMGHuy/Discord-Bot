@@ -35,6 +35,15 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 import measure_arms as ma  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    from swingbot.core.marketdata import training_data
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
+
 # Fixture shape, frozen once it fired (architecture.md: synthetic fixtures need
 # tuning). Real AAPL bars build a bearish 4w/3m scenario on 2025-01-10 at a
 # 0.5% stop floor (the live 2.0% floor leaves two tickers' bars almost no

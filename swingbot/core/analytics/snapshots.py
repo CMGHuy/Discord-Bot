@@ -61,6 +61,9 @@ def build_snapshot(closed: list[dict], starting_balance: float, registry_entries
         "deciles": calibration.score_deciles(closed),
         "levels": calibration.level_calibration(closed),
         "drift": calibration.badge_drift(closed, registry_entries),
+        # v164 D4: the pre-registered live loss watch, over BOTH ledgers
+        # (spec D1); report-only, never feeds a badge. A JSON key, no schema.
+        "live_loss_watch": calibration.live_loss_watch([*closed, *weak_closed], registry_entries),
     }
 
     return {
@@ -120,7 +123,7 @@ def refresh_snapshot() -> None:
         closed_all = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
         closed, weak_closed = split_by_ledger(closed_all)
         starting_balance = account_module.load_account_config().get("base_balance", 0.0)
-        registry_entries = registry.load_registry()
+        registry_entries = registry.active_rows(registry.load_registry())
 
         snap = build_snapshot(closed, starting_balance, registry_entries, weak_closed=weak_closed)
         save_snapshot(snap)

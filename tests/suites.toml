@@ -67,9 +67,25 @@ description = "slash commands, embeds/presentation, infra"
 paths = ["tests/commands/", "tests/presentation/", "tests/infra/"]
 
 [suites.tooling]
-description = "scripts, hooks and the dev tooling itself (incl. this file's guard)"
-paths = ["tests/scripts/", "tests/hooks/", "tests/dev/"]
+description = "operational and analysis scripts under scripts/"
+paths = ["tests/scripts/"]
+
+[suites.dev-setup]
+description = "Claude/Codex hooks and the dev tooling itself (incl. this file's guard)"
+paths = ["tests/hooks/", "tests/dev/"]
+
+[suites.backtest-scripts]
+description = "scripts/backtest/* -- measure_*, run_backtest_range, tune_strategy, screen_idea and friends"
+paths = ["tests/backtest_scripts/"]
 
 [suites.config]
 description = "Config schema/keys -- the loose tests/test_*.py files (CI used to skip these)"
 paths = ["tests/test_*.py"]
+
+[suites.history-store]
+description = "v162 Alpaca history store: read seam, backfill, update, training switch"
+paths = ["tests/history_store/"]
+
+[suites.scout]
+description = "v161 trade scout: book export, autopsy, merge, generator roles"
+paths = ["tests/scout/"]

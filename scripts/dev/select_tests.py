@@ -248,20 +248,48 @@ REGISTRY_PREFIXES = (
 # test_no_path_a_test_reads_is_classified_inert fails when a test starts
 # naming a data file this table (or the inert rule) mis-routes.
 DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # v161: the generator role skills, the playbook and the trade-scout skill
+    # are read by tests/scout/ shape tests as well as tests/hooks/. Narrower
+    # rows first (first match wins), repeating the broad row's target.
+    (".claude/skills/", ("tests/hooks/", "tests/scout/test_generator_roles.py",
+                         "tests/scout/test_trade_scout_skill.py")),
+    (".claude/agents/", ("tests/hooks/", "tests/scout/test_trade_scout_skill.py")),
     # Skill/agent/settings shape and the Codex mirror: test_skill_shape,
     # test_agent_shape, test_codex_mirror (directly and via sync_codex.py),
     # test_guardrails.
     (".claude/", ("tests/hooks/",)),
     ("CLAUDE.md", ("tests/hooks/",)),
+    # Every `.py` path the README names must exist (v149 H3).
+    ("README.md", ("tests/dev/test_readme_paths.py",)),
+    # The complexity ratchet's baseline is compared against the real tree.
+    ("scripts/dev/complexity_baseline.json", ("tests/dev/test_complexity_gate.py",)),
     # Codex mirror outputs, compared against a fresh render by test_codex_mirror.
-    ("AGENTS.md", ("tests/hooks/",)),
-    (".agents/", ("tests/hooks/",)),
+    # v161: test_generator_roles pins the scout row, the .agents/ copies and
+    # the 32 KiB Codex cap.
+    ("AGENTS.md", ("tests/hooks/", "tests/scout/test_generator_roles.py")),
+    (".agents/", ("tests/hooks/", "tests/scout/test_generator_roles.py")),
     (".codex/", ("tests/hooks/",)),
     # backtest-methodology.md's closed table (test_guardrails); every
     # reference doc must be named in AGENTS.md (sync_codex via test_codex_mirror);
     # skills-tools.md's roles table pins each reviewer model (test_role_skills);
     # three docs carry pinned section headings (test_doc_sections) that
     # doc_section.py prints, one of them from the real file (test_doc_section).
+    # v161: scout_merge parses the closed pre-registrations table, pinned
+    # against the real doc (spec § 6). Repeats every docs/claude/ target.
+    ("docs/claude/backtest-methodology.md", ("tests/hooks/test_guardrails.py",
+                                             "tests/hooks/test_codex_mirror.py",
+                                             "tests/hooks/test_role_skills.py",
+                                             "tests/hooks/test_doc_sections.py",
+                                             "tests/dev/test_doc_section.py",
+                                             "tests/scout/test_scout_merge_parse.py",
+                                             "tests/scout/test_scout_merge.py")),
+    # v161: § Generator roles carries the thresholds the role skills cite.
+    ("docs/claude/skills-tools.md", ("tests/hooks/test_guardrails.py",
+                                     "tests/hooks/test_codex_mirror.py",
+                                     "tests/hooks/test_role_skills.py",
+                                     "tests/hooks/test_doc_sections.py",
+                                     "tests/dev/test_doc_section.py",
+                                     "tests/scout/test_trade_scout_skill.py")),
     ("docs/claude/", ("tests/hooks/test_guardrails.py",
                       "tests/hooks/test_codex_mirror.py",
                       "tests/hooks/test_role_skills.py",
@@ -285,15 +313,22 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
                                  "tests/hooks/test_spec_panel_header.py")),
     # Every plan past v145 must stamp **Model:** under each ### Task.
     ("docs/superpowers/plans/", ("tests/hooks/test_plan_model_stamp.py",)),
-    # The pre-registration ledger is loaded and validated row by row.
+    # The pre-registration ledger is loaded and validated row by row; v161's
+    # scout_merge reads it to drop ideas already on the ledger.
     ("docs/superpowers/results/preregistration-ledger.jsonl",
      ("tests/backtesting/test_preregistration_ledger_file.py",
       "tests/backtesting/test_instrument_stats_ledger.py",
       "tests/scripts/test_preregistration_ledger_cli.py",
-      "tests/admin/test_api_v1_research.py")),
+      "tests/admin/test_api_v1_research.py",
+      "tests/scout/")),
     # _rule_screen_rerun globs results docs (*-screen-<idea>.md) for a screened
     # idea, so a results doc is a hook input (v155).
     ("docs/superpowers/results/", ("tests/hooks/test_guardrails.py",)),
+    # The v162 Alpaca history store (data/market_data/, NOT the root
+    # market_data/ live cache): history_store reads it, training_data selects
+    # it. Gitignored, so this fires only when a path is named explicitly.
+    ("data/market_data/", ("tests/history_store/test_history_store.py",
+                           "tests/history_store/test_training_data.py")),
 )
 
 # Known to affect no test. Distinct from "unplaceable", which widens: silence

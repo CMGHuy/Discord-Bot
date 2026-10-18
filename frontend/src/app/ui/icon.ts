@@ -40,6 +40,7 @@ export const ICON_NAMES = [
   'pending',
   'partial',
   'cancelled',
+  'trailing',
   'brand',
   'reports',
   'research',
@@ -97,6 +98,9 @@ const PATHS: Record<IconName, string> = {
   // A plain cross: the universal cancel/void mark, distinct from `closed`'s
   // square so a plan that never filled cannot be misread as one that did.
   cancelled: 'M4.5 4.5l7 7 M11.5 4.5l-7 7',
+  // A staircase that only steps one way: the stop ratcheting with price and
+  // never giving ground, which is what a trailing stop does.
+  trailing: 'M2 3.5h4v4h4v4h4',
   // A diamond: the sidebar brand mark, replacing the raster logo (D3,
   // finding 16) with a shape that inherits currentColor and holds at 24px.
   brand: 'M8 1.5 14 8 8 14.5 1.5 8z',

@@ -181,6 +181,8 @@ const FINISHED_JOB = {
   returncode: 0,
 };
 
+const TUNE_DEFAULTS = { data_source: 'alpaca', choices: ['alpaca', 'yfinance'] };
+
 describe('AnalyticsStore', () => {
   let store: InstanceType<typeof AnalyticsStore>;
   let backend: HttpTestingController;
@@ -260,6 +262,8 @@ describe('AnalyticsStore', () => {
     respondJobs(jobs);
     respondProposals();
     respondStrategies();
+    // v162: the launcher's source picker, fetched once on the first Tuning load.
+    backend.expectOne('/api/v1/jobs/tune/defaults').flush(TUNE_DEFAULTS);
     if (jobs.length) {
       const id = (jobs[0] as { id: string }).id;
       backend
@@ -395,6 +399,37 @@ describe('AnalyticsStore', () => {
 
     expect(store.deciles()).toHaveLength(1);
     expect(store.tiers()[0].level).toBe(3);
+  });
+
+  it('exposes the live loss watch rows and counts, in the order the server sent them (v164)', () => {
+    const rows = [
+      { source: 'confluence', strategy: 'ALL', horizon: '4w', live_n: 24, live_wr: 41.7, live_expr: -0.25,
+        bound_upper: -0.04, alert: true, registry_status: 'WEAK', registry_window_kind: 'VALIDATION',
+        registry_run_date: '2026-05-01', registry_expr: -0.05 },
+      { source: 'confluence', strategy: 'ALL', horizon: '2w', live_n: 3, live_wr: null, live_expr: 0.1,
+        bound_upper: 0.6, alert: false, registry_status: 'WEAK', registry_window_kind: 'VALIDATION',
+        registry_run_date: '2026-05-01', registry_expr: -0.02 },
+    ];
+    tick();
+    respondOverview();
+    store.setTab('edge');
+    tick();
+    respondEdge({ live_loss_watch: { rows, counts: { no_source: 2, manual_close: 1 } } });
+
+    expect(store.liveLossWatch().map((row) => row.horizon)).toEqual(['4w', '2w']);
+    expect(store.liveLossWatch()[0].alert).toBe(true);
+    expect(store.liveLossCounts()).toEqual({ no_source: 2, manual_close: 1 });
+  });
+
+  it('reads a calibration body cached before v164 as an empty live loss watch', () => {
+    tick();
+    respondOverview();
+    store.setTab('edge');
+    tick();
+    respondEdge();   // CALIBRATION carries no live_loss_watch key
+
+    expect(store.liveLossWatch()).toEqual([]);
+    expect(store.liveLossCounts()).toEqual({});
   });
 
   it('exposes deciles as a fixed-0-100 histogram', () => {
@@ -595,12 +630,12 @@ describe('AnalyticsStore', () => {
     respondOverview();
     openTuning([]);
 
-    store.startTune('RSI');
+    store.startTune('RSI', 'yfinance');
     const posted = backend.expectOne('/api/v1/jobs/tune');
     expect(posted.request.method).toBe('POST');
-    // Strategy only. No date argument exists, because the window is TRAIN
-    // and the server refuses anything else.
-    expect(posted.request.body).toEqual({ strategy: 'RSI' });
+    // Strategy and training data. No date argument exists, because the window
+    // is TRAIN and the server refuses anything else.
+    expect(posted.request.body).toEqual({ strategy: 'RSI', params: { data_source: 'yfinance' } });
     posted.flush({ job_id: 'abc123' });
 
     respondJobs([RUNNING_JOB]);
@@ -611,12 +646,44 @@ describe('AnalyticsStore', () => {
     expect(store.job()?.id).toBe('abc123');
   });
 
+  it('sends no params when no source was chosen, so the server default applies', () => {
+    tick();
+    respondOverview();
+    openTuning([]);
+
+    store.startTune('RSI', '');
+    const posted = backend.expectOne('/api/v1/jobs/tune');
+    expect(posted.request.body).toEqual({ strategy: 'RSI' });
+  });
+
+  it('fetches the tuning defaults once, not on every jobs event', () => {
+    tick();
+    respondOverview();
+    openTuning();
+    expect(store.tuneDefaults()).toEqual(TUNE_DEFAULTS);
+
+    events.raise('jobs');
+    store.load();
+    respondJobs([RUNNING_JOB]);
+    respondProposals();
+    backend.expectOne('/api/v1/jobs/abc123').flush({ ...RUNNING_JOB, log_tail: '' });
+    backend.expectNone('/api/v1/jobs/tune/defaults');
+  });
+
+  it("loads the tune defaults when the route resolver opens the Tuning tab", () => {
+    tick();
+    respondOverview();
+    store.resolveTab('tuning').subscribe();
+    backend.expectOne('/api/v1/jobs/tune/defaults').flush(TUNE_DEFAULTS);
+    expect(store.tuneDefaults()).toEqual(TUNE_DEFAULTS);
+  });
+
   it('reports a launch conflict separately from a stale-data error', () => {
     tick();
     respondOverview();
     openTuning([]);
 
-    store.startTune('RSI');
+    store.startTune('RSI', 'alpaca');
     backend
       .expectOne('/api/v1/jobs/tune')
       .flush(

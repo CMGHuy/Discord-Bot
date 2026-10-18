@@ -6,6 +6,7 @@ import asyncio
 import datetime as dt
 import inspect
 import logging
+import threading
 import types
 
 import pytest
@@ -78,6 +79,26 @@ def test_the_scheduled_tick_applies_the_cooldown_and_posts_its_note(monkeypatch)
     assert calls == [{"bot": loops_mod.bot, "require_confirmation": True,
                       "route_by_confidence": True, "apply_cooldown": True}]
     assert notes == [[held_plan]]
+
+
+def test_the_scheduled_tick_refreshes_the_snapshot_off_the_event_loop(monkeypatch):
+    """build_snapshot runs ~22 bootstrap rows; it must never block the bot loop."""
+    seen = {}
+
+    async def fake_send_then_short(channel, alerts, **kwargs):
+        seen["loop_thread"] = threading.get_ident()
+        return []
+
+    async def no_note(held):
+        pass
+
+    _scan_tick_env(monkeypatch, fake_send_then_short)
+    monkeypatch.setattr(loops_mod, "_post_cooldown_note", no_note)
+    monkeypatch.setattr(loops_mod, "_refresh_snapshot_safely",
+                        lambda: seen.update(refresh_thread=threading.get_ident()))
+    asyncio.run(loops_mod._session_scan_tick())
+    assert "refresh_thread" in seen
+    assert seen["refresh_thread"] != seen["loop_thread"]
 
 
 def test_the_halt_repost_never_applies_the_cooldown_and_still_raises(monkeypatch):

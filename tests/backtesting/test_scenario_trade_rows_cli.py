@@ -7,13 +7,23 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from swingbot import config
 from swingbot.core.backtesting import backtest_scenarios as bs
 from swingbot.core.backtesting import scenario_rows
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
+from swingbot.core.marketdata import training_data
 from tests.helpers import make_ohlcv
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
+
+
+@pytest.fixture(autouse=True)
+def _legacy_source(monkeypatch):
+    monkeypatch.setattr(config, "TRAINING_DATA_SOURCE", "yfinance")   # v162: no store in tests
+    training_data.reset()
+    yield
+    training_data.reset()
 
 GATES = {"min_reward_pct": 1.0, "min_stop_distance_pct": 0.5,
          "max_stop_distance_pct": 15.0, "min_risk_reward": 0.0,
@@ -151,7 +161,7 @@ def test_write_scenario_trades_jsonl_round_trips(tmp_path):
 def _stub_scenario_mode(monkeypatch, rr, tmp_path, seen):
     """run_scenario_mode with every loader and the replay itself faked."""
     monkeypatch.chdir(tmp_path)                 # it writes backtest_range_summary.txt to cwd
-    monkeypatch.setattr(rr, "_tickers_for_run", lambda universe: ["AAA", "BBB"])
+    monkeypatch.setattr(rr, "_tickers_for_run", lambda universe, tickers_file=None: ["AAA", "BBB"])
     monkeypatch.setattr(rr, "_membership_for_run", lambda universe, tickers: None)
     monkeypatch.setattr(rr, "load_cached", lambda ticker: f"frame-{ticker}")
     monkeypatch.setattr(rr, "_with_context", lambda df, **kw: df)

@@ -28,6 +28,7 @@ from swingbot.core.backtesting.backtest_wf import (  # noqa: E402
 )
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 from swingbot.core.marketdata.universe import liquidity_ok  # noqa: E402
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
 
 DECIDED_OR_NOT = ("win", "loss", "scratch", "timeout")
 
@@ -109,7 +110,10 @@ def main() -> int:
                     help='config overrides for the component leg, e.g. '
                          '\'{"MA_RIBBON_CONFIRM_BARS": 2}\'')
     ap.add_argument("--out", required=True)
+    instrument_cli.add_instrument_arg(ap)
     args = ap.parse_args()
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_strategy_arm.py",
+                              "phase 6 (cutover: walk-forward on the v2 folds)")
 
     overrides = json.loads(args.component_json)
     if not overrides:

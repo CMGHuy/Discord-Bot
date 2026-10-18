@@ -59,6 +59,11 @@ TRADE_ROW = {
     "quality_score": NULLABLE_NUMBER,
     "entry": NULLABLE_NUMBER,
     "stop_loss": NULLABLE_NUMBER,
+    # v166 -- the plan's ORIGINAL risk stop. On PARTIAL, `stop_loss` is the
+    # working (trailing) stop; the trade page needs both to say "move your
+    # resting stop to X (was Y)" and to size risk per share from the
+    # original stop.
+    "risk_stop": NULLABLE_NUMBER,
     "target": NULLABLE_NUMBER,
     "target2": NULLABLE_NUMBER,
     # v73 -- projection provenance and derived display values, carried on
@@ -66,6 +71,7 @@ TRADE_ROW = {
     "target_is_banked_tp1": bool,
     "stop_kind": str,
     "bar_kind": str,
+    "runner_best": NULLABLE_NUMBER,
     "distance_to_trigger_r": NULLABLE_NUMBER,
     "bars_to_expiry": NULLABLE_NUMBER,
     "floor_r": NULLABLE_NUMBER,
@@ -1142,6 +1148,65 @@ def test_partial_plan_falls_back_when_the_runner_fields_are_unset(seed, logged_i
     assert row["stop_loss"] == pytest.approx(107.0)
 
 
+def _trailing_short(best=52.0):
+    """RKLB-shaped runner: a short, TP1 banked, no TP2, stop trailing down."""
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan.update({"direction": "bearish", "entry_price": 60.67, "stop_loss": 61.85,
+                 "tp1": 58.33, "tp2": None, "working_stop": 59.0,
+                 "runner_high_close": best,
+                 "legs_realized": [{"fraction": 0.5, "exit_price": 54.0,
+                                    "r": 5.6, "reason": "tp1"}]})
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    trade.update({"direction": "bearish", "entry": 60.67})
+    return plan, trade
+
+
+def _runner_row(client):
+    """The open runner row -- the plan also expands into a realized TP1 leg row."""
+    items = client.get("/api/v1/trades").get_json()["items"]
+    return next(r for r in items if r["status"] == "PARTIAL")
+
+
+def test_trailing_runner_bar_spans_the_stop_to_the_best_price(seed, logged_in, priced):
+    """No TP2, so the bar's 100% end is the best price since TP1: 0% = at the
+    trailing stop (about to be stopped out), 100% = at the best price."""
+    plan, trade = _trailing_short(best=52.0)
+    seed(plans=[plan], trades=[trade])
+    priced(55.5)                       # stop 59.0 .. best 52.0 -> halfway
+
+    row = _runner_row(logged_in)
+
+    assert row["bar_kind"] == "trailing"
+    assert row["progress_pct"] == pytest.approx(50.0)
+    assert row["progress_band"] == "neutral"
+    assert row["runner_best"] == 52.0
+    # P&L vs the 60.67 short fill at the bar's two ends.
+    assert row["stop_pnl_pct"] == pytest.approx(2.75, abs=0.01)
+    assert row["best_pnl_pct"] == pytest.approx(14.29, abs=0.01)
+    assert 0.6 <= row["blink_seconds"] <= 2.2
+
+
+def test_trailing_runner_at_a_new_low_is_full_and_near_stop_is_empty(seed, logged_in, priced):
+    plan, trade = _trailing_short(best=52.0)
+    seed(plans=[plan], trades=[trade])
+    priced(51.0)                       # past the recorded best: clamps to 100
+    assert _runner_row(logged_in)["progress_pct"] == 100.0
+    priced(58.9)                       # a hair under the stop
+    row = _runner_row(logged_in)
+    assert row["progress_pct"] < 5.0
+    assert row["progress_band"] == "toward_stop"
+
+
+def test_trailing_runner_without_a_best_price_keeps_the_plain_chip(seed, logged_in, priced):
+    plan, trade = _trailing_short(best=None)
+    seed(plans=[plan], trades=[trade])
+    priced(55.5)
+
+    row = _runner_row(logged_in)
+    assert row["progress_pct"] is None
+    assert row["status_label"] == "PARTIAL"
+
+
 def test_active_plan_is_unaffected_by_the_partial_fields(seed, logged_in):
     """Only PARTIAL gets the runner substitution -- an ACTIVE plan hasn't hit
     TP1 yet, so its stop/target really are the original entry stop/TP1."""
@@ -1224,8 +1289,10 @@ def test_a_closed_row_keeps_its_terminal_pnl_not_a_live_one(seed, logged_in, pri
 
 
 def test_no_internal_bookkeeping_fields_leak_onto_the_wire(seed, logged_in, priced):
-    """`_risk_stop` is transient, consumed by `_attach_unrealized_pnl`
-    -- the contract check below fails loudly on any undeclared key."""
+    """No transient bookkeeping key (`_display_shares`) reaches the wire,
+    and `risk_stop` -- transient as `_risk_stop` until v166 -- is now a
+    declared field: the contract check below fails loudly on any
+    undeclared or missing key."""
     plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
     plan["legs_realized"] = [{"fraction": 0.5, "exit_price": 110.0, "r": 1.0,
                               "reason": "tp1"}]
@@ -1235,6 +1302,65 @@ def test_no_internal_bookkeeping_fields_leak_onto_the_wire(seed, logged_in, pric
 
     body = logged_in.get("/api/v1/trades").get_json()
     assert_collection(body, TRADE_ROW, envelope={"prices_as_of": (str, type(None))})
+
+
+# --- v166: risk_stop, the plan's original stop -----------------------------
+
+def _partial_pair(working_stop=104.0):
+    plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    plan["working_stop"] = working_stop
+    plan["legs_realized"] = [{"fraction": 0.5, "exit_price": 110.0, "r": 1.5,
+                              "reason": "tp1"}]
+    trade = _trade("aaaaaaaaaaaaaaaa", plan_id=plan["plan_id"], status="open")
+    return plan, trade
+
+
+def test_partial_rows_publish_the_original_stop_as_risk_stop(seed, logged_in, priced):
+    """On PARTIAL the row's `stop_loss` is the working stop; `risk_stop`
+    is the plan's original stop (95.0), on the runner row and every leg row."""
+    plan, trade = _partial_pair()
+    seed(plans=[plan], trades=[trade])
+    priced(115.0)
+
+    items = logged_in.get("/api/v1/trades").get_json()["items"]
+    assert items, "the PARTIAL plan produced no rows"
+    assert {row["risk_stop"] for row in items} == {95.0}
+    runner = next(r for r in items if r["status"] == "PARTIAL")
+    assert runner["stop_loss"] != 95.0
+
+
+def test_partial_r_multiple_is_still_measured_against_the_original_stop(
+        seed, logged_in, priced):
+    """The rename must not change `_attach_unrealized_pnl`'s input."""
+    plan, trade = _partial_pair()
+    seed(plans=[plan], trades=[trade])
+    priced(115.0)
+
+    items = logged_in.get("/api/v1/trades").get_json()["items"]
+    runner = next(r for r in items if r["status"] == "PARTIAL")
+    assert runner["r_multiple"] == pytest.approx((115.0 - 101.0) / (101.0 - 95.0), abs=0.01)
+
+
+def test_trade_detail_row_carries_risk_stop(seed, logged_in, priced):
+    plan, trade = _partial_pair()
+    seed(plans=[plan], trades=[trade])
+    priced(115.0)
+
+    body = logged_in.get(f"/api/v1/trades/{plan['plan_id']}").get_json()
+    assert body["risk_stop"] == 95.0
+    assert body["stop_loss"] != 95.0
+
+
+def test_legacy_row_risk_stop_is_its_own_stop(seed, logged_in):
+    seed(trades=[_trade("cccccccccccccccc", plan_id=None)])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["risk_stop"] == row["stop_loss"] == 95.0
+
+
+def test_pending_plan_row_carries_its_planned_stop(seed, logged_in):
+    seed(plans=[_plan("22222222-2222-4222-8222-222222222222", status="PENDING")])
+    row = logged_in.get("/api/v1/trades").get_json()["items"][0]
+    assert row["risk_stop"] == 95.0
 
 
 # --- range filters: opened_from / opened_to --------------------------------

@@ -21,6 +21,8 @@ import logging
 import time
 import urllib.request
 
+from swingbot.core.infra.swallowed import swallowed
+
 log = logging.getLogger(__name__)
 
 NASDAQ_LISTED_URL = "https://ftp.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
@@ -92,7 +94,8 @@ def _build_directory() -> list[dict]:
                 seen.add(row["symbol"])
                 rows.append(row)
         except Exception as exc:
-            log.warning("Could not download ticker directory from %s: %s", url, exc, exc_info=True)
+            swallowed(log, "marketdata.ticker_directory.download", exc,
+                      "Could not download ticker directory from %s: %s", url, exc, exc_info=True)
     return rows
 
 
@@ -102,9 +105,9 @@ def _save_cache(rows: list[dict]) -> None:
     try:
         from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
         ticker_directory_repo().replace(rows)
-    except Exception:
-        log.warning("Could not write ticker directory cache to the database",
-                    exc_info=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.ticker_directory.save", exc,
+                  "Could not write ticker directory cache to the database", exc_info=True)
 
 
 def _load_cache() -> tuple[list[dict], float]:
@@ -119,9 +122,10 @@ def _load_cache() -> tuple[list[dict], float]:
         from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
         repo = ticker_directory_repo()
         return repo.all_rows(), repo.loaded_at()
-    except Exception:
-        log.warning("ticker directory cache unreadable from the database; "
-                    "will re-download", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.ticker_directory.load", exc,
+                  "ticker directory cache unreadable from the database; "
+                  "will re-download", exc_info=True)
         return [], 0.0
 
 
@@ -207,7 +211,8 @@ def _search_db(query: str, limit: int) -> list[dict] | None:
     try:
         from swingbot.core.db.repositories.ticker_directory import ticker_directory_repo
         return ticker_directory_repo().search(query, limit)
-    except Exception:
-        log.warning("ticker directory search failed in the database; "
-                    "using the in-memory copy", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.ticker_directory.search", exc,
+                  "ticker directory search failed in the database; "
+                  "using the in-memory copy", exc_info=True)
         return None

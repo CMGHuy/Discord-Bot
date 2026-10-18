@@ -15,6 +15,7 @@ import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
 import { MIN_SAMPLE_N, StatTile } from '../../ui/stat-tile';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
+import { PAPER_CAPTION, legsSampleNote } from './day/day-copy';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -225,6 +226,10 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       [heading]="store.selectedDay() ?? ''"
       (closed)="store.closeDay()"
     >
+      @if (store.selectedDay(); as day) {
+        <!-- v165 D6: the drawer is the quick preview; the page is the full day. -->
+        <a class="open-day" [routerLink]="['/calendar', day]" [queryParams]="dayLinkParams()">Open full day →</a>
+      }
       @if (store.dayLoading()) {
         <p class="day-loading">Loading...</p>
       } @else if (store.dayDetail() === null) {
@@ -232,6 +237,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       } @else if (store.dayDetail()!.trades.length === 0) {
         <p class="day-empty">No closed trades on this day under the current filter.</p>
       } @else if (store.dayDetail(); as detail) {
+        <p class="day-caption">{{ paperCaption }}</p>
         <div class="day-summary">
           <sb-stat-tile label="Total" [value]="rLabel(detail.total_r)" [sample]="detail.trade_count" />
           <sb-stat-tile label="Total P&L" [value]="ccyLabel(detail.total_ccy)" [sample]="detail.trade_count" />
@@ -241,6 +247,9 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
           <sb-stat-tile label="Average trade" [value]="rLabel(detail.avg_trade_r)" [sample]="detail.trade_count" />
           <sb-stat-tile label="Worst drawdown" [value]="rLabel(detail.worst_drawdown_r)" [sample]="detail.trade_count" tone="neg" />
         </div>
+        @if (hasLegs(detail.trades)) {
+          <p class="day-sample-note">{{ legsNote(detail.trade_count) }}</p>
+        }
         <div class="day-leaders">
           <section class="contributors">
             <h3>Contributors</h3>
@@ -494,6 +503,9 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     }
     .day-empty, .day-loading { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
     .day-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-8); margin-bottom: var(--space-14); }
+    .open-day { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: var(--space-10); color: var(--accent); font-weight: 600; text-decoration: none; }
+    .open-day:hover, .open-day:focus-visible { text-decoration: underline; }
+    .day-caption, .day-sample-note { margin: 0 0 var(--space-8); color: var(--text-secondary); font-size: var(--text-micro); }
     .day-leaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-14); margin-bottom: var(--space-14); }
     .day-leaders h3 { margin: 0 0 var(--space-6); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.08em; }
     .day-leaders p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-table); }
@@ -685,6 +697,20 @@ export class Calendar {
   }
 
   protected readonly dateTime = dateTime;
+
+  /** D7: the drawer's summary says what these figures are. */
+  protected readonly paperCaption = PAPER_CAPTION;
+  protected readonly legsNote = legsSampleNote;
+
+  /** Only the filters that are set, so a bare day links as `/calendar/<date>`. */
+  protected readonly dayLinkParams = computed(() => ({
+    ...(this.store.strategy() ? { strategy: this.store.strategy() } : {}),
+    ...(this.store.horizon() ? { horizon: this.store.horizon() } : {}),
+  }));
+
+  protected hasLegs(trades: CalendarTrade[]): boolean {
+    return trades.some((trade) => trade.leg_total > 1);
+  }
 
   /** Same last-six rule as the Trades list's # column, so the id on the
    *  drawer is the id on the row it links to. */

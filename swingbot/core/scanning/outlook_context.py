@@ -3,9 +3,14 @@ lines. Weekly and hourly price action is shown, never used as a gate: a gate
 would be a new filter, and a new filter needs a SCREEN-PASS first."""
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.scanning.regime import get_market_regime
+
+log = logging.getLogger(__name__)
 
 _WEEKLY_MA = 20
 _HOURLY_SWING_BARS = 7
@@ -52,7 +57,8 @@ def regime_line(symbol: str, daily) -> str | None:
         return None
     try:
         label = get_market_regime(daily, symbol).label
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.regime_line", exc, level=logging.DEBUG)
         return None                       # too little history for the 200EMA regime
     weekly = weekly_phrase(daily)
     return f"{symbol}: {label}" + (f" · {weekly}" if weekly else "")

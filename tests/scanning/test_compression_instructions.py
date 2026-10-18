@@ -19,7 +19,7 @@ from swingbot.core.market.strategy_types import STRATEGY_GATES
 from swingbot.core.planning.plan_manager import Delivery, PlanEvent, PlanManager, ack_notified
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.presentation import short_notice
-from swingbot.core.presentation.instructions import instruction_for
+from swingbot.core.presentation.instructions import instruction_for, money_from
 from swingbot.core.scanning import execution_embeds, lifecycle_embeds
 from swingbot.core.scanning.alert_embeds import build_embed, build_simple_alert
 from tests.planning.test_compression_time_exit import _short
@@ -33,6 +33,7 @@ STAMP = {"compression_mode": "isolated", "compression_bar_date": "2026-10-01"}
 def _setup(monkeypatch):
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     monkeypatch.setattr(execution_embeds, "_sizing_snapshot", lambda entry, plan: None)
+    monkeypatch.setattr(execution_embeds, "_linked_trade", lambda plan_id: None)
 
 
 def _pending_plan():
@@ -124,7 +125,7 @@ def test_due_notice_says_buy_to_cover_by_the_stated_closing_auction_with_shares(
     event = PlanEvent("p1", "time_exit_due", {
         "cover_fraction": 1.0, "auction_time": "2026-12-01T16:00:00-05:00", "late": False,
         "notice_id": "p1:time_exit_due:2026-12-01"})
-    text = _words(instruction_for(_short(), event, sizing={"shares": 12.6}))
+    text = _words(instruction_for(_short(), event, money=money_from(12.6, "$")))
     assert "buy to cover" in text.lower() and "12 sh" in text and "16:00" in text
     assert "MOC" in text and "broker" in text.lower()
 

@@ -16,10 +16,12 @@ from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
 from swingbot.core.db import write_failure
 from swingbot.core.infra import pitr_watch
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
-from . import cooldown, notices, outlook, presence, recap, runstate
+from swingbot.core.tracking import live_loss_watch as loss_watch
+from . import cooldown, notices, ops_watch, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
@@ -231,7 +233,11 @@ async def _session_scan_tick():
     from swingbot.core.charts.cache import purge
     await asyncio.to_thread(purge)
 
-    _refresh_snapshot_safely()
+    # Off the event loop: build_snapshot bootstraps every live-loss-watch row
+    # (seconds of pure Python). The trade-close paths already run it in worker
+    # threads (close_if_live_price_hit / check_near_tp_timeout via to_thread).
+    await asyncio.to_thread(_refresh_snapshot_safely)
+    await ops_watch.check_provider_health()
 
     f = progress.funnel
     if alerts:
@@ -701,12 +707,48 @@ def _mark_scheduled_job_fired(job: str, today: dt.date) -> None:
     scheduled_repo().mark(job, today.isoformat())
 
 
+async def _send_live_loss_flags(today: dt.date) -> int:
+    watch = await asyncio.to_thread(loss_watch.load_watch)
+    pending = [row for row in watch.get("rows") or []
+               if row.get("alert") and not loss_watch.is_latched(row)]
+    if not pending:
+        return 0
+    channel = _ops_channel()
+    if channel is None:
+        log.warning("daily_recap: %d live loss flag(s) pending but no ops channel resolved",
+                    len(pending))
+        return 0
+    sent = 0
+    for row in pending:
+        message = await notices.send_guarded(
+            channel, notices.live_loss_flag_embed(row), what="live loss watch flag")
+        if message is not None:            # send_guarded swallows failures: latch only on success
+            loss_watch.mark_latched(row, today)
+            sent += 1
+    return sent
+
+
+async def _post_live_loss_flags(today: dt.date) -> int:
+    """v164 D3: one ops-channel post per alerting live-loss-watch row with no
+    open latch, latched once the send returned a message. Called only from
+    daily_recap, after the retrospective (whose Sunday Part 11 clears
+    recovered latches). Report-only, and never raises: a raise inside a
+    tasks.loop body would stop the loop."""
+    try:
+        return await _send_live_loss_flags(today)
+    except Exception as exc:
+        swallowed(log, "scan.post_live_loss_flags", exc,
+                  "daily_recap: live loss watch flags failed, none posted",
+                  level=logging.ERROR, exc_info=True)
+        return 0
+
+
 @tasks.loop(minutes=1)
 async def daily_recap():
     """
     Posts the end-of-session retrospective once per weekday, at SESSION_END_HOUR
     (Europe/Berlin) + 15 minutes, so it runs right after the trading session closes.
-    Guards against duplicate posts within the same calendar day.
+    Guards against duplicate posts within the same calendar day. After the retrospective it posts any new live-loss-watch flags (v164) to the ops channel.
     """
     global _recap_fired_date
     now = dt.datetime.now(SESSION_TZ)
@@ -741,6 +783,7 @@ async def daily_recap():
         await recap._post_retrospective()
     except Exception:
         log.exception("daily_recap: failed to post retrospective")
+    await _post_live_loss_flags(today)
     await _prune_alert_posts()
 
 
@@ -1044,7 +1087,8 @@ def _always_on_loops() -> tuple:
     """Loops on_ready starts unconditionally, in start order."""
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
             weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
-            pitr_watch_loop, next_session_scan, next_session_wrapup)
+            pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
+            next_session_wrapup)
 
 
 def _start_background_loops() -> None:

@@ -5,21 +5,25 @@ Selection rule is PRE-REGISTERED (see plan Task 30) and printed with the
 output so the result doc can quote it verbatim. Never run this against the
 validation window -- the harness flags for that don't even exist here.
 """
+import argparse
 import itertools
 import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts" / "data"))
 
 from swingbot.core.planning import plan_engine
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS, STRATEGY_GATES
+from swingbot.core.marketdata import training_data
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
+from swingbot.core.backtesting.instrument import cli as instrument_cli
+from fetch_backtest_data import add_data_source_arg, apply_data_source
 
-CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backtest_cache"
-TRAIN = ("2020-01-01", "2023-12-31")
+TRAIN = resolve_instrument("v1").train_window   # v1 contract alias (v158 WC7)
 BREAKOUT_CLASS = {"Break & Retest", "Support/Resistance", "EMA Crossover"}
 GRID_TRAIL = [2.0, 2.5, 3.0]
 GRID_TP2 = ["levels", "none"]
@@ -48,17 +52,32 @@ def _pool(summaries):
     }
 
 
-def main():
+def _frames() -> dict:
+    """{ticker: daily frame} for every ticker the selected training data holds."""
+    return {t: f for t in training_data.available_tickers()
+            if (f := training_data.load_daily(t)) is not None}
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="v2 exit grid over TRAIN")
+    ap.add_argument("strategies", nargs="*",
+                    help="strategy names (default: all). Operational only: lets the grid "
+                         "run in per-strategy chunks; the grid and selection rule are unchanged")
+    add_data_source_arg(ap)
+    instrument_cli.add_instrument_arg(ap)
+    args = ap.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "tune_exit_v2.py",
+                              "phase 6 (cutover: v2 exit tuning on the purged folds)")
+    apply_data_source(args)
     # The grid explores trail/tp2 via the module defaults, so the adopted
     # Task 31 per-strategy overrides must not shadow the axes on a rerun.
     plan_engine.EXIT_V2_PARAMS.clear()
-    frames = {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True)
-              for p in sorted(CACHE_DIR.glob("*.csv"))}
+    frames = _frames()
     # Optional single-strategy filter (operational only -- lets the full
     # grid be run in per-strategy background chunks so a killed/restarted
     # process only loses one strategy's ~10min of work instead of the full
     # ~90min run; the grid, gates, and selection rule are unchanged).
-    strategies = sys.argv[1:] or list(ALL_STRATEGIES)
+    strategies = args.strategies or list(ALL_STRATEGIES)
     print(f"tickers: {len(frames)}  train window: {TRAIN}  rule: {RULE}\n")
 
     for strategy in strategies:

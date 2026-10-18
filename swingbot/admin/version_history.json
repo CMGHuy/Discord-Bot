@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-15 22:11:52 UTC",
+  "generated_at": "2026-10-18 08:28:47 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.24.1",
-    "bot": "2.5.2"
+    "ui": "1.28.0",
+    "bot": "2.10.0"
   },
   "releases": [
     {
@@ -1665,6 +1665,162 @@
       "versions": {
         "ui": "1.24.1",
         "bot": "2.5.2"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-16",
+      "last_seen": "2026-10-16",
+      "commit": "35040ff5",
+      "subject": "release(ui): 1.25.0 -- P&L calendar day page",
+      "versions": {
+        "ui": "1.25.0",
+        "bot": "2.5.2"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-16",
+      "last_seen": "2026-10-16",
+      "commit": "1ba2427d",
+      "subject": "release(bot): 2.5.3 -- Alpaca history store as the training data (v162)",
+      "versions": {
+        "ui": "1.25.0",
+        "bot": "2.5.3"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-16",
+      "last_seen": "2026-10-16",
+      "commit": "7f26526a",
+      "subject": "release(bot): 2.6.0 -- Alpaca data provider behind the market-data router (v106)",
+      "versions": {
+        "ui": "1.25.0",
+        "bot": "2.6.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-16",
+      "last_seen": "2026-10-16",
+      "commit": "b9c7fb23",
+      "subject": "release(ui): 1.26.0 -- data-source card and watchlist price-source badge (v106)",
+      "versions": {
+        "ui": "1.26.0",
+        "bot": "2.6.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "831e3c3b",
+      "subject": "release(bot): 2.7.0 -- instrument v2 fills and costs: gap-through, next-open entries, slippage and commission in R (v157)",
+      "versions": {
+        "ui": "1.26.0",
+        "bot": "2.7.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "9d5177df",
+      "subject": "release(ui): 1.26.1 -- System > Scan provider-health and swallowed-errors panels, login rate-limit message (v148)",
+      "versions": {
+        "ui": "1.26.1",
+        "bot": "2.7.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "6d7b5409",
+      "subject": "release(bot): 2.7.1 -- gunicorn admin, constant-time login with limiter, swallowed-error counters, heartbeat watchdog and health endpoint (v148)",
+      "versions": {
+        "ui": "1.26.1",
+        "bot": "2.7.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "edcf62db",
+      "subject": "release(bot): 2.8.0 -- instrument v2 window contract: contract-owned spans, purged anchored folds, causal PIT universe gate, --instrument on every live backtest script (v158)",
+      "versions": {
+        "ui": "1.26.1",
+        "bot": "2.8.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "6e0a8044",
+      "subject": "release(bot): 2.9.0 -- live loss watch: confluence/strategy ExpR below zero with week-clustered bootstrap confidence, Sunday digest Part 11 and latched ops-channel flag (v164)",
+      "versions": {
+        "ui": "1.26.1",
+        "bot": "2.9.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "43550e79",
+      "subject": "release(ui): 1.27.0 -- Analytics Edge tab shows the live loss watch table and the win-rate drift table (v164)",
+      "versions": {
+        "ui": "1.27.0",
+        "bot": "2.9.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "last_seen": "2026-10-17",
+      "commit": "172f31f4",
+      "subject": "release(bot): 2.10.0 -- simple alerts: signed dollars beside R, one symbol table with broker verbs kept, persistent Chart/Breakdown/Watch/P&L-now buttons (v170)",
+      "versions": {
+        "ui": "1.27.0",
+        "bot": "2.10.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "7226b3e4",
+      "subject": "release(ui): 1.28.0 -- trade detail reorganised: outcome strip, header actions, Overview/Why/Chart/Journal tabs, responsive card grid (v166)",
+      "versions": {
+        "ui": "1.28.0",
+        "bot": "2.10.0"
       },
       "changed": [
         "ui"

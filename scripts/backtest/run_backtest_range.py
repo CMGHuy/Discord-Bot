@@ -5,6 +5,10 @@ pools results per strategy over an entry-date window.
     python scripts/backtest/run_backtest_range.py --train        # 2020-01-01 .. 2023-12-31
     python scripts/backtest/run_backtest_range.py --validation   # 2024-01-01 .. 2025-12-31 (run ONCE, at the end)
     python scripts/backtest/run_backtest_range.py --from 2022-01-01 --to 2022-12-31 --strategy "RSI"
+    python scripts/backtest/run_backtest_range.py --train --instrument v2 --exit-model v2 --tp2 none
+        # instrument v2 (v158): the contract's research span on its point-in-time
+        # universe, membership and a causal liquidity floor checked on the signal
+        # day, plus the watchlist slice; --validation is the sealed holdout and exits
     python scripts/backtest/run_backtest_range.py --train --scenarios --scale-out --record-blocked logs/v147-blocked-confluence.jsonl   # v147 TRAIN gate rows
 
 Legacy reporting gate: win_rate >= 80; the live decision bar is 50 (see
@@ -26,16 +30,28 @@ sys.path.insert(0, str(ROOT / "scripts" / "data"))
 
 import numpy as np
 
-from fetch_backtest_data import load_cached, load_watchlist
+from fetch_backtest_data import add_data_source_arg, apply_data_source, load_cached, load_watchlist
 from swingbot import config
 from swingbot.core.market import market_context
-from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
+from swingbot.core.backtesting.backtest import ALL_STRATEGIES, _uses_live_constructor, run_backtest
 from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
 from swingbot.core.backtesting.blocked_recorder import require_train_window, write_gate_rows
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
+from swingbot.core.marketdata import training_data
+from swingbot.core.marketdata.history_store import MissingStoreError
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
+from swingbot.core.backtesting.instrument import cli as instrument_cli
+from swingbot.core.backtesting.instrument import universe_gate
 
 _SPY_CACHE: dict = {}
+
+#: Printed on every --validation run (spec § Research discipline): the switch
+#: never buys a component a second VALIDATION shot.
+VALIDATION_SOURCE_NOTICE = (
+    "NOTE: a new data source resets no VALIDATION budget. A component whose "
+    "validation shot was spent on yfinance has spent it, and every closed "
+    "pre-registration stays closed (backtest-methodology.md).")
 
 
 def write_trades_jsonl(rows, path) -> None:
@@ -85,6 +101,17 @@ def _scenario_progress(trades_jsonl):
     return on_ticker_done
 
 
+def _context_symbols(symbols) -> list:
+    """Context-only symbols (sector ETFs) the selected training data holds.
+    One absent from the store is skipped rather than loaded: loading it would
+    record a 'not in store' exclusion for a ticker the run never trades
+    (yfinance's cache lacks them too), burying the real exclusions in the
+    provenance sidecar. Under yfinance the list is the cache's own files, so
+    nothing changes there."""
+    available = set(training_data.available_tickers())
+    return [symbol for symbol in symbols if symbol in available]
+
+
 def _build_asof_map(tickers: list, frames: dict, universe: str | None):
     """Build every loaded ticker's point-in-time cross-sectional context once."""
     from swingbot.core.backtesting.asof_context import build_asof
@@ -95,7 +122,7 @@ def _build_asof_map(tickers: list, frames: dict, universe: str | None):
         print("    ! no SPY frame -- as-of context disabled for this run", flush=True)
         return {}
     sector_of_etf = sector_map("etfs")
-    etf_frames = {etf: frame for etf in sector_of_etf
+    etf_frames = {etf: frame for etf in _context_symbols(sector_of_etf)
                   if (frame := load_cached(etf)) is not None}
     sector_of_ticker = sector_map(universe or "watchlist")
     return build_asof(frames, spy, sector_of_ticker=sector_of_ticker,
@@ -134,8 +161,10 @@ def _with_context(df, *, date_to=None):
         print(f"    ! market_context.attach failed: {e}", flush=True)
         return df
 
-TRAIN = ("2020-01-01", "2023-12-31")
-VALIDATION = ("2024-01-01", "2025-12-31")
+# v1's windows live in the instrument contract (v158 WC7). The names stay as
+# aliases: measure_* scripts import them.
+TRAIN = resolve_instrument("v1").train_window
+VALIDATION = resolve_instrument("v1").validation_window
 
 
 def window_trades(summary, date_from, date_to):
@@ -258,11 +287,11 @@ def _scenario_stats(frames, date_from, date_to, *, scale_out, universe, membersh
 
 
 def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=None, trades_jsonl=None,
-                      record_blocked=None):
+                      record_blocked=None, tickers_file=None):
     """--scenarios: replay the confluence scan itself (backtest_scenarios)
     instead of a named strategy, and print per-horizon + pooled rows in the
     standard table with strategy column `confluence/<horizon>`."""
-    tickers = _tickers_for_run(universe)
+    tickers = _tickers_for_run(universe, tickers_file)
     membership = _membership_for_run(universe, tickers)
     frames = {}
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block below
@@ -277,6 +306,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
             target.append((ticker, excluded[1]))
             continue
         frames[ticker] = df
+    _report_exclusions()
     print(f"loaded {len(frames)}/{len(tickers)} cached tickers "
           f"({len(excluded_illiquid)} excluded illiquid, "
           f"{len(excluded_bad_data)} excluded bad data)", flush=True)
@@ -284,6 +314,7 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     stats = _scenario_stats(frames, date_from, date_to, scale_out=scale_out, universe=universe,
                             membership=membership, trades_jsonl=trades_jsonl,
                             record_blocked=record_blocked)
+    _write_provenance(trades_jsonl)
 
     header = f"{'Strategy':22s} {'N':>5s} {'Win%':>6s} {'ExpR':>7s} {'Scr':>5s} {'TO':>5s} {'Excl%':>6s}  PASS"
     lines = []
@@ -321,10 +352,25 @@ def run_scenario_mode(date_from, date_to, min_n, label, *, scale_out, universe=N
     print("\nSaved backtest_range_summary.txt")
 
 
-def _tickers_for_run(universe: str | None) -> list:
+def _tickers_from_file(path: str) -> list[str]:
+    """v162 §5: an explicit ticker list (one per line, '#' comments), so every
+    leg of a comparison runs on the same set, whatever the watchlist holds."""
+    from snapshot_backtest_cache import read_tickers_file
+    tickers = read_tickers_file(path)
+    if not tickers:
+        raise SystemExit(f"error: --tickers-file {path} names no ticker")
+    return tickers
+
+
+def _tickers_for_run(universe: str | None, tickers_file: str | None = None) -> list:
     """Ticker set for the scan: a named universe (e.g. 'etfs', Task E80)
     when given, else the watchlist -- same override seam as
-    backtest_wf._symbols_for_folds/run_folds' tickers= param."""
+    backtest_wf._symbols_for_folds/run_folds' tickers= param. v162: an
+    explicit --tickers-file replaces both and cannot be combined with a universe."""
+    if tickers_file:
+        if universe:
+            raise SystemExit("error: --tickers-file and --universe are exclusive")
+        return _tickers_from_file(tickers_file)
     if universe:
         from swingbot.core.marketdata.universe import universe_symbols
         return sorted(universe_symbols(universe))
@@ -374,6 +420,140 @@ def member_trades(trades, spans) -> list:
     return [t for t in trades if is_member(t.entry_date, spans)]
 
 
+def _instrument_frame(df, spec):
+    """The price frame a run may read. v1: unchanged (rule 1). v2: truncated at
+    the research span's end, so no trade -- not even one whose exit walk runs
+    past research_end -- reads a sealed-holdout bar (folds.py's caller rule)."""
+    if df is None or spec.version == "v1":
+        return df
+    return df.loc[:spec.research_span[1]]
+
+
+def _v2_window_trades(summary, date_from, date_to, spans, df, spec) -> list:
+    """v2: the entry-date window, then PIT membership and the causal liquidity
+    floor checked on each trade's SIGNAL day (universe_gate, v136 section 1)."""
+    return universe_gate.eligible_trades(window_trades(summary, date_from, date_to),
+                                         spans, df, spec.liquidity_floor)
+
+
+def _windowed_trades(summary, date_from, date_to, spans, df, spec) -> list:
+    """The trades a run keeps for one (ticker, strategy, horizon). v1 is exactly
+    today's entry-date mask (rule 1); v2 goes through the signal-day gate."""
+    if spec.version == "v1":
+        return member_trades(window_trades(summary, date_from, date_to), spans)
+    return _v2_window_trades(summary, date_from, date_to, spans, df, spec)
+
+
+def _resolve_window(args, spec) -> tuple[str, str, int, str]:
+    """(date_from, date_to, min_n, label), windows from the instrument contract.
+    v1: today's --train/--validation/--from-to exactly. v2: --train is the
+    research span, --validation is the sealed holdout (exits), and --from/--to
+    must lie inside the research span. ValueError when no window is given."""
+    if args.train:
+        return (*instrument_cli.window_for(spec, "train"), 30, "TRAIN")
+    if args.validation:
+        return (*instrument_cli.window_for(spec, "validation"), 15, "VALIDATION")
+    if not (args.date_from and args.date_to):
+        raise ValueError("need --train, --validation, or --from/--to")
+    instrument_cli.check_inside_research(spec, args.date_from, args.date_to)
+    return args.date_from, args.date_to, 15, "CUSTOM"
+
+
+# (args attribute, what to name, the phase that wires it under v2)
+_V2_UNWIRED = (
+    ("scenarios", "run_backtest_range.py --scenarios", "phase 5 (scan replay under v2)"),
+    ("emit_registry", "run_backtest_range.py --emit-registry",
+     "phase 6 (registry instrument_version column)"),
+    ("from_json", "run_backtest_range.py --from-json",
+     "phase 6 (registry instrument_version column)"),
+)
+
+
+def _instrument_guards(args, spec) -> None:
+    """Under v2: refuse the paths a later phase owns, pin the contract's
+    universe, and check run_backtest's v2 refusals ONCE, before the ticker
+    loop (inside it main catches every exception per run, so a refusal there
+    would silently empty the table). Under v1: no-op."""
+    if spec.version == "v1":
+        return
+    for attr, script, owner in _V2_UNWIRED:
+        if getattr(args, attr):
+            instrument_cli.require_v1(spec, script, owner)
+    if args.tickers_file:
+        raise SystemExit(f"--instrument {spec.version} runs on the contract's universe "
+                         f"{spec.universe!r}; --tickers-file would replace it and is refused")
+    if args.universe not in (None, spec.universe):
+        raise SystemExit(f"--instrument {spec.version} runs on the contract's universe "
+                         f"{spec.universe!r}; got --universe {args.universe!r}")
+    args.universe = spec.universe
+    tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
+    try:
+        _uses_live_constructor(spec, args.exit_model, tp2_mode)
+    except ValueError as exc:
+        raise SystemExit(f"--instrument {spec.version}: {exc}") from None
+
+
+MISSING_FRAME = "no cached frame"
+
+
+def _missing_frames(tickers, frames, spec) -> list:
+    """v2 data precondition (v136): a universe member without a cached frame is
+    listed, never silently dropped -- one progress line each, as exclusions
+    print. v1 lists nothing (byte-identical output)."""
+    if spec.version == "v1":
+        return []
+    missing = []
+    for ti, ticker in enumerate(tickers, 1):
+        if ticker not in frames:
+            print(f"[{ti}/{len(tickers)}] {ticker}: excluded (missing frame) -- {MISSING_FRAME}",
+                  flush=True)
+            missing.append(ticker)
+    return missing
+
+
+def _missing_block(missing, total) -> list[str]:
+    """The report's header block for `_missing_frames`; empty when none is missing."""
+    if not missing:
+        return []
+    return [f"-- excluded (missing frame): {len(missing)} of {total} ticker(s) --",
+            *(f"  {ticker}: {MISSING_FRAME}" for ticker in missing), ""]
+
+
+def _watchlist_slice(trade_rows, watchlist) -> tuple[str, dict]:
+    """The watchlist slice of a run's rows (v136 section 1): the report text and
+    {status, n, expectancy_r}. `trade_rows` are main's (ticker, strategy, hk,
+    trade) tuples; N is pool()'s n_eval, the N every gate here uses."""
+    members = set(watchlist)
+    stats = pool([trade for ticker, _strat, _hk, trade in trade_rows if ticker in members])
+    verdict = universe_gate.watchlist_slice_verdict(stats["n_eval"], stats["expectancy_r"])
+    exp_r = "n/a" if verdict.expectancy_r is None else f"{verdict.expectancy_r:+.3f}"
+    line = f"N={verdict.n} ExpR={exp_r} -> {verdict.status.upper()}"
+    return line, {"status": verdict.status, "n": verdict.n, "expectancy_r": verdict.expectancy_r}
+
+
+def _instrument_report(spec, trade_rows, strategies, tickers) -> tuple[list[str], dict]:
+    """Report lines and JSON keys a v2 run adds: the instrument line and the
+    per-strategy watchlist slice. `tickers` is the run's universe: only the
+    watchlist names inside it can score. v1 adds nothing (byte-identical output)."""
+    if spec.version == "v1":
+        return [], {}
+    watchlist = sorted(load_watchlist())
+    in_universe = len(set(watchlist) & set(tickers))
+    lines = ["",
+             f"-- instrument {spec.version}: universe {spec.universe}; PIT membership and the "
+             f"causal liquidity floor checked on the signal day --",
+             f"-- watchlist slice (same run, {in_universe}/{len(watchlist)} watchlist tickers "
+             f"in the run's universe): FAIL here "
+             f"fails the strategy's verdict whatever PASS says; ExpR < 0 with "
+             f"N >= {universe_gate.WATCHLIST_SLICE_MIN_N} fails, fewer is THIN --"]
+    slices = {}
+    for strat in strategies:
+        rows = [row for row in trade_rows if row[1] == strat]
+        line, slices[strat] = _watchlist_slice(rows, watchlist)
+        lines.append(f"{strat:22s} {line}")
+    return lines, {"_watchlist_slice": slices}
+
+
 # Hard gates on the registry emit path. A run that fails any of these produces
 # NO row rather than a row that looks like evidence -- half a row is worse than
 # none, being indistinguishable from evidence downstream. Tokens are stable
@@ -413,14 +593,58 @@ def registry_refusal(result, *, min_n=15):
     return None
 
 
+def _replay_data_source(json_in: str) -> str:
+    """The source a previous --json output was measured on: its sidecar's
+    data_source, or yfinance for a file written before v162 (no sidecar)."""
+    sidecar = training_data.provenance_path(json_in)
+    if not sidecar.exists():
+        return "yfinance"
+    return json.loads(sidecar.read_text(encoding="utf-8")).get("data_source") or "yfinance"
+
+
+def _resolve_data_source(args) -> str:
+    """The run's one training-data source (spec §3), chosen before any bar is
+    read. --from-json replays what its sidecar recorded and reads no bars; every
+    other mode selects --data-source (else TRAINING_DATA_SOURCE) and stops with
+    an error naming the missing path when the Alpaca store is absent."""
+    if args.from_json:
+        replayed = _replay_data_source(args.from_json)
+        if args.data_source not in (None, replayed):
+            raise SystemExit(f"error: {args.from_json} was measured on {replayed}; "
+                             f"--data-source {args.data_source} cannot relabel it")
+        return replayed
+    try:
+        source = apply_data_source(args)
+    except MissingStoreError as exc:
+        raise SystemExit(f"error: {exc}") from exc
+    if args.validation:
+        print(VALIDATION_SOURCE_NOTICE, flush=True)
+    return source
+
+
+def _report_exclusions() -> None:
+    """Every ticker the training data left out, with its reason (spec §3)."""
+    for line in training_data.exclusion_lines():
+        print(line, flush=True)
+
+
+def _write_provenance(json_out: str | None) -> None:
+    """<out>.provenance.json next to a result file; the result shape is unchanged."""
+    if not json_out:
+        return
+    path = training_data.write_provenance(json_out)
+    print(f"Wrote provenance to {path}", flush=True)
+
+
 def build_registry_records(summaries, *, source, window, run_date,
-                           horizon=None, pass_wr=80.0, min_n=15):
+                           horizon=None, pass_wr=80.0, min_n=15, data_source="yfinance"):
     """Turn pooled per-strategy summaries into validation-registry records.
 
     A record is VALIDATED only when it clears the acceptance gates on the
     window it was measured on; everything else is WEAK. A cell that fails a
     hard gate (see registry_refusal) yields no record at all -- refusal is
     per-row, so one unhealthy cell never discards the healthy cells beside it.
+    `data_source` (v162) names the bars the summaries were measured on.
     """
     recs = []
     for s in summaries:
@@ -441,19 +665,61 @@ def build_registry_records(summaries, *, source, window, run_date,
                      "n": s["n"],
                      "win_rate": round(wr, 1),
                      "expectancy_r": round(er, 3),
-                     "window": window, "run_date": run_date})
+                     "window": window, "run_date": run_date,
+                     "data_source": data_source})
     return recs
 
 
+def registry_key(rec: dict) -> tuple:
+    """(source, strategy, horizon, data_source); a row with no data_source was
+    measured before v162 and means yfinance (schema-evolution: an added field,
+    old rows never rewritten)."""
+    return (rec["source"], rec["strategy"], rec.get("horizon"),
+            rec.get("data_source") or "yfinance")
+
+
+def _registry_sort_key(rec: dict) -> tuple:
+    """(source, strategy, str(horizon)), then yfinance before any other
+    data_source: the pre-v162 row of a key stays first, so today's
+    yfinance-only file keeps its order."""
+    data_source = registry_key(rec)[3]
+    return (rec["source"], rec["strategy"], str(rec.get("horizon")),
+            data_source != "yfinance", data_source)
+
+
+def _is_validation_row(rec: dict) -> bool:
+    return rec.get("window") == f"{VALIDATION[0]}..{VALIDATION[1]}"
+
+
+def _refuse_spent_validation(existing: list, new_records: list) -> None:
+    """The VALIDATION budget is spent once per key and a new data source resets
+    nothing (backtest-methodology.md § Windows): a non-yfinance VALIDATION row
+    for a key whose yfinance VALIDATION row exists is refused, nothing written."""
+    spent = {registry_key(r)[:3] for r in existing
+             if registry_key(r)[3] == "yfinance" and _is_validation_row(r)}
+    for rec in new_records:
+        key = registry_key(rec)
+        if key[3] != "yfinance" and _is_validation_row(rec) and key[:3] in spent:
+            raise SystemExit(
+                f"error: refusing to emit a {key[3]} VALIDATION row for "
+                f"source={key[0]} strategy={key[1]} horizon={key[2]}: its yfinance "
+                "VALIDATION shot is spent and a new data source resets no budget "
+                "(backtest-methodology.md, Windows)")
+
+
 def merge_registry(path, new_records):
-    """Merge records into the registry JSON, replacing same-key entries."""
+    """Merge records into the registry JSON, replacing same-key entries only.
+
+    The key includes data_source, so an Alpaca row sits beside the yfinance
+    row of the same (source, strategy, horizon) instead of overwriting it.
+    An Alpaca VALIDATION row for a key whose yfinance VALIDATION shot is spent
+    is refused (SystemExit) before anything is written."""
     path = Path(path)
     existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-    new_keys = {(r["source"], r["strategy"], r.get("horizon")) for r in new_records}
-    kept = [r for r in existing
-            if (r["source"], r["strategy"], r.get("horizon")) not in new_keys]
-    merged = sorted(kept + new_records,
-                    key=lambda r: (r["source"], r["strategy"], str(r.get("horizon"))))
+    _refuse_spent_validation(existing, new_records)
+    new_keys = {registry_key(r) for r in new_records}
+    kept = [r for r in existing if registry_key(r) not in new_keys]
+    merged = sorted(kept + new_records, key=_registry_sort_key)
     path.write_text(json.dumps(merged, indent=1) + "\n", encoding="utf-8")
     return merged
 
@@ -468,6 +734,9 @@ def main():
     ap.add_argument("--universe", default=None,
                     help="scope tickers to a named universe (e.g. 'etfs', Task E80) via "
                          "swingbot.core.marketdata.universe.universe_symbols, instead of the watchlist")
+    ap.add_argument("--tickers-file", dest="tickers_file", default=None,
+                    help="v162: run exactly the tickers listed in this file (one per line, "
+                         "'#' comments) instead of the watchlist; exclusive with --universe")
     ap.add_argument("--json", dest="json_out", default=None)
     ap.add_argument("--trades-jsonl", dest="trades_jsonl", default=None,
                     help="write one JSONL training row per windowed trade "
@@ -502,18 +771,20 @@ def main():
                     help="replay per-strategy summaries from a previous --json "
                          "output instead of running the backtest (honors the "
                          "run-once validation budget); requires --emit-registry")
+    add_data_source_arg(ap)
+    instrument_cli.add_instrument_arg(ap)
     args = ap.parse_args()
     if args.emit_registry and not args.run_date:
         ap.error("--emit-registry requires --run-date")
-
-    if args.train:
-        date_from, date_to, min_n, label = *TRAIN, 30, "TRAIN"
-    elif args.validation:
-        date_from, date_to, min_n, label = *VALIDATION, 15, "VALIDATION"
-    else:
-        if not (args.date_from and args.date_to):
-            ap.error("need --train, --validation, or --from/--to")
-        date_from, date_to, min_n, label = args.date_from, args.date_to, 15, "CUSTOM"
+    # Instrument refusals (sealed holdout, unwired paths, v2 exit knobs) come
+    # before the data source: a refused run never depends on a store existing.
+    spec = instrument_cli.spec_from_args(args)
+    _instrument_guards(args, spec)
+    try:
+        date_from, date_to, min_n, label = _resolve_window(args, spec)
+    except ValueError as exc:
+        ap.error(str(exc))
+    data_source = _resolve_data_source(args)
     _check_record_blocked(args, date_from, date_to)
 
     if args.from_json:
@@ -528,7 +799,8 @@ def main():
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
-            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr))
+            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr,
+            data_source=data_source))
         print(f"Merged {len(summaries)} records into {args.emit_registry} "
               f"(replayed from {args.from_json}, no backtest run)")
         return
@@ -536,7 +808,7 @@ def main():
     if args.scenarios:
         run_scenario_mode(date_from, date_to, min_n, label, scale_out=args.scale_out,
                           universe=args.universe, trades_jsonl=args.trades_jsonl,
-                          record_blocked=args.record_blocked)
+                          record_blocked=args.record_blocked, tickers_file=args.tickers_file)
         return
 
     strategies = [args.strategy] if args.strategy else list(ALL_STRATEGIES)
@@ -552,11 +824,14 @@ def main():
     show_runner_cols = args.exit_model == "v2" and args.scale_out
     tp2_mode = args.tp2 if args.exit_model == "v2" else "none"
 
-    tickers = _tickers_for_run(args.universe)
+    tickers = _tickers_for_run(args.universe, args.tickers_file)
     # Context ranking is cross-sectional, so every cached frame must be loaded
     # before individual liquidity/data-quality exclusions are applied below.
-    frames = {ticker: _with_context(load_cached(ticker)) for ticker in tickers}
+    frames = {ticker: _instrument_frame(_with_context(load_cached(ticker)), spec)
+              for ticker in tickers}
     frames = {ticker: frame for ticker, frame in frames.items() if frame is not None}
+    missing = _missing_frames(tickers, frames, spec)
+    _report_exclusions()
     asof_map = _build_asof_map(tickers, frames, args.universe) if args.context == "on" else {}
     membership = _membership_for_run(args.universe, tickers)
     excluded_illiquid = []   # [(ticker, reason), ...] -- printed as a header block in the final report
@@ -579,11 +854,12 @@ def main():
                     s = run_backtest(ticker, df, strat, hk, one_at_a_time=True,
                                       exit_model=args.exit_model, scale_out=args.scale_out,
                                       tp2_mode=tp2_mode, frictions=(args.frictions == "on"),
-                                      asof=asof_map.get(ticker))
+                                      asof=asof_map.get(ticker),
+                                      instrument=instrument_cli.run_instrument(spec))
                 except Exception as e:
                     print(f"    ! {strat}/{hk}: {e}")
                     continue
-                tr = member_trades(window_trades(s, date_from, date_to), spans)
+                tr = _windowed_trades(s, date_from, date_to, spans, df, spec)
                 by_strategy[strat].extend(tr)
                 by_combo[(strat, hk)].extend(tr)
                 trade_rows.extend((ticker, strat, hk, trade) for trade in tr)
@@ -602,7 +878,7 @@ def main():
     if show_runner_cols:
         header += f" {'tp2%':>6s} {'trail%':>6s} {'be%':>6s} {'rto%':>6s}"
     header += "  PASS"
-    lines = []
+    lines = _missing_block(missing, len(tickers))
     if excluded_illiquid:
         lines.append(f"-- excluded (illiquid, Task E12): {len(excluded_illiquid)} of {len(tickers)} ticker(s) --")
         lines.extend(f"  {tkr}: {reason}" for tkr, reason in excluded_illiquid)
@@ -656,21 +932,27 @@ def main():
         er = f"{st['expectancy_r']:+.3f}" if st["expectancy_r"] is not None else "n/a"
         lines.append(f"{strat:22s} {hk:6s} {st['n_eval']:5d} {wr:>6s} {er:>7s}")
 
+    instrument_lines, instrument_json = _instrument_report(spec, trade_rows, strategies, tickers)
+    lines.extend(instrument_lines)
     report = "\n".join(lines)
     print("\n" + report)
     Path("backtest_range_summary.txt").write_text(report, encoding="utf-8")
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(
-            {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, indent=2))
+            {**{k: {kk: vv for kk, vv in v.items()} for k, v in results.items()},
+             **instrument_json}, indent=2))
     if args.trades_jsonl:
         write_trades_jsonl(trade_rows, args.trades_jsonl)
         print(f"Wrote {len(trade_rows)} trade rows to {args.trades_jsonl}")
+    _write_provenance(args.json_out)
+    _write_provenance(args.trades_jsonl)
     if args.emit_registry:
         summaries = [{"strategy": k, "n": v["n_eval"], "win_rate": v["win_rate"],
                       "expectancy_r": v["expectancy_r"]} for k, v in results.items()]
         merge_registry(args.emit_registry, build_registry_records(
             summaries, source="strategy", window=f"{date_from}..{date_to}",
-            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr))
+            run_date=args.run_date, min_n=min_n, pass_wr=args.pass_wr,
+            data_source=data_source))
         print(f"Merged {len(summaries)} records into {args.emit_registry}")
     print("\nSaved backtest_range_summary.txt")
 

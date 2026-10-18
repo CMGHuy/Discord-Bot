@@ -19,6 +19,7 @@ import {
   AnalyticsStrategies,
   BookScope,
   BotRestartResult,
+  CalendarDaySparklines,
   CalendarDayTrades,
   ChartResponse,
   ClearResult,
@@ -51,6 +52,7 @@ import {
   SettingsImportResult,
   SettingsPreview,
   SettingsSaveResult,
+  SystemHealth,
   TapeResponse,
   TickerAddResult,
   TickerList,
@@ -62,6 +64,7 @@ import {
   TradeQuery,
   TradeRow,
   TradeJournal,
+  TuneDefaults,
   VersionHistory,
 } from './models';
 
@@ -331,6 +334,11 @@ export class ApiClient {
     return this.http.post<JobStarted>(`${this.base}/jobs/tune`, args);
   }
 
+  /** v162 — the Tuning launcher's training-data default and choices. */
+  getTuneDefaults(): Observable<TuneDefaults> {
+    return this.http.get<TuneDefaults>(`${this.base}/jobs/tune/defaults`);
+  }
+
   proposals(): Observable<ProposalList> {
     return this.http.get<ProposalList>(`${this.base}/analytics/tuning/proposals`);
   }
@@ -460,6 +468,11 @@ export class ApiClient {
     return this.http.get<ScanStatus>(`${this.base}/system/scan`);
   }
 
+  /** v148 — provider rows and swallowed-error counts for System → Scan. */
+  systemHealth(): Observable<SystemHealth> {
+    return this.http.get<SystemHealth>(`${this.base}/system/health`);
+  }
+
   triggerScan(): Observable<ScanCommandResult> {
     return this.http.post<ScanCommandResult>(`${this.base}/system/scan/trigger`, {});
   }
@@ -543,6 +556,21 @@ export class ApiClient {
     if (query.strategy) params = params.set('strategy', query.strategy);
     if (query.horizon) params = params.set('horizon', query.horizon);
     return this.http.get<CalendarDayTrades>(`${this.base}/calendar/pnl/day`, {
+      params,
+    });
+  }
+
+  /** Daily-close sparklines for one day's rows (v165 D4). Fetched after the
+   *  day itself so the page renders before any bar file is read. */
+  calendarPnlDaySparklines(query: {
+    date: string;
+    strategy?: string;
+    horizon?: string;
+  }): Observable<CalendarDaySparklines> {
+    let params = new HttpParams().set('date', query.date);
+    if (query.strategy) params = params.set('strategy', query.strategy);
+    if (query.horizon) params = params.set('horizon', query.horizon);
+    return this.http.get<CalendarDaySparklines>(`${this.base}/calendar/pnl/day/sparklines`, {
       params,
     });
   }

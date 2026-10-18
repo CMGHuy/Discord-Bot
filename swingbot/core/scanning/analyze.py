@@ -23,6 +23,7 @@ from swingbot.core.edge import gates as gates_mod
 from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import earnings_calendar, levels, trendlines
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
@@ -66,8 +67,9 @@ def veto_bullish_for(df) -> bool:
         return False
     try:
         return bool(dead_cat_bounce(df, params_from_config())["detected"])
-    except Exception:
-        log.debug("dead-cat-bounce check failed; not vetoing", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.veto_bullish_for", exc, "dead-cat-bounce check failed; not vetoing",
+                  level=logging.DEBUG, exc_info=True)
         return False
 
 
@@ -132,8 +134,9 @@ def _plan_snapshot(plan) -> dict | None:
     try:
         from swingbot.core.planning.plan_types import plan_to_dict
         return plan_to_dict(plan)
-    except Exception:   # noqa: BLE001 -- measurement only, never the rejection itself
-        log.debug("gate: plan snapshot failed", exc_info=True)
+    except Exception as exc:   # noqa: BLE001 -- measurement only, never the rejection itself
+        swallowed(log, "scan.plan_snapshot", exc, "gate: plan snapshot failed",
+                  level=logging.DEBUG, exc_info=True)
         return None
 
 
@@ -177,8 +180,8 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
     try:
         pivots = [p for p in (plan.stop_loss, plan.trigger_price, plan.tp1) if p]
         ctx["weekly"] = {"df": rs_factors.weekly_frame(df), "pivots": pivots}
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.decision_context.weekly", exc, level=logging.DEBUG)
 
     try:
         # Cap at 3 overlay lines -- v35 Task 2 added 52-week extreme anchors
@@ -195,20 +198,20 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
         ctx["avwaps"] = [{"series": rs_factors.anchored_vwap(df, idx),
                           "anchor_label": label}
                          for idx, label in rs_factors.avwap_anchors(df)[-3:]]
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.decision_context.avwaps", exc, level=logging.DEBUG)
 
     try:
         rel = (df["Close"].pct_change(rs_factors.RS_WINDOW)
                - spy_df["Close"].pct_change(rs_factors.RS_WINDOW)).dropna()
         ctx["rs"] = {"rel_series": rel, "percentile": getattr(item, "rs_percentile", None)}
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.decision_context.rs", exc, level=logging.DEBUG)
 
     try:
         ctx["regimes"] = regime2.regime_series(spy_df)
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.decision_context.regimes", exc, level=logging.DEBUG)
 
     try:
         gstats = gates_mod.gap_stats(df)
@@ -216,8 +219,8 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
         stop_distance_pct = abs(entry_px - plan.stop_loss) / entry_px * 100.0
         fragile = not gates_mod.stop_beyond_gap_noise(stop_distance_pct, gstats["p90_gap_pct"])
         ctx["gap"] = {"p90_gap_pct": gstats["p90_gap_pct"], "gap_fragile": fragile}
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.decision_context.gap", exc, level=logging.DEBUG)
 
     try:
         # E39's fold-trade cache -- doesn't exist yet for any strategy as of
@@ -228,8 +231,8 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
         outcomes = read_json(fold_path, {}).get("outcomes")
         if outcomes:
             ctx["outcomes"] = outcomes
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.decision_context.outcomes", exc, level=logging.DEBUG)
 
     # ev_cone (E32 per-day MFE/MAE trajectory percentiles) has no producer
     # anywhere in this codebase -- E32 only ever shipped single-value
@@ -260,8 +263,8 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
             "cap": cap,
             "cluster_note": cluster_note,
         }
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.decision_context.sizing", exc, level=logging.DEBUG)
 
     try:
         components = [(name, pts, _QUALITY_COMPONENT_MAX[name])
@@ -275,8 +278,8 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
             "badge_stats": _format_badge_stats(getattr(plan, "badge_stats", None)),
             "advisor": None,        # no advisory-annotation producer in this codebase
         }
-    except Exception:
-        pass
+    except Exception as exc:
+        swallowed(log, "scan.decision_context.quality", exc, level=logging.DEBUG)
 
     return ctx
 
@@ -373,19 +376,21 @@ def _regime_at(regimes, when) -> str | None:
         return None
     try:
         hit = regimes[regimes.index.normalize() == pd_normalize(when)]
-    except Exception:
+    except Exception as exc:
         # A real regimes series was supplied but the lookup itself blew up
         # (bad index dtype, tz mismatch, etc.) -- every such miss silently
         # became COHORT_UNKNOWN with no way to tell "no data" apart from
         # "broken lookup" until now.
         if len(regimes) > 0:
-            log.warning("_regime_at lookup raised for bar %s (regime series has %d rows)",
-                        when, len(regimes), exc_info=True)
+            swallowed(log, "scan.regime_at", exc,
+                      "_regime_at lookup raised for bar %s (regime series has %d rows)",
+                      when, len(regimes), exc_info=True)
         return None
     if hit.empty:
         try:
             lagged = _label_past_series_end(regimes, when) if len(regimes) > 0 else None
-        except Exception:       # same stance as the lookup above: never raise into a scan
+        except Exception as exc:       # same stance as the lookup above: never raise into a scan
+            swallowed(log, "scan.regime_at.lagged", exc, level=logging.DEBUG)
             lagged = None
         if lagged is not None:
             return lagged
@@ -442,8 +447,9 @@ def _days_to_earnings(ticker: str, df) -> int | None:
     try:
         return earnings_calendar.sessions_to_reaction(
             ticker, _decision_session_date(df), source=_earnings_source())
-    except Exception:
-        log.debug("days_to_earnings unavailable for %s", ticker, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.days_to_earnings", exc, "days_to_earnings unavailable for %s",
+                  ticker, level=logging.DEBUG, exc_info=True)
         return None
 
 
@@ -536,12 +542,13 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                 days_to_earnings=(_days_to_earnings(ticker, df) if issued_at is None else None),
                 now=now or now_et(),
             )
-        except Exception:
-            log.warning("risk_features stamping failed for %s/%s -- plan_v2 still posts, "
-                        "risk_features left at its default", ticker, horizon_key, exc_info=True)
-    except Exception:
-        log.warning("plan_v2 construction failed for %s/%s", ticker,
-                    horizon_key, exc_info=True)
+        except Exception as exc:
+            swallowed(log, "scan.attach_plan_v2.risk_features", exc,
+                      "risk_features stamping failed for %s/%s -- plan_v2 still posts, "
+                      "risk_features left at its default", ticker, horizon_key, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.attach_plan_v2.build", exc, "plan_v2 construction failed for %s/%s",
+                  ticker, horizon_key, exc_info=True)
 
 
 def _check_near_close(ticker: str, df) -> list:

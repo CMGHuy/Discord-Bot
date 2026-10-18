@@ -99,6 +99,13 @@ export interface TradeRow {
   quality_score: number | null;
   entry: number | null;
   stop_loss: number | null;
+  /** v166 -- the plan's ORIGINAL risk stop. `stop_loss` is the working
+   *  (trailing) stop once a plan is PARTIAL; this is the stop the position
+   *  was sized against, so risk per share and "$ at risk" read it first.
+   *  The API always sends it (null on a row with no stop). Optional here,
+   *  like `cohort_label`, so a typed fixture written before this field
+   *  existed is not forced to grow it. */
+  risk_stop?: number | null;
   target: number | null;
   target2: number | null;
   /** The TP1 leg's own fraction/fill-price/R once a PARTIAL plan has banked
@@ -153,6 +160,14 @@ export interface TradeRow {
   target_is_banked_tp1: boolean;
   stop_kind: 'risk' | 'trailing' | 'derived_floor';
   bar_kind: 'progress' | 'approach' | 'trailing' | 'none';
+  /** Best price since TP1 -- the 100% end of a trailing runner's bar (0% is
+   *  the trailing stop). Server-side input to `progress_pct`; null until the
+   *  runner has recorded one and on every row that is not a runner. */
+  runner_best?: number | null;
+  /** Trailing runner only: P&L % vs the original fill if the trailing stop
+   *  is hit (bar 0%) and at the best price since TP1 (bar 100%). */
+  stop_pnl_pct?: number | null;
+  best_pnl_pct?: number | null;
   floor_r: number | null;
   price_r: number | null;
   headroom_r: number | null;
@@ -613,10 +628,42 @@ export interface AnalyticsStrategies extends Scoped {
   cumulative: Record<string, { date: string; cum_r: number }[]>;
 }
 
+/** v164: one row of the pre-registered live loss watch (spec D2), as
+ *  `calibration.live_loss_watch` emits it. `alert` means live ExpR for this
+ *  row is below zero with ~90% one-sided confidence; the `registry_*` fields
+ *  are backtest context only, never comparable with the live figures. */
+export interface LiveLossRow {
+  source: string;
+  strategy: string;
+  /** `null` is the pooled row of its `(source, strategy)`. */
+  horizon: string | null;
+  live_n: number;
+  /** 0–100 over wins and losses only; `null` when there is neither. */
+  live_wr: number | null;
+  live_expr: number | null;
+  /** 90th percentile of the week-clustered bootstrap of mean R. */
+  bound_upper: number | null;
+  alert: boolean;
+  registry_status: string | null;
+  registry_window_kind: 'TRAIN' | 'VALIDATION' | null;
+  registry_run_date: string | null;
+  registry_expr: number | null;
+}
+
+/** Rows already ordered by the server (alerts first, then confluence by
+ *  horizon with the pooled row last, then strategies by name). */
+export interface LiveLossWatch {
+  rows: LiveLossRow[];
+  counts: Record<string, number>;
+}
+
 export interface AnalyticsCalibration {
   deciles: unknown[];
   levels: unknown[];
   drift: unknown[];
+  /** Absent on a snapshot cached before v164; the API then sends the empty
+   *  shape, but the client tolerates the key missing as well. */
+  live_loss_watch?: LiveLossWatch;
   scope: 'all-time';
 }
 
@@ -992,12 +1039,22 @@ export interface JobStarted {
 /** `GET /jobs/:id/result` — a finished tuning job's grid.
  *
  *  `strategy` is null and `grid` empty while the job is still running: the
- *  endpoint answers 200 with the same three keys either way, so nothing here
- *  has to branch on which shape arrived (SR51). */
+ *  endpoint answers 200 with the same keys either way, so nothing here has to
+ *  branch on which shape arrived (SR51). `data_source` (v162) is the training
+ *  data the grid ran on: `"yfinance"` for a result written before v162, null
+ *  while there is no result yet. */
 export interface JobResult {
   job_id: string;
   strategy: string | null;
   grid: unknown[];
+  data_source: string | null;
+}
+
+/** `GET /jobs/tune/defaults` (v162) — the launcher's training-data picker:
+ *  the server's TRAINING_DATA_SOURCE and every value it accepts. */
+export interface TuneDefaults {
+  data_source: string;
+  choices: string[];
 }
 
 export interface ProposalList {
@@ -1336,6 +1393,47 @@ export interface ScanCommandResult {
   ok: boolean;
   message: string;
   scan: ScanStatus;
+}
+
+/* -- system health (v148) ------------------------------------------------ */
+
+/** One scheduled scan's provider figures, from `GET /system/health`.
+ *  Rates are fractions (0.05 = 5%). The four figures are null on a row
+ *  written before v148 -- render "—", never 0. */
+export interface ProviderHealthRow {
+  at: string;
+  tickers: number;
+  /** yfinance-fallback / (alpaca + yfinance-fallback), daily frames and live
+   *  prices pooled; null when Alpaca was asked for nothing. */
+  provider_fallback_rate: number | null;
+  /** Frames whose last bar is before the previous NYSE session. Display
+   *  only: no alert reads it. */
+  stale_symbols: number | null;
+  empty_symbols: number | null;
+  empty_rate: number | null;
+}
+
+/** Errors a process caught and carried on from, per call-site tag. */
+export interface SwallowedRow {
+  process: 'bot' | 'admin';
+  tag: string;
+  count: number;
+  first_at: string | null;
+  last_at: string | null;
+  /** `Type: message`, at most 200 characters; no traceback. */
+  last_error: string | null;
+}
+
+export interface SystemHealth {
+  /** Newest first, at most 20. */
+  providers: ProviderHealthRow[];
+  /** Percent (1-100): the levels the ops-channel alert fires above. */
+  thresholds: { fallback_pct: number; empty_pct: number };
+  /** Highest count first. */
+  swallowed: SwallowedRow[];
+  /** When the bot's counts began (its process start); null when the bot has
+   *  not yet written them. */
+  bot_counts_since: string | null;
 }
 
 /* -- market: the interactive chart (SR33, v25) -------------------------- */
@@ -1716,6 +1814,24 @@ export interface CalendarTrade {
    *  own, and the legs' `pnl_amount` sum to the trade's realized total. */
   leg_index: number;
   leg_total: number;
+  /** v165 D1 -- read from the leg part itself, never re-derived. Every
+   *  figure is null when its input is missing (never 0). */
+  entry_price: number | null;
+  /** The leg's own exit for a leg row, the trade exit for a whole trade. */
+  exit_price: number | null;
+  /** The final recorded stop (a trailed or break-even runner's stop moved). */
+  stop_price: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  /** Leg-scaled for a leg row. */
+  shares: number | null;
+  /** Null when either stamp is missing or the close precedes the open. */
+  held_hours: number | null;
+  /** Signed by direction: a short that fell is positive. Null on a missing or zero entry. */
+  return_pct: number | null;
+  /** One of metrics `EXIT_REASONS` (tp1, runner_tp2, runner_trail, runner_be,
+   *  stop, scratch, timeout, reversed, other). */
+  exit_reason: string;
 }
 
 /** `days`/`totals` are the requested month; `day_of_week`, `best_day`,
@@ -1751,6 +1867,72 @@ export interface CalendarDayTrades {
   worst_drawdown_r: number | null;
   contributors: Array<{ ticker: string | null; r: number }>;
   detractors: Array<{ ticker: string | null; r: number }>;
+  /** v165 D2 -- this day against the OTHER trading days under the filter. */
+  context: DayContext;
+  /** v165 D3 -- exactly the rows in `trades`, grouped four ways. */
+  breakdown: DayBreakdown;
+}
+
+/** A difference from a reference day. Null when either side has no figure. */
+export interface DayDelta {
+  pnl_amount: number | null;
+  r: number | null;
+}
+
+/** v165 D2. `percentile` is null below 20 other trading days (the page
+ *  says why with `history_days`); the day is never in its own reference set. */
+export interface DayContext {
+  percentile: number | null;
+  /** Other trading days with a non-null net P&L. */
+  history_days: number;
+  vs_avg_day: DayDelta;
+  vs_weekday_avg: DayDelta;
+}
+
+/** One group of a day's rows. `win_rate` is 0-100 and null for a group with
+ *  no decided rows; a null key arrives as `"unknown"`. */
+export interface DayBreakdownRow {
+  key: string;
+  n: number;
+  pnl_amount: number | null;
+  r: number | null;
+  win_rate: number | null;
+}
+
+export type DayBreakdownDimension = 'strategy' | 'horizon' | 'direction' | 'exit_reason';
+
+/** Each dimension sorted by P&L descending, nulls last. */
+export type DayBreakdown = Record<DayBreakdownDimension, DayBreakdownRow[]>;
+
+export interface SparkClose {
+  date: string;
+  close: number;
+}
+
+/** v165 D4. Daily closes from 3 bars before entry to at most 3 bars after
+ *  the exit bar (`exit_bar` indexes `closes`; later bars are context, drawn
+ *  dimmed). Ticks are the recorded prices -- all null when entry no longer
+ *  sits on the bars. `stale`: the cache ends before the exit day. */
+export interface SparkSeries {
+  closes: SparkClose[];
+  exit_bar: number;
+  last_bar: string;
+  stale: boolean;
+  entry: number | null;
+  stop: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  exit: number | null;
+  exit_date: string;
+}
+
+/** Keyed `"<trade_id>:<leg_index>"`. A null value: no cached bars (or a
+ *  spot metal); a missing key: the row was past the 50-row cap. */
+export interface CalendarDaySparklines {
+  as_of: string;
+  date: string;
+  truncated: boolean;
+  series: Record<string, SparkSeries | null>;
 }
 
 /* -- live tape ---------------------------------------------------------- */

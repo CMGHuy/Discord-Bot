@@ -358,6 +358,9 @@ export const DASHBOARD_COLUMNS = tradeColumns();
         @if (isPartialLeg(row)) {
           <sb-icon name="partial" class="leg-icon" title="Closed after an earlier partial exit of the same position" />
         }
+        @if (row.bar_kind === 'trailing') {
+          <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
+        }
       </sb-row-link>
     </ng-template>
 

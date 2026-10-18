@@ -10,6 +10,15 @@ interpreting any backtest, grid, or validation result.
   component, results recorded as-is, never retuned after — a config that fails
   train never gets a validation shot. Treat the 2024–2025 window as tainted
   for any selection decision.
+- **A new data source resets no budget (v162).** A validation shot spent on
+  yfinance bars stays spent: `--data-source` on `--validation` gives no
+  component a second run, and 2024-2025 stays tainted. Every closed
+  pre-registration stays closed on Alpaca bars too (the same hypothesis on a
+  new dataset; v122, v127, v129, v135, v139 and v143 included). The v162
+  re-baseline describes a data change, is never quoted as a lift and decides
+  nothing: no switching back, no per-ticker or per-strategy source. Each new
+  pre-registration names its `data_source` in its frozen block before TRAIN
+  is read.
 
 ## Acceptance gate
 
@@ -63,11 +72,26 @@ interpreting any backtest, grid, or validation result.
   Answers "does this entry predict anything, after costs, beyond its own
   trend state?" before anyone writes a spec. Every event on the
   point-in-time S&P 500 (2010-01-01..2019-12-31, `data/backtest_cache_ext`)
-  races one fixed trade — entry next open, stop 1.5 × ATR14, target
-  3 × ATR14, gaps through either level filled at the open, an idea-specific
-  time cap, 5 bps slippage a side plus commission — against K = 20 random
-  non-event bars from the same ticker, month and trend state
-  (`close > SMA200`). Pass rule, all four: paired ΔExpR ≥ +0.10R; lower 95%
+  races the idea's one frozen **race shape** — `fixed` (v140: entry next
+  open, stop 1.5 × ATR14, target 3 × ATR14, gaps through either level
+  filled at the open, an idea-specific time cap) or `trail` (v163: same
+  entry and 1.5 × ATR14 initial stop, no target, a chandelier stop
+  3 × ATR14[t] under the highest high of the bars before the one tested,
+  never lowered, ATR frozen at the event bar, a gap through the stop filled
+  at the open, cap ≥ 60 bars; R always in the initial 1R) — with 5 bps
+  slippage a side plus commission, against K = 20 random non-event bars
+  from the same ticker, month and trend state (`close > SMA200`), raced
+  the same shape. **One shape per idea**: an idea module's `RACE` constant
+  (default `fixed`) is part of its frozen definition, pinned in
+  `tests/backtesting/screen/test_ideas_registry.py`; a changed shape is a
+  new idea with a new name, and the trigger of any closed idea never
+  returns under the other shape. The pass rule below is the same for both
+  shapes. A trail results doc also prints timeouts per book and the book
+  re-priced at 2 × slippage, never gating; the trail's A/A calibration is
+  `docs/superpowers/results/*-trail-race-calibration.md`. A trail fail is
+  "no edge under this exit", and closed; a trail pass is not tradeable
+  until a nightly stop-update path exists. Pass rule, all four: paired
+  ΔExpR ≥ +0.10R; lower 95%
   bound > 0 (week-clustered bootstrap, 10,000 resamples); same sign in ≥ 7
   of 9 calendar years, 2011–2019 (2010 is warm-up only; a year with no events counts against); N ≥ 300
   events (below that, `SCREEN-UNDERPOWERED`, closed like a fail). Forward
@@ -204,6 +228,16 @@ edited; a re-measurement is a new pre-registration with a new id. The
 2026-10-06 backfill (v138) covers every row of the table below plus v118 and
 v119 (v124 and v127 are exempt: no spent budget or no enum verdict); `n`/`exp_r` are the decisive population the record names and `null`
 where it names none, and `p` is `null` wherever no p-value was recorded.
+
+**Data source on registry and ledger rows (v162).** New registry rows carry
+`data_source` and merge on `(source, strategy, horizon, data_source)`, so the
+yfinance and Alpaca populations sit side by side. New ledger rows may carry
+the optional field `data_source` (`OPTIONAL_LEDGER_FIELDS`). A row without
+the field means `yfinance`; old rows are never rewritten. `get_badge` takes
+the row of the active `TRAINING_DATA_SOURCE`, falls back to the `yfinance`
+row, logs which one it used, and never blends the two. Every `--json` result
+has a `<out>.provenance.json` sidecar (source, feed, adjustment, manifest
+hash, excluded tickers); the result JSON's own shape is unchanged.
 
 **The v72 procedure change does not reopen anything below.** A better
 instrument is not a new hypothesis. Every row in this table stays closed,

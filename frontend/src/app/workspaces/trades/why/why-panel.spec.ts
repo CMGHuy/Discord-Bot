@@ -107,6 +107,19 @@ describe('WhyPanel', () => {
     }
   });
 
+  it('bounds text factor columns and wraps long labels and notes within their own cells', () => {
+    const factor = 'Higher_timeframe_confirmation_without_breaks';
+    const note = 'Confirmation_pending_until_the_next_completed_session';
+    const f = mount({ confidenceFactors: [{ factor, note }] });
+    const row = f.nativeElement.querySelector('.confidence .factor-row') as HTMLElement;
+    expect([...row.children].map(cell => cell.textContent?.trim())).toEqual([factor, note]);
+    expect(getComputedStyle(row).gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
+    for (const cell of Array.from(row.children)) {
+      expect(getComputedStyle(cell).minWidth).toBe('0px');
+      expect(getComputedStyle(cell).overflowWrap).toBe('anywhere');
+    }
+  });
+
   it('shows quality even without confidence rows', () => {
     const f = mount({ qualityFactors: [{ label: 'Structure', points: -2 }] });
     expect(f.nativeElement.textContent).toContain('Quality breakdown');

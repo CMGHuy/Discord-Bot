@@ -29,6 +29,7 @@ from swingbot import config as app_config
 from swingbot.core.analytics import calibration
 from swingbot.core.analytics.insights import edge_decay_report
 from swingbot.core.analytics.journal import JournalStore
+from swingbot.core.tracking import live_loss_watch as loss_watch
 from swingbot.core.presentation import tokens
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
@@ -388,6 +389,89 @@ def _section(name: str, failures: list[str]):
         failures.append(name)
 
 
+# ---------------------------------------------------------------------------
+# Part 11: live loss watch (v164 D3) -- the Sunday digest
+# ---------------------------------------------------------------------------
+
+def _berlin_today() -> dt.date:
+    """The real Berlin date. A seam so tests can backdate the digest."""
+    return dt.datetime.now(_BERLIN_TZ).date()
+
+
+def _llw_opt(value, spec: str) -> str:
+    return "—" if value is None else format(value, spec)
+
+
+def _llw_label(row: dict) -> str:
+    if row.get("source") == "confluence":
+        return f"confluence {row.get('horizon') or 'pooled'}"
+    return str(row.get("strategy") or "?")
+
+
+#: (header, width, cell) per column -- the digest table is table-driven.
+#: Reg / Window / RegExpR are registry context, labelled as not comparable.
+_LLW_COLUMNS = (
+    ("Row", 20, _llw_label),
+    ("N", 4, lambda row: str(row.get("live_n", 0))),
+    ("WR%", 4, lambda row: _llw_opt(row.get("live_wr"), ".0f")),
+    ("ExpR", 6, lambda row: _llw_opt(row.get("live_expr"), "+.2f")),
+    ("Up90", 6, lambda row: _llw_opt(row.get("bound_upper"), "+.2f")),
+    ("Flag", 4, lambda row: "LOSS" if row.get("alert") else ""),
+    ("Reg", 9, lambda row: str(row.get("registry_status") or "—")),
+    ("Window", 10, lambda row: str(row.get("registry_window_kind") or "—")),
+    ("RegExpR", 7, lambda row: _llw_opt(row.get("registry_expr"), "+.2f")),
+)
+
+
+def _llw_line(cells: list[str]) -> str:
+    widths = [width for _, width, _ in _LLW_COLUMNS]
+    return " ".join(f"{cell[:width]:<{width}}" for cell, width in zip(cells, widths)).rstrip()
+
+
+def _llw_row_line(row: dict) -> str:
+    return _llw_line([cell(row) for _, _, cell in _LLW_COLUMNS])
+
+
+def _llw_notes(watch: dict, flagged: int, total: int) -> str:
+    counts = watch.get("counts") or {}
+    counted = " · ".join(f"{key} {counts.get(key, 0)}" for key in calibration.WATCH_COUNT_KEYS)
+    return "\n".join([
+        f"**📉 Live loss watch — {flagged} of {total} row(s) flagged · notes**",
+        f"• A LOSS flag means: {calibration.LIVE_LOSS_MEANING}.",
+        f"• Up90 = 90th percentile of the week-clustered bootstrap of mean R; a row flags at "
+        f"N >= {calibration.EXPR_WATCH_LIVE_N_FLOOR} with Up90 < 0.",
+        f"• Reg / Window / RegExpR: {calibration.REGISTRY_CONTEXT_LABEL}.",
+        f"• Population: closed trades (win, loss, manual close) of both ledgers, opened on or "
+        f"after {calibration.EXPR_WATCH_START.isoformat()} (Berlin).",
+        f"• Counted: {counted} (manual closes are in the rows; the others are excluded).",
+        f"• {calibration.LIVE_LOSS_LOOKS_CAVEAT}.",
+    ])
+
+
+def _format_live_loss_watch(watch: dict) -> list[str]:
+    """Part 11 as messages: the row table (always self-split by _emit_table
+    into fenced chunks under Discord's limit), then one notes message."""
+    rows = watch.get("rows") or []
+    flagged = sum(1 for row in rows if row.get("alert"))
+    title = f"📉 Live loss watch — {flagged} of {len(rows)} row(s) flagged"
+    header = _llw_line([name for name, _, _ in _LLW_COLUMNS])
+    table = _emit_table(title, header, "-" * len(header), [_llw_row_line(row) for row in rows])
+    return [*table, _llw_notes(watch, flagged, len(rows))]
+
+
+def _live_loss_watch_part(today: dt.date) -> list[str]:
+    """Part 11 (v164 D3), Sundays only. Loads both ledgers itself: the
+    retrospective's own input is the main ledger only (recap.py:51). Clears
+    recovered latches only for the real Berlin today, so a backdated
+    !recap <date> reports but never re-arms a flag."""
+    if today.weekday() != 6:
+        return []
+    watch = loss_watch.load_watch()
+    if today == _berlin_today():
+        loss_watch.clear_latches(watch.get("rows") or [])
+    return _format_live_loss_watch(watch)
+
+
 def build_daily_retrospective(all_trades: list, today: dt.date | None = None) -> list[str]:
     """
     Returns a list of strings to post to Discord in order.
@@ -697,6 +781,10 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
         except Exception:
             log.exception("build_daily_retrospective: scan health alarm failed, skipping")
             failed_sections.append("scan health")
+
+    # ── Part 11: Live loss watch (Sundays only, v164) ──────────────────────
+    with _section("live loss watch", failed_sections):
+        messages.extend(_live_loss_watch_part(today))
 
     if failed_sections:
         messages.append(

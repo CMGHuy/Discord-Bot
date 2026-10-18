@@ -129,6 +129,22 @@ describe('PlanCell', () => {
       .toBe('Entry 71.64 · Target — · Trailing stop 69.85');
   });
 
+  it('shows the banked TP1 fill in the target slot of a trailing runner', () => {
+    // A runner with no TP2 has no live target; the slot reads as the TP point
+    // that was actually hit rather than an empty dash.
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', 60.67);
+    f.componentRef.setInput('target', null);
+    f.componentRef.setInput('stop', 59.11);
+    f.componentRef.setInput('stopKind', 'trailing');
+    f.componentRef.setInput('targetIsBankedTp1', true);
+    f.componentRef.setInput('bankedEntry', 53.94);
+    f.detectChanges();
+    const target = f.nativeElement.querySelector('.target');
+    expect(target.textContent.trim()).toBe('53.94 ✓');
+    expect(f.nativeElement.querySelector('.rise').textContent.trim()).toBe('11.1%');
+  });
+
   it('says plain "Stop" when not trailing (the default)', () => {
     expect(render(178, 195, 170).querySelector('[title]')!.getAttribute('title'))
       .toBe('Entry 178.00 · Target 195.00 · Stop 170.00');

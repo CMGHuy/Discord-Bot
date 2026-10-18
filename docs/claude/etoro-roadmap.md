@@ -27,6 +27,10 @@ Broker choice (decided 2026-10-11): **eToro stays the broker for both stages.**
 IBKR (cheapest per-share, native bracket/OCO orders), Trading 212 (beta API, no
 commission), Saxo (OpenAPI, pricier) and Alpaca (EU access via partners only)
 were compared and not chosen. Don't reopen the broker question unprompted.
+Broker seam (decided 2026-10-16): eToro is built as the first adapter behind a
+broker-neutral `BrokerAdapter` interface, with one active broker picked by
+`BROKER` in `.env` and open positions staying with the broker that opened them
+(v160 § Amendment). This keeps a later switch cheap; it does not reopen the choice.
 Open items for the stage-2 spec: check whether eToro EU fills US-listed ETFs as
 real shares or only as CFDs (EU PRIIPs/KID rule), and whether stop loss and
 take profit attach at order time so a resting plan is never unprotected.

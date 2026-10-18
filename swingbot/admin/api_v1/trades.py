@@ -292,6 +292,9 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "target_is_banked_tp1": view.target_is_banked_tp1,
         "stop_kind": view.stop_kind,
         "bar_kind": view.bar_kind,
+        # Best price since TP1: the 100% end of a trailing runner's bar, which
+        # has no target to measure toward (see `_trailing_status_fields`).
+        "runner_best": plan.get("runner_high_close"),
         "distance_to_trigger_r": view.distance_to_trigger_r,
         "bars_to_expiry": view.bars_to_expiry,
         "floor_r": view.floor_r,
@@ -310,10 +313,11 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t) if trade else None,
         "r_multiple": dash.closed_r(t) if trade else None,
-        # Transient -- consumed and stripped by `_attach_unrealized_pnl`
-        # once a live price exists to compute pnl_pct/r_multiple/
-        # realized_pnl_amount for a row that hasn't closed yet.
-        "_risk_stop": plan.get("stop_loss"),
+        # The plan's ORIGINAL risk stop (v166, public). `stop_loss` above is
+        # `view.stop` -- the working/trailing stop once PARTIAL -- so this is
+        # the only place the original survives on the row. Also read by
+        # `_attach_unrealized_pnl` to measure live R against original risk.
+        "risk_stop": plan.get("stop_loss"),
         "held_hours": _held_hours(held_from, closed_at),
         "opened_at": opened_at,
         "closed_at": closed_at,
@@ -492,6 +496,7 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "target_is_banked_tp1": False,
         "stop_kind": "risk",
         "bar_kind": "none",
+        "runner_best": None,
         "distance_to_trigger_r": None,
         "bars_to_expiry": None,
         "floor_r": None,
@@ -512,10 +517,9 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t),
         "r_multiple": dash.closed_r(t),
-        # Transient -- see `_row_from_plan`'s matching field. Legacy v1
-        # trades never scale out, so `_risk_stop` is always the same value
-        # already shown as `stop_loss`.
-        "_risk_stop": t.get("stop_loss"),
+        # See `_row_from_plan`'s matching field. Legacy v1 trades never scale
+        # out, so `risk_stop` is always the same value shown as `stop_loss`.
+        "risk_stop": t.get("stop_loss"),
         "held_hours": _held_hours(t.get("opened_at"), t.get("closed_at")),
         "opened_at": t.get("opened_at"),
         "closed_at": t.get("closed_at"),
@@ -957,6 +961,51 @@ def _status_fields(row: dict, price: float | None) -> dict:
     }
 
 
+def _trailing_status_fields(row: dict, price: float | None) -> dict:
+    """The status bar for a PARTIAL runner that has no TP2.
+
+    There is no target to measure toward, so the bar runs from the trailing
+    stop (0% -- one more tick against the runner and it is stopped out) to the
+    best price since TP1 (100% -- a new extreme). Without a live price or a
+    recorded best price there is nothing honest to draw, and the cell falls
+    back to its chip.
+    """
+    chip = {"progress_pct": None, "entry_pct": None, "progress_band": None,
+            "blink_seconds": None, "status_label": row["status"]}
+    stop, best = row.get("stop_loss"), row.get("runner_best")
+    if price is None or not all(isinstance(v, (int, float)) for v in (stop, best)):
+        return chip
+    is_bull = row.get("direction") != "bearish"
+    span = (best - stop) if is_bull else (stop - best)
+    if span <= 0:
+        return chip
+    pos = max(0.0, min(100.0, ((price - stop) if is_bull else (stop - price)) / span * 100))
+    leg = row.get("banked_exit_price")
+    ent = ((leg - stop) if is_bull else (stop - leg)) / span * 100 if isinstance(leg, (int, float)) else 0.0
+    band = "toward_target" if pos >= 66 else "toward_stop" if pos <= 33 else "neutral"
+    label = ("Near trailing stop" if band == "toward_stop"
+             else "Near best price" if band == "toward_target" else "Trailing")
+    # Pulse faster the nearer the stop, same urgency scale as trade_proximity.
+    urgency = max(0.0, 1.0 - pos / 50.0)
+    out = {"progress_pct": round(pos, 1),
+           "entry_pct": max(0.0, min(100.0, round(ent, 1))),
+           "progress_band": band, "blink_seconds": round(2.2 - 1.6 * urgency, 2),
+           "status_label": label}
+    out.update(_trailing_pnl_ends(row, stop, best, is_bull))
+    return out
+
+
+def _trailing_pnl_ends(row: dict, stop: float, best: float, is_bull: bool) -> dict:
+    """P&L % (vs the original fill) at the bar's two ends: the trailing stop
+    being hit (0%) and the best price since TP1 (100%)."""
+    entry = row.get("entry")
+    if not isinstance(entry, (int, float)) or not entry:
+        return {"stop_pnl_pct": None, "best_pnl_pct": None}
+    sign = 1 if is_bull else -1
+    return {"stop_pnl_pct": round((stop - entry) * sign / entry * 100, 2),
+            "best_pnl_pct": round((best - entry) * sign / entry * 100, 2)}
+
+
 def _attach_status_fields(rows: list[dict]) -> None:
     """Merge the status-bar fields into every row, terminal ones included.
 
@@ -965,8 +1014,9 @@ def _attach_status_fields(rows: list[dict]) -> None:
     second one only runs on data nobody tests with.
     """
     for row in rows:
-        if (row["status"] in _TERMINAL or row["status"] == "PENDING"
-                or row.get("bar_kind") == "trailing"):
+        if row.get("bar_kind") == "trailing" and row["status"] not in _TERMINAL:
+            row.update(_trailing_status_fields(row, row.get("current_price")))
+        elif row["status"] in _TERMINAL or row["status"] == "PENDING":
             # Nothing has opened, or it is already over: there is no position
             # to place on a bar. The label is the status itself, which is what
             # the cell shows in place of the bar.
@@ -988,13 +1038,11 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
     position look unpriced -- it has real live P&L, just not the terminal
     kind those two functions compute.
 
-    Reads `_risk_stop` (transient, set by the two row builders) with
-    `.get`, not `.pop`: like `_attach_status_fields`, this may run twice on
-    the same row objects when a request sorts by a field that needs a price
-    for every row, not just the page (see the `_SORT_ALIASES` branch in
-    `list_trades`) -- popping here would make the second pass recompute from
-    an empty/missing fallback and silently overwrite the first pass's real
-    numbers. `_strip_internal_fields` removes it once, at the very end.
+    Reads `risk_stop` (the original stop, set by the two row builders and
+    published on the wire since v166). Like `_attach_status_fields`, this
+    may run twice on the same row objects when a request sorts by a field
+    that needs a price for every row, not just the page (see the
+    `_SORT_ALIASES` branch in `list_trades`), so it only ever reads it.
 
     Sets transient `_display_shares` when a row has realized a leg; this is
     applied to the public `shares` field exactly once by `_strip_internal_fields`
@@ -1007,7 +1055,7 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
         entry, direction = row.get("entry"), row.get("direction")
         if price is not None and entry is not None:
             row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
-            row["r_multiple"] = dash.unrealized_r(entry, row.get("_risk_stop"), direction, price)
+            row["r_multiple"] = dash.unrealized_r(entry, row.get("risk_stop"), direction, price)
             row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
                 entry, direction, row.get("open_shares"), price)
         # Store the display value in a transient field; apply it exactly once
@@ -1017,22 +1065,22 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
 
 
 def _strip_internal_fields(rows: list[dict]) -> None:
-    """Drop the transient `_risk_stop`/`_display_shares` keys --
-    must run exactly once, after every other row transform, so neither leaks
-    onto the wire and breaks the row's declared shape.
+    """Drop the transient `_display_shares` key -- must run exactly once,
+    after every other row transform, so it never leaks onto the wire and
+    breaks the row's declared shape.
 
     Applies `_display_shares` to the public `shares` field for partially-realized
     rows (v79), showing the true remaining share count instead of the original
     size. This override happens exactly once here, after all possible passes of
     `_attach_unrealized_pnl` are complete, so the original `shares` value is
-    preserved for each P&L calculation pass.
+    preserved for each P&L calculation pass. (`risk_stop`, transient as
+    `_risk_stop` until v166, is a public field now and is kept.)
     """
     for row in rows:
         if "_display_shares" in row:
             row["shares"] = row.pop("_display_shares")
         else:
             row.pop("_display_shares", None)
-        row.pop("_risk_stop", None)
 
 
 def _attach_current_prices(rows: list[dict]) -> None:

@@ -2,6 +2,8 @@
 
 At signal bar ``i`` the constructor receives only ``df.iloc[:i + 1]``;
 ``simulate_exit`` alone walks later bars to determine the outcome.
+Under a v2 instrument (``StrategyEngine(instrument=...)``, v157) that walk uses
+the instrument's fills and costs; each ArmTrade still carries its signal date.
 
 The v119 compression short is research-only here: it runs when a
 ``CompressionResearchContext`` is supplied or the research knob
@@ -113,10 +115,13 @@ def level_map_at(df, index: int, horizon_key: str):
 class StrategyEngine:
     engine_id = "strategy"
 
-    def __init__(self, strategies=None, compression_context: CompressionResearchContext | None = None, *,
-                 blocked_sink: list | None = None, compression_allowlist: tuple | None = None):
+    def __init__(self, strategies=None, compression_context: CompressionResearchContext | None = None,
+                 instrument=None, *, blocked_sink: list | None = None,
+                 compression_allowlist: tuple | None = None):
         self.strategies = tuple(strategies or bt.ALL_STRATEGIES)
         self.compression_context = compression_context
+        # v157: the backtest instrument every simulate_exit call runs under; None is v1.
+        self.instrument = instrument
         # v147, record-only: (arm, BlockedCandidate) per counted compression decision; None = off.
         self.blocked_sink = blocked_sink
         # v147: the decision's mode allowlist; None keeps the research-knob derivation below.
@@ -251,7 +256,7 @@ class StrategyEngine:
                 level_map if wants_tp2 else None, counted)
             if plan is None:
                 continue
-            result = simulate_exit(df, index, plan, scale_out=True)
+            result = simulate_exit(df, index, plan, scale_out=True, instrument=self.instrument)
             if self._skipped(result, strategy, stamp, counted):
                 continue
             open_until = result.exit_index

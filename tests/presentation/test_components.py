@@ -138,6 +138,25 @@ def test_push_kwargs_adds_content_only_when_the_embed_has_a_push_line():
     assert c.push_kwargs("EMBED") == {"embed": "EMBED"}
 
 
+def test_push_kwargs_without_a_view_never_adds_the_view_key():
+    pushed = c.push_embed(Kind.BOT_ONLINE)
+    for kwargs in (c.push_kwargs(pushed), c.push_kwargs(pushed, view=None),
+                   c.push_kwargs(pushed, None)):
+        assert list(kwargs) == ["embed", "content"]
+    plain = discord.Embed(title="x")
+    assert list(c.push_kwargs(plain, view=None)) == ["embed"]
+
+
+def test_push_kwargs_adds_a_given_view_last():
+    view = object()                         # any object: push_kwargs never inspects it
+    pushed = c.push_embed(Kind.BOT_ONLINE)
+    assert c.push_kwargs(pushed, view=view) == {
+        "embed": pushed, "content": "🤖 SYSTEM · ONLINE", "view": view}
+    assert list(c.push_kwargs(pushed, view=view)) == ["embed", "content", "view"]
+    plain = discord.Embed(title="x")
+    assert c.push_kwargs(plain, view=view) == {"embed": plain, "view": view}
+
+
 def test_the_package_exports_the_push_helpers():
     from swingbot.core import presentation as ui
     assert ui.push_embed is c.push_embed and ui.push_kwargs is c.push_kwargs

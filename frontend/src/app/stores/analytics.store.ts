@@ -25,6 +25,9 @@ import {
   AnalyticsStrategies,
   AnalyticsUnit,
   BookScope,
+  LiveLossRow,
+  LiveLossWatch,
+  TuneDefaults,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
 import { BarRow } from '../ui/bar-list';
@@ -380,6 +383,12 @@ interface AnalyticsSlice {
    *  Empty while it is still running, which the endpoint answers with a 200
    *  rather than a 404 so this never has to mean "something failed". */
   gridStrategy: string | null;
+  /** v162 — the training data the tracked job's grid ran on. */
+  gridDataSource: string | null;
+  /** v162 — the launcher's source picker. Fetched once: the default only
+   *  changes on a config reload, and a running grid raises a `jobs` event per
+   *  log flush. Null until it arrives, or when it failed (picker hidden). */
+  tuneDefaults: TuneDefaults | null;
   grid: GridRow[];
   /** The row currently being staged, by index — so only its own button shows
    *  a pending state rather than the whole table going quiet. */
@@ -458,6 +467,8 @@ export const AnalyticsStore = signalStore(
       plans: null, plansError: null,
       partials: null, partialsError: null,
       gridStrategy: null,
+      gridDataSource: null,
+      tuneDefaults: null,
       grid: [],
       proposing: null,
       proposeError: null,
@@ -591,6 +602,10 @@ export const AnalyticsStore = signalStore(
     deciles: computed<DecileRow[]>(() => (calibration()?.deciles ?? []) as DecileRow[]),
     tiers: computed<TierRow[]>(() => (calibration()?.levels ?? []) as TierRow[]),
     drift: computed<DriftRow[]>(() => (calibration()?.drift ?? []) as DriftRow[]),
+    /** v164 D4: the live loss watch, in the server's order. A body cached
+     *  before the deploy has no key, which reads as an empty watch. */
+    liveLossWatch: computed<LiveLossRow[]>(() => calibration()?.live_loss_watch?.rows ?? []),
+    liveLossCounts: computed<LiveLossWatch['counts']>(() => calibration()?.live_loss_watch?.counts ?? {}),
 
     /* -- tuning -------------------------------------------------------- */
 
@@ -760,12 +775,22 @@ export const AnalyticsStore = signalStore(
         next: (result) =>
           patchState(store, {
             gridStrategy: result.strategy,
+            gridDataSource: result.data_source ?? null,
             grid: toGridRows(result.grid ?? []),
           }),
         // Deliberately quiet. A missing result file is the ordinary state of a
         // running or failed job, and the panel renders nothing rather than
         // claiming an error the job's own state already explains.
-        error: () => patchState(store, { grid: [], gridStrategy: null }),
+        error: () => patchState(store, { grid: [], gridStrategy: null, gridDataSource: null }),
+      });
+    };
+
+    /** v162. Quiet on failure, like the result fetch: without defaults the
+     *  picker is hidden and the server applies its own default. */
+    const loadTuneDefaults = (): void => {
+      api.getTuneDefaults().subscribe({
+        next: (defaults) => patchState(store, { tuneDefaults: defaults }),
+        error: () => undefined,
       });
     };
 
@@ -791,6 +816,7 @@ export const AnalyticsStore = signalStore(
       // refetching the whole registry each time would turn a progress update
       // into two payloads, one of which cannot have changed.
       if (store.strategies() === null) loadStrategies();
+      if (store.tuneDefaults() === null) loadTuneDefaults();
     };
 
     /**
@@ -850,6 +876,7 @@ export const AnalyticsStore = signalStore(
         patchState(store, { loading: true });
         loadProposals();
         if (store.strategies() === null) loadStrategies();
+        if (store.tuneDefaults() === null) loadTuneDefaults();
       },
       next: (list) => {
         const jobs = (list.jobs ?? []) as JobSummary[];
@@ -989,17 +1016,19 @@ export const AnalyticsStore = signalStore(
       loadTuning,
 
       /**
-       * Launch a TRAIN-window grid search.
+       * Launch a TRAIN-window grid search on the chosen training data (v162).
        *
        * No date argument is sent, and none can be: `build_tune_args` accepts
-       * only `--strategy` and an optional `--be-trigger`, and asserts the
-       * window is TRAIN. That firewall is what keeps the VALIDATION badges on
-       * the Strategies tab meaningful, so the UI must not offer a way around
-       * it — hence a strategy picker and nothing else.
+       * only `--strategy`, `--data-source` and an optional `--be-trigger`, and
+       * asserts the window is TRAIN. That firewall keeps the VALIDATION badges
+       * on the Strategies tab meaningful, so the UI offers a strategy and a
+       * data source and nothing else. An empty `dataSource` sends no params:
+       * the server then uses TRAINING_DATA_SOURCE.
        */
-      startTune(strategy: string): void {
+      startTune(strategy: string, dataSource: string): void {
         patchState(store, { launching: true, launchError: null });
-        api.startTuneJob({ strategy }).subscribe({
+        const body = dataSource ? { strategy, params: { data_source: dataSource } } : { strategy };
+        api.startTuneJob(body).subscribe({
           next: () => {
             patchState(store, { launching: false });
             // One refetch, because the user just acted and expects to see the

@@ -7,10 +7,17 @@ else an open at/above the target exits at the open; else a low touching the
 stop exits at the stop (checked first); else a high touching the target
 exits at the target. After bar t+cap, exit at its close. Costs: both fills
 worsened by SLIPPAGE_BPS, then commission_r() in R.
+
+Outcome codes index OUTCOMES. v163 appended ``trail`` (5) and ``gap_trail``
+(6) for the trail race (``trail.py``); a fixed race never produces them, a
+trail race never produces ``gap_target`` or ``target``. SHAPE_OUTCOMES is
+each shape's own list, in table order, so a fixed idea's results doc keeps
+its five rows.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -20,7 +27,12 @@ from swingbot.core.edge.frictions import apply_frictions, commission_r
 
 STOP_ATR = 1.5
 REWARD_RISK = 2.0
-OUTCOMES = ("gap_stop", "gap_target", "stop", "target", "timeout")
+OUTCOMES = ("gap_stop", "gap_target", "stop", "target", "timeout",
+            "trail", "gap_trail")
+SHAPE_OUTCOMES: dict[str, tuple[str, ...]] = {
+    "fixed": OUTCOMES[:5],
+    "trail": ("gap_stop", "stop", "gap_trail", "trail", "timeout"),
+}
 COUNTERS = ("dropped_nonmember", "dropped_warmup", "dropped_window",
             "skipped_overlap")
 _FIELDS = ("event_pos", "exit_pos", "entry", "risk", "gross_r", "r", "outcome")
@@ -140,12 +152,27 @@ def non_overlapping(event_pos, exit_pos) -> np.ndarray:
     return keep
 
 
+def race_for(shape: str) -> Callable[..., RaceResult]:
+    """The race function of one shape: ``race`` (fixed) or
+    ``trail.race_trail`` (v163). ``trail`` imports this module, so it is
+    imported here, on first use, never at module level."""
+    if shape == "fixed":
+        return race
+    if shape == "trail":
+        from swingbot.core.backtesting.screen import trail
+        return trail.race_trail
+    raise ValueError(f"unknown race shape {shape!r}; expected one of "
+                     f"{tuple(SHAPE_OUTCOMES)}")
+
+
 def run_book(df, events, cap: int, *, member, warm, atr, slippage_bps=None,
-             commission=None):
-    """Race the eligible events, then keep one open race at a time."""
+             commission=None, shape: str = "fixed"):
+    """Race the eligible events under ``shape``, then keep one open race at a
+    time."""
+    race_fn = race_for(shape)
     cand, counts = candidate_events(events, member, warm, cap)
-    raced = race(df, cand, cap, atr=atr, slippage_bps=slippage_bps,
-                 commission=commission)
+    raced = race_fn(df, cand, cap, atr=atr, slippage_bps=slippage_bps,
+                    commission=commission)
     keep = non_overlapping(raced.event_pos, raced.exit_pos)
     counts["skipped_overlap"] = int((~keep).sum())
     return raced.take(keep), counts

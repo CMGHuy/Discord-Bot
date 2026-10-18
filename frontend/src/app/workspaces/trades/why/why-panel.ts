@@ -67,7 +67,7 @@ export function marginTone(
             <div class="factor-row total"><span>Total</span><strong class="sb-num">{{ fmtSigned(totalPoints(), 0) }}</strong></div>
           } @else {
             @for (factor of confidenceFactors(); track $index) {
-              <div class="factor-row"><span>{{ factor.factor }}</span><span class="muted">{{ factor.note }}</span></div>
+              <div class="factor-row text-factor"><span>{{ factor.factor }}</span><span class="muted">{{ factor.note }}</span></div>
             }
           }
         </div>
@@ -127,6 +127,8 @@ export function marginTone(
     /* A 1300px row put the label at one edge and its number at the other, so
        the eye had to travel the whole panel to pair them. */
     .factor-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-8); padding: var(--space-4) 0; max-width: 64rem; }
+    .text-factor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .text-factor > span { min-width: 0; overflow-wrap: anywhere; }
     .factor-row .note { grid-column: 1 / -1; }
     .total { border-top: 1px solid var(--border); margin-top: var(--space-8); }
     .quality { padding-top: var(--space-14); }

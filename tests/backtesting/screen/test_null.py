@@ -132,3 +132,39 @@ def test_null_mean_is_the_mean_of_its_raced_bars():
                              slippage_bps=0.0, commission=0.0).r.mean()
     assert draw.null_mean_r[0] == pytest.approx(expected)
     assert len(draw.null_race) == len(draw.groups[0])
+
+
+from swingbot.core.backtesting.screen import trail  # noqa: E402
+
+
+def _walk_null(shape=None):
+    df = random_walk(400, start="2019-01-01")
+    eligible = null.eligible_mask(np.zeros(len(df), dtype=bool), _all(df), _all(df), cap=60)
+    shape_kw = {} if shape is None else {"shape": shape}
+    draw = null.matched_null(df, [5, 30], eligible, 20, 3, cap=60, atr=_atr(df),
+                             trend=_all(df), slippage_bps=0.0, commission=0.0, **shape_kw)
+    return df, draw
+
+
+def test_a_trail_null_races_the_same_draw_through_the_trail_race():
+    _, fixed = _walk_null("fixed")
+    df, drawn = _walk_null("trail")
+    assert [g.tolist() for g in drawn.groups] == [g.tolist() for g in fixed.groups]
+    for k, group in enumerate(drawn.groups):
+        expected = trail.race_trail(df, group, 60, atr=_atr(df), slippage_bps=0.0,
+                                    commission=0.0)
+        assert drawn.null_mean_r[k] == pytest.approx(expected.r.mean())
+    assert set(drawn.null_race.outcome.tolist()) <= set(race_mod.SHAPE_OUTCOMES["trail"])
+    assert drawn.null_race.r.tolist() != fixed.null_race.r.tolist()
+
+
+def test_matched_null_without_a_shape_is_the_fixed_null():
+    _, default = _walk_null()
+    _, fixed = _walk_null("fixed")
+    assert default.null_mean_r.tolist() == fixed.null_mean_r.tolist()
+    assert default.null_race.outcome.tolist() == fixed.null_race.outcome.tolist()
+
+
+def test_matched_null_refuses_an_unknown_shape():
+    with pytest.raises(ValueError, match="race shape"):
+        _walk_null("donchian")

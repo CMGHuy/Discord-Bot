@@ -25,6 +25,7 @@ from swingbot.commands import scanning as scanning_mod
 from swingbot.commands.scanning import _send_alerts
 from swingbot.commands.scanning import loops as loops_mod
 from swingbot.commands.scanning import runstate
+from swingbot.commands.scanning import ops_watch
 from swingbot.commands.scanning import presence
 from swingbot.core.infra.silent_channel import SilentChannel, silence
 from swingbot.core.scanning import engine as scan_engine
@@ -188,6 +189,7 @@ def test_the_scan_tick_actually_delivers_a_built_alert(monkeypatch):
     monkeypatch.setattr(presence, "_refresh_presence", _noop, raising=False)
     monkeypatch.setattr(presence, "_post_healthcheck", _noop, raising=False)
     monkeypatch.setattr(loops_mod, "_refresh_snapshot_safely", lambda: None, raising=False)
+    monkeypatch.setattr(ops_watch, "check_provider_health", _noop)   # v148: tested in test_ops_watch.py
 
     built_alert = (types.SimpleNamespace(title="AAPL setup", footer=None), None, None, "SIMPLE-TEXT")
 

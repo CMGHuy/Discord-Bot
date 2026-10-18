@@ -18,6 +18,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
+
 
 def permuted_expectancies(run_fn, n_perm: int = 200, seed: int = 42) -> list:
     rng = np.random.default_rng(seed)
@@ -202,6 +204,7 @@ def _parser():
     p.add_argument("--arms", default=None)
     p.add_argument("--harvest-arms", default=None)
     p.add_argument("--seed", type=int, default=42)
+    instrument_cli.add_instrument_arg(p)
     return p
 
 
@@ -230,6 +233,8 @@ def _harvest_main(args) -> int:
 
 def main(argv=None) -> int:
     args = _parser().parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "permutation_test.py",
+                              "phase 6 (cutover: walk-forward on the v2 folds)")
     if args.harvest_arms:
         return _harvest_main(args)
     return _arms_main(args) if args.arms else _fold_main(args)

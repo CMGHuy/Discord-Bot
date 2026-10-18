@@ -1,11 +1,15 @@
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpRequest, provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
+  TestRequest,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
+import { provideLocationMocks } from '@angular/common/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter, withComponentInputBinding } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { of } from 'rxjs';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -14,9 +18,13 @@ import {
   loadingInterceptor,
 } from '../../api/interceptors';
 import { CalendarTrade, PnlCalendar } from '../../api/models';
+import { BACKGROUND_REFRESH_INFO } from '../../routing/route-loading.service';
+import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Calendar } from './calendar';
+import { calendarRoutes } from './calendar.routes';
 import { CalendarStore } from '../../stores/calendar.store';
+import { PAPER_CAPTION } from './day/day-copy';
 
 const RESPONSE: PnlCalendar = {
   as_of: '2026-08-10T12:00:00Z',
@@ -281,6 +289,15 @@ const TRADE: CalendarTrade = {
   opened_at: '2026-08-01T14:30:00+00:00',
   leg_index: 0,
   leg_total: 1,
+  entry_price: 100,
+  exit_price: 110,
+  stop_price: 95,
+  tp1: 120,
+  tp2: null,
+  shares: 10,
+  held_hours: 53.5,
+  return_pct: 10,
+  exit_reason: 'tp1',
 };
 
 describe('Calendar day drawer', () => {
@@ -292,7 +309,11 @@ describe('Calendar day drawer', () => {
       .flush({ as_of: '2026-08-10T12:00:00Z', date: '2026-08-03', trades, trade_count: trades.length,
         winners: 0, losers: 0, total_r: null, total_ccy: null,
         win_rate: null, avg_trade_r: null, worst_drawdown_r: null,
-        contributors: [], detractors: [] });
+        contributors: [], detractors: [],
+        context: { percentile: null, history_days: 0,
+          vs_avg_day: { pnl_amount: null, r: null },
+          vs_weekday_avg: { pnl_amount: null, r: null } },
+        breakdown: { strategy: [], horizon: [], direction: [], exit_reason: [] } });
     await fixture.whenStable();
     fixture.detectChanges();
   };
@@ -373,6 +394,45 @@ describe('Calendar day drawer', () => {
 
     expect(fixture.componentInstance.store.selectedDay()).toBeNull();
     expect(el(fixture).querySelector('.day-row')).toBeNull();
+  });
+
+  it('offers the full day page, carrying the active filters', async () => {
+    const fixture = seed();
+    fixture.componentInstance.store.setStrategy('EMA20');
+    TestBed.inject(HttpTestingController)
+      .expectOne((r) => r.params.get('strategy') === 'EMA20')
+      .flush(RESPONSE);
+    await openDay(fixture, [TRADE]);
+
+    const link = el(fixture).querySelector('a.open-day');
+    expect(link?.textContent?.trim()).toBe('Open full day →');
+    expect(link?.getAttribute('href')).toBe('/calendar/2026-08-03?strategy=EMA20');
+  });
+
+  it('links the bare day when no filter is set, even on an empty day', async () => {
+    const fixture = seed();
+    await openDay(fixture, []);
+    expect(el(fixture).querySelector('a.open-day')?.getAttribute('href')).toBe('/calendar/2026-08-03');
+  });
+
+  it('captions the drawer summary as paper, before costs', async () => {
+    const fixture = seed();
+    await openDay(fixture, [TRADE]);
+    expect(el(fixture).querySelector('.day-caption')?.textContent?.trim()).toBe(PAPER_CAPTION);
+  });
+
+  it('says once that scale-out legs count separately', async () => {
+    const fixture = seed();
+    await openDay(fixture, [
+      { ...TRADE, leg_index: 0, leg_total: 2 },
+      { ...TRADE, leg_index: 1, leg_total: 2 },
+    ]);
+    expect(el(fixture).querySelector('.day-sample-note')?.textContent?.trim())
+      .toBe('2 rows · scale-out legs count separately');
+
+    const whole = seed();
+    await openDay(whole, [TRADE]);
+    expect(el(whole).querySelector('.day-sample-note')).toBeNull();
   });
 });
 
@@ -529,5 +589,117 @@ describe('Calendar phone agenda', () => {
 
     expect(el(fixture).querySelector('.week')).not.toBeNull();
     expect(el(fixture).querySelector('.agenda')).toBeNull();
+  });
+});
+
+describe('Calendar URL (v165 D6)', () => {
+  const MONTH_URL = '/api/v1/calendar/pnl';
+
+  function mount(): void {
+    installDialogPolyfill();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([{ path: 'calendar', children: calendarRoutes }], withComponentInputBinding()),
+        provideLocationMocks(),
+        provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+        provideHttpClientTesting(),
+        // The real one would first ask /api/v1/preferences inside resolveRoute.
+        { provide: PreferencesStore, useValue: {
+          resolve: () => of(undefined), values: () => ({}), update: () => undefined,
+        } },
+      ],
+    });
+  }
+
+  const settle = async () => {
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  async function take(predicate: (r: HttpRequest<unknown>) => boolean): Promise<TestRequest> {
+    const backend = TestBed.inject(HttpTestingController);
+    for (let i = 0; i < 50; i++) {
+      const [found] = backend.match(predicate);
+      if (found) return found;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    throw new Error('the expected request was never made');
+  }
+
+  async function openAt(url: string): Promise<{ harness: RouterTestingHarness; store: InstanceType<typeof CalendarStore> }> {
+    mount();
+    const harness = await RouterTestingHarness.create();
+    const navigation = harness.navigateByUrl(url);
+    (await take((r) => r.url === MONTH_URL)).flush(RESPONSE);
+    await navigation;
+    const store = (harness.routeDebugElement!.componentInstance as Calendar).store;
+    return { harness, store };
+  }
+
+  it('restores the month and the filters from the URL in its first request', async () => {
+    mount();
+    const harness = await RouterTestingHarness.create();
+    const navigation = harness.navigateByUrl('/calendar?month=2026-08&strategy=EMA20');
+    const first = await take((r) => r.url === MONTH_URL);
+    expect(first.request.params.get('month')).toBe('2026-08');
+    expect(first.request.params.get('strategy')).toBe('EMA20');
+    expect(first.request.params.has('horizon')).toBe(false);
+    first.flush(RESPONSE);
+    await navigation;
+
+    const store = (harness.routeDebugElement!.componentInstance as Calendar).store;
+    expect([store.month(), store.strategy(), store.horizon()]).toEqual(['2026-08', 'EMA20', '']);
+  });
+
+  it('makes exactly one request per filter change and writes it to the URL', async () => {
+    const { store } = await openAt('/calendar?month=2026-08&strategy=EMA20');
+    const backend = TestBed.inject(HttpTestingController);
+
+    store.setHorizon('4w');
+    await settle();
+    const calls = backend.match((r) => r.url === MONTH_URL);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].request.params.get('horizon')).toBe('4w');
+    calls[0].flush(RESPONSE);
+
+    await settle();
+    backend.expectNone((r) => r.url === MONTH_URL);       // the URL write did not reload
+    const url = TestBed.inject(Router).url;
+    expect(url.startsWith('/calendar?')).toBe(true);
+    expect(url).toContain('month=2026-08');
+    expect(url).toContain('strategy=EMA20');
+    expect(url).toContain('horizon=4w');
+
+    store.stepMonth(-1);
+    await settle();
+    const stepped = backend.match((r) => r.url === MONTH_URL);
+    expect(stepped).toHaveLength(1);
+    expect(stepped[0].request.params.get('month')).toBe('2026-07');
+    stepped[0].flush(RESPONSE);
+    await settle();
+    expect(TestBed.inject(Router).url).toContain('month=2026-07');
+  });
+
+  it('still reloads on a background refresh of the same URL', async () => {
+    await openAt('/calendar?month=2026-08');
+    const router = TestBed.inject(Router);
+    void router.navigateByUrl(router.url, {
+      onSameUrlNavigation: 'reload', replaceUrl: true, info: BACKGROUND_REFRESH_INFO,
+    });
+    const refresh = await take((r) => r.url === MONTH_URL);
+    expect(refresh.request.params.get('month')).toBe('2026-08');
+    refresh.flush(RESPONSE);
+  });
+
+  it('loads a URL edited by hand, filters it does not name included', async () => {
+    const { harness, store } = await openAt('/calendar?month=2026-08&strategy=EMA20');
+    const navigation = harness.navigateByUrl('/calendar?month=2026-07');
+    const edited = await take((r) => r.url === MONTH_URL);
+    expect(edited.request.params.get('month')).toBe('2026-07');
+    expect(edited.request.params.has('strategy')).toBe(false);
+    edited.flush(RESPONSE);
+    await navigation;
+    expect([store.month(), store.strategy()]).toEqual(['2026-07', '']);
   });
 });

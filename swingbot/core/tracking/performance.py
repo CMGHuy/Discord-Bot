@@ -1239,6 +1239,20 @@ class TradeLog:
     def get_trade_by_id(self, trade_id: str) -> dict | None:
         return next((t for t in self._all() if t["id"] == trade_id), None)
 
+    def trade_for_plan(self, plan_id: str) -> dict | None:
+        """The paper trade linked to ``plan_id``, in ANY status (v170 A1).
+
+        append_leg_by_plan and close_plan_trade match only open trades; the
+        execution feed's lifecycle money and the P&L-now button also need a
+        closed one. A thin wrapper over the repository's own any-status
+        lookup (limit 1, unordered): legacy data holding two records for one
+        plan id returns either of them."""
+        if not plan_id:
+            return None
+        from swingbot.core.db.repositories.trades import trades_repo
+        row = trades_repo().by_plan_id(plan_id)
+        return _json_record(row) if row else None
+
     def open_trade_for_ticker(self, ticker: str, origin: str | None = None) -> dict | None:
         """The open trade on this ticker, if there is one.
 

@@ -53,6 +53,12 @@ EXPECTED = {
         "model": "sonnet",
         "skills": set(),
     },
+    # v161: one read-only proposer parameterised by generator role. It loads
+    # the role skill at run time, so it preloads none.
+    "scout": {
+        "model": "sonnet",
+        "skills": set(),
+    },
 }
 
 VALID_MODELS = {"haiku", "sonnet", "opus"}
@@ -119,6 +125,20 @@ def test_expert_reviewer_is_read_only_and_knows_every_role():
     missing = [role for role in EXPERT_ROLES if f"`{role}`" not in body]
     assert not missing, missing
     for word in ("BLOCKING", "ADVISORY", "CLEAN", "UNKNOWN ROLE"):
+        assert word in body, word
+
+
+# v161: the three generator roles scout must name (spec § 4).
+GENERATOR_ROLES = ("exit-harvester", "setup-scout", "regime-desk")
+
+
+def test_scout_is_read_only_and_knows_every_generator_role():
+    meta, body = _read_agent("scout")
+    tools = {t.strip() for t in meta.get("tools", "").split(",")}
+    assert tools == {"Read", "Grep", "Glob", "Skill"}
+    missing = [role for role in GENERATOR_ROLES if f"`{role}`" not in body]
+    assert not missing, missing
+    for word in ("NO ROWS", "UNKNOWN ROLE"):
         assert word in body, word
 
 

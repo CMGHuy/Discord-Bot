@@ -216,8 +216,53 @@ haiku -- reviewing means judging.
 | `technical-analyst` | sonnet | S/R, pattern and indicator logic: correct in code and true to how the setup is traded |
 | `fundamental-analyst` | sonnet | Earnings, catalysts, sector and macro concentration: the bot's blind spot |
 | `staff-engineer` | opus | Cross-cutting design: seams, migrations, VM ops, blast radius, long-run cost |
-| `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the two OHLCV caches, reproducibility |
+| `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the OHLCV caches and the v162 training-data store, reproducibility |
 | `senior-engineer` | sonnet | Code-level quality, the complexity limit, reads like its surroundings; `task-reviewer` preloads it |
+
+## Generator roles (v161)
+
+Three role skills propose instead of review: `exit-harvester` (exits, trails,
+stops, give-back), `setup-scout` (entries, fills, liquidity, rejected plans,
+and the setup playbook at `.claude/skills/setup-scout/references/playbook.md`)
+and `regime-desk` (regime, calendar, events, alert timing). They share the
+reviewer roles' file shape but open with `## Generator lens`, so
+`tests/hooks/test_role_skills.py` never counts them as reviewers;
+`tests/scout/test_generator_roles.py` pins their shape. `/trade-scout` runs
+them through the read-only `scout` agent (sonnet), one role per dispatch,
+serially, over one book autopsy (`scripts/reports/book_autopsy.py`, fed by the
+read-only VM export `scripts/ops/export_book_rows.sh`); then
+`scripts/dev/scout_merge.py` drops and ranks their rows into
+`docs/superpowers/results/<date>-scout-slate.md`.
+
+**Evidence rule** -- the thresholds the role skills point at:
+
+- A cell is **thin** when N < 30 or it spans fewer than 8 distinct ISO weeks
+  (`THIN_MIN_N`, `THIN_MIN_WEEKS` in `scripts/reports/autopsy/cells.py`).
+  A thin cell is tested and counted, never ranked as evidence; the merge
+  drops a row that cites one.
+- A row's cell needs a Δ interval (cell minus its complement, week-cluster
+  bootstrap) that excludes zero and a Benjamini–Hochberg **q ≤ 0.10** across
+  every cell tested. The merge drops any row whose Δ lower bound is ≤ 0;
+  the q cut-off is the roles' filter, and `quant-researcher` checks it on the
+  slate.
+- Every autopsy-derived row carries `exploratory: yes`: the live-book window
+  overlaps the 2026 holdout, so a `/prereg` built on one freezes its
+  thresholds on windows ending before the autopsy window and records the
+  holdout as contaminated for that idea. A `/screen` route is unaffected.
+- A row quotes only figures printed in the autopsy Markdown
+  (`pooled-numbers`); a playbook row routed to `/screen` needs no cell.
+
+**Boundaries:** a slate row is a hypothesis. No gate moves, nothing edits
+code, config, thresholds or live alerts, and no closed pre-registration is
+re-run. Every entry or filter idea still needs a `SCREEN-PASS` row before its
+spec. No paid usage: the export, autopsy and merge are scripts; the roles run
+as subagents.
+
+**Retention:** raw export CSVs stay in the session scratchpad. Each run
+commits one `*-book-autopsy.{json,md}` and one `*-scout-slate.md` on `main`.
+If three consecutive slates send no row to `/screen` or `/prereg`, the next
+session records that in the latest slate and asks the partner whether to
+retire the tooling.
 
 ## Which agent for what (v107)
 
@@ -229,6 +274,7 @@ Serial, one at a time — except plan parts (§ Plan writing below). Opus
 | Implement one plan task from `/task-brief` | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
 | Review that task's commits | `task-reviewer` | sonnet |
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
+| Propose hypotheses from a book autopsy through one generator role (via `/trade-scout`) | `scout` | sonnet |
 | Gather a plan's code context into one brief | `plan-briefer` | sonnet |
 | Draft a plan from an approved spec — index, then parts two at a time | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |

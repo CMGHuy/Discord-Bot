@@ -56,8 +56,13 @@ describe('workspace consistency (v85)', () => {
       // this rule is about metric grids, where fixed columns strand content
       // at phone width. A calendar's geometry is semantic, not responsive
       // card layout.
+      // v166: Trade Detail's `.card-grid` takes its tracks from named
+      // grid-template-areas at fixed container widths, and its cards' two-column
+      // `dl` only exists at >= 640px; neither is a metric grid.
       .filter((s) => /grid-template-columns:\s*repeat\(\s*\d/.test(s.source)
-        && !/\.week, \.weekhead|\.grid \{[\s\S]*weekday/.test(s.source))
+        && !/\.week, \.weekhead|\.grid \{[\s\S]*weekday/.test(s.source)
+        && s.source.split('\n').some((line) => /grid-template-columns:\s*repeat\(\s*\d/.test(line)
+          && !/^\s*(\.card-grid|dl) \{/.test(line)))
       .map((s) => s.name);
     expect(offenders).toEqual([]);
   });

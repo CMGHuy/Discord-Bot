@@ -8,8 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
+from swingbot.core.backtesting.instrument.contract import resolve as resolve_instrument
 
-VALIDATION_START = "2024-01-01"
+_V1_VALIDATION = resolve_instrument("v1").validation_window   # v1 contract (v158 WC7)
+VALIDATION_START = _V1_VALIDATION[0]
 ALL_HORIZONS: tuple[str, ...] = LEGACY_HORIZONS
 PILOT_TICKERS = 10
 
@@ -40,7 +42,7 @@ STAGES: dict[str, StageSpec] = {
                ("2023", "2023-01-01", "2023-12-31")),
         fold_key="folds", fold_label_key="test_year",
     ),
-    "validation": StageSpec("validation", (VALIDATION_START, "2025-12-31"), full_width=True),
+    "validation": StageSpec("validation", _V1_VALIDATION, full_width=True),
 }
 
 FUNNEL_TO_PRODUCER_STAGE = {

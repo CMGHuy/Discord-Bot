@@ -27,6 +27,7 @@ import logging
 import time
 
 from swingbot.core.edge.rs_gate import rs_margin
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.spot_metals import is_spot_metal
 
 log = logging.getLogger(__name__)
@@ -110,7 +111,8 @@ def record_rejection(*, ticker, gate, reason, source, strategy, horizon, directi
               "scan_params": scan_params, "entry_context": entry_context}
     try:
         return bool(_repo().insert_ignore(_snapshot(fields, frame, _utc_now())))
-    except Exception:   # noqa: BLE001 -- fail-open: a recording failure never touches the scan
+    except Exception as exc:   # noqa: BLE001 -- fail-open: a recording failure never touches the scan
+        swallowed(log, "scan.record_rejection", exc, level=logging.DEBUG)
         _warn(f"{ticker} {gate} {strategy} {horizon}")
         return False
 
@@ -119,7 +121,8 @@ def _record_built(label: str, build) -> bool:
     """record_rejection(**build()), with a failure while building the arguments swallowed too."""
     try:
         kwargs = build()
-    except Exception:   # noqa: BLE001 -- fail-open
+    except Exception as exc:   # noqa: BLE001 -- fail-open
+        swallowed(log, "scan.record_built", exc, level=logging.DEBUG)
         _warn(label)
         return False
     return record_rejection(**kwargs)
