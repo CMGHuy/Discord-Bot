@@ -600,8 +600,10 @@ async def _record_equity_sample(live_prices: dict) -> None:
     thread hand-off itself, so recording can never break the monitor."""
     try:
         await asyncio.to_thread(equity_recorder.record_sample, live_prices)
-    except Exception as exc:
-        log.warning("trade_monitor: equity sample failed: %s", exc, exc_info=True)
+    except Exception as exc:  # noqa: BLE001 -- recording must never break the monitor
+        swallowed(log, "ops.equity_sample_handoff", exc,
+                  "trade_monitor: equity sample failed: %s", exc,
+                  level=logging.WARNING, exc_info=True)
 
 
 @tasks.loop(seconds=60)

@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.db.repositories.equity_samples import (EquitySampleRepository,
                                                           equity_samples_repo)
 from swingbot.core.market.session import is_regular_session
@@ -84,14 +85,12 @@ def _record(live_prices: dict, now: datetime, repo: EquitySampleRepository) -> b
     return True
 
 
-def _warn_once(exc: Exception) -> None:
+def _first_of_kind(exc: Exception) -> bool:
+    """True once per process per exception type (that one is logged at WARNING)."""
     kind = type(exc).__name__
-    if kind in _warned:
-        log.debug("equity sample skipped: %s: %s", kind, exc)
-        return
+    first = kind not in _warned
     _warned.add(kind)
-    log.warning("equity sample skipped (%s; repeats of this error logged at DEBUG): %s",
-                kind, exc, exc_info=True)
+    return first
 
 
 def record_sample(live_prices: dict[str, float], *, now: datetime | None = None,
@@ -100,6 +99,10 @@ def record_sample(live_prices: dict[str, float], *, now: datetime | None = None,
     try:
         moment = now or datetime.now(timezone.utc)
         return _record(live_prices, moment, repo or equity_samples_repo())
-    except Exception as exc:
-        _warn_once(exc)
+    except Exception as exc:  # noqa: BLE001 -- recording must never break the monitor
+        first = _first_of_kind(exc)
+        swallowed(log, "ops.equity_record_sample", exc,
+                  "equity sample skipped (%s%s): %s", type(exc).__name__,
+                  "; repeats of this error logged at DEBUG" if first else "", exc,
+                  level=logging.WARNING if first else logging.DEBUG, exc_info=first)
         return False
