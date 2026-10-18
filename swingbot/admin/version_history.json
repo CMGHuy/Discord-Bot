@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-18 08:28:47 UTC",
+  "generated_at": "2026-10-18 15:13:21 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.28.0",
+    "ui": "1.29.0",
     "bot": "2.10.0"
   },
   "releases": [
@@ -1820,6 +1820,19 @@
       "subject": "release(ui): 1.28.0 -- trade detail reorganised: outcome strip, header actions, Overview/Why/Chart/Journal tabs, responsive card grid (v166)",
       "versions": {
         "ui": "1.28.0",
+        "bot": "2.10.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "b9cbce75",
+      "subject": "release(ui): 1.29.0 -- Arctic Navy: three-tier tokens, refined-terminal radii and two-level elevation, gradient panels, chart PNG palette in lockstep (v167)",
+      "versions": {
+        "ui": "1.29.0",
         "bot": "2.10.0"
       },
       "changed": [
