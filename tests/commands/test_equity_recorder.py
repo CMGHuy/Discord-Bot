@@ -203,3 +203,20 @@ def test_the_monitor_hands_its_own_prices_to_the_recorder(monkeypatch):
                         lambda live_prices, **kw: seen.append(dict(live_prices)) or False)
     asyncio.run(scanning_mod.trade_monitor.coro())
     assert seen == [{"AAPL": 110.0}]
+
+
+def test_price_feed_outage_with_open_position_writes_nothing_and_keeps_throttle(
+        monkeypatch, repo, account):
+    _patch_book(monkeypatch, [_trade("t1", "AAPL")])
+    assert equity_recorder.record_sample({}, now=IN_SESSION, repo=repo) is False
+    assert repo.list_rows() == []
+    # the throttle did not advance: the next tick with prices writes at once
+    later = IN_SESSION + timedelta(seconds=60)
+    assert equity_recorder.record_sample({"AAPL": 110.0}, now=later, repo=repo) is True
+
+
+def test_no_open_positions_and_no_prices_still_writes_a_row(monkeypatch, repo, account):
+    _patch_book(monkeypatch, [_trade("t1", "AAPL", status="closed")])
+    assert equity_recorder.record_sample({}, now=IN_SESSION, repo=repo) is True
+    (row,) = repo.list_rows()
+    assert row["open_n"] == 0

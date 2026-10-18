@@ -12,6 +12,8 @@ Rules (spec v172 § 2, Corrections 3 and 6):
   around the clock;
 - at most one row per `SAMPLE_INTERVAL`: the first tick at least 5 minutes
   after the last written live row, seeded from the table after a restart;
+- no sample while open positions exist but the tick fetched no prices at all
+  (feed outage), and the throttle does not advance;
 - no market-data call of its own; an unpriced or unsized position is
   counted in `skipped_n`, never priced at 0;
 - never raises: a failure is logged once per process per exception type
@@ -78,8 +80,14 @@ def _row(snapshot: equity.EquitySnapshot, now: datetime) -> dict:
 def _record(live_prices: dict, now: datetime, repo: EquitySampleRepository) -> bool:
     if not is_regular_session(now) or not _due(now, repo):
         return False
-    snapshot = equity.snapshot_at(load_trades(), equity.load_plans_by_id(),
-                                  _priced(live_prices), now, equity.starting_balance())
+    trades, plans = load_trades(), equity.load_plans_by_id()
+    prices = _priced(live_prices)
+    if not live_prices and equity.live_open_positions(trades, plans):
+        # Price-feed outage: an all-skipped row would be equity == realized,
+        # a permanent false low wick. Skip; the throttle does not advance.
+        log.debug("equity sample skipped: open positions but no live prices")
+        return False
+    snapshot = equity.snapshot_at(trades, plans, prices, now, equity.starting_balance())
     repo.insert_sample(_row(snapshot, now))
     _state["last_at"] = now
     return True
