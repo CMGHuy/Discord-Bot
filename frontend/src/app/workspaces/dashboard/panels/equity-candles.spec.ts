@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { EquityCandle, EquityCandlesResponse } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
@@ -172,5 +172,33 @@ describe('sb-equity-candles', () => {
     const { el } = render(response([], { tf: '1H' }));
     expect(buttons(el, 'Candle timeframe').length).toBe(4);
     expect(buttons(el, 'Equity basis').length).toBe(2);
+  });
+
+  it('fits the view once, only after the host has a width (first load)', () => {
+    let notify: () => void = () => {};
+    class FakeObserver {
+      constructor(cb: () => void) { notify = cb; }
+      observe(): void {}
+      disconnect(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', FakeObserver);
+    let width = 0;
+    const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width);
+    try {
+      const { fixture, stub } = render(response(MIXED));
+      const fit = vi.spyOn(
+        (fixture.componentInstance as unknown as { chart: { timeScale(): { fitContent(): void } } })
+          .chart.timeScale(), 'fitContent');
+      stub.data.set(response(MIXED));
+      fixture.detectChanges();
+      expect(fit).not.toHaveBeenCalled();
+      width = 600;
+      notify();
+      notify();
+      expect(fit).toHaveBeenCalledTimes(1);
+    } finally {
+      widthSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -68,10 +68,11 @@ export type DashboardScopeMode = DashboardScope;
         </div>
       </div>
 
-      <!-- On a phone the position book is deliberately first. When the
-           reader reaches performance, this one-line summary preserves the
-           essential account context without placing the desktop chart and
-           eight-card grid ahead of live trades. -->
+      <!-- Phone (v172 section 5, reversing v85's hide-on-phone): the portfolio
+           block above (figure, day change, equity candles) now shows, the
+           eight-card grid does not. This summary carries the figures the grid
+           would; its Portfolio and Today rows repeat the figure above on
+           purpose, so the summary reads complete on its own. -->
       <div class="mobile-summary" aria-label="Portfolio summary">
         <div><span>Portfolio</span><strong>{{ fmtAmount(balance()) }}</strong></div>
         <div><span>Today</span><strong [class.pos]="(changePct() ?? 0) > 0" [class.neg]="(changePct() ?? 0) < 0">{{ fmtPct(changePct()) }}</strong></div>
@@ -122,7 +123,7 @@ export type DashboardScopeMode = DashboardScope;
     @media (max-width: 1023px) {
       .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-    @media (max-width: 640px) {
+    @media (max-width: 639px) {
       .grid { display: none; }
       .combined { margin-bottom: var(--space-10); }
       .mobile-summary {
