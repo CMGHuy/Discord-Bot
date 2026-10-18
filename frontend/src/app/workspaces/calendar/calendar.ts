@@ -313,7 +313,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .months { display: flex; align-items: center; gap: var(--space-8); }
     .month { min-width: 10ch; font-weight: 600; }
 
-    .metric { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); }
+    .metric { display: inline-flex; border: 1px solid var(--border); border-radius: var(--control-radius); }
     /* padding/border override the segment variant's defaults for a
        tighter two-cell toggle; the variant owns colour, weight and the
        active-cell background is our own since this pair has no divider. */
@@ -497,7 +497,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .tag {
       padding: 0 var(--space-6);
       background: var(--surface-raised);
-      border-radius: var(--radius);
+      border-radius: var(--chip-radius);
       color: var(--text-secondary);
       font-size: var(--text-micro);
     }

@@ -466,7 +466,7 @@ function cameFromPlan(): boolean {
     .tag {
       padding: 1px var(--space-6);
       border: 1px solid var(--border-strong);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       color: var(--text-secondary);
       font-size: var(--text-chip);
     }
@@ -516,7 +516,7 @@ function cameFromPlan(): boolean {
       background: var(--bg);
       color: var(--text);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       font: inherit;
       font-size: var(--text-table);
       resize: vertical;

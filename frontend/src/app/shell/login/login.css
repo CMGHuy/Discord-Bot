@@ -14,7 +14,7 @@
   padding: var(--space-20);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--panel-radius);
 }
 
 .mark {

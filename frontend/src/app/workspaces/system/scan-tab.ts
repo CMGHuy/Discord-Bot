@@ -192,7 +192,7 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
     .state {
       padding: 1px var(--space-6);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--chip-radius);
       color: var(--text-secondary);
       font-size: var(--text-micro);
       text-transform: uppercase;

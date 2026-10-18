@@ -42,13 +42,13 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
     .bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8) var(--space-10); padding: var(--space-10); font-size: var(--text-table); color: var(--text-secondary); }
     .range { margin-right: auto; }
     .per-page { display: inline-flex; align-items: center; gap: var(--space-6); }
-    .per-page select, .jump { height: var(--control-h); background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius); font: inherit; font-size: var(--text-control); }
+    .per-page select, .jump { height: var(--control-h); background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--control-radius); font: inherit; font-size: var(--text-control); }
     .per-page select { padding: 0 var(--space-4); min-width: 4.5rem; }
     .nav { display: inline-flex; align-items: center; gap: var(--space-6); }
     .jump { width: 3.5rem; padding: 0 var(--space-4); text-align: center; }
     .of { display: inline-flex; align-items: center; gap: var(--space-4); white-space: nowrap; }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    button { min-height: var(--control-h); min-width: var(--control-h); padding: 0 var(--space-10); background: transparent; border: 1px solid var(--border-strong); border-radius: var(--radius); color: var(--text); font: inherit; cursor: pointer; transition: border-color var(--transition); }
+    button { min-height: var(--control-h); min-width: var(--control-h); padding: 0 var(--space-10); background: transparent; border: 1px solid var(--border-strong); border-radius: var(--control-radius); color: var(--text); font: inherit; cursor: pointer; transition: border-color var(--transition); }
     button:disabled { opacity: 0.45; cursor: default; }
     button:not(:disabled):hover { border-color: var(--accent); }
     button:focus-visible, select:focus-visible, .jump:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }

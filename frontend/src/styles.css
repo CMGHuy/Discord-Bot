@@ -1,6 +1,8 @@
 /* Global styles. Everything component-level lives with its component --
  * this file is tokens, the document base, and nothing else. */
 @import './styles/fonts.css';
+/* Tier 1 before tiers 2 and 3: tokens.css refers to these names (spec v167 § 1). */
+@import './styles/palette.css';
 @import './styles/tokens.css';
 
 *,
@@ -36,7 +38,7 @@ body {
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--glow-ambient), var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--text-body);
@@ -142,7 +144,10 @@ a:hover {
 .stale { color: var(--warn); font-size: var(--text-table); }
 .error { color: var(--neg); font-size: var(--text-table); }
 
-/* L3 — the only level that casts a shadow.
+/* Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+ * the one-shadow law this comment stated (spec v54 D2). Original text, kept:
+ *
+ * L3 — the only level that casts a shadow.
  *
  * L0 --bg (the page, no border), L1 --surface (a panel, 1px border),
  * L2 --surface-raised (a thing on a panel, 1px border) and L3 (this) are the
@@ -151,11 +156,22 @@ a:hover {
  *
  * So a shadow here says exactly one thing: THIS ELEMENT IS NOT PART OF THE
  * PAGE FLOW. Dropdown, popover, tooltip, toast, drawer, dialog. Nothing else
- * may take it, and primitives.spec.ts enforces that. */
+ * may take it, and primitives.spec.ts enforces that.
+ *
+ * v167 §3, two levels. An in-flow panel (L1/L2) takes .sb-panel and casts
+ * --panel-shadow: a 3% top highlight and a soft drop. An out-of-flow element
+ * (L3: dropdown, popover, tooltip, toast, drawer, dialog) takes .elev-overlay
+ * and casts --shadow-overlay. No component writes a non-inset box-shadow of
+ * its own; primitives.spec.ts G3 holds this file to exactly these two, panel
+ * first, so an element carrying both classes reads as the overlay. */
+.sb-panel {
+  box-shadow: var(--panel-shadow);
+}
+
 .elev-overlay {
   background: var(--surface-overlay);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border-radius: var(--panel-radius);
   box-shadow: var(--shadow-overlay);
 }
 

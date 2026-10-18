@@ -124,7 +124,7 @@ export function sparkGeometry(series: SparkSeries, width = 120, height = 32): Sp
   `,
   styles: `
     :host { display: inline-flex; align-items: center; gap: var(--space-6); max-width: 100%; }
-    .spark { display: inline-flex; align-items: center; flex: none; min-height: 44px; line-height: 0; border-radius: 2px; }
+    .spark { display: inline-flex; align-items: center; flex: none; min-height: 44px; line-height: 0; border-radius: var(--radius-sm); }
     .spark:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
     .line { fill: none; stroke: var(--text-secondary); stroke-width: 1.25; }
     .line.dimmed { opacity: 0.35; stroke-dasharray: 2 2; }

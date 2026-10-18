@@ -248,7 +248,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
     .breakdown .r-head { cursor: help; }
     .breakdown .win.withheld { color: var(--text-secondary); }
     .breakdown .bar { width: 30%; }
-    .breakdown .fill { display: block; height: 8px; border-radius: 2px; background: var(--text-faint); }
+    .breakdown .fill { display: block; height: 8px; border-radius: var(--radius-sm); background: var(--text-faint); }
     .breakdown .fill.pos { background: var(--pos); }
     .breakdown .fill.neg { background: var(--neg); }
     .day-loading { margin: 0; color: var(--text-secondary); }

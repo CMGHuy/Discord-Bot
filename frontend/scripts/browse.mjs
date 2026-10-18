@@ -11,12 +11,18 @@
  * waits for the partner to sign in in the window.
  *
  *   node scripts/browse.mjs shots --out <dir> --path "/trades/ID?tab=live" [--path ...]
- *                                 [--widths 1440,1024,768,390] [--base URL]
+ *                                 [--widths 1440,1024,768,390] [--base URL] [--click <css selector>] [--settle <ms, default 1500>]
  *   node scripts/browse.mjs api   --path /api/v1/trades?status=CLOSED   # prints JSON
  *   node scripts/browse.mjs login                                        # just sign in
  *
  * Every `shots` capture is a full-page PNG named <slug>@<width>.png, plus
  * <slug>@<width>.txt with the page's visible text.
+ *
+ * --click opens something before the shot (a drawer, a menu): after the
+ * page settles it clicks the FIRST match and waits 800 ms. It may repeat;
+ * the clicks run in the order given. Each .txt starts
+ * with `page-scroll-x: <n>`, the document's horizontal overflow in px at
+ * the 900px-tall viewport -- 0 means no horizontal page scroll.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -29,7 +35,7 @@ const LOGIN_TIMEOUT_MS = 5 * 60_000;
 const ENV_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env');
 
 function parseArgs(argv) {
-  const opts = { cmd: argv[0] ?? 'login', paths: [], widths: [1440, 1024, 768, 390], base: 'https://bomeo-capital.com', out: null };
+  const opts = { cmd: argv[0] ?? 'login', paths: [], widths: [1440, 1024, 768, 390], base: 'https://bomeo-capital.com', out: null, clicks: [], settle: 1500 };
   for (let i = 1; i < argv.length; i += 2) {
     const [flag, value] = [argv[i], argv[i + 1]];
     // Leading slash optional: Git Bash rewrites "/trades/x" into a Windows
@@ -38,6 +44,8 @@ function parseArgs(argv) {
     else if (flag === '--widths') opts.widths = value.split(',').map(Number);
     else if (flag === '--base') opts.base = value.replace(/\/$/, '');
     else if (flag === '--out') opts.out = value;
+    else if (flag === '--click') opts.clicks.push(value);
+    else if (flag === '--settle') opts.settle = Number(value);
     else throw new Error(`unknown flag ${flag}`);
   }
   return opts;
@@ -95,6 +103,29 @@ function slug(path) {
   return path.replace(/^\//, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/_$/, '') || 'root';
 }
 
+/** --click: the first match only. A miss is reported, not fatal, so one
+ *  empty page does not cost the rest of the set. */
+async function clickFirst(page, selector, path) {
+  const target = page.locator(selector).first();
+  await target.waitFor({ timeout: 10_000 }).catch(() => {}); // lazy routes and their data arrive late
+  if ((await target.count()) === 0) {
+    console.error(`--click matched nothing on ${path}: ${selector}`);
+    return;
+  }
+  // DOM click, not a pointer click: at 390px the sidebar links sit in a closed
+  // drawer, and Playwright refuses to click what is outside the viewport.
+  await target.evaluate((el) => el.click());
+  await page.waitForTimeout(800);
+}
+
+/** Horizontal overflow of the page itself, in px: 0 means no sideways scroll. */
+function pageScrollX(page) {
+  return page.evaluate(() => {
+    const doc = document.documentElement;
+    return Math.max(doc.scrollWidth - doc.clientWidth, document.body.scrollWidth - document.body.clientWidth);
+  });
+}
+
 async function shots(page, opts) {
   if (!opts.out) throw new Error('--out is required for shots');
   mkdirSync(opts.out, { recursive: true });
@@ -112,7 +143,9 @@ async function shots(page, opts) {
         return main.innerText.trim().length > 200 && !/Loading/.test(document.body.innerText);
       }, null, { timeout: 30_000 })
         .catch(() => console.error(`still loading after 30s: ${path}`));
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(opts.settle);
+      for (const selector of opts.clicks) await clickFirst(page, selector, path);
+      const scrollX = await pageScrollX(page);
       const name = join(opts.out, `${slug(path)}@${width}`);
       // The shell scrolls an inner pane, not the document, so fullPage alone
       // stops at the fold: grow the viewport to the tallest scroller first.
@@ -125,7 +158,8 @@ async function shots(page, opts) {
       await page.waitForTimeout(500);
       await page.screenshot({ path: `${name}.png`, fullPage: true });
       await page.setViewportSize({ width, height: 900 });
-      writeFileSync(`${name}.txt`, await page.evaluate(() => document.body.innerText));
+      writeFileSync(`${name}.txt`, `page-scroll-x: ${scrollX}
+${await page.evaluate(() => document.body.innerText)}`);
       console.error(`${name}.png`);
     }
   }

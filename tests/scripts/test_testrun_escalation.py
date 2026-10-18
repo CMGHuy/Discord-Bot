@@ -27,3 +27,15 @@ def test_an_unrelated_frontend_edit_does_not_escalate(monkeypatch):
 
     monkeypatch.setattr(testrun, "changed_paths", lambda: ["frontend/src/app/ui/chip.ts"])
     assert testrun.should_escalate() == (False, "")
+
+
+def test_a_palette_edit_escalates_fast_to_full(monkeypatch):
+    """Spec v167 § 1: tier 1 lives in frontend/src/styles/palette.css, and
+    test_chart_theme.py resolves THEME through it. A palette-only edit must
+    escalate `fast` just as a tokens.css edit does."""
+    import testrun
+
+    monkeypatch.setattr(testrun, "changed_paths", lambda: ["frontend/src/styles/palette.css"])
+    escalate, reason = testrun.should_escalate()
+    assert escalate
+    assert "frontend/src/styles/palette.css" in reason

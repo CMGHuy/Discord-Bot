@@ -1,0 +1,512 @@
+page-scroll-x: 0
+Dashboard
+Watchlist
+Risk
+Trades
+Calendar
+Analytics
+Research
+Reports
+System
+Versions
+
+Trade smarter. Build further.
+
+ui
+1.28.0
+bot
+2.10.0
+updated 2026-10-18 08:28 UTC
+Calendar
+MKT
+S&P 500
+7,659.44
+-1.09%
+Nasdaq 100
+29,187.55
+-2.50%
+Dow Jones
+52,002.41
+-0.34%
+VIX
+19.98
++21.39%
+AAPL
+342.62
++0.18%
+ABNB
+173.20
+-0.62%
+AMD
+527.09
+-6.25%
+AMZN
+248.98
+-2.27%
+ARM
+227.00
+-7.27%
+ASML
+1,640.41
+-1.03%
+ASTS
+40.65
+-8.57%
+AVGO
+330.30
+-4.07%
+CEG
+269.76
+-1.91%
+CRM
+239.56
+-2.91%
+CRWD
+226.40
+-7.43%
+CRWV
+60.99
+-12.48%
+DELL
+449.00
+-5.15%
+GC=F
+no price
+GEV
+918.00
+-0.91%
+GLW
+131.26
+-5.18%
+GOOGL
+339.22
+-2.86%
+GS
+877.71
+-1.52%
+HD
+309.08
++0.27%
+HIMS
+28.05
+-4.53%
+HOOD
+98.55
+-5.23%
+HPQ
+30.00
+-2.76%
+IBM
+231.20
+-1.25%
+INTC
+89.33
+-6.33%
+INTU
+324.59
+-1.69%
+IREN
+26.96
+-11.29%
+ISRG
+423.00
+-1.14%
+JPM
+339.40
++1.15%
+META
+705.32
+-4.26%
+MRNA
+215.34
+-8.95%
+MRVL
+226.90
+-5.94%
+MSFT
+526.83
+-2.34%
+MSTR
+135.50
+-10.44%
+MU
+875.98
+-5.93%
+NBIS
+165.45
+-12.19%
+NFLX
+70.33
+-3.14%
+NKE
+37.14
+0.00%
+NOW
+141.48
+-4.77%
+NVDA
+213.75
+-1.60%
+ORCL
+127.80
+-4.96%
+S&P 500
+7,659.44
+-1.09%
+Nasdaq 100
+29,187.55
+-2.50%
+Dow Jones
+52,002.41
+-0.34%
+VIX
+19.98
++21.39%
+AAPL
+342.62
++0.18%
+ABNB
+173.20
+-0.62%
+AMD
+527.09
+-6.25%
+AMZN
+248.98
+-2.27%
+ARM
+227.00
+-7.27%
+ASML
+1,640.41
+-1.03%
+ASTS
+40.65
+-8.57%
+AVGO
+330.30
+-4.07%
+CEG
+269.76
+-1.91%
+CRM
+239.56
+-2.91%
+CRWD
+226.40
+-7.43%
+CRWV
+60.99
+-12.48%
+DELL
+449.00
+-5.15%
+GC=F
+no price
+GEV
+918.00
+-0.91%
+GLW
+131.26
+-5.18%
+GOOGL
+339.22
+-2.86%
+GS
+877.71
+-1.52%
+HD
+309.08
++0.27%
+HIMS
+28.05
+-4.53%
+HOOD
+98.55
+-5.23%
+HPQ
+30.00
+-2.76%
+IBM
+231.20
+-1.25%
+INTC
+89.33
+-6.33%
+INTU
+324.59
+-1.69%
+IREN
+26.96
+-11.29%
+ISRG
+423.00
+-1.14%
+JPM
+339.40
++1.15%
+META
+705.32
+-4.26%
+MRNA
+215.34
+-8.95%
+MRVL
+226.90
+-5.94%
+MSFT
+526.83
+-2.34%
+MSTR
+135.50
+-10.44%
+MU
+875.98
+-5.93%
+NBIS
+165.45
+-12.19%
+NFLX
+70.33
+-3.14%
+NKE
+37.14
+0.00%
+NOW
+141.48
+-4.77%
+NVDA
+213.75
+-1.60%
+ORCL
+127.80
+-4.96%
+Connecting
+bot offline
+Sun, Oct 18, 2026 16:53
+‹
+October 2026
+›
+€
+R
+Trades
+Win rate
+STRATEGY
+Any strategy
+Bollinger lower
+Bollinger upper
+Donchian high
+Donchian low
+EMA100
+EMA14
+EMA150
+EMA20
+EMA200
+EMA21
+EMA250
+EMA30
+EMA35
+EMA40
+EMA50
+EMA60
+EMA70
+EMA80
+EMA9
+FVG (bearish)
+FVG (bullish)
+Fib 23.6%
+Fib 38.2%
+Fib 50.0%
+Fib 61.8%
+Fib 78.6%
+Floor Pivot
+Floor R1
+Floor R2
+Floor S1
+Floor S2
+Pivot high
+Pivot low
+Rolling resistance
+Rolling support
+Swing high
+Swing low
+Trendline (10x touch)
+Trendline (11x touch)
+Trendline (2x touch)
+Trendline (3x touch)
+Trendline (4x touch)
+Trendline (5x touch)
+Trendline (6x touch)
+Trendline (7x touch)
+Trendline (8x touch)
+Trendline (9x touch)
+VWAP
+Volume Profile HVN
+HORIZON
+Any horizon
+2m
+2w
+3m
+4m
+4w
+5m
+6m
+7m
+8m
+9m
+
+thin sample — N=12
+
+NET THIS MONTH
+374.89€
+TRADES
+145
+WIN RATE
+55.6%
+WINNING DAYS
+10 (83%)
+N=12 · thin sample
+AVERAGE DAY
++31.24 €
+N=12 · thin sample
+BEST DAY
++173.48 €
+N=12 · thin sample
+WORST DAY
+-73.33 €
+N=12 · thin sample
+MON
+TUE
+WED
+THU
+FRI
+SAT
+SUN
+28
+29
+30
+1
+-35
+2
+2
++33
+9
+3
+4
+5
++143
+8
+6
++58
+12
+7
++13
+3
+8
++32
+12
+9
++101
+12
+10
+11
+12
++14
+3
+13
+-18
+10
+14
+-73
+9
+15
++173
+36
+16
+-67
+29
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+1
+BY WEEKDAY (ALL HISTORY)
+DAY	AVG	WIN RATE	N
+Mon	-1.83 €	43%	167
+Tue	-2.53 €	50%	228
+Wed	-1.92 €	55%	237
+Thu	-2.94 €	55%	221
+Fri	-1.05 €	53%	214
+2026-10-01
+×
+Open full day →
+
+Paper trades · P&L before commissions, fees and tax
+
+TOTAL
+-2.00R
+N=2 · thin sample
+TOTAL P&L
+-34.98 €
+N=2 · thin sample
+WIN RATE
+0%
+N=2 · thin sample
+WINNERS
+0
+N=2 · thin sample
+LOSERS
+2
+N=2 · thin sample
+AVERAGE TRADE
+-1.00R
+N=2 · thin sample
+WORST DRAWDOWN
++2.00R
+N=2 · thin sample
+CONTRIBUTORS
+
+Nothing gained today.
+
+DETRACTORS
+
+NOW · -1.00R
+
+INTU · -1.00R
+
+NOW
+c580fc
+Bollinger upper · 3m
+-17.50 €
+
+Opened 1 Oct, 15:34 · Closed 1 Oct, 16:33
+
+loss · -1.00R · MFE +0.53R · MAE +1.05R
+
+Outcome loss at -1.00R.
+
+weak_source
+
+INTU
+2abfc2
+FVG (bearish) · 2m
+-17.48 €
+
+Opened 1 Oct, 15:54 · Closed 1 Oct, 16:45
+
+loss · -1.00R · MFE +1.22R · MAE +1.03R
+
+Outcome loss at -1.00R.
+
+weak_source

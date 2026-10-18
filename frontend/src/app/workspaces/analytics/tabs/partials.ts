@@ -193,7 +193,7 @@ export function monthTrend(rows: readonly PartialsBreakdownRow[]): LineChartSeri
       }
     }
   `,
-  styles: `:host{display:grid;gap:var(--space-14)}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:var(--space-10)}.tile.hero{outline:1px solid var(--accent);border-radius:var(--radius)}.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-14)}.wide{grid-column:1/-1}.breakdown{width:100%;border-collapse:collapse;font-size:var(--text-table);margin-top:var(--space-10)}.breakdown th,.breakdown td{padding:var(--space-4) var(--space-8);text-align:left;border-bottom:1px solid var(--border)}.breakdown .num{text-align:right;font-variant-numeric:tabular-nums}.breakdown tr.thin td{color:var(--text-faint)}.footer{margin:0;font-size:var(--text-micro);color:var(--text-faint)}@media(max-width:639px){.panels{grid-template-columns:1fr}}`,
+  styles: `:host{display:grid;gap:var(--space-14)}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:var(--space-10)}.tile.hero{outline:1px solid var(--accent);border-radius:var(--panel-radius)}.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-14)}.wide{grid-column:1/-1}.breakdown{width:100%;border-collapse:collapse;font-size:var(--text-table);margin-top:var(--space-10)}.breakdown th,.breakdown td{padding:var(--space-4) var(--space-8);text-align:left;border-bottom:1px solid var(--border)}.breakdown .num{text-align:right;font-variant-numeric:tabular-nums}.breakdown tr.thin td{color:var(--text-faint)}.footer{margin:0;font-size:var(--text-micro);color:var(--text-faint)}@media(max-width:639px){.panels{grid-template-columns:1fr}}`,
 })
 export class PartialsTab {
   readonly store = inject(AnalyticsStore);

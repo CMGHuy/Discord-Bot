@@ -57,7 +57,7 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
       padding: var(--space-14);
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
     }
     .label {
       font-size: var(--text-micro);

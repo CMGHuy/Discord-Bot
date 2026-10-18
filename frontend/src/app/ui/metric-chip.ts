@@ -35,7 +35,7 @@ import { MetricTone } from './metric-card';
       padding: var(--space-6) var(--space-10);
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       height: 100%;
       box-sizing: border-box;
     }

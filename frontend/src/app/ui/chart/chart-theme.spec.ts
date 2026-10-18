@@ -1,7 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { resolveToken } from '../testing/resolve-token';
 import { chartOptions, chartPalette, tokenPx } from './chart-theme';
 
 /**
@@ -15,44 +14,40 @@ import { chartOptions, chartPalette, tokenPx } from './chart-theme';
  * the test document, so the read resolves — and if that ever stops working,
  * these assertions fail loudly instead of the fallback quietly covering it up.
  *
- * The expected values are parsed out of `tokens.css` rather than written here,
- * for the same reason the fallbacks were removed: a literal in this file is one
- * more copy of the palette to keep in step.
+ * The expected values come from `resolveToken()` rather than being written
+ * here, for the same reason the fallbacks were removed: a literal in this file
+ * is one more copy of the palette to keep in step. Not the raw tokens.css text
+ * either: since spec v167 tier 2 reads `--pos: var(--mint-400)`, and the
+ * palette must equal the literal the resolver reaches (test-setup.ts injects
+ * exactly those literals).
  */
-const CSS = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
-
-function tokenValue(name: string): string {
-  const match = new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm').exec(CSS);
-  if (!match) throw new Error(`tokens.css does not define ${name}`);
-  return match[1].trim();
-}
 
 describe('chartPalette', () => {
   it('resolves every colour from the token file', () => {
     const palette = chartPalette();
 
-    expect(palette.up).toBe(tokenValue('--pos'));
-    expect(palette.down).toBe(tokenValue('--neg'));
-    expect(palette.accent).toBe(tokenValue('--accent'));
-    expect(palette.warn).toBe(tokenValue('--warn'));
-    expect(palette.text).toBe(tokenValue('--text'));
-    expect(palette.textMuted).toBe(tokenValue('--text-muted'));
-    expect(palette.border).toBe(tokenValue('--border'));
-    expect(palette.surface).toBe(tokenValue('--surface'));
-    expect(palette.volume).toBe(tokenValue('--text-faint'));
-    expect(palette.separator).toBe(tokenValue('--border-strong'));
-    expect(palette.separatorHover).toBe(tokenValue('--accent'));
-    expect(palette.info).toBe(tokenValue('--info'));
-    expect(palette.posSoft).toBe(tokenValue('--pos-soft'));
-    expect(palette.negSoft).toBe(tokenValue('--neg-soft'));
-    expect(palette.infoSoft).toBe(tokenValue('--info-soft'));
+    expect(palette.up).toBe(resolveToken('--pos'));
+    expect(palette.down).toBe(resolveToken('--neg'));
+    expect(palette.accent).toBe(resolveToken('--accent'));
+    expect(palette.warn).toBe(resolveToken('--warn'));
+    expect(palette.text).toBe(resolveToken('--text'));
+    expect(palette.textMuted).toBe(resolveToken('--text-muted'));
+    expect(palette.border).toBe(resolveToken('--border'));
+    expect(palette.surface).toBe(resolveToken('--surface'));
+    expect(palette.volume).toBe(resolveToken('--text-faint'));
+    expect(palette.separator).toBe(resolveToken('--border-strong'));
+    expect(palette.separatorHover).toBe(resolveToken('--accent'));
+    expect(palette.info).toBe(resolveToken('--info'));
+    expect(palette.posSoft).toBe(resolveToken('--pos-soft'));
+    expect(palette.negSoft).toBe(resolveToken('--neg-soft'));
+    expect(palette.infoSoft).toBe(resolveToken('--info-soft'));
     // v54 D5 (CHART_CHROME): axis and tooltipBorder are deliberately the same
     // token (--border-strong) under two names for two different roles --
     // asserted against tooltipSurface too so a future edit that merges them
     // back into one field would fail here, not silently in the chart.
-    expect(palette.axis).toBe(tokenValue('--border-strong'));
-    expect(palette.tooltipSurface).toBe(tokenValue('--surface-overlay'));
-    expect(palette.tooltipBorder).toBe(tokenValue('--border-strong'));
+    expect(palette.axis).toBe(resolveToken('--border-strong'));
+    expect(palette.tooltipSurface).toBe(resolveToken('--surface-overlay'));
+    expect(palette.tooltipBorder).toBe(resolveToken('--border-strong'));
   });
 
   it('leaves no entry empty', () => {
