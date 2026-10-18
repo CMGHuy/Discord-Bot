@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-17 21:19:36 UTC",
+  "generated_at": "2026-10-18 08:28:47 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.27.0",
+    "ui": "1.28.0",
     "bot": "2.10.0"
   },
   "releases": [
@@ -1811,6 +1811,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "7226b3e4",
+      "subject": "release(ui): 1.28.0 -- trade detail reorganised: outcome strip, header actions, Overview/Why/Chart/Journal tabs, responsive card grid (v166)",
+      "versions": {
+        "ui": "1.28.0",
+        "bot": "2.10.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
