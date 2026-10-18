@@ -49,7 +49,7 @@ export type ButtonVariant =
       min-height: var(--control-h);
       padding: 0 var(--space-14);
       border: 1px solid transparent;
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       font-family: var(--font-sans);
       font-size: var(--text-table);
       font-weight: 600;
@@ -141,7 +141,7 @@ export type ButtonVariant =
       min-height: var(--control-h);
       padding: var(--space-4) var(--space-8);
       border-color: var(--border);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       background: var(--surface-raised);
       color: var(--text-secondary);
       font-size: var(--text-chip);

@@ -103,7 +103,7 @@ export interface HistogramBin {
     .track {
       height: 10px;
       background: var(--bg);
-      border-radius: 2px;
+      border-radius: var(--radius-sm);
       overflow: hidden;
     }
     .fill {
@@ -112,7 +112,7 @@ export interface HistogramBin {
       /* Gains and losses are P&L direction — the one place the green/red pair
          is allowed by the colour rule. */
       background: var(--pos);
-      border-radius: 2px;
+      border-radius: var(--radius-sm);
     }
     .fill.negative { background: var(--neg); }
   `,

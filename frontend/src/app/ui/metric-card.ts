@@ -44,7 +44,7 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
       padding: var(--space-14) var(--space-20);
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
       height: 100%;
       box-sizing: border-box;
     }

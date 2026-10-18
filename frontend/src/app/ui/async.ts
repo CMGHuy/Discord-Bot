@@ -88,7 +88,7 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
       min-height: var(--control-h);
       padding: 0 var(--space-14);
       border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       background: var(--surface-raised);
       color: var(--text);
       font-family: var(--font-sans);
@@ -102,7 +102,7 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
     .skeleton-cell {
       flex: 1;
       height: var(--control-h);
-      border-radius: var(--radius-chip);
+      border-radius: var(--radius-sm);
       background: var(--surface-raised);
       animation: pulse 1.4s var(--ease-out) infinite;
     }
@@ -112,7 +112,7 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
     .reason {
       display: inline-block;
       padding: var(--space-4) var(--space-8);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       font-family: var(--font-mono);
       font-size: var(--text-micro);
       text-transform: uppercase;
@@ -128,7 +128,7 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
       top: 0;
       right: 0;
       padding: var(--space-4) var(--space-6);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       background: var(--warn-soft);
       color: var(--warn);
       font-family: var(--font-mono);

@@ -69,7 +69,7 @@ export interface TimelineItem {
       letter-spacing: 0.1em;
       color: var(--accent);
       border: 1px solid var(--accent);
-      border-radius: var(--radius);
+      border-radius: var(--chip-radius);
       padding: 0 4px;
     }
     .meta { font-size: var(--text-micro); color: var(--text-faint); }

@@ -94,7 +94,7 @@ export function qualityTone(value: number | string | null | undefined): ChipTone
       align-items: center;
       padding: 1px var(--space-6);
       border: 1px solid var(--border-strong);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       font-family: var(--font-mono);
       font-size: var(--text-chip);
       font-weight: 500;

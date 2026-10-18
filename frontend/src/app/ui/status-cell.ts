@@ -130,7 +130,7 @@ export interface StatusCellRow {
       position: relative;
       width: 72px;
       height: 4px;
-      border-radius: 2px;
+      border-radius: var(--radius-sm);
       background: var(--surface-raised);
       overflow: hidden;
     }

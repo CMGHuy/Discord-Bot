@@ -22,8 +22,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
     }
   `,
   styles: `
-    :host { display: block; height: 3px; background: var(--surface-raised); border-radius: 2px; }
-    .bar { display: block; height: 100%; border-radius: 2px; background: var(--pos); }
+    :host { display: block; height: 3px; background: var(--surface-raised); border-radius: var(--radius-sm); }
+    .bar { display: block; height: 100%; border-radius: var(--radius-sm); background: var(--pos); }
     .bar.neg { background: var(--neg); margin-left: auto; }
   `,
 })

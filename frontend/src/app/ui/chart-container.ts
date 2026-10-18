@@ -118,7 +118,7 @@ import { EmptyStateComponent } from './empty-state';
     .retry {
       padding: var(--space-6) var(--space-14);
       border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       background: var(--surface-raised);
       color: var(--text);
       font: inherit;
