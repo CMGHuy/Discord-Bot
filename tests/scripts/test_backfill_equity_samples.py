@@ -165,3 +165,147 @@ def test_bar_for_matches_by_date_and_rejects_nan():
     assert bes.bar_for(BARS["AAPL"], MON) == bes.Bar(99.0, 104.0, 98.0, 102.0)
     assert bes.bar_for(BARS["AAPL"], date(2026, 10, 8)) is None
     assert bes.bar_for(None, MON) is None
+
+
+# --- V172-7: the CLI -------------------------------------------------------------
+from swingbot.core.db.repositories.equity_samples import EquitySampleRepository  # noqa: E402
+from tests.store_seed import seed_store  # noqa: E402
+
+TODAY = date(2026, 10, 8)            # Thursday, no live rows: days covered are Mon..Wed
+RUN = "20261008T120000Z"
+
+
+@pytest.fixture
+def account():
+    seed_store("account", {"base_balance": 10000.0, "balance": 10000.0, "risk_pct": 1.0,
+                           "max_position_pct": 20.0, "sizing_mode": "risk_pct",
+                           "balance_history": []})
+
+
+@pytest.fixture
+def repo():
+    return EquitySampleRepository()
+
+
+def _bars_fn(frames, calls):
+    def fetch(ticker, start, end):
+        calls.append((ticker, start, end))
+        if ticker not in frames:
+            raise OSError("HTTP 404")
+        return frames[ticker].copy()
+    return fetch
+
+
+def _main(monkeypatch, argv, repo, tmp_path, *, frames=BARS, calls=None, run_id=RUN, trades=None):
+    monkeypatch.setattr(bes, "new_run_id", lambda: run_id)
+    return bes.main(argv, bars_fn=_bars_fn(frames, [] if calls is None else calls), repo=repo,
+                    trades_fn=lambda: list(TRADES if trades is None else trades),
+                    plans_fn=lambda: {}, today=TODAY, out_dir=tmp_path / run_id)
+
+
+def _live(at, realized, unrealized):
+    return {"at": at, "realized_balance": Decimal(str(realized)),
+            "unrealized_pnl": Decimal(str(unrealized)),
+            "equity": Decimal(str(realized)) + Decimal(str(unrealized)), "open_n": 1,
+            "skipped_n": 0, "source": "live", "kind": "point", "backfill_run": None}
+
+
+def test_dry_run_reports_coverage_and_writes_nothing(monkeypatch, repo, account, tmp_path, capsys):
+    calls = []
+    assert _main(monkeypatch, [], repo, tmp_path, calls=calls) == {
+        "run_id": RUN, "bars_asof": "2026-10-07", "days": 3, "rows": 12, "written": 0,
+        "gaps": 0, "skipped": 0, "recomputed": 0}
+    assert repo.list_rows() == []
+    out = capsys.readouterr().out
+    for line in (f"run id: {RUN}", "bars as-of: 2026-10-07",
+                 "days covered: 3 (2026-10-05..2026-10-07)", "DRY RUN: rows=12 gaps=0 skipped=0",
+                 "Dry run only -- pass --apply to write."):
+        assert line in out
+    assert sorted(calls) == [("AAPL", MON, WED), ("MSFT", TUE, WED)]     # held days only
+    assert (tmp_path / RUN / "AAPL.csv").exists() and (tmp_path / RUN / "MSFT.csv").exists()
+
+
+def test_apply_writes_four_rows_a_day_and_a_rerun_writes_nothing_new(
+        monkeypatch, repo, account, tmp_path):
+    assert _main(monkeypatch, ["--apply"], repo, tmp_path)["written"] == 12
+    rows = repo.list_rows(sources=("backfill",))
+    assert {r["backfill_run"] for r in rows} == {f"{RUN}@bars-asof-2026-10-07"}
+    assert sorted(r["equity"] for r in rows if bes.ny_day(r["at"]) == WED) == [
+        10055.0, 10060.0, 10125.0, 10130.0]
+    assert _main(monkeypatch, ["--apply"], repo, tmp_path, run_id="20261009T090000Z")["written"] == 0
+    assert len(repo.list_rows()) == 12
+
+
+def test_replace_rewrites_every_backfill_row_with_the_new_run(monkeypatch, repo, account, tmp_path):
+    _main(monkeypatch, ["--apply"], repo, tmp_path)
+    assert _main(monkeypatch, ["--apply", "--replace"], repo, tmp_path,
+                 run_id="20261009T090000Z")["written"] == 12
+    rows = repo.list_rows(sources=("backfill",))
+    assert len(rows) == 12
+    assert {r["backfill_run"] for r in rows} == {"20261009T090000Z@bars-asof-2026-10-07"}
+
+
+def test_the_coverage_gate_refuses_a_gap_unless_allowed(monkeypatch, repo, account, tmp_path, capsys):
+    short = {"AAPL": BARS["AAPL"], "MSFT": _frame({TUE: (201, 203, 196, 198)})}
+    summary = _main(monkeypatch, ["--apply"], repo, tmp_path, frames=short)
+    assert (summary["gaps"], summary["written"]) == (1, 0)
+    assert repo.list_rows() == []
+    assert "REFUSED: 1 coverage gap(s)" in capsys.readouterr().out
+    assert _main(monkeypatch, ["--apply", "--allow-gaps"], repo, tmp_path, frames=short)["written"] == 12
+    wed = [r for r in repo.list_rows() if bes.ny_day(r["at"]) == WED]
+    assert {r["skipped_n"] for r in wed} == {1}
+
+
+def test_a_failed_fetch_is_a_gap_and_is_reported(monkeypatch, repo, account, tmp_path, capsys):
+    summary = _main(monkeypatch, [], repo, tmp_path, frames={"AAPL": BARS["AAPL"]})
+    assert summary["gaps"] == 2                               # MSFT on Tue and on Wed
+    out = capsys.readouterr().out
+    assert "MSFT: fetch failed (HTTP 404)" in out
+    assert "skipped 2026-10-06 MSFT trade m1: fetch failed" in out
+
+
+def test_days_stop_at_the_session_before_the_first_live_sample(monkeypatch, repo, account, tmp_path):
+    repo.insert_sample(_live(datetime(2026, 10, 7, 14, 0, tzinfo=timezone.utc), 10000, 0))
+    assert _main(monkeypatch, [], repo, tmp_path)["days"] == 2   # Mon, Tue
+
+
+def test_fetch_raw_bars_asks_yfinance_for_unadjusted_daily_bars(monkeypatch):
+    seen = {}
+
+    def fake_download(ticker, **kwargs):
+        seen.update(ticker=ticker, **kwargs)
+        frame = BARS["AAPL"].copy()
+        frame.columns = pd.MultiIndex.from_product([frame.columns, [ticker]])
+        frame[("Adj Close", ticker)] = 1.0
+        return frame
+
+    monkeypatch.setattr(bes.yf, "download", fake_download)
+    frame = bes.fetch_raw_bars("AAPL", MON, WED)
+    assert seen["auto_adjust"] is False
+    assert (seen["ticker"], seen["interval"], seen["progress"]) == ("AAPL", "1d", False)
+    assert (seen["start"], seen["end"]) == ("2026-10-05", "2026-10-08")  # yfinance's end is exclusive
+    assert list(frame.columns) == ["Open", "High", "Low", "Close"]
+
+
+def test_recompute_realized_rewrites_only_the_realized_columns_of_live_rows(
+        monkeypatch, repo, account, tmp_path):
+    at = datetime(2026, 10, 8, 15, 0, tzinfo=timezone.utc)
+    repo.insert_sample(_live(at, 9000.0, 25.0))                       # stale: AAPL's +100 missing
+    repo.upsert_many([{**_live(at, 1.0, 0.0), "source": "backfill", "backfill_run": "old@bars-asof-x"}])
+    assert _main(monkeypatch, ["--recompute-realized"], repo, tmp_path)["recomputed"] == 1
+    assert repo.list_rows(sources=("live",))[0]["realized_balance"] == 9000.0   # dry run
+    assert _main(monkeypatch, ["--recompute-realized", "--apply"], repo, tmp_path)["recomputed"] == 1
+    (live,) = repo.list_rows(sources=("live",))
+    assert (live["realized_balance"], live["unrealized_pnl"], live["equity"]) == (10100.0, 25.0, 10125.0)
+    (old,) = repo.list_rows(sources=("backfill",))
+    assert old["realized_balance"] == 1.0
+    assert _main(monkeypatch, ["--recompute-realized", "--apply"], repo, tmp_path)["recomputed"] == 0
+
+
+def test_a_pending_placeholder_is_never_fetched_or_written(monkeypatch, repo, account, tmp_path):
+    pending = {**MSFT, "id": "p1", "ticker": "NVDA", "status": "PENDING"}
+    calls = []
+    summary = _main(monkeypatch, ["--apply"], repo, tmp_path, calls=calls,
+                    trades=[AAPL, MSFT, pending], frames={**BARS})
+    assert summary["written"] == 12 and summary["gaps"] == 0
+    assert "NVDA" not in {c[0] for c in calls}

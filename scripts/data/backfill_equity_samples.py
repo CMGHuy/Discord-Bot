@@ -36,21 +36,27 @@ Production (after the v172 deploy):
 """
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
 from typing import NamedTuple
 
 import pandas as pd
+import yfinance as yf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from swingbot.core.market.session import US_MARKET_TZ  # noqa: E402
+from swingbot.core.db.repositories.equity_samples import equity_samples_repo  # noqa: E402
+from swingbot.core.market.session import US_MARKET_TZ, nyse_calendar  # noqa: E402
 from swingbot.core.tracking import equity  # noqa: E402
 from swingbot.core.tracking.performance import expand_trade_legs  # noqa: E402
 
+ROOT = Path(__file__).resolve().parents[2]
+DRY_RUN_NOTE = "Dry run only -- pass --apply to write."
 SESSION_OPEN = time(9, 30)
 SESSION_CLOSE = time(16, 0)
 GAP_REASONS = ("fetch failed", "no bar")
@@ -239,3 +245,181 @@ def build_day_rows(day: date, positions: list[dict], bars: dict[str, pd.DataFram
         _row(open_at, "day_low", after, totals["low_u"], *common),
         _row(close_at, "point", after, totals["close_u"], *common),
     ], skips
+
+
+def new_run_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def fetch_raw_bars(ticker: str, start: date, end: date) -> pd.DataFrame:
+    """UNADJUSTED daily bars, start..end inclusive (yfinance's `end` is exclusive).
+    Entries and exits are raw fills, so raw bars match them with no rebase."""
+    frame = yf.download(ticker, start=start.isoformat(), end=(end + timedelta(days=1)).isoformat(),
+                        interval="1d", auto_adjust=False, progress=False)
+    if frame is None or frame.empty:
+        return pd.DataFrame(columns=list(_OHLC))
+    if isinstance(frame.columns, pd.MultiIndex):
+        frame.columns = frame.columns.get_level_values(0)
+    return frame[list(_OHLC)]
+
+
+def _load_trades() -> list[dict]:
+    from swingbot.core.tracking.performance import TradeLog
+    return TradeLog().get_trades(status=None, limit=None, sort_by="opened_at") or []
+
+
+def backfill_days(trades: list[dict], repo, today: date) -> list[date]:
+    """NYSE sessions from the earliest entry day to the session before the first live sample."""
+    entries = [piece["entry_day"] for trade in equity.main_book(trades) for piece in _slices(trade)]
+    if not entries:
+        return []
+    first_live = repo.earliest_at("live")
+    stop = ny_day(first_live) if first_live is not None else today
+    return nyse_calendar().sessions(min(entries), stop - timedelta(days=1))
+
+
+def _spans(trades: list[dict], days: list[date]) -> dict[str, tuple[date, date]]:
+    """Per ticker, the first and last backfill day it was held: one fetch each."""
+    spans: dict[str, tuple[date, date]] = {}
+    for day in days:
+        for pos in held_positions(trades, day):
+            first, last = spans.get(pos["ticker"], (day, day))
+            spans[pos["ticker"]] = (min(first, day), max(last, day))
+    return spans
+
+
+def _fetch_all(spans: dict, bars_fn, out_dir: Path) -> dict[str, pd.DataFrame | None]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    frames: dict[str, pd.DataFrame | None] = {}
+    for ticker, (start, end) in sorted(spans.items()):
+        try:
+            frame = bars_fn(ticker, start, end)
+        except Exception as exc:                       # a failed fetch is a coverage gap
+            print(f"  {ticker}: fetch failed ({exc})")
+            frame = None
+        if frame is not None and not frame.empty:
+            frame.to_csv(out_dir / f"{ticker}.csv")
+        frames[ticker] = frame
+    return frames
+
+
+def _bars_asof(frames: dict) -> str:
+    dates = [frame.index.max().date() for frame in frames.values()
+             if frame is not None and not frame.empty]
+    return max(dates).isoformat() if dates else "none"
+
+
+def _build_all(days, trades, frames, legs, start, run_tag) -> tuple[list[dict], list[Skip]]:
+    rows: list[dict] = []
+    skips: list[Skip] = []
+    for day in days:
+        day_rows, day_skips = build_day_rows(day, held_positions(trades, day), frames, legs,
+                                             start, run_tag, allow_gaps=True)
+        rows.extend(day_rows)
+        skips.extend(day_skips)
+    return rows, skips
+
+
+def _write(repo, rows: list[dict], *, replace: bool) -> int:
+    rows = [{**row, "backfill_run": row.get("backfill_run")} for row in rows]   # same keys on every row
+    if replace:
+        return repo.replace_backfill(rows)
+    existing = repo.backfill_session_dates()
+    fresh = [row for row in rows if ny_day(row["at"]) not in existing]
+    return repo.upsert_many(fresh) if fresh else 0
+
+
+def recompute_realized(repo, trades: list[dict], *, apply: bool) -> int:
+    """Live rows whose stored realized balance differs from today's trade log;
+    with `apply`, rewrite realized_balance and equity, keeping unrealized_pnl."""
+    legs, start, changed = equity.realized_legs(trades), equity.starting_balance(), 0
+    for row in repo.list_rows(sources=("live",)):
+        realized = equity.realized_balance_at(start, legs, row["at"])
+        if float(realized.quantize(Decimal("0.01"), ROUND_HALF_UP)) == row.get("realized_balance"):
+            continue
+        changed += 1
+        if apply:
+            repo.update_realized(row["id"], realized,
+                                 realized + Decimal(str(row.get("unrealized_pnl") or 0)))
+    return changed
+
+
+def _parse(argv):
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--apply", action="store_true",
+                        help="Write. Default is a dry run that only reports.")
+    parser.add_argument("--replace", action="store_true",
+                        help="With --apply: delete every backfill row and rewrite them, one transaction.")
+    parser.add_argument("--allow-gaps", action="store_true",
+                        help="With --apply: write despite missing bars (left out, counted in skipped_n).")
+    parser.add_argument("--recompute-realized", action="store_true",
+                        help="Rewrite realized_balance/equity on live rows from the current trade log.")
+    return parser.parse_args(argv)
+
+
+def _summary(run_id: str, **values) -> dict:
+    return {"run_id": run_id, "bars_asof": None, "days": 0, "rows": 0, "written": 0,
+            "gaps": 0, "skipped": 0, "recomputed": 0, **values}
+
+
+def _run_recompute(args, repo, trades, run_id: str) -> dict:
+    count = recompute_realized(repo, trades, apply=args.apply)
+    print(f"{'APPLIED' if args.apply else 'DRY RUN'}: recompute-realized changed={count}")
+    if not args.apply:
+        print(DRY_RUN_NOTE)
+    return _summary(run_id, recomputed=count)
+
+
+def _report(summary: dict, days: list[date], skips: list[Skip]) -> None:
+    print(f"run id: {summary['run_id']}")
+    print(f"bars as-of: {summary['bars_asof']}")
+    span = f"{days[0]}..{days[-1]}" if days else "none"
+    print(f"days covered: {summary['days']} ({span})")
+    for skip in skips:
+        print(f"  skipped {skip.day} {skip.ticker} trade {skip.trade_id}: {skip.reason}")
+
+
+def _apply(args, repo, rows: list[dict], gaps: int) -> int:
+    if gaps and not args.allow_gaps:
+        print(f"REFUSED: {gaps} coverage gap(s). Re-run the dry run (a fetch can fail "
+              "transiently) before considering --allow-gaps.")
+        return 0
+    written = _write(repo, rows, replace=args.replace)
+    print(f"APPLIED: written={written}")
+    return written
+
+
+def _finish(args, repo, summary: dict, rows: list[dict]) -> dict:
+    if args.apply:
+        summary["written"] = _apply(args, repo, rows, summary["gaps"])
+    else:
+        print(f"DRY RUN: rows={len(rows)} gaps={summary['gaps']} skipped={summary['skipped']}")
+        print(DRY_RUN_NOTE)
+    return summary
+
+
+def main(argv: list[str] | None = None, *, bars_fn=None, repo=None, trades_fn=None,
+         plans_fn=None, today: date | None = None, out_dir: Path | None = None) -> dict:
+    args = _parse(argv)
+    repo = repo or equity_samples_repo()
+    run_id = new_run_id()
+    trades = (trades_fn or _load_trades)()
+    if args.recompute_realized:
+        return _run_recompute(args, repo, trades, run_id)
+    filled = filled_trades(trades, (plans_fn or equity.load_plans_by_id)())   # drops PENDING placeholders
+    days = backfill_days(filled, repo, today or datetime.now(US_MARKET_TZ).date())
+    frames = _fetch_all(_spans(filled, days), bars_fn or fetch_raw_bars,
+                        out_dir or ROOT / "data" / "backfill_equity_samples" / run_id)
+    bars_asof = _bars_asof(frames)
+    rows, skips = _build_all(days, filled, frames, equity.realized_legs(trades),
+                             equity.starting_balance(), f"{run_id}@bars-asof-{bars_asof}")
+    gaps = sum(1 for skip in skips if skip.reason in GAP_REASONS)
+    summary = _summary(run_id, bars_asof=bars_asof, days=len(days), rows=len(rows),
+                       gaps=gaps, skipped=len(skips))
+    _report(summary, days, skips)
+    return _finish(args, repo, summary, rows)
+
+
+if __name__ == "__main__":
+    main()
