@@ -238,7 +238,7 @@ def _last_minute_quote(raw, ticker):
         return None
     if closes.empty or float(closes.iloc[-1]) <= 0:
         return None
-    return QuoteDetail(symbol=ticker, trade_price=float(closes.iloc[-1]),
+    return QuoteDetail(symbol=ticker, price=float(closes.iloc[-1]),
                        trade_at=_bar_time_utc(closes.index[-1]), bid=None, ask=None,
                        quote_at=None, source="yfinance-1m")
 

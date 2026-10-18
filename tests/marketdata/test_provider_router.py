@@ -171,7 +171,7 @@ _T = datetime(2026, 10, 16, 15, 0, tzinfo=timezone.utc)
 
 
 def _q(sym, price, source="alpaca-iex", bid=None, ask=None):
-    return QuoteDetail(symbol=sym, trade_price=price, trade_at=_T if price else None,
+    return QuoteDetail(symbol=sym, price=price, trade_at=_T if price else None,
                        bid=bid, ask=ask, quote_at=_T if bid else None, source=source)
 
 
@@ -185,7 +185,7 @@ def yf_quotes(calls, prices):
 def test_latest_quotes_alpaca_hit_makes_no_yfinance_call(enabled, monkeypatch):
     _use(monkeypatch, FakeProvider(quotes={"AAPL": _q("AAPL", 190.0)})); calls = []
     out = router.latest_quotes(["AAPL"], yf_quotes(calls, {}))
-    assert calls == [] and out["AAPL"].trade_price == 190.0
+    assert calls == [] and out["AAPL"].price == 190.0
     assert router.last_source("AAPL") == "alpaca"
 
 
@@ -195,7 +195,7 @@ def test_latest_quotes_stale_trade_falls_back_and_keeps_alpaca_bid_ask(enabled, 
     out = router.latest_quotes(["AAPL"], yf_quotes(calls, {"AAPL": 190.4}))
     assert calls == [["AAPL"]]
     q = out["AAPL"]
-    assert (q.trade_price, q.source) == (190.4, "yfinance-1m")
+    assert (q.price, q.source) == (190.4, "yfinance-1m")
     assert (q.bid, q.ask, q.quote_at) == (189.0, 191.0, _T)
     assert router.last_source("AAPL") == "yfinance-fallback"
 
@@ -221,7 +221,7 @@ def test_latest_quotes_spot_metal_takes_the_spot_quote(enabled, monkeypatch):
                         lambda t, **k: (spot_metals.SpotQuote(2400.0, _T), None))
     out = router.latest_quotes(["XAUUSD"], yf_quotes(calls, {}))
     assert prov.calls == 0 and calls == []
-    assert out["XAUUSD"] == QuoteDetail(symbol="XAUUSD", trade_price=2400.0, trade_at=_T,
+    assert out["XAUUSD"] == QuoteDetail(symbol="XAUUSD", price=2400.0, trade_at=_T,
                                         bid=None, ask=None, quote_at=None, source="spot")
 
 
@@ -246,7 +246,7 @@ def test_yf_quote_details_stamps_the_last_bar_in_utc(monkeypatch):
     monkeypatch.setattr(yf_safe, "download", lambda *a, **k: raw)
     q = data._yf_quote_details(["AAPL", "MSFT"])
     assert set(q) == {"AAPL"}
-    assert q["AAPL"].trade_price == 190.5 and q["AAPL"].source == "yfinance-1m"
+    assert q["AAPL"].price == 190.5 and q["AAPL"].source == "yfinance-1m"
     assert q["AAPL"].trade_at == datetime(2026, 10, 16, 14, 59, tzinfo=timezone.utc)
 
 

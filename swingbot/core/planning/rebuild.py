@@ -70,8 +70,8 @@ def _candidates(quote: QuoteDetail | None) -> tuple:
     if quote is None:
         return ()
     is_yf = quote.source == _YF_SOURCE
-    traded = None if is_yf else quote.trade_price
-    yf = quote.trade_price if is_yf else None
+    traded = None if is_yf else quote.price
+    yf = quote.price if is_yf else None
     return ((KIND_TRADE, traded, quote.trade_at),
             (KIND_MID, quote.mid(), quote.quote_at),
             (KIND_YF, yf, quote.trade_at))

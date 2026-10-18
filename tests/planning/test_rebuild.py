@@ -28,7 +28,7 @@ def _ago(now, s):
 
 def _q(now=REG, price=101.0, trade_age=2.0, bid=None, ask=None, quote_age=None,
        source="alpaca-iex"):
-    return QuoteDetail(symbol="AAPL", trade_price=price,
+    return QuoteDetail(symbol="AAPL", price=price,
                        trade_at=None if trade_age is None else _ago(now, trade_age),
                        bid=bid, ask=ask,
                        quote_at=None if quote_age is None else _ago(now, quote_age),

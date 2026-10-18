@@ -168,7 +168,7 @@ class AlpacaProvider:
         if price is None and quote_at is None:
             return None
         trade_at = snap.latest_trade.timestamp if price is not None else None
-        return QuoteDetail(symbol=ticker, trade_price=price, trade_at=trade_at, bid=bid, ask=ask,
+        return QuoteDetail(symbol=ticker, price=price, trade_at=trade_at, bid=bid, ask=ask,
                            quote_at=quote_at, source=f"alpaca-{self._live_feed.value}")
 
     def latest_quotes(self, tickers, max_trade_age_s):

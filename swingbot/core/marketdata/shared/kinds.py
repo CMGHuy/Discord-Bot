@@ -106,7 +106,7 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
 @dataclass(frozen=True)
 class QuoteDetail:
     symbol: str
-    trade_price: Optional[float]
+    price: Optional[float]
     trade_at: Optional[datetime]
     bid: Optional[float]
     ask: Optional[float]
@@ -123,7 +123,7 @@ class QuoteDetail:
 
     def to_doc(self) -> dict:
         return {
-            "symbol": self.symbol, "trade_price": self.trade_price,
+            "symbol": self.symbol, "price": self.price,
             "trade_at": _iso(self.trade_at), "bid": self.bid, "ask": self.ask,
             "quote_at": _iso(self.quote_at), "source": self.source,
         }
@@ -131,7 +131,7 @@ class QuoteDetail:
     @classmethod
     def from_doc(cls, doc: dict) -> "QuoteDetail":
         return cls(
-            symbol=doc["symbol"], trade_price=doc.get("trade_price"),
+            symbol=doc["symbol"], price=doc.get("price"),
             trade_at=_parse(doc.get("trade_at")), bid=doc.get("bid"), ask=doc.get("ask"),
             quote_at=_parse(doc.get("quote_at")), source=doc["source"],
         )

@@ -405,7 +405,7 @@ def _spot_quotes(spot) -> dict:
         if quote is None:
             _spot_miss[str(ticker).upper().strip()] = reason
             continue
-        out[ticker] = QuoteDetail(symbol=ticker, trade_price=quote.price, trade_at=quote.updated_at,
+        out[ticker] = QuoteDetail(symbol=ticker, price=quote.price, trade_at=quote.updated_at,
                                   bid=None, ask=None, quote_at=None, source="spot")
         _last_source[ticker] = SOURCE_SPOT
     return out
@@ -419,7 +419,7 @@ def latest_quotes(tickers, yf_fetch):
     wanted, rest = _split(tickers)
     got = (_attempt("latest_quotes", wanted,
                     int(config.ALPACA_MAX_TRADE_AGE_SECONDS)) or {}) if wanted else {}
-    priced = {t: q for t, q in got.items() if q.trade_price is not None}
+    priced = {t: q for t, q in got.items() if q.price is not None}
     misses = [t for t in wanted if t not in priced]
     _log_fallback("latest_quotes", misses)
     out = dict(got)

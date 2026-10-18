@@ -202,7 +202,7 @@ def test_latest_quotes_carries_trade_and_quote_timestamps():
     t_quote = NOW - pd.Timedelta(seconds=1)
     c = FakeClient(snaps={"AAPL": _qsnap(190.0, t_trade, 189.9, 190.1, t_quote)})
     out = _prov(c).latest_quotes(["AAPL"], 300)
-    assert out == {"AAPL": QuoteDetail(symbol="AAPL", trade_price=190.0, trade_at=t_trade,
+    assert out == {"AAPL": QuoteDetail(symbol="AAPL", price=190.0, trade_at=t_trade,
                                        bid=189.9, ask=190.1, quote_at=t_quote,
                                        source="alpaca-iex")}
     assert str(c.requests[0].feed.value) == "iex"
@@ -213,7 +213,7 @@ def test_latest_quotes_stale_trade_in_session_keeps_the_quote():
     c = FakeClient(snaps={"AAPL": _qsnap(190.0, NOW - pd.Timedelta(minutes=20),
                                          189.0, 191.0, t_quote)})
     q = _prov(c).latest_quotes(["AAPL"], 300)["AAPL"]
-    assert q.trade_price is None and q.trade_at is None
+    assert q.price is None and q.trade_at is None
     assert (q.bid, q.ask, q.quote_at) == (189.0, 191.0, t_quote)
     assert q.mid() == 190.0
 
@@ -234,4 +234,4 @@ def test_latest_quotes_old_trade_outside_session_is_kept_with_its_timestamp():
     c = FakeClient(snaps={"AAPL": _qsnap(190.0, friday_close)})
     prov = ap.AlpacaProvider("k", "s", "iex", client=c, now=lambda: sat)
     q = prov.latest_quotes(["AAPL"], 300)["AAPL"]
-    assert q.trade_price == 190.0 and q.trade_at == friday_close
+    assert q.price == 190.0 and q.trade_at == friday_close
