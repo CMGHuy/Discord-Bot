@@ -64,11 +64,12 @@ class VLineRenderer implements IPrimitivePaneRenderer {
       const family = token('--font-sans') || 'sans-serif';
       context.font = `${Math.round(LABEL_PX * verticalPixelRatio)}px ${family}`;
       context.textBaseline = 'top';
-      context.fillText(
-        spec.label,
-        px + Math.round(LABEL_INSET_PX * horizontalPixelRatio),
-        Math.round(LABEL_INSET_PX * verticalPixelRatio),
-      );
+      const inset = Math.round(LABEL_INSET_PX * horizontalPixelRatio);
+      // Left of the line by default; right of it (right-aligned) when the
+      // label would run past the pane's right edge.
+      const flip = px + inset + context.measureText(spec.label).width > bitmapSize.width;
+      context.textAlign = flip ? 'right' : 'left';
+      context.fillText(spec.label, flip ? px - inset : px + inset, Math.round(LABEL_INSET_PX * verticalPixelRatio));
       context.restore();
     });
   }

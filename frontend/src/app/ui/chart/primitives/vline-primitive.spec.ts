@@ -5,7 +5,9 @@ import { VLinePrimitive } from './vline-primitive';
 function fakeContext() {
   return {
     save: vi.fn(), restore: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(),
-    fillStyle: '', font: '', textBaseline: '',
+    fillStyle: '', font: '', textBaseline: '', textAlign: '',
+    // 8 bitmap px per character, so the 17-character label is 136px wide.
+    measureText: (text: string) => ({ width: text.length * 8 }),
   };
 }
 
@@ -20,10 +22,10 @@ function attach(coordinate: number | null) {
   return { primitive, requestUpdate };
 }
 
-function draw(primitive: VLinePrimitive) {
+function draw(primitive: VLinePrimitive, width = 400) {
   const context = fakeContext();
   const target = { useBitmapCoordinateSpace: (cb: (scope: unknown) => void) => cb({
-    context, horizontalPixelRatio: 2, verticalPixelRatio: 2, bitmapSize: { width: 400, height: 300 },
+    context, horizontalPixelRatio: 2, verticalPixelRatio: 2, bitmapSize: { width, height: 300 },
   }) };
   primitive.paneViews()[0].renderer()!.draw(target as never);
   return context;
@@ -39,6 +41,21 @@ describe('VLinePrimitive', () => {
     // centre 100 - half of barSpacing 10 = 95 CSS px = 190 bitmap px.
     expect(context.fillRect).toHaveBeenCalledWith(190, 0, 2, 300);
     expect(context.fillText).toHaveBeenCalledWith('Recording started', 198, 8);
+  });
+
+  it('flips the label to the left of the line when it would run past the right edge', () => {
+    const { primitive } = attach(150);
+    primitive.setLine(SPEC as never);
+    // line at 145 CSS px = 290 bitmap px; 290 + 8 + 136 = 434 > 400.
+    const context = draw(primitive);
+    expect(context.textAlign).toBe('right');
+    expect(context.fillText).toHaveBeenCalledWith('Recording started', 282, 8);
+  });
+
+  it('keeps the label left-aligned when it fits', () => {
+    const { primitive } = attach(100);
+    primitive.setLine(SPEC as never);
+    expect(draw(primitive).textAlign).toBe('left');
   });
 
   it('draws nothing without a line or off screen', () => {
