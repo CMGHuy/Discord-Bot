@@ -52,9 +52,15 @@ range.
 
 Pure functions, no I/O.
 
-**Input:** every closed plan with a computable R (`metrics.r_multiple`,
-the single R definition, skipped when `None` as in `metrics.r_multiples`)
-and its close date.
+**Input:** the closed book as the analytics API already loads it: trade
+dicts from `_all_trades(TradeLog())` (`analytics.py:84`) filtered by
+`scope.closed_only`. `scope.select` is skipped, because the band is
+whole-book. Each trade contributes its R (`metrics.r_multiple`, the single
+R definition, skipped when `None` as in `metrics.r_multiples`) and its
+close date. The close date is the trade's UTC `closed_at` converted to an
+America/New_York date (`session.US_MARKET_TZ`) by a new helper
+`et_close_date`. This deliberately differs from `pnl_calendar.day_of`'s
+UTC slice, because an after-hours close belongs to its NYSE session.
 
 - **Close-day series:** the R values are summed per NYSE close date, in
   date order.
@@ -63,11 +69,12 @@ and its close date.
   - Anything else is a **scratch day**.
   - One gap day that stops out five positions is therefore one loss day,
     not five losses.
-- **Era:** if the plan doc carries an exit-model era marker (the
-  plan-briefer names the field), the pool is restricted to the current era
-  once that era alone has at least `MIN_DAYS` close days; until then it
-  uses the whole book. Either way the band reports its composition: close
-  days per era and trades per horizon.
+- **Era:** no exit-model era field exists. The proxy is the plan link: a
+  trade with `plan_id` is v2 (the current era), and a legacy v1 trade has
+  `plan_id = None`. The pool is restricted to v2 trades once they alone
+  reach `MIN_DAYS` close days and `MIN_WEEKS` weeks; until then it uses
+  the whole book. Either way the band reports its composition: close days
+  per era (v2 / legacy) and trades per horizon.
 
 **Frozen constants:**
 
@@ -88,7 +95,9 @@ this same rule.
 **Drawdown:** the gap from the running peak of the cumulative close-day R,
 in R.
 
-**Bootstrap, week blocks:**
+**Bootstrap, week blocks** (a dedicated path sampler: `week_cluster_bootstrap`
+cannot build ordered, truncated paths; reuse `stats.iso_week_key`, the seed
+and the `np.random.default_rng` pattern at `stats.py:67-69`):
 - Each path concatenates whole ISO weeks of close days, drawn with
   replacement, until it holds `h` close days; the last week is truncated.
   Correlated same-week losses stay together, the repo's week-cluster
@@ -115,8 +124,10 @@ in R.
 - **Ties:** when p80 == p95 (integer runs), the `rough` zone is empty and
   the copy skips it. A test covers this.
 - **ExpR beside the band:** the band always carries the closed book's ExpR
-  with N and window, re-derived on every call (`pooled-numbers`), and its
-  week-cluster interval (`week_cluster_bootstrap`). If that ExpR is ≤ 0,
+  with N and window, re-derived on every call (`pooled-numbers`) via
+  `metrics.expectancy_r`. Its week-cluster interval follows
+  `calibration.live_expr_bound` (`stats.week_cluster_bootstrap` with
+  `WEEK_BOOTSTRAP_SEED`, trade dicts wrapped as items with `.entry_date`). If that ExpR is ≤ 0,
   or its interval includes 0, every zone's copy adds: "This book's past
   results are not positive. A run within their range is still a losing
   run." The word "edge" never appears.
@@ -126,9 +137,10 @@ in R.
   (§3). The calibration test (§ Testing) measures the per-look rate.
 
 **Dollars:** a drawdown in dollars is shown as **≈ $X**, computed as R ×
-the book's median per-trade dollar risk. The plan-briefer names the stored
-field v170's alerts read. If it's missing, the figure is omitted, not shown
-as "—". The panel says how it is derived. All figures come from the paper
+the book's median per-trade dollar risk. No dollar-risk field is stored;
+per-trade dollar risk = the trade's `shares` × |`entry` − `stop_loss`|, the
+v170 basis (`performance.py:1242`). If no trade has `shares`, the figure is
+omitted, not shown as "—". The panel says how it is derived. All figures come from the paper
 book and are pre-tax.
 
 `variance_band(closed) -> Band` returns either `{status: "insufficient",
@@ -173,9 +185,16 @@ nothing on it is tappable except the panel's standard retry.
 
 Once per scan cycle the bot computes the band, cached for that cycle, and
 compares the worse of the two zones (run, drawdown) with the last zone it
-posted. That last zone is persisted in a small state record (the
-plan-briefer picks the existing store, e.g. the bot state used by the
-throttle). A message posts **only when the zone rises** into `rough` or
+posted.
+
+- **Hook:** one awaited, guarded helper call after
+  `ops_watch.check_provider_health()` in `loops.py:_session_scan_tick`.
+  That function is already at complexity 15, so the call adds no branch;
+  all logic lives in the helper.
+- **Last zone:** persisted in `scheduled_repo()` under a job key (no
+  migration), with the latch pattern of `live_loss_watch.py:36-60`. The
+  post is success-gated with `send_guarded` (`loops.py:710-728`), and the
+  stored zone changes only after a successful post. A message posts **only when the zone rises** into `rough` or
 `outside`.
 
 | Transition | Message (one line, its own message, not on a plan) |
