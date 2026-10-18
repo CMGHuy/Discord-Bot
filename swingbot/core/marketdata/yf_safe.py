@@ -22,9 +22,12 @@ import threading
 
 import yfinance as yf
 
-from swingbot.core.marketdata.shared.budget import BudgetDeferred  # noqa: F401  (raised from V171-8 on)
+from swingbot import config
+from swingbot.core.marketdata.shared import budget
+from swingbot.core.marketdata.shared.budget import BudgetDeferred  # noqa: F401
+from swingbot.core.marketdata.shared.kinds import PROVIDER_YF
 
-log =logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 _DOWNLOAD_LOCK = threading.Lock()
 
@@ -50,7 +53,20 @@ def set_default_lock_timeout(seconds: float | None) -> None:
     _default_lock_timeout = seconds
 
 
+def _take_yf_token() -> None:
+    """v171 D6, `on` mode only: one yfinance token per download at the
+    caller's tier. Tiers 1-3 (stops, re-quote, scan) are never denied."""
+    if config.MARKETDATA_LAYER != "on":
+        return
+    from swingbot.core.marketdata.providers.router import current_asker  # lazy: router imports data paths
+    asker = current_asker()
+    if budget.take(PROVIDER_YF, asker) or asker.priority <= 3:
+        return
+    raise BudgetDeferred(f"yfinance budget short for {asker.value}")
+
+
 def download(*args, lock_timeout: float | None = None, **kwargs):
+    _take_yf_token()
     limit = lock_timeout if lock_timeout is not None else _default_lock_timeout
     if not _DOWNLOAD_LOCK.acquire(timeout=-1 if limit is None else limit):
         raise DownloadBusy(f"yfinance download lock busy for {limit:g}s")

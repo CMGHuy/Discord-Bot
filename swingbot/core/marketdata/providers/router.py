@@ -6,6 +6,8 @@ this module is a pass-through that only adds source tags.
 Config is read at call time; the provider is cached per (key_id, secret) so
 rotated keys take effect on the next call in any process -- the admin
 container has no on_config_reload hook."""
+import contextlib
+import contextvars
 import dataclasses
 import logging
 import threading
@@ -21,7 +23,8 @@ from swingbot.core.marketdata.providers.alpaca_provider import (
     AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
 from swingbot.core.marketdata.providers.base import (
     SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_SPOT, SOURCE_YF, is_alpaca_eligible)
-from swingbot.core.marketdata.shared.kinds import QuoteDetail
+from swingbot.core.marketdata.shared import budget
+from swingbot.core.marketdata.shared.kinds import PROVIDER_ALPACA, Asker, QuoteDetail
 
 log = logging.getLogger(__name__)
 _QUOTE_METHODS = frozenset({"latest_prices", "latest_quotes"})
@@ -112,6 +115,56 @@ _provider_key = None
 _last_source: dict = {}
 _spot_miss: dict = {}
 _stats = {"alpaca": 0, "yfinance": 0, "fallback": 0, "failures": 0}
+_ASKER: contextvars.ContextVar = contextvars.ContextVar("marketdata_asker", default=Asker.SCAN)
+#: v171: process-local memo of the shared breaker; at most one read per second.
+_SHARED_BREAKER_MEMO_S = 1.0
+_shared_breaker_memo: dict = {"stamp": None, "allows": True}
+
+
+@contextlib.contextmanager
+def asker_scope(asker: Asker):
+    """Every provider call made inside runs at `asker`'s budget tier (D6)."""
+    token = _ASKER.set(asker)
+    try:
+        yield
+    finally:
+        _ASKER.reset(token)
+
+
+def current_asker() -> Asker:
+    return _ASKER.get()
+
+
+def _shared() -> bool:
+    return config.MARKETDATA_LAYER == "on"
+
+
+def _take_token() -> bool:
+    """One token for one provider call: the shared budget in `on` mode,
+    this process's bucket otherwise (pre-v171, unchanged)."""
+    if not _shared():
+        return _bucket.take()
+    return budget.take(PROVIDER_ALPACA, current_asker())
+
+
+def _shared_breaker_allows() -> bool:
+    if not _shared():
+        return True
+    now = time.monotonic()
+    stamp = _shared_breaker_memo["stamp"]
+    if stamp is not None and now - stamp < _SHARED_BREAKER_MEMO_S:
+        return _shared_breaker_memo["allows"]
+    allows = budget.breaker_allows(PROVIDER_ALPACA)
+    _shared_breaker_memo.update(stamp=now, allows=allows)
+    return allows
+
+
+def _record_verdict(ok: bool, auth: bool = False, reason: str = "") -> None:
+    """The local breaker always; the shared one too in `on` mode."""
+    _breaker.record(ok, auth=auth, reason=reason)
+    if _shared():
+        budget.breaker_record(PROVIDER_ALPACA, ok)
+        _shared_breaker_memo["stamp"] = None
 
 
 def reset() -> None:
@@ -120,6 +173,7 @@ def reset() -> None:
     _bucket, _breaker, _warn_gate = _Bucket(), _Breaker(), _WarnGate()
     _last_source.clear()
     _spot_miss.clear()
+    _shared_breaker_memo.update(stamp=None, allows=True)
     for k in _stats:
         _stats[k] = 0
 
@@ -133,7 +187,7 @@ def _active_provider():
         if key != _provider_key:
             _provider = _provider_factory(key[0], key[1], config.ALPACA_DATA_FEED_LIVE)
             _provider_key, _breaker = key, _Breaker()
-    return _provider if _breaker.allows() else None
+    return _provider if _breaker.allows() and _shared_breaker_allows() else None
 
 
 def _label(exc) -> str:
@@ -166,10 +220,10 @@ def _collect(future, method: str, deadline: float):
     result, exc = _wait(future, deadline)
     if exc is not None:
         _stats["failures"] += 1
-        _breaker.record(False, auth=isinstance(exc, AlpacaAuthError), reason=_reason(exc))
+        _record_verdict(False, auth=isinstance(exc, AlpacaAuthError), reason=_reason(exc))
         log.debug("Alpaca %s miss: %s", method, str(exc) or type(exc).__name__)
         return None
-    _breaker.record(True)
+    _record_verdict(True)
     return result
 
 
@@ -181,7 +235,7 @@ def _attempt(method: str, *args, timeout: float = None):
     """One bounded Alpaca call. Returns its result, or None on any miss.
     `timeout` defaults to the quote deadline (ALPACA_TIMEOUT_SECONDS)."""
     prov = _active_provider()
-    if prov is None or not _bucket.take():
+    if prov is None or not _take_token():
         return None
     deadline = time.monotonic() + float(config.ALPACA_TIMEOUT_SECONDS if timeout is None else timeout)
     pool = _quote_pool if method in _QUOTE_METHODS else _pool
@@ -192,7 +246,7 @@ def _round(prov, method: str, batches: list, args: tuple, deadline: float) -> li
     """(result, exc) per batch, all in flight together. A batch without a
     bucket token is not submitted (exc is a _NotSent)."""
     futures = [_pool.submit(with_current_context(getattr(prov, method)), b, *args)
-               if _bucket.take() else None for b in batches]
+               if _take_token() else None for b in batches]
     return [(None, _NotSent()) if f is None else _wait(f, deadline) for f in futures]
 
 
@@ -229,16 +283,16 @@ def _account(method: str, batches: list, outcomes: list) -> None:
     succeeded = any(exc is None for _, exc in outcomes)
     if not failed:
         if succeeded:
-            _breaker.record(True)
+            _record_verdict(True)
         return
     _stats["failures"] += len(failed)
     for i, exc in failed:
         log.debug("Alpaca %s batch %d miss: %s", method, i, _reason(exc))
     auth = any(isinstance(e, AlpacaAuthError) for _, e in failed)
     if succeeded and not auth:
-        _breaker.record(True)
+        _record_verdict(True)
     else:
-        _breaker.record(False, auth=auth, reason=_reason(failed[-1][1]))
+        _record_verdict(False, auth=auth, reason=_reason(failed[-1][1]))
     _warn_miss_summary(method, batches, failed)
 
 
