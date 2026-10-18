@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-18 15:13:21 UTC",
+  "generated_at": "2026-10-18 15:13:33 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.29.0",
-    "bot": "2.10.0"
+    "bot": "2.10.1"
   },
   "releases": [
     {
@@ -1837,6 +1837,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "0a3b7646",
+      "subject": "release(bot): 2.10.1 -- chart PNG cache keys carry a style version so the Arctic Navy palette never serves stale charts (v167)",
+      "versions": {
+        "ui": "1.29.0",
+        "bot": "2.10.1"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
