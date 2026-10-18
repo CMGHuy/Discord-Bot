@@ -18,6 +18,9 @@ class FakeProvider:
         if self.exc: raise self.exc
     def daily_bars(self, tickers, period):
         self._maybe(); return {t: _df() for t in tickers if t in self.daily}
+    def daily_bars_between(self, tickers, start, end):
+        self._maybe(); self.between = (list(tickers), start, end)
+        return {t: _df() for t in tickers if t in self.daily}
     def latest_prices(self, tickers, max_age):
         self._maybe(); return {t: p for t, p in self.prices.items() if t in tickers}
     def latest_quotes(self, tickers, max_age):
@@ -267,3 +270,19 @@ def test_yf_quote_details_reraises_budget_deferred(monkeypatch):
     monkeypatch.setattr(yf_safe, "download", deferred)
     with pytest.raises(yf_safe.BudgetDeferred):
         data._yf_quote_details(["AAPL"])
+
+
+def test_daily_bars_between_is_alpaca_only(enabled, monkeypatch):
+    from datetime import date
+    prov = FakeProvider(daily={"AAPL"}); _use(monkeypatch, prov)
+    out = router.daily_bars_between(["AAPL", "SAP.DE", "XAUUSD"], date(2026, 10, 1), date(2026, 10, 16))
+    assert set(out) == {"AAPL"} and out["AAPL"].attrs["source"] == "alpaca"
+    assert prov.between == (["AAPL"], date(2026, 10, 1), date(2026, 10, 16))
+
+
+def test_daily_bars_between_disabled_returns_nothing(monkeypatch):
+    monkeypatch.setattr(config, "ALPACA_ENABLED", False); router.reset()
+    prov = FakeProvider(daily={"AAPL"}); _use(monkeypatch, prov)
+    from datetime import date
+    assert router.daily_bars_between(["AAPL"], date(2026, 10, 1), date(2026, 10, 16)) == {}
+    assert prov.calls == 0

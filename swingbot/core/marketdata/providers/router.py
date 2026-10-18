@@ -20,7 +20,7 @@ from swingbot.core.infra.logsetup import with_current_context
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.providers.alpaca_provider import (
-    AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
+    ROWS_PER_PAGE, AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
 from swingbot.core.marketdata.providers.base import (
     SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_SPOT, SOURCE_YF, is_alpaca_eligible)
 from swingbot.core.marketdata.shared import budget
@@ -422,6 +422,24 @@ def daily_bars(tickers, period, yf_fetch):
     out = _merge(got, rest, misses, fetch)
     out.update(side.result() if side is not None else _spot_daily(spot, out, fetch))
     return out
+
+
+def daily_bars_between(tickers, start, end) -> dict:
+    """v171 D4: Alpaca-only ranged daily bars for the alpaca-all cache. Spot,
+    non-eligible symbols and an inactive provider give nothing; there is no
+    yfinance fallback (a yfinance frame never enters that cache)."""
+    _, tickers = spot_metals.split_spot(tickers)
+    if _active_provider() is None:
+        return {}
+    wanted = [t for t in tickers if is_alpaca_eligible(t)]
+    rows = (end - start).days * 252 // 365 + 10
+    n = max(1, ROWS_PER_PAGE // rows)
+    batches = [wanted[i:i + n] for i in range(0, len(wanted), n)]
+    got = {}
+    for part in _attempt_many("daily_bars_between", batches, start, end):
+        got.update(part or {})
+    _stats["alpaca"] += len(got)
+    return _tag(got, SOURCE_ALPACA)
 
 
 def latest_prices(tickers, yf_fetch):

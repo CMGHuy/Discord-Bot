@@ -45,6 +45,9 @@ from swingbot.core.marketdata.adjustments import merge_adjusted
 log = logging.getLogger(__name__)
 
 DATA_DIR = "market_data"
+#: v171 D4: the alpaca-all daily cache (one basis per file); only
+#: daily_delta.write_daily writes it.
+ALPACA_DAILY_DIR = os.path.join(DATA_DIR, "daily_alpaca")
 
 # Semantic timeframe -> the yfinance interval code and Yahoo's real depth.
 # folder    = subdirectory under market_data/ (what training runs point at)
@@ -332,13 +335,28 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
         swallowed(log, "marketdata.load_normalized.read", exc, "cache read failed for %s/%s: %s",
                   ticker, interval, exc, exc_info=True)
         return None
-    if df is None or df.empty:
+    df = _normalize_cached(df, f"{ticker}/{interval}")
+    if df is None:
         return None
 
+    # Capture the signature after parsing.  If a refresh atomically replaced
+    # the file while it was read, don't retain a frame under the old identity;
+    # the next caller will read the new file instead.
+    after_read = _frame_signature(path)
+    if after_read == signature:
+        _remember_normalized_frame(path, signature, df)
+    return df.copy(deep=True)
+
+
+def _normalize_cached(df: pd.DataFrame | None, label: str) -> pd.DataFrame | None:
+    """The shape guarantees of load_normalized: OHLCV float64 over a tz-naive,
+    de-duplicated, sorted DatetimeIndex. None for an empty or unusable frame."""
+    if df is None or df.empty:
+        return None
     df = _normalize_columns(df)
     if not all(c in df.columns for c in OHLCV_COLUMNS):
-        log.warning("cached frame for %s/%s is missing OHLCV columns (has %s)",
-                    ticker, interval, list(df.columns))
+        log.warning("cached frame for %s is missing OHLCV columns (has %s)",
+                    label, list(df.columns))
         return None
     df = df[OHLCV_COLUMNS].astype("float64")
 
@@ -347,21 +365,34 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
             df.index = pd.to_datetime(df.index)
         except Exception as exc:
             swallowed(log, "marketdata.load_normalized.index", exc,
-                      "cached frame for %s/%s has an unparseable index: %s",
-                      ticker, interval, exc, exc_info=True)
+                      "cached frame for %s has an unparseable index: %s",
+                      label, exc, exc_info=True)
             return None
     if df.index.tz is not None:
         df.index = df.index.tz_localize(None)
     df = df[~df.index.duplicated(keep="last")].sort_index()
+    return None if df.empty else df
 
-    if df.empty:
+
+def load_normalized_file(path: str, label: str = "") -> pd.DataFrame | None:
+    """v171 D4: load_normalized for any CSV path (the daily_alpaca cache has no
+    timeframe folder), with the same normalisation and signature memo."""
+    signature = _frame_signature(path)
+    if signature is None:
         return None
-
-    # Capture the signature after parsing.  If a refresh atomically replaced
-    # the file while it was read, don't retain a frame under the old identity;
-    # the next caller will read the new file instead.
-    after_read = _frame_signature(path)
-    if after_read == signature:
+    cached = _cached_normalized_frame(path, signature)
+    if cached is not None:
+        return cached
+    try:
+        df = pd.read_csv(path, index_col=0, parse_dates=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.load_normalized.read", exc, "cache read failed for %s: %s",
+                  label or path, exc, exc_info=True)
+        return None
+    df = _normalize_cached(df, label or path)
+    if df is None:
+        return None
+    if _frame_signature(path) == signature:
         _remember_normalized_frame(path, signature, df)
     return df.copy(deep=True)
 

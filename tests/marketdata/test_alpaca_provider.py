@@ -235,3 +235,14 @@ def test_latest_quotes_old_trade_outside_session_is_kept_with_its_timestamp():
     prov = ap.AlpacaProvider("k", "s", "iex", client=c, now=lambda: sat)
     q = prov.latest_quotes(["AAPL"], 300)["AAPL"]
     assert q.price == 190.0 and q.trade_at == friday_close
+
+
+def test_daily_bars_between_sends_the_range_on_sip_all():
+    from datetime import date
+    c = FakeClient(bars=_barset(["AAPL"]))
+    out = _prov(c).daily_bars_between(["AAPL"], date(2026, 9, 20), date(2026, 9, 25))
+    req = c.requests[0]
+    assert str(req.feed.value) == "sip" and str(req.adjustment.value) == "all"
+    assert req.start == datetime(2026, 9, 20)
+    assert req.end <= (NOW - pd.Timedelta(minutes=15)).replace(tzinfo=None)
+    assert list(out["AAPL"].columns) == ["Open", "High", "Low", "Close", "Volume"]
