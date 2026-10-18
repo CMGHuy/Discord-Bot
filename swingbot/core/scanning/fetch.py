@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
+from datetime import date
 
 from swingbot import config
 from swingbot.core.infra.logsetup import with_current_context
@@ -21,7 +22,10 @@ from swingbot.core.marketdata.data import (
     get_current_price_batch, get_daily_data, get_daily_data_batch,
 )
 from swingbot.core.marketdata import data_refresh, data_store, spot_metals, universe
+from swingbot.core.marketdata import daily_delta, yf_safe
 from swingbot.core.marketdata.history_splice import splice_cached_history
+from swingbot.core.marketdata.shared import counters
+from swingbot.core.marketdata.shared.kinds import Asker
 
 from . import runstate
 
@@ -390,6 +394,102 @@ def _crawl_spot(tickers: list, progress: "ScanProgress" = None) -> dict:
     return out
 
 
+def _delta_provider_worker(op: str, tickers: list[str], start: date | None, end: date | None,
+                           basis: str, asker_name: str) -> tuple[dict, list, float]:
+    """v171 D3 worker body: one provider call for the delta crawl ("window" or
+    "full"), at the asker's budget tier. A deferred budget is a miss ({}).
+    The worker's D9 counter rows and its own wall time ride back with the
+    frames -- this process exits after the call."""
+    from swingbot.core.marketdata.providers import router
+    started = time.monotonic()
+    with router.asker_scope(Asker[asker_name]):
+        try:
+            if op == "full":
+                frames = daily_delta.provider_full(tickers, basis)
+            else:
+                frames = daily_delta.provider_window(tickers, start, end, basis)
+        except yf_safe.BudgetDeferred as exc:
+            log.info("Crawl: delta %s (%s) deferred (%s)", op, basis, exc)
+            frames = {}
+    return frames or {}, counters.snapshot_and_clear(), round(time.monotonic() - started, 3)
+
+
+def _bounded_delta_call(op: str, tickers, start: date | None, end: date | None,
+                        basis: str) -> dict:
+    """One delta provider call in a bounded worker. A timed-out or failed
+    worker is {} -- delta_update's miss: a warm symbol keeps its cached
+    frame, a cold one is absent this scan. Only `full` calls are recorded as
+    cold-fetch time, so that telemetry keeps its meaning."""
+    timeout = int(getattr(config, "COLD_FETCH_TIMEOUT_SECONDS", 180))
+    tickers = list(tickers)
+    got = _run_bounded(
+        _delta_provider_worker, (op, tickers, start, end, basis, Asker.SCAN.name), timeout,
+        label=f"Crawl: delta {op} ({basis}) for {len(tickers)} ticker(s)")
+    if got is None:
+        return {}
+    frames, rows, elapsed = got
+    counters.merge(rows)
+    if op == "full":
+        _fetch_stats["cold_fetch_s"].append(elapsed)
+    return frames or {}
+
+
+def _delta_window_fetch(tickers, start: date, end: date, basis: str) -> dict:
+    return _bounded_delta_call("window", tickers, start, end, basis)
+
+
+def _delta_full_fetch(tickers, basis: str) -> dict:
+    return _bounded_delta_call("full", tickers, None, None, basis)
+
+
+def _delta_chunk(chunk: list, progress: "ScanProgress" = None) -> dict:
+    """One chunk through daily_delta.delta_update, keyed by the caller's
+    ticker strings. A raising chunk degrades to today's cold path (which
+    keeps its own progress), never to missing frames."""
+    try:
+        got = daily_delta.delta_update(chunk, asker=Asker.SCAN, fetch_window=_delta_window_fetch,
+                                       fetch_full=_delta_full_fetch)
+    except Exception:
+        log.exception("Crawl (delta): chunk of %d ticker(s) failed -- falling back to the cold path",
+                      len(chunk))
+        return {t: df for t, df in _fetch_cold_frames(chunk, progress) if df is not None}
+    if progress is not None:
+        progress.done += len(chunk)
+        progress.current_ticker = chunk[-1]
+    out = {}
+    for ticker in chunk:
+        df = got.get(str(ticker).upper().strip())
+        if df is not None:
+            out[ticker] = df
+    return out
+
+
+def _crawl_delta(tickers: list[str], progress: "ScanProgress" = None) -> dict:
+    """v171 D3 crawl (DAILY_DELTA_FETCH on): the two single-basis daily caches
+    brought up to date by one batched window per basis, provider calls in
+    bounded workers, the splice and the write-back of cold frames in this
+    process. Spot metals keep _crawl_spot. A frame carrying attrs["source"]
+    came from a full fetch this scan (cold-fetched); a delta-served frame has
+    no attrs, so the scan counts it as cache."""
+    results = LRUFrames(max_frames=len(tickers))
+    started = time.monotonic()
+    spot, plain = spot_metals.split_spot(tickers)
+    chunk_size = int(getattr(config, "BATCH_FETCH_CHUNK_SIZE", 100))
+    for chunk in _chunked(plain, chunk_size):
+        if runstate.is_stop_requested():
+            log.info("Crawl (delta): stop requested -- ending early (%d/%d ticker(s) resolved so far)",
+                     len(results), len(tickers))
+            if progress is not None:
+                progress.stopped = True
+            return results
+        results.update(_delta_chunk(chunk, progress))
+    cold = sum(1 for df in results.values() if df.attrs.get("source"))
+    results.update(_crawl_spot(spot, progress))
+    log.info("Crawl (delta) complete in %.1fs: %d/%d ticker(s) resolved (%d cold-fetched)",
+             time.monotonic() - started, len(results), len(tickers), cold)
+    return results
+
+
 def _load_cached_daily(ticker: str):
     """v47: today's daily bar from market_data/daily/{TICKER}.csv, or None.
 
@@ -459,12 +559,17 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     (returning whatever was fetched so far) if a stop was requested --
     see the module-level _STOP_FILE docstring above for why this is
     file-based and only checked at per-ticker checkpoints, not instant.
+
+    v171: with DAILY_DELTA_FETCH on, `_crawl_delta` replaces everything below
+    (two single-basis caches plus a batched window; cold frames written back).
     """
     if progress is not None:
         progress.stage = "crawling data"
         progress.total = len(tickers)
         progress.done = 0
         progress.current_ticker = None
+    if config.DAILY_DELTA_FETCH:
+        return _crawl_delta(tickers, progress)
 
     results = LRUFrames(max_frames=len(tickers))
     started = time.monotonic()
