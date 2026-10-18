@@ -42,6 +42,9 @@ def dedup_scan_items(items: list) -> list:
                 {"strategy": it.result.strategy, "horizon_key": it.result.horizon_key, "level": it.conf.level}
                 for it in cluster
             ]
+            # v171 D5: a pre-post rebuild that drops `rep` must also revoke the
+            # siblings' confirmations, or they stay confirmed and never post.
+            rep.cluster_siblings = cluster[1:]
             if len(cluster) > 1:
                 log.debug("dedup: %s %s merged %d scenario(s) into %s/%s",
                           rep.result.ticker, rep.result.trend, len(cluster),

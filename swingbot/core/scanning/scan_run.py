@@ -421,7 +421,19 @@ def _rebuild_item(item, price, *, fresh_data, regimes, regime, require_confirmat
     if not outcome.kept:
         item.plan_v2_rejected = outcome.reason
         _skip_rejected_plan(item, require_confirmation)
+        _revoke_cluster_siblings(item, require_confirmation)
     return outcome
+
+
+def _revoke_cluster_siblings(item, require_confirmation: bool) -> None:
+    """The dedup siblings of a dropped representative were confirmed in the
+    merge loop and never post either: revoke each, so the drop consumes no
+    dedup (before v171 a rejected plan left before dedup and a sibling won)."""
+    if not require_confirmation:
+        return
+    for sib in getattr(item, "cluster_siblings", ()):
+        state.revoke_confirmation(sib.result.state_key, sib.result.state_value,
+                                  getattr(sib, "previous_confirmed", None))
 
 
 def _rebuild_stats(requote) -> dict:

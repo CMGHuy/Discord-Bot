@@ -148,3 +148,39 @@ def test_flag_off_scan_is_todays_path(monkeypatch, stub_batch_fetch):
     assert alerts and seen["quotes"] == [] and seen["rebuilt"] == []
     assert all(p.quote_kind is None and p.quote_age_s is None for p in _Store.plans)
     assert all("quote" not in t for t in log.get_trades(status=None, limit=None))
+
+
+def _cluster_item(strategy, score, key):
+    plan = SimpleNamespace(entry=100.0, take_profit=110.0, stop_loss=95.0, stop_distance_pct=5.0)
+    return SimpleNamespace(
+        result=SimpleNamespace(ticker="AAPL", trend="bullish", strategy=strategy, horizon_key="4w",
+                               state_key=key, state_value="bullish"),
+        plan=plan, conf=SimpleNamespace(score=score, level=3), previous_confirmed=None,
+        plan_v2_rejected=None)
+
+
+def test_dedup_keeps_the_cluster_siblings_on_the_representative():
+    from swingbot.core.scanning import dedup
+    rep, sib = _cluster_item("RSI", 0.9, "k1"), _cluster_item("Fibonacci", 0.5, "k2")
+    assert dedup.dedup_scan_items([sib, rep]) == [rep]
+    assert rep.cluster_siblings == [sib]
+
+
+def test_a_rebuild_drop_revokes_every_cluster_sibling(monkeypatch):
+    """The merge loop confirmed every cluster member; the drop posts none of them,
+    so every one must stay able to confirm and alert on a later scan."""
+    from swingbot.core.scanning import dedup
+    revoked = []
+    monkeypatch.setattr(scan_run.state, "revoke_confirmation",
+                        lambda key, value, prev: revoked.append(key))
+    monkeypatch.setattr(scan_run.rebuild, "rebuild_before_post",
+                        lambda item, price, **kw: RebuildOutcome(False, "rebuild:risk_cap", price))
+    rep, sib = _cluster_item("RSI", 0.9, "k1"), _cluster_item("Fibonacci", 0.5, "k2")
+    dedup.dedup_scan_items([rep, sib])
+    scan_run._rebuild_item(rep, PRICE, fresh_data={}, regimes=None, regime=None,
+                           require_confirmation=True)
+    assert revoked == ["k1", "k2"]
+    revoked.clear()
+    scan_run._rebuild_item(rep, PRICE, fresh_data={}, regimes=None, regime=None,
+                           require_confirmation=False)
+    assert revoked == []
