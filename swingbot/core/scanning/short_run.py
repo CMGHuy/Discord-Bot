@@ -32,11 +32,13 @@ from swingbot.core.market.session import session_date
 from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS
 from swingbot.core.marketdata import universe
 from swingbot.core.marketdata.data import get_currency_symbol
+from swingbot.core.planning import rebuild
 from swingbot.core.planning.account import load_account_config
 from swingbot.scan_params import ScanParams
 
 from . import (analyze, dedup, fetch, lane_overlap, qualify, rejection_recorder, runstate, scan_run,
                short_funnel, telemetry)
+from .requote import Requote
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
 from .short_candidates import admitted_short_modes, extra_symbols
@@ -175,15 +177,15 @@ def _fit_trendline(df, plan, h, trend):
         return None
 
 
-def _log_trade(item, nums, explanation, fit, alerts, origin=None):
+def _log_trade(item, nums, explanation, fit, alerts, origin=None, requote=None):
     """Persist the plan, then the paper trade (v116 order); returns the trade id."""
     result, plan, conf = item.result, item.plan, item.conf
     plan_v2 = item.plan_v2 if config.PLAN_ENGINE_V2 == "on" and item.plan_v2 is not None else None
     sources, rr = scan_run._logged_plan_fields(plan_v2, plan, item.level_map, result.trend)
     if plan_v2 is not None:
-        scan_run._persist_plan_v2(plan_v2, alerts)
+        scan_run._persist_plan_v2(plan_v2, alerts, requote)
     return trade_log.log_trade(
-        ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
+        quote=scan_run._trade_quote(requote, result.ticker), ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
         direction=result.trend, confidence_level=conf.level, confidence_label=conf.label,
         entry=nums["entry"], stop_loss=nums["stop_loss"], take_profit=nums["take_profit"],
         target2=nums["target2"], confidence_score=conf.score, confidence_breakdown=conf.breakdown,
@@ -276,7 +278,7 @@ def _stamp_intraday(item) -> None:
         item.intraday = None
 
 
-def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None):
+def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None, requote=None):
     result, plan, conf = item.result, item.plan, item.conf
     h = HORIZONS[result.horizon_key]
     df = frames.get(result.ticker)
@@ -293,7 +295,8 @@ def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None):
     if funnel is not None:
         funnel.record_decision(item)
     fit = _fit_trendline(df, plan, h, result.trend) if item.paper_logged else None
-    trade_id = _log_trade(item, nums, explanation, fit, alerts) if item.paper_logged else None
+    trade_id = (_log_trade(item, nums, explanation, fit, alerts, requote=requote)
+                if item.paper_logged else None)
     chart_path, chart_filename = _render_chart(item, nums, df, frames, spy_df, trade_id, fit)
     _stamp_risk_flags(item, frames, account_cfg)
     warning = _open_positions_warning(account_cfg)
@@ -307,16 +310,53 @@ def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None):
     notify_secondary(item, plan, conf)
 
 
-def _build_alerts(deduped, require_confirmation, frames, spy_df, funnel=None) -> list:
+def _bare_context(frames) -> qualify.QualifyContext:
+    """A context with no lane state, for callers that pass none (tests)."""
+    return qualify.QualifyContext(frames=frames, spy=None, sector_of={}, etf_symbol_of={},
+                                  sector_frames={}, regime=None, regimes=None)
+
+
+def _rescenario_for(item, frames):
+    """The rebuild's scenario builder: the lane's own frame, a re-quoted price."""
+    return lambda price: analyze.rescenario(item, frames.get(item.result.ticker), price)
+
+
+def _attach_for(item, context):
+    """The rebuild's attach: set the scenario, then the lane's own plan attach."""
+    def attach(scenario) -> None:
+        item.plan = scenario
+        qualify._attach_plan(item, context)
+    return attach
+
+
+def _rebuild_fn(frames, context):
+    """`Requote.iter_fresh`'s rebuild callback; a drop revokes like a build-time rejection."""
+    def run(item, price):
+        outcome = rebuild.rebuild_before_post(
+            item, price, rescenario=_rescenario_for(item, frames),
+            attach=_attach_for(item, context))
+        if not outcome.kept:
+            item.plan_v2_rejected = outcome.reason
+            qualify._revoke(item, context)
+        return outcome
+    return run
+
+
+def _build_alerts(deduped, require_confirmation, frames, spy_df, funnel=None,
+                  qualify_context=None) -> list:
+    """v171: every postable item is first rebuilt from one batched re-quote
+    (planning/rebuild.py); a drop revokes its confirmation and never posts."""
     account_cfg = load_account_config()
     alerts: list = []
-    for item in deduped:
+    requote = Requote(deduped)
+    rebuild_fn = _rebuild_fn(frames, qualify_context or _bare_context(frames))
+    for item in requote.iter_fresh(deduped, rebuild=rebuild_fn):
         if runstate.is_stop_requested():
             log.info("SHORT alert building: stop requested -- %d/%d built", len(alerts), len(deduped))
             break
         blocked = _post_block(item, require_confirmation)
         if blocked is None:
-            _alert_for(item, frames, spy_df, account_cfg, alerts, funnel)
+            _alert_for(item, frames, spy_df, account_cfg, alerts, funnel, requote=requote)
         elif funnel is not None and blocked == "existing_trade":   # unmet is already a scenario_events rejection
             funnel.record_item(item, "trade_decision", blocked)
     return alerts
@@ -420,7 +460,9 @@ def _sync_run_short_scan(require_confirmation: bool, progress=None) -> tuple:
     deduped = dedup.dedup_scan_items(qualified)
     funnel.record_dedup(qualified, deduped)
     deduped.sort(key=lambda item: (item.all_requirements_met, item.conf.score), reverse=True)
-    alerts = _build_alerts(deduped, require_confirmation, frames, reference.spy, funnel)
+    alerts = _build_alerts(
+        deduped, require_confirmation, frames, reference.spy, funnel,
+        qualify_context=_qualify_context(require_confirmation, frames, lane))
     _log_funnel(funnel, len(alerts))
     log.info("SHORT extra lane: %d candidate(s), %d scenario(s), %d alert(s)",
              len(candidates), len(items), len(alerts))
