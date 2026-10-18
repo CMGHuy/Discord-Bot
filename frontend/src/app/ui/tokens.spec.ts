@@ -205,6 +205,9 @@ const NOT_CONTROL_ROWS = new Set([
   // Trade Detail's ticker/status title is a semantic heading, not a control
   // lane. It is the one flex row whose children are data and status only.
   'trade-title',
+  // v166: the Trade Detail identity row (title, tags, id) is data and status
+  // chips, and the Back link is a navigation anchor, not a control lane.
+  'identity', 'back',
   // Analytics' win/loss donut beside its avg-win/avg-loss captions (v85
   // D39) -- same category again: a figure and the numbers explaining it.
   'winloss',

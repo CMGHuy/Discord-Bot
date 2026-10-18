@@ -621,7 +621,7 @@ Open every PNG with the Read tool. Per shot, write one line: path, width, column
 
 - [ ] **Step 9: Fix a layout defect, if one was found**
 
-A defect the probe or the shots show is fixed in `frontend/src/app/workspaces/trades/trade-detail.ts` (the grid, cell and stretch rules TD11 owns), with only the allowed breakpoints (640 / 1024, Global Constraints), never by editing `ui/`, `why/` or a card's markup. After each fix:
+A grid, cell or stretch defect the probe or shots show is fixed in `frontend/src/app/workspaces/trades/trade-detail.ts`, with only the allowed breakpoints (640 / 1024, Global Constraints). The 2026-10-17 visual amendment below permits one separate confidence-row fix in `why/why-panel.ts` and its focused spec. Neither fix edits `ui/` or card markup. After each page fix:
 
 Run: `npm --prefix $WT/frontend exec -- ng test --watch=false --include src/app/workspaces/trades/trade-detail.spec.ts --include src/app/ui/primitives.spec.ts --include src/app/ui/async-coverage.spec.ts --include src/app/ui/breakpoint-guard.spec.ts --include src/app/ui/spacing.spec.ts --include src/app/ui/contrast.spec.ts`
 Expected: PASS, 0 failed (update a TD11 source-pinning case in the same commit only when the fix changes the very rule it pins, and say so in the commit body).
@@ -635,7 +635,7 @@ git -C $WT commit -m "fix(v166): TD12 <what the shots showed, in one line>
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-Then re-run Steps 7 and 8 for the affected paths. If the cause sits inside a card component or a shared primitive (outside `trade-detail.ts`), do not edit it: stop and report the probe line and the PNG path to the controller as `BLOCKED:`.
+Then re-run Steps 7 and 8 for the affected paths. For a cause inside a shared component other than the approved `WhyPanel` confidence-row exception, stop and report the probe line and PNG path to the controller as `BLOCKED:`.
 
 - [ ] **Step 10: Get the partner's sign-off**
 
@@ -674,6 +674,28 @@ git -C $WT commit -m "docs(v166): TD12 visual pass recorded -- 1440/1024/768/390
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+#### TD12 visual amendment, approved 2026-10-17
+
+The first local pass used the existing `swingbot_prod_replica` through a
+process-only API connection. Its data supplied closed, partial and cancelled
+trades, but no pending plan; no records were changed. Across 48 page and width
+combinations the area-map column counts matched the container widths, with no
+grid holes or page overflow. The Back link was below the phone touch-target
+height and was corrected in `trade-detail.ts` with a focused regression.
+
+The screenshots also revealed overlapping confidence-factor labels and notes
+inside the shared `WhyPanel` at 390–1024 px. The partner approved a direct,
+scoped correction to `why/why-panel.ts` and its spec before merge. This is the
+only exception to the shared `why/` exclusion above. Re-run the focused Why
+spec, plan-detail spec and five UI gates, then re-shoot Why at all four widths
+for the closed, partial and cancelled local cases. Check the affected rows for
+overlap in the PNGs and by DOM geometry. Keep the pending case marked absent for
+the after-deploy re-shot.
+
+The local replica's stale scan banner covers the Back link at every tested
+width. That shell/data condition remains a recorded limitation; it does not
+alter the trade grid and is outside this plan's code scope.
+
 ### Task TD13: Full Python suite, whole frontend spec run, radon check
 
 **Model:** haiku — runs commands, no code
@@ -705,7 +727,7 @@ Expected: `0 failed` and `0 xfailed` (a changed pass count is not a failure, `do
 - [ ] **Step 3: Run the whole frontend spec suite and the production build**
 
 Run: `npm --prefix $WT/frontend exec -- ng test --watch=false`
-Expected: every spec file passes, 0 failed, including `why/*.spec.ts` and `workspaces/plans/plan-detail.spec.ts` unchanged, and the five UI gate specs. A 60 s `Timeout waiting for worker ... no tests` with nothing run is machine load: re-run once (`docs/claude/testing-cost.md` § Frontend).
+Expected: every spec file passes, 0 failed, including the updated `why-panel.spec.ts`, unchanged other `why/*.spec.ts`, `workspaces/plans/plan-detail.spec.ts`, and the five UI gate specs. A 60 s `Timeout waiting for worker ... no tests` with nothing run is machine load: re-run once (`docs/claude/testing-cost.md` § Frontend).
 
 Run: `npm --prefix $WT/frontend run build`
 Expected: the build completes with no error (CI's `frontend-test` job runs the same build after the specs; a bundle-budget error here would fail CI).
@@ -725,9 +747,10 @@ Expected: `radon: unchanged` (the same functions at the same grades and scores, 
 - [ ] **Step 5: Check the files the plan must not touch**
 
 ```bash
-git -C $WT diff --stat main -- frontend/src/app/workspaces/trades/why/ frontend/src/app/workspaces/plans/plan-detail.ts frontend/src/app/workspaces/trades/trade-actions.ts frontend/src/app/ui/ tests/suites.toml VERSION.json
+git -C $WT diff --name-only main -- frontend/src/app/workspaces/trades/why/
+git -C $WT diff --stat main -- frontend/src/app/workspaces/plans/plan-detail.ts frontend/src/app/workspaces/trades/trade-actions.ts frontend/src/app/ui/ tests/suites.toml VERSION.json
 ```
-Expected: no output (Global Constraints: shared `why/` components, `plan-detail.ts`, `trade-actions.ts`, `ui/`, the suite map and the version file are untouched; the bump is `/close-out`'s).
+Expected: the first command lists only `why/why-panel.ts` and `why/why-panel.spec.ts`; the second prints nothing (`plan-detail.ts`, `trade-actions.ts`, `ui/`, the suite map and the version file remain untouched; the bump is `/close-out`'s).
 
 - [ ] **Step 6: If anything failed**
 

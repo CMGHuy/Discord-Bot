@@ -333,3 +333,134 @@ describe('TradeDetailStore — notes and strategy', () => {
     expect(store.strategyRow()).toBeNull();
   });
 });
+
+describe('TradeDetailStore — original risk and plan figures', () => {
+  let store: InstanceType<typeof TradeDetailStore>;
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        TradeDetailStore,
+      ],
+    });
+    store = TestBed.inject(TradeDetailStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  function open(row: Record<string, unknown> = {}, detail: Record<string, unknown> = {}) {
+    store.setId(ID);
+    TestBed.inject(ApplicationRef).tick();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush({
+      ...detailResponse(), status: 'ACTIVE', shares: 10, ...row,
+      detail: { ...detailResponse().detail, ...detail },
+    });
+    backend.expectOne(`/api/v1/trades/${ID}/journal`).flush({ journaled: false, entry: null });
+    backend.verify();
+  }
+
+  it('keeps original per-share risk after a PARTIAL stop moves to breakeven', () => {
+    open({ status: 'PARTIAL', risk_stop: 95, stop_loss: 100, shares: 4 });
+    expect(store.riskPerShare()).toBe(5);
+    expect(store.rewardPerShare()).toBe(10);
+  });
+
+  it('measures ACTIVE risk and plan figures from their recorded values', () => {
+    open({ risk_stop: 95 }, {
+      working_stop: 97, trail_atr_mult: 2.5, sizing_mode: 'risk', entry_type: 'stop',
+    });
+    expect(store.riskStop()).toBe(95);
+    expect(store.riskPerShare()).toBe(5);
+    expect(store.dollarAtRisk()).toBe(50);
+    expect(store.workingStop()).toBe(97);
+    expect(store.trailAtrMult()).toBe(2.5);
+    expect(store.sizingMode()).toBe('risk');
+    expect(store.entryType()).toBe('stop');
+  });
+
+  it('uses remaining open shares and original risk for a PARTIAL position', () => {
+    open({ status: 'PARTIAL', risk_stop: 95, stop_loss: 100, shares: 4 });
+    expect(store.dollarAtRisk()).toBe(20);
+  });
+
+  it.each([
+    { row: {}, stop: null, risk: 5, dollars: 50 },
+    { row: { risk_stop: null }, stop: null, risk: 5, dollars: 50 },
+    { row: { risk_stop: 105 }, stop: 105, risk: 5, dollars: 50 },
+    { row: { risk_stop: 95, stop_loss: null }, stop: 95, risk: 5, dollars: 50 },
+    { row: { risk_stop: 100, shares: 0 }, stop: 100, risk: 0, dollars: 0 },
+    { row: { risk_stop: '95' }, stop: null, risk: 5, dollars: 50 },
+    { row: { risk_stop: NaN }, stop: null, risk: 5, dollars: 50 },
+    { row: { risk_stop: Infinity }, stop: null, risk: 5, dollars: 50 },
+    { row: { stop_loss: null }, stop: null, risk: null, dollars: null },
+    { row: { stop_loss: undefined }, stop: null, risk: null, dollars: null },
+    { row: { stop_loss: '95' }, stop: null, risk: null, dollars: null },
+    { row: { entry: null }, stop: null, risk: null, dollars: null },
+    { row: { entry: undefined }, stop: null, risk: null, dollars: null },
+    { row: { entry: Infinity }, stop: null, risk: null, dollars: null },
+    { row: { entry: '100' }, stop: null, risk: null, dollars: null },
+    { row: { shares: null }, stop: null, risk: 5, dollars: null },
+    { row: { shares: undefined }, stop: null, risk: 5, dollars: null },
+    { row: { shares: NaN }, stop: null, risk: 5, dollars: null },
+    { row: { shares: '10' }, stop: null, risk: 5, dollars: null },
+  ])('narrows original risk and open shares: $row', ({ row, stop, risk, dollars }) => {
+    open(row);
+    expect(store.riskStop()).toBe(stop);
+    expect(store.riskPerShare()).toBe(risk);
+    expect(store.dollarAtRisk()).toBe(dollars);
+  });
+
+  it('keeps figures unknown before a response arrives', () => {
+    expect(store.riskStop()).toBeNull();
+    expect(store.riskPerShare()).toBeNull();
+    expect(store.dollarAtRisk()).toBeNull();
+    expect(store.workingStop()).toBeNull();
+    expect(store.trailAtrMult()).toBeNull();
+    expect(store.sizingMode()).toBeNull();
+    expect(store.entryType()).toBeNull();
+    expect(store.earningsDays()).toBeNull();
+  });
+
+  it.each([undefined, null, NaN, Infinity, '3', {}, true])(
+    'rejects absent or malformed numeric detail fields: %s', (value) => {
+      open({}, { working_stop: value, trail_atr_mult: value });
+      expect(store.workingStop()).toBeNull();
+      expect(store.trailAtrMult()).toBeNull();
+    },
+  );
+
+  it('preserves recorded zero values in detail fields', () => {
+    open({}, { working_stop: 0, trail_atr_mult: 0 });
+    expect(store.workingStop()).toBe(0);
+    expect(store.trailAtrMult()).toBe(0);
+  });
+
+  it.each([undefined, null, '', '  ', {}, true])(
+    'keeps unreadable or blank plan text unknown: %s', (value) => {
+      open({}, { sizing_mode: value, entry_type: value });
+      expect(store.sizingMode()).toBeNull();
+      expect(store.entryType()).toBeNull();
+    },
+  );
+
+  it.each([
+    { gates: undefined, days: null },
+    { gates: null, days: null },
+    { gates: {}, days: null },
+    { gates: [], days: null },
+    { gates: [{ key: 'rs', label: 'RS', value: 90 }], days: null },
+    { gates: [{ key: 'earnings', label: 'Earnings', value: 7 }], days: 7 },
+    { gates: [{ key: 'earnings', label: 'Earnings', value: 0 }], days: 0 },
+    { gates: [{ key: 'earnings', label: 'Earnings', value: -2 }], days: -2 },
+    { gates: [{ key: 'earnings', label: 'Earnings', value: '7' }], days: null },
+    { gates: [{ key: 'earnings', label: 'Earnings', value: Infinity }], days: null },
+    { gates: [{ key: 'earnings', label: 'Earnings', value: null }], days: null },
+    { gates: [{ key: 'earnings', label: '', value: 7 }], days: null },
+  ])('reads earnings days only from a readable numeric earnings gate: $gates', ({ gates, days }) => {
+    open({}, { gates });
+    expect(store.earningsDays()).toBe(days);
+  });
+});

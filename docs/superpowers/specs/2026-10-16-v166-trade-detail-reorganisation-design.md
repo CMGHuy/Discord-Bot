@@ -230,3 +230,18 @@ Veteran-trader (1 BLOCKING, 7 ADVISORY):
 - expiry as bars, and "never filled" reason -- applied (date first; status_history reason as subline).
 - arrow-only direction, order side unnamed -- applied (Long/Short text; Order row names side and type; gap-through-trigger note).
 - `held_hours` unreadable -- no change needed (`held()` already prints days, `ui/format.ts:74-82`); time-exit days-left subline added.
+
+## TD12 visual amendment (2026-10-17)
+
+The local visual pass found overlapping confidence-factor labels and notes in
+the shared `WhyPanel` at 390–1024 px. The `auto` note track can consume the
+row width and leave the label too narrow to wrap. The partner approved fixing
+this directly before merge. This amendment overrides the earlier "WhyPanel
+unchanged" and shared `why/` out-of-scope clauses only for the confidence
+factor-row layout and its focused regression test. The plan-detail page keeps
+using the same component and must pass its existing spec. No other shared Why
+component or UI primitive changes under this exception.
+
+The local replica has no pending plan; TD12 records that missing visual case
+for the production re-shot after deploy. Its stale scan banner covers the Back
+link in screenshots and is recorded as an independent shell/data limitation.
