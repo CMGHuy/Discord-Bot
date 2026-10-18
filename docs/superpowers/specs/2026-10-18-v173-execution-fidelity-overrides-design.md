@@ -97,8 +97,12 @@ The transition entry gains an `override` object:
               "quote_ts": "<iso>", "bars_asof": "2026-10-17"}}
 ```
 
-- `exit_price` and `quote_ts`: the live quote the admin already attaches
-  (`_attach_current_prices`) and the time it was taken.
+- `exit_price` and `quote_ts`: the live quote, fetched **once** in
+  `_close_plan`, with `quote_ts` set by the caller (`PriceQuote` has no
+  timestamp). The same price is the one written to the linked paper
+  trade by `close_trade_manual`, so the stamp and the trade never
+  disagree. The plan task passes the price in, or reads it back from the
+  trade.
   - With no quote, it falls back to the last close in the live scan's
     cache (`runner_path.cached_daily_bars`, i.e. `market_data/daily`), with
     `price_source: "bar_close"` and `quote_ts: null`.
@@ -116,10 +120,18 @@ into the appended entry. No other caller changes.
 **Schema:** this adds fields inside `plans.doc` JSONB, the *add* operation in
 `schema-evolution.md`, so no migration is needed.
 
-**Readers of `"manual"`:** `partials.py:_REASON_BUCKET` maps `"manual_bulk"`
-to the `manual` bucket. The plan greps every reader of a plan's terminal
-`reason` and lists each one. `trades.py`/`lifecycle_embeds.py` key on the
-legacy trade's `status`, not on this reason, and stay unchanged.
+**Readers of a plan's terminal reason** (brief, with file:line), each
+taught `"manual_bulk"`:
+
+- `runner_path.close_reason`, which feeds `partials._REASON_BUCKET` and
+  `STOP_EXIT_REASONS`: `manual_bulk` maps to the `manual` bucket.
+- The frontend `exitReasonLabel` gets the label "Bulk close", where it
+  would otherwise print `manual_bulk` raw.
+- The SQL in `export_book_rows.sh` reads CANCELLED reasons only and stays
+  unchanged.
+
+`trades.py`/`lifecycle_embeds.py` key on the legacy trade's `status`, not
+on this reason, and stay unchanged.
 
 ### 2. Re-tagging the 2026-09-30 bulk clear
 
@@ -147,8 +159,22 @@ Pure functions, no I/O.
 replaying the whole trade from the plan's real fill bar and price, with the
 same plan, *is* the "left alone" counterfactual.
 
-- `engine_path(plan, bars)` runs `walk_v2` from the fill index. The fill is
-  the ACTIVE entry in `status_history`, mapped to its NYSE session.
+- `engine_path(plan, bars)` calls `walk_v2(df, fill_idx, plan.entry_price,
+  plan, hold_cap, resolve("v2"), scale_out=tp1_fraction < 1)` from the fill
+  index. No live-plan-to-sim adapter exists; this module is the adapter.
+  The fill is the ACTIVE entry in `status_history`, mapped to its NYSE
+  session.
+- `walk_v2` skips the fill-bar stop check, which lives in the private
+  `_filled`/`_fill_bar_v2`. A public wrapper exposes that check without
+  any behaviour change (the existing exit tests stay green), and the
+  replay applies it first.
+- `ExitResult` gains an optional `tp1_index: int | None = None`, set where
+  TP1 fills and `None` everywhere else. The change is additive and
+  behaviour-preserving, and the PARTIAL parity check needs it.
+- `walk_v2` reads `config.STALL_EXIT_ENABLED` and
+  `config.RUNNER_STRUCTURE_EXIT` live. The replay uses the current values,
+  the report prints them, and a divergence from the live path at the time
+  surfaces as `parity_mismatch`.
 - **Parity check.** The replay must not exit before the override's
   session, because the live plan was still open then.
   - If it does, the row is `parity_mismatch`: excluded from sums and
@@ -156,20 +182,27 @@ same plan, *is* the "left alone" counterfactual.
   - For a PARTIAL plan, the replay's TP1 bar must equal the live TP1
     session, or the row is `parity_mismatch` too.
 
-**One cost basis for both arms.**
+**One cost basis for both arms.** Costs come from
+`swingbot/core/backtesting/instrument/costs.py:book`, the sim's own
+`_booked` path. `edge/frictions.py` is v1-only and is not used.
 
-- The TP1 leg of a PARTIAL plan is identical in both arms by
-  construction. It is taken from `legs_realized` for **both**.
-- The diverging remainder (`1 - tp1_fraction` for PARTIAL, `1` for ACTIVE,
-  as at `plan_manager.py:1115`) is booked once through `costs.book` with
-  the same `frictions.py` model on both arms:
-  - Actual arm: a one-leg exit at `exit_price`, with a stop-style exit
-    fill.
-  - Engine arm: the replay's own remainder leg(s).
+- Each arm is booked in **one `book` call over all its legs**:
+  - The TP1 leg of a PARTIAL plan is identical in both arms: the live
+    TP1 `exit_price` from `legs_realized`, priced through `book` in both.
+    The live `legs_realized[].r` is gross and is not used directly.
+  - Actual arm: TP1 leg (if any) plus a remainder leg at `exit_price`,
+    `kind="stop"` (10 bps).
+  - Engine arm: TP1 leg (if any) plus the replay's own remainder leg(s).
+- The remainder fraction is `1 - tp1_fraction` for PARTIAL and `1` for
+  ACTIVE, as at `plan_manager.py:1115`.
 - `delta_r = actual_r - engine_r`. R uses the plan's initial risk, the
-  basis of `metrics.r_multiple`. Dollars = R × the plan's stored dollar
-  risk. The plan-briefer names the field v170's alerts already read.
-- Both arms are **net of modelled frictions and pre-tax**.
+  basis of `metrics.r_multiple`.
+- **Dollars:** the plan stores no dollar risk. As in v170
+  (`performance.py:1242`, `TradeLog.trade_for_plan`), dollar risk =
+  linked trade `shares` × |`entry_price` − `stop_loss`|, and dollars = R ×
+  that. With no linked trade or no `shares`, the dollars are "—" and the
+  row stays in the R sums.
+- Both arms are **net of modelled costs and pre-tax**.
 
 **The override session is the same for both arms (no lookahead).** `at` is
 converted to America/New_York and assigned to an NYSE session:
@@ -195,12 +228,12 @@ above), `source="manual"` and one `status`:
 
 | `status` | Meaning | In sums |
 |---|---|---|
-| `resolved` | The engine exited, or hit its hold cap (`timeout`, `_hold_cap_bars`), within the data | yes |
-| `open` | The data ends before any engine exit **and** before the hold cap | no, counted |
+| `resolved` | The engine exited, or hit its hold cap (`fill_idx + hold_cap_bars <= len(df) - 1`), within the data | yes |
+| `open` | `walk_v2` returned `timeout` but `fill_idx + hold_cap_bars > len(df) - 1`, i.e. the data ended first (`walk_v2` clips and labels that `timeout` too) | no, counted |
 | `stale` | The cache's last bar is before the latest NYSE session ≤ `asof` | no, counted |
 | `ambiguous` | Override-session range touches the engine's stop/target | no, counted |
 | `parity_mismatch` | The replay disagrees with the live path before the override | no, counted |
-| `split_affected` | A split/dividend adjustment (`adjustments.py`) falls between fill and last bar | no, counted |
+| `split_affected` | The plan's raw `entry_price` lies outside the cached fill-session bar's [low × 0.98, high × 1.02]: the cache (`auto_adjust`, rescaled on refresh) no longer matches the plan's price basis. `adjustments.py` has no split events, so this price test is the check | no, counted |
 | `unreplayable` | No fill, no bars, or no exit price derivable | no, counted |
 
 - The bars come only from `runner_path.cached_daily_bars`
@@ -237,7 +270,9 @@ above), `source="manual"` and one `status`:
   - CI entirely above 0 → **`SAVED`**.
   - Otherwise → **`INCONCLUSIVE`**.
 - The result is written once to `preregistration-ledger.jsonl` as
-  `v173-override-fidelity` and **frozen**. Later runs show that recorded
+  `v173-override-fidelity` and **frozen**. The ledger's verdict enum
+  (`instrument/stats.py:116-118`) gains `COST`, `SAVED` and
+  `INCONCLUSIVE`. `WAITING` is never written. Later runs show that recorded
   verdict and keep the descriptive rows live. They never recompute it,
   because watching a live CI until it crosses zero inflates false
   positives.
