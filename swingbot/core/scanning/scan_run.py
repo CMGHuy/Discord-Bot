@@ -1,5 +1,6 @@
 """Scan orchestration and async notification delivery."""
 import asyncio
+import functools
 import logging
 import math
 import hashlib
@@ -36,6 +37,7 @@ from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import UnrealizedPnL, compute_unrealized_pnl, load_account_config
 from swingbot.core.planning.plan_manager import log_plan_armed
 from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.planning import rebuild
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
@@ -50,6 +52,7 @@ from .embeds import (
 )
 from .singletons import state, trade_log
 from .regime import get_market_regime
+from .requote import Requote
 
 
 log = logging.getLogger(__name__)
@@ -349,7 +352,7 @@ def _earnings_in_window(ticker: str, max_holding_days: int):
     return earnings_info
 
 
-def _persist_plan_v2(plan_v2, alerts=()) -> None:
+def _persist_plan_v2(plan_v2, alerts=(), requote=None) -> None:
     """Add the plan to PlanStore; log it as armed only once that succeeded.
 
     v116: a failed database write is not swallowed. The
@@ -358,7 +361,11 @@ def _persist_plan_v2(plan_v2, alerts=()) -> None:
     so the halting result has neither a trade nor an alert; `alerts` (those
     already built, each with its trade and plan stored) ride on the halt so
     the caller still posts them.
+
+    v171: `requote` stamps the plan's fetch-to-persist quote age (and counts a
+    miss) right before the write.
     """
+    _stamp_persist_age(plan_v2, requote)
     try:
         PlanStore().add(plan_v2)
     except Exception as exc:
@@ -369,6 +376,59 @@ def _persist_plan_v2(plan_v2, alerts=()) -> None:
                     plan_v2.plan_id, exc_info=True)
         return
     log_plan_armed(plan_v2)
+
+
+def _stamp_persist_age(plan_v2, requote) -> None:
+    """v171 D5: the 5 s clock ends here, at the plan write."""
+    if requote is None or not requote.enabled:
+        return
+    plan_v2.quote_age_s = requote.age_at_persist(plan_v2.ticker)
+
+
+def _trade_quote(requote, ticker: str) -> dict | None:
+    """The trade record's `quote` dict, or None with the rebuild off."""
+    if requote is None or not requote.enabled:
+        return None
+    price = requote.price_for(ticker)
+    if price is None:
+        return None
+    return rebuild.quote_record(price, requote.age_at_persist(ticker))
+
+
+def _attach_item_plan(item, scenario, df, regimes, regime) -> None:
+    """Attach the v2 plan for `scenario` at the frame's last bar's regime;
+    shared by the merge loop and the v171 pre-post rebuild."""
+    regime2_state = analyze._regime_at(regimes, df.index[-1] if df is not None and len(df) > 0 else None)
+    analyze.attach_plan_v2(item, scenario, df,
+                           item.result.ticker, item.result.horizon_key,
+                           level_map=item.level_map, regime=regime,
+                           rs_percentile=item.rs_percentile, breadth=item.breadth,
+                           regime2_state=regime2_state)
+    if item.plan_v2 is not None:
+        item.plan_v2.regime_aligned = not (
+            item.htf_info and item.htf_info.get("counter_trend", False)
+        )
+
+
+def _rebuild_item(item, price, *, fresh_data, regimes, regime, require_confirmation):
+    """v171 D5: rebuild `item` at `price` from the scan's own frame. A drop
+    revokes the confirmation, so it consumes no cooldown and no dedup."""
+    df = fresh_data.get(item.result.ticker)
+    outcome = rebuild.rebuild_before_post(
+        item, price,
+        rescenario=lambda p: analyze.rescenario(item, df, p),
+        attach=lambda s: _attach_item_plan(item, s, df, regimes, regime))
+    if not outcome.kept:
+        item.plan_v2_rejected = outcome.reason
+        _skip_rejected_plan(item, require_confirmation)
+    return outcome
+
+
+def _rebuild_stats(requote) -> dict:
+    """The scan telemetry's `rebuild` block, present only with the flag on."""
+    if not requote.enabled:
+        return {}
+    return {"rebuild": requote.stats()}
 
 
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
@@ -717,17 +777,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # confirmation gate above, matching the pre-parallelization
                 # timing exactly -- a still-debouncing scenario no longer pays
                 # for plan construction on every scan pass.
-                df_for_item = fresh_data.get(item.result.ticker)
-                regime2_state = analyze._regime_at(regimes, df_for_item.index[-1] if df_for_item is not None and len(df_for_item) > 0 else None)
-                analyze.attach_plan_v2(item, item.plan, df_for_item,
-                                item.result.ticker, item.result.horizon_key,
-                                level_map=item.level_map, regime=regime,
-                                rs_percentile=item.rs_percentile, breadth=item.breadth,
-                                regime2_state=regime2_state)
-                if item.plan_v2 is not None:
-                    item.plan_v2.regime_aligned = not (
-                        item.htf_info and item.htf_info.get("counter_trend", False)
-                    )
+                _attach_item_plan(item, item.plan, fresh_data.get(item.result.ticker),
+                                  regimes, regime)
                 if (config.PLAN_ENGINE_V2 == "on"
                         and getattr(item, "plan_v2_rejected", None)):
                     filtered_by_rr += 1
@@ -821,7 +872,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     reversed_count = 0
     log.info("Scan pass: %d ticker(s) evaluated, %d scenario(s) shown, %d after dedup",
               len(tickers), len(scan_items), len(deduped))
-    for item in deduped:
+    requote = Requote(deduped)
+    for item in requote.iter_fresh(deduped, rebuild=functools.partial(
+            _rebuild_item, fresh_data=fresh_data, regimes=regimes, regime=regime,
+            require_confirmation=require_confirmation)):
         if runstate.is_stop_requested():
             log.info("Alert building: stop requested -- ending early (%d/%d alert(s) built so far)",
                       len(alerts), len(deduped))
@@ -1012,7 +1066,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # and the intraday manager's poll() had nothing to ever act on.
                 # v116: BEFORE log_trade, so a halting plan write leaves no
                 # trade without an alert (earlier results ride on the halt).
-                _persist_plan_v2(plan_v2, alerts)
+                _persist_plan_v2(plan_v2, alerts, requote)
 
             trade_id = trade_log.log_trade(
                 ticker=result.ticker, strategy=result.strategy, horizon_key=result.horizon_key,
@@ -1036,6 +1090,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 risk_features=plan_v2.risk_features if plan_v2 is not None else None,
                 entry_context=plan_v2.entry_context if plan_v2 is not None else None,
                 **_confidence_point_kwargs(conf),
+                quote=_trade_quote(requote, result.ticker),
             )
             log.info("Logged new paper trade %s for %s", trade_id, result.ticker)
         else:
@@ -1202,6 +1257,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "data_sources": _count_sources(fresh_data),
             "short_funnel": funnel.snapshot(),
             **fetch.fetch_stats(),
+            **_rebuild_stats(requote),
         }
         scan_stats.update(_provider_health_fields(tickers, fresh_data, scan_stats))
         telemetry.log_scan_telemetry(scan_stats)
