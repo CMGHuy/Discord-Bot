@@ -299,7 +299,6 @@ export const TradeDetailStore = signalStore(
     journalAnswered: false,
     journalError: null,
   }),
-  // eslint-disable-next-line max-len
   withComputed(({ data, noteDraft, noteAcked, noteSaving, noteError, noteUnjournaled, strategies,
                  journal, journalAnswered }) => ({
     empty: computed(() => data() === null),
