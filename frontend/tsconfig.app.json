@@ -19,6 +19,8 @@
     /* Same reason as test-setup.ts above: reads source files off disk with
      * `node:fs`/`node:path`/`process` for the gate specs. Not a `.spec.ts`
      * itself, so it isn't caught by the pattern above. */
-    "src/app/ui/testing/call-sites.ts"
+    "src/app/ui/testing/call-sites.ts",
+    /* Same again: the colour/radius gates' source walker, `node:fs` too. */
+    "src/app/ui/testing/all-sources.ts"
   ]
 }
