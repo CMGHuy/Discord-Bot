@@ -16,8 +16,9 @@ from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals, yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.providers.base import SOURCE_YF, is_alpaca_eligible
-from swingbot.core.marketdata.shared import layer
-from swingbot.core.marketdata.shared.kinds import (PROVIDER_ALPACA, Asker, DataKind, QuoteDetail,
+from swingbot.core.marketdata.shared import counters, layer
+from swingbot.core.marketdata.shared.budget import BudgetDeferred
+from swingbot.core.marketdata.shared.kinds import (PROVIDER_ALPACA, PROVIDER_YF, Asker, DataKind, QuoteDetail,
                                                    resolve_asker)
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
@@ -541,6 +542,15 @@ def get_company_name(ticker: str) -> str | None:
         return name
 
     # Slow path: yfinance for international / OTC symbols
+    name, answered = _provider_company_name(ticker_key)
+    if not answered:
+        return None            # v171: deferred or failed shared lookup; retry next time
+    _company_name_cache[ticker_key] = name
+    _save_ticker_meta_cache()  # persist so this network call isn't repeated after the next restart
+    return name
+
+
+def _company_name_legacy(ticker_key: str) -> str | None:
     name = None
     for candidate in candidate_symbols(ticker_key):
         try:
@@ -551,10 +561,72 @@ def get_company_name(ticker: str) -> str | None:
         except Exception as exc:
             swallowed(log, "marketdata.company_name", exc, level=logging.DEBUG)
             continue
-
-    _company_name_cache[ticker_key] = name
-    _save_ticker_meta_cache()  # persist so this network call isn't repeated after the next restart
     return name
+
+
+def _fast_info_currency(ticker):
+    try:
+        fast_info = ticker.fast_info
+        return fast_info.get("currency") if hasattr(fast_info, "get") else getattr(fast_info, "currency", None)
+    except Exception as exc:
+        swallowed(log, "marketdata.ticker_meta_fast", exc, level=logging.DEBUG)
+        return None
+
+
+def _meta_for(symbol: str) -> dict | None:
+    """One symbol's name and currency; the first candidate that answered wins, None when all raised."""
+    for candidate in candidate_symbols(symbol):
+        try:
+            yf_safe._take_yf_token()
+            ticker = yf.Ticker(candidate)
+            info = ticker.info
+            name = info.get("longName") or info.get("shortName")
+            code = info.get("currency") or _fast_info_currency(ticker)
+            return {"name": name, "currency": str(code).upper() if code else None}
+        except BudgetDeferred:
+            raise
+        except Exception as exc:
+            swallowed(log, "marketdata.ticker_meta", exc, level=logging.DEBUG)
+    return None
+
+
+def _fetch_ticker_meta(symbols: list) -> dict:
+    return {s: _meta_for(s) for s in symbols}
+
+
+def _ticker_meta(ticker: str) -> dict:
+    """v171: the persistent metadata doc through the shared layer; {} when it has nothing."""
+    with router.asker_scope(Asker.BACKGROUND):
+        got = layer.get(DataKind.METADATA, [ticker], _fetch_ticker_meta,
+                        asker=Asker.BACKGROUND, provider=PROVIDER_YF)
+    entry = got.get(ticker)
+    return dict(entry.value) if entry is not None and entry.value else {}
+
+
+def _count_meta_fetch() -> None:
+    counters.count(PROVIDER_YF, DataKind.METADATA, router.current_asker(), "fetched")
+
+
+def _provider_company_name(key: str) -> tuple:
+    mode = config.MARKETDATA_LAYER
+    if mode == "on":
+        meta = _ticker_meta(key)
+        return meta.get("name"), bool(meta)
+    name = _company_name_legacy(key)
+    if mode == "count":
+        _count_meta_fetch()
+    return name, True
+
+
+def _provider_currency_code(key: str) -> tuple:
+    mode = config.MARKETDATA_LAYER
+    if mode == "on":
+        meta = _ticker_meta(key)
+        return meta.get("currency"), bool(meta)
+    code = _resolve_currency_code(key)
+    if mode == "count":
+        _count_meta_fetch()
+    return code, True
 
 
 def _resolve_currency_code(ticker: str) -> str | None:
@@ -587,7 +659,9 @@ def get_currency_symbol(ticker: str, default_symbol: str = "€") -> str:
         return _currency_cache[ticker_key]
 
     symbol = default_symbol
-    code = _resolve_currency_code(ticker_key)
+    code, answered = _provider_currency_code(ticker_key)
+    if not answered:
+        return default_symbol  # v171: deferred or failed shared lookup; retry next time
     if code:
         symbol = CURRENCY_SYMBOLS.get(code, f"{code} ")
 

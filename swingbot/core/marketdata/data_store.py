@@ -35,6 +35,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import yfinance as yf
 
+from swingbot import config
 from swingbot.core.infra.jsonio import _replace_with_retry
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals, yf_safe
@@ -510,11 +511,37 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
     if spot_metals.is_spot_metal(symbol):
         return _spot_intraday(symbol, interval, base_dir, fetch_fn)
     path = cache_path(symbol, interval, base_dir=base_dir)
-    fresh_enough = (os.path.exists(path)
-                    and time.time() - os.path.getmtime(path) < INTRADAY_MAX_AGE_SECONDS)
-    if fresh_enough:
+    if _intraday_fresh(path):
         return load_from_disk(symbol, interval, base_dir=base_dir)
+    if config.MARKETDATA_LAYER == "off":
+        return _fetch_merge_intraday(symbol, interval, base_dir, fetch_fn)
+    return _intraday_under_lease(symbol, interval, base_dir, fetch_fn, path)
 
+
+def _intraday_fresh(path: str) -> bool:
+    return os.path.exists(path) and time.time() - os.path.getmtime(path) < INTRADAY_MAX_AGE_SECONDS
+
+
+def _intraday_provider(symbol: str) -> str:
+    from swingbot.core.marketdata.providers.base import is_alpaca_eligible
+    from swingbot.core.marketdata.shared.kinds import PROVIDER_ALPACA, PROVIDER_YF
+    return PROVIDER_ALPACA if config.ALPACA_ENABLED and is_alpaca_eligible(symbol) else PROVIDER_YF
+
+
+def _intraday_under_lease(symbol, interval, base_dir, fetch_fn, path):
+    """v171: single-flight the stale-file refetch; the other holder's fresh file is read, not refetched."""
+    from swingbot.core.marketdata.shared import counters, layer
+    from swingbot.core.marketdata.shared.kinds import DataKind
+    asker = router.current_asker()
+    with layer.lease(DataKind.INTRADAY_BARS, f"{symbol}:{interval}", asker=asker):
+        if _intraday_fresh(path):
+            return load_from_disk(symbol, interval, base_dir=base_dir)
+        out = _fetch_merge_intraday(symbol, interval, base_dir, fetch_fn)
+        counters.count(_intraday_provider(symbol), DataKind.INTRADAY_BARS, asker, "fetched")
+        return out
+
+
+def _fetch_merge_intraday(symbol, interval, base_dir, fetch_fn):
     def _default_fetch(sym, iv):
         def _yf(s, i):
             df = yf_safe.download(s, period="700d", interval=i,
