@@ -31,6 +31,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterator, Optional
+from uuid import uuid4
 
 from swingbot import config
 from swingbot.core.db.repositories.market_shared import market_shared_repo
@@ -42,10 +43,15 @@ from swingbot.core.marketdata.shared.kinds import (
 from swingbot.core.marketdata.spot_metals import is_spot_metal
 
 #: Process prefix of every lease holder; each ``get``/``lease`` call appends ``#n``.
-HOLDER_ID = f"{socket.gethostname()}:{os.getpid()}"
+#: The random suffix keeps a restarted container (same hostname and pid, ``#n``
+#: restarting at 0) from matching a dead process's still-live lease.
+HOLDER_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid4().hex[:8]}"
 
 _POLL_S = 0.1
-_DEFAULT_DEADLINE_S = 30.0
+#: ``get`` waits less than one lease (30 s) so tiers 1-2 fetch for themselves
+#: behind a hung holder; a bar writer's ``lease`` waits a full lease.
+_GET_DEADLINE_S = 10.0
+_LEASE_DEADLINE_S = 30.0
 _monotonic = time.monotonic
 _sleep = time.sleep
 _calls = itertools.count()
@@ -89,7 +95,7 @@ class _Call:
 
 def get(kind: DataKind, symbols, fetch: Callable, *, asker: Asker, provider: str,
         params: str = "", max_age_s: Optional[float] = None,
-        deadline_s: float = _DEFAULT_DEADLINE_S, encode: Callable = identity,
+        deadline_s: float = _GET_DEADLINE_S, encode: Callable = identity,
         decode: Callable = identity) -> dict[str, Entry]:
     """``{symbol: Entry}`` keyed exactly as passed; a symbol with no value is absent."""
     asker = resolve_asker(asker)
@@ -107,7 +113,7 @@ def get(kind: DataKind, symbols, fetch: Callable, *, asker: Asker, provider: str
 
 
 @contextmanager
-def lease(kind: DataKind, symbol: str, *, asker: Asker, deadline_s: float = _DEFAULT_DEADLINE_S,
+def lease(kind: DataKind, symbol: str, *, asker: Asker, deadline_s: float = _LEASE_DEADLINE_S,
           params: str = "") -> Iterator[bool]:
     """Single-flight for bar writers: True = write, False = another holder finished or failed open."""
     if config.MARKETDATA_LAYER != "on" or is_spot_metal(symbol):

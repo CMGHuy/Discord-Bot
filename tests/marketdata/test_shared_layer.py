@@ -1,6 +1,8 @@
 """v171 D1/D2/D6: the shared layer against an in-memory repository."""
 import contextlib
+import inspect
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -251,3 +253,65 @@ def test_lease_for_bar_writers(env, monkeypatch):
     monkeypatch.setattr(config, "MARKETDATA_LAYER", "count")
     with layer.lease(DataKind.DAILY_BARS, "MSFT", asker=Asker.BACKGROUND) as held:
         assert held is True
+
+
+def test_get_deadline_defaults_to_10s_and_holder_id_is_unique_per_process():
+    assert inspect.signature(layer.get).parameters["deadline_s"].default == 10.0
+    assert inspect.signature(layer.lease).parameters["deadline_s"].default == 30.0
+    host_pid, suffix = layer.HOLDER_ID.rsplit(":", 1)
+    assert host_pid.endswith(f":{os.getpid()}") and len(suffix) == 8
+
+
+def _land_on_sleep(repo, clock, value):
+    original = clock.sleep
+
+    def sleep_then_land(s):
+        original(s)
+        repo.rows[cache_key(Q, "AAPL")].update(value=value, fetched_at=clock.now(),
+                                               lease_holder=None, lease_until=None)
+    clock.sleep = sleep_then_land
+
+
+def test_a_window_zero_waiter_takes_the_holders_write(env):
+    repo, clock = env
+    repo.seed("AAPL", 1.0, age_s=600, lease_holder="other", lease_for=30)
+    _land_on_sleep(repo, clock, 9.0)
+    calls = []
+    with fresh_request():
+        got = layer.get(Q, ["AAPL"], fetcher({"AAPL": 2.0}, calls), asker=Asker.ADMIN_PAGE,
+                        provider="alpaca")
+    assert calls == [] and got["AAPL"].value == 9.0 and got["AAPL"].outcome == "shared-wait"
+
+
+def test_mixed_case_symbols_fetch_once_and_return_both(env):
+    repo, _ = env
+    calls = []
+    got = layer.get(Q, ["aapl", "AAPL"], fetcher({"aapl": 1.0}, calls), asker=Asker.SCAN,
+                    provider="alpaca")
+    assert calls == [["aapl"]] and got["aapl"].value == 1.0 and got["AAPL"].value == 1.0
+    assert repo.rows[cache_key(Q, "AAPL")]["symbol"] == "AAPL"
+
+
+def test_a_read_error_while_waiting_goes_straight_to_the_deadline_rule(env):
+    repo, clock = env
+    repo.seed("AAPL", 1.0, age_s=600, lease_holder="hung", lease_for=300)
+    original = clock.sleep
+
+    def sleep_then_break(s):
+        original(s)
+        repo.fail.add("read")
+    clock.sleep = sleep_then_break
+    calls = []
+    got = layer.get(Q, ["AAPL"], fetcher({"AAPL": 2.0}, calls), asker=Asker.ADMIN_PAGE,
+                    provider="alpaca")
+    assert calls == [] and clock.t == pytest.approx(0.1)
+    assert got["AAPL"].value == 1.0 and got["AAPL"].outcome == "shared-wait"
+
+
+def test_a_foreign_lease_expiring_mid_wait_is_claimed_and_fetched(env):
+    repo, clock = env
+    repo.seed("AAPL", 1.0, age_s=600, lease_holder="dead", lease_for=0.25)
+    calls = []
+    got = layer.get(Q, ["AAPL"], fetcher({"AAPL": 2.0}, calls), asker=Asker.SCAN, provider="alpaca")
+    assert calls == [["AAPL"]] and got["AAPL"].outcome == "fetched" and clock.t < 1.0
+    assert repo.rows[cache_key(Q, "AAPL")]["lease_holder"] is None
