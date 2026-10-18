@@ -1,7 +1,6 @@
 ---
 name: replicate-prod-db
-description: "Copy the production Postgres data into a local database (read-only on the Hetzner VM) and verify row counts. Invoked explicitly as /replicate-prod-db, never model-triggered."
-disable-model-invocation: true
+description: "Copy the production Postgres data into a local database (read-only on the Hetzner VM) and verify row counts. Run as /replicate-prod-db, or by Claude itself before a task's first test run against the database (partner rule, 2026-10-18)."
 ---
 
 # Replicate prod DB

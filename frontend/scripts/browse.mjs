@@ -4,9 +4,11 @@
  * Playwright -- the one browser tool this repo uses (docs/claude/skills-tools.md).
  *
  * Headed, on a persistent profile outside the repo, so the session cookie
- * survives between runs: the partner types the credentials into the window
- * the first time (and whenever the session expires); this script never
- * fills, asks for or stores them.
+ * survives between runs. When the session is missing it signs in with
+ * ADMIN_USERNAME / ADMIN_PASSWORD from the repo's .env, loaded into this
+ * process only -- never printed, logged or passed on the command line
+ * (docs/claude/skills-tools.md). Without them, or if they are refused, it
+ * waits for the partner to sign in in the window.
  *
  *   node scripts/browse.mjs shots --out <dir> --path "/trades/ID?tab=live" [--path ...]
  *                                 [--widths 1440,1024,768,390] [--base URL] [--click <css selector>] [--settle <ms, default 1500>]
@@ -24,11 +26,13 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const PROFILE = join(process.env.LOCALAPPDATA ?? join(homedir(), '.cache'), 'swingbot-playwright', 'profile');
 const LOGIN_TIMEOUT_MS = 5 * 60_000;
+const ENV_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env');
 
 function parseArgs(argv) {
   const opts = { cmd: argv[0] ?? 'login', paths: [], widths: [1440, 1024, 768, 390], base: 'https://bomeo-capital.com', out: null, clicks: [], settle: 1500 };
@@ -55,10 +59,38 @@ async function signedIn(page, base) {
   }, `${base}/api/v1/session`).catch(() => false);
 }
 
+/** The .env admin credentials, or null. The values stay in this process. */
+function envCredentials() {
+  try {
+    process.loadEnvFile(ENV_FILE);
+  } catch {
+    return null;
+  }
+  const { ADMIN_USERNAME: username, ADMIN_PASSWORD: password } = process.env;
+  return username && password ? { username, password } : null;
+}
+
+/** One POST /api/v1/session attempt -- one only, the login limiter counts failures. */
+async function signInFromEnv(page, base) {
+  const creds = envCredentials();
+  if (!creds) return false;
+  return page.evaluate(async ({ url, body }) => {
+    const res = await fetch(url, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    return res.ok;
+  }, { url: `${base}/api/v1/session`, body: creds }).catch(() => false);
+}
+
 async function ensureLogin(page, base) {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   if (await signedIn(page, base)) return;
-  console.error('Sign in in the browser window -- waiting up to 5 minutes...');
+  if (await signInFromEnv(page, base) && await signedIn(page, base)) {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    return console.error('Signed in with the .env credentials.');
+  }
+  console.error('No usable .env credentials -- sign in in the browser window (waiting up to 5 minutes)...');
   const deadline = Date.now() + LOGIN_TIMEOUT_MS;
   while (Date.now() < deadline) {
     await page.waitForTimeout(2000);

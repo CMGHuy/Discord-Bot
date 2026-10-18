@@ -37,9 +37,10 @@ TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod"
                 "exit-harvester", "setup-scout", "regime-desk", "trade-scout"}   # each skill task appends its own name
 TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel",
           "result-digest", "handoff", "screen", "prereg", "data-check", "replicate-prod-db"}        # each ritual task appends its own name
-# Rituals the partner lets Claude run on its own (2026-10-08). Still checklists
-# with no Trigger table; their description names the moment they run.
-MODEL_RUN_RITUALS = {"close-out", "new-doc", "panel"}
+# Rituals the partner lets Claude run on its own (2026-10-08; replicate-prod-db
+# 2026-10-18). Still checklists with no Trigger table; their description names
+# the moment they run.
+MODEL_RUN_RITUALS = {"close-out", "new-doc", "panel", "replicate-prod-db"}
 
 # A bare threshold in a SKILL.md is content that belongs in docs/claude/.
 # Dates, version numbers and step numbers are not thresholds.
