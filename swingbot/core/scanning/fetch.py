@@ -67,10 +67,21 @@ def _cold_chunk(chunk: list, period: str, timeout: int) -> dict:
 def _price_batch_with_sources(tickers: list) -> tuple:
     """Worker body for a live-price chunk: the prices plus which provider
     answered each -- the router's record lives in this worker process, so it
-    has to travel back with the result."""
+    has to travel back with the result.
+
+    v171: the worker's D9 counter rows ride back under sources["__counts__"]
+    -- this process exits after the call."""
     from swingbot.core.marketdata.providers import router
+    from swingbot.core.marketdata.shared import counters
     prices = get_current_price_batch(tickers)
-    return prices, {t: router.last_source(t) or "none" for t in prices}
+    sources = {t: router.last_source(t) or "none" for t in prices}
+    sources["__counts__"] = counters.snapshot_and_clear()
+    return prices, sources
+
+
+def _merge_worker_counts(sources: dict) -> None:
+    from swingbot.core.marketdata.shared import counters
+    counters.merge(sources.pop("__counts__", []))
 
 
 def _record_price_sources(chunk: list, sources: dict) -> None:
@@ -550,6 +561,7 @@ def _fetch_live_prices(tickers: list, progress: "ScanProgress" = None) -> dict:
         result, sources = _run_bounded(
             _price_batch_with_sources, (chunk,), timeout,
             label=f"Crawl: live-price batch of {len(chunk)} ticker(s)") or ({}, {})
+        _merge_worker_counts(sources)
         _record_price_sources(chunk, sources)
         if result:
             prices.update(result)

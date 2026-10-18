@@ -4,17 +4,21 @@ import os
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import pandas as pd
 import yfinance as yf
 
+from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals, yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.providers.base import SOURCE_YF, is_alpaca_eligible
-from swingbot.core.marketdata.shared.kinds import QuoteDetail
+from swingbot.core.marketdata.shared import layer
+from swingbot.core.marketdata.shared.kinds import (PROVIDER_ALPACA, Asker, DataKind, QuoteDetail,
+                                                   resolve_asker)
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
 log = logging.getLogger(__name__)
@@ -160,7 +164,82 @@ _LAST_GOOD_BATCH_PRICE_TTL_SECONDS = 15 * 60
 _BATCH_PRICE_CACHE_TTL_SECONDS = 15
 
 
-def get_current_price_batch(tickers: list, *, allow_stale: bool = True) -> dict:
+def _normalise_tickers(tickers) -> list:
+    return list(dict.fromkeys(str(t).upper().strip() for t in tickers
+                              if t is not None and str(t).strip()))
+
+
+def _usable(entry, window, fresh_only: bool) -> bool:
+    """A layer entry a caller may use; fresh-only callers never take a
+    budget-deferred or over-window value (D2: never "close enough")."""
+    if entry is None or entry.value is None:
+        return False
+    if not fresh_only:
+        return True
+    return entry.outcome != "budget-deferred" and (window is None or entry.age_s() <= window)
+
+
+def get_quote_batch(tickers, *, asker, max_age_s=None, fresh_only=False) -> dict:
+    """v171: timestamped quotes through the shared layer at `asker`'s window
+    and tier. Spot metals keep spot_metals' own path and are never cached."""
+    tickers = _normalise_tickers(tickers)
+    spot, rest = spot_metals.split_spot(tickers)
+    out = router.latest_quotes(spot, _yf_quote_details) if spot else {}
+    if not rest:
+        return out
+    with router.asker_scope(asker):
+        entries = layer.get(DataKind.QUOTE, rest,
+                            lambda syms: router.latest_quotes(list(syms), _yf_quote_details),
+                            asker=asker, provider=PROVIDER_ALPACA, max_age_s=max_age_s,
+                            encode=QuoteDetail.to_doc, decode=QuoteDetail.from_doc)
+    window = max_age_s if max_age_s is not None else resolve_asker(asker).window_s(DataKind.QUOTE)
+    out.update({t: e.value for t, e in entries.items() if _usable(e, window, fresh_only)})
+    return out
+
+
+def get_current_price_batch(tickers: list, *, allow_stale: bool = True,
+                            asker: Asker = Asker.SCAN) -> dict:
+    """{ticker: price}. See _price_batch_legacy for the contract (unchanged).
+    v171: MARKETDATA_LAYER off is that function exactly; count/on read
+    get_quote_batch at `asker`, fresh-only when allow_stale=False."""
+    if config.MARKETDATA_LAYER == "off":
+        return _price_batch_legacy(tickers, allow_stale=allow_stale)
+    return _price_batch_layer(tickers, allow_stale=allow_stale, asker=asker)
+
+
+def _price_batch_layer(tickers, *, allow_stale: bool, asker) -> dict:
+    tickers = _normalise_tickers(tickers)
+    if not tickers:
+        return {}
+    now = time.monotonic()
+    current = _count_mode_display_hit(tickers, now, allow_stale)
+    if current is not None:
+        return current
+    out = _priced(get_quote_batch(tickers, asker=asker, fresh_only=not allow_stale))
+    for ticker, price in out.items():
+        _last_good_batch_price[ticker] = (price, now)
+    missing = [t for t in tickers if t not in out]
+    if missing and allow_stale:
+        out.update(_stale_batch_fallback(missing, now))
+    return out
+
+
+def _count_mode_display_hit(tickers: list, now: float, allow_stale: bool) -> dict | None:
+    """count mode keeps the in-process 15 s display short-circuit so its call
+    volume is today's (the D9 baseline); on mode leaves it to the layer."""
+    if not allow_stale or config.MARKETDATA_LAYER != "count":
+        return None
+    current = _fresh_batch_prices(tickers, now)
+    return current if len(current) == len(tickers) else None
+
+
+def _priced(quotes: dict) -> dict:
+    """{ticker: price} for quotes carrying a positive trade price; a
+    bid/ask-only QuoteDetail (price None) is skipped."""
+    return {t: q.price for t, q in quotes.items() if q.price and q.price > 0}
+
+
+def _price_batch_legacy(tickers: list, *, allow_stale: bool = True) -> dict:
     """v55: batched sibling of get_current_price() -- one yf.download() call
     (1-day/1-minute, prepost=True) for many tickers' live price instead of a
     Ticker().history() + fast_info fallback per ticker (see
@@ -524,9 +603,14 @@ class PriceQuote:
     - the last-known-good `_price_cache` entry served past its normal TTL,
       which `test_current_price_staleness.py` already covered before this
       type existed -- any age, by definition not a live observation.
+
+    v171: `as_of` and `age_s` are when the price was observed and how old it
+    was at return; `None` before v171 and on the off path.
     """
     price: float
     stale: bool
+    as_of: datetime | None = None
+    age_s: float | None = None
 
 
 def _fast_info_price(fi) -> float | None:
@@ -585,7 +669,8 @@ def _spot_price_detail(ticker_key: str, cached, now: float,
 
 
 def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
-                             *, allow_stale: bool = True) -> PriceQuote | None:
+                             *, allow_stale: bool = True,
+                             asker: Asker = Asker.ADMIN_PAGE) -> PriceQuote | None:
     """
     `get_current_price`'s full answer: the price AND whether it is safe to
     treat as a live tick (see `PriceQuote`). `get_current_price` itself stays
@@ -608,7 +693,39 @@ def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SE
     repeated cached print would otherwise count as a fresh confirming tick
     for the extended-hours debounce and fill a close at a price that stopped
     being current an unknown time ago.
+
+    v171: off is _price_detail_legacy exactly; count/on ask get_quote_batch
+    at `asker` first and stamp as_of/age_s.
     """
+    if config.MARKETDATA_LAYER == "off":
+        return _price_detail_legacy(ticker, ttl_seconds, allow_stale)
+    return _price_detail_layer(ticker, ttl_seconds, allow_stale, asker)
+
+
+def _quote_to_price(q) -> PriceQuote:
+    as_of = q.trade_at or q.quote_at
+    age = (datetime.now(timezone.utc) - as_of).total_seconds() if as_of else None
+    return PriceQuote(q.price, False, as_of, age)
+
+
+def _price_detail_layer(ticker, ttl_seconds, allow_stale, asker) -> PriceQuote | None:
+    key = ticker.upper().strip()
+    cached = _price_cache.get(key)
+    now = time.monotonic()
+    if spot_metals.is_spot_metal(key):
+        return _spot_price_detail(key, cached, now, allow_stale)
+    if config.MARKETDATA_LAYER == "count" and cached and now - cached[1] < ttl_seconds:
+        return PriceQuote(cached[0], cached[2])
+    q = get_quote_batch([key], asker=asker, fresh_only=not allow_stale).get(key)
+    if q is not None and q.price:
+        _price_cache[key] = (q.price, now, False)
+        return _quote_to_price(q)
+    return _detail_from_yfinance(key, cached, now, allow_stale)
+
+
+def _price_detail_legacy(ticker: str, ttl_seconds: int,
+                         allow_stale: bool) -> PriceQuote | None:
+    """get_current_price_detail before v171, unchanged (MARKETDATA_LAYER off)."""
     ticker_key = ticker.upper().strip()
     cached = _price_cache.get(ticker_key)
     now = time.monotonic()
@@ -617,7 +734,13 @@ def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SE
     early = _cached_or_alpaca_quote(ticker_key, cached, now, ttl_seconds)
     if early is not None:
         return early
+    return _detail_from_yfinance(ticker_key, cached, now, allow_stale)
 
+
+def _detail_from_yfinance(ticker_key: str, cached, now: float,
+                          allow_stale: bool) -> PriceQuote | None:
+    """The yfinance 1-minute history / fast_info candidate loop, then the
+    last-known-good tail -- moved verbatim from get_current_price_detail."""
     for candidate in candidate_symbols(ticker_key):
         # Primary: 1-minute history with prepost=True is the most accurate
         # source — it returns the true last-traded price in any session
@@ -655,13 +778,14 @@ def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SE
 
 
 def get_current_price(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SECONDS,
-                      *, allow_stale: bool = True) -> float | None:
+                      *, allow_stale: bool = True, asker: Asker = Asker.SCAN) -> float | None:
     """The price alone, for every existing (mostly trading) call site.
 
     See `get_current_price_detail` for the full docstring and for the
     `stale` flag a display caller should be reading instead of calling this.
     """
-    detail = get_current_price_detail(ticker, ttl_seconds, allow_stale=allow_stale)
+    detail = get_current_price_detail(ticker, ttl_seconds, allow_stale=allow_stale,
+                                      asker=asker)
     return detail.price if detail is not None else None
 
 
