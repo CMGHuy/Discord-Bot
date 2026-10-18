@@ -5,8 +5,15 @@ import pandas as pd
 
 log = logging.getLogger(__name__)
 
-_ADJUSTMENT_MISMATCH_TOLERANCE = 0.01
-_MIN_OVERLAP_BARS = 3
+# 1%: real EOD closes agree exactly; a split/dividend shifts price by far more.
+ADJUSTMENT_MISMATCH_TOLERANCE = 0.01
+# A corporate action rescales the ENTIRE history, so a genuine detection needs
+# a deep overlap; the warm path overlaps one bar and must not rescale on it.
+MIN_OVERLAP_BARS = 3
+# v171 D4: the delta-splice tolerance (relative). Real end-of-day closes agree
+# exactly, so a larger difference is a basis change, not rounding noise. Owned
+# here, imported by daily_delta.
+DELTA_OVERLAP_TOLERANCE = 1e-4
 _ADJUSTMENT_RATIO_DISPERSION = 0.005
 _PRICE_COLUMNS = ("Open", "High", "Low", "Close")
 
@@ -14,14 +21,14 @@ _PRICE_COLUMNS = ("Open", "High", "Low", "Close")
 def adjustment_ratio(existing, fresh, symbol: str, timeframe: str):
     """Return the uniform fresh/cached price ratio, if one proves an adjustment."""
     common = existing.index.intersection(fresh.index)
-    if len(common) < _MIN_OVERLAP_BARS:
+    if len(common) < MIN_OVERLAP_BARS:
         return None
     ratios = (fresh.loc[common, "Close"] / existing.loc[common, "Close"]).dropna()
     ratios = ratios[ratios > 0]
     if ratios.empty:
         return None
     ratio = float(ratios.median())
-    if abs(ratio - 1.0) <= _ADJUSTMENT_MISMATCH_TOLERANCE + 1e-9:
+    if abs(ratio - 1.0) <= ADJUSTMENT_MISMATCH_TOLERANCE + 1e-9:
         return None
     spread = float((ratios / ratio - 1.0).abs().max())
     if spread > _ADJUSTMENT_RATIO_DISPERSION:

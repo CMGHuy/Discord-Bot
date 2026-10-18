@@ -138,3 +138,13 @@ def test_stale_cache_after_a_split_returns_live_unchanged_and_logs(caplog):
         out = splice_cached_history(live, cached, "SPLT")
     pd.testing.assert_frame_equal(out, live)
     assert any("SPLT" in r.message and "disagree" in r.message for r in caplog.records)
+
+
+def test_splice_reads_the_shared_tolerance(monkeypatch):
+    from swingbot.core.marketdata import history_splice
+    cached, live = _pair()
+    cached = cached.copy()
+    cached[["Open", "High", "Low", "Close"]] *= 1.10      # a 10% basis gap
+    assert len(splice_cached_history(live, cached, "AAPL")) == len(live)
+    monkeypatch.setattr(history_splice, "ADJUSTMENT_MISMATCH_TOLERANCE", 0.5)
+    assert len(splice_cached_history(live, cached, "AAPL")) == 302

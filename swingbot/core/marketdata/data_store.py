@@ -23,16 +23,19 @@ from Yahoo Finance -- that data isn't available for free anywhere at that
 granularity going back years. `download_and_cache('1m')` pulls the maximum
 Yahoo actually has (~30 days) and says so plainly in the result.
 """
+import contextlib
 import logging
 import os
 import time
 import threading
 from collections import OrderedDict
+from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import yfinance as yf
 
+from swingbot.core.infra.jsonio import _replace_with_retry
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals, yf_safe
 from swingbot.core.marketdata.providers import router
@@ -208,10 +211,26 @@ def refuse_spot_write(ticker: str) -> None:
             f"{spot_metals.underlying(ticker)} instead")
 
 
+def atomic_write_csv(df: pd.DataFrame, path: str) -> None:
+    """v171 D1: the one CSV writer. A unique temp name per call (pid + uuid), so
+    two writers whose lease failed open never share a temp file; os.replace
+    (with jsonio's Windows retry) makes readers see the old or the new file,
+    never a torn one, and invalidates load_normalized's signature memo."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.{uuid4().hex}.tmp"
+    try:
+        df.to_csv(tmp)
+        _replace_with_retry(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
+
+
 def save_to_disk(df: pd.DataFrame, ticker: str, interval: str, base_dir: str = DATA_DIR) -> str:
     refuse_spot_write(ticker)
     path = cache_path(ticker, interval, base_dir)
-    df.to_csv(path)
+    atomic_write_csv(df, path)
     return path
 
 
@@ -421,9 +440,7 @@ def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
         added = len(fresh.index.difference(existing.index))
         merged = merge_adjusted(existing, fresh, symbol, interval, _align_tz)
         path = cache_path(symbol, interval, base_dir=base_dir)
-        tmp = path + ".tmp"
-        merged.to_csv(tmp)
-        os.replace(tmp, path)
+        atomic_write_csv(merged, path)
         result[symbol] = added
     return result
 
