@@ -71,7 +71,7 @@ Murphy.
 
 - G1. An idea module can read named context series, point-in-time, with
   every existing idea unchanged byte for byte on the real call path.
-- G2. TLT and UUP adjusted daily bars for 2009-01-01..2019-12-31 sit in
+- G2. TLT and UUP adjusted daily bars for 2009-06-01..2019-12-31 sit in
   `backtest_cache_ext`, and are fetched once, before either shot.
 - G3. Two ideas, `bond_spike_rebound` and `dollar_drop`, are frozen here
   and each is screened **once**, with its ledger row and a results doc
@@ -105,14 +105,16 @@ argument, as today.
 - `screen_universe` loads each context ticker **once** and passes the
   frames to every `screen_ticker` call.
 - **Context window.** A context frame is loaded from `CONTEXT_START =
-  "2009-01-01"` to the screen's `WINDOW_END`. This is its own start, not
+  "2009-06-01"` (the first date of `backtest_cache_ext/SPY.csv`, so the contiguity check below covers the whole context window; ~400 sessions precede 2011-01-01, well over the 257 needed) to the screen's `WINDOW_END`. This is its own start, not
   the stock `WINDOW_START`, so 5 + 252 bars of warm-up exist before
   `EVENT_START` (2011-01-01). The results doc records both starts.
 - **Load checks: refuse before any ticker runs, and before any ledger
   write, if any of these fail.**
   - The file is missing.
-  - The index is not sorted, not unique, or not tz-naive and normalised
-    like `load_frame`'s output (`screen_idea.py:60`).
+  - The index is not sorted, not unique, or not tz-naive and normalised.
+    These checks read the **raw** CSV, because `load_frame`
+    (`screen_idea.py:60`) silently repairs all three. The frame passed to
+    the idea is then the `load_frame` output.
   - The file is missing any SPY session between `CONTEXT_START` and
     `WINDOW_END`. This contiguity check guards `r5`'s row offset, and it
     also catches thin early UUP bars.
@@ -132,10 +134,14 @@ A one-off run of `scripts/data/fetch_backtest_data.py` with
   existing call at `fetch_backtest_data.py:99`), so TLT's monthly
   distributions do not enter `r5`.
 - The results doc records the fetch date, row counts, first and last
-  dates, and a SHA-256 of each CSV.
+  dates, and a SHA-256 of each CSV. The first shot also writes
+  `docs/superpowers/results/2026-10-18-v174-context-hashes.json`
+  (`{ticker: sha256}`), committed with its results doc, because
+  `backtest_cache_ext` is gitignored. The fetch is `--tickers TLT,UUP
+  --start 2009-06-01 --end 2020-01-01` (`end` exclusive).
 - **No refetch between the two shots.** Adjusted history is restated at
   fetch time, so the second shot must read the same bytes as the first. A
-  hash mismatch at the second run is a refusal.
+  hash mismatch against that committed JSON at the second run is a refusal.
 
 ### 3. The two frozen ideas
 
@@ -190,9 +196,12 @@ Each idea runs once:
    verdict carried by one or two episodes (for example August 2011) says
    so.
 5. **Multiple comparisons:** the ledger BH q-value (`ledger_qvalues` /
-   `bh_qvalues`, `instrument/stats.py`), with the family being these two
-   ideas plus all prior screen rows.
-6. **Scope sentence**, copied into the ledger row's note: the
+   `bh_qvalues`, `instrument/stats.py`), with the family filtered to
+   screen rows (`instrument == "screen-v1"`): these two ideas plus all
+   prior screen rows.
+6. **Scope sentence**, written into the ledger row's `hypothesis` field
+   (the ledger schema has no `note`, and `validate_ledger_row` rejects
+   extra fields): the
    frozen-definition wording from § What the two shots can and cannot say.
 
 ## Testing
