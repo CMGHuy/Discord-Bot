@@ -176,15 +176,28 @@ def _usable(entry, window, fresh_only: bool) -> bool:
         return False
     if not fresh_only:
         return True
-    return entry.outcome != "budget-deferred" and (window is None or entry.age_s() <= window)
+    if entry.outcome == "budget-deferred":
+        return False
+    # "fetched" = fetched by this very call: fresh even at ADMIN_FRESH's 0 s window.
+    return entry.outcome == "fetched" or window is None or entry.age_s() <= window
 
 
 def get_quote_batch(tickers, *, asker, max_age_s=None, fresh_only=False) -> dict:
     """v171: timestamped quotes through the shared layer at `asker`'s window
     and tier. Spot metals keep spot_metals' own path and are never cached."""
+    marked = _marked_quotes(tickers, asker=asker, max_age_s=max_age_s)
+    return {t: q for t, (q, fresh) in marked.items() if fresh or not fresh_only}
+
+
+def _marked_quotes(tickers, *, asker, max_age_s=None) -> dict:
+    """{ticker: (QuoteDetail, fresh)} -- get_quote_batch's read, keeping
+    whether each value passes the fresh-only rule (`_usable`), so price
+    callers can flag a deferred / over-window value stale and never re-stamp
+    it into an in-process cache as a new observation."""
     tickers = _normalise_tickers(tickers)
     spot, rest = spot_metals.split_spot(tickers)
-    out = router.latest_quotes(spot, _yf_quote_details) if spot else {}
+    out = {t: (q, True) for t, q in
+           (router.latest_quotes(spot, _yf_quote_details) if spot else {}).items()}
     if not rest:
         return out
     with router.asker_scope(asker):
@@ -193,7 +206,8 @@ def get_quote_batch(tickers, *, asker, max_age_s=None, fresh_only=False) -> dict
                             asker=asker, provider=PROVIDER_ALPACA, max_age_s=max_age_s,
                             encode=QuoteDetail.to_doc, decode=QuoteDetail.from_doc)
     window = max_age_s if max_age_s is not None else resolve_asker(asker).window_s(DataKind.QUOTE)
-    out.update({t: e.value for t, e in entries.items() if _usable(e, window, fresh_only)})
+    out.update({t: (e.value, _usable(e, window, True))
+                for t, e in entries.items() if _usable(e, window, False)})
     return out
 
 
@@ -215,9 +229,13 @@ def _price_batch_layer(tickers, *, allow_stale: bool, asker) -> dict:
     current = _count_mode_display_hit(tickers, now, allow_stale)
     if current is not None:
         return current
-    out = _priced(get_quote_batch(tickers, asker=asker, fresh_only=not allow_stale))
+    out, served_stale = _split_fresh_prices(_marked_quotes(tickers, asker=asker))
+    # Only a fresh value is a new observation; a deferred / over-window one
+    # is never re-stamped `now`, so the last-good TTL keeps counting.
     for ticker, price in out.items():
         _last_good_batch_price[ticker] = (price, now)
+    if allow_stale:
+        out.update(served_stale)
     missing = [t for t in tickers if t not in out]
     if missing and allow_stale:
         out.update(_stale_batch_fallback(missing, now))
@@ -231,6 +249,13 @@ def _count_mode_display_hit(tickers: list, now: float, allow_stale: bool) -> dic
         return None
     current = _fresh_batch_prices(tickers, now)
     return current if len(current) == len(tickers) else None
+
+
+def _split_fresh_prices(marked: dict) -> tuple:
+    """(fresh {ticker: price}, non-fresh {ticker: price}) from _marked_quotes."""
+    fresh = _priced({t: q for t, (q, ok) in marked.items() if ok})
+    stale = _priced({t: q for t, (q, ok) in marked.items() if not ok})
+    return fresh, stale
 
 
 def _priced(quotes: dict) -> dict:
@@ -702,10 +727,10 @@ def get_current_price_detail(ticker: str, ttl_seconds: int = _PRICE_CACHE_TTL_SE
     return _price_detail_layer(ticker, ttl_seconds, allow_stale, asker)
 
 
-def _quote_to_price(q) -> PriceQuote:
+def _quote_to_price(q, stale: bool) -> PriceQuote:
     as_of = q.trade_at or q.quote_at
     age = (datetime.now(timezone.utc) - as_of).total_seconds() if as_of else None
-    return PriceQuote(q.price, False, as_of, age)
+    return PriceQuote(q.price, stale, as_of, age)
 
 
 def _price_detail_layer(ticker, ttl_seconds, allow_stale, asker) -> PriceQuote | None:
@@ -716,10 +741,11 @@ def _price_detail_layer(ticker, ttl_seconds, allow_stale, asker) -> PriceQuote |
         return _spot_price_detail(key, cached, now, allow_stale)
     if config.MARKETDATA_LAYER == "count" and cached and now - cached[1] < ttl_seconds:
         return PriceQuote(cached[0], cached[2])
-    q = get_quote_batch([key], asker=asker, fresh_only=not allow_stale).get(key)
-    if q is not None and q.price:
-        _price_cache[key] = (q.price, now, False)
-        return _quote_to_price(q)
+    q, fresh = _marked_quotes([key], asker=asker).get(key, (None, False))
+    if q is not None and q.price and (fresh or allow_stale):
+        if fresh:
+            _price_cache[key] = (q.price, now, False)
+        return _quote_to_price(q, stale=not fresh)
     return _detail_from_yfinance(key, cached, now, allow_stale)
 
 

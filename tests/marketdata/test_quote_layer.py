@@ -119,27 +119,35 @@ def test_explicit_max_age_sets_the_fresh_only_window(mode, fake_layer):
 
 @pytest.fixture
 def quotes(monkeypatch):
+    """Fakes the layer read the price paths share: rec["out"] maps a ticker
+    to a QuoteDetail (fresh) or a (QuoteDetail, fresh) pair."""
     rec = {"calls": [], "out": {}}
 
-    def fake(tickers, *, asker, max_age_s=None, fresh_only=False):
-        rec["calls"].append({"tickers": list(tickers), "asker": asker, "fresh_only": fresh_only})
-        return dict(rec["out"])
-    monkeypatch.setattr(data, "get_quote_batch", fake)
+    def fake(tickers, *, asker, max_age_s=None):
+        rec["calls"].append({"tickers": list(tickers), "asker": asker})
+        return {t: v if isinstance(v, tuple) else (v, True) for t, v in rec["out"].items()}
+    monkeypatch.setattr(data, "_marked_quotes", fake)
     return rec
 
 
 def test_trading_batch_is_fresh_only_with_no_last_good_fallback(mode, quotes):
     mode("on")
+    quotes["out"] = {"AAPL": (_q("AAPL", 191.0), False)}
     data._last_good_batch_price["AAPL"] = (190.0, time.monotonic())
     assert data.get_current_price_batch(["AAPL"], allow_stale=False) == {}
-    assert quotes["calls"][0]["fresh_only"] is True
 
 
 def test_display_batch_falls_back_to_last_good(mode, quotes):
     mode("on")
     data._last_good_batch_price["AAPL"] = (190.0, time.monotonic() - 60)
     assert data.get_current_price_batch(["AAPL"]) == {"AAPL": 190.0}
-    assert quotes["calls"][0]["fresh_only"] is False
+
+
+def test_display_batch_serves_a_non_fresh_layer_value_without_caching_it(mode, quotes):
+    mode("on")
+    quotes["out"] = {"AAPL": (_q("AAPL", 191.0), False)}
+    assert data.get_current_price_batch(["AAPL"]) == {"AAPL": 191.0}
+    assert "AAPL" not in data._last_good_batch_price
 
 
 def test_batch_skips_quotes_without_a_trade_price(mode, quotes):
@@ -175,12 +183,15 @@ def test_price_detail_carries_as_of_and_age(mode, quotes):
     assert quotes["calls"][0]["asker"] is Asker.ADMIN_PAGE
 
 
-def test_get_current_price_forwards_asker_and_fresh_only(mode, quotes):
+def test_get_current_price_forwards_asker_and_fresh_only(mode, quotes, monkeypatch):
     mode("on")
+    monkeypatch.setattr(data, "_detail_from_yfinance",
+                        lambda key, cached, now, allow_stale: None)
     quotes["out"] = {"AAPL": _q("AAPL", 190.0)}
     assert data.get_current_price("AAPL", allow_stale=False, asker=Asker.STOP_MONITOR) == 190.0
     assert quotes["calls"][0]["asker"] is Asker.STOP_MONITOR
-    assert quotes["calls"][0]["fresh_only"] is True
+    quotes["out"] = {"AAPL": (_q("AAPL", 190.0), False)}
+    assert data.get_current_price("AAPL", allow_stale=False, asker=Asker.STOP_MONITOR) is None
 
 
 def test_price_detail_layer_miss_falls_back_to_the_yfinance_history_path(mode, quotes, monkeypatch):
@@ -196,3 +207,53 @@ def test_price_detail_off_mode_is_the_pre_v171_function(mode, quotes, monkeypatc
                         lambda ticker, ttl_seconds, allow_stale: data.PriceQuote(1.0, False))
     assert data.get_current_price_detail("AAPL") == data.PriceQuote(1.0, False)
     assert quotes["calls"] == []
+
+
+@pytest.mark.parametrize("outcome, age", [("budget-deferred", 1.0), ("hit", 40.0)])
+def test_price_detail_flags_a_deferred_or_over_window_layer_value_stale(mode, fake_layer, outcome, age):
+    mode("on")
+    fake_layer["entries"]["AAPL"] = _entry(_q("AAPL", 190.0), outcome, age=age)
+    detail = data.get_current_price_detail("AAPL", asker=Asker.STOP_MONITOR)
+    assert (detail.price, detail.stale) == (190.0, True)
+    assert "AAPL" not in data._price_cache          # never re-stamped as a fresh observation
+
+
+def test_price_detail_fresh_layer_value_is_live_and_cached(mode, fake_layer):
+    mode("on")
+    fake_layer["entries"]["AAPL"] = _entry(_q("AAPL", 190.0), "hit", age=1.0)
+    detail = data.get_current_price_detail("AAPL", asker=Asker.STOP_MONITOR)
+    assert (detail.price, detail.stale) == (190.0, False)
+    assert data._price_cache["AAPL"][0] == 190.0
+
+
+def test_display_batch_never_restamps_a_deferred_value_as_last_good(mode, fake_layer):
+    mode("on")
+    fake_layer["entries"]["AAPL"] = _entry(_q("AAPL", 190.0), "budget-deferred", age=600.0)
+    assert data.get_current_price_batch(["AAPL"], asker=Asker.ADMIN_PAGE) == {"AAPL": 190.0}
+    assert "AAPL" not in data._last_good_batch_price
+
+
+def test_admin_fresh_request_counts_a_just_fetched_value_as_fresh(mode, fake_layer):
+    from swingbot.core.marketdata.shared.kinds import fresh_request
+    mode("on")
+    fake_layer["entries"]["AAPL"] = _entry(_q("AAPL", 190.0), "fetched", age=0.01)
+    with fresh_request():
+        detail = data.get_current_price_detail("AAPL")
+        assert set(data.get_quote_batch(["AAPL"], asker=Asker.ADMIN_PAGE, fresh_only=True)) == {"AAPL"}
+    assert detail.stale is False
+
+
+def test_price_detail_count_mode_cache_hit_never_asks_the_layer(mode, quotes):
+    mode("count")
+    data._price_cache["AAPL"] = (190.0, time.monotonic(), False)
+    assert data.get_current_price_detail("AAPL") == data.PriceQuote(190.0, False)
+    assert quotes["calls"] == []
+
+
+def test_price_detail_spot_metal_takes_the_spot_path_in_on_mode(mode, quotes, monkeypatch):
+    mode("on")
+    seen = []
+    monkeypatch.setattr(data, "_spot_price_detail",
+                        lambda key, cached, now, allow_stale: seen.append(key) or data.PriceQuote(2400.0, False))
+    assert data.get_current_price_detail("xauusd") == data.PriceQuote(2400.0, False)
+    assert seen == ["XAUUSD"] and quotes["calls"] == []
