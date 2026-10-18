@@ -131,6 +131,13 @@ describe('trading-performance tablet band', () => {
     expect(tabletBlock).toMatch(/grid-template-columns:\s*repeat\(2,/);
   });
 
+  it('gives the portfolio block the full panel width at every width (v172 candles)', () => {
+    // A `minmax(0, 1fr) auto` split left the chart a ~240px column beside the KPI grid.
+    const combined = src.match(/\.combined\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(combined).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+    expect(src).not.toMatch(/\.combined\s*\{\s*display:\s*none/);
+  });
+
   it('uses only declared breakpoint values', () => {
     const allowed = new Set(['639', '1023', '1439', '1919', '640', '1024', '1440', '1920']);
     const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
