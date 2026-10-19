@@ -131,6 +131,14 @@ Two tasks run at once only on disjoint files with no contract dependency; at mos
 | V173-19 | First real report run on the VM | 5 | sonnet — reads the real book's output and decides whether a ledger row must be mirrored | M `docs/superpowers/results/preregistration-ledger.jsonl` only if the run evaluated (mirror); M this index § Progress | the recorded report output |
 | V173-20 | Close-out: move plan and spec to `implemented/`, remove worktree | 5 | haiku — the close-out checklist | M this plan's files and the spec (moved by `git mv`) | none |
 
+## Handoff
+
+Decisions and deviations recorded while writing (2026-10-19):
+
+- **`ExitResult.tp1_index` is an unannotated class attribute, not a dataclass field** (V173-6). The ledger says "last field", but `tests/test_exit_sim_scaleout_witness.py` hashes `dataclasses.asdict(ExitResult)`, so a real field would break the witness. `result.tp1_index` reads exactly as the ledger promises; `asdict`, `==`, `repr` and `fields()` are unchanged. Part 2 also exports `ROW_FIELDS` (the 19 `OverrideRow` keys).
+- **Cost parity (`delta_r == 0`) holds only for stop-type engine exits.** A manual exit at the engine's TP2 price is 0.006R worse (manual leg 10 bps vs target 5 bps); a test pins this as a real cost, not a bug.
+- **No-lookahead invariance is pinned on a single-leg plan** (or by changing bars at least 30 sessions before the fill): on runner plans the trailing stop's ATR(14) legitimately reads up to 13 sessions before the fill.
+
 ## What follows
 
 Part writers append tasks in id order to their part file. Each part file starts with a short header (title, `**Spec:**` link, a pointer to this index for Global Constraints and Parallelisation).
