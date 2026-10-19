@@ -233,6 +233,56 @@ def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
     return extreme_close_since_tp1 + mult * atr_value
 
 
+#: v176: RUNNER_GIVEBACK_PCT's safe range in percent. The config Field carries
+#: the same min/max for the admin save path; runner_giveback_pct() enforces it
+#: for a hand-edited .env, which config._cast does not range-check.
+GIVEBACK_PCT_BOUNDS = (0.5, 49.0)
+
+
+def giveback_stop(extreme: float, pct: float, direction: str) -> float:
+    """v176 give-back level: ``pct`` percent back from the runner's best price
+    since TP1 -- ``E x (1 - p)`` for a long, ``E x (1 + p)`` for a short."""
+    if not 0 < pct < 100:
+        raise ValueError(f"give-back pct must be in (0, 100), got {pct!r}")
+    p = pct / 100.0
+    if direction == "bullish":
+        return extreme * (1.0 - p)
+    return extreme * (1.0 + p)
+
+
+def runner_giveback_pct() -> float:
+    """config.RUNNER_GIVEBACK_PCT clamped to GIVEBACK_PCT_BOUNDS, read at call
+    time so a SIGHUP reload takes effect on the next tick."""
+    low, high = GIVEBACK_PCT_BOUNDS
+    return min(high, max(low, float(config.RUNNER_GIVEBACK_PCT)))
+
+
+def giveback_level(extreme: float | None, direction: str) -> float | None:
+    """The give-back term for a runner, or None (flag off, or no extreme yet)."""
+    if extreme is None or not config.RUNNER_GIVEBACK_ENABLED:
+        return None
+    return giveback_stop(float(extreme), runner_giveback_pct(), direction)
+
+
+def tighter_stop(stop: float, other: float | None, is_bull: bool) -> float:
+    """The tighter of two runner stops; a missing term never loosens ``stop``."""
+    if other is None:
+        return stop
+    return max(stop, other) if is_bull else min(stop, other)
+
+
+def runner_stop_source(stop: float, floor: float, giveback: float | None) -> str:
+    """Which term set the runner stop that fired: floor, giveback or trail.
+
+    The floor is tested first so the source agrees with the unchanged
+    ``runner_be`` / ``tp1_runner_be`` label, which keys off ``stop == floor``."""
+    if stop == floor:
+        return "floor"
+    if giveback is not None and stop == giveback:
+        return "giveback"
+    return "trail"
+
+
 def _effective_trail_mult(base_mult: float, runner_r: float) -> float:
     """R-adaptive tightening (v92 Hypothesis 1). Once the runner has banked
     TIGHTEN_TRIGGER_R since entry (measured off the same extreme_close the
