@@ -28,6 +28,8 @@
 | `p_le_zero` | 0.3238 |
 | `mde_paired` | 0.0181R |
 | trades whose outcome changed | 334 (2.7% of 12,488) |
+| interval method | ticker-cluster bootstrap (`bootstrap_delta`), 10,000 resamples |
+| ledger row `v176-giveback` | Benjamini–Hochberg q = 0.9714 (reported, never gating) |
 
 Verdict by the rule fixed before the run (PASS if the interval's low end is
 above 0, FAIL if its high end is below 0, NO-LIFT if it contains 0): the
@@ -58,9 +60,9 @@ that gap:
 | exits filled worse than the stop level | 55 | 129 |
 
 The tighter, tick-like basis triggers about 56% more exits and moves the point
-estimate three times higher, but the interval still contains 0 on both bases.
-Live, where the rule follows every tick, will act closer to the high/low column
-than to the close column.
+estimate about three times as large (3.3x), but the interval still contains 0 on
+both bases. The high/low column is a bound on live behaviour (the live rule
+follows every tick), not a forecast: neither basis shows a lift.
 
 ## Descriptive only (28 cells looked at; none is an effect claim)
 
@@ -91,8 +93,10 @@ on short ones did not materialise: it is roughly 2.6R on all ten.
 The give-back mostly replaces trailing-stop exits (383 → 180) and some floor
 exits, rather than adding new exits.
 
-**Cost of gaps.** 55 of the 334 give-back exits (16%) filled worse than the stop
+**Cost of gaps.** 55 of the 334 give-back exits (16.5%) filled worse than the stop
 level, with a mean gap cost of −0.44R (high/low basis: 129 of 521, −0.88R).
+The unit is trade R weighted by the runner's share of the position, not
+runner-leg R.
 
 **Book, summed over the paired trades (not a portfolio-constrained equity
 curve).**
@@ -104,9 +108,17 @@ curve).**
 | max drawdown R | 532.0 | 495.4 | 447.0 |
 | max drawdown dollars | 53,200 | 49,537 | 44,702 |
 
-Higher total R and a shallower drawdown go with a ΔExpR interval that contains
-0: the gain is spread thinly over many trades and is not distinguishable from
-no effect at this sample size.
+The whole +37.7R difference sits in the 334 changed trades (about +0.11R each);
+the other 12,154 trades contribute exactly 0. Higher total R and a shallower
+drawdown go with a ΔExpR interval that contains 0, so they are not
+distinguishable from no effect at this sample size. The drawdown figures are a
+single path statistic over trades sorted by exit date: descriptive, with no
+interval.
+
+**Known limit.** The interval clusters by ticker, as the spec froze it. Trades in
+the same week across 75 tickers are correlated, so a week-clustered interval
+would be wider; the verdict cannot change, since a wider interval still
+contains 0.
 
 ## What this does not license
 

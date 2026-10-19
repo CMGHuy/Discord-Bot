@@ -165,3 +165,21 @@ that does not move gets no edit.
 | `tests/backtesting/test_backtest_engine.py`, `tests/planning/test_exit_sim_scaleout.py` | re-pin if moved | they test current engine output |
 | `tests/planning/test_plan_manager_structure_exit.py` (existing tests) | flag-off autouse fixture, in V176-2 | isolate the structure rule; V176-2 adds the give-back-first test with the flag on |
 | `tests/planning/test_plan_manager_partial.py`, `test_plan_manager_feed.py`, `test_near_stop_event.py`, `test_plan_manager_gaps.py` | re-pin if moved, in V176-2 / V176-3 | live behaviour is default-on |
+
+## Panel review
+
+Pre-close-out review, 2026-10-19 (risk-manager, veteran-trader, quant-researcher), over `1007b6bf^1...1007b6bf` plus the deploy-gate and TRAIN results. No BLOCKING finding.
+
+- risk-manager 1: one bad or extended-hours tick sets the best price for good -- rejected as a change here: it is the operator's 2026-09-14 choice (`plan_manager.py:494-512`), accepted in the spec's panel review; a tick sanity guard would be a follow-up pre-registration.
+- risk-manager 2: live is tighter than the close-basis backtest -- answered: the results doc reports both bases and states the high/low column as a bound, not a forecast.
+- risk-manager 3: `stop_source` is lost if the flag or percent changes after a tightening -- not changed: the stop price and the close are correct, only attribution blurs; persisting the source with the stop is a follow-up.
+- risk-manager 4: write churn from `_track_extreme` plus `_apply_giveback` -- not changed: no risk effect.
+- veteran-trader 1: a give-back close still reads "trail locked profit" / "at its trailing stop" -- follow-up: pick the phrase from `leg.stop_source` in `lifecycle_embeds.py:319` and `follow_notify.py:132`.
+- veteran-trader 2: the TP1 ticket's runner line never mentions the give-back -- follow-up (`instructions.py:242`, `:318-322`).
+- veteran-trader 3: a stop set on an extended-hours tick is announced only in a regular session; a first regular tick already past the level closes with only the closed notice -- follow-up: the closed embed should say when the resting stop did not fire (`notified_stop != bot_stop`).
+- veteran-trader 4: the level is an unrounded float (52.437) -- follow-up: round the notice price in the safe direction.
+- veteran-trader 5: a give-back landing exactly on the floor is labelled floor -- noted, intended.
+- quant-researcher 1, 2, 3, 4, 6, 7: wording of the results doc (concentration, drawdown has no interval, the high/low column is a bound, BH q and interval method quoted, "about three times as large", the gap-cost unit) -- applied to `docs/superpowers/results/2026-10-19-v176-giveback-train.md`.
+- quant-researcher 5: the interval clusters by ticker, not week -- recorded as a known limit in the results doc; the spec froze ticker-cluster and the verdict cannot change.
+
+Follow-ups (not blocking, not scheduled): alert wording for give-back closes (veteran-trader 1, 2, 3, 4) and persisting the stop source (risk-manager 3).
