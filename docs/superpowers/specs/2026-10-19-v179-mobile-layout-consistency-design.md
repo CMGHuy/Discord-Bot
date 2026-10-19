@@ -115,8 +115,8 @@ table exactly as today.
   plus the row's existing actions (`sb-row-actions` where the table has
   them) and, where the row has a detail page, an "Open full …" link.
 - **Applies to:** Trades, Dashboard Open positions, Watchlist, Watchlist →
-  ticker detail's trade list, Research registry, Risk open positions,
-  Versions table. Any other `sb-data-table` gets the behaviour automatically
+  ticker detail's trade list, Research registry, Risk open positions.
+  Any other `sb-data-table` gets the behaviour automatically
   once it declares compact fields; a table without the declaration keeps
   today's scroller (so nothing regresses before it is migrated).
 - **Sort and paging stay.** The phone sort `<select>` and pager remain above
@@ -336,6 +336,50 @@ does not guess.
    mode renders no header row, so header sort buttons do not exist there.
    Tablet/desktop header sort buttons get the 44px hit area under coarse
    pointers.
+
+## 6b. Corrections from the code brief
+
+The plan brief (`.superpowers/briefs/2026-10-19-v179-mobile-layout-consistency.md`)
+read the code and found places where this spec was wrong or vague. These
+override the sections above.
+
+1. **Versions has no `sb-data-table`** (`versions.ts` renders `sb-timeline`
+   cards). It drops out of §3.1's list; only the "Running now" baseline fix
+   (§3.4) applies to it.
+2. **Research:** the `rowActivate` + store-only drawer belongs to the
+   **Pre-registration ledger** table (`research.ts` ~113-166), not the
+   registry. The ledger sets "emit only" (§6a.4); the **registry** takes the
+   generic drawer, with the §3.1 badge floor.
+3. **Recent activity rows are not interactive today** (a plain `<li>`
+   list). They become buttons that open the trade drawer. `ActivityEvent`
+   gains an explicit `tradeId` field rather than parsing it out of
+   `id` (`<tradeId>:<kind>`).
+4. **Today, `rowActivate` navigates away** on Trades, Dashboard positions and
+   Watchlist. On phone, Trades and Watchlist switch to the generic drawer
+   (whose "Open full …" link keeps the old destination). The Dashboard
+   switches to the trade drawer on every device.
+5. **`sb-tab-bar` already has edge fades**; it only lacks
+   scroll-active-into-view. The System settings group strip is
+   `nav.category-rail` (`system/settings-tab.ts`), not a tab bar. It gets the
+   same fade and scroll-into-view treatment.
+6. **The 9.9px text comes from the shell zoom preference** (`--text-scale`,
+   here set to 90%), not a token bug. The 11px floor is applied as a clamp
+   in the micro/label tokens (`max(11px, …)`). Zoom still scales everything
+   above the floor. *(Claude's call: a zoomed-out view should fit more, but
+   not drop its smallest labels below legibility.)* After any `tokens.css`
+   edit, `python scripts/dev/dump_tokens.py` regenerates the jsdom fixture.
+7. **Partials' `.kpis` grid is already `auto-fit`**, so its 58px overflow has
+   another origin. The plan task reproduces it in a browser before fixing it.
+8. **The Dashboard route has `runGuardsAndResolvers: 'always'`**, so pushing
+   the drawer's query parameter would re-run the resolver and refetch. The
+   route's rerun rule changes so that a change to the drawer parameter alone
+   does not re-resolve. A unit test pins that §3.2 "no extra fetch" holds.
+9. **The v80 "no cards" decision is reversed on purpose.** The test that pins
+   it (`data-table.spec.ts`) and the docstring at `data-table.ts` (~518-537)
+   are rewritten to record compact rows, citing this spec.
+10. **The complexity gate is Python-only**: radon cannot read TypeScript and
+    ESLint has no complexity rule. TS functions are still kept small and
+    table-driven, but no gate enforces it here.
 
 ## 7. Success criteria
 
