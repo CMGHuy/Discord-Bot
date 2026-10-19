@@ -19,6 +19,7 @@ prints the results doc and writes nothing; --tickers needs --dry-run.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
@@ -37,6 +38,8 @@ from swingbot import config  # noqa: E402
 from swingbot.core.backtesting.screen import forward, indicators, null, race, trail, verdict  # noqa: E402,F401
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
+from swingbot.core.backtesting.screen import context as screen_context  # noqa: E402
+from swingbot.core.backtesting.screen.context import CONTEXT_START  # noqa: E402,F401
 from swingbot.core.edge.frictions import commission_r  # noqa: E402
 from swingbot.core.marketdata import pit_membership  # noqa: E402
 
@@ -199,11 +202,56 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         stressed=_stressed(idea, ticker, df, ctx, costs))
 
 
+def _spy_calendar(cache_dir, end: str) -> pd.DataFrame:
+    """SPY sessions in [CONTEXT_START, end]: the calendar every context file
+    must cover (v174 load check 3)."""
+    path = Path(cache_dir) / "SPY.csv"
+    if not path.is_file():
+        raise screen_context.ContextError(f"SPY calendar {path} is missing")
+    calendar = load_frame(path, CONTEXT_START, end)
+    if calendar is None:
+        raise screen_context.ContextError(f"SPY calendar has no bar in {CONTEXT_START}..{end}")
+    return calendar
+
+
+def _context_frame(cache_dir, ticker: str, sessions: pd.DatetimeIndex, end: str):
+    """One context CSV through the v174 load checks, the raw index first
+    (load_frame silently repairs tz, order and duplicates)."""
+    path = Path(cache_dir) / f"{ticker}.csv"
+    record = screen_context.file_record(path)
+    raw = pd.read_csv(path, parse_dates=["Date"], index_col="Date")
+    screen_context.check_raw_index(raw.index, ticker)
+    frame = load_frame(path, CONTEXT_START, end)
+    if frame is None:
+        raise screen_context.ContextError(f"{ticker}: no bar in {CONTEXT_START}..{end}")
+    screen_context.check_contiguous(frame.index, sessions, ticker)
+    screen_context.check_z_coverage(screen_context.trailing_z(frame["Close"]), sessions,
+                                    ticker, event_start=EVENT_START)
+    return frame, record
+
+
+def load_context(cache_dir, tickers: tuple[str, ...], *, end: str = WINDOW_END) -> screen_context.ContextData:
+    """Every context frame an idea names, checked, from CONTEXT_START to end."""
+    calendar = _spy_calendar(cache_dir, end)
+    frames, records = {}, {}
+    for ticker in tickers:
+        frames[ticker], records[ticker] = _context_frame(cache_dir, ticker, calendar.index, end)
+    return screen_context.ContextData(frames=frames, calendar=calendar, records=records)
+
+
+def _universe_context(idea: Idea, cache_dir, end: str, context):
+    """A context idea run without frames loads them here, once per universe."""
+    if idea.context and context is None:
+        return load_context(cache_dir, idea.context, end=end).frames
+    return context
+
+
 def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
                     start: str = WINDOW_START, end: str = WINDOW_END,
                     tickers=None, out=print, context: Mapping | None = None):
     """Every cached member, one at a time, with flushed percent progress.
     ``context`` (v174) is handed unchanged to every screen_ticker call."""
+    context = _universe_context(idea, cache_dir, end, context)
     names = universe.cached if tickers is None else [t for t in tickers if t in universe.cached]
     screens, skipped = [], Counter()
     for i, ticker in enumerate(names, start=1):
@@ -222,6 +270,65 @@ def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
 
 RESULTS_DIR = ROOT / "docs" / "superpowers" / "results"
 INSTRUMENT = "screen-v1"
+
+#: {ticker: sha256} of every registered context CSV, written by the first
+#: real run of a context idea; backtest_cache_ext is gitignored (v174 § 2).
+CONTEXT_HASHES = RESULTS_DIR / "2026-10-18-v174-context-hashes.json"
+
+
+def context_tickers() -> tuple[str, ...]:
+    return tuple(sorted({name for idea in IDEAS.values() for name in idea.context}))
+
+
+def _hash_records(cache_dir) -> dict:
+    return {t: screen_context.file_record(Path(cache_dir) / f"{t}.csv")
+            for t in context_tickers()}
+
+
+def hash_refusal(records: Mapping[str, dict], path) -> str | None:
+    """Why the context bytes differ from the pinned ones, or None (no pin yet,
+    or every ticker matches)."""
+    path = Path(path)
+    if not path.is_file():
+        return None
+    pinned = json.loads(path.read_text(encoding="utf-8"))
+    for ticker, record in sorted(records.items()):
+        if ticker not in pinned:
+            return f"{ticker} has no SHA-256 in {path}; the pinned context set changed"
+        if pinned[ticker] != record["sha256"]:
+            return (f"{ticker}.csv SHA-256 {record['sha256'][:12]} differs from "
+                    f"{pinned[ticker][:12]} pinned in {path}; the context data changed "
+                    f"after the first shot (never refetch)")
+    return None
+
+
+def write_hashes(records: Mapping[str, dict], path) -> bool:
+    """Pin the context bytes once; never overwrite a pin."""
+    path = Path(path)
+    if path.exists():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps({t: r["sha256"] for t, r in records.items()}, indent=2, sort_keys=True)
+    path.write_text(text + "\n", encoding="utf-8", newline="\n")
+    return True
+
+
+def _context_step(args, idea: Idea) -> tuple[screen_context.ContextData | None, str | None]:
+    """(ContextData, None), or (None, reason) to refuse; (None, None) for an
+    idea without context. Runs for dry and real runs alike."""
+    if not idea.context:
+        return None, None
+    try:
+        data = load_context(args.cache_dir, idea.context, end=args.end)
+        reason = hash_refusal(_hash_records(args.cache_dir), args.context_hashes)
+    except screen_context.ContextError as exc:
+        return None, str(exc)
+    return (None, reason) if reason else (data, None)
+
+
+def _pin_context_hashes(args, idea: Idea) -> None:
+    if idea.context and write_hashes(_hash_records(args.cache_dir), args.context_hashes):
+        print(f"pinned context SHA-256 -> {args.context_hashes}")
 
 
 def ledger_id(name: str) -> str:
@@ -247,6 +354,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="results-doc and ledger date; default today")
     p.add_argument("--ledger", type=Path, default=stats.LEDGER_PATH)
     p.add_argument("--results-dir", type=Path, default=RESULTS_DIR)
+    p.add_argument("--context-hashes", type=Path, default=CONTEXT_HASHES,
+                   help="v174 pinned SHA-256 of the context CSVs")
     p.add_argument("--tickers", default=None, help="comma list; smoke test, needs --dry-run")
     p.add_argument("--dry-run", action="store_true", help="print the doc, write nothing")
     return p
@@ -550,6 +659,7 @@ def publish(args, idea, universe, summary, rows) -> int:
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="\n")
+    _pin_context_hashes(args, idea)
     stats.append_ledger_row(row, path=args.ledger)
     print(f"{row['id']}: {v.verdict}, N={v.n}, dExpR={_fmt(v.delta_exp_r)}R, "
           f"lower95={_fmt(v.ci_low)}R, {v.years_positive}/{len(verdict.YEARS)} years -> {row['record']}")
@@ -575,13 +685,17 @@ def main(argv=None) -> int:
             universe = load_universe(args.cache_dir, args.membership, args.start, args.end)
         except ValueError as exc:
             reason = str(exc)
+    data = None
+    if reason is None:
+        data, reason = _context_step(args, IDEAS[args.idea])
     if reason:
         print(f"refused: {reason}", file=sys.stderr)
         return 2
     idea = IDEAS[args.idea]
     tickers = args.tickers.split(",") if args.tickers else None
     screens, skipped = screen_universe(idea, universe, args.cache_dir, start=args.start,
-                                       end=args.end, tickers=tickers)
+                                       end=args.end, tickers=tickers,
+                                       context=None if data is None else data.frames)
     return publish(args, idea, universe, summarise(screens, skipped), rows)
 
 

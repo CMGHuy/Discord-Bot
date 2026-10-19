@@ -4,6 +4,7 @@ import dataclasses
 import functools
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -17,6 +18,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 import screen_idea  # noqa: E402
 
 from swingbot.core.backtesting.screen import verdict  # noqa: E402
+from swingbot.core.backtesting.instrument import stats  # noqa: E402
+from swingbot.core.backtesting.screen import context as ctx_math  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from tests.backtesting.screen.helpers import random_walk  # noqa: E402
 
@@ -191,3 +194,183 @@ def test_screen_universe_passes_none_for_an_old_idea_by_default(tmp_path, monkey
                         lambda idea, ticker, df, spans, **kw: seen.append(kw))
     screen_idea.screen_universe(IDEAS["turn_of_month"], universe, cache, out=_quiet)
     assert seen and all(kw["context"] is None for kw in seen)
+
+
+# --- V174-4: loading and refusals -------------------------------------------
+
+def _ctx_argv(tmp_path, cache, *extra, idea="fake_ctx"):
+    return ["--idea", idea, "--cache-dir", str(cache),
+            "--membership", str(tmp_path / "membership.csv"),
+            "--ledger", str(tmp_path / "ledger.jsonl"),
+            "--results-dir", str(tmp_path / "results"), "--date", "2026-10-18",
+            "--context-hashes", str(tmp_path / "hashes.json"), *extra]
+
+
+@pytest.fixture
+def fake_registered(monkeypatch):
+    idea = _fake_ctx_idea()
+    monkeypatch.setitem(screen_idea.IDEAS, idea.name, idea)
+    return idea
+
+
+def _forbid_screening(monkeypatch):
+    def boom(*_a, **_k):
+        raise AssertionError("screen_universe ran after a refusal")
+    monkeypatch.setattr(screen_idea, "screen_universe", boom)
+
+
+def _rewrite_tlt(cache, change):
+    path = cache / "TLT.csv"
+    _write_csv(path, change(pd.read_csv(path, parse_dates=["Date"], index_col="Date")))
+
+
+def _tz_aware(df):
+    df.index = df.index.tz_localize("UTC")
+    return df
+
+
+def _flat_2011_2014(df):
+    inside = (df.index >= "2011-01-01") & (df.index <= "2014-12-31")
+    df.loc[inside, ["Open", "High", "Low", "Close"]] = 100.0
+    return df
+
+
+def _sha(records):
+    return {t: r["sha256"] for t, r in records.items()}
+
+
+def test_context_start_and_hash_path_are_exposed():
+    assert screen_idea.CONTEXT_START == "2009-06-01"
+    assert screen_idea.CONTEXT_HASHES.name == "2026-10-18-v174-context-hashes.json"
+    assert screen_idea.build_parser().parse_args(
+        ["--idea", "high52w"]).context_hashes == screen_idea.CONTEXT_HASHES
+
+
+def test_load_context_returns_frames_calendar_and_records(tmp_path):
+    cache = _ctx_cache(tmp_path)
+    data = screen_idea.load_context(cache, ("TLT", "UUP"))
+    assert list(data.frames) == ["TLT", "UUP"]
+    tlt = data.frames["TLT"]
+    assert tlt.index[0] == pd.Timestamp("2009-06-01")
+    assert tlt.index[-1] <= pd.Timestamp("2019-12-31")
+    assert data.calendar.index.equals(tlt.index)
+    assert data.records["UUP"] == ctx_math.file_record(cache / "UUP.csv")
+
+
+@pytest.mark.parametrize("mutate, words", [
+    (lambda c: (c / "TLT.csv").unlink(), r"TLT: context file .*TLT\.csv is missing"),
+    (lambda c: (c / "SPY.csv").unlink(), "SPY calendar .* is missing"),
+    (lambda c: _rewrite_tlt(c, _tz_aware), "TLT: the raw index is tz-aware"),
+    (lambda c: _rewrite_tlt(c, lambda df: df.iloc[::-1]), "TLT: the raw index is not sorted"),
+    (lambda c: _rewrite_tlt(c, lambda df: df.drop(pd.Timestamp("2012-03-05"))),
+     r"TLT: 1 SPY session\(s\) missing .* first 2012-03-05"),
+    (lambda c: _rewrite_tlt(c, _flat_2011_2014), "TLT: defined z covers"),
+])
+def test_a_bad_context_file_refuses_before_any_ticker_or_write(
+        tmp_path, monkeypatch, capsys, fake_registered, mutate, words):
+    cache = _ctx_cache(tmp_path)
+    mutate(cache)
+    _forbid_screening(monkeypatch)
+    assert screen_idea.main(_ctx_argv(tmp_path, cache)) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("refused: ")
+    assert re.search(words, err)
+    for written in ("ledger.jsonl", "results", "hashes.json"):
+        assert not (tmp_path / written).exists()
+
+
+def test_a_changed_context_file_refuses_even_a_dry_run(tmp_path, monkeypatch, capsys,
+                                                       fake_registered):
+    cache = _ctx_cache(tmp_path)
+    hashes = tmp_path / "hashes.json"
+    pinned = _sha({t: ctx_math.file_record(cache / f"{t}.csv")
+                   for t in screen_idea.context_tickers()})
+    pinned["TLT"] = "0" * 64
+    hashes.write_text(json.dumps(pinned), encoding="utf-8")
+    before = hashes.read_bytes()
+    _forbid_screening(monkeypatch)
+    assert screen_idea.main(_ctx_argv(tmp_path, cache, "--dry-run")) == 2
+    assert "TLT.csv SHA-256" in capsys.readouterr().err
+    assert hashes.read_bytes() == before
+
+
+def test_a_ticker_missing_from_the_hash_file_refuses(tmp_path, monkeypatch, capsys,
+                                                     fake_registered):
+    cache = _ctx_cache(tmp_path)
+    (tmp_path / "hashes.json").write_text("{}", encoding="utf-8")
+    _forbid_screening(monkeypatch)
+    assert screen_idea.main(_ctx_argv(tmp_path, cache, "--dry-run")) == 2
+    assert "TLT has no SHA-256" in capsys.readouterr().err
+
+
+def test_matching_hashes_let_a_dry_run_through(tmp_path, capsys, fake_registered):
+    cache = _ctx_cache(tmp_path)
+    records = {t: ctx_math.file_record(cache / f"{t}.csv") for t in screen_idea.context_tickers()}
+    assert screen_idea.write_hashes(records, tmp_path / "hashes.json")
+    assert screen_idea.main(_ctx_argv(tmp_path, cache, "--dry-run")) == 0
+    assert "# v140 screen: `fake_ctx`" in capsys.readouterr().out
+    assert not (tmp_path / "ledger.jsonl").exists()
+
+
+def test_a_real_run_pins_hashes_after_the_doc_and_before_the_ledger(tmp_path, monkeypatch,
+                                                                    fake_registered):
+    cache = _ctx_cache(tmp_path)
+    hashes = tmp_path / "hashes.json"
+    doc = tmp_path / "results" / "2026-10-18-screen-fake_ctx.md"
+    seen, append = [], stats.append_ledger_row
+
+    def spy(row, path):
+        seen.append((doc.exists(), hashes.exists()))
+        return append(row, path=path)
+
+    monkeypatch.setattr(screen_idea.stats, "append_ledger_row", spy)
+    assert screen_idea.main(_ctx_argv(tmp_path, cache)) == 0
+    assert seen == [(True, True)]
+    expected = _sha({t: ctx_math.file_record(cache / f"{t}.csv")
+                     for t in screen_idea.context_tickers()})
+    assert hashes.read_text(encoding="utf-8") == json.dumps(expected, indent=2, sort_keys=True) + "\n"
+
+
+def test_write_hashes_never_overwrites(tmp_path):
+    path = tmp_path / "hashes.json"
+    assert screen_idea.write_hashes({"TLT": {"sha256": "a" * 64}}, path)
+    assert not screen_idea.write_hashes({"TLT": {"sha256": "b" * 64}}, path)
+    assert json.loads(path.read_text(encoding="utf-8")) == {"TLT": "a" * 64}
+
+
+def test_context_tickers_is_the_sorted_union(monkeypatch):
+    monkeypatch.setitem(screen_idea.IDEAS, "fake_a", dataclasses.replace(
+        _fake_ctx_idea(), name="fake_a", context=("UUP",)))
+    monkeypatch.setitem(screen_idea.IDEAS, "fake_b", dataclasses.replace(
+        _fake_ctx_idea(), name="fake_b", context=("TLT", "UUP")))
+    tickers = screen_idea.context_tickers()
+    assert isinstance(tickers, tuple) and tickers == tuple(sorted(set(tickers)))
+    assert {"TLT", "UUP"} <= set(tickers)
+
+
+def test_context_frames_load_once_per_universe(tmp_path, monkeypatch):
+    cache = _ctx_cache(tmp_path)
+    universe = screen_idea.load_universe(cache, tmp_path / "membership.csv")
+    loads, seen, real = [], [], screen_idea.load_context
+
+    def counting(*args, **kwargs):
+        loads.append(args[1])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(screen_idea, "load_context", counting)
+    monkeypatch.setattr(screen_idea, "screen_ticker",
+                        lambda idea, ticker, df, spans, **kw: seen.append(kw["context"]))
+    screen_idea.screen_universe(_fake_ctx_idea(), universe, cache, out=_quiet)
+    assert loads == [("TLT",)]
+    assert len(seen) == 2 and seen[0] is seen[1] and list(seen[0]) == ["TLT"]
+
+
+def test_an_old_idea_never_loads_context(tmp_path, monkeypatch):
+    cache = _ctx_cache(tmp_path)
+    universe = screen_idea.load_universe(cache, tmp_path / "membership.csv")
+    monkeypatch.setattr(screen_idea, "load_context",
+                        lambda *a, **k: pytest.fail("an old idea loaded context"))
+    monkeypatch.setattr(screen_idea, "screen_ticker", lambda *a, **k: None)
+    screen_idea.screen_universe(IDEAS["turn_of_month"], universe, cache, out=_quiet)
+    args = screen_idea.build_parser().parse_args(["--idea", "turn_of_month"])
+    assert screen_idea._context_step(args, IDEAS["turn_of_month"]) == (None, None)
