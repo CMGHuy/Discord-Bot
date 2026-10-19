@@ -11,7 +11,8 @@ from swingbot.core.backtesting.screen.ideas import IDEAS, Idea
 
 def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
     assert ideas.IDEA_MODULES == ("high52w", "uptrend_pullback", "gap_volume",
-                                  "turn_of_month", "turtle_soup", "quiet_pullback")
+                                  "turn_of_month", "turtle_soup", "quiet_pullback",
+                                  "bond_spike_rebound", "dollar_drop")
     assert list(IDEAS) == list(ideas.IDEA_MODULES)
     assert all(IDEAS[name].name == name for name in IDEAS)
 
@@ -19,7 +20,8 @@ def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
 def test_time_caps_are_the_spec_values():
     assert {n: i.time_cap_bars for n, i in IDEAS.items()} == {
         "high52w": 60, "uptrend_pullback": 10, "gap_volume": 20, "turn_of_month": 4,
-        "turtle_soup": 10, "quiet_pullback": 10}
+        "turtle_soup": 10, "quiet_pullback": 10, "bond_spike_rebound": 10,
+        "dollar_drop": 10}
 
 
 def test_frozen_parameter_sets():
@@ -36,6 +38,11 @@ def test_frozen_parameter_sets():
     assert dict(IDEAS["quiet_pullback"].params) == {
         "trend_sma": 200, "rsi_n": 2, "rsi_below": 10, "quiet_bars": 3,
         "gap_atr": 1.0, "atr_n": 14, "volume_mult": 2.0, "volume_window": 50}
+
+    assert dict(IDEAS["bond_spike_rebound"].params) == {
+        "series": "TLT", "lookback": 5, "window": 252, "z": 2.0, "side": "long"}
+    assert dict(IDEAS["dollar_drop"].params) == {
+        "series": "UUP", "lookback": 5, "window": 252, "z": -2.0, "side": "long"}
 
 
 def test_every_idea_is_long_and_cites_its_source():
@@ -68,7 +75,23 @@ def test_every_registered_idea_is_raced_under_one_pinned_shape():
     assert ideas.RACE_SHAPES == ("fixed", "trail")
     assert {n: i.race_shape for n, i in IDEAS.items()} == {
         "high52w": "fixed", "uptrend_pullback": "fixed", "gap_volume": "fixed",
-        "turn_of_month": "fixed", "turtle_soup": "fixed", "quiet_pullback": "fixed"}
+        "turn_of_month": "fixed", "turtle_soup": "fixed", "quiet_pullback": "fixed",
+        "bond_spike_rebound": "fixed", "dollar_drop": "fixed"}
+
+
+MURPHY = ("Murphy (2004), Intermarket Analysis — shock proxy, "
+          "see v174 § What the two shots can and cannot say")
+
+
+def test_only_the_two_intermarket_ideas_read_context_series():
+    """v174 § 3: the six older ideas keep `events(df)`; the two new ones
+    each name one context series and cite the scope section."""
+    assert {n: i.context for n, i in IDEAS.items()} == {
+        "high52w": (), "uptrend_pullback": (), "gap_volume": (), "turn_of_month": (),
+        "turtle_soup": (), "quiet_pullback": (),
+        "bond_spike_rebound": ("TLT",), "dollar_drop": ("UUP",)}
+    assert IDEAS["bond_spike_rebound"].source == MURPHY
+    assert IDEAS["dollar_drop"].source == MURPHY
 
 
 def _events(df):
