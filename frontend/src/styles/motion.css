@@ -38,8 +38,8 @@
 [data-motion=off] { --motion-scale: 0; }
 
 /* -- moved keyframes: one copy each, every call site keeps its duration ----- */
-/* `pulse` was declared four times in three shapes (spec amendment 7). */
-@keyframes sb-pulse-soft { 50% { opacity: 0.45; } }                            /* sb-async skeleton */
+/* `pulse` was declared four times in three shapes (spec amendment 7); the
+   skeleton's soft one became the shimmer (MO9), so two shapes remain. */
 @keyframes sb-pulse-dim { 50% { opacity: 0.35; } }                             /* live dot, open-trade dot */
 @keyframes sb-pulse-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }  /* status-cell dot */
 /* `spin` was declared twice (data-table, chart-container), identically. */

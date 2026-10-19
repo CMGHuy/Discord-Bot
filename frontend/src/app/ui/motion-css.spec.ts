@@ -76,7 +76,7 @@ function keyframeList(css: string): [string, string][] {
 
 const KEYFRAMES = [
   // moved (v168 §2, amendment 7)
-  'sb-pulse-soft', 'sb-pulse-dim', 'sb-pulse-blink', 'sb-spin', 'sb-route-spin', 'sb-scan-sweep',
+  'sb-pulse-dim', 'sb-pulse-blink', 'sb-spin', 'sb-route-spin', 'sb-scan-sweep',
   'sb-scan-strip-in', 'sb-flash-up', 'sb-flash-down', 'sb-row-blink', 'sb-tape-slide',
   // new (v168 §3)
   'sb-enter', 'sb-fade-in', 'sb-pop-in', 'sb-drawer-in', 'sb-drawer-out', 'sb-sheet-in', 'sb-sheet-out',
@@ -105,9 +105,11 @@ describe('styles/motion.css: the one motion home (v168 §2)', () => {
     expect(STYLES).not.toMatch(/\.flash-(up|down)\s*\{/);
   });
 
-  it('merges the four pulse copies by shape, each shape unchanged (amendment 7)', () => {
+  it('merges the pulse copies by shape, each shape unchanged (amendment 7)', () => {
+    /* Four copies in three shapes before v168. The skeleton's soft pulse
+     * (.45) became the shimmer in MO9, so two shapes remain. */
     const body = Object.fromEntries(keyframeList(MOTION));
-    expect(body['sb-pulse-soft']).toBe('50% { opacity: 0.45; }');
+    expect(body['sb-pulse-soft']).toBeUndefined();
     expect(body['sb-pulse-dim']).toBe('50% { opacity: 0.35; }');
     expect(body['sb-pulse-blink']).toBe('0%, 100% { opacity: 1; } 50% { opacity: 0.25; }');
     expect(body['sb-spin']).toBe('to { transform: rotate(360deg); }');
