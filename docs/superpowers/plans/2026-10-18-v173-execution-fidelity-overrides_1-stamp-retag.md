@@ -7,7 +7,7 @@
 **Edge:** none (integrity)
 **Index:** [`2026-10-18-v173-execution-fidelity-overrides_0-index.md`](2026-10-18-v173-execution-fidelity-overrides_0-index.md) carries the Goal, `## Global Constraints`, `## Parallelisation`, `## Where to work` (`$WT`, `$R`) and the task ledger. Every task below implicitly includes those Global Constraints.
 
-Tasks: V173-1..V173-5. V173-1 creates the worktree every branch task uses. V173-4 runs on `main` against production (read-only) and must finish before V173-5 starts.
+Tasks: V173-1..V173-5. V173-1 creates the worktree every branch task uses. V173-4 runs on `main` against production (read-only) and must finish before V173-5 starts. V173-5 was revised on 2026-10-19 (`FOR UPDATE`, `down_revision = "v172_001"`, `v173_002` chaining on it): index § Revision 2026-10-19.
 
 **Tests never touch a database** (Global Constraints): every new test here uses plain dataclasses, dicts, fakes and monkeypatched seams. No `seed_store`, no `db_conn`, no `db_engine_empty`, never the production replica.
 
@@ -1033,7 +1033,7 @@ Stage only the index: other sessions share the main tree (`worktree-lifecycle`),
 
 **Interfaces:**
 - Consumes: the 15 ids in the index § Pinned bulk-clear ids (V173-4). `manual_bulk` as a reason (V173-2 teaches its readers; this task does not depend on V173-2's code).
-- Produces: `revision = "v173_001"`; `PINNED_PLAN_IDS: tuple[str, ...]` (exactly 15 unique ids); `retag(histories: dict[str, list], *, frm: str, to: str) -> dict[str, list]`; `apply(conn, *, frm: str, to: str) -> int` (rows written). V173-18 runs it on production through `deploy/deploy.sh` (`alembic upgrade head`) and verifies the 15 re-tags.
+- Produces: `revision = "v173_001"`, `down_revision = "v172_001"` (the current head, written as a placeholder and re-checked by Step 1); `PINNED_PLAN_IDS: tuple[str, ...]` (exactly 15 unique ids); `retag(histories: dict[str, list], *, frm: str, to: str) -> dict[str, list]`; `apply(conn, *, frm: str, to: str) -> int` (rows written). V173-18 runs it on production through `deploy/deploy.sh` (`alembic upgrade head`) and verifies the 15 re-tags. **`v173_002` (V173-24, the `preregistration_verdicts` table) chains on this revision** (`v173_002.down_revision = "v173_001"`), so after V173-24 the single head is `v173_002` and `v173_001` sits directly below it; if `main` gains a revision before the merge, V173-17 re-chains only `v173_001.down_revision`.
 
 **Gate:** do not start until the index § Pinned bulk-clear ids holds the 15-id tuple (V173-4 Step 4). If it still says `Not yet pinned.`, stop and report `BLOCKED: V173-4 has not run`.
 
@@ -1043,7 +1043,7 @@ What the revision does (spec §2, Global Constraints "Data revision"):
 - **Downgrade:** the exact reverse, refusing unless every pinned last entry reads `manual_bulk`.
 - **Refusal before any write:** every history is checked first and the writes follow only if all 15 pass; one missing pinned id or one mismatch raises `RuntimeError` naming the ids, and nothing is written.
 - **A database holding none of the pinned plans** (a fresh install, the disposable test database that `tests/db/test_migrations.py::test_migrations_produce_exactly_the_declared_schema` upgrades to head, a dev fixture book) is not the production book: the revision logs one line and writes nothing. Without this, `alembic upgrade head` would fail on every database except production. Some-but-not-all present still refuses. V173-18 verifies after the deploy that production really re-tagged 15 rows, so a silent no-op there cannot go unseen.
-- **Reads and writes:** only `plan_id, doc -> 'status_history'` for the pinned ids, and one `jsonb_set(doc, '{status_history}', CAST(:hist AS jsonb))` per pinned id. Pure helpers carry the logic so the test needs no database.
+- **Reads and writes:** only `plan_id, doc -> 'status_history'` for the pinned ids, read with `SELECT plan_id, doc->'status_history' AS hist FROM plans WHERE plan_id = ANY(:ids) FOR UPDATE` (the row lock holds the 15 rows from the check to the write inside the revision's transaction, so a concurrent close or retag cannot slip between them; a test asserts the SQL text carries `FOR UPDATE`), and one `jsonb_set(doc, '{status_history}', CAST(:hist AS jsonb))` per pinned id. Pure helpers carry the logic so the test needs no database.
 
 - [ ] **Step 1: Find the current head**
 
@@ -1051,7 +1051,7 @@ What the revision does (spec §2, Global Constraints "Data revision"):
 python -c "import re,pathlib; d=pathlib.Path(r'E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/swingbot/core/db/migrations/versions'); revs={}; downs=set(); [(revs.__setitem__(re.search(r'^revision = \"(.+?)\"', t, re.M).group(1), f.name), downs.add((re.search(r'^down_revision = \"(.+?)\"', t, re.M) or [None, None])[1])) for f in d.glob('*.py') for t in [f.read_text(encoding='utf-8')]]; print(sorted(set(revs) - downs))"
 ```
 
-Expected: `['v146_001']` when this plan was written; `['v172_001']` (or another single id) if a later plan merged a revision first. Use that single id as `down_revision` below. More than one id means the graph already has two heads: stop and report it.
+Expected: `['v172_001']` (the head when this plan was revised, 2026-10-19; brief addendum A). That is the placeholder written as `down_revision` below. Another single id means a later plan merged a revision first: write that id instead, in both `down_revision` and the docstring's `Revises:` line. More than one id means the graph already has two heads: stop and report it. `v173_002` does not exist yet (V173-24 adds it on top of this revision).
 
 - [ ] **Step 2: Write the failing test**
 
@@ -1119,11 +1119,13 @@ class FakeConn:
     def __init__(self, plans):
         self.plans = plans
         self.selected_ids = None
+        self.select_sql = None
         self.updates = []
 
     def execute(self, statement, params):
         sql = str(statement).strip()
         if sql.upper().startswith("SELECT"):
+            self.select_sql = sql
             self.selected_ids = list(params["ids"])
             return _Result([(pid, copy.deepcopy(hist)) for pid, hist in self.plans.items()
                             if pid in params["ids"]])
@@ -1214,6 +1216,14 @@ def test_only_pinned_ids_are_read_and_written():
     assert plans["99999999-9999-4999-8999-999999999999"][-1]["reason"] == "manual"
 
 
+def test_the_pinned_read_locks_its_rows():
+    """The check and the write must see the same 15 rows: FOR UPDATE."""
+    assert "FOR UPDATE" in " ".join(str(MIG._SELECT).upper().split())
+    conn = FakeConn(_book())
+    MIG.apply(conn, frm="manual", to="manual_bulk")
+    assert conn.select_sql.upper().rstrip().endswith("FOR UPDATE")
+
+
 def test_a_mismatch_refuses_before_any_write():
     plans = _book()
     plans[PINNED[-1]][-1]["reason"] = "manual_bulk"
@@ -1277,12 +1287,17 @@ def scripts():
     return ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
 
 
-def test_the_revision_is_the_single_head(scripts):
+def test_v173_001_is_on_the_single_head_chain(scripts):
+    """True now (v173_001 is the head) and after V173-24 (v173_002 on top)."""
     assert MIG.revision == "v173_001"
-    assert scripts.get_heads() == ["v173_001"]
+    heads = scripts.get_heads()
+    assert len(heads) == 1
+    chain = {rev.revision for rev in scripts.iterate_revisions(heads[0], "base")}
+    assert "v173_001" in chain
 
 
 def test_it_chains_onto_an_existing_revision(scripts):
+    assert MIG.down_revision == "v172_001"   # re-chained only by V173-17 if main moved
     assert scripts.get_revision(MIG.down_revision) is not None
     assert scripts.get_revision("v173_001").down_revision == MIG.down_revision
 ```
@@ -1320,7 +1335,7 @@ nothing written, so `alembic upgrade head` still works there. Downgrade is
 the exact reverse over the same 15 entries.
 
 Revision ID: v173_001
-Revises: v146_001
+Revises: v172_001
 """
 from __future__ import annotations
 
@@ -1332,7 +1347,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "v173_001"
-down_revision = "v146_001"   # the head found in Step 1
+down_revision = "v172_001"   # = python -m alembic heads at implementation time (Step 1); v173_002 chains on v173_001
 branch_labels = None
 depends_on = None
 
@@ -1344,8 +1359,9 @@ PINNED_PLAN_IDS: tuple[str, ...] = (
     # ... exactly 15 lines
 )
 
+# FOR UPDATE: the 15 rows stay locked from the check to the write (one transaction).
 _SELECT = sa.text(
-    "SELECT plan_id, doc -> 'status_history' FROM plans WHERE plan_id = ANY(:ids)")
+    "SELECT plan_id, doc->'status_history' AS hist FROM plans WHERE plan_id = ANY(:ids) FOR UPDATE")
 _UPDATE = sa.text(
     "UPDATE plans SET doc = jsonb_set(doc, '{status_history}', CAST(:hist AS jsonb)) "
     "WHERE plan_id = :plan_id")
@@ -1409,7 +1425,7 @@ def downgrade() -> None:
     apply(op.get_bind(), frm="manual_bulk", to="manual")
 ```
 
-If Step 1 found a head other than `v146_001`, write it in both `down_revision` and the docstring's `Revises:` line.
+If Step 1 found a head other than `v172_001`, write it in both `down_revision` and the docstring's `Revises:` line, and change the `== "v172_001"` assertion in `test_it_chains_onto_an_existing_revision` to match.
 
 - [ ] **Step 5: Run the test**
 
@@ -1417,7 +1433,7 @@ If Step 1 found a head other than `v146_001`, write it in both `down_revision` a
 python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/db/test_v173_manual_bulk_retag.py
 ```
 
-Expected: PASS, `0 failed`, `0 xfailed`. `test_exactly_fifteen_unique_pinned_plan_ids` failing means the tuple was not copied in full.
+Expected: PASS, `0 failed`, `0 xfailed`. `test_exactly_fifteen_unique_pinned_plan_ids` failing means the tuple was not copied in full; `test_the_pinned_read_locks_its_rows` failing means `FOR UPDATE` was dropped from `_SELECT`.
 
 - [ ] **Step 6: Run the revision-graph test**
 
@@ -1425,7 +1441,7 @@ Expected: PASS, `0 failed`, `0 xfailed`. `test_exactly_fifteen_unique_pinned_pla
 python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/db/test_migrations.py
 ```
 
-Expected: `test_exactly_one_head`, `test_every_revision_id_is_part_prefixed` and `test_the_graph_roots_at_the_baseline` PASS. `test_migrations_produce_exactly_the_declared_schema` is an existing DB-backed test: it upgrades an empty test database to head, where this revision finds none of the pinned plans and writes nothing. It skips with the start command when the disposable test database is down; that skip is not a pass, so start it and re-run. It is never pointed at the production replica.
+Expected (single head `v173_001` until V173-24 adds `v173_002` above it): `test_exactly_one_head`, `test_every_revision_id_is_part_prefixed` and `test_the_graph_roots_at_the_baseline` PASS. `test_migrations_produce_exactly_the_declared_schema` is an existing DB-backed test: it upgrades an empty test database to head, where this revision finds none of the pinned plans and writes nothing. It skips with the start command when the disposable test database is down; that skip is not a pass, so start it and re-run. It is never pointed at the production replica.
 
 - [ ] **Step 7: Complexity**
 
