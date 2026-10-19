@@ -261,6 +261,10 @@ def test_load_context_returns_frames_calendar_and_records(tmp_path):
 @pytest.mark.parametrize("mutate, words", [
     (lambda c: (c / "TLT.csv").unlink(), r"TLT: context file .*TLT\.csv is missing"),
     (lambda c: (c / "SPY.csv").unlink(), "SPY calendar .* is missing"),
+    (lambda c: (c / "TLT.csv").write_text("Date,Close\n", encoding="utf-8"),
+     "TLT: context file .* has no rows"),
+    (lambda c: (c / "TLT.csv").write_text("Close\n100\n", encoding="utf-8"),
+     "TLT: cannot read Date column"),
     (lambda c: _rewrite_tlt(c, _tz_aware), "TLT: the raw index is tz-aware"),
     (lambda c: _rewrite_tlt(c, lambda df: df.iloc[::-1]), "TLT: the raw index is not sorted"),
     (lambda c: _rewrite_tlt(c, lambda df: df.drop(pd.Timestamp("2012-03-05"))),
@@ -578,3 +582,51 @@ def test_a_context_dry_run_prints_the_diagnostics_and_writes_nothing(tmp_path, c
     assert not (tmp_path / "ledger.jsonl").exists()
     assert not (tmp_path / "hashes.json").exists()
     assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.parametrize("pinned", [False, True], ids=["first-shot", "pinned"])
+@pytest.mark.parametrize("ticker", ["TLT", "UUP"])
+@pytest.mark.parametrize("stage", ["screen_universe", "render_results"])
+def test_context_mutation_refuses_before_any_publication_write(
+        tmp_path, monkeypatch, capsys, fake_registered, pinned, ticker, stage):
+    cache = _ctx_cache(tmp_path)
+    hashes = tmp_path / "hashes.json"
+    if pinned:
+        records = {t: ctx_math.file_record(cache / f"{t}.csv")
+                   for t in screen_idea.context_tickers()}
+        screen_idea.write_hashes(records, hashes)
+    before = hashes.read_bytes() if pinned else None
+    real = getattr(screen_idea, stage)
+
+    def mutate(*args, **kwargs):
+        result = real(*args, **kwargs)
+        path = cache / f"{ticker}.csv"
+        path.write_bytes(path.read_bytes() + b"\n")
+        return result
+
+    monkeypatch.setattr(screen_idea, stage, mutate)
+    assert screen_idea.main(_ctx_argv(tmp_path, cache)) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("refused: ") and f"{ticker}.csv SHA-256" in err
+    assert not (tmp_path / "results").exists()
+    assert not (tmp_path / "ledger.jsonl").exists()
+    assert (hashes.read_bytes() if hashes.exists() else None) == before
+
+
+def test_context_mutation_during_loading_refuses_before_screening(
+        tmp_path, monkeypatch, capsys, fake_registered):
+    cache = _ctx_cache(tmp_path)
+    real = screen_idea.load_context
+
+    def mutate(*args, **kwargs):
+        data = real(*args, **kwargs)
+        path = cache / "TLT.csv"
+        path.write_bytes(path.read_bytes() + b"\n")
+        return data
+
+    monkeypatch.setattr(screen_idea, "load_context", mutate)
+    _forbid_screening(monkeypatch)
+    assert screen_idea.main(_ctx_argv(tmp_path, cache)) == 2
+    assert "TLT.csv SHA-256" in capsys.readouterr().err
+    for written in ("ledger.jsonl", "results", "hashes.json"):
+        assert not (tmp_path / written).exists()

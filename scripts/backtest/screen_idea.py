@@ -19,10 +19,11 @@ prints the results doc and writes nothing; --tickers needs --dry-run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 from typing import Callable, Mapping
@@ -341,15 +342,34 @@ def _context_step(args, idea: Idea) -> tuple[screen_context.ContextData | None, 
     if not idea.context:
         return None, None
     try:
+        records = _hash_records(args.cache_dir)
         data = load_context(args.cache_dir, idea.context, end=args.end)
-        reason = hash_refusal(_hash_records(args.cache_dir), args.context_hashes)
+        data = replace(data, checked_records=records)
+        reason = _context_hash_refusal(args, data)
     except screen_context.ContextError as exc:
         return None, str(exc)
     return (None, reason) if reason else (data, None)
 
 
-def _pin_context_hashes(args, idea: Idea) -> None:
-    if idea.context and write_hashes(_hash_records(args.cache_dir), args.context_hashes):
+def _context_hash_refusal(args, data) -> str | None:
+    """Bind loaded frames and publication to the union checked before screening."""
+    if data is None:
+        return None
+    try:
+        for ticker, record in sorted(data.checked_records.items()):
+            path = Path(args.cache_dir) / f"{ticker}.csv"
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            loaded = data.records.get(ticker, record)["sha256"]
+            if digest != record["sha256"] or loaded != record["sha256"]:
+                return (f"{ticker}.csv SHA-256 differs from the checked bytes before "
+                        "screening; the context data changed")
+    except OSError as exc:
+        return f"cannot verify checked context bytes: {exc}"
+    return hash_refusal(data.checked_records, args.context_hashes)
+
+
+def _pin_context_hashes(args, data) -> None:
+    if data is not None and write_hashes(data.checked_records, args.context_hashes):
         print(f"pinned context SHA-256 -> {args.context_hashes}")
 
 
@@ -725,12 +745,16 @@ def publish(args, idea, universe, summary, rows, data=None) -> int:
     q = stats.ledger_qvalues(rows + [row])[row["id"]]
     run = _context_run(_run_info(args, q), idea, rows, row, data)
     text = render_results(idea, summary, universe, run)
+    reason = _context_hash_refusal(args, data)
+    if reason:
+        print(f"refused: {reason}", file=sys.stderr)
+        return 2
     if args.dry_run:
         print(text)
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="\n")
-    _pin_context_hashes(args, idea)
+    _pin_context_hashes(args, data)
     stats.append_ledger_row(row, path=args.ledger)
     print(f"{row['id']}: {v.verdict}, N={v.n}, dExpR={_fmt(v.delta_exp_r)}R, "
           f"lower95={_fmt(v.ci_low)}R, {v.years_positive}/{len(verdict.YEARS)} years -> {row['record']}")
