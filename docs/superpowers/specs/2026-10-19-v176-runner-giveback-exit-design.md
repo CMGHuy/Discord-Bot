@@ -82,7 +82,7 @@ via SIGHUP and read at call time, never cached:
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `RUNNER_GIVEBACK_ENABLED` | bool | `true` | Off stops **new** give-back tightening. |
-| `RUNNER_GIVEBACK_PCT` | float | `5.0` | Percent of the best price; valid `0 < pct < 50`, else rejected by the schema. |
+| `RUNNER_GIVEBACK_PCT` | float | `5.0` | Percent of the best price. Read through a clamp helper to `[0.5, 49]`, like `trail_notify_min_r()` (`plan_manager.py:132`), because `_cast` enforces no range (`config.py:1427`); the admin save path carries the same min/max. |
 
 **Off does not loosen.** `working_stop` is persisted and a runner stop never
 widens. A runner already tightened by the give-back keeps that stop after the
@@ -261,7 +261,11 @@ This run counts as **one look**, and a ledger row is appended to
 
 **Primary reading (one):** pooled paired per-trade runner-leg ΔR (on minus
 off), with a ticker-cluster bootstrap interval
-(`swingbot/core/backtesting/instrument/stats.py`) and `acceptance.mde_paired`.
+(`acceptance.cluster_bootstrap` / `bootstrap_delta`,
+`swingbot/core/backtesting/acceptance.py:239,280`) and `acceptance.mde_paired`
+(`:372`), on the paired-measurement template
+`scripts/backtest/measure_acceptance_exits.py` (`paired_r_deltas`), which
+carries frictions where `runner_headroom.py` does not.
 Reported with the count of trades whose outcome changed.
 
 **Descriptive only.** None of these is an effect claim. With 10 horizons and
