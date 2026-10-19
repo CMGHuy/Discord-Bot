@@ -74,3 +74,16 @@ describe('one keyframe home (v168 §2)', () => {
     expect(unknown).toEqual([]);
   });
 });
+
+describe('the OS reduced-motion setting (spec v168 D2)', () => {
+  /* Matches the media feature as a query uses it -- "(prefers-reduced-motion"
+   * in an @media rule or a matchMedia() string -- so prose that names the
+   * feature is not an offence. flash.ts's doc comment still names it until
+   * MO14 rewrites that comment; that is prose, not a query. */
+  it('no prefers-reduced-motion outside specs', () => {
+    const offenders = sourceFiles()
+      .filter(({ source }) => /\(\s*prefers-reduced-motion\b/.test(source))
+      .map(({ name }) => name);
+    expect(offenders).toEqual([]);
+  });
+});

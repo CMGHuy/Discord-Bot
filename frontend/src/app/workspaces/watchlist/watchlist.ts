@@ -341,7 +341,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
         <!-- A row blinks when its earnings date falls within the current
              week (Monday-Sunday, same boundary the Earnings tab's calendar
              uses) -- a gentle pulse, not a hard flash; see data-table.ts's
-             .blink rule and its prefers-reduced-motion fallback. -->
+             .blink rule and its Motion = Off fallback in styles/motion.css. -->
         <p class="section-help panel-note">
           A row pulses when that ticker reports earnings this week.
         </p>

@@ -119,8 +119,13 @@ describe('design tokens', () => {
     expect(CSS).toMatch(/^\s*--control-h:\s*28px;/m);
   });
 
-  it('honours prefers-reduced-motion', () => {
-    expect(CSS).toContain('prefers-reduced-motion: reduce');
+  /* Inverted by v168 (spec D2): the OS reduced-motion setting is ignored by
+   * design, and the shell's Motion control drives data-motion instead. The
+   * media-feature name must not come back into this file, comments included. */
+  it('ignores the OS reduced-motion setting: no media block; motion.css carries the Off rules', () => {
+    expect(CSS).not.toContain('prefers-reduced-motion');
+    const motion = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8');
+    expect(motion).toMatch(/\[data-motion="?off"?\]\s*\{\s*--motion-scale:\s*0;\s*\}/);
   });
 
   it('has dropped --space-28', () => {

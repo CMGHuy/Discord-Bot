@@ -243,3 +243,56 @@ sb-confirm-dialog dialog[open]::backdrop {
 [data-motion=off] sb-async .skeleton-cell { animation: none; }
 [data-motion=off] sb-connection-status .dot.live::after,
 [data-motion=pending] sb-connection-status .dot.live::after { animation: none; opacity: 0; }
+
+/* ===== Off / Reduced fallbacks for the pre-v168 motion sites (spec v168 §1) =====
+ *
+ * These replace the eight component-level reduced-motion media blocks and the
+ * global one tokens.css used to carry. The OS setting is no longer read (spec
+ * D2): the shell's Motion control writes data-motion on <html>, and these rules
+ * key on it. Each site keeps the fallback it had before, so Off means "no
+ * decorative motion", never "status disappears".
+ *
+ * Why !important: emulated encapsulation qualifies every compound of a
+ * component selector with an attribute, so `.shell.overlay .sidebar` in
+ * shell.css out-ranks any global selector this file could write. The old
+ * global block solved the same problem the same way.
+ *
+ * Spinners are status, not decoration: under Off they slow to 2.4s, and no
+ * mode ever stops one. (The route spinner used to stop under the OS setting;
+ * slowing it instead is an intended change, spec amendment 6.)
+ */
+
+/* connection-status: the live dot keeps its colour and drops the pulse. */
+[data-motion=off] sb-connection-status .dot.live { animation: none !important; }
+
+/* scan-progress: the strip appears without sliding in; the indeterminate sweep
+   becomes a static full-width bar at .4 opacity, still told apart from a
+   determinate one. */
+[data-motion=off] sb-scan-progress .strip { animation: none !important; }
+[data-motion=off] sb-scan-progress .fill { transition: none !important; }
+[data-motion=off] sb-scan-progress .fill.sweeping { animation: none !important; width: 100% !important; opacity: .4 !important; }
+
+/* shell: the sidebar width snaps; the route spinner keeps turning, slowly. */
+[data-motion=off] sb-shell .shell,
+[data-motion=off] sb-shell .shell.overlay .sidebar { transition: none !important; }
+[data-motion=off] sb-shell .route-loading-mark { animation-duration: 2.4s !important; }
+
+/* tape: frozen under Off, Reduced and the cold-load pending state; without a
+   scroll affordance every tile past the first viewport-width would be
+   unreachable. Hover and focus still pause it under On (tape.css). */
+:is([data-motion=off], [data-motion=reduced], [data-motion=pending]) sb-tape .track { animation: none !important; }
+:is([data-motion=off], [data-motion=reduced], [data-motion=pending]) sb-tape .viewport { overflow-x: auto !important; }
+
+/* data-table: the spinner slows; the earnings-week row keeps its meaning as a
+   steady warn tint instead of a pulse. */
+[data-motion=off] sb-data-table .loading-spinner { animation-duration: 2.4s !important; }
+[data-motion=off] sb-data-table .blink { animation: none !important; background: color-mix(in srgb, var(--warn) 10%, transparent) !important; }
+
+/* chart-container: the spinner slows. */
+[data-motion=off] sb-chart-container .spinner { animation-duration: 2.4s !important; }
+
+/* status-indicator and status-cell: the colour carries the state; the pulse
+   only ever carried liveliness. */
+[data-motion=off] sb-status-indicator .open { animation: none !important; }
+[data-motion=off] sb-status-cell .dot { animation: none !important; }
+[data-motion=off] sb-status-cell .fill { transition: none !important; }

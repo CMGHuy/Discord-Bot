@@ -57,12 +57,6 @@
          animation-iteration-count: infinite; will-change: transform; }
 .viewport:hover .track { animation-play-state: paused; }
 .viewport:focus-within .track { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) {
-  .track { animation: none; }
-  /* The track freezes at translateX(0); without a scroll affordance every
-     name past the first viewport-width would be permanently unreachable. */
-  .viewport { overflow-x: auto; }
-}
 
 .tile { display: inline-flex; align-items: baseline; gap: var(--space-6);
         padding: 0 var(--space-14); border-right: 1px solid var(--border);

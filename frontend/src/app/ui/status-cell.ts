@@ -170,12 +170,7 @@ export interface StatusCellRow {
     .dot.neutral       { color: var(--text-muted); }
 
 
-    /* The pulse says "this is live right now", which is exactly the kind of
-       motion someone with vestibular sensitivity has asked the OS to stop. */
-    @media (prefers-reduced-motion: reduce) {
-      .dot { animation: none; }
-      .fill { transition: none; }
-    }
+    /* Motion = Off steadies the dot and the fill: styles/motion.css. */
 
     .end { font-family: var(--font-mono); font-size: var(--text-chip); }
     .end.neg { color: var(--neg); }

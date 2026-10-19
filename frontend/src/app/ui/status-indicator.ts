@@ -76,9 +76,6 @@ export function slToTpProgress(
     .open { background: var(--text); animation: sb-pulse-dim 2.2s ease-in-out infinite; }
     .inert { background: var(--text-faint); }
 
-    @media (prefers-reduced-motion: reduce) {
-      .open { animation: none; }
-    }
 
     .label { font-size: var(--text-table); color: var(--text-secondary); }
 

@@ -271,3 +271,89 @@ describe('the mode rules for the new classes (v168 §1)', () => {
     ]);
   });
 });
+
+describe('Off keeps every fallback (spec v168 §1)', () => {
+  /* Whitespace-flattened, so a rule is asserted by its text whatever the line
+   * breaks. Read from disk, never `?raw` (see tokens.spec.ts's header). */
+  const fallbackCss = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8')
+    .replace(/\s+/g, ' ');
+  const readSource = (path: string) => readFileSync(join(process.cwd(), 'src', path), 'utf8');
+  const frozen = ':is([data-motion=off], [data-motion=reduced], [data-motion=pending])';
+
+  const fallbackSites: { site: string; file: string; rules: string[] }[] = [
+    {
+      site: 'tokens.css global block',
+      file: 'styles/tokens.css',
+      rules: ['[data-motion=off] { --motion-scale: 0; }'],
+    },
+    {
+      site: 'connection-status live dot',
+      file: 'app/shell/connection-status.ts',
+      rules: ['[data-motion=off] sb-connection-status .dot.live { animation: none !important; }'],
+    },
+    {
+      site: 'scan-progress strip and sweep',
+      file: 'app/shell/scan-progress.css',
+      rules: [
+        '[data-motion=off] sb-scan-progress .strip { animation: none !important; }',
+        '[data-motion=off] sb-scan-progress .fill { transition: none !important; }',
+        '[data-motion=off] sb-scan-progress .fill.sweeping { animation: none !important; width: 100% !important; opacity: .4 !important; }',
+      ],
+    },
+    {
+      site: 'shell sidebar width and route spinner',
+      file: 'app/shell/shell.css',
+      rules: [
+        '[data-motion=off] sb-shell .shell, [data-motion=off] sb-shell .shell.overlay .sidebar { transition: none !important; }',
+        '[data-motion=off] sb-shell .route-loading-mark { animation-duration: 2.4s !important; }',
+      ],
+    },
+    {
+      site: 'tape track',
+      file: 'app/shell/tape/tape.css',
+      rules: [
+        `${frozen} sb-tape .track { animation: none !important; }`,
+        `${frozen} sb-tape .viewport { overflow-x: auto !important; }`,
+      ],
+    },
+    {
+      site: 'data-table spinner and blinking row',
+      file: 'app/ui/data-table/data-table.ts',
+      rules: [
+        '[data-motion=off] sb-data-table .loading-spinner { animation-duration: 2.4s !important; }',
+        '[data-motion=off] sb-data-table .blink { animation: none !important; background: color-mix(in srgb, var(--warn) 10%, transparent) !important; }',
+      ],
+    },
+    {
+      site: 'chart-container spinner',
+      file: 'app/ui/chart-container.ts',
+      rules: ['[data-motion=off] sb-chart-container .spinner { animation-duration: 2.4s !important; }'],
+    },
+    {
+      site: 'status-indicator open dot',
+      file: 'app/ui/status-indicator.ts',
+      rules: ['[data-motion=off] sb-status-indicator .open { animation: none !important; }'],
+    },
+    {
+      site: 'status-cell dot and fill',
+      file: 'app/ui/status-cell.ts',
+      rules: [
+        '[data-motion=off] sb-status-cell .dot { animation: none !important; }',
+        '[data-motion=off] sb-status-cell .fill { transition: none !important; }',
+      ],
+    },
+  ];
+
+  for (const { site, file, rules } of fallbackSites) {
+    it(`${site}: carries its [data-motion] fallback and no OS media block`, () => {
+      for (const rule of rules) expect(fallbackCss).toContain(rule);
+      expect(readSource(file)).not.toContain('prefers-reduced-motion');
+    });
+  }
+
+  it('never stops a spinner: loading spinners only slow down', () => {
+    const stops = /(?:spinner|route-loading-mark)[^{}]*\{[^}]*animation:\s*none/;
+    /* Comments stripped: prose naming a spinner must not pair with the next rule. */
+    expect(fallbackCss.replace(/\/\*.*?\*\//g, '')).not.toMatch(stops);
+  });
+});

@@ -74,9 +74,3 @@
 
 .strip.complete .fill { background: var(--pos, var(--accent)); }
 
-@media (prefers-reduced-motion: reduce) {
-  .strip { animation: none; }
-  .fill { transition: none; }
-  /* Still distinguishable from a determinate bar -- it just does not travel. */
-  .fill.sweeping { animation: none; width: 100% !important; opacity: 0.4; }
-}

@@ -97,10 +97,6 @@
 .tagline-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
 .shell.railed:not(.overlay) .tagline-row { justify-content: center; }
 
-@media (prefers-reduced-motion: reduce) {
-  .shell, .shell.overlay .sidebar { transition: none; }
-}
-
 /* Sticky and exactly one viewport tall.
  *
  * As a plain grid item the sidebar was as tall as the ROW, i.e. as tall as
@@ -369,7 +365,6 @@
 .route-pending .workspace-content { opacity: 0.32; pointer-events: none; user-select: none; }
 .route-loading-overlay { position: absolute; inset: 0; z-index: 10; display: grid; place-content: center; justify-items: center; gap: var(--space-10); color: var(--text-secondary); background: color-mix(in srgb, var(--surface) 58%, transparent); backdrop-filter: blur(1px); }
 .route-loading-mark { width: 24px; height: 24px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: sb-route-spin 700ms linear infinite; }
-@media (prefers-reduced-motion: reduce) { .route-loading-mark { animation: none; } }
 
 /* The drop order, widest trigger first -- spec v85 "Responsive behaviour",
    retriggered onto the declared breakpoints by v95 A2.

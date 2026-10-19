@@ -137,11 +137,6 @@ import { EmptyStateComponent } from './empty-state';
       border-radius: 50%;
       animation: sb-spin 700ms linear infinite;
     }
-    @media (prefers-reduced-motion: reduce) {
-      .spinner {
-        animation-duration: 2.4s;
-      }
-    }
   `,
 })
 export class ChartContainer {

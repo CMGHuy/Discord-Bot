@@ -275,18 +275,26 @@
    * file (--panel-radius 8px, --control-radius 6px, --chip-radius 999px,
    * --radius-sm 2px); --radius and --radius-chip are deleted.
    *
-   * Three durations, replacing the single 120ms. The previous rule was
-   * "120ms on state change and nothing on entrance", on the reasoning that
-   * with real-time push "something changed" is continuous and an entrance
-   * animation becomes a permanent flicker. That reasoning still holds for
-   * the thing it actually ruled out — a CARD flash on every push event —
-   * and that stays ruled out. What it wrongly excluded was motion scoped to
-   * the specific cell whose value changed, which is feedback rather than
-   * noise.
+   * Motion (spec v168). Entrances run once per route activation and never on
+   * a push or a refetch -- the permanent flicker the old "nothing on
+   * entrance" rule guarded against; RouteEntryService.claim() enforces it
+   * now. The two push reactions that do run are scoped to the value that
+   * changed: the cell flash and the count-up on a change.
    *
    *   --dur-instant  hover, press, focus ring
-   *   --dur-base     state change, value flash, bar easing
-   *   --dur-slow     layout: sidebar, panel reflow, route transition
+   *   --dur-base     state change, value flash, bar easing, Reduced fades
+   *   --dur-slow     layout: sidebar, panel reflow
+   *   --dur-enter, --dur-count, --dur-draw (tier 3): entrance, count-up, draw-in
+   *
+   * Every duration is multiplied by --motion-scale (tier 3): 1 normally, 0
+   * under the shell's Motion = Off, which styles/motion.css sets.
+   *
+   * The OS reduced-motion setting is deliberately ignored (spec v168 D2).
+   * Windows reports it whenever "Animation effects" is off, which is common
+   * on laptops, and honouring it left this admin with no motion and no way
+   * back. The shell's Motion control (On / Reduced / Off, persisted as
+   * shell.motion) is the one switch; every Off and Reduced fallback lives in
+   * styles/motion.css.
    */
   /* v80 D3: 2px, was 4px / 3px -- a pro terminal's corners, not a card's.
      Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
@@ -334,23 +342,6 @@
  * silently — so a `--bp-*` token would look usable and would not be. The
  * literals live in the media queries; the canonical list also lives in
  * `src/app/ui/breakpoints.ts` for the TS side. */
-
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --dur-instant: 0ms;
-    --dur-base: 0ms;
-    --dur-slow: 0ms;
-  }
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0ms !important;
-    scroll-behavior: auto !important;
-  }
-}
 
 /* ===== Tier 3: component tokens (spec v167 §3) ===== */
 /* What a panel, a control, a chip and a button LOOK like, named once, so a
