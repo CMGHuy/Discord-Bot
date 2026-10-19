@@ -3,14 +3,19 @@ import {
   Component,
   ElementRef,
   effect,
+  inject,
   input,
   output,
+  signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 
 import { Button } from './button';
 import { FocusTrap } from './focus-trap';
 import { ControlRow } from './layout';
+import { playExit } from './motion/exit';
+import { MotionService } from './motion/motion.service';
 
 /**
  * The gate in front of every destructive action — close, cancel, delete,
@@ -33,7 +38,10 @@ import { ControlRow } from './layout';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Button, ControlRow, FocusTrap],
   template: `
-    <dialog #dialog class="elev-overlay" (close)="cancelled.emit()" (cancel)="cancelled.emit()">
+    <!-- v168 §3a: Cancel and Escape (cancel, prevented) play the fade-out
+         first through requestClose(); the native close then emits once. -->
+    <dialog #dialog class="elev-overlay" [class.sb-pop-in]="!closing()"
+            (close)="onClosed()" (cancel)="onCancel($event)">
       <!-- Only present while open, so sbFocusTrap's constructor/ngOnDestroy
            pair runs on exactly open and close -- see focus-trap.ts. -->
       @if (open()) {
@@ -42,7 +50,7 @@ import { ControlRow } from './layout';
           <p class="consequence">{{ consequence() }}</p>
 
           <sb-control-row class="actions">
-            <button sb-button variant="ghost" type="button" (click)="close()">
+            <button sb-button variant="ghost" type="button" (click)="requestClose()">
               {{ cancelLabel() }}
             </button>
             <button
@@ -112,21 +120,46 @@ export class ConfirmDialog {
   readonly confirmed = output<void>();
   readonly cancelled = output<void>();
 
+  protected readonly closing = signal(false);
+
+  private readonly motion = inject(MotionService);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private cancelExit: () => void = () => undefined;
 
   constructor() {
     effect(() => {
       const element = this.dialog().nativeElement;
       // showModal() twice throws, and close() on a closed dialog fires a
       // spurious `close` event that would look like a cancellation.
-      if (this.open() && !element.open) element.showModal();
-      else if (!this.open() && element.open) element.close();
+      if (this.open() && !element.open) {
+        untracked(() => this.stopExit());
+        element.showModal();
+      } else if (!this.open() && element.open) element.close();
     });
   }
 
-  protected close(): void {
-    // Emits `cancelled` through the dialog's own close event, so dismissing
-    // with Escape and pressing Cancel take exactly one path.
-    this.dialog().nativeElement.close();
+  /** Cancel and Escape: one path, the fade-out first (v168 §3a). The
+   *  `cancelled` output still comes from the dialog's own close event. */
+  protected requestClose(): void {
+    const element = this.dialog().nativeElement;
+    if (this.closing() || !element.open) return;
+    this.closing.set(true);
+    this.cancelExit = playExit(element, 'sb-fade-out', this.motion.active(), () => element.close());
+  }
+
+  protected onCancel(event: Event): void {
+    event.preventDefault();
+    this.requestClose();
+  }
+
+  protected onClosed(): void {
+    this.stopExit();
+    this.cancelled.emit();
+  }
+
+  private stopExit(): void {
+    this.cancelExit();
+    this.cancelExit = () => undefined;
+    this.closing.set(false);
   }
 }
