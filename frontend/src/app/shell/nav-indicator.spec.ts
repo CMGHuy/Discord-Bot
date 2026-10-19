@@ -70,7 +70,10 @@ describe('NavIndicator (v168 §3 #6)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
-    (globalThis as { ResizeObserver?: unknown }).ResizeObserver = originalObserver;
+    // `'ResizeObserver' in window` is what lightweight-charts tests, so an
+    // absent observer must be deleted, not left behind as `undefined`.
+    if (originalObserver === undefined) delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+    else (globalThis as { ResizeObserver?: unknown }).ResizeObserver = originalObserver;
   });
 
   async function mount() {
