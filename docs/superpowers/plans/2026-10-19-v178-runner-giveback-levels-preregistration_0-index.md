@@ -282,8 +282,10 @@ replays at once (shared tree, CPU).
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
-| 1 | `2026-10-19-v178-runner-giveback-levels-preregistration_1-simulator-and-funnel.md` | V178-1..V178-4 | simulator modes in both walks, funnel logic, descriptive blocks |
-| 2 | `2026-10-19-v178-runner-giveback-levels-preregistration_2-script-and-runs.md` | V178-5..V178-11 | measurement script, full suite and merge, the runs with their gates, VALIDATION shot, record and close-out |
+| 1 | `2026-10-19-v178-runner-giveback-levels-preregistration_1-simulator-and-funnel.md` | V178-1..V178-3 | simulator modes in both walks, funnel logic |
+| 1b | `2026-10-19-v178-runner-giveback-levels-preregistration_1b-descriptive-blocks.md` | V178-4 | descriptive blocks |
+| 2 | `2026-10-19-v178-runner-giveback-levels-preregistration_2-script-and-runs.md` | V178-5..V178-10 | measurement script, full suite and merge, the runs with their gates, VALIDATION shot |
+| 3 | `2026-10-19-v178-runner-giveback-levels-preregistration_3-record-and-close-out.md` | V178-11 | results doc verdict, ledger row, closed row, /panel, /close-out |
 
 ## Task ledger
 
@@ -292,11 +294,11 @@ replays at once (shared tree, CPU).
 | V178-1 | Adaptive give-back modes in the v1 walk | 1 | opus | M `swingbot/core/planning/exit_sim.py`; C `tests/planning/test_giveback_levels.py` | `GIVEBACK_MODES`, `GIVEBACK_MODE`, `GIVEBACK_K`, `GIVEBACK_F`, `GIVEBACK_FLOOR_ATR`, `GIVEBACK_K_BOUNDS`, `GIVEBACK_F_BOUNDS`, `giveback_allowance(mode, extreme, entry, atr, *, k, f)`, `giveback_term(extreme, entry, atr, direction)`, `_giveback_term(ctx, j, extreme, atr_series)`, `_carried_level(runner_stop, level, carried)`, `_runner_bar_exit(..., gb_level)` |
 | V178-2 | v2 walk parity and the pinned witnesses | 1 | opus | M `swingbot/core/planning/exit_sim_v2.py`, `swingbot/core/planning/exit_sim.py` (delete `_giveback_ratchet`, `_stop_source`); C `tests/planning/test_exit_sim_v2_giveback_levels.py` | `_runner_bar_v2(..., gb_level)`; v1 = v2 on every arm |
 | V178-3 | Funnel logic: stages 0–2, stage-3 pick, Holm, cells | 1 | opus | C `swingbot/core/backtesting/giveback_levels_funnel.py`, `tests/backtesting/test_giveback_levels_funnel.py` | Funnel contract above (`ARMS`, `run_funnel`, `stage0/1/2`, `pick_stage3`, `holm`, `cells_looked_at`, `arm_trades`, `changed_count`, `paired_delta`, `week_interval`) |
-| V178-4 | Descriptive blocks | 1 | sonnet | C `swingbot/core/backtesting/giveback_levels_blocks.py`, `tests/backtesting/test_giveback_levels_blocks.py` | Blocks contract above (`describe_arm`, `seven_blocks`, `regime_split`, `SHAKEOUT_BARS`, `QUICK_STOP_BARS`, `TR_SHOCK_ATR`, `ADX_TREND_MIN`) |
+| V178-4 | Descriptive blocks | 1b | sonnet | C `swingbot/core/backtesting/giveback_levels_blocks.py`, `tests/backtesting/test_giveback_levels_blocks.py` | Blocks contract above (`describe_arm`, `seven_blocks`, `regime_split`, `SHAKEOUT_BARS`, `QUICK_STOP_BARS`, `TR_SHOCK_ATR`, `ADX_TREND_MIN`) |
 | V178-5 | Measurement script: arms, entries, rows | 2 | opus | C `scripts/backtest/measure_giveback_levels.py`, `tests/backtest_scripts/test_measure_giveback_levels.py` | `arm_settings`, `stage_window`, `frame_end`, `entry_row`, `rows_for`, `build_rows`, `write_rows`, `read_rows`; the row contract |
 | V178-6 | Measurement script: stages, refusals, report, validation file | 2 | opus | M `scripts/backtest/measure_giveback_levels.py`, `tests/backtest_scripts/test_measure_giveback_levels.py` | CLI above, `cmd_pilot/train/report/validation`, `validation_arms_blob`, `BESPOKE_REASON`, output files |
 | V178-7 | Full suite, merge, bot patch bump | 2 | sonnet | M `VERSION.json`, `version_history.json` (regenerated) | merged branch on `main` |
 | V178-8 | Frozen block and stage −1 pilot (gate) | 2 | sonnet | C `docs/superpowers/results/v178/pilot-close.json`, the results doc's frozen block | pilot verdicts |
 | V178-9 | Train simulation, stages 0–2 and the TRAIN-side sensitivity (gates) | 2 | sonnet | C `docs/superpowers/results/v178/funnel-close.json`, `docs/superpowers/results/v178/sensitivity-high_low.json` (only if an arm passes stage 0) | `stage3_arm` |
 | V178-10 | Stage 3: the one VALIDATION shot (conditional, partner go) | 2 | sonnet | C `docs/superpowers/results/v178/validation-readings.json`, `docs/superpowers/results/v178/validation-gate.md`, `docs/superpowers/results/v178/validation-gate.json` | stage-3 verdict |
-| V178-11 | Results doc, ledger row, closed row, /panel, /close-out | 2 | sonnet | C results doc; M `docs/superpowers/results/preregistration-ledger.jsonl`, `docs/claude/backtest-methodology.md`, `.claude/hooks/guardrails.py`; plan moved by `/close-out` | ledger row `v178-giveback-levels` |
+| V178-11 | Results doc, ledger row, closed row, /panel, /close-out | 3 | sonnet | C results doc; M `docs/superpowers/results/preregistration-ledger.jsonl`, `docs/claude/backtest-methodology.md`, `.claude/hooks/guardrails.py`; plan moved by `/close-out` | ledger row `v178-giveback-levels` |
