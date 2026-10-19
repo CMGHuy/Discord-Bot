@@ -3,12 +3,14 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PreferencesStore } from '../../stores/preferences.store';
+import { ViewportService } from '../breakpoints';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import {
   MOTION_MODES,
   MOTION_PREF_KEY,
   MotionService,
   MotionState,
+  defaultMotion,
   parseMotion,
   provideMotion,
 } from './motion.service';
@@ -23,12 +25,14 @@ function fakePreferences(loaded: boolean, values: Prefs = {}) {
   return { isLoaded, current, update, store: { isLoaded, values: current, update } };
 }
 
-function live(fake: ReturnType<typeof fakePreferences>): MotionService {
+/** `phone` stands in for ViewportService.isPhone (below 640px); a signal lets a spec resize. */
+function live(fake: ReturnType<typeof fakePreferences>, phone = signal(false)): MotionService {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       provideMotion('live'),
       { provide: PreferencesStore, useValue: fake.store },
+      { provide: ViewportService, useValue: { isPhone: phone } },
     ],
   });
   return TestBed.inject(MotionService);
@@ -51,6 +55,13 @@ describe('parseMotion', () => {
   });
 });
 
+describe('defaultMotion', () => {
+  it('is off on a phone and on everywhere else', () => {
+    expect(defaultMotion(true)).toBe('off');
+    expect(defaultMotion(false)).toBe('on');
+  });
+});
+
 describe('MotionService, live (spec v168 §1)', () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -62,8 +73,36 @@ describe('MotionService, live (spec v168 §1)', () => {
     expect(motion.mode()).toBe('on');
   });
 
-  it('defaults to on when nothing is stored', () => {
+  it('defaults to on when nothing is stored (tablet and desktop)', () => {
     expect(live(fakePreferences(true)).mode()).toBe('on');
+  });
+
+  it('defaults to off on a phone when nothing is stored', () => {
+    expect(live(fakePreferences(true), signal(true)).mode()).toBe('off');
+  });
+
+  it('a stored on wins on a phone too', () => {
+    expect(live(fakePreferences(true, { [MOTION_PREF_KEY]: 'on' }), signal(true)).mode()).toBe('on');
+  });
+
+  it('a stored reduced wins on a phone too', () => {
+    expect(live(fakePreferences(true, { [MOTION_PREF_KEY]: 'reduced' }), signal(true)).mode()).toBe('reduced');
+  });
+
+  it('a stored off stays off on a tablet or desktop', () => {
+    expect(live(fakePreferences(true, { [MOTION_PREF_KEY]: 'off' })).mode()).toBe('off');
+  });
+
+  it('the unchosen default follows the viewport when it crosses the phone breakpoint', () => {
+    const phone = signal(true);
+    const motion = live(fakePreferences(true), phone);
+    expect(motion.mode()).toBe('off');
+    phone.set(false);
+    expect(motion.mode()).toBe('on');
+  });
+
+  it('an unknown stored value falls back to the device default', () => {
+    expect(live(fakePreferences(true, { [MOTION_PREF_KEY]: 'sparkly' }), signal(true)).mode()).toBe('off');
   });
 
   it('restores a persisted value', () => {

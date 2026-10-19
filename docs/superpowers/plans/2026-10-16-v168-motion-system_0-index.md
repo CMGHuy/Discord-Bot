@@ -1,4 +1,4 @@
-# v168 Motion system: one motion file, a Motion preference (default On), ten animations. Implementation Plan, index
+# v168 Motion system: one motion file, a Motion preference (default On on tablet and desktop, Off on a phone), ten animations. Implementation Plan, index
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief MO7` or `grep -n "^### Task MO7:" -A 300 docs/superpowers/plans/2026-10-16-v168-motion-system_*.md`.
 
@@ -29,7 +29,7 @@
 
 ## Global Constraints
 
-- **Motion modes, verbatim:** `on` (default), `reduced`, `off`, plus the transient `pending` before `PreferencesStore.isLoaded()`. Unknown or missing `shell.motion` means `on`. The mode is stored only through `PreferencesStore.update` under the key `shell.motion` (never `localStorage`, plan v21's constraint).
+- **Motion modes, verbatim:** `on` (default), `reduced`, `off`, plus the transient `pending` before `PreferencesStore.isLoaded()`. Unknown or missing `shell.motion` means the device default (2026-10-19 amendment): `on` on tablet and desktop, `off` on a phone (`ViewportService.isPhone`); a stored value always wins. The mode is stored only through `PreferencesStore.update` under the key `shell.motion` (never `localStorage`, plan v21's constraint).
 - **The OS setting is ignored by design (spec D2).** No source file outside `*.spec.ts` calls `matchMedia` for reduced motion, and after MO6 the string `prefers-reduced-motion` appears in no `frontend/src` file except specs. The decision comment in `tokens.css` says "the OS reduced-motion setting", never the media-feature name (the inverted `tokens.spec.ts` case asserts the name is absent).
 - **TS reads the mode from `MotionService` only**, never from the `data-motion` attribute. CSS reads only the attribute.
 - **Durations (MO2):** `--dur-instant: calc(90ms * var(--motion-scale))`, `--dur-base: calc(160ms * var(--motion-scale))`, `--dur-slow: calc(260ms * var(--motion-scale))` changed in place; new, inside the tier-3 block: `--motion-scale: 1`, `--dur-enter: calc(420ms * var(--motion-scale))`, `--dur-count: calc(900ms * var(--motion-scale))`, `--dur-draw: calc(1200ms * var(--motion-scale))`, `--flash-up-text: var(--pos)`, `--flash-down-text: var(--neg)`, `--panel-shadow-lift: 0 10px 28px rgba(0, 0, 0, .35)`. `--ease-out` stays `cubic-bezier(0.2, 0.8, 0.3, 1)`, `--ease-spring` stays `cubic-bezier(0.34, 1.4, 0.64, 1)`. `[data-motion=off] { --motion-scale: 0; }` lives in `motion.css`, never in `tokens.css`.

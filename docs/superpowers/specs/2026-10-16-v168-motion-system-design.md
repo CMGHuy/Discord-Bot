@@ -1,4 +1,4 @@
-# v168 — Motion system: one motion file, a Motion preference (default On), ten animations
+# v168 — Motion system: one motion file, a Motion preference (default On on tablet and desktop, Off on a phone), ten animations
 
 **Version:** ui 1.24.1 · bot 2.5.2 (at writing)
 **Bump:** ui minor; bot none. Every screen gains motion, and the shell gains a Motion setting. The Discord bot is untouched.
@@ -33,7 +33,7 @@ The flicker argument still holds for **re-animating on a push**, and that stays 
 
 | Mode | `data-motion` | What runs |
 |---|---|---|
-| **On** (default) | `on` | everything in §3 |
+| **On** (default on tablet and desktop) | `on` | everything in §3 |
 | **Reduced** | `reduced` | **No transform-based motion.** Entrances (#1, #2) become a plain opacity fade at `--dur-base`. There is no count-up (#3: the final value shows at once), no draw-in (#9), no hover lift (only the border and glow change), no ping, no ambient drift, and the **tape is frozen**. The cell flash (#8), the drawer and dialog fade (no slide), the nav indicator (instant move, colour fade) and the skeleton shimmer (a static tint instead) stay. |
 | **Off** | `off` | No decorative motion. Every animation and transition **keeps its existing non-motion fallback** (table below) rather than simply stopping. |
 
@@ -223,3 +223,7 @@ The plan-briefer's pass (`.superpowers/briefs/2026-10-16-v168-motion-system.md`)
     - `flash.ts:37-47` is actually :41-46, and the Drawer class runs to about :443.
     - Specs run with `cd frontend && npx ng test --watch=false --include '<glob>'`, not `npx vitest run`.
     - TypeScript has no radon. Complexity < 15 is held by review.
+
+## Amendment (2026-10-19): the default follows the device
+
+Partner decision: until someone chooses a mode, motion is **On on tablet and desktop and Off on a phone** (below `sm`, 640px; `ViewportService.isPhone`). A stored `shell.motion` always wins on every device, and the unchosen default follows the viewport live (a rotation across 640px flips it). Implemented in `MotionService` (`defaultMotion`, `parseMotion(stored, fallback)`).

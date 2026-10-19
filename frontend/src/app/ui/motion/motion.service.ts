@@ -1,6 +1,7 @@
 import { Injectable, InjectionToken, Provider, Signal, computed, inject, signal } from '@angular/core';
 
 import { PreferencesStore } from '../../stores/preferences.store';
+import { ViewportService } from '../breakpoints';
 
 /** The three choices the Motion control offers (spec v168 §1). */
 export type MotionMode = 'on' | 'reduced' | 'off';
@@ -11,9 +12,17 @@ export const MOTION_MODES: readonly MotionMode[] = ['on', 'reduced', 'off'];
 /** Stored only through PreferencesStore, never localStorage (plan v21). */
 export const MOTION_PREF_KEY = 'shell.motion';
 
-/** A stored value, validated rather than trusted: anything unknown is On. */
-export function parseMotion(stored: unknown): MotionMode {
-  return MOTION_MODES.includes(stored as MotionMode) ? (stored as MotionMode) : 'on';
+/**
+ * A stored value, validated rather than trusted: anything unknown is the
+ * default for the device (On on tablet and desktop, Off on a phone).
+ */
+export function parseMotion(stored: unknown, fallback: MotionMode = 'on'): MotionMode {
+  return MOTION_MODES.includes(stored as MotionMode) ? (stored as MotionMode) : fallback;
+}
+
+/** What nobody has chosen yet: motion on tablet and desktop, none on a phone (below `sm`). */
+export function defaultMotion(isPhone: boolean): MotionMode {
+  return isPhone ? 'off' : 'on';
 }
 
 /**
@@ -51,8 +60,10 @@ export function provideMotion(mode: MotionState | 'live'): Provider {
  * **The OS reduced-motion setting is ignored by design (spec D2).** Windows
  * reports it whenever "Animation effects" is off, which is common on
  * laptops, and honouring it left the admin with no motion and no way back.
- * The Motion control (default On) is the switch, so this never asks the
- * browser for that media feature.
+ * The Motion control is the switch, so this never asks the browser for that
+ * media feature. Until the user picks a mode the default follows the device:
+ * On on tablet and desktop, Off on a phone (`ViewportService.isPhone`); a
+ * stored choice always wins, on every device.
  *
  * `pending` until PreferencesStore has loaded (it also counts as loaded
  * when the GET fails), so a user who chose Off never sees a cold-load burst.
@@ -62,6 +73,7 @@ export class MotionService {
   private readonly fixed = signal(inject(MOTION_FIXED));
   /** Injected only when following preferences: a fixed-mode spec needs no HttpClient. */
   private readonly preferences = this.fixed() === null ? inject(PreferencesStore) : null;
+  private readonly viewport = this.fixed() === null ? inject(ViewportService) : null;
 
   readonly mode: Signal<MotionState> = computed(() => this.fixed() ?? this.stored());
   /** Everything runs: count-up, draw-in, lift, ping, drift. */
@@ -80,6 +92,6 @@ export class MotionService {
   private stored(): MotionState {
     const preferences = this.preferences!;
     if (!preferences.isLoaded()) return 'pending';
-    return parseMotion(preferences.values()[MOTION_PREF_KEY]);
+    return parseMotion(preferences.values()[MOTION_PREF_KEY], defaultMotion(this.viewport!.isPhone()));
   }
 }
