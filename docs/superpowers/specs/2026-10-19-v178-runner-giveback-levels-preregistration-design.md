@@ -210,13 +210,15 @@ The comparison is **paired on the same entries**, against the live fixed 5%
 ## Phases
 
 **Phase A: simulator and measurement (this spec).** Add the two families to
-`giveback_stop` and to the simulators, behind
-`RUNNER_GIVEBACK_MODE` ∈ {`pct` (default), `range`, `profit_share`} plus the
-arm parameters, via the standard arm producer (`measure_arms.py`, v100).
-The default `pct` keeps the live v176 rule and all existing tests unchanged.
-Nothing in `plan_manager.py` changes. The new fields are `_SEARCH_CLASSES`
-"excluded" until reachability requires otherwise (`scan_params`,
-`reachability` edits only where the funnel needs them).
+`giveback_stop` and to the simulators as **simulator-only module constants**
+(`GIVEBACK_MODE` ∈ {`pct` (default), `range`, `profit_share`}, `GIVEBACK_K`,
+`GIVEBACK_F`, next to the v176 `GIVEBACK_EXTREME_BASIS`), set by the
+measurement script. They are not `.env` fields: `plan_manager.py` calls
+`giveback_level` and `runner_giveback_pct`, so a mode read from config inside
+them would change live behaviour on a SIGHUP. The default `pct` keeps the live
+v176 rule and all existing tests unchanged, and nothing in `plan_manager.py`
+changes. The measurement runs through a bespoke script on the v176 template
+(`scripts/backtest/measure_runner_giveback.py`), not the standard arm producer.
 
 **Phase B: live parity, only after a stage-3 pass.** The live tick path and the
 bar catch-up path need the arm's level from `atr_fn` and the stored extreme.
@@ -291,6 +293,49 @@ descriptive block 6 reports.
   unstamped or wrong-stage; a result file never overwritten; the stage-1 family
   rule and the per-fold changed-outcome floor are unit-tested on synthetic folds.
 - The live path is untouched: the existing v176 tests pass unmodified.
+
+## Code facts the plan must honour
+
+From the code brief (`.superpowers/briefs/2026-10-19-v178-runner-giveback-levels-preregistration.md`);
+where the wording above and these differ, these win.
+
+- `_safe_atr_value` is `targets.py:134` and substitutes 2% of entry when ATR is
+  NaN or ≤ 0 — a replaced term, not "no term". The new modes get their own
+  guard: ATR NaN, zero or missing yields no term, and test (c) asserts that.
+  `runner_floor` is defined at `exit_sim.py:304` (`:555-556` is a call site).
+- The standard arm producer (`measure_arms.py`) refuses any knob that is not
+  REACHABLE in `reachability.REGISTRY`, and `REGISTRY` must equal
+  `searchable_attrs()` exactly. The new knobs stay out of `_SEARCH_CLASSES`,
+  so a bespoke producer is used (`validate_component.py --bespoke-instrument`,
+  its reason recorded in the result), as v176 did. Control B
+  (`RUNNER_GIVEBACK_ENABLED=false`) is an excluded knob too.
+- Funnel plumbing is partly new code, in the bespoke script, behind unit
+  tests: `stage_mde` takes a typed `--train-effect-r`, so the script computes
+  the pooled fold-train ΔExpR (the fold-train windows are nested, all starting
+  2018-06-01) and passes it; `--stage selection` is the v72 win-rate selector and
+  `harvest_select.py` requires `lo95 > 0` and ignores `train_folds`, so stage 1
+  is the spec's own rule (`plateau_report` per family plus the family-wide
+  same-sign rule); `backtest_wf.gate` (`:205`) already gives 0.05R degradation
+  and 2-of-3, but counts closed trades, so the "30 changed outcomes per fold"
+  floor is added in the script. `gate_expectancy_harvest` (`:255`) exists but is
+  not wired in and is not used. The Holm adjustment has no existing code
+  (`stats.ledger_qvalues` is Benjamini–Hochberg); it is a small function in the
+  script.
+- Frictions: the standard producer books none (`ArmTrade.r_multiple` is gross).
+  The script applies them after the fact with `expectancy_attribution.net_r`
+  (`:110`), as v176 did; `frictions.py` has only `apply_frictions` and
+  `commission_r`.
+- Descriptive blocks 2–7 need data `ArmTrade` lacks (exit index, price, stop
+  source, ATR, stop-move count): the script derives them from the simulator's
+  own results, with the v1 walk's `trace` where a move counter is needed.
+- New scripts under `scripts/backtest/` carry no date or year literal, call
+  `add_instrument_arg` and one reader (`window_for`, `spec_from_args`,
+  `require_v1`), per `tests/backtesting/instrument/test_date_literal_guard.py`.
+- `.claude/hooks/guardrails.py` denies a `tune_strategy.py` or
+  `run_backtest_range.py` command that names a closed knob. The new knobs are
+  not on its list and `measure_*.py` commands are not checked. If a v178 row
+  is later closed, its knobs join that list and the methodology table in the
+  same commit (a test pins both ways).
 
 ## Panel review
 
