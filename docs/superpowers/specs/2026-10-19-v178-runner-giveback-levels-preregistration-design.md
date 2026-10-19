@@ -192,7 +192,8 @@ The comparison is **paired on the same entries**, against the live fixed 5%
   therefore done for the tightest arm (R k = 0.75), for each family's best
   arm and for the survivor, **TRAIN-side only** (fold-train and fold-test).
   Until it is read, a close-basis result for a tight arm is stated as an
-  upper bound on the live result. VALIDATION is read once, for the gating
+  upper bound on the live result. If every arm is refused at stage 0, the
+  test ends there and the sensitivity is not run. VALIDATION is read once, for the gating
   stage-3 run, and never for the sensitivity.
 - **Stage-3 readings fixed now.** Beside the gating arm-vs-A reading, the
   record reports A-vs-B and arm-vs-B on VALIDATION. v176 found A no better
