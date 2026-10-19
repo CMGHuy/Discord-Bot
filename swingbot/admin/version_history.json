@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-19 17:49:44 UTC",
+  "generated_at": "2026-10-19 20:07:09 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.30.0",
+    "ui": "1.31.0",
     "bot": "2.12.0"
   },
   "releases": [
@@ -1889,6 +1889,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-19",
+      "last_seen": "2026-10-19",
+      "commit": "80f3ef29",
+      "subject": "release(ui): 1.31.0 -- Motion system: one motion file, Motion preference (On on tablet and desktop, Off on a phone), ten animations (v168)",
+      "versions": {
+        "ui": "1.31.0",
+        "bot": "2.12.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
