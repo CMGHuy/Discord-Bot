@@ -64,7 +64,7 @@ import { ConnectionState } from '../stores/connection.store';
        live/degraded/dead) is not money (NG52's colour review) -- degraded
        and dead both mean the same caution (what you are reading may be
        stale) and the label is what tells them apart, not colour. */
-    .dot.live { background: var(--text); animation: pulse 2s ease-out infinite; }
+    .dot.live { background: var(--text); animation: sb-pulse-dim 2s ease-out infinite; }
     /* Out of session hours the stream is still up but nothing is coming down
        it, and a pulse in that state claims activity that is not happening --
        it reads as "prices are moving" on an evening when they are not. The
@@ -89,7 +89,6 @@ import { ConnectionState } from '../stores/connection.store';
        it rather than relying on a 6px dot to carry the difference. */
     .status.dead { color: var(--warn); }
     .bot { color: var(--warn); }
-    @keyframes pulse { 50% { opacity: 0.35; } }
     @media (prefers-reduced-motion: reduce) {
       .dot.live { animation: none; }
     }

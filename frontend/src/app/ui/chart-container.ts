@@ -135,12 +135,7 @@ import { EmptyStateComponent } from './empty-state';
       border: 2px solid var(--border-strong);
       border-top-color: var(--accent);
       border-radius: 50%;
-      animation: spin 700ms linear infinite;
-    }
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
+      animation: sb-spin 700ms linear infinite;
     }
     @media (prefers-reduced-motion: reduce) {
       .spinner {

@@ -104,9 +104,8 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
       height: var(--control-h);
       border-radius: var(--radius-sm);
       background: var(--surface-raised);
-      animation: pulse 1.4s var(--ease-out) infinite;
+      animation: sb-pulse-soft 1.4s var(--ease-out) infinite;
     }
-    @keyframes pulse { 50% { opacity: 0.45; } }
 
     .empty-wrap { text-align: center; }
     .reason {

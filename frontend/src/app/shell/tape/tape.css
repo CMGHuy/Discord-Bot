@@ -53,12 +53,10 @@
    incident, 2026-09-14: the whole tape read as illegible overlapping text. */
 .track { display: inline-flex; align-items: center; white-space: nowrap;
          flex-shrink: 0;
-         animation-name: tape-slide; animation-timing-function: linear;
+         animation-name: sb-tape-slide; animation-timing-function: linear;
          animation-iteration-count: infinite; will-change: transform; }
 .viewport:hover .track { animation-play-state: paused; }
 .viewport:focus-within .track { animation-play-state: paused; }
-@keyframes tape-slide { from { transform: translateX(0); }
-                        to   { transform: translateX(-50%); } }
 @media (prefers-reduced-motion: reduce) {
   .track { animation: none; }
   /* The track freezes at translateX(0); without a scroll affordance every
