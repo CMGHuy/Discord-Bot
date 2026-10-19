@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import {
   Signal,
   WritableSignal,
@@ -12,13 +12,15 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteTitleService } from '../routing/route-title.service';
+import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { CLOCK } from '../ui/clock';
+import { provideMotion } from '../ui/motion/motion.service';
 import { Shell } from './shell';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
@@ -147,6 +149,18 @@ describe('shell navigation', () => {
     expect(strip!.previousElementSibling).toBeNull();
   });
 
+  it("paints the ambient glow as the shell's first child, hidden from assistive tech (v168 §3 #10)", () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const shell = (f.nativeElement as HTMLElement).querySelector('.shell') as HTMLElement;
+
+    const first = shell.firstElementChild as HTMLElement;
+    expect(first.classList).toContain('ambient');
+    expect(first.getAttribute('aria-hidden')).toBe('true');
+    expect(first.children).toHaveLength(0);
+    expect(shell.querySelectorAll('.ambient')).toHaveLength(1);
+  });
+
   it('loads the tape once on construction', () => {
     // This only proves the constructor's one-time `this.tape.load()` --
     // NOT that `Shell` reacts to a `scan` event, which it does not do and
@@ -233,24 +247,22 @@ describe('shell navigation', () => {
     expect((f.nativeElement as HTMLElement).querySelector('.page-subtitle')).toBeNull();
   });
 
-  it('marks the active entry with an accent rail rather than colour alone', () => {
+  it('marks the active entry with a rail plus tint and weight, not colour alone', () => {
+    // v168 §3 #6: the rail is one sliding sb-nav-indicator in the sidebar,
+    // no longer a per-link border; the active link keeps the tint and the
+    // weight, so the state still has three cues.
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
-    const link = (f.nativeElement as HTMLElement).querySelector('.nav a')!;
-    link.classList.add('active');
-    f.detectChanges();
-    // The rule must exist in the component stylesheet; colour alone fails
-    // contrast guidance for state, which is why this asserts a border.
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('.sidebar > sb-nav-indicator').length).toBe(1);
     const styles = [...document.styleSheets]
       .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
       .map((rule) => rule.cssText);
-    // Not a single `.includes('.nav a.active')` -- Angular's emulated
-    // encapsulation inserts an `[_ngcontent-*]` attribute selector between
-    // `.nav` and `a.active`, so that exact substring never appears in the
-    // compiled stylesheet even when the rule is present.
-    expect(styles.some((text) =>
-      text.includes('.nav') && text.includes('a.active') && text.includes('border-left')))
-      .toBe(true);
+    // Not a single `.includes('.nav a.active')` -- emulated encapsulation
+    // inserts an `[_ngcontent-*]` attribute between `.nav` and `a.active`.
+    const active = styles.filter((text) => text.includes('.nav') && text.includes('a.active'));
+    expect(active.some((text) => text.includes('background') && text.includes('font-weight'))).toBe(true);
+    expect(active.some((text) => text.includes('border-left-color'))).toBe(false);
   });
 
   it('keeps the version block pinned to the foot of the rail', () => {
@@ -335,5 +347,134 @@ describe('shell.css breakpoints', () => {
 
     expect(widths.length).toBeGreaterThan(0);
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+});
+
+describe('shell motion preference (v168 §1)', () => {
+  const html = document.documentElement;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: TapeStore, useValue: { load: vi.fn(), visible: signal(false), rows: signal([]), asOf: signal(null) } },
+        provideMotion('live'),
+      ],
+    });
+  });
+
+  afterEach(() => {
+    delete html.dataset['motion'];
+  });
+
+  function flushPreferences(preferences: Record<string, unknown>): void {
+    TestBed.inject(HttpTestingController)
+      .expectOne((request) => request.method === 'GET' && request.url.endsWith('/system/preferences'))
+      .flush({ preferences });
+  }
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it('starts the cold load as pending in index.html, before any script runs', () => {
+    const source = readFileSync(join(process.cwd(), 'src/index.html'), 'utf8');
+    expect(source).toMatch(/<html lang="en" data-motion="pending">/);
+  });
+
+  it('keeps <html data-motion> pending until preferences load', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('pending');
+  });
+
+  it('defaults to on once preferences load without a stored mode', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    flushPreferences({});
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('on');
+  });
+
+  it('restores a stored mode onto <html>', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    flushPreferences({ 'shell.motion': 'reduced' });
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('reduced');
+  });
+
+  it('falls back to on for an unknown stored value', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    flushPreferences({ 'shell.motion': 'sparkly' });
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('on');
+  });
+
+  it('writes shell.motion and data-motion when the control is used', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    flushPreferences({});
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('sb-profile-menu .avatar')!.click();
+    fixture.detectChanges();
+    const off = Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .motion-control .segment'))
+      .find((button) => button.textContent!.trim() === 'Off')!;
+    off.click();
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('off');
+    expect(TestBed.inject(PreferencesStore).values()['shell.motion']).toBe('off');
+  });
+});
+
+describe('ambient live cues (v168 §3 #10)', () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+
+  /** The first `<selector> { ... }` rule, verbatim. */
+  function ruleOf(css: string, selector: string): string {
+    const at = css.indexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThanOrEqual(0);
+    return css.slice(at, css.indexOf('}', at) + 1);
+  }
+
+  it('isolates the shell, so the fixed glow layer sits above --bg and under every pane', () => {
+    const css = read('src/app/shell/shell.css');
+    expect(ruleOf(css, '.shell')).toContain('isolation: isolate;');
+    const ambient = ruleOf(css, '.ambient');
+    for (const declaration of [
+      'position: fixed;',
+      'inset: -10%;',
+      'z-index: -1;',
+      'pointer-events: none;',
+      'background: var(--glow-ambient);',
+    ]) {
+      expect(ambient).toContain(declaration);
+    }
+    // The drift lives in styles/motion.css, per mode (On only, static on a phone).
+    expect(ambient).not.toContain('animation');
+  });
+
+  it('rings the live dot with a ping, never while resting or with the bot down', () => {
+    const source = read('src/app/shell/connection-status.ts');
+    expect(source).toMatch(/\.dot\s*\{[^}]*position:\s*relative;/s);
+    expect(source).toMatch(/\.dot\.live::after\s*\{[^}]*animation:\s*sb-ping 2s ease-out infinite;/s);
+    expect(source).toMatch(/\.dot\.live::after\s*\{[^}]*background:\s*inherit;/s);
+    expect(source).toMatch(
+      /\.dot\.live\.resting::after,\s*\.dot\.bot-down::after\s*\{\s*animation:\s*none;\s*opacity:\s*0;\s*\}/s,
+    );
+  });
+
+  it('sweeps the scan strip with an accent gradient, same keyframe and timing', () => {
+    const css = read('src/app/shell/scan-progress.css');
+    expect(css).toMatch(/\.fill\.sweeping\s*\{[^}]*background:\s*linear-gradient\(90deg, transparent, var\(--accent\)\);/s);
+    expect(css).toMatch(/\.fill\.sweeping\s*\{[^}]*animation:\s*sb-scan-sweep 1\.4s ease-in-out infinite;/s);
   });
 });

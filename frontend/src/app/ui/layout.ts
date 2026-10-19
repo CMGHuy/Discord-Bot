@@ -9,12 +9,15 @@ import {
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 
 import { Viewport, ViewportService } from './breakpoints';
 import { FocusTrap } from './focus-trap';
 import { Icon, IconName } from './icon';
+import { playExit } from './motion/exit';
+import { MotionService } from './motion/motion.service';
 import { isInline } from './priority';
 
 /* Spec 3's layout inventory: panel, tab bar, split view, drawer. */
@@ -31,7 +34,7 @@ import { isInline } from './priority';
   selector: 'sb-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="panel sb-panel">
+    <section class="panel sb-panel sb-lift">
       @if (heading(); as text) {
         <header>
           <h2 class="sb-label">{{ text }}</h2>
@@ -333,21 +336,30 @@ export class ControlRow {
  *
  * `<dialog>` again, for the same reasons as `ConfirmDialog`: the browser owns
  * the top layer, Escape, focus trapping and making the background inert.
+ *
+ * Its own close paths (the × button, Escape, a backdrop click) play an exit
+ * first (spec v168 §3a): `requestClose()` sets `closing`, plays
+ * `.sb-drawer-out` (a sinking sheet below 640px, styles/motion.css), and only
+ * then closes the dialog, so the body stays mounted for the exit. Under Motion
+ * Off or pending it closes at once, as before.
  */
 @Component({
   selector: 'sb-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FocusTrap],
   template: `
-    <dialog #dialog class="drawer elev-overlay" (close)="closed.emit()" (cancel)="closed.emit()"
-            (click)="onDialogClick($event)">
+    <!-- (cancel) is Escape: it is prevented and routed through requestClose()
+         so the exit plays; the native close then fires (close) once. -->
+    <dialog #dialog class="drawer elev-overlay" [class.sb-drawer-in]="!closing()"
+            (close)="onClosed()" (cancel)="onCancel($event)" (click)="onDialogClick($event)">
       <!-- Only present while open, so sbFocusTrap's constructor/ngOnDestroy
            pair runs on exactly open and close -- see focus-trap.ts. -->
       @if (open()) {
         <div sbFocusTrap class="drawer-content">
+          <div class="drag-handle" aria-hidden="true"></div>
           <header>
             <h2>{{ heading() }}</h2>
-            <button type="button" class="close" aria-label="Close" (click)="dismiss()">×</button>
+            <button type="button" class="close" aria-label="Close" (click)="requestClose()">×</button>
           </header>
           <div class="body"><ng-content /></div>
         </div>
@@ -402,8 +414,18 @@ export class ControlRow {
     }
     .close:hover { color: var(--text); }
     .body { padding: var(--space-14); overflow-y: auto; }
+    /* v168 §3a: below 640px the drawer is a bottom sheet rising from the
+       foot of the screen, with a drag handle and rounded top corners (its
+       other edges sit flush, as on desktop); 640-1023px it is 85vw from the
+       right; from 1024px the width above. */
+    .drag-handle { display: none; }
     @media (max-width: 639px) {
-      .drawer { width: 100vw; }
+      .drawer { margin: auto 0 0; width: 100vw; height: auto; max-height: 85dvh; }
+      .drawer.elev-overlay { border-radius: var(--panel-radius) var(--panel-radius) 0 0; border-width: 1px 0 0; }
+      .drag-handle { display: block; width: 36px; height: 4px; margin: var(--space-8) auto 0; border-radius: var(--radius-sm); background: var(--border-strong); }
+    }
+    @media (min-width: 640px) and (max-width: 1023px) {
+      .drawer { width: 85vw; }
     }
   `,
 })
@@ -412,13 +434,19 @@ export class Drawer {
   readonly heading = input('');
   readonly closed = output<void>();
 
+  protected readonly closing = signal(false);
+
+  private readonly motion = inject(MotionService);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private cancelExit: () => void = () => undefined;
 
   constructor() {
     effect(() => {
       const element = this.dialog().nativeElement;
-      if (this.open() && !element.open) element.showModal();
-      else if (!this.open() && element.open) element.close();
+      if (this.open() && !element.open) {
+        untracked(() => this.stopExit());
+        element.showModal();
+      } else if (!this.open() && element.open) element.close();
     });
   }
 
@@ -431,12 +459,31 @@ export class Drawer {
     const box = element.getBoundingClientRect();
     const inside = event.clientX >= box.left && event.clientX <= box.right
       && event.clientY >= box.top && event.clientY <= box.bottom;
-    if (!inside) this.dismiss();
+    if (!inside) this.requestClose();
   }
 
-  protected dismiss(): void {
-    // Through the dialog's own close event, so the button and Escape are one
-    // path rather than two that can drift.
-    this.dialog().nativeElement.close();
+  /** The × button, Escape and the backdrop: one path, exit first. */
+  protected requestClose(): void {
+    const element = this.dialog().nativeElement;
+    if (this.closing() || !element.open) return;
+    this.closing.set(true);
+    this.cancelExit = playExit(element, 'sb-drawer-out', this.motion.active(), () => element.close());
+  }
+
+  protected onCancel(event: Event): void {
+    event.preventDefault();
+    this.requestClose();
+  }
+
+  /** The native close, whoever caused it: report it once. */
+  protected onClosed(): void {
+    this.stopExit();
+    this.closed.emit();
+  }
+
+  private stopExit(): void {
+    this.cancelExit();
+    this.cancelExit = () => undefined;
+    this.closing.set(false);
   }
 }

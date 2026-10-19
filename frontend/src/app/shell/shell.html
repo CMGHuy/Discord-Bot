@@ -1,5 +1,7 @@
 <div class="shell" [class.railed]="railed()" [class.overlay]="overlay()"
      [class.overlay-open]="overlayOpen()">
+  <!-- v168 §3 #10: the page's one ambient glow, under everything (shell.css). -->
+  <div class="ambient" aria-hidden="true"></div>
   <!-- Below sm the sidebar is an overlay, so something has to summon it. -->
   @if (overlay()) {
     <button sb-button variant="icon" class="menu-button" type="button"
@@ -9,6 +11,9 @@
   }
 
   <nav class="sidebar" [attr.aria-hidden]="overlay() && !overlayOpen() ? 'true' : null">
+    <!-- v168 §3 #6: one rail that slides to the active entry. Absolutely
+         placed (shell.css), so it takes no part in the sidebar's flex gap. -->
+    <sb-nav-indicator />
     <div class="mark">
       <!-- Collapsed, the mark is the icon alone: a name clipped to three
            letters reads as a rendering fault rather than as a choice. D3 --
@@ -133,7 +138,9 @@
           {{ now() }}
         </span>
       </div>
-      <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()" (signedOut)="logout()" />
+      <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()"
+                       [motion]="motionMode()" (motionChanged)="setMotion($event)"
+                       (signedOut)="logout()" />
     </header>
 
     <!-- Engaged killswitch is shell-level and unmissable: it means the bot
@@ -157,7 +164,7 @@
         [running]="connection.scanRunning()"
         [progress]="connection.scanProgress()"
       />
-      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
+      <div class="workspace-content" sbRouteEntrance [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
       @if (routeLoading.visible()) {
         <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
       }

@@ -232,14 +232,8 @@ const PIN_KEYS = ['ticker', 'symbol'];
       border: 2px solid var(--border-strong);
       border-top-color: var(--accent);
       border-radius: 50%;
-      animation: spin 700ms linear infinite;
+      animation: sb-spin 700ms linear infinite;
       z-index: 1;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .loading-spinner { animation-duration: 2.4s; }
     }
 
     /* NG54. Cells are white-space:nowrap by design — a wrapped price is
@@ -325,18 +319,11 @@ const PIN_KEYS = ['ticker', 'symbol'];
 
     /* A pulse, not a hard on/off flash: WCAG's flash-rate guidance exists
        for a reason, and an opacity/background fade reads as "attention"
-       without the seizure risk of a true blink. Respects
-       prefers-reduced-motion -- the row still needs telling apart, so it
-       falls back to a steady tint rather than losing the signal entirely. */
+       without the seizure risk of a true blink. Under Motion = Off the row
+       still needs telling apart, so styles/motion.css falls it back to a
+       steady tint rather than losing the signal entirely. */
     .blink { animation: sb-row-blink 1.6s ease-in-out infinite; }
     .blink:hover { animation-play-state: paused; }
-    @keyframes sb-row-blink {
-      0%, 100% { background: transparent; }
-      50% { background: color-mix(in srgb, var(--warn) 16%, transparent); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .blink { animation: none; background: color-mix(in srgb, var(--warn) 10%, transparent); }
-    }
 
     /* A row whose data did not refresh with the rest of the table (Watchlist
        v85 R7-04) -- a steady tint, not a pulse: this is not urgent like an

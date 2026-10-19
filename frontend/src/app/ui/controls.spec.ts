@@ -1,6 +1,6 @@
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Button } from './button';
 import { ConfirmDialog } from './confirm-dialog';
@@ -8,6 +8,8 @@ import { FilterBar, FilterChip, FilterChips } from './filter-bar';
 import { Checkbox, Select, TextInput } from './form-controls';
 import { installDialogPolyfill } from '../testing/dialog-polyfill';
 import { ControlRow, Drawer, Tab, TabBar } from './layout';
+import { EXIT_FALLBACK_MS } from './motion/exit';
+import { provideMotion } from './motion/motion.service';
 
 /* NG41 — input and layout.
  *
@@ -371,5 +373,172 @@ describe('input and layout components', () => {
 
     expect(host.drawerOpen()).toBe(false);
     expect(drawer.open).toBe(false);
+  });
+});
+
+/* -- v168 §3a: dialogs play their exit before closing ---------------------
+ *
+ * The global test default is Motion = Off (src/test-setup.ts), under which
+ * every close is immediate and the cases above hold unchanged. These opt in.
+ * jsdom never fires animationend, so each case dispatches it on the dialog
+ * (or lets EXIT_FALLBACK_MS run out). */
+describe('dialog exits under Motion = On (v168 §3a)', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideMotion('on')] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  const el = (): HTMLElement => fixture.nativeElement;
+  const q = <T extends Element>(selector: string) => el().querySelector(selector) as T;
+  const end = (target: Element) => target.dispatchEvent(new Event('animationend'));
+  const escape = (target: Element) => {
+    const event = new Event('cancel', { cancelable: true });
+    target.dispatchEvent(event);
+    return event;
+  };
+
+  function openDrawer(): HTMLDialogElement {
+    host.drawerOpen.set(true);
+    fixture.detectChanges();
+    return q<HTMLDialogElement>('sb-drawer dialog');
+  }
+
+  function openConfirm(): HTMLDialogElement {
+    host.confirmOpen.set(true);
+    fixture.detectChanges();
+    return q<HTMLDialogElement>('sb-confirm-dialog dialog');
+  }
+
+  it('slides the drawer in while it is open', () => {
+    expect(openDrawer().classList).toContain('sb-drawer-in');
+  });
+
+  it('plays the drawer exit, keeping the body mounted, then closes on animationend', () => {
+    const drawer = openDrawer();
+    q<HTMLButtonElement>('sb-drawer .close').click();
+    fixture.detectChanges();
+    expect(drawer.open).toBe(true);
+    expect(drawer.classList).toContain('sb-drawer-out');
+    expect(drawer.classList).not.toContain('sb-drawer-in');
+    expect(q('sb-drawer .drawer-content')).not.toBeNull();
+    expect(host.drawerOpen()).toBe(true);
+
+    end(drawer);
+    fixture.detectChanges();
+    expect(drawer.open).toBe(false);
+    expect(host.drawerOpen()).toBe(false);
+    expect(drawer.classList).not.toContain('sb-drawer-out');
+  });
+
+  it('sends Escape down the same path instead of the native close', () => {
+    const drawer = openDrawer();
+    const event = escape(drawer);
+    fixture.detectChanges();
+    expect(event.defaultPrevented).toBe(true);
+    expect(drawer.open).toBe(true);
+    expect(drawer.classList).toContain('sb-drawer-out');
+    end(drawer);
+    fixture.detectChanges();
+    expect(host.drawerOpen()).toBe(false);
+  });
+
+  it('sends a backdrop click down the same path', () => {
+    const drawer = openDrawer();
+    // jsdom's rect is all zeros, so any point with a positive x is outside it.
+    drawer.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 600, clientY: 300 }));
+    fixture.detectChanges();
+    expect(drawer.classList).toContain('sb-drawer-out');
+    end(drawer);
+    fixture.detectChanges();
+    expect(drawer.open).toBe(false);
+  });
+
+  it('closes on the fallback timer if animationend never arrives', () => {
+    const drawer = openDrawer();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    q<HTMLButtonElement>('sb-drawer .close').click();
+    vi.advanceTimersByTime(EXIT_FALLBACK_MS);
+    fixture.detectChanges();
+    expect(drawer.open).toBe(false);
+    expect(host.drawerOpen()).toBe(false);
+  });
+
+  it('pops the confirm dialog in and fades it out before cancelling, once', () => {
+    const dialog = openConfirm();
+    expect(dialog.classList).toContain('sb-pop-in');
+    const cancel = q<HTMLButtonElement>('sb-confirm-dialog button');
+    cancel.click();
+    cancel.click();
+    fixture.detectChanges();
+    expect(dialog.classList).toContain('sb-fade-out');
+    expect(dialog.open).toBe(true);
+    expect(host.cancelled).toBe(0);
+
+    end(dialog);
+    fixture.detectChanges();
+    expect(host.cancelled).toBe(1);
+    expect(host.confirmed).toBe(0);
+    expect(dialog.open).toBe(false);
+  });
+
+  it('sends Escape on the confirm dialog down the same path', () => {
+    const dialog = openConfirm();
+    const event = escape(dialog);
+    fixture.detectChanges();
+    expect(event.defaultPrevented).toBe(true);
+    expect(dialog.classList).toContain('sb-fade-out');
+    end(dialog);
+    fixture.detectChanges();
+    expect(host.cancelled).toBe(1);
+  });
+
+  it('plays the in-animation again when reopened after an exit', () => {
+    const drawer = openDrawer();
+    q<HTMLButtonElement>('sb-drawer .close').click();
+    end(drawer);
+    fixture.detectChanges();
+    openDrawer();
+    expect(drawer.classList).toContain('sb-drawer-in');
+    expect(drawer.classList).not.toContain('sb-drawer-out');
+  });
+});
+
+describe('dialog exits under Motion = Off (v168 §3a)', () => {
+  let fixture: ComponentFixture<Host>;
+  let host: Host;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideMotion('off')] });
+    fixture = TestBed.createComponent(Host);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('closes at once on Escape and on a backdrop click, adding no exit class', () => {
+    host.drawerOpen.set(true);
+    fixture.detectChanges();
+    const drawer = (fixture.nativeElement as HTMLElement).querySelector<HTMLDialogElement>('sb-drawer dialog')!;
+    const event = new Event('cancel', { cancelable: true });
+    drawer.dispatchEvent(event);
+    fixture.detectChanges();
+    expect(event.defaultPrevented).toBe(true);
+    expect(drawer.open).toBe(false);
+    expect(drawer.classList).not.toContain('sb-drawer-out');
+
+    host.drawerOpen.set(true);
+    fixture.detectChanges();
+    drawer.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 600, clientY: 300 }));
+    fixture.detectChanges();
+    expect(drawer.open).toBe(false);
+    expect(host.drawerOpen()).toBe(false);
   });
 });

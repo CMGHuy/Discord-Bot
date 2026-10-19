@@ -55,10 +55,18 @@ export type ButtonVariant =
       font-weight: 600;
       cursor: pointer;
       transition: background var(--transition), border-color var(--transition),
-        color var(--transition);
+        color var(--transition), filter var(--dur-base) var(--ease-out),
+        transform var(--dur-instant) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
     }
     :host(:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
     :host([disabled]) { opacity: 0.45; cursor: default; }
+    /* Press (v168 §3 #5), every device. On touch, where nothing hovers, the
+       press also tints; an inset shadow is a fill, not elevation, so G3
+       does not count it. */
+    :host(:not([disabled]):active) { transform: scale(.97); }
+    @media (hover: none) {
+      :host(:not([disabled]):active) { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }
+    }
 
     /* Blue is interactive-only, which is exactly what a primary button is --
        the one place the accent is allowed to carry weight. v80 D1 split the
@@ -73,7 +81,11 @@ export type ButtonVariant =
        hover swaps to --btn-fill-hover, and v168 animates it with filter and
        glow. */
     :host(.primary) { background: var(--btn-fill); color: var(--on-accent); }
-    :host(.primary:not([disabled]):hover) { background: var(--btn-fill-hover); }
+    /* v168 §3 #5: a gradient cannot transition, so the hover's change is
+       carried by brightness (which can) and by the accent glow that
+       styles/motion.css casts -- a component never casts its own elevation
+       shadow (primitives.spec.ts G3). */
+    :host(.primary:not([disabled]):hover) { background: var(--btn-fill-hover); filter: brightness(1.1); }
 
     /* A hairline on whatever ground it sits on. Panels separate by hairlines
        now (v80 D3), and a raised fill made every secondary look pressed. */

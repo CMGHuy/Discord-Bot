@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { MetricTone } from './metric-card';
+import { CountUp } from './motion/count-up';
 
 /**
  * Deprecated (v80 D4): use `sb-figure` inside an `sb-figure-strip`.
@@ -15,10 +16,12 @@ import { MetricTone } from './metric-card';
 @Component({
   selector: 'sb-metric-chip',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CountUp],
   template: `
     <div class="chip">
       <span class="label">{{ label() }}</span>
-      <span class="value num" [class]="valueClass()">{{ display() }}</span>
+      <span class="value num" [class]="valueClass()" [sbCountUp]="value()"
+            [countFormat]="format()" [countKey]="'chip:' + label()"></span>
     </div>
   `,
   styles: `
@@ -65,12 +68,12 @@ export class MetricChip {
   readonly unit = input('');
   readonly decimals = input(2);
 
-  /** An em dash, matching `MetricCard`: a metric with no value yet is not a
-   *  metric that is zero. */
-  protected readonly display = computed(() => {
-    const value = this.value();
-    if (value === null) return '—';
-    return `${value.toFixed(this.decimals())}${this.unit()}`;
+  /** The value's text for any number; `null` is CountUp's em dash, matching
+   *  `MetricCard`: a metric with no value yet is not a metric that is zero. */
+  protected readonly format = computed(() => {
+    const decimals = this.decimals();
+    const unit = this.unit();
+    return (value: number) => `${value.toFixed(decimals)}${unit}`;
   });
 
   protected readonly valueClass = computed(() => {

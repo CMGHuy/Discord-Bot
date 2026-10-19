@@ -97,6 +97,15 @@ const REQUIRED = [
   '--glow-accent',
   '--glow-ambient',
   '--scrim-soft',
+
+  // v168 §1, motion (tier 3)
+  '--motion-scale',
+  '--dur-enter',
+  '--dur-count',
+  '--dur-draw',
+  '--flash-up-text',
+  '--flash-down-text',
+  '--panel-shadow-lift',
 ];
 
 describe('design tokens', () => {
@@ -110,8 +119,13 @@ describe('design tokens', () => {
     expect(CSS).toMatch(/^\s*--control-h:\s*28px;/m);
   });
 
-  it('honours prefers-reduced-motion', () => {
-    expect(CSS).toContain('prefers-reduced-motion: reduce');
+  /* Inverted by v168 (spec D2): the OS reduced-motion setting is ignored by
+   * design, and the shell's Motion control drives data-motion instead. The
+   * media-feature name must not come back into this file, comments included. */
+  it('ignores the OS reduced-motion setting: no media block; motion.css carries the Off rules', () => {
+    expect(CSS).not.toContain('prefers-reduced-motion');
+    const motion = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8');
+    expect(motion).toMatch(/\[data-motion="?off"?\]\s*\{\s*--motion-scale:\s*0;\s*\}/);
   });
 
   it('has dropped --space-28', () => {
@@ -416,5 +430,63 @@ describe('v167 §3: the tier-3 component tokens', () => {
     ];
     const offenders = files.filter((file) => GRADIENT_AS_COLOUR.test(readFileSync(file, 'utf8')));
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * v168 §1: every duration is a calc() over --motion-scale, so one declaration
+ * in styles/motion.css ([data-motion=off] { --motion-scale: 0; }) zeroes them
+ * all. The scale's default and every new v168 token sit INSIDE v167's tier-3
+ * block (spec v168 amendment 9): dump_tokens.py and resolve-token.ts read
+ * every top-level :root, and motion.css is outside both, so the default must
+ * live here. Reduced is not a multiplier (spec §1): the scale is only ever 1
+ * or 0.
+ */
+describe('v168 §1: motion tokens', () => {
+  const declared = (source: string, name: string) =>
+    source.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
+
+  const DURATIONS: Record<string, string> = {
+    '--dur-instant': '90ms',
+    '--dur-base': '160ms',
+    '--dur-slow': '260ms',
+    '--dur-enter': '420ms',
+    '--dur-count': '900ms',
+    '--dur-draw': '1200ms',
+  };
+
+  it('scales every duration by --motion-scale', () => {
+    for (const [name, ms] of Object.entries(DURATIONS)) {
+      expect(declared(CSS, name), name).toBe(`calc(${ms} * var(--motion-scale))`);
+    }
+  });
+
+  it('declares the scale once, as 1, in tier 3', () => {
+    expect(declared(TIER3, '--motion-scale')).toBe('1');
+    expect([...CSS.matchAll(/^\s*--motion-scale:/gm)]).toHaveLength(1);
+  });
+
+  it('puts every new v168 token inside the tier-3 block', () => {
+    const NEW = ['--dur-enter', '--dur-count', '--dur-draw', '--flash-up-text', '--flash-down-text', '--panel-shadow-lift'];
+    for (const name of NEW) {
+      expect(TIER3, name).toMatch(new RegExp(`^\\s*${name}:`, 'm'));
+      expect([...CSS.matchAll(new RegExp(`^\\s*${name}:`, 'gm'))], name).toHaveLength(1);
+    }
+  });
+
+  it('keeps both easings exactly as they were', () => {
+    expect(declared(CSS, '--ease-out')).toBe('cubic-bezier(0.2, 0.8, 0.3, 1)');
+    expect(declared(CSS, '--ease-spring')).toBe('cubic-bezier(0.34, 1.4, 0.64, 1)');
+  });
+
+  it('gives the flash text and the hover-lift shadow their spec values', () => {
+    expect(declared(TIER3, '--flash-up-text')).toBe('var(--pos)');
+    expect(declared(TIER3, '--flash-down-text')).toBe('var(--neg)');
+    expect(declared(TIER3, '--panel-shadow-lift')).toBe('0 10px 28px rgba(0, 0, 0, .35)');
+  });
+
+  it('reaches jsdom with the scale already resolved', () => {
+    expect(resolveToken('--dur-base')).toBe('calc(160ms * 1)');
+    expect(resolveToken('--motion-scale')).toBe('1');
   });
 });

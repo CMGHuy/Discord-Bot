@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { CountUp } from './motion/count-up';
+
 /** How a value should be coloured. `pnl` is the ONLY one that may go green
  *  or red -- those two colours mean P&L direction and nothing else. */
 export type MetricTone = 'plain' | 'pnl' | 'caution';
@@ -17,12 +19,12 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
 @Component({
   selector: 'sb-metric-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CountUp],
   template: `
-    <div class="card">
+    <div class="card sb-lift">
       <span class="label">{{ label() }}</span>
-      <span class="value num" [class]="valueClass()">
-        {{ display() }}
-      </span>
+      <span class="value num" [class]="valueClass()" [sbCountUp]="value()"
+            [countFormat]="format()" [countKey]="'metric:' + label()"></span>
       @if (sub(); as subtext) {
         <span class="sub num" [class]="subClass()">{{ subtext }}</span>
       }
@@ -63,9 +65,10 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
       font-size: var(--register-figure, var(--text-metric));
       font-weight: 700;
       line-height: 1.1;
-      /* No transition on the value: with push, numbers change whenever the
-         bot moves, and an animated number is unreadable at a glance --
-         which is the only way this card is ever read. */
+      /* v168: the number counts up once when the route is entered, and eases
+         to a new value when a push changes it -- 900ms, scoped to this one
+         number, and only under Motion = On (CountUp). It never re-counts on a
+         refetch, so a glance still reads a settled number. */
     }
     .sub {
       color: var(--text-muted);
@@ -90,12 +93,13 @@ export class MetricCard {
    *  rule as the main value). Leave null for a plain muted sub line. */
   readonly subPnl = input<number | null>(null);
 
-  /** An em dash, not "0" or "—%": a metric with no value yet is not a
-   *  metric that is zero, and on a balance those differ by everything. */
-  protected readonly display = computed(() => {
-    const value = this.value();
-    if (value === null) return '—';
-    return `${value.toFixed(this.decimals())}${this.unit()}`;
+  /** The value's text for any number. `null` is CountUp's em dash, not "0"
+   *  or "—%": a metric with no value yet is not a metric that is zero, and on
+   *  a balance those differ by everything. */
+  protected readonly format = computed(() => {
+    const decimals = this.decimals();
+    const unit = this.unit();
+    return (value: number) => `${value.toFixed(decimals)}${unit}`;
   });
 
   protected readonly subClass = computed(() => {

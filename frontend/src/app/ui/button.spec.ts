@@ -106,3 +106,48 @@ describe('button touch floor', () => {
     expect(read(path)).not.toMatch(/min-height:\s*0\b/);
   });
 });
+
+/* Spec v168 §3 #5. The primary gradient cannot transition (v167 §3), so
+ * hover brightens it with a filter and motion.css adds the accent glow; every
+ * enabled button presses to .97; on touch the press also tints. */
+describe('v168 #5: hover and press', () => {
+  const MOTION = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ');
+
+  it('brightens the primary gradient on hover', () => {
+    const hover = rule(':host(.primary:not([disabled]):hover)');
+    expect(hover).toContain('background: var(--btn-fill-hover)');
+    expect(hover).toContain('filter: brightness(1.1)');
+  });
+
+  it('presses every enabled button to .97', () => {
+    expect(rule(':host(:not([disabled]):active)')).toContain('transform: scale(.97)');
+  });
+
+  it('transitions the press and the brightness, not the gradient', () => {
+    const host = rule(':host');
+    expect(host).toContain('transform var(--dur-instant) var(--ease-out)');
+    expect(host).toContain('filter var(--dur-base) var(--ease-out)');
+  });
+
+  it('tints the press on touch with an inset, so it is not elevation', () => {
+    const block = SOURCE.match(/@media \(hover: none\) \{([\s\S]*?)\n    \}/);
+    expect(block).not.toBeNull();
+    expect(block![1]).toContain(':host(:not([disabled]):active) { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }');
+  });
+
+  it('casts no elevation shadow itself: the glow lives in motion.css', () => {
+    const own = [...SOURCE.matchAll(/box-shadow:\s*([^;]+);/g)]
+      .map(([, value]) => value.trim())
+      .filter((value) => !value.startsWith('inset'));
+    expect(own).toEqual([]);
+    expect(MOTION).toContain(
+      '@media (hover: hover) { button[sb-button].primary:not([disabled]):hover { box-shadow: var(--glow-accent); } }',
+    );
+  });
+
+  it('does not scale the press under Motion = Reduced', () => {
+    expect(MOTION).toContain('[data-motion=reduced] button[sb-button]:not([disabled]):active { transform: none; }');
+  });
+});

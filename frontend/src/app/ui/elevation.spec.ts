@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { allSources, stripComments } from './testing/all-sources';
+
 const GLOBAL = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
 const ui = (file: string) => readFileSync(join(process.cwd(), 'src/app/ui', file), 'utf8');
 
@@ -39,8 +41,17 @@ describe('the elevation ladder', () => {
     expect(rule).not.toMatch(/rgba?\(/);
   });
 
-  it('grounds the page on the ambient glow over --bg', () => {
-    expect(GLOBAL).toMatch(/body\s*\{[^}]*background:\s*var\(--glow-ambient\),\s*var\(--bg\);/s);
+  /* v168 §3 #10 (amendment 9): the glow moved off body onto one fixed shell
+   * layer, so there is exactly one per page and it can drift. */
+  it('the ambient glow is one shell layer, not the body', () => {
+    expect(GLOBAL).toMatch(/body\s*\{[^}]*background:\s*var\(--bg\);/s);
+    expect(stripComments(GLOBAL)).not.toContain('--glow-ambient');
+    const painters = allSources()
+      .filter(({ source }) => stripComments(source).includes('var(--glow-ambient)'))
+      .map(({ name }) => name);
+    expect(painters).toEqual(['app/shell/shell.css']);
+    const shellHtml = readFileSync(join(process.cwd(), 'src/app/shell/shell.html'), 'utf8');
+    expect(shellHtml.match(/class="ambient"/g)).toHaveLength(1);
   });
 });
 
@@ -62,19 +73,19 @@ describe('the panel primitives paint the panel tokens (v167 §3)', () => {
 
   it('sb-panel puts .sb-panel on its section and paints .panel from the tokens', () => {
     const source = ui('layout.ts');
-    expect(source).toContain('<section class="panel sb-panel">');
+    expect(source).toContain('<section class="panel sb-panel sb-lift">');
     expectPanelRule(source.match(/\.panel\s*\{[^}]*\}/)![0]);
   });
 
   it('sb-figure-strip carries .sb-panel on its host and paints :host from the tokens', () => {
     const line = ui('figure.ts').split('\n').find((l) => l.includes("selector: 'sb-figure-strip'"))!;
-    expect(line).toMatch(/host:\s*\{\s*class:\s*'sb-panel'/);
+    expect(line).toMatch(/host:\s*\{\s*class:\s*'sb-panel sb-lift'/);
     expectPanelRule(line.match(/:host\s*\{[^}]*\}/)![0]);
   });
 
   it('sb-chart-container puts .sb-panel on its frame and paints .frame from the tokens', () => {
     const source = ui('chart-container.ts');
-    expect(source).toContain('<figure class="frame sb-panel" [style.height.px]="height()">');
+    expect(source).toContain('<figure class="frame sb-panel sb-lift" [style.height.px]="height()">');
     expectPanelRule(source.match(/\.frame\s*\{[^}]*\}/)![0]);
   });
 });

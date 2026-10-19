@@ -132,14 +132,15 @@ describe('no colour is declared outside the token files', () => {
  * tokens.css under its own rules (spec v167 §5). palette.css is tier 1, the
  * only file free to hold hued literals. tokens.css keeps hex only on the
  * seven names jsdom and chart-palette.spec read as literals, and
- * rgb()/rgba() only inside the three tier-3 shadow and scrim tokens, black
+ * rgb()/rgba() only inside the four tier-3 shadow and scrim tokens, black
  * or white at some alpha. A hued glow derives from a tier-2 token with
  * color-mix(), so a palette change reaches it. hsl() is in neither file.
  */
 const TOKENS_HEX_ALLOWED = new Set([
   '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6', '--quality-4',
 ]);
-const TIER3_RGB = new Set(['--panel-shadow', '--shadow-overlay', '--scrim-soft']);
+/* v168 amendment 8: the hover lift's deeper shadow is black at an alpha too. */
+const TIER3_RGB = new Set(['--panel-shadow', '--shadow-overlay', '--scrim-soft', '--panel-shadow-lift']);
 
 describe('tokens.css holds no hued literal (v167 §5)', () => {
   const styles = (file: string) =>
@@ -159,7 +160,7 @@ describe('tokens.css holds no hued literal (v167 §5)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps rgb()/rgba() inside the three tier-3 tokens only', () => {
+  it('keeps rgb()/rgba() inside the four tier-3 shadow and scrim tokens only', () => {
     const offenders = declarations
       .filter(({ name, value }) => rgbIn(value).length > 0 && !TIER3_RGB.has(name))
       .map(({ name }) => name);
@@ -232,9 +233,12 @@ describe('every allowlist entry is justified', () => {
 });
 
 /**
- * G3 -- a non-inset box-shadow appears in exactly two rules, both global:
+ * G3 -- a non-inset box-shadow appears in exactly two rules of styles.css,
  * .sb-panel (in flow, --panel-shadow) and .elev-overlay (out of flow,
- * --shadow-overlay), in that order in styles.css.
+ * --shadow-overlay), in that order, plus exactly two interaction shadows in
+ * styles/motion.css (spec v168 §3 #5): the hover lift (--panel-shadow-lift)
+ * and the primary button's hover glow (--glow-accent), in that order. No
+ * component casts one itself.
  *
  * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
  * this gate used to allow exactly one shadow, the L3 rule (spec v54 D2's
@@ -260,6 +264,12 @@ describe('G3: only the two elevation rules cast a shadow', () => {
   it('styles.css casts exactly two, both tokens, the panel first', () => {
     const global = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
     expect(shadows(global)).toEqual(['var(--panel-shadow)', 'var(--shadow-overlay)']);
+  });
+
+  it('motion.css casts exactly the hover lift and the primary-button glow (v168 #5)', () => {
+    const motion = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(shadows(motion)).toEqual(['var(--panel-shadow-lift)', 'var(--glow-accent)']);
   });
 });
 
@@ -296,4 +306,22 @@ describe('no raw or retired radius (v167 §3)', () => {
     expect(tokens).not.toMatch(/--radius:/);
     expect(tokens).not.toMatch(/--radius-chip:/);
   });
+});
+
+/* Spec v168 §3 #5: the shared panels and cards lift on hover. The class only
+ * marks them; styles/motion.css owns the motion (hover devices only, the
+ * translate under Motion = On only). Asserted as source text: the class is
+ * static markup, and jsdom has no hover. */
+describe('v168 #5: panels and cards carry .sb-lift', () => {
+  const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+  const CASES: [string, RegExp][] = [
+    ['src/app/ui/layout.ts', /<section class="[^"]*\bpanel\b[^"]*\bsb-lift\b[^"]*">/],
+    ['src/app/ui/figure.ts', /host: \{[^}]*class: '[^']*\bsb-panel sb-lift\b[^']*'/],
+    ['src/app/ui/chart-container.ts', /<figure class="[^"]*\bframe\b[^"]*\bsb-lift\b[^"]*"/],
+    ['src/app/ui/stat-tile.ts', /<div class="tile sb-lift"/],
+    ['src/app/ui/metric-card.ts', /<div class="card sb-lift">/],
+  ];
+  for (const [path, marker] of CASES) {
+    it(`${path} marks its surface`, () => expect(source(path)).toMatch(marker));
+  }
 });

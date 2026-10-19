@@ -161,7 +161,7 @@ export interface StatusCellRow {
       border-radius: 50%;
       flex: none;
       background: currentColor;
-      animation-name: pulse;
+      animation-name: sb-pulse-blink;
       animation-timing-function: ease-in-out;
       animation-iteration-count: infinite;
     }
@@ -169,14 +169,8 @@ export interface StatusCellRow {
     .dot.toward_stop   { color: var(--neg); }
     .dot.neutral       { color: var(--text-muted); }
 
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 
-    /* The pulse says "this is live right now", which is exactly the kind of
-       motion someone with vestibular sensitivity has asked the OS to stop. */
-    @media (prefers-reduced-motion: reduce) {
-      .dot { animation: none; }
-      .fill { transition: none; }
-    }
+    /* Motion = Off steadies the dot and the fill: styles/motion.css. */
 
     .end { font-family: var(--font-mono); font-size: var(--text-chip); }
     .end.neg { color: var(--neg); }

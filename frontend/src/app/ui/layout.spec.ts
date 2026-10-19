@@ -114,7 +114,21 @@ describe('sb-control-row and sb-drawer on a phone (v80 D4)', () => {
     expect(SOURCE).not.toMatch(/\.stacked \{/);
   });
   it('sizes the drawer by the dynamic viewport', () => { expect(rule('.drawer')).toContain('height: 100dvh'); expect(rule('.drawer')).toContain('max-height: 100dvh'); });
-  it('takes the full width on a phone', () => expect(SOURCE).toMatch(/@media \(max-width: 639px\) \{\s*\.drawer \{ width: 100vw; \}/));
+  /* v168 §3a: below 640px the drawer is a bottom sheet, a geometry change
+   * and not only a keyframe; from 640 to 1023px it takes 85vw from the right. */
+  it('becomes a bottom sheet on a phone', () => {
+    // Anchored on the .drawer rule: the control row has its own 639px block
+    // earlier in the file.
+    const phone = SOURCE.match(
+      /@media \(max-width: 639px\) \{\s*\.drawer \{ margin: auto 0 0; width: 100vw; height: auto; max-height: 85dvh; \}([\s\S]*?)\n    \}/,
+    );
+    expect(phone).not.toBeNull();
+    expect(phone![1]).toMatch(/\.drawer\.elev-overlay \{ border-radius: var\(--panel-radius\) var\(--panel-radius\) 0 0; border-width: 1px 0 0; \}/);
+    expect(phone![1]).toMatch(/\.drag-handle \{ display: block;/);
+    expect(rule('.drag-handle')).toContain('display: none');
+  });
+  it('takes 85vw from the right on a tablet', () =>
+    expect(SOURCE).toMatch(/@media \(min-width: 640px\) and \(max-width: 1023px\) \{\s*\.drawer \{ width: 85vw; \}/));
   it('gives the close button a touch-sized target', () => expect(rule('.close')).toContain('min-height: var(--control-h)'));
 });
 

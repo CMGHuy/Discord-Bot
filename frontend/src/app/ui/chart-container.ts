@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 
 import { EmptyStateComponent } from './empty-state';
+import { DrawIn } from './motion/draw-in';
 
 /**
  * The frame every chart is drawn into — spec v14 Decision 10.
@@ -38,9 +39,9 @@ import { EmptyStateComponent } from './empty-state';
 @Component({
   selector: 'sb-chart-container',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [EmptyStateComponent],
+  imports: [EmptyStateComponent, DrawIn],
   template: `
-    <figure class="frame sb-panel" [style.height.px]="height()">
+    <figure class="frame sb-panel sb-lift" [style.height.px]="height()">
       @if (caption(); as text) {
         <figcaption>{{ text }}</figcaption>
       }
@@ -50,7 +51,8 @@ import { EmptyStateComponent } from './empty-state';
            zero and renders as nothing. The chart is PROJECTED into it rather
            than mounted from outside, so the container owns the element's
            lifetime and the chart component owns the canvas. -->
-      <div #surface class="surface" [class.hidden]="state() !== 'ready'">
+      <div #surface class="surface" [class.hidden]="state() !== 'ready'"
+           [sbDrawIn]="'chart:' + (caption() ?? '')" [drawReady]="state() === 'ready'">
         <ng-content />
       </div>
 
@@ -135,17 +137,7 @@ import { EmptyStateComponent } from './empty-state';
       border: 2px solid var(--border-strong);
       border-top-color: var(--accent);
       border-radius: 50%;
-      animation: spin 700ms linear infinite;
-    }
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .spinner {
-        animation-duration: 2.4s;
-      }
+      animation: sb-spin 700ms linear infinite;
     }
   `,
 })
