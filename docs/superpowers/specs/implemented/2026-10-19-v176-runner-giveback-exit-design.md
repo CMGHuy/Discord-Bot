@@ -1,8 +1,8 @@
 # v176 — Runner give-back exit: close the runner 5% off its best price
 
 **Version:** ui 1.30.0 · bot 2.11.0 (at writing)
-**Bump:** bot minor — every open runner gains a new, usually tighter stop, and runners already open move to it on the first tick after deploy.
-**Edge:** harvest — locks in more of a runner's favourable run before a reversal takes it back. Prediction: pooled paired runner-leg ΔR of unknown sign, with |Δ pooled ExpR| under 0.05R (two earlier runner-tightening rules on the same headroom both closed near 0.01R); not a capture-ratio claim (see `## Measurement`).
+**Bump:** bot minor — every open runner gains a new, usually tighter stop, and runners already open move to it on the first tick after deploy. (Shipped as bot 2.12.0; by the three-levels rule in `working-conventions.md` this would class as a patch. Recorded, not reverted.)
+**Edge:** harvest — locks in more of a runner's favourable run before a reversal takes it back. Prediction: pooled paired runner-leg ΔR of unknown sign, with |Δ pooled ExpR| under 0.05R (two earlier runner-tightening rules on the same headroom both closed near 0.01R); not a capture-ratio claim (see `## Measurement`). Measured (TRAIN, one look): NO-LIFT, ΔExpR +0.0030R [−0.0124, +0.0159] on the close basis, so the |Δ| < 0.05R bound held and the sign is undetermined.
 **Screen:** harvest-headroom docs/superpowers/results/2026-10-02-v123-runner-headroom.md
 **Panel:** risk-manager, veteran-trader, quant-researcher
 **Status:** spec written 2026-10-19 from a chat with the partner. Rule, scope (runners after TP1 only) and "apply to open trades now" were all decided by the partner in chat. Revised the same day after the panel (see `## Panel review`). Approved by the partner 2026-10-19, as written: `E` keeps taking extended-hours ticks.

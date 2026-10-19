@@ -1,7 +1,7 @@
 # v176 TRAIN measurement: runner give-back exit at 5%
 
-**Plan:** [v176 index](../plans/2026-10-19-v176-runner-giveback-exit_0-index.md) (V176-13)
-**Spec:** [v176 design](../specs/2026-10-19-v176-runner-giveback-exit-design.md) § Measurement
+**Plan:** [v176 index](../plans/implemented/2026-10-19-v176-runner-giveback-exit_0-index.md) (V176-13)
+**Spec:** [v176 design](../specs/implemented/2026-10-19-v176-runner-giveback-exit-design.md) § Measurement
 **Raw results:** `v176/train-close.json` (primary), `v176/train-high_low.json` (sensitivity), each with a `.provenance.json` sidecar
 **Looks:** one. Each basis ran once; both JSONs exist, and neither can be rewritten (the script refuses).
 
