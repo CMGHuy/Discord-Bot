@@ -2,10 +2,10 @@
 
 **Version:** ui 1.30.0 · bot 2.11.0 (at writing)
 **Bump:** bot minor — every open runner gains a new, usually tighter stop, and runners already open move to it on the first tick after deploy.
-**Edge:** harvest — locks in more of a runner's favourable run before a reversal takes it back. Prediction: higher runner capture; the effect on pooled `ExpR` is unknown in sign until measured (it also cuts runners that would have resumed).
+**Edge:** harvest — locks in more of a runner's favourable run before a reversal takes it back. Prediction: pooled paired runner-leg ΔR of unknown sign, with |Δ pooled ExpR| under 0.05R (two earlier runner-tightening rules on the same headroom both closed near 0.01R); not a capture-ratio claim (see `## Measurement`).
 **Screen:** harvest-headroom docs/superpowers/results/2026-10-02-v123-runner-headroom.md
 **Panel:** risk-manager, veteran-trader, quant-researcher
-**Status:** spec written 2026-10-19 from a chat with the partner. Rule, scope (runners after TP1 only) and "apply to open trades now" were all decided by the partner in chat.
+**Status:** spec written 2026-10-19 from a chat with the partner. Rule, scope (runners after TP1 only) and "apply to open trades now" were all decided by the partner in chat. Revised the same day after the panel (see `## Panel review`).
 
 ## Why
 
@@ -23,9 +23,24 @@ price, exit and take the profit. Example: long at 50, TP1 75, stop 25. The
 price runs to 100, so the give-back stop sits at 95. A fall to 95 closes the
 runner.
 
-v123 measured this headroom. Pooled TRAIN runner capture is 70.4% of MFE (mean
-runner 2.43R against mean MFE 3.77R, n = 3127), which is below the 75%
-no-headroom line.
+**The headroom, and the prior.** v123 measured pooled TRAIN runner capture at
+70.4% of MFE (mean runner 2.43R against mean MFE 3.77R, n = 3127). That figure
+was v123's description of its own baseline, not evidence that the gap can be
+captured.
+
+This is the **third** rule aimed at that headroom. Both earlier ones closed
+near zero:
+- v92 `ADAPTIVE_RUNNER_TRAIL`: ΔExpR between +0.0091R and −0.0045R across 9
+  cells;
+- v123 `hl_trail`: ΔExpR ≤ +0.0012R, with 29–57 of 8737 trades changing
+  outcome (`backtest-methodology.md` § Closed pre-registrations).
+
+The prior is therefore a pooled effect on the order of 0.01R. This rule ships
+on the partner's decision, not on a predicted lift.
+
+It is a different mechanism from both: a percent off the post-TP1 extreme,
+against v92's ATR tightening and v123's swing-low trail. It reopens no closed
+pre-registration.
 
 ## The rule
 
@@ -45,13 +60,19 @@ give-back level:
 It only ever tightens. The floor and the chandelier keep working unchanged.
 When `E` is `None` (no tick seen since TP1), there is no give-back term.
 
-Because the floor is always on the profit side of entry and the give-back term
-only binds when it is tighter than the floor, a give-back exit is always a
-win.
+**The level is always a win; the fill is not guaranteed to be.** The
+give-back term binds only when it is tighter than the floor, and the floor is
+on the profit side of entry, so the stop **level** always locks a profit. The
+**fill** can still be worse. The bar path fills with `gap_stop_fill` at the
+open (`plan_manager.py:1333`), and a real broker stop can gap the same way,
+through the level or past entry. The measurement reports give-back exits whose
+fill is worse than the level.
 
 **Out of scope:** plans before TP1 (`ACTIVE`), legacy trades without a
-`plan_id`, TP2 handling, the structure exit and the adaptive trail (both off
-in production). All behave exactly as today.
+`plan_id`, TP2 handling, and the adaptive trail (off in production). All
+behave exactly as today. The structure exit is also off in production. Its
+interaction with this rule is fixed in `## Where it changes` so that enabling
+it later cannot silently drop the give-back.
 
 ## Config
 
@@ -60,8 +81,14 @@ via SIGHUP and read at call time, never cached:
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
-| `RUNNER_GIVEBACK_ENABLED` | bool | `true` | Off restores today's behaviour exactly. |
+| `RUNNER_GIVEBACK_ENABLED` | bool | `true` | Off stops **new** give-back tightening. |
 | `RUNNER_GIVEBACK_PCT` | float | `5.0` | Percent of the best price; valid `0 < pct < 50`, else rejected by the schema. |
+
+**Off does not loosen.** `working_stop` is persisted and a runner stop never
+widens. A runner already tightened by the give-back keeps that stop after the
+flag is turned off or the percent is raised. Restoring the old stop on a given
+plan is a manual `working_stop` reset on production, done only when the
+partner asks for it. No automatic revert is built.
 
 The default is **on** by partner decision ("apply to open trades now"). This
 spec records that the default was not chosen by a backtest; the measurement
@@ -75,16 +102,23 @@ All the arithmetic lives in one pure helper, next to `chandelier_stop` in
 so live and backtest cannot drift on the formula.
 
 1. **Live tick path**, `PlanManager._step_partial`
-   (`swingbot/core/planning/plan_manager.py:1031`). Before the stop is read,
-   a new `_apply_giveback(plan)` tightens `plan.working_stop` against
-   `giveback_stop(plan.runner_high_close, …)`. It persists and logs a
-   `_plan_line("giveback stop", …)` only when the stop actually moves.
-   - This runs on **every** tick, not only on a new extreme. That is what
-     makes it reach plans already open at deploy: RKLB's extreme does not
-     change, so `_ratchet_chandelier`'s early return at `:1099` would never
-     reach it.
-   - `_ratchet_chandelier` (`:1092`) also applies the term when it records a
-     new extreme, so the stop moves on the same tick as the new best price.
+   (`swingbot/core/planning/plan_manager.py:1031`).
+   - **Extreme tracking moves out of `_ratchet_chandelier`.** Today
+     `runner_high_close` is updated only after the `atr_fn is None` early
+     return (`:1094`). A manager without `atr_fn` would leave `E` stale, and
+     the give-back would silently do nothing.
+   - A new `_track_extreme(plan, price, is_bull)` updates and persists the
+     extreme on every tick, before anything else in the step. The chandelier
+     reads that extreme. Production has `atr_fn` wired (`:1430`), so the
+     chandelier's own behaviour is unchanged.
+   - A new `_apply_giveback(plan)` then tightens `plan.working_stop` against
+     `giveback_stop(plan.runner_high_close, …)`. It persists and logs a
+     `_plan_line("giveback stop", …)` only when the stop actually moves.
+   - Both run **before** `_structure_runner_step` (`:1036`). A structure exit
+     can then never pre-empt the give-back on a tick that should have closed
+     on it.
+   - It runs on **every** tick, not only on a new extreme. That is what makes
+     it reach plans already open at deploy: RKLB's extreme does not change.
 2. **Bar catch-up path**, `PlanManager._check_bar_partial` (`:1323`). It
    tightens the stop the same way before its bar test. It uses the stored
    extreme, never the checked bar's own high or low (no intrabar lookahead),
@@ -93,10 +127,22 @@ so live and backtest cannot drift on the formula.
    `exit_sim_v2` counterpart (`exit_sim_v2.py:~166-181`). They apply the term
    from the extreme **close**, effective the next bar, the same way the
    chandelier is applied there. Gated by the same flag.
+   - The runner-phase result gains an internal `stop_source`
+     (`floor`/`trail`/`giveback`) beside the unchanged `runner_trail` reason
+     string. The measurement reads it.
    - **Known asymmetry:** live uses the extreme tick, the backtest uses the
-     extreme close, so live is slightly tighter. That asymmetry already
-     exists for the chandelier and is accepted here for the same reason: bars
-     carry no intraday sequence.
+     extreme close, so live is tighter. On a flat 5% band the tick/close gap
+     is a large share of the band on high-ATR names. The backtest therefore
+     measures a **looser** rule than the live one and can flatter it. The
+     measurement reports this gap rather than assuming it away
+     (`## Measurement`).
+
+**When it runs.** `poll` runs the full state machine every 60s outside the
+operator's quiet window (`INTRADAY_RTH_ONLY` + `is_quiet_hours`,
+`plan_manager.py:494-517`). That includes pre- and after-hours ticks, by the
+operator's 2026-09-14 choice recorded there. A breach during the quiet window
+exits on the first tick after it reopens, at that tick's price, not at the
+level.
 
 ## Exit reason: no new string
 
@@ -108,35 +154,64 @@ pattern-match these strings. They include `_STOPPED_REASONS`,
 one of those tables changed, and missing one fails silently. The give-back is
 a trailing stop, so the label is honest.
 
-To keep the rule measurable, the live runner leg carries
-`"stop_source": "giveback"` through `_close_runner`'s existing `extra`
-argument when the stop that fired equals the give-back level. Otherwise it
-carries `"trail"` or `"floor"`. Nothing reads the field yet. It exists for the
-post-ship measurement and for the book autopsy.
+The live runner leg carries `"stop_source": "giveback"` through
+`_close_runner`'s existing `extra` argument when the stop that fired equals
+the give-back level, otherwise `"trail"` or `"floor"`. The close embed
+(`lifecycle_embeds.py`) reads it: a give-back close adds one line naming the
+level and the best price it came from, for example "5% give-back from the low
+of 49.94: stop 52.44". The reason string is unchanged.
 
-## Open trades at deploy
+## Telling the reader
+
+A stop moved by the give-back reaches the reader through the existing
+execution-feed `stop_moved` notice. In the regular session, `_feed_bookkeeping`
+posts it whenever the resting stop has moved by at least `TRAIL_NOTIFY_MIN_R`
+from the last stop told (`plan_manager.py:465-469`, `stop_move_event` `:171`).
+`resting_stop` reads `working_stop`, so give-back moves are covered with no new
+plumbing.
+
+**The gap that remains:** a runner whose stop moves and is hit on the **same
+tick** gets only the close notice. That happens on deploy day for a runner
+already past its give-back level, and after a gap. The close event already
+carries `notified_stop` and `bot_stop` (`:456-457`), and the embed line above
+names the give-back. The deploy gate below covers deploy day.
+
+## Open trades at deploy: a hard gate
 
 No migration. The first tick after deploy tightens every open runner's
 `working_stop`.
 
+**Before the deploy step runs**, the plan's deploy task lists every open
+`PARTIAL` plan on production with:
+- its current `working_stop`;
+- `E`;
+- its computed give-back stop;
+- whether the last price is already past that stop, meaning it closes on the
+  first tick.
+
+That list is shown to the partner and recorded in the plan's results before
+the image is restarted. The reason: the partner holds real broker stops at
+the old levels (RKLB: 59.11), and the paper close will not move them.
+
 Expected: RKLB short, `E = 49.94`, gives `giveback = 52.44`. The last price
-was about 52.30 (2026-10-19), so the RKLB runner will most likely close on its
-first tick above 52.44, or stay open with a 52.44 stop if it falls again.
-Before deploy, the plan lists every open `PARTIAL` plan on production with its
-current stop and its computed give-back stop, so the partner sees what will
-move.
+was about 52.30 (2026-10-19).
 
 ## Risks (stated, accepted by the partner's decision)
 
 - **5% sits inside one day's normal range on volatile names.** RKLB's daily
-  ATR is about 8% of price. Such a runner will be shaken out by ordinary
-  noise more often than by a real reversal. This is the main way the rule can
-  lower `ExpR`, and the measurement below reports it per horizon. A follow-up
-  could scale `p` by ATR. That is not part of this spec.
+  ATR is about 8% of price, so 5% is about 0.6 ATR, and the rule can act like
+  "exit on the first bounce". This is the main way it can lower `ExpR`. A
+  follow-up could scale `p` by ATR. That is a new pre-registration, not a tweak
+  (`## Measurement`).
+- **Extended-hours prints set `E` for good.** By the operator's 2026-09-14
+  choice, the full machine runs on pre- and after-hours ticks. One thin print
+  can set an extreme the regular session never traded, and the give-back
+  tightens off it permanently. This rule inherits that choice rather than
+  overriding it. The measurement and the live tag let it be revisited.
 - **Real-money resting orders.** The partner trades from alerts with resting
-  broker orders. The bot moves only its paper stop. Moving the broker stop is
-  manual, and the Discord close notice arrives after the fact. No stop-moved
-  notice is added here.
+  broker orders. The bot moves only its paper stop. The `stop_moved` notice
+  (`## Telling the reader`) tells the reader to move the broker stop. Doing so
+  is manual.
 - **Pinned backtest numbers.** Default-on changes simulator output.
   - A test that pins a simulator figure is either re-pinned to the new
     measured value or pinned flag-off, decided per test and recorded in the
@@ -151,25 +226,105 @@ move.
   - long and short tighten;
   - never loosens when the floor or trail is already tighter;
   - `E is None` gives no term;
-  - flag off is byte-identical to today;
+  - flag off is byte-identical to today on a plan never tightened;
   - an existing plan whose extreme does not change still tightens (the RKLB
     case, as a fixture with its real numbers);
-  - the closing leg carries the right `stop_source`.
+  - the first post-deploy tick is already past the give-back level, so the
+    stop moves and the runner closes on one tick;
+  - an isolated spike print sets `E` (documents the accepted behaviour);
+  - a manager with `atr_fn=None` still tracks `E` and applies the give-back;
+  - with the structure exit enabled, the give-back still applies before it;
+  - the closing leg carries the right `stop_source`, and the close embed shows
+    the give-back line only for `giveback`.
 - Bar path: tightens before the bar test and does not use the bar's own
   extreme.
 - Simulator: flag off gives an identical trade list on an existing fixture;
-  flag on gives a give-back exit on a constructed run-up-and-reversal frame.
+  flag on gives a give-back exit tagged `stop_source = giveback` on a
+  constructed run-up-and-reversal frame.
 - Config: defaults, range validation, SIGHUP reload picks up a changed percent.
 
 ## Measurement (after ship, reported, not a gate)
 
-Run TRAIN through `backtest-runner` with the flag off, then on (5%). Report
-the following, pooled and per horizon, to the partner:
+**Frozen before TRAIN is read.** These match the v123 instrument, so the
+result is comparable to the headroom cited:
+- window: TRAIN 2020-01-01..2023-12-31 only. **VALIDATION is neither run nor
+  read**, so a future pre-registered give-back hypothesis keeps its one shot;
+- data source: the 75-ticker local backtest cache;
+- engines: `StrategyEngine.iter_trades` and `replay_scenarios`;
+- horizons: all ten;
+- `scale_out=True`;
+- non-zero frictions from `swingbot/core/edge/frictions.py` in both arms;
+- arms: the flag off, then on at 5%, on the same entries.
 
-- pooled `ExpR`;
-- win rate;
-- runner capture (the v123 instrument);
-- the runner exit mix.
+This run counts as **one look**, and a ledger row is appended to
+`preregistration-ledger.jsonl` so `ledger_qvalues` counts it.
+
+**Primary reading (one):** pooled paired per-trade runner-leg ΔR (on minus
+off), with a ticker-cluster bootstrap interval
+(`swingbot/core/backtesting/instrument/stats.py`) and `acceptance.mde_paired`.
+Reported with the count of trades whose outcome changed.
+
+**Descriptive only.** None of these is an effect claim. With 10 horizons and
+several metrics, one or two horizon "effects" at 5% are expected by chance,
+and the report says how many cells were looked at.
+- per-horizon paired ΔR, beside the distribution of `p × E / risk` per
+  horizon. 5% of price is more than 1R on short horizons and a fraction of 1R
+  on long ones;
+- the runner-leg R distribution and the floor-exit share;
+- runner capture against a **fixed** MFE window: the flag-off arm's own
+  window, so an earlier exit cannot shrink the denominator;
+- the exit mix by `stop_source`, including give-back exits with a fill worse
+  than the level;
+- dollars at fixed risk and max drawdown, off against on;
+- days from TP1 to exit, and how often a give-back exit is followed by a new
+  extreme within 10 bars (a shake-out, not a reversal);
+- a tick-versus-close sensitivity: the same run with `E` taken from bar
+  highs/lows instead of closes, as a bound on the live/backtest asymmetry.
+
+Win rate (TP1 touched) is **not** reported as a result. A post-TP1 rule cannot
+move it (`backtest-methodology.md` § Harvest gate, `win_rate_floor` SKIPPED;
+v92 recorded the same immunity).
+
+**Re-tuning is a new pre-registration.** If the partner wants a different
+percent, or an ATR-scaled `p`, after reading this report, that is a new
+hypothesis. Its grid is frozen before fold-train is read, and it passes Stage 1
+`plateau_report()` and then the harvest gate's one-shot VALIDATION. The best
+cell is not read off this report.
+
+**Live book.** Live give-back exits carry `stop_source`. A small offline
+script computes each one's counterfactual flag-off exit from daily bars. No
+live conclusion is drawn below 30 give-back exits.
 
 Changing the 5% or turning the flag off is the partner's call. It is not
 automatic.
+
+## Panel review
+
+Spec review, 2026-10-19 (risk-manager, veteran-trader, quant-researcher).
+
+- risk-manager 1: "always a win" overstated; gap fills can lose; measure fills worse than the level -- applied (§ The rule, § Measurement).
+- risk-manager 2: flag-off does not loosen persisted stops -- applied (§ Config).
+- risk-manager 3: extreme tracking sits behind the `atr_fn is None` return -- applied (`_track_extreme`, § Where it changes; test added).
+- risk-manager 4: deploy needs a hard gate listing old/new stops -- applied (§ Open trades at deploy).
+- risk-manager 5: backtest measures a looser rule than live -- applied (tick/close sensitivity in § Measurement).
+- risk-manager 6: simulator cannot isolate give-back exits -- applied (internal `stop_source` in the sim result).
+- risk-manager 7: dollars at fixed risk and drawdown missing -- applied (§ Measurement).
+- risk-manager 8: structure step can pre-empt the give-back -- applied (give-back runs before `_structure_runner_step`; test added).
+- veteran-trader 1 [BLOCKING]: no stop-moved notice after the alert -- rejected as stated: `stop_moved` already posts on any resting-stop move of at least `TRAIL_NOTIFY_MIN_R` in the regular session (`plan_manager.py:465-469`), and `resting_stop` reads `working_stop`. The real residual, a move and hit on the same tick, is applied: documented in § Telling the reader, covered on deploy day by the hard gate, and named in the close embed.
+- veteran-trader 2: close notice cannot show a give-back -- applied (close embed line from `stop_source`).
+- veteran-trader 3: extended-hours prints set `E` permanently -- rejected: the full machine on extended-hours ticks is the operator's 2026-09-14 decision (`plan_manager.py:494-512`); this spec inherits it, states the risk, and adds a test documenting it. Raised to the partner.
+- veteran-trader 4: polling and quiet-hours behaviour unstated -- applied (§ Where it changes, "When it runs").
+- veteran-trader 5: report timing since TP1 and shake-out rate -- applied (§ Measurement).
+- veteran-trader 6: non-zero frictions in both arms -- applied (§ Measurement).
+- veteran-trader 7: fixtures for a spike print and a first tick already past the level -- applied (§ Testing).
+- quant-researcher 1: capture prediction cannot fail because the MFE window shrinks -- applied (prediction is paired ΔR; capture uses a fixed window).
+- quant-researcher 2: third attempt on the same headroom; prior near 0.01R -- applied (§ Why).
+- quant-researcher 3: no magnitude in the prediction -- applied (`Edge:` bound under 0.05R).
+- quant-researcher 4: no paired statistic or interval -- applied (paired ΔR, cluster bootstrap, `mde_paired`).
+- quant-researcher 5: one primary reading, cells descriptive, ledger row -- applied.
+- quant-researcher 6: win rate cannot move -- applied (not reported as a result).
+- quant-researcher 7: a re-tuned percent is a new pre-registration -- applied.
+- quant-researcher 8: VALIDATION untouched -- applied.
+- quant-researcher 9: freeze data source, universe and engines -- applied (v123's setup).
+- quant-researcher 10: 5% is a different R on each horizon -- applied (`p × E / risk` per horizon).
+- quant-researcher 11: live tag needs a counterfactual and a minimum N -- applied (offline counterfactual, no conclusion below 30).
