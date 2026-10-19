@@ -1,5 +1,6 @@
 {
   "390": {
+    "defaultMode": "off",
     "route": {
       "mid": [
         "sb-enter"
@@ -26,6 +27,7 @@
     }
   },
   "768": {
+    "defaultMode": "on",
     "route": {
       "mid": [
         "sb-ambient-drift",
@@ -61,6 +63,7 @@
     }
   },
   "1440": {
+    "defaultMode": "on",
     "route": {
       "mid": [
         "sb-ambient-drift",

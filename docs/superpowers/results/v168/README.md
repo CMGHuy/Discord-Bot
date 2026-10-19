@@ -1,6 +1,10 @@
 # v168 motion system: evidence (MO18)
 
-Recorded 2026-10-19 against local stacks: before = `main` at f067dccc (:4123), after = branch `2026-10-16-v168-motion-system` at 35d3a53b (:4124, `main` merged in). API: `admin_ui.py` on :1234 against the local `swingbot_prod_replica` (production copy of 2026-10-19 17:58Z). The SPA is served under `/app/`; the script adds the prefix itself. Script: `motion-evidence.cjs` (this directory); raw samples: `animations.json`.
+Recorded 2026-10-19 against local stacks: before = `main` at f067dccc (:4123), after = branch `2026-10-16-v168-motion-system` at 35d3a53b (:4124, `main` merged in). API: `admin_ui.py` on :1234 against the local `swingbot_prod_replica` (production copy of 2026-10-19 17:58Z). The dev server only answers under `/app/` (assets) while the router lives at root, so the script enters at `/app/dashboard` and navigates by sidebar click. Script: `motion-evidence.cjs` (this directory); raw samples: `animations.json`.
+
+## 0. Default per device (partner decision 2026-10-19)
+
+`<html data-motion>` on a first load with no stored choice: **390 -> off, 768 -> on, 1440 -> on.** For the 390px checks below the script then picks On through the profile menu's Motion control (the choice is stored in the local replica database only), because the route and drawer animations only run when motion is On; Off at 390 is covered by section 3.
 
 ## 1. Route change (`route@<w>-mid.png`, `route@<w>-settled.png`)
 

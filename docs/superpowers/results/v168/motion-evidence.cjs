@@ -23,7 +23,7 @@ const STEP_PAUSE_MS = 2500;
 
 function parseArgs(args) {
   let argv = args;
-  const opts = { cmd: argv[0], base: null, out: null, label: 'after', forceOff: argv.includes('--force-off'), css: null };
+  const opts = { cmd: argv[0], base: null, out: null, label: 'after', forceOff: argv.includes('--force-off'), css: null, only: null };
   argv = argv.filter((arg) => arg !== '--force-off');
   for (let i = 1; i < argv.length; i += 2) {
     const [flag, value] = [argv[i], argv[i + 1]];
@@ -31,6 +31,7 @@ function parseArgs(args) {
     else if (flag === '--out') opts.out = value;
     else if (flag === '--label') opts.label = value;
     else if (flag === '--css') opts.css = value;
+    else if (flag === '--only') opts.only = Number(value);
     else throw new Error(`unknown flag ${flag}`);
   }
   if (!opts.base || !opts.out || !['motion', 'trace'].includes(opts.cmd)) {
@@ -148,10 +149,38 @@ async function offMode(page, opts, width) {
   return { loading: names(loading), spinDurations: loading.filter((a) => a.name === 'sb-route-spin').map((a) => a.ms), settled: names(settled) };
 }
 
+
+/** The mode <html data-motion> shows once preferences have loaded: the device default until a choice is stored. */
+const modeNow = (page) => page.evaluate(() => document.documentElement.dataset.motion);
+
+/**
+ * Pick a mode through the profile menu, like a user. This stores the choice in the preferences, so it is
+ * only for the local replica database: a phone defaults to Off, and the 390px checks need On.
+ */
+async function chooseMotion(page, label) {
+  const menu = page.locator('button[aria-label="Account menu"]');
+  if ((await menu.count()) === 0) await page.locator('.menu-button').click();
+  await menu.click();
+  await page.locator('.motion-control').getByText(label, { exact: true }).click();
+  await page.waitForTimeout(2500); // the preference saves after a short debounce; a reload before it lands loses the choice
+  await page.keyboard.press('Escape');
+}
+
 async function motion(page, opts) {
   const result = {};
-  for (const width of WIDTHS) {
+  const widths = opts.only ? [opts.only] : WIDTHS;
+  const defaults = {};
+  for (const width of widths) {
+    await open(page, opts.base, '/dashboard', width);
+    defaults[width] = await modeNow(page);
+  }
+  for (const width of widths) {
+    if (width < 640) {
+      await open(page, opts.base, '/dashboard', width);
+      await chooseMotion(page, 'On');
+    }
     result[width] = {
+      defaultMode: defaults[width],
       route: await routeChange(page, opts, width),
       drawer: await drawer(page, opts, width),
       off: await offMode(page, opts, width),
