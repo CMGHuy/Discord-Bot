@@ -1,13 +1,13 @@
 # v173 Execution fidelity, part 2: exit-engine hooks and the replay core
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task with `grep -n "^### Task V173-7:" -A 400 <this file>`; never read the file whole.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task with `grep -n "^### Task V173-7:" -A 600 <this file>`; never read the file whole.
 
-**Spec:** [`docs/superpowers/specs/2026-10-18-v173-execution-fidelity-overrides-design.md`](../specs/2026-10-18-v173-execution-fidelity-overrides-design.md) §3 (replay core: never resume, one cost basis, the override session)
+**Spec:** [`docs/superpowers/specs/2026-10-18-v173-execution-fidelity-overrides-design.md`](../specs/2026-10-18-v173-execution-fidelity-overrides-design.md) §3 (replay core: never resume, one cost basis, the override session) and `## Plan panel review` (indicators from the real frame, `unstamped`, before-costs figure)
 **Bump:** bot minor; ui minor (applied once, in V173-17)
 **Edge:** none (integrity)
-**Index:** [`2026-10-18-v173-execution-fidelity-overrides_0-index.md`](2026-10-18-v173-execution-fidelity-overrides_0-index.md) carries the Goal, `## Global Constraints`, `## Parallelisation`, `## Where to work` (`$WT`, `$R`) and the task ledger. Every task below implicitly includes those Global Constraints.
+**Index:** [`2026-10-18-v173-execution-fidelity-overrides_0-index.md`](2026-10-18-v173-execution-fidelity-overrides_0-index.md) carries the Goal, `## Global Constraints`, `## Parallelisation`, `## Where to work` (`$WT`, `$R`), the task ledger, `## Handoff` and `## Revision 2026-10-19`. Every task below implicitly includes those Global Constraints.
 
-Tasks: V173-6..V173-8. V173-6 may run in Wave A (right after V173-1). V173-7 → V173-8 run in order (both write `override_fidelity.py`), and V173-8 also needs V173-6. Part 3 (V173-9, V173-10) builds `replay_override`, `summarise` and the verdict on top of the names created here.
+Tasks: V173-6, V173-21, V173-7 (revised 2026-10-19; V173-8 moved to part 2b, `_2b-engine-arms.md`). V173-6 may run in Wave A (right after V173-1). V173-21 runs after V173-6 (both edit `exit_sim_v2.py`). V173-7 creates `override_fidelity.py` and has no dependency inside this part; V173-8 (part 2b) follows it and needs V173-6 and V173-21. Parts 3 and 3b (V173-9, V173-22, V173-23, V173-10) build `replay_override`, `summarise` and the verdict on top of the names created here.
 
 `$WT = E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides`. Every path below is under `$WT`; commands spell it out in full because shell variables do not persist between Bash calls.
 
@@ -337,7 +337,368 @@ git -C E:/Documents/Private/Projects/Discord-Bot status --short
 
 The last command checks the main tree stayed clean of branch edits.
 
-### Task V173-7: `override_fidelity`: constants, session assignment, plan readers, `OverrideRow`
+### Task V173-21: `walk_v2(..., indicator_df=None)`: indicators from a separate frame
+
+**Model:** opus — the exit engine shared by every backtest; byte-identical default
+
+**Files:**
+- Modify: `swingbot/core/planning/exit_sim_v2.py` (import block; `_runner_v2` :174; `walk_v2` :203, as left by V173-6)
+- Create: `tests/planning/test_exit_sim_v2_indicator_frame.py`
+
+**Interfaces:**
+- Consumes: V173-6's `walk_v2` (both TP1 `_booked` calls pass `tp1_index=pre`) and `ExitResult.tp1_index`. Existing: `swingbot.core.market.indicators.atr` (`indicators.py:62`, imported inside `_runner_v2` at call time as `atr_indicator`), `exit_sim.runner_structure_frame` (`exit_sim.py:46`, imported into `exit_sim_v2` at module level), `config.RUNNER_STRUCTURE_EXIT` (`"off"`, `"hl_trail"`, `"progress_stall"`; `config.py:1392`).
+- Produces (V173-8's `engine_path` passes it):
+  - `walk_v2(df, entry_index: int, entry_price: float, plan: TradePlanV2, max_holding_days: int, instrument: InstrumentSpec, *, scale_out: bool, indicator_df: pd.DataFrame | None = None) -> ExitResult`.
+  - `_runner_v2(df, ctx, tp1_index: int, indicator_df=None)`: `atr_indicator(...)` and `runner_structure_frame(...)` read `indicator_df` when given, else `df`; `ctx` (built from `df`) still drives every exit check.
+  - `ValueError` from `walk_v2` (before anything else, on every path) when `indicator_df` is given and its length or index differs from `df`'s.
+  - Omitted (`None`), every result is byte-identical to before: no existing caller (`_filled` :251, `simulate_exit_v2` :315) passes it.
+
+**Why.** The override replay walks an *engine frame*: the real bars with the override session's high and low shrunk to its open-close body, so the engine is never shown that session's range as a later path (spec §3). Today `_runner_v2` computes ATR(14) and the structure frame from the same `df` it walks, so shrinking one bar also shrinks ATR for the next 14 bars and moves every later trailing stop: a wide override bar would change the engine arm through its indicators, not through any exit it could have seen. The plan panel's fix (spec `## Plan panel review`; brief addendum D): one optional keyword that feeds only the two indicator calls. `ATR` and `runner_structure_frame` are read by position (`atr_series.iloc[j]`, `frame` row `j`), so the indicator frame must line up bar for bar, hence the `ValueError`.
+
+**Concurrent plan note.** `docs/superpowers/plans/2026-10-19-v176-runner-giveback-exit_*.md` (V176-5) also edits `_runner_v2` (it returns a fifth element `stop_source`) and `_booked`. If V176-5 has merged into `main` before this task runs, apply the same two edits to its version: keep its return shape, add `indicator_df=None` as the last parameter, and use `source` for the two indicator calls. The test below does not depend on the return shape.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `$WT/tests/planning/test_exit_sim_v2_indicator_frame.py`:
+
+```python
+"""v173 (plan panel): walk_v2 can read its runner indicators from a separate frame.
+
+`indicator_df` feeds only ATR(14) and the structure frame; `df` still drives
+every stop, target and close check. Omitted, nothing changes. Expected R
+figures were taken from walk_v2 on these exact bars under pin_code_defaults
+(RUNNER_STRUCTURE_EXIT "off"): 3.691 un-spiked, 3.565 with the wide bar 18,
+3.697 for the clamped frame walked on its own (clamped) indicators.
+"""
+import dataclasses
+
+import pandas as pd
+import pytest
+
+from swingbot import config
+from swingbot.core.backtesting.instrument.contract import ZERO_COSTS, resolve
+from swingbot.core.market import indicators
+from swingbot.core.planning import exit_sim_v2
+from swingbot.core.planning.exit_sim_v2 import walk_v2
+from swingbot.core.planning.plan_engine import PlanStatus, TradePlanV2
+from tests.backtesting.test_pullback_dryup_witness import pin_code_defaults
+from tests.helpers import make_ohlcv
+
+V2 = resolve("v2")
+FREE = dataclasses.replace(V2, cost_model=ZERO_COSTS)
+ENTRY = (100.0, 100.5, 99.5, 100.0)
+FLAT = (100.0, 100.5, 99.5, 100.0)
+TP1_BAR = (105.0, 111.0, 104.0, 110.0)
+STOP_BAR = (96.0, 96.5, 94.0, 95.0)
+#: rising[15] sits at bar 18 (entry 0, flat 1, TP1 2, rising from 3).
+OV_IDX = 18
+
+
+@pytest.fixture(autouse=True)
+def _pinned(monkeypatch):
+    pin_code_defaults(monkeypatch)
+
+
+def _plan(**kw):
+    base = dict(
+        plan_id="p1", ticker="T", created_at="2024-01-02", source="strategy",
+        strategy="Probe", horizon_key="4w", direction="bullish",
+        entry_type="market", trigger_price=100.0, entry_price=100.0, expiry_bars=3,
+        stop_loss=95.0, tp1=110.0, tp1_fraction=0.5, tp2=200.0,
+        breakeven_trigger_fraction=0.5, trail_atr_mult=1.0,
+        quality_score=0, quality_breakdown=[],
+        badge="WEAK", badge_stats={}, status=PlanStatus.PENDING, status_history=[],
+    )
+    base.update(kw)
+    return TradePlanV2(**base)
+
+
+def _bars(*, override_bar=None):
+    """TP1 on bar 2, twenty rising bars, then bar 23 opens at 129 and trades
+    through the trail, so the runner exits AT the trailing stop (an
+    ATR-priced exit). `override_bar` replaces bar 18."""
+    rising = [(110.0 + i, 111.0 + i, 109.0 + i, 110.5 + i) for i in range(20)]
+    if override_bar is not None:
+        rising[15] = override_bar
+    return make_ohlcv([ENTRY, FLAT, TP1_BAR, *rising, (129.0, 129.5, 100.0, 101.0)])
+
+
+SPIKE = (125.0, 150.0, 124.0, 125.5)      # wide high, touches neither trail nor TP2
+WICK = (125.0, 126.0, 100.0, 125.5)       # deep low: touches the trail on the real bar
+
+
+def _clamp(df, i):
+    frame = df.copy()
+    body = sorted((float(frame["Open"].iat[i]), float(frame["Close"].iat[i])))
+    frame.iloc[i, frame.columns.get_loc("Low")] = body[0]
+    frame.iloc[i, frame.columns.get_loc("High")] = body[1]
+    return frame
+
+
+def _walk(df, plan=None, *, scale_out=True, instrument=V2, **kw):
+    return walk_v2(df, 0, 100.0, plan or _plan(), 28, instrument, scale_out=scale_out, **kw)
+
+
+def _spy_atr(monkeypatch):
+    """Record every frame ATR is computed from (_runner_v2 imports
+    indicators.atr at call time, so patching the module attribute reaches it)."""
+    seen = []
+    real_atr = indicators.atr
+
+    def spy(frame, period=14):
+        seen.append(frame)
+        return real_atr(frame, period)
+
+    monkeypatch.setattr(indicators, "atr", spy)
+    return seen
+
+
+# --- omitted == the frame itself: byte-identical --------------------------------
+
+@pytest.mark.parametrize("override_bar, r_total", [(None, 3.691), (SPIKE, 3.565)])
+def test_omitted_and_the_frame_itself_give_equal_results(override_bar, r_total):
+    df = _bars(override_bar=override_bar)
+    default, explicit = _walk(df), _walk(df, indicator_df=df)
+    assert default == explicit
+    assert (default.runner_outcome, default.exit_index, default.r_total) == (
+        "runner_trail", 23, r_total)
+    assert default.tp1_index == explicit.tp1_index == 2
+
+
+@pytest.mark.parametrize("bars", [[ENTRY, FLAT, TP1_BAR], [ENTRY, STOP_BAR], [ENTRY, FLAT, FLAT]])
+def test_single_leg_walks_ignore_the_indicator_frame(bars):
+    df = make_ohlcv(bars)
+    plan = _plan(tp1_fraction=1.0, tp2=None)
+    assert _walk(df, plan, scale_out=False, instrument=FREE) == _walk(
+        df, plan, scale_out=False, instrument=FREE, indicator_df=_clamp(df, 1))
+
+
+# --- a clamped frame with the real indicators -------------------------------------
+
+def test_the_clamped_frame_reads_atr_from_the_real_bars(monkeypatch):
+    seen = _spy_atr(monkeypatch)
+    real = _bars(override_bar=SPIKE)
+    clamped = _clamp(real, OV_IDX)
+    res = _walk(clamped, indicator_df=real)
+    assert seen and seen[-1] is real
+    assert res.r_total == _walk(real).r_total == 3.565
+
+
+def test_without_the_keyword_the_clamped_frame_reads_its_own_atr(monkeypatch):
+    seen = _spy_atr(monkeypatch)
+    clamped = _clamp(_bars(override_bar=SPIKE), OV_IDX)
+    res = _walk(clamped)
+    assert seen[-1] is clamped
+    assert res.r_total == 3.697
+
+
+def test_the_structure_frame_reads_the_real_bars_too(monkeypatch):
+    monkeypatch.setattr(config, "RUNNER_STRUCTURE_EXIT", "hl_trail")
+    seen = []
+    real_frame = exit_sim_v2.runner_structure_frame
+
+    def spy(frame):
+        seen.append(frame)
+        return real_frame(frame)
+
+    monkeypatch.setattr(exit_sim_v2, "runner_structure_frame", spy)
+    real = _bars(override_bar=SPIKE)
+    _walk(_clamp(real, OV_IDX), indicator_df=real)
+    assert seen and seen[-1] is real
+
+
+def test_exit_checks_still_read_the_walked_frame():
+    """The real bar 18 wicks through the trail; its clamped body does not. With
+    real indicators the clamped walk still does not stop on bar 18."""
+    real = _bars(override_bar=WICK)
+    on_real = _walk(real)
+    on_clamped = _walk(_clamp(real, OV_IDX), indicator_df=real)
+    assert (on_real.runner_outcome, on_real.exit_index) == ("runner_trail", OV_IDX)
+    assert (on_clamped.runner_outcome, on_clamped.exit_index) == ("runner_trail", 23)
+
+
+# --- the frames must line up --------------------------------------------------------
+
+def test_an_indicator_frame_of_another_length_is_refused():
+    df = _bars()
+    with pytest.raises(ValueError, match="same index"):
+        _walk(df, indicator_df=df.iloc[:-1])
+
+
+def test_an_indicator_frame_on_other_dates_is_refused():
+    df = _bars()
+    shifted = df.copy()
+    shifted.index = df.index + pd.Timedelta(days=1)
+    with pytest.raises(ValueError, match="same index"):
+        _walk(df, indicator_df=shifted)
+
+
+def test_the_check_runs_on_every_path_not_only_the_runner():
+    df = make_ohlcv([ENTRY, STOP_BAR])
+    with pytest.raises(ValueError, match="same index"):
+        _walk(df, _plan(tp1_fraction=1.0, tp2=None), scale_out=False, indicator_df=df.iloc[:1])
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+```bash
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_v2_indicator_frame.py
+```
+
+Expected: FAIL. Every test that passes `indicator_df=` fails with `TypeError: walk_v2() got an unexpected keyword argument 'indicator_df'`; `test_without_the_keyword_the_clamped_frame_reads_its_own_atr` already passes (it pins today's behaviour).
+
+- [ ] **Step 3: Implement the keyword**
+
+In `$WT/swingbot/core/planning/exit_sim_v2.py`, add `import pandas as pd` to the import block, directly after `from dataclasses import dataclass` (with a blank line before the `swingbot` imports, as the file's import groups already are):
+
+```python
+from dataclasses import dataclass
+
+import pandas as pd
+
+from swingbot import config
+```
+
+Add this helper directly above `_runner_bar_v2`:
+
+```python
+def _check_indicator_frame(df, indicator_df) -> None:
+    """v173: an indicator frame must line up with the exit frame bar for bar,
+    because ATR and the structure frame are read by position."""
+    if indicator_df is None:
+        return
+    if len(indicator_df) != len(df) or not indicator_df.index.equals(df.index):
+        raise ValueError("indicator_df must have the same index and length as df")
+```
+
+Replace `_runner_v2` (line 174 onward) with:
+
+```python
+def _runner_v2(df, ctx, tp1_index: int, indicator_df=None):
+    """exit_sim._runner_phase on fills.py's compares: (price, index, reason,
+    kind) of the post-TP1 leg. The trailing stop set from bar j's close is
+    first checked on bar j + 1.
+
+    v173: ATR and the structure frame are computed from `indicator_df` when
+    given (same index as `df`), else from `df`; ctx, built from `df`, still
+    drives every exit check."""
+    if acceptance_exit(ctx.plan, float(ctx.close[tp1_index])):
+        return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit", "close"
+    from swingbot.core.market.indicators import atr as atr_indicator
+    source = df if indicator_df is None else indicator_df
+    floor = runner_floor(ctx.entry_price, ctx.plan.tp1)
+    runner_stop = checked_stop = floor
+    extreme_close = float(ctx.close[tp1_index])
+    atr_series = atr_indicator(source, 14)
+    frame = runner_structure_frame(source) if config.RUNNER_STRUCTURE_EXIT != "off" else None
+    stall_pending = False
+    for j in range(tp1_index + 1, ctx.end + 1):
+        if stall_pending:                            # the open comes first
+            return float(ctx.open_[j]), j, "runner_progress_stall", "close"
+        checked_stop = runner_stop
+        hit = _runner_bar_v2(ctx, j, runner_stop, floor)
+        if hit is not None:
+            return hit
+        c = float(ctx.close[j])
+        extreme_close = max(extreme_close, c) if ctx.is_bull else min(extreme_close, c)
+        runner_stop = _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series)
+        if frame is not None:
+            runner_stop, stall_pending = _structure_update(ctx, frame, j, runner_stop,
+                                                           atr_series)
+    return _runner_timeout(ctx, checked_stop), ctx.end, "runner_timeout", "close"
+```
+
+The only changes against the current body are the docstring paragraph, the `indicator_df=None` parameter, the `source = ...` line and `source` in the two indicator calls.
+
+Replace `walk_v2` (as left by V173-6) with:
+
+```python
+def walk_v2(df, entry_index: int, entry_price: float, plan: TradePlanV2,
+            max_holding_days: int, instrument: InstrumentSpec, *,
+            scale_out: bool, indicator_df: pd.DataFrame | None = None) -> ExitResult:
+    """The v2 exit walk from a filled entry: bars entry_index + 1 .. entry_index
+    + max_holding_days (capped at the data). Single-leg unless `scale_out` and
+    the plan keeps a runner (tp1_fraction < 1.0), as exit_sim._walk_for.
+    v173: a result that reached TP1 carries that bar as `tp1_index`, and
+    `indicator_df` (same index and length as `df`, else ValueError) feeds
+    only the runner's ATR and structure frame; omitted, the walk is unchanged."""
+    _check_indicator_frame(df, indicator_df)
+    if abs(entry_price - plan.stop_loss) <= 0:
+        return _no_trade(entry_index, entry_price)
+    ctx = _context(df, entry_index, entry_price, plan, max_holding_days, instrument, scale_out)
+    pre = _pre_tp1_v2(ctx)
+    if isinstance(pre, ExitResult):
+        return pre
+    tp1_fill = fills.exit_fill(ctx.fills, "target", plan.tp1, float(ctx.open_[pre]),
+                               plan.direction)
+    if not ctx.stall:
+        return _booked(ctx, "win", pre, [_leg(1.0, tp1_fill, "tp1", "target")],
+                       tp1_index=pre)
+    price, exit_index, reason, kind = _runner_v2(df, ctx, pre, indicator_df)
+    legs = [_leg(plan.tp1_fraction, tp1_fill, "tp1", "target"),
+            _leg(1.0 - plan.tp1_fraction, price, reason, kind)]
+    return _booked(ctx, "win", exit_index, legs, runner_outcome=reason, tp1_index=pre)
+```
+
+`_pre_tp1_v2`, `_context`, `_filled` and `simulate_exit_v2` are not edited. Confirm nothing else calls `_runner_v2`:
+
+```bash
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides grep -n "_runner_v2(" -- swingbot tests scripts
+```
+
+Expected: the definition and the one call in `walk_v2` only.
+
+- [ ] **Step 4: Run the new test**
+
+```bash
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_v2_indicator_frame.py
+```
+
+Expected: PASS, `0 failed`, `0 xfailed`. If a figure is off, do not loosen it: recompute it with `walk_v2` on the same bars under `pin_code_defaults` in a scratch script in the session scratchpad; a difference in the omitted case means the default path changed, which is the bug.
+
+- [ ] **Step 5: Run every existing exit test, unchanged**
+
+```bash
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_v2_replay_hooks.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_v2_walk.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_v2_entry.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_scaleout_witness.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_scaleout.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_runner_structure.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_acceptance.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/planning/test_exit_sim_hold_cap.py
+```
+
+Expected: every file PASS with `0 failed`, `0 xfailed`, and **no existing test file edited**: `git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides status --short tests/` shows only `?? tests/planning/test_exit_sim_v2_indicator_frame.py`. The scale-out witness lives at `tests/planning/test_exit_sim_scaleout_witness.py` (the index's `tests/test_exit_sim_scaleout_witness.py` is the same file under its old path).
+
+Then let the diff-selector catch every backtest witness and arm that walks v2:
+
+```bash
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py changed
+```
+
+Expected: `0 failed`, `0 xfailed`. If it widens to the full suite, hand the run to the `test-runner` subagent rather than reading its output here.
+
+- [ ] **Step 6: Complexity**
+
+```bash
+python -m radon cc -s -n C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/swingbot/core/planning/exit_sim_v2.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/complexity_gate.py
+```
+
+Expected: `walk_v2`, `_runner_v2` and `_check_indicator_frame` are not listed by `radon` (`_runner_v2` was B(8) and gains one branch); the gate passes.
+
+- [ ] **Step 7: Commit on the branch**
+
+```bash
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides add swingbot/core/planning/exit_sim_v2.py tests/planning/test_exit_sim_v2_indicator_frame.py
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): walk_v2 indicator_df keyword so a clamped replay frame keeps the real ATR and structure"
+git -C E:/Documents/Private/Projects/Discord-Bot status --short
+```
+
+The last command checks the main tree stayed clean of branch edits.
+
+### Task V173-7: `override_fidelity`: constants, session assignment, plan readers, stamp kinds, `OverrideRow`
 
 **Model:** opus — no-lookahead territory (timestamp to session mapping)
 
@@ -346,29 +707,32 @@ The last command checks the main tree stayed clean of branch edits.
 - Create: `tests/analytics/test_override_fidelity_sessions.py`
 
 **Interfaces:**
-- Consumes: `swingbot.core.market.session` (`RTH_OPEN`, `US_MARKET_TZ`, `nyse_calendar`, `session_close`, all existing); `swingbot.core.planning.plan_types.PlanStatus` (existing).
-- Produces (all in `swingbot/core/analytics/override_fidelity.py`; V173-8..V173-12 import them by these names):
-  - Constants: `MANUAL_REASONS = ("manual", "manual_bulk")`; `STATUSES = ("resolved", "open", "stale", "ambiguous", "parity_mismatch", "split_affected", "unreplayable")`; `EXCLUDED_STATUSES = ("stale", "ambiguous", "parity_mismatch", "split_affected", "unreplayable")`; `TIMEOUT_REASONS = ("timeout", "runner_timeout")` (the two reasons `walk_v2` gives when it stops at `ctx.end`, which is also where it clips at the data end); `DEAD_BAND = 0.05`; `VERDICT_FLOOR = 30`; `WEEK_FLOOR = 10`; `EXCLUDED_CAP = 0.20`; `SPLIT_TOLERANCE = 0.02`; `LEDGER_ID = "v173-override-fidelity"`; `ROW_FIELDS` (the 19 row keys, in order).
+- Consumes: `swingbot.core.market.session` (`RTH_OPEN`, `US_MARKET_TZ`, `nyse_calendar`, `session_close`, all existing); `swingbot.core.planning.plan_types.PlanStatus` (existing). The `override` stamp shape written by V173-3 (`{"exit_price", "price_source", "quote_ts", "bars_asof"}`, or `None` when building it failed); this task only reads its presence and `price_source`.
+- Produces (all in `swingbot/core/analytics/override_fidelity.py`; V173-8, V173-9, V173-22, V173-23, V173-10 and V173-26 import them by these names):
+  - Constants: `MANUAL_REASONS = ("manual", "manual_bulk")`; `STATUSES = ("resolved", "open", "unstamped", "stale", "ambiguous", "parity_mismatch", "split_affected", "unreplayable")` (eight); `EXCLUDED_STATUSES = ("unstamped", "stale", "ambiguous", "parity_mismatch", "split_affected", "unreplayable")` (six: every status but `resolved` and `open`, in `STATUSES` order); `TIMEOUT_REASONS = ("timeout", "runner_timeout")` (the two reasons `walk_v2` gives when it stops at `ctx.end`, which is also where it clips at the data end); `STAMP_KINDS = ("missing", "failed", "stamped")`; `DEAD_BAND = 0.05`; `VERDICT_FLOOR = 30`; `WEEK_FLOOR = 10`; `EXCLUDED_CAP = 0.20`; `SPLIT_TOLERANCE = 0.02`; `LEDGER_ID = "v173-override-fidelity"`; `ROW_FIELDS` (the 20 row keys, in order).
   - `@dataclass(frozen=True) SessionHit(session: date, price_kind: str)`, `price_kind` `"open"` or `"close"`.
-  - `assign_session(at_iso: str | None) -> SessionHit | None` per the Global Constraints table; a naive timestamp is read as UTC (every `status_history` `at` is written by `datetime.now(timezone.utc).isoformat()`); `None` for empty, unparseable or outside the NYSE calendar (2018-01-02..2030-12-31).
+  - `assign_session(at_iso: str | None) -> SessionHit | None` per the Global Constraints rule; a naive timestamp is read as UTC (every `status_history` `at` is written by `datetime.now(timezone.utc).isoformat()`); `None` for empty, unparseable or outside the NYSE calendar (2018-01-02..2030-12-31).
   - `latest_completed_session(now: datetime) -> date`: the last session whose `session_close` (ET) is at or before `now`; naive `now` read as UTC; `ValueError` outside the calendar.
   - `session_index(df, day: date | None) -> int | None`: positional index of the bar dated `day`.
   - `transition_at(plan, status: str) -> str | None`: `at` of the **first** `status_history` entry with `status`.
   - `override_entry(plan) -> dict | None`: the last `status_history` entry, when the plan is CLOSED and that entry is `CLOSED` with a reason in `MANUAL_REASONS`.
   - `is_override(plan) -> bool`.
   - `state_at_close(plan) -> str`: `"PARTIAL"` when any `status_history` entry is `PARTIAL`, else `"ACTIVE"`.
-  - `@dataclass(frozen=True) OverrideRow` with exactly the 19 row fields of the Global Constraints, in that order (`plan_id, ticker, horizon, direction, state_at_close, close_date, bulk, approx, price_source, status` required; `actual_r, engine_r, delta_r, actual_usd, engine_usd, delta_usd, engine_exit_reason, outcome` default `None`; `source` default `"manual"`); `ValueError` on a `status` not in `STATUSES`; property `entry_date -> date | None` (= `close_date`, the attribute `stats.group_by_week` reads); `to_dict() -> dict` with `close_date` as an ISO string or `None`.
+  - `stamp_kind(entry: dict | None) -> str`, on the CLOSED entry: `"missing"` (no entry, or no `override` key: a pre-v173 close), `"failed"` (`override` present but `None` or not a dict, or its `price_source == "none"`: a post-v173 stamp that failed), `"stamped"` (otherwise). It reads only the `override` key, never the reason or the timestamp: a missing key is never inferred to be anything else (`schema-evolution.md`: no read-time upcasting). V173-9 maps `"failed"` on an individual close to `unstamped`, and `"missing"` to the session-bar path.
+  - `@dataclass(frozen=True) OverrideRow` with exactly the 20 row fields of the Global Constraints, in that order (`plan_id, ticker, horizon, direction, state_at_close, close_date, bulk, approx, price_source, status` required; `actual_r, engine_r, delta_r, delta_r_gross, actual_usd, engine_usd, delta_usd, engine_exit_reason, outcome` default `None`; `source` default `"manual"`); `ValueError` on a `status` not in `STATUSES`; property `entry_date -> date | None` (= `close_date`, the attribute `stats.group_by_week` reads); `to_dict() -> dict` with `close_date` as an ISO string or `None`. `delta_r_gross` is the before-costs delta (descriptive only; never in the verdict decision).
   - `outcome_of(delta_r: float | None) -> str | None`: `"helped"` above `+DEAD_BAND`, `"hurt"` below `-DEAD_BAND`, `"neutral"` otherwise (the band edges are neutral), `None` for `None`.
-  - Test helper `tests.analytics.test_override_fidelity_sessions.override_plan(...)` and the stamps `FILL_AT`, `TP1_AT`, `CLOSE_AT`: V173-8 (and Part 3's tests, if they choose) import them.
+  - Test helper `tests.analytics.test_override_fidelity_sessions.override_plan(...)`, the stamps `FILL_AT`, `TP1_AT`, `CLOSE_AT` and the sample stamp `QUOTE_STAMP`: V173-8 (and Part 3's tests, if they choose) import them.
 
-**Why the session rules look like this.** §3's table: the override session is the session the human acted in, and the engine is never shown that session's range as a later path. A stamp before 09:30 ET on a session day belongs to that day's open (the unstamped exit price is that open); from 09:30 on, regular hours and after-hours alike, to that day's close. A stamp on a weekend or holiday belongs to the last session before it, at its close. ET, not UTC, decides the date: `2026-10-02T02:30Z` is 22:30 ET on 2026-10-01.
+**Why the session rules look like this.** §3's table: the override session is the session the human acted in, and the engine is never shown that session's range as a later path. A stamp before 09:30 ET on a session day belongs to that day's open (a pre-v173 close is priced from that open); from 09:30 on, regular hours and after-hours alike, to that day's close. A stamp on a weekend or holiday belongs to the last session before it, at its close. ET, not UTC, decides the date: `2026-10-02T02:30Z` is 22:30 ET on 2026-10-01.
+
+**Why three stamp kinds (plan panel, 2026-10-19).** Two different things leave a close without a quote. A close made before v173 shipped has no `override` key at all: it is priced from its session bar and marked `approx`. A close made after v173 whose stamp builder failed carries `"override": None` (or a stamp whose `price_source` is `"none"`): the close was a decision, but nothing priced it, so it must not quietly fall back to a bar estimate and must count against the verdict's exclusion cap. That is the new `unstamped` status (V173-9), an excluded status. Telling the two apart from the key's presence alone is the only honest reading.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `$WT/tests/analytics/test_override_fidelity_sessions.py`:
 
 ```python
-"""v173 §3: override sessions, plan readers and the OverrideRow shape.
+"""v173 §3: override sessions, plan readers, stamp kinds and the OverrideRow shape.
 
 Dates: 2026-10-01 is a Thursday in EDT (UTC-4); 2026-11-26 is Thanksgiving,
 2026-11-27 a 13:00 ET early close and 2026-12-01 a Tuesday in EST (UTC-5).
@@ -387,18 +751,23 @@ U = dt.timezone.utc
 FILL_AT = "2026-10-01T14:00:00+00:00"    # Thu 10:00 ET
 TP1_AT = "2026-10-05T15:00:00+00:00"     # Mon 11:00 ET
 CLOSE_AT = "2026-10-07T18:00:00+00:00"   # Wed 14:00 ET
+#: A post-v173 stamp from a live quote (the V173-3 shape).
+QUOTE_STAMP = {"exit_price": 104.0, "price_source": "quote", "quote_ts": CLOSE_AT,
+               "bars_asof": "2026-10-06"}
 
 ROW_KEYS = ("plan_id", "ticker", "horizon", "direction", "state_at_close", "close_date",
             "bulk", "approx", "price_source", "status", "actual_r", "engine_r", "delta_r",
-            "actual_usd", "engine_usd", "delta_usd", "engine_exit_reason", "outcome", "source")
+            "delta_r_gross", "actual_usd", "engine_usd", "delta_usd", "engine_exit_reason",
+            "outcome", "source")
 
 
 def override_plan(*, reason="manual", partial=False, status=PlanStatus.CLOSED,
                   history=None, close_at=CLOSE_AT, override=None, **kw):
     """A live plan record closed by a manual override (shared by the v173 tests).
 
-    `override` is the stamp dict put on the CLOSED entry; leave it None for an
-    unstamped close (the key is then absent, as on every pre-v173 close)."""
+    `override` is the stamp dict put on the CLOSED entry; leave it None for a
+    pre-v173 close (the key is then absent). A failed post-v173 stamp
+    (`"override": None`) needs an explicit `history`."""
     if history is None:
         history = [{"status": "ACTIVE", "reason": "filled", "at": FILL_AT}]
         if partial:
@@ -426,10 +795,13 @@ def override_plan(*, reason="manual", partial=False, status=PlanStatus.CLOSED,
 
 def test_the_frozen_constants():
     assert of.MANUAL_REASONS == ("manual", "manual_bulk")
-    assert of.STATUSES == ("resolved", "open", "stale", "ambiguous", "parity_mismatch",
-                           "split_affected", "unreplayable")
+    assert of.STATUSES == ("resolved", "open", "unstamped", "stale", "ambiguous",
+                           "parity_mismatch", "split_affected", "unreplayable")
+    assert of.EXCLUDED_STATUSES == ("unstamped", "stale", "ambiguous", "parity_mismatch",
+                                    "split_affected", "unreplayable")
     assert of.EXCLUDED_STATUSES == tuple(s for s in of.STATUSES if s not in ("resolved", "open"))
     assert of.TIMEOUT_REASONS == ("timeout", "runner_timeout")
+    assert of.STAMP_KINDS == ("missing", "failed", "stamped")
     assert (of.DEAD_BAND, of.VERDICT_FLOOR, of.WEEK_FLOOR, of.EXCLUDED_CAP,
             of.SPLIT_TOLERANCE) == (0.05, 30, 10, 0.20, 0.02)
     assert of.LEDGER_ID == "v173-override-fidelity"
@@ -563,6 +935,52 @@ def test_state_at_close():
     assert of.state_at_close(override_plan()) == "ACTIVE"
 
 
+# --- stamp_kind: missing, failed, stamped --------------------------------------
+
+def _closed(**extra):
+    return {"status": "CLOSED", "reason": "manual", "at": CLOSE_AT, **extra}
+
+
+def test_no_override_key_is_a_pre_v173_close():
+    assert of.stamp_kind(_closed()) == "missing"
+    assert of.stamp_kind(of.override_entry(override_plan())) == "missing"
+
+
+def test_no_entry_at_all_is_missing():
+    assert of.stamp_kind(None) == "missing"
+    assert of.stamp_kind({}) == "missing"
+
+
+def test_a_stamp_that_failed_to_build_is_failed():
+    assert of.stamp_kind(_closed(override=None)) == "failed"
+
+
+def test_a_stamp_with_no_price_is_failed():
+    stamp = {"exit_price": None, "price_source": "none", "quote_ts": None, "bars_asof": None}
+    assert of.stamp_kind(_closed(override=stamp)) == "failed"
+
+
+def test_a_garbled_stamp_is_failed_not_stamped():
+    assert of.stamp_kind(_closed(override="104.0")) == "failed"
+
+
+@pytest.mark.parametrize("source", ["quote", "bar_close"])
+def test_a_priced_stamp_is_stamped(source):
+    stamp = {**QUOTE_STAMP, "price_source": source}
+    if source == "bar_close":
+        stamp["quote_ts"] = None
+    assert of.stamp_kind(_closed(override=stamp)) == "stamped"
+    plan = override_plan(override=stamp)
+    assert of.stamp_kind(of.override_entry(plan)) == "stamped"
+
+
+def test_the_kind_is_read_from_the_key_alone_never_the_reason_or_the_date():
+    """A bulk close, or a close dated after v173 shipped, with no key is still
+    'missing': nothing is inferred (no read-time upcasting)."""
+    late = _closed(reason="manual_bulk", at="2026-12-01T18:00:00+00:00")
+    assert of.stamp_kind(late) == "missing"
+
+
 # --- OverrideRow -------------------------------------------------------------
 
 def _row(**kw):
@@ -575,21 +993,31 @@ def _row(**kw):
 
 def test_row_fields_are_exactly_the_payload_keys_in_order():
     assert tuple(f.name for f in dataclasses.fields(of.OverrideRow)) == ROW_KEYS
+    assert len(ROW_KEYS) == 20
 
 
 def test_row_defaults():
     row = _row()
     assert row.source == "manual"
-    assert all(getattr(row, key) is None for key in ROW_KEYS[10:18])
+    assert all(getattr(row, key) is None for key in ROW_KEYS[10:19])
 
 
 def test_to_dict_writes_the_close_date_as_iso():
-    row = _row(actual_r=0.5, engine_r=0.2, delta_r=0.3, outcome="helped")
+    row = _row(actual_r=0.5, engine_r=0.2, delta_r=0.3, delta_r_gross=0.35, outcome="helped")
     body = row.to_dict()
     assert tuple(body) == ROW_KEYS
     assert body["close_date"] == "2026-10-07"
-    assert body["delta_r"] == 0.3 and body["outcome"] == "helped"
+    assert body["delta_r"] == 0.3 and body["delta_r_gross"] == 0.35
+    assert body["outcome"] == "helped"
     assert _row(close_date=None).to_dict()["close_date"] is None
+
+
+def test_an_unstamped_row_carries_no_figures():
+    row = _row(status="unstamped", price_source="none")
+    body = row.to_dict()
+    assert body["status"] == "unstamped"
+    assert all(body[key] is None for key in ("actual_r", "engine_r", "delta_r", "delta_r_gross",
+                                             "actual_usd", "engine_usd", "delta_usd"))
 
 
 def test_entry_date_is_the_close_date_for_week_clustering():
@@ -604,6 +1032,12 @@ def test_row_is_frozen_and_refuses_an_unknown_status():
         _row().status = "open"
     with pytest.raises(ValueError):
         _row(status="timeout")
+
+
+@pytest.mark.parametrize("status", ["resolved", "open", "unstamped", "stale", "ambiguous",
+                                    "parity_mismatch", "split_affected", "unreplayable"])
+def test_every_status_is_accepted(status):
+    assert _row(status=status).status == status
 
 
 # --- outcome_of: the frozen ±0.05R dead band ----------------------------------
@@ -635,14 +1069,15 @@ A manual close (`_close_plan`, reason "manual" or "manual_bulk") ends a plan
 the engine would otherwise have kept managing. This module replays that plan
 through the v2 exit engine from its real fill and compares the two arms on one
 cost basis. It is pure: no store, no network, no file reads. Plans, bars
-(`runner_path.cached_daily_bars`, read by the caller) and linked trades come
+(`runner_path.cached_daily_bars`, read by override_io) and linked trades come
 in as arguments.
 
 This first block holds the frozen constants, the timestamp-to-session rule,
-the plan readers and the row shape. The engine path and the two arms follow
-(v173 V173-8); `replay_override` and `summarise` close the module (V173-9,
-V173-10). The constants are pre-registered (spec §4): changing any of them is
-a new spec, never an edit.
+the plan readers, the stamp kinds and the row shape. The engine path and the
+two arms follow (V173-8); `replay_override` and its data admission (V173-9,
+V173-22, V173-23) and `summarise` (V173-10) close the module. The constants
+are pre-registered (spec §4): changing any of them is a new spec, never an
+edit.
 """
 from __future__ import annotations
 
@@ -657,14 +1092,17 @@ from swingbot.core.planning.plan_types import PlanStatus
 
 #: The terminal reasons of a manual close; "manual_bulk" rows are shown, never summed.
 MANUAL_REASONS = ("manual", "manual_bulk")
-#: Every row carries exactly one of these (spec §3 status table).
-STATUSES = ("resolved", "open", "stale", "ambiguous", "parity_mismatch", "split_affected",
-            "unreplayable")
+#: Every row carries exactly one of these (spec §3 status table, eight since
+#: the plan panel added "unstamped").
+STATUSES = ("resolved", "open", "unstamped", "stale", "ambiguous", "parity_mismatch",
+            "split_affected", "unreplayable")
 #: Statuses left out of the sums and capped at EXCLUDED_CAP for the verdict.
-EXCLUDED_STATUSES = ("stale", "ambiguous", "parity_mismatch", "split_affected",
+EXCLUDED_STATUSES = ("unstamped", "stale", "ambiguous", "parity_mismatch", "split_affected",
                      "unreplayable")
 #: walk_v2's reasons for stopping at ctx.end -- the hold cap, or the data end.
 TIMEOUT_REASONS = ("timeout", "runner_timeout")
+#: What the CLOSED entry's `override` key says (stamp_kind).
+STAMP_KINDS = ("missing", "failed", "stamped")
 #: Frozen (spec §3, §4).
 DEAD_BAND = 0.05
 VERDICT_FLOOR = 30
@@ -680,8 +1118,8 @@ _LOOKBACK = dt.timedelta(days=14)
 
 @dataclass(frozen=True)
 class SessionHit:
-    """The NYSE session a timestamp belongs to, and which of its prices an
-    unstamped exit would have got: "open" (before 09:30 ET) or "close"."""
+    """The NYSE session a timestamp belongs to, and which of its prices a
+    pre-v173 close is priced from: "open" (before 09:30 ET) or "close"."""
     session: dt.date
     price_kind: str
 
@@ -732,7 +1170,7 @@ def assign_session(at_iso: str | None) -> SessionHit | None:
 
 def latest_completed_session(now: dt.datetime) -> dt.date:
     """The last NYSE session whose regular close (ET) is at or before `now`:
-    the newest bar a fresh daily cache can hold."""
+    the newest bar a fresh daily cache can hold settled."""
     local = _to_et(now)
     day = local.date()
     if nyse_calendar().is_session(day) and local.time() >= session_close(day):
@@ -779,10 +1217,27 @@ def state_at_close(plan) -> str:
     return PlanStatus.PARTIAL if partial else PlanStatus.ACTIVE
 
 
+def stamp_kind(entry: dict | None) -> str:
+    """What the CLOSED entry's `override` key says, read from the key alone.
+
+    "missing": no key (a close made before v173 shipped; priced from its
+    session bar, approx). "failed": the key is there but holds None, a
+    non-dict, or a stamp with price_source "none" (a v173 close nothing could
+    price; V173-9 makes an individual one `unstamped`). "stamped": a priced
+    stamp. A missing key is never inferred to be anything else."""
+    if not entry or "override" not in entry:
+        return "missing"
+    stamp = entry["override"]
+    if not isinstance(stamp, dict) or stamp.get("price_source") == "none":
+        return "failed"
+    return "stamped"
+
+
 @dataclass(frozen=True)
 class OverrideRow:
     """One override against the engine. R is on the plan's initial risk, net
-    of modelled costs and pre-tax; the *_usd fields are None without a dollar
+    of modelled costs and pre-tax (`delta_r_gross`: the same delta before
+    costs, descriptive only); the *_usd fields are None without a dollar
     risk. Only `resolved` rows that are neither bulk nor approx are summed."""
     plan_id: str
     ticker: str
@@ -797,6 +1252,7 @@ class OverrideRow:
     actual_r: float | None = None
     engine_r: float | None = None
     delta_r: float | None = None
+    delta_r_gross: float | None = None
     actual_usd: float | None = None
     engine_usd: float | None = None
     delta_usd: float | None = None
@@ -834,7 +1290,7 @@ def outcome_of(delta_r: float | None) -> str | None:
     return "neutral"
 ```
 
-`PlanStatus` (`plan_types.py:6`) is a class of plain string constants, so `state_at_close` returns the `str` `"PARTIAL"` or `"ACTIVE"`. `ROW_FIELDS` is derived from the dataclass so the payload key list can never drift from the row; the test pins it to the Global Constraints list.
+`PlanStatus` (`plan_types.py:6`) is a class of plain string constants, so `state_at_close` returns the `str` `"PARTIAL"` or `"ACTIVE"`. `ROW_FIELDS` is derived from the dataclass so the payload key list can never drift from the row; the test pins it to the Global Constraints list (20 keys, `delta_r_gross` after `delta_r`).
 
 - [ ] **Step 4: Run the test**
 
@@ -856,482 +1312,7 @@ Expected: no output (every function below rank C, i.e. CC < 11).
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides add swingbot/core/analytics/override_fidelity.py tests/analytics/test_override_fidelity_sessions.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): override_fidelity sessions, plan readers and OverrideRow"
-git -C E:/Documents/Private/Projects/Discord-Bot status --short
-```
-
-The last command checks the main tree stayed clean of branch edits.
-
-### Task V173-8: Engine path from the fill, `leg_kind`, both arms through `costs.book`, dollar risk
-
-**Model:** opus — exit-engine replay and cost basis feeding a frozen verdict
-
-**Files:**
-- Modify: `swingbot/core/analytics/override_fidelity.py` (created by V173-7: extend the import block, append the engine and arm functions at the end)
-- Create: `tests/analytics/test_override_fidelity_arms.py`
-
-**Interfaces:**
-- Consumes:
-  - V173-6: `exit_sim_v2.fill_bar_exit(df, j, fill, plan, instrument) -> ExitResult | None`; `ExitResult.tp1_index`.
-  - V173-7: `override_fidelity` module and its constants; test helper `tests.analytics.test_override_fidelity_sessions.override_plan`.
-  - Existing: `exit_sim_v2.walk_v2` (`exit_sim_v2.py:203`), `exit_sim._hold_cap_bars` (`exit_sim.py:613`), `strategy_types.HORIZONS`, `contract.resolve` (`contract.py:130`), `costs.book` (`costs.py:41`), `time_exit.TIME_EXIT_REASON` (`"time_exit"`).
-- Produces (in `override_fidelity.py`; V173-9 builds `replay_override` from these):
-  - `INSTRUMENT = contract.resolve("v2")`.
-  - `hold_cap_bars(plan) -> int` = `exit_sim._hold_cap_bars(plan, HORIZONS[plan.horizon_key]["max_holding_days"])`, the cap `simulate_exit_v2` uses.
-  - `engine_frame(df, ov_idx: int) -> pd.DataFrame`: a copy of `df` whose bar `ov_idx` has `High = max(Open, Close)` and `Low = min(Open, Close)`; every other bar and the input frame are unchanged.
-  - `engine_path(plan, df, fill_idx: int) -> ExitResult`: `fill_bar_exit(df, fill_idx, plan.entry_price, plan, INSTRUMENT)`, and when that is `None`, `walk_v2(df, fill_idx, plan.entry_price, plan, hold_cap_bars(plan), INSTRUMENT, scale_out=plan.tp1_fraction < 1.0)`. The plan's original `stop_loss` is the stop, as at the fill. V173-9 calls it twice: on the real frame (parity, ambiguity) and on `engine_frame(df, ov_idx)` (the engine arm).
-  - `leg_kind(reason: str) -> str`: `"target"` for `tp1`, `runner_tp2`; `"close"` for `timeout`, `runner_timeout`, `acceptance_exit`, `stall_exit`, `runner_progress_stall`, `time_exit`; `"stop"` for every other reason (`stop`, `breakeven_stop`, `runner_be`, `runner_trail`, ...). It matches the kind `walk_v2` books each reason with.
-  - `live_tp1_leg(plan) -> dict | None`: `{"fraction": plan.tp1_fraction, "exit_price": <legs_realized "tp1" leg's exit_price>, "reason": "tp1", "kind": "target"}`, or `None` when the plan has no realised TP1 leg with a price.
-  - `actual_r(plan, exit_price: float, state: str) -> float` and `engine_r(plan, result: ExitResult, state: str) -> float`: each **one** `costs.book(INSTRUMENT.cost_model, direction=plan.direction, entry_price=plan.entry_price, stop_loss=plan.stop_loss, legs=[...])` call, per the Global Constraints "One cost basis". Both raise `ValueError` when the entry is at or beyond the stop, when a PARTIAL plan has no `live_tp1_leg`, or (`engine_r`) when the result has no leg left to book. V173-9 maps any `ValueError` here to `unreplayable`.
-  - `dollar_risk(plan, trade: dict | None) -> float | None` = `float(trade["shares"]) * abs(plan.entry_price - plan.stop_loss)`; `None` with no trade, no or unparseable `shares`, a missing price, or a non-positive result.
-  - `to_usd(r: float | None, risk: float | None) -> float | None` = `round(r * risk, 2)`, `None` if either is `None`.
-
-**What the arms mean.**
-
-- **Actual arm.** The human's exit. On a PARTIAL plan it is the live TP1 leg plus a remainder of `1 - tp1_fraction` at the override price. On an ACTIVE plan it is the whole position at the override price. The manual leg is booked as kind `"stop"`: 10 bps, a market order taken at a moment the engine did not choose.
-- **Engine arm.** The replay's legs, each booked with the kind the engine itself gives that reason. On a PARTIAL plan the replay's own `tp1` leg is dropped and the **live** TP1 leg is used, so both arms share one TP1 leg and the delta is decided by the remainder alone. The remaining legs are re-scaled so their fractions sum to the remainder. In the normal case (one runner leg of `1 - tp1_fraction`) the scale is exactly 1.
-- **Cost parity.** Both arms share entry, stop, entry slippage and the TP1 leg. So when the actual exit price equals the engine's exit price on a **stop-kind** engine exit (stop, breakeven, runner trail), `delta_r` is exactly 0. When the engine exit is a target or a close, the same price still differs by the slippage gap (5 bps against the manual leg's 10). That gap is a real cost of exiting by hand, not a bias, and a test pins it so nobody "fixes" it.
-- **Bars before the fill.** On the single-leg paths (stop, TP1, timeout) no bar before the fill is read. On a runner, the chandelier trail reads ATR(14) and the structure frame, which can reach up to 13 sessions back from the trailing bar. That is past data, exactly as in every backtest, never lookahead. The invariance test below is therefore pinned on a single-leg plan; Part 3's no-lookahead test should use the same kind of plan, or change only bars at least 30 sessions before the fill.
-
-- [ ] **Step 1: Write the failing test**
-
-Create `$WT/tests/analytics/test_override_fidelity_arms.py`:
-
-```python
-"""v173 §3: the engine path from the live fill and the two cost-basis arms.
-
-Every figure is booked through the real v2 instrument (resolve("v2"): 5 bps
-entry and target/close slippage, 10 bps stop slippage, no commission). With
-entry 100 and stop 95 the slipped entry is 100.05 and the risk 5.05, so e.g.
-a manual exit at 104 is (104 * 0.999 - 100.05) / 5.05 = 0.762R. Expected
-numbers were computed with costs.book before this module existed.
-"""
-import dataclasses
-
-import pytest
-
-from swingbot.core.analytics import override_fidelity as of
-from swingbot.core.backtesting.instrument.contract import resolve
-from swingbot.core.planning.exit_sim import ExitResult
-from tests.analytics.test_override_fidelity_sessions import override_plan
-from tests.backtesting.test_pullback_dryup_witness import pin_code_defaults
-from tests.helpers import make_ohlcv
-
-ENTRY = (100.0, 100.5, 99.5, 100.0)
-FLAT = (100.0, 100.5, 99.5, 100.0)
-TP1_BAR = (105.0, 111.0, 104.0, 110.0)
-TP2_BAR = (112.0, 121.0, 111.0, 120.0)
-STOP_BAR = (96.0, 96.5, 94.0, 95.0)
-
-
-@pytest.fixture(autouse=True)
-def _pinned(monkeypatch):
-    pin_code_defaults(monkeypatch)      # STALL_EXIT_ENABLED, RUNNER_STRUCTURE_EXIT at code defaults
-
-
-def _active(**kw):
-    return override_plan(**kw)
-
-
-def _partial(tp1_price=110.0, **kw):
-    plan = override_plan(partial=True, **kw)
-    return dataclasses.replace(plan, legs_realized=[
-        {"fraction": 0.5, "exit_price": tp1_price, "r": 2.0, "reason": "tp1"}])
-
-
-def _trail_bars():
-    """TP1 on bar 2, twenty rising bars that ratchet the trail, then a gap down."""
-    rising = [(110.0 + i, 111.0 + i, 109.0 + i, 110.5 + i) for i in range(20)]
-    return make_ohlcv([ENTRY, FLAT, TP1_BAR, *rising, (125.0, 125.5, 100.0, 101.0)])
-
-
-# --- instrument and hold cap ---------------------------------------------------
-
-def test_the_replay_books_on_the_v2_instrument():
-    assert of.INSTRUMENT is resolve("v2")
-    model = of.INSTRUMENT.cost_model
-    assert (model.slippage_bps, model.stop_slippage_bps, model.commission_per_share) == (
-        5.0, 10.0, 0.0)
-
-
-def test_hold_cap_bars_is_the_simulators_cap():
-    assert of.hold_cap_bars(_active()) == 28                    # HORIZONS["4w"]
-    assert of.hold_cap_bars(_active(horizon_key="1w")) == 7
-    assert of.hold_cap_bars(_active(hold_cap_bars=10)) == 10    # the plan's own cap wins
-
-
-# --- engine_frame ----------------------------------------------------------------
-
-def test_engine_frame_clamps_only_the_override_bar_and_leaves_the_input_alone():
-    df = make_ohlcv([ENTRY, (101.0, 108.0, 96.0, 103.0), FLAT])
-    frame = of.engine_frame(df, 1)
-    assert frame.iloc[1][["Open", "High", "Low", "Close"]].tolist() == [101.0, 103.0, 101.0, 103.0]
-    assert frame.iloc[0].tolist() == df.iloc[0].tolist()
-    assert frame.iloc[2].tolist() == df.iloc[2].tolist()
-    assert df.iloc[1][["High", "Low"]].tolist() == [108.0, 96.0]
-
-
-# --- engine_path ----------------------------------------------------------------
-
-def test_engine_path_checks_the_fill_bar_first():
-    res = of.engine_path(_active(), make_ohlcv([(100.0, 101.0, 94.0, 96.0), FLAT]), 0)
-    assert (res.outcome, res.entry_index, res.exit_index, res.r_total) == ("loss", 0, 0, -1.019)
-
-
-def test_engine_path_walks_from_the_fill_index():
-    res = of.engine_path(_active(), make_ohlcv([FLAT, ENTRY, FLAT, FLAT]), 1)
-    assert (res.outcome, res.entry_index, res.exit_index) == ("timeout", 1, 3)
-    assert res.legs[0]["reason"] == "timeout"
-
-
-def test_engine_path_stops_at_the_hold_cap():
-    res = of.engine_path(_active(hold_cap_bars=2), make_ohlcv([ENTRY, *[FLAT] * 6]), 0)
-    assert (res.outcome, res.exit_index) == ("timeout", 2)
-
-
-def test_engine_path_scales_out_only_when_the_plan_keeps_a_runner():
-    df = make_ohlcv([ENTRY, FLAT, TP1_BAR, TP2_BAR])
-    single = of.engine_path(_active(), df, 0)
-    runner = of.engine_path(_active(tp1_fraction=0.5, tp2=120.0), df, 0)
-    assert [leg["reason"] for leg in single.legs] == ["tp1"]
-    assert [leg["reason"] for leg in runner.legs] == ["tp1", "runner_tp2"]
-    assert single.tp1_index == runner.tp1_index == 2
-
-
-def test_bars_before_the_fill_never_change_a_single_leg_engine_r():
-    quiet = make_ohlcv([*[(50.0, 51.0, 49.0, 50.0)] * 5, ENTRY, FLAT, TP1_BAR])
-    wild = make_ohlcv([*[(80.0, 90.0, 70.0, 85.0)] * 5, ENTRY, FLAT, TP1_BAR])
-    a = of.engine_r(_active(), of.engine_path(_active(), quiet, 5), "ACTIVE")
-    b = of.engine_r(_active(), of.engine_path(_active(), wild, 5), "ACTIVE")
-    assert a == b == 1.959
-
-
-# --- leg_kind ---------------------------------------------------------------------
-
-@pytest.mark.parametrize("reason, kind", [
-    ("tp1", "target"), ("runner_tp2", "target"),
-    ("timeout", "close"), ("runner_timeout", "close"), ("acceptance_exit", "close"),
-    ("stall_exit", "close"), ("runner_progress_stall", "close"), ("time_exit", "close"),
-    ("stop", "stop"), ("breakeven_stop", "stop"), ("runner_be", "stop"),
-    ("runner_trail", "stop"), ("entry_gap_scratch", "stop"),
-])
-def test_leg_kind_matches_the_engines_booking(reason, kind):
-    assert of.leg_kind(reason) == kind
-
-
-# --- live_tp1_leg -------------------------------------------------------------------
-
-def test_live_tp1_leg_reads_the_realised_tp1_price():
-    assert of.live_tp1_leg(_partial(tp1_price=110.4)) == {
-        "fraction": 0.5, "exit_price": 110.4, "reason": "tp1", "kind": "target"}
-
-
-def test_live_tp1_leg_is_none_without_a_priced_tp1_leg():
-    assert of.live_tp1_leg(_active()) is None
-    plan = dataclasses.replace(_partial(), legs_realized=[{"fraction": 0.5, "reason": "tp1"}])
-    assert of.live_tp1_leg(plan) is None
-
-
-# --- actual_r -----------------------------------------------------------------------
-
-def test_actual_r_active_books_the_whole_position_as_a_stop_kind_exit():
-    assert of.actual_r(_active(), 104.0, "ACTIVE") == 0.762
-
-
-def test_actual_r_partial_books_the_live_tp1_leg_and_the_remainder_together():
-    # 0.5 * (110 * 0.9995 - 100.05) / 5.05 + 0.5 * 0.76158 = 1.360
-    assert of.actual_r(_partial(), 104.0, "PARTIAL") == 1.36
-
-
-def test_actual_r_refuses_an_entry_at_the_stop():
-    with pytest.raises(ValueError):
-        of.actual_r(_active(entry_price=95.0), 96.0, "ACTIVE")
-
-
-def test_actual_r_refuses_a_partial_plan_without_a_tp1_leg():
-    with pytest.raises(ValueError):
-        of.actual_r(_active(tp1_fraction=0.5), 104.0, "PARTIAL")
-
-
-# --- engine_r -------------------------------------------------------------------------
-
-def test_engine_r_rebooks_an_active_result_to_its_own_r_total():
-    for bars in ([ENTRY, FLAT, TP1_BAR], [ENTRY, STOP_BAR], [ENTRY, FLAT, FLAT]):
-        res = of.engine_path(_active(), make_ohlcv(bars), 0)
-        assert of.engine_r(_active(), res, "ACTIVE") == res.r_total
-
-
-def test_engine_r_keeps_both_legs_of_an_active_plan_that_reaches_tp1_later():
-    plan = _active(tp1_fraction=0.5, tp2=120.0)
-    res = of.engine_path(plan, make_ohlcv([ENTRY, FLAT, TP1_BAR, TP2_BAR]), 0)
-    assert of.engine_r(plan, res, "ACTIVE") == res.r_total == 2.949
-
-
-def test_engine_r_partial_uses_the_live_tp1_leg_and_the_replays_runner():
-    plan = _partial()
-    res = of.engine_path(plan, make_ohlcv([ENTRY, FLAT, TP1_BAR, TP2_BAR]), 0)
-    assert res.runner_outcome == "runner_tp2"
-    assert of.engine_r(plan, res, "PARTIAL") == res.r_total == 2.949
-
-
-def test_the_tp1_leg_is_shared_so_its_price_never_moves_the_delta():
-    df = make_ohlcv([ENTRY, FLAT, TP1_BAR, TP2_BAR])
-    deltas = []
-    for tp1_price in (110.0, 111.0):
-        plan = _partial(tp1_price=tp1_price)
-        res = of.engine_path(plan, df, 0)
-        deltas.append(round(of.actual_r(plan, 104.0, "PARTIAL")
-                            - of.engine_r(plan, res, "PARTIAL"), 3))
-    assert deltas == [-1.589, -1.589]
-
-
-def test_engine_r_refuses_a_partial_result_with_no_runner_leg():
-    lone_tp1 = ExitResult(outcome="win", runner_outcome=None, entry_index=0, exit_index=2,
-                          entry_price=100.0, r_total=1.959,
-                          legs=[{"fraction": 1.0, "exit_price": 110.0, "r": 1.959,
-                                 "reason": "tp1"}])
-    with pytest.raises(ValueError):
-        of.engine_r(_partial(), lone_tp1, "PARTIAL")
-
-
-# --- cost parity ------------------------------------------------------------------------
-
-def test_cost_parity_on_a_stop_exit_gives_zero_delta():
-    plan = _active()
-    res = of.engine_path(plan, make_ohlcv([ENTRY, STOP_BAR]), 0)
-    exit_price = res.legs[0]["exit_price"]
-    assert exit_price == 95.0
-    assert of.actual_r(plan, exit_price, "ACTIVE") - of.engine_r(plan, res, "ACTIVE") == 0
-
-
-def test_cost_parity_on_a_runner_trail_gives_zero_delta():
-    plan = _partial(tp2=200.0)
-    res = of.engine_path(plan, _trail_bars(), 0)
-    assert res.runner_outcome == "runner_trail"
-    exit_price = res.legs[1]["exit_price"]
-    assert of.actual_r(plan, exit_price, "PARTIAL") == of.engine_r(plan, res, "PARTIAL")
-
-
-def test_a_manual_exit_at_the_engines_tp2_price_still_pays_the_stop_slippage():
-    """Target kind slips 5 bps, the manual leg 10: a real cost of exiting by hand."""
-    plan = _partial()
-    res = of.engine_path(plan, make_ohlcv([ENTRY, FLAT, TP1_BAR, TP2_BAR]), 0)
-    assert of.actual_r(plan, 120.0, "PARTIAL") == 2.943
-    assert of.engine_r(plan, res, "PARTIAL") == 2.949
-
-
-# --- dollars ------------------------------------------------------------------------------
-
-def test_dollar_risk_is_record_shares_times_the_initial_risk():
-    assert of.dollar_risk(_active(), {"shares": 10}) == 50.0
-    assert of.dollar_risk(_active(), {"shares": "7.5"}) == 37.5
-    bear = _active(direction="bearish", stop_loss=105.0, tp1=90.0)
-    assert of.dollar_risk(bear, {"shares": 10}) == 50.0
-
-
-@pytest.mark.parametrize("trade", [None, {}, {"shares": None}, {"shares": "n/a"},
-                                   {"shares": 0}])
-def test_dollar_risk_is_none_without_usable_shares(trade):
-    assert of.dollar_risk(_active(), trade) is None
-
-
-def test_to_usd():
-    assert of.to_usd(0.762, 50.0) == 38.1
-    assert of.to_usd(-1.019, 37.5) == -38.21
-    assert of.to_usd(None, 50.0) is None
-    assert of.to_usd(0.5, None) is None
-```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-```bash
-python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_fidelity_arms.py
-```
-
-Expected: FAIL, every test with `AttributeError: module 'swingbot.core.analytics.override_fidelity' has no attribute ...` (`INSTRUMENT`, `engine_path`, ...).
-
-- [ ] **Step 3: Extend the import block**
-
-In `$WT/swingbot/core/analytics/override_fidelity.py`, replace the two `swingbot` import lines written by V173-7:
-
-```python
-from swingbot.core.market.session import RTH_OPEN, US_MARKET_TZ, nyse_calendar, session_close
-from swingbot.core.planning.plan_types import PlanStatus
-```
-
-with:
-
-```python
-from swingbot.core.backtesting.instrument import contract, costs
-from swingbot.core.market.session import RTH_OPEN, US_MARKET_TZ, nyse_calendar, session_close
-from swingbot.core.market.strategy_types import HORIZONS
-from swingbot.core.planning import exit_sim
-from swingbot.core.planning.exit_sim import ExitResult
-from swingbot.core.planning.exit_sim_v2 import fill_bar_exit, walk_v2
-from swingbot.core.planning.plan_types import PlanStatus
-from swingbot.core.planning.time_exit import TIME_EXIT_REASON
-```
-
-- [ ] **Step 4: Append the engine path and the arms**
-
-Append to the end of `$WT/swingbot/core/analytics/override_fidelity.py`:
-
-```python
-# --- the engine path and the two arms (V173-8) ---------------------------------
-
-#: The instrument every arm is booked on: v2 fills and costs, as the sim.
-INSTRUMENT = contract.resolve("v2")
-
-_TARGET_REASONS = frozenset({"tp1", "runner_tp2"})
-_CLOSE_REASONS = frozenset({"timeout", "runner_timeout", "acceptance_exit", "stall_exit",
-                            "runner_progress_stall", TIME_EXIT_REASON})
-
-
-def hold_cap_bars(plan) -> int:
-    """The walk length simulate_exit_v2 gives this plan."""
-    return exit_sim._hold_cap_bars(plan, HORIZONS[plan.horizon_key]["max_holding_days"])
-
-
-def engine_frame(df: pd.DataFrame, ov_idx: int) -> pd.DataFrame:
-    """`df` with the override session's range shrunk to its open-close body.
-
-    The human acted somewhere inside that session; the engine is never shown
-    the session's high or low as a later path (spec §3, no lookahead). A
-    touch of the real range is caught as `ambiguous` instead."""
-    frame = df.copy()
-    open_, close = float(frame["Open"].iat[ov_idx]), float(frame["Close"].iat[ov_idx])
-    frame.iloc[ov_idx, frame.columns.get_loc("High")] = max(open_, close)
-    frame.iloc[ov_idx, frame.columns.get_loc("Low")] = min(open_, close)
-    return frame
-
-
-def engine_path(plan, df: pd.DataFrame, fill_idx: int) -> ExitResult:
-    """The plan left alone: the fill-bar stop check, then the v2 walk, from
-    the live fill bar at the live fill price with the original stop. Never a
-    mid-trade resume: the engine is deterministic, so replaying the whole
-    trade is the counterfactual."""
-    entry = float(plan.entry_price)
-    early = fill_bar_exit(df, fill_idx, entry, plan, INSTRUMENT)
-    if early is not None:
-        return early
-    return walk_v2(df, fill_idx, entry, plan, hold_cap_bars(plan), INSTRUMENT,
-                   scale_out=plan.tp1_fraction < 1.0)
-
-
-def leg_kind(reason: str) -> str:
-    """The costs.EXIT_KINDS kind walk_v2 books a leg of this reason with."""
-    if reason in _TARGET_REASONS:
-        return "target"
-    return "close" if reason in _CLOSE_REASONS else "stop"
-
-
-def live_tp1_leg(plan) -> dict | None:
-    """The realised TP1 leg as a raw costs.book leg; both arms share it."""
-    leg = next((leg for leg in plan.legs_realized or [] if leg.get("reason") == "tp1"), None)
-    if leg is None or leg.get("exit_price") is None:
-        return None
-    return {"fraction": float(plan.tp1_fraction), "exit_price": float(leg["exit_price"]),
-            "reason": "tp1", "kind": "target"}
-
-
-def _remainder(plan, state: str) -> float:
-    """The position the override closed (plan_manager.py:1115)."""
-    return 1.0 - float(plan.tp1_fraction) if state == PlanStatus.PARTIAL else 1.0
-
-
-def _tp1_legs(plan, state: str) -> list[dict]:
-    if state != PlanStatus.PARTIAL:
-        return []
-    leg = live_tp1_leg(plan)
-    if leg is None:
-        raise ValueError(f"{plan.plan_id}: PARTIAL at close but no realised tp1 leg")
-    return [leg]
-
-
-def _book(plan, legs: list[dict]) -> float:
-    """One costs.book call: the plan's entry and original stop, every leg."""
-    entry, stop = float(plan.entry_price), float(plan.stop_loss)
-    sign = 1 if plan.direction == "bullish" else -1
-    if (entry - stop) * sign <= 0:
-        raise ValueError(f"{plan.plan_id}: entry {entry} is at or beyond the stop {stop}")
-    r_total, _ = costs.book(INSTRUMENT.cost_model, direction=plan.direction,
-                            entry_price=entry, stop_loss=stop, legs=legs)
-    return r_total
-
-
-def actual_r(plan, exit_price: float, state: str) -> float:
-    """The override as booked: the live TP1 leg (PARTIAL) plus the closed
-    remainder at `exit_price`, a stop-kind exit (a market order by hand)."""
-    manual = {"fraction": _remainder(plan, state), "exit_price": float(exit_price),
-              "reason": "manual", "kind": "stop"}
-    return _book(plan, [*_tp1_legs(plan, state), manual])
-
-
-def engine_r(plan, result: ExitResult, state: str) -> float:
-    """The replay as booked: the live TP1 leg (PARTIAL; the replay's own tp1
-    leg is dropped) plus the replay's remainder legs, re-scaled to the
-    remainder, each with the kind the engine books its reason with."""
-    partial = state == PlanStatus.PARTIAL
-    own = [leg for leg in result.legs if not (partial and leg.get("reason") == "tp1")]
-    total = sum(float(leg["fraction"]) for leg in own)
-    if total <= 0:
-        raise ValueError(f"{plan.plan_id}: the engine result has no leg to book")
-    scale = _remainder(plan, state) / total
-    legs = [{"fraction": float(leg["fraction"]) * scale, "exit_price": float(leg["exit_price"]),
-             "reason": leg["reason"], "kind": leg_kind(leg["reason"])} for leg in own]
-    return _book(plan, [*_tp1_legs(plan, state), *legs])
-
-
-def dollar_risk(plan, trade: dict | None) -> float | None:
-    """Dollars at risk at the fill: the linked paper trade's record shares
-    times the initial risk per share (the v170 convention). None when the
-    trade or its shares are missing: the row then shows R only."""
-    if not trade or trade.get("shares") is None:
-        return None
-    if plan.entry_price is None or plan.stop_loss is None:
-        return None
-    try:
-        shares = float(trade["shares"])
-    except (TypeError, ValueError):
-        return None
-    risk = shares * abs(float(plan.entry_price) - float(plan.stop_loss))
-    return risk if risk > 0 else None
-
-
-def to_usd(r: float | None, risk: float | None) -> float | None:
-    """R in dollars; None when either side is unknown."""
-    if r is None or risk is None:
-        return None
-    return round(r * risk, 2)
-```
-
-Paper-trade `shares` are stored positive for both directions (`performance.py:477-480` applies the direction sign separately), so one formula serves bulls and bears.
-
-- [ ] **Step 5: Run the new test and the V173-7 test**
-
-```bash
-python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_fidelity_arms.py
-python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_fidelity_sessions.py
-```
-
-Expected: both PASS, `0 failed`, `0 xfailed`.
-
-If a numeric expectation is off by 0.001, do not loosen it to `approx`. Recompute it with `costs.book(resolve("v2").cost_model, ...)` in a scratch script. A mismatch means the legs or kinds differ from the ones described above, and that is the bug to fix.
-
-- [ ] **Step 6: Purity and complexity**
-
-```bash
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides grep -n "open(\|requests\|PlanStore\|TradeLog\|data_store\|cached_daily_bars\|get_current_price" -- swingbot/core/analytics/override_fidelity.py
-python -m radon cc -s -n C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/swingbot/core/analytics/override_fidelity.py
-```
-
-Expected: the `grep` finds nothing (the module does no I/O; `cached_daily_bars` is read only by the callers in V173-11/V173-12). The `radon` call prints nothing.
-
-- [ ] **Step 7: Commit on the branch**
-
-```bash
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides add swingbot/core/analytics/override_fidelity.py tests/analytics/test_override_fidelity_arms.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): replay an override from its fill and book both arms on one cost basis"
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): override_fidelity sessions, plan readers, stamp kinds and OverrideRow"
 git -C E:/Documents/Private/Projects/Discord-Bot status --short
 ```
 
