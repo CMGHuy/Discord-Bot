@@ -2,10 +2,10 @@
 
 **Version:** ui 1.31.0 · bot 2.12.0 (at writing)
 **Bump:** bot patch — Phase A adds inert simulator modes behind a default that leaves the live v176 rule byte-identical; nothing the user sees changes. Phase B (live parity) exists only if an arm passes the one-shot VALIDATION, and is then its own spec.
-**Edge:** harvest — locks in more of a runner's run before a reversal. Prediction: a small paired ΔExpR against the live fixed 5% (|Δ| under 0.05R; the v176 5% rule measured +0.003R and the two earlier tighter-trail rules measured near zero), sign unknown.
+**Edge:** harvest — locks in more of a runner's run before a reversal. Prediction: a small paired ΔExpR against the live fixed 5% (|Δ| under 0.05R; the v176 5% rule measured +0.003R and the two earlier tighter-trail rules measured near zero), sign unknown. The base case is that no arm clears stage 0 (see Stage 0).
 **Screen:** harvest-headroom docs/superpowers/results/2026-10-02-v123-runner-headroom.md
 **Panel:** risk-manager, veteran-trader, quant-researcher
-**Status:** spec written 2026-10-19 from a chat with the partner, who asked for a pullback level that adapts to each trade instead of one fixed percentage, and chose to test both families as separate arms.
+**Status:** spec written 2026-10-19 from a chat with the partner, who asked for a pullback level that adapts to each trade instead of one fixed percentage, chose to test both families as separate arms, and ruled the v92 overlap a new test (below). Revised the same day after the quant-researcher pass; risk-manager and veteran-trader still to run.
 
 ## Why
 
@@ -41,17 +41,37 @@ processed, `entry` the original fill.
 | control A | the live v176 rule, fixed 5% of `E` | 1 |
 | control B | no give-back (flag off) | 1 |
 
-- Six candidate arms (R×3, S×3) and two controls. `k` stays below 1.5 on
-  purpose: v92 `ADAPTIVE_RUNNER_TRAIL` already tested the chandelier multiple
-  at {1.5, 1.75, 2.0} after a trigger profit and closed with no lift
-  (`backtest-methodology.md` § Closed pre-registrations). That grid is not
-  re-run; family R covers lower multiples, applied from TP1.
-- The floor in family S is fixed at 1.0 × ATR and is not a grid axis, so the
-  range-multiple behaviour is not reopened through the back door.
+- Six candidate arms (R×3, S×3) and two controls. The floor in family S is
+  fixed at 1.0 × ATR and is not a grid axis.
 - Worked example, RKLB short (entry 60.67, `E` = 49.94, profit 10.73, ATR
   4.164): fixed 5% exits at 52.44; R 0.75/1.0/1.25 at 53.06 / 54.10 / 55.14;
   S 25/33/50% at 54.10 / 54.10 / 55.31 (the floor binds for the first two).
   This is arithmetic, not a result.
+
+## Ruling on the v92 overlap (the partner, 2026-10-19)
+
+v92 `ADAPTIVE_RUNNER_TRAIL` (closed, `backtest-methodology.md` § Closed
+pre-registrations; record `results/2026-09-16-v92-adaptive-trail-train.md`) tested
+the chandelier multiple at {1.5, 1.75, 2.0} after a trigger profit {1.5, 2.0,
+2.5}R since entry, and found no lift. Its record notes that, because TP1 already
+sits at 1.5–2.5R, its low-trigger cells fired on the first runner bar, so it
+"is closer to a tighter trail from TP1", with the tightest multiple, 1.5, the
+least-bad column; the same record says "a trigger measured from TP1 itself
+would be a genuinely new mechanism, not a re-run of this one".
+
+Family R is therefore **adjacent** to v92: lower multiples (all below 1.5),
+anchored at the best price since TP1 with no trigger. The same is true of family
+S wherever its 1.0 × ATR floor binds. The partner ruled both a new test, not a
+re-run, with these conditions:
+
+- No v92 cell is re-run, re-gridded or re-used. No arm here has a multiple
+  inside {1.5, 1.75, 2.0}.
+- The overlap is disclosed in every result doc. The nearest v92 cell
+  (`trigger_r=2.50, mult=1.50`, ΔExpR −0.0045R to +0.0091R across its grid, best
+  cell lower bound −0.0131R) is quoted beside each R arm as context, never as a
+  threshold.
+- A result in the direction v92 leaned is not a replication claim and a null
+  result does not reopen v92.
 
 ## Not the Stage −2 screen
 
@@ -61,7 +81,7 @@ An exit rule is not an entry idea, so no `SCREEN-PASS` row applies. The
 the harvest gate (`acceptance_harvest.evaluate_harvest`, v92) through the same
 four stages.
 
-## The test, stage by stage
+## The test, stage by stage (the rules below are frozen now)
 
 The comparison is **paired on the same entries**, against the live fixed 5%
 (control A) as the baseline. Control B is reported for context.
@@ -69,29 +89,67 @@ The comparison is **paired on the same entries**, against the live fixed 5%
 | Stage | Window | What happens | Closes the arm if |
 |---|---|---|---|
 | −1 reachability | pilot | the arm's knob is reachable by replay and changes at least one outcome | unreachable, or zero changed outcomes: refused, budget intact |
-| 0 MDE | fold-train | paired MDE (`acceptance.mde_paired`) against the arm's expected effect | TRAIN effect below the MDE: shot refused, budget intact |
-| 1 plateau | fold-train (2018-06..2020 / ..2021 / ..2022) | `plateau_report()` (`backtest_wf.py:36`) within each family, over its three arms, mandatory and disqualifying | a spike with unstable neighbours: closed |
-| 2 walk-forward | fold-test 2021 / 2022 / 2023 | at least 2 of 3 folds improving, no fold worse than −1.0pp, per-fold N ≥ 30 | fails: closed |
+| 0 MDE | fold-train | `--train-effect-r` is the **measured** pooled fold-train paired ΔExpR (arm − control A) over the three fold-train windows, compared with `acceptance.mde_paired` on the same pairs | effect below the MDE: shot refused, budget intact |
+| 1 plateau | fold-train (2018-06..2020 / ..2021 / ..2022) | `plateau_report()` (`backtest_wf.py:36`) per family, adopted value = the arm with the highest pooled fold-train ΔExpR, plus the extra rule below | a spike with unstable neighbours: closed |
+| 2 walk-forward | fold-test 2021 / 2022 / 2023 | the **harvest** walk-forward gate (`validate_component.py --gate harvest` → `backtest_wf.gate`): ΔExpR per fold, at least 2 of 3 folds improving over control A, no fold worse than −`GATE_MAX_DEGRADATION_R` (0.05R); a fold counts as improving only with at least 30 changed outcomes in it | fails: closed |
 | 3 validation | 2024-01-01..2025-12-31 | **one shot**, for the single surviving arm, all clauses of the harvest gate | any clause fails: closed; the live 5% stays |
 
-- At most **one** arm reaches stage 3: the one with the best stage-2 result among
-  those that passed stage 1. If both families have survivors, the larger mean
-  paired ΔExpR across the three folds goes through; the other is closed
-  unspent. Ties go to the lower-complexity rule (family R).
-- Multiple comparisons: six candidates are looked at at stage 1. The result
-  reports the number looked at, a Holm-adjusted p across the six, and appends
-  one ledger row per candidate (so `ledger_qvalues` counts every look). A
-  per-family reading is descriptive; the funnel's pass rule is the gate.
-- The harvest gate's `win_rate_floor` is `SKIPPED` (a post-TP1 rule cannot move
-  the TP1-touch win rate) and `volume_floor` does not apply (the count of
-  trades is unchanged). Win→non-win outcome flips are disclosed.
+- **Stage 0 base case.** v176's paired MDE on this entry population was
+  0.0181R and the prior effect is about 0.01R, so every arm being refused at
+  stage 0 is the expected outcome, not a risk. A refusal is a finished result;
+  the 5% stays live. Changed-outcome counts are reported beside every MDE
+  (fewer changed trades shrink the MDE, as v123's 0.0009–0.0024R did).
+- **Stage 1 extra rule.** `PLATEAU_TOLERANCE_R` (0.03R) is larger than the
+  prior effect, so `plateau_report` alone disqualifies little. Added and
+  frozen: an adopted arm proceeds only if all three arms of its family have a
+  fold-train ΔExpR (vs control A) of the same sign as the adopted arm on at
+  least 2 of the 3 fold-train windows. An edge arm (k 0.75 or 1.25, f 0.25 or
+  0.50) has one neighbour in `plateau_report` and faces this same family-wide
+  rule. An arm refused at stage 0 still counts as a neighbour: stage 0 gates
+  the shot, not the measurement.
+- **At most one arm reaches stage 3**: the one with the best stage-2 mean
+  paired ΔExpR among those that passed stages 1–2. If both families have
+  survivors, the larger mean goes through; the other is closed unspent. Ties go
+  to the simpler rule (family R).
+- **Near-duplicate arms.** Family S collapses toward R at k = 1.0 wherever the
+  1.0 × ATR floor binds, which is whenever profit since entry is below 4 / 3 /
+  2 ATR for f = 0.25 / 0.33 / 0.50. Reported for each S arm: the share of
+  runner exits where the floor binds, and the number of trades whose outcome
+  differs from R k = 1.0. The "six arms" are six rules but fewer than six
+  distinct behaviours, and the Holm adjustment is conservative by that margin.
+- **Counting.** One ledger row per pre-registration (`v178-giveback-levels`),
+  not per arm, with the number of arms and cells in its hypothesis text. Its
+  `p` is the stage-3 p if stage 3 ran, otherwise the best arm's pooled
+  fold-train p; the record names which. The result reports a Holm-adjusted p
+  across the six arms. `cells_looked_at` is frozen as: 6 arms × (3 fold-train
+  + 3 fold-test) = 36 gating cells, + 6 arms × 10 horizons = 60 per-horizon
+  descriptive cells, + 6 control-B comparisons, + 6 drawdown/dollar blocks =
+  **108**, plus one for the survivor's high/low sensitivity if it runs.
+  A concentration line is reported: the top-2 horizons' share of ΔR and the
+  long/short split.
+- **Gate clauses.** The harvest gate's `win_rate_floor` is `SKIPPED` (a post-TP1
+  rule cannot move the TP1-touch win rate) and `volume_floor` does not apply
+  (the count of trades is unchanged). Win→non-win outcome flips are disclosed.
+- **Uncertainty.** The gating interval is the harvest gate's ticker-cluster
+  bootstrap. A `week_cluster_bootstrap` interval is reported beside it
+  (descriptive, never gating), because give-back exits cluster in market-wide
+  reversal weeks.
+- **Sensitivity.** The survivor's high/low-basis run (live follows ticks, the
+  simulator follows closes) is **TRAIN-side only** (fold-train and fold-test).
+  VALIDATION is read once, for the gating stage-3 run, and never for the
+  sensitivity.
+- **Stage-3 readings fixed now.** Beside the gating arm-vs-A reading, the
+  record reports A-vs-B and arm-vs-B on VALIDATION. v176 found A no better
+  than B on TRAIN, so an arm that beats A could still be no better than B.
 - Frictions: non-zero slippage and commission in every arm, from
   `swingbot/core/edge/frictions.py`.
 - Data source `yfinance`, the 75-ticker cache, both engines, all ten horizons,
-  `scale_out=True`, instrument v1, TRAIN-side windows only before stage 3.
-  Stated in the frozen block before any window is read.
-- The v176 measurement already read TRAIN for control A only. Control A's numbers
-  are known; this is disclosed, and it sets no threshold here.
+  `scale_out=True`, instrument v1. Stated in the frozen block before any window
+  is read.
+- **Disclosure.** The v176 measurement already read TRAIN for control A (and
+  its tick sensitivity). The arm grid above was set with that knowledge of a
+  neighbouring rule, not blind to it. Control A's numbers are known and set no
+  threshold here.
 
 ## Phases
 
@@ -119,8 +177,8 @@ production keeps the fixed 5%.
 ## Risks
 
 - **Six arms at roughly 0.01R effects.** The earlier tests of similar rules
-  closed near zero. The most likely outcome is NO-LIFT at stage 1 or 0. That
-  is a finished result, and the 5% stays live.
+  closed near zero. The most likely outcome is a refusal at stage 0 or a
+  NO-LIFT. That is a finished result, and the 5% stays live.
 - **A volatility-scaled stop can be wide in a real drawdown.** A 1.25 × ATR
   allowance on a name with an 8% daily range is a 10% give-back. The
   measurement reports max drawdown and dollars at fixed risk, off against on,
@@ -128,8 +186,7 @@ production keeps the fixed 5%.
   paired ΔExpR with a deeper drawdown goes to the partner as a trade-off.
 - **Live differs from the simulator.** The simulator trails the best close, the
   live bot trails the best tick. v176 measured the gap (+0.003R against
-  +0.010R). Any stage-3 pass is read together with a high/low sensitivity run
-  on the survivor, as v176 did.
+  +0.010R). The survivor's TRAIN-side high/low sensitivity bounds it.
 - **Real-money orders.** The bot moves only its paper stop. A rule that is
   wider than the live 5% would move the paper stop less often; any switch of the
   live rule needs the partner to move broker stops by hand.
@@ -145,9 +202,23 @@ production keeps the fixed 5%.
 - No lookahead: a level is built from the extreme and ATR of the bars before
   the one tested, effective the next bar.
 - Funnel plumbing: reachability classifies each knob; stage files refused when
-  unstamped or wrong-stage; a result file never overwritten.
+  unstamped or wrong-stage; a result file never overwritten; the stage-1 family
+  rule and the per-fold changed-outcome floor are unit-tested on synthetic folds.
 - The live path is untouched: the existing v176 tests pass unmodified.
 
 ## Panel review
 
-(filled after the panel runs)
+Spec review, 2026-10-19. quant-researcher done; risk-manager and veteran-trader to follow.
+
+- quant-researcher 1 [BLOCKING]: family R is adjacent to the closed v92 row -- applied. The partner ruled it a new test; conditions and disclosure written in "Ruling on the v92 overlap".
+- quant-researcher 2 [BLOCKING]: stage-2 rule named the win-rate fold gate, which the harvest rule skips -- applied (the harvest dExpR walk-forward gate and `GATE_MAX_DEGRADATION_R` are frozen in the stage table).
+- quant-researcher 3: stage-1 plateau under-specified and near-vacuous -- applied (adopted value, family-wide same-sign rule on 2 of 3 windows, edge arms, stage-0-refused arms as neighbours).
+- quant-researcher 4: family S collapses onto R k = 1.0 -- applied (floor-binding share and differing-trade count reported; tie-break and Holm noted).
+- quant-researcher 5: stage-0 effect number unfrozen; base case unstated -- applied (measured pooled fold-train ΔExpR; refusal of every arm named as the base case; changed counts beside each MDE).
+- quant-researcher 6: six ledger rows break the one-row convention -- applied (one row, arms and cells in its text, `p` rule named).
+- quant-researcher 7: no `cells_looked_at` formula or concentration line -- applied (108, with the formula; top-2 horizon share and long/short split).
+- quant-researcher 8: the high/low sensitivity window was unnamed -- applied (TRAIN-side only; VALIDATION read once).
+- quant-researcher 9: control A's relation to control B; grid set after v176 -- applied (A-vs-B and arm-vs-B reported at stage 3; plain disclosure).
+- quant-researcher 10: per-fold N ≥ 30 counts all trades -- applied (at least 30 changed outcomes per fold).
+- quant-researcher 11: week-clustered interval beside the ticker-clustered one -- applied (descriptive).
+- quant-researcher 12: the drawdown trade-off belongs to risk-manager -- handed to risk-manager.
