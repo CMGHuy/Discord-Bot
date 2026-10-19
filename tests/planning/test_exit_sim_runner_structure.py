@@ -69,6 +69,30 @@ def test_hl_stop_is_hit_on_a_drop_through_the_swing_low(monkeypatch):
     assert arm.legs[1]["exit_price"] == pytest.approx(runner_structure_frame(df)["sl_px"].iloc[-1])
 
 
+def test_hl_stop_with_giveback_on_is_95pct_of_the_best_close(monkeypatch):
+    # v176: give-back on (overrides the module pin). Hand derivation: the best
+    # close since TP1 is 109, so the stop is 109 x 0.95 = 103.55 (was 100.66667).
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", True)
+    _mode(monkeypatch, "hl_trail", b=0.25)
+    df = sawtooth(4)
+    trace = []
+    _scale_out_exit_walk(df, E, 100.0, _runner_plan(), 60, trace=trace)
+    stops = dict(trace)
+    confirm = WARMUP + 6 + 3
+    assert stops[confirm - 1] == pytest.approx(103.55)
+
+
+def test_drop_through_the_swing_low_with_giveback_on_is_a_runner_trail(monkeypatch):
+    # v176: give-back on. The 109 x 0.95 = 103.55 stop closes the runner that
+    # runs to timeout when the give-back is off.
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", True)
+    closes = sawtooth_closes(4)
+    df = sawtooth(4, tail=(closes[-1] - 6.0,))
+    _mode(monkeypatch, "hl_trail")
+    arm = _scale_out_exit_walk(df, E, 100.0, _runner_plan(), 60)
+    assert arm.runner_outcome == "runner_trail"
+
+
 def test_pivot_never_moves_the_stop_its_confirmation_bar_is_checked_against(monkeypatch):
     """Confirmation is non-strict on the right: bar confirm's Low may EQUAL the
     pivot low. With b = 0 the new stop equals that Low, so applying the update

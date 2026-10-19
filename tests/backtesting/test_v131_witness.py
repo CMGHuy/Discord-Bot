@@ -28,18 +28,18 @@ HORIZONS_UNDER_TEST = ("1w", "2w", "4w", "2m")
 # Every strategy unmasked in both directions, 1w admitted too, so masked
 # strategies (the v104 shorts, the v113 fade) are witnessed as well.
 OPEN_GATES = {"cells": frozenset({("bullish", "1w"), ("bearish", "1w")})}
-
-
-@pytest.fixture(autouse=True)
-def _giveback_off(monkeypatch):
-    """v176: the witness predates the runner give-back (default on); pinned off."""
-    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
 # The plan fields that decide how a plan trades. plan_id is random and the
 # badge fields follow the registry, so neither belongs in a behaviour witness.
 PLAN_KEYS = ("created_at", "direction", "entry_type", "trigger_price", "entry_price",
              "expiry_bars", "stop_loss", "tp1", "tp1_fraction", "tp2",
              "breakeven_trigger_fraction", "trail_atr_mult", "hold_cap_bars", "status",
              "stop_mult_applied", "tp2_r_applied", "time_stop_days", "stall_exit_day")
+
+
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: the witness predates the runner give-back (default on); pinned off."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
 
 
 def _frames():
