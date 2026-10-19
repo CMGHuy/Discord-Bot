@@ -132,14 +132,15 @@ describe('no colour is declared outside the token files', () => {
  * tokens.css under its own rules (spec v167 §5). palette.css is tier 1, the
  * only file free to hold hued literals. tokens.css keeps hex only on the
  * seven names jsdom and chart-palette.spec read as literals, and
- * rgb()/rgba() only inside the three tier-3 shadow and scrim tokens, black
+ * rgb()/rgba() only inside the four tier-3 shadow and scrim tokens, black
  * or white at some alpha. A hued glow derives from a tier-2 token with
  * color-mix(), so a palette change reaches it. hsl() is in neither file.
  */
 const TOKENS_HEX_ALLOWED = new Set([
   '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6', '--quality-4',
 ]);
-const TIER3_RGB = new Set(['--panel-shadow', '--shadow-overlay', '--scrim-soft']);
+/* v168 amendment 8: the hover lift's deeper shadow is black at an alpha too. */
+const TIER3_RGB = new Set(['--panel-shadow', '--shadow-overlay', '--scrim-soft', '--panel-shadow-lift']);
 
 describe('tokens.css holds no hued literal (v167 §5)', () => {
   const styles = (file: string) =>
@@ -159,7 +160,7 @@ describe('tokens.css holds no hued literal (v167 §5)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps rgb()/rgba() inside the three tier-3 tokens only', () => {
+  it('keeps rgb()/rgba() inside the four tier-3 shadow and scrim tokens only', () => {
     const offenders = declarations
       .filter(({ name, value }) => rgbIn(value).length > 0 && !TIER3_RGB.has(name))
       .map(({ name }) => name);

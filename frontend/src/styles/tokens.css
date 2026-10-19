@@ -294,9 +294,11 @@
      one of the four tier-3 radius targets, and primitives.spec.ts fails a
      raw px radius or either old name anywhere outside styles/. */
 
-  --dur-instant: 90ms;
-  --dur-base: 160ms;
-  --dur-slow: 260ms;
+  /* v168 §1: scaled by --motion-scale (tier 3, below), which is 1 and
+   * becomes 0 only under [data-motion=off] in styles/motion.css. */
+  --dur-instant: calc(90ms * var(--motion-scale));
+  --dur-base: calc(160ms * var(--motion-scale));
+  --dur-slow: calc(260ms * var(--motion-scale));
   --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
@@ -355,8 +357,8 @@
  * component reads these instead of re-spelling background + border +
  * radius + shadow. Every colour here derives from tier 2 by var() or
  * color-mix(): a palette change reaches it. The only rgb()/rgba() literals
- * are black or white at an alpha, inside --panel-shadow, --shadow-overlay
- * and --scrim-soft (the colour gate, primitives.spec.ts).
+ * are black or white at an alpha, inside --panel-shadow, --shadow-overlay,
+ * --panel-shadow-lift and --scrim-soft (the colour gate, primitives.spec.ts).
  *
  * --panel-bg, --btn-fill, --btn-fill-hover and --glow-ambient are
  * GRADIENTS, i.e. images: `background` / `background-image` only, never
@@ -402,4 +404,25 @@
   /* The mobile-nav scrim (shell.css), given a name. Softer than --scrim,
    * which dims behind a modal. */
   --scrim-soft: rgb(0 0 0 / 0.5);
+
+  /* -- motion (spec v168 §1) ---------------------------------------------
+   * --motion-scale is 1 here and 0 only under [data-motion=off]
+   * (styles/motion.css). Never a fraction: Reduced is written as
+   * [data-motion=reduced] rules, not as a faster multiplier. Every
+   * --dur-* token, here and in tier 2, is calc(<ms> * var(--motion-scale)).
+   * The default must live in this file: motion.css is outside the token
+   * resolver's STYLE_FILES, so the fixture would not see it. */
+  --motion-scale: 1;
+  --dur-enter: calc(420ms * var(--motion-scale));   /* route entrance, stagger */
+  --dur-count: calc(900ms * var(--motion-scale));   /* first count-up */
+  --dur-draw: calc(1200ms * var(--motion-scale));   /* chart draw-in */
+
+  /* The text colour a changed cell takes while its tint fades (#8). */
+  --flash-up-text: var(--pos);
+  --flash-down-text: var(--neg);
+
+  /* The hover lift's deeper shadow (#5), cast only from styles/motion.css;
+   * primitives.spec.ts G3 holds that file to it and --glow-accent. */
+  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 -- shadow values have no natural expression via the closed --space-* scale. */
+  --panel-shadow-lift: 0 10px 28px rgba(0, 0, 0, .35);
 }
