@@ -208,7 +208,8 @@ def _ctx_argv(tmp_path, cache, *extra, idea="fake_ctx"):
 
 @pytest.fixture
 def fake_registered(monkeypatch):
-    idea = _fake_ctx_idea()
+    # Publishing now renders the frozen context definition, including its parameters.
+    idea = dataclasses.replace(IDEAS["bond_spike_rebound"], name="fake_ctx")
     monkeypatch.setitem(screen_idea.IDEAS, idea.name, idea)
     return idea
 
@@ -374,3 +375,206 @@ def test_an_old_idea_never_loads_context(tmp_path, monkeypatch):
     screen_idea.screen_universe(IDEAS["turn_of_month"], universe, cache, out=_quiet)
     args = screen_idea.build_parser().parse_args(["--idea", "turn_of_month"])
     assert screen_idea._context_step(args, IDEAS["turn_of_month"]) == (None, None)
+
+
+# --- V174-8: restricted null, diagnostics, scope ----------------------------
+
+from swingbot.core.backtesting.screen import context as pit  # noqa: E402
+from swingbot.core.backtesting.screen import diagnostics, null  # noqa: E402
+
+
+def _tlt_like(n=2600, seed=21):
+    """A context series on the same business days as random_walk(n)."""
+    return random_walk(n, seed=seed)
+
+
+def _spy_matched_null(monkeypatch):
+    calls = []
+    real = null.matched_null
+
+    def spy(df, event_pos, eligible, k, seed, **kw):
+        calls.append({"eligible": np.asarray(eligible, dtype=bool).copy(), "k": k,
+                      "seed": list(seed), "cap": kw["cap"]})
+        return real(df, event_pos, eligible, k, seed, **kw)
+
+    monkeypatch.setattr(screen_idea.null, "matched_null", spy)
+    return calls
+
+
+def test_a_context_idea_draws_a_second_null_without_bars_near_a_shock(monkeypatch):
+    df, tlt = random_walk(2600), _tlt_like()
+    idea = IDEAS["bond_spike_rebound"]
+    raw = np.asarray(idea.events(df, {"TLT": tlt}), dtype=bool)
+    assert raw.any()                                       # non-vacuous: shocks exist
+    calls = _spy_matched_null(monkeypatch)
+    screen_idea.screen_ticker(idea, "AAA", df, ALWAYS, context={"TLT": tlt})
+    assert len(calls) == 2                                 # official, then restricted
+    official, restricted = calls
+    assert (restricted["seed"], restricted["k"], restricted["cap"]) == \
+        (official["seed"], official["k"], official["cap"]) == \
+        (null.null_seed(idea.name, "AAA"), null.K, idea.time_cap_bars)
+    near = pit.near_mask(raw, idea.time_cap_bars)
+    assert np.array_equal(restricted["eligible"], official["eligible"] & ~near)
+    assert restricted["eligible"].sum() < official["eligible"].sum()
+
+
+def test_an_old_idea_draws_one_null_and_keeps_no_restricted_book(monkeypatch):
+    calls = _spy_matched_null(monkeypatch)
+    out = screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", random_walk(2600),
+                                    ALWAYS)
+    assert len(calls) == 1
+    assert out.restricted is None
+
+
+def test_restricted_pairs_race_the_same_events_as_the_official_book():
+    df, tlt = random_walk(2600), _tlt_like()
+    out = screen_idea.screen_ticker(IDEAS["bond_spike_rebound"], "AAA", df, ALWAYS,
+                                    context={"TLT": tlt})
+    assert out.events and out.restricted is not None
+    official = {row["entry_date"]: row["r_event"] for row in out.events}
+    for row in out.restricted:
+        assert set(row) == {"entry_date", "r_event", "r_null"}
+        assert official[row["entry_date"]] == row["r_event"]   # same race, other null
+
+
+def test_exclude_cuts_the_null_pool_and_nothing_else():
+    df, tlt = random_walk(2600), _tlt_like()
+    idea = IDEAS["bond_spike_rebound"]
+    atr = screen_idea.indicators.atr(df)
+    sma = screen_idea.indicators.sma(df["Close"], 200)
+    ctx = {"raw": np.asarray(idea.events(df, {"TLT": tlt}), dtype=bool),
+           "member": np.ones(len(df), dtype=bool),
+           "warm": screen_idea.race.warm_mask(atr, sma)
+           & (df.index >= pd.Timestamp(screen_idea.EVENT_START)),
+           "atr": atr, "trend": null.trend_state(df, sma)}
+    costs = {"slippage_bps": None, "commission": None}
+    plain = screen_idea._books(idea, "AAA", df, ctx, costs)
+    no_cut = screen_idea._books(idea, "AAA", df, ctx, costs,
+                                exclude=np.zeros(len(df), dtype=bool))
+    assert np.array_equal(plain[0].event_pos, no_cut[0].event_pos)
+    assert np.array_equal(plain[2].null_mean_r, no_cut[2].null_mean_r)
+    cut = screen_idea._books(idea, "AAA", df, ctx, costs,
+                             exclude=pit.near_mask(ctx["raw"], idea.time_cap_bars))
+    assert set(cut[0].event_pos) <= set(plain[0].event_pos)   # a smaller pool may drop events
+
+
+def test_the_restricted_pass_is_deterministic():
+    df, tlt = random_walk(2600), _tlt_like()
+    idea = IDEAS["bond_spike_rebound"]
+    first = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS, context={"TLT": tlt})
+    second = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS, context={"TLT": tlt})
+    assert first.events == second.events and first.restricted == second.restricted
+
+
+def _context_data(tlt, spy):
+    record = {"ticker": "TLT", "rows": len(tlt), "first": "2010-01-04",
+              "last": tlt.index[-1].strftime("%Y-%m-%d"), "fetched": "2026-10-18",
+              "sha256": "cd" * 32}
+    return pit.ContextData(frames={"TLT": tlt}, calendar=spy, records={"TLT": record})
+
+
+def test_diagnostics_are_added_beside_the_verdict_never_into_it():
+    tlt, spy = _tlt_like(), random_walk(2600, seed=5)
+    idea = IDEAS["bond_spike_rebound"]
+    screens = [screen_idea.screen_ticker(idea, t, random_walk(2600, seed=s), ALWAYS,
+                                         context={"TLT": tlt})
+               for s, t in ((1, "AAA"), (2, "BBB"))]
+    summary = screen_idea.summarise(screens)
+    out = screen_idea.with_diagnostics(summary, screens, idea, _context_data(tlt, spy),
+                                       end="2019-12-31")
+    assert out["verdict"] is summary["verdict"]
+    assert set(out) == set(summary) | {"context"}
+    assert "context" not in summary                        # the input is not mutated
+    assert set(out["context"]) == {"sample", "overlap", "selloff", "concentration"}
+    assert out["context"]["overlap"]["restricted"] is not None
+
+
+def test_an_old_idea_summary_passes_through_untouched():
+    screens = [screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", random_walk(2600),
+                                         ALWAYS)]
+    summary = screen_idea.summarise(screens)
+    assert screen_idea.with_diagnostics(summary, screens, IDEAS["turn_of_month"], None,
+                                        end="2019-12-31") is summary
+
+
+def test_restricted_pairs_pool_over_tickers_and_are_none_for_an_old_idea():
+    class S:
+        def __init__(self, restricted):
+            self.restricted = restricted
+    assert screen_idea._restricted_pairs([S(None), S(None)]) is None
+    assert screen_idea._restricted_pairs([S([{"a": 1}]), S([]), S([{"b": 2}])]) == \
+        [{"a": 1}, {"b": 2}]
+
+
+def test_a_context_idea_hypothesis_carries_the_scope_sentence():
+    idea = IDEAS["bond_spike_rebound"]
+    text = screen_idea.hypothesis(idea)
+    assert text.startswith(
+        "bond_spike_rebound: TLT 5-day return z >= +2.0 vs its trailing 252 values; "
+        "fixed 1.5/3.0 ATR race vs K=20 matched null, cap 10, PIT S&P 500 2010-2019, "
+        "context TLT adjusted closes from 2009-06-01, after costs (v174 intermarket "
+        "screen). ")
+    assert text.endswith(diagnostics.scope_sentence(idea))
+    v = screen_idea.verdict.Verdict("SCREEN-FAIL", 412, 0.01, -0.02, 0.04, 0.3, 4, {},
+                                    {"exp_r": False, "ci": False, "years": False, "n": True})
+    row = screen_idea.ledger_row(idea, v, "docs/x.md", "2026-10-19")
+    stats.validate_ledger_row(row)                         # no new field: scope lives in hypothesis
+    assert (row["instrument"], row["data_source"]) == ("screen-v1", "yfinance")
+
+
+def test_the_run_dict_of_an_old_idea_is_unchanged():
+    run = {"ledger_id": "screen-gap_volume", "q": 0.1}
+    assert screen_idea._context_run(run, IDEAS["gap_volume"], [], {"id": "x"}, None) is run
+
+
+def test_the_run_dict_of_a_context_idea_carries_the_screen_family_q():
+    rows = [{"id": "v1-a", "instrument": "v1", "p": 0.001},
+            {"id": "v1-b", "instrument": "v1", "p": 0.9},
+            {"id": "screen-a", "instrument": "screen-v1", "p": 0.04}]
+    row = {"id": "screen-bond_spike_rebound", "instrument": "screen-v1", "p": 0.03}
+    out = screen_idea._context_run({"q": 0.5}, IDEAS["bond_spike_rebound"], rows, row, "DATA")
+    assert out["context"] == "DATA" and out["q"] == 0.5
+    assert out["screen_q"] == pytest.approx(0.04)
+
+
+def _diagnostic_argv(tmp_path, cache, idea, *extra):
+    return ["--idea", idea, "--cache-dir", str(cache),
+            "--membership", str(tmp_path / "membership.csv"),
+            "--ledger", str(tmp_path / "ledger.jsonl"),
+            "--results-dir", str(tmp_path / "results"), "--date", "2026-10-19",
+            "--context-hashes", str(tmp_path / "hashes.json"), *extra]
+
+
+def test_a_context_run_writes_the_diagnostics_section_and_the_scope(tmp_path):
+    cache = _ctx_cache(tmp_path)
+    assert screen_idea.main(_diagnostic_argv(tmp_path, cache, "bond_spike_rebound")) == 0
+    text = (tmp_path / "results" / "2026-10-19-screen-bond_spike_rebound.md").read_text(
+        encoding="utf-8")
+    heading = "## Intermarket diagnostics (printed, never gating)"
+    assert text.index("## Forward drift") < text.index(heading)   # the last section
+    for needle in ("### 1. Effective sample", "### 2. Null overlap",
+                   "### 3. SPY selloff split", "### 4. Concentration by shock episode",
+                   "### 5. Multiple comparisons", "### 6. Scope", "undercovers",
+                   "loaded from 2009-06-01", "stock window starts 2010-01-01",
+                   "across the `screen-v1` family", "across the ledger",
+                   "closes exactly this frozen definition",
+                   hashlib.sha256((cache / "TLT.csv").read_bytes()).hexdigest()):
+        assert needle in text, needle
+    rows = stats.load_ledger(tmp_path / "ledger.jsonl")
+    assert [row["id"] for row in rows] == ["screen-bond_spike_rebound"]
+    assert rows[0]["hypothesis"].endswith(
+        diagnostics.scope_sentence(IDEAS["bond_spike_rebound"]))
+    assert f"-> {rows[0]['verdict']}" in text.splitlines()[0]
+    pinned = json.loads((tmp_path / "hashes.json").read_text(encoding="utf-8"))
+    assert set(pinned) == {"TLT", "UUP"}
+
+
+def test_a_context_dry_run_prints_the_diagnostics_and_writes_nothing(tmp_path, capsys):
+    cache = _ctx_cache(tmp_path)
+    assert screen_idea.main(_diagnostic_argv(tmp_path, cache, "dollar_drop", "--dry-run")) == 0
+    out = capsys.readouterr().out
+    assert "## Intermarket diagnostics (printed, never gating)" in out
+    assert "UUP 5-day return z <= -2.0" in out
+    assert not (tmp_path / "ledger.jsonl").exists()
+    assert not (tmp_path / "hashes.json").exists()
+    assert not (tmp_path / "results").exists()

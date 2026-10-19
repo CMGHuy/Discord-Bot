@@ -39,6 +39,8 @@ from swingbot.core.backtesting.screen import forward, indicators, null, race, tr
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from swingbot.core.backtesting.screen import context as screen_context  # noqa: E402
+from swingbot.core.backtesting.screen import context as pit  # noqa: E402
+from swingbot.core.backtesting.screen import diagnostics  # noqa: E402
 from swingbot.core.backtesting.screen.context import CONTEXT_START  # noqa: E402,F401
 from swingbot.core.edge.frictions import commission_r  # noqa: E402
 from swingbot.core.marketdata import pit_membership  # noqa: E402
@@ -102,6 +104,7 @@ class TickerScreen:
     rank: pd.DataFrame
     null_timeout_r: list = field(default_factory=list)   # v163: trail only, net R per null timeout
     stressed: list | None = None                          # v163: trail only, 2 x slippage pairs
+    restricted: list | None = None                        # v174: context only, null pool off shock windows
 
 
 def _event_rows(ticker, index, kept, null_mean_r) -> list:
@@ -121,14 +124,19 @@ def _rank_frame(index, raw, population, fwd) -> pd.DataFrame:
     return pd.DataFrame(columns)
 
 
-def _books(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
+def _books(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
+           exclude: np.ndarray | None = None):
     """The kept event book, its counters and its matched null at one cost
-    setting, both raced under the idea's own shape (v163)."""
+    setting, both raced under the idea's own shape (v163). ``exclude`` drops
+    bars from the null pool only (v174 restricted null); the event book and
+    the seed are the same either way."""
     cap, shape = idea.time_cap_bars, idea.race_shape
     booked, counts = race.run_book(df, ctx["raw"], cap, member=ctx["member"],
                                    warm=ctx["warm"], atr=ctx["atr"], shape=shape, **costs)
-    draw = null.matched_null(df, booked.event_pos,
-                             null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], cap),
+    eligible = null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], cap)
+    if exclude is not None:
+        eligible = eligible & ~exclude
+    draw = null.matched_null(df, booked.event_pos, eligible,
                              null.K, null.null_seed(idea.name, ticker), cap=cap,
                              atr=ctx["atr"], trend=ctx["trend"], shape=shape, **costs)
     counts["dropped_no_match"] = draw.dropped_no_match
@@ -153,6 +161,19 @@ def _stressed(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict)
     stress = {"slippage_bps": STRESS_SLIPPAGE_FACTOR * base_slippage(costs["slippage_bps"]),
               "commission": costs["commission"]}
     kept, _, draw = _books(idea, ticker, df, ctx, stress)
+    return [{"entry_date": row["entry_date"], "r_event": row["r_event"], "r_null": row["r_null"]}
+            for row in _event_rows(ticker, df.index, kept, draw.null_mean_r)]
+
+
+def _restricted(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
+    """Context ideas only (v174 § 5.2): every event raced again against a
+    null pool without the bars closer than CAP sessions to any shock day.
+    For a context idea the raw mask IS the shock-day mask on this ticker's
+    dates. Same seed, K and cap; printed, never gating."""
+    if not idea.context:
+        return None
+    near = pit.near_mask(ctx["raw"], idea.time_cap_bars)
+    kept, _, draw = _books(idea, ticker, df, ctx, costs, exclude=near)
     return [{"entry_date": row["entry_date"], "r_event": row["r_event"], "r_null": row["r_null"]}
             for row in _event_rows(ticker, df.index, kept, draw.null_mean_r)]
 
@@ -199,7 +220,8 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
                 for h in forward.HORIZONS},
         rank=_rank_frame(df.index, ctx["raw"], member & warm, fwd),
         null_timeout_r=_null_timeout_r(idea, draw),
-        stressed=_stressed(idea, ticker, df, ctx, costs))
+        stressed=_stressed(idea, ticker, df, ctx, costs),
+        restricted=_restricted(idea, ticker, df, ctx, costs))
 
 
 def _spy_calendar(cache_dir, end: str) -> pd.DataFrame:
@@ -445,6 +467,23 @@ def summarise(screens, skipped=None) -> dict:
             "timeouts": _timeouts(screens, events), "stress": _stress(screens)}
 
 
+def _restricted_pairs(screens):
+    """Every ticker's restricted-null pairs, pooled; None for an old idea."""
+    if all(screen.restricted is None for screen in screens):
+        return None
+    return [row for screen in screens if screen.restricted for row in screen.restricted]
+
+
+def with_diagnostics(summary: dict, screens, idea: Idea, data, *, end: str) -> dict:
+    """The summary plus ``"context"`` (v174 § 5) for a context idea; the same
+    dict, untouched, for any other. The verdict object is never rebuilt."""
+    if not idea.context or data is None:
+        return summary
+    diag = diagnostics.compute(idea, summary["events"], _restricted_pairs(screens), data,
+                               event_start=EVENT_START, event_end=end)
+    return {**summary, "context": diag}
+
+
 def _fmt(value, spec: str = "+.4f") -> str:
     return "n/a" if value is None else format(value, spec)
 
@@ -597,6 +636,14 @@ def _render_drift(summary) -> list:
     return lines + _render_rank(summary["rank"])
 
 
+def _render_context(idea, summary, run) -> list:
+    """v174 § 5, the last section of a context idea's doc."""
+    return diagnostics.render(summary["context"], run["context"],
+                              context_start=CONTEXT_START, window_start=run["start"],
+                              screen_q=run["screen_q"],
+                              scope=diagnostics.scope_sentence(idea))
+
+
 def render_results(idea, summary, universe, run) -> str:
     v = summary["verdict"]
     sections = [_render_head(idea, v, run), _render_universe(universe, summary),
@@ -605,6 +652,8 @@ def render_results(idea, summary, universe, run) -> str:
     if idea.race_shape == "trail":
         sections.append(_render_trail(summary, run))
     sections += [_render_years(v), _render_drift(summary)]
+    if idea.context:
+        sections.append(_render_context(idea, summary, run))
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
 
 
@@ -616,9 +665,21 @@ def record_path(path) -> str:
         return path.as_posix()
 
 
+def _context_hypothesis(idea) -> str:
+    """v174: the fixed-race text naming the context series, then the scope
+    sentence (the ledger has no note field; validate_ledger_row rejects one)."""
+    return (f"{idea.name}: {idea.summary}; fixed {race.STOP_ATR}/{race.STOP_ATR * race.REWARD_RISK} "
+            f"ATR race vs K={null.K} matched null, cap {idea.time_cap_bars}, PIT S&P 500 "
+            f"2010-2019, context {', '.join(idea.context)} adjusted closes from "
+            f"{CONTEXT_START}, after costs (v174 intermarket screen). "
+            + diagnostics.scope_sentence(idea))
+
+
 def hypothesis(idea) -> str:
     """The ledger hypothesis, naming the shape and cap; the fixed text is
     today's, byte for byte."""
+    if idea.context:
+        return _context_hypothesis(idea)
     if idea.race_shape == "trail":
         return (f"{idea.name}: {idea.summary}; chandelier {trail.TRAIL_ATR} ATR trail race, "
                 f"initial stop {race.STOP_ATR} ATR, cap {idea.time_cap_bars} vs K={null.K} "
@@ -645,7 +706,16 @@ def _run_info(args, q) -> dict:
             "commission": commission_r()}
 
 
-def publish(args, idea, universe, summary, rows) -> int:
+def _context_run(run: dict, idea, rows, row: dict, data) -> dict:
+    """A context idea's run dict also carries its ContextData and the
+    screen-family BH q (§ 5.5); any other idea's run dict is returned as is."""
+    if not idea.context:
+        return run
+    return {**run, "context": data,
+            "screen_q": diagnostics.screen_family_q(rows, row, INSTRUMENT)}
+
+
+def publish(args, idea, universe, summary, rows, data=None) -> int:
     """Write the results doc, then append the ledger row (so the ledger never
     points at a missing doc). --dry-run prints and writes nothing."""
     v = summary["verdict"]
@@ -653,7 +723,8 @@ def publish(args, idea, universe, summary, rows) -> int:
     row = ledger_row(idea, v, record_path(path), args.date)
     stats.validate_ledger_row(row)
     q = stats.ledger_qvalues(rows + [row])[row["id"]]
-    text = render_results(idea, summary, universe, _run_info(args, q))
+    run = _context_run(_run_info(args, q), idea, rows, row, data)
+    text = render_results(idea, summary, universe, run)
     if args.dry_run:
         print(text)
         return 0
@@ -696,7 +767,8 @@ def main(argv=None) -> int:
     screens, skipped = screen_universe(idea, universe, args.cache_dir, start=args.start,
                                        end=args.end, tickers=tickers,
                                        context=None if data is None else data.frames)
-    return publish(args, idea, universe, summarise(screens, skipped), rows)
+    summary = with_diagnostics(summarise(screens, skipped), screens, idea, data, end=args.end)
+    return publish(args, idea, universe, summary, rows, data=data)
 
 
 if __name__ == "__main__":
