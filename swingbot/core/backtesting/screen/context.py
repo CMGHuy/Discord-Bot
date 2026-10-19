@@ -9,7 +9,7 @@ the context lacks is ``False``, never forward-filled (v174 spec § 1, § 3).
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Mapping
@@ -136,7 +136,12 @@ def file_record(path) -> dict:
     path = Path(path)
     if not path.is_file():
         raise ContextError(f"{path.stem}: context file {path} is missing")
-    dates = pd.read_csv(path, usecols=["Date"])["Date"].astype(str)
+    try:
+        dates = pd.read_csv(path, usecols=["Date"])["Date"].astype(str)
+    except (ValueError, OSError) as exc:
+        raise ContextError(f"{path.stem}: cannot read Date column from {path}: {exc}") from exc
+    if dates.empty:
+        raise ContextError(f"{path.stem}: context file {path} has no rows")
     return {"ticker": path.stem, "rows": int(len(dates)),
             "first": dates.min()[:10], "last": dates.max()[:10],
             "fetched": date.fromtimestamp(path.stat().st_mtime).isoformat(),
@@ -150,3 +155,5 @@ class ContextData:
     frames: Mapping[str, pd.DataFrame]
     calendar: pd.DataFrame
     records: Mapping[str, dict]
+    # The runner retains the whole registered union before loading any frames.
+    checked_records: Mapping[str, dict] = field(default_factory=dict)

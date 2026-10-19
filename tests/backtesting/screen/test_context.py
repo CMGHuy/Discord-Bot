@@ -301,3 +301,14 @@ def test_context_data_is_frozen():
     data = context.ContextData(frames={}, calendar=pd.DataFrame(), records={})
     with pytest.raises(dataclasses.FrozenInstanceError):
         data.frames = {"TLT": pd.DataFrame()}
+
+
+@pytest.mark.parametrize("csv, words", [
+    ("Date,Close\n", "TLT: context file .* has no rows"),
+    ("Close\n100\n", "TLT: cannot read Date column"),
+])
+def test_file_record_of_a_malformed_csv_is_refused(tmp_path, csv, words):
+    path = tmp_path / "TLT.csv"
+    path.write_text(csv, encoding="utf-8")
+    with pytest.raises(context.ContextError, match=words):
+        context.file_record(path)
