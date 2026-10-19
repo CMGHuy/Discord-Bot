@@ -40,7 +40,7 @@ import { EmptyStateComponent } from './empty-state';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EmptyStateComponent],
   template: `
-    <figure class="frame sb-panel" [style.height.px]="height()">
+    <figure class="frame sb-panel sb-lift" [style.height.px]="height()">
       @if (caption(); as text) {
         <figcaption>{{ text }}</figcaption>
       }

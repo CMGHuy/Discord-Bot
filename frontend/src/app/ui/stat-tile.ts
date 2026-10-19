@@ -36,7 +36,7 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Sparkline, CountUp],
   template: `
-    <div class="tile" [class.thin]="thin()" [class]="tone()">
+    <div class="tile sb-lift" [class.thin]="thin()" [class]="tone()">
       <div class="label">{{ label() }}</div>
       <div class="value" [sbCountUp]="countValue()" [countFormat]="countFormat()"
            [countKey]="'stat:' + label()" [countAbsent]="value() ?? '—'"></div>

@@ -62,19 +62,19 @@ describe('the panel primitives paint the panel tokens (v167 §3)', () => {
 
   it('sb-panel puts .sb-panel on its section and paints .panel from the tokens', () => {
     const source = ui('layout.ts');
-    expect(source).toContain('<section class="panel sb-panel">');
+    expect(source).toContain('<section class="panel sb-panel sb-lift">');
     expectPanelRule(source.match(/\.panel\s*\{[^}]*\}/)![0]);
   });
 
   it('sb-figure-strip carries .sb-panel on its host and paints :host from the tokens', () => {
     const line = ui('figure.ts').split('\n').find((l) => l.includes("selector: 'sb-figure-strip'"))!;
-    expect(line).toMatch(/host:\s*\{\s*class:\s*'sb-panel'/);
+    expect(line).toMatch(/host:\s*\{\s*class:\s*'sb-panel sb-lift'/);
     expectPanelRule(line.match(/:host\s*\{[^}]*\}/)![0]);
   });
 
   it('sb-chart-container puts .sb-panel on its frame and paints .frame from the tokens', () => {
     const source = ui('chart-container.ts');
-    expect(source).toContain('<figure class="frame sb-panel" [style.height.px]="height()">');
+    expect(source).toContain('<figure class="frame sb-panel sb-lift" [style.height.px]="height()">');
     expectPanelRule(source.match(/\.frame\s*\{[^}]*\}/)![0]);
   });
 });

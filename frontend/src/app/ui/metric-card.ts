@@ -21,7 +21,7 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CountUp],
   template: `
-    <div class="card">
+    <div class="card sb-lift">
       <span class="label">{{ label() }}</span>
       <span class="value num" [class]="valueClass()" [sbCountUp]="value()"
             [countFormat]="format()" [countKey]="'metric:' + label()"></span>

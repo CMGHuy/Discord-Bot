@@ -31,7 +31,7 @@ import { isInline } from './priority';
   selector: 'sb-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="panel sb-panel">
+    <section class="panel sb-panel sb-lift">
       @if (heading(); as text) {
         <header>
           <h2 class="sb-label">{{ text }}</h2>

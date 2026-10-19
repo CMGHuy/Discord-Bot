@@ -139,6 +139,15 @@
   [data-motion] .sb-lift:active { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }
 }
 
+/* The primary button's hover glow (#5). Cast here, after the lift, because
+   no component casts an elevation shadow (primitives.spec.ts G3: this file's
+   two are the lift and this glow, in that order). Mode-agnostic: a glow is
+   colour, not motion. Under Reduced the press does not scale. */
+@media (hover: hover) {
+  button[sb-button].primary:not([disabled]):hover { box-shadow: var(--glow-accent); }
+}
+[data-motion=reduced] button[sb-button]:not([disabled]):active { transform: none; }
+
 /* -- #7 drawer, dialog, toast ------------------------------------------------
  * In: 450ms on the spring; out: 200ms, held at the last frame until the
  * component closes the <dialog> on animationend (MO12) or Angular removes the
