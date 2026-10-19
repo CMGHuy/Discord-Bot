@@ -120,7 +120,7 @@ describe('sb-control-row and sb-drawer on a phone (v80 D4)', () => {
     // Anchored on the .drawer rule: the control row has its own 639px block
     // earlier in the file.
     const phone = SOURCE.match(
-      /@media \(max-width: 639px\) \{\s*\.drawer \{ margin: auto 0 0; width: 100vw; height: auto; max-height: 85dvh; \}([\s\S]*?)\n    \}/,
+      /@media \(max-width: 639px\) \{\s*\.drawer \{ margin: auto 0 0; width: 100vw; height: auto; max-height: 85dvh; \}([\s\S]*?)\n {4}\}/,
     );
     expect(phone).not.toBeNull();
     expect(phone![1]).toMatch(/\.drawer\.elev-overlay \{ border-radius: var\(--panel-radius\) var\(--panel-radius\) 0 0; border-width: 1px 0 0; \}/);

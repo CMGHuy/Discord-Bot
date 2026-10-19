@@ -80,7 +80,7 @@ describe('v80 D4: the button restyle', () => {
   });
 
   it('grows both icon variants to a square touch target', () => {
-    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 639px\) \{([\s\S]*?)\n    \}/);
+    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/);
     expect(block).not.toBeNull();
     expect(block![1]).toContain(':host(.icon), :host(.danger-icon)');
     expect(block![1]).toContain('min-width: var(--control-h)');
@@ -132,7 +132,7 @@ describe('v168 #5: hover and press', () => {
   });
 
   it('tints the press on touch with an inset, so it is not elevation', () => {
-    const block = SOURCE.match(/@media \(hover: none\) \{([\s\S]*?)\n    \}/);
+    const block = SOURCE.match(/@media \(hover: none\) \{([\s\S]*?)\n {4}\}/);
     expect(block).not.toBeNull();
     expect(block![1]).toContain(':host(:not([disabled]):active) { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }');
   });
