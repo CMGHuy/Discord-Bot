@@ -1,24 +1,24 @@
-# v173 Execution fidelity, part 3: replay statuses, the summary and the frozen verdict
+# v173 Execution fidelity, part 3: replay statuses and data admission
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task with `grep -n "^### Task V173-9:" -A 700 <this file>`; never read the file whole.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task with `grep -n "^### Task V173-9:" -A 800 <this file>`; never read the file whole.
 
-**Spec:** [`docs/superpowers/specs/2026-10-18-v173-execution-fidelity-overrides-design.md`](../specs/2026-10-18-v173-execution-fidelity-overrides-design.md) §3 (rows and statuses, the session table, helped/hurt/neutral, `summarise`) and §4 (verdict rule)
+**Spec:** [`docs/superpowers/specs/2026-10-18-v173-execution-fidelity-overrides-design.md`](../specs/2026-10-18-v173-execution-fidelity-overrides-design.md) §3 (rows and statuses, the session table) and `## Plan panel review` (unstamped rows, stale `bar_close` stamps, the before-costs delta, trimming to `asof`, calendar gaps, the adjustment basis)
 **Bump:** bot minor; ui minor (applied once, in V173-17)
 **Edge:** none (integrity)
-**Index:** [`2026-10-18-v173-execution-fidelity-overrides_0-index.md`](2026-10-18-v173-execution-fidelity-overrides_0-index.md) carries the Goal, `## Global Constraints`, `## Parallelisation`, `## Where to work` (`$WT`, `$R`) and the task ledger. Every task below implicitly includes those Global Constraints, in particular **Status precedence**, **One cost basis**, **Counted rows**, **Verdict** and **Report payload**.
+**Index:** [`2026-10-18-v173-execution-fidelity-overrides_0-index.md`](2026-10-18-v173-execution-fidelity-overrides_0-index.md) carries the Goal, `## Global Constraints`, `## Parallelisation`, `## Where to work` (`$WT`, `$R`), the task ledger, `## Handoff` and `## Revision 2026-10-19`. Every task below implicitly includes those Global Constraints, in particular **Stamp kinds**, **Data admission**, **Actual exit price**, **Replay, two frames, no lookahead**, **Status precedence** and **One cost basis**.
 
-Tasks: V173-9..V173-10, in order (both edit `swingbot/core/analytics/override_fidelity.py`). V173-9 needs V173-6 (`fill_bar_exit`, `ExitResult.tp1_index`), V173-7 and V173-8 committed on the branch first.
+Tasks: V173-9, then V173-22 (both edit `swingbot/core/analytics/override_fidelity.py`). V173-9 needs V173-6 (`fill_bar_exit`, `ExitResult.tp1_index`), V173-21 (`walk_v2(..., indicator_df=)`), V173-7 and V173-8 committed on the branch first. Part 3b (`_3b-verdict.md`) continues with V173-23 and V173-10.
 
 **What earlier tasks created, per the index ledger** (check each with `git -C $WT grep -n "<name>" swingbot/core/analytics/override_fidelity.py` before starting; a missing one means an earlier task is not merged into the branch yet: stop and report, never re-create it here):
 
-- V173-7: constants `MANUAL_REASONS`, `STATUSES`, `EXCLUDED_STATUSES`, `TIMEOUT_REASONS`, `DEAD_BAND`, `VERDICT_FLOOR`, `WEEK_FLOOR`, `EXCLUDED_CAP`, `SPLIT_TOLERANCE`, `LEDGER_ID`; `SessionHit(session: date, price_kind: str)`; `assign_session(at_iso)`; `latest_completed_session(now)`; `session_index(df, day) -> int | None`; `transition_at(plan, status) -> str | None`; `override_entry(plan) -> dict | None`; `is_override(plan) -> bool`; `state_at_close(plan) -> "PARTIAL" | "ACTIVE"`; the frozen dataclass `OverrideRow` (the 19 row fields, property `entry_date`, `to_dict()`); `outcome_of(delta_r) -> "helped" | "hurt" | "neutral" | None`.
-- V173-8: `INSTRUMENT`, `hold_cap_bars(plan)`, `engine_frame(df, ov_idx)`, `engine_path(plan, df, fill_idx) -> ExitResult` (fill-bar check first, then `walk_v2`), `leg_kind(reason)`, `live_tp1_leg(plan)`, `actual_r(plan, exit_price, state)`, `engine_r(plan, result, state)`, `dollar_risk(plan, trade)`, `to_usd(r, risk)`.
+- V173-7: constants `MANUAL_REASONS`, `STATUSES` (eight, with `unstamped`), `EXCLUDED_STATUSES` (six, with `unstamped`), `TIMEOUT_REASONS`, `DEAD_BAND`, `VERDICT_FLOOR`, `WEEK_FLOOR`, `EXCLUDED_CAP`, `SPLIT_TOLERANCE`, `LEDGER_ID`; `SessionHit(session: date, price_kind: str)`; `assign_session(at_iso)`; `latest_completed_session(now)`; `session_index(df, day) -> int | None`; `transition_at(plan, status) -> str | None`; `override_entry(plan) -> dict | None`; `is_override(plan) -> bool`; `state_at_close(plan) -> "PARTIAL" | "ACTIVE"`; `stamp_kind(entry) -> "missing" | "failed" | "stamped"`; the frozen dataclass `OverrideRow` (the 20 row fields, `delta_r_gross` after `delta_r`; property `entry_date`; `to_dict()`); `ROW_FIELDS`; `outcome_of(delta_r) -> "helped" | "hurt" | "neutral" | None`. The module imports `datetime as dt`, `pandas as pd`, `PlanStatus`, and has `from __future__ import annotations`.
+- V173-8: `INSTRUMENT`, `GROSS_COST_MODEL`, `hold_cap_bars(plan)`, `engine_frame(df, ov_idx)`, `engine_path(plan, df, fill_idx, *, indicator_df=None) -> ExitResult` (fill-bar check first, then `walk_v2`), `leg_kind(reason)`, `live_tp1_leg(plan)`, `actual_r(plan, exit_price, state, *, cost_model=None)`, `engine_r(plan, result, state, *, cost_model=None)`, `dollar_risk(plan, trade)`, `to_usd(r, risk)`; the module imports `ExitResult`.
 
-**Tests never touch a database** (Global Constraints): plain `TradePlanV2` objects, synthetic frames on real NYSE session dates, `tmp_path` ledgers. No `seed_store`, no `db_conn`, never the production replica.
+**Tests never touch a database** (Global Constraints): plain `TradePlanV2` objects and synthetic frames on real NYSE session dates. No `seed_store`, no `db_conn`, never the production replica.
 
-# Phase: Statuses, summary, verdict (V173-9..V173-10)
+# Phase: Statuses and data admission (V173-9, V173-22)
 
-### Task V173-9: `replay_override`: actual exit price and the seven statuses
+### Task V173-9: `replay_override`: actual exit price and the eight statuses
 
 **Model:** opus — no-lookahead replay, status precedence feeds the verdict
 
@@ -27,30 +27,33 @@ Tasks: V173-9..V173-10, in order (both edit `swingbot/core/analytics/override_fi
 - Create: `tests/analytics/test_override_fidelity_replay.py`
 
 **Interfaces:**
-- Consumes (V173-7): `SessionHit`, `assign_session`, `session_index`, `transition_at`, `override_entry`, `state_at_close`, `OverrideRow`, `outcome_of`, `TIMEOUT_REASONS`, `SPLIT_TOLERANCE`. (V173-8): `INSTRUMENT`, `hold_cap_bars`, `engine_frame`, `engine_path`, `leg_kind`, `actual_r`, `engine_r`, `dollar_risk`, `to_usd`. (V173-6): `ExitResult.tp1_index`.
-- Produces: `actual_exit(plan, df: pd.DataFrame | None, hit: SessionHit | None) -> tuple[float | None, str, bool]`, i.e. `(price, price_source, approx)`; `replay_override(plan, bars: pd.DataFrame | None, asof: date, trade: dict | None = None) -> OverrideRow`. V173-10's `build_report` calls `replay_override` once per override plan; nothing else in this section is public.
+- Consumes (V173-7): `SessionHit`, `assign_session`, `session_index`, `transition_at`, `override_entry`, `state_at_close`, `stamp_kind`, `OverrideRow`, `outcome_of`, `TIMEOUT_REASONS`, `SPLIT_TOLERANCE`. (V173-8): `INSTRUMENT`, `GROSS_COST_MODEL`, `hold_cap_bars`, `engine_frame`, `engine_path(..., *, indicator_df=None)`, `leg_kind`, `actual_r(..., *, cost_model=None)`, `engine_r(..., *, cost_model=None)`, `dollar_risk`, `to_usd`. (V173-6): `ExitResult.tp1_index`. (V173-21): `walk_v2(..., indicator_df=)`, reached through `engine_path`.
+- Produces: `actual_exit(plan, df: pd.DataFrame | None, hit: SessionHit | None) -> tuple[float | None, str, bool]`, i.e. `(price, price_source, approx)`; `replay_override(plan, bars: pd.DataFrame | None, asof: date, trade: dict | None = None) -> OverrideRow`. Private helpers later tasks replace or call by name: `_Replay` (fields `df, fill_idx, ov_idx, state, price, price_source, approx, actual_r`), `_split_band(plan, df, fill_idx) -> bool`, `_admission(plan, rp, asof) -> str | None` (replaced by V173-22), `_parity_broken`, `_ambiguous`, `_engine_arm(plan, rp) -> ExitResult`, `_still_open`, `_status(plan, rp, asof) -> tuple[str, ExitResult | None]` (replaced by V173-23), `replay_override` (its first lines replaced by V173-22). V173-10's `build_report` calls `replay_override` once per override plan.
 
 **Decisions this task makes inside the index's status precedence** (each has a test below; none changes a shared contract):
 
-1. **`unreplayable` before the bars are judged** covers: not a manual close, an unreadable `at`, no `entry_price`/`stop_loss`, no or empty bars, no fill session in the bars, no actual exit price (an unstamped row whose override session is missing from the bars), and `costs.book` refusing the actual arm. A *stamped* row whose override session is missing from the bars is judged after `stale` (a cache that ends early is stale, not unreplayable), then `unreplayable`.
-2. **Ambiguous on any TP1 at the override session**, ACTIVE or PARTIAL. The index names the ACTIVE case. For a PARTIAL plan whose live TP1 and manual close fall on the same session, the engine frame would clamp the TP1 bar's high and lose the very TP1 the live plan took, so that row is also `ambiguous`.
-3. **Non-resolved rows carry no engine figures:** `engine_r`, `delta_r`, `engine_usd`, `delta_usd`, `engine_exit_reason` and `outcome` are `None` unless `status == "resolved"`. `actual_r`/`actual_usd` are filled whenever the actual arm could be booked (shown in the table, summed only for counted rows).
-4. **`close_date`** is the override session (`assign_session(<CLOSED at>).session`), so a weekend close dates to Friday; `None` only when `at` is unreadable.
+1. **`unstamped` is decided before anything else is read.** An individual close (`reason == "manual"`) whose stamp kind is `"failed"` (`override: null`, or `price_source == "none"`) is `unstamped` even with no bars or no ACTIVE entry: the row exists to be counted against the 20% cap, and a failed stamp says nothing about the replay. It carries `approx=False`, `price_source="none"` and every R and $ field `None`. A bulk close with a failed stamp is not `unstamped`: it falls through to the session-bar path (`approx=True`) like a pre-v173 close, because bulk rows are never in the verdict population anyway.
+2. **`unreplayable` before the bars are judged** covers: not a manual close, an unreadable `at`, no `entry_price`/`stop_loss`, no or empty bars, no fill session in the bars, no actual exit price (a pre-v173 row whose override session is missing from the bars), and `costs.book` refusing the actual arm. A *stamped* row whose override session is missing is judged by `_admission`; after V173-22 that is `stale` (a calendar gap), which V173-22 tests.
+3. **A `bar_close` stamp is approx when its `bars_asof` is before the close session date, or unknown.** The price stays the stamp's (`price_source="bar_close"`); only the flag changes, so the row is shown and never summed. A `quote` stamp is never approx, whatever its `bars_asof`.
+4. **Ambiguous on any TP1 at the override session**, ACTIVE or PARTIAL. For a PARTIAL plan whose live TP1 and manual close fall on the same session, the engine frame would clamp the TP1 bar's high and lose the very TP1 the live plan took, so that row is also `ambiguous` (index § Handoff).
+5. **Non-resolved rows carry no engine figures:** `engine_r`, `delta_r`, `delta_r_gross`, `engine_usd`, `delta_usd`, `engine_exit_reason` and `outcome` are `None` unless `status == "resolved"`. `actual_r`/`actual_usd` are filled whenever the actual arm could be booked (shown in the table, summed only for counted rows). `delta_r_gross` is filled on every row that has a `delta_r`: the same two `costs.book` calls with `GROSS_COST_MODEL`, descriptive only.
+6. **The engine arm is walked on `engine_frame(df, ov_idx)` with `indicator_df=df`** (Global Constraints, revised 2026-10-19): ATR and structure read the real bars, the exit checks see the clamped override bar. On a runner plan the real override bar's range therefore feeds the trail's ATR on later bars, as it did live: past data at those bars, not lookahead. So "moving the override bar's high/low never moves a resolved row's `engine_r`" is pinned on a pre-TP1 single-leg path only, the same way the index § Handoff pins the pre-fill invariance on single-leg plans.
+7. **`close_date`** is the override session (`assign_session(<CLOSED at>).session`), so a weekend close dates to Friday; `None` only when `at` is unreadable.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `$WT/tests/analytics/test_override_fidelity_replay.py`:
 
 ```python
-"""v173 §3: replay_override -- the actual exit price and the seven statuses.
+"""v173 §3: replay_override -- the actual exit price and the eight statuses.
 
 Frames sit on real NYSE sessions from 2026-09-14: 15 warm-up bars, the fill
 bar at index 15 (Mon 2026-10-05), the override session at index 17 (Wed
 2026-10-07). Bullish plans enter at 100 with the stop at 95 and TP1 at 110;
-the hold cap is 8 bars, so a full 26-bar frame (last bar Mon 2026-10-19)
-times out at index 23. Expected R figures are booked here through the same
-costs.book call, so the tests pin the wiring, not the engine's arithmetic
-(V173-8's arms tests pin that).
+the breakeven trigger is 105; the hold cap is 8 bars, so a full 26-bar frame
+(last bar Mon 2026-10-19) times out at index 23. Expected R figures are booked
+here through the same costs.book call, so the tests pin the wiring, not the
+engine's arithmetic (V173-8's arms tests pin that).
 """
 from datetime import date, timedelta
 
@@ -70,6 +73,7 @@ FILL_IDX, OV_IDX = 15, 17
 FILL_AT = "2026-10-05T14:00:00+00:00"      # Mon 10:00 ET -> index 15
 PARTIAL_AT = "2026-10-06T15:00:00+00:00"   # Tue 11:00 ET -> index 16
 CLOSE_AT = "2026-10-07T18:00:00+00:00"     # Wed 14:00 ET -> index 17
+CLOSE_DAY = date(2026, 10, 7)
 LAST_DAY = date(2026, 10, 19)              # index 25 of a full frame
 WARM = (100.0, 100.5, 99.5, 100.0)
 FILL_BAR = (100.0, 101.0, 99.0, 100.0)
@@ -79,7 +83,9 @@ RUNNER_HOLD = (108.0, 108.5, 107.0, 107.5)  # above the runner floor
 STOP_BAR = (101.0, 102.0, 94.0, 95.0)
 FLOOR = runner_floor(100.0, 110.0)           # 106.667
 _STAMPED = object()
-UNSTAMPED = object()
+UNSTAMPED = object()                          # no `override` key: a pre-v173 close
+NO_FIGURES = ("engine_r", "delta_r", "delta_r_gross", "engine_usd", "delta_usd",
+              "engine_exit_reason", "outcome")
 
 
 @pytest.fixture(autouse=True)
@@ -91,10 +97,9 @@ def _pinned(monkeypatch):
     monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", False)
 
 
-def stamp(price=102.0, source="quote"):
+def stamp(price=102.0, source="quote", bars_asof="2026-10-06"):
     return {"exit_price": price, "price_source": source,
-            "quote_ts": CLOSE_AT if source == "quote" else None,
-            "bars_asof": "2026-10-06"}
+            "quote_ts": CLOSE_AT if source == "quote" else None, "bars_asof": bars_asof}
 
 
 def plan(*, partial=False, reason="manual", override=_STAMPED, fill_at=FILL_AT,
@@ -139,10 +144,10 @@ def partial_frame(rows: dict | None = None, *, n: int = 26) -> pd.DataFrame:
     return frame({16: TP1_BAR, 17: RUNNER_HOLD, **(rows or {})}, n=n)
 
 
-def book(*legs) -> float:
+def book(*legs, model=None) -> float:
     """costs.book over (fraction, exit_price, kind) legs, the plan's entry and stop."""
-    return costs.book(of.INSTRUMENT.cost_model, direction="bullish", entry_price=100.0,
-                      stop_loss=95.0,
+    return costs.book(model or of.INSTRUMENT.cost_model, direction="bullish",
+                      entry_price=100.0, stop_loss=95.0,
                       legs=[{"fraction": f, "exit_price": p, "reason": "x", "kind": k}
                             for f, p, k in legs])[0]
 
@@ -151,12 +156,16 @@ def replay(p, df, *, when=None, trade=None):
     return of.replay_override(p, df, when or df.index[-1].date(), trade)
 
 
+def no_figures(row) -> bool:
+    return all(getattr(row, name) is None for name in NO_FIGURES)
+
+
 # -- the frame itself --------------------------------------------------------
 
 def test_the_frame_sits_on_the_sessions_the_docstring_names():
     df = frame()
     assert [df.index[i].date() for i in (FILL_IDX, 16, OV_IDX, 19, 20, 25)] == [
-        date(2026, 10, 5), date(2026, 10, 6), date(2026, 10, 7), date(2026, 10, 9),
+        date(2026, 10, 5), date(2026, 10, 6), CLOSE_DAY, date(2026, 10, 9),
         date(2026, 10, 12), LAST_DAY]
 
 
@@ -172,7 +181,18 @@ def test_hold_cap_timeout_is_resolved_not_open():
     assert (row.approx, row.price_source, row.bulk, row.source) == (False, "quote", False, "manual")
     assert (row.state_at_close, row.horizon, row.direction, row.ticker) == (
         "ACTIVE", "2w", "bullish", "T")
-    assert row.close_date == date(2026, 10, 7)
+    assert row.close_date == CLOSE_DAY
+
+
+def test_delta_before_costs_is_the_same_two_arms_on_the_gross_model():
+    """Manual 102 (stop kind) vs the engine's 101 timeout close: 1 point on a
+    5-point risk is +0.2R before costs, whatever the cost model charges."""
+    row = replay(plan(), frame())
+    assert row.delta_r_gross == pytest.approx(0.2, abs=1e-9)
+    gross = (book((1.0, 102.0, "stop"), model=of.GROSS_COST_MODEL)
+             - book((1.0, 101.0, "close"), model=of.GROSS_COST_MODEL))
+    assert row.delta_r_gross == round(gross, 3)
+    assert row.delta_r_gross > row.delta_r       # the manual leg pays more slippage
 
 
 def test_engine_stop_after_the_override_is_resolved():
@@ -203,13 +223,18 @@ TRAIL_ROWS = {17: (109.0, 112.0, 108.5, 111.5), 18: (112.0, 118.0, 111.5, 117.5)
               19: (118.0, 124.0, 117.5, 123.5), 20: (123.0, 123.5, 100.0, 101.0)}
 
 
-def test_runner_trail_is_replayed_on_the_engine_frame():
-    """The real frame gives 3.035; the engine frame clamps the override bar's
-    range to its body, which moves the ATR the trail reads: 3.038."""
-    row = replay(plan(partial=True, trail_atr_mult=1.0, override=stamp(111.0)),
-                 partial_frame(TRAIL_ROWS))
+def test_runner_trail_reads_the_real_frames_atr():
+    """The engine frame clamps the override bar for the exit checks only;
+    ATR comes from the real frame (indicator_df), so the trail equals the
+    real-frame walk's: 3.035 when this plan was written (it was 3.038 while
+    the clamped bar also fed the ATR)."""
+    p = plan(partial=True, trail_atr_mult=1.0, override=stamp(111.0))
+    df = partial_frame(TRAIL_ROWS)
+    row = replay(p, df)
     assert (row.status, row.engine_exit_reason) == ("resolved", "runner_trail")
-    assert row.engine_r == pytest.approx(3.038, abs=0.002)
+    real = of.engine_path(p, df, FILL_IDX)
+    assert row.engine_r == of.engine_r(p, real, "PARTIAL")
+    assert row.engine_r == pytest.approx(3.035, abs=0.002)
 
 
 # -- open, stale -------------------------------------------------------------
@@ -217,8 +242,7 @@ def test_runner_trail_is_replayed_on_the_engine_frame():
 def test_data_ending_before_the_hold_cap_is_open():
     row = replay(plan(), frame(n=22))     # walk_v2 clips at index 21, 15 + 8 > 21
     assert row.status == "open"
-    assert (row.engine_r, row.delta_r, row.engine_usd, row.delta_usd,
-            row.engine_exit_reason, row.outcome) == (None,) * 6
+    assert no_figures(row)
     assert row.actual_r == pytest.approx(book((1.0, 102.0, "stop")), abs=1e-3)
 
 
@@ -240,7 +264,7 @@ def test_a_cache_ending_before_asof_is_stale():
 def test_override_session_touching_a_level_is_ambiguous(p, df):
     row = replay(p, df)
     assert row.status == "ambiguous"
-    assert row.engine_r is None and row.delta_r is None
+    assert no_figures(row)
 
 
 # -- parity_mismatch ---------------------------------------------------------
@@ -259,10 +283,10 @@ def test_override_session_touching_a_level_is_ambiguous(p, df):
 def test_replay_disagreeing_with_the_live_path_is_parity_mismatch(p, df):
     row = replay(p, df)
     assert row.status == "parity_mismatch"
-    assert row.engine_r is None and row.delta_r is None
+    assert no_figures(row)
 
 
-# -- split_affected ----------------------------------------------------------
+# -- split_affected (the price band; V173-22 adds the adjustment seam) --------
 
 def test_entry_outside_the_fill_bar_is_split_affected():
     assert replay(plan(), frame({FILL_IDX: (50.0, 50.5, 49.5, 50.0)})).status == "split_affected"
@@ -271,6 +295,37 @@ def test_entry_outside_the_fill_bar_is_split_affected():
 def test_entry_inside_the_two_percent_tolerance_is_not_split_affected():
     # 98.1 * 1.02 = 100.062 >= 100
     assert replay(plan(), frame({FILL_IDX: (98.0, 98.1, 97.5, 98.0)})).status == "resolved"
+
+
+# -- unstamped ---------------------------------------------------------------
+
+@pytest.mark.parametrize("override", [None, stamp(None, "none", None)],
+                         ids=["override-null", "price-source-none"])
+def test_a_failed_stamp_on_an_individual_close_is_unstamped(override):
+    row = replay(plan(override=override), frame(), trade={"id": "t1", "shares": 10})
+    assert row.status == "unstamped"
+    assert (row.approx, row.price_source, row.bulk) == (False, "none", False)
+    assert row.actual_r is None and row.actual_usd is None
+    assert no_figures(row)
+    assert row.close_date == CLOSE_DAY
+
+
+@pytest.mark.parametrize("p, bars", [
+    pytest.param(plan(override=None), None, id="no-bars"),
+    pytest.param(plan(override=None, fill_at=None), frame(), id="no-active-entry"),
+    pytest.param(plan(override=None, entry_price=None), frame(), id="no-entry-price"),
+])
+def test_unstamped_beats_unreplayable(p, bars):
+    assert of.replay_override(p, bars, LAST_DAY).status == "unstamped"
+
+
+@pytest.mark.parametrize("override", [None, stamp(None, "none", None)],
+                         ids=["override-null", "price-source-none"])
+def test_a_failed_stamp_on_a_bulk_close_is_priced_from_the_session_bar(override):
+    row = replay(plan(reason="manual_bulk", override=override), frame())
+    assert (row.status, row.bulk, row.approx, row.price_source) == (
+        "resolved", True, True, "session_close")
+    assert row.actual_r == pytest.approx(book((1.0, 101.0, "stop")), abs=1e-3)
 
 
 # -- unreplayable and precedence ---------------------------------------------
@@ -287,14 +342,13 @@ _FULL = frame()
     pytest.param(plan(reason="tp1_runner_trail"), _FULL, id="not-a-manual-close"),
     pytest.param(plan(close_at="not-a-time"), _FULL, id="unreadable-close-time"),
     pytest.param(plan(override=UNSTAMPED), _FULL.drop(_FULL.index[OV_IDX]),
-                 id="unstamped-override-session-missing"),
-    pytest.param(plan(), _FULL.drop(_FULL.index[OV_IDX]), id="stamped-override-session-missing"),
+                 id="pre-v173-override-session-missing"),
     pytest.param(plan(stop_loss=101.0), _FULL, id="costs-book-refuses"),
 ])
 def test_rows_the_replay_cannot_place_are_unreplayable(p, bars):
     row = of.replay_override(p, bars, LAST_DAY)
     assert row.status == "unreplayable"
-    assert (row.engine_r, row.delta_r, row.outcome) == (None, None, None)
+    assert no_figures(row)
     assert row.source == "manual"
 
 
@@ -325,19 +379,18 @@ def test_bars_before_the_fill_never_change_engine_r(p, rows):
     assert again.engine_r == base.engine_r
 
 
-@pytest.mark.parametrize("p, rows, quiet, touching", [
-    pytest.param(plan(), {}, (101.0, 104.0, 96.0, 101.0), (101.0, 102.0, 94.0, 101.0),
-                 id="active"),
-    pytest.param(plan(partial=True, trail_atr_mult=1.0, override=stamp(111.0)), TRAIL_ROWS,
-                 (109.0, 115.0, 107.0, 111.5), (109.0, 115.0, 106.0, 111.5), id="trail"),
-])
-def test_override_bar_range_flips_resolved_and_ambiguous_never_engine_r(p, rows, quiet, touching):
-    build = partial_frame if p.tp1_fraction < 1.0 else frame
-    base = replay(p, build(rows))
-    other = replay(p, build({**rows, OV_IDX: quiet}))
-    flipped = replay(p, build({**rows, OV_IDX: touching}))
+def test_override_bar_range_never_moves_a_pre_tp1_engine_r():
+    """Pre-TP1 the walk reads no indicator, so the clamped override bar is all
+    the engine arm sees of that session: a quieter or wider range touching no
+    level leaves engine_r alone, a range touching the stop flips the row to
+    ambiguous. (A runner plan reads the real bar's range through ATR on later
+    bars, as it did live: decision 6.)"""
+    quiet, touching = (101.0, 104.0, 96.0, 101.0), (101.0, 102.0, 94.0, 101.0)
+    base = replay(plan(), frame())
+    other = replay(plan(), frame({OV_IDX: quiet}))
+    flipped = replay(plan(), frame({OV_IDX: touching}))
     assert base.status == other.status == "resolved"
-    assert other.engine_r == base.engine_r          # the engine frame clamps that bar
+    assert other.engine_r == base.engine_r
     assert flipped.status == "ambiguous"
 
 
@@ -349,6 +402,7 @@ def test_same_exit_price_and_kind_as_the_engine_gives_zero_delta():
     row = replay(plan(override=stamp(95.0)), frame({19: STOP_BAR}))
     assert row.status == "resolved"
     assert row.delta_r == 0.0
+    assert row.delta_r_gross == 0.0
     assert row.outcome == "neutral"
 
 
@@ -372,7 +426,7 @@ def test_a_bulk_close_is_replayed_and_flagged():
     assert (row.bulk, row.status) == (True, "resolved")
 
 
-# -- the actual exit price (spec §3 session table) ----------------------------
+# -- the actual exit price (spec §3 session table, stamp kinds) ---------------
 
 def _priced() -> pd.DataFrame:
     df = frame()
@@ -390,22 +444,38 @@ def _priced() -> pd.DataFrame:
     pytest.param("2026-10-10T15:00:00+00:00", (319.0, "session_close"), id="saturday"),
     pytest.param("2026-10-12T03:00:00+00:00", (319.0, "session_close"), id="sunday-night-et"),
 ])
-def test_unstamped_exit_price_follows_the_session_table(at, expected):
+def test_a_pre_v173_exit_price_follows_the_session_table(at, expected):
     p = plan(override=UNSTAMPED, close_at=at)
     assert of.actual_exit(p, _priced(), of.assign_session(at)) == (*expected, True)
 
 
-def test_a_stamped_price_wins_and_is_not_approx():
+def test_a_quote_stamp_wins_and_is_never_approx():
     hit = of.assign_session(CLOSE_AT)
     assert of.actual_exit(plan(), _priced(), hit) == (102.0, "quote", False)
-    bar = plan(override=stamp(101.5, "bar_close"))
-    assert of.actual_exit(bar, _priced(), hit) == (101.5, "bar_close", False)
+    old_cache = plan(override=stamp(102.0, "quote", "2026-09-01"))
+    assert of.actual_exit(old_cache, _priced(), hit) == (102.0, "quote", False)
 
 
-@pytest.mark.parametrize("override", [UNSTAMPED, None, stamp(None, "none")],
-                         ids=["no-key", "stamp-failed", "stamp-without-price"])
-def test_a_row_without_a_stamped_price_is_approx(override):
-    row = replay(plan(override=override), frame())
+@pytest.mark.parametrize("bars_asof, approx", [
+    pytest.param("2026-10-07", False, id="cache-at-the-close-session"),
+    pytest.param("2026-10-08", False, id="cache-after-the-close-session"),
+    pytest.param("2026-10-06", True, id="cache-a-session-old"),
+    pytest.param(None, True, id="cache-date-unknown"),
+])
+def test_a_bar_close_stamp_older_than_the_close_session_is_approx(bars_asof, approx):
+    hit = of.assign_session(CLOSE_AT)
+    p = plan(override=stamp(101.5, "bar_close", bars_asof))
+    assert of.actual_exit(p, _priced(), hit) == (101.5, "bar_close", approx)
+
+
+def test_an_approx_bar_close_row_keeps_the_stamp_price():
+    row = replay(plan(override=stamp(101.5, "bar_close", "2026-10-06")), frame())
+    assert (row.status, row.approx, row.price_source) == ("resolved", True, "bar_close")
+    assert row.actual_r == pytest.approx(book((1.0, 101.5, "stop")), abs=1e-3)
+
+
+def test_a_pre_v173_row_is_approx_from_the_session_bar():
+    row = replay(plan(override=UNSTAMPED), frame())
     assert (row.approx, row.price_source, row.status) == (True, "session_close", "resolved")
     assert row.actual_r == pytest.approx(book((1.0, 101.0, "stop")), abs=1e-3)
 
@@ -414,9 +484,17 @@ def test_no_bar_for_the_override_session_gives_no_price():
     df = _priced().drop(_priced().index[OV_IDX])
     assert of.actual_exit(plan(override=UNSTAMPED), df, of.assign_session(CLOSE_AT)) == (
         None, "none", True)
+
+
+def test_an_unreplayable_row_keeps_its_stamp_fields():
+    stamped = of.replay_override(plan(fill_at=None), _FULL, LAST_DAY)
+    assert (stamped.status, stamped.approx, stamped.price_source) == (
+        "unreplayable", False, "quote")
+    old = of.replay_override(plan(fill_at=None, override=UNSTAMPED), _FULL, LAST_DAY)
+    assert (old.status, old.approx, old.price_source) == ("unreplayable", True, "none")
 ```
 
-The scenario paths (`timeout` at 23, `stop` at 19, `tp1` at 18, `runner_be`/`runner_tp2` at 18, `runner_trail` at 20, the early exits at 15/16/17) were checked against today's `walk_v2`/`_fill_bar_v2` with these frames when this plan was written.
+The scenario paths (`timeout` at 23, `stop` at 19, `tp1` at 18, `runner_be`/`runner_tp2` at 18, `runner_trail` at 20, the early exits at 15/16/17) were checked against `walk_v2`/`_fill_bar_v2` with these frames when this plan was first written. The trail figure 3.035 was the real-frame walk's then; the test also pins it against `engine_path` on the real frame, so the equality line is the contract and the number a sanity check.
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -426,30 +504,24 @@ python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v1
 
 Expected: FAIL with `AttributeError: module 'swingbot.core.analytics.override_fidelity' has no attribute 'replay_override'` (and `actual_exit`). `test_the_frame_sits_on_the_sessions_the_docstring_names` passes.
 
-If an import fails instead, a V173-6..8 symbol is missing: stop and report. Do not re-create it.
+If an import or a V173-6..8/21 name fails instead (`stamp_kind`, `GROSS_COST_MODEL`, `engine_path(..., indicator_df=)`), an earlier task is missing: stop and report. Do not re-create it.
 
 - [ ] **Step 3: Implement**
 
-At the top of `$WT/swingbot/core/analytics/override_fidelity.py`, make sure these imports exist (add only the missing ones; V173-7/8 already import most):
-
-```python
-import logging
-from dataclasses import dataclass
-from datetime import date
-
-import pandas as pd
-
-from swingbot.core.planning.exit_sim import ExitResult
-```
+At the top of `$WT/swingbot/core/analytics/override_fidelity.py`, add `import logging` beside the other standard-library imports if it is missing. V173-7 and V173-8 already import `datetime as dt`, `dataclass`, `pandas as pd`, `PlanStatus` and `ExitResult`.
 
 Append at the end of the module:
 
 ```python
 # --------------------------------------------------------------------------
-# V173-9: the actual exit price and replay_override's seven statuses
-# (spec §3). Precedence, first match wins: unreplayable -> stale ->
-# split_affected -> parity_mismatch -> ambiguous -> open -> resolved.
+# V173-9: the actual exit price and replay_override's eight statuses
+# (spec §3, plan panel review). Precedence, first match wins: unstamped ->
+# unreplayable -> stale -> split_affected -> parity_mismatch -> ambiguous ->
+# open -> resolved.
 # --------------------------------------------------------------------------
+
+_log = logging.getLogger(__name__)
+
 
 class _Unreplayable(Exception):
     """The replay cannot place this override: no fill, no bars, no exit
@@ -463,16 +535,46 @@ class _Replay:
     fill_idx: int
     ov_idx: int | None
     state: str
+    price: float
     price_source: str
     approx: bool
     actual_r: float
 
 
-def _stamp(entry: dict | None) -> dict:
-    """The CLOSED entry's `override` stamp; {} when the key is absent or the
-    stamp failed (`override: null`). Never inferred (schema-evolution.md)."""
-    stamp = (entry or {}).get("override")
-    return stamp if isinstance(stamp, dict) else {}
+@dataclass(frozen=True)
+class _Arms:
+    """The engine side of a resolved row."""
+    engine_r: float
+    gross_delta: float
+    exit_reason: str
+
+
+def _iso_day(value) -> dt.date | None:
+    try:
+        return dt.date.fromisoformat(str(value)[:10]) if value else None
+    except ValueError:
+        return None
+
+
+def _bar_close_stale(stamp: dict, hit: SessionHit | None) -> bool:
+    """A bar_close stamp read from a cache older than the close session (or
+    of unknown age) is an estimate, not the price the human saw."""
+    if stamp.get("price_source") != "bar_close":
+        return False
+    cache_day = _iso_day(stamp.get("bars_asof"))
+    return cache_day is None or hit is None or cache_day < hit.session
+
+
+def _stamped_price(entry: dict | None,
+                   hit: SessionHit | None) -> tuple[float, str, bool] | None:
+    """(price, source, approx) from a "stamped" stamp with a price; else None."""
+    if entry is None or stamp_kind(entry) != "stamped":
+        return None
+    stamp = entry["override"]
+    if stamp.get("exit_price") is None:
+        return None
+    return (float(stamp["exit_price"]), str(stamp["price_source"]),
+            _bar_close_stale(stamp, hit))
 
 
 def _bar_price(df: pd.DataFrame | None, hit: SessionHit | None) -> tuple[float | None, str]:
@@ -489,13 +591,30 @@ def actual_exit(plan, df: pd.DataFrame | None,
                 hit: SessionHit | None) -> tuple[float | None, str, bool]:
     """(price, price_source, approx) of the human's exit.
 
-    The stamp's exit_price when it has one (`quote` or `bar_close`, not
-    approx); otherwise the override session bar's open or close, approx."""
-    stamp = _stamp(override_entry(plan))
-    if stamp.get("exit_price") is not None:
-        return float(stamp["exit_price"]), str(stamp.get("price_source") or "quote"), False
+    A "stamped" stamp's exit_price (quote or bar_close; a bar_close older
+    than the close session is approx); otherwise the override session bar's
+    open or close, approx. An individual close with a failed stamp never
+    gets here: replay_override marks it unstamped first."""
+    priced = _stamped_price(override_entry(plan), hit)
+    if priced is not None:
+        return priced
     price, source = _bar_price(df, hit)
     return price, source, True
+
+
+def _is_unstamped(entry: dict | None) -> bool:
+    """An individual close whose post-v173 stamp failed (Global Constraints,
+    Stamp kinds). Bulk closes fall through to the session-bar path."""
+    return (entry is not None and entry.get("reason") != "manual_bulk"
+            and stamp_kind(entry) == "failed")
+
+
+def _price_fields(entry: dict | None, hit: SessionHit | None) -> tuple[str, bool]:
+    """(price_source, approx) of a row the replay never priced."""
+    if _is_unstamped(entry):
+        return "none", False
+    priced = _stamped_price(entry, hit)
+    return (priced[1], priced[2]) if priced is not None else ("none", True)
 
 
 def _usable_frame(bars) -> pd.DataFrame:
@@ -532,16 +651,28 @@ def _prepare(plan, bars, hit: SessionHit | None) -> _Replay:
         raise _Unreplayable("no exit price derivable")
     state = state_at_close(plan)
     return _Replay(df=df, fill_idx=fill_idx, ov_idx=session_index(df, hit.session),
-                   state=state, price_source=source, approx=approx,
+                   state=state, price=price, price_source=source, approx=approx,
                    actual_r=_booked_actual(plan, price, state))
 
 
-def _split_affected(plan, df: pd.DataFrame, fill_idx: int) -> bool:
+def _split_band(plan, df: pd.DataFrame, fill_idx: int) -> bool:
     """The raw fill price outside the cached fill bar (± SPLIT_TOLERANCE):
     the adjusted cache no longer shares the plan's price basis."""
     low = float(df["Low"].iloc[fill_idx]) * (1.0 - SPLIT_TOLERANCE)
     high = float(df["High"].iloc[fill_idx]) * (1.0 + SPLIT_TOLERANCE)
     return not low <= float(plan.entry_price) <= high
+
+
+def _admission(plan, rp: _Replay, asof: dt.date) -> str | None:
+    """stale / split_affected / unreplayable from the bars alone, or None.
+    V173-22 widens stale (calendar gaps) and split_affected (seams)."""
+    if rp.df.index[-1].date() < asof:
+        return "stale"
+    if _split_band(plan, rp.df, rp.fill_idx):
+        return "split_affected"
+    if rp.ov_idx is None or rp.ov_idx < rp.fill_idx:
+        return "unreplayable"
+    return None
 
 
 def _live_tp1_index(plan, df: pd.DataFrame) -> int | None:
@@ -567,6 +698,18 @@ def _ambiguous(real: ExitResult, ov_idx: int) -> bool:
             and leg_kind(real.legs[-1]["reason"]) in ("stop", "target"))
 
 
+def _engine_arm(plan, rp: _Replay) -> ExitResult:
+    """The engine left alone: exit checks on the clamped override bar,
+    ATR and structure from the real bars (indicator_df).
+
+    Guard: ExitResult.tp1_index is a plain class attribute set on the
+    instance by walk_v2, not a dataclass field, so dataclasses.replace()
+    and asdict() drop it (index § Handoff). Read tp1_index from the
+    engine_path result itself, never from a copy."""
+    return engine_path(plan, engine_frame(rp.df, rp.ov_idx), rp.fill_idx,
+                       indicator_df=rp.df)
+
+
 def _still_open(plan, eng: ExitResult, rp: _Replay) -> bool:
     """walk_v2 labels a data-end clip `timeout` too; only the hold cap resolves."""
     last = len(rp.df) - 1
@@ -574,76 +717,83 @@ def _still_open(plan, eng: ExitResult, rp: _Replay) -> bool:
             and rp.fill_idx + hold_cap_bars(plan) > last)
 
 
-def _status(plan, rp: _Replay, asof: date) -> tuple[str, ExitResult | None]:
+def _status(plan, rp: _Replay, asof: dt.date) -> tuple[str, ExitResult | None]:
     """The row's status after _prepare, and the engine-frame result when resolved.
 
-    The real frame decides parity and ambiguity only; the engine arm is the
-    engine frame (override bar clamped to its body), so the engine never
-    sees the override session's range as a later path."""
-    df = rp.df
-    if df.index[-1].date() < asof:
-        return "stale", None
-    if _split_affected(plan, df, rp.fill_idx):
-        return "split_affected", None
-    if rp.ov_idx is None or rp.ov_idx < rp.fill_idx:
-        return "unreplayable", None
-    real = engine_path(plan, df, rp.fill_idx)
+    The real frame decides parity and ambiguity only (its tp1_index is read
+    straight from engine_path's result, see _engine_arm); the engine arm is
+    the clamped engine frame, so the engine never sees the override
+    session's range as a later path."""
+    early = _admission(plan, rp, asof)
+    if early is not None:
+        return early, None
+    real = engine_path(plan, rp.df, rp.fill_idx)
     if not real.legs:
         return "unreplayable", None
     if _parity_broken(plan, real, rp):
         return "parity_mismatch", None
     if _ambiguous(real, rp.ov_idx):
         return "ambiguous", None
-    eng = engine_path(plan, engine_frame(df, rp.ov_idx), rp.fill_idx)
+    eng = _engine_arm(plan, rp)
     if _still_open(plan, eng, rp):
         return "open", None
     return "resolved", eng
 
 
+def _arms(plan, rp: _Replay, eng: ExitResult) -> _Arms:
+    """engine_r net of costs, and the delta before costs (descriptive only)."""
+    gross_actual = actual_r(plan, rp.price, rp.state, cost_model=GROSS_COST_MODEL)
+    gross_engine = engine_r(plan, eng, rp.state, cost_model=GROSS_COST_MODEL)
+    return _Arms(engine_r=engine_r(plan, eng, rp.state),
+                 gross_delta=round(gross_actual - gross_engine, 3),
+                 exit_reason=eng.legs[-1]["reason"])
+
+
 def _row(plan, entry: dict | None, hit: SessionHit | None, status: str,
-         trade: dict | None, *, rp: _Replay | None = None, eng_r: float | None = None,
-         exit_reason: str | None = None) -> OverrideRow:
+         trade: dict | None, *, rp: _Replay | None = None,
+         arms: _Arms | None = None) -> OverrideRow:
     a_r = rp.actual_r if rp is not None else None
-    d_r = round(a_r - eng_r, 3) if a_r is not None and eng_r is not None else None
+    e_r = arms.engine_r if arms is not None else None
+    d_r = round(a_r - e_r, 3) if arms is not None else None
     risk = dollar_risk(plan, trade) if rp is not None else None
-    stamp = _stamp(entry)
+    source, approx = ((rp.price_source, rp.approx) if rp is not None
+                      else _price_fields(entry, hit))
     return OverrideRow(
         plan_id=plan.plan_id, ticker=plan.ticker, horizon=plan.horizon_key,
         direction=plan.direction, state_at_close=state_at_close(plan),
         close_date=hit.session if hit is not None else None,
-        bulk=(entry or {}).get("reason") == "manual_bulk",
-        approx=rp.approx if rp is not None else stamp.get("exit_price") is None,
-        price_source=rp.price_source if rp is not None
-        else str(stamp.get("price_source") or "none"),
-        status=status, actual_r=a_r, engine_r=eng_r, delta_r=d_r,
-        actual_usd=to_usd(a_r, risk), engine_usd=to_usd(eng_r, risk),
-        delta_usd=to_usd(d_r, risk), engine_exit_reason=exit_reason,
+        bulk=(entry or {}).get("reason") == "manual_bulk", approx=approx,
+        price_source=source, status=status, actual_r=a_r, engine_r=e_r, delta_r=d_r,
+        delta_r_gross=arms.gross_delta if arms is not None else None,
+        actual_usd=to_usd(a_r, risk), engine_usd=to_usd(e_r, risk),
+        delta_usd=to_usd(d_r, risk),
+        engine_exit_reason=arms.exit_reason if arms is not None else None,
         outcome=outcome_of(d_r), source="manual")
 
 
-def replay_override(plan, bars: pd.DataFrame | None, asof: date,
+def replay_override(plan, bars: pd.DataFrame | None, asof: dt.date,
                     trade: dict | None = None) -> OverrideRow:
     """One manual close against the engine left alone (spec §3).
 
     Pure: `bars` is the live scan's cache frame (never fetched here), `asof`
     the latest completed NYSE session, `trade` the linked paper trade (for
-    dollars). A row it cannot place is `unreplayable`; it never raises."""
+    dollars). A failed stamp on an individual close is `unstamped`; a row
+    it cannot place is `unreplayable`; it never raises."""
     entry = override_entry(plan)
     hit = assign_session((entry or {}).get("at"))
+    if _is_unstamped(entry):
+        return _row(plan, entry, hit, "unstamped", trade)
     try:
         rp = _prepare(plan, bars, hit)
     except _Unreplayable as exc:
-        logging.getLogger(__name__).info("override_fidelity: %s unreplayable: %s",
-                                         plan.plan_id, exc)
+        _log.info("override_fidelity: %s unreplayable: %s", plan.plan_id, exc)
         return _row(plan, entry, hit, "unreplayable", trade)
     status, eng = _status(plan, rp, asof)
-    if eng is None:
-        return _row(plan, entry, hit, status, trade, rp=rp)
-    return _row(plan, entry, hit, status, trade, rp=rp, eng_r=engine_r(plan, eng, rp.state),
-                exit_reason=eng.legs[-1]["reason"])
+    arms = _arms(plan, rp, eng) if eng is not None else None
+    return _row(plan, entry, hit, status, trade, rp=rp, arms=arms)
 ```
 
-If V173-7 already defines a module logger (`log = logging.getLogger(__name__)`), use `log.info(...)` instead of the inline `logging.getLogger(__name__)`.
+`stamp_kind` (V173-7) returns `"missing"` for an entry without an `override` key, `"failed"` for `override: None` or `price_source == "none"`, `"stamped"` otherwise; `_stamped_price` reads `entry["override"]` only after `stamp_kind` said `"stamped"`, so the key exists and holds a dict there.
 
 - [ ] **Step 4: Run the new test and the earlier override tests**
 
@@ -655,7 +805,7 @@ python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v1
 
 Expected: all PASS, `0 failed`, `0 xfailed`.
 
-If `test_runner_trail_is_replayed_on_the_engine_frame` lands away from 3.038, do not loosen it. Check that `engine_frame` replaces the override bar's `High`/`Low` with `max(Open, Close)`/`min(Open, Close)` and changes nothing else; the value was measured on that clamp, with code defaults pinned and the three flags above held off. If `test_the_frame_sits_on_the_sessions_the_docstring_names` fails, the calendar changed: fix the docstring dates and the `*_AT` constants together.
+If `test_runner_trail_reads_the_real_frames_atr` fails on the equality line, `_engine_arm` is not passing `indicator_df=rp.df`, or V173-21's keyword does not reach `atr_indicator`: fix that, never the test. If only the `3.035` sanity line misses while the equality holds, report the measured value in the task report and update the number; do not loosen the tolerance. If `test_the_frame_sits_on_the_sessions_the_docstring_names` fails, the calendar changed: fix the docstring dates and the `*_AT` constants together.
 
 - [ ] **Step 5: Complexity**
 
@@ -663,168 +813,64 @@ If `test_runner_trail_is_replayed_on_the_engine_frame` lands away from 3.038, do
 python -m radon cc -s -n C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/swingbot/core/analytics/override_fidelity.py
 ```
 
-Expected: no output (every function below grade C, i.e. CC < 11; `_status` is about 9, `_row` about 10).
+Expected: no output (every function below grade C, i.e. CC < 11; `_status` is about 7, `_row` about 9, `_prepare` about 7). If `_row` grades C, move the four `arms is not None` ternaries into a helper returning a small dict of the engine fields; the tests stay unchanged.
 
 - [ ] **Step 6: Commit on the branch**
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides add swingbot/core/analytics/override_fidelity.py tests/analytics/test_override_fidelity_replay.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): replay_override -- actual exit price and the seven replay statuses"
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): replay_override -- actual exit price, unstamped rows and the eight replay statuses"
 git -C E:/Documents/Private/Projects/Discord-Bot status --short
 ```
 
 The last command checks the main tree stayed clean of branch edits.
 
-### Task V173-10: `summarise`, the frozen verdict, ledger enums and `build_report`
 
-**Model:** opus — statistical code feeding a frozen pre-registration
+### Task V173-22: Data admission: trim to `asof`, NYSE calendar gaps, adjustment basis
+
+**Model:** opus — no-lookahead (partial bars) and the split test on an adjusted cache
 
 **Files:**
-- Modify: `swingbot/core/analytics/override_fidelity.py` (append `summarise`; created by V173-7)
-- Create: `swingbot/core/analytics/override_verdict.py`
-- Modify: `swingbot/core/backtesting/instrument/stats.py:114-117` (`VERDICTS`)
-- Modify: `tests/backtesting/test_instrument_stats_ledger.py:15-21` (the pinned `VERDICTS` tuple; not in the ledger row, see Step 6)
-- Create: `tests/analytics/test_override_summary.py`
-- Create: `tests/analytics/test_override_verdict.py`
+- Modify: `swingbot/core/analytics/override_fidelity.py` (append a V173-22 section; replace V173-9's `_admission` in place; one line of `replay_override`)
+- Create: `tests/analytics/test_override_fidelity_admission.py`
 
 **Interfaces:**
-- Consumes: V173-7's `OverrideRow` (keyword-constructed with its 19 fields; `to_dict()` gives `close_date` as ISO), `outcome_of`, `is_override`, `STATUSES`, `EXCLUDED_STATUSES`, `VERDICT_FLOOR`, `WEEK_FLOOR`, `EXCLUDED_CAP`, `LEDGER_ID`; V173-9's `replay_override(plan, bars, asof, trade)`; `stats.week_cluster_bootstrap`, `stats.iso_week_key`, `stats.validate_ledger_row`, `stats.WEEK_BOOTSTRAP_RESAMPLES`, `stats.WEEK_BOOTSTRAP_SEED`.
-- Produces:
-  - `override_fidelity.summarise(rows: list[OverrideRow]) -> dict` with keys exactly `n_by_status, bulk_n, bulk_dates, approx_n, counted_n, sum_delta_r, sum_delta_usd, usd_missing_n, helped, hurt, neutral, splits`.
-  - In `override_verdict.py`: `counted(rows) -> list`, `eligible(rows) -> list`, `conditions(rows) -> dict` (`n, weeks, open_n, excluded_share, evaluable`), `evaluate_verdict(rows) -> dict`, `recorded_verdict(ledger_rows: list[dict]) -> dict | None`, `verdict_payload(rows, ledger_rows) -> dict` (never evaluates), `ledger_row(verdict: dict, *, today: date) -> dict`, `build_report(plans, trades_by_plan, bars_fn, asof, ledger_rows, currency_symbol) -> dict` (keys exactly `rows, summary, verdict, engine_flags, asof, currency_symbol`); constants `SPEC_PATH`, `WAITING`, `COST`, `SAVED`, `INCONCLUSIVE`.
-  - **Every verdict function accepts rows either as `OverrideRow` or as their `to_dict()` form**, so V173-11's script can pass `payload["rows"]` straight to `evaluate_verdict`.
-  - `stats.VERDICTS` gains `"COST", "SAVED", "INCONCLUSIVE"` (appended, never `WAITING`).
+- Consumes (V173-7): `assign_session`, `override_entry`, `SPLIT_TOLERANCE`. (V173-8): `engine_path(plan, df, fill_idx, *, indicator_df=None)` (spied on in a test). (V173-9): `_Replay` (fields `df, fill_idx, ov_idx, ...`), `_split_band(plan, df, fill_idx) -> bool`, `_admission(plan, rp, asof) -> str | None` (replaced here), `_prepare(plan, bars, hit)`, `replay_override(plan, bars, asof, trade=None)`. Library: `swingbot.core.market.session.nyse_calendar().sessions(start, end) -> list[date]` (session.py:169); `swingbot.core.marketdata.adjustments.adjustment_seam_issue(frame, symbol, timeframe, threshold=0.20) -> str | None` (adjustments.py:71).
+- Produces: `trim_to_asof(df: pd.DataFrame, asof: date) -> pd.DataFrame`; `missing_sessions(df: pd.DataFrame | None, start: date) -> list[date]`; `split_suspect(plan, df: pd.DataFrame, fill_idx: int) -> bool`; private `_close_session(plan) -> date | None`, `_stale(plan, rp, asof) -> bool`. `replay_override`'s signature is unchanged; V173-23 replaces `_status`, not `_admission`.
 
-**Shapes this task fixes** (the index names the keys but not these value types; V173-11..14 read them as written here):
+**Decisions this task makes inside the index's status precedence** (each has a test below):
 
-- `n_by_status`: `{status: int}` over every value of `STATUSES`, counting **eligible** rows only (individual, stamped). Bulk rows are counted only in `bulk_n`, non-bulk approx rows only in `approx_n`, so `bulk_n + approx_n + sum(n_by_status.values()) == len(rows)` and no exclusion note counts a row twice.
-- `bulk_dates`: `{iso_date: int}` sorted by date (one exclusion note line per key).
-- `sum_delta_r` (3 dp) and `sum_delta_usd` (2 dp; rows without dollars skipped and counted in `usd_missing_n`) are over counted rows; both are `0.0` with no counted rows.
-- `splits`: `{"state_at_close"|"horizon"|"direction": {value: {"n", "sum_delta_r", "sum_delta_usd"}}}` over counted rows, values sorted.
-- Verdict: `excluded_share` rounded to 4 dp (the cap compares the unrounded share); `ci` is `[lo, hi]` (3 dp) or `None`; `recorded_on` is the ledger row's `date` or `None`; `needed` = `VERDICT_FLOOR`, `week_floor` = `WEEK_FLOOR`. Without a ledger row `verdict_payload` reports `WAITING` even when `evaluable` is true: only the script under `--production` evaluates.
-- The ledger has no CI field (`stats.LEDGER_FIELDS` is closed), so `ledger_row` writes the interval into `hypothesis` as `95% CI [lo, hi]` and `recorded_verdict` parses it back.
-- `engine_flags`: `{"stall_exit_enabled": bool, "runner_structure_exit": str}`, read live from `config`.
-- `rows` are sorted newest `close_date` first, then `plan_id` descending.
+1. **The trim happens once, in `replay_override`, before `_prepare`**, so the fill index, the override index, the actual exit price of a pre-v173 row, the real frame, the engine frame and the `open` check all see the same settled bars. Nothing after `asof` exists for the replay. An `asof` before every bar leaves an empty frame: `unreplayable` ("no or empty bars after the trim").
+2. **`stale` has three triggers**, in this order: the last settled bar is before `asof` (V173-9's rule); `missing_sessions(df, <fill session>)` is non-empty (a calendar gap from the fill on would shift the hold cap and the `open` count); the close session lies after the last settled bar (a report run on the close day itself: the bars have not reached the override yet). A gap before the fill is ignored. A stamped row whose override session is missing from the bars is therefore `stale` (V173-9 decision 2 deferred it here); a pre-v173 row in the same position stays `unreplayable`, because `_prepare` has no price for it.
+3. **`split_suspect` = the fill-bar band or an adjustment seam from the fill session on.** The seam detector runs on `df.iloc[fill_idx:]` only: a seam in the warm-up bars before the fill moves no price the replay compares. The frozen `SPLIT_TOLERANCE = 0.02` stays (index § Handoff trap: the cache is split **and dividend** adjusted, so a 1% dividend step stays inside the band and is not a seam).
+4. **Precedence is unchanged:** `stale` before `split_affected` before the `unreplayable` index checks, as V173-9's `_admission` already orders them.
 
-- [ ] **Step 1: Write the failing summary test**
+- [ ] **Step 1: Write the failing test**
 
-Create `$WT/tests/analytics/test_override_summary.py`:
+Create `$WT/tests/analytics/test_override_fidelity_admission.py`:
 
 ```python
-"""v173 §3: summarise -- descriptive totals over the counted rows only."""
+"""v173 plan panel review: data admission -- trim to asof, NYSE calendar
+gaps, and the adjustment basis of the auto_adjust daily cache.
+
+Same frames as test_override_fidelity_replay: 15 warm-up bars, the fill at
+index 15 (Mon 2026-10-05), the override at index 17 (Wed 2026-10-07), the
+last bar at index 25 (Mon 2026-10-19). Index 20 is Mon 2026-10-12 (an NYSE
+session), index 24 is Fri 2026-10-16. Hold cap 8 unless a test says so.
+"""
 from datetime import date
-
-import pytest
-
-from swingbot.core.analytics import override_fidelity as of
-
-SUMMARY_KEYS = {"n_by_status", "bulk_n", "bulk_dates", "approx_n", "counted_n",
-                "sum_delta_r", "sum_delta_usd", "usd_missing_n", "helped", "hurt",
-                "neutral", "splits"}
-
-
-def row(delta=0.2, day=date(2026, 8, 3), *, status="resolved", bulk=False, approx=False,
-        usd=None, state="ACTIVE", horizon="2w", direction="bullish", plan_id="p"):
-    resolved = status == "resolved"
-    return of.OverrideRow(
-        plan_id=plan_id, ticker="T", horizon=horizon, direction=direction,
-        state_at_close=state, close_date=day, bulk=bulk, approx=approx,
-        price_source="session_close" if approx else "quote", status=status,
-        actual_r=delta, engine_r=0.0 if resolved else None,
-        delta_r=delta if resolved else None, actual_usd=None, engine_usd=None,
-        delta_usd=usd if resolved else None,
-        engine_exit_reason="timeout" if resolved else None,
-        outcome=of.outcome_of(delta if resolved else None), source="manual")
-
-
-def test_keys_and_the_empty_summary():
-    out = of.summarise([])
-    assert set(out) == SUMMARY_KEYS
-    assert out["n_by_status"] == {s: 0 for s in of.STATUSES}
-    assert (out["bulk_n"], out["bulk_dates"], out["approx_n"], out["counted_n"]) == (0, {}, 0, 0)
-    assert (out["sum_delta_r"], out["sum_delta_usd"], out["usd_missing_n"]) == (0.0, 0.0, 0)
-    assert (out["helped"], out["hurt"], out["neutral"]) == (0, 0, 0)
-    assert out["splits"] == {"state_at_close": {}, "horizon": {}, "direction": {}}
-
-
-def test_rows_partition_into_counted_status_bulk_and_approx():
-    rows = [row(0.2, usd=20.0), row(-0.3, usd=-30.0), row(0.05, usd=5.0),
-            row(status="stale"),
-            row(0.9, date(2026, 9, 30), bulk=True), row(-0.9, date(2026, 9, 30), bulk=True),
-            row(1.5, approx=True)]
-    out = of.summarise(rows)
-    assert out["n_by_status"]["resolved"] == 3
-    assert out["n_by_status"]["stale"] == 1
-    assert sum(out["n_by_status"].values()) == 4
-    assert (out["bulk_n"], out["bulk_dates"], out["approx_n"], out["counted_n"]) == (
-        2, {"2026-09-30": 2}, 1, 3)
-    assert out["bulk_n"] + out["approx_n"] + sum(out["n_by_status"].values()) == len(rows)
-    assert out["sum_delta_r"] == pytest.approx(-0.05, abs=1e-9)
-    assert out["sum_delta_usd"] == pytest.approx(-5.0, abs=1e-9)
-    assert (out["helped"], out["hurt"], out["neutral"]) == (1, 1, 1)   # 0.05 sits on the band
-
-
-def test_bulk_dates_one_key_per_day_sorted():
-    rows = [row(bulk=True, day=date(2026, 9, 30)), row(bulk=True, day=date(2026, 8, 1)),
-            row(bulk=True, day=date(2026, 9, 30))]
-    assert list(of.summarise(rows)["bulk_dates"].items()) == [("2026-08-01", 1), ("2026-09-30", 2)]
-
-
-def test_rows_without_dollars_stay_in_the_r_sum_and_are_counted_missing():
-    out = of.summarise([row(0.4, usd=40.0), row(0.6, usd=None)])
-    assert out["sum_delta_r"] == pytest.approx(1.0)
-    assert out["sum_delta_usd"] == pytest.approx(40.0)
-    assert out["usd_missing_n"] == 1
-
-
-@pytest.mark.parametrize("delta, outcome", [(0.051, "helped"), (0.05, "neutral"),
-                                            (-0.05, "neutral"), (-0.051, "hurt")])
-def test_the_dead_band_is_frozen_at_five_hundredths(delta, outcome):
-    assert of.DEAD_BAND == 0.05
-    out = of.summarise([row(delta)])
-    assert out[outcome] == 1
-
-
-def test_splits_cover_state_horizon_and_direction_over_counted_rows():
-    rows = [row(0.5, usd=50.0, state="PARTIAL", horizon="4w", direction="bearish"),
-            row(-0.2, usd=-20.0, state="ACTIVE", horizon="2w"),
-            row(-0.1, usd=None, state="ACTIVE", horizon="2w"),
-            row(9.9, state="ACTIVE", bulk=True)]
-    splits = of.summarise(rows)["splits"]
-    assert splits["state_at_close"] == {
-        "ACTIVE": {"n": 2, "sum_delta_r": -0.3, "sum_delta_usd": -20.0},
-        "PARTIAL": {"n": 1, "sum_delta_r": 0.5, "sum_delta_usd": 50.0}}
-    assert set(splits["horizon"]) == {"2w", "4w"}
-    assert splits["direction"]["bearish"]["n"] == 1
-    assert splits["direction"]["bullish"]["n"] == 2
-```
-
-- [ ] **Step 2: Write the failing verdict and report test**
-
-Create `$WT/tests/analytics/test_override_verdict.py`:
-
-```python
-"""v173 §4: the frozen verdict, its one ledger row, and build_report."""
-from datetime import date, timedelta
 
 import pytest
 
 from swingbot import config
 from swingbot.core.analytics import override_fidelity as of
-from swingbot.core.analytics import override_verdict as ov
-from swingbot.core.backtesting.instrument import stats
-from tests.analytics.test_override_fidelity_replay import (LAST_DAY, STOP_BAR, frame,
-                                                           plan)
-from tests.analytics.test_override_summary import row
+from tests.analytics.test_override_fidelity_replay import (FILL_IDX, FLAT, LAST_DAY, OV_IDX,
+                                                           UNSTAMPED, frame, plan, replay)
 from tests.backtesting.test_pullback_dryup_witness import pin_code_defaults
 
-W0 = date(2026, 8, 3)
-VERDICT_KEYS = {"state", "n", "needed", "weeks", "week_floor", "open_n", "excluded_share",
-                "evaluable", "recorded", "recorded_on", "mean_delta_r", "ci"}
-ROW_KEYS = {"plan_id", "ticker", "horizon", "direction", "state_at_close", "close_date",
-            "bulk", "approx", "price_source", "status", "actual_r", "engine_r", "delta_r",
-            "actual_usd", "engine_usd", "delta_usd", "engine_exit_reason", "outcome",
-            "source"}
+FRI = date(2026, 10, 16)        # index 24
+GAP_DAY = date(2026, 10, 12)    # index 20
+HALVED = {i: tuple(v / 2 for v in FLAT) for i in range(20, 26)}   # a 2:1 seam at index 20
 
 
 @pytest.fixture(autouse=True)
@@ -835,523 +881,245 @@ def _pinned(monkeypatch):
     monkeypatch.setattr(config, "ADAPTIVE_RUNNER_TRAIL_ENABLED", False)
 
 
-def spread(n, weeks, delta=0.3, **kw):
-    """n counted rows over `weeks` distinct ISO weeks; `delta` may be a
-    function of the week number."""
-    return [row(delta(i % weeks) if callable(delta) else delta,
-                W0 + timedelta(weeks=i % weeks), plan_id=f"p{i}", **kw) for i in range(n)]
+# -- trim_to_asof ------------------------------------------------------------
+
+def test_trim_keeps_bars_on_or_before_asof_only():
+    df = frame()
+    out = of.trim_to_asof(df, FRI)
+    assert out.index[-1].date() == FRI
+    assert out.equals(df.iloc[:25])
+    assert len(df) == 26                                   # the input is not mutated
+    assert of.trim_to_asof(df, LAST_DAY).equals(df)
+    assert of.trim_to_asof(df, date(2026, 9, 1)).empty
 
 
-def _no_bootstrap(*_a, **_k):
-    raise AssertionError("the bootstrap must not run here")
+def test_a_bar_dated_after_asof_never_reaches_the_walk(monkeypatch):
+    """The cache can hold a half-formed bar for today (data_refresh.py:160-170).
+    Here Monday's bar runs through the stop; with asof = Friday no frame the
+    replay walks (real, engine, or the indicator frame) reaches it."""
+    seen = []
+    walk = of.engine_path
+
+    def spy(p, df, fill_idx, *, indicator_df=None):
+        seen.append(df.index[-1].date())
+        if indicator_df is not None:
+            seen.append(indicator_df.index[-1].date())
+        return walk(p, df, fill_idx, indicator_df=indicator_df)
+
+    monkeypatch.setattr(of, "engine_path", spy)
+    row = replay(plan(), frame({25: (101.0, 102.0, 94.0, 95.0)}), when=FRI)
+    assert seen and max(seen) == FRI
+    assert (row.status, row.engine_exit_reason) == ("resolved", "timeout")
 
 
-# -- constants and ledger vocabulary ---------------------------------------------
-
-def test_the_rule_constants_are_the_spec_values():
-    assert (of.VERDICT_FLOOR, of.WEEK_FLOOR, of.EXCLUDED_CAP, of.DEAD_BAND) == (30, 10, 0.20, 0.05)
-    assert of.LEDGER_ID == "v173-override-fidelity"
-    assert ov.SPEC_PATH == "docs/superpowers/specs/2026-10-18-v173-execution-fidelity-overrides-design.md"
-
-
-def test_the_ledger_accepts_the_three_outcomes_and_never_waiting():
-    assert stats.VERDICTS[-3:] == ("COST", "SAVED", "INCONCLUSIVE")
-    assert ov.WAITING not in stats.VERDICTS
+def test_the_trim_decides_open_against_the_hold_cap():
+    """Hold cap 10 from the fill at 15 ends at index 25. Trimmed to Friday
+    (index 24) the walk clips at the data end: still open. With Monday
+    settled, the same plan times out on the hold cap: resolved."""
+    assert replay(plan(hold_cap_bars=10), frame(), when=FRI).status == "open"
+    assert replay(plan(hold_cap_bars=10), frame(), when=LAST_DAY).status == "resolved"
 
 
-# -- conditions: WAITING until every floor holds ---------------------------------
-
-def test_29_rows_wait():
-    out = ov.evaluate_verdict(spread(29, 10))
-    assert set(out) == VERDICT_KEYS
-    assert (out["state"], out["n"], out["needed"], out["evaluable"]) == ("WAITING", 29, 30, False)
-    assert (out["mean_delta_r"], out["ci"], out["recorded"], out["recorded_on"]) == (
-        None, None, False, None)
+def test_asof_before_every_bar_is_unreplayable():
+    assert replay(plan(), frame(), when=date(2026, 9, 1)).status == "unreplayable"
 
 
-def test_30_rows_over_9_weeks_wait():
-    out = ov.evaluate_verdict(spread(30, 9))
-    assert (out["state"], out["weeks"], out["week_floor"]) == ("WAITING", 9, 10)
+# -- missing_sessions and stale ----------------------------------------------
+
+def test_missing_sessions_lists_calendar_sessions_absent_from_the_frame():
+    df = frame()
+    gap = df.drop(df.index[20])
+    assert of.missing_sessions(df, date(2026, 10, 5)) == []
+    assert of.missing_sessions(gap, date(2026, 10, 5)) == [GAP_DAY]
+    assert of.missing_sessions(gap, date(2026, 10, 13)) == []      # the gap is before start
+    assert of.missing_sessions(df, date(2026, 10, 10)) == []       # a Saturday start
+    assert of.missing_sessions(gap.iloc[0:0], date(2026, 10, 5)) == []
+    assert of.missing_sessions(None, date(2026, 10, 5)) == []
 
 
-def test_one_eligible_open_row_holds_the_verdict():
-    out = ov.evaluate_verdict(spread(30, 10) + [row(status="open")])
-    assert (out["state"], out["open_n"], out["evaluable"]) == ("WAITING", 1, False)
+@pytest.mark.parametrize("missing", [16, OV_IDX, 20],
+                         ids=["after-fill", "override-session", "after-override"])
+def test_a_missing_session_from_the_fill_on_is_stale(missing):
+    df = frame()
+    row = replay(plan(), df.drop(df.index[missing]), when=LAST_DAY)
+    assert row.status == "stale"
+    assert (row.engine_r, row.delta_r, row.outcome) == (None, None, None)
 
 
-def test_open_bulk_or_approx_rows_do_not_hold_it():
-    rows = spread(30, 10) + [row(status="open", bulk=True), row(status="open", approx=True)]
-    assert ov.conditions(rows)["evaluable"] is True
+def test_a_pre_v173_row_missing_its_override_session_stays_unreplayable():
+    df = frame()
+    gap = df.drop(df.index[OV_IDX])
+    assert replay(plan(override=UNSTAMPED), gap, when=LAST_DAY).status == "unreplayable"
 
 
-def test_exclusions_above_20_percent_wait_and_exactly_20_percent_does_not():
-    over = spread(30, 10) + [row(status="ambiguous", plan_id=f"x{i}") for i in range(8)]
-    assert ov.conditions(over)["excluded_share"] == pytest.approx(0.2105, abs=1e-4)
-    assert ov.evaluate_verdict(over)["state"] == "WAITING"
-    at_cap = spread(40, 10) + [row(status="stale", plan_id=f"x{i}") for i in range(10)]
-    assert ov.conditions(at_cap)["excluded_share"] == 0.2
-    assert ov.conditions(at_cap)["evaluable"] is True
+def test_a_gap_before_the_fill_does_not_matter():
+    df = frame()
+    assert replay(plan(), df.drop(df.index[5]), when=LAST_DAY).status == "resolved"
 
 
-def test_bulk_and_approx_rows_never_count_toward_n():
-    rows = spread(29, 10) + [row(bulk=True)] * 5 + [row(approx=True)] * 5
-    assert ov.conditions(rows)["n"] == 29
-    assert [r.plan_id for r in ov.counted(rows)] == [f"p{i}" for i in range(29)]
-    assert len(ov.eligible(rows)) == 29
+def test_a_stamped_close_after_the_last_settled_bar_is_stale():
+    """Report run on the close day itself: asof is the previous session, so
+    the settled bars stop before the override session."""
+    assert replay(plan(), frame(), when=date(2026, 10, 6)).status == "stale"
 
 
-# -- one evaluation ----------------------------------------------------------------
+# -- split_suspect -----------------------------------------------------------
 
-@pytest.mark.parametrize("delta, state", [
-    (lambda w: -0.5 + 0.02 * w, "COST"),
-    (lambda w: 0.5 - 0.02 * w, "SAVED"),
-    (lambda w: 0.6 if w % 2 == 0 else -0.6, "INCONCLUSIVE"),
-])
-def test_seeded_delta_sets_give_each_outcome(delta, state):
-    rows = spread(30, 10, delta)
-    out = ov.evaluate_verdict(rows)
-    assert (out["state"], out["evaluable"], out["recorded"]) == (state, True, False)
-    lo, hi = out["ci"]
-    assert lo <= out["mean_delta_r"] <= hi
-    assert ov.evaluate_verdict(rows) == out          # seeded: the same draw every time
+def test_a_two_for_one_seam_after_the_fill_is_split_affected():
+    df = frame(HALVED)
+    assert of._split_band(plan(), df, FILL_IDX) is False       # the fill bar itself agrees
+    assert of.split_suspect(plan(), df, FILL_IDX) is True
+    row = replay(plan(), df)
+    assert row.status == "split_affected"
+    assert (row.engine_r, row.delta_r) == (None, None)
 
 
-def test_dict_rows_evaluate_like_override_rows():
-    rows = spread(30, 10, lambda w: -0.5 + 0.02 * w)
-    assert ov.evaluate_verdict([r.to_dict() for r in rows]) == ov.evaluate_verdict(rows)
+def test_the_fill_bar_band_still_marks_split_suspect():
+    assert of.split_suspect(plan(), frame({FILL_IDX: (50.0, 50.5, 49.5, 50.0)}), FILL_IDX) is True
+    assert of.split_suspect(plan(), frame(), FILL_IDX) is False
 
 
-# -- the frozen ledger row ---------------------------------------------------------
-
-def test_ledger_row_is_valid_and_round_trips_through_the_ledger(tmp_path):
-    verdict = ov.evaluate_verdict(spread(30, 10, lambda w: -0.5 + 0.02 * w))
-    entry = ov.ledger_row(verdict, today=date(2027, 3, 1))
-    assert (entry["id"], entry["date"], entry["instrument"], entry["verdict"]) == (
-        "v173-override-fidelity", "2027-03-01", "v2", "COST")
-    assert (entry["n"], entry["exp_r"], entry["p"], entry["record"]) == (
-        30, verdict["mean_delta_r"], None, ov.SPEC_PATH)
-    path = tmp_path / "ledger.jsonl"
-    stats.append_ledger_row(entry, path=path)
-    recorded = ov.recorded_verdict(stats.load_ledger(path))
-    assert recorded == {"state": "COST", "n": 30, "recorded_on": "2027-03-01",
-                        "mean_delta_r": verdict["mean_delta_r"], "ci": verdict["ci"]}
-    with pytest.raises(ValueError):
-        stats.append_ledger_row(entry, path=path)      # written once
+def test_a_seam_before_the_fill_is_not_split_affected():
+    df = frame({i: (200.0, 201.0, 199.0, 200.0) for i in range(10)})   # seam at index 10
+    assert of.split_suspect(plan(), df, FILL_IDX) is False
+    assert replay(plan(), df).status == "resolved"
 
 
-@pytest.mark.parametrize("verdict", [
-    {"state": "WAITING", "evaluable": False, "recorded": False},
-    {"state": "COST", "evaluable": True, "recorded": True, "n": 30, "mean_delta_r": -0.4,
-     "ci": [-0.5, -0.3]},
-])
-def test_ledger_row_refuses_anything_but_a_fresh_evaluation(verdict):
-    with pytest.raises(ValueError):
-        ov.ledger_row(verdict, today=date(2027, 3, 1))
+def test_a_dividend_sized_drift_inside_two_percent_stays_resolved():
+    """auto_adjust rescales history before an ex-date: a 1% dividend on
+    Mon 2026-10-12 scales every earlier bar, the fill bar included, by 0.99.
+    The raw entry (100) sits inside the fill bar's 2% band (99.99 x 1.02)
+    and a 1% step is no seam."""
+    df = frame()
+    df.iloc[:20, :4] = df.iloc[:20, :4] * 0.99
+    assert of.split_suspect(plan(), df, FILL_IDX) is False
+    assert replay(plan(), df).status == "resolved"
 
 
-def test_a_recorded_verdict_is_shown_and_never_recomputed(monkeypatch):
-    cost = ov.evaluate_verdict(spread(30, 10, lambda w: -0.5 + 0.02 * w))
-    ledger = [{"id": "v139-arm-d", "verdict": "NO-LIFT"},
-              ov.ledger_row(cost, today=date(2027, 3, 1))]
-    monkeypatch.setattr(stats, "week_cluster_bootstrap", _no_bootstrap)
-    shown = ov.verdict_payload(spread(40, 12, 0.5), ledger)   # live rows now look SAVED
-    assert (shown["state"], shown["recorded"], shown["recorded_on"]) == ("COST", True, "2027-03-01")
-    assert (shown["mean_delta_r"], shown["ci"]) == (cost["mean_delta_r"], cost["ci"])
-    assert (shown["n"], shown["weeks"]) == (40, 12)          # descriptive figures stay live
-
-
-def test_without_a_ledger_row_the_payload_waits_even_when_evaluable(monkeypatch):
-    monkeypatch.setattr(stats, "week_cluster_bootstrap", _no_bootstrap)
-    out = ov.verdict_payload(spread(30, 10, 0.5), [])
-    assert (out["state"], out["evaluable"], out["recorded"], out["ci"]) == (
-        "WAITING", True, False, None)
-
-
-# -- build_report ------------------------------------------------------------------
-
-def _book():
-    return [plan(plan_id="a", ticker="AAA"),
-            plan(plan_id="b", ticker="BBB", reason="manual_bulk",
-                 close_at="2026-10-08T18:00:00+00:00"),
-            plan(plan_id="c", ticker="AAA", reason="tp1_runner_trail"),   # not an override
-            plan(plan_id="d", ticker="BAD")]
-
-
-def test_report_payload_shape(monkeypatch):
-    monkeypatch.setattr(stats, "week_cluster_bootstrap", _no_bootstrap)
-    calls = []
-
-    def bars_fn(ticker):
-        calls.append(ticker)
-        if ticker == "BAD":
-            raise OSError("corrupt cache file")
-        return frame({19: STOP_BAR})
-
-    out = ov.build_report(_book(), {"a": {"id": "t", "shares": 10}}, bars_fn, LAST_DAY, [], "$")
-    assert set(out) == {"rows", "summary", "verdict", "engine_flags", "asof", "currency_symbol"}
-    assert (out["asof"], out["currency_symbol"]) == ("2026-10-19", "$")
-    assert out["engine_flags"] == {"stall_exit_enabled": False, "runner_structure_exit": "off"}
-    assert sorted(calls) == ["AAA", "BAD", "BBB"]               # once per ticker
-    assert [r["plan_id"] for r in out["rows"]] == ["b", "d", "a"]   # newest close first
-    assert set(of.ROW_FIELDS) == ROW_KEYS                       # V173-7's row contract
-    assert all(set(r) == ROW_KEYS for r in out["rows"])
-    by_id = {r["plan_id"]: r for r in out["rows"]}
-    assert by_id["d"]["status"] == "unreplayable"
-    assert by_id["b"]["bulk"] is True
-    assert by_id["a"]["delta_usd"] is not None and by_id["b"]["delta_usd"] is None
-    assert out["summary"]["bulk_dates"] == {"2026-10-08": 1}
-    assert set(out["verdict"]) == VERDICT_KEYS
-    assert out["verdict"]["state"] == "WAITING"
-
-
-def test_report_with_no_overrides_is_empty_not_an_error():
-    out = ov.build_report([plan(reason="tp1_runner_trail")], {}, lambda t: None, LAST_DAY, [], "$")
-    assert out["rows"] == []
-    assert out["summary"]["counted_n"] == 0
-    assert out["verdict"]["state"] == "WAITING"
+def test_stale_beats_a_seam():
+    assert replay(plan(), frame(HALVED), when=date(2026, 10, 20)).status == "stale"
 ```
 
-Note on `_book()`: plans `a` and `d` close on 2026-10-07 and `b` on 2026-10-08, so the order is `b` first, then `d` before `a` (same date, `plan_id` descending).
+The scenario arithmetic, checked against `adjustment_seam_issue` (adjustments.py:71-87) when this plan was written: in `HALVED` the close ratio at index 20 is 0.5; the five closes before it (indices 15..19: 100, 101, 101, 101, 101) and the five after it (50.5 each) both have a coefficient of variation below 0.03, so it reports a seam. In the warm-up seam the five 200 closes before index 10 and the five 100 closes after it qualify on the whole frame, but `df.iloc[FILL_IDX:]` holds no close ratio past 20%. The hold-cap test relies on V173-9's frame: cap 10 from index 15 ends at 25, so the trimmed 25-bar frame (last index 24) clips there and `15 + 10 > 24` keeps it open.
 
-- [ ] **Step 3: Run both to verify they fail**
+- [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_summary.py
-python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_verdict.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_fidelity_admission.py
 ```
 
-Expected: the first FAILS with `AttributeError: ... has no attribute 'summarise'` (the dead-band cases that only read `DEAD_BAND` still fail on `summarise`). The second fails at collection with `ModuleNotFoundError: No module named 'swingbot.core.analytics.override_verdict'`.
+Expected: FAIL with `AttributeError: module 'swingbot.core.analytics.override_fidelity' has no attribute 'trim_to_asof'` (and `missing_sessions`, `split_suspect`); the status tests fail on the wrong status (for example `test_the_trim_decides_open_against_the_hold_cap` reads `resolved`, `test_a_missing_session_from_the_fill_on_is_stale[override-session]` reads `unreplayable`). `test_a_gap_before_the_fill_does_not_matter` and `test_a_pre_v173_row_missing_its_override_session_stays_unreplayable` may already pass.
 
-- [ ] **Step 4: Add the three ledger verdicts**
+If an import from `tests.analytics.test_override_fidelity_replay` fails, V173-9 is not on the branch: stop and report.
 
-In `$WT/swingbot/core/backtesting/instrument/stats.py`, replace the `VERDICTS` block (the comment line above it included):
+- [ ] **Step 3: Implement**
+
+In `$WT/swingbot/core/analytics/override_fidelity.py`, add beside the other imports (skip either if V173-7 already imports it):
 
 ```python
-#: v140 appends the idea screen's three verdicts and its instrument; v173
-#: appends the override-fidelity outcomes. WAITING is never written: a
-#: verdict that is not yet evaluable has no ledger row. Existing rows are
-#: untouched (a ledger row is never edited).
-VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN",
-            "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED",
-            "COST", "SAVED", "INCONCLUSIVE")
+from swingbot.core.market.session import nyse_calendar
+from swingbot.core.marketdata import adjustments
 ```
 
-- [ ] **Step 5: Implement `summarise`**
-
-At the top of `$WT/swingbot/core/analytics/override_fidelity.py` add `from collections import Counter` if missing. Append at the end of the module:
+Append at the end of the module:
 
 ```python
 # --------------------------------------------------------------------------
-# V173-10: descriptive totals (spec §3). Counted rows are individual,
-# stamped and resolved; bulk and approx rows are shown, never summed.
+# V173-22: data admission (plan panel review). The cache can hold a
+# half-formed bar for today, can miss a session, and is split AND dividend
+# adjusted (auto_adjust=True), rescaled after later corporate actions.
 # --------------------------------------------------------------------------
 
-_SPLIT_KEYS = ("state_at_close", "horizon", "direction")
+def trim_to_asof(df: pd.DataFrame, asof: dt.date) -> pd.DataFrame:
+    """The bars dated on or before `asof`: settled sessions only. A partially
+    formed bar for today (data_refresh.py:160-170) never reaches the replay."""
+    return df.loc[df.index.normalize() <= pd.Timestamp(asof)]
 
 
-def _sum_r(rows) -> float:
-    return round(sum(r.delta_r for r in rows), 3)
+def missing_sessions(df: pd.DataFrame | None, start: dt.date) -> list[dt.date]:
+    """NYSE sessions from `start` to the frame's last bar that the frame lacks."""
+    if df is None or len(df) == 0:
+        return []
+    present = set(df.index.date)
+    return [day for day in nyse_calendar().sessions(start, df.index[-1].date())
+            if day not in present]
 
 
-def _sum_usd(rows) -> float:
-    return round(sum(r.delta_usd for r in rows if r.delta_usd is not None), 2)
+def split_suspect(plan, df: pd.DataFrame, fill_idx: int) -> bool:
+    """The cache no longer shares the plan's raw price basis: the fill price
+    outside the fill bar's band, or an adjustment seam from the fill on."""
+    if _split_band(plan, df, fill_idx):
+        return True
+    seam = adjustments.adjustment_seam_issue(df.iloc[fill_idx:], plan.ticker, "daily")
+    return seam is not None
 
 
-def _split(rows, key: str) -> dict:
-    groups: dict = {}
-    for r in rows:
-        groups.setdefault(getattr(r, key), []).append(r)
-    return {value: {"n": len(group), "sum_delta_r": _sum_r(group),
-                    "sum_delta_usd": _sum_usd(group)}
-            for value, group in sorted(groups.items())}
+def _close_session(plan) -> dt.date | None:
+    hit = assign_session((override_entry(plan) or {}).get("at"))
+    return hit.session if hit is not None else None
 
 
-def _bulk_dates(rows) -> dict[str, int]:
-    tally = Counter(r.close_date.isoformat() if r.close_date else "unknown"
-                    for r in rows if r.bulk)
-    return dict(sorted(tally.items()))
-
-
-def summarise(rows: list[OverrideRow]) -> dict:
-    """N by status, bulk/approx counts, ΣΔR and Σ$ and helped/hurt/neutral
-    over counted rows, and the splits by state, horizon and direction."""
-    rows = list(rows)
-    eligible = [r for r in rows if not r.bulk and not r.approx]
-    counted = [r for r in eligible if r.status == "resolved"]
-    by_status = Counter(r.status for r in eligible)
-    outcomes = Counter(r.outcome for r in counted)
-    return {
-        "n_by_status": {status: by_status[status] for status in STATUSES},
-        "bulk_n": sum(1 for r in rows if r.bulk),
-        "bulk_dates": _bulk_dates(rows),
-        "approx_n": sum(1 for r in rows if r.approx and not r.bulk),
-        "counted_n": len(counted),
-        "sum_delta_r": _sum_r(counted),
-        "sum_delta_usd": _sum_usd(counted),
-        "usd_missing_n": sum(1 for r in counted if r.delta_usd is None),
-        "helped": outcomes["helped"], "hurt": outcomes["hurt"],
-        "neutral": outcomes["neutral"],
-        "splits": {key: _split(counted, key) for key in _SPLIT_KEYS},
-    }
+def _stale(plan, rp: _Replay, asof: dt.date) -> bool:
+    """Bars behind asof, a calendar gap from the fill on, or a close the
+    settled bars have not reached yet."""
+    last = rp.df.index[-1].date()
+    if last < asof:
+        return True
+    if missing_sessions(rp.df, rp.df.index[rp.fill_idx].date()):
+        return True
+    close = _close_session(plan)
+    return close is not None and close > last
 ```
 
-- [ ] **Step 6: Implement `override_verdict.py`**
-
-Create `$WT/swingbot/core/analytics/override_verdict.py`:
+Replace V173-9's `_admission` **in place** (same position in the module, so there is one definition) with:
 
 ```python
-"""v173 §4: the frozen verdict on manual overrides, and the report payload.
-
-The rule is frozen in the spec and evaluated once. Population: individual
-(not bulk), stamped (not approx), resolved rows. It becomes evaluable when
-there are >= VERDICT_FLOOR of them over >= WEEK_FLOOR ISO weeks, no
-eligible row is still open, and excluded statuses are <= EXCLUDED_CAP of
-the eligible rows. The first evaluating run of the report script (under
---production, on the VM) writes one ledger row; from then on every reader
-shows that row and never recomputes it, because watching a live interval
-until it crosses zero inflates false positives.
-
-Pure: no store, no network. build_report takes its inputs from the caller
-(the report script, the API route) and never evaluates the verdict.
-"""
-from __future__ import annotations
-
-import logging
-import re
-from dataclasses import dataclass
-from datetime import date
-from typing import Callable
-
-import numpy as np
-import pandas as pd
-
-from swingbot import config
-from swingbot.core.analytics import override_fidelity as ofi
-from swingbot.core.backtesting.instrument import stats
-
-log = logging.getLogger(__name__)
-
-SPEC_PATH = "docs/superpowers/specs/2026-10-18-v173-execution-fidelity-overrides-design.md"
-WAITING = "WAITING"
-COST, SAVED, INCONCLUSIVE = "COST", "SAVED", "INCONCLUSIVE"
-_EVALUATED = (COST, SAVED, INCONCLUSIVE)
-_HYPOTHESIS = ("Manual overrides vs the v2 engine left alone: mean delta R over stamped "
-               "individual resolved overrides, week-cluster bootstrap 95% CI [{lo:.3f}, {hi:.3f}]")
-_CI_RE = re.compile(r"95% CI \[(-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)\]")
-
-
-@dataclass(frozen=True)
-class _View:
-    """The fields the rule reads, from an OverrideRow or its to_dict() form.
-    `entry_date` is the name stats.group_by_week reads."""
-    bulk: bool
-    approx: bool
-    status: str
-    delta_r: float | None
-    entry_date: date | None
-
-
-def _field(row, name: str):
-    return row.get(name) if isinstance(row, dict) else getattr(row, name)
-
-
-def _day(value) -> date | None:
-    if value is None or isinstance(value, date):
-        return value
-    return date.fromisoformat(str(value)[:10])
-
-
-def _view(row) -> _View:
-    return _View(bulk=bool(_field(row, "bulk")), approx=bool(_field(row, "approx")),
-                 status=_field(row, "status"), delta_r=_field(row, "delta_r"),
-                 entry_date=_day(_field(row, "close_date")))
-
-
-def _is_eligible(view: _View) -> bool:
-    return not view.bulk and not view.approx
-
-
-def _is_counted(view: _View) -> bool:
-    return _is_eligible(view) and view.status == "resolved"
-
-
-def eligible(rows) -> list:
-    """Individual, stamped rows (any status), as given."""
-    return [r for r in rows if _is_eligible(_view(r))]
-
-
-def counted(rows) -> list:
-    """The verdict population: individual, stamped, resolved rows, as given."""
-    return [r for r in rows if _is_counted(_view(r))]
-
-
-def conditions(rows) -> dict:
-    """The four floors of spec §4, evaluated on the rows as they are now."""
-    views = [_view(r) for r in rows]
-    elig = [v for v in views if _is_eligible(v)]
-    population = [v for v in elig if v.status == "resolved"]
-    weeks = len({stats.iso_week_key(v.entry_date) for v in population})
-    open_n = sum(1 for v in elig if v.status == "open")
-    excluded = sum(1 for v in elig if v.status in ofi.EXCLUDED_STATUSES)
-    share = excluded / len(elig) if elig else 0.0
-    evaluable = (len(population) >= ofi.VERDICT_FLOOR and weeks >= ofi.WEEK_FLOOR
-                 and open_n == 0 and share <= ofi.EXCLUDED_CAP)
-    return {"n": len(population), "weeks": weeks, "open_n": open_n,
-            "excluded_share": share, "evaluable": evaluable}
-
-
-def _payload(cond: dict, state: str, *, recorded: bool = False,
-             recorded_on: str | None = None, mean: float | None = None,
-             ci: list | None = None) -> dict:
-    return {"state": state, "n": cond["n"], "needed": ofi.VERDICT_FLOOR,
-            "weeks": cond["weeks"], "week_floor": ofi.WEEK_FLOOR,
-            "open_n": cond["open_n"], "excluded_share": round(cond["excluded_share"], 4),
-            "evaluable": cond["evaluable"], "recorded": recorded,
-            "recorded_on": recorded_on, "mean_delta_r": mean, "ci": ci}
-
-
-def _mean_delta(baseline, _component) -> float | None:
-    return float(np.mean([v.delta_r for v in baseline])) if baseline else None
-
-
-def _state_for(lo: float, hi: float) -> str:
-    if hi < 0:
-        return COST
-    if lo > 0:
-        return SAVED
-    return INCONCLUSIVE
-
-
-def evaluate_verdict(rows) -> dict:
-    """The one evaluation: WAITING until conditions() holds, then the
-    week-clustered bootstrap of mean ΔR (seeded) and its 95% interval.
-    Called only by the report script under --production."""
-    cond = conditions(rows)
-    if not cond["evaluable"]:
-        return _payload(cond, WAITING)
-    population = [v for v in map(_view, rows) if _is_counted(v)]
-    draws = stats.week_cluster_bootstrap(population, [], _mean_delta,
-                                         n_resamples=stats.WEEK_BOOTSTRAP_RESAMPLES,
-                                         seed=stats.WEEK_BOOTSTRAP_SEED)
-    lo, hi = (float(x) for x in np.percentile(draws, [2.5, 97.5]))
-    mean = round(float(np.mean([v.delta_r for v in population])), 3)
-    return _payload(cond, _state_for(lo, hi), mean=mean, ci=[round(lo, 3), round(hi, 3)])
-
-
-def recorded_verdict(ledger_rows) -> dict | None:
-    """The frozen v173 ledger row, read back; None when not yet written."""
-    for entry in ledger_rows or ():
-        if entry.get("id") != ofi.LEDGER_ID:
-            continue
-        match = _CI_RE.search(entry.get("hypothesis") or "")
-        ci = [float(match.group(1)), float(match.group(2))] if match else None
-        return {"state": entry["verdict"], "n": entry["n"], "recorded_on": entry["date"],
-                "mean_delta_r": entry["exp_r"], "ci": ci}
+def _admission(plan, rp: _Replay, asof: dt.date) -> str | None:
+    """stale / split_affected / unreplayable from the bars alone, or None."""
+    if _stale(plan, rp, asof):
+        return "stale"
+    if split_suspect(plan, rp.df, rp.fill_idx):
+        return "split_affected"
+    if rp.ov_idx is None or rp.ov_idx < rp.fill_idx:
+        return "unreplayable"
     return None
-
-
-def verdict_payload(rows, ledger_rows) -> dict:
-    """What the API and every non-evaluating run show. Never evaluates: the
-    state is the recorded verdict, or WAITING; the counts stay live."""
-    cond = conditions(rows)
-    recorded = recorded_verdict(ledger_rows)
-    if recorded is None:
-        return _payload(cond, WAITING)
-    return _payload(cond, recorded["state"], recorded=True,
-                    recorded_on=recorded["recorded_on"],
-                    mean=recorded["mean_delta_r"], ci=recorded["ci"])
-
-
-def ledger_row(verdict: dict, *, today: date) -> dict:
-    """The one pre-registration row for a fresh COST/SAVED/INCONCLUSIVE
-    evaluation; anything else (WAITING, an already recorded verdict) raises."""
-    if (verdict.get("recorded") or verdict.get("state") not in _EVALUATED
-            or not verdict.get("evaluable")):
-        raise ValueError("only a fresh COST/SAVED/INCONCLUSIVE evaluation is written")
-    lo, hi = verdict["ci"]
-    entry = {"id": ofi.LEDGER_ID, "date": today.isoformat(),
-             "hypothesis": _HYPOTHESIS.format(lo=lo, hi=hi), "instrument": "v2",
-             "n": int(verdict["n"]), "exp_r": float(verdict["mean_delta_r"]), "p": None,
-             "verdict": verdict["state"], "record": SPEC_PATH}
-    stats.validate_ledger_row(entry)
-    return entry
-
-
-def _bars_for(bars_fn: Callable[[str], pd.DataFrame | None], ticker: str,
-              cache: dict) -> pd.DataFrame | None:
-    """One cache read per ticker; an unreadable file is an unreplayable row."""
-    if ticker not in cache:
-        try:
-            cache[ticker] = bars_fn(ticker)
-        except Exception as exc:   # noqa: BLE001 -- one bad file never fails the report
-            log.warning("override_verdict: bars for %s unreadable: %s", ticker, exc)
-            cache[ticker] = None
-    return cache[ticker]
-
-
-def _engine_flags() -> dict:
-    """The exit flags walk_v2 reads live, echoed so a reader can see what
-    the replay ran under."""
-    return {"stall_exit_enabled": bool(config.STALL_EXIT_ENABLED),
-            "runner_structure_exit": str(config.RUNNER_STRUCTURE_EXIT)}
-
-
-def build_report(plans: list, trades_by_plan: dict[str, dict],
-                 bars_fn: Callable[[str], pd.DataFrame | None], asof: date,
-                 ledger_rows: list[dict], currency_symbol: str) -> dict:
-    """The report payload (index § Report payload). Replays every manual
-    close, newest first; the verdict is the recorded one or WAITING."""
-    cache: dict = {}
-    trades = trades_by_plan or {}
-    rows = [ofi.replay_override(p, _bars_for(bars_fn, p.ticker, cache), asof,
-                                trades.get(p.plan_id))
-            for p in plans if ofi.is_override(p)]
-    rows.sort(key=lambda r: (r.close_date or date.min, r.plan_id), reverse=True)
-    return {"rows": [r.to_dict() for r in rows], "summary": ofi.summarise(rows),
-            "verdict": verdict_payload(rows, ledger_rows), "engine_flags": _engine_flags(),
-            "asof": asof.isoformat(), "currency_symbol": currency_symbol}
 ```
 
-Then update the pinned vocabulary in `$WT/tests/backtesting/test_instrument_stats_ledger.py` (`test_fields_and_vocabularies_are_the_plan_set`, lines 15-21). The ledger row for V173-10 does not list this file; it is the one existing test that pins `VERDICTS`, so it changes here:
+`_admission` calls helpers defined further down the module; Python resolves them at call time. In `replay_override`, replace the line `rp = _prepare(plan, bars, hit)` with:
 
 ```python
-    assert stats.VERDICTS == ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE",
-                              "WITHDRAWN", "OPEN", "SCREEN-PASS", "SCREEN-FAIL",
-                              "SCREEN-UNDERPOWERED", "COST", "SAVED", "INCONCLUSIVE")
+        settled = None if bars is None else trim_to_asof(bars, asof)
+        rp = _prepare(plan, settled, hit)        # V173-22: nothing after asof
 ```
 
-The research page's `VERDICT_TONE` (`frontend/src/app/workspaces/research/research.ts:32`) shows an unlisted verdict as neutral, which is right for all three. It stays unchanged.
+and add to its docstring: "Bars dated after `asof` are dropped before any index is taken."
 
-- [ ] **Step 7: Run the new tests and the ledger tests**
+- [ ] **Step 4: Run the new test and the earlier override tests**
 
 ```bash
-python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_summary.py
-python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_verdict.py
-python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/backtesting/test_instrument_stats_ledger.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_fidelity_admission.py
 python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_fidelity_replay.py
+python E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/scripts/dev/testrun.py file tests/analytics/test_override_fidelity_arms.py
 ```
 
-Expected: all PASS, `0 failed`, `0 xfailed`. Each seeded evaluation draws 10,000 resamples over 10 weeks. If `test_override_verdict.py` takes more than about 15 s, report it; do not lower the resample count (it is the pre-registered `stats.WEEK_BOOTSTRAP_RESAMPLES`).
+Expected: all PASS, `0 failed`, `0 xfailed`. V173-9's tests must stay green unchanged: every V173-9 frame closes on 2026-10-07 with bars through at least 2026-10-14 and no gap after the fill, so none changes status. If one does, the new rule is wrong, not the old test.
 
-If the INCONCLUSIVE case comes out COST or SAVED, the bootstrap is not pooling weeks: check that `_View.entry_date` carries the row's `close_date`. Do not change the seeded deltas.
+If `test_a_two_for_one_seam_after_the_fill_is_split_affected` fails on `split_suspect`, print `adjustments.adjustment_seam_issue(df.iloc[FILL_IDX:], "T", "daily")`; `None` there means the detector changed since this plan was written: report it, do not reshape the frame to pass.
 
-- [ ] **Step 8: Complexity**
+- [ ] **Step 5: Complexity**
 
 ```bash
-python -m radon cc -s -n C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/swingbot/core/analytics/override_fidelity.py E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/swingbot/core/analytics/override_verdict.py E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/swingbot/core/backtesting/instrument/stats.py
+python -m radon cc -s -n C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides/swingbot/core/analytics/override_fidelity.py
 ```
 
-Expected: no output (every function below grade C). If `summarise` or `conditions` grades C, move one comprehension into a named helper: the result stays identical and the tests above must stay green unchanged.
+Expected: no output (`_stale` about 4, `_admission` about 6, `replay_override` about 4).
 
-- [ ] **Step 9: Commit on the branch (two scoped commits)**
+- [ ] **Step 6: Commit on the branch**
 
 ```bash
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides add swingbot/core/backtesting/instrument/stats.py tests/backtesting/test_instrument_stats_ledger.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): ledger verdicts COST, SAVED, INCONCLUSIVE"
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides add swingbot/core/analytics/override_fidelity.py swingbot/core/analytics/override_verdict.py tests/analytics/test_override_summary.py tests/analytics/test_override_verdict.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): override summary, the frozen verdict and build_report"
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides add swingbot/core/analytics/override_fidelity.py tests/analytics/test_override_fidelity_admission.py
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v173-execution-fidelity-overrides commit -m "feat(v173): override replay admits settled bars only -- trim to asof, calendar gaps stale, adjustment seams split_affected"
 git -C E:/Documents/Private/Projects/Discord-Bot status --short
 ```
 
 The last command checks the main tree stayed clean of branch edits.
-
