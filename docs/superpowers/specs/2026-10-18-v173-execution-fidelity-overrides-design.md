@@ -261,7 +261,10 @@ above), `source="manual"` and one `status`:
 **Until then:** **`WAITING`**, with no mean and no interval.
 
 **One evaluation:**
-- The first run where the conditions hold computes mean ΔR with
+- **Trigger:** a daily job in the bot's scheduler, after the US close,
+  checks the conditions and evaluates the first time they hold. Nobody
+  runs it by hand, so nobody picks the moment after seeing the sums.
+- The first check where the conditions hold computes mean ΔR with
   `week_cluster_bootstrap` (`swingbot/core/backtesting/instrument/stats.py`,
   its own `WEEK_BOOTSTRAP_SEED` and resample count), pooled across
   ACTIVE/PARTIAL.
@@ -269,8 +272,16 @@ above), `source="manual"` and one `status`:
   - CI entirely below 0 → **`COST`**.
   - CI entirely above 0 → **`SAVED`**.
   - Otherwise → **`INCONCLUSIVE`**.
-- The result is written once to `preregistration-ledger.jsonl` as
-  `v173-override-fidelity` and **frozen**. The ledger's verdict enum
+- The result is written once to the Postgres table
+  `preregistration_verdicts` (new Alembic revision; primary key
+  `ledger_id`, so a second insert is impossible), in the same transaction
+  as the condition check, and **frozen**. The row carries `n`, `weeks`,
+  the CI, `mean_delta_r`, the mean ΔR before costs (descriptive), the
+  engine flags in force (`STALL_EXIT_ENABLED`, `RUNNER_STRUCTURE_EXIT`),
+  `recorded_on`, and the evaluated rows as JSONB, so the verdict can be
+  re-derived. `preregistration-ledger.jsonl` gets the same row as
+  `v173-override-fidelity` by a mirror commit; the table is the
+  authority, the file is the record. The ledger's verdict enum
   (`instrument/stats.py:116-118`) gains `COST`, `SAVED` and
   `INCONCLUSIVE`. `WAITING` is never written. Later runs show that recorded
   verdict and keep the descriptive rows live. They never recompute it,
@@ -289,13 +300,13 @@ often, and nothing about trades that were not overridden.
 - `scripts/reports/execution_fidelity_report.py`
   - Reads plans and `market_data/daily` and never fetches.
   - Prints the row table, the summary and splits, and the verdict state.
-    It writes the ledger row on the evaluating run (§4).
+    It only reads: the verdict comes from `preregistration_verdicts`.
   - Runs on the VM against the real book. A dev-DB run is fixture data,
-    prints a banner saying so, and never writes the ledger
+    prints a banner saying so, and never writes a verdict
     (`working-conventions.md` § Investigating production).
 - `GET /api/v1/analytics/override-fidelity`
-  - Computed on request (~21 rows, so no store and no cron). It reads the
-    frozen verdict from the ledger and never evaluates it.
+  - Rows computed on request (~21 rows). It reads the frozen verdict
+    from `preregistration_verdicts` and never evaluates it.
   - Returns `{rows, summary, verdict}`. Behind `require_auth`, like its
     siblings in `analytics.py`.
 
@@ -386,7 +397,8 @@ price on the same session gives `delta_r == 0`.
 - One eligible row `open` → WAITING.
 - Exclusions at 21% → WAITING.
 - Seeded ΔR sets → each of COST, SAVED, INCONCLUSIVE.
-- A second evaluation reads the frozen ledger row and does not recompute.
+- A second daily check finds the `preregistration_verdicts` row and does
+  not recompute; a concurrent second insert fails on the primary key.
 
 **`_close_plan`:**
 - A single close stamps `manual` with the four `override` fields.
@@ -478,3 +490,75 @@ was applied; none was rejected.
   applied in §5.
 - financial-advisor: the waiting copy must not nudge -- applied: "no
   target number of overrides" in the caption.
+
+## Plan panel review
+
+2026-10-19. The same three roles ran serially over the written plan
+(index + five parts at `33e08fa2`). The partner chose every fix below in
+chat (Postgres store, the bot's daily job as trigger, every advisory
+applied); each is a requirement of the plan.
+
+- quant-researcher [BLOCKING]: the ledger row lived in the container's
+  image copy of `docs/` (no mount), so a redeploy erased it and invited a
+  second evaluation -- applied: `preregistration_verdicts` Postgres table
+  is the authority (§4); the jsonl is a mirror.
+- quant-researcher [BLOCKING]: no step governed the one run that counts
+  -- applied: the bot's daily scheduler job evaluates when the conditions
+  first hold (§4 Trigger); the script and API only read; the mirror
+  commit of the row is a documented standing procedure.
+- quant-researcher: evaluating at a moment chosen after seeing the sums
+  -- applied: same daily-job trigger.
+- quant-engineer: a breakeven arming on the override bar is clamped away
+  in the engine frame -- applied: a real-frame stop move or BE trigger on
+  the override session that the clamped frame lacks marks the row
+  `ambiguous`, with a test.
+- quant-engineer: bars dated after `asof` (partial bars) are walked --
+  applied: bars are trimmed to `<= asof` before any index math, with a
+  test.
+- quant-engineer: hold cap and `open` count rows, not sessions -- applied:
+  sessions between fill and last bar are checked against
+  `nyse_calendar()`; a gap marks the row `stale`.
+- quant-engineer: clamping changes ATR/structure on runner plans --
+  applied: indicators are computed on the real frame; only the exit checks
+  see the clamped override bar.
+- quant-engineer + quant-researcher: a `bar_close` stamp older than the
+  close session counts as stamped -- applied: `bars_asof < close_date`
+  makes the row `approx`; the verdict line reports the `bar_close` count.
+- quant-researcher: a failed post-v173 stamp silently leaves the
+  denominator -- applied: post-v173 individual closes with `override:
+  null` or `price_source="none"` count as an exclusion status
+  (`unstamped`) under the 20% cap.
+- quant-researcher: a frozen verdict paired with live N and live sums --
+  applied: once recorded, the badge and verdict line show the recorded
+  `n`, `mean_delta_r`, CI and `recorded_on`; live sums are labelled
+  "since recorded".
+- quant-researcher: costs could carry a near-zero COST -- applied: mean ΔR
+  before costs is reported as descriptive context, never in the verdict.
+- quant-engineer: the verdict is not reproducible -- applied: engine flags
+  and the evaluated rows are stored in the verdict row (§4).
+- quant-engineer: no truncation (lookahead) test for the engine arm --
+  applied: dropping every bar after the engine exit leaves `engine_r`
+  identical.
+- quant-engineer: `tp1_index` is lost by `replace()`/`asdict()` --
+  applied: a guard comment on the replay path.
+- quant-engineer: `v173_001` template -- applied: `down_revision` written
+  as the current head placeholder, `FOR UPDATE` on the pinned SELECT, the
+  deploy step fails unless exactly 15 rows read `manual_bulk`.
+- quant-engineer: 2% split tolerance on dividend-adjusted bars --
+  applied: the split check uses the cache's adjustment basis
+  (`adjustments.py`) and the exclusion copy names dividends.
+- financial-advisor: "N of 30 needed" contradicts itself when the count
+  is met but another condition fails -- applied: a "waiting on other
+  conditions" line, with a test.
+- financial-advisor: the approved WAITING copy -- applied: it gains "No
+  conclusion yet."; the net-effect tile is neutral-toned while WAITING.
+- financial-advisor: "still open ... left out" reads as permanent --
+  applied: "N rows are still open and not counted yet. No conclusion is
+  recorded while any are open."
+- financial-advisor: plurals for a count of 1 -- applied: a pluralisation
+  helper.
+- financial-advisor: the caption is the least legible text -- applied:
+  readable size and `--text-secondary`; the three-width check asserts it
+  is visible and unclipped at 390px.
+- financial-advisor: dollars come from modelled sizing -- applied: the
+  caption says "dollars use the plan's modelled position size".
