@@ -16,6 +16,7 @@ import { MarketIndexStore } from '../stores/market-index.store';
 import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { ViewportService } from '../ui/breakpoints';
+import { MotionMode, MotionService } from '../ui/motion/motion.service';
 import { Button } from '../ui/button';
 import { CLOCK } from '../ui/clock';
 import { Icon, IconName } from '../ui/icon';
@@ -250,6 +251,36 @@ export class Shell {
       else if (stored === 'expanded') this.userCollapsed.set(false);
     });
   });
+
+  /* -- v168: Motion preference --------------------------------------- */
+
+  /**
+   * The one TS source of the Motion mode (spec v168 §1). Persisted through
+   * `PreferencesStore` under `shell.motion` by `MotionService.set`, never
+   * `localStorage` -- the same plan v21 Global Constraint as `shell.zoom`.
+   * The OS reduced-motion setting is deliberately not read (spec D2).
+   */
+  protected readonly motion = inject(MotionService);
+
+  /** Narrowed for the profile menu: `pending` is a load state, not a choice,
+   *  so the control shows the default (On) until preferences arrive. */
+  protected readonly motionMode = computed<MotionMode>(() => {
+    const mode = this.motion.mode();
+    return mode === 'pending' ? 'on' : mode;
+  });
+
+  /**
+   * Written to `<html>` for the same reason as `--text-scale` above: dialogs,
+   * the drawer and the toast host sit outside this component. CSS reads only
+   * this attribute; TS reads only `MotionService`.
+   */
+  private readonly applyMotion = effect(() => {
+    document.documentElement.dataset['motion'] = this.motion.mode();
+  });
+
+  protected setMotion(mode: MotionMode): void {
+    this.motion.set(mode);
+  }
 
   /**
    * Killswitch state, owned by the shell rather than by RiskStore.

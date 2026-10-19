@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import {
   Signal,
   WritableSignal,
@@ -12,13 +12,15 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteTitleService } from '../routing/route-title.service';
+import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { CLOCK } from '../ui/clock';
+import { provideMotion } from '../ui/motion/motion.service';
 import { Shell } from './shell';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
@@ -335,5 +337,90 @@ describe('shell.css breakpoints', () => {
 
     expect(widths.length).toBeGreaterThan(0);
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+});
+
+describe('shell motion preference (v168 §1)', () => {
+  const html = document.documentElement;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: TapeStore, useValue: { load: vi.fn(), visible: signal(false), rows: signal([]), asOf: signal(null) } },
+        provideMotion('live'),
+      ],
+    });
+  });
+
+  afterEach(() => {
+    delete html.dataset['motion'];
+  });
+
+  function flushPreferences(preferences: Record<string, unknown>): void {
+    TestBed.inject(HttpTestingController)
+      .expectOne((request) => request.method === 'GET' && request.url.endsWith('/system/preferences'))
+      .flush({ preferences });
+  }
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it('starts the cold load as pending in index.html, before any script runs', () => {
+    const source = readFileSync(join(process.cwd(), 'src/index.html'), 'utf8');
+    expect(source).toMatch(/<html lang="en" data-motion="pending">/);
+  });
+
+  it('keeps <html data-motion> pending until preferences load', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('pending');
+  });
+
+  it('defaults to on once preferences load without a stored mode', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    flushPreferences({});
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('on');
+  });
+
+  it('restores a stored mode onto <html>', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    flushPreferences({ 'shell.motion': 'reduced' });
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('reduced');
+  });
+
+  it('falls back to on for an unknown stored value', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    flushPreferences({ 'shell.motion': 'sparkly' });
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('on');
+  });
+
+  it('writes shell.motion and data-motion when the control is used', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    flushPreferences({});
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('sb-profile-menu .avatar')!.click();
+    fixture.detectChanges();
+    const off = Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .motion-control .segment'))
+      .find((button) => button.textContent!.trim() === 'Off')!;
+    off.click();
+    await settle(fixture);
+    expect(html.dataset['motion']).toBe('off');
+    expect(TestBed.inject(PreferencesStore).values()['shell.motion']).toBe('off');
   });
 });

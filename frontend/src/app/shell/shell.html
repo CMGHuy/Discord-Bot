@@ -133,7 +133,9 @@
           {{ now() }}
         </span>
       </div>
-      <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()" (signedOut)="logout()" />
+      <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()"
+                       [motion]="motionMode()" (motionChanged)="setMotion($event)"
+                       (signedOut)="logout()" />
     </header>
 
     <!-- Engaged killswitch is shell-level and unmissable: it means the bot
