@@ -39,11 +39,16 @@ from swingbot import config  # noqa: E402
 from swingbot.core.analytics.expectancy_attribution import net_r  # noqa: E402
 from swingbot.core.backtesting.acceptance import (BOOTSTRAP_RESAMPLES,  # noqa: E402
                                                   bootstrap_delta, mde_paired)
+from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
+from swingbot.core.backtesting.instrument import contract  # noqa: E402
 from swingbot.core.marketdata import training_data  # noqa: E402
 from swingbot.core.planning import exit_sim  # noqa: E402
 from swingbot.core.planning.plan_engine import simulate_exit  # noqa: E402
 
-TRAIN = ("2020-01-01", "2023-12-31")
+#: v136 rule 2: the window comes from the instrument contract, never a literal.
+#: This measurement is frozen on instrument v1 (spec § Measurement); main()
+#: refuses any other --instrument.
+TRAIN = instrument_cli.window_for(contract.resolve("v1"), "train")
 PCT = 5.0
 DATA_SOURCE = "yfinance"
 BASES = ("close", "high_low")
@@ -334,7 +339,10 @@ def main(argv=None) -> int:
     parser.add_argument("--tickers", nargs="+", default=None)
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES)
+    instrument_cli.add_instrument_arg(parser)
     args = parser.parse_args(argv)
+    instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_runner_giveback.py",
+                              "a later spec (v176 is frozen on instrument v1)")
     target = args.out_dir / f"train-{args.basis}.json"
     refusal = _refusal(args, target)
     if refusal:

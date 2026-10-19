@@ -136,6 +136,16 @@ def test_book_reports_drawdown_in_r_and_dollars():
     assert book["max_drawdown_dollars"] == pytest.approx(200.0)
 
 
+def test_train_window_comes_from_the_v1_instrument_contract():
+    from swingbot.core.backtesting.instrument import cli, contract
+    assert mrg.TRAIN == cli.window_for(contract.resolve("v1"), "train")
+
+
+def test_main_refuses_instrument_v2(tmp_path):
+    with pytest.raises(SystemExit, match="not wired"):
+        mrg.main(["--out-dir", str(tmp_path), "--instrument", "v2"])
+
+
 def test_main_refuses_a_second_look(tmp_path, capsys):
     (tmp_path / "train-close.json").write_text("{}", encoding="utf-8")
     assert mrg.main(["--out-dir", str(tmp_path), "--basis", "close"]) == 1
