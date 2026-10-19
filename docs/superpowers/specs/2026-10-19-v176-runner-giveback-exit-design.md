@@ -5,7 +5,7 @@
 **Edge:** harvest — locks in more of a runner's favourable run before a reversal takes it back. Prediction: pooled paired runner-leg ΔR of unknown sign, with |Δ pooled ExpR| under 0.05R (two earlier runner-tightening rules on the same headroom both closed near 0.01R); not a capture-ratio claim (see `## Measurement`).
 **Screen:** harvest-headroom docs/superpowers/results/2026-10-02-v123-runner-headroom.md
 **Panel:** risk-manager, veteran-trader, quant-researcher
-**Status:** spec written 2026-10-19 from a chat with the partner. Rule, scope (runners after TP1 only) and "apply to open trades now" were all decided by the partner in chat. Revised the same day after the panel (see `## Panel review`).
+**Status:** spec written 2026-10-19 from a chat with the partner. Rule, scope (runners after TP1 only) and "apply to open trades now" were all decided by the partner in chat. Revised the same day after the panel (see `## Panel review`). Approved by the partner 2026-10-19, as written: `E` keeps taking extended-hours ticks.
 
 ## Why
 
