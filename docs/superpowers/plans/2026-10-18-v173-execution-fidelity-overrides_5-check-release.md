@@ -205,18 +205,19 @@ function measure() {
 const CAPTION = "Compares the overrides you made with what the engine would have done. Past closes only, not advice on future ones. A close for a reason the engine cannot see (a gap, earnings, needing the cash) can still be right. Figures are after modelled costs and before tax. Dollars use the plan's modelled position size. Closing early can also change the tax holding period. There is no target number of overrides.";
 const COPY = ['Overrides vs engine', 'Overrides counted', 'Helped / hurt / neutral', 'counts ignore size', CAPTION,
   '1 close from one bulk clear on 2026-09-30 is not a decision, so it is left out',
-  '1 estimated row is shown but not counted', 'estimated exit: daily close, not your fill'];
+  '1 estimated row is shown but not counted', 'estimated exit: daily close, not your fill',
+  '1 ambiguous row is left out'];   // TSLA; plural(n, `${STATUS_LABEL[s]} row`, ...) in part 4b
 const EXPECT = {
   waiting: [...COPY, '2 of 30 needed. No conclusion yet.'],
   waitingOn: [...COPY, '31 of 30 counted. Waiting on other conditions. No conclusion yet.',
     'Waiting on: at least 10 distinct weeks (now 7); left-out rows at most 20% (now 25%)'],
-  cost: [...COPY, 'Your overrides cost $', 'R) vs the engine',
+  // Recorded figures (verdict.sum_delta_usd/-r = -544 / -2.72), never the live summary (-580 / -2.9).
+  cost: [...COPY, 'Your overrides cost $544.00 (2.72 R) vs the engine',
     'Recorded on 2027-03-01 from 34 overrides over 12 weeks: mean', 'R per override, 95% CI',
     'Before costs:', '2 overrides priced from a bar close, not a quote.',
     'live, may have moved since recorded on 2027-03-01'],
   empty: ['Overrides vs engine', 'No manual overrides in scope.'],
 };
-const AMBIGUOUS_NOTE = /1 .+ row is left out/;   // the TSLA row, under its STATUS_LABEL
 
 (async () => {
   const browser = await chromium.launch({ headless: false });
@@ -234,7 +235,6 @@ const AMBIGUOUS_NOTE = /1 .+ row is left out/;   // the TSLA row, under its STAT
       const m = await page.evaluate(measure);
       const flat = (m.text ?? '').replace(/\s+/g, ' ');
       const missing = EXPECT[v].filter((s) => !flat.includes(s));
-      if (v !== 'empty' && !AMBIGUOUS_NOTE.test(flat)) missing.push('1 <ambiguous label> row is left out');
       delete m.text;
       console.log(v, width, JSON.stringify({ ...m, missing }));
       await page.locator('sb-override-fidelity-panel').screenshot({ path: `${out}/${v}-${width}.png` });
