@@ -9,6 +9,9 @@
   }
 
   <nav class="sidebar" [attr.aria-hidden]="overlay() && !overlayOpen() ? 'true' : null">
+    <!-- v168 §3 #6: one rail that slides to the active entry. Absolutely
+         placed (shell.css), so it takes no part in the sidebar's flex gap. -->
+    <sb-nav-indicator />
     <div class="mark">
       <!-- Collapsed, the mark is the icon alone: a name clipped to three
            letters reads as a rendering fault rather than as a choice. D3 --

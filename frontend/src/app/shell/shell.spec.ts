@@ -235,24 +235,22 @@ describe('shell navigation', () => {
     expect((f.nativeElement as HTMLElement).querySelector('.page-subtitle')).toBeNull();
   });
 
-  it('marks the active entry with an accent rail rather than colour alone', () => {
+  it('marks the active entry with a rail plus tint and weight, not colour alone', () => {
+    // v168 §3 #6: the rail is one sliding sb-nav-indicator in the sidebar,
+    // no longer a per-link border; the active link keeps the tint and the
+    // weight, so the state still has three cues.
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
-    const link = (f.nativeElement as HTMLElement).querySelector('.nav a')!;
-    link.classList.add('active');
-    f.detectChanges();
-    // The rule must exist in the component stylesheet; colour alone fails
-    // contrast guidance for state, which is why this asserts a border.
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('.sidebar > sb-nav-indicator').length).toBe(1);
     const styles = [...document.styleSheets]
       .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
       .map((rule) => rule.cssText);
-    // Not a single `.includes('.nav a.active')` -- Angular's emulated
-    // encapsulation inserts an `[_ngcontent-*]` attribute selector between
-    // `.nav` and `a.active`, so that exact substring never appears in the
-    // compiled stylesheet even when the rule is present.
-    expect(styles.some((text) =>
-      text.includes('.nav') && text.includes('a.active') && text.includes('border-left')))
-      .toBe(true);
+    // Not a single `.includes('.nav a.active')` -- emulated encapsulation
+    // inserts an `[_ngcontent-*]` attribute between `.nav` and `a.active`.
+    const active = styles.filter((text) => text.includes('.nav') && text.includes('a.active'));
+    expect(active.some((text) => text.includes('background') && text.includes('font-weight'))).toBe(true);
+    expect(active.some((text) => text.includes('border-left-color'))).toBe(false);
   });
 
   it('keeps the version block pinned to the foot of the rail', () => {

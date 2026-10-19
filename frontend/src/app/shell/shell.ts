@@ -21,6 +21,7 @@ import { RouteEntrance } from '../ui/motion/route-entrance';
 import { Button } from '../ui/button';
 import { CLOCK } from '../ui/clock';
 import { Icon, IconName } from '../ui/icon';
+import { NavIndicator } from './nav-indicator';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
@@ -64,7 +65,7 @@ const ZOOM_DEFAULT = 100;
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
     ScanProgressStrip,
-    Button, Icon, ProfileMenu, Tape, RouteEntrance,
+    Button, Icon, ProfileMenu, NavIndicator, Tape, RouteEntrance,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
