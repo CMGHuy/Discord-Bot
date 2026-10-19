@@ -123,6 +123,12 @@ table exactly as today.
   and below the compact list.
 - Expandable rows (the ▸ disclosure) are replaced on phone by the drawer;
   the expanded content is the drawer's content.
+- **Money and risk floor.** A table of open positions (Dashboard, Trades,
+  Risk) keeps P&L as an amount (€) and either the stop distance or the risk
+  amount on line 1 or 2 — never only behind a tap.
+- **Badge floor.** The Research registry and any strategy row keep the badge
+  tier on line 1, and the evidence freshness stays on the compact row, so a
+  WEAK strategy never reads like a validated one.
 
 ### 3.2 The Dashboard trade drawer, on every device
 
@@ -134,11 +140,23 @@ device.
 - Content: ticker, direction, status, P&L (% and amount), the plan levels
   (trigger/entry, stop, TP1, TP2, R:R), opened/held, strategy and horizon,
   the row's existing actions, and **"Open full trade →"** to `/trades/:id`.
-- The open trade is in the URL as a query parameter, so Back closes the
-  drawer and the state is linkable. *(Builder's call on the name; Research
-  already does the same for its drawer.)*
+- The header carries a **"Paper trade"** marker (the bot is paper-only;
+  a drawer styled like a position ticket must not read as a live position).
+- The open trade is in the URL as a query parameter, written as a **pushed**
+  history entry (never `replaceUrl`), so Back closes the drawer and the state
+  is linkable. *(Builder's call on the name. There is no precedent to copy:
+  Research's drawer is store-only state, `research.store.ts` `selectedId`.)*
 - Data comes from the row already loaded; no extra fetch is required for the
   summary. Anything not on the row is out of the drawer, not fetched.
+- **Row source.** `sb-positions-table` owns its own `TradesStore`
+  (`positions-table.ts`), so the Dashboard does not reach into it: the row
+  arrives through `rowActivate` and the Dashboard holds it in a signal.
+  Activity rows resolve from the Dashboard's own `TradesStore`.
+- **A link whose trade is not loaded** (a reload while an Open positions row
+  was open, a closed trade older than the activity window, a shared link):
+  the Dashboard looks the id up in the rows it holds; if absent it navigates
+  to `/trades/:id` with `replaceUrl` instead of opening an empty drawer or
+  fetching.
 - The drawer is the same component the phone compact rows open (§3.1), so the
   Dashboard on phone gets one consistent behaviour.
 
@@ -191,6 +209,9 @@ playback):
 - Small copy defects found on the way are fixed with it (e.g. Trade detail
   "Confirmed by:Fib" missing a space; Analytics Partials population reads
   "N=— closed").
+- **An empty sample reads as "no data", never a dash beside a value**: a
+  population line or tile with no N says "no closed trades" (or "n/a" where
+  the unit is not trades).
 
 ### 3.5 Guarding it
 
@@ -229,6 +250,15 @@ page beyond showing the new primitive variants.
 - Desktop gets visibly worse (denser, smaller, or loses the full-page trade
   route).
 - The Dashboard drawer fetches more than today's page already does.
+- Any existing cost, tax, paper-trade or pre-tax caption or ⓘ hint
+  disappears in the migration (stat-tile unification, Calendar variants,
+  drawer content). Captions move with their figure; they are never dropped.
+
+**Blast radius and rollback.** The shared primitives (`sb-data-table`,
+`sb-stat-tile`, `sb-panel`, `sb-tab-bar`, control bars) are used by every
+admin workspace, so a defect shows on every page — but only in the admin UI:
+no alert channel, store, schema or backtest is touched. Rollback is a plain
+image rollback (`scripts/ops/rollback_to.sh`).
 
 ## 5. Constraints
 
@@ -281,10 +311,15 @@ does not guess.
    with no detail page (Versions, Risk, Research registry) simply show no
    link. The Dashboard uses a trade-specific `sb-trade-drawer` content
    component (§3.2) for both Open positions and Recent activity on every
-   device; on the Dashboard the positions table's row activation opens that,
-   not the generic one.
-5. **URL state:** only the Dashboard trade drawer (and Research, as today)
-   writes a query parameter. Generic table drawers on other pages are local
+   device.
+   **Precedence:** `sb-data-table` gets one input choosing what a phone row
+   tap does — open the generic drawer (default) or emit `rowActivate` only.
+   A page that already owns a drawer for its rows (Research registry,
+   Dashboard positions) sets "emit only", so one tap never opens two drawers.
+   Every existing `rowActivate` consumer is checked and its choice stated in
+   the plan.
+5. **URL state:** only the Dashboard trade drawer writes a query parameter.
+   Research keeps its store-only drawer. Generic table drawers are local
    component state; they close on Escape, backdrop tap, navigation and page
    change.
 6. **The audit** runs against a local instance on the `/replicate-prod-db`
@@ -292,7 +327,11 @@ does not guess.
    allow-list may cover canvas/third-party chart internals with a reason per
    entry. It is a Node/Playwright script, **not** a pytest suite and **not**
    in CI: it is a documented pre-merge check and runs in the plan's final
-   verification task. §3.5's CI option is closed.
+   verification task. §3.5's CI option is closed. **Ownership:** the plan
+   records the check in `docs/claude/ui-design.md` § Checklist (with its
+   `AGENTS.md` mirror) as a step for any UI change; every allow-list entry
+   carries a reason and a date, and an entry whose target no longer exists is
+   removed by the script's own run (it reports stale entries).
 7. **Phone sorting** uses only the existing phone sort `<select>`; compact
    mode renders no header row, so header sort buttons do not exist there.
    Tablet/desktop header sort buttons get the 44px hit area under coarse
@@ -307,4 +346,27 @@ does not guess.
 3. On the Dashboard at 1440px and 390px, clicking/tapping an open position
    or an activity row opens the drawer; Back closes it; "Open full trade"
    reaches `/trades/:id`.
-4. Full test suite green (0 failed, 0 xfailed) and complexity gate clean.
+4. Full test suite green (`python scripts/dev/testrun.py full`: 0 failed,
+   0 xfailed), complexity gate clean, **and** the frontend gates the CI
+   `frontend-test` job runs: `npm test` and `npm run lint` in `frontend/`.
+5. A column-reachability unit test per migrated table: compact row plus
+   drawer together cover every column the table shows today at that device
+   class (the §6a.1 rule), so the §4 anti-goal is verified, not stated.
+
+## Panel review
+
+Spec review, 2026-10-19, against e48ca1f0. No BLOCKING findings.
+
+- staff-engineer: "Research already does the same" was false (store-only drawer, `replaceUrl` only for filters) -- applied (§3.2, §6a.5).
+- staff-engineer: linkable vs no-fetch clash for a trade not in loaded rows -- applied (§3.2: redirect to `/trades/:id`).
+- staff-engineer: positions-table owns its own `TradesStore`; name the row-source seam -- applied (§3.2 Row source).
+- staff-engineer: Research would get two drawers for one tap; precedence for every `rowActivate` consumer -- applied (§6a.4).
+- staff-engineer: audit and allow-list need an owner and an expiry rule -- applied (§6a.6).
+- staff-engineer: success criteria must name `npm test` and `npm run lint` -- applied (§7.4).
+- staff-engineer: no blast-radius/rollback note -- applied (§4).
+- financial-advisor: compact rows need a floor for money/risk fields -- applied (§3.1).
+- financial-advisor: badge tier and freshness must stay on registry compact rows -- applied (§3.1).
+- financial-advisor: no cost/tax/paper caption may be dropped in the migration -- applied (§4 anti-goal).
+- financial-advisor: "N=— closed" fix must say what replaces the blank -- applied (§3.4).
+- financial-advisor: drawer must say it is a paper trade -- applied (§3.2).
+- financial-advisor: verify column reachability, not just state it -- applied (§7.5).
