@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from swingbot import config
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.market.entry_filters import entries_for, gate_override
 from swingbot.core.market.strategy_types import FADE_STRATEGY, V104_SHORTS
@@ -27,6 +28,12 @@ HORIZONS_UNDER_TEST = ("1w", "2w", "4w", "2m")
 # Every strategy unmasked in both directions, 1w admitted too, so masked
 # strategies (the v104 shorts, the v113 fade) are witnessed as well.
 OPEN_GATES = {"cells": frozenset({("bullish", "1w"), ("bearish", "1w")})}
+
+
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: the witness predates the runner give-back (default on); pinned off."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
 # The plan fields that decide how a plan trades. plan_id is random and the
 # badge fields follow the registry, so neither belongs in a behaviour witness.
 PLAN_KEYS = ("created_at", "direction", "entry_type", "trigger_price", "entry_price",

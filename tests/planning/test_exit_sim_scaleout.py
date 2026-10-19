@@ -145,7 +145,11 @@ def test_chandelier_trail_locks_in_runner_profit():
     assert result.r_total > (0.5 + 0.5 * RUNNER_FLOOR_FRACTION) * 2.0  # better than the floor
 
 
-def test_trail_never_ratchets_backwards():
+def test_trail_never_ratchets_backwards(monkeypatch):
+    # v176: subject is the chandelier ratchet; the runner give-back (default on,
+    # would exit at 123.5 = 130 x 0.95) is pinned off so it keeps testing it.
+    from swingbot import config
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
     # After a big up-close ratchets the trail, a down-close must NOT lower it:
     # the pullback bar that would survive a re-lowered trail must still exit
     # against the higher trail set by the 130-close bar, not a lower trail

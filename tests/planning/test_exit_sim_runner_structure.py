@@ -11,6 +11,13 @@ from tests.planning.test_exit_sim_single import _plan
 E = WARMUP - 1
 
 
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: these tests isolate the structure rule (and reuse the frozen
+    scale-out witness), so the runner give-back is pinned off."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
+
+
 def _runner_plan(**kw):
     return _plan(stop_loss=95.0, tp1=101.0, tp2=None, trail_atr_mult=50.0, horizon_key="2m", **kw)
 
