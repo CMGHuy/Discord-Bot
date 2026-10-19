@@ -8,7 +8,11 @@ import { ToastService } from './toast.service';
   template: `
     <div class="host" role="status" aria-live="polite">
       @for (toast of toasts.toasts(); track toast.id) {
-        <button class="toast elev-overlay" [class]="toast.kind" (click)="toasts.dismiss(toast.id)">
+        <!-- v168 §3a: pops in, fades out before leaving the DOM. The classes
+             are global (styles/motion.css); under Motion Off or pending they
+             are animation: none, so Angular removes the toast at once. -->
+        <button class="toast elev-overlay" [class]="toast.kind" animate.enter="sb-pop-in"
+                animate.leave="sb-fade-out" (click)="toasts.dismiss(toast.id)">
           {{ toast.message }}
         </button>
       }
