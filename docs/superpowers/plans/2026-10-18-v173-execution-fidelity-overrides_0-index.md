@@ -146,7 +146,7 @@ Decisions and deviations recorded while writing (2026-10-19):
 - **Push = deploy, and the deploy runs `v173_001`.** V173-17 merges and bumps on `main` without pushing, and runs the `schema-evolution.md` pre-revision checks first (DB_RESTORE drill VERDICT PASS, `pitr_verify.log`, `pgbackrest info`, `rollback_to.sh --dry-run`). V173-18 records rollback T0, then pushes. Run V173-17 and V173-18 back to back (shared `$R`).
 - **Part 5 depends on two part-4 names:** CLI `execution_fidelity_report.py --production --json PATH`; panel cards are `<li class="card">` in `<ul class="cards">`, matched by `li.card` in V173-15 (if it misses, change only the scratch selector).
 
-- **Part 4 additions:** V173-13 creates `override-fidelity.fixture.ts` (shared test data; ledger row updated); the row table gets a pager (`tablePerPage('override-fidelity')`, hidden at <= 5 rows) per `ui-design.md`; exclusion notes include `open`. Badge copy for evaluable-but-unrecorded WAITING is the writer's own — "Floors met (N of 30). Awaiting the one recorded evaluation." — not spec copy. Part 4 sits at 1499 lines: any added line means splitting it.
+- **Part 4 additions:** V173-13 creates `override-fidelity.fixture.ts` (shared test data; ledger row updated); the row table gets a pager (`tablePerPage('override-fidelity')`, hidden at <= 5 rows) per `ui-design.md`; exclusion notes include `open`. Badge copy for evaluable-but-unrecorded WAITING is the writer's own — "Floors met (N of 30). Awaiting the one recorded evaluation." — not spec copy; partner approved it 2026-10-19. Part 4 sits at 1499 lines: any added line means splitting it.
 
 ## What follows
 
