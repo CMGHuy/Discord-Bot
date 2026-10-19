@@ -117,3 +117,22 @@ def test_load_refuses_a_trail_module_with_a_short_cap(monkeypatch):
     short = _fake_module(monkeypatch, "fake_short_trail", CAP=20, RACE="trail")
     with pytest.raises(ValueError, match="at least 60"):
         ideas._load(short)
+
+
+def test_the_six_v140_ideas_read_no_context():
+    for name in ("high52w", "uptrend_pullback", "gap_volume", "turn_of_month",
+                 "turtle_soup", "quiet_pullback"):
+        assert IDEAS[name].context == ()
+
+
+def test_load_reads_the_context_constant_and_defaults_to_empty(monkeypatch):
+    plain = _fake_module(monkeypatch, "fake_no_context", CAP=10)
+    reads = _fake_module(monkeypatch, "fake_context", CAP=10, CONTEXT=["TLT"])
+    assert ideas._load(plain).context == ()
+    assert ideas._load(reads).context == ("TLT",)
+
+
+def test_context_is_stored_as_a_tuple():
+    idea = Idea(name="x", events=lambda df, context: df["Close"] > 0,
+                time_cap_bars=5, context=["TLT", "UUP"])
+    assert idea.context == ("TLT", "UUP")

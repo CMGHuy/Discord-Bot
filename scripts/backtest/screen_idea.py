@@ -24,6 +24,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from typing import Callable, Mapping
 
 import numpy as np
 import pandas as pd
@@ -153,14 +154,36 @@ def _stressed(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict)
             for row in _event_rows(ticker, df.index, kept, draw.null_mean_r)]
 
 
+def _events_plain(idea: Idea, df: pd.DataFrame, context) -> pd.Series:
+    """An idea without CONTEXT: one argument, exactly as since v140."""
+    return idea.events(df)
+
+
+def _events_with_context(idea: Idea, df: pd.DataFrame, context) -> pd.Series:
+    """A v174 context idea: its own named frames, nothing else."""
+    if context is None:
+        raise ValueError(f"{idea.name} reads context {idea.context}; none was loaded")
+    return idea.events(df, {name: context[name] for name in idea.context})
+
+
+#: Keyed on bool(idea.context), so screen_ticker grows no branch (v174 § 1).
+_EVENT_CALLS: dict[bool, Callable] = {False: _events_plain, True: _events_with_context}
+
+
+def raw_events(idea: Idea, df: pd.DataFrame, context: Mapping | None) -> pd.Series:
+    """The idea's raw event flags on the ticker's own index."""
+    return _EVENT_CALLS[bool(idea.context)](idea, df, context).reindex(df.index, fill_value=False)
+
+
 def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
-                  slippage_bps=None, commission=None) -> TickerScreen:
+                  slippage_bps=None, commission=None,
+                  context: Mapping | None = None) -> TickerScreen:
     costs = {"slippage_bps": slippage_bps, "commission": commission}
     atr = indicators.atr(df)
     sma200 = indicators.sma(df["Close"], 200)
     member = null.member_mask(df.index, spans)
     warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
-    ctx = {"raw": np.asarray(idea.events(df).reindex(df.index, fill_value=False), dtype=bool),
+    ctx = {"raw": np.asarray(raw_events(idea, df, context), dtype=bool),
            "member": member, "warm": warm, "atr": atr,
            "trend": null.trend_state(df, sma200)}
     kept, counts, draw = _books(idea, ticker, df, ctx, costs)
@@ -178,8 +201,9 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
 
 def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
                     start: str = WINDOW_START, end: str = WINDOW_END,
-                    tickers=None, out=print):
-    """Every cached member, one at a time, with flushed percent progress."""
+                    tickers=None, out=print, context: Mapping | None = None):
+    """Every cached member, one at a time, with flushed percent progress.
+    ``context`` (v174) is handed unchanged to every screen_ticker call."""
     names = universe.cached if tickers is None else [t for t in tickers if t in universe.cached]
     screens, skipped = [], Counter()
     for i, ticker in enumerate(names, start=1):
@@ -188,7 +212,8 @@ def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
             skipped["empty_frame"] += 1
         else:
             screens.append(screen_ticker(idea, ticker, df,
-                                         universe.intervals.get(ticker, [])))
+                                         universe.intervals.get(ticker, []),
+                                         context=context))
         if i % PROGRESS_EVERY == 0 or i == len(names):
             out(f"[{idea.name}] {i}/{len(names)} tickers ({100.0 * i / len(names):.0f}%)",
                 flush=True)
