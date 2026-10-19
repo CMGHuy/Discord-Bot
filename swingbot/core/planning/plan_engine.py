@@ -16,7 +16,8 @@ from .builders import (STRATEGY_ENTRY_TYPE, WEAK_CAUTION_TEXT, _atr_plan,
                        entry_type_for)
 from .exit_sim import (ExitResult, _not_triggered, _single_leg_exit_walk,
                        chandelier_stop, runner_floor, _scale_out_exit_walk,
-                       simulate_exit)
+                       simulate_exit, giveback_stop, runner_giveback_pct,
+                       giveback_level, tighter_stop, runner_stop_source)
 from .lifecycle import (_lifecycle_levels, apply_level_lifecycle, trigger_hit,
                         fill_price, pending_expired, pending_invalidated)
 from .targets import (select_structural_target, _safe_atr_value,
@@ -43,6 +44,8 @@ __all__ = [
     "_lifecycle_levels", "apply_level_lifecycle", "trigger_hit", "fill_price",
     "pending_expired", "pending_invalidated", "ExitResult", "_not_triggered",
     "_single_leg_exit_walk", "chandelier_stop", "runner_floor", "_scale_out_exit_walk",
+    "giveback_stop", "runner_giveback_pct", "giveback_level", "tighter_stop",
+    "runner_stop_source",
     "simulate_exit", "_atr_plan", "_fibonacci_plan", "_sr_plan", "_elliott_plan",
     "build_strategy_plan", "scenario_is_breakout", "primary_strategy_for",
     "build_confluence_plan", "entry_type_for", "STRATEGY_ENTRY_TYPE", "WEAK_CAUTION_TEXT",

@@ -38,6 +38,7 @@ PINS = {
     "FIB_LEVEL_STOP_ATR": 0.0,
     "MIN_RISK_REWARD_RATIO": 1.5,
     "MAX_RISK_REWARD_RATIO": 2.5,
+    "RUNNER_GIVEBACK_ENABLED": False,     # v176: default on; the golden predates it
 }
 _MISSING = object()
 

@@ -6,10 +6,18 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "reports"))
 
 from runner_headroom import cache_universe, main, runner_metrics, stop_rule, summarise  # noqa: E402
+from swingbot import config
 from swingbot.core.marketdata import backtest_cache
 from swingbot.core.planning.plan_engine import simulate_exit
 from tests.helpers import make_ohlcv
 from tests.planning.test_exit_sim_single import _plan
+
+
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: these tests pin v123's headroom instrument; the runner give-back
+    (default on) is pinned off so their runner exits stay the instrument's."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
 
 
 def test_mfe_is_best_close_after_tp1_before_exit():

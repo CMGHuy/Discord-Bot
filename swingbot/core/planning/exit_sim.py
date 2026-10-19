@@ -71,6 +71,11 @@ class ExitResult:
     # "risk_cap"|"expired"|"invalidated", or a v131 cancellable limit's
     # "expired"|"cancelled". None everywhere else.
     cancel_reason: str | None = None
+    # v176: which runner stop term closed the runner -- "floor" | "trail" |
+    # "giveback" -- when the runner exited on its stop (runner_be /
+    # runner_trail). None for every other exit and every single-leg walk.
+    # Rides here, not on the leg: legs keep their four keys.
+    runner_stop_source: str | None = None
 
 
 def _not_triggered(cancel_reason: str | None = None) -> ExitResult:
@@ -231,6 +236,56 @@ def chandelier_stop(extreme_close_since_tp1: float, atr_value: float,
     if direction == "bullish":
         return extreme_close_since_tp1 - mult * atr_value
     return extreme_close_since_tp1 + mult * atr_value
+
+
+#: v176: RUNNER_GIVEBACK_PCT's safe range in percent. The config Field carries
+#: the same min/max for the admin save path; runner_giveback_pct() enforces it
+#: for a hand-edited .env, which config._cast does not range-check.
+GIVEBACK_PCT_BOUNDS = (0.5, 49.0)
+
+
+def giveback_stop(extreme: float, pct: float, direction: str) -> float:
+    """v176 give-back level: ``pct`` percent back from the runner's best price
+    since TP1 -- ``E x (1 - p)`` for a long, ``E x (1 + p)`` for a short."""
+    if not 0 < pct < 100:
+        raise ValueError(f"give-back pct must be in (0, 100), got {pct!r}")
+    p = pct / 100.0
+    if direction == "bullish":
+        return extreme * (1.0 - p)
+    return extreme * (1.0 + p)
+
+
+def runner_giveback_pct() -> float:
+    """config.RUNNER_GIVEBACK_PCT clamped to GIVEBACK_PCT_BOUNDS, read at call
+    time so a SIGHUP reload takes effect on the next tick."""
+    low, high = GIVEBACK_PCT_BOUNDS
+    return min(high, max(low, float(config.RUNNER_GIVEBACK_PCT)))
+
+
+def giveback_level(extreme: float | None, direction: str) -> float | None:
+    """The give-back term for a runner, or None (flag off, or no extreme yet)."""
+    if extreme is None or not config.RUNNER_GIVEBACK_ENABLED:
+        return None
+    return giveback_stop(float(extreme), runner_giveback_pct(), direction)
+
+
+def tighter_stop(stop: float, other: float | None, is_bull: bool) -> float:
+    """The tighter of two runner stops; a missing term never loosens ``stop``."""
+    if other is None:
+        return stop
+    return max(stop, other) if is_bull else min(stop, other)
+
+
+def runner_stop_source(stop: float, floor: float, giveback: float | None) -> str:
+    """Which term set the runner stop that fired: floor, giveback or trail.
+
+    The floor is tested first so the source agrees with the unchanged
+    ``runner_be`` / ``tp1_runner_be`` label, which keys off ``stop == floor``."""
+    if stop == floor:
+        return "floor"
+    if giveback is not None and stop == giveback:
+        return "giveback"
+    return "trail"
 
 
 def _effective_trail_mult(base_mult: float, runner_r: float) -> float:
@@ -408,16 +463,20 @@ def _pre_tp1_phase(ctx) -> ExitResult | int:
                      round((exit_price - ctx.entry_price) * ctx.sign / ctx.risk, 3), "timeout")
 
 
-def _runner_bar_exit(ctx, j, runner_stop, floor):
-    """Runner stop first, then TP2; the stop checked is the one set BEFORE bar j."""
+def _runner_bar_exit(ctx, j, runner_stop, floor, gb_extreme=None):
+    """Runner stop first, then TP2; the stop checked is the one set BEFORE bar j.
+    (price, index, reason, stop_source); stop_source is None for TP2."""
     hi, lo = float(ctx.high[j]), float(ctx.low[j])
     if (lo <= runner_stop) if ctx.is_bull else (hi >= runner_stop):
         # v39: "runner_be" means "closed at its initial post-TP1 floor"; the
         # string is deliberately unchanged (~30 files pattern-match it).
-        return runner_stop, j, ("runner_be" if runner_stop == floor else "runner_trail")
+        # v176: a give-back close is still "runner_trail"; the term that
+        # fired rides on ExitResult.runner_stop_source instead.
+        reason = "runner_be" if runner_stop == floor else "runner_trail"
+        return runner_stop, j, reason, _stop_source(ctx, runner_stop, floor, gb_extreme)
     tp2 = ctx.plan.tp2
     if tp2 is not None and ((hi >= tp2) if ctx.is_bull else (lo <= tp2)):
-        return tp2, j, "runner_tp2"
+        return tp2, j, "runner_tp2", None
     return None
 
 
@@ -430,6 +489,45 @@ def _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series) -> float
     return max(runner_stop, trail) if ctx.is_bull else min(runner_stop, trail)
 
 
+#: v176: which price sets the give-back's best price in the simulator.
+#: "close" is the rule (extreme close, effective the next bar, like the
+#: chandelier). "high_low" is the measurement's tick proxy (extreme high for a
+#: long, low for a short, still effective the next bar) used only to report
+#: the spec's tick/close gap. A module constant, never config: V176-8 assigns
+#: ``exit_sim.GIVEBACK_EXTREME_BASIS`` in its worker processes.
+GIVEBACK_EXTREME_BASIS: str = "close"
+_GIVEBACK_BASES = ("close", "high_low")
+
+
+def _giveback_extreme(ctx, j: int, extreme: float | None) -> float:
+    """The give-back's best price after bar j (``extreme`` None seeds it).
+    Reads GIVEBACK_EXTREME_BASIS at call time."""
+    if GIVEBACK_EXTREME_BASIS not in _GIVEBACK_BASES:
+        raise ValueError(f"GIVEBACK_EXTREME_BASIS must be one of {_GIVEBACK_BASES}, "
+                         f"got {GIVEBACK_EXTREME_BASIS!r}")
+    if GIVEBACK_EXTREME_BASIS == "high_low":
+        price = float(ctx.high[j]) if ctx.is_bull else float(ctx.low[j])
+    else:
+        price = float(ctx.close[j])
+    if extreme is None:
+        return price
+    return max(extreme, price) if ctx.is_bull else min(extreme, price)
+
+
+def _giveback_ratchet(ctx, extreme: float, runner_stop: float) -> float:
+    """v176: tighten the runner stop for the NEXT bar to the give-back level
+    off ``extreme``. Never loosens (tighter_stop); a no-op with the flag off."""
+    return tighter_stop(runner_stop, giveback_level(extreme, ctx.plan.direction), ctx.is_bull)
+
+
+def _stop_source(ctx, runner_stop: float, floor: float, gb_extreme: float | None) -> str:
+    """Which term set the stop that just fired. The give-back level is
+    recomputed from the SAME extreme that set ``runner_stop`` (the extreme is
+    only extended after the bar test), so the float equality is exact."""
+    return runner_stop_source(runner_stop, floor,
+                              giveback_level(gb_extreme, ctx.plan.direction))
+
+
 def _runner_timeout(ctx, checked_stop) -> float:
     """Clamp to the level actually checked against the last bar walked."""
     exit_px = float(ctx.close[ctx.end])
@@ -437,9 +535,12 @@ def _runner_timeout(ctx, checked_stop) -> float:
 
 
 def _runner_phase(df, ctx, tp1_index, trace=None):
-    """Phase 2: (exit price, exit index, runner reason) for the post-TP1 leg.
-    v123: a structure rule (RUNNER_STRUCTURE_EXIT) updates after the chandelier,
-    from this bar's close, effective next bar; a stall exits at the next open."""
+    """Phase 2: (exit price, exit index, runner reason, stop source) for the
+    post-TP1 leg. v123: a structure rule (RUNNER_STRUCTURE_EXIT) updates after
+    the chandelier, from this bar's close, effective next bar; a stall exits at
+    the next open. v176: the give-back ratchets after the chandelier and before
+    the structure rule (the live order), from its own extreme
+    (GIVEBACK_EXTREME_BASIS), effective next bar."""
     if acceptance_exit(ctx.plan, float(ctx.close[tp1_index])):
         # v129: the TP1 bar itself closed through the threshold -- TP1 banked
         # first (stop -> target -> acceptance), the remainder exits at that
@@ -449,29 +550,32 @@ def _runner_phase(df, ctx, tp1_index, trace=None):
         # have hit the runner stop. Nothing enforces that for an arbitrary
         # threshold; a plan whose threshold sits on the profit side of entry
         # would need a per-bar check here.
-        return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit"
+        return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit", None
     from swingbot.core.market.indicators import atr as atr_indicator
     floor = runner_floor(ctx.entry_price, ctx.plan.tp1)
     runner_stop = checked_stop = floor
     extreme_close = float(ctx.close[tp1_index])
+    gb_extreme = _giveback_extreme(ctx, tp1_index, None)
     atr_series = atr_indicator(df, 14)
     frame = runner_structure_frame(df) if config.RUNNER_STRUCTURE_EXIT != "off" else None
     stall_pending = False
     for j in range(tp1_index + 1, ctx.end + 1):
         if stall_pending:                            # the open comes first
-            return float(ctx.open_[j]), j, "runner_progress_stall"
+            return float(ctx.open_[j]), j, "runner_progress_stall", None
         checked_stop = runner_stop
-        hit = _runner_bar_exit(ctx, j, runner_stop, floor)
+        hit = _runner_bar_exit(ctx, j, runner_stop, floor, gb_extreme)
         if hit is not None:
             return hit
         c = float(ctx.close[j])
         extreme_close = max(extreme_close, c) if ctx.is_bull else min(extreme_close, c)
+        gb_extreme = _giveback_extreme(ctx, j, gb_extreme)
         runner_stop = _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series)
+        runner_stop = _giveback_ratchet(ctx, gb_extreme, runner_stop)
         if frame is not None:
             runner_stop, stall_pending = _structure_update(ctx, frame, j, runner_stop, atr_series)
         if trace is not None:
             trace.append((j, runner_stop))
-    return _runner_timeout(ctx, checked_stop), ctx.end, "runner_timeout"
+    return _runner_timeout(ctx, checked_stop), ctx.end, "runner_timeout", None
 
 
 def _structure_update(ctx, frame, j, runner_stop, atr_series):
@@ -485,7 +589,7 @@ def _structure_update(ctx, frame, j, runner_stop, atr_series):
 
 
 def _runner_result(ctx, runner) -> ExitResult:
-    runner_exit, exit_index, reason = runner
+    runner_exit, exit_index, reason, stop_source = runner
     plan = ctx.plan
     rr = abs(plan.tp1 - ctx.entry_price) / ctx.risk
     frac1 = plan.tp1_fraction
@@ -495,7 +599,8 @@ def _runner_result(ctx, runner) -> ExitResult:
     leg2 = {"fraction": frac2, "exit_price": runner_exit, "r": r2, "reason": reason}
     return ExitResult(outcome="win", runner_outcome=reason, entry_index=ctx.entry_index,
                       exit_index=exit_index, entry_price=ctx.entry_price,
-                      r_total=round(frac1 * rr + frac2 * r2, 3), legs=[leg1, leg2])
+                      r_total=round(frac1 * rr + frac2 * r2, 3), legs=[leg1, leg2],
+                      runner_stop_source=stop_source)
 
 
 def _scale_out_exit_walk(
