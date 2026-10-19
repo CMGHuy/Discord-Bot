@@ -152,7 +152,7 @@ function measure() {
   const touch = [...host.querySelectorAll('button, a, [role=button], summary')].filter(visible)
     .map((e) => Math.round(e.getBoundingClientRect().height));
   const table = host.querySelector('table');
-  const cards = [...host.querySelectorAll('[class*=card]')].filter(visible);
+  const cards = [...host.querySelectorAll('li.card')].filter(visible);
   return {
     panel: true,
     pageOverflowPx: Math.max(doc.scrollWidth - doc.clientWidth, document.body.scrollWidth - document.body.clientWidth),
@@ -237,7 +237,7 @@ The `.env` path is a path, not a secret; the script reads the two values itself 
 - `smallestTouchPx` ≥ 44 at 390 wherever it is not `null` (the panel may carry no control; the retry button only shows on an error).
 - `label` lines: `bulkClose` true at every width.
 
-If `cardCount` is 0 at 390 because V173-14 named its card class differently, read the class from `override-fidelity-panel.ts` and change the `[class*=card]` selector in the scratch script only; never rename the component's class to suit the script.
+If `cardCount` is 0 at 390 because V173-14 named its card class differently, read the class from `override-fidelity-panel.ts` and change the `li.card` selector in the scratch script only; never rename the component's class to suit the script.
 
 - [ ] **Step 5: Look at the screenshots**
 
