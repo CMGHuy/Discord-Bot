@@ -193,6 +193,50 @@ Frontend:
 - Browser check at 390/768/1440 on the PARTIAL tab, the Closed tab and the
   Trades page (needs `ADMIN_USERNAME`/`ADMIN_PASSWORD` in `.env`).
 
+## Code facts the plan must honour
+
+From the code brief (`.superpowers/briefs/2026-10-19-v177-runner-plan-cell.md`);
+where the wording above and these differ, these win.
+
+- `_row_from_plan` sits at complexity 15 in `scripts/dev/complexity_baseline.json`:
+  every new line of logic goes in named helpers.
+- `best_pnl_pct` and `stop_pnl_pct` are **not** produced by `_row_from_plan`. They
+  are added inside `_trailing_status_fields` after its no-price early return, so
+  with no live price the keys are absent. The percentages for the Plan cell are
+  computed in the `_row_from_plan` path by a helper that the status bar also
+  uses (same formula, same key names), so they exist with or without a price.
+  The spec's backend tests call `_row_from_plan` / `_expand_plan_row` directly,
+  which never run `_attach_status_fields`.
+- The API row contract is exact-key: `tests/admin/api_v1_contract.py::assert_shape`
+  and `TRADE_ROW` (reused by `DETAIL_ROW`) gain the new keys; legacy rows
+  (`_row_from_trade`) emit them as `None`;
+  `test_detail_row_fields_match_the_list_exactly` must stay green.
+- A manual close yields **one** row (`_close_plan` appends no runner leg), and
+  `_row_from_leg` overwrites `exit_price` with the TP1 fill, so the manual
+  runner exit is read from `trade["exit_price"]` inside `_row_from_plan`,
+  before that overwrite. A manual close is recognised by
+  `status_history[-1].reason == "manual"` with a single `"tp1"` leg. The trade's
+  `exit_price` is `None` when the price fetch failed or no trade is linked; the
+  cell then shows no runner exit.
+- Runner-leg reasons are more than three: also `tp1_runner_progress_stall` and
+  `time_exit`. Legacy TP1 legs carry no `reason` (use `.get`). The tooltip maps
+  every known reason and falls back to "runner exit" for any other.
+- `_row_from_leg` keeps `bar_kind: "trailing"` on the TP1-leg row of a PARTIAL
+  plan (`trades.ts` uses it for the trailing icon): clear the line-2 fields only.
+- The dashboard has one shared `#planCell` template for all tabs, identical to
+  the Trades page's; no frontend spec renders a plan cell from a `TradeRow`
+  today, so the template-wiring tests are new.
+- New `TradeRow` fields are optional (`trades.spec.ts`'s `row()` fixture is not
+  cast). `plan-cell.ts`, `dashboard.ts`, `trades.ts` and `models.ts` have no
+  `eslint-suppressions.json` entries, so edits there are lint-clean.
+  `primitives.spec.ts` bans colour literals and call-site `.pos`/`.neg`/`.muted`
+  selectors.
+- `plan_view.py` needs no change; `test_surface_agreement.py` stays green while
+  `view.stop`, `view.target` and the row's `stop_loss`/`target` are unchanged.
+- Naming: the view builders are `_pending_view` / `_active_view`; the percent
+  formatter is `PlanCell`'s own `pct(v, decimals)`; `first`, `risePct`,
+  `dropPct` are protected computeds.
+
 ## Panel review
 
 Spec review, 2026-10-19 (staff-engineer, financial-advisor).
