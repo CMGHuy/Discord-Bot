@@ -197,6 +197,14 @@ Supersedes the entries above where they conflict: the "script under `--productio
 - **Trap: the mirror row's `instrument` is `"v2"`** (`stats.INSTRUMENTS` requires one of `v1`, `v2`, `screen-v1`), and its `record` is the results doc, which must exist before any mirror (V173-11 creates it).
 - **Known behaviour, not a bug:** the daily cache refreshes on a 12-hour staleness rule, so at the 23:50 Berlin slot some rows may read `stale` and count against the 20% cap. That only delays evaluation to a later day; it never selects on the sums.
 
+### Writer decisions, revision run 2026-10-19 (all parts written)
+
+- **V173-23's runner rule is pinned through v176's give-back on the `"high_low"` basis** (`exit_sim.GIVEBACK_EXTREME_BASIS`), with `"close"` as the control: the chandelier reads closes and the real-frame ATR, so the clamped bar can never move it.
+- **`override_io.load_inputs` imports `PlanStore`/`TradeLog` lazily**; tests patch the source modules, never `override_io.PlanStore`. `TABLE_CHANNELS` is in `swingbot/core/db/events.py`.
+- **The loop's `scheduled_jobs` read and write sit inside the `try`** (unlike the resolver), so a database outage is logged rather than stopping the `tasks.loop`. The scheduler logs no start line: V173-18 checks `_always_on_loops()` on the VM and `Logged in as`; the first `override_verdict_check: <result>` line is read in V173-19.
+- **`badgeCopy(verdict, currency)`** reads COST/SAVED figures from the recorded verdict only; V173-15 asserts the recorded figures win over the live summary.
+- **V173-5's head test checks that `v173_001` is on the single head's chain**, so it stays green after `v173_002`; a separate test pins `down_revision`.
+
 ## Revision 2026-10-19
 
 Worklist for the part writers. **Rewrite** = edit the task in place to the revised ledger row and Global Constraints, keeping its id; **move** = cut the task whole from its old file and paste it, then rewrite it; **new** = write a fresh task. A moved task is handled by the destination file's writer, who also deletes it from the source file in the same run, so run the source and destination of a move as one job. Every part header is updated to its new task list and to point here. At most 2 part writers at once; suggested jobs: A = parts 2 + 2b, B = parts 3 + 3b, C = part 3c, D = parts 4 + 4b, E = parts 1 + 5.

@@ -187,7 +187,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 <!-- The whole row is the touch target (opens the same drawer
                      as a grid cell); a bare span row left phones with no way
                      to see a day's trades. -->
-                <button type="button" class="agenda-hit"
+                <button type="button" sb-button variant="ghost" class="agenda-hit"
                         [attr.aria-pressed]="store.selectedDay() === day.date"
                         (click)="store.selectDay(day.date)">
                   <span class="agenda-date">{{ day.date }}</span>
@@ -472,10 +472,14 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .agenda { list-style: none; margin: 0; padding: 0; }
     .agenda-day { border-bottom: 1px solid var(--border); }
     .agenda-day.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+    /* sb-button ghost supplies the paint and hover; display, alignment,
+       padding, border, ink and font are overridden back so the whole row stays
+       one full-width touch target (the .value link above does the same). */
     .agenda-hit {
-      display: flex; align-items: baseline; gap: var(--space-10);
+      display: flex; align-items: baseline; justify-content: flex-start;
+      gap: var(--space-10);
       width: 100%; min-height: 44px; padding: var(--space-6) var(--space-10);
-      border: 0; background: transparent; color: inherit; font: inherit;
+      border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit;
       text-align: left; cursor: pointer;
     }
     .agenda-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
