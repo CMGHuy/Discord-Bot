@@ -43,12 +43,18 @@ Slimmed to metadata plus events of 1ms or more; both load in Chrome DevTools -> 
 | before | @1360 115ms TimerFire / FunctionCall chunk-VKM6RLSZ (page timer); @1475 85ms Layout 62ms, UpdateLayoutTree 12ms, Paint 4ms |
 | after | @1071 81ms FireAnimationFrame 57ms (chunk-6MEYMZ7U), Layout 16ms; @2701 168ms lightweight-charts 78ms, FireAnimationFrame 53ms; @2878 51ms lightweight-charts 36ms; @3066 60ms UpdateLayoutTree 22ms, FireAnimationFrame 17ms; @4856 50ms (no children) |
 
-Two further runs per stack (not committed, same method): before had 1-3 long tasks, all the page's own timer or a layout (72-133ms TimerFire, one 85ms Layout); after had 2-3, one of them a 172ms TimerFire in the shared page chunk and the others `lightweight-charts` frames of 33-115ms. A run with `--force-off` (motion off, branch) still showed chart-library work but about a third of it (35-38ms total against 83-175ms with motion on).
+A controlled follow-up (2026-10-19, same machine, interleaved, three runs each of before = `main`, after = branch, and after with motion forced off through `--force-off`) gave, per run, long tasks (count, summed ms) and `lightweight-charts` script time:
 
-**Attributable to motion, by the plan's rule:** one task, after @3066 (60ms): no counterpart in the before trace at that step and its heaviest child is style work (`UpdateLayoutTree`). It is small and not repeated in the other runs, so it may be noise, but the rule counts it.
+| Run | before | after | after, motion off |
+|---|---|---|---|
+| 1 | 11 tasks, 842ms, chart 0ms | 7 tasks, 707ms, chart 0ms | 2 tasks, 227ms, chart 0ms |
+| 2 | 3 tasks, 230ms, chart 0ms | 6 tasks, 342ms, chart 630ms | 4 tasks, 293ms, chart 0ms |
+| 3 | 14 tasks, 953ms, chart 117ms | 0 tasks, 0ms, chart 0ms | 1 task, 90ms, chart 0ms |
 
-**Not attributable by the rule, but a finding:** `lightweight-charts` script frames appear in every after run (83-175ms of chart code per run, 33-168ms single tasks) and in no before run. They are script, not style/layout/paint, so they do not meet the rule, and the same code runs with motion off at a third of the cost, which points at motion making the dashboard equity chart re-render more often while it animates in (a resize or re-layout during `sb-enter` / `sb-draw-in`). Not investigated further here: the remedy would change the spec's design (drop the entrance from the chart host, or draw the chart after the entrance), so it goes to the partner first.
+Long tasks are the page's own timers and renders in every column; `main` (no motion) has as many and as heavy as the branch, and shows chart-library work too (run 3). The branch is not consistently worse than `main`, so the long tasks cannot be attributed to motion. The earlier impression that chart-library time appeared only in the motion build was sampling luck: whether the equity chart renders inside the 5-second window depends on when its candles arrive. The machine was running two `ng serve`, the API and a headed browser, so single numbers swing widely (0-630ms of chart time under identical conditions); the table is the honest summary, not a precise benchmark.
+
+**Attributable to motion, by the plan's rule:** none. The one 60ms style-work task in the first trace has a counterpart in every before run (long tasks of 85-133ms with Layout / TimerFire children).
 
 ## Verdict
 
-Criteria 1-3 pass at 390 / 768 / 1440. Criterion 4 is **open**: one task attributable by the rule and a consistent chart-library cost that only the motion build shows. No fix applied. Shot notes: none.
+Pass on all four criteria. Criteria 1-3 at 390 / 768 / 1440 from the animation samples; criterion 4 from the three-run comparison above (no long task attributable to motion; measurement noise is large on this machine). Shot notes: none.

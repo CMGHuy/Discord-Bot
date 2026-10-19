@@ -16,8 +16,9 @@
 ## Progress
 
 - **MO1-MO17:** done on branch `2026-10-16-v168-motion-system` (`main` merged in 2026-10-19, v167 landed).
-- **Evidence (MO18), 2026-10-19:** `docs/superpowers/results/v168/` -- route entrance seen at 390 / 768 / 1440 and nothing left running 1.5s later; drawer is a bottom sheet at 390 and slides from the right at 768 / 1440; under Off only the route spinner turns (2400ms). **Trace criterion open:** one 60ms style-work task attributable by the rule, and `lightweight-charts` frames (83-175ms per run) only in the motion build -- awaiting the partner's call (README section 4).
-- **Next:** decide the trace finding, then MO19 (full suite).
+- **Evidence (MO18), 2026-10-19:** `docs/superpowers/results/v168/` -- route entrance seen at 390 / 768 / 1440 and nothing left running 1.5s later; drawer is a bottom sheet at 390 and slides from the right at 768 / 1440; under Off only the route spinner turns (2400ms); trace compared over three interleaved runs per stack, no long task attributable to motion. Pass on all four criteria.
+- **Partner decision 2026-10-19:** Motion defaults to On on tablet and desktop, Off on a phone (committed `2d618dd3`).
+- **Next:** MO19, the full suite.
 
 ## Where to work
 

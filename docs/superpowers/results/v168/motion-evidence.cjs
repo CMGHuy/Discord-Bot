@@ -23,13 +23,14 @@ const STEP_PAUSE_MS = 2500;
 
 function parseArgs(args) {
   let argv = args;
-  const opts = { cmd: argv[0], base: null, out: null, label: 'after', forceOff: argv.includes('--force-off') };
+  const opts = { cmd: argv[0], base: null, out: null, label: 'after', forceOff: argv.includes('--force-off'), css: null };
   argv = argv.filter((arg) => arg !== '--force-off');
   for (let i = 1; i < argv.length; i += 2) {
     const [flag, value] = [argv[i], argv[i + 1]];
     if (flag === '--base') opts.base = value.replace(/\/$/, '').replace(/(?<!\/app)$/, '/app');
     else if (flag === '--out') opts.out = value;
     else if (flag === '--label') opts.label = value;
+    else if (flag === '--css') opts.css = value;
     else throw new Error(`unknown flag ${flag}`);
   }
   if (!opts.base || !opts.out || !['motion', 'trace'].includes(opts.cmd)) {
@@ -183,6 +184,7 @@ function longTasks(events) {
 
 async function trace(page, opts) {
   await open(page, opts.base, '/dashboard', 1440);
+  if (opts.css) await page.addStyleTag({ content: opts.css });
   if (opts.forceOff) await page.evaluate(() => { document.documentElement.dataset.motion = 'off'; });
   const cdp = await page.context().newCDPSession(page);
   const events = [];
