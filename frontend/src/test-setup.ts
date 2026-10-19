@@ -44,3 +44,23 @@ import { flattenedRootCss, readFixture } from './app/ui/testing/resolve-token';
 const style = document.createElement('style');
 style.textContent = flattenedRootCss(readFixture());
 document.head.appendChild(style);
+
+/**
+ * Motion is Off in every spec unless the spec asks (spec v168, Testing).
+ *
+ * Off renders final values at once -- a count-up writes its text
+ * synchronously, a draw-in never clips, an entrance never runs -- so a spec
+ * that reads `.textContent` right after one detectChanges() keeps passing.
+ * A motion spec opts in with provideMotion('on') (or 'reduced' / 'pending'),
+ * and one that needs the preference-driven service uses provideMotion('live');
+ * a provider the spec adds later wins over this default.
+ *
+ * Deviation from the plan: a global, not a TestBed.configureTestingModule
+ * beforeEach. Under `ng test` this file is evaluated as a separate module
+ * copy from the specs', so importing provideMotion here yields a different
+ * MOTION_FIXED token and the provider silently does nothing (probed: the app
+ * module evaluates twice, TestBed once). MotionService's MOTION_FIXED root
+ * factory reads this key, so no import is needed. Keep the literal in step
+ * with MOTION_TEST_DEFAULT_KEY in ui/motion/motion.service.ts.
+ */
+(globalThis as Record<string, unknown>)['__sbMotionTestDefault'] = 'off';
