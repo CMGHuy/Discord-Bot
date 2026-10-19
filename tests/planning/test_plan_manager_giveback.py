@@ -180,3 +180,76 @@ def test_giveback_line_is_logged_only_when_the_stop_moves(caplog):
     lines = [r.getMessage() for r in caplog.records if "giveback stop" in r.getMessage()]
     assert len(lines) == 1
     assert "AAPL" in lines[0]
+
+
+# -- V176-3: the bar catch-up path (check_bar -> _check_bar_partial) ----------
+
+
+def bar(store, mgr, o, h, l):
+    return mgr.check_bar("p1", bar_open=o, bar_high=h, bar_low=l)
+
+
+def test_bar_path_tightens_from_the_stored_extreme_before_its_test():
+    store, mgr = _env(_runner(extreme=120.0))
+    events = bar(store, mgr, 115.0, 116.0, 113.5)       # low 113.5 <= give-back 114.0
+    assert [e.transition for e in events] == ["closed"]
+    assert events[0].detail["reason"] == "tp1_runner_trail"
+    # gap_stop_fill(115.0, 114.0, "bullish") == 114.0: opened above the level.
+    assert events[0].detail["exit_price"] == pytest.approx(114.0)
+    leg = events[0].detail["leg"]
+    assert leg["stop_source"] == "giveback"
+    assert leg["giveback_stop"] == pytest.approx(114.0)
+    assert leg["giveback_extreme"] == 120.0
+
+
+def test_bar_path_never_reads_the_checked_bars_own_extreme():
+    # No stored extreme. If the bar's own high (130) were used, the level
+    # would be 123.5 > low 120 and the runner would close: lookahead.
+    store, mgr = _env(_runner())
+    assert bar(store, mgr, 125.0, 130.0, 120.0) == []
+    plan = store.get("p1")
+    assert plan.working_stop == pytest.approx(FLOOR)
+    assert plan.runner_high_close is None
+
+
+def test_bar_path_uses_the_stored_extreme_not_a_higher_bar_high():
+    # Stored E = 120 -> 114.0. The bar's high of 140 would give 133.0 > low 115.
+    store, mgr = _env(_runner(extreme=120.0))
+    assert bar(store, mgr, 121.0, 140.0, 115.0) == []
+    plan = store.get("p1")
+    assert plan.working_stop == pytest.approx(114.0)
+    assert plan.runner_high_close == 120.0              # the bar path never moves E
+
+
+def test_bar_path_gap_through_the_giveback_fills_at_the_open():
+    store, mgr = _env(_runner(extreme=120.0))
+    events = bar(store, mgr, 110.0, 111.0, 109.0)       # opened below 114.0
+    assert events[0].detail["reason"] == "tp1_runner_trail"
+    assert events[0].detail["exit_price"] == pytest.approx(110.0)   # worse than the level
+    assert events[0].detail["leg"]["stop_source"] == "giveback"
+    assert events[0].detail["leg"]["giveback_stop"] == pytest.approx(114.0)
+
+
+def test_bar_path_short_runner_closes_on_its_giveback():
+    store, mgr = _env(_rklb())
+    events = bar(store, mgr, 52.0, 52.8, 51.5)          # high 52.8 >= 52.437
+    assert events[0].detail["reason"] == "tp1_runner_trail"
+    # gap_stop_fill(52.0, 52.437, "bearish") == max(52.0, 52.437) == 52.437
+    assert events[0].detail["exit_price"] == pytest.approx(52.437)
+    assert events[0].detail["leg"]["stop_source"] == "giveback"
+    assert events[0].detail["leg"]["giveback_extreme"] == RKLB_E
+
+
+def test_bar_path_flag_off_is_unchanged(monkeypatch):
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
+    store, mgr = _env(_runner(extreme=120.0))
+    assert bar(store, mgr, 115.0, 116.0, 113.5) == []   # floor 106.67 still holds
+    assert store.get("p1").working_stop == pytest.approx(FLOOR)
+
+
+def test_bar_path_floor_close_carries_stop_source_floor():
+    store, mgr = _env(_runner())
+    events = bar(store, mgr, 107.0, 107.5, 100.0)
+    assert events[0].detail["reason"] == "tp1_runner_be"
+    assert events[0].detail["exit_price"] == pytest.approx(FLOOR)
+    assert events[0].detail["leg"]["stop_source"] == "floor"

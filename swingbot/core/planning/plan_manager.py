@@ -1373,6 +1373,10 @@ class PlanManager:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         risk = abs(plan.entry_price - plan.stop_loss)
+        # v176: tighten from the STORED extreme before the bar test. Never the
+        # checked bar's own high/low (no intrabar lookahead), and the bar path
+        # never moves runner_high_close itself.
+        self._apply_giveback(plan, bar_open)
         stop = (plan.working_stop if plan.working_stop is not None
                 else runner_floor(plan.entry_price, plan.tp1))
 
@@ -1383,7 +1387,8 @@ class PlanManager:
             reason = ("tp1_runner_be"
                       if stop == runner_floor(plan.entry_price, plan.tp1)
                       else "tp1_runner_trail")
-            return self._close_runner(plan, fill, reason, risk, sign)
+            return self._close_runner(plan, fill, reason, risk, sign,
+                                      extra=self._runner_stop_extra(plan, stop))
 
         if plan.tp2 is not None:
             hit_tp2 = bar_high >= plan.tp2 if is_bull else bar_low <= plan.tp2
