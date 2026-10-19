@@ -143,6 +143,9 @@ Decisions and deviations recorded while writing (2026-10-19):
 - **Value types V173-10 fixes, consumed by V173-11..14:** `bulk_dates` = `{iso_date: int}`; `engine_flags` = `{"stall_exit_enabled": bool, "runner_structure_exit": str}`; `n_by_status` counts individual stamped rows only; the CI is written into the ledger `hypothesis` as `95% CI [lo, hi]` and parsed back. With no ledger row `verdict_payload` returns `WAITING` even when `evaluable` is true, so the V173-14 badge must show a ready-to-evaluate state rather than "34 of 30 needed".
 - **V173-9 marks a PARTIAL plan `ambiguous`** when its live TP1 and the manual close fall on the same session (the engine frame would clamp that TP1 bar away). Status enum unchanged.
 
+- **Push = deploy, and the deploy runs `v173_001`.** V173-17 merges and bumps on `main` without pushing, and runs the `schema-evolution.md` pre-revision checks first (DB_RESTORE drill VERDICT PASS, `pitr_verify.log`, `pgbackrest info`, `rollback_to.sh --dry-run`). V173-18 records rollback T0, then pushes. Run V173-17 and V173-18 back to back (shared `$R`).
+- **Part 5 depends on two part-4 names:** CLI `execution_fidelity_report.py --production --json PATH`; panel cards matched by `[class*=card]` in V173-15 (if it misses, change only the scratch selector).
+
 ## What follows
 
 Part writers append tasks in id order to their part file. Each part file starts with a short header (title, `**Spec:**` link, a pointer to this index for Global Constraints and Parallelisation).
