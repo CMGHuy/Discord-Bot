@@ -17,6 +17,7 @@ import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { ViewportService } from '../ui/breakpoints';
 import { MotionMode, MotionService } from '../ui/motion/motion.service';
+import { RouteEntrance } from '../ui/motion/route-entrance';
 import { Button } from '../ui/button';
 import { CLOCK } from '../ui/clock';
 import { Icon, IconName } from '../ui/icon';
@@ -63,7 +64,7 @@ const ZOOM_DEFAULT = 100;
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
     ScanProgressStrip,
-    Button, Icon, ProfileMenu, Tape,
+    Button, Icon, ProfileMenu, Tape, RouteEntrance,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',

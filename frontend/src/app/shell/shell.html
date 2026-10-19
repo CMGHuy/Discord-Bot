@@ -159,7 +159,7 @@
         [running]="connection.scanRunning()"
         [progress]="connection.scanProgress()"
       />
-      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
+      <div class="workspace-content" sbRouteEntrance [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
       @if (routeLoading.visible()) {
         <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
       }
