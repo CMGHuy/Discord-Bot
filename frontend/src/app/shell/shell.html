@@ -1,5 +1,7 @@
 <div class="shell" [class.railed]="railed()" [class.overlay]="overlay()"
      [class.overlay-open]="overlayOpen()">
+  <!-- v168 §3 #10: the page's one ambient glow, under everything (shell.css). -->
+  <div class="ambient" aria-hidden="true"></div>
   <!-- Below sm the sidebar is an overlay, so something has to summon it. -->
   @if (overlay()) {
     <button sb-button variant="icon" class="menu-button" type="button"

@@ -59,6 +59,8 @@
 .fill.sweeping {
   width: 35% !important;
   transition: none;
+  /* v168 §3 #10: a comet rather than a block, fading in from its tail. */
+  background: linear-gradient(90deg, transparent, var(--accent));
   animation: sb-scan-sweep 1.4s ease-in-out infinite;
 }
 

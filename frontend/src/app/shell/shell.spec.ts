@@ -149,6 +149,18 @@ describe('shell navigation', () => {
     expect(strip!.previousElementSibling).toBeNull();
   });
 
+  it("paints the ambient glow as the shell's first child, hidden from assistive tech (v168 §3 #10)", () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const shell = (f.nativeElement as HTMLElement).querySelector('.shell') as HTMLElement;
+
+    const first = shell.firstElementChild as HTMLElement;
+    expect(first.classList).toContain('ambient');
+    expect(first.getAttribute('aria-hidden')).toBe('true');
+    expect(first.children).toHaveLength(0);
+    expect(shell.querySelectorAll('.ambient')).toHaveLength(1);
+  });
+
   it('loads the tape once on construction', () => {
     // This only proves the constructor's one-time `this.tape.load()` --
     // NOT that `Shell` reacts to a `scan` event, which it does not do and
@@ -420,5 +432,49 @@ describe('shell motion preference (v168 §1)', () => {
     await settle(fixture);
     expect(html.dataset['motion']).toBe('off');
     expect(TestBed.inject(PreferencesStore).values()['shell.motion']).toBe('off');
+  });
+});
+
+describe('ambient live cues (v168 §3 #10)', () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+
+  /** The first `<selector> { ... }` rule, verbatim. */
+  function ruleOf(css: string, selector: string): string {
+    const at = css.indexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThanOrEqual(0);
+    return css.slice(at, css.indexOf('}', at) + 1);
+  }
+
+  it('isolates the shell, so the fixed glow layer sits above --bg and under every pane', () => {
+    const css = read('src/app/shell/shell.css');
+    expect(ruleOf(css, '.shell')).toContain('isolation: isolate;');
+    const ambient = ruleOf(css, '.ambient');
+    for (const declaration of [
+      'position: fixed;',
+      'inset: -10%;',
+      'z-index: -1;',
+      'pointer-events: none;',
+      'background: var(--glow-ambient);',
+    ]) {
+      expect(ambient).toContain(declaration);
+    }
+    // The drift lives in styles/motion.css, per mode (On only, static on a phone).
+    expect(ambient).not.toContain('animation');
+  });
+
+  it('rings the live dot with a ping, never while resting or with the bot down', () => {
+    const source = read('src/app/shell/connection-status.ts');
+    expect(source).toMatch(/\.dot\s*\{[^}]*position:\s*relative;/s);
+    expect(source).toMatch(/\.dot\.live::after\s*\{[^}]*animation:\s*sb-ping 2s ease-out infinite;/s);
+    expect(source).toMatch(/\.dot\.live::after\s*\{[^}]*background:\s*inherit;/s);
+    expect(source).toMatch(
+      /\.dot\.live\.resting::after,\s*\.dot\.bot-down::after\s*\{\s*animation:\s*none;\s*opacity:\s*0;\s*\}/s,
+    );
+  });
+
+  it('sweeps the scan strip with an accent gradient, same keyframe and timing', () => {
+    const css = read('src/app/shell/scan-progress.css');
+    expect(css).toMatch(/\.fill\.sweeping\s*\{[^}]*background:\s*linear-gradient\(90deg, transparent, var\(--accent\)\);/s);
+    expect(css).toMatch(/\.fill\.sweeping\s*\{[^}]*animation:\s*sb-scan-sweep 1\.4s ease-in-out infinite;/s);
   });
 });

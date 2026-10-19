@@ -8,6 +8,22 @@
      being laid out beside their icons. Slow + spring because this is a
      deliberate, occasional gesture rather than feedback on a value. */
   transition: grid-template-columns var(--dur-slow) var(--ease-spring);
+  /* Its own stacking context, so the .ambient layer's z-index -1 lands
+     above body's --bg and below every pane (v168 §3 #10). */
+  isolation: isolate;
+}
+
+/* The page's one ambient glow (v168 §3 #10), moved off body. Fixed, so it
+   takes no grid cell and stays put while the panes scroll; -10% leaves room
+   for the drift, which styles/motion.css runs under Motion=On only (static
+   below 640px). The login page is outside the shell and has no glow until
+   v169. */
+.ambient {
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--glow-ambient);
 }
 
 /* 52px: an icon's 16px plus enough padding that the hit target clears the

@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { allSources, stripComments } from './testing/all-sources';
+
 const GLOBAL = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
 const ui = (file: string) => readFileSync(join(process.cwd(), 'src/app/ui', file), 'utf8');
 
@@ -39,8 +41,17 @@ describe('the elevation ladder', () => {
     expect(rule).not.toMatch(/rgba?\(/);
   });
 
-  it('grounds the page on the ambient glow over --bg', () => {
-    expect(GLOBAL).toMatch(/body\s*\{[^}]*background:\s*var\(--glow-ambient\),\s*var\(--bg\);/s);
+  /* v168 §3 #10 (amendment 9): the glow moved off body onto one fixed shell
+   * layer, so there is exactly one per page and it can drift. */
+  it('the ambient glow is one shell layer, not the body', () => {
+    expect(GLOBAL).toMatch(/body\s*\{[^}]*background:\s*var\(--bg\);/s);
+    expect(stripComments(GLOBAL)).not.toContain('--glow-ambient');
+    const painters = allSources()
+      .filter(({ source }) => stripComments(source).includes('var(--glow-ambient)'))
+      .map(({ name }) => name);
+    expect(painters).toEqual(['app/shell/shell.css']);
+    const shellHtml = readFileSync(join(process.cwd(), 'src/app/shell/shell.html'), 'utf8');
+    expect(shellHtml.match(/class="ambient"/g)).toHaveLength(1);
   });
 });
 

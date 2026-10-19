@@ -56,6 +56,7 @@ import { ConnectionState } from '../stores/connection.store';
       height: 6px;
       border-radius: 50%;
       background: var(--text-faint);
+      position: relative;
     }
     /* The blinking dot survives from the old UI; a card-wide flash on every
        push still does not -- with push, "something changed" is continuous,
@@ -86,6 +87,21 @@ import { ConnectionState } from '../stores/connection.store';
        so they win at equal specificity. */
     .dot.bot-up { background: var(--pos); }
     .dot.bot-down { background: var(--neg); animation: none; }
+    /* v168 §3 #10: a ring spreading out from the live dot. It inherits the
+       dot's colour (bot-up rings green). Not while resting: out of session
+       hours a ping would claim traffic that is not coming. Not with the bot
+       down. styles/motion.css stills it under Reduced, Off and pending. */
+    .dot.live::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: inherit;
+      opacity: 0;
+      pointer-events: none;
+      animation: sb-ping 2s ease-out infinite;
+    }
+    .dot.live.resting::after, .dot.bot-down::after { animation: none; opacity: 0; }
     /* Dead is the more serious of the two, so it takes the whole label with
        it rather than relying on a 6px dot to carry the difference. */
     .status.dead { color: var(--warn); }
