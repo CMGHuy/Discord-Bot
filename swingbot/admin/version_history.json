@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-18 18:46:33 UTC",
+  "generated_at": "2026-10-19 17:49:44 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.30.0",
-    "bot": "2.11.0"
+    "bot": "2.12.0"
   },
   "releases": [
     {
@@ -1873,6 +1873,19 @@
       "versions": {
         "ui": "1.30.0",
         "bot": "2.11.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-19",
+      "last_seen": "2026-10-19",
+      "commit": "3951d818",
+      "subject": "release(bot): 2.12.0 -- runner give-back exit (5% off the best price since TP1)",
+      "versions": {
+        "ui": "1.30.0",
+        "bot": "2.12.0"
       },
       "changed": [
         "bot"
