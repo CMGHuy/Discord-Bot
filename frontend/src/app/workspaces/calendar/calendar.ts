@@ -183,13 +183,20 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                most of them, and gives each traded day a readable row. -->
           <ul class="agenda">
             @for (day of monthDays(); track day.date) {
-              <li class="agenda-day">
-                <span class="agenda-date">{{ day.date }}</span>
-                <span class="agenda-value"
-                      [class.pos]="store.signedIntensity(day) > 0"
-                      [class.neg]="store.signedIntensity(day) < 0"
-                >{{ display(day) }}</span>
-                <span class="agenda-count">{{ day.trade_count }} trades</span>
+              <li class="agenda-day" [class.selected]="store.selectedDay() === day.date">
+                <!-- The whole row is the touch target (opens the same drawer
+                     as a grid cell); a bare span row left phones with no way
+                     to see a day's trades. -->
+                <button type="button" class="agenda-hit"
+                        [attr.aria-pressed]="store.selectedDay() === day.date"
+                        (click)="store.selectDay(day.date)">
+                  <span class="agenda-date">{{ day.date }}</span>
+                  <span class="agenda-value"
+                        [class.pos]="store.signedIntensity(day) > 0"
+                        [class.neg]="store.signedIntensity(day) < 0"
+                  >{{ display(day) }}</span>
+                  <span class="agenda-count">{{ day.trade_count }} trades</span>
+                </button>
               </li>
             } @empty {
               <li class="agenda-day"><span class="agenda-date">No trading days this month.</span></li>
@@ -463,11 +470,15 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     /* v95 C6 -- the phone agenda, replacing the 7-column grid below sm. */
     .agenda { list-style: none; margin: 0; padding: 0; }
-    .agenda-day {
+    .agenda-day { border-bottom: 1px solid var(--border); }
+    .agenda-day.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .agenda-hit {
       display: flex; align-items: baseline; gap: var(--space-10);
-      min-height: var(--row-h); padding: var(--space-6) var(--space-10);
-      border-bottom: 1px solid var(--border);
+      width: 100%; min-height: 44px; padding: var(--space-6) var(--space-10);
+      border: 0; background: transparent; color: inherit; font: inherit;
+      text-align: left; cursor: pointer;
     }
+    .agenda-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .agenda-date { flex: 0 0 6rem; color: var(--text-faint); font-size: var(--text-micro); }
     .agenda-value { flex: 1 1 auto; text-align: right; font-family: var(--font-mono); color: var(--text); }
     .agenda-value.pos { color: var(--pos); }

@@ -6,11 +6,20 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
+from swingbot import config
 from swingbot.core.planning.plan_engine import simulate_exit
 from tests.planning.test_exit_sim_single import _plan
 
 FIXTURE = Path(__file__).parent / "fixtures" / "scale_out_witness.sha256"
+
+
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: this byte-identity witness predates the runner give-back
+    (default on); it is pinned off and its fixture is never regenerated."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
 
 
 def _frames():
@@ -35,6 +44,13 @@ def _rounded(value):
     return value
 
 
+def _witness_dict(res) -> dict:
+    """asdict(res) without v176's runner_stop_source: the frozen hash predates the field."""
+    out = dataclasses.asdict(res)
+    out.pop("runner_stop_source", None)
+    return out
+
+
 def witness_rows():
     rows = []
     for f, df in enumerate(_frames()):
@@ -45,7 +61,7 @@ def witness_rows():
                     plan = _plan(direction=direction, stop_loss=c - sign * 3.0,
                                  tp1=c + sign * 2.0, tp2=tp2, horizon_key="4w")
                     res = simulate_exit(df, i, plan, scale_out=True)
-                    rows.append([f, i, direction, tp2 is not None, _rounded(dataclasses.asdict(res))])
+                    rows.append([f, i, direction, tp2 is not None, _rounded(_witness_dict(res))])
     return rows
 
 

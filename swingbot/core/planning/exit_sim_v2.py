@@ -22,10 +22,11 @@ from swingbot.core.backtesting.instrument import costs, fills
 from swingbot.core.backtesting.instrument.contract import CostModel, FillModel, InstrumentSpec
 from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.risk_limits import planned_loss_pct
-from .exit_sim import (ExitResult, _chandelier_ratchet, _hold_cap_bars, _is_compression,
-                       _limit_unfilled, _no_trade, _not_triggered, _runner_timeout,
-                       _structure_update, _tenth_session_reached, acceptance_exit,
-                       runner_floor, runner_structure_frame)
+from .exit_sim import (ExitResult, _chandelier_ratchet, _giveback_extreme, _giveback_ratchet,
+                       _hold_cap_bars, _is_compression, _limit_unfilled, _no_trade,
+                       _not_triggered, _runner_timeout, _stop_source, _structure_update,
+                       _tenth_session_reached, acceptance_exit, runner_floor,
+                       runner_structure_frame)
 from .lifecycle import limit_cancelled, pending_expired, pending_invalidated
 from .plan_types import TradePlanV2
 from .stop_scope import plan_stop_ceiling
@@ -77,8 +78,10 @@ def _leg(fraction: float, exit_price: float, reason: str, kind: str) -> dict:
 
 
 def _booked(ctx, outcome: str, exit_index: int, legs: list[dict],
-            runner_outcome: str | None = None) -> ExitResult:
-    """The trade's ExitResult, its raw legs booked once through costs.book."""
+            runner_outcome: str | None = None,
+            runner_stop_source: str | None = None) -> ExitResult:
+    """The trade's ExitResult, its raw legs booked once through costs.book.
+    v176: ``runner_stop_source`` rides on the result, never on a leg."""
     r_total, booked = costs.book(ctx.costs, direction=ctx.plan.direction,
                                  entry_price=ctx.entry_price, stop_loss=ctx.plan.stop_loss,
                                  legs=legs)
@@ -87,7 +90,8 @@ def _booked(ctx, outcome: str, exit_index: int, legs: list[dict],
             leg["price_basis"] = raw["price_basis"]
     return ExitResult(outcome=outcome, runner_outcome=runner_outcome,
                       entry_index=ctx.entry_index, exit_index=exit_index,
-                      entry_price=ctx.entry_price, r_total=r_total, legs=booked)
+                      entry_price=ctx.entry_price, r_total=r_total, legs=booked,
+                      runner_stop_source=runner_stop_source)
 
 
 def _gross_r(ctx, price: float) -> float:
@@ -157,47 +161,53 @@ def _pre_tp1_v2(ctx) -> ExitResult | int:
     return _timeout(ctx)
 
 
-def _runner_bar_v2(ctx, j: int, runner_stop: float, floor: float):
+def _runner_bar_v2(ctx, j: int, runner_stop: float, floor: float, gb_extreme=None):
     """Runner stop first, then TP2, each filled through fills.exit_fill:
-    (price, index, reason, kind) or None."""
+    (price, index, reason, kind, stop_source) or None; stop_source is None for TP2."""
     hi, lo, op = float(ctx.high[j]), float(ctx.low[j]), float(ctx.open_[j])
     direction = ctx.plan.direction
     if fills.stop_touched(hi, lo, runner_stop, direction):
         reason = "runner_be" if runner_stop == floor else "runner_trail"
-        return fills.exit_fill(ctx.fills, "stop", runner_stop, op, direction), j, reason, "stop"
+        return (fills.exit_fill(ctx.fills, "stop", runner_stop, op, direction), j, reason,
+                "stop", _stop_source(ctx, runner_stop, floor, gb_extreme))
     tp2 = ctx.plan.tp2
     if tp2 is not None and fills.target_touched(hi, lo, tp2, direction):
-        return fills.exit_fill(ctx.fills, "target", tp2, op, direction), j, "runner_tp2", "target"
+        return (fills.exit_fill(ctx.fills, "target", tp2, op, direction), j, "runner_tp2",
+                "target", None)
     return None
 
 
 def _runner_v2(df, ctx, tp1_index: int):
     """exit_sim._runner_phase on fills.py's compares: (price, index, reason,
-    kind) of the post-TP1 leg. The trailing stop set from bar j's close is
-    first checked on bar j + 1."""
+    kind, stop_source) of the post-TP1 leg. The trailing stop set from bar j's
+    close is first checked on bar j + 1; v176's give-back ratchets after the
+    chandelier and before the structure rule, as in exit_sim."""
     if acceptance_exit(ctx.plan, float(ctx.close[tp1_index])):
-        return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit", "close"
+        return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit", "close", None
     from swingbot.core.market.indicators import atr as atr_indicator
     floor = runner_floor(ctx.entry_price, ctx.plan.tp1)
     runner_stop = checked_stop = floor
     extreme_close = float(ctx.close[tp1_index])
+    gb_extreme = _giveback_extreme(ctx, tp1_index, None)
     atr_series = atr_indicator(df, 14)
     frame = runner_structure_frame(df) if config.RUNNER_STRUCTURE_EXIT != "off" else None
     stall_pending = False
     for j in range(tp1_index + 1, ctx.end + 1):
         if stall_pending:                            # the open comes first
-            return float(ctx.open_[j]), j, "runner_progress_stall", "close"
+            return float(ctx.open_[j]), j, "runner_progress_stall", "close", None
         checked_stop = runner_stop
-        hit = _runner_bar_v2(ctx, j, runner_stop, floor)
+        hit = _runner_bar_v2(ctx, j, runner_stop, floor, gb_extreme)
         if hit is not None:
             return hit
         c = float(ctx.close[j])
         extreme_close = max(extreme_close, c) if ctx.is_bull else min(extreme_close, c)
+        gb_extreme = _giveback_extreme(ctx, j, gb_extreme)
         runner_stop = _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series)
+        runner_stop = _giveback_ratchet(ctx, gb_extreme, runner_stop)
         if frame is not None:
             runner_stop, stall_pending = _structure_update(ctx, frame, j, runner_stop,
                                                            atr_series)
-    return _runner_timeout(ctx, checked_stop), ctx.end, "runner_timeout", "close"
+    return _runner_timeout(ctx, checked_stop), ctx.end, "runner_timeout", "close", None
 
 
 def walk_v2(df, entry_index: int, entry_price: float, plan: TradePlanV2,
@@ -216,10 +226,11 @@ def walk_v2(df, entry_index: int, entry_price: float, plan: TradePlanV2,
                                plan.direction)
     if not ctx.stall:
         return _booked(ctx, "win", pre, [_leg(1.0, tp1_fill, "tp1", "target")])
-    price, exit_index, reason, kind = _runner_v2(df, ctx, pre)
+    price, exit_index, reason, kind, stop_source = _runner_v2(df, ctx, pre)
     legs = [_leg(plan.tp1_fraction, tp1_fill, "tp1", "target"),
             _leg(1.0 - plan.tp1_fraction, price, reason, kind)]
-    return _booked(ctx, "win", exit_index, legs, runner_outcome=reason)
+    return _booked(ctx, "win", exit_index, legs, runner_outcome=reason,
+                   runner_stop_source=stop_source)
 
 
 def _entry_gap_scratch(j: int, fill: float) -> ExitResult:

@@ -8,6 +8,13 @@ from tests.planning.test_exit_sim_runner_structure import _runner_plan
 from tests.planning.test_plan_manager_structure_exit import at, manager, partial_plan
 
 
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: live-vs-replay parity of the structure rule only; the give-back
+    has its own tests, so it is pinned off on both sides."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
+
+
 def _live(df):
     view = [WARMUP + 2]
     store, mgr = manager(df, partial_plan(df), view)

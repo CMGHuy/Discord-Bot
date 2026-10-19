@@ -55,6 +55,8 @@ def _capture():
 def test_flag_off_exits_match_the_pre_v129_golden(monkeypatch):
     # raising=False: the attribute only exists from V129-5 on.
     monkeypatch.setattr(config, "ACCEPTANCE_EXIT_ENABLED", False, raising=False)
+    # v176: the golden predates the runner give-back (default on); never regenerate it.
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     assert golden["break_retest"] and golden["confluence"], "golden must be non-empty"
     assert _capture() == golden

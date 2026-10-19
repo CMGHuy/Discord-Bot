@@ -145,7 +145,11 @@ def test_chandelier_trail_locks_in_runner_profit():
     assert result.r_total > (0.5 + 0.5 * RUNNER_FLOOR_FRACTION) * 2.0  # better than the floor
 
 
-def test_trail_never_ratchets_backwards():
+def test_trail_never_ratchets_backwards(monkeypatch):
+    # v176: subject is the chandelier ratchet; the runner give-back (default on,
+    # would exit at 123.5 = 130 x 0.95) is pinned off so it keeps testing it.
+    from swingbot import config
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
     # After a big up-close ratchets the trail, a down-close must NOT lower it:
     # the pullback bar that would survive a re-lowered trail must still exit
     # against the higher trail set by the 130-close bar, not a lower trail
@@ -167,6 +171,18 @@ def test_trail_never_ratchets_backwards():
     assert trail_from_124 < trail_from_130    # sanity: the would-be lower trail
     # ratchet floor: exit lands on the 130-close bar's trail, never the lower one
     assert result.legs[1]["exit_price"] == pytest.approx(trail_from_130)
+
+
+def test_trail_never_ratchets_backwards_giveback_on_closes_at_95pct_of_the_best_close():
+    # v176: give-back on. Best close since TP1 is 130; stop = 130 x 0.95 = 123.5,
+    # effective the next bar, and the 124 close does not touch it, the 118 bar does.
+    closes = [100.0] * 15 + [111.0] + [130.0] + [124.0] + [118.0]
+    df = make_ohlcv(closes)
+    plan = _plan(direction="bullish", stop_loss=95.0, tp1=110.0, tp2=None)
+    result = simulate_exit(df, signal_index=14, plan=plan, scale_out=True)
+    assert result.runner_outcome == "runner_trail"
+    assert result.legs[1]["exit_price"] == pytest.approx(123.5)  # v176: give-back on (chandelier alone: 120.05574)
+    assert result.runner_stop_source == "giveback"
 
 
 def test_chandelier_stop_pure_function():

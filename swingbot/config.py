@@ -1223,6 +1223,25 @@ FIELDS: list[Field] = [
           help="Applied once TIGHTEN_TRIGGER_R clears; always <= the base "
                "trail_atr_mult by construction (min() in exit_sim.py). The "
                "other of v92 Hypothesis 1's two TRAIN grid dimensions."),
+    Field("RUNNER_GIVEBACK_ENABLED", "RUNNER_GIVEBACK_ENABLED", "Exit quality",
+          "Close the runner on a give-back from its best price",
+          type="checkbox", default="true",
+          help="v176: after TP1, the runner's stop is also held at "
+               "RUNNER_GIVEBACK_PCT percent back from its best price since TP1 "
+               "(long: best x (1 - p), short: best x (1 + p)); the tightest of "
+               "the floor, the ATR chandelier and this level wins. Live and "
+               "backtest share exit_sim.giveback_stop. Turning it off stops NEW "
+               "tightening only -- a stop already tightened is never widened. "
+               "On by the partner's decision, not by a backtest "
+               "(docs/superpowers/specs/2026-10-19-v176-runner-giveback-exit-design.md)."),
+    Field("RUNNER_GIVEBACK_PCT", "RUNNER_GIVEBACK_PCT", "Exit quality",
+          "Runner give-back (% of the best price since TP1)",
+          type="float", default="5.0", min=0.5, max=49.0, step=0.5,
+          help="Percent of the runner's best price since TP1 it may give back "
+               "before the give-back stop closes it. Read through a clamp to "
+               "0.5-49 at every tick (exit_sim.runner_giveback_pct). Changing "
+               "it is the partner's call; a re-tuned value is a new "
+               "pre-registration, not a tweak."),
     Field("STALL_EXIT_ENABLED", "STALL_EXIT_ENABLED", "Exit quality",
           "Close stalled pre-TP1 positions early",
           type="checkbox", default="false",

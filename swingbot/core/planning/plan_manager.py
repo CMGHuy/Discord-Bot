@@ -24,9 +24,11 @@ from swingbot.core.planning import time_exit as te
 from swingbot.core.planning.exit_sim import runner_structure_frame, runner_structure_step
 from swingbot.core.planning.targets import _safe_atr_value
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
-                                       chandelier_stop, pending_expired,
-                                       pending_invalidated, record_transition,
-                                       runner_floor)
+                                       chandelier_stop, giveback_level,
+                                       pending_expired, pending_invalidated,
+                                       record_transition, runner_floor,
+                                       runner_giveback_pct, runner_stop_source,
+                                       tighter_stop)
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning.stop_scope import plan_stop_ceiling
 from swingbot.core.planning.plan_types import breakeven_trigger, effective_stop
@@ -1033,6 +1035,12 @@ class PlanManager:
         sign = 1 if is_bull else -1
         entry = plan.entry_price
         risk = abs(entry - plan.stop_loss)
+        # v176: the extreme is tracked and the give-back applied on EVERY tick,
+        # before the structure step and before the stop is read below, so a
+        # runner open at deploy tightens on its first tick and a structure
+        # exit can never skip the give-back.
+        moved = self._track_extreme(plan, price, is_bull)
+        self._apply_giveback(plan, price)
         structure = self._structure_runner_step(plan, price, now)
         if structure:
             return structure
@@ -1068,14 +1076,15 @@ class PlanManager:
             # purpose -- see the same note in plan_engine._scale_out_exit_walk.
             reason = ("tp1_runner_be" if stop == runner_floor(entry, plan.tp1)
                       else "tp1_runner_trail")
-            return self._close_runner(plan, price, reason, risk, sign)
+            return self._close_runner(plan, price, reason, risk, sign,
+                                      extra=self._runner_stop_extra(plan, stop))
 
         if plan.tp2 is not None:
             hit_tp2 = price >= plan.tp2 if is_bull else price <= plan.tp2
             if hit_tp2:
                 return self._close_runner(plan, price, "tp1_runner_tp2", risk, sign)
 
-        self._ratchet_chandelier(plan, price, is_bull, entry)
+        self._ratchet_chandelier(plan, is_bull, entry, moved)
         return []
 
     def _maybe_suggest_pyramid(self, plan, price) -> list[PlanEvent]:
@@ -1089,24 +1098,63 @@ class PlanManager:
         self.store.update(plan)
         return [PlanEvent(plan.plan_id, "pyramid_add", dict(add))]
 
-    def _ratchet_chandelier(self, plan, price, is_bull, entry) -> None:
-        """Live chandelier ratchet off the extreme tick since TP1 (Task 66)."""
-        if self.atr_fn is None:
-            return
-        extreme = plan.runner_high_close
-        extreme = price if extreme is None else (max(extreme, price) if is_bull
-                                                 else min(extreme, price))
-        if extreme == plan.runner_high_close:
-            return
+    def _track_extreme(self, plan, price: float, is_bull: bool) -> bool:
+        """v176: the runner's best tick since TP1 (bearish: lowest), on every
+        tick and independent of atr_fn. True when it moved; persisted then."""
+        old = plan.runner_high_close
+        extreme = price if old is None else (max(old, price) if is_bull
+                                             else min(old, price))
+        if extreme == old:
+            return False
         plan.runner_high_close = extreme
+        self.store.update(plan)
+        return True
+
+    def _apply_giveback(self, plan, price: float) -> None:
+        """v176: tighten working_stop to the give-back level off the tracked
+        extreme. Never loosens; persists and logs only when the stop moves."""
+        level = giveback_level(plan.runner_high_close, plan.direction)
+        if level is None:
+            return
+        current = (plan.working_stop if plan.working_stop is not None
+                   else runner_floor(plan.entry_price, plan.tp1))
+        new_stop = tighter_stop(current, level, plan.direction == "bullish")
+        if new_stop == current:
+            return
+        plan.working_stop = new_stop
+        self.store.update(plan)
+        _plan_line("giveback stop", plan, price,
+                   f" stop={new_stop:.2f} from={current:.2f}"
+                   f" extreme={plan.runner_high_close:.2f}")
+
+    def _ratchet_chandelier(self, plan, is_bull: bool, entry: float, moved: bool) -> None:
+        """Live chandelier ratchet off the extreme tick since TP1 (Task 66).
+
+        v176: the extreme is tracked by _track_extreme; the chandelier still
+        moves only on a new extreme and only with atr_fn wired."""
+        if self.atr_fn is None or not moved:
+            return
         atr_val = float(self.atr_fn(plan.ticker))
-        trail = chandelier_stop(extreme, atr_val, plan.trail_atr_mult, plan.direction)
+        trail = chandelier_stop(plan.runner_high_close, atr_val,
+                                plan.trail_atr_mult, plan.direction)
         floor = (plan.working_stop if plan.working_stop is not None
                  else runner_floor(entry, plan.tp1))
-        new_stop = max(floor, trail) if is_bull else min(floor, trail)
+        new_stop = tighter_stop(floor, trail, is_bull)
         if new_stop != plan.working_stop:
             plan.working_stop = new_stop
-        self.store.update(plan)
+            self.store.update(plan)
+
+    def _runner_stop_extra(self, plan, stop: float) -> dict:
+        """v176: the closing runner leg's stop_source, plus the give-back
+        level's inputs when the give-back set the stop that fired."""
+        floor = runner_floor(plan.entry_price, plan.tp1)
+        level = giveback_level(plan.runner_high_close, plan.direction)
+        source = runner_stop_source(stop, floor, level)
+        if source != "giveback":
+            return {"stop_source": source}
+        return {"stop_source": source, "giveback_pct": runner_giveback_pct(),
+                "giveback_extreme": float(plan.runner_high_close),
+                "giveback_stop": level}
 
     def _close_runner(self, plan: TradePlanV2, fill: float, reason: str,
                       risk: float, sign: int, extra: dict | None = None) -> list[PlanEvent]:
@@ -1325,6 +1373,10 @@ class PlanManager:
         is_bull = plan.direction == "bullish"
         sign = 1 if is_bull else -1
         risk = abs(plan.entry_price - plan.stop_loss)
+        # v176: tighten from the STORED extreme before the bar test. Never the
+        # checked bar's own high/low (no intrabar lookahead), and the bar path
+        # never moves runner_high_close itself.
+        self._apply_giveback(plan, bar_open)
         stop = (plan.working_stop if plan.working_stop is not None
                 else runner_floor(plan.entry_price, plan.tp1))
 
@@ -1335,7 +1387,8 @@ class PlanManager:
             reason = ("tp1_runner_be"
                       if stop == runner_floor(plan.entry_price, plan.tp1)
                       else "tp1_runner_trail")
-            return self._close_runner(plan, fill, reason, risk, sign)
+            return self._close_runner(plan, fill, reason, risk, sign,
+                                      extra=self._runner_stop_extra(plan, stop))
 
         if plan.tp2 is not None:
             hit_tp2 = bar_high >= plan.tp2 if is_bull else bar_low <= plan.tp2

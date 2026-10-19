@@ -11,6 +11,12 @@ from tests.planning.structure_fixtures import WARMUP, sawtooth, stall_frame
 from tests.planning.test_plan_engine_model import _plan
 
 
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: isolate the structure rule; the give-back-first tests turn it on."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
+
+
 def at(day, hour):
     return datetime(day.year, day.month, day.day, hour, 0, tzinfo=timezone.utc)
 
@@ -202,3 +208,40 @@ def test_cache_entry_is_pruned_when_the_plan_closes(monkeypatch):
     store, mgr = manager(df, partial_plan(df), [j + 2])
     step(store, mgr, 120.0, at(df.index[j + 1].date(), 15))
     assert store.get("p1").status == PlanStatus.CLOSED and "p1" not in mgr._structure_seen
+
+
+def test_giveback_closes_before_hl_trail_can_pre_empt_it(monkeypatch):
+    # v176: track + give-back run before _structure_runner_step. Price 113.0,
+    # hl_trail level 104.895, stored extreme 125.0 -> give-back 118.75 > price.
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", True)
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_PCT", 5.0)
+    monkeypatch.setattr(config, "RUNNER_STRUCTURE_EXIT", "hl_trail")
+    monkeypatch.setattr(config, "RUNNER_HL_TRAIL_ATR_BUFFER", 0.0)
+    df = sawtooth(4)
+    confirm = WARMUP + 9
+    plan = partial_plan(df)
+    plan.runner_high_close = 125.0
+    store, mgr = manager(df, plan, [confirm + 2])
+    price = float(df["Open"].iloc[confirm + 1])
+    assert price == pytest.approx(113.0)
+    events = step(store, mgr, price, at(df.index[confirm + 1].date(), 15))
+    assert [e.detail["reason"] for e in events] == ["tp1_runner_trail"]
+    assert events[0].detail["leg"]["stop_source"] == "giveback"
+    assert events[0].detail["leg"]["giveback_stop"] == pytest.approx(118.75)
+
+
+def test_giveback_is_applied_even_on_a_tick_the_stall_closes(monkeypatch):
+    # The stall closes at the tick price either way; the give-back has already
+    # tightened and persisted the stop before the structure step ran.
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", True)
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_PCT", 5.0)
+    monkeypatch.setattr(config, "RUNNER_STRUCTURE_EXIT", "progress_stall")
+    monkeypatch.setattr(config, "RUNNER_STALL_RANGE_MAX", 0.70)
+    df = stall_frame()
+    j = _stall_bar(df)
+    plan = partial_plan(df)
+    plan.runner_high_close = 125.0                     # give-back 118.75 < price 120.4
+    store, mgr = manager(df, plan, [j + 2])
+    events = step(store, mgr, float(df["Open"].iloc[j + 1]), at(df.index[j + 1].date(), 15))
+    assert [e.detail["reason"] for e in events] == ["tp1_runner_progress_stall"]
+    assert store.get("p1").working_stop == pytest.approx(118.75)

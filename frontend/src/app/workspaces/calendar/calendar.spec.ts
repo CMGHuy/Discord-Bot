@@ -581,6 +581,22 @@ describe('Calendar phone agenda', () => {
     expect(day.querySelector('.agenda-count')).not.toBeNull();
   });
 
+  it('opens the day drawer when an agenda row is tapped', async () => {
+    // The agenda replaced the grid on phones without carrying its click
+    // target, so a phone could not open a day's trades at all.
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentRef.setInput('viewportAt', 'xs');
+    fixture.detectChanges();
+
+    const row = el(fixture).querySelector('.agenda-day button') as HTMLButtonElement;
+    expect(row).not.toBeNull();
+    row.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.store.selectedDay()).toBe(RESPONSE.days[0].date);
+  });
+
   it('keeps the grid at sm and above', async () => {
     const fixture = seed();
     await fixture.whenStable();
