@@ -8,6 +8,12 @@ the context lacks is ``False``, never forward-filled (v174 spec § 1, § 3).
 """
 from __future__ import annotations
 
+import hashlib
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+from typing import Mapping
+
 import numpy as np
 import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
@@ -19,6 +25,10 @@ LOOKBACK = 5
 Z_WINDOW = 252
 #: std(W) at or below this is the floating-point form of std(W) == 0.
 STD_FLOOR = 1e-12
+
+#: Defined z must cover this share of SPY sessions in the event window, or
+#: the file would spend a shot on an idea that can hardly fire (v174 § 1).
+MIN_Z_COVERAGE = 0.95
 
 
 def r_lookback(close: pd.Series, lookback: int = LOOKBACK) -> pd.Series:
@@ -71,3 +81,72 @@ def near_mask(raw: np.ndarray, cap: int) -> np.ndarray:
     np.add.at(marks, np.maximum(pos - cap + 1, 0), 1)
     np.add.at(marks, np.minimum(pos + cap, n), -1)
     return np.cumsum(marks[:n]) > 0
+
+
+class ContextError(ValueError):
+    """A context file the screen must not run on; the runner refuses with it."""
+
+
+def check_raw_index(index: pd.Index, name: str) -> None:
+    """The CSV index as written, before load_frame repairs it: one date
+    index, tz-naive, sorted, unique, every stamp at midnight."""
+    if not isinstance(index, pd.DatetimeIndex):
+        raise ContextError(f"{name}: the Date column is not a date index")
+    if index.tz is not None:
+        raise ContextError(f"{name}: the raw index is tz-aware ({index.tz}); "
+                           f"the cache is tz-naive")
+    if not index.is_monotonic_increasing:
+        raise ContextError(f"{name}: the raw index is not sorted")
+    if index.has_duplicates:
+        raise ContextError(f"{name}: the raw index is not unique "
+                           f"({int(index.duplicated().sum())} repeated dates)")
+    if (index != index.normalize()).any():
+        raise ContextError(f"{name}: the raw index is not normalised "
+                           f"(a stamp other than midnight)")
+
+
+def check_contiguous(index: pd.DatetimeIndex, sessions: pd.DatetimeIndex,
+                     name: str) -> None:
+    """Every SPY session is a bar of the context frame, so the 5-row
+    offset of r5 is a 5-session offset."""
+    missing = sessions.difference(index)
+    if len(missing):
+        raise ContextError(
+            f"{name}: {len(missing)} SPY session(s) missing between "
+            f"{sessions[0]:%Y-%m-%d} and {sessions[-1]:%Y-%m-%d}, "
+            f"first {missing[0]:%Y-%m-%d}")
+
+
+def check_z_coverage(z: pd.Series, sessions: pd.DatetimeIndex, name: str, *,
+                     event_start: str, minimum: float = MIN_Z_COVERAGE) -> None:
+    """Defined z on at least ``minimum`` of the SPY sessions from
+    ``event_start``; a session z never saw counts as undefined."""
+    window = sessions[sessions >= pd.Timestamp(event_start)]
+    if not len(window):
+        raise ContextError(f"{name}: no SPY session from {event_start}")
+    share = float(z.reindex(window).notna().mean())
+    if share < minimum:
+        raise ContextError(
+            f"{name}: defined z covers {share:.1%} of {len(window)} SPY sessions "
+            f"from {event_start}; the floor is {minimum:.0%}")
+
+
+def file_record(path) -> dict:
+    """What the results doc prints and the hash file pins for one CSV."""
+    path = Path(path)
+    if not path.is_file():
+        raise ContextError(f"{path.stem}: context file {path} is missing")
+    dates = pd.read_csv(path, usecols=["Date"])["Date"].astype(str)
+    return {"ticker": path.stem, "rows": int(len(dates)),
+            "first": dates.min()[:10], "last": dates.max()[:10],
+            "fetched": date.fromtimestamp(path.stat().st_mtime).isoformat(),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
+@dataclass(frozen=True)
+class ContextData:
+    """The context frames an idea reads, the SPY calendar they were checked
+    against, and one file record per frame."""
+    frames: Mapping[str, pd.DataFrame]
+    calendar: pd.DataFrame
+    records: Mapping[str, dict]

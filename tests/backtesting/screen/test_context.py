@@ -1,4 +1,9 @@
 """v174 context hook: point-in-time r5, trailing z, gates and exact-date alignment."""
+import dataclasses
+import hashlib
+import os
+from datetime import date
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -189,3 +194,110 @@ def test_near_mask_keeps_the_input_length_when_cap_exceeds_it():
     raw[2] = True
     out = context.near_mask(raw, 10)
     assert len(out) == 5 and out.all()
+
+
+# --- V174-2: load checks ----------------------------------------------------
+
+def test_min_z_coverage_is_95_percent():
+    assert context.MIN_Z_COVERAGE == 0.95
+    assert issubclass(context.ContextError, ValueError)
+
+
+def test_a_clean_raw_index_passes():
+    context.check_raw_index(pd.bdate_range("2009-06-01", periods=30), "TLT")
+
+
+@pytest.mark.parametrize("index, words", [
+    (pd.bdate_range("2009-06-01", periods=5, tz="UTC"), "tz-aware"),
+    (pd.DatetimeIndex(["2009-06-02", "2009-06-01", "2009-06-03"]), "not sorted"),
+    (pd.DatetimeIndex(["2009-06-01", "2009-06-01", "2009-06-02"]), "not unique"),
+    (pd.DatetimeIndex(["2009-06-01 16:00", "2009-06-02 16:00"]), "not normalised"),
+    (pd.Index(["2009-06-01", "junk"]), "not a date index"),
+])
+def test_a_bad_raw_index_is_refused(index, words):
+    with pytest.raises(context.ContextError, match=words):
+        context.check_raw_index(index, "TLT")
+
+
+def test_a_tz_aware_csv_read_raw_is_refused(tmp_path):
+    df = random_walk(20, start="2009-06-01")
+    df.index = df.index.tz_localize("UTC")
+    df.rename_axis("Date").to_csv(tmp_path / "TLT.csv")
+    raw = pd.read_csv(tmp_path / "TLT.csv", parse_dates=["Date"], index_col="Date")
+    with pytest.raises(context.ContextError, match="TLT: .*tz-aware"):
+        context.check_raw_index(raw.index, "TLT")
+
+
+def test_contiguity_passes_when_every_session_is_present():
+    sessions = pd.bdate_range("2009-06-01", periods=40)
+    context.check_contiguous(sessions.union(pd.DatetimeIndex(["2009-06-06"])), sessions, "TLT")
+
+
+def test_a_missing_spy_session_is_refused_and_named():
+    sessions = pd.bdate_range("2009-06-01", periods=40)
+    with pytest.raises(context.ContextError, match=r"UUP: 1 SPY session.*2009-06-10"):
+        context.check_contiguous(sessions.delete(7), sessions, "UUP")
+
+
+def test_z_coverage_counts_only_sessions_from_the_event_start():
+    sessions = pd.bdate_range("2010-11-01", periods=300)
+    z = pd.Series(1.0, index=sessions)
+    z[z.index < pd.Timestamp("2011-01-01")] = np.nan      # warm-up NaNs do not count
+    context.check_z_coverage(z, sessions, "TLT", event_start="2011-01-01")
+
+
+def test_z_coverage_below_95_percent_is_refused():
+    sessions = pd.bdate_range("2011-01-03", periods=100)
+    z = pd.Series(1.0, index=sessions)
+    z.iloc[:6] = np.nan                                   # 94% defined
+    with pytest.raises(context.ContextError, match="TLT: defined z covers 94.0%"):
+        context.check_z_coverage(z, sessions, "TLT", event_start="2011-01-01")
+    z.iloc[:5] = 1.0                                      # 99% defined
+    context.check_z_coverage(z, sessions, "TLT", event_start="2011-01-01")
+
+
+def test_a_session_absent_from_z_counts_as_undefined():
+    sessions = pd.bdate_range("2011-01-03", periods=100)
+    z = pd.Series(1.0, index=sessions[10:])               # z never saw 10 sessions
+    with pytest.raises(context.ContextError, match="90.0%"):
+        context.check_z_coverage(z, sessions, "UUP", event_start="2011-01-01")
+
+
+def test_no_session_in_the_event_window_is_refused():
+    sessions = pd.bdate_range("2009-06-01", periods=10)
+    with pytest.raises(context.ContextError, match="no SPY session"):
+        context.check_z_coverage(pd.Series(1.0, index=sessions), sessions, "TLT",
+                                 event_start="2011-01-01")
+
+
+# --- V174-2: file record ----------------------------------------------------
+
+def test_file_record_reads_rows_dates_mtime_and_sha256(tmp_path):
+    path = tmp_path / "TLT.csv"
+    random_walk(30, start="2009-06-01").rename_axis("Date").to_csv(path)
+    stamp = pd.Timestamp("2026-10-18 09:30").timestamp()
+    os.utime(path, (stamp, stamp))
+    record = context.file_record(path)
+    assert record == {
+        "ticker": "TLT", "rows": 30, "first": "2009-06-01", "last": "2009-07-10",
+        "fetched": date.fromtimestamp(stamp).isoformat(),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+
+
+def test_file_record_changes_with_one_byte(tmp_path):
+    path = tmp_path / "UUP.csv"
+    random_walk(30, start="2009-06-01").rename_axis("Date").to_csv(path)
+    before = context.file_record(path)["sha256"]
+    path.write_bytes(path.read_bytes().replace(b"Volume", b"volume"))
+    assert context.file_record(path)["sha256"] != before
+
+
+def test_file_record_of_a_missing_file_is_refused(tmp_path):
+    with pytest.raises(context.ContextError, match="TLT: context file .*TLT.csv is missing"):
+        context.file_record(tmp_path / "TLT.csv")
+
+
+def test_context_data_is_frozen():
+    data = context.ContextData(frames={}, calendar=pd.DataFrame(), records={})
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        data.frames = {"TLT": pd.DataFrame()}
