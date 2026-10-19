@@ -105,7 +105,7 @@ def _sample(events, days, runs) -> dict:
 def _overlap(events, restricted, cap: int) -> dict:
     return {"cap": cap, "n": len(events),
             "official": verdict.mean_d([], _paired(events)),
-            "restricted": None if restricted is None else _decide(restricted)}
+            "restricted": None if restricted is None else verdict.decide(_paired(restricted))}
 
 
 def _bucket(value) -> str:

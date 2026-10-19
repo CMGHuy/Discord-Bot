@@ -284,3 +284,15 @@ def test_missing_signal_or_warmup_return_stays_undefined_and_unmatched():
     assert out["selloff"]["down"] is None and out["selloff"]["up"] is None
     assert out["concentration"]["rows"] == []
     assert out["concentration"]["unmatched"] == 2
+
+
+def test_empty_restricted_pass_reports_zero_pairs_instead_of_not_run():
+    out = diagnostics.compute(_idea(), _events(), [], _data(), **_window())
+    result = out["overlap"]["restricted"]
+    assert isinstance(result, verdict.Verdict)
+    assert result.n == 0
+    assert result.delta_exp_r is None and result.ci_low is None and result.ci_high is None
+    text = "\n".join(_rendered(restricted=[]))
+    assert "Restricted null not run" not in text
+    assert "at least 10 sessions from any shock day" in text
+    assert "N = 0" in text and "interval n/aR to n/aR" in text
