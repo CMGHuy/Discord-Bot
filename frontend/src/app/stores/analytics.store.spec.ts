@@ -218,14 +218,16 @@ describe('AnalyticsStore', () => {
     points: [{ date: '2026-04-01', cum_r: 1, drawdown_r: 0, cum_pnl: 70, cum_pct: 0.7 }],
     points_n: 1, as_of: '2026-04-01', benchmark: { spy_indexed: [] }, scope: SCOPE, n: 1,
   };
+  const VARIANCE_BAND = { status: 'insufficient', scope: 'whole_book', days: 0, weeks: 0 };
   const BY_DIMENSION = { rows: [], as_of: null, min_cell_n: 20, scope: SCOPE, n: 34 };
   const HEAT_GRID = {
     rows: [], cols: ['2w', '4w'], cells: [], folded: { n_strategies: 0, cells: [] },
     min_cell_n: 20, scope: SCOPE, n: 34,
   };
 
-  /** Overview asks for exactly two payloads: the scoped record and its
-   *  curve. Both are settled here so `backend.verify()` still means
+  /** Overview asks for exactly three payloads: the scoped record, its
+   *  curve and the unscoped variance band. All are settled here so
+   *  `backend.verify()` still means
    *  "nothing ELSE went out". */
   const respondOverview = (body: Partial<AnalyticsPerformance> = {}) => {
     backend
@@ -234,6 +236,9 @@ describe('AnalyticsStore', () => {
     backend
       .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
       .flush(EQUITY_CURVE);
+    backend
+      .expectOne((req) => req.url === '/api/v1/analytics/variance-band')
+      .flush(VARIANCE_BAND);
   };
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
@@ -771,6 +776,7 @@ describe('AnalyticsStore', () => {
     backend
       .expectOne((req) => req.url === '/api/v1/analytics/equity-curve')
       .error(new ProgressEvent('error'), { status: 0 });
+    backend.expectOne((req) => req.url === '/api/v1/analytics/variance-band').flush(VARIANCE_BAND);
     expect(store.performanceError()).not.toBeNull();
     expect(store.equityCurveError()).not.toBeNull();
 
@@ -820,6 +826,8 @@ describe('AnalyticsStore', () => {
         .forEach((request) => request.flush(PERFORMANCE));
       backend.match((req) => req.url === '/api/v1/analytics/equity-curve')
         .forEach((request) => request.flush(EQUITY_CURVE));
+      backend.match((req) => req.url === '/api/v1/analytics/variance-band')
+        .forEach((request) => request.flush(VARIANCE_BAND));
       backend.verify();
     });
 
@@ -864,6 +872,7 @@ describe('AnalyticsStore', () => {
       expect(request.request.params.get('to')).toBe('2026-06-30');
       request.flush(PERFORMANCE);
       backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/variance-band').flush(VARIANCE_BAND);
     });
 
     it('omits an unset bound instead of sending it empty', () => {
@@ -877,6 +886,7 @@ describe('AnalyticsStore', () => {
       expect(request.request.params.has('to')).toBe(false);
       request.flush(PERFORMANCE);
       backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/variance-band').flush(VARIANCE_BAND);
     });
 
     it('normalises an inverted range rather than rejecting it', () => {
@@ -902,6 +912,7 @@ describe('AnalyticsStore', () => {
 
       backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
       backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/variance-band').flush(VARIANCE_BAND);
       backend.verify();
     });
 
@@ -921,6 +932,7 @@ describe('AnalyticsStore', () => {
       expect(store.activeFilterCount()).toBe(0);
       request.flush(PERFORMANCE);
       backend.expectOne((req) => req.url === '/api/v1/analytics/equity-curve').flush(EQUITY_CURVE);
+      backend.expectOne((req) => req.url === '/api/v1/analytics/variance-band').flush(VARIANCE_BAND);
     });
 
     it('hydrates from the URL without firing a request', () => {

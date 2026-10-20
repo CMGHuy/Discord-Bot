@@ -17,6 +17,7 @@ import {
   AnalyticsRegistry,
   AnalyticsSnapshot,
   AnalyticsStrategies,
+  AnalyticsVarianceBand,
   BookScope,
   BotRestartResult,
   CalendarDaySparklines,
@@ -274,6 +275,12 @@ export class ApiClient {
   /** v142 — the Partials tab: TP1->TP2 conversion and runner counterfactuals. */
   analyticsPartials(scope?: Partial<BookScope> | null): Observable<AnalyticsPartials> {
     return this.http.get<AnalyticsPartials>(`${this.base}/analytics/partials`, { params: scopeParams(scope) });
+  }
+
+  /** v175 — the whole-book losing-run band. Unscoped on purpose: the route
+   *  rejects any query parameter, so no `BookScope` is ever sent. */
+  analyticsVarianceBand(): Observable<AnalyticsVarianceBand> {
+    return this.http.get<AnalyticsVarianceBand>(`${this.base}/analytics/variance-band`);
   }
 
   analyticsExitQuality(scope?: Partial<BookScope> | null): Observable<AnalyticsExitQuality> {

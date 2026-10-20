@@ -735,6 +735,69 @@ export interface AnalyticsPartials extends Scoped {
   thin_n: number;
   population: { filled: number; partial: number; unreadable: number };
 }
+/** v175 — `GET /analytics/variance-band`: the whole closed book's losing-run
+ *  band (`swingbot/core/analytics/variance_band.py`). Not `Scoped`: the band
+ *  never follows the Analytics scope bar, and says so in `scope`. */
+export type BandZone = 'normal' | 'rough' | 'outside';
+/** p80/p95 of one statistic across the simulated paths, plus p95's own
+ *  10–90% range across the outer resamples of the week set. Integers for the
+ *  run (close days), R rounded to 2 dp for the drawdown. */
+export interface BandQuantiles { p80: number; p95: number; p95_lo: number; p95_hi: number; }
+export interface BandHorizon {
+  /** Simulated length in close days (20 or 50). */
+  horizon: number;
+  /** `horizon` close days expressed in weeks at this book's pace, 1 dp. */
+  weeks_span: number;
+  run: BandQuantiles;
+  drawdown: BandQuantiles;
+}
+export interface BandCurrent {
+  /** Losing close days in a row at the latest close day (scratch days skipped). */
+  run: number;
+  /** Inclusive calendar days from the run's first loss day; null when `run` is 0. */
+  run_age_days: number | null;
+  /** Peak-to-now drawdown inside the last 50 close days, in R (>= 0). */
+  drawdown: number;
+  /** Inclusive calendar days since the window's peak; null when `drawdown` is 0. */
+  drawdown_age_days: number | null;
+  run_zone: BandZone;
+  drawdown_zone: BandZone;
+  /** The worse of the two. */
+  zone: BandZone;
+}
+export interface BandExpR {
+  value: number | null;
+  n: number;
+  /** First and last NYSE close date of the pool, ISO. */
+  start: string | null;
+  end: string | null;
+  /** 2.5–97.5% week-cluster bootstrap interval; null when it has no draws. */
+  ci: [number, number] | null;
+  not_positive: boolean;
+}
+export interface BandDollars { median_risk: number; drawdown_usd: number; }
+export interface VarianceBandInsufficient {
+  status: 'insufficient';
+  scope: 'whole_book';
+  days: number;
+  weeks: number;
+}
+export interface VarianceBandOk {
+  status: 'ok';
+  scope: 'whole_book';
+  asof: string;
+  days: number;
+  weeks: number;
+  pool: 'v2' | 'all';
+  composition: { days_by_era: { v2: number; legacy: number }; trades_by_horizon: Record<string, number> };
+  /** One entry per simulated horizon, in order (20, then 50). */
+  horizons: BandHorizon[];
+  current: BandCurrent;
+  expr: BandExpR;
+  /** Omitted (never null) when no pool trade carries shares and a stop distance. */
+  dollars?: BandDollars;
+}
+export type AnalyticsVarianceBand = VarianceBandOk | VarianceBandInsufficient;
 
 export interface AnalyticsPlans {
   funnel: { posted: number; filled: number; hit_tp1: number; closed: number };
