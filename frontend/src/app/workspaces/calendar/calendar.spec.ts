@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { HttpRequest, provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -717,5 +719,77 @@ describe('Calendar URL (v165 D6)', () => {
     edited.flush(RESPONSE);
     await navigation;
     expect([store.month(), store.strategy()]).toEqual(['2026-07', '']);
+  });
+});
+
+describe('Calendar totals: one stat tile (v179 §3.3)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/calendar/calendar.ts'), 'utf8');
+
+  it('renders every summary figure as the same stacked sb-stat-tile, in reading order', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const totals = el(fixture).querySelector('.totals')!;
+    expect(totals.querySelectorAll('sb-metric-card')).toHaveLength(0);
+    expect([...totals.querySelectorAll('sb-stat-tile .label')].map((n) => n.textContent!.trim()))
+      .toEqual(['Net this month', 'Trades', 'Win rate', 'Winning days', 'Average day', 'Best day', 'Worst day']);
+  });
+
+  it('keeps the figures the metric cards showed, units included', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    const calendar = fixture.componentInstance as unknown as {
+      totalLabel(): string; tradesLabel(): string; monthWinRate(): string;
+    };
+    // RESPONSE.totals: net_pnl_amount -60, net_r -0.6, trade_count 3, win_rate 33.33.
+    expect(calendar.totalLabel()).toContain('60');
+    expect(calendar.tradesLabel()).toBe('3');
+    expect(calendar.monthWinRate()).toBe('33.3%');
+  });
+
+  it('restyles no tile from outside and fixes no row height', () => {
+    expect(SOURCE).not.toMatch(/::ng-deep/);
+    expect(SOURCE).not.toMatch(/grid-auto-rows/);
+    // The doc comment on currency() still names `MetricCard` in prose; the
+    // element and its import are what must be gone.
+    expect(SOURCE).not.toMatch(/sb-metric-card|from '\.\.\/\.\.\/ui\/metric-card'/);
+  });
+});
+
+
+describe('Calendar totals metric formatting and tone (v179)', () => {
+  it.each([
+    ['currency', '-60.00 €', 'neg'],
+    ['r', '-0.60R', 'neg'],
+    ['trades', '3', 'neutral'],
+    ['win_rate', '33.3%', 'neutral'],
+  ] as const)('keeps the %s unit and uses only meaningful sign colours', async (metric, value, tone) => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.componentInstance.store.setMetric(metric);
+    fixture.detectChanges();
+    const tile = el(fixture).querySelector('.totals sb-stat-tile .tile');
+    expect(tile?.querySelector('.value')?.textContent?.trim()).toBe(value);
+    expect(tile?.classList).toContain(tone);
+  });
+
+  it.each([0, 60])('uses a neutral zero and positive gains for %s money', async (amount) => {
+    const fixture = seed({ ...RESPONSE, totals: { ...RESPONSE.totals, net_pnl_amount: amount } });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const tile = el(fixture).querySelector('.totals sb-stat-tile .tile');
+    expect(tile?.classList).toContain(amount === 0 ? 'neutral' : 'pos');
+  });
+
+  it('keeps a missing month win rate absent', async () => {
+    const fixture = seed({ ...RESPONSE, totals: { ...RESPONSE.totals, win_rate: null } });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const tiles = el(fixture).querySelectorAll('.totals sb-stat-tile');
+    expect(tiles[2]?.querySelector('.value')?.textContent?.trim()).toBe('—');
+    fixture.componentInstance.store.setMetric('win_rate');
+    fixture.detectChanges();
+    expect(tiles[0]?.querySelector('.value')?.textContent?.trim()).toBe('—');
+    expect(tiles[0]?.querySelector('.tile')?.classList).toContain('neutral');
   });
 });

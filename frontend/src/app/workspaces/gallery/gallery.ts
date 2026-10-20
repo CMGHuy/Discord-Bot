@@ -461,11 +461,15 @@ interface ContractRow {
     <!-- -- v85 shared primitives (R2-01..R2-06) --------------------------------- -->
     <sb-section-head [heading]="'v85 primitives'" [level]="2" />
     <sb-panel>
-      <sb-control-row>
+      <!-- v179 §3.3: the one stat tile -- label, value, secondary, N=, hint,
+           stacked and left-aligned -- in an auto-fit grid whose rows share
+           one height. -->
+      <div class="stat-grid">
         <sb-stat-tile label="Win rate" [value]="'68%'" [sample]="412" />
         <sb-stat-tile label="Payoff ratio" [value]="'1.80'" [sample]="7" tone="pos" />
         <sb-stat-tile label="Expectancy" [value]="null" />
-      </sb-control-row>
+        <sb-stat-tile label="Net P&L" [value]="'+1,240.00 €'" secondary="+12.4R" [sample]="412" tone="pos" hint="Pre-tax, paper trades." />
+      </div>
       <sb-gauge label="Heat utilisation" [value]="62" caption="cap 100%" />
       <sb-gauge label="Heat utilisation (over limit)" [value]="130" />
       <sb-matrix [labels]="matrixLabels" [values]="matrixValues" [clusters]="[['AAPL', 'MSFT']]" />
@@ -765,6 +769,8 @@ interface ContractRow {
        positioned ancestor; give it one here so the demo state is visible
        rather than escaping the panel. */
     .tooltip-demo { position: relative; height: 70px; }
+    /* v179 §3.3 -- the stat-tile grid every page uses. */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-14); }
   `,
 })
 export class Gallery {

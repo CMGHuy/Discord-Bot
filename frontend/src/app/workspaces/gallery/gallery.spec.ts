@@ -157,3 +157,13 @@ describe('the gallery covers the v95 content-priority primitives', () => {
     expect(element.querySelector(selector)).not.toBeNull();
   });
 });
+
+describe('the gallery shows the one stat tile (v179 §3.3)', () => {
+  it('lays the tiles in an auto-fit grid and shows the full stack once', () => {
+    expect(GALLERY).toMatch(/\.stat-grid \{[^}]*repeat\(auto-fit, minmax\(10rem, 1fr\)\)/);
+    const from = GALLERY.slice(GALLERY.indexOf('<div class="stat-grid">'));
+    const block = from.slice(0, from.indexOf('</div>'));
+    expect(block.match(/<sb-stat-tile/g)).toHaveLength(4);
+    expect(block).toMatch(/secondary="[^"]+"[^>]*hint="[^"]+"/);
+  });
+});

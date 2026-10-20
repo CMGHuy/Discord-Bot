@@ -9,21 +9,23 @@ import { Button } from '../../ui/button';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
 import { ABSENT, dateTime, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
-import { MetricCard } from '../../ui/metric-card';
 import { isInline } from '../../ui/priority';
 import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
-import { MIN_SAMPLE_N, StatTile } from '../../ui/stat-tile';
+import { MIN_SAMPLE_N, StatTile, StatTone } from '../../ui/stat-tile';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
 import { PAPER_CAPTION, legsSampleNote } from './day/day-copy';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+/** Metrics whose sign means up or down; a count or a rate never does. */
+const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r', 'currency']);
+
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, MetricCard, Panel, RouterLink, SectionHead, Select, StatTile, Async],
+  imports: [Button, ControlRow, Drawer, Panel, RouterLink, SectionHead, Select, StatTile, Async],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -103,20 +105,12 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
            instead (Guard 2) rather than hiding the warning behind a
            settled-looking digest. -->
       <sb-panel inlineFrom="md" [digest]="calendarDigest()" [problem]="calendarProblem()">
-        <!-- One row for every summary figure -- the live-month totals and the
-             month-over-month stats used to split across two separate rows
-             (one above the grid, one below) for no reason tied to what they
-             mean; auto-fit wraps to a second row on its own once width runs
-             out, rather than a hardcoded per-row count. -->
+        <!-- Seven summary figures in reading order; four columns on desktop
+             and tablet, two on phone, with content-sized rows. -->
         <div class="totals">
-          <sb-metric-card
-            label="Net this month"
-            [value]="totalValue()"
-            [unit]="totalUnit()"
-            [tone]="totalsTone()"
-          />
-          <sb-metric-card label="Trades" [value]="store.totals()?.trade_count ?? null" [decimals]="0" />
-          <sb-metric-card label="Win rate" [value]="store.totals()?.win_rate ?? null" unit="%" [decimals]="1" />
+          <sb-stat-tile label="Net this month" [value]="totalLabel()" [tone]="totalsTone()" />
+          <sb-stat-tile label="Trades" [value]="tradesLabel()" />
+          <sb-stat-tile label="Win rate" [value]="monthWinRate()" />
           <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
           <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
           <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
@@ -330,83 +324,20 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     }
     .metric button.active { background: var(--surface-raised); color: var(--text); }
 
-    /* Exactly 4 columns, not auto-fit (2026-09-14): 8 cards at 4-per-row is
-       exactly 2 rows, on request -- auto-fit's own per-viewport column
-       count could just as easily land on 3 rows. Narrower than ~600px
-       drops to 2 columns (4 rows) rather than crushing 4 columns into
-       something unreadably thin; the user asked for "at most 2 rows",
-       which a phone screen cannot honour AND stay legible at the same
-       time -- legibility wins there. */
+    /* Exactly 4 columns, 2 below sm -- on request (2026-09-14, "at most 2
+       rows"): seven tiles at four per row is two rows. minmax(0, 1fr)
+       cannot overflow. v179 §3.3: no fixed row height and no reaching into
+       the tiles any more -- the 4.5rem row is what forced the inline
+       label-and-value variant, and every tile here is now the same stacked
+       sb-stat-tile as Analytics and Risk. A grid row stretches its tiles to
+       one height on its own (stat-tile.ts fills its cell). */
     .totals {
       display: grid;
       gap: var(--space-14);
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      /* A fixed row height, not auto: every card must read as the SAME
-         height regardless of which one currently has the longer number,
-         so the shared 2-row block reads as one grid, not eight
-         independently-sized boxes that happen to align on their left
-         edge. */
-      grid-auto-rows: 4.5rem;
     }
-    @media (max-width: 640px) {
+    @media (max-width: 639px) {
       .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    /* Reaches inside sb-metric-card/sb-stat-tile's own encapsulated
-       styles -- this component's scoped styles cannot select their
-       internals otherwise (same reasoning as analytics.ts's own
-       ::ng-deep use on DataTable rows).
-
-       No backticks in here: these comments live in a TS template literal.
-       sb-stat-tile's OWN stylesheet never sets a :host display rule, so
-       unstyled it defaults to display:inline -- and an inline box ignores
-       height/overflow for clipping purposes. The first fix here
-       (2026-09-14) set height+overflow on the host WITHOUT first forcing
-       it out of inline, so it silently did nothing: overflowing tile
-       content (three stacked lines -- label, value, the N= sample --
-       taller than the fixed row) spilled out of its cell and read as
-       "Average day"/"Best day" overlapping the row below. sb-metric-card
-       already sets display:block on its own :host, which is why ONLY the
-       stat-tiles (Month total/Winning days/Average day/Best day/Worst
-       day), never the metric-cards, showed this. */
-    :host ::ng-deep .totals sb-metric-card,
-    :host ::ng-deep .totals sb-stat-tile { display: block; height: 100%; overflow: hidden; }
-    :host ::ng-deep .totals sb-metric-card .card {
-      height: 100%; box-sizing: border-box; justify-content: center;
-    }
-    /* The real fix, not just clipping: a wide, short cell has the width to
-       put label/value/sample on ONE row instead of stacking three -- so
-       do that, rather than cram three lines into a box too short for
-       them. .tile's own column layout (stat-tile.ts) is for contexts
-       with real vertical room; this one does not have it, so it borrows
-       the width sb-metric-card's own .card doesn't need instead. */
-    :host ::ng-deep .totals sb-stat-tile .tile {
-      height: 100%;
-      box-sizing: border-box;
-      flex-direction: row;
-      flex-wrap: wrap;
-      align-items: baseline;
-      justify-content: center;
-      gap: var(--space-6);
-    }
-    :host ::ng-deep .totals sb-stat-tile .label {
-      flex: 0 1 auto;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    :host ::ng-deep .totals sb-stat-tile .value,
-    :host ::ng-deep .totals sb-stat-tile .sample {
-      flex: none;
-      white-space: nowrap;
-    }
-    :host ::ng-deep .totals sb-metric-card .value,
-    :host ::ng-deep .totals sb-stat-tile .value {
-      font-size: var(--text-table);
-      line-height: 1.2;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     /* The calendar table's own panel, not .totals -- on request. A plain
@@ -568,14 +499,15 @@ export class Calendar {
     monthMatrix(this.store.month()),
   );
 
-  /** `plain` while there is nothing to colour, so a loading strip is not
-   *  briefly green; `pnl` is the only tone allowed to go green or red, and
-   *  it takes its sign from the value itself. */
-  protected readonly totalsTone = computed(() => {
-    const totals = this.store.totals();
+  /** Net this month's tone (v179): by sign for R and money; neutral for a
+   *  trade count or a win rate -- the old metric card's `pnl` tone used to paint
+   *  a 33% win rate green -- and neutral while loading, so a pending strip
+   *  is not briefly coloured. */
+  protected readonly totalsTone = computed<StatTone>(() => {
     const value = this.totalValue();
-    if (value === null || value === undefined) return 'plain' as const;
-    return 'pnl' as const;
+    if (value === null || value === undefined || value === 0) return 'neutral';
+    if (!SIGNED_METRICS.has(this.store.metric())) return 'neutral';
+    return value > 0 ? 'pos' : 'neg';
   });
 
   /** The day behind a cell, or null. Cells outside the month and weekends
@@ -631,14 +563,34 @@ export class Calendar {
     }
   }
 
-  protected totalUnit(): string {
+  /** "Net this month" as text in the metric on show. sb-stat-tile never
+   *  formats a number (stat-tile.ts), so the unit travels in the string --
+   *  what the old metric card's [unit] and [decimals] did before v179. */
+  protected totalLabel(): string {
+    const value = this.totalValue();
+    return value === null || value === undefined ? ABSENT : this.metricText(value);
+  }
+
+  protected tradesLabel(): string {
+    const count = this.store.totals()?.trade_count;
+    return count === null || count === undefined ? ABSENT : String(count);
+  }
+
+  /** One decimal, as the Win rate card showed it ("33.3%"). */
+  protected monthWinRate(): string {
+    const rate = this.store.totals()?.win_rate;
+    return rate === null || rate === undefined ? ABSENT : `${rate.toFixed(1)}%`;
+  }
+
+  private metricText(value: number): string {
     switch (this.store.metric()) {
-      case 'r': return 'R';
-      case 'currency': return this.currency();
-      case 'win_rate': return '%';
-      case 'trades': return '';
+      case 'r': return rMultiple(value);
+      case 'currency': return money(value, this.currency(), 2);
+      case 'win_rate': return `${value.toFixed(1)}%`;
+      case 'trades': return String(value);
     }
   }
+
 
   /** Closed-trading days only: calendar blanks are not observations. */
   protected readonly monthDays = computed(() => this.store.days().filter((day) => day.trade_count > 0));
