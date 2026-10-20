@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, ElementRef, afterRenderEffect, computed, inject, signal, untracked, viewChild,
+} from '@angular/core';
 
 import { SettingField } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
@@ -8,6 +10,7 @@ import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-control
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
+import { edgeFades, revealActive } from '../../ui/scroll-rail';
 import { controlOf, groupByControl, settingsCategories } from './settings-grouping';
 
 /**
@@ -25,6 +28,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
  */
 @Component({
   selector: 'sb-settings-tab',
+  host: { '(window:resize)': 'measureRail()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, ConfirmDialog, Async],
   template: `
@@ -92,7 +96,8 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
     }
 
     <div class="settings-layout">
-    <nav class="category-rail" aria-label="Settings categories">
+    <div class="rail-strip" [class.fade-start]="railFades().start" [class.fade-end]="railFades().end">
+    <nav #rail class="category-rail" aria-label="Settings categories" (scroll)="measureRail()">
       @for (category of categories(); track category.id) {
         <button sb-button variant="ghost" type="button"
                 [class.active]="activeCategory() === category.id"
@@ -101,6 +106,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
         </button>
       }
     </nav>
+    </div>
     <div class="category-content">
     @for (section of categorySections(); track section.name) {
       <sb-panel [heading]="section.name">
@@ -551,11 +557,25 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
     .count { color: var(--text-secondary); font-size: var(--text-table); }
     .bar-actions { margin-left: auto; }
     .settings-layout { display: grid; grid-template-columns: minmax(10rem, 0.24fr) minmax(0, 1fr); gap: var(--space-14); }
+    /* v179 §6b.5: the strip carries the edge fades, the nav scrolls inside it
+       (the same fade as sb-tab-bar). min-width: 0 lets the strip shrink in
+       the one-column phone layout instead of widening the page. */
+    .rail-strip { position: relative; min-width: 0; align-self: start; }
+    .rail-strip::before, .rail-strip::after {
+      content: ''; position: absolute; top: 0; bottom: 0; width: var(--space-20);
+      pointer-events: none; opacity: 0; transition: opacity var(--transition);
+    }
+    .rail-strip::before { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
+    .rail-strip::after { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
+    .rail-strip.fade-start::before, .rail-strip.fade-end::after { opacity: 1; }
     .category-rail { display: grid; align-content: start; gap: var(--space-4); }
+    @media (max-width: 639px) {
+      .settings-layout { grid-template-columns: minmax(0, 1fr); }
+      .category-rail { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; scrollbar-width: none; }
+    }
     .category-rail button { justify-content: space-between; text-align: left; }
     .category-rail button.active { background: var(--surface-raised); color: var(--text); }
     .category-rail span { color: var(--text-faint); font-family: var(--font-mono); }
-    @media (max-width: 639px) { .settings-layout { grid-template-columns: minmax(0, 1fr); } .category-rail { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; } }
 
     .stale-form {
       padding: var(--space-8) var(--space-14);
@@ -631,6 +651,30 @@ export class SettingsTab {
   protected readonly importText = signal('');
   protected readonly confirmDiscard = signal(false);
   protected readonly activeCategory = signal<string | null>(null);
+  private readonly rail = viewChild<ElementRef<HTMLElement>>('rail');
+  protected readonly railFades = signal({ start: false, end: false });
+
+  constructor() {
+    // v179 §6b.5: the rail only exists once settings have loaded (it sits
+    // inside the sb-async body), hence the optional viewChild. Reveal the
+    // chosen category and re-measure after every render that changed it.
+    afterRenderEffect(() => {
+      this.activeCategory();
+      this.categories();
+      const rail = this.rail()?.nativeElement;
+      if (!rail) return;
+      untracked(() => {
+        revealActive(rail, rail.querySelector('button.active'));
+        this.measureRail();
+      });
+    });
+  }
+
+  protected measureRail(): void {
+    const rail = this.rail()?.nativeElement;
+    if (rail) this.railFades.set(edgeFades(rail));
+  }
+
   protected readonly categories = computed(() => settingsCategories(this.store.visibleSections()));
   protected readonly categorySections = computed(() => {
     const categories = this.categories();
