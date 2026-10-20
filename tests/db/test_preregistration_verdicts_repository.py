@@ -24,8 +24,15 @@ def _record(verdict="COST", *, recorded_on="2026-12-04", mean=-0.212):
             "ci": [-0.401, -0.033], "sum_delta_r": -6.572, "sum_delta_usd": -1314.4,
             "bar_close_n": 2, "excluded_share": 0.114,
             "engine_flags": {"stall_exit_enabled": True, "runner_structure_exit": "off"},
-            "rows": [{"plan_id": "p1", "delta_r": -0.5, "close_date": "2026-09-01"},
-                     {"plan_id": "p2", "delta_r": 0.25, "close_date": "2026-09-09"}]}
+            "engine_config": {"STALL_EXIT_ENABLED": True, "RUNNER_HL_TRAIL_ATR_BUFFER": 0.0,
+                              "STRUCTURAL_STOP_SCOPE": "",
+                              "exit_sim.GIVEBACK_EXTREME_BASIS": "close"},
+            "engine_config_sha256": "ab" * 32, "asof": "2026-12-04",
+            "bars_last_date": {"AAPL": "2026-12-04", "MSFT": None},
+            "rows": [{"plan_id": "p1", "delta_r": -0.5, "close_date": "2026-09-01",
+                      "bars_sha256": "cd" * 32},
+                     {"plan_id": "p2", "delta_r": 0.25, "close_date": "2026-09-09",
+                      "bars_sha256": None}]}
 
 
 def test_the_first_insert_writes_the_row(repo, db_conn):
