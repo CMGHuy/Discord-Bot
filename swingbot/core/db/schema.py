@@ -292,6 +292,18 @@ equity_samples = register(sa.Table("equity_samples", METADATA,
     ("at", "realized_balance", "unrealized_pnl", "equity", "open_n", "skipped_n", "source", "kind",
      "backfill_run"))
 
+# v173: the frozen verdict of a pre-registration, written once by the bot's daily
+# check (analytics/override_io.run_daily_check). The primary key is the idempotency
+# authority: a second insert on the same ledger_id is impossible. Everything but the
+# key, the verdict and its date lives in doc (n, weeks, CI, engine flags, the counted
+# rows). No SSE event (not in TABLE_CHANNELS); never updated or deleted by code.
+preregistration_verdicts = register(sa.Table("preregistration_verdicts", METADATA,
+    sa.Column("ledger_id", sa.Text, primary_key=True),
+    sa.Column("verdict", sa.Text, nullable=False),
+    sa.Column("recorded_on", sa.Date, nullable=False),
+    *standard_columns()),
+    ("ledger_id", "verdict", "recorded_on"))
+
 
 #: Why each promoted column is a column and not a `doc` field. A promotion
 #: costs a migration forever after, so each names what needs it: identity,
@@ -408,5 +420,10 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "source": "equity_samples_at_source_kind_uq and the range index; live vs backfill filter",
         "kind": "equity_samples_at_source_kind_uq; point vs day_high/day_low, o/c read points only",
         "backfill_run": "names the run and bar date a backfill row was built from; NULL on live rows",
+    },
+    "preregistration_verdicts": {
+        "ledger_id": "primary key: one row per pre-registration, so a second insert is impossible",
+        "verdict": "NOT NULL frozen outcome",
+        "recorded_on": "NOT NULL date the verdict was recorded",
     },
 }

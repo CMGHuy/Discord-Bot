@@ -82,6 +82,8 @@ CASES = {
 #: Tables with no repository, and why. Anything else must be in CASES.
 NOT_REPOSITORY_BACKED = {
     "dropped_doc_fields": "written only by swingbot.core.db.doc_fields inside Alembic revisions",
+    "preregistration_verdicts": "write-once (insert_once only; upsert/insert refused); its doc "
+                                "round trip is tests/db/test_preregistration_verdicts_repository.py",
 }
 
 #: Tables whose rows need the probe plan first (a foreign key into plans).
