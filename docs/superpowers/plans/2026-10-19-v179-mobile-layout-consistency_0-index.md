@@ -102,7 +102,7 @@ per migrated table; by the Dashboard drawer round trip (open, Back closes,
 
 ## Global Constraints
 
-- Frontend only: nothing under `swingbot/`, `bot.py`, `admin_ui.py`, `scripts/` or any store/schema changes. Files outside `frontend/` that do change: `tests/charts/resolved_tokens.json` (regenerated), `docs/claude/ui-design.md`, `AGENTS.md`, `VERSION.json`, `version_history.json`, the v179 results doc.
+- Frontend only: nothing under `swingbot/`, `bot.py`, `admin_ui.py`, `scripts/` or any store/schema changes. Files outside `frontend/` that do change: `tests/charts/resolved_tokens.json` (regenerated), `docs/claude/ui-design.md`, `AGENTS.md`, `VERSION.json`, `swingbot/admin/version_history.json`, the v179 results doc.
 - Paths in tasks are relative to `frontend/src/app/` unless they start with `frontend/`, `docs/`, `tests/` or are repo-root files; `Create:`/`Modify:` lines in tasks always use the full repo path.
 - Narrow test run per task: `cd frontend && npx ng test --watch=false --include <spec path relative to frontend/>` (e.g. `--include src/app/ui/stat-tile.spec.ts`); Python files only via `python scripts/dev/testrun.py file <test>`. `npm test`, `npm run lint` and `testrun.py full` run once, in V179-21.
 - Styles are not loaded in jsdom and `matchMedia` never matches: phone/viewport behaviour is forced with `sb-data-table`'s `cardsAt`/`viewportAt` inputs; CSS is asserted as source text (`readFileSync` + `rule(selector)`), as `ui/layout.spec.ts` does.
@@ -187,11 +187,11 @@ export function rerunExceptQueryParam(name: string): (from: ActivatedRouteSnapsh
 // styles (V179-1, V179-2): --font-num, --hit-min, .sb-hit; .num { font-family: var(--font-num) }
 
 // frontend/scripts/layout-audit-lib.mjs  (V179-19)
-export const ROUTES: readonly string[];      // every route and tab; :id/:symbol resolved at run time from the API
+export const ROUTES: readonly string[];      // every route and tab (27); :id/:plan/:symbol/:date resolved at run time from the API
 export const CHECKS: readonly ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline'];
 export function classify(findings, allow, today): { unallowed, allowed, stale };
 // allow-list entry: { route, width ('*' or number), check, selector, reason, date: 'YYYY-MM-DD' }
-// CLI: node frontend/scripts/layout-audit.mjs [--base URL] [--widths 390,768,1440] [--out DIR] [--allow FILE]
+// CLI: node frontend/scripts/layout-audit.mjs [--base URL] [--widths 390,768,1440] [--out DIR] [--allow FILE] [--settle MS] [--prune]
 //      exit 1 on any unallowed finding; prints stale allow-list entries
 ```
 
@@ -261,4 +261,4 @@ All tasks share one worktree; at most 2 implementers at once, and only on disjoi
 | V179-18 | Versions "Running now", Dashboard performance segmented header, Analytics population line and empty N; Part 4 browser check | 4b | sonnet | M `workspaces/versions/versions.ts`, `workspaces/dashboard/panels/trading-performance.ts`, `workspaces/dashboard/dashboard.spec.ts`, `workspaces/analytics/scope-bar.ts`, their specs | — |
 | V179-19 | Layout audit script, allow-list, `ui-design.md` checklist and `AGENTS.md` mirror | 5 | sonnet | C `frontend/scripts/layout-audit.mjs`, `frontend/scripts/layout-audit-lib.mjs`, `frontend/scripts/layout-audit-lib.test.mjs`, `frontend/scripts/layout-audit.allow.json`; M `docs/claude/ui-design.md`, `AGENTS.md` | `ROUTES`, `CHECKS`, `classify`, CLI |
 | V179-20 | Three-width verification: audit to zero, screenshots, Dashboard drawer round trip | 5 | sonnet | C `docs/superpowers/results/2026-10-19-v179-layout-audit.md`; M any file a finding traces to | audit report |
-| V179-21 | Full suite, `npm test`, lint, ui minor bump, merge, `/panel`, `/close-out` | 5 | sonnet | M `VERSION.json`, `version_history.json` (regenerated) | merged branch on `main` |
+| V179-21 | Full suite, `npm test`, lint, ui minor bump, merge, `/panel`, `/close-out` | 5 | sonnet | M `VERSION.json`, `swingbot/admin/version_history.json` (regenerated; the bump runs inside `/close-out`); no push — a push to `main` deploys, so it waits for the partner | merged branch on `main` |
