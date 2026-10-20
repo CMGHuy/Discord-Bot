@@ -279,7 +279,8 @@ above), `source="manual"` and one `status`:
   the CI, `mean_delta_r`, the mean ΔR before costs (descriptive), the
   engine flags in force (`STALL_EXIT_ENABLED`, `RUNNER_STRUCTURE_EXIT`),
   `recorded_on`, and the evaluated rows as JSONB, so the verdict can be
-  re-derived. `preregistration-ledger.jsonl` gets the same row as
+  re-derived (widened 2026-10-20 to the full exit-engine config, `asof` and
+  bar hashes: see "Panel review (pre-merge)" below). `preregistration-ledger.jsonl` gets the same row as
   `v173-override-fidelity` by a mirror commit; the table is the
   authority, the file is the record. The ledger's verdict enum
   (`instrument/stats.py:116-118`) gains `COST`, `SAVED` and
@@ -562,3 +563,33 @@ applied); each is a requirement of the plan.
   is visible and unclipped at 390px.
 - financial-advisor: dollars come from modelled sizing -- applied: the
   caption says "dollars use the plan's modelled position size".
+
+## Panel review (pre-merge) — record widened, partner decision 2026-10-20
+
+quant-engineer, on the implemented branch, before merge. The frozen rule
+(floors, dead band, 20% cap), the bootstrap and the insert-once write are
+unchanged; only what the stored row carries grew, inside its `doc` JSONB
+(no schema change, no new Alembic revision).
+
+- quant-engineer [BLOCKING]: the record stored two engine flags while
+  `engine_r` is replayed with every live exit setting
+  (`RUNNER_HL_TRAIL_ATR_BUFFER`, `RUNNER_STALL_RANGE_MAX`, the give-back,
+  tightening and lifecycle settings, `exit_sim.GIVEBACK_EXTREME_BASIS`),
+  so the verdict could not be re-derived -- applied: the record gains
+  `engine_config`, a snapshot of every config name the exit engine reads
+  (`exit_sim`, `exit_sim_v2`, `override_fidelity` and their direct
+  imports; a test scans those modules and fails when one is missing) plus
+  the module-level give-back basis, and `engine_config_sha256`, the sha256
+  of that snapshot as sorted-key compact JSON. `engine_flags` keeps its
+  two keys for the API and the panel.
+- quant-engineer [BLOCKING]: the record held aggregates and rows but not
+  the data they came from -- applied: it gains `asof`, `bars_last_date`
+  (each counted ticker's last cached bar as read, before the `asof` trim)
+  and, on every counted row (which already carries `plan_id` and
+  `delta_r`), `bars_sha256`: the sha256 of the fill-session..`asof` OHLCV
+  slice the replay walked, as compact JSON.
+- quant-engineer: `approx` stale-stamp rows leave the cap denominator --
+  checked, not changed: §4 defines the denominator as eligible *stamped*
+  individual overrides and the plan panel review made a stale `bar_close`
+  stamp `approx`, so the code matches the frozen wording. Changing it is a
+  new spec.

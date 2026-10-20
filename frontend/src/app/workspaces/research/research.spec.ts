@@ -9,7 +9,7 @@ import { authInterceptor, errorInterceptor, loadingInterceptor } from '../../api
 import { LedgerRow, ResearchLedger, StrategyRow } from '../../api/models';
 import { ResearchStore, filtersFromParams } from '../../stores/research.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
-import { DISCLAIMER, Research } from './research';
+import { DISCLAIMER, Research, VERDICT_TONE } from './research';
 
 /* The page is a renderer over ResearchStore, so these tests look at what a
  * reader sees: which rows, how a missing figure and a missing record read,
@@ -147,5 +147,15 @@ describe('Research', () => {
     const { fixture } = create();
     expect(text(fixture)).toContain(DISCLAIMER);
     expect(text(fixture)).toContain('this page never edits it');
+  });
+});
+
+describe('VERDICT_TONE', () => {
+  it('colours the v173 override verdicts by how the measurement came out', () => {
+    expect(VERDICT_TONE['SAVED']).toBe('good');
+    expect(VERDICT_TONE['COST']).toBe('bad');
+    expect(VERDICT_TONE['INCONCLUSIVE']).toBe('neutral');
+    expect(VERDICT_TONE['PASS']).toBe('good');          // the existing entries are untouched
+    expect(VERDICT_TONE['SCREEN-UNDERPOWERED']).toBe('warn');
   });
 });

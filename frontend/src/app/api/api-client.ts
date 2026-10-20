@@ -42,6 +42,7 @@ import {
   KillswitchResult,
   LogClearResult,
   Logs,
+  OverrideFidelity,
   PnlCalendar,
   Preferences,
   Proposal,
@@ -274,6 +275,11 @@ export class ApiClient {
   /** v142 — the Partials tab: TP1->TP2 conversion and runner counterfactuals. */
   analyticsPartials(scope?: Partial<BookScope> | null): Observable<AnalyticsPartials> {
     return this.http.get<AnalyticsPartials>(`${this.base}/analytics/partials`, { params: scopeParams(scope) });
+  }
+
+  /** v173 — manual overrides vs the engine. Global: every manual close, never scoped. */
+  analyticsOverrideFidelity(): Observable<OverrideFidelity> {
+    return this.http.get<OverrideFidelity>(`${this.base}/analytics/override-fidelity`);
   }
 
   analyticsExitQuality(scope?: Partial<BookScope> | null): Observable<AnalyticsExitQuality> {

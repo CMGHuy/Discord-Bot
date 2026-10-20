@@ -111,10 +111,13 @@ LEDGER_PATH = (Path(__file__).resolve().parents[4] / "docs" / "superpowers"
                / "results" / "preregistration-ledger.jsonl")
 LEDGER_FIELDS = ("id", "date", "hypothesis", "instrument", "n", "exp_r", "p",
                  "verdict", "record")
-#: v140 appends the idea screen's three verdicts and its instrument; existing
-#: rows are untouched (a ledger row is never edited).
+#: v140 appends the idea screen's three verdicts and its instrument; v173
+#: appends the override-fidelity outcomes. WAITING is never written: a
+#: verdict that is not yet evaluable has no row. Existing rows are untouched
+#: (a ledger row is never edited).
 VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN",
-            "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED")
+            "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED",
+            "COST", "SAVED", "INCONCLUSIVE")
 INSTRUMENTS = ("v1", "v2", "screen-v1")
 #: v162 adds one OPTIONAL field: the bars a verdict was measured on. Rows
 #: written before v162 have none and mean yfinance (ledger_data_source); they

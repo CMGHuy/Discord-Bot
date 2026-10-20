@@ -736,6 +736,74 @@ export interface AnalyticsPartials extends Scoped {
   population: { filled: number; partial: number; unreadable: number };
 }
 
+/* v173 — manual overrides vs the engine (GET /analytics/override-fidelity).
+ * Every figure is computed server-side (`swingbot/core/analytics/
+ * override_fidelity.py`, `override_verdict.py`); R and dollars are net of
+ * modelled costs and pre-tax, dollars at the plan's modelled position size.
+ * Global, never scoped. */
+export type OverrideStatus =
+  | 'resolved' | 'open' | 'unstamped' | 'stale' | 'ambiguous' | 'parity_mismatch'
+  | 'split_affected' | 'unreplayable';
+export type OverrideVerdictState = 'WAITING' | 'COST' | 'SAVED' | 'INCONCLUSIVE';
+/** The verdict floors still failing, in this order. */
+export type OverrideWaitingOn = 'count' | 'weeks' | 'open' | 'excluded';
+export type OverrideOutcome = 'helped' | 'hurt' | 'neutral';
+export interface OverrideRowDto {
+  plan_id: string; ticker: string; horizon: string; direction: string;
+  state_at_close: 'ACTIVE' | 'PARTIAL';
+  /** ISO session date of the manual close, or null when it could not be assigned. */
+  close_date: string | null;
+  /** A bulk-clear close: shown, never counted. */
+  bulk: boolean;
+  /** Estimated exit (no stamp, or a bar-close stamp older than the close session). Shown, never counted. */
+  approx: boolean;
+  price_source: string;
+  status: OverrideStatus;
+  actual_r: number | null; engine_r: number | null; delta_r: number | null;
+  /** The same delta before modelled costs: descriptive only, never in the verdict. */
+  delta_r_gross: number | null;
+  /** Null when the plan has no linked trade with shares: the row shows R only. */
+  actual_usd: number | null; engine_usd: number | null; delta_usd: number | null;
+  engine_exit_reason: string | null;
+  outcome: OverrideOutcome | null;
+  source: string;
+}
+export interface OverrideSplit { n: number; sum_delta_r: number; sum_delta_usd: number; }
+export interface OverrideSummary {
+  /** Eligible (individual, not estimated) rows only; bulk and approx rows are counted apart. */
+  n_by_status: Record<OverrideStatus, number>;
+  bulk_n: number;
+  /** ISO date -> closes in that bulk clear, sorted by date. */
+  bulk_dates: Record<string, number>;
+  approx_n: number;
+  counted_n: number;
+  sum_delta_r: number; sum_delta_r_gross: number; sum_delta_usd: number; usd_missing_n: number;
+  helped: number; hurt: number; neutral: number;
+  splits: Record<'state_at_close' | 'horizon' | 'direction', Record<string, OverrideSplit>>;
+}
+export interface OverrideVerdict {
+  /** WAITING until a verdict is stored, even when `evaluable` is true. */
+  state: OverrideVerdictState;
+  /** Recorded figures once `recorded`; live counts before. */
+  n: number; needed: number; weeks: number; week_floor: number;
+  /** Always live. */
+  open_n: number; excluded_share: number; evaluable: boolean; waiting_on: OverrideWaitingOn[];
+  recorded: boolean; recorded_on: string | null;
+  /** Null until recorded. */
+  mean_delta_r: number | null; mean_delta_r_gross: number | null; ci: [number, number] | null;
+  sum_delta_r: number | null; sum_delta_usd: number | null;
+  /** Counted overrides priced from a bar close, not a quote. */
+  bar_close_n: number;
+}
+export interface OverrideFidelity {
+  rows: OverrideRowDto[];
+  summary: OverrideSummary;
+  verdict: OverrideVerdict;
+  engine_flags: { stall_exit_enabled: boolean; runner_structure_exit: string };
+  asof: string;
+  currency_symbol: string;
+}
+
 export interface AnalyticsPlans {
   funnel: { posted: number; filled: number; hit_tp1: number; closed: number };
   in_flight: number;

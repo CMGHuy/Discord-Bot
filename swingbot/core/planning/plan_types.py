@@ -228,13 +228,19 @@ def plan_from_dict(d: dict) -> TradePlanV2:
 
 
 def record_transition(plan: TradePlanV2, new_status: str, reason: str | None = None,
-                      at: str | None = None) -> None:
-    """Apply a lifecycle transition, enforcing the legal state machine."""
+                      at: str | None = None, extra: dict | None = None) -> None:
+    """Apply a lifecycle transition, enforcing the legal state machine.
+
+    `extra` (v173) adds keys to the appended entry -- today only the manual
+    close's `override` stamp. The three core keys always win, so an `extra`
+    can never rewrite what the transition itself says.
+    """
     allowed = _LEGAL_TRANSITIONS.get(plan.status, set())
     if new_status not in allowed:
         raise ValueError(f"illegal transition {plan.status} -> {new_status}")
     plan.status = new_status
-    plan.status_history.append({"status": new_status, "reason": reason, "at": at})
+    entry = {**(extra or {}), "status": new_status, "reason": reason, "at": at}
+    plan.status_history.append(entry)
 
 
 
