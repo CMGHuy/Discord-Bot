@@ -192,7 +192,7 @@ def test_open_tickers_count_only_the_outlook_lane():
 def test_log_trade_passes_the_origin_through(monkeypatch):
     seen = {}
     monkeypatch.setattr(short_run.scan_run, "_logged_plan_fields", lambda *a: ([], 2.0))
-    monkeypatch.setattr(short_run.scan_run, "_persist_plan_v2", lambda plan, alerts: None)
+    monkeypatch.setattr(short_run.scan_run, "_persist_plan_v2", lambda plan, alerts, requote=None: None)
     monkeypatch.setattr(short_run.trade_log, "log_trade", lambda **kw: seen.update(kw) or "T1")
     monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
     plan_v2 = _plan(entry_type="stop_entry")
