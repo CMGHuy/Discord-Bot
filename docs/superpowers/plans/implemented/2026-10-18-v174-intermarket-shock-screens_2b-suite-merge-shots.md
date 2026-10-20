@@ -1,8 +1,8 @@
 # v174 Intermarket shock screens, part 2b: full suite, merge, the two shots, close-out
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V174-11:" -A 200 docs/superpowers/plans/2026-10-18-v174-intermarket-shock-screens_2b-suite-merge-shots.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V174-11:" -A 200 docs/superpowers/plans/implemented/2026-10-18-v174-intermarket-shock-screens_2b-suite-merge-shots.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-18-v174-intermarket-shock-screens-design.md`](../specs/2026-10-18-v174-intermarket-shock-screens-design.md) (every applied `## Panel review` finding is a requirement)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-18-v174-intermarket-shock-screens-design.md`](../../specs/implemented/2026-10-18-v174-intermarket-shock-screens-design.md) (every applied `## Panel review` finding is a requirement)
 **Index:** [`2026-10-18-v174-intermarket-shock-screens_0-index.md`](2026-10-18-v174-intermarket-shock-screens_0-index.md) — **Global Constraints, Review Focus, Parallelisation, the task ledger and `$WT`/`$R` are defined there; every task below implicitly includes the Global Constraints.** Split from part 2 (`_2-ideas-diagnostics-shots.md`, V174-6..V174-8) to keep each file under 1500 lines.
 
 `$WT` = `E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-18-v174-intermarket-shock-screens`, `$R` = `E:/Documents/Private/Projects/Discord-Bot`. Never `cd`; use absolute paths and `git -C`. **A PreToolUse hook rejects Bash commands that contain the string `screen_idea` with an unbalanced quote** (heredocs included): keep every Bash command that names the runner free of apostrophes.
@@ -308,7 +308,7 @@ Replace `<VERDICT>` with the ledger verdict before committing. Report to the par
 **Model:** haiku — the `/close-out` ritual, no code
 
 **Files:**
-- Modify: `docs/superpowers/plans/2026-10-18-v174-intermarket-shock-screens_0-index.md` (`## Progress`, then moved with the parts)
+- Modify: `docs/superpowers/plans/implemented/2026-10-18-v174-intermarket-shock-screens_0-index.md` (`## Progress`, then moved with the parts)
 - Modify: `swingbot/admin/version_history.json` only if the ritual regenerates it (`Bump: none`, so normally unchanged)
 
 **Interfaces:**
@@ -319,7 +319,7 @@ Replace `<VERDICT>` with the ledger verdict before committing. Report to the par
 
 - [ ] **Step 1: Write the outcome into the index's `## Progress` block**
 
-Replace the `## Progress` body of `$R/docs/superpowers/plans/2026-10-18-v174-intermarket-shock-screens_0-index.md` with five lines: the full-suite counts (V174-9); `screen-bond_spike_rebound` verdict, N, ΔExpR, lower bound, results-doc path; the same for `screen-dollar_drop`; one line on what each verdict licenses (a `SCREEN-PASS` licenses only a later `Edge: expectancy` filter spec; a fail closes exactly the frozen definition, nothing broader); and the hash JSON path.
+Replace the `## Progress` body of `$R/docs/superpowers/plans/implemented/2026-10-18-v174-intermarket-shock-screens_0-index.md` with five lines: the full-suite counts (V174-9); `screen-bond_spike_rebound` verdict, N, ΔExpR, lower bound, results-doc path; the same for `screen-dollar_drop`; one line on what each verdict licenses (a `SCREEN-PASS` licenses only a later `Edge: expectancy` filter spec; a fail closes exactly the frozen definition, nothing broader); and the hash JSON path.
 
 - [ ] **Step 2: Run `/close-out`**
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this file whole**: pull one task with `grep -n "^### Task V174-3:" -A 400 <this file>`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-18-v174-intermarket-shock-screens-design.md`](../specs/2026-10-18-v174-intermarket-shock-screens-design.md)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-18-v174-intermarket-shock-screens-design.md`](../../specs/implemented/2026-10-18-v174-intermarket-shock-screens-design.md)
 **Index:** [`2026-10-18-v174-intermarket-shock-screens_0-index.md`](2026-10-18-v174-intermarket-shock-screens_0-index.md) holds the Goal, Global Constraints, Parallelisation, Where to work and the task ledger. Every task below implicitly includes the index's Global Constraints.
 
 Scope of this part: the worktree; the point-in-time context math and load checks in a new pure module `swingbot/core/backtesting/screen/context.py`; the registry field `Idea.context` and the table-driven `events` seam in `scripts/backtest/screen_idea.py`, pinned by a real-call-path parity test; context loading once per universe with load and hash refusals in `main`; the one-off TLT/UUP fetch.

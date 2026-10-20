@@ -1,8 +1,8 @@
 # v174 Intermarket shock screens: do sharp bond or dollar moves precede stock gains? Implementation Plan, index
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief V174-4` or `grep -n "^### Task V174-4:" -A 300 docs/superpowers/plans/2026-10-18-v174-intermarket-shock-screens_*.md`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Never read this plan whole**: pull one task with `/task-brief V174-4` or `grep -n "^### Task V174-4:" -A 300 docs/superpowers/plans/implemented/2026-10-18-v174-intermarket-shock-screens_*.md`.
 
-**Spec:** [`docs/superpowers/specs/2026-10-18-v174-intermarket-shock-screens-design.md`](../specs/2026-10-18-v174-intermarket-shock-screens-design.md) (at a9040d84, including the brief-findings amendment: scope sentence in the ledger `hypothesis`, `CONTEXT_START = "2009-06-01"`, raw-file index checks, committed hash JSON, screen-only BH family; every applied `## Panel review` finding is a requirement)
+**Spec:** [`docs/superpowers/specs/implemented/2026-10-18-v174-intermarket-shock-screens-design.md`](../../specs/implemented/2026-10-18-v174-intermarket-shock-screens-design.md) (at a9040d84, including the brief-findings amendment: scope sentence in the ledger `hypothesis`, `CONTEXT_START = "2009-06-01"`, raw-file index checks, committed hash JSON, screen-only BH family; every applied `## Panel review` finding is a requirement)
 **Bump:** none
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
