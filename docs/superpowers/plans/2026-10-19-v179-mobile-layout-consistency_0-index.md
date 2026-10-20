@@ -156,6 +156,7 @@ export function drawerColumns<T>(columns: ColumnDef<T>[], rendered: readonly str
 export function compactKeys(root: ParentNode): string[];
 export function drawerKeys(root: ParentNode): string[];
 export function openRowDrawer(root: HTMLElement, index?: number): void;
+export function phoneViewport(): Provider;   // ViewportService stub (viewport/isPhone/isNarrow signals) for workspace specs
 
 // ui/scroll-rail.ts  (V179-6)
 export function edgeFades(el: HTMLElement): { start: boolean; end: boolean };
@@ -192,7 +193,7 @@ export function classify(findings, allow, today): { unallowed, allowed, stale };
 //      exit 1 on any unallowed finding; prints stale allow-list entries
 ```
 
-**`rowActivate` consumers and their `phoneTap` (spec §6a.4):** Trades → `drawer` (detailLink `/trades/:id`, "Open full trade →"); Dashboard positions → `emit` (the trade drawer on every device); Watchlist → `drawer` (detailLink `/watchlist/:symbol`, "Open ticker →"); Research ledger → `emit` (its store-only drawer); Research registry → `drawer` (no detailLink); Risk exposure → `drawer` (no detailLink); ticker-detail trades → `drawer` (detailLink `/trades/:id`); `data-table.spec.ts` host → default; gallery demo → `drawer`. Tablet and desktop keep today's `rowActivate` navigation on Trades and Watchlist.
+**`rowActivate` consumers and their `phoneTap` (spec §6a.4):** Trades → `drawer` (detailLink `/trades/:id`, "Open full trade →"); Dashboard positions → `emit` (the trade drawer on every device); Watchlist → `drawer` (detailLink `/watchlist/:symbol`, "Open ticker →"); Research ledger → `emit` (its store-only drawer); Research registry → `drawer` (no detailLink); Risk exposure → `drawer` (detailLink `/trades/:trade_id`, "Open full trade →" — keeps the ticker-cell link's destination, which a compact row cannot tap); ticker-detail trades → `drawer` (detailLink `/trades/:id`); `data-table.spec.ts` host → default; gallery demo → `drawer`. Tablet and desktop keep today's `rowActivate` navigation on Trades and Watchlist.
 
 ## Parallelisation
 
@@ -228,7 +229,8 @@ All tasks share one worktree; at most 2 implementers at once, and only on disjoi
 |---|---|---|---|
 | 1 | `2026-10-19-v179-mobile-layout-consistency_1-tokens-and-panels.md` | V179-1..V179-4 | worktree, text floor, numeric font, 44px hit areas, panel baseline, stat-tile single variant |
 | 2 | `2026-10-19-v179-mobile-layout-consistency_2-controls-and-charts.md` | V179-5..V179-8 | control/filter row, tab-bar and category-rail reveal, chart containment, Partials repro and fix, Parts 1–2 browser check |
-| 3 | `2026-10-19-v179-mobile-layout-consistency_3-tables.md` | V179-9..V179-13 | compact rows, generic drawer, per-table declarations and reachability tests, Part 3 browser check |
+| 3 | `2026-10-19-v179-mobile-layout-consistency_3-tables.md` | V179-9..V179-12 | compact rows, generic drawer, per-table declarations and reachability tests |
+| 3b | `2026-10-19-v179-mobile-layout-consistency_3b-research-risk-and-check.md` | V179-13 | Research and Risk declarations, no-hand-rolled-cards guard, Part 3 browser check (split for the 1500-line rule) |
 | 4 | `2026-10-19-v179-mobile-layout-consistency_4-dashboard-and-pages.md` | V179-14..V179-18 | activity rows, trade drawer, Dashboard URL wiring, per-page fixes, Part 4 browser check |
 | 5 | `2026-10-19-v179-mobile-layout-consistency_5-audit-and-close-out.md` | V179-19..V179-21 | audit script and docs, three-width verification, full suite, merge, panel, close-out |
 
@@ -248,7 +250,7 @@ All tasks share one worktree; at most 2 implementers at once, and only on disjoi
 | V179-10 | Generic row drawer, `phoneTap` precedence, `detailLink`, gallery demo | 3 | sonnet | M `ui/data-table/data-table.ts`, `ui/data-table/data-table.spec.ts`, `workspaces/gallery/gallery.ts`, `workspaces/gallery/gallery.spec.ts`; C `ui/data-table/testing/reachability.ts` | `phoneTap`, `detailLink` inputs, `drawerRow`, `compactKeys`, `drawerKeys`, `openRowDrawer` |
 | V179-11 | Trades and Dashboard-positions compact declarations (money floor) | 3 | sonnet | M `workspaces/trades/trades.columns.ts`, `workspaces/trades/trades.columns.spec.ts`, `workspaces/trades/trades.ts`, `workspaces/trades/trades.spec.ts` | `compact` on `tradeColumns` |
 | V179-12 | Watchlist and ticker-detail compact declarations | 3 | sonnet | M `workspaces/watchlist/watchlist.ts`, `workspaces/watchlist/ticker-detail.ts` and their specs | — |
-| V179-13 | Research registry (badge floor), ledger `emit`, Risk exposure (money floor); no-hand-rolled-cards guard; Part 3 browser check | 3 | sonnet | M `workspaces/research/research.ts`, `workspaces/risk/risk.ts`, their specs, `workspaces/workspace-consistency.spec.ts` | — |
+| V179-13 | Research registry (badge floor), ledger `emit`, Risk exposure (money floor); no-hand-rolled-cards guard; Part 3 browser check | 3b | sonnet | M `workspaces/research/research.ts`, `workspaces/risk/risk.ts`, their specs, `workspaces/workspace-consistency.spec.ts` | — |
 | V179-14 | `ActivityEvent.tradeId` and interactive activity rows | 4 | sonnet | M `workspaces/dashboard/panels/activity.ts`, `workspaces/dashboard/panels/recent-activity.ts` and their specs | `tradeId`, `eventActivate` |
 | V179-15 | `sb-trade-drawer` content and the drawer header slot | 4 | sonnet | C `workspaces/dashboard/trade-drawer.ts`, `workspaces/dashboard/trade-drawer.spec.ts`; M `ui/layout.ts` (Drawer), `ui/layout.spec.ts` | `TradeDrawer`, `[drawer-header]` slot |
 | V179-16 | Dashboard drawer wiring: `trade` param, rerun rule, redirect, positions `emit` | 4 | opus | C `routing/route-rerun.ts`, `routing/route-rerun.spec.ts`; M `workspaces/dashboard/dashboard.ts`, `workspaces/dashboard/dashboard.routes.ts`, `workspaces/dashboard/positions-table.ts`, `workspaces/dashboard/dashboard.spec.ts`, `workspaces/dashboard/positions-table.spec.ts`, `app.routes.spec.ts` | `rerunExceptQueryParam`, `openTrade`, `openActivity`, `closeTrade`, `drawerTrade` |
