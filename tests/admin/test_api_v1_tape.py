@@ -278,3 +278,88 @@ def test_concurrent_tape_requests_share_one_download(admin_app):
             t.join(20)
     assert statuses == [200] * 20
     assert calls == {"prices": 1, "daily": 1}
+
+
+# --- v171 D7: the shared tape --------------------------------------------
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+
+@pytest.fixture
+def shared(monkeypatch):
+    from swingbot import config
+    from swingbot.admin.api_v1 import market
+    from swingbot.core.marketdata.shared import tape
+    monkeypatch.setattr(config, "TAPE_SHARED_ENABLED", True)
+    monkeypatch.setattr(config, "MARKETDATA_LAYER", "on")
+    monkeypatch.setattr(config, "TAPE_STALE_FALLBACK_S", 180)
+    st = {"entries": {}, "demand": [], "self_fetch": []}
+    monkeypatch.setattr(tape, "read_tape", lambda syms: {s: st["entries"][s] for s in syms if s in st["entries"]})
+    monkeypatch.setattr(tape, "record_demand", lambda syms: st["demand"].append(list(syms)))
+    monkeypatch.setattr(market, "_tape_self_fetch", lambda syms: st["self_fetch"].append(list(syms)))
+    return st
+
+
+def _entry(symbol, age_s, **kw):
+    from swingbot.core.marketdata.shared import tape
+    fields = {"price": 5800.0, "change_pct": 0.4, "is_proxy": False, "proxy_symbol": None, **kw}
+    return tape.TapeEntry(symbol=symbol, as_of=datetime.now(timezone.utc) - timedelta(seconds=age_s), **fields)
+
+
+def _tape_row(client, symbols):
+    return client.get(f"/api/v1/market/tape?symbols={symbols}").get_json()["rows"][0]
+
+
+def test_shared_tape_rows_carry_the_proxy_label_and_age(logged_in, shared):
+    shared["entries"]["^GSPC"] = _entry("^GSPC", 20, price=None, change_pct=0.8, is_proxy=True, proxy_symbol="SPY")
+    with patch("swingbot.core.marketdata.data.get_current_price_batch", side_effect=AssertionError("Yahoo call")):
+        row = _tape_row(logged_in, "^GSPC")
+    assert row["price"] is None and row["change_pct"] == 0.8
+    assert row["is_proxy"] is True and row["proxy_symbol"] == "SPY" and 18 <= row["age_s"] <= 25
+    assert shared["self_fetch"] == [] and shared["demand"] == [["^GSPC"]]
+
+
+def test_a_stale_shared_entry_keeps_its_value_and_self_fetches_in_the_background(logged_in, shared):
+    shared["entries"]["^GSPC"] = _entry("^GSPC", 400)
+    row = _tape_row(logged_in, "^GSPC")
+    assert row["price"] == 5800.0 and 395 <= row["age_s"] <= 410
+    assert shared["self_fetch"] == [["^GSPC"]]
+
+
+def test_an_empty_shared_cache_renders_a_null_row_not_an_error(logged_in, shared):
+    resp = logged_in.get("/api/v1/market/tape?symbols=^VIX")
+    row = resp.get_json()["rows"][0]
+    assert resp.status_code == 200 and row["symbol"] == "^VIX"
+    assert row["price"] is None and row["change_pct"] is None and row["age_s"] is None
+    assert row["is_proxy"] is False and shared["self_fetch"] == [["^VIX"]]
+
+
+def test_a_non_tape_symbol_keeps_todays_path_at_the_admin_tier(logged_in, shared):
+    from swingbot.core.marketdata.shared.kinds import Asker
+    with patch("swingbot.core.marketdata.data.get_current_price_batch",
+               return_value={"NVDA": 182.4}) as batch:
+        row = _tape_row(logged_in, "NVDA")
+    assert row["price"] == 182.4 and row["is_proxy"] is False and row["age_s"] is None
+    assert batch.call_args.kwargs["asker"] is Asker.ADMIN_PAGE
+
+
+def test_flag_off_rows_carry_the_default_proxy_fields(logged_in):
+    with patch("swingbot.core.marketdata.data.get_current_price_batch", return_value={"NVDA": 182.4}) as batch:
+        row = _tape_row(logged_in, "NVDA")
+    assert (row["is_proxy"], row["proxy_symbol"], row["age_s"]) == (False, None, None)
+    assert batch.call_args.kwargs == {}                     # off: called exactly as before v171
+
+
+def test_the_self_fetch_runs_once_at_admin_page(monkeypatch):
+    from swingbot.admin.api_v1 import market
+    from swingbot.core.marketdata.shared import tape
+    from swingbot.core.marketdata.shared.kinds import Asker
+    calls = []
+    monkeypatch.setattr(tape, "refresh_tape", lambda syms, *, asker, **k: calls.append((syms, asker)) or {})
+    market._run_tape_self_fetch(["^GSPC"])
+    assert calls == [(["^GSPC"], Asker.ADMIN_PAGE)]
+    assert market._SELF_FETCH_LOCK.acquire(blocking=False)
+    try:
+        assert market._tape_self_fetch(["^GSPC"]) is None   # one in flight per process
+    finally:
+        market._SELF_FETCH_LOCK.release()

@@ -100,8 +100,12 @@ _daily = SingleFlightCache(DAILY_TTL_SECONDS)
 
 
 def prices(symbols: list) -> dict:
+    from swingbot import config
     from swingbot.core.marketdata import data as market_data
-    return _prices.get(symbols, lambda missing: market_data.get_current_price_batch(missing))
+    from swingbot.core.marketdata.shared.kinds import Asker
+    # v171: admin prices never run at the default scan tier (layer off: as before).
+    kwargs = {} if config.MARKETDATA_LAYER == "off" else {"asker": Asker.ADMIN_PAGE}
+    return _prices.get(symbols, lambda missing: market_data.get_current_price_batch(missing, **kwargs))
 
 
 def daily_frames(symbols: list) -> dict:

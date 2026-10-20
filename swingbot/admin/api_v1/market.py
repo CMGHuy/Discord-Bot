@@ -30,6 +30,7 @@ Reusing the accessor is also how this endpoint avoids having to know that.
 from __future__ import annotations
 
 import math
+import threading
 
 from flask import jsonify, request
 
@@ -649,6 +650,95 @@ def _tape_context(symbol: str, price, open_trades: dict, open_plans: dict,
     return None, None, 2
 
 
+_NO_EXTRAS = {"is_proxy": False, "proxy_symbol": None, "age_s": None}
+_SELF_FETCH_LOCK = threading.Lock()
+
+
+def _tape_shared() -> bool:
+    from swingbot import config
+    return bool(config.TAPE_SHARED_ENABLED) and config.MARKETDATA_LAYER == "on"
+
+
+def _tape_quotes_direct(symbols: list[str]) -> tuple[dict, dict, dict]:
+    from swingbot.admin import tape_cache
+
+    # v132: both batches go through the single-flight cache -- any number of
+    # tabs costs one download per TTL instead of one per request, and N
+    # concurrent requests wait on one download rather than queueing N of them
+    # on the yfinance lock (the 2026-10-05 handle exhaustion). The cache
+    # degrades a dead feed to stale or priceless rows, never a 500.
+    prices = tape_cache.prices(symbols)
+    frames = tape_cache.daily_frames(symbols)
+    changes = {s: _tape_change_pct(s, prices.get(s), frames) for s in symbols}
+    return prices, changes, {}
+
+
+def _tape_extras(entry, now) -> dict:
+    age = None if entry.as_of is None else max(0.0, (now - entry.as_of).total_seconds())
+    return {"is_proxy": bool(entry.is_proxy), "proxy_symbol": entry.proxy_symbol,
+            "age_s": None if age is None else round(age, 1)}
+
+
+def _needs_refresh(entry, now, limit_s: float) -> bool:
+    return entry is None or entry.as_of is None or (now - entry.as_of).total_seconds() > limit_s
+
+
+def _shared_tape_quotes(symbols: list[str]) -> tuple[dict, dict, dict]:
+    from datetime import datetime, timezone
+
+    from swingbot import config
+    from swingbot.core.marketdata.shared import tape
+
+    others = [s for s in symbols if not tape.is_tape_symbol(s)]
+    prices, changes, extras = _tape_quotes_direct(others) if others else ({}, {}, {})
+    mine = [s for s in symbols if tape.is_tape_symbol(s)]
+    if not mine:
+        return prices, changes, extras
+    tape.record_demand(mine)
+    entries = tape.read_tape(mine)
+    now = datetime.now(timezone.utc)
+    limit = float(config.TAPE_STALE_FALLBACK_S)
+    stale = [s for s in mine if _needs_refresh(entries.get(s), now, limit)]
+    for s, entry in entries.items():
+        prices[s], changes[s], extras[s] = entry.price, entry.change_pct, _tape_extras(entry, now)
+    if stale:
+        _tape_self_fetch(stale)
+    return prices, changes, extras
+
+
+def _tape_quotes(symbols: list[str]) -> tuple[dict, dict, dict]:
+    if _tape_shared():
+        return _shared_tape_quotes(symbols)
+    return _tape_quotes_direct(symbols)
+
+
+def _run_tape_self_fetch(symbols: list[str]) -> None:
+    import logging
+
+    from swingbot.core.marketdata.shared import tape
+    from swingbot.core.marketdata.shared.kinds import Asker
+    try:
+        tape.refresh_tape(symbols, asker=Asker.ADMIN_PAGE)
+    except Exception:
+        logging.getLogger(__name__).warning("tape self-fetch failed", exc_info=True)
+
+
+def _tape_self_fetch(symbols: list[str]) -> threading.Thread | None:
+    """D7: refresh stale tape rows off the request; one in flight per process."""
+    if not _SELF_FETCH_LOCK.acquire(blocking=False):
+        return None
+
+    def _target() -> None:
+        try:
+            _run_tape_self_fetch(symbols)
+        finally:
+            _SELF_FETCH_LOCK.release()
+
+    thread = threading.Thread(target=_target, name="tape-self-fetch", daemon=True)
+    thread.start()
+    return thread
+
+
 @api_v1.route("/market/tape", methods=["GET"])
 @require_auth
 def tape():
@@ -668,7 +758,6 @@ def tape():
     """
     from datetime import datetime, timezone
 
-    from swingbot.admin import tape_cache
     from swingbot.core.planning.plan_store import PlanStore
     from swingbot.core.tracking.performance import TradeLog
 
@@ -677,13 +766,7 @@ def tape():
     if not symbols:
         return jsonify({"as_of": as_of, "rows": []})
 
-    # v132: both batches go through the single-flight cache -- any number of
-    # tabs costs one download per TTL instead of one per request, and N
-    # concurrent requests wait on one download rather than queueing N of them
-    # on the yfinance lock (the 2026-10-05 handle exhaustion). The cache
-    # degrades a dead feed to stale or priceless rows, never a 500.
-    prices = tape_cache.prices(symbols)
-    frames = tape_cache.daily_frames(symbols)
+    prices, changes, extras = _tape_quotes(symbols)
 
     open_trades: dict = {}
     try:
@@ -709,9 +792,10 @@ def tape():
         rows.append({
             "symbol": symbol,
             "price": _num(price),
-            "change_pct": _tape_change_pct(symbol, price, frames),
+            "change_pct": changes.get(symbol),
             "context_kind": kind,
             "context_label": label,
             "sort_rank": rank,
+            **extras.get(symbol, _NO_EXTRAS),
         })
     return jsonify({"as_of": as_of, "rows": rows})
