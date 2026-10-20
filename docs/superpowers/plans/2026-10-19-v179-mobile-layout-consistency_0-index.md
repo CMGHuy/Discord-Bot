@@ -205,8 +205,8 @@ All tasks share one worktree; at most 2 implementers at once, and only on disjoi
 | V179-3 | V179-4, V179-5 | after V179-2: `panel-header.ts` hit area set there; `layout.ts` shared with V179-6 and V179-15 |
 | V179-4 | V179-3, V179-5, V179-7 | after V179-2 (uses `--font-num`); `calendar.ts`, `stat-tile.ts` only here |
 | V179-5 | V179-3, V179-4, V179-7 | after V179-2: `filter-bar.ts`, `column-picker.ts` hit areas set there |
-| V179-6 | V179-4, V179-5, V179-7 | after V179-3: same file `ui/layout.ts` |
-| V179-7 | V179-4, V179-5, V179-6 | after V179-2; chart files only |
+| V179-6 | V179-4, V179-5 | after V179-3: same file `ui/layout.ts` |
+| V179-7 | V179-4, V179-5 | after V179-6: the heat-grid fade imports `edgeFades` from `ui/scroll-rail.ts`; chart files only |
 | V179-8 | — | after V179-4 and V179-7: the Partials repro must see the fixed tiles and charts; ends Parts 1–2 with the browser check |
 | V179-9 | — | after V179-2 (sort-button hit area in `data-table.ts`); creates the compact contract |
 | V179-10 | — | after V179-9: same `data-table.ts`, consumes `compactLines`/`drawerColumns` |
