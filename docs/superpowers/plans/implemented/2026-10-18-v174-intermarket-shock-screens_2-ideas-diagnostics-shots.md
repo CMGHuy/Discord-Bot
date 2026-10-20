@@ -383,7 +383,7 @@ Run: `python $WT/scripts/dev/testrun.py file tests/backtesting/screen/test_idea_
 Expected: PASS (7 tests).
 
 Run: `python $WT/scripts/dev/testrun.py file tests/backtesting/screen/test_idea_dollar_drop.py`
-Expected: PASS (8 tests).
+Observed: PASS (7 tests); the draft's count of 8 was incorrect.
 
 Run: `python $WT/scripts/dev/testrun.py file tests/backtesting/screen/test_ideas_registry.py`
 Expected: PASS.
