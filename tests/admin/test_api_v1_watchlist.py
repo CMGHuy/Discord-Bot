@@ -41,6 +41,8 @@ def no_network(monkeypatch):
     have nothing to do with the code."""
     monkeypatch.setattr("swingbot.core.marketdata.data.get_company_name", lambda t: f"{t} Inc.")
     monkeypatch.setattr("swingbot.core.market.events.get_next_earnings_datetime", lambda t: None)
+    monkeypatch.setattr("swingbot.admin.watchlist_rows.get_daily_data_batch",
+                        lambda tickers, period="6mo": {})
     monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.ensure_cached_background",
                         lambda t: None)
 
