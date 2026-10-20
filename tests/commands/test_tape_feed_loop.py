@@ -53,5 +53,6 @@ def test_a_failed_refresh_is_logged_not_raised(feed, monkeypatch, caplog):
 
 
 def test_registered_last_as_an_always_on_loop():
-    # V171-15's daily_reanchor is not on this branch yet; when it lands it goes before tape_feed.
-    assert loops_mod._always_on_loops()[-1] is loops_mod.tape_feed
+    loops = loops_mod._always_on_loops()
+    assert loops[-1] is loops_mod.tape_feed
+    assert loops.index(loops_mod.daily_reanchor) < loops.index(loops_mod.tape_feed)

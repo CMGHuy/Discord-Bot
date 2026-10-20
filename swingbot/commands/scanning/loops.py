@@ -711,6 +711,9 @@ async def _trade_monitor_error(exc: Exception):
 _recap_fired_date: dt.date | None = None   # process-local fast path; persisted below for restart safety
 _weekend_scan_fired_date: dt.date | None = None
 _earnings_refresh_fired_date: dt.date | None = None
+_reanchor_fired_date: dt.date | None = None
+_REANCHOR_CHUNK = 30       # 10 Alpaca requests of 3 symbols per chunk
+_REANCHOR_PAUSE_S = 10.0   # one chunk per 10 s stays inside the 150/min budget at tier 4's 25 % reserve
 _gate_resolve_fired_date: dt.date | None = None
 
 
@@ -965,6 +968,45 @@ async def weekly_earnings_refresh():
 
 
 @tasks.loop(minutes=1)
+async def daily_reanchor():
+    """v171 D4 backstop: weekly full re-fetch of both daily caches, outside session.
+
+    Catches an adjustment (split, dividend) the daily anchor somehow missed. Runs
+    on the VM in the first tick of REANCHOR_HOUR on REANCHOR_WEEKDAY (Berlin); a
+    restart inside that hour still runs it, once per date. Stays after the
+    per-part flags are removed (spec Rollout)."""
+    global _reanchor_fired_date
+    if not config.DAILY_DELTA_FETCH:
+        return
+    now = dt.datetime.now(SESSION_TZ)
+    if now.weekday() != config.REANCHOR_WEEKDAY or now.hour != config.REANCHOR_HOUR:
+        return
+    today = now.date()
+    if _reanchor_fired_date == today or _scheduled_job_already_fired('daily_reanchor', today):
+        return
+    _reanchor_fired_date = today
+    _mark_scheduled_job_fired('daily_reanchor', today)
+    await _run_reanchor()
+
+
+async def _run_reanchor() -> None:
+    from swingbot.core.marketdata import daily_delta, spot_metals
+    from swingbot.core.marketdata.shared.kinds import Asker
+    symbols = spot_metals.cache_symbols(load_watchlist())
+    chunks = [symbols[i:i + _REANCHOR_CHUNK] for i in range(0, len(symbols), _REANCHOR_CHUNK)]
+    done = 0
+    for n, chunk in enumerate(chunks):
+        if n:
+            await asyncio.sleep(_REANCHOR_PAUSE_S)
+        try:
+            await asyncio.to_thread(daily_delta.full_refetch, chunk, asker=Asker.BACKGROUND)
+            done += len(chunk)
+        except Exception:
+            log.exception("daily_reanchor: chunk %d/%d failed", n + 1, len(chunks))
+    log.info("daily_reanchor: re-anchored %d/%d symbol(s)", done, len(symbols))
+
+
+@tasks.loop(minutes=1)
 async def gate_counterfactual_resolve():
     """v147: resolve expired `gate_rejections` rows once per weekday at SESSION_END_HOUR:45 Berlin.
 
@@ -1132,7 +1174,7 @@ def _always_on_loops() -> tuple:
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
             weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
             pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
-            next_session_wrapup, tape_feed)
+            next_session_wrapup, daily_reanchor, tape_feed)
 
 
 def _start_background_loops() -> None:
