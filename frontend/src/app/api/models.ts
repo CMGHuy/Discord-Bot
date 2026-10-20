@@ -1951,6 +1951,15 @@ export interface TapeRow {
   /** 0 position, 1 plan, 2 neither. The client sorts on this so the ordering
    *  rule lives in one place. */
   sort_rank: number;
+  /** v171 D7: true when Yahoo came back blank and the tape shows an Alpaca
+   *  ETF proxy instead. A proxy row has `price` null and `change_pct` set:
+   *  an ETF price must never be read as an index level. Absent when the
+   *  server's TAPE_SHARED_ENABLED is off. */
+  is_proxy?: boolean;
+  /** The proxy's own symbol (SPY, QQQ, DIA, VIXY, SLV), shown as its label. */
+  proxy_symbol?: string | null;
+  /** Seconds since the value was fetched, from the shared copy. */
+  age_s?: number | null;
 }
 
 export interface TapeResponse {
