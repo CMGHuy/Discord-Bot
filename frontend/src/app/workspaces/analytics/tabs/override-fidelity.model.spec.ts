@@ -64,15 +64,23 @@ describe('override-fidelity model', () => {
     expect(liveHint(VERDICT_FLOORS_MET)).toBeNull();
   });
 
-  it('words a recorded verdict from the recorded figures', () => {
-    expect(badgeCopy(VERDICT_RECORDED_COST, '$'))
-      .toBe('Your overrides cost $1,364.00 (6.82 R) vs the engine');
-    expect(badgeCopy({ ...VERDICT_RECORDED_COST, state: 'SAVED', sum_delta_usd: 59.35,
-      sum_delta_r: 1.187 }, '$')).toBe('Your overrides saved $59.35 (1.19 R) vs the engine');
-    expect(badgeCopy({ ...VERDICT_RECORDED_COST, state: 'INCONCLUSIVE' }, '$'))
-      .toBe('No clear difference vs the engine');
-    expect(badgeCopy({ ...VERDICT_RECORDED_COST, sum_delta_usd: null }, '$'))
-      .toBe('Your overrides cost 6.82 R vs the engine');
+  it('words a recorded verdict from the recorded figures, R and CI first', () => {
+    const lead = `Overrides would have differed by ${M}0.22 R per override on average vs the engine `
+      + `(95% CI [${M}0.24, ${M}0.20], 31 overrides).`;
+    expect(badgeCopy(VERDICT_RECORDED_COST, '$')).toBe(
+      `${lead} Modelled size, before tax: ${M}$1,364.00 summed over the recorded overrides.`);
+    const saved = badgeCopy({ ...VERDICT_RECORDED_COST, state: 'SAVED', mean_delta_r: 0.04,
+      ci: [0.01, 0.07], sum_delta_usd: 59.35 }, '$');
+    expect(saved).toBe('Overrides would have differed by +0.04 R per override on average vs the '
+      + 'engine (95% CI [+0.01, +0.07], 31 overrides). Modelled size, before tax: +$59.35 '
+      + 'summed over the recorded overrides.');
+    expect(badgeCopy({ ...VERDICT_RECORDED_COST, state: 'INCONCLUSIVE', mean_delta_r: -0.02,
+      ci: [-0.05, 0.01] }, '$')).toBe('No clear difference vs the engine: mean '
+      + `${M}0.02 R per override (95% CI [${M}0.05, +0.01], 31 overrides).`);
+    expect(badgeCopy({ ...VERDICT_RECORDED_COST, sum_delta_usd: null }, '$')).toBe(lead);
+    for (const state of ['COST', 'SAVED'] as const) {
+      expect(badgeCopy({ ...VERDICT_RECORDED_COST, state }, '$')).not.toMatch(/(cost|saved)/i);
+    }
     expect(waitingOnLine(VERDICT_RECORDED_COST)).toBeNull();
   });
 

@@ -75,7 +75,7 @@ describe('OverrideFidelityPanel', () => {
   it('shows a recorded verdict from the record and labels the live tiles', () => {
     const { el } = render(overrideFixture({ verdict: VERDICT_RECORDED_COST }));
     expect(text(el.querySelector('.badge-text')))
-      .toBe('Your overrides cost $1,364.00 (6.82 R) vs the engine');
+      .toContain('Overrides would have differed by −0.22 R per override');
     expect(tone(el, '.badge')).toBe('neg');
     expect(tone(el, '.tiles > .net')).toBe('pos');              // the live sum, labelled live
     expect([...el.querySelectorAll('.tiles .live')].map(text)).toEqual([

@@ -42,7 +42,6 @@ const MINUS = '−';   // negatives line up with positives in tabular figures
 const known = (x: number | null): x is number => x !== null && Number.isFinite(x);
 const sign = (x: number): string => (x > 0 ? '+' : x < 0 ? MINUS : '');
 const be = (n: number): string => (n === 1 ? 'is' : 'are');
-const abs2 = (x: number | null): string => Math.abs(x ?? 0).toFixed(2);
 
 function magnitude(x: number, currency: string): string {
   return currency + num(Math.abs(x), 2);
@@ -84,13 +83,21 @@ function waitingBadge(v: OverrideVerdict): string {
   return `${v.n} of ${v.needed} needed. No conclusion yet.`;
 }
 
+/** Mean R and its 95% CI first (the recorded verdict's own figures); dollars are the
+ *  plan's modelled size, a secondary clause, summed over rows that carry a USD value. */
+function recordedBadge(v: OverrideVerdict, currency: string): string {
+  const [lo, hi] = v.ci ?? [null, null];
+  const ci = `(95% CI [${fixed2(lo)}, ${fixed2(hi)}], ${plural(v.n, 'override', 'overrides')})`;
+  const mean = `${fixed2(v.mean_delta_r)} R per override`;
+  if (v.state === 'INCONCLUSIVE') return `No clear difference vs the engine: mean ${mean} ${ci}.`;
+  const lead = `Overrides would have differed by ${mean} on average vs the engine ${ci}.`;
+  if (!known(v.sum_delta_usd)) return lead;
+  return `${lead} Modelled size, before tax: ${signedUsd(v.sum_delta_usd, currency)} `
+    + 'summed over the recorded overrides.';
+}
+
 export function badgeCopy(verdict: OverrideVerdict, currency: string): string {
-  if (verdict.state === 'WAITING') return waitingBadge(verdict);
-  if (verdict.state === 'INCONCLUSIVE') return 'No clear difference vs the engine';
-  const amount = known(verdict.sum_delta_usd)
-    ? `${magnitude(verdict.sum_delta_usd, currency)} (${abs2(verdict.sum_delta_r)} R)`
-    : `${abs2(verdict.sum_delta_r)} R`;
-  return `Your overrides ${verdict.state === 'COST' ? 'cost' : 'saved'} ${amount} vs the engine`;
+  return verdict.state === 'WAITING' ? waitingBadge(verdict) : recordedBadge(verdict, currency);
 }
 
 export function badgeTone(verdict: OverrideVerdict): Tone {
