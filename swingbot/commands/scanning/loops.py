@@ -21,7 +21,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
 from swingbot.core.tracking import live_loss_watch as loss_watch
-from . import cooldown, equity_recorder, notices, ops_watch, outlook, presence, recap, runstate
+from . import book_status, cooldown, equity_recorder, notices, ops_watch, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
@@ -238,6 +238,7 @@ async def _session_scan_tick():
     # threads (close_if_live_price_hit / check_near_tp_timeout via to_thread).
     await asyncio.to_thread(_refresh_snapshot_safely)
     await ops_watch.check_provider_health()
+    await book_status.post_book_status(channel)
 
     f = progress.funnel
     if alerts:
