@@ -76,6 +76,14 @@ class ExitResult:
     # runner_trail). None for every other exit and every single-leg walk.
     # Rides here, not on the leg: legs keep their four keys.
     runner_stop_source: str | None = None
+    # v173: the TP1 bar's index on a v2 walk that reached TP1 (the single-leg
+    # TP1 exit and the scale-out runner), set per instance by
+    # exit_sim_v2._booked; None everywhere else, v1 included. Deliberately a
+    # plain class attribute WITHOUT an annotation, so it is not a dataclass
+    # field: dataclasses.asdict, ==, repr and fields() are unchanged, and the
+    # frozen scale-out witness (a hash of asdict over v1 results) stays
+    # byte-identical.
+    tp1_index = None
 
 
 def _not_triggered(cancel_reason: str | None = None) -> ExitResult:
