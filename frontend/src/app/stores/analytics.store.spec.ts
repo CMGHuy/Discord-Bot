@@ -377,6 +377,7 @@ describe('AnalyticsStore', () => {
     backend.expectOne((req) => req.url === '/api/v1/analytics/exit-quality').flush(EXIT_QUALITY);
     backend.expectOne((req) => req.url === '/api/v1/analytics/journal').flush(JOURNAL);
     backend.expectOne((req) => req.url === '/api/v1/analytics/performance').flush(PERFORMANCE);
+    backend.expectOne((req) => req.url === '/api/v1/analytics/override-fidelity').flush({});
 
     expect(store.digest()).toEqual(['Two losses, both chased.']);
     expect(store.minCellN()).toBe(20);
