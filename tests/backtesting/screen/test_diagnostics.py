@@ -46,7 +46,9 @@ def _data() -> ContextData:
     record = {"ticker": "TLT", "rows": N_BARS, "first": "2009-06-01",
               "last": cal.index[-1].strftime("%Y-%m-%d"), "fetched": "2026-10-18",
               "sha256": "ab" * 32}
-    return ContextData(frames={"TLT": tlt}, calendar=cal, records={"TLT": record})
+    uup_record = {**record, "ticker": "UUP", "sha256": "cd" * 32}
+    return ContextData(frames={"TLT": tlt}, calendar=cal, records={"TLT": record},
+                       checked_records={"TLT": record, "UUP": uup_record})
 
 
 def _entry(pos: int) -> str:
@@ -247,7 +249,9 @@ def test_render_records_both_starts_and_every_context_file():
     text = "\n".join(_rendered())
     assert "loaded from 2009-06-01" in text and "stock window starts 2010-01-01" in text
     assert "| TLT | 800 | 2009-06-01 |" in text
+    assert "| UUP | 800 | 2009-06-01 |" in text
     assert "ab" * 32 in text and "2026-10-18" in text
+    assert "cd" * 32 in text
 
 
 def test_render_prints_the_restricted_delta_when_the_pass_ran():

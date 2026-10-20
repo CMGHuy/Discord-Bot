@@ -170,6 +170,7 @@ def _fmt(value, spec: str = "+.4f") -> str:
 
 
 def _render_data(data, context_start: str, window_start: str) -> list:
+    records = data.checked_records or data.records
     lines = [f"**Context data** (v174 spec `{SPEC_FILE}`): context series loaded from "
              f"{context_start} for the z warm-up; the stock window starts {window_start}. "
              f"Adjusted closes, the bytes pinned by SHA-256 in `{HASH_FILE}`.", "",
@@ -177,7 +178,7 @@ def _render_data(data, context_start: str, window_start: str) -> list:
              "|---|---|---|---|---|---|"]
     lines += [f"| {r['ticker']} | {r['rows']} | {r['first']} | {r['last']} | "
               f"{r['fetched']} | `{r['sha256']}` |"
-              for _, r in sorted(data.records.items())]
+              for _, r in sorted(records.items())]
     return lines
 
 
