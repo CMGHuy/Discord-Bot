@@ -364,12 +364,13 @@ describe('v80 D3: type, shape and touch', () => {
     expect(CSS).toMatch(/^\s*--text-control:\s*calc\(14px \* var\(--text-scale\)\);/m);
   });
 
-  it('grows controls, rows and control text for touch and narrow screens', () => {
-    const block = CSS.match(/@media \(pointer: coarse\), \(max-width: 639px\)\s*\{([\s\S]*?)\n\}/);
+  it('grows controls, rows, control text and the hit area on phone and tablet (v179 §3.4)', () => {
+    const block = CSS.match(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{([\s\S]*?)\n\}/);
     expect(block).not.toBeNull();
     expect(block![1]).toMatch(/--control-h:\s*44px;/);
     expect(block![1]).toMatch(/--row-h:\s*44px;/);
     expect(block![1]).toMatch(/--text-control:\s*calc\(16px \* var\(--text-scale\)\);/);
+    expect(block![1]).toMatch(/--hit-min:\s*44px;/);
   });
 });
 

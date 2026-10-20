@@ -249,3 +249,25 @@ a:hover {
   gap: var(--section-gap);
 }
 
+
+/* v179 §3.4 -- a hit area of at least --hit-min (24px; 44px on phone and
+ * tablet, tokens.css) without growing the visible control. The ::after box
+ * is transparent and centred on the element, so a 17px "View all" link
+ * looks the same and a thumb still lands on it. Global, because the class
+ * goes on elements inside many components' templates. For a control whose
+ * look may grow instead (a chip, a nav link), prefer
+ * min-height: var(--control-h). Never on an element that draws its own
+ * ::after. */
+.sb-hit {
+  position: relative;
+}
+
+.sb-hit::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit-min));
+  height: max(100%, var(--hit-min));
+  transform: translate(-50%, -50%);
+}

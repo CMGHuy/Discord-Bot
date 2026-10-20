@@ -36,6 +36,7 @@
   "font-sans": "\"Inter\", system-ui, -apple-system, sans-serif",
   "glow-accent": "0 4px 14px color-mix(in srgb, #1c6dd0 35%, transparent)",
   "glow-ambient": "radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, #1c6dd0 12%, transparent), transparent 60%)",
+  "hit-min": "24px",
   "info": "#c3a6ff",
   "info-soft": "rgba(195, 166, 255, 0.14)",
   "mint-400": "#3ddc97",

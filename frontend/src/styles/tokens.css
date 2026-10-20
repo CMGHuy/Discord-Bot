@@ -272,6 +272,12 @@
    * lines up. Grows with --control-h in the touch block below. */
   --row-h: 32px;
 
+  /* v179 §3.4 -- the smallest hit area an interactive control may have.
+     24px is WCAG 2.2's minimum target for a mouse; the touch block below
+     raises it to 44px. Read by the global .sb-hit (styles.css), which pads a
+     control to this size without growing what you see. */
+  --hit-min: 24px;
+
   /* Breakpoints are deliberately NOT tokens: @media cannot evaluate var(),
      so each one would have to be repeated as a literal in every query and
      the two copies would drift silently. They live in ui/breakpoints.ts --
@@ -331,17 +337,22 @@
   :root { --section-gap: var(--space-14); }
 }
 
-/* v80 D3 -- touch. A finger needs about 44px; a mouse row of 28px controls
- * shows more data. `pointer: coarse` catches touch at any width, and 639px
- * (breakpoints.ts's sm floor, less one) catches a narrow window driven by a
- * mouse too. Only these three move: gutters stay put, so this is a
- * hit-target change, not a zoom. 16px control text is also the size below
- * which mobile browsers zoom into a focused field. */
-@media (pointer: coarse), (max-width: 639px) {
+/* v80 D3, widened by v179 §3.4 -- touch, phone AND tablet. A finger needs
+ * about 44px; a mouse row of 28px controls shows more data. `pointer:
+ * coarse` catches touch at any width, and 1023px (breakpoints.ts's md
+ * floor, less one) catches a phone or tablet-width window driven by a mouse
+ * too -- v179 asks for 44px targets on both device classes, and a tablet in
+ * a desktop browser is still held in the hand often enough. Only these four
+ * move: gutters stay put, so this is a hit-target change, not a zoom. 16px
+ * control text is also the size below which mobile browsers zoom into a
+ * focused field. Every component's own touch block uses this exact
+ * condition (ui/hit-area.spec.ts). */
+@media (pointer: coarse), (max-width: 1023px) {
   :root {
     --control-h: 44px;
     --row-h: 44px;
     --text-control: calc(16px * var(--text-scale));
+    --hit-min: 44px;
   }
 }
 
