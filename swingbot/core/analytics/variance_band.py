@@ -23,6 +23,8 @@ import datetime as dt
 from collections import defaultdict
 from dataclasses import dataclass
 
+import numpy as np
+
 from swingbot.core.analytics import metrics
 from swingbot.core.backtesting.instrument import stats
 from swingbot.core.market.session import US_MARKET_TZ
@@ -145,3 +147,120 @@ def zone_of(value: float, p80: float, p95: float) -> str:
 def worse_zone(a: str, b: str) -> str:
     """The later of two zones in ``ZONES`` order."""
     return max(a, b, key=ZONES.index)
+
+
+# --- Week-block path bootstrap -------------------------------------------
+
+
+def week_blocks(days: list[CloseDay]) -> list[np.ndarray]:
+    """Close-day R grouped by the ISO week of the close date.
+
+    ``days`` is in date order (``close_days`` returns it so), so the weeks
+    come out in date order and each week's days stay in date order."""
+    weeks: dict[str, list[float]] = {}
+    for close_day in days:
+        key = stats.iso_week_key(close_day.day.isoformat())
+        weeks.setdefault(key, []).append(close_day.r)
+    return [np.asarray(rs, dtype=float) for rs in weeks.values()]
+
+
+def _week_picks(lengths: np.ndarray, h: int, n_paths: int,
+                rng: np.random.Generator) -> np.ndarray:
+    """Week indices per path, wide enough that every path holds ``h`` days.
+
+    A batch of ``ceil(1.5 * h / mean week length) + 2`` picks per path
+    covers ``h`` almost always; another batch of the same width is appended
+    to every path while any path is still short (deterministic per seed)."""
+    width = int(np.ceil(1.5 * h / lengths.mean())) + 2
+    picks = rng.integers(0, len(lengths), size=(n_paths, width))
+    while (lengths[picks].sum(axis=1) < h).any():
+        more = rng.integers(0, len(lengths), size=(n_paths, width))
+        picks = np.hstack([picks, more])
+    return picks
+
+
+def sample_paths(blocks: list[np.ndarray], h: int, n_paths: int,
+                 rng: np.random.Generator) -> np.ndarray:
+    """``n_paths`` paths of ``h`` close days, each whole weeks drawn with
+    replacement and concatenated; the last week is truncated.
+
+    Vectorised: every picked week is laid out end to end in one flat index
+    array, then each path keeps its first ``h`` entries."""
+    lengths = np.array([len(block) for block in blocks])
+    starts = np.cumsum(lengths) - lengths
+    flat = np.concatenate(blocks)
+    picks = _week_picks(lengths, h, n_paths, rng)
+    pick_lens = lengths[picks]
+    seg_lens = pick_lens.ravel()
+    seg_offsets = np.cumsum(seg_lens) - seg_lens
+    day_index = (np.repeat(starts[picks].ravel() - seg_offsets, seg_lens)
+                 + np.arange(int(seg_lens.sum())))
+    row_lens = pick_lens.sum(axis=1)
+    row_starts = np.cumsum(row_lens) - row_lens
+    take = row_starts[:, None] + np.arange(h)[None, :]
+    return flat[day_index[take]]
+
+
+def path_longest_runs(paths: np.ndarray) -> np.ndarray:
+    """Longest losing run per path: a loss day extends it, a scratch day
+    neither extends nor breaks it, a win day ends it (``current_run``'s rule)."""
+    current = np.zeros(len(paths), dtype=int)
+    best = current.copy()
+    for column in paths.T:
+        current = np.where(column < -SCRATCH_R, current + 1,
+                           np.where(column > SCRATCH_R, 0, current))
+        best = np.maximum(best, current)
+    return best
+
+
+def path_max_drawdowns(paths: np.ndarray) -> np.ndarray:
+    """Maximum drawdown per path in R: running peak of cumulative R (0
+    baseline) minus cumulative R."""
+    cum = np.cumsum(paths, axis=1)
+    peak = np.maximum.accumulate(np.maximum(cum, 0.0), axis=1)
+    return (peak - cum).max(axis=1)
+
+
+def _run_q(values, pct: float) -> int:
+    return int(np.percentile(values, pct, method="higher"))
+
+
+def _dd_q(values, pct: float) -> float:
+    return round(float(np.percentile(values, pct)), 2)
+
+
+def _quantiles(values, outer_p95s, q) -> dict:
+    """p80/p95 of the main draw and the CI_PCT range of the outer p95s."""
+    return {"p80": q(values, ROUGH_PCT), "p95": q(values, OUTSIDE_PCT),
+            "p95_lo": q(outer_p95s, CI_PCT[0]), "p95_hi": q(outer_p95s, CI_PCT[1])}
+
+
+def _outer_p95s(blocks: list[np.ndarray], h: int, outer: int, outer_paths: int,
+                rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    """p95 run and p95 drawdown of ``outer`` resampled week sets."""
+    runs, drawdowns = [], []
+    for _ in range(outer):
+        picks = rng.integers(0, len(blocks), size=len(blocks))
+        inner = sample_paths([blocks[i] for i in picks], h, outer_paths, rng)
+        runs.append(np.percentile(path_longest_runs(inner), OUTSIDE_PCT,
+                                  method="higher"))
+        drawdowns.append(np.percentile(path_max_drawdowns(inner), OUTSIDE_PCT))
+    return np.asarray(runs), np.asarray(drawdowns)
+
+
+def horizon_band(blocks: list[np.ndarray], h: int, *, paths: int = PATHS,
+                 outer: int = OUTER_RESAMPLES, outer_paths: int = OUTER_PATHS,
+                 seed: int = SEED) -> dict:
+    """The band for one horizon: p80/p95 of the longest losing run and of the
+    maximum drawdown over ``h`` close days, with p95's own uncertainty.
+
+    One generator per call: the main draw first, then the outer resamples,
+    so a seed reproduces the whole band. ``outer`` must be at least 1."""
+    rng = np.random.default_rng(seed)
+    main = sample_paths(blocks, h, paths, rng)
+    outer_runs, outer_dds = _outer_p95s(blocks, h, outer, outer_paths, rng)
+    return {
+        "horizon": h,
+        "run": _quantiles(path_longest_runs(main), outer_runs, _run_q),
+        "drawdown": _quantiles(path_max_drawdowns(main), outer_dds, _dd_q),
+    }
