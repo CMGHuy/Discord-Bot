@@ -86,6 +86,21 @@ def _inputs():
     return (["plan-a"], {"a": {"shares": 5}})
 
 
+def _assert_record_shape(record):
+    assert set(record) == RECORD_KEYS
+    assert (record["ledger_id"], record["verdict"]) == (of.LEDGER_ID, ov.COST)
+    assert record["recorded_on"] == FRIDAY.isoformat()
+    assert (record["n"], record["weeks"], record["bar_close_n"]) == (31, 12, 2)
+    assert record["engine_flags"] == FLAGS
+    assert record["rows"] == _costly_rows()
+
+
+def _assert_report_inputs(report):
+    assert report["asof"] == FRIDAY and report["recorded"] is None
+    assert report["currency_symbol"] == config.CURRENCY_SYMBOL
+    assert report["plans"] == ["plan-a"]
+
+
 def test_records_once_with_the_exact_record_shape_and_recorded_on_asof(report, caplog):
     repo, engine = FakeRepo(), FakeEngine()
     with caplog.at_level(logging.WARNING, logger=oio.log.name):
@@ -93,15 +108,8 @@ def test_records_once_with_the_exact_record_shape_and_recorded_on_asof(report, c
                                     repo=repo, engine=engine)
     assert result == oio.RESULT_RECORDED == "recorded"
     (record,) = repo.inserted
-    assert set(record) == RECORD_KEYS
-    assert (record["ledger_id"], record["verdict"]) == (of.LEDGER_ID, ov.COST)
-    assert record["recorded_on"] == FRIDAY.isoformat()
-    assert (record["n"], record["weeks"], record["bar_close_n"]) == (31, 12, 2)
-    assert record["engine_flags"] == FLAGS
-    assert record["rows"] == _costly_rows()
-    assert report["asof"] == FRIDAY and report["recorded"] is None
-    assert report["currency_symbol"] == config.CURRENCY_SYMBOL
-    assert report["plans"] == ["plan-a"]
+    _assert_record_shape(record)
+    _assert_report_inputs(report)
     (conn,) = engine.conns                                # one transaction ...
     assert repo.conns == [conn, conn]                     # ... for the check and the insert
     (warning,) = [r for r in caplog.records if r.levelno == logging.WARNING]

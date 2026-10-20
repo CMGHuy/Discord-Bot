@@ -70,10 +70,7 @@ def test_requires_auth(client):
     assert_error(client.get(_URL), "auth", 401)
 
 
-def test_shape_and_the_bulk_exclusion(api, logged_in):
-    resp = logged_in.get(_URL)
-    assert resp.status_code == 200
-    body = resp.get_json()
+def _assert_header_and_rows(body):
     assert set(body) == PAYLOAD_KEYS
     assert (body["asof"], body["currency_symbol"]) == ("2026-10-19", "$")
     assert body["engine_flags"] == {"stall_exit_enabled": False, "runner_structure_exit": "off"}
@@ -82,17 +79,30 @@ def test_shape_and_the_bulk_exclusion(api, logged_in):
     assert all(set(r) == ROW_KEYS for r in body["rows"])
     by_id = {r["plan_id"]: r for r in body["rows"]}
     assert (by_id["b"]["bulk"], by_id["a"]["bulk"]) == (True, False)
-    summary = body["summary"]
+
+
+def _assert_bulk_excluded_summary(summary):
     assert (summary["bulk_n"], summary["bulk_dates"]) == (1, {"2026-10-08": 1})
     assert summary["counted_n"] == 1                                  # bulk shown, never summed
     assert sum(summary["n_by_status"].values()) == 1                  # eligible rows only
     assert "sum_delta_r_gross" in summary
-    verdict = body["verdict"]
+
+
+def _assert_waiting_verdict(verdict):
     assert set(verdict) == VERDICT_KEYS
     assert (verdict["state"], verdict["recorded"], verdict["recorded_on"]) == ("WAITING", False, None)
     assert (verdict["mean_delta_r"], verdict["ci"], verdict["sum_delta_r"]) == (None, None, None)
     assert verdict["waiting_on"] == ["count", "weeks"]                # 1 row, 1 week
     assert verdict["bar_close_n"] == 0                                # a's stamp is a quote
+
+
+def test_shape_and_the_bulk_exclusion(api, logged_in):
+    resp = logged_in.get(_URL)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    _assert_header_and_rows(body)
+    _assert_bulk_excluded_summary(body["summary"])
+    _assert_waiting_verdict(body["verdict"])
 
 
 def test_dollars_sit_beside_every_r_figure(api, logged_in):

@@ -266,6 +266,17 @@ def _bars_fn(calls):
     return bars_fn
 
 
+def _assert_row_contract(out):
+    assert [r["plan_id"] for r in out["rows"]] == ["b", "d", "a"]   # newest close first
+    assert set(of.ROW_FIELDS) == ROW_KEYS                       # V173-7's row contract
+    assert all(set(r) == ROW_KEYS for r in out["rows"])
+    by_id = {r["plan_id"]: r for r in out["rows"]}
+    assert by_id["d"]["status"] == "unreplayable"
+    assert by_id["b"]["bulk"] is True
+    assert by_id["a"]["delta_usd"] is not None and by_id["b"]["delta_usd"] is None
+    assert by_id["a"]["delta_r_gross"] is not None
+
+
 def test_report_payload_shape(monkeypatch):
     monkeypatch.setattr(stats, "week_cluster_bootstrap", _no_bootstrap)
     calls = []
@@ -275,14 +286,7 @@ def test_report_payload_shape(monkeypatch):
     assert (out["asof"], out["currency_symbol"]) == ("2026-10-19", "$")
     assert out["engine_flags"] == FLAGS == ov.engine_flags()
     assert sorted(calls) == ["AAA", "BAD", "BBB"]               # once per ticker
-    assert [r["plan_id"] for r in out["rows"]] == ["b", "d", "a"]   # newest close first
-    assert set(of.ROW_FIELDS) == ROW_KEYS                       # V173-7's row contract
-    assert all(set(r) == ROW_KEYS for r in out["rows"])
-    by_id = {r["plan_id"]: r for r in out["rows"]}
-    assert by_id["d"]["status"] == "unreplayable"
-    assert by_id["b"]["bulk"] is True
-    assert by_id["a"]["delta_usd"] is not None and by_id["b"]["delta_usd"] is None
-    assert by_id["a"]["delta_r_gross"] is not None
+    _assert_row_contract(out)
     assert out["summary"]["bulk_dates"] == {"2026-10-08": 1}
     assert set(out["verdict"]) == VERDICT_KEYS
     assert out["verdict"]["state"] == "WAITING"
