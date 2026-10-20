@@ -23,14 +23,14 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
-from swingbot.core.backtesting.instrument import contract, costs
+from swingbot.core.backtesting.instrument import contract, costs, fills
 from swingbot.core.market.session import RTH_OPEN, US_MARKET_TZ, nyse_calendar, session_close
 from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.marketdata import adjustments
 from swingbot.core.planning import exit_sim
 from swingbot.core.planning.exit_sim import ExitResult
 from swingbot.core.planning.exit_sim_v2 import fill_bar_exit, walk_v2
-from swingbot.core.planning.plan_types import PlanStatus
+from swingbot.core.planning.plan_types import PlanStatus, breakeven_trigger
 from swingbot.core.planning.time_exit import TIME_EXIT_REASON
 
 #: The terminal reasons of a manual close; "manual_bulk" rows are shown, never summed.
@@ -581,10 +581,11 @@ def _still_open(plan, eng: ExitResult, rp: _Replay) -> bool:
 def _status(plan, rp: _Replay, asof: dt.date) -> tuple[str, ExitResult | None]:
     """The row's status after _prepare, and the engine-frame result when resolved.
 
-    The real frame decides parity and ambiguity only (its tp1_index is read
+    The real frame decides parity and ambiguity (its tp1_index is read
     straight from engine_path's result, see _engine_arm); the engine arm is
     the clamped engine frame, so the engine never sees the override
-    session's range as a later path."""
+    session's range as a later path. V173-23: state the real override bar
+    gives the walk and the clamped bar lacks is ambiguous too."""
     early = _admission(plan, rp, asof)
     if early is not None:
         return early, None
@@ -596,6 +597,8 @@ def _status(plan, rp: _Replay, asof: dt.date) -> tuple[str, ExitResult | None]:
     if _ambiguous(real, rp.ov_idx):
         return "ambiguous", None
     eng = _engine_arm(plan, rp)
+    if bar_state_differs(plan, real, eng, rp.df, rp.ov_idx, rp.state):
+        return "ambiguous", None
     if _still_open(plan, eng, rp):
         return "open", None
     return "resolved", eng
@@ -701,3 +704,44 @@ def _stale(plan, rp: _Replay, asof: dt.date) -> bool:
         return True
     close = _close_session(plan)
     return close is not None and close > last
+
+
+# --------------------------------------------------------------------------
+# V173-23: state the real override bar gives the walk and the clamped engine
+# frame lacks (plan panel review). Breakeven arming is a local in
+# exit_sim_v2._pre_tp1_v2 and leaves no trace in ExitResult, so it is
+# recomputed; anything else shows as a difference between the two results,
+# because the frames differ only in that bar's high and low. Reads bars
+# fill_idx + 1 .. ov_idx only, never a later one.
+# --------------------------------------------------------------------------
+
+def be_armed(plan, high: float, low: float) -> bool:
+    """walk_v2's breakeven trigger touched by a bar with this high and low."""
+    trigger = breakeven_trigger(plan, float(plan.entry_price))
+    return fills.target_touched(high, low, trigger, plan.direction)
+
+
+def _bar_hl(df: pd.DataFrame, j: int) -> tuple[float, float]:
+    return float(df["High"].iloc[j]), float(df["Low"].iloc[j])
+
+
+def _be_only_on_real_bar(plan, df: pd.DataFrame, fill_idx: int, ov_idx: int) -> bool:
+    """The real override bar arms breakeven, the clamped one does not, and no
+    bar since the fill had armed it already."""
+    if any(be_armed(plan, *_bar_hl(df, j)) for j in range(fill_idx + 1, ov_idx)):
+        return False
+    clamped = engine_frame(df, ov_idx)
+    return (be_armed(plan, *_bar_hl(df, ov_idx))
+            and not be_armed(plan, *_bar_hl(clamped, ov_idx)))
+
+
+def bar_state_differs(plan, real: ExitResult, engine: ExitResult, df: pd.DataFrame,
+                      ov_idx: int, state: str) -> bool:
+    """Rule A: an ACTIVE plan armed only by the real override bar, the engine
+    still in after it. Rule B: the real frame exits after the override bar
+    and the two results differ."""
+    if (state == "ACTIVE" and engine.exit_index > ov_idx
+            and _be_only_on_real_bar(plan, df, real.entry_index, ov_idx)):
+        return True
+    return real.exit_index > ov_idx and (real.r_total != engine.r_total
+                                         or real.legs != engine.legs)
