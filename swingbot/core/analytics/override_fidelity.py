@@ -672,6 +672,18 @@ def trim_to_asof(df: pd.DataFrame, asof: dt.date) -> pd.DataFrame:
     return df.loc[df.index.normalize() <= pd.Timestamp(asof)]
 
 
+def replay_slice(plan, bars: pd.DataFrame | None, asof: dt.date) -> pd.DataFrame | None:
+    """The bars the replay walks for `plan`: its fill session through `asof`,
+    after the same trim. None when the frame cannot place the fill."""
+    if bars is None or len(bars) == 0:
+        return None
+    settled = trim_to_asof(bars, asof)
+    try:
+        return settled.iloc[_fill_index(plan, settled):]
+    except _Unreplayable:
+        return None
+
+
 def missing_sessions(df: pd.DataFrame | None, start: dt.date) -> list[dt.date]:
     """NYSE sessions from `start` to the frame's last bar that the frame lacks."""
     if df is None or len(df) == 0:

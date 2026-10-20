@@ -52,14 +52,18 @@ def stored_verdict(repo=None) -> dict | None:
 
 
 def _evaluate(asof: date, inputs_fn, bars_fn) -> dict | None:
-    """The stored record when the floors hold, else None."""
+    """The stored record when the floors hold, else None. The bar cache the
+    replay read is kept so the record can hash the bars each row walked."""
     plans, trades = inputs_fn()
-    report = ov.build_report(plans, trades, bars_fn, asof, None, config.CURRENCY_SYMBOL)
+    bars: dict = {}
+    report = ov.build_report(plans, trades, bars_fn, asof, None, config.CURRENCY_SYMBOL,
+                             cache=bars)
     if not report["verdict"]["evaluable"]:
         return None
     verdict = ov.evaluate_verdict(report["rows"])
     return ov.verdict_record(verdict, ov.counted(report["rows"]), report["engine_flags"],
-                             recorded_on=asof)
+                             recorded_on=asof, asof=asof, engine_config=ov.engine_config(),
+                             plans=plans, bars=bars)
 
 
 def run_daily_check(now: datetime, *, inputs_fn=None, bars_fn=None, repo=None,

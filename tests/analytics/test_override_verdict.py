@@ -1,7 +1,11 @@
 """v173 §4: the frozen verdict rule, the stored record and its jsonl mirror,
 the payload (never evaluates) and build_report."""
+import ast
+import hashlib
 import json
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -21,7 +25,14 @@ EVAL_KEYS = {"state", "n", "weeks", "mean_delta_r", "mean_delta_r_gross", "ci",
              "sum_delta_r", "sum_delta_usd", "bar_close_n", "excluded_share"}
 RECORD_KEYS = {"ledger_id", "verdict", "recorded_on", "n", "weeks", "mean_delta_r",
                "mean_delta_r_gross", "ci", "sum_delta_r", "sum_delta_usd", "bar_close_n",
-               "excluded_share", "engine_flags", "rows"}
+               "excluded_share", "engine_flags", "rows",
+               "asof", "engine_config", "engine_config_sha256", "bars_last_date"}
+REPO = Path(__file__).resolve().parents[2]
+#: The exit engine the replay walks: exit_sim_v2.walk_v2 / fill_bar_exit, the
+#: exit_sim helpers they call, and the replay module itself.
+ENGINE_ROOTS = ("swingbot/core/planning/exit_sim.py", "swingbot/core/planning/exit_sim_v2.py",
+                "swingbot/core/analytics/override_fidelity.py")
+_CONFIG_READ = re.compile(r"config\.([A-Z][A-Z0-9_]+)|getattr\(\s*config\s*,\s*[\"']([A-Z0-9_]+)")
 VERDICT_KEYS = {"state", "n", "needed", "weeks", "week_floor", "open_n", "excluded_share",
                 "evaluable", "waiting_on", "recorded", "recorded_on", "mean_delta_r",
                 "mean_delta_r_gross", "ci", "sum_delta_r", "sum_delta_usd", "bar_close_n"}
@@ -50,9 +61,16 @@ def cost_rows(**kw):
     return spread(30, 10, lambda w: -0.5 + 0.02 * w, **kw)
 
 
+def record_of(verdict, rows, *, plans=(), bars=None, asof=RECORDED_ON):
+    """verdict_record with the live engine snapshot; synthetic rows have no plan."""
+    return ov.verdict_record(verdict, rows, FLAGS, recorded_on=RECORDED_ON, asof=asof,
+                             engine_config=ov.engine_config(), plans=plans,
+                             bars={} if bars is None else bars)
+
+
 def cost_record():
     rows = cost_rows(usd=-10.0)
-    return ov.verdict_record(ov.evaluate_verdict(rows), rows, FLAGS, recorded_on=RECORDED_ON)
+    return record_of(ov.evaluate_verdict(rows), rows)
 
 
 def _no_bootstrap(*_a, **_k):
@@ -173,7 +191,7 @@ def test_dict_rows_evaluate_like_override_rows():
 def test_the_record_has_the_stored_shape():
     rows = cost_rows(usd=-10.0) + [row(bulk=True), row(status="stale", plan_id="s")]
     verdict = ov.evaluate_verdict(rows)
-    record = ov.verdict_record(verdict, rows, FLAGS, recorded_on=RECORDED_ON)
+    record = record_of(verdict, rows, asof=date(2027, 2, 26))
     assert set(record) == RECORD_KEYS
     assert (record["ledger_id"], record["verdict"], record["recorded_on"]) == (
         "v173-override-fidelity", "COST", "2027-03-01")
@@ -181,15 +199,149 @@ def test_the_record_has_the_stored_shape():
                 "sum_delta_usd", "bar_close_n", "excluded_share"):
         assert record[key] == verdict[key]
     assert record["engine_flags"] == FLAGS
+    _assert_provenance(record)
+    assert json.loads(json.dumps(record, allow_nan=False)) == record   # JSONB-ready
+
+
+def _assert_provenance(record):
+    """The widened fields (panel review, 2026-10-20) on synthetic, plan-less rows."""
+    assert record["asof"] == "2027-02-26"
+    assert record["engine_config"] == ov.engine_config()
+    assert record["engine_config_sha256"] == ov.config_sha256(ov.engine_config())
+    assert record["bars_last_date"] == {"T": None}               # no cache frame for T
     assert [r["plan_id"] for r in record["rows"]] == [f"p{i}" for i in range(30)]
-    assert all(set(r) == ROW_KEYS for r in record["rows"])
-    assert json.loads(json.dumps(record)) == record              # JSONB-ready
+    assert all(set(r) == ROW_KEYS | {"bars_sha256"} for r in record["rows"])
+    assert all(r["bars_sha256"] is None for r in record["rows"])  # no plan to place
 
 
 @pytest.mark.parametrize("verdict", [{"state": "WAITING"}, {"state": "OPEN"}, {}])
 def test_only_an_evaluated_outcome_is_recorded(verdict):
     with pytest.raises(ValueError):
-        ov.verdict_record(verdict, [], FLAGS, recorded_on=RECORDED_ON)
+        record_of(verdict, [])
+
+
+# -- the exit-engine config snapshot ---------------------------------------------------
+
+def _module_file(module: str) -> Path | None:
+    path = REPO / Path(*module.split("."))
+    for candidate in (path.with_suffix(".py"), path / "__init__.py"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _imported_modules(tree: ast.AST, package: str) -> set[str]:
+    """Every swingbot module an ImportFrom names, relative ones resolved."""
+    names = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        base = f"{package}.{node.module}" if node.level else (node.module or "")
+        names.add(base)
+        names.update(f"{base}.{alias.name}" for alias in node.names)
+    return {name for name in names if name.startswith("swingbot.")}
+
+
+def _engine_files() -> set[Path]:
+    """The engine roots and every swingbot module they import (one level)."""
+    files = set()
+    for root in ENGINE_ROOTS:
+        path = REPO / root
+        package = ".".join(Path(root).with_suffix("").parts[:-1])
+        files.add(path)
+        imported = _imported_modules(ast.parse(path.read_text(encoding="utf-8")), package)
+        files.update(f for f in map(_module_file, imported) if f is not None)
+    return {f for f in files if f.name != "__init__.py" and f != REPO / "swingbot/config.py"}
+
+
+def _config_reads(path: Path) -> set[str]:
+    return {a or b for a, b in _CONFIG_READ.findall(path.read_text(encoding="utf-8"))}
+
+
+def test_the_snapshot_holds_every_config_name_the_exit_engine_reads():
+    files = _engine_files()
+    assert REPO / "swingbot/core/planning/lifecycle.py" in files      # the scan reached imports
+    read = set().union(*map(_config_reads, files))
+    assert {"RUNNER_HL_TRAIL_ATR_BUFFER", "RUNNER_STALL_RANGE_MAX", "RUNNER_GIVEBACK_PCT"} <= read
+    missing = read - set(ov.engine_config())
+    assert not missing, f"engine_config() misses config the exit engine reads: {sorted(missing)}"
+
+
+def test_the_snapshot_carries_the_module_level_giveback_basis(monkeypatch):
+    from swingbot.core.planning import exit_sim
+    assert ov.engine_config()["exit_sim.GIVEBACK_EXTREME_BASIS"] == exit_sim.GIVEBACK_EXTREME_BASIS
+    monkeypatch.setattr(exit_sim, "GIVEBACK_EXTREME_BASIS", "high_low")
+    assert ov.engine_config()["exit_sim.GIVEBACK_EXTREME_BASIS"] == "high_low"
+
+
+def test_the_snapshot_keeps_the_flag_values_and_is_json_ready():
+    snapshot = ov.engine_config()
+    flags = ov.engine_flags()
+    assert snapshot["STALL_EXIT_ENABLED"] is flags["stall_exit_enabled"]
+    assert snapshot["RUNNER_STRUCTURE_EXIT"] == flags["runner_structure_exit"]
+    assert json.loads(json.dumps(snapshot, allow_nan=False)) == snapshot
+
+
+def test_the_config_hash_is_stable_and_moves_with_any_engine_setting(monkeypatch):
+    first = ov.config_sha256(ov.engine_config())
+    assert first == ov.config_sha256(dict(reversed(list(ov.engine_config().items()))))
+    canonical = json.dumps(ov.engine_config(), sort_keys=True, separators=(",", ":"))
+    assert first == hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    monkeypatch.setattr(config, "RUNNER_HL_TRAIL_ATR_BUFFER", 0.25)
+    assert ov.config_sha256(ov.engine_config()) != first
+
+
+# -- the bars each counted row was replayed on ----------------------------------------
+
+def _replayed_a(bars):
+    p = plan(plan_id="a", ticker="AAA")
+    replayed = of.replay_override(p, bars, LAST_DAY, None)
+    assert replayed.status == "resolved"
+    return p, replayed
+
+
+def _stored_row(bars):
+    p, replayed = _replayed_a(bars)
+    record = record_of(ov.evaluate_verdict(cost_rows()), [replayed], plans=[p],
+                       bars={"AAA": bars}, asof=LAST_DAY)
+    (stored,) = record["rows"]
+    return record, stored
+
+
+def test_a_counted_row_stores_its_delta_and_the_hash_of_its_fill_to_asof_bars():
+    bars = frame({19: STOP_BAR})
+    p, replayed = _replayed_a(bars)
+    record, stored = _stored_row(bars)
+    assert (stored["plan_id"], stored["delta_r"]) == ("a", replayed.delta_r)
+    walked = of.replay_slice(p, bars, LAST_DAY)
+    assert (walked.index[0].date(), walked.index[-1].date()) == (date(2026, 10, 5), LAST_DAY)
+    assert stored["bars_sha256"] == ov.frame_sha256(walked)
+    assert (record["asof"], record["bars_last_date"]) == ("2026-10-19", {"AAA": "2026-10-19"})
+
+
+def test_the_bar_hash_moves_with_a_walked_bar_only():
+    _, base = _stored_row(frame({19: STOP_BAR}))
+    _, warm = _stored_row(frame({19: STOP_BAR, 3: (99.0, 99.5, 98.5, 99.0)}))
+    _, walked = _stored_row(frame({19: STOP_BAR, 20: (96.0, 97.0, 95.5, 96.5)}))
+    later, after = _stored_row(frame({19: STOP_BAR}, n=27))
+    assert warm["bars_sha256"] == base["bars_sha256"]          # before the fill
+    assert after["bars_sha256"] == base["bars_sha256"]         # after asof: trimmed
+    assert walked["bars_sha256"] != base["bars_sha256"]
+    assert later["bars_last_date"] == {"AAA": "2026-10-20"}    # the cache's own last bar
+
+
+def test_the_frame_hash_is_sha256_of_the_canonical_bar_json():
+    bars = frame()
+    expected = json.dumps({"columns": ["Open", "High", "Low", "Close", "Volume"],
+                           "bars": [[stamp.isoformat(), *map(float, values)]
+                                    for stamp, values in zip(bars.index, bars.to_numpy())]},
+                          separators=(",", ":"), allow_nan=False)
+    assert ov.frame_sha256(bars) == hashlib.sha256(expected.encode("utf-8")).hexdigest()
+
+
+def test_an_unplaceable_fill_stores_no_bar_hash():
+    assert of.replay_slice(plan(plan_id="a", fill_at=None), frame(), LAST_DAY) is None
+    assert of.replay_slice(plan(plan_id="a"), None, LAST_DAY) is None
 
 
 def test_the_mirror_row_is_a_valid_ledger_line(tmp_path):
@@ -290,6 +442,12 @@ def test_report_payload_shape(monkeypatch):
     assert out["summary"]["bulk_dates"] == {"2026-10-08": 1}
     assert set(out["verdict"]) == VERDICT_KEYS
     assert out["verdict"]["state"] == "WAITING"
+
+
+def test_report_fills_the_bar_cache_its_caller_hands_it():
+    cache = {}
+    ov.build_report(_book(), {}, _bars_fn([]), LAST_DAY, None, "$", cache=cache)
+    assert set(cache) == {"AAA", "BBB", "BAD"} and cache["BAD"] is None
 
 
 def test_report_shows_the_stored_record(monkeypatch):

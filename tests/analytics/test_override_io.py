@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import pytest
 
 from swingbot import config
@@ -17,7 +18,10 @@ FRIDAY_SLOT = datetime(2026, 12, 4, 23, 50, tzinfo=BERLIN)     # after the 16:00
 FRIDAY = date(2026, 12, 4)
 RECORD_KEYS = {"ledger_id", "verdict", "recorded_on", "n", "weeks", "mean_delta_r",
                "mean_delta_r_gross", "ci", "sum_delta_r", "sum_delta_usd", "bar_close_n",
-               "excluded_share", "engine_flags", "rows"}
+               "excluded_share", "engine_flags", "rows",
+               "asof", "engine_config", "engine_config_sha256", "bars_last_date"}
+AAPL_BARS = pd.DataFrame({"Open": [1.0], "High": [1.0], "Low": [1.0], "Close": [1.0]},
+                         index=pd.DatetimeIndex(["2026-12-04"]))
 FLAGS = {"stall_exit_enabled": True, "runner_structure_exit": "off"}
 
 
@@ -70,9 +74,10 @@ def report(monkeypatch):
     """Replace build_report; record its arguments; evaluable unless told otherwise."""
     seen = {}
 
-    def fake(plans, trades, bars_fn, asof, recorded, currency_symbol):
+    def fake(plans, trades, bars_fn, asof, recorded, currency_symbol, *, cache=None):
         seen.update(plans=plans, trades=trades, bars_fn=bars_fn, asof=asof,
                     recorded=recorded, currency_symbol=currency_symbol)
+        cache["AAPL"] = AAPL_BARS                   # the frame the replay read
         return {"rows": seen.get("rows", _costly_rows()), "summary": {},
                 "verdict": {"evaluable": seen.get("evaluable", True)},
                 "engine_flags": FLAGS, "asof": asof.isoformat(),
@@ -92,7 +97,10 @@ def _assert_record_shape(record):
     assert record["recorded_on"] == FRIDAY.isoformat()
     assert (record["n"], record["weeks"], record["bar_close_n"]) == (31, 12, 2)
     assert record["engine_flags"] == FLAGS
-    assert record["rows"] == _costly_rows()
+    assert record["engine_config"] == ov.engine_config()
+    assert record["engine_config_sha256"] == ov.config_sha256(ov.engine_config())
+    assert (record["asof"], record["bars_last_date"]) == ("2026-12-04", {"AAPL": "2026-12-04"})
+    assert record["rows"] == [{**r, "bars_sha256": None} for r in _costly_rows()]  # no plan
 
 
 def _assert_report_inputs(report):
@@ -122,7 +130,7 @@ def test_asof_is_the_latest_completed_session_not_the_wall_date(report):
     repo = FakeRepo()
     oio.run_daily_check(before_close, inputs_fn=_inputs, repo=repo, engine=FakeEngine())
     assert report["asof"] == date(2026, 12, 3)
-    assert repo.inserted[0]["recorded_on"] == "2026-12-03"
+    assert repo.inserted[0]["recorded_on"] == repo.inserted[0]["asof"] == "2026-12-03"
 
 
 def test_waiting_when_the_floors_do_not_hold_and_nothing_is_inserted(report, caplog):
@@ -182,7 +190,7 @@ def test_only_counted_rows_are_stored(report):
     report["rows"] = _costly_rows() + [bulk]
     repo = FakeRepo()
     oio.run_daily_check(FRIDAY_SLOT, inputs_fn=_inputs, repo=repo, engine=FakeEngine())
-    assert bulk not in repo.inserted[0]["rows"]
+    assert "p40" not in {r["plan_id"] for r in repo.inserted[0]["rows"]}
     assert len(repo.inserted[0]["rows"]) == 31
 
 
