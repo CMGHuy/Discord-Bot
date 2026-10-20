@@ -43,7 +43,17 @@ episodes per idea, closes exactly the frozen definition.
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+- V174-9 final integrated-branch full suite: 11,857 passed, 4 skipped, 0 failed, 0 xfailed; the six narrow post-merge files passed.
+- `screen-bond_spike_rebound`: `SCREEN-FAIL`, N = 9,118, ΔExpR +0.1731R, lower 95% bound −0.0946R; `docs/superpowers/results/2026-10-20-screen-bond_spike_rebound.md`.
+- `screen-dollar_drop`: `SCREEN-FAIL`, N = 9,895, ΔExpR +0.0937R, lower 95% bound −0.0751R; `docs/superpowers/results/2026-10-20-screen-dollar_drop.md`.
+- Both failures close only their frozen definitions; neither licenses a follow-on `Edge: expectancy` filter spec. A future `SCREEN-PASS` would license a spec, not a trading verdict.
+- The one-time TLT/UUP byte pin is `docs/superpowers/results/2026-10-18-v174-context-hashes.json`; both screen runs used those bytes.
+
+## Close-out panel
+
+- `quant-researcher`: two ADVISORY wording findings on the restricted-null comparison and SPY selloff split — applied in the renderer and both results documents; every published number and ledger row stayed fixed.
+- `quant-engineer`: one ADVISORY finding on extra context dates changing row-offset returns — applied as a load refusal with a focused test. The frozen TLT/UUP files each have zero extra and zero missing dates against SPY in the screen window, so the closed measurements are unaffected.
+- `technical-analyst`: CLEAN. No unresolved BLOCKING finding.
 
 ## Where to work
 
