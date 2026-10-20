@@ -37,10 +37,12 @@ export interface OutcomeTile {
   costCaption: boolean;
   stale: boolean;
   indicator: StripIndicator | null;
+  /** v171 D2: age of the price this tile shows; null for tiles that show none. */
+  ageS: number | null;
 }
 
 function tile(id: string, label: string, value: string, extras: Partial<OutcomeTile> = {}): OutcomeTile {
-  return { id, label, value, sub: null, tone: null, costCaption: false, stale: false, indicator: null, ...extras };
+  return { id, label, value, sub: null, tone: null, costCaption: false, stale: false, indicator: null, ageS: null, ...extras };
 }
 
 function joined(parts: (string | null)[]): string | null {
@@ -79,7 +81,7 @@ function openTiles(ctx: StripContext): OutcomeTile[] {
   const stale = t.current_price_stale === true;
   const tiles = [
     tile('price', 'Price', num(current), {
-      stale, sub: `to stop ${pct(pctFrom(current, t.stop_loss ?? null))} · to T1 ${pct(pctFrom(current, t.target ?? null))}`,
+      stale, ageS: t.price_age_s ?? null, sub: `to stop ${pct(pctFrom(current, t.stop_loss ?? null))} · to T1 ${pct(pctFrom(current, t.target ?? null))}`,
     }),
     tile('unrealised', 'Unrealised', signed(t.realized_pnl_amount), {
       stale, tone: outcomeTone(t.r_multiple ?? null), costCaption: true,

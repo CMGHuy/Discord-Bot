@@ -41,6 +41,7 @@ import { outcomeTiles } from './outcome-tiles';
 import { sideLabel, statusGroup, StatusGroup } from './trade-figures';
 
 import { PlanCard, PlanFigures } from './plan-card';
+import { quoteLine } from './quote-line';
 import { PositionCard, PositionFigures } from './position-card';
 import { OutcomeCard } from './outcome-card';
 
@@ -627,6 +628,7 @@ export class TradeDetail {
       tp1Pct: this.store.tp1Pct(), breakevenTriggerPct: this.store.breakevenTriggerPct(),
       trailAtrMult: this.store.trailAtrMult(), expiresOn: this.store.expiresOn(),
       timeExitOn: this.store.timeExitOn(), holdCapBars: this.store.holdCapBars(),
+      alertPrice: quoteLine(this.store.detail()?.quote ?? null),
     };
   });
   protected readonly outcomeGroup: Signal<StatusGroup> = computed(() =>

@@ -16,6 +16,7 @@ import { PreferencesStore } from '../../stores/preferences.store';
 import { TapeStore } from '../../stores/tape.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
+import { AgeHint, PAGE_PRICE_WINDOW_S } from '../../ui/age-hint';
 import { Chip } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
@@ -166,7 +167,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline, AgeHint],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -402,6 +403,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
     <ng-template #priceCell let-row>
       <span class="price">{{ num(row.price) }}</span>
       <span class="as-of">{{ text(row.as_of) }}</span>
+      <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="pageWindowS" />
       <!-- v106: only the exception is flagged -- Alpaca missed and yfinance
            answered. An Alpaca or plain-yfinance price stays quiet. -->
       @if (row.price_source === 'yfinance-fallback') {
@@ -562,6 +564,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
 })
 export class Watchlist {
   private readonly router = inject(Router);
+  protected readonly pageWindowS = PAGE_PRICE_WINDOW_S;
   protected readonly store = inject(WatchlistStore);
   private readonly preferences = inject(PreferencesStore);
   protected readonly tape = inject(TapeStore);

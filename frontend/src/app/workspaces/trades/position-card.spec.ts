@@ -39,4 +39,11 @@ describe('PositionCard', () => {
     expect(el.querySelector('.section-help')?.textContent).toContain('Position size is snapshotted when the trade opens. A trade with no sizing snapshot was logged before that feature existed.');
     expect(el.querySelector('sb-chip')).toBeNull();
   });
+
+  it('shows the alert price line when the page passes one, n/a included', () => {
+    const row = (alertPrice: string) => positionRows({ ...base, alertPrice }).find(r => r.label === 'Alert price');
+    expect(row('n/a')?.value).toBe('n/a');
+    expect(row('Live trade, 2.4 s to post')?.value).toBe('Live trade, 2.4 s to post');
+    expect(positionRows(base).some(r => r.label === 'Alert price')).toBe(false);
+  });
 });

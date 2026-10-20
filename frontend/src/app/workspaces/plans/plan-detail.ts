@@ -14,6 +14,7 @@ import { asyncInputs, Async } from '../../ui/async';
 import { QualityChip } from '../../ui/chip';
 import { dateTime, text } from '../../ui/format';
 import { StatusIndicator } from '../../ui/status-indicator';
+import { quoteLine } from '../trades/quote-line';
 import { IfItGetsThere } from '../trades/why/if-it-gets-there';
 import { LevelsBlock } from '../trades/why/levels-block';
 import { OutcomePath } from '../trades/why/outcome-path';
@@ -118,6 +119,7 @@ export function timingLines(t: PlanTiming): string[] {
           @if (createdAt(); as at) {
             <span class="created">created {{ fmtDate(at) }}</span>
           }
+          <span class="created">Alert price: {{ quoteLine(store.detail()?.quote ?? null) }}</span>
         </div>
         @for (line of timing(); track line) {
           <p class="timing">{{ line }}</p>
@@ -280,6 +282,7 @@ export class PlanDetail {
   protected readonly sections = WHY_SECTIONS;
 
   protected readonly fmtText = text;
+  protected readonly quoteLine = quoteLine;
   protected readonly fmtDate = dateTime;
 
   /** Same rule as the trade page: a PARTIAL plan's stop is the runner's. */
