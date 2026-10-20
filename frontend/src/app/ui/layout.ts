@@ -71,19 +71,36 @@ import { isInline } from './priority';
       border-radius: var(--panel-radius);
       overflow: hidden;
     }
+    /* v179 §3.3/§3.4 -- one header height and one baseline on every panel.
+       At least one control tall (plus padding and the 1px rule, border-box),
+       so a header holding only its label and one holding a button or a
+       segmented control are the same height. The label, an N= count, an
+       action and the hint glyph sit on the text BASELINE -- centring put an
+       11px label 2-3px off a 14px button's text. align-content centres that
+       one line inside the minimum height; it needs flex-wrap to act, and
+       wrapping also lets the actions drop below the label on a narrow panel
+       rather than squeeze it. */
     header {
       display: flex;
-      align-items: center;
+      flex-wrap: wrap;
+      align-items: baseline;
+      align-content: center;
       justify-content: space-between;
-      gap: var(--space-10);
+      gap: var(--space-6) var(--space-10);
+      min-height: calc(var(--control-h) + 2 * var(--space-10) + 1px);
       padding: var(--space-10) var(--space-14);
       border-bottom: 1px solid var(--border);
     }
     /* Typography is the global .sb-label (v80 D3); only the UA margin is
        this component's business. */
     h2 { margin: 0; }
-    .actions { display: flex; align-items: center; gap: var(--space-8); }
+    .actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
     .body { padding: var(--space-14); }
+    /* v179 §3.3 -- one gap to the first row: the body's padding, never the
+       padding plus whatever top margin the first projected element brings
+       (a <p>, a <dl>, a nested heading). .panel > .body is this component's
+       own structure, so the reach is exactly one level. */
+    :host ::ng-deep .panel > .body > :first-child { margin-top: 0; }
     /* Tables draw their own edge-to-edge padding. */
     .flush { padding: 0; }
     .panel-digest { margin: 0; padding: var(--space-10) var(--space-14); color: var(--text-secondary); font-size: var(--text-table); }
@@ -287,10 +304,14 @@ export class TabBar {
  * differed by 4px in height. `--control-h` and the checkbox's top label fixed
  * the controls; this fixes the container.
  *
- * **`flex-end`, and the reason matters.** A labelled control is label-band +
- * control-band; a bare button is control-band only. Aligning on the BOTTOM
- * edge is the only rule under which both land on the same line, whatever the
- * label does above it.
+ * **`last baseline`, and the reason matters** (v179 §3.4; it was
+ * `flex-end`). A labelled control is label-band + control-band; a bare
+ * button is control-band only. Both END in a --control-h control with its
+ * text centred, so their last baselines coincide exactly where their bottom
+ * edges did -- the two still land on one line whatever the label does above.
+ * Unlike `flex-end`, a plain text item in the row (the Versions "Running
+ * now" label, a count, an N=) now sits on the controls' text line instead
+ * of on their bottom border.
  *
  * Flexbox already aligns per-line when wrapping — `align-items` applies within
  * each flex line, not across the container — so a wrapped second line aligns
@@ -312,7 +333,7 @@ export class TabBar {
     :host { display: block; }
     .row {
       display: flex;
-      align-items: flex-end;
+      align-items: last baseline;
       align-content: flex-start;
       flex-wrap: wrap;
       gap: var(--space-10);

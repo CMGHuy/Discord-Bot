@@ -253,3 +253,57 @@ describe('sb-tab-bar narrow widths', () => {
     expect(SOURCE).toMatch(/\.tab\.iconed \.count \{ display: inline; \}/);
   });
 });
+
+/** One component's styles: the source between its selector and its class. */
+function stylesOf(selector: string, className: string): string {
+  return SOURCE.slice(SOURCE.indexOf(`selector: '${selector}'`), SOURCE.indexOf(`export class ${className}`));
+}
+const ruleIn = (styles: string, selector: string) =>
+  styles.match(new RegExp(`(?:^|\\n)\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+describe('sb-panel header: one height, one baseline (v179 §3.3, §3.4)', () => {
+  const PANEL = stylesOf('sb-panel', 'Panel');
+
+  it('aligns label, counts, actions and hint on the text baseline, never their centres', () => {
+    const header = ruleIn(PANEL, 'header');
+    expect(header).toContain('align-items: baseline');
+    expect(header).not.toContain('align-items: center');
+    expect(ruleIn(PANEL, '.actions')).toContain('align-items: baseline');
+  });
+
+  it('gives every header one minimum height and centres its line in it', () => {
+    const header = ruleIn(PANEL, 'header');
+    expect(header).toContain('min-height: calc(var(--control-h) + 2 * var(--space-10) + 1px)');
+    expect(header).toContain('flex-wrap: wrap');
+    expect(header).toContain('align-content: center');
+  });
+
+  it('keeps one gap between the header and the first row of the body', () => {
+    expect(PANEL).toContain(':host ::ng-deep .panel > .body > :first-child { margin-top: 0; }');
+    expect(ruleIn(PANEL, '.body')).toContain('padding: var(--space-14)');
+  });
+
+  it('renders the actions slot inside the header, beside the label', () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(Panel);
+    f.componentRef.setInput('heading', 'Exposure');
+    f.detectChanges();
+    const header = (f.nativeElement as HTMLElement).querySelector('header')!;
+    expect([...header.children].map((child) => child.tagName.toLowerCase() + '.' + child.className))
+      .toEqual(['h2.sb-label', 'div.actions']);
+  });
+});
+
+describe('sb-control-row on the last baseline (v179 §3.4)', () => {
+  const ROW = stylesOf('sb-control-row', 'ControlRow');
+
+  it('aligns controls and plain text on one text line', () => {
+    const row = ruleIn(ROW, '.row');
+    expect(row).toContain('align-items: last baseline');
+    expect(row).not.toContain('flex-end');
+  });
+
+  it('still stacks below 640px', () => {
+    expect(ROW).toMatch(/@media \(max-width: 639px\) \{\s*\.row \{ flex-direction: column; align-items: stretch; \}/);
+  });
+});
