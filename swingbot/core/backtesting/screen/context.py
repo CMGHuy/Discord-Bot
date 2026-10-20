@@ -107,14 +107,18 @@ def check_raw_index(index: pd.Index, name: str) -> None:
 
 def check_contiguous(index: pd.DatetimeIndex, sessions: pd.DatetimeIndex,
                      name: str) -> None:
-    """Every SPY session is a bar of the context frame, so the 5-row
-    offset of r5 is a 5-session offset."""
+    """Context bars match SPY sessions, so r5's row offset is a session offset."""
     missing = sessions.difference(index)
     if len(missing):
         raise ContextError(
             f"{name}: {len(missing)} SPY session(s) missing between "
             f"{sessions[0]:%Y-%m-%d} and {sessions[-1]:%Y-%m-%d}, "
             f"first {missing[0]:%Y-%m-%d}")
+    extra = index.difference(sessions)
+    if len(extra):
+        raise ContextError(
+            f"{name}: {len(extra)} extra bar date(s) absent from SPY sessions, "
+            f"first {extra[0]:%Y-%m-%d}; row offsets must follow SPY sessions")
 
 
 def check_z_coverage(z: pd.Series, sessions: pd.DatetimeIndex, name: str, *,

@@ -230,7 +230,14 @@ def test_a_tz_aware_csv_read_raw_is_refused(tmp_path):
 
 def test_contiguity_passes_when_every_session_is_present():
     sessions = pd.bdate_range("2009-06-01", periods=40)
-    context.check_contiguous(sessions.union(pd.DatetimeIndex(["2009-06-06"])), sessions, "TLT")
+    context.check_contiguous(sessions, sessions, "TLT")
+
+
+def test_an_extra_date_outside_spy_sessions_is_refused():
+    sessions = pd.bdate_range("2009-06-01", periods=40)
+    bars = sessions.union(pd.DatetimeIndex(["2009-06-06"]))
+    with pytest.raises(context.ContextError, match=r"TLT: 1 extra.*2009-06-06"):
+        context.check_contiguous(bars, sessions, "TLT")
 
 
 def test_a_missing_spy_session_is_refused_and_named():

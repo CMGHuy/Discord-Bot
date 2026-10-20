@@ -239,7 +239,7 @@ def test_render_prints_all_six_diagnostics():
                    "### 5. Multiple comparisons", "### 6. Scope",
                    "5 shock days in 3 episodes", "4 distinct ISO entry weeks",
                    "undercovers", "Restricted null not run",
-                   "| < 0 | 1 |", "| >= 0 | 4 |", "mean-reversion effect",
+                   "| < 0 | 1 |", "| >= 0 | 4 |", "consistent with a SPY selloff confound",
                    "BH q = 0.0421 across the `screen-v1` family",
                    "closes exactly this frozen definition"):
         assert needle in text, needle
@@ -260,6 +260,7 @@ def test_render_prints_the_restricted_delta_when_the_pass_ran():
     text = "\n".join(_rendered(restricted))
     assert "at least 10 sessions from any shock day" in text
     assert "ΔExpR +0.1500R" in text and "N = 2" in text
+    assert "gap combines changes to the null pool and retained event population" in text
 
 
 def test_render_prints_n_a_without_a_screen_q():

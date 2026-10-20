@@ -207,8 +207,7 @@ def _render_overlap(overlap) -> list:
             "sessions from any shock day (same seed, K and cap; an event left with fewer "
             f"than 5 candidates drops out): ΔExpR {_fmt(v.delta_exp_r)}R, 95% "
             f"week-clustered interval {_fmt(v.ci_low)}R to {_fmt(v.ci_high)}R, N = {v.n}. "
-            "The gap shows how far pre-shock and post-shock null races moved the "
-            "official figure."]
+            "This gap combines changes to the null pool and retained event population."]
 
 
 def _split_row(label: str, v) -> str:
@@ -228,8 +227,9 @@ def _render_selloff(selloff) -> list:
             "|---|---|---|---|",
             _split_row("< 0", selloff["down"]), _split_row(">= 0", selloff["up"]), "",
             f"Kept events with no SPY 5-day return at their signal day: "
-            f"{selloff['undefined']}. A pass carried by the < 0 half is a mean-reversion "
-            "effect, not an intermarket one."]
+            f"{selloff['undefined']}. A lift concentrated in the < 0 half is "
+            "consistent with a SPY selloff confound; this split alone cannot "
+            "establish the mechanism or exclude an intermarket contribution."]
 
 
 def _render_concentration(conc) -> list:
