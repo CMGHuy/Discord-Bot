@@ -490,3 +490,58 @@ describe('v168 §1: motion tokens', () => {
     expect(resolveToken('--motion-scale')).toBe('1');
   });
 });
+
+/**
+ * v179 §3.4 / §6b.6: no text-size token falls below 11px, even at the 90%
+ * zoom preference (shell.ts ZOOM_CHOICES), while every size above the floor
+ * still scales with --text-scale. The 9.9px labels the audit found were
+ * --text-micro at 90%; the floor lives inside the token, as max(11px, ...).
+ */
+describe('v179: the 11px text floor', () => {
+  /** Every size token: a --text-* declaration whose value reads --text-scale
+   *  (the colour tokens --text-muted/--text-secondary/... never do). */
+  const SIZE = /^\s*(--text-[a-z]+):\s*(.*var\(--text-scale\).*);/gm;
+  const sizes = [...CSS.matchAll(SIZE)].map((m) => ({ name: m[1], value: m[2].trim() }));
+
+  /** Pixels at `scale` for `calc(Npx * var(--text-scale))`, optionally
+   *  wrapped in `max(Fpx, ...)`. */
+  function px(value: string, scale: number): number {
+    const base = Number(value.match(/calc\((\d+(?:\.\d+)?)px \* var\(--text-scale\)\)/)![1]) * scale;
+    const floor = value.match(/^max\((\d+)px,/);
+    return floor ? Math.max(Number(floor[1]), base) : base;
+  }
+
+  it('finds the size tokens', () => {
+    expect(sizes.map((s) => s.name)).toEqual(expect.arrayContaining(['--text-micro', '--text-chip', '--text-table']));
+  });
+
+  it.each([0.9, 1, 1.1, 1.25])('keeps every size token at or above 11px at scale %s', (scale) => {
+    const below = sizes
+      .filter((s) => px(s.value, scale) < 11)
+      .map((s) => `${s.name}=${px(s.value, scale)}px`);
+    expect(below).toEqual([]);
+  });
+
+  it('floors the two tokens that could fall below it, inside the token', () => {
+    expect(CSS).toMatch(/^\s*--text-micro:\s*max\(11px, calc\(11px \* var\(--text-scale\)\)\);/m);
+    expect(CSS).toMatch(/^\s*--text-chip:\s*max\(11px, calc\(12px \* var\(--text-scale\)\)\);/m);
+  });
+
+  it('still grows a floored token above 100%', () => {
+    const micro = sizes.find((s) => s.name === '--text-micro')!;
+    expect(px(micro.value, 1.25)).toBeCloseTo(13.75);
+  });
+
+  it('reaches jsdom through the regenerated fixture', () => {
+    expect(resolveToken('--text-micro')).toBe('max(11px, calc(11px * 1))');
+    expect(resolveToken('--text-chip')).toBe('max(11px, calc(12px * 1))');
+  });
+});
+
+/** v179 §3.3: every numeric value uses one tabular face, named once. */
+describe('v179: one numeric face', () => {
+  it('declares --font-num as the mono family', () => {
+    expect(CSS).toMatch(/^\s*--font-num:\s*var\(--font-mono\);/m);
+    expect(resolveToken('--font-num')).toBe(resolveToken('--font-mono'));
+  });
+});

@@ -193,6 +193,11 @@
    */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  /* v179 §3.3 -- the one face for every numeric value (.num, stat values,
+     key/value figures). Mono, tabular: digits align down a column. Named
+     separately from --font-mono so a figure says "I am a number", not "I am
+     code", and the two can part later without a sweep. */
+  --font-num: var(--font-mono);
 
   /* The shell's "Text" control multiplies this, and the scale is the ONLY
    * thing it touches.
@@ -211,8 +216,13 @@
      end, and this is the anchor every step multiplies from -- raising it
      here moves 100% (and, proportionally, 90/110/125%) together rather than
      special-casing one step. */
-  --text-micro: calc(11px * var(--text-scale));      /* micro-label */
-  --text-chip: calc(12px * var(--text-scale));      /* chip */
+  /* v179 §6b.6 -- an 11px floor inside the two tokens the 90% zoom step
+     would push below it (9.9px and 10.8px). Zoom still scales every size
+     above the floor; a zoomed-out view fits more, but never drops its
+     smallest labels below legibility. tokens.spec.ts checks every size
+     token at 90/100/110/125%. */
+  --text-micro: max(11px, calc(11px * var(--text-scale)));  /* micro-label */
+  --text-chip: max(11px, calc(12px * var(--text-scale)));   /* chip */
   --text-table: calc(13px * var(--text-scale));     /* table body */
   --text-body: calc(14px * var(--text-scale));      /* body */
   --text-control: calc(14px * var(--text-scale));   /* form-control text; 16px on touch, below */

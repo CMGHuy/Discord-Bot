@@ -58,7 +58,7 @@ body {
  * price table scannable. Applied by class rather than by element so a
  * label inside a numeric cell can opt back out. */
 .num {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
 }
 
