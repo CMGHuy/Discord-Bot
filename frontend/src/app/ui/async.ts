@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 
+import { FreshRequestService } from '../api/fresh-request.service';
 import { EmptyStateComponent } from './empty-state';
 
 /** Which empty this is. Not optional -- see the class comment. */
@@ -41,7 +42,7 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
     @if (error(); as message) {
       <div class="failed" role="alert">
         <p class="failed-text">{{ message }}</p>
-        <button class="retry" type="button" (click)="retry.emit()">Retry</button>
+        <button class="retry" type="button" (click)="onRetry()">Retry</button>
       </div>
     } @else if (loading()) {
       <div class="skeleton" aria-hidden="true">
@@ -153,6 +154,15 @@ export class Async {
   readonly announce = input<string | null>(null);
 
   readonly retry = output<void>();
+
+  private readonly fresh = inject(FreshRequestService);
+
+  /** v171 D2: Retry is each page's own refresh control, so the reload it
+   *  triggers fetches fresh market data instead of reusing the cache. The
+   *  parent's handler runs synchronously inside emit(). */
+  protected onRetry(): void {
+    this.fresh.markFresh(() => this.retry.emit());
+  }
 
   protected readonly rows = computed(() => Array.from({ length: this.skeletonRows() }));
   protected readonly cols = computed(() => Array.from({ length: this.skeletonCols() }));

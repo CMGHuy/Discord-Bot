@@ -19,6 +19,7 @@ import { provideServiceWorker } from '@angular/service-worker';
 import {
   authInterceptor,
   errorInterceptor,
+  freshInterceptor,
   loadingInterceptor,
   routeRefreshInterceptor,
 } from './api/interceptors';
@@ -72,10 +73,12 @@ export const appConfig: ApplicationConfig = {
     //             ApiError, never an HttpErrorResponse;
     //   loading   is FIRST, so its finalize() wraps the entire lifetime,
     //             including the time the other two spend on the way back.
+    //   fresh     is innermost: it only adds a header on the way out and never
+    //             sees a response, so its position changes nothing else.
     // Swapping auth and error would silently break 401 detection: auth would
     // be matching `status === 401` against an ApiError that no longer is one.
     provideHttpClient(
-      withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor]),
+      withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor, freshInterceptor]),
     ),
     // Answer "who am I" BEFORE the app bootstraps. Angular waits on the
     // returned promise, so App never renders in the 'unknown' state -- which
