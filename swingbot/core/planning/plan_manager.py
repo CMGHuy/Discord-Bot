@@ -9,6 +9,8 @@ gap-aware fills (Task 67) handle the overnight case."""
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import NamedTuple
@@ -403,9 +405,48 @@ def _holding_cap(plan) -> int | None:
     return min(cap, int(hold)) if hold is not None else cap
 
 
+# v171 D8: one forming-bar refresh per ticker per 60 s tick, shared by
+# _daily_frame, _live_atr and _bars_since (the scan's basis and frame).
+_SHARED_DAILY: dict = {}
+_SHARED_DAILY_LOCK = threading.Lock()
+_SHARED_DAILY_TTL_S = 60.0
+_clock = time.monotonic                     # test seam
+
+
+def _shared_daily(ticker):
+    """The cached closed bars plus the refreshed forming bar, memoised for one
+    tick; None when the delta path has no frame (spot metals, a cold miss)."""
+    from swingbot.core.marketdata import daily_delta
+    key = ticker.upper()
+    with _SHARED_DAILY_LOCK:
+        hit = _SHARED_DAILY.get(key)
+        if hit is not None and _clock() - hit[0] < _SHARED_DAILY_TTL_S:
+            return hit[1].copy()
+    try:
+        frame = daily_delta.delta_update([ticker], asker=Asker.STOP_MONITOR).get(key)
+    except Exception as exc:  # noqa: BLE001 - any provider/cache error degrades to the cache
+        log.debug("plan_manager: delta_update failed for %s: %s", ticker, exc)
+        return daily_delta.read_daily(ticker)
+    if frame is None or frame.empty:
+        return None
+    with _SHARED_DAILY_LOCK:
+        _SHARED_DAILY[key] = (_clock(), frame)
+    return frame.copy()
+
+
+def _manager_daily(ticker):
+    """The one daily-frame source for the manager's helpers. Flag off (or no
+    shared frame) -> today's 2y download, which raises on no data."""
+    from swingbot.core.marketdata import data
+    if config.DAILY_DELTA_FETCH:
+        frame = _shared_daily(ticker)
+        if frame is not None and not frame.empty:
+            return frame
+    return data.get_daily_data(ticker)
+
+
 def _daily_frame(ticker):
-    from swingbot.core.marketdata.data import get_daily_data
-    return get_daily_data(ticker)
+    return _manager_daily(ticker)
 
 
 class PlanManager:
@@ -1489,9 +1530,8 @@ _DEFAULT_PRICE_FN = _price_fn
 
 
 def _live_atr(ticker):
-    from swingbot.core.marketdata.data import get_daily_data
     from swingbot.core.market.indicators import atr
-    df = get_daily_data(ticker)
+    df = _manager_daily(ticker)
     return float(atr(df, 14).iloc[-1])
 
 
@@ -1505,8 +1545,7 @@ def _session_wall_clock(stamp):
 
 
 def _bars_since(ticker, created_at):
-    from swingbot.core.marketdata.data import get_daily_data
-    index = get_daily_data(ticker).index
+    index = _manager_daily(ticker).index
     if index.tz is not None:
         index = index.tz_localize(None)
     return int((index > _session_wall_clock(created_at)).sum())
