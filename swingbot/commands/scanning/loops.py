@@ -712,6 +712,7 @@ _recap_fired_date: dt.date | None = None   # process-local fast path; persisted 
 _weekend_scan_fired_date: dt.date | None = None
 _earnings_refresh_fired_date: dt.date | None = None
 _gate_resolve_fired_date: dt.date | None = None
+_override_verdict_fired_date: dt.date | None = None
 
 
 def _scheduled_job_already_fired(job: str, today: dt.date) -> bool:
@@ -989,6 +990,39 @@ async def gate_counterfactual_resolve():
         log.exception("gate_counterfactual_resolve: resolver failed")
 
 
+@tasks.loop(minutes=1)
+async def override_verdict_check():
+    """v173: the one evaluation of the override-fidelity pre-registration, checked
+    once per weekday at SESSION_END_HOUR:50 Berlin (after the US close and the
+    resolver's :45 slot). Off the event loop (`asyncio.to_thread`).
+
+    The scheduled_jobs marker is written before the work (as in
+    gate_counterfactual_resolve), so a failure is not retried until the next
+    weekday. It only throttles this tick: whether a verdict is written twice is
+    decided by the preregistration_verdicts primary key inside run_daily_check,
+    which returns "already recorded" before any replay once a row exists. The
+    marker calls sit inside the try so a database outage is logged, never raised
+    (an escaping exception would stop this loop until a restart)."""
+    global _override_verdict_fired_date
+    now = dt.datetime.now(SESSION_TZ)
+    if now.weekday() > 4 or now.hour != config.SESSION_END_HOUR or now.minute < 50:
+        return
+    today = now.date()
+    if _override_verdict_fired_date == today:
+        return
+    try:
+        if _scheduled_job_already_fired('override_verdict_check', today):
+            _override_verdict_fired_date = today
+            return
+        _override_verdict_fired_date = today
+        _mark_scheduled_job_fired('override_verdict_check', today)
+        from swingbot.core.analytics import override_io
+        result = await asyncio.to_thread(override_io.run_daily_check, now)
+        log.info("override_verdict_check: %s", result)
+    except Exception:
+        log.exception("override_verdict_check: daily check failed")
+
+
 @tasks.loop(minutes=config.MARKET_DATA_REFRESH_MINUTES)
 async def market_data_refresh():
     """
@@ -1105,7 +1139,7 @@ def _always_on_loops() -> tuple:
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
             weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
             pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
-            next_session_wrapup)
+            next_session_wrapup, override_verdict_check)
 
 
 def _start_background_loops() -> None:
