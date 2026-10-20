@@ -150,6 +150,13 @@ describe('override-fidelity-panel.ts styles', () => {
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
   });
 
+  it('swaps the nine-column table for cards at tablet width, so the delta never scrolls off', () => {
+    // Measured at 768px: the table scrolled sideways and hid the delta column.
+    const q = src.match(/@media\(max-width:1023px\)\{([^@]*?\}\})/)?.[1] ?? '';
+    expect(q).toContain('.table-wrap{display:none}');
+    expect(q).toContain('.cards{display:grid}');
+  });
+
   it('sets the caption at body size in the secondary text colour, never clipped', () => {
     const rule = src.match(/\.caption\{([^}]*)\}/)?.[1] ?? '';
     expect(rule).toContain('font-size:var(--text-body)');
