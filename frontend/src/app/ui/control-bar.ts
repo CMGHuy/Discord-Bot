@@ -55,9 +55,13 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
       min-width: var(--control-h);
     }
     /* At phone width the two groups stack rather than compete for one row.
-       Nothing is hidden — the plan forbids a control that vanishes silently. */
-    @media (max-width: 640px) {
+       Nothing is hidden — the plan forbids a control that vanishes silently.
+       v179 §3.3: the filter selects become two equal columns, so five selects
+       read as a 2-2-1 grid instead of a ragged 2 + 3 wrap at three widths.
+       639px, not 640: 640 is the first tablet width (BREAKPOINTS.sm). */
+    @media (max-width: 639px) {
       .bar { flex-direction: column; align-items: stretch; }
+      .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
       .scope { justify-content: flex-start; }
     }
   `,

@@ -36,6 +36,10 @@ export interface FilterChip {
   `,
   styles: `
     :host { display: block; padding: var(--space-10) 0; container: filter-bar / inline-size; }
+    /* v179: with nothing projected and nothing active the bar has nothing to
+       say, so it takes no room -- it used to keep its padding and sit between
+       two section gaps (~60px of blank above Trades' table). */
+    :host:has(> .bar:empty) { display: none; }
     .bar { display: flex; align-items: flex-end; align-content: flex-start; flex-wrap: wrap; gap: var(--space-10); }
     .summary { display: inline-flex; align-items: center; gap: var(--space-8); margin-left: auto; }
     .active { color: var(--text-secondary); font-size: var(--text-table); }
@@ -95,19 +99,22 @@ export class FilterBar {
     </div>
   `,
   styles: `
+    :host { display: block; min-width: 0; max-width: 100%; }
     .chips { display: flex; gap: var(--space-4); flex-wrap: wrap; }
     .chip {
       display: inline-flex;
       align-items: center;
       gap: var(--space-6);
+      flex: 0 0 auto;
       min-height: var(--control-h);
-      padding: var(--space-4) var(--space-10);
+      padding: 0 var(--space-10);
       background: transparent;
       border: 1px solid var(--border);
       border-radius: var(--chip-radius);
       color: var(--text-secondary);
       font: inherit;
       font-size: var(--text-table);
+      white-space: nowrap;
       cursor: pointer;
       transition: color var(--transition), border-color var(--transition);
     }
@@ -116,6 +123,11 @@ export class FilterBar {
     /* Selection is interactive state, which is what blue is for. */
     .active { color: var(--text); border-color: var(--accent); background: var(--surface-raised); }
     .count { color: var(--text-muted); font-size: var(--text-chip); }
+    /* v179 chips */
+    @media (max-width: 639px) {
+      :host { flex: 1 1 100%; }
+      .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+    }
   `,
 })
 export class FilterChips {
