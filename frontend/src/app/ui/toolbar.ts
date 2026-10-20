@@ -113,6 +113,11 @@ export interface ToolbarControl {
     @container toolbar (max-width: 639px) {
       .toolbar-sheet.open { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
+    /* Share the phone flex row with the projected controls: a boxed inline
+       wrapper keeps Filters below Columns after chips fill their own line. */
+    @media (max-width: 639px) {
+      .toolbar-inline { display: contents; }
+    }
     .active-dot::after { content: attr(data-count); color: var(--accent); }
   `,
 })
