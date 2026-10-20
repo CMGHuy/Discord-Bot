@@ -12,6 +12,7 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from swingbot.core.marketdata.providers.base import (
     NY, to_alpaca_symbol, to_yf_daily, to_yf_hourly)
+from swingbot.core.marketdata.shared.kinds import QuoteDetail
 
 log = logging.getLogger(__name__)
 
@@ -98,10 +99,11 @@ class AlpacaProvider:
                 raise AlpacaAuthError(str(exc)) from exc
             raise AlpacaMiss(str(exc)) from exc
 
-    def _bars(self, tickers, timeframe, start):
+    def _bars(self, tickers, timeframe, start, end=None):
+        latest = self._now() - SIP_DELAY
         by_symbol = {to_alpaca_symbol(t): t for t in tickers}
         req = StockBarsRequest(symbol_or_symbols=list(by_symbol), timeframe=timeframe,
-                               start=start, end=self._now() - SIP_DELAY,
+                               start=start, end=latest if end is None else min(end, latest),
                                feed=DataFeed.SIP, adjustment=Adjustment.ALL)
         raw = self._call("get_stock_bars", req, self._bars_client) or {}
         return {by_symbol[s]: df for s, df in _frames_from_raw(raw).items() if s in by_symbol}
@@ -109,6 +111,13 @@ class AlpacaProvider:
     def daily_bars(self, tickers, period):
         now = self._now()
         raw = self._bars(tickers, TimeFrame.Day, _start_for(period, now))
+        return {t: to_yf_daily(df) for t, df in raw.items() if not df.empty}
+
+    def daily_bars_between(self, tickers, start, end):
+        """v171 D4: daily bars dated start..end (inclusive), SIP, Adjustment.ALL."""
+        lo = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
+        hi = datetime(end.year, end.month, end.day, tzinfo=timezone.utc) + timedelta(days=1)
+        raw = self._bars(tickers, TimeFrame.Day, lo, hi)
         return {t: to_yf_daily(df) for t, df in raw.items() if not df.empty}
 
     def intraday_bars(self, ticker, interval):
@@ -150,6 +159,38 @@ class AlpacaProvider:
         if _in_regular_session(now) and (now - trade.timestamp).total_seconds() > max_age_s:
             return None
         return float(trade.price)
+
+    def _quote_sides(self, snap):
+        """(bid, ask, quote_at) from the snapshot's latest quote; a missing or
+        non-positive side is None, and quote_at is None unless both sides exist."""
+        quote = getattr(snap, "latest_quote", None)
+        if quote is None:
+            return None, None, None
+        bid = float(quote.bid_price) if quote.bid_price and quote.bid_price > 0 else None
+        ask = float(quote.ask_price) if quote.ask_price and quote.ask_price > 0 else None
+        return bid, ask, (quote.timestamp if bid and ask else None)
+
+    def _detail(self, ticker, snap, now, max_age_s):
+        price = self._fresh_price(snap, now, max_age_s)
+        bid, ask, quote_at = self._quote_sides(snap)
+        if price is None and quote_at is None:
+            return None
+        trade_at = snap.latest_trade.timestamp if price is not None else None
+        return QuoteDetail(symbol=ticker, price=price, trade_at=trade_at, bid=bid, ask=ask,
+                           quote_at=quote_at, source=f"alpaca-{self._live_feed.value}")
+
+    def latest_quotes(self, tickers, max_trade_age_s):
+        """v171: latest_prices with timestamps and the IEX bid/ask. One snapshot call."""
+        by_symbol = {to_alpaca_symbol(t): t for t in tickers}
+        req = StockSnapshotRequest(symbol_or_symbols=list(by_symbol), feed=self._live_feed)
+        snaps = self._call("get_stock_snapshot", req) or {}
+        now = self._now()
+        out = {}
+        for sym, snap in snaps.items():
+            detail = self._detail(by_symbol[sym], snap, now, max_trade_age_s) if sym in by_symbol else None
+            if detail is not None:
+                out[detail.symbol] = detail
+        return out
 
     def latest_prices(self, tickers, max_trade_age_s):
         by_symbol = {to_alpaca_symbol(t): t for t in tickers}

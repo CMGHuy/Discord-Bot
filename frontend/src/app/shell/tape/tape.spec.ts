@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { MarketIndexStore } from '../../stores/market-index.store';
+import { ConnectionStore } from '../../stores/connection.store';
 import { TapeStore } from '../../stores/tape.store';
 import { Tape } from './tape';
 
@@ -16,6 +17,7 @@ describe('Tape', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([]),
+        { provide: ConnectionStore, useValue: { marketActive: () => true } },
         { provide: MarketIndexStore, useValue: { rows: () => indexRows, asOf: () => null, load: () => undefined } },
         { provide: TapeStore, useValue: {
           rows: () => stockRows, asOf: () => asOf,
@@ -66,5 +68,28 @@ describe('Tape', () => {
       .nativeElement as HTMLElement;
     expect(el.textContent).toContain('ZZZZ');
     expect(el.textContent).toContain('no price');
+  });
+
+  const proxy = { symbol: '^GSPC', price: null, change_pct: 0.42, is_proxy: true, proxy_symbol: 'SPY', age_s: 20 };
+
+  it('labels a proxy row and shows its change only, never a level (v171 D7)', () => {
+    const el = setup([proxy], []).nativeElement as HTMLElement;
+    const tile = el.querySelector('.tile')!;
+    expect(tile.querySelector('.sym')?.textContent).toBe('S&P 500');
+    expect(tile.querySelector('.ctx.proxy')?.textContent?.trim()).toBe('SPY proxy');
+    expect(tile.textContent).toContain('+0.42%');
+    expect(tile.querySelector('.px')).toBeNull();
+    expect(tile.textContent).not.toContain('no price');
+  });
+
+  it('shows the age of a value older than the tape window', () => {
+    const el = setup([{ ...index, age_s: 240 }], []).nativeElement as HTMLElement;
+    expect(el.querySelector('.tile .age-hint')?.textContent?.trim()).toBe('4 min ago');
+  });
+
+  it('shows no age inside the window, nor when the server sends none (flag off)', () => {
+    expect((setup([{ ...index, age_s: 30 }], []).nativeElement as HTMLElement).querySelector('.age-hint')).toBeNull();
+    TestBed.resetTestingModule();
+    expect((setup([index], []).nativeElement as HTMLElement).querySelector('.age-hint')).toBeNull();
   });
 });

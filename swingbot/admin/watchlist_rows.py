@@ -114,6 +114,8 @@ def _empty_row() -> dict:
     return {
         "price": None,
         "price_source": None,
+        "price_age_s": None,
+        "price_as_of": None,
         "as_of": None,
         "change_1d_pct": None,
         "change_1w_pct": None,
@@ -146,6 +148,14 @@ def _cached_daily(ticker: str) -> pd.DataFrame | None:
         return None
 
 
+def _cold_frames(cold: list[str]) -> dict:
+    """Frames for symbols the warm cache lacks: the shared layer when on, else today's batch."""
+    from swingbot.admin import freshness
+    if freshness.layer_on():
+        return freshness.page_daily(cold, period="6mo")
+    return get_daily_data_batch(cold, period="6mo")
+
+
 def build_market_rows(tickers: list[str]) -> dict[str, dict]:
     """Price, changes and a 30-bar sparkline for every ticker, keyed by symbol.
 
@@ -160,12 +170,58 @@ def build_market_rows(tickers: list[str]) -> dict[str, dict]:
     cold = [t for t, df in cached.items() if df is None]
     # Still one batch call, never one per row -- just for whichever subset
     # (often none, in steady state) the warm cache didn't already cover.
-    fetched = get_daily_data_batch(cold, period="6mo") if cold else {}
+    fetched = _cold_frames(cold) if cold else {}
     frames = {**{t: df for t, df in cached.items() if df is not None}, **fetched}
 
-    live = _live_overlay(tickers)
-    return {symbol: _market_row(symbol, frames.get(symbol), live.get(symbol))
+    live, quotes = _overlay(tickers)
+    return {symbol: _stamp(_market_row(symbol, frames.get(symbol), live.get(symbol)),
+                           quotes.get(symbol))
             for symbol in tickers}
+
+
+def _overlay(tickers: list[str]):
+    """(live prices, their quotes). Layer off/count: today's overlay, no quotes."""
+    from swingbot.admin import freshness
+    if not freshness.layer_on():
+        return _live_overlay(tickers), {}
+    return _layer_overlay(tickers)
+
+
+def _layer_overlay(tickers: list[str]):
+    """v171: prices from the shared quote cache, cache-only on the request
+    (the under-1-second contract); symbols missing or older than the page's
+    window (every symbol on a fresh reload) warm in the background."""
+    from swingbot.admin import freshness
+    if not is_us_market_active():
+        return {}, {}
+    entries = freshness.cached_quotes(list(tickers))
+    window = freshness.page_window_s()
+    stale = [t for t in tickers if t not in entries or entries[t].age_s() > window]
+    if stale:
+        freshness.warm_quotes_background(stale)
+    quotes = {t: e.value for t, e in entries.items() if e.value.price}
+    return {t: q.price for t, q in quotes.items()}, quotes
+
+
+_SOURCE_PREFIXES = (("alpaca", "alpaca"), ("yfinance", "yfinance"))
+
+
+def _quote_provider(source: str) -> str | None:
+    """Today's price_source values for a layer quote's source label."""
+    for prefix, name in _SOURCE_PREFIXES:
+        if source.startswith(prefix):
+            return name
+    return None
+
+
+def _stamp(row: dict, quote) -> dict:
+    """Age and provider of the layer quote behind a row's live price."""
+    if quote is None or row["price"] is None:
+        return row
+    from swingbot.admin import freshness
+    row["price_age_s"], row["price_as_of"] = freshness.quote_age(quote)
+    row["price_source"] = _quote_provider(quote.source)
+    return row
 
 
 def _live_overlay(tickers: list[str]) -> dict[str, float]:

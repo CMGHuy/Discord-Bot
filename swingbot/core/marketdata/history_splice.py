@@ -14,7 +14,7 @@ import logging
 import pandas as pd
 
 from swingbot.core.marketdata.adjustments import (
-    _ADJUSTMENT_MISMATCH_TOLERANCE, _MIN_OVERLAP_BARS)
+    ADJUSTMENT_MISMATCH_TOLERANCE, MIN_OVERLAP_BARS)
 
 log = logging.getLogger(__name__)
 
@@ -28,17 +28,17 @@ def _comparable(live, cached) -> bool:
 
 
 def _bases_agree(live, cached) -> bool:
-    """True only when >= _MIN_OVERLAP_BARS shared bars have closes within the
+    """True only when >= MIN_OVERLAP_BARS shared bars have closes within the
     corporate-action tolerance (median ratio): a split/dividend rescales the
     whole history, so an unproven or disagreeing basis must not be spliced."""
     common = live.index.intersection(cached.index)
-    if len(common) < _MIN_OVERLAP_BARS:
+    if len(common) < MIN_OVERLAP_BARS:
         return False
     ratios = (live.loc[common, "Close"] / cached.loc[common, "Close"]).dropna()
     ratios = ratios[ratios > 0]
     if ratios.empty:
         return False
-    return abs(float(ratios.median()) - 1.0) <= _ADJUSTMENT_MISMATCH_TOLERANCE + 1e-9
+    return abs(float(ratios.median()) - 1.0) <= ADJUSTMENT_MISMATCH_TOLERANCE + 1e-9
 
 
 def _refusal(live, cached) -> str | None:

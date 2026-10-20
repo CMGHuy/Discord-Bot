@@ -570,6 +570,24 @@ async def _resend_plan_notices() -> None:
 
 
 async def _live_price_batch(tickers: list) -> dict:
+    """Fresh-only live prices for the trade monitor, or {} on failure (see
+    _legacy_live_price_batch). v171: count/on use plan_manager.monitor_quotes,
+    the fetch the plan manager's tick then reuses from the shared cache."""
+    if not tickers:
+        return {}
+    if config.MARKETDATA_LAYER == "off":
+        return await _legacy_live_price_batch(tickers)
+    from swingbot.core.planning import plan_manager
+    try:
+        quotes = await asyncio.to_thread(plan_manager.monitor_quotes, tickers)
+    except Exception as exc:
+        swallowed(log, "scan.loops.monitor_prices", exc,
+                  "trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        return {}
+    return {t: q.price for t, q in quotes.items() if q.price}
+
+
+async def _legacy_live_price_batch(tickers: list) -> dict:
     """Fresh-only live prices for the trade monitor, or {} on failure.
 
     One Yahoo request for the whole open book avoids a serial minute-history
@@ -711,6 +729,9 @@ async def _trade_monitor_error(exc: Exception):
 _recap_fired_date: dt.date | None = None   # process-local fast path; persisted below for restart safety
 _weekend_scan_fired_date: dt.date | None = None
 _earnings_refresh_fired_date: dt.date | None = None
+_reanchor_fired_date: dt.date | None = None
+_REANCHOR_CHUNK = 30       # 10 Alpaca requests of 3 symbols per chunk
+_REANCHOR_PAUSE_S = 10.0   # one chunk per 10 s stays inside the 150/min budget at tier 4's 25 % reserve
 _gate_resolve_fired_date: dt.date | None = None
 _override_verdict_fired_date: dt.date | None = None
 
@@ -966,6 +987,46 @@ async def weekly_earnings_refresh():
 
 
 @tasks.loop(minutes=1)
+async def daily_reanchor():
+    """v171 D4 backstop: weekly full re-fetch of both daily caches, outside session.
+
+    Catches an adjustment (split, dividend) the daily anchor somehow missed. Runs
+    on the VM in the first tick of REANCHOR_HOUR on REANCHOR_WEEKDAY (Berlin); a
+    restart inside that hour still runs it, once per date. Stays after the
+    per-part flags are removed (spec Rollout)."""
+    global _reanchor_fired_date
+    if not config.DAILY_DELTA_FETCH:
+        return
+    now = dt.datetime.now(SESSION_TZ)
+    if now.weekday() != config.REANCHOR_WEEKDAY or now.hour != config.REANCHOR_HOUR:
+        return
+    today = now.date()
+    if _reanchor_fired_date == today or _scheduled_job_already_fired('daily_reanchor', today):
+        return
+    _reanchor_fired_date = today
+    _mark_scheduled_job_fired('daily_reanchor', today)
+    await _run_reanchor()
+
+
+async def _run_reanchor() -> None:
+    from swingbot.core.marketdata import daily_delta, spot_metals
+    from swingbot.core.marketdata.shared.kinds import Asker
+    symbols = spot_metals.cache_symbols(load_watchlist())
+    chunks = [symbols[i:i + _REANCHOR_CHUNK] for i in range(0, len(symbols), _REANCHOR_CHUNK)]
+    done = 0
+    for n, chunk in enumerate(chunks):
+        if n:
+            await asyncio.sleep(_REANCHOR_PAUSE_S)
+        try:
+            await asyncio.to_thread(daily_delta.full_refetch, chunk, asker=Asker.BACKGROUND)
+            done += len(chunk)
+        except Exception as exc:
+            swallowed(log, "scan.loops.reanchor_chunk", exc, "daily_reanchor: chunk %d/%d failed",
+                      n + 1, len(chunks), level=logging.ERROR, exc_info=True)
+    log.info("daily_reanchor: re-anchored %d/%d symbol(s)", done, len(symbols))
+
+
+@tasks.loop(minutes=1)
 async def gate_counterfactual_resolve():
     """v147: resolve expired `gate_rejections` rows once per weekday at SESSION_END_HOUR:45 Berlin.
 
@@ -1136,12 +1197,40 @@ async def pitr_watch_loop():
         await notices.send_guarded(channel, notices.pitr_notice_embed(notice), what="PITR alarm")
 
 
+_TAPE_FEED_MAX_AGE_S = 30.0
+
+
+def _tape_feed_tick() -> None:
+    from swingbot.core.marketdata.shared import tape
+    from swingbot.core.marketdata.shared.kinds import Asker
+    now = dt.datetime.now(dt.timezone.utc)
+    tape.refresh_tape(tape.demanded_symbols(now), asker=Asker.BACKGROUND,
+                      max_age_s=_TAPE_FEED_MAX_AGE_S)
+
+
+@tasks.loop(seconds=60)
+async def tape_feed():
+    """v171 D7: feeds the admin's index tape from one shared copy, once a minute in
+    session. The admin self-fetches only when that copy is older than
+    TAPE_STALE_FALLBACK_S. Max age is half the period: each tick refetches, and a
+    second process ticking at once shares the fetch."""
+    from swingbot.core.marketdata import data
+    if not (config.TAPE_SHARED_ENABLED and config.MARKETDATA_LAYER == "on"
+            and data.is_us_market_active()):
+        return
+    try:
+        await asyncio.to_thread(_tape_feed_tick)
+    except Exception as exc:
+        swallowed(log, "scan.loops.tape_feed", exc, "tape_feed: refresh failed",
+                  level=logging.ERROR, exc_info=True)
+
+
 def _always_on_loops() -> tuple:
     """Loops on_ready starts unconditionally, in start order."""
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
             weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
             pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
-            next_session_wrapup, override_verdict_check)
+            next_session_wrapup, daily_reanchor, tape_feed, override_verdict_check)
 
 
 def _start_background_loops() -> None:

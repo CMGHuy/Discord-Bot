@@ -108,6 +108,16 @@ def _revoke(item, context: QualifyContext) -> None:
             item.result.state_key, item.result.state_value, item.previous_confirmed)
 
 
+def revoke_cluster_siblings(item, context: QualifyContext) -> None:
+    """v171: a dropped dedup representative's merged siblings were confirmed too and
+    never post; revoke each so the drop consumes no dedup (same rule as scan_run)."""
+    if context.confirmations is None:
+        return
+    for sib in getattr(item, "cluster_siblings", ()):
+        context.confirmations.revoke_confirmation(
+            sib.result.state_key, sib.result.state_value, getattr(sib, "previous_confirmed", None))
+
+
 def qualify_short_item(candidate, scenario, context: QualifyContext) -> Accepted | Rejected:
     """Run one scored ScanItem (`scenario`) through the post-scoring gates.
 

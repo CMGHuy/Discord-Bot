@@ -9,6 +9,8 @@ export interface PositionFigures {
   gapFragile: boolean | null; tp1Pct: number | null; breakevenTriggerPct: number | null;
   trailAtrMult: number | null; expiresOn: string | null; timeExitOn: string | null;
   holdCapBars: number | null;
+  /** v171 D2: the quote line (`quoteLine`); undefined hides the row, the page always passes one. */
+  alertPrice?: string | null;
 }
 export interface PositionRow { label: string; value: string; sub: string | null; fragile: boolean; }
 export const SNAPSHOT_SENTENCE = 'Position size is snapshotted when the trade opens. A trade with no sizing snapshot was logged before that feature existed.';
@@ -31,6 +33,7 @@ export function positionRows(f: PositionFigures): PositionRow[] {
   add('Expires on', f.expiresOn, date(f.expiresOn));
   add('Time exit on', f.timeExitOn, date(f.timeExitOn));
   add('Hold cap', f.holdCapBars, `${num(f.holdCapBars, 0)} bars`);
+  add('Alert price', f.alertPrice ?? null, f.alertPrice ?? '');
   return rows;
 }
 

@@ -14,6 +14,17 @@ function context(status = 'CLOSED', overrides: Partial<TradeRow> = {}): StripCon
   };
 }
 
+describe('outcomeTiles price age (v171 D2)', () => {
+  it('the open Price tile carries the price age, other tiles none', () => {
+    const tiles = outcomeTiles(context('ACTIVE', { price_age_s: 42 }));
+    expect(tiles[0].ageS).toBe(42);
+    expect(tiles[1].ageS).toBeNull();
+  });
+  it('an absent age reads null', () => {
+    expect(outcomeTiles(context('ACTIVE'))[0].ageS).toBeNull();
+  });
+});
+
 describe('outcomeTiles', () => {
   it('summarises a closed result with original risk and weighted exits', () => {
     const ctx = context();

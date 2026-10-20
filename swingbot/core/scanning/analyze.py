@@ -9,7 +9,7 @@ this very module and would otherwise close a circular import.
 import logging
 import os
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from .scan_run import ScanProgress
@@ -99,6 +99,11 @@ class ScanItem:
     paper_logged: bool = False
     not_logged_reason: str | None = None
     candidate_context: dict | None = None   # V118-5: source/mode/reference of the extra-lane candidate; None = base lane
+    # v171 D5: what the pre-post rebuild needs to re-run this item's scenario
+    # build at a re-quoted price from the same frame (analyze.rescenario).
+    trendline_candidates: object = None   # the scan's per-ticker trendline levels
+    scan_price: float | None = None       # current_price this item was built at
+    hard_filters: dict | None = None      # the scan's hard-filter snapshot
 
     @property
     def all_requirements_met(self) -> bool:
@@ -759,6 +764,81 @@ def _apply_pullback_dryup(scenarios, df, stats, ticker, horizon_key, now=None) -
     return kept
 
 
+class HorizonBuild(NamedTuple):
+    candidates: Any
+    supports: list
+    resistances: list
+    scenarios: list
+
+
+def _default_hard_filters(hard_filters: dict | None = None) -> dict:
+    """`hard_filters` when given (truthy), else the config-read filters a scan
+    uses when its caller passes none."""
+    return hard_filters or {
+        'min_reward_pct': config.MIN_REWARD_PCT,
+        'max_stop_loss_pct': config.MAX_STOP_LOSS_PCT,
+        'min_stop_distance_pct': config.MIN_STOP_DISTANCE_PCT,
+        'min_risk_reward_ratio': config.MIN_RISK_REWARD_RATIO,
+        'mtf_adjacent_gate': config.MTF_ADJACENT_GATE,
+        'confluence_deviation_pct': config.CONFLUENCE_DEVIATION_PCT,
+    }
+
+
+def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
+                       hard_filters: dict) -> HorizonBuild:
+    """One horizon's level map and scenarios at `current_price` (v171 D5 seam:
+    `_scan_one` at the scan price, `rescenario` at a re-quoted one)."""
+    # Computed once here and threaded through to build_level_map() and
+    # every count_confirming_strategies() call below (up to 2 scenarios x
+    # 2 calls each) -- all of them run against this exact same
+    # (df, h, current_price), so recomputing per call was pure redundant
+    # work (every S/R method rerun from scratch each time): up to 5x the
+    # necessary CPU per ticker/horizon, the dominant cost of a scan over
+    # a large universe. See levels.count_confirming_strategies's docstring.
+    candidates = levels.collect_candidate_levels(df, h, current_price,
+                                                   trendline_candidates=trendline_candidates)
+    supports, resistances = levels.build_level_map(df, h, current_price, candidates=candidates)
+    floor_pct = levels.atr_floor_pct(df, current_price, h)
+    # Reward/stop bounds are widened toward this horizon's OWN scale
+    # (h["sr_target_min_pct"] / h["max_risk_pct"], defined per-horizon
+    # in strategy_types.py -- up to 22%/11% for a 9-month swing)
+    # rather than the flat, horizon-blind config.MIN_REWARD_PCT/
+    # MAX_STOP_LOSS_PCT (3%/7%) that used to be applied identically to
+    # every horizon from 2 weeks to 9 months. That flat floor let a
+    # "9-month swing" scenario qualify with just a 3% target and sit
+    # inside a 2-7% stop -- small enough for a couple of ordinary
+    # trading days' volatility to fully traverse, which is why trades
+    # meant to run for weeks/months were actually closing within
+    # hours/days.
+    #
+    # Progressively loosened after each round came back too strict:
+    # full sr_target_min_pct (100%) -> too strict (15-22% targets are
+    # rare) -> half (50%) -> still too strict -> 30% -> still not
+    # enough trade plans. Now at 15% of the horizon's own target-min,
+    # e.g. 9m needs only ~3.3% instead of ~6.6%/11%/22%. This is only
+    # barely above config.MIN_REWARD_PCT (3%) for most horizons now --
+    # still SOME horizon-awareness (longer horizons ask for a little
+    # more room than shorter ones) rather than being fully flat again,
+    # but the floor itself is no longer doing much of the "stop
+    # trades from closing too fast" work on its own. If trades are
+    # still closing too quickly after this, the near-TP timeout
+    # scaling (performance.py's check_near_tp_timeout) and the
+    # confidence/expectancy gate are the other levers actually worth
+    # revisiting -- this min-reward floor is close to its practical
+    # floor already. The activation guard in PlanManager is the
+    # non-bypassable live execution boundary for planned loss; preserve
+    # the horizon's scenario ceiling here so scan and historical replay
+    # continue to evaluate the same candidates.
+    effective_min_reward = max(hard_filters["min_reward_pct"], h.get("sr_target_min_pct", hard_filters["min_reward_pct"]) * 0.15)
+    effective_max_stop = max(hard_filters["max_stop_loss_pct"], h.get("max_risk_pct", hard_filters["max_stop_loss_pct"]))
+    scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
+                                        atr_floor=floor_pct, min_stop_distance_pct=hard_filters["min_stop_distance_pct"],
+                                        max_stop_distance_pct=effective_max_stop,
+                                        min_risk_reward=hard_filters["min_risk_reward_ratio"],
+                                        block_bullish=veto_bullish_for(df))
+    return HorizonBuild(candidates, supports, resistances, scenarios)
+
+
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
@@ -813,14 +893,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     confidence track record; None is LIVE_IO, the live scan's behaviour.
     """
     io = io or LIVE_IO
-    hard_filters = hard_filters or {
-        'min_reward_pct': config.MIN_REWARD_PCT,
-        'max_stop_loss_pct': config.MAX_STOP_LOSS_PCT,
-        'min_stop_distance_pct': config.MIN_STOP_DISTANCE_PCT,
-        'min_risk_reward_ratio': config.MIN_RISK_REWARD_RATIO,
-        'mtf_adjacent_gate': config.MTF_ADJACENT_GATE,
-        'confluence_deviation_pct': config.CONFLUENCE_DEVIATION_PCT,
-    }
+    hard_filters = _default_hard_filters(hard_filters)
 
     stats = {
         "items": [],
@@ -946,56 +1019,10 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             continue
 
         log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
-        # Computed once here and threaded through to build_level_map() and
-        # every count_confirming_strategies() call below (up to 2 scenarios x
-        # 2 calls each) -- all of them run against this exact same
-        # (df, h, current_price), so recomputing per call was pure redundant
-        # work (every S/R method rerun from scratch each time): up to 5x the
-        # necessary CPU per ticker/horizon, the dominant cost of a scan over
-        # a large universe. See levels.count_confirming_strategies's docstring.
-        candidates = levels.collect_candidate_levels(df, h, current_price,
-                                                       trendline_candidates=trendline_candidates)
-        supports, resistances = levels.build_level_map(df, h, current_price, candidates=candidates)
+        candidates, supports, resistances, scenarios = _horizon_scenarios(
+            df, h, current_price, trendline_candidates, hard_filters)
         log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                    ticker, horizon_key, len(supports), len(resistances))
-        floor_pct = levels.atr_floor_pct(df, current_price, h)
-        # Reward/stop bounds are widened toward this horizon's OWN scale
-        # (h["sr_target_min_pct"] / h["max_risk_pct"], defined per-horizon
-        # in strategy_types.py -- up to 22%/11% for a 9-month swing)
-        # rather than the flat, horizon-blind config.MIN_REWARD_PCT/
-        # MAX_STOP_LOSS_PCT (3%/7%) that used to be applied identically to
-        # every horizon from 2 weeks to 9 months. That flat floor let a
-        # "9-month swing" scenario qualify with just a 3% target and sit
-        # inside a 2-7% stop -- small enough for a couple of ordinary
-        # trading days' volatility to fully traverse, which is why trades
-        # meant to run for weeks/months were actually closing within
-        # hours/days.
-        #
-        # Progressively loosened after each round came back too strict:
-        # full sr_target_min_pct (100%) -> too strict (15-22% targets are
-        # rare) -> half (50%) -> still too strict -> 30% -> still not
-        # enough trade plans. Now at 15% of the horizon's own target-min,
-        # e.g. 9m needs only ~3.3% instead of ~6.6%/11%/22%. This is only
-        # barely above config.MIN_REWARD_PCT (3%) for most horizons now --
-        # still SOME horizon-awareness (longer horizons ask for a little
-        # more room than shorter ones) rather than being fully flat again,
-        # but the floor itself is no longer doing much of the "stop
-        # trades from closing too fast" work on its own. If trades are
-        # still closing too quickly after this, the near-TP timeout
-        # scaling (performance.py's check_near_tp_timeout) and the
-        # confidence/expectancy gate are the other levers actually worth
-        # revisiting -- this min-reward floor is close to its practical
-        # floor already. The activation guard in PlanManager is the
-        # non-bypassable live execution boundary for planned loss; preserve
-        # the horizon's scenario ceiling here so scan and historical replay
-        # continue to evaluate the same candidates.
-        effective_min_reward = max(hard_filters["min_reward_pct"], h.get("sr_target_min_pct", hard_filters["min_reward_pct"]) * 0.15)
-        effective_max_stop = max(hard_filters["max_stop_loss_pct"], h.get("max_risk_pct", hard_filters["max_stop_loss_pct"]))
-        scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
-                                            atr_floor=floor_pct, min_stop_distance_pct=hard_filters["min_stop_distance_pct"],
-                                            max_stop_distance_pct=effective_max_stop,
-                                            min_risk_reward=hard_filters["min_risk_reward_ratio"],
-                                            block_bullish=veto_bullish_for(df))
         stats["checked"] += 1
         # Depends only on df/horizon_key, not scenario.direction -- hoisted
         # above the scenario loop (v56) so a horizon with both a bullish and
@@ -1165,6 +1192,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                 htf_info=htf_info_for_item,
                 htf_bias=htf_result["bias"] if htf_result else None,
                 rs_percentile=rs_pctile,
+                trendline_candidates=trendline_candidates, scan_price=current_price,
+                hard_filters=hard_filters,
             )
             if all_ok:
                 item.level_map = (supports, resistances)
@@ -1177,6 +1206,23 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             progress.done += 1
 
     return stats
+
+
+def rescenario(item, df, price: float):
+    """v171 D5: the item's scenario rebuilt at `price` from the scan's own frame,
+    trendline candidates and hard filters; None when that direction no longer
+    qualifies. Never touches `df`."""
+    if df is None or not price or price <= 0:
+        return None
+    horizon_key = item.result.horizon_key
+    build = _horizon_scenarios(df, HORIZONS[horizon_key], price, item.trendline_candidates,
+                               _default_hard_filters(item.hard_filters))
+    kept = _apply_headroom(build.scenarios, build.supports, build.resistances,
+                           {"failed_counts": {"headroom": 0}}, item.result.ticker, horizon_key)
+    scenario = next((s for s in kept if s.direction == item.plan.direction), None)
+    if scenario is not None:
+        item.level_map = (build.supports, build.resistances)
+    return scenario
 
 
 # --- V118-4: the SHORT extra lane's per-symbol analysis ---------------------------

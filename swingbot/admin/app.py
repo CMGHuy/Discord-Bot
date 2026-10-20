@@ -48,6 +48,7 @@ from swingbot.core.scanning.engine import is_scan_running
 # than from helpers, so it is used even though nothing in this file calls it.
 from .helpers import docker_sdk, _load_or_create_secret_key  # noqa: F401
 from . import login_limiter
+from . import freshness
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -217,6 +218,10 @@ def _reload_env_if_changed():
     config.auto_reload_if_changed()
 
 
+# v171 D2: `X-Swingbot-Fresh: 1` marks one request's market-data calls fresh.
+freshness.install(app)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -244,13 +249,20 @@ def index():
     return redirect(url_for("spa_dashboard"))
 
 
+def _live_daily(ticker: str):
+    """The chart's live daily frame: the shared layer's file when on, else today's fetch."""
+    if freshness.layer_on():
+        return freshness.page_daily([ticker]).get(ticker.upper().strip())
+    from swingbot.core.marketdata.data import get_daily_data
+    return get_daily_data(ticker)
+
+
 def _ohlcv_frame(ticker: str):
     """Daily OHLCV for the interactive chart: live fetch first, falling back
     to the backtest CSV cache so the chart still renders offline. Split out
     of the route for testability (tests monkeypatch this)."""
     try:
-        from swingbot.core.marketdata.data import get_daily_data
-        df = get_daily_data(ticker)
+        df = _live_daily(ticker)
         if df is not None and len(df):
             return df
     except Exception:

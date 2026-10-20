@@ -9,6 +9,8 @@ if TYPE_CHECKING:
 
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
+from datetime import date, timedelta
+from functools import partial
 
 from swingbot import config
 from swingbot.core.infra.logsetup import with_current_context
@@ -21,7 +23,12 @@ from swingbot.core.marketdata.data import (
     get_current_price_batch, get_daily_data, get_daily_data_batch,
 )
 from swingbot.core.marketdata import data_refresh, data_store, spot_metals, universe
+from swingbot.core.marketdata import daily_delta, yf_safe
 from swingbot.core.marketdata.history_splice import splice_cached_history
+from swingbot.core.marketdata.shared import counters
+from swingbot.core.marketdata.shared.kinds import Asker
+from swingbot.core.marketdata.ticker_utils import candidate_symbols
+from swingbot.core.market import session
 
 from . import runstate
 
@@ -67,10 +74,21 @@ def _cold_chunk(chunk: list, period: str, timeout: int) -> dict:
 def _price_batch_with_sources(tickers: list) -> tuple:
     """Worker body for a live-price chunk: the prices plus which provider
     answered each -- the router's record lives in this worker process, so it
-    has to travel back with the result."""
+    has to travel back with the result.
+
+    v171: the worker's D9 counter rows ride back under sources["__counts__"]
+    -- this process exits after the call."""
     from swingbot.core.marketdata.providers import router
+    from swingbot.core.marketdata.shared import counters
     prices = get_current_price_batch(tickers)
-    return prices, {t: router.last_source(t) or "none" for t in prices}
+    sources = {t: router.last_source(t) or "none" for t in prices}
+    sources["__counts__"] = counters.snapshot_and_clear()
+    return prices, sources
+
+
+def _merge_worker_counts(sources: dict) -> None:
+    from swingbot.core.marketdata.shared import counters
+    counters.merge(sources.pop("__counts__", []))
 
 
 def _record_price_sources(chunk: list, sources: dict) -> None:
@@ -379,6 +397,152 @@ def _crawl_spot(tickers: list, progress: "ScanProgress" = None) -> dict:
     return out
 
 
+def _delta_provider_worker(op: str, tickers: list[str], start: date | None, end: date | None,
+                           basis: str, asker_name: str) -> tuple[dict, list, float]:
+    """v171 D3 worker body: one provider call for the delta crawl ("window" or
+    "full"), at the asker's budget tier. A deferred budget is a miss ({}).
+    The worker's D9 counter rows and its own wall time ride back with the
+    frames -- this process exits after the call."""
+    from swingbot.core.marketdata.providers import router
+    started = time.monotonic()
+    with router.asker_scope(Asker[asker_name]):
+        try:
+            if op == "full":
+                frames = daily_delta.provider_full(tickers, basis)
+            else:
+                frames = daily_delta.provider_window(tickers, start, end, basis)
+        except yf_safe.BudgetDeferred as exc:
+            log.info("Crawl: delta %s (%s) deferred (%s)", op, basis, exc)
+            frames = {}
+    return frames or {}, counters.snapshot_and_clear(), round(time.monotonic() - started, 3)
+
+
+def _bounded_delta_call(op: str, tickers, start: date | None, end: date | None,
+                        basis: str) -> dict:
+    """One delta provider call in a bounded worker. A timed-out or failed
+    worker is {} -- delta_update's miss: a warm symbol keeps its cached
+    frame, a cold one is absent this scan. Only `full` calls are recorded as
+    cold-fetch time, so that telemetry keeps its meaning."""
+    timeout = int(getattr(config, "COLD_FETCH_TIMEOUT_SECONDS", 180))
+    tickers = list(tickers)
+    got = _run_bounded(
+        _delta_provider_worker, (op, tickers, start, end, basis, Asker.SCAN.name), timeout,
+        label=f"Crawl: delta {op} ({basis}) for {len(tickers)} ticker(s)")
+    if got is None:
+        return {}
+    frames, rows, elapsed = got
+    counters.merge(rows)
+    if op == "full":
+        _fetch_stats["cold_fetch_s"].append(elapsed)
+    return frames or {}
+
+
+def _delta_window_fetch(tickers, start: date, end: date, basis: str) -> dict:
+    return _bounded_delta_call("window", tickers, start, end, basis)
+
+
+def _delta_full_fetch(tickers, basis: str) -> dict:
+    return _bounded_delta_call("full", tickers, None, None, basis)
+
+
+def _delta_chunk(chunk: list, progress: "ScanProgress" = None) -> dict:
+    """One chunk through daily_delta.delta_update, keyed by the caller's
+    ticker strings. A raising chunk degrades to today's cold path (which
+    keeps its own progress), never to missing frames."""
+    try:
+        got = daily_delta.delta_update(chunk, asker=Asker.SCAN, fetch_window=_delta_window_fetch,
+                                       fetch_full=_delta_full_fetch)
+    except Exception as exc:
+        swallowed(log, "scan.fetch.delta_chunk", exc,
+                  "Crawl (delta): chunk of %d ticker(s) failed -- falling back to the cold path",
+                  len(chunk), level=logging.ERROR, exc_info=True)
+        return {t: df for t, df in _fetch_cold_frames(chunk, progress) if df is not None}
+    if progress is not None:
+        progress.done += len(chunk)
+        progress.current_ticker = chunk[-1]
+    out = {}
+    stale_before = _previous_session(daily_delta._today_ny())
+    for ticker in chunk:
+        df = got.get(str(ticker).upper().strip())
+        if df is not None:
+            _warn_if_stale(ticker, df, stale_before)
+            out[ticker] = df
+    return out
+
+
+def _previous_session(today: date) -> date | None:
+    """The NYSE session before `today`, or None outside the frozen calendar."""
+    sessions = session.nyse_calendar().sessions(today - timedelta(days=14), today - timedelta(days=1))
+    return sessions[-1] if sessions else None
+
+
+def _warn_if_stale(ticker: str, df, previous: date | None) -> None:
+    """A window miss serves the cached frame with no age limit (D3); say so
+    when its last bar is older than the previous trading session."""
+    if previous is None or df.empty or df.attrs.get("source"):
+        return
+    last = df.index[-1].date()
+    if last < previous:
+        log.warning("Crawl (delta): %s served from cache with last bar %s, older than the previous "
+                    "session %s -- the window fetch missed", ticker, last, previous)
+
+
+def _needs_alias(ticker: str) -> bool:
+    """True when the literal symbol may not be the instrument (SPX, BTC,
+    EURUSD...): only the legacy path tries candidate_symbols() aliases, and
+    the delta caches must never hold another instrument's bars."""
+    return len(candidate_symbols(ticker)) > 1
+
+
+def _crawl_aliased(tickers: list, progress: "ScanProgress" = None) -> dict:
+    """Aliased tickers take exactly the flag-off route: the fresh
+    market_data/daily cache, else today's cold path with its alias fallback."""
+    out, cold = {}, []
+    for ticker in tickers:
+        df = _load_cached_daily(ticker)
+        if df is None:
+            cold.append(ticker)
+            continue
+        out[ticker] = df
+        if progress is not None:
+            progress.done += 1
+            progress.current_ticker = ticker
+    for ticker, df in (_fetch_cold_frames(cold, progress) if cold else []):
+        if df is not None:
+            out[ticker] = df
+    return out
+
+
+def _crawl_delta(tickers: list[str], progress: "ScanProgress" = None) -> dict:
+    """v171 D3 crawl (DAILY_DELTA_FETCH on): the two single-basis daily caches
+    brought up to date by one batched window per basis, provider calls in
+    bounded workers, the splice and the write-back of cold frames in this
+    process. Spot metals keep _crawl_spot. A frame carrying attrs["source"]
+    came from a full fetch this scan (cold-fetched); a delta-served frame has
+    no attrs, so the scan counts it as cache."""
+    results = LRUFrames(max_frames=len(tickers))
+    started = time.monotonic()
+    spot, plain = spot_metals.split_spot(tickers)
+    aliased = [t for t in plain if _needs_alias(t)]
+    chunk_size = int(getattr(config, "BATCH_FETCH_CHUNK_SIZE", 100))
+    jobs = [partial(_delta_chunk, chunk, progress)
+            for chunk in _chunked([t for t in plain if t not in aliased], chunk_size)]
+    jobs.append(partial(_crawl_aliased, aliased, progress))
+    for job in jobs:
+        if runstate.is_stop_requested():
+            log.info("Crawl (delta): stop requested -- ending early (%d/%d ticker(s) resolved so far)",
+                     len(results), len(tickers))
+            if progress is not None:
+                progress.stopped = True
+            return results
+        results.update(job())
+    cold = sum(1 for df in results.values() if df.attrs.get("source"))
+    results.update(_crawl_spot(spot, progress))
+    log.info("Crawl (delta) complete in %.1fs: %d/%d ticker(s) resolved (%d cold-fetched)",
+             time.monotonic() - started, len(results), len(tickers), cold)
+    return results
+
+
 def _load_cached_daily(ticker: str):
     """v47: today's daily bar from market_data/daily/{TICKER}.csv, or None.
 
@@ -448,12 +612,17 @@ def _crawl_latest_data(tickers: list, progress: "ScanProgress" = None) -> dict:
     (returning whatever was fetched so far) if a stop was requested --
     see the module-level _STOP_FILE docstring above for why this is
     file-based and only checked at per-ticker checkpoints, not instant.
+
+    v171: with DAILY_DELTA_FETCH on, `_crawl_delta` replaces everything below
+    (two single-basis caches plus a batched window; cold frames written back).
     """
     if progress is not None:
         progress.stage = "crawling data"
         progress.total = len(tickers)
         progress.done = 0
         progress.current_ticker = None
+    if config.DAILY_DELTA_FETCH:
+        return _crawl_delta(tickers, progress)
 
     results = LRUFrames(max_frames=len(tickers))
     started = time.monotonic()
@@ -550,6 +719,7 @@ def _fetch_live_prices(tickers: list, progress: "ScanProgress" = None) -> dict:
         result, sources = _run_bounded(
             _price_batch_with_sources, (chunk,), timeout,
             label=f"Crawl: live-price batch of {len(chunk)} ticker(s)") or ({}, {})
+        _merge_worker_counts(sources)
         _record_price_sources(chunk, sources)
         if result:
             prices.update(result)

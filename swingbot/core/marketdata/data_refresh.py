@@ -22,17 +22,28 @@ import time
 
 from swingbot.core.infra.retry import with_retry
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.marketdata.adjustments import merge_adjusted
-from swingbot.core.marketdata import spot_metals
+# Tolerances live in adjustments.py (v171 one home): 1% basis-mismatch
+# tolerance, a 3-bar minimum overlap (the warm path overlaps one bar by
+# construction, so it never rescales history), and a 0.5% dispersion bound (a
+# real split moves every overlapping bar by an identical factor).
+from swingbot.core.marketdata.adjustments import (
+    ADJUSTMENT_MISMATCH_TOLERANCE, MIN_OVERLAP_BARS, _ADJUSTMENT_RATIO_DISPERSION,
+    merge_adjusted)
+from swingbot import config
+from swingbot.core.marketdata import spot_metals, yf_safe
+from swingbot.core.marketdata.providers import router
+from swingbot.core.marketdata.shared.kinds import Asker
 from swingbot.core.marketdata.data_store import (
     DATA_DIR,
     TRAINING_TIMEFRAMES,
     _default_ranged_fetch,
+    atomic_write_csv,
     cache_path,
     fetch_interval_data,
     load_from_disk,
     refuse_spot_write,
     timeframe_name,
+    yf_interval,
 )
 
 log = logging.getLogger(__name__)
@@ -152,24 +163,6 @@ def _align_tz(a, b):
     return a, b
 
 
-_ADJUSTMENT_MISMATCH_TOLERANCE = 0.01   # 1%: real EOD closes agree exactly; a split/dividend shifts price by far more
-
-# A corporate action rescales the ENTIRE history, so a genuine detection has
-# the deep overlap the cold/forced full-depth path produces. The WARM
-# incremental path overlaps exactly one bar by construction -- refresh_symbol
-# passes `start=existing.index.max()` and yfinance's date-only `start` is
-# inclusive, so `fresh` re-fetches the last cached bar's own date and nothing
-# older. The median of one ratio is that ratio, which turned a refresh landing
-# mid-session (a partially-formed daily bar, re-fetched settled after the
-# close) into a whole-history rescale on any >1% intraday mover.
-_MIN_OVERLAP_BARS = 3
-
-# A real split/dividend moves EVERY overlapping bar by an IDENTICAL factor.
-# Bars disagreeing by different amounts mean drifting prices or an already
-# two-basis archive -- rescaling on that median would smear the error across
-# the whole history rather than repair it.
-_ADJUSTMENT_RATIO_DISPERSION = 0.005
-
 _PRICE_COLUMNS = ["Open", "High", "Low", "Close"]
 
 
@@ -186,7 +179,7 @@ def _adjustment_ratio(existing, fresh, symbol: str, timeframe: str):
     alone, else None (no adjustment change -- the common case, every scan).
     """
     common = existing.index.intersection(fresh.index)
-    if len(common) < _MIN_OVERLAP_BARS:
+    if len(common) < MIN_OVERLAP_BARS:
         # Too little overlap to tell a corporate action from ordinary price
         # movement. Doing nothing is always safe: the merge below still takes
         # `fresh`'s values for the dates they share, so a real split is picked
@@ -197,7 +190,7 @@ def _adjustment_ratio(existing, fresh, symbol: str, timeframe: str):
     if ratios.empty:
         return None
     ratio = float(ratios.median())
-    if abs(ratio - 1.0) <= _ADJUSTMENT_MISMATCH_TOLERANCE:
+    if abs(ratio - 1.0) <= ADJUSTMENT_MISMATCH_TOLERANCE:
         return None
     spread = float((ratios / ratio - 1.0).abs().max())
     if spread > _ADJUSTMENT_RATIO_DISPERSION:
@@ -248,9 +241,7 @@ def _merge_save(existing, fresh, symbol: str, timeframe: str,
         added = sum(1 for i in fresh.index if i not in before)
 
     path = cache_path(symbol, timeframe, base_dir=base_dir)
-    tmp = path + ".tmp"
-    merged.to_csv(tmp)
-    os.replace(tmp, path)          # atomic: a crash mid-write can't truncate
+    atomic_write_csv(merged, path)   # atomic: a crash mid-write can't truncate
     return merged, added
 
 
@@ -302,6 +293,14 @@ def refresh_symbol(symbol: str, timeframe: str, base_dir: str = DATA_DIR,
                   "incremental %s/%s failed after retries: %s", symbol, tf, exc, exc_info=True)
         return {**out, "status": "failed", "rows": have, "error": str(exc)[:200]}
 
+    return _apply_incremental(symbol, tf, base_dir, existing, fresh, out)
+
+
+def _apply_incremental(symbol: str, tf: str, base_dir: str, existing, fresh,
+                       out: dict) -> dict:
+    """The warm tail after the fetch, shared by the per-symbol and the batched
+    path so they cannot drift."""
+    have = len(existing)
     if fresh is None or len(fresh) == 0:
         # Nothing new, but touch the file so a closed market doesn't make
         # every tick re-request the same empty window.
@@ -371,6 +370,110 @@ def _record(state: dict, symbol: str, tf: str, r: dict, base_dir: str) -> None:
     state[k] = rec
 
 
+def _chunk_frames(raw, symbols: list[str]) -> dict:
+    """Per-symbol frames out of a group_by="ticker" download. A single-ticker
+    reply may come back flat; symbols missing from the reply are omitted."""
+    if len(symbols) == 1 and getattr(raw.columns, "nlevels", 1) == 1:
+        return {symbols[0]: raw.dropna(how="all")}
+    frames = {}
+    for symbol in symbols:
+        try:
+            frames[symbol] = raw[symbol].dropna(how="all")
+        except KeyError:
+            continue
+    return frames
+
+
+def _since(frame, last_date: str):
+    """Rows dated on or after `last_date`. Compared as date strings: cached
+    intraday indexes may be tz-aware, naive or object."""
+    keep = [str(i)[:10] >= last_date for i in frame.index]
+    return frame[keep]
+
+
+def _due_pairs(symbols, tf: str, base_dir: str, state) -> list[str]:
+    """Warm and stale: a CSV exists and its window has passed (mtime only)."""
+    return [s for s in symbols
+            if os.path.exists(cache_path(s, tf, base_dir=base_dir))
+            and is_stale(s, tf, base_dir=base_dir, state=state)]
+
+
+def _load_chunk(symbols: list[str], tf: str, base_dir: str) -> dict:
+    loaded = {}
+    for symbol in symbols:
+        existing = load_from_disk(symbol, tf, base_dir=base_dir)
+        if existing is not None and len(existing):
+            loaded[symbol] = existing
+    return loaded
+
+
+def _refresh_timeframe_batch(symbols: list[str], timeframe: str, base_dir: str, *,
+                             state, force: bool) -> dict[str, dict]:
+    """One multi-ticker yfinance download for the warm, stale pairs among
+    `symbols`; results shaped like refresh_symbol's, plus "batched": True.
+    A whole-batch failure returns {} so those pairs take refresh_symbol."""
+    tf = timeframe_name(timeframe)
+    if force:
+        return {}
+    loaded = _load_chunk(_due_pairs(symbols, tf, base_dir, state), tf, base_dir)
+    if not loaded:
+        return {}
+    lasts = {s: str(df.index.max())[:10] for s, df in loaded.items()}
+    try:
+        raw = yf_safe.download(" ".join(loaded), start=min(lasts.values()),
+                               interval=yf_interval(tf), group_by="ticker",
+                               auto_adjust=True, progress=False)
+        frames = _chunk_frames(raw, list(loaded))
+    except yf_safe.BudgetDeferred:
+        return {s: {"symbol": s, "timeframe": tf, "rows": len(df), "added": 0,
+                    "status": "failed", "error": "budget-deferred", "batched": True}
+                for s, df in loaded.items()}
+    except Exception as exc:
+        swallowed(log, "marketdata.refresh_batch", exc,
+                  "batched refresh %s of %d symbol(s) failed: %s", tf, len(loaded), exc,
+                  exc_info=True)
+        return {}
+    results = {}
+    for s, frame in frames.items():
+        try:
+            results[s] = _apply_incremental(
+                s, tf, base_dir, loaded[s], _since(frame, lasts[s]),
+                {"symbol": s, "timeframe": tf, "rows": 0, "added": 0, "batched": True})
+        except Exception as exc:   # omitted: refresh_symbol and its guard take the pair
+            swallowed(log, "marketdata.refresh_batch.apply", exc,
+                      "batched merge %s/%s failed: %s", s, tf, exc, exc_info=True)
+    return results
+
+
+def _prefetch(symbols, tf: str, base_dir: str, *, state, force: bool, started: float,
+              deadline_seconds) -> dict[str, dict]:
+    """Batched results for one timeframe; {} with the layer off or on force."""
+    if config.MARKETDATA_LAYER == "off" or force:
+        return {}
+    due = _due_pairs(symbols, tf, base_dir, state)   # so every chunk is full
+    size = max(1, int(config.BATCH_FETCH_CHUNK_SIZE))
+    results: dict[str, dict] = {}
+    with router.asker_scope(Asker.BACKGROUND):
+        for i in range(0, len(due), size):
+            if deadline_seconds is not None and time.monotonic() - started >= deadline_seconds:
+                break
+            results.update(_refresh_timeframe_batch(
+                due[i:i + size], tf, base_dir, state=state, force=force))
+    return results
+
+
+def _refresh_one(prefetched: dict, symbol: str, tf: str, base_dir: str, force: bool,
+                 state) -> dict:
+    return prefetched.get(symbol) or refresh_symbol(
+        symbol, tf, base_dir=base_dir, force=force, state=state)
+
+
+def _pause(r: dict, seconds: float) -> None:
+    """Per-symbol pacing is pointless for a pair that cost no request of its own."""
+    if not r.get("batched"):
+        time.sleep(seconds)
+
+
 def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DIR,
                 force: bool = False, sleep_seconds: float = 0.0,
                 on_progress=None, state: dict = None,
@@ -401,13 +504,14 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
     for tf in timeframes:
         if deadline_hit:
             break
+        prefetched = _prefetch(symbols, tf, base_dir, state=state, force=force,
+                               started=started, deadline_seconds=deadline_seconds)
         for symbol in symbols:
             if deadline_seconds is not None and time.monotonic() - started >= deadline_seconds:
                 deadline_hit = True
                 break
             try:
-                r = refresh_symbol(symbol, tf, base_dir=base_dir, force=force,
-                                   state=state)
+                r = _refresh_one(prefetched, symbol, tf, base_dir, force, state)
             except Exception as exc:      # belt-and-braces: loop must survive
                 swallowed(log, "marketdata.refresh_all.pair", exc, "refresh %s/%s crashed: %s",
                           symbol, tf, exc, exc_info=True)
@@ -425,7 +529,7 @@ def refresh_all(symbols, timeframes=TRAINING_TIMEFRAMES, base_dir: str = DATA_DI
                 except Exception as exc:
                     swallowed(log, "marketdata.refresh_all.on_progress", exc, level=logging.DEBUG)
             if sleep_seconds and r["status"] not in ("fresh", "skipped"):
-                time.sleep(sleep_seconds)
+                _pause(r, sleep_seconds)
 
     if persist_state:
         save_state(state)

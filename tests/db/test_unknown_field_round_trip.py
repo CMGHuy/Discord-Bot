@@ -15,6 +15,7 @@ from swingbot.core.db.repositories.jobs import JobRepository
 from swingbot.core.db.repositories.journal import JournalRepository
 from swingbot.core.db.repositories.killswitch import KillswitchRepository
 from swingbot.core.db.repositories.market_data_state import MarketDataStateRepository
+from swingbot.core.db.repositories.market_shared import MarketSharedRepository
 from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
 from swingbot.core.db.repositories.plans import PlanRepository
 from swingbot.core.db.repositories.preferences import PreferencesRepository
@@ -74,6 +75,13 @@ CASES = {
     "gate_rejections": (GateRejectionRepository, {"ticker": "AAPL", "gate": "rs", "strategy": "RSI",
                                                   "horizon": "2w", "signal_date": "2026-10-01",
                                                   "cf_status": "pending", "created_at": TS}),
+    "market_cache": (lambda: MarketSharedRepository().cache,
+                     {"key": "quote:AAPL:", "kind": "quote", "symbol": "AAPL"}),
+    "provider_budget": (lambda: MarketSharedRepository().budget,
+                        {"provider": "alpaca", "tokens": 150.0, "stamp": TS}),
+    "market_fetch_counts": (lambda: MarketSharedRepository().counts,
+                            {"hour": TS, "provider": "alpaca", "kind": "quote", "asker": "scan",
+                             "outcome": "hit", "n": 1}),
     "equity_samples": (EquitySampleRepository, {"at": TS, "realized_balance": 0.0, "unrealized_pnl": 0.0,
                                                 "equity": 0.0, "open_n": 0, "skipped_n": 0,
                                                 "source": "live", "kind": "point"}),

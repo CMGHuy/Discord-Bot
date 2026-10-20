@@ -45,6 +45,9 @@ installDialogPolyfill();
 class FakeEventStream {
   private readonly counters = new Map<string, WritableSignal<number>>();
 
+  /** The outcome strip's age hint reads ConnectionStore (v171), which opens the stream. */
+  connect(): void {}
+
   changes(name: string): Signal<number> {
     let counter = this.counters.get(name);
     if (!counter) {

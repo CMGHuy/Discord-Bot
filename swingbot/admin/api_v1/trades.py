@@ -292,6 +292,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "position_value": t.get("position_value"),
         "current_price": None,
         "current_price_stale": False,
+        "price_age_s": None,
+        "price_as_of": None,
         "exit_price": t.get("exit_price"),
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t) if trade else None,
@@ -397,8 +399,10 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
         "shares": shares,
         "open_shares": None,
         # The TP1 leg is a closed trade of its own: its target is TP1, not the
-        # runner's TP2 that the PARTIAL plan's projection reports.
-        "target": plan.get("tp1") if leg_index == 0 else row["target"],
+        # runner's TP2 that the PARTIAL plan's projection reports. A closed
+        # runner leg is likewise TP2 (None for a trailing runner): the CLOSED
+        # plan's projection falls back to TP1, which the banked leg already shows.
+        "target": plan.get("tp1") if leg_index == 0 else plan.get("tp2"),
         "target_is_banked_tp1": False if leg_index == 0 else row["target_is_banked_tp1"],
         "exit_price": exit_price,
         "realized_pnl_amount": (
@@ -501,6 +505,8 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "position_value": t.get("position_value"),
         "current_price": None,
         "current_price_stale": False,
+        "price_age_s": None,
+        "price_as_of": None,
         "exit_price": t.get("exit_price"),
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t),
@@ -650,6 +656,27 @@ def _looks_like_a_plan_id(value: str) -> bool:
     return len(value) == 36 and value.count("-") == 4
 
 
+# v171 D2: response key -> the plan record's flat field (V171-17).
+_QUOTE_PLAN_FIELDS = (("at", "quote_at"), ("kind", "quote_kind"), ("age_s", "quote_age_s"),
+                      ("session", "quote_session"), ("confirmed", "price_confirmed"))
+
+
+def _quote_stamp(plan: dict | None, trade: dict | None) -> dict | None:
+    """The quote a posted plan was built from (v171 D2), or None before v171.
+
+    The trade record's `quote` is written with the trade (V171-20) and wins;
+    a plan with no trade row carries the same values as flat fields. No
+    read-time upcasting: a row without them answers None and the SPA shows
+    n/a (docs/claude/schema-evolution.md).
+    """
+    quote = (trade or {}).get("quote")
+    if isinstance(quote, dict):
+        return {key: quote.get(key) for key, _ in _QUOTE_PLAN_FIELDS}
+    if not plan or plan.get("quote_kind") is None:
+        return None
+    return {key: plan.get(field) for key, field in _QUOTE_PLAN_FIELDS}
+
+
 def _plan_detail(plan: dict, trade: dict | None) -> dict:
     """Heavy fields for a plan-backed position.
 
@@ -686,6 +713,7 @@ def _plan_detail(plan: dict, trade: dict | None) -> dict:
         "target2_sources": t.get("target2_sources") or [],
         "sizing_mode": t.get("sizing_mode"),
         "account_balance_after": t.get("account_balance_after"),
+        "quote": _quote_stamp(plan, trade),
     }
 
 
@@ -724,6 +752,7 @@ def _legacy_detail(t: dict) -> dict:
         "target2_sources": t.get("target2_sources") or [],
         "sizing_mode": t.get("sizing_mode"),
         "account_balance_after": t.get("account_balance_after"),
+        "quote": _quote_stamp(None, t),
     }
 
 
@@ -1071,6 +1100,22 @@ def _strip_internal_fields(rows: list[dict]) -> None:
             row.pop("_display_shares", None)
 
 
+def _attach_layer_prices(live: list[dict]) -> None:
+    """v171: price the live rows with one shared-layer batch. The age fields
+    carry the staleness signal, so `current_price_stale` stays False; an
+    empty cache leaves the row exactly as a failed fetch does today."""
+    from swingbot.admin import freshness
+    quotes = freshness.page_quotes([r["ticker"] for r in live],
+                                   dashboard=freshness.from_dashboard())
+    for r in live:
+        q = quotes.get(str(r["ticker"]).upper())
+        price = q.price if q is not None and q.price and q.price > 0 else None
+        r["current_price"] = price
+        r["current_price_stale"] = False
+        if price is not None:
+            r["price_age_s"], r["price_as_of"] = freshness.quote_age(q)
+
+
 def _attach_current_prices(rows: list[dict]) -> None:
     """Live price for the still-open rows ON THIS PAGE only.
 
@@ -1093,6 +1138,10 @@ def _attach_current_prices(rows: list[dict]) -> None:
     """
     live = [r for r in rows if r["status"] not in _TERMINAL and r.get("ticker")]
     if not live:
+        return
+    from swingbot.admin import freshness
+    if freshness.layer_on():
+        _attach_layer_prices(live)
         return
     try:
         from swingbot.core.marketdata.data import get_current_price_detail, prefetch_prices

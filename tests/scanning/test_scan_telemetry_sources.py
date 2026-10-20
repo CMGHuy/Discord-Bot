@@ -102,3 +102,18 @@ def test_a_failed_chunk_counts_its_tickers_as_none(monkeypatch):
     fetch.reset_fetch_stats()
     assert fetch._fetch_live_prices(["AAPL", "MSFT"]) == {}
     assert fetch.fetch_stats()["price_sources"]["none"] == 2
+
+
+def test_live_price_worker_counts_travel_back_to_the_parent(monkeypatch):
+    from swingbot.core.marketdata.shared import counters
+    from swingbot.core.scanning import fetch
+    rows = [("2026-10-16T14:00:00+00:00", "alpaca", "quote", "SCAN", "fetched", 2)]
+    merged = []
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "get_current_price_batch", lambda tickers: {"AAPL": 190.0})
+    monkeypatch.setattr(counters, "snapshot_and_clear", lambda: list(rows))
+    monkeypatch.setattr(counters, "merge", merged.extend)
+    fetch.reset_fetch_stats()
+    assert fetch._fetch_live_prices(["AAPL"]) == {"AAPL": 190.0}
+    assert merged == rows
+    assert "__counts__" not in fetch.fetch_stats()["price_sources"]

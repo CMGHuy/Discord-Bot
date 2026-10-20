@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { FreshRequestService } from '../api/fresh-request.service';
 import { asyncInputs, Async, skeletonGrid, type AsyncEmptyReason, type SkeletonShape } from './async';
 
 @Component({
@@ -20,7 +21,7 @@ import { asyncInputs, Async, skeletonGrid, type AsyncEmptyReason, type SkeletonS
       [skeletonCols]="2"
       [shape]="shape"
       [announce]="announce"
-      (retry)="retried = retried + 1"
+      (retry)="retried = retried + 1; onRetried()"
     >
       <p class="content">loaded</p>
     </sb-async>
@@ -34,6 +35,7 @@ class Host {
   staleAsOf: string | null = null;
   announce: string | null = null;
   retried = 0;
+  onRetried: () => void = () => undefined;
   shape: SkeletonShape = 'table';
 }
 
@@ -198,5 +200,16 @@ describe('asyncInputs', () => {
   it('reports empty only once data has actually arrived', () => {
     expect(asyncInputs(src(null, false, null), opts).empty).toBe(false);
     expect(asyncInputs(src([], false, null), opts).empty).toBe(true);
+  });
+
+  it('emits Retry inside markFresh, so the reload it triggers is fresh (v171 D2)', () => {
+    const fresh = TestBed.inject(FreshRequestService);
+    const { f, el } = render({ error: 'The admin could not be reached.' });
+    let markingDuringRetry: boolean | null = null;
+    f.componentInstance.onRetried = () => { markingDuringRetry = fresh.isMarking(); };
+    (el.querySelector('button.retry') as HTMLButtonElement).click();
+    expect(f.componentInstance.retried).toBe(1);
+    expect(markingDuringRetry).toBe(true);
+    expect(fresh.isMarking()).toBe(false);
   });
 });

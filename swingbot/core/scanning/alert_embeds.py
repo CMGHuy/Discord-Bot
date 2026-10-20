@@ -100,6 +100,53 @@ def _short_notice_fields(item, nums, plan_v2) -> list:
     return [(SHORT_FIELD, notice, False)] if notice else []
 
 
+QUOTE_FIELD = "Quote"
+_KIND_WORDS = {"trade": "live trade", "mid": "bid/ask mid", "yf-1m": "Yahoo 1-min bar"}
+
+
+def _print_age_s(plan) -> "float | None":
+    """Seconds from the quote's timestamp to the plan's issue; None unless both parse."""
+    try:
+        seconds = (datetime.fromisoformat(plan.issued_at)
+                   - datetime.fromisoformat(plan.quote_at)).total_seconds()
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return max(0.0, seconds)
+
+
+def quote_line(plan) -> "str | None":
+    """v171 D5: which price this plan was built from, its age and session; None
+    for an unstamped plan, so pre-v171 rendering is unchanged."""
+    kind = getattr(plan, "quote_kind", None)
+    if kind is None:
+        return None
+    if not getattr(plan, "price_confirmed", None) or kind == "scan":
+        text = "Price not confirmed live (scan price)"
+    else:
+        text = f"Price: {_KIND_WORDS.get(kind, kind)}"
+        age = _print_age_s(plan)
+        if age is not None:
+            text += f", {age:.0f} s"
+    session = getattr(plan, "quote_session", None)
+    if session and session != "regular":
+        text += f", {session}"
+    return text
+
+
+def _quote_target(item):
+    return item.plan_v2 if getattr(item, "plan_v2", None) is not None else item.plan
+
+
+def _quote_fields(item) -> list:
+    line = quote_line(_quote_target(item))
+    return [(QUOTE_FIELD, line, False)] if line else []
+
+
+def _add_quote_field(embed, item) -> None:
+    for name, value, inline in _quote_fields(item):
+        embed.add_field(name=name, value=value, inline=inline)
+
+
 def build_embed(item, explanation, perf_stats, open_positions_warning, chart_filename,
                 htf_info: dict = None, layout: str = "detailed") -> discord.Embed:
     """
@@ -144,6 +191,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     })
     stop_pct, stop_r = stop_figures_for_display(plan_v2, nums, plan)
     sections["headline"].extend(_short_notice_fields(item, nums, plan_v2))
+    sections["plan"].extend(_quote_fields(item))
 
     unmet = [(requirement.label, requirement.detail)
              for requirement in item.requirements if not requirement.passed]
@@ -316,6 +364,7 @@ def build_simple_alert(item) -> discord.Embed:
     notice = _short_notice_text(item, nums, plan_v2)
     if notice:
         embed.add_field(name=SHORT_FIELD, value=notice, inline=False)
+    _add_quote_field(embed, item)
     return embed
 
 

@@ -135,6 +135,11 @@ export interface TradeRow {
    *  position that never actually touched it. Always present, never null --
    *  false when there is no price at all. */
   current_price_stale: boolean;
+  /** v171 D2: seconds since `current_price` was fetched, from the shared
+   *  cache; null when unknown (pre-v171 server, layer off). */
+  price_age_s?: number | null;
+  /** ISO-8601 UTC instant of that fetch. */
+  price_as_of?: string | null;
   exit_price: number | null;
   realized_pnl_amount: number | null;
   pnl_pct: number | null;
@@ -213,6 +218,17 @@ export interface CalendarRow {
  *  One shape for both origins on purpose: the server fills the plan-only
  *  fields with null for legacy records rather than returning two shapes, so
  *  the Plan tab is one component instead of a component and a branch. */
+/** v171 D2: the quote a posted plan was built from (V171-17 plan fields,
+ *  V171-18 trade `quote`). `age_s` is fetch-to-persist, the D5 5 s clock.
+ *  Absent (null on `detail.quote`) before v171: the page reads n/a. */
+export interface QuoteStamp {
+  at: string | null;
+  kind: string | null;
+  age_s: number | null;
+  session: string | null;
+  confirmed: boolean | null;
+}
+
 export interface TradeDetailFields {
   /** The underlying trade record's id. The plan id is the public identity,
    *  but close/cancel/delete act on this one. Null when no trade was ever
@@ -263,6 +279,8 @@ export interface TradeDetailFields {
   calendar: CalendarRow[];
   hold_cap_bars: number | null;
   acceptance_level: number | null;
+  /** v171 D2: the quote the plan was built from; null before v171. */
+  quote?: QuoteStamp | null;
 }
 
 /** `GET /trades/:id` -- a list row plus the heavy fields. */
@@ -1174,6 +1192,10 @@ export interface Ticker {
    *  null when `price` is the cached close. Only `yfinance-fallback` is
    *  flagged in the table: Alpaca missed and yfinance answered instead. */
   price_source?: 'alpaca' | 'yfinance' | 'yfinance-fallback' | null;
+  /** v171 D2: seconds since `price` was fetched; null when unknown. */
+  price_age_s?: number | null;
+  /** ISO-8601 UTC instant of that fetch. */
+  price_as_of?: string | null;
   /** The date of the bar `price`/the change columns/`spark` were computed
    *  from -- NOT when the request was served. A page reading "as of now"
    *  over Friday's close on a Sunday is the failure this field guards
@@ -2023,6 +2045,15 @@ export interface TapeRow {
   /** 0 position, 1 plan, 2 neither. The client sorts on this so the ordering
    *  rule lives in one place. */
   sort_rank: number;
+  /** v171 D7: true when Yahoo came back blank and the tape shows an Alpaca
+   *  ETF proxy instead. A proxy row has `price` null and `change_pct` set:
+   *  an ETF price must never be read as an index level. Absent when the
+   *  server's TAPE_SHARED_ENABLED is off. */
+  is_proxy?: boolean;
+  /** The proxy's own symbol (SPY, QQQ, DIA, VIXY, SLV), shown as its label. */
+  proxy_symbol?: string | null;
+  /** Seconds since the value was fetched, from the shared copy. */
+  age_s?: number | null;
 }
 
 export interface TapeResponse {

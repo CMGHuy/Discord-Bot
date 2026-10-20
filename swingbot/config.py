@@ -797,6 +797,91 @@ FIELDS: list[Field] = [
                "updatedAt is older than this is treated exactly like a missing one: the scan "
                "skips new signals for that metal and open plans are not stepped until a fresh "
                "quote arrives. Never falls back to unscaled futures prices."),
+    Field("MARKETDATA_LAYER", "MARKETDATA_LAYER", "Data Sources",
+          "Shared market-data layer", type="select", default="off",
+          options=["off", "count", "on"],
+          help="v171. 'off' = exact pre-v171 fetch paths, no layer code runs. 'count' = every "
+               "Alpaca/yfinance call is made exactly as today and counted per hour by provider, "
+               "kind, asker and outcome (the baseline week). 'on' = one shared, Postgres-"
+               "coordinated cache with per-asker freshness windows, cross-process single-flight "
+               "and one money-first budget. Production ships 'count'."),
+    Field("DAILY_DELTA_FETCH", "DAILY_DELTA_FETCH", "Data Sources",
+          "Daily bars: delta fetch + write-back", type="checkbox", default="false",
+          help="v171 D3/D4. On: the scan keeps closed daily bars on disk (Alpaca-basis "
+               "market_data/daily_alpaca for Alpaca symbols, market_data/daily for the rest), "
+               "fetches only a short recent window per scan and full-refetches on any "
+               "adjustment change. Off: today's crawl."),
+    Field("PLAN_REBUILD_ENABLED", "PLAN_REBUILD_ENABLED", "Data Sources",
+          "Rebuild plans from a last-second quote", type="checkbox", default="false",
+          help="v171 D5. On: every main-scan and SHORT-lane plan is re-priced from a quote "
+               "at most 5 s old right before it posts, and its price gates re-run."),
+    Field("TAPE_SHARED_ENABLED", "TAPE_SHARED_ENABLED", "Data Sources",
+          "Admin tape from the bot's shared copy", type="checkbox", default="false",
+          help="v171 D7. On: the bot fetches the index tape once a minute into the shared "
+               "cache, with labelled ETF change-% proxies when Yahoo is blank; the admin reads "
+               "that copy."),
+    Field("MARKETDATA_PG_TIMEOUT_MS", "MARKETDATA_PG_TIMEOUT_MS", "Data Sources",
+          "Layer: Postgres timeout (ms)", type="number", default="250", min=50, max=5000, step=50,
+          help="v171. Statement timeout for every shared-cache read, lease and budget call. "
+               "Past it the asker fetches directly (fail open)."),
+    Field("MARKETDATA_LEASE_SECONDS", "MARKETDATA_LEASE_SECONDS", "Data Sources",
+          "Layer: fetch lease (s)", type="number", default="30", min=5, max=300, step=5,
+          help="v171. How long one process's claim on a key lasts; a dead holder's claim "
+               "expires after this."),
+    Field("QUOTE_MAX_AGE_REQUOTE_S", "QUOTE_MAX_AGE_REQUOTE_S", "Data Sources",
+          "Max quote age: pre-post re-quote (s)", type="number", default="5", min=1, max=60, step=1,
+          help="v171 D2/D5. The re-quote right before a plan posts."),
+    Field("QUOTE_MAX_AGE_MONITOR_S", "QUOTE_MAX_AGE_MONITOR_S", "Data Sources",
+          "Max quote age: stop monitor (s)", type="number", default="15", min=1, max=120, step=1,
+          help="v171 D2. Trade monitor and plan manager."),
+    Field("QUOTE_MAX_AGE_SCAN_S", "QUOTE_MAX_AGE_SCAN_S", "Data Sources",
+          "Max quote age: scan (s)", type="number", default="15", min=1, max=120, step=1,
+          help="v171 D2. The scan's live-prices phase and the SHORT lane."),
+    Field("QUOTE_MAX_AGE_DASHBOARD_S", "QUOTE_MAX_AGE_DASHBOARD_S", "Data Sources",
+          "Max quote age: admin Dashboard (s)", type="number", default="15", min=1, max=300, step=1,
+          help="v171 D2. The admin page that always shows the latest price."),
+    Field("QUOTE_MAX_AGE_ADMIN_S", "QUOTE_MAX_AGE_ADMIN_S", "Data Sources",
+          "Max quote age: other admin pages (s)", type="number", default="60", min=5, max=600, step=5,
+          help="v171 D2. Watchlist, Trades, Risk, Charts; shown with its age."),
+    Field("INDEX_QUOTE_MAX_AGE_S", "INDEX_QUOTE_MAX_AGE_S", "Data Sources",
+          "Max index-tape quote age (s)", type="number", default="60", min=5, max=600, step=5,
+          help="v171 D2/D7."),
+    Field("EARNINGS_MAX_AGE_S", "EARNINGS_MAX_AGE_S", "Data Sources",
+          "Max earnings-date age (s)", type="number", default="21600", min=600, max=172800, step=600,
+          help="v171 D2. Earnings dates for the alert path and the admin (6 h)."),
+    Field("REBUILD_PRICE_MAX_AGE_S", "REBUILD_PRICE_MAX_AGE_S", "Data Sources",
+          "Rebuild: max trade/quote age (s)", type="number", default="60", min=5, max=600, step=5,
+          help="v171 D5. A last trade, then a bid/ask midpoint, younger than this re-prices "
+               "the plan; otherwise the scan price is kept and flagged 'price not confirmed live'."),
+    Field("TAPE_STALE_FALLBACK_S", "TAPE_STALE_FALLBACK_S", "Data Sources",
+          "Tape: admin self-fetch after (s)", type="number", default="180", min=60, max=1800, step=30,
+          help="v171 D7. When the bot's shared tape entry is older than this, the admin "
+               "fetches the tape itself at admin priority."),
+    Field("ALPACA_BUDGET_PER_MINUTE", "ALPACA_BUDGET_PER_MINUTE", "Data Sources",
+          "Shared Alpaca budget (calls/min)", type="number", default="150", min=10, max=10000, step=10,
+          help="v171 D6. One bucket for every process on the Alpaca account. Stop monitoring, "
+               "the re-quote and the scan never wait behind background or admin calls."),
+    Field("YF_BUDGET_PER_MINUTE", "YF_BUDGET_PER_MINUTE", "Data Sources",
+          "Shared yfinance budget (calls/min)", type="number", default="60", min=5, max=2000, step=5,
+          help="v171 D6. One bucket for the VM's egress IP (bot and admin)."),
+    Field("DELTA_WINDOW_MAX_DAYS", "DELTA_WINDOW_MAX_DAYS", "Data Sources",
+          "Delta fetch: max window (days)", type="number", default="30", min=7, max=120, step=1,
+          help="v171 D4. A longer gap since the last verified bar means a full refetch."),
+    Field("ALPACA_ANCHOR_DATE", "ALPACA_ANCHOR_DATE", "Data Sources",
+          "Alpaca cache: anchor bar date", default="2017-01-03",
+          help="v171 D4. The Alpaca-basis cache's adjustment fingerprint is the first bar on "
+               "or after this date; any change in its adjusted close forces a full refetch."),
+    Field("REANCHOR_WEEKDAY", "REANCHOR_WEEKDAY", "Data Sources",
+          "Weekly re-anchor: weekday (0=Mon)", type="number", default="6", min=0, max=6, step=1,
+          help="v171 D4. Weekly full refetch of every watchlist symbol, outside session."),
+    Field("REANCHOR_HOUR", "REANCHOR_HOUR", "Data Sources",
+          "Weekly re-anchor: hour (Berlin)", type="number", default="4", min=0, max=23, step=1,
+          help="v171 D4."),
+    Field("TAPE_PROXY_SYMBOLS", "TAPE_PROXY_SYMBOLS", "Data Sources",
+          "Tape ETF proxies (index=ETF,...)",
+          default="^GSPC=SPY,^NDX=QQQ,^DJI=DIA,^VIX=VIXY,SI=F=SLV",
+          help="v171 D7. Shown as change % only, labelled as a proxy, when Yahoo is blank for "
+               "the index. The last '=' separates the ETF (so 'SI=F=SLV' maps SI=F to SLV)."),
     # v148: ops alerts (spec O3/O4).
     Field("PROVIDER_FALLBACK_ALERT_PCT", "PROVIDER_FALLBACK_ALERT_PCT", "Data Sources",
           "Ops alert: provider fallback above (%)", type="number", default="20",
@@ -1408,6 +1493,7 @@ _CASTERS = {
 # entry (default "off") with a warning.
 _MODE_VALUES = {
     "PLAN_ENGINE_V2": ("off", "shadow", "on"),
+    "MARKETDATA_LAYER": ("off", "count", "on"),
     "RUNNER_STRUCTURE_EXIT": ("off", "hl_trail", "progress_stall"),
     "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
     "PULLBACK_DRYUP_SCOPE": ("off", "strategy", "confluence"),

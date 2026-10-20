@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { AgeHint, PAGE_PRICE_WINDOW_S } from '../../ui/age-hint';
 import { StatusIndicator } from '../../ui/status-indicator';
 import { COST_CAPTION, OutcomeTile, PAPER_FILLS_LINE, STALE_FLAG } from './outcome-tiles';
 
 @Component({
   selector: 'sb-outcome-strip',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusIndicator],
+  imports: [StatusIndicator, AgeHint],
   template: `
     <div class="strip">
       @for (tile of tiles(); track tile.id) {
@@ -18,6 +19,7 @@ import { COST_CAPTION, OutcomeTile, PAPER_FILLS_LINE, STALE_FLAG } from './outco
             } @else {
               {{ tile.value }}
             }
+            <sb-age-hint [ageS]="tile.ageS" [windowS]="pageWindowS" />
             @if (tile.stale) { <span class="stale-flag">{{ staleFlag }}</span> }
           </div>
           @if (tile.sub) { <div class="tile-sub">{{ tile.sub }}</div> }
@@ -47,4 +49,5 @@ export class OutcomeStrip {
   protected readonly costCaption = COST_CAPTION;
   protected readonly paperFillsLine = PAPER_FILLS_LINE;
   protected readonly staleFlag = STALE_FLAG;
+  protected readonly pageWindowS = PAGE_PRICE_WINDOW_S;
 }

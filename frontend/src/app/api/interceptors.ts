@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { catchError, finalize, tap, throwError } from 'rxjs';
 
 import { ApiError } from './api-error';
+import { FRESH_HEADER, FRESH_REQUEST, FreshRequestService } from './fresh-request.service';
 import { LoadingService } from './loading.service';
 import { UnauthorizedService } from './unauthorized.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
@@ -92,4 +93,13 @@ export const routeRefreshInterceptor: HttpInterceptorFn = (req, next) => {
       refresh.requestMutationRefresh();
     }
   }));
+};
+
+/** v171 D2: mark the requests of a full page load and of explicit refresh
+ *  clicks as fresh. Reads only: a mutation reads no market data. */
+export const freshInterceptor: HttpInterceptorFn = (req, next) => {
+  const fresh = inject(FreshRequestService);
+  const marked = req.method === 'GET'
+    && (req.context.get(FRESH_REQUEST) || fresh.isMarking() || fresh.isBootPhase());
+  return next(marked ? req.clone({ setHeaders: { [FRESH_HEADER]: '1' } }) : req);
 };

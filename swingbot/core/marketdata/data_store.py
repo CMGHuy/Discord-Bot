@@ -23,16 +23,20 @@ from Yahoo Finance -- that data isn't available for free anywhere at that
 granularity going back years. `download_and_cache('1m')` pulls the maximum
 Yahoo actually has (~30 days) and says so plainly in the result.
 """
+import contextlib
 import logging
 import os
 import time
 import threading
 from collections import OrderedDict
+from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import yfinance as yf
 
+from swingbot import config
+from swingbot.core.infra.jsonio import _replace_with_retry
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import spot_metals, yf_safe
 from swingbot.core.marketdata.providers import router
@@ -42,6 +46,9 @@ from swingbot.core.marketdata.adjustments import merge_adjusted
 log = logging.getLogger(__name__)
 
 DATA_DIR = "market_data"
+#: v171 D4: the alpaca-all daily cache (one basis per file); only
+#: daily_delta.write_daily writes it.
+ALPACA_DAILY_DIR = os.path.join(DATA_DIR, "daily_alpaca")
 
 # Semantic timeframe -> the yfinance interval code and Yahoo's real depth.
 # folder    = subdirectory under market_data/ (what training runs point at)
@@ -208,10 +215,26 @@ def refuse_spot_write(ticker: str) -> None:
             f"{spot_metals.underlying(ticker)} instead")
 
 
+def atomic_write_csv(df: pd.DataFrame, path: str) -> None:
+    """v171 D1: the one CSV writer. A unique temp name per call (pid + uuid), so
+    two writers whose lease failed open never share a temp file; os.replace
+    (with jsonio's Windows retry) makes readers see the old or the new file,
+    never a torn one, and invalidates load_normalized's signature memo."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.{uuid4().hex}.tmp"
+    try:
+        df.to_csv(tmp)
+        _replace_with_retry(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
+
+
 def save_to_disk(df: pd.DataFrame, ticker: str, interval: str, base_dir: str = DATA_DIR) -> str:
     refuse_spot_write(ticker)
     path = cache_path(ticker, interval, base_dir)
-    df.to_csv(path)
+    atomic_write_csv(df, path)
     return path
 
 
@@ -313,13 +336,28 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
         swallowed(log, "marketdata.load_normalized.read", exc, "cache read failed for %s/%s: %s",
                   ticker, interval, exc, exc_info=True)
         return None
-    if df is None or df.empty:
+    df = _normalize_cached(df, f"{ticker}/{interval}")
+    if df is None:
         return None
 
+    # Capture the signature after parsing.  If a refresh atomically replaced
+    # the file while it was read, don't retain a frame under the old identity;
+    # the next caller will read the new file instead.
+    after_read = _frame_signature(path)
+    if after_read == signature:
+        _remember_normalized_frame(path, signature, df)
+    return df.copy(deep=True)
+
+
+def _normalize_cached(df: pd.DataFrame | None, label: str) -> pd.DataFrame | None:
+    """The shape guarantees of load_normalized: OHLCV float64 over a tz-naive,
+    de-duplicated, sorted DatetimeIndex. None for an empty or unusable frame."""
+    if df is None or df.empty:
+        return None
     df = _normalize_columns(df)
     if not all(c in df.columns for c in OHLCV_COLUMNS):
-        log.warning("cached frame for %s/%s is missing OHLCV columns (has %s)",
-                    ticker, interval, list(df.columns))
+        log.warning("cached frame for %s is missing OHLCV columns (has %s)",
+                    label, list(df.columns))
         return None
     df = df[OHLCV_COLUMNS].astype("float64")
 
@@ -328,21 +366,34 @@ def load_normalized(ticker: str, interval: str, base_dir: str = DATA_DIR) -> pd.
             df.index = pd.to_datetime(df.index)
         except Exception as exc:
             swallowed(log, "marketdata.load_normalized.index", exc,
-                      "cached frame for %s/%s has an unparseable index: %s",
-                      ticker, interval, exc, exc_info=True)
+                      "cached frame for %s has an unparseable index: %s",
+                      label, exc, exc_info=True)
             return None
     if df.index.tz is not None:
         df.index = df.index.tz_localize(None)
     df = df[~df.index.duplicated(keep="last")].sort_index()
+    return None if df.empty else df
 
-    if df.empty:
+
+def load_normalized_file(path: str, label: str = "") -> pd.DataFrame | None:
+    """v171 D4: load_normalized for any CSV path (the daily_alpaca cache has no
+    timeframe folder), with the same normalisation and signature memo."""
+    signature = _frame_signature(path)
+    if signature is None:
         return None
-
-    # Capture the signature after parsing.  If a refresh atomically replaced
-    # the file while it was read, don't retain a frame under the old identity;
-    # the next caller will read the new file instead.
-    after_read = _frame_signature(path)
-    if after_read == signature:
+    cached = _cached_normalized_frame(path, signature)
+    if cached is not None:
+        return cached
+    try:
+        df = pd.read_csv(path, index_col=0, parse_dates=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.load_normalized.read_csv", exc, "cache read failed for %s: %s",
+                  label or path, exc, exc_info=True)
+        return None
+    df = _normalize_cached(df, label or path)
+    if df is None:
+        return None
+    if _frame_signature(path) == signature:
         _remember_normalized_frame(path, signature, df)
     return df.copy(deep=True)
 
@@ -421,9 +472,7 @@ def update_cache(symbols: list, interval: str = "1d", base_dir: str = DATA_DIR,
         added = len(fresh.index.difference(existing.index))
         merged = merge_adjusted(existing, fresh, symbol, interval, _align_tz)
         path = cache_path(symbol, interval, base_dir=base_dir)
-        tmp = path + ".tmp"
-        merged.to_csv(tmp)
-        os.replace(tmp, path)
+        atomic_write_csv(merged, path)
         result[symbol] = added
     return result
 
@@ -462,11 +511,37 @@ def get_intraday(symbol: str, interval: str = "1h", base_dir: str = DATA_DIR,
     if spot_metals.is_spot_metal(symbol):
         return _spot_intraday(symbol, interval, base_dir, fetch_fn)
     path = cache_path(symbol, interval, base_dir=base_dir)
-    fresh_enough = (os.path.exists(path)
-                    and time.time() - os.path.getmtime(path) < INTRADAY_MAX_AGE_SECONDS)
-    if fresh_enough:
+    if _intraday_fresh(path):
         return load_from_disk(symbol, interval, base_dir=base_dir)
+    if config.MARKETDATA_LAYER == "off":
+        return _fetch_merge_intraday(symbol, interval, base_dir, fetch_fn)
+    return _intraday_under_lease(symbol, interval, base_dir, fetch_fn, path)
 
+
+def _intraday_fresh(path: str) -> bool:
+    return os.path.exists(path) and time.time() - os.path.getmtime(path) < INTRADAY_MAX_AGE_SECONDS
+
+
+def _intraday_provider(symbol: str) -> str:
+    from swingbot.core.marketdata.providers.base import is_alpaca_eligible
+    from swingbot.core.marketdata.shared.kinds import PROVIDER_ALPACA, PROVIDER_YF
+    return PROVIDER_ALPACA if config.ALPACA_ENABLED and is_alpaca_eligible(symbol) else PROVIDER_YF
+
+
+def _intraday_under_lease(symbol, interval, base_dir, fetch_fn, path):
+    """v171: single-flight the stale-file refetch; the other holder's fresh file is read, not refetched."""
+    from swingbot.core.marketdata.shared import counters, layer
+    from swingbot.core.marketdata.shared.kinds import DataKind
+    asker = router.current_asker()
+    with layer.lease(DataKind.INTRADAY_BARS, f"{symbol}:{interval}", asker=asker):
+        if _intraday_fresh(path):
+            return load_from_disk(symbol, interval, base_dir=base_dir)
+        out = _fetch_merge_intraday(symbol, interval, base_dir, fetch_fn)
+        counters.count(_intraday_provider(symbol), DataKind.INTRADAY_BARS, asker, "fetched")
+        return out
+
+
+def _fetch_merge_intraday(symbol, interval, base_dir, fetch_fn):
     def _default_fetch(sym, iv):
         def _yf(s, i):
             df = yf_safe.download(s, period="700d", interval=i,

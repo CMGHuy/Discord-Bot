@@ -184,11 +184,12 @@ def test_upgrade_logs_counts_and_downgrade_drops_both_fields(trades_conn, caplog
 
 def test_revision_chains_after_v147_and_leaves_one_head():
     """v147_001 also branched off v152_001 on main; v146_001 sits on top of it.
-    Later revisions stack above v146_001, so the head is asserted unique, not named."""
+    Later revisions may chain after it, so check ancestry, not the global head."""
     script = ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
     assert MIG.down_revision == "v147_001"
-    assert len(script.get_heads()) == 1
-    assert script.get_revision("v146_001") is not None
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert "v146_001" in {r.revision for r in script.iterate_revisions(heads[0], "base")}
 
 
 def test_revision_sits_on_an_existing_revision_and_runs_up_and_down(db_engine_empty):

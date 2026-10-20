@@ -70,6 +70,10 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   landed ahead of the task that wires them into the scan path. Before "fixing"
   a seemingly-dead edge function, grep the plan for its wiring task.
 
+## Shared market-data layer (v171)
+
+Every Alpaca and yfinance request in `swingbot/` (bot, spawned `_run_bounded` workers, admin) goes through `swingbot/core/marketdata/shared/`: `kinds.py` (data kinds; askers with priority 1-5 and freshness windows), `layer.py` (`get`: Postgres cache, cross-process lease single-flight, batching; `lease`: bar writers), `budget.py` (one token bucket per provider shared by every process, tier reserves 0/0/0/25 %/50 %, shared breaker), `counters.py` (D9 hourly counts in `market_fetch_counts`) and `tape.py` (the bot's index tape feed). Its tables (`market_cache`, `provider_budget`, `market_fetch_counts`) are reached only through `core/db/repositories/market_shared.py` over `core/db/side_engine.py` (autocommit, 250 ms statement timeout), and every touch fails open. Provider calls stay in provider functions (`providers/`, `yf_safe.py`, `data.py`, `data_store.py`, `data_refresh.py`, `daily_delta.py`, `events.py`), which take their budget token at the call site at `router.current_asker()`; `tests/marketdata/test_fetch_layer_guard.py` fails any direct use elsewhere. The D5 rebuild is `core/planning/rebuild.py`, fed by `core/scanning/requote.py`. The admin's reload mark and page readers are `swingbot/admin/freshness.py`. Flags: `MARKETDATA_LAYER` (`off`/`count`/`on`), `DAILY_DELTA_FETCH`, `PLAN_REBUILD_ENABLED`, `TAPE_SHARED_ENABLED`; each off restores the pre-v171 path. Traps: `known-traps.md` § Shared market-data layer.
+
 ## Entry-signal single source
 
 - **Entry signals have a single source:** `swingbot/core/market/entry_filters.py`

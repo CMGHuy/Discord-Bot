@@ -55,7 +55,7 @@ installDialogPolyfill();
  *  values()/isLoaded()/update() from PreferencesStore -- stubbed rather than
  *  let their own onInit hooks issue real HTTP requests this spec does not
  *  care about. */
-const connectionStub = { currency: signal('$') };
+const connectionStub = { currency: signal('$'), marketActive: signal<boolean | null>(true) };
 const preferencesStub = {
   values: signal({}),
   isLoaded: signal(true),
@@ -475,5 +475,32 @@ describe('DASHBOARD_COLUMNS', () => {
     // this is literally that same function's return value.
     expect(DASHBOARD_COLUMNS.length).toBeGreaterThan(0);
     expect(DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined)).toEqual([]);
+  });
+});
+
+describe('Dashboard v171 price age hint', () => {
+  /** Open rows carry a live pnl_pct from the server, so the hint has to sit
+   *  on that branch of the P&L cell, not only on the projected one a
+   *  PENDING row falls through to (found by the V171-33 Playwright pass). */
+  async function withActiveRow(row: Partial<TradeRow>) {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    for (const req of backend.match((r) => r.url === '/api/v1/trades')) {
+      const active = req.request.params.get('status') === 'ACTIVE';
+      req.flush({ items: active ? [tradeRow({ status: 'ACTIVE', pnl_pct: 0.9, ...row })] : [], total: active ? 1 : 0, page: 1, per_page: 20 });
+    }
+    backend.expectOne('/api/v1/dashboard?mode=today').flush(payload({ lifecycle: { ACTIVE: 1 } as never }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return (fixture.nativeElement as HTMLElement).querySelectorAll('.age-hint');
+  }
+
+  it('shows the age beside a live P&L older than the dashboard window', async () => {
+    const hints = await withActiveRow({ price_age_s: 75 });
+    expect([...hints].map((h) => h.textContent?.trim())).toEqual(['1 min ago']);
+  });
+
+  it('stays silent inside the window', async () => {
+    expect((await withActiveRow({ price_age_s: 5 })).length).toBe(0);
   });
 });

@@ -103,6 +103,8 @@ TRADE_ROW = {
     # because the primary fetch had failed. False (never null) so a cell
     # never has to ask whether the flag exists before reading it.
     "current_price_stale": bool,
+    "price_age_s": NULLABLE_NUMBER,
+    "price_as_of": NULLABLE_STR,
     "exit_price": NULLABLE_NUMBER,
     "realized_pnl_amount": NULLABLE_NUMBER,
     "pnl_pct": NULLABLE_NUMBER,

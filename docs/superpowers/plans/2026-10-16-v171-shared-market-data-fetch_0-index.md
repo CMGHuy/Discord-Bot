@@ -15,7 +15,7 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+V171-1..V171-32 implemented on the branch. V171-33 Playwright pass 2026-10-20: 15 shots at 390/768/1440 (Dashboard, Watchlist, trade 2ooWWtEpJRs2dsEc default and live tab, plan 944b0241-7f27-4861-85a1-10b2a7147654); sideways 0, spinners 0 (one pre-existing on the plan page at 390 px, also in the unpatched baseline); fresh header on first load yes, after navigation no; tape hidden at 390 px by design; fixes: 0d413124; missing local data: none.
 
 ## Where to work
 

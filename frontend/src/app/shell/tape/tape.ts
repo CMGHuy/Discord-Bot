@@ -4,8 +4,10 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { TapeRow } from '../../api/models';
 import { MarketIndexStore } from '../../stores/market-index.store';
 import { TapeStore } from '../../stores/tape.store';
+import { AgeHint, TAPE_WINDOW_S } from '../../ui/age-hint';
 import { Flash } from '../../ui/flash';
 import { ABSENT, num, pct } from '../../ui/format';
 import { TAPE_MIN_DURATION_S, tapeDurationSeconds } from './tape-speed';
@@ -20,6 +22,10 @@ const INDEX_LABELS: Record<string, string> = {
   '^VIX': 'VIX',
 };
 
+function proxyLabel(r: TapeRow): string | null {
+  return r.is_proxy ? `${r.proxy_symbol ?? 'ETF'} proxy` : null;
+}
+
 /** One row of either source, reshaped to the one tile template needs. */
 interface Tile {
   key: string;
@@ -29,6 +35,8 @@ interface Tile {
   link: string | null;
   context_label: string | null;
   context_kind: string | null;
+  proxyLabel: string | null;
+  ageS: number | null;
 }
 
 /**
@@ -50,7 +58,7 @@ interface Tile {
 @Component({
   selector: 'sb-tape',
   standalone: true,
-  imports: [RouterLink, Flash],
+  imports: [RouterLink, Flash, AgeHint],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
   template: `
@@ -65,7 +73,12 @@ interface Tile {
                  [attr.aria-hidden]="pass === 1 ? 'true' : null"
                  [attr.tabindex]="tile.link && pass !== 1 ? null : -1">
                 <span class="sym">{{ tile.label }}</span>
-                @if (tile.price !== null) {
+                @if (tile.proxyLabel) {
+                  @if (tile.change_pct !== null) {
+                    <span [class.up]="up(tile)" [class.down]="down(tile)">{{ pct(tile.change_pct) }}</span>
+                  }
+                  <span class="ctx proxy" title="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.">{{ tile.proxyLabel }}</span>
+                } @else if (tile.price !== null) {
                   <span class="px" [class.up]="up(tile)" [class.down]="down(tile)">{{ num(tile.price) }}</span>
                   @if (tile.change_pct !== null) {
                     <span [class.up]="up(tile)" [class.down]="down(tile)">{{ pct(tile.change_pct) }}</span>
@@ -78,6 +91,7 @@ interface Tile {
                     {{ tile.context_label }}
                   </span>
                 }
+                <sb-age-hint [ageS]="tile.ageS" [windowS]="tapeWindowS" />
               </a>
             }
           }
@@ -92,6 +106,7 @@ export class Tape {
   protected readonly num = num;
   protected readonly pct = pct;
   protected readonly ABSENT = ABSENT;
+  protected readonly tapeWindowS = TAPE_WINDOW_S;
 
   private readonly trackRef = viewChild<ElementRef<HTMLElement>>('track');
   /** Measured from the track's own rendered width (after every render the
@@ -108,6 +123,8 @@ export class Tape {
       link: null,
       context_label: null,
       context_kind: null,
+      proxyLabel: proxyLabel(r),
+      ageS: r.age_s ?? null,
     }));
     const stocks: Tile[] = this.tape.rows().map((r) => ({
       key: `stk:${r.symbol}`,
@@ -117,6 +134,8 @@ export class Tape {
       link: `/watchlist/${r.symbol}`,
       context_label: r.context_label,
       context_kind: r.context_kind,
+      proxyLabel: proxyLabel(r),
+      ageS: r.age_s ?? null,
     }));
     return [...indices, ...stocks];
   });

@@ -22,6 +22,7 @@ import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { TapeStore } from '../../stores/tape.store';
 import { TradesStore } from '../../stores/trades.store';
+import { AgeHint, DASHBOARD_PRICE_WINDOW_S } from '../../ui/age-hint';
 import { Async, asyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.types';
@@ -134,7 +135,7 @@ export const DASHBOARD_COLUMNS = tradeColumns();
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
-    Hint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
+    Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
     RecentActivity, MarketMovers,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
@@ -391,6 +392,9 @@ export const DASHBOARD_COLUMNS = tradeColumns();
           {{ fmtPct(row.pnl_pct) }}
           <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
         </span>
+        <!-- An open row carries a live pnl_pct too, so it lands here, not in
+             the else branch; price_age_s is null on a closed row. -->
+        <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />
       } @else {
         <span
           class="pnl-plan"
@@ -410,6 +414,7 @@ export const DASHBOARD_COLUMNS = tradeColumns();
               <span class="pnl-amount"> ({{ fmtMoney(liveUnrealizedAmount(row)) }})</span>
             }
           </span>
+          <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />
           <span class="sep">{{ ' → ' }}</span>
           <span class="tp expected">{{ fmtPct(expectedPnlPct(row)) }}</span>
           <span class="sep">{{ ' - ' }}</span>
@@ -583,6 +588,7 @@ export class Dashboard {
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);
   private readonly toast = inject(ToastService);
+  protected readonly dashboardWindowS = DASHBOARD_PRICE_WINDOW_S;
   protected readonly store = inject(DashboardStore);
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */

@@ -9,7 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiClient } from './api-client';
 import { ApiError } from './api-error';
-import { authInterceptor, errorInterceptor, loadingInterceptor, routeRefreshInterceptor } from './interceptors';
+import { authInterceptor, errorInterceptor, freshInterceptor, loadingInterceptor, routeRefreshInterceptor } from './interceptors';
+import { provideRouter } from '@angular/router';
 import { CloseOpenResult } from './models';
 import { RouteRefreshService } from '../routing/route-refresh.service';
 import { LoadingService } from './loading.service';
@@ -33,8 +34,9 @@ describe('http interceptors', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(
-          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor]),
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor, freshInterceptor]),
         ),
+        provideRouter([]),
         provideHttpClientTesting(),
         { provide: RouteRefreshService, useValue: { requestMutationRefresh: () => undefined } },
       ],
@@ -203,6 +205,16 @@ describe('http interceptors', () => {
     // stay false through this request and the next one.
     expect(loading.isLoading()).toBe(true);
     backend.expectOne((req) => req.url === '/api/v1/dashboard').flush({});
+  });
+
+  /* -- fresh (v171 D2) ------------------------------------------------- */
+
+  it('sends the fresh header on a GET of the page load, after the other interceptors', () => {
+    http.get('/api/v1/dashboard').subscribe();
+    const req = backend.expectOne('/api/v1/dashboard');
+    expect(req.request.headers.get('X-Swingbot-Fresh')).toBe('1');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({});
   });
 });
 
