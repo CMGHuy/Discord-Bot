@@ -1100,12 +1100,39 @@ async def pitr_watch_loop():
         await notices.send_guarded(channel, notices.pitr_notice_embed(notice), what="PITR alarm")
 
 
+_TAPE_FEED_MAX_AGE_S = 30.0
+
+
+def _tape_feed_tick() -> None:
+    from swingbot.core.marketdata.shared import tape
+    from swingbot.core.marketdata.shared.kinds import Asker
+    now = dt.datetime.now(dt.timezone.utc)
+    tape.refresh_tape(tape.demanded_symbols(now), asker=Asker.BACKGROUND,
+                      max_age_s=_TAPE_FEED_MAX_AGE_S)
+
+
+@tasks.loop(seconds=60)
+async def tape_feed():
+    """v171 D7: feeds the admin's index tape from one shared copy, once a minute in
+    session. The admin self-fetches only when that copy is older than
+    TAPE_STALE_FALLBACK_S. Max age is half the period: each tick refetches, and a
+    second process ticking at once shares the fetch."""
+    from swingbot.core.marketdata import data
+    if not (config.TAPE_SHARED_ENABLED and config.MARKETDATA_LAYER == "on"
+            and data.is_us_market_active()):
+        return
+    try:
+        await asyncio.to_thread(_tape_feed_tick)
+    except Exception:
+        log.exception("tape_feed: refresh failed")
+
+
 def _always_on_loops() -> tuple:
     """Loops on_ready starts unconditionally, in start order."""
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
             weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
             pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
-            next_session_wrapup)
+            next_session_wrapup, tape_feed)
 
 
 def _start_background_loops() -> None:
