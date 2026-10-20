@@ -17,6 +17,7 @@ import { PanelError } from '../../../ui/panel-error';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
 import { StatTile } from '../../../ui/stat-tile';
 import { alwaysMoney, inUnit, unitLabel } from '../../../ui/unit-format';
+import { VarianceBandPanel } from './variance-band-panel';
 
 /** One KPI tile's resolved, pre-formatted content -- `StatTile` never formats. */
 interface KpiTile {
@@ -71,7 +72,7 @@ function maxDrawdown(values: readonly number[]): number | null {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Panel, PanelHeader, PanelError, EmptyStateComponent, StatTile, LineChart,
-    ShareBar, Histogram, BarList, DataTable, RouterLink,
+    ShareBar, Histogram, BarList, DataTable, RouterLink, VarianceBandPanel,
   ],
   template: `
     <div class="kpis">@for (tile of kpiTiles(); track tile.label) {
@@ -139,12 +140,16 @@ function maxDrawdown(values: readonly number[]): number | null {
         }
         <a routerLink="/calendar">Open the calendar</a>
       </sb-panel>
+      <sb-variance-band-panel class="wide" />
     </div>
   `,
   styles: `
     :host { display: grid; gap: var(--space-20); }
     .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-10); }
     .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-14); }
+    /* v175: the Normal bad luck panel spans both columns; its own two bars
+       take the columns from 640px up and stack below. */
+    .wide { grid-column: 1 / -1; }
     .pane-label { font-size: var(--text-chip); color: var(--text-secondary); margin: var(--space-10) 0 var(--space-4); }
     /* Named .benchmark-note, not .note (v54 precedent, trade-detail.ts):
        that name is a promoted sb-note callout composite -- this is an
