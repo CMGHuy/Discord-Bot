@@ -107,6 +107,10 @@ export interface TradeRow {
    *  existed is not forced to grow it. */
   risk_stop?: number | null;
   target: number | null;
+  /** TP1 as planned, in every status. `target` is the live target (TP2 once a
+   *  PARTIAL runner has banked TP1), so a "Target 1" label reads this. Optional
+   *  like `risk_stop`; readers fall back to `target`. */
+  target1?: number | null;
   target2: number | null;
   /** The TP1 leg's own fraction/fill-price/R once a PARTIAL plan has banked
    *  it. All three null until then; a legacy trade never scale-outs so

@@ -612,7 +612,7 @@ export class TradeDetail {
     return {
       direction: trade.direction, status: trade.status, entryType: this.store.entryType(),
       trigger: this.store.triggerPrice(), entry: trade.entry, riskStop: this.store.riskStop(),
-      stopLoss: trade.stop_loss, workingStop: this.store.workingStop(), target1: trade.target,
+      stopLoss: trade.stop_loss, workingStop: this.store.workingStop(), target1: trade.target1 ?? trade.target,
       target2: trade.target2, acceptance: this.store.acceptanceLevel(), riskReward: trade.risk_reward,
       riskPerShare: this.store.riskPerShare(), rewardPerShare: this.store.rewardPerShare(),
     };

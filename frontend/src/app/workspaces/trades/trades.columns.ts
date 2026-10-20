@@ -143,7 +143,7 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     /* -- individually re-addable through the column picker ---------------- */
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true, inlineFrom: 'lg' },
     { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, inlineFrom: 'lg' },
-    { key: 'target', header: 'Target', value: (row) => num(row.target), numeric: true, inlineFrom: 'lg' },
+    { key: 'target', header: 'Target', value: (row) => num(row.target1 ?? row.target), numeric: true, inlineFrom: 'lg' },
     { key: 'risk_reward', header: 'R:R', value: (row) => num(row.risk_reward), numeric: true, inlineFrom: 'lg' },
     // Rich cell (trades.ts's rMultipleCell) adds sb-magnitude beneath; value
     // is the fallback used wherever cell isn't wired up. v54 Task 28: signed()
