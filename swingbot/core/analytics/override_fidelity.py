@@ -17,6 +17,7 @@ edit.
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -371,3 +372,283 @@ def to_usd(r: float | None, risk: float | None) -> float | None:
     if r is None or risk is None:
         return None
     return round(r * risk, 2)
+
+
+# --------------------------------------------------------------------------
+# V173-9: the actual exit price and replay_override's eight statuses
+# (spec §3, plan panel review). Precedence, first match wins: unstamped ->
+# unreplayable -> stale -> split_affected -> parity_mismatch -> ambiguous ->
+# open -> resolved.
+# --------------------------------------------------------------------------
+
+_log = logging.getLogger(__name__)
+
+
+class _Unreplayable(Exception):
+    """The replay cannot place this override: no fill, no bars, no exit
+    price, or costs.book refused the plan's entry and stop."""
+
+
+@dataclass(frozen=True)
+class _Replay:
+    """What the status walk needs, gathered once by _prepare."""
+    df: pd.DataFrame
+    fill_idx: int
+    ov_idx: int | None
+    state: str
+    price: float
+    price_source: str
+    approx: bool
+    actual_r: float
+
+
+@dataclass(frozen=True)
+class _Arms:
+    """The engine side of a resolved row."""
+    engine_r: float
+    gross_delta: float
+    exit_reason: str
+
+
+def _iso_day(value) -> dt.date | None:
+    try:
+        return dt.date.fromisoformat(str(value)[:10]) if value else None
+    except ValueError:
+        return None
+
+
+def _bar_close_stale(stamp: dict, hit: SessionHit | None) -> bool:
+    """A bar_close stamp read from a cache older than the close session (or
+    of unknown age) is an estimate, not the price the human saw."""
+    if stamp.get("price_source") != "bar_close":
+        return False
+    cache_day = _iso_day(stamp.get("bars_asof"))
+    return cache_day is None or hit is None or cache_day < hit.session
+
+
+def _stamped_price(entry: dict | None,
+                   hit: SessionHit | None) -> tuple[float, str, bool] | None:
+    """(price, source, approx) from a "stamped" stamp with a price; else None."""
+    if entry is None or stamp_kind(entry) != "stamped":
+        return None
+    stamp = entry["override"]
+    if stamp.get("exit_price") is None:
+        return None
+    return (float(stamp["exit_price"]), str(stamp["price_source"]),
+            _bar_close_stale(stamp, hit))
+
+
+def _bar_price(df: pd.DataFrame | None, hit: SessionHit | None) -> tuple[float | None, str]:
+    """The override session's open or close, per the spec §3 table."""
+    idx = session_index(df, hit.session) if df is not None and hit is not None else None
+    if idx is None:
+        return None, "none"
+    if hit.price_kind == "open":
+        return float(df["Open"].iloc[idx]), "session_open"
+    return float(df["Close"].iloc[idx]), "session_close"
+
+
+def actual_exit(plan, df: pd.DataFrame | None,
+                hit: SessionHit | None) -> tuple[float | None, str, bool]:
+    """(price, price_source, approx) of the human's exit.
+
+    A "stamped" stamp's exit_price (quote or bar_close; a bar_close older
+    than the close session is approx); otherwise the override session bar's
+    open or close, approx. An individual close with a failed stamp never
+    gets here: replay_override marks it unstamped first."""
+    priced = _stamped_price(override_entry(plan), hit)
+    if priced is not None:
+        return priced
+    price, source = _bar_price(df, hit)
+    return price, source, True
+
+
+def _is_unstamped(entry: dict | None) -> bool:
+    """An individual close whose post-v173 stamp failed (Global Constraints,
+    Stamp kinds). Bulk closes fall through to the session-bar path."""
+    return (entry is not None and entry.get("reason") != "manual_bulk"
+            and stamp_kind(entry) == "failed")
+
+
+def _price_fields(entry: dict | None, hit: SessionHit | None) -> tuple[str, bool]:
+    """(price_source, approx) of a row the replay never priced."""
+    if _is_unstamped(entry):
+        return "none", False
+    priced = _stamped_price(entry, hit)
+    return (priced[1], priced[2]) if priced is not None else ("none", True)
+
+
+def _usable_frame(bars) -> pd.DataFrame:
+    if bars is None or len(bars) == 0:
+        raise _Unreplayable("no cached bars")
+    return bars
+
+
+def _fill_index(plan, df: pd.DataFrame) -> int:
+    hit = assign_session(transition_at(plan, "ACTIVE"))
+    idx = session_index(df, hit.session) if hit is not None else None
+    if idx is None:
+        raise _Unreplayable("no fill session in the cached bars")
+    return idx
+
+
+def _booked_actual(plan, price: float, state: str) -> float:
+    try:
+        return actual_r(plan, price, state)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise _Unreplayable(f"costs.book refused the actual arm: {exc}") from exc
+
+
+def _prepare(plan, bars, hit: SessionHit | None) -> _Replay:
+    """Everything before the bars are judged; raises _Unreplayable."""
+    if override_entry(plan) is None or hit is None:
+        raise _Unreplayable("not a manual close with a readable time")
+    if plan.entry_price is None or plan.stop_loss is None:
+        raise _Unreplayable("plan has no entry price or stop")
+    df = _usable_frame(bars)
+    fill_idx = _fill_index(plan, df)
+    price, source, approx = actual_exit(plan, df, hit)
+    if price is None:
+        raise _Unreplayable("no exit price derivable")
+    state = state_at_close(plan)
+    return _Replay(df=df, fill_idx=fill_idx, ov_idx=session_index(df, hit.session),
+                   state=state, price=price, price_source=source, approx=approx,
+                   actual_r=_booked_actual(plan, price, state))
+
+
+def _split_band(plan, df: pd.DataFrame, fill_idx: int) -> bool:
+    """The raw fill price outside the cached fill bar (± SPLIT_TOLERANCE):
+    the adjusted cache no longer shares the plan's price basis."""
+    low = float(df["Low"].iloc[fill_idx]) * (1.0 - SPLIT_TOLERANCE)
+    high = float(df["High"].iloc[fill_idx]) * (1.0 + SPLIT_TOLERANCE)
+    return not low <= float(plan.entry_price) <= high
+
+
+def _admission(plan, rp: _Replay, asof: dt.date) -> str | None:
+    """stale / split_affected / unreplayable from the bars alone, or None.
+    V173-22 widens stale (calendar gaps) and split_affected (seams)."""
+    if rp.df.index[-1].date() < asof:
+        return "stale"
+    if _split_band(plan, rp.df, rp.fill_idx):
+        return "split_affected"
+    if rp.ov_idx is None or rp.ov_idx < rp.fill_idx:
+        return "unreplayable"
+    return None
+
+
+def _live_tp1_index(plan, df: pd.DataFrame) -> int | None:
+    hit = assign_session(transition_at(plan, "PARTIAL"))
+    return session_index(df, hit.session) if hit is not None else None
+
+
+def _parity_broken(plan, real: ExitResult, rp: _Replay) -> bool:
+    """The replay disagrees with what the live plan did before the override."""
+    if real.exit_index < rp.ov_idx:
+        return True
+    if rp.state == "ACTIVE":
+        return real.tp1_index is not None and real.tp1_index < rp.ov_idx
+    live = _live_tp1_index(plan, rp.df)
+    return live is None or real.tp1_index != live
+
+
+def _ambiguous(real: ExitResult, ov_idx: int) -> bool:
+    """The engine may have exited on the override session before the human."""
+    if real.tp1_index == ov_idx:
+        return True
+    return (real.exit_index == ov_idx
+            and leg_kind(real.legs[-1]["reason"]) in ("stop", "target"))
+
+
+def _engine_arm(plan, rp: _Replay) -> ExitResult:
+    """The engine left alone: exit checks on the clamped override bar,
+    ATR and structure from the real bars (indicator_df).
+
+    Guard: ExitResult.tp1_index is a plain class attribute set on the
+    instance by walk_v2, not a dataclass field, so dataclasses.replace()
+    and asdict() drop it (index § Handoff). Read tp1_index from the
+    engine_path result itself, never from a copy."""
+    return engine_path(plan, engine_frame(rp.df, rp.ov_idx), rp.fill_idx,
+                       indicator_df=rp.df)
+
+
+def _still_open(plan, eng: ExitResult, rp: _Replay) -> bool:
+    """walk_v2 labels a data-end clip `timeout` too; only the hold cap resolves."""
+    last = len(rp.df) - 1
+    return (eng.legs[-1]["reason"] in TIMEOUT_REASONS and eng.exit_index == last
+            and rp.fill_idx + hold_cap_bars(plan) > last)
+
+
+def _status(plan, rp: _Replay, asof: dt.date) -> tuple[str, ExitResult | None]:
+    """The row's status after _prepare, and the engine-frame result when resolved.
+
+    The real frame decides parity and ambiguity only (its tp1_index is read
+    straight from engine_path's result, see _engine_arm); the engine arm is
+    the clamped engine frame, so the engine never sees the override
+    session's range as a later path."""
+    early = _admission(plan, rp, asof)
+    if early is not None:
+        return early, None
+    real = engine_path(plan, rp.df, rp.fill_idx)
+    if not real.legs:
+        return "unreplayable", None
+    if _parity_broken(plan, real, rp):
+        return "parity_mismatch", None
+    if _ambiguous(real, rp.ov_idx):
+        return "ambiguous", None
+    eng = _engine_arm(plan, rp)
+    if _still_open(plan, eng, rp):
+        return "open", None
+    return "resolved", eng
+
+
+def _arms(plan, rp: _Replay, eng: ExitResult) -> _Arms:
+    """engine_r net of costs, and the delta before costs (descriptive only)."""
+    gross_actual = actual_r(plan, rp.price, rp.state, cost_model=GROSS_COST_MODEL)
+    gross_engine = engine_r(plan, eng, rp.state, cost_model=GROSS_COST_MODEL)
+    return _Arms(engine_r=engine_r(plan, eng, rp.state),
+                 gross_delta=round(gross_actual - gross_engine, 3),
+                 exit_reason=eng.legs[-1]["reason"])
+
+
+def _row(plan, entry: dict | None, hit: SessionHit | None, status: str,
+         trade: dict | None, *, rp: _Replay | None = None,
+         arms: _Arms | None = None) -> OverrideRow:
+    a_r = rp.actual_r if rp is not None else None
+    e_r = arms.engine_r if arms is not None else None
+    d_r = round(a_r - e_r, 3) if arms is not None else None
+    risk = dollar_risk(plan, trade) if rp is not None else None
+    source, approx = ((rp.price_source, rp.approx) if rp is not None
+                      else _price_fields(entry, hit))
+    return OverrideRow(
+        plan_id=plan.plan_id, ticker=plan.ticker, horizon=plan.horizon_key,
+        direction=plan.direction, state_at_close=state_at_close(plan),
+        close_date=hit.session if hit is not None else None,
+        bulk=(entry or {}).get("reason") == "manual_bulk", approx=approx,
+        price_source=source, status=status, actual_r=a_r, engine_r=e_r, delta_r=d_r,
+        delta_r_gross=arms.gross_delta if arms is not None else None,
+        actual_usd=to_usd(a_r, risk), engine_usd=to_usd(e_r, risk),
+        delta_usd=to_usd(d_r, risk),
+        engine_exit_reason=arms.exit_reason if arms is not None else None,
+        outcome=outcome_of(d_r), source="manual")
+
+
+def replay_override(plan, bars: pd.DataFrame | None, asof: dt.date,
+                    trade: dict | None = None) -> OverrideRow:
+    """One manual close against the engine left alone (spec §3).
+
+    Pure: `bars` is the live scan's cache frame (never fetched here), `asof`
+    the latest completed NYSE session, `trade` the linked paper trade (for
+    dollars). A failed stamp on an individual close is `unstamped`; a row
+    it cannot place is `unreplayable`; it never raises."""
+    entry = override_entry(plan)
+    hit = assign_session((entry or {}).get("at"))
+    if _is_unstamped(entry):
+        return _row(plan, entry, hit, "unstamped", trade)
+    try:
+        rp = _prepare(plan, bars, hit)
+    except _Unreplayable as exc:
+        _log.info("override_fidelity: %s unreplayable: %s", plan.plan_id, exc)
+        return _row(plan, entry, hit, "unreplayable", trade)
+    status, eng = _status(plan, rp, asof)
+    arms = _arms(plan, rp, eng) if eng is not None else None
+    return _row(plan, entry, hit, status, trade, rp=rp, arms=arms)
