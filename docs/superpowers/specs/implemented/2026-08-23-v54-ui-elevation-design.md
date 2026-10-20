@@ -122,6 +122,8 @@ Default assignment:
 
 ## D2 — The elevation ladder, and the one-shadow law
 
+> **Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):** elevation has two levels now. In-flow panels cast `--panel-shadow` through the global `.sb-panel` class; out-of-flow elements cast `--shadow-overlay` through `.elev-overlay`. The ladder's surfaces stand; the one-shadow law does not.
+
 Four levels, using the four existing surface tokens, whose values already form
 a clean four-step lightness ramp (`#0a0b10` → `#10121a` → `#171a25` →
 `#1e2230`):
@@ -348,7 +350,7 @@ Each is mechanically checkable; none is a judgement call.
 |---|---|
 | G1 | `sb-async` wraps every fetch-backed region: count equals the number of fetching surfaces, enumerated in the plan. |
 | G2 | Every `sb-async` empty branch passes an explicit reason. No default. |
-| G3 | A non-`inset` `box-shadow` appears in exactly one rule (the L3 rule). `inset` shadows are borders drawn inside the box, not elevation, and stay allowed. |
+| G3 | A non-`inset` `box-shadow` appears in exactly one rule (the L3 rule). `inset` shadows are borders drawn inside the box, not elevation, and stay allowed. *Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3): exactly two non-inset shadows, `.sb-panel` (`--panel-shadow`) and `.elev-overlay` (`--shadow-overlay`).* |
 | G4 | Zero hex literals outside `tokens.css`. |
 | G5 | Every text-token / surface-token pair ≥ 4.5:1, or documented as non-text. |
 | G6 | No layout shift on data arrival: skeleton geometry matches loaded geometry for each surface. |

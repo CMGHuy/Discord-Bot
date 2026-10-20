@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-17 21:19:36 UTC",
+  "generated_at": "2026-10-19 20:07:09 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.27.0",
-    "bot": "2.10.0"
+    "ui": "1.31.0",
+    "bot": "2.12.0"
   },
   "releases": [
     {
@@ -1811,6 +1811,97 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "7226b3e4",
+      "subject": "release(ui): 1.28.0 -- trade detail reorganised: outcome strip, header actions, Overview/Why/Chart/Journal tabs, responsive card grid (v166)",
+      "versions": {
+        "ui": "1.28.0",
+        "bot": "2.10.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "b9cbce75",
+      "subject": "release(ui): 1.29.0 -- Arctic Navy: three-tier tokens, refined-terminal radii and two-level elevation, gradient panels, chart PNG palette in lockstep (v167)",
+      "versions": {
+        "ui": "1.29.0",
+        "bot": "2.10.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "0a3b7646",
+      "subject": "release(bot): 2.10.1 -- chart PNG cache keys carry a style version so the Arctic Navy palette never serves stale charts (v167)",
+      "versions": {
+        "ui": "1.29.0",
+        "bot": "2.10.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "871fbfb4",
+      "subject": "release(ui): 1.30.0 -- equity candlestick chart on the Dashboard: 1H/4H/1D/1W, open + closed or closed-only, OHLC readout (v172)",
+      "versions": {
+        "ui": "1.30.0",
+        "bot": "2.10.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "last_seen": "2026-10-18",
+      "commit": "13fa9ee0",
+      "subject": "release(bot): 2.11.0 -- equity samples recorded by the trade monitor, equity candles API, raw-bar backfill script (v172)",
+      "versions": {
+        "ui": "1.30.0",
+        "bot": "2.11.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-19",
+      "last_seen": "2026-10-19",
+      "commit": "3951d818",
+      "subject": "release(bot): 2.12.0 -- runner give-back exit (5% off the best price since TP1)",
+      "versions": {
+        "ui": "1.30.0",
+        "bot": "2.12.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-19",
+      "last_seen": "2026-10-19",
+      "commit": "80f3ef29",
+      "subject": "release(ui): 1.31.0 -- Motion system: one motion file, Motion preference (On on tablet and desktop, Off on a phone), ten animations (v168)",
+      "versions": {
+        "ui": "1.31.0",
+        "bot": "2.12.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]

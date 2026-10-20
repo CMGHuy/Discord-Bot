@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FreshRequestService } from '../api/fresh-request.service';
-import { asyncInputs, Async, type AsyncEmptyReason } from './async';
+import { asyncInputs, Async, skeletonGrid, type AsyncEmptyReason, type SkeletonShape } from './async';
 
 @Component({
   imports: [Async],
@@ -17,6 +19,7 @@ import { asyncInputs, Async, type AsyncEmptyReason } from './async';
       [staleAsOf]="staleAsOf"
       [skeletonRows]="3"
       [skeletonCols]="2"
+      [shape]="shape"
       [announce]="announce"
       (retry)="retried = retried + 1; onRetried()"
     >
@@ -33,6 +36,7 @@ class Host {
   announce: string | null = null;
   retried = 0;
   onRetried: () => void = () => undefined;
+  shape: SkeletonShape = 'table';
 }
 
 function render(patch: Partial<Host> = {}) {
@@ -101,6 +105,68 @@ describe('Async', () => {
   it('announces only what the caller gives it', () => {
     const { el } = render({ announce: '3 trades updated' });
     expect(el.querySelector('[aria-live]')!.textContent).toContain('3 trades updated');
+  });
+});
+
+/* Spec v168 §3 #4: the skeleton was already shaped (rows x cols); v168 swaps
+ * its pulse for a moving shimmer and adds `shape` for placeholders that are
+ * not tables. Every cell keeps the table-row height, so nothing reflows when
+ * the content replaces it. */
+describe('Async skeleton shapes (v168 #4)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  const cells = (row: Element) => [...row.querySelectorAll('.skeleton-cell')];
+
+  it('defaults to the table shape it always had', () => {
+    const { el } = render({ loading: true });
+    const skeleton = el.querySelector('.skeleton')!;
+    expect(skeleton.classList).toContain('shape-table');
+    expect(el.querySelectorAll('.skeleton-row').length).toBe(3);
+    for (const row of el.querySelectorAll('.skeleton-row')) expect(cells(row).length).toBe(2);
+  });
+
+  it('draws a panel as a heading bar over full-width rows', () => {
+    const { el } = render({ loading: true, shape: 'panel' });
+    const rows = [...el.querySelectorAll('.skeleton-row')];
+    expect(el.querySelector('.skeleton')!.classList).toContain('shape-panel');
+    expect(rows.length).toBe(3);
+    expect(cells(rows[0]).map((cell) => cell.className)).toEqual(['skeleton-cell head']);
+    expect(rows.slice(1).map((row) => cells(row).length)).toEqual([1, 1]);
+  });
+
+  it('draws a figure as a label over a value', () => {
+    const { el } = render({ loading: true, shape: 'figure' });
+    const rows = [...el.querySelectorAll('.skeleton-row')];
+    expect(el.querySelector('.skeleton')!.classList).toContain('shape-figure');
+    expect(rows.map((row) => cells(row).map((cell) => cell.className))).toEqual([
+      ['skeleton-cell label'],
+      ['skeleton-cell value'],
+    ]);
+  });
+
+  it('keeps aria-busy and the live region whatever the shape', () => {
+    const { el } = render({ loading: true, shape: 'figure', announce: 'Loading' });
+    expect(el.querySelector('sb-async')!.getAttribute('aria-busy')).toBe('true');
+    expect(el.querySelectorAll('[aria-live]').length).toBe(1);
+    expect(el.querySelector('.skeleton')!.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('computes the grid as a pure table of shapes', () => {
+    expect(skeletonGrid('table', 2, 3)).toEqual([['', '', ''], ['', '', '']]);
+    expect(skeletonGrid('panel', 3, 4)).toEqual([['head'], [''], ['']]);
+    expect(skeletonGrid('panel', 1, 4)).toEqual([['head']]);
+    expect(skeletonGrid('figure', 6, 4)).toEqual([['label'], ['value']]);
+  });
+
+  it('shimmers with a moving gradient instead of pulsing (source text)', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/ui/async.ts'), 'utf8');
+    const cell = source.match(/\.skeleton-cell\s*\{[^}]*\}/)![0];
+    expect(cell).toContain('animation: sb-shimmer 1.6s linear infinite;');
+    expect(cell).toContain('background-size: 200% 100%;');
+    expect(cell).toContain('height: var(--control-h);');
+    expect(source).not.toContain('sb-pulse-soft');
   });
 });
 

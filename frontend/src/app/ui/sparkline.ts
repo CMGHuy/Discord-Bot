@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { DrawIn } from './motion/draw-in';
+
 const VIEW_WIDTH = 100;
 const VIEW_HEIGHT = 24;
 /** Keeps the stroke from being clipped at the extremes. */
@@ -54,6 +56,7 @@ export function sparklinePath(points: readonly number[]): string {
 @Component({
   selector: 'sb-sparkline',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DrawIn],
   template: `
     @if (path(); as d) {
       <svg
@@ -61,6 +64,7 @@ export function sparklinePath(points: readonly number[]): string {
         preserveAspectRatio="none"
         role="img"
         [attr.aria-label]="ariaLabel()"
+        [sbDrawIn]="'sparkline:' + label()"
       >
         <path [attr.d]="d" [class]="toneClass()" />
       </svg>

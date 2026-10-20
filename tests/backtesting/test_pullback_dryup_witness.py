@@ -15,15 +15,20 @@ HORIZONS = ("4w", "3m")
 WINDOW = ("1900-01-01", "2100-12-31")
 
 
-def pin_code_defaults(monkeypatch) -> None:
+def pin_code_defaults(monkeypatch, *, giveback: bool = False) -> None:
     """Set every config field to its code default for this test only.
 
     The witness was captured on code defaults. A developer's .env, or a
     variable inherited from the shell, can override a field such as
     MIN_STOP_DISTANCE_PCT and change which scenarios the replay admits.
+
+    v176: RUNNER_GIVEBACK_ENABLED defaults on in code, but every golden that
+    calls this was captured before the runner give-back existed, so it is
+    pinned off unless the caller passes ``giveback=True``.
     """
     for field in config.FIELDS:
         monkeypatch.setattr(config, field.attr, config._cast(field, field.default))
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", giveback)
 
 
 def witness_rows() -> list:
@@ -40,6 +45,17 @@ def test_pin_code_defaults_overrides_an_environment_value(monkeypatch):
     monkeypatch.setattr(config, "MIN_STOP_DISTANCE_PCT", 99.0)
     pin_code_defaults(monkeypatch)
     assert config.MIN_STOP_DISTANCE_PCT == config._cast(field, field.default)
+
+
+def test_pin_code_defaults_pins_the_runner_giveback_off_unless_asked(monkeypatch):
+    # v176: the give-back defaults ON in code, but every golden that calls
+    # pin_code_defaults was captured before it existed.
+    field = next(f for f in config.FIELDS if f.attr == "RUNNER_GIVEBACK_ENABLED")
+    assert config._cast(field, field.default) is True
+    pin_code_defaults(monkeypatch)
+    assert config.RUNNER_GIVEBACK_ENABLED is False
+    pin_code_defaults(monkeypatch, giveback=True)
+    assert config.RUNNER_GIVEBACK_ENABLED is True
 
 
 @pytest.mark.slow

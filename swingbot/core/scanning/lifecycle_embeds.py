@@ -359,10 +359,27 @@ def _tp1_partial_fields(embed, plan, d) -> None:
     embed.add_field(name="Partial position", value=partial_position_line(plan), inline=False)
 
 
+def _giveback_line(plan, detail: dict) -> str | None:
+    """v176: one line naming the give-back level that closed the runner, from
+    the closing leg's own record; None for every other close."""
+    leg = detail.get("leg") or {}
+    if leg.get("stop_source") != "giveback":
+        return None
+    pct, extreme, stop = (leg.get("giveback_pct"), leg.get("giveback_extreme"),
+                          leg.get("giveback_stop"))
+    if pct is None or extreme is None or stop is None:
+        return None
+    side = "high" if plan.direction == "bullish" else "low"
+    return f"{pct:g}% give-back from the {side} of {extreme:.2f}: stop {stop:.2f}"
+
+
 def _closed_fields(embed, plan, d) -> None:
     exit_price = d.get("exit_price")
     embed.description = plan_result_block(plan, exit_price, total_r(plan, exit_price))
     embed.add_field(name="Exit", value=f"{d.get('exit_price', 0):.2f}")
+    giveback = _giveback_line(plan, d)
+    if giveback:
+        embed.add_field(name="Give-back", value=giveback, inline=False)
 
 
 def _expired_fields(embed, plan, d) -> None:

@@ -162,17 +162,9 @@ def unrealized_r(entry, stop_loss, direction: str, price) -> float | None:
     return round(realized / risk, 2)
 
 
-def unrealized_pnl_amount(entry, direction: str, open_shares, price) -> float | None:
-    """Live $ P&L on the shares still held, priced at the live quote.
-
-    Deliberately excludes any leg a TP1 partial already banked: since v79
-    the Trades table shows that leg as its own CLOSED row with its own
-    realized amount, so blending it in here too counted the same profit
-    twice -- once on the leg row, again on the PARTIAL runner row."""
-    if not open_shares or entry is None or price is None:
-        return None
-    sign = 1 if direction == "bullish" else -1
-    return round(open_shares * (price - entry) * sign, 2)
+# v172: moved to swingbot/core/tracking/equity.py (the one equity definition);
+# re-imported so `dash.unrealized_pnl_amount` and `_append_amount` below keep working.
+from swingbot.core.tracking.equity import unrealized_pnl_amount  # noqa: E402,F401
 
 
 def closed_days(t) -> dict | None:

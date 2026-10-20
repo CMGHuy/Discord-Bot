@@ -1,0 +1,72 @@
+page-scroll-x: 0
+Dashboard
+Watchlist
+Risk
+Trades
+Calendar
+Analytics
+Research
+Reports
+System
+Versions
+
+Trade smarter. Build further.
+
+ui
+1.28.0
+bot
+2.10.0
+updated 2026-10-18 08:28 UTC
+Trades
+Connecting
+bot offline
+All
+Open
+Closed
+Pending
+Win
+Loss
+Long
+Short
+Columns
+12/29
+Filters
+13
+1220 trades
+SORT
+Unsorted
+Ticker ↑
+Ticker ↓
+P&L % ↑
+P&L % ↓
+Show more
+	
+TICKER
+	PLAN	
+P&L %
+
+▸	SNDK	1,314.06 → 1,362.31 / 1,288.42 (3.7% - 2.0%)	-1.65% (-16.44 €)
+▸	PANW	340.37 → 355.26 / 334.41 (4.4% - 1.8%)	+0.48% (+4.79 €)
+▸	AMD	538.65 → 556.21 / 529.22 (3.3% - 1.8%)	-1.75% (-17.53 €)
+▸	INTC	90.98 → 94.96 / 89.39 (4.4% - 1.8%)	-1.75% (-17.50 €)
+▸	EBAY	121.07 → 124.46 / 118.94 (2.8% - 1.8%)	-0.65% (-6.53 €)
+▸	DDOG	246.34 → 256.23 / 242.03 (4.0% - 1.7%)	-0.17% (-1.71 €)
+▸	FTNT	169.60 → 177.14 / 166.58 (4.4% - 1.8%)	-0.85% (-8.53 €)
+▸	MSTR	141.35 → 145.50 / 138.69 (2.9% - 1.9%)	-1.88% (-18.82 €)
+▸	PANW	347.71 → 360.91 / 341.63 (3.8% - 1.7%)	-1.75% (-17.52 €)
+▸	FTNT	170.85 → 175.41 / 167.81 (2.7% - 1.8%)	-1.78% (-17.76 €)
+1–10 of 1220
+ROWS
+5
+10
+20
+50
+100
+All
+⏮
+‹
+Page
+/ 122
+›
+⏭
+Page 1 of 122, showing 1–10 of 1220

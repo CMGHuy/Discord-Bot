@@ -52,6 +52,8 @@ def test_knobs_off_replay_matches_the_pre_v139_golden(monkeypatch):
     # raising=False: the attributes only exist from V139-2 on.
     monkeypatch.setattr(config, "CONFLUENCE_STRUCTURAL_STOP_PCT", 0.0, raising=False)
     monkeypatch.setattr(config, "CONFLUENCE_STOP_DROP_PCT", 0.0, raising=False)
+    # v176: the golden predates the runner give-back (default on); never regenerate it.
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     assert len(_clamped(golden["dell"])) >= 5, "the golden must exercise clamped plans"
     assert _capture() == golden

@@ -342,7 +342,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
         <!-- A row blinks when its earnings date falls within the current
              week (Monday-Sunday, same boundary the Earnings tab's calendar
              uses) -- a gentle pulse, not a hard flash; see data-table.ts's
-             .blink rule and its prefers-reduced-motion fallback. -->
+             .blink rule and its Motion = Off fallback in styles/motion.css. -->
         <p class="section-help panel-note">
           A row pulses when that ticker reports earnings this week.
         </p>
@@ -515,7 +515,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
       overflow-y: auto;
       background: var(--surface-raised);
       border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
     }
     /* justify-content/align-items/width/colour/font override the ghost
        variant's defaults for a full-width, baseline-aligned result row;
@@ -547,7 +547,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
     .as-of { display: block; color: var(--text-faint); font-size: var(--register-label); }
     .source-badge {
       display: inline-block; margin-top: var(--space-4);
-      padding: 0 var(--space-6); border: 1px solid var(--warn); border-radius: var(--radius-chip);
+      padding: 0 var(--space-6); border: 1px solid var(--warn); border-radius: var(--chip-radius);
       color: var(--warn); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.1em;
     }
 

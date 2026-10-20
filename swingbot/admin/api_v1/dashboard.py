@@ -212,20 +212,13 @@ def _live_positions(open_trades: list[dict]) -> list[dict]:
     figures describe a different book than the table under it: PENDING
     plans are dropped and a partial runner is sized at its remaining shares.
     A trade with no plan (legacy) is kept as-is.
-    """
-    from swingbot.admin.api_v1.trades import _open_shares
-    from swingbot.core.planning.plan_store import PlanStore
 
-    plans = {p.get("plan_id"): p for p in PlanStore().records()}
-    live = []
-    for trade in open_trades:
-        plan = plans.get(trade.get("plan_id"))
-        if plan is None:
-            live.append(trade)
-        elif plan.get("status") in ("ACTIVE", "PARTIAL"):
-            remaining = _open_shares(trade.get("shares"), plan.get("legs_realized") or [])
-            live.append({**trade, "shares": remaining})
-    return live
+    v172: the filter lives in `core/tracking/equity.held_now`, shared with
+    the equity recorder.
+    """
+    from swingbot.core.tracking.equity import held_now, load_plans_by_id
+
+    return held_now(open_trades, load_plans_by_id())
 
 
 @api_v1.route("/dashboard", methods=["GET"])

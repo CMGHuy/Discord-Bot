@@ -183,13 +183,20 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                most of them, and gives each traded day a readable row. -->
           <ul class="agenda">
             @for (day of monthDays(); track day.date) {
-              <li class="agenda-day">
-                <span class="agenda-date">{{ day.date }}</span>
-                <span class="agenda-value"
-                      [class.pos]="store.signedIntensity(day) > 0"
-                      [class.neg]="store.signedIntensity(day) < 0"
-                >{{ display(day) }}</span>
-                <span class="agenda-count">{{ day.trade_count }} trades</span>
+              <li class="agenda-day" [class.selected]="store.selectedDay() === day.date">
+                <!-- The whole row is the touch target (opens the same drawer
+                     as a grid cell); a bare span row left phones with no way
+                     to see a day's trades. -->
+                <button type="button" sb-button variant="ghost" class="agenda-hit"
+                        [attr.aria-pressed]="store.selectedDay() === day.date"
+                        (click)="store.selectDay(day.date)">
+                  <span class="agenda-date">{{ day.date }}</span>
+                  <span class="agenda-value"
+                        [class.pos]="store.signedIntensity(day) > 0"
+                        [class.neg]="store.signedIntensity(day) < 0"
+                  >{{ display(day) }}</span>
+                  <span class="agenda-count">{{ day.trade_count }} trades</span>
+                </button>
               </li>
             } @empty {
               <li class="agenda-day"><span class="agenda-date">No trading days this month.</span></li>
@@ -313,7 +320,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .months { display: flex; align-items: center; gap: var(--space-8); }
     .month { min-width: 10ch; font-weight: 600; }
 
-    .metric { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); }
+    .metric { display: inline-flex; border: 1px solid var(--border); border-radius: var(--control-radius); }
     /* padding/border override the segment variant's defaults for a
        tighter two-cell toggle; the variant owns colour, weight and the
        active-cell background is our own since this pair has no divider. */
@@ -463,11 +470,19 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     /* v95 C6 -- the phone agenda, replacing the 7-column grid below sm. */
     .agenda { list-style: none; margin: 0; padding: 0; }
-    .agenda-day {
-      display: flex; align-items: baseline; gap: var(--space-10);
-      min-height: var(--row-h); padding: var(--space-6) var(--space-10);
-      border-bottom: 1px solid var(--border);
+    .agenda-day { border-bottom: 1px solid var(--border); }
+    .agenda-day.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+    /* sb-button ghost supplies the paint and hover; display, alignment,
+       padding, border, ink and font are overridden back so the whole row stays
+       one full-width touch target (the .value link above does the same). */
+    .agenda-hit {
+      display: flex; align-items: baseline; justify-content: flex-start;
+      gap: var(--space-10);
+      width: 100%; min-height: 44px; padding: var(--space-6) var(--space-10);
+      border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit;
+      text-align: left; cursor: pointer;
     }
+    .agenda-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .agenda-date { flex: 0 0 6rem; color: var(--text-faint); font-size: var(--text-micro); }
     .agenda-value { flex: 1 1 auto; text-align: right; font-family: var(--font-mono); color: var(--text); }
     .agenda-value.pos { color: var(--pos); }
@@ -497,7 +512,7 @@ const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .tag {
       padding: 0 var(--space-6);
       background: var(--surface-raised);
-      border-radius: var(--radius);
+      border-radius: var(--chip-radius);
       color: var(--text-secondary);
       font-size: var(--text-micro);
     }

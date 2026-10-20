@@ -1,5 +1,9 @@
 <!doctype html>
-<html lang="en">
+<!-- data-motion starts as "pending" (spec v168 §1): no entrance, count-up or
+     draw-in runs, and the tape is frozen, until the shell has read the saved
+     Motion preference and replaced this value. A user who chose Off never
+     sees a burst of motion on a cold load. -->
+<html lang="en" data-motion="pending">
 <head>
   <meta charset="utf-8">
   <title>Bomeo Capital</title>
@@ -18,7 +22,11 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0a0b10">
+  <!-- A copy of --bg (palette.css --navy-950): the browser reads the
+       theme-color before any stylesheet loads, so it cannot be var(--bg).
+       primitives.spec.ts allow-lists it and asserts it equals the resolved
+       --bg (spec v167 §7). -->
+  <meta name="theme-color" content="#070b14">
   <!-- iOS Safari ignores the manifest above for "Add to Home Screen" (pre
        iOS 16.4) -- these three are what it actually reads: standalone
        display (no browser chrome), a dark status bar to match the app's own
@@ -33,13 +41,15 @@
        ground colour rather than a white flash on a UI that is dark by
        definition.
 
-       This hex is the ONE colour literal SR3's audit deliberately leaves in
-       place: it has to be inline and it has to work before any stylesheet
-       loads, so it cannot read `--bg`. It is therefore a copy, and copies
-       drift -- if `--bg` in styles/tokens.css changes, change it here too.
-       The symptom of forgetting is a one-frame flash of the old colour on a
-       cold load, which is easy to miss and easy to explain once seen. -->
-  <style>html, body { background: #0a0b10; }</style>
+       This hex is one of the two colour literals the colour gate
+       deliberately leaves in place: it has to be inline and it has to work
+       before any stylesheet loads, so it cannot read `--bg`. It is therefore
+       a copy, and copies drift -- so primitives.spec.ts ('the cold-load
+       copies equal the resolved --bg', spec v167 §7) fails when it differs
+       from --bg in styles/palette.css, as does the manifest's pair. The
+       symptom it prevents is a one-frame flash of the old colour on a cold
+       load, which is easy to miss and easy to explain once seen. -->
+  <style>html, body { background: #070b14; }</style>
 </head>
 <body>
   <sb-root></sb-root>

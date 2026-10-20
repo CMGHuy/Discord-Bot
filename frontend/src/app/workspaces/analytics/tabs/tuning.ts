@@ -260,7 +260,7 @@ interface ProposalView extends ProposalRow {
     .alert {
       padding: var(--space-8) var(--space-10);
       border: 1px solid var(--warn);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
       color: var(--warn);
       font-size: var(--text-table);
     }
@@ -307,7 +307,7 @@ interface ProposalView extends ProposalRow {
       padding: var(--space-10);
       background: var(--surface-raised);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
     }
     .proposal-head {
       display: flex;

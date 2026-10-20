@@ -53,9 +53,19 @@ const rule = (selector: string) =>
  * jsdom does not resolve var() inside a shorthand, so a computed-style
  * assertion here would be about jsdom rather than about the button. */
 describe('v80 D4: the button restyle', () => {
-  it('fills primary with the fill blue and its own ink', () => {
-    expect(rule(':host(.primary)')).toContain('background: var(--accent-fill)');
-    expect(rule(':host(.primary)')).toContain('color: var(--on-accent)');
+  /* v167 §3: the fill is the tier-3 gradient. A gradient is an image, so it
+   * must be `background`, never `background-color` (which would drop it). */
+  it('fills primary with the button gradient and its own ink', () => {
+    const primary = rule(':host(.primary)');
+    expect(primary).toContain('background: var(--btn-fill)');
+    expect(primary).toContain('color: var(--on-accent)');
+    expect(primary).not.toContain('background-color');
+  });
+
+  it('hovers primary onto the lighter gradient, not a flat color-mix', () => {
+    const hover = rule(':host(.primary:not([disabled]):hover)');
+    expect(hover).toContain('background: var(--btn-fill-hover)');
+    expect(hover).not.toContain('color-mix');
   });
 
   it('draws secondary as a hairline, not a raised fill', () => {
@@ -70,7 +80,7 @@ describe('v80 D4: the button restyle', () => {
   });
 
   it('grows both icon variants to a square touch target', () => {
-    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 639px\) \{([\s\S]*?)\n    \}/);
+    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/);
     expect(block).not.toBeNull();
     expect(block![1]).toContain(':host(.icon), :host(.danger-icon)');
     expect(block![1]).toContain('min-width: var(--control-h)');
@@ -94,5 +104,50 @@ describe('button touch floor', () => {
     // component that sets min-height: 0 opts every one of its call sites out
     // of that floor, which is how chips reached ~28px on a phone.
     expect(read(path)).not.toMatch(/min-height:\s*0\b/);
+  });
+});
+
+/* Spec v168 §3 #5. The primary gradient cannot transition (v167 §3), so
+ * hover brightens it with a filter and motion.css adds the accent glow; every
+ * enabled button presses to .97; on touch the press also tints. */
+describe('v168 #5: hover and press', () => {
+  const MOTION = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ');
+
+  it('brightens the primary gradient on hover', () => {
+    const hover = rule(':host(.primary:not([disabled]):hover)');
+    expect(hover).toContain('background: var(--btn-fill-hover)');
+    expect(hover).toContain('filter: brightness(1.1)');
+  });
+
+  it('presses every enabled button to .97', () => {
+    expect(rule(':host(:not([disabled]):active)')).toContain('transform: scale(.97)');
+  });
+
+  it('transitions the press and the brightness, not the gradient', () => {
+    const host = rule(':host');
+    expect(host).toContain('transform var(--dur-instant) var(--ease-out)');
+    expect(host).toContain('filter var(--dur-base) var(--ease-out)');
+  });
+
+  it('tints the press on touch with an inset, so it is not elevation', () => {
+    const block = SOURCE.match(/@media \(hover: none\) \{([\s\S]*?)\n {4}\}/);
+    expect(block).not.toBeNull();
+    expect(block![1]).toContain(':host(:not([disabled]):active) { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }');
+  });
+
+  it('casts no elevation shadow itself: the glow lives in motion.css', () => {
+    const own = [...SOURCE.matchAll(/box-shadow:\s*([^;]+);/g)]
+      .map(([, value]) => value.trim())
+      .filter((value) => !value.startsWith('inset'));
+    expect(own).toEqual([]);
+    expect(MOTION).toContain(
+      '@media (hover: hover) { button[sb-button].primary:not([disabled]):hover { box-shadow: var(--glow-accent); } }',
+    );
+  });
+
+  it('does not scale the press under Motion = Reduced', () => {
+    expect(MOTION).toContain('[data-motion=reduced] button[sb-button]:not([disabled]):active { transform: none; }');
   });
 });

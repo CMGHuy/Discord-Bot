@@ -5,14 +5,14 @@ breaker per provider shared by every process, and hourly fetch counts per
 (provider, kind, asker, outcome). A new set of tables, so the downgrade drops them whole.
 
 Revision ID: v171_001
-Revises: v146_001
+Revises: v172_001
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "v171_001"
-down_revision = "v146_001"
+down_revision = "v172_001"
 branch_labels = None
 depends_on = None
 

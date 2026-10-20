@@ -23,7 +23,10 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   (offline replay, walk-forward and the validation registry —
   `backtest.py`, `backtest_wf.py`, `backtest_scenarios.py`, `registry.py`,
   `shadow_log.py`), `core/tracking/` (the trade log's write path —
-  `performance.py`, `retrospective.py`, `risk_metrics.py`), `core/infra/`
+  `performance.py`, `retrospective.py`, `risk_metrics.py`; v172 `equity.py`
+  sits here but is a read model, not part of that write path: the one equity
+  definition — main-book realized legs walk plus open-position unrealized —
+  shared by the equity recorder, the backfill and the admin), `core/infra/`
   (JSON, locks and delivery channels — `jsonio.py`, `state.py`,
   `notifier.py`, `silent_channel.py`), plus the four that predate the
   restructure: `core/edge/`, `core/scanning/`, `core/analytics/`,
@@ -121,6 +124,10 @@ Every Alpaca and yfinance request in `swingbot/` (bot, spawned `_run_bounded` wo
   only, so the simulator still has nothing to match outside 09:30–16:00 ET.
   `planning/plan_manager.py` +
   `planning/plan_store.py` drive the live lifecycle from the 60s monitor;
+  after each tick `trade_monitor` hands its own live prices to
+  `commands/scanning/equity_recorder.py` (v172: one equity sample per 5 min in
+  the regular session, no market-data call of its own, skipped when open
+  positions have no prices);
   `backtesting/backtest_scenarios.py` replays the confluence scan
   historically.
 - **Badges/registry:** `swingbot/core/backtesting/validation_registry.json`

@@ -240,17 +240,18 @@ Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
 (extract one plan task with its trap preflight), `deploy` (Hetzner deploy
 sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
-backup pull), `replicate-prod-db` (read-only copy of the production database
-into a local replica database), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
+backup pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
 output returned verbatim, never judged),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
 results-doc checks), `prereg` (commit a pre-registration stub before the
 measurement, append the ledger row after it) and `data-check` (run
 `validate_data.py` and report each cache's verdict from its output). `new-doc`
-(new spec or plan) and `close-out` (plan close-out) may
+(new spec or plan), `close-out` (plan close-out) and `replicate-prod-db`
+(read-only copy of the production database into a local replica database) may
 also be run implicitly: `new-doc` right before creating a numbered spec or plan,
-`close-out` once a plan's final full-suite task is green. `panel` (dispatch
+`close-out` once a plan's final full-suite task is green, `replicate-prod-db`
+before a task's first test run against the database. `panel` (dispatch
 expert role reviewers one at a time through `expert-reviewer` and merge their
 findings) may also run implicitly: right after committing a spec with a
 `**Panel:**` line, and before `close-out` of a plan built from one. Skill text
@@ -282,8 +283,12 @@ Codex has no counterpart; do not name their skills or agents (for example
 
 Drive any browser, including production at bomeo-capital.com, with Playwright
 (`node frontend/scripts/browse.mjs shots|api ...`, persistent profile so one
-sign-in lasts; paths without a leading slash). For production, launch it headed
-and let the partner type the credentials; never script, ask for or store them.
+sign-in lasts; paths without a leading slash). Log in to bomeo-capital.com or a
+local testing instance with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded
+inside the script and never printed, echoed, passed as arguments or written
+elsewhere; build any local test instance from those same `.env` values, never
+the `admin`/`admin` default. A task that runs tests against the database runs
+`replicate-prod-db` first and points `DATABASE_URL` at the replica.
 
 ## Efficient repository navigation
 

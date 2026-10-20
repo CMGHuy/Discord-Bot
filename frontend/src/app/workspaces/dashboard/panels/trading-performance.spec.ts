@@ -5,11 +5,21 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach } from 'vitest';
 
+import { EquityCandlesStore } from '../../../stores/equity-candles.store';
+import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
+import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
 import { TradingPerformance } from './trading-performance';
+
+installMatchMediaPolyfill();
 
 describe('trading performance panel', () => {
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
+      ],
+    });
   });
 
   function render(inputs: Record<string, unknown>) {
@@ -119,6 +129,13 @@ describe('trading-performance tablet band', () => {
   it('never leaves a four-track KPI grid below md', () => {
     const tabletBlock = src.match(/@media\s*\(\s*max-width:\s*1023px\s*\)\s*\{[\s\S]*?\n\s{0,4}\}/)?.[0] ?? '';
     expect(tabletBlock).toMatch(/grid-template-columns:\s*repeat\(2,/);
+  });
+
+  it('gives the portfolio block the full panel width at every width (v172 candles)', () => {
+    // A `minmax(0, 1fr) auto` split left the chart a ~240px column beside the KPI grid.
+    const combined = src.match(/\.combined\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(combined).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+    expect(src).not.toMatch(/\.combined\s*\{\s*display:\s*none/);
   });
 
   it('uses only declared breakpoint values', () => {

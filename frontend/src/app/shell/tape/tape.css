@@ -53,23 +53,15 @@
    incident, 2026-09-14: the whole tape read as illegible overlapping text. */
 .track { display: inline-flex; align-items: center; white-space: nowrap;
          flex-shrink: 0;
-         animation-name: tape-slide; animation-timing-function: linear;
+         animation-name: sb-tape-slide; animation-timing-function: linear;
          animation-iteration-count: infinite; will-change: transform; }
 .viewport:hover .track { animation-play-state: paused; }
 .viewport:focus-within .track { animation-play-state: paused; }
-@keyframes tape-slide { from { transform: translateX(0); }
-                        to   { transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) {
-  .track { animation: none; }
-  /* The track freezes at translateX(0); without a scroll affordance every
-     name past the first viewport-width would be permanently unreachable. */
-  .viewport { overflow-x: auto; }
-}
 
 .tile { display: inline-flex; align-items: baseline; gap: var(--space-6);
         padding: 0 var(--space-14); border-right: 1px solid var(--border);
         font-size: var(--text-table); text-decoration: none; color: inherit;
-        border-radius: var(--radius-chip); }
+        border-radius: var(--control-radius); }
 .sym { font-weight: 650; color: var(--text); }
 .px { color: var(--text-secondary); }
 .up { color: var(--pos); } .down { color: var(--neg); }

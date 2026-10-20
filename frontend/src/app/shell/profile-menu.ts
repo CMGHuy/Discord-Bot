@@ -11,6 +11,15 @@ import {
 
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
+import { MotionMode, parseMotion } from '../ui/motion/motion.service';
+import { SegmentOption, Segmented } from '../ui/segmented';
+
+/** The three Motion modes, in the order the control shows them (spec v168 §1). */
+const MOTION_OPTIONS: SegmentOption[] = [
+  { value: 'on', label: 'On' },
+  { value: 'reduced', label: 'Reduced' },
+  { value: 'off', label: 'Off' },
+];
 
 /**
  * The avatar, and what sits behind it — spec v18 Decision 8.
@@ -27,7 +36,7 @@ import { Icon } from '../ui/icon';
 @Component({
   selector: 'sb-profile-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, Icon],
+  imports: [Button, Icon, Segmented],
   host: {
     '(document:click)': 'onDocumentClick($event)',
     '(document:keydown.escape)': 'close()',
@@ -63,6 +72,16 @@ import { Icon } from '../ui/icon';
           <sb-icon name="expand" />
           <span>Aa {{ zoom() }}%</span>
         </button>
+        <div class="motion-row" role="none">
+          <span class="menu-label" aria-hidden="true">Motion</span>
+          <sb-segmented
+            class="motion-control"
+            label="Motion"
+            [options]="motionOptions"
+            [value]="motion()"
+            (valueChange)="onMotion($event)"
+          />
+        </div>
         <button sb-button variant="ghost" type="button" role="menuitem" (click)="signOut()">
           <sb-icon name="signout" />
           <span>Sign out</span>
@@ -108,6 +127,26 @@ import { Icon } from '../ui/icon';
       padding: var(--space-4) var(--space-6);
       font-size: var(--text-body);
     }
+    /* The Motion control is a segmented group, not a menu row: it keeps its
+       own centred segments. The ".menu button" rule above does not reach
+       them (emulated encapsulation scopes it to this template's own
+       buttons), so nothing has to be undone here. */
+    .motion-row {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: var(--space-4) var(--space-6);
+    }
+    .menu-label {
+      font-size: var(--text-chip);
+      color: var(--text-secondary);
+    }
+    /* Spec v168 §1 and §5: 44px targets on touch. --control-h already gives
+       the height on coarse pointers; this gives a short label like "On" the
+       same width. */
+    @media (pointer: coarse) {
+      :host ::ng-deep .motion-control .segment { min-width: 44px; justify-content: center; }
+    }
   `,
 })
 export class ProfileMenu {
@@ -117,6 +156,17 @@ export class ProfileMenu {
   readonly signedOut = output<void>();
   readonly zoom = input<number>(100);
   readonly zoomCycled = output<void>();
+
+  /** The current Motion mode, owned by the shell's MotionService. */
+  readonly motion = input<MotionMode>('on');
+  readonly motionChanged = output<MotionMode>();
+
+  protected readonly motionOptions = MOTION_OPTIONS;
+
+  /** Validated, not trusted: the segmented control hands back a string. */
+  protected onMotion(value: string): void {
+    this.motionChanged.emit(parseMotion(value));
+  }
 
   protected readonly open = signal(false);
 

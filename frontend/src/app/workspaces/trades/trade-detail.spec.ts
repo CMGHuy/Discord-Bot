@@ -989,10 +989,10 @@ describe('TradeDetail — responsive card layout (v166 TD11)', () => {
   it('switches named areas only at the tablet and desktop container floors', () => {
     expect(styles).toMatch(/@container cards \(min-width: 640px\)\s*\{\s*\.card-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[^}]*grid-template-areas:\s*var\(--areas-2\)/);
     expect(styles).toMatch(/@container cards \(min-width: 1024px\)\s*\{\s*\.card-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)[^}]*grid-template-areas:\s*var\(--areas-3\)/);
-    expect(styles.match(/@container[^\{]+/g)?.map(query => query.trim())).toEqual([
+    expect(styles.match(/@container[^{]+/g)?.map(query => query.trim())).toEqual([
       '@container cards (min-width: 640px)', '@container cards (min-width: 1024px)',
     ]);
-    expect(styles).not.toMatch(/@media|@container[^\{]*[<>]/);
+    expect(styles).not.toMatch(/@media|@container[^{]*[<>]/);
   });
 
   it('gives every cell a shrinkable single track and its own inline size', () => {

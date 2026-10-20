@@ -126,3 +126,44 @@ describe('ApiClient — scope and analytics', () => {
     expect(got).toEqual(body);
   });
 });
+
+describe('ApiClient — equity candles', () => {
+  let api: ApiClient;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: RouteRefreshService, useValue: { requestMutationRefresh: () => undefined } },
+      ],
+    });
+    api = TestBed.inject(ApiClient);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    http.verify();
+  });
+
+  it('sends the timeframe and basis, and a limit only when one is given', () => {
+    const empty = { currency_symbol: '€', candles: [], recording_since: null,
+                    as_of: '2026-10-17T14:00:00+00:00' };
+    api.equityCandles('4H', 'realized').subscribe();
+    const first = http.expectOne((r) => r.url.endsWith('/api/v1/equity/candles'));
+    expect(first.request.method).toBe('GET');
+    expect(first.request.params.get('tf')).toBe('4H');
+    expect(first.request.params.get('basis')).toBe('realized');
+    expect(first.request.params.has('limit')).toBe(false);
+    first.flush({ tf: '4H', basis: 'realized', ...empty });
+
+    api.equityCandles('1D', 'mtm', 30).subscribe();
+    const second = http.expectOne((r) => r.url.endsWith('/api/v1/equity/candles'));
+    expect(second.request.params.get('limit')).toBe('30');
+    second.flush({ tf: '1D', basis: 'mtm', ...empty });
+  });
+});

@@ -97,8 +97,12 @@ The transition entry gains an `override` object:
               "quote_ts": "<iso>", "bars_asof": "2026-10-17"}}
 ```
 
-- `exit_price` and `quote_ts`: the live quote the admin already attaches
-  (`_attach_current_prices`) and the time it was taken.
+- `exit_price` and `quote_ts`: the live quote, fetched **once** in
+  `_close_plan`, with `quote_ts` set by the caller (`PriceQuote` has no
+  timestamp). The same price is the one written to the linked paper
+  trade by `close_trade_manual`, so the stamp and the trade never
+  disagree. The plan task passes the price in, or reads it back from the
+  trade.
   - With no quote, it falls back to the last close in the live scan's
     cache (`runner_path.cached_daily_bars`, i.e. `market_data/daily`), with
     `price_source: "bar_close"` and `quote_ts: null`.
@@ -116,10 +120,18 @@ into the appended entry. No other caller changes.
 **Schema:** this adds fields inside `plans.doc` JSONB, the *add* operation in
 `schema-evolution.md`, so no migration is needed.
 
-**Readers of `"manual"`:** `partials.py:_REASON_BUCKET` maps `"manual_bulk"`
-to the `manual` bucket. The plan greps every reader of a plan's terminal
-`reason` and lists each one. `trades.py`/`lifecycle_embeds.py` key on the
-legacy trade's `status`, not on this reason, and stay unchanged.
+**Readers of a plan's terminal reason** (brief, with file:line), each
+taught `"manual_bulk"`:
+
+- `runner_path.close_reason`, which feeds `partials._REASON_BUCKET` and
+  `STOP_EXIT_REASONS`: `manual_bulk` maps to the `manual` bucket.
+- The frontend `exitReasonLabel` gets the label "Bulk close", where it
+  would otherwise print `manual_bulk` raw.
+- The SQL in `export_book_rows.sh` reads CANCELLED reasons only and stays
+  unchanged.
+
+`trades.py`/`lifecycle_embeds.py` key on the legacy trade's `status`, not
+on this reason, and stay unchanged.
 
 ### 2. Re-tagging the 2026-09-30 bulk clear
 
@@ -147,8 +159,22 @@ Pure functions, no I/O.
 replaying the whole trade from the plan's real fill bar and price, with the
 same plan, *is* the "left alone" counterfactual.
 
-- `engine_path(plan, bars)` runs `walk_v2` from the fill index. The fill is
-  the ACTIVE entry in `status_history`, mapped to its NYSE session.
+- `engine_path(plan, bars)` calls `walk_v2(df, fill_idx, plan.entry_price,
+  plan, hold_cap, resolve("v2"), scale_out=tp1_fraction < 1)` from the fill
+  index. No live-plan-to-sim adapter exists; this module is the adapter.
+  The fill is the ACTIVE entry in `status_history`, mapped to its NYSE
+  session.
+- `walk_v2` skips the fill-bar stop check, which lives in the private
+  `_filled`/`_fill_bar_v2`. A public wrapper exposes that check without
+  any behaviour change (the existing exit tests stay green), and the
+  replay applies it first.
+- `ExitResult` gains an optional `tp1_index: int | None = None`, set where
+  TP1 fills and `None` everywhere else. The change is additive and
+  behaviour-preserving, and the PARTIAL parity check needs it.
+- `walk_v2` reads `config.STALL_EXIT_ENABLED` and
+  `config.RUNNER_STRUCTURE_EXIT` live. The replay uses the current values,
+  the report prints them, and a divergence from the live path at the time
+  surfaces as `parity_mismatch`.
 - **Parity check.** The replay must not exit before the override's
   session, because the live plan was still open then.
   - If it does, the row is `parity_mismatch`: excluded from sums and
@@ -156,20 +182,27 @@ same plan, *is* the "left alone" counterfactual.
   - For a PARTIAL plan, the replay's TP1 bar must equal the live TP1
     session, or the row is `parity_mismatch` too.
 
-**One cost basis for both arms.**
+**One cost basis for both arms.** Costs come from
+`swingbot/core/backtesting/instrument/costs.py:book`, the sim's own
+`_booked` path. `edge/frictions.py` is v1-only and is not used.
 
-- The TP1 leg of a PARTIAL plan is identical in both arms by
-  construction. It is taken from `legs_realized` for **both**.
-- The diverging remainder (`1 - tp1_fraction` for PARTIAL, `1` for ACTIVE,
-  as at `plan_manager.py:1115`) is booked once through `costs.book` with
-  the same `frictions.py` model on both arms:
-  - Actual arm: a one-leg exit at `exit_price`, with a stop-style exit
-    fill.
-  - Engine arm: the replay's own remainder leg(s).
+- Each arm is booked in **one `book` call over all its legs**:
+  - The TP1 leg of a PARTIAL plan is identical in both arms: the live
+    TP1 `exit_price` from `legs_realized`, priced through `book` in both.
+    The live `legs_realized[].r` is gross and is not used directly.
+  - Actual arm: TP1 leg (if any) plus a remainder leg at `exit_price`,
+    `kind="stop"` (10 bps).
+  - Engine arm: TP1 leg (if any) plus the replay's own remainder leg(s).
+- The remainder fraction is `1 - tp1_fraction` for PARTIAL and `1` for
+  ACTIVE, as at `plan_manager.py:1115`.
 - `delta_r = actual_r - engine_r`. R uses the plan's initial risk, the
-  basis of `metrics.r_multiple`. Dollars = R × the plan's stored dollar
-  risk. The plan-briefer names the field v170's alerts already read.
-- Both arms are **net of modelled frictions and pre-tax**.
+  basis of `metrics.r_multiple`.
+- **Dollars:** the plan stores no dollar risk. As in v170
+  (`performance.py:1242`, `TradeLog.trade_for_plan`), dollar risk =
+  linked trade `shares` × |`entry_price` − `stop_loss`|, and dollars = R ×
+  that. With no linked trade or no `shares`, the dollars are "—" and the
+  row stays in the R sums.
+- Both arms are **net of modelled costs and pre-tax**.
 
 **The override session is the same for both arms (no lookahead).** `at` is
 converted to America/New_York and assigned to an NYSE session:
@@ -195,12 +228,12 @@ above), `source="manual"` and one `status`:
 
 | `status` | Meaning | In sums |
 |---|---|---|
-| `resolved` | The engine exited, or hit its hold cap (`timeout`, `_hold_cap_bars`), within the data | yes |
-| `open` | The data ends before any engine exit **and** before the hold cap | no, counted |
+| `resolved` | The engine exited, or hit its hold cap (`fill_idx + hold_cap_bars <= len(df) - 1`), within the data | yes |
+| `open` | `walk_v2` returned `timeout` but `fill_idx + hold_cap_bars > len(df) - 1`, i.e. the data ended first (`walk_v2` clips and labels that `timeout` too) | no, counted |
 | `stale` | The cache's last bar is before the latest NYSE session ≤ `asof` | no, counted |
 | `ambiguous` | Override-session range touches the engine's stop/target | no, counted |
 | `parity_mismatch` | The replay disagrees with the live path before the override | no, counted |
-| `split_affected` | A split/dividend adjustment (`adjustments.py`) falls between fill and last bar | no, counted |
+| `split_affected` | The plan's raw `entry_price` lies outside the cached fill-session bar's [low × 0.98, high × 1.02]: the cache (`auto_adjust`, rescaled on refresh) no longer matches the plan's price basis. `adjustments.py` has no split events, so this price test is the check | no, counted |
 | `unreplayable` | No fill, no bars, or no exit price derivable | no, counted |
 
 - The bars come only from `runner_path.cached_daily_bars`
@@ -228,7 +261,10 @@ above), `source="manual"` and one `status`:
 **Until then:** **`WAITING`**, with no mean and no interval.
 
 **One evaluation:**
-- The first run where the conditions hold computes mean ΔR with
+- **Trigger:** a daily job in the bot's scheduler, after the US close,
+  checks the conditions and evaluates the first time they hold. Nobody
+  runs it by hand, so nobody picks the moment after seeing the sums.
+- The first check where the conditions hold computes mean ΔR with
   `week_cluster_bootstrap` (`swingbot/core/backtesting/instrument/stats.py`,
   its own `WEEK_BOOTSTRAP_SEED` and resample count), pooled across
   ACTIVE/PARTIAL.
@@ -236,8 +272,18 @@ above), `source="manual"` and one `status`:
   - CI entirely below 0 → **`COST`**.
   - CI entirely above 0 → **`SAVED`**.
   - Otherwise → **`INCONCLUSIVE`**.
-- The result is written once to `preregistration-ledger.jsonl` as
-  `v173-override-fidelity` and **frozen**. Later runs show that recorded
+- The result is written once to the Postgres table
+  `preregistration_verdicts` (new Alembic revision; primary key
+  `ledger_id`, so a second insert is impossible), in the same transaction
+  as the condition check, and **frozen**. The row carries `n`, `weeks`,
+  the CI, `mean_delta_r`, the mean ΔR before costs (descriptive), the
+  engine flags in force (`STALL_EXIT_ENABLED`, `RUNNER_STRUCTURE_EXIT`),
+  `recorded_on`, and the evaluated rows as JSONB, so the verdict can be
+  re-derived. `preregistration-ledger.jsonl` gets the same row as
+  `v173-override-fidelity` by a mirror commit; the table is the
+  authority, the file is the record. The ledger's verdict enum
+  (`instrument/stats.py:116-118`) gains `COST`, `SAVED` and
+  `INCONCLUSIVE`. `WAITING` is never written. Later runs show that recorded
   verdict and keep the descriptive rows live. They never recompute it,
   because watching a live CI until it crosses zero inflates false
   positives.
@@ -254,13 +300,13 @@ often, and nothing about trades that were not overridden.
 - `scripts/reports/execution_fidelity_report.py`
   - Reads plans and `market_data/daily` and never fetches.
   - Prints the row table, the summary and splits, and the verdict state.
-    It writes the ledger row on the evaluating run (§4).
+    It only reads: the verdict comes from `preregistration_verdicts`.
   - Runs on the VM against the real book. A dev-DB run is fixture data,
-    prints a banner saying so, and never writes the ledger
+    prints a banner saying so, and never writes a verdict
     (`working-conventions.md` § Investigating production).
 - `GET /api/v1/analytics/override-fidelity`
-  - Computed on request (~21 rows, so no store and no cron). It reads the
-    frozen verdict from the ledger and never evaluates it.
+  - Rows computed on request (~21 rows). It reads the frozen verdict
+    from `preregistration_verdicts` and never evaluates it.
   - Returns `{rows, summary, verdict}`. Behind `require_auth`, like its
     siblings in `analytics.py`.
 
@@ -351,7 +397,8 @@ price on the same session gives `delta_r == 0`.
 - One eligible row `open` → WAITING.
 - Exclusions at 21% → WAITING.
 - Seeded ΔR sets → each of COST, SAVED, INCONCLUSIVE.
-- A second evaluation reads the frozen ledger row and does not recompute.
+- A second daily check finds the `preregistration_verdicts` row and does
+  not recompute; a concurrent second insert fails on the primary key.
 
 **`_close_plan`:**
 - A single close stamps `manual` with the four `override` fields.
@@ -367,7 +414,10 @@ price on the same session gives `delta_r == 0`.
 - Frontend spec: the panel, each badge state's copy, the caption, the
   empty state and the card layout.
 
-Every test uses fixture data. No pooled figure comes from the dev DB.
+Every test uses fixture data and never the database, including the local
+production replica. Any pooled figure a plan or results doc quotes is
+re-derived from the live production book with its N, window and source
+(`pooled-numbers`). A replica is a snapshot, not the live book.
 
 ## Risks
 
@@ -440,3 +490,75 @@ was applied; none was rejected.
   applied in §5.
 - financial-advisor: the waiting copy must not nudge -- applied: "no
   target number of overrides" in the caption.
+
+## Plan panel review
+
+2026-10-19. The same three roles ran serially over the written plan
+(index + five parts at `33e08fa2`). The partner chose every fix below in
+chat (Postgres store, the bot's daily job as trigger, every advisory
+applied); each is a requirement of the plan.
+
+- quant-researcher [BLOCKING]: the ledger row lived in the container's
+  image copy of `docs/` (no mount), so a redeploy erased it and invited a
+  second evaluation -- applied: `preregistration_verdicts` Postgres table
+  is the authority (§4); the jsonl is a mirror.
+- quant-researcher [BLOCKING]: no step governed the one run that counts
+  -- applied: the bot's daily scheduler job evaluates when the conditions
+  first hold (§4 Trigger); the script and API only read; the mirror
+  commit of the row is a documented standing procedure.
+- quant-researcher: evaluating at a moment chosen after seeing the sums
+  -- applied: same daily-job trigger.
+- quant-engineer: a breakeven arming on the override bar is clamped away
+  in the engine frame -- applied: a real-frame stop move or BE trigger on
+  the override session that the clamped frame lacks marks the row
+  `ambiguous`, with a test.
+- quant-engineer: bars dated after `asof` (partial bars) are walked --
+  applied: bars are trimmed to `<= asof` before any index math, with a
+  test.
+- quant-engineer: hold cap and `open` count rows, not sessions -- applied:
+  sessions between fill and last bar are checked against
+  `nyse_calendar()`; a gap marks the row `stale`.
+- quant-engineer: clamping changes ATR/structure on runner plans --
+  applied: indicators are computed on the real frame; only the exit checks
+  see the clamped override bar.
+- quant-engineer + quant-researcher: a `bar_close` stamp older than the
+  close session counts as stamped -- applied: `bars_asof < close_date`
+  makes the row `approx`; the verdict line reports the `bar_close` count.
+- quant-researcher: a failed post-v173 stamp silently leaves the
+  denominator -- applied: post-v173 individual closes with `override:
+  null` or `price_source="none"` count as an exclusion status
+  (`unstamped`) under the 20% cap.
+- quant-researcher: a frozen verdict paired with live N and live sums --
+  applied: once recorded, the badge and verdict line show the recorded
+  `n`, `mean_delta_r`, CI and `recorded_on`; live sums are labelled
+  "since recorded".
+- quant-researcher: costs could carry a near-zero COST -- applied: mean ΔR
+  before costs is reported as descriptive context, never in the verdict.
+- quant-engineer: the verdict is not reproducible -- applied: engine flags
+  and the evaluated rows are stored in the verdict row (§4).
+- quant-engineer: no truncation (lookahead) test for the engine arm --
+  applied: dropping every bar after the engine exit leaves `engine_r`
+  identical.
+- quant-engineer: `tp1_index` is lost by `replace()`/`asdict()` --
+  applied: a guard comment on the replay path.
+- quant-engineer: `v173_001` template -- applied: `down_revision` written
+  as the current head placeholder, `FOR UPDATE` on the pinned SELECT, the
+  deploy step fails unless exactly 15 rows read `manual_bulk`.
+- quant-engineer: 2% split tolerance on dividend-adjusted bars --
+  applied: the split check uses the cache's adjustment basis
+  (`adjustments.py`) and the exclusion copy names dividends.
+- financial-advisor: "N of 30 needed" contradicts itself when the count
+  is met but another condition fails -- applied: a "waiting on other
+  conditions" line, with a test.
+- financial-advisor: the approved WAITING copy -- applied: it gains "No
+  conclusion yet."; the net-effect tile is neutral-toned while WAITING.
+- financial-advisor: "still open ... left out" reads as permanent --
+  applied: "N rows are still open and not counted yet. No conclusion is
+  recorded while any are open."
+- financial-advisor: plurals for a count of 1 -- applied: a pluralisation
+  helper.
+- financial-advisor: the caption is the least legible text -- applied:
+  readable size and `--text-secondary`; the three-width check asserts it
+  is visible and unclipped at 390px.
+- financial-advisor: dollars come from modelled sizing -- applied: the
+  caption says "dollars use the plan's modelled position size".

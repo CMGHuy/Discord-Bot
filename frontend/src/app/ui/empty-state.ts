@@ -27,7 +27,7 @@ import type { AsyncEmptyReason } from './async';
     </div>
   `,
   styles: `
-    .empty { display: grid; justify-items: center; gap: var(--space-6); padding: var(--space-20); border: 1px dashed var(--border-strong); border-radius: var(--radius); text-align: center; }
+    .empty { display: grid; justify-items: center; gap: var(--space-6); padding: var(--space-20); border: 1px dashed var(--border-strong); border-radius: var(--panel-radius); text-align: center; }
     .empty-title { margin: 0; color: var(--text-secondary); font-size: var(--text-body); }
     .empty-hint { margin: 0; color: var(--text-muted); font-size: var(--text-table); }
   `,

@@ -6,6 +6,24 @@ import { EmptyStateComponent } from './empty-state';
 /** Which empty this is. Not optional -- see the class comment. */
 export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
 
+/** The placeholder's outline: a table (default), a panel, or one figure. */
+export type SkeletonShape = 'table' | 'panel' | 'figure';
+
+/**
+ * Rows of cell modifier classes for each shape (`''` is a plain cell). Every
+ * cell keeps the table-row height (`--control-h`), so whatever replaces the
+ * skeleton lands in the space it held and nothing reflows.
+ */
+const SKELETON_SHAPES: Record<SkeletonShape, (rows: number, cols: number) => string[][]> = {
+  table: (rows, cols) => Array.from({ length: rows }, () => Array.from({ length: cols }, () => '')),
+  panel: (rows) => [['head'], ...Array.from({ length: Math.max(rows - 1, 0) }, () => [''])],
+  figure: () => [['label'], ['value']],
+};
+
+export function skeletonGrid(shape: SkeletonShape, rows: number, cols: number): string[][] {
+  return SKELETON_SHAPES[shape](rows, cols);
+}
+
 /**
  * The four states every fetch-backed region can be in, in one place.
  *
@@ -23,7 +41,9 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
  * The loading branch is a SHAPED skeleton, not a spinner: it occupies the
  * geometry the loaded content will, so nothing reflows at the moment the
  * reader starts reading. A spinner swapped for a table moves every element on
- * the page.
+ * the page. `shape` picks the outline (a table by default, a panel, or a
+ * single figure); a moving shimmer marks it as loading (spec v168 §3 #4),
+ * frozen to a static tint under Motion = Reduced or Off (styles/motion.css).
  *
  * Branch order is error > loading > empty > content, so a refetch that fails
  * reports the failure rather than spinning forever.
@@ -45,11 +65,11 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
         <button class="retry" type="button" (click)="onRetry()">Retry</button>
       </div>
     } @else if (loading()) {
-      <div class="skeleton" aria-hidden="true">
-        @for (row of rows(); track $index) {
+      <div class="skeleton" [class]="'shape-' + shape()" aria-hidden="true">
+        @for (row of grid(); track $index) {
           <div class="skeleton-row">
-            @for (col of cols(); track $index) {
-              <span class="skeleton-cell"></span>
+            @for (cell of row; track $index) {
+              <span class="skeleton-cell" [class]="cell"></span>
             }
           </div>
         }
@@ -89,7 +109,7 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
       min-height: var(--control-h);
       padding: 0 var(--space-14);
       border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       background: var(--surface-raised);
       color: var(--text);
       font-family: var(--font-sans);
@@ -99,21 +119,30 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
 
     .skeleton { display: flex; flex-direction: column; gap: var(--space-6); }
     .skeleton-row { display: flex; gap: var(--space-10); }
-    /* Height matched to a table row so the swap costs no layout shift. */
+    /* A highlight band sweeps across a static base (spec v168 §3 #4). Only
+       background-position moves, so it costs no layout or paint of
+       neighbours. Under Motion = Reduced or Off the animation is dropped
+       (styles/motion.css) and the gradient rests as a static tint.
+       Height matched to a table row so the swap costs no layout shift. */
     .skeleton-cell {
       flex: 1;
       height: var(--control-h);
-      border-radius: var(--radius-chip);
-      background: var(--surface-raised);
-      animation: pulse 1.4s var(--ease-out) infinite;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(90deg, var(--surface-raised) 30%,
+        color-mix(in srgb, var(--surface-raised) 55%, var(--border-strong)) 50%,
+        var(--surface-raised) 70%);
+      background-size: 200% 100%;
+      animation: sb-shimmer 1.6s linear infinite;
     }
-    @keyframes pulse { 50% { opacity: 0.45; } }
+    .skeleton-cell.head { flex: 0 0 40%; }
+    .skeleton-cell.label { flex: 0 0 35%; }
+    .skeleton-cell.value { flex: 0 0 65%; }
 
     .empty-wrap { text-align: center; }
     .reason {
       display: inline-block;
       padding: var(--space-4) var(--space-8);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       font-family: var(--font-mono);
       font-size: var(--text-micro);
       text-transform: uppercase;
@@ -129,7 +158,7 @@ export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
       top: 0;
       right: 0;
       padding: var(--space-4) var(--space-6);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       background: var(--warn-soft);
       color: var(--warn);
       font-family: var(--font-mono);
@@ -150,6 +179,8 @@ export class Async {
   readonly staleAsOf = input<string | null>(null);
   readonly skeletonRows = input(6);
   readonly skeletonCols = input(4);
+  /** The placeholder's outline while loading (v168 §3 #4). */
+  readonly shape = input<SkeletonShape>('table');
   /** A short summary of what just changed, or null. Announced politely. */
   readonly announce = input<string | null>(null);
 
@@ -164,8 +195,7 @@ export class Async {
     this.fresh.markFresh(() => this.retry.emit());
   }
 
-  protected readonly rows = computed(() => Array.from({ length: this.skeletonRows() }));
-  protected readonly cols = computed(() => Array.from({ length: this.skeletonCols() }));
+  protected readonly grid = computed(() => skeletonGrid(this.shape(), this.skeletonRows(), this.skeletonCols()));
 }
 
 export interface AsyncSource<T> {

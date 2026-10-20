@@ -68,10 +68,11 @@ export type DashboardScopeMode = DashboardScope;
         </div>
       </div>
 
-      <!-- On a phone the position book is deliberately first. When the
-           reader reaches performance, this one-line summary preserves the
-           essential account context without placing the desktop chart and
-           eight-card grid ahead of live trades. -->
+      <!-- Phone (v172 section 5, reversing v85's hide-on-phone): the portfolio
+           block above (figure, day change, equity candles) now shows, the
+           eight-card grid does not. This summary carries the figures the grid
+           would; its Portfolio and Today rows repeat the figure above on
+           purpose, so the summary reads complete on its own. -->
       <div class="mobile-summary" aria-label="Portfolio summary">
         <div><span>Portfolio</span><strong>{{ fmtAmount(balance()) }}</strong></div>
         <div><span>Today</span><strong [class.pos]="(changePct() ?? 0) > 0" [class.neg]="(changePct() ?? 0) < 0">{{ fmtPct(changePct()) }}</strong></div>
@@ -86,23 +87,18 @@ export type DashboardScopeMode = DashboardScope;
   `,
   styles: `
     :host { display: block; }
-    /* The metric grid is sized to its own four fixed-ish columns (.grid,
-       below) rather than a flexible track, so .combined's "auto" column
-       gives it exactly that width and no more; Portfolio Value (1fr) takes
-       every pixel left over instead of sitting in a capped column of its
-       own. Stacks below 640px -- narrower than that and a shared row
-       squeezes the sparkline into an unreadable sliver. */
+    /* One column at every width (v172): the equity candles need the panel's
+       full width, so the portfolio block (figure, day change, candles) is a
+       row of its own above the KPI grid instead of a ~240px side column that
+       would leave the chart and its readout unreadable. */
     .combined {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: var(--space-20);
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-14);
       align-items: start;
     }
-    .portfolio { min-width: 0; }
+    .portfolio { min-width: 0; width: 100%; }
     .mobile-summary { display: none; }
-    @media (max-width: 640px) {
-      .combined { grid-template-columns: minmax(0, 1fr); }
-    }
     /* A fixed 4 columns, not auto-fit: eight cards read as two even rows of
        four, never an uneven 5+3 or 6+2 split that auto-fit would produce at
        an in-between width. minmax with two lengths (not a bare 1fr) keeps
@@ -125,13 +121,11 @@ export type DashboardScopeMode = DashboardScope;
        query adds no specificity, so a base .grid declared below it would
        win. */
     @media (max-width: 1023px) {
-      .combined { grid-template-columns: minmax(0, 1fr); }
-      .portfolio { width: 100%; margin-bottom: var(--space-14); }
       .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-    @media (max-width: 640px) {
-      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .combined { display: none; }
+    @media (max-width: 639px) {
+      .grid { display: none; }
+      .combined { margin-bottom: var(--space-10); }
       .mobile-summary {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));

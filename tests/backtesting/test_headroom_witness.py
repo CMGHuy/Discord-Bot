@@ -40,7 +40,10 @@ def witness(delta=None) -> dict:
 
 
 @pytest.mark.slow
-def test_defaults_off_replay_matches_the_pre_gate_witness():
+def test_defaults_off_replay_matches_the_pre_gate_witness(monkeypatch):
+    # v176: v123's headroom instrument is the spec's cited baseline; pin the
+    # runner give-back (default on) off so the witness keeps measuring it.
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
     assert config.HEADROOM_SCOPE == "off"
     assert config.HEADROOM_MIN_R == 0.0
     current = json.loads(json.dumps(witness()))

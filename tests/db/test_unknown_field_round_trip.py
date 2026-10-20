@@ -7,6 +7,7 @@ import pytest
 from swingbot.core.db import schema
 from swingbot.core.db.repositories.account import AccountRepository
 from swingbot.core.db.repositories.base import Repository
+from swingbot.core.db.repositories.equity_samples import EquitySampleRepository
 from swingbot.core.db.repositories.flags import FlagRepository
 from swingbot.core.db.repositories.gate_rejections import GateRejectionRepository
 from swingbot.core.db.repositories.heartbeat import HeartbeatRepository
@@ -81,6 +82,9 @@ CASES = {
     "market_fetch_counts": (lambda: MarketSharedRepository().counts,
                             {"hour": TS, "provider": "alpaca", "kind": "quote", "asker": "scan",
                              "outcome": "hit", "n": 1}),
+    "equity_samples": (EquitySampleRepository, {"at": TS, "realized_balance": 0.0, "unrealized_pnl": 0.0,
+                                                "equity": 0.0, "open_n": 0, "skipped_n": 0,
+                                                "source": "live", "kind": "point"}),
 }
 
 #: Tables with no repository, and why. Anything else must be in CASES.

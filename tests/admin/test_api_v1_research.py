@@ -145,6 +145,7 @@ def test_the_committed_ledger_loads_through_the_endpoint(logged_in):
     assert len(body["rows"]) == len(stats.load_ledger(stats.LEDGER_PATH))
     assert len(body["rows"]) > 0
     for row in body["rows"]:
-        assert_shape(row, _ROW_SHAPE, where=f"row {row['id']}")
+        shape = {**_ROW_SHAPE, **{k: str for k in stats.OPTIONAL_LEDGER_FIELDS if k in row}}
+        assert_shape(row, shape, where=f"row {row['id']}")
         assert row["record_kind"] in {"results", "specs", "plans", "other"}
     assert body["q_family_m"] == sum(1 for row in body["rows"] if row["p"] is not None)

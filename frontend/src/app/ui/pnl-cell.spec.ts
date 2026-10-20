@@ -5,6 +5,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { PnlCell } from './pnl-cell';
+import { provideMotion } from './motion/motion.service';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/pnl-cell.ts'), 'utf8');
 
@@ -22,7 +23,9 @@ describe('PnlCell (v80 cell contract)', () => {
   let host: Host;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    // The flash case below asserts the class; Motion = Off (the test
+    // default) skips it by design (v168 §3 #8).
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideMotion('on')] });
     fixture = TestBed.createComponent(Host);
     host = fixture.componentInstance;
     fixture.detectChanges();

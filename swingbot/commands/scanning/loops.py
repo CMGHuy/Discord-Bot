@@ -21,7 +21,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
 from swingbot.core.tracking import live_loss_watch as loss_watch
-from . import cooldown, notices, ops_watch, outlook, presence, recap, runstate
+from . import cooldown, equity_recorder, notices, ops_watch, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
@@ -611,6 +611,19 @@ async def _legacy_live_price_batch(tickers: list) -> dict:
         return {}
 
 
+async def _record_equity_sample(live_prices: dict) -> None:
+    """v172: one equity sample after this tick's closes (see equity_recorder).
+
+    `record_sample` already swallows its own failures; this guard covers the
+    thread hand-off itself, so recording can never break the monitor."""
+    try:
+        await asyncio.to_thread(equity_recorder.record_sample, live_prices)
+    except Exception as exc:  # noqa: BLE001 -- recording must never break the monitor
+        swallowed(log, "ops.equity_sample_handoff", exc,
+                  "trade_monitor: equity sample failed: %s", exc,
+                  level=logging.WARNING, exc_info=True)
+
+
 @tasks.loop(seconds=60)
 async def trade_monitor():
     """
@@ -645,6 +658,9 @@ async def trade_monitor():
     trade row (`!trades clear` / the admin's clear-open delete rows and leave
     plans ACTIVE), and returning early here left those positions' stops and
     targets unmonitored until some unrelated trade opened.
+
+    After the closes, one equity sample is recorded (v172, equity_recorder): it
+    reuses this tick's prices and never raises.
     """
     open_trades = trade_log.get_trades(status="open", limit=200)
     tickers = list({t["ticker"] for t in open_trades})
@@ -691,6 +707,7 @@ async def trade_monitor():
         plan_events = []
     if plan_events:
         await _post_plan_events(plan_events)
+    await _record_equity_sample(live_prices)
     await _retry_notifications()
 
     if all_newly_closed:

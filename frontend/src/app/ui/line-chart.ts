@@ -151,7 +151,7 @@ function seriesColour(index: number): string {
       padding: var(--space-6) var(--space-8);
       background: var(${CHART_CHROME.tooltipSurface});
       border: 1px solid var(${CHART_CHROME.tooltipBorder});
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       font-size: var(--text-chip);
       pointer-events: none;
     }

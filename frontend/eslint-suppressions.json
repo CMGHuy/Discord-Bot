@@ -42,11 +42,6 @@
       "count": 4
     }
   },
-  "src/app/ui/button.spec.ts": {
-    "no-regex-spaces": {
-      "count": 1
-    }
-  },
   "src/app/ui/button.ts": {
     "@angular-eslint/component-selector": {
       "count": 1

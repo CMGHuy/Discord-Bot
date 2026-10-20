@@ -80,6 +80,15 @@ def test_a_partial_plan_expands_to_a_closed_leg_and_an_open_remainder():
     assert rows[1]["leg_index"] == 1 and rows[1]["leg_total"] == 2
 
 
+def test_the_banked_tp1_leg_shows_tp1_and_the_runner_row_keeps_tp2():
+    plan = partial_plan(tp2=140.0)
+    rows = _expand_plan_row(plan, {"id": "t1", "shares": 10, "status": "open"}, set())
+    assert (rows[0]["target"], rows[0]["target_is_banked_tp1"]) == (120.0, False)
+    assert rows[1]["target"] == 140.0
+    assert [r["target1"] for r in rows] == [120.0, 120.0]
+    assert [r["target2"] for r in rows] == [140.0, 140.0]
+
+
 def test_a_fully_closed_scaled_out_plan_expands_to_two_closed_rows():
     plan = closed_scaled_out_plan()
     trade = {"id": "t1", "shares": 10, "status": "win"}

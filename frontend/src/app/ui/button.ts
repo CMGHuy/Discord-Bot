@@ -49,24 +49,43 @@ export type ButtonVariant =
       min-height: var(--control-h);
       padding: 0 var(--space-14);
       border: 1px solid transparent;
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       font-family: var(--font-sans);
       font-size: var(--text-table);
       font-weight: 600;
       cursor: pointer;
       transition: background var(--transition), border-color var(--transition),
-        color var(--transition);
+        color var(--transition), filter var(--dur-base) var(--ease-out),
+        transform var(--dur-instant) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
     }
     :host(:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
     :host([disabled]) { opacity: 0.45; cursor: default; }
+    /* Press (v168 §3 #5), every device. On touch, where nothing hovers, the
+       press also tints; an inset shadow is a fill, not elevation, so G3
+       does not count it. */
+    :host(:not([disabled]):active) { transform: scale(.97); }
+    @media (hover: none) {
+      :host(:not([disabled]):active) { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }
+    }
 
     /* Blue is interactive-only, which is exactly what a primary button is --
        the one place the accent is allowed to carry weight. v80 D1 split the
        accent: --accent (#5593ff) is the text-safe blue and too light to carry
        white ink, so a filled button paints --accent-fill (#2962ff) with
-       --on-accent on top, 4.90:1. */
-    :host(.primary) { background: var(--accent-fill); color: var(--on-accent); }
-    :host(.primary:not([disabled]):hover) { background: color-mix(in srgb, var(--accent-fill) 85%, white); }
+       --on-accent on top, 4.90:1.
+       Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
+       the fill is the tier-3 gradient --btn-fill, from --accent-fill-hi
+       (#2474d2, white 4.66:1) down to --accent-fill (#1c6dd0, white
+       5.06:1); --accent is now #7cc4ff. A gradient is an image, so it goes
+       in background, never background-color, and does not transition:
+       hover swaps to --btn-fill-hover, and v168 animates it with filter and
+       glow. */
+    :host(.primary) { background: var(--btn-fill); color: var(--on-accent); }
+    /* v168 §3 #5: a gradient cannot transition, so the hover's change is
+       carried by brightness (which can) and by the accent glow that
+       styles/motion.css casts -- a component never casts its own elevation
+       shadow (primitives.spec.ts G3). */
+    :host(.primary:not([disabled]):hover) { background: var(--btn-fill-hover); filter: brightness(1.1); }
 
     /* A hairline on whatever ground it sits on. Panels separate by hairlines
        now (v80 D3), and a raised fill made every secondary look pressed. */
@@ -134,7 +153,7 @@ export type ButtonVariant =
       min-height: var(--control-h);
       padding: var(--space-4) var(--space-8);
       border-color: var(--border);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       background: var(--surface-raised);
       color: var(--text-secondary);
       font-size: var(--text-chip);

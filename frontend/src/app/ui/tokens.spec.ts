@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resolveToken } from './testing/resolve-token';
 
 /**
  * The token file is asserted as TEXT, not through a mounted component.
@@ -24,6 +25,10 @@ import { describe, expect, it } from 'vitest';
  * the frontend project root as its working directory.
  */
 const CSS = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
+/** Tier 3 is the LAST top-level block of tokens.css, under this banner (spec v167 §3). */
+const TIER3_BANNER = '/* ===== Tier 3: component tokens (spec v167 §3) ===== */';
+/** Everything from the tier-3 banner to the end of the file; '' while the banner is missing. */
+const TIER3 = CSS.includes(TIER3_BANNER) ? CSS.slice(CSS.indexOf(TIER3_BANNER)) : '';
 
 const REQUIRED = [
   '--bg',
@@ -32,7 +37,6 @@ const REQUIRED = [
   '--surface-overlay',
   '--border',
   '--border-strong',
-  '--shadow-overlay',
   '--scrim',
 
   '--text',
@@ -45,6 +49,7 @@ const REQUIRED = [
   '--warn',
   '--accent',
   '--accent-fill',
+  '--accent-fill-hi',
   '--on-accent',
   '--info',
 
@@ -75,6 +80,32 @@ const REQUIRED = [
 
   '--control-h',
   '--section-gap',
+
+  // v167 §3, tier 3
+  '--panel-radius',
+  '--control-radius',
+  '--chip-radius',
+  '--radius-sm',
+  '--panel-bg',
+  '--panel-border',
+  '--panel-shadow',
+  '--panel-inner-bg',
+  '--panel-inner-radius',
+  '--shadow-overlay',
+  '--btn-fill',
+  '--btn-fill-hover',
+  '--glow-accent',
+  '--glow-ambient',
+  '--scrim-soft',
+
+  // v168 §1, motion (tier 3)
+  '--motion-scale',
+  '--dur-enter',
+  '--dur-count',
+  '--dur-draw',
+  '--flash-up-text',
+  '--flash-down-text',
+  '--panel-shadow-lift',
 ];
 
 describe('design tokens', () => {
@@ -88,8 +119,13 @@ describe('design tokens', () => {
     expect(CSS).toMatch(/^\s*--control-h:\s*28px;/m);
   });
 
-  it('honours prefers-reduced-motion', () => {
-    expect(CSS).toContain('prefers-reduced-motion: reduce');
+  /* Inverted by v168 (spec D2): the OS reduced-motion setting is ignored by
+   * design, and the shell's Motion control drives data-motion instead. The
+   * media-feature name must not come back into this file, comments included. */
+  it('ignores the OS reduced-motion setting: no media block; motion.css carries the Off rules', () => {
+    expect(CSS).not.toContain('prefers-reduced-motion');
+    const motion = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8');
+    expect(motion).toMatch(/\[data-motion="?off"?\]\s*\{\s*--motion-scale:\s*0;\s*\}/);
   });
 
   it('has dropped --space-28', () => {
@@ -117,8 +153,12 @@ describe('design tokens', () => {
     expect(CSS).toMatch(/^\s*--transition:/m);
   });
 
-  it('defines exactly one elevation shadow, for L3', () => {
-    expect(CSS).toMatch(/^\s*--shadow-overlay:\s*0 8px 24px/m);
+  /* v167 §3 supersedes v54 D2's one-shadow law: two levels, both in tier 3. */
+  it('defines the two elevation shadows', () => {
+    expect(TIER3).toMatch(/^\s*--panel-shadow:\s*inset 0 1px 0 rgba\(255, 255, 255, \.03\), 0 6px 18px rgba\(0, 0, 0, \.25\);/m);
+    expect(TIER3).toMatch(/^\s*--shadow-overlay:\s*0 16px 40px rgba\(0, 0, 0, \.55\), 0 2px 8px rgba\(0, 0, 0, \.4\);/m);
+    // declared once, in tier 3 -- not left behind in tier 2 as well
+    expect([...CSS.matchAll(/^\s*--shadow-overlay:/gm)]).toHaveLength(1);
   });
 });
 
@@ -240,40 +280,57 @@ describe('no workspace hand-rolls a control row', () => {
   }
 });
 
-describe('v80 D1: the TradingView Blue palette', () => {
-  const EXPECTED: Record<string, string> = {
-    '--bg': '#0c0f16',
-    '--surface': '#131722',
-    '--surface-raised': '#1c212d',
-    '--surface-overlay': '#242936',
-    '--border': '#2a2e39',
-    '--border-strong': '#363a45',
-    '--text': '#d9dce4',
-    '--text-secondary': '#9ea2ad',
-    '--text-muted': '#9195a0',
-    '--text-faint': '#4e5361',
-    '--accent': '#5593ff',
-    '--accent-fill': '#2962ff',
-    '--on-accent': '#ffffff',
-    '--info': '#b39ddb',
-    '--pos': '#17c98e',
-    '--neg': '#ff5470',
-    '--warn': '#ffb43d',
-  };
+/**
+ * v167 §2: the Arctic Navy palette. Supersedes the v80 D1 block that pinned
+ * literal hexes here: tier 2 no longer holds a colour, it references a
+ * tier-1 palette entry in styles/palette.css. Two assertions per token --
+ * the reference as written (the tier contract) and the value it resolves to
+ * (the spec's table) -- so a palette edit that keeps the names but drifts a
+ * value fails here as well as in contrast.spec.ts.
+ */
+describe('v167 §2: the Arctic Navy palette', () => {
+  const EXPECTED: [token: string, palette: string, value: string][] = [
+    ['--bg', '--navy-950', '#070b14'],
+    ['--surface', '--navy-900', '#0c1320'],
+    ['--surface-raised', '--navy-850', '#121b2d'],
+    ['--surface-overlay', '--navy-800', '#1a2540'],
+    ['--overlay-dim', '--navy-950-a72', 'rgba(7, 11, 20, 0.72)'],
+    ['--border', '--navy-750', '#1d2940'],
+    ['--border-strong', '--navy-700', '#2a3a58'],
+    ['--text', '--slate-100', '#e8eef8'],
+    ['--text-secondary', '--slate-300', '#b3bfd3'],
+    ['--text-muted', '--slate-400', '#8f9db5'],
+    ['--text-faint', '--navy-600', '#3a4a66'],
+    ['--accent', '--sky-300', '#7cc4ff'],
+    ['--accent-fill', '--sky-600', '#1c6dd0'],
+    ['--accent-fill-hi', '--sky-550', '#2474d2'],
+    ['--on-accent', '--white', '#ffffff'],
+    ['--pos', '--mint-400', '#3ddc97'],
+    ['--neg', '--coral-400', '#ff6f7d'],
+    ['--warn', '--amber-300', '#ffc266'],
+    ['--info', '--violet-300', '#c3a6ff'],
+    ['--pos-soft', '--mint-400-a12', 'rgba(61, 220, 151, 0.12)'],
+    ['--neg-soft', '--coral-400-a12', 'rgba(255, 111, 125, 0.12)'],
+    ['--warn-soft', '--amber-300-a12', 'rgba(255, 194, 102, 0.12)'],
+    ['--accent-soft', '--sky-600-a18', 'rgba(28, 109, 208, 0.18)'],
+    ['--info-soft', '--violet-300-a14', 'rgba(195, 166, 255, 0.14)'],
+  ];
 
-  for (const [name, hex] of Object.entries(EXPECTED)) {
-    it(`${name} is ${hex}`, () => {
-      expect(CSS).toMatch(new RegExp(`^\\s*${name}:\\s*${hex};`, 'mi'));
+  for (const [name, palette, value] of EXPECTED) {
+    it(`${name} references ${palette}`, () => {
+      expect(CSS).toMatch(new RegExp(`^\\s*${name}:\\s*var\\(${palette}\\);`, 'm'));
+    });
+
+    it(`${name} resolves to ${value}`, () => {
+      expect(resolveToken(name)).toBe(value);
     });
   }
 
-  it('dims the overlay from the new ground', () => {
-    expect(CSS).toMatch(/^\s*--overlay-dim:\s*rgba\(12, 15, 22, \.72\);/m);
-  });
-
-  it('tints accent-soft from the fill blue and info-soft from lavender', () => {
-    expect(CSS).toMatch(/^\s*--accent-soft:\s*rgba\(41, 98, 255, 0\.18\);/m);
-    expect(CSS).toMatch(/^\s*--info-soft:\s*rgba\(179, 157, 219, 0\.14\);/m);
+  it('leaves --quality-4 and the six chart series literal (spec §1 exception)', () => {
+    expect(CSS).toMatch(/^\s*--quality-4:\s*#9acd32;/m);
+    for (let i = 1; i <= 6; i++) {
+      expect(CSS).toMatch(new RegExp(`^\\s*--chart-${i}:\\s*#[0-9a-f]{6};`, 'mi'));
+    }
   });
 });
 
@@ -284,16 +341,22 @@ describe('v80 D3: type, shape and touch', () => {
 
   it('offers a hero size above the primary metric size', () => {
     const style = getComputedStyle(document.documentElement);
-    const hero = style.getPropertyValue('--text-hero').trim();
-    expect(hero).not.toBe('');
+    expect(style.getPropertyValue('--text-hero').trim()).not.toBe('');
     // Same calc(px * var(--text-scale)) shape as every other size token, so
-    // the zoom control reaches it too.
-    expect(hero).toContain('var(--text-scale)');
+    // the zoom control reaches it too. Asserted on the source: the jsdom
+    // document carries flattened literals (spec v167, Amendment 1), where
+    // var(--text-scale) has already been replaced by its value.
+    expect(CSS).toMatch(/^\s*--text-hero:\s*calc\(44px \* var\(--text-scale\)\);/m);
   });
 
-  it('tightens both radii to 2px', () => {
-    expect(CSS).toMatch(/^\s*--radius:\s*2px;/m);
-    expect(CSS).toMatch(/^\s*--radius-chip:\s*2px;/m);
+  /* v167 §3 supersedes v80 D3's single 2px: four targets, all in tier 3,
+   * and the two old tokens are gone so no unclassified corner survives. */
+  it('defines the four radius targets', () => {
+    expect(TIER3).toMatch(/^\s*--panel-radius:\s*8px;/m);
+    expect(TIER3).toMatch(/^\s*--control-radius:\s*6px;/m);
+    expect(TIER3).toMatch(/^\s*--chip-radius:\s*999px;/m);
+    expect(TIER3).toMatch(/^\s*--radius-sm:\s*2px;/m);
+    expect(CSS).not.toMatch(/^\s*--radius(?:-chip)?:/m);
   });
 
   it('defines one row height and one form-control text size', () => {
@@ -307,5 +370,123 @@ describe('v80 D3: type, shape and touch', () => {
     expect(block![1]).toMatch(/--control-h:\s*44px;/);
     expect(block![1]).toMatch(/--row-h:\s*44px;/);
     expect(block![1]).toMatch(/--text-control:\s*calc\(16px \* var\(--text-scale\)\);/);
+  });
+});
+
+/**
+ * v167 §3: the component tokens. Values are asserted as DECLARED (whitespace
+ * collapsed), because tier 3 is the contract components read; one resolved
+ * case proves the gradient reaches the Arctic Navy fill blues through tier 2.
+ */
+describe('v167 §3: the tier-3 component tokens', () => {
+  const declared = (name: string) =>
+    TIER3.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
+
+  const VALUES: Record<string, string> = {
+    '--panel-radius': '8px',
+    '--control-radius': '6px',
+    '--chip-radius': '999px',
+    '--radius-sm': '2px',
+    '--panel-bg': 'linear-gradient(180deg, var(--surface-raised), var(--surface))',
+    '--panel-border': '1px solid var(--border)',
+    '--panel-shadow': 'inset 0 1px 0 rgba(255, 255, 255, .03), 0 6px 18px rgba(0, 0, 0, .25)',
+    '--panel-inner-bg': 'var(--surface-raised)',
+    '--panel-inner-radius': 'var(--control-radius)',
+    '--shadow-overlay': '0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4)',
+    '--btn-fill': 'linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill))',
+    '--btn-fill-hover':
+      'linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white), color-mix(in srgb, var(--accent-fill) 88%, white))',
+    '--glow-accent': '0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent)',
+    '--glow-ambient':
+      'radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%)',
+    '--scrim-soft': 'rgb(0 0 0 / 0.5)',
+  };
+
+  it('sits in one :root block after every other block, under its banner', () => {
+    expect(TIER3).not.toBe('');
+    expect(TIER3.match(/:root\s*\{/g)).toHaveLength(1);
+    expect(TIER3).not.toContain('@media');
+  });
+
+  for (const [name, value] of Object.entries(VALUES)) {
+    it(`${name} is ${value}`, () => {
+      expect(declared(name)).toBe(value);
+    });
+  }
+
+  it('resolves the button gradient to the two Arctic Navy fill blues', () => {
+    expect(resolveToken('--btn-fill')).toBe('linear-gradient(180deg, #2474d2, #1c6dd0)');
+  });
+
+  /* A gradient is an image: as background-color it is invalid and the
+   * declaration is dropped silently, leaving the element transparent. */
+  it('never paints a gradient token as background-color (styles.css and ui/)', () => {
+    const GRADIENT_AS_COLOUR = /background-color:\s*var\(--(?:panel-bg|btn-fill|btn-fill-hover|glow-ambient)\)/;
+    const files = [
+      join(process.cwd(), 'src/styles.css'),
+      ...readdirSync(UI)
+        .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts'))
+        .map((file) => join(UI, file)),
+    ];
+    const offenders = files.filter((file) => GRADIENT_AS_COLOUR.test(readFileSync(file, 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * v168 §1: every duration is a calc() over --motion-scale, so one declaration
+ * in styles/motion.css ([data-motion=off] { --motion-scale: 0; }) zeroes them
+ * all. The scale's default and every new v168 token sit INSIDE v167's tier-3
+ * block (spec v168 amendment 9): dump_tokens.py and resolve-token.ts read
+ * every top-level :root, and motion.css is outside both, so the default must
+ * live here. Reduced is not a multiplier (spec §1): the scale is only ever 1
+ * or 0.
+ */
+describe('v168 §1: motion tokens', () => {
+  const declared = (source: string, name: string) =>
+    source.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
+
+  const DURATIONS: Record<string, string> = {
+    '--dur-instant': '90ms',
+    '--dur-base': '160ms',
+    '--dur-slow': '260ms',
+    '--dur-enter': '420ms',
+    '--dur-count': '900ms',
+    '--dur-draw': '1200ms',
+  };
+
+  it('scales every duration by --motion-scale', () => {
+    for (const [name, ms] of Object.entries(DURATIONS)) {
+      expect(declared(CSS, name), name).toBe(`calc(${ms} * var(--motion-scale))`);
+    }
+  });
+
+  it('declares the scale once, as 1, in tier 3', () => {
+    expect(declared(TIER3, '--motion-scale')).toBe('1');
+    expect([...CSS.matchAll(/^\s*--motion-scale:/gm)]).toHaveLength(1);
+  });
+
+  it('puts every new v168 token inside the tier-3 block', () => {
+    const NEW = ['--dur-enter', '--dur-count', '--dur-draw', '--flash-up-text', '--flash-down-text', '--panel-shadow-lift'];
+    for (const name of NEW) {
+      expect(TIER3, name).toMatch(new RegExp(`^\\s*${name}:`, 'm'));
+      expect([...CSS.matchAll(new RegExp(`^\\s*${name}:`, 'gm'))], name).toHaveLength(1);
+    }
+  });
+
+  it('keeps both easings exactly as they were', () => {
+    expect(declared(CSS, '--ease-out')).toBe('cubic-bezier(0.2, 0.8, 0.3, 1)');
+    expect(declared(CSS, '--ease-spring')).toBe('cubic-bezier(0.34, 1.4, 0.64, 1)');
+  });
+
+  it('gives the flash text and the hover-lift shadow their spec values', () => {
+    expect(declared(TIER3, '--flash-up-text')).toBe('var(--pos)');
+    expect(declared(TIER3, '--flash-down-text')).toBe('var(--neg)');
+    expect(declared(TIER3, '--panel-shadow-lift')).toBe('0 10px 28px rgba(0, 0, 0, .35)');
+  });
+
+  it('reaches jsdom with the scale already resolved', () => {
+    expect(resolveToken('--dur-base')).toBe('calc(160ms * 1)');
+    expect(resolveToken('--motion-scale')).toBe('1');
   });
 });

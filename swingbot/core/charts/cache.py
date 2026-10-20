@@ -15,12 +15,15 @@ import time
 from typing import Callable
 
 from swingbot import config
+from swingbot.core.charts.chart_style import STYLE_VERSION
 
 DEFAULT_CACHE_DIR = os.path.join(config.EXPORT_DIR, "chart_cache")
 
 
 def _key_hash(key_parts: dict) -> str:
-    canonical = json.dumps(key_parts, sort_keys=True, default=str)
+    # The chart palette is part of a PNG's identity: STYLE_VERSION rides in
+    # every key, so a THEME change misses every old entry (spec v167 § 4).
+    canonical = json.dumps({**key_parts, "_style": STYLE_VERSION}, sort_keys=True, default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 

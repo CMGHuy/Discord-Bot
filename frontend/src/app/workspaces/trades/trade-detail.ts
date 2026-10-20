@@ -467,7 +467,7 @@ function cameFromPlan(): boolean {
     .tag {
       padding: 1px var(--space-6);
       border: 1px solid var(--border-strong);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       color: var(--text-secondary);
       font-size: var(--text-chip);
     }
@@ -517,7 +517,7 @@ function cameFromPlan(): boolean {
       background: var(--bg);
       color: var(--text);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       font: inherit;
       font-size: var(--text-table);
       resize: vertical;
@@ -613,7 +613,7 @@ export class TradeDetail {
     return {
       direction: trade.direction, status: trade.status, entryType: this.store.entryType(),
       trigger: this.store.triggerPrice(), entry: trade.entry, riskStop: this.store.riskStop(),
-      stopLoss: trade.stop_loss, workingStop: this.store.workingStop(), target1: trade.target,
+      stopLoss: trade.stop_loss, workingStop: this.store.workingStop(), target1: trade.target1 ?? trade.target,
       target2: trade.target2, acceptance: this.store.acceptanceLevel(), riskReward: trade.risk_reward,
       riskPerShare: this.store.riskPerShare(), rewardPerShare: this.store.rewardPerShare(),
     };

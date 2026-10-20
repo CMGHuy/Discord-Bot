@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from swingbot import config
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, run_backtest
 from swingbot.core.market.entry_filters import entries_for, gate_override
 from swingbot.core.market.strategy_types import FADE_STRATEGY, V104_SHORTS
@@ -33,6 +34,12 @@ PLAN_KEYS = ("created_at", "direction", "entry_type", "trigger_price", "entry_pr
              "expiry_bars", "stop_loss", "tp1", "tp1_fraction", "tp2",
              "breakeven_trigger_fraction", "trail_atr_mult", "hold_cap_bars", "status",
              "stop_mult_applied", "tp2_r_applied", "time_stop_days", "stall_exit_day")
+
+
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: the witness predates the runner give-back (default on); pinned off."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
 
 
 def _frames():

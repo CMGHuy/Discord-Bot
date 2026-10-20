@@ -65,6 +65,7 @@ TRADE_ROW = {
     # original stop.
     "risk_stop": NULLABLE_NUMBER,
     "target": NULLABLE_NUMBER,
+    "target1": NULLABLE_NUMBER,
     "target2": NULLABLE_NUMBER,
     # v73 -- projection provenance and derived display values, carried on
     # every origin so the SPA never needs a second row shape.

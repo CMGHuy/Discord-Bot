@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 
 import { PreferencesStore } from '../stores/preferences.store';
 import { Sparkline } from './sparkline';
+import { CountUp } from './motion/count-up';
+import { formatFigureText, parseFigureText } from './motion/figure-text';
 
 /**
  * The smallest sample a derived metric may be read from without a warning.
@@ -32,11 +34,12 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
 @Component({
   selector: 'sb-stat-tile',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Sparkline],
+  imports: [Sparkline, CountUp],
   template: `
-    <div class="tile" [class.thin]="thin()" [class]="tone()">
+    <div class="tile sb-lift" [class.thin]="thin()" [class]="tone()">
       <div class="label">{{ label() }}</div>
-      <div class="value">{{ value() ?? '—' }}</div>
+      <div class="value" [sbCountUp]="countValue()" [countFormat]="countFormat()"
+           [countKey]="'stat:' + label()" [countAbsent]="value() ?? '—'"></div>
       @if (secondary()) { <div class="secondary num">{{ secondary() }}</div> }
       @if (sample() !== null) {
         <div class="sample" [title]="sampleTitle()">
@@ -57,7 +60,7 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
       padding: var(--space-14);
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
     }
     .label {
       font-size: var(--text-micro);
@@ -95,6 +98,19 @@ export class StatTile {
   readonly hint = input<string | undefined>(undefined);
   readonly secondary = input<string | null>(null);
   readonly trend = input<readonly number[] | null>(null);
+
+  /**
+   * v168 count-up. `value` arrives pre-formatted (this component never formats
+   * a number, see the class comment), so the number is read back out of the
+   * text and the text rebuilt around each counted value. Text with no number
+   * in it has nothing to count and shows as it is, through `countAbsent`.
+   */
+  private readonly parsed = computed(() => parseFigureText(this.value()));
+  protected readonly countValue = computed(() => this.parsed()?.value ?? null);
+  protected readonly countFormat = computed(() => {
+    const parts = this.parsed();
+    return (value: number) => (parts ? formatFigureText(parts, value) : String(value));
+  });
 
   protected readonly thin = computed(() => {
     const n = this.sample();

@@ -11,6 +11,13 @@ from tests.planning.test_exit_sim_single import _plan
 E = WARMUP - 1
 
 
+@pytest.fixture(autouse=True)
+def _giveback_off(monkeypatch):
+    """v176: these tests isolate the structure rule (and reuse the frozen
+    scale-out witness), so the runner give-back is pinned off."""
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", False)
+
+
 def _runner_plan(**kw):
     return _plan(stop_loss=95.0, tp1=101.0, tp2=None, trail_atr_mult=50.0, horizon_key="2m", **kw)
 
@@ -60,6 +67,30 @@ def test_hl_stop_is_hit_on_a_drop_through_the_swing_low(monkeypatch):
     assert arm.runner_outcome == "runner_trail" and arm.exit_index == len(df) - 1
     assert arm.outcome == base.outcome == "win"
     assert arm.legs[1]["exit_price"] == pytest.approx(runner_structure_frame(df)["sl_px"].iloc[-1])
+
+
+def test_hl_stop_with_giveback_on_is_95pct_of_the_best_close(monkeypatch):
+    # v176: give-back on (overrides the module pin). Hand derivation: the best
+    # close since TP1 is 109, so the stop is 109 x 0.95 = 103.55 (was 100.66667).
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", True)
+    _mode(monkeypatch, "hl_trail", b=0.25)
+    df = sawtooth(4)
+    trace = []
+    _scale_out_exit_walk(df, E, 100.0, _runner_plan(), 60, trace=trace)
+    stops = dict(trace)
+    confirm = WARMUP + 6 + 3
+    assert stops[confirm - 1] == pytest.approx(103.55)
+
+
+def test_drop_through_the_swing_low_with_giveback_on_is_a_runner_trail(monkeypatch):
+    # v176: give-back on. The 109 x 0.95 = 103.55 stop closes the runner that
+    # runs to timeout when the give-back is off.
+    monkeypatch.setattr(config, "RUNNER_GIVEBACK_ENABLED", True)
+    closes = sawtooth_closes(4)
+    df = sawtooth(4, tail=(closes[-1] - 6.0,))
+    _mode(monkeypatch, "hl_trail")
+    arm = _scale_out_exit_walk(df, E, 100.0, _runner_plan(), 60)
+    assert arm.runner_outcome == "runner_trail"
 
 
 def test_pivot_never_moves_the_stop_its_confirmation_bar_is_checked_against(monkeypatch):

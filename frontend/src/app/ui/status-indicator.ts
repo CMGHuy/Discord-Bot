@@ -73,13 +73,9 @@ export function slToTpProgress(
     .loss { background: var(--neg); }
     /* The blink survives from the old UI (spec 3 keeps it); it is the one
        motion that carries meaning -- this trade is live right now. */
-    .open { background: var(--text); animation: pulse 2.2s ease-in-out infinite; }
+    .open { background: var(--text); animation: sb-pulse-dim 2.2s ease-in-out infinite; }
     .inert { background: var(--text-faint); }
 
-    @keyframes pulse { 50% { opacity: 0.35; } }
-    @media (prefers-reduced-motion: reduce) {
-      .open { animation: none; }
-    }
 
     .label { font-size: var(--text-table); color: var(--text-secondary); }
 
@@ -87,7 +83,7 @@ export function slToTpProgress(
       position: relative;
       width: 48px;
       height: 3px;
-      border-radius: 2px;
+      border-radius: var(--radius-sm);
       background: var(--border-strong);
       overflow: hidden;
     }

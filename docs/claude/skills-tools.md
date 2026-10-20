@@ -55,9 +55,20 @@ Referenced from the root `CLAUDE.md`.
   it follows the existing TradingView-style theme.
 - **Driving a browser (screenshot passes, UI verification, and every visit
   to production at bomeo-capital.com): use Playwright, never
-  `claude-in-chrome`.** For bomeo-capital.com, launch it headed
-  (`headless: false`) and let the partner type the credentials into the
-  window — never script, ask for or store a production login. **Use
+  `claude-in-chrome`.** **Log in with the credentials in `.env`
+  (`ADMIN_USERNAME`/`ADMIN_PASSWORD`), for bomeo-capital.com and for a local
+  testing instance alike (partner rule, 2026-10-18), without exposing them:**
+  the Playwright script loads `.env` itself (`process.loadEnvFile('.env')` or
+  equivalent) and fills the form from `process.env`; the values never appear
+  in a command line, a log, a screenshot caption, a commit or this
+  conversation — never `cat`/`grep`/`echo` them, never pass them as CLI
+  arguments, never write them to another file. **A local testing instance
+  you spawn (`admin_ui.py`, `docker compose`, `ng serve` + API) is built and
+  started with those same `.env` values**, so the `admin`/`admin` default is
+  never what it runs on. `browse.mjs` does this for you: with no live
+  session it makes one `POST /api/v1/session` from the `.env` values (one
+  attempt, since the login limiter counts failures), and falls back to a
+  manual sign-in in the window only when they are missing or refused. **Use
   `frontend/scripts/browse.mjs`** (Playwright is a `frontend` devDependency,
   so `npm ci` keeps it; Chromium lives in `%LOCALAPPDATA%\ms-playwright`): it
   opens a persistent profile under `%LOCALAPPDATA%\swingbot-playwright`, so
@@ -70,8 +81,7 @@ Referenced from the root `CLAUDE.md`.
   straight to `npx playwright` (install a local copy with
   `npm install --no-save playwright` inside `frontend/`, then
   `npx playwright install chromium` once per machine). The admin UI requires
-  login (`ADMIN_USERNAME`/`ADMIN_PASSWORD`, default `admin`/`admin` if unset —
-  never read `.env` to find a real one); script the login with Playwright's
+  login (`ADMIN_USERNAME`/`ADMIN_PASSWORD` from `.env`, as above); script the login with Playwright's
   Node API rather than the bare `playwright screenshot` CLI, which can't fill
   a form. A v94 V2 plan task still lists `claude-in-chrome` as its first
   fallback — that ordering is superseded by this rule.
@@ -79,6 +89,13 @@ Referenced from the root `CLAUDE.md`.
   `npx ng serve --port 4123` (or `npm start -- --port 4123`). Point any
   Playwright/browser-driven URL and the `proxy.conf.json` target's own port
   (`:1234`, unaffected) at `4123` accordingly.
+- **A task that runs tests against the database syncs production first:
+  run the `replicate-prod-db` skill** (partner rule, 2026-10-18) before the
+  first such test run, then point the run's `DATABASE_URL` at the replica
+  (`swingbot_prod_replica`), never at the working `swingbot` database. Once
+  per task, not once per test run; re-run it only if the task spans a
+  production change you need to see. Pure unit tests that never open a
+  database connection don't trigger it.
 
 ## The v96 skills layer
 
@@ -117,7 +134,7 @@ wrapper; it reads flags only from the shell segment that runs
 | `deploy` | 2 | slash-only (`/deploy`) | none — Step 1 reads `docs/deploy/DEPLOY_HETZNER.md` and `docs/deploy/DOCKER.md`, not `docs/claude/` |
 | `stable-snapshot` | 2 | slash-only (`/stable-snapshot`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 | `backup-pull` | 2 | slash-only (`/backup-pull`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
-| `replicate-prod-db` | 2 | slash-only (`/replicate-prod-db`) | none — Step 1 reads `docs/deploy/DB_RESTORE.md` and `DEPLOY_HETZNER.md` § PostgreSQL, not `docs/claude/` |
+| `replicate-prod-db` | 2 | `/replicate-prod-db`, or Claude before a task's first test run against the database | none — Step 1 reads `docs/deploy/DB_RESTORE.md` and `DEPLOY_HETZNER.md` § PostgreSQL, not `docs/claude/` |
 | `result-digest` | 2 | slash-only (`/result-digest`) | none — runs `scripts/backtest/compare_backtest_json.py` on the two files it is given, reads no `docs/claude/` file |
 | `handoff` | 2 | slash-only (`/handoff`) | `skills-tools.md` — only the "Handing a plan to another session or account" paragraph of § Plan writing, by `grep` |
 | `screen` | 2 | slash-only (`/screen <idea>`) | `backtest-methodology.md` — Step 1 reads the `Funnel stages` section with `doc_section.py` |
@@ -134,12 +151,13 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry no Trigger table — they are
 checklists for an explicit slash command. `/deploy`, `/stable-snapshot`,
-`/backup-pull`, `/replicate-prod-db`, `/result-digest`, `/handoff`, `/screen`,
+`/backup-pull`, `/result-digest`, `/handoff`, `/screen`,
 `/prereg` and `/data-check` also carry
-`disable-model-invocation: true`: the model never decides to run them. `/new-doc` and `/close-out` do not (the partner let
-Claude run both, 2026-10-08): Claude invokes `new-doc` right before creating a
-numbered spec or plan, and `close-out` once a plan's final full-suite task is
-green and its results are recorded. `MODEL_RUN_RITUALS` in
+`disable-model-invocation: true`: the model never decides to run them. `/new-doc`, `/close-out` and `/replicate-prod-db` do not (the partner let
+Claude run the first two 2026-10-08, the third 2026-10-18): Claude invokes `new-doc` right before creating a
+numbered spec or plan, `close-out` once a plan's final full-suite task is
+green and its results are recorded, and `replicate-prod-db` before a task's
+first test run against the database. `MODEL_RUN_RITUALS` in
 `tests/hooks/test_skill_shape.py` pins the split.
 
 ## Proving a skill fires: the eval suites

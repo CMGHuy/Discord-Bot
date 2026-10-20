@@ -1,14 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const CSS = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
-
-function token(name: string): string {
-  const m = CSS.match(new RegExp(`^\\s*${name}:\\s*(#[0-9a-fA-F]{6});`, 'm'));
-  if (!m) throw new Error(`${name} is not defined as a hex literal`);
-  return m[1];
-}
+import { resolveToken } from './testing/resolve-token';
 
 /** sRGB hex -> OKLab: the space the dataviz palette validator measures in
  *  (spec v80 D2). One metric for every colour gate: under the CIE76 formula
@@ -46,7 +38,7 @@ const SERIES = Array.from({ length: 6 }, (_, i) => `--chart-${i + 1}`);
 
 describe('the chart series namespace', () => {
   for (const name of SERIES) {
-    it(`defines ${name}`, () => expect(() => token(name)).not.toThrow());
+    it(`defines ${name}`, () => expect(resolveToken(name)).toMatch(/^#[0-9a-f]{6}$/i));
   }
 
   // G9. Green means gain and red means loss everywhere else in this app; a
@@ -54,14 +46,14 @@ describe('the chart series namespace', () => {
   for (const name of SERIES) {
     for (const valence of ['--pos', '--neg']) {
       it(`${name} is not confusable with ${valence}`, () => {
-        expect(deltaE(token(name), token(valence))).toBeGreaterThan(10);
+        expect(deltaE(resolveToken(name), resolveToken(valence))).toBeGreaterThan(10);
       });
     }
   }
 
   it('keeps adjacent series distinguishable at 1px stroke', () => {
     for (let i = 0; i < SERIES.length - 1; i++) {
-      expect(deltaE(token(SERIES[i]), token(SERIES[i + 1]))).toBeGreaterThan(15);
+      expect(deltaE(resolveToken(SERIES[i]), resolveToken(SERIES[i + 1]))).toBeGreaterThan(15);
     }
   });
 
@@ -72,13 +64,42 @@ describe('the chart series namespace', () => {
   // lavender info fails this floor and its amber fails the band.
   for (const name of SERIES) {
     it(`${name} sits inside the dark-surface lightness band`, () => {
-      const { l } = oklch(token(name));
+      const { l } = oklch(resolveToken(name));
       expect(l).toBeGreaterThanOrEqual(0.48);
       expect(l).toBeLessThanOrEqual(0.67);
     });
 
     it(`${name} clears the chroma floor`, () => {
-      expect(oklch(token(name)).c).toBeGreaterThanOrEqual(0.1);
+      expect(oklch(resolveToken(name)).c).toBeGreaterThanOrEqual(0.1);
+    });
+  }
+});
+
+/** WCAG 2.1 contrast ratio of two `#rrggbb` colours. */
+function ratio(fg: string, bg: string): number {
+  const luminance = (hex: string) => {
+    const channel = (i: number) => {
+      const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2);
+  };
+  const [a, b] = [luminance(fg), luminance(bg)].sort((x, y) => y - x);
+  return (a + 0.05) / (b + 0.05);
+}
+
+/**
+ * Spec v167 § 2 and Amendment 6 (new in v167). A series is a 1px line on the
+ * chart ground, `--surface` (chart-container.ts; the PNG's CHART_BG), and
+ * WCAG 1.4.11 asks 3:1 of a graphical object. The floor is checked on
+ * `--surface` only, deliberately: on `--surface-overlay` chart-6 measures
+ * 3.94:1, and a series colour there (a tooltip swatch) carries no text.
+ * A failure reopens the spec's palette table; it never lowers this number.
+ */
+describe('the chart series on the chart ground', () => {
+  for (const name of SERIES) {
+    it(`${name} clears 3:1 on --surface`, () => {
+      expect(ratio(resolveToken(name), resolveToken('--surface'))).toBeGreaterThanOrEqual(3);
     });
   }
 });

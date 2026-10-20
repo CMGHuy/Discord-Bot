@@ -6,6 +6,10 @@ layout constants that more than one of those modules needs. Split out of
 trade_chart.py so the theme/config lives in exactly one place regardless of
 which drawing module needs it, instead of being duplicated or imported
 awkwardly between sibling modules.
+
+Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §4):
+the theme is now the admin's Arctic Navy palette, a refined terminal rather
+than the TradingView one; the layout constants are unchanged.
 """
 import matplotlib
 matplotlib.use("Agg")
@@ -23,6 +27,10 @@ if os.path.exists(_INTER_TTF):
     matplotlib.rcParams["font.family"] = "Inter"
 
 # ---------------------------------------------------------------------------
+# Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §4):
+# the palette is no longer v80 D5's direction C, and the token source is no
+# longer one file. Original text, kept:
+#
 # The admin palette, on every Discord chart -- spec v80 D5, direction C
 # ("TradingView Blue").
 #
@@ -34,31 +42,45 @@ if os.path.exists(_INTER_TTF):
 #   2. indicator panes may reuse a series;
 #   3. nothing but the gain/loss constants sits within dE 10 of gain or loss.
 # Change a colour in tokens.css and that test names the constant to follow.
+#
+# v167 §4: THEME copies, byte for byte, the RESOLVED value of each token it
+# names. Tier 2 in tokens.css is var(--<palette-name>) into palette.css, so
+# the test resolves both files through scripts/dev/dump_tokens.py, which
+# also writes the committed fixture tests/charts/resolved_tokens.json. The
+# three rules above still hold. A THEME change bumps STYLE_VERSION in the
+# same commit: cache.py folds it into every chart-cache key, and
+# test_chart_theme.py pins the (THEME digest, STYLE_VERSION) pair.
 # ---------------------------------------------------------------------------
 THEME = {
-    "bg": "#0c0f16",
-    "surface": "#131722",
-    "surface-raised": "#1c212d",
-    "border": "#2a2e39",
-    "border-strong": "#363a45",
-    "text": "#d9dce4",
-    "text-muted": "#9195a0",
-    "text-faint": "#4e5361",
-    "pos": "#17c98e",
-    "neg": "#ff5470",
-    "warn": "#ffb43d",
-    "info": "#b39ddb",
+    "bg": "#070b14",
+    "surface": "#0c1320",
+    "surface-raised": "#121b2d",
+    "border": "#1d2940",
+    "border-strong": "#2a3a58",
+    "text": "#e8eef8",
+    "text-muted": "#8f9db5",
+    "text-faint": "#3a4a66",
+    "pos": "#3ddc97",
+    "neg": "#ff6f7d",
+    "warn": "#ffc266",
+    "info": "#c3a6ff",
     "chart-1": "#4c8dff",
     "chart-2": "#c97a22",
     "chart-3": "#a868e0",
     "chart-5": "#1a9db3",
 }
 
+# Folded into every chart-cache key (swingbot/core/charts/cache.py:_key_hash),
+# so a THEME change, or a rollback across one, never serves a PNG drawn in the
+# other palette from ./exports/chart_cache (spec v167 § 4). Bump it in the same
+# commit as THEME; tests/charts/test_chart_theme.py pins the pair (STYLE_PINS).
+STYLE_VERSION = "v167"
+
 CHART_BG = THEME["surface"]             # figure + every panel's background: TradingView's chart pane
 GRID_COLOR = THEME["border"]            # gridlines -- subtle, never competes with data
 SPINE_COLOR = THEME["border-strong"]    # axis borders
 TEXT_COLOR = THEME["text"]              # primary text (titles, axis labels)
-MUTED_TEXT_COLOR = THEME["text-muted"]  # tick labels, fine print: 5.97:1 on CHART_BG (#666666 was 3.6:1)
+MUTED_TEXT_COLOR = THEME["text-muted"]  # tick labels, fine print: 6.78:1 on CHART_BG (#666666 was 3.6:1)
 UP_COLOR = THEME["pos"]                 # bullish candle body/wick
 DOWN_COLOR = THEME["neg"]               # bearish candle body/wick
 CHIP_BG = THEME["surface-raised"]       # background for the small rounded "chip" labels every overlay uses

@@ -514,7 +514,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
     .restart {
       padding: 1px var(--space-6);
       background: color-mix(in srgb, var(--warn) 14%, transparent);
-      border-radius: var(--radius-chip);
+      border-radius: var(--chip-radius);
       color: var(--warn);
       font-size: var(--text-chip);
       cursor: help;
@@ -529,7 +529,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       min-height: var(--control-h);
       padding: 2px var(--space-8);
       border: 1px solid var(--border);
-      border-radius: var(--radius-chip);
+      border-radius: var(--control-radius);
       background: var(--surface);
       color: var(--accent);
       font: inherit;
@@ -544,7 +544,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       padding: var(--space-10) var(--space-14);
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
       position: sticky;
       bottom: 0;
     }
@@ -560,7 +560,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
     .stale-form {
       padding: var(--space-8) var(--space-14);
       border: 1px solid var(--warn);
-      border-radius: var(--radius);
+      border-radius: var(--panel-radius);
       color: var(--warn);
       font-size: var(--text-table);
     }
@@ -601,7 +601,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       padding: var(--space-8);
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--control-radius);
       color: var(--text);
       font-family: var(--font-mono);
       font-size: var(--text-chip);

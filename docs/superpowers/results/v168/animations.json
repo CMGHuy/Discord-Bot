@@ -1,0 +1,103 @@
+{
+  "390": {
+    "defaultMode": "off",
+    "route": {
+      "mid": [
+        "sb-enter"
+      ],
+      "settled": []
+    },
+    "drawer": {
+      "opening": [
+        "sb-fade-in",
+        "sb-sheet-in"
+      ],
+      "closing": [
+        "sb-sheet-out"
+      ]
+    },
+    "off": {
+      "loading": [
+        "sb-route-spin"
+      ],
+      "spinDurations": [
+        2400
+      ],
+      "settled": []
+    }
+  },
+  "768": {
+    "defaultMode": "on",
+    "route": {
+      "mid": [
+        "sb-ambient-drift",
+        "sb-enter",
+        "sb-tape-slide"
+      ],
+      "settled": [
+        "sb-ambient-drift",
+        "sb-tape-slide"
+      ]
+    },
+    "drawer": {
+      "opening": [
+        "sb-ambient-drift",
+        "sb-drawer-in",
+        "sb-fade-in",
+        "sb-tape-slide"
+      ],
+      "closing": [
+        "sb-ambient-drift",
+        "sb-drawer-out",
+        "sb-tape-slide"
+      ]
+    },
+    "off": {
+      "loading": [
+        "sb-route-spin"
+      ],
+      "spinDurations": [
+        2400
+      ],
+      "settled": []
+    }
+  },
+  "1440": {
+    "defaultMode": "on",
+    "route": {
+      "mid": [
+        "sb-ambient-drift",
+        "sb-enter",
+        "sb-pulse-blink",
+        "sb-tape-slide"
+      ],
+      "settled": [
+        "sb-ambient-drift",
+        "sb-pulse-blink",
+        "sb-tape-slide"
+      ]
+    },
+    "drawer": {
+      "opening": [
+        "sb-ambient-drift",
+        "sb-drawer-in",
+        "sb-fade-in",
+        "sb-tape-slide"
+      ],
+      "closing": [
+        "sb-ambient-drift",
+        "sb-drawer-out",
+        "sb-tape-slide"
+      ]
+    },
+    "off": {
+      "loading": [
+        "sb-route-spin"
+      ],
+      "spinDurations": [
+        2400
+      ],
+      "settled": []
+    }
+  }
+}

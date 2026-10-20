@@ -172,7 +172,8 @@ export class PositionsTable {
       this.trades.setQuery({
         status: tab?.status ?? 'ACTIVE',
         today: tab?.scoped ? (this.today() ?? undefined) : undefined,
-        sort: '-opened_at',
+        // Closed reads newest close first; every other tab by when it opened.
+        sort: tab?.status === 'CLOSED' ? '-closed_at' : '-opened_at',
         page: this.page(),
         per_page: perPageForApi(this.perPage()),
       });

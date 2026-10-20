@@ -8,6 +8,22 @@
      being laid out beside their icons. Slow + spring because this is a
      deliberate, occasional gesture rather than feedback on a value. */
   transition: grid-template-columns var(--dur-slow) var(--ease-spring);
+  /* Its own stacking context, so the .ambient layer's z-index -1 lands
+     above body's --bg and below every pane (v168 §3 #10). */
+  isolation: isolate;
+}
+
+/* The page's one ambient glow (v168 §3 #10), moved off body. Fixed, so it
+   takes no grid cell and stays put while the panes scroll; -10% leaves room
+   for the drift, which styles/motion.css runs under Motion=On only (static
+   below 640px). The login page is outside the shell and has no glow until
+   v169. */
+.ambient {
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--glow-ambient);
 }
 
 /* 52px: an icon's 16px plus enough padding that the hit target clears the
@@ -30,7 +46,7 @@
   position: fixed;
   inset: 0;
   z-index: 25;
-  background: rgb(0 0 0 / 0.5);
+  background: var(--scrim-soft);
 }
 
 .menu-button {
@@ -96,10 +112,6 @@
 
 .tagline-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
 .shell.railed:not(.overlay) .tagline-row { justify-content: center; }
-
-@media (prefers-reduced-motion: reduce) {
-  .shell, .shell.overlay .sidebar { transition: none; }
-}
 
 /* Sticky and exactly one viewport tall.
  *
@@ -198,7 +210,7 @@
   gap: var(--space-10);
   padding: var(--space-8) var(--space-10);
   border-left: 2px solid transparent;
-  border-radius: 0 var(--radius) var(--radius) 0;
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
   color: var(--text-secondary);
   font-size: var(--text-body);
   text-decoration: none;
@@ -214,13 +226,26 @@
 
 /* An accent rail plus a background tint plus weight -- three cues, not
    colour alone, so the active entry survives a monochrome or low-vision
-   reading. */
+   reading. The rail is sb-nav-indicator (v168 §3 #6), one bar that slides
+   between entries; each link still reserves its 2px transparent border
+   (`.nav a`) so the bar lands on that strip and nothing shifts. */
 .nav a.active {
-  border-left-color: var(--accent);
   background: var(--accent-soft);
   color: var(--text);
   font-weight: 600;
 }
+
+/* The indicator's host, placed against .sidebar (sticky, so positioned;
+   absolute children scroll with its content). `left` tracks the sidebar's
+   inline padding, which is where every link's border strip starts. */
+sb-nav-indicator {
+  position: absolute;
+  top: 0;
+  left: var(--space-14);
+  width: 2px;
+  pointer-events: none;
+}
+.shell.railed:not(.overlay) sb-nav-indicator { left: var(--space-10); }
 
 
 
@@ -368,9 +393,7 @@
 .workspace-content { min-width: 0; transition: opacity var(--transition); }
 .route-pending .workspace-content { opacity: 0.32; pointer-events: none; user-select: none; }
 .route-loading-overlay { position: absolute; inset: 0; z-index: 10; display: grid; place-content: center; justify-items: center; gap: var(--space-10); color: var(--text-secondary); background: color-mix(in srgb, var(--surface) 58%, transparent); backdrop-filter: blur(1px); }
-.route-loading-mark { width: 24px; height: 24px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: route-spin 700ms linear infinite; }
-@keyframes route-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .route-loading-mark { animation: none; } }
+.route-loading-mark { width: 24px; height: 24px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: sb-route-spin 700ms linear infinite; }
 
 /* The drop order, widest trigger first -- spec v85 "Responsive behaviour",
    retriggered onto the declared breakpoints by v95 A2.

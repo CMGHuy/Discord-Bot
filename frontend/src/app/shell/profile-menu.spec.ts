@@ -94,4 +94,51 @@ describe('ProfileMenu', () => {
     zoom.click();
     expect(cycled).toBe(1);
   });
+
+  describe('Motion control (v168 §1)', () => {
+    const control = () => el.querySelector('sb-segmented.motion-control');
+    const segments = () =>
+      Array.from(el.querySelectorAll<HTMLButtonElement>('sb-segmented.motion-control .segment'));
+
+    it('offers On, Reduced and Off under the label "Motion"', () => {
+      openMenu();
+      expect(control()).not.toBeNull();
+      expect(control()!.querySelector('[role=group]')!.getAttribute('aria-label')).toBe('Motion');
+      expect(segments().map((b) => b.textContent!.trim())).toEqual(['On', 'Reduced', 'Off']);
+    });
+
+    it('marks the current mode from the motion input', () => {
+      fixture.componentRef.setInput('motion', 'reduced');
+      openMenu();
+      const current = segments().filter((b) => b.getAttribute('aria-pressed') === 'true');
+      expect(current.map((b) => b.textContent!.trim())).toEqual(['Reduced']);
+    });
+
+    it('defaults to On when no mode is bound', () => {
+      openMenu();
+      const current = segments().find((b) => b.getAttribute('aria-pressed') === 'true');
+      expect(current!.textContent!.trim()).toBe('On');
+    });
+
+    it('emits the chosen mode and keeps the menu open', () => {
+      const chosen: string[] = [];
+      fixture.componentInstance.motionChanged.subscribe((mode) => chosen.push(mode));
+      openMenu();
+      segments()[2].click();
+      fixture.detectChanges();
+      expect(chosen).toEqual(['off']);
+      expect(menu()).not.toBeNull();
+    });
+
+    it('is keyboard-operable: ArrowRight moves to the next mode', () => {
+      const chosen: string[] = [];
+      fixture.componentInstance.motionChanged.subscribe((mode) => chosen.push(mode));
+      openMenu();
+      control()!.querySelector('[role=group]')!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+      );
+      fixture.detectChanges();
+      expect(chosen).toEqual(['reduced']);
+    });
+  });
 });
