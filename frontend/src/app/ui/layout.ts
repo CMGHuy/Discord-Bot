@@ -2,7 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  afterNextRender,
+  afterRenderEffect,
   computed,
   effect,
   inject,
@@ -19,6 +19,7 @@ import { Icon, IconName } from './icon';
 import { playExit } from './motion/exit';
 import { MotionService } from './motion/motion.service';
 import { isInline } from './priority';
+import { edgeFades, revealActive } from './scroll-rail';
 
 /* Spec 3's layout inventory: panel, tab bar, split view, drawer. */
 
@@ -271,13 +272,27 @@ export class TabBar {
   protected readonly fadeStart = signal(false);
   protected readonly fadeEnd = signal(false);
 
-  constructor() { afterNextRender(() => this.measure()); }
+  constructor() {
+    // v179 §6b.5: after every render in which the active tab or the tab list
+    // changed -- including the first, so a tab chosen by the URL is not left
+    // off-screen -- bring the active tab into view, then re-measure the fades.
+    afterRenderEffect(() => {
+      this.active();
+      this.tabs();
+      untracked(() => this.reveal());
+    });
+  }
 
   protected measure(): void {
-    const el = this.tabList().nativeElement;
-    const overflow = el.scrollWidth - el.clientWidth;
-    this.fadeStart.set(overflow > 1 && el.scrollLeft > 1);
-    this.fadeEnd.set(overflow > 1 && el.scrollLeft < overflow - 1);
+    const fades = edgeFades(this.tabList().nativeElement);
+    this.fadeStart.set(fades.start);
+    this.fadeEnd.set(fades.end);
+  }
+
+  private reveal(): void {
+    const list = this.tabList().nativeElement;
+    revealActive(list, list.querySelector('[role="tab"][aria-selected="true"]'));
+    this.measure();
   }
 
   protected onKeydown(event: KeyboardEvent): void {

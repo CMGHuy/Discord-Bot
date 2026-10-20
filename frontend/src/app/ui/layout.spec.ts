@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ComponentFixture } from '@angular/core/testing';
 
@@ -305,5 +305,84 @@ describe('sb-control-row on the last baseline (v179 §3.4)', () => {
 
   it('still stacks below 640px', () => {
     expect(ROW).toMatch(/@media \(max-width: 639px\) \{\s*\.row \{ flex-direction: column; align-items: stretch; \}/);
+  });
+});
+
+@Component({ imports: [TabBar], template: `<sb-tab-bar [tabs]="tabs" [active]="active()" />` })
+class ActiveTabHost {
+  readonly tabs: Tab[] = [
+    { id: 'overview', label: 'Overview' }, { id: 'attribution', label: 'Attribution' },
+    { id: 'execution', label: 'Execution' }, { id: 'edge', label: 'Edge' },
+    { id: 'pipeline', label: 'Pipeline' }, { id: 'tuning', label: 'Tuning' },
+    { id: 'partials', label: 'Partials' },
+  ];
+  readonly active = signal('overview');
+}
+
+/** Every element overflows: 900px of tabs in a 390px phone. Defined on the
+ *  prototype so it holds before the first render, which is when the reveal
+ *  for a tab chosen by the URL runs. */
+function overflowEverything(): () => void {
+  Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 900 });
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 390 });
+  return () => {
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollWidth'];
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['clientWidth'];
+  };
+}
+
+describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
+  let spy: ReturnType<typeof vi.fn>;
+  let restore: () => void;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    spy = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: spy });
+    restore = overflowEverything();
+  });
+
+  afterEach(() => {
+    restore();
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollIntoView'];
+  });
+
+  async function mount(active: string) {
+    const f = TestBed.createComponent(ActiveTabHost);
+    f.componentInstance.active.set(active);
+    f.detectChanges();
+    await f.whenStable();
+    f.detectChanges();
+    return f;
+  }
+
+  const revealed = () => (spy.mock.contexts.at(-1) as HTMLElement | undefined)?.textContent?.trim();
+
+  it('reveals a tab chosen by the URL on first render', async () => {
+    await mount('partials');
+    expect(spy).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    expect(revealed()).toBe('Partials');
+  });
+
+  it('reveals the newly active tab whenever the active tab changes', async () => {
+    const f = await mount('overview');
+    spy.mockClear();
+    f.componentInstance.active.set('tuning');
+    f.detectChanges();
+    await f.whenStable();
+    expect(revealed()).toBe('Tuning');
+  });
+
+  it('re-measures the fades after revealing', async () => {
+    const f = await mount('overview');
+    const strip = (f.nativeElement as HTMLElement).querySelector('.strip')!;
+    // scrollLeft 0 on a 900/390 rail: more tabs off to the right only.
+    expect(strip.classList).toContain('fade-end');
+    expect(strip.classList).not.toContain('fade-start');
+  });
+
+  it('measures through the shared rail helper, not a private copy', () => {
+    expect(SOURCE).toMatch(/import \{ edgeFades, revealActive \} from '\.\/scroll-rail';/);
+    expect(SOURCE).toContain('afterRenderEffect(');
   });
 });
