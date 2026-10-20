@@ -173,6 +173,8 @@ export function revealActive(container: HTMLElement, active: Element | null): vo
 //   renders .paper-marker "Paper trade" (attribute drawer-header, projected into sb-drawer's header),
 //   ticker, direction, status, P&L % and €, plan levels (trigger/entry, stop, TP1, TP2, R:R), opened/held,
 //   strategy and horizon, sb-row-actions, a.full-trade "Open full trade →" to ['/trades', row.id]
+//   its own template holds the sb-drawer (projection needs it there); outputs closed = output<void>(),
+//   actionDone = output<void>() (a row action reloads the data and closes the drawer)
 
 // routing/route-rerun.ts  (V179-16)
 export function rerunExceptQueryParam(name: string): (from: ActivatedRouteSnapshot, to: ActivatedRouteSnapshot) => boolean;
@@ -231,7 +233,8 @@ All tasks share one worktree; at most 2 implementers at once, and only on disjoi
 | 2 | `2026-10-19-v179-mobile-layout-consistency_2-controls-and-charts.md` | V179-5..V179-8 | control/filter row, tab-bar and category-rail reveal, chart containment, Partials repro and fix, Parts 1–2 browser check |
 | 3 | `2026-10-19-v179-mobile-layout-consistency_3-tables.md` | V179-9..V179-12 | compact rows, generic drawer, per-table declarations and reachability tests |
 | 3b | `2026-10-19-v179-mobile-layout-consistency_3b-research-risk-and-check.md` | V179-13 | Research and Risk declarations, no-hand-rolled-cards guard, Part 3 browser check (split for the 1500-line rule) |
-| 4 | `2026-10-19-v179-mobile-layout-consistency_4-dashboard-and-pages.md` | V179-14..V179-18 | activity rows, trade drawer, Dashboard URL wiring, per-page fixes, Part 4 browser check |
+| 4 | `2026-10-19-v179-mobile-layout-consistency_4-dashboard-and-pages.md` | V179-14..V179-16 | activity rows, trade drawer, Dashboard URL wiring |
+| 4b | `2026-10-19-v179-mobile-layout-consistency_4b-page-fixes.md` | V179-17..V179-18 | per-page fixes, Part 4 browser check (split for the 1500-line rule) |
 | 5 | `2026-10-19-v179-mobile-layout-consistency_5-audit-and-close-out.md` | V179-19..V179-21 | audit script and docs, three-width verification, full suite, merge, panel, close-out |
 
 ## Task ledger
@@ -254,8 +257,8 @@ All tasks share one worktree; at most 2 implementers at once, and only on disjoi
 | V179-14 | `ActivityEvent.tradeId` and interactive activity rows | 4 | sonnet | M `workspaces/dashboard/panels/activity.ts`, `workspaces/dashboard/panels/recent-activity.ts` and their specs | `tradeId`, `eventActivate` |
 | V179-15 | `sb-trade-drawer` content and the drawer header slot | 4 | sonnet | C `workspaces/dashboard/trade-drawer.ts`, `workspaces/dashboard/trade-drawer.spec.ts`; M `ui/layout.ts` (Drawer), `ui/layout.spec.ts` | `TradeDrawer`, `[drawer-header]` slot |
 | V179-16 | Dashboard drawer wiring: `trade` param, rerun rule, redirect, positions `emit` | 4 | opus | C `routing/route-rerun.ts`, `routing/route-rerun.spec.ts`; M `workspaces/dashboard/dashboard.ts`, `workspaces/dashboard/dashboard.routes.ts`, `workspaces/dashboard/positions-table.ts`, `workspaces/dashboard/dashboard.spec.ts`, `workspaces/dashboard/positions-table.spec.ts`, `app.routes.spec.ts` | `rerunExceptQueryParam`, `openTrade`, `openActivity`, `closeTrade`, `drawerTrade` |
-| V179-17 | Trade-detail fixes: title baseline, "Confirmed by:" space, one numeric face in cards | 4 | haiku | M `workspaces/trades/trade-detail.ts`, `workspaces/trades/why/why-panel.ts`, `workspaces/trades/strategy-record-card.ts`, `workspaces/trades/scores-card.ts`, `workspaces/trades/why/levels-block.ts`, their specs | — |
-| V179-18 | Versions "Running now", Dashboard performance segmented header, Analytics population line and empty N; Part 4 browser check | 4 | sonnet | M `workspaces/versions/versions.ts`, `workspaces/dashboard/panels/trading-performance.ts`, `workspaces/analytics/scope-bar.ts`, their specs | — |
+| V179-17 | Trade-detail fixes: title baseline, "Confirmed by:" space, one numeric face in cards | 4b | haiku | M `workspaces/trades/trade-detail.ts`, `workspaces/trades/why/sizing-panel.ts`, `workspaces/trades/why/if-it-gets-there.ts`, `ui/status-indicator.ts`, `workspaces/trades/why/why-panel.ts`, `workspaces/trades/strategy-record-card.ts`, `workspaces/trades/scores-card.ts`, `workspaces/trades/why/levels-block.ts`, their specs | — |
+| V179-18 | Versions "Running now", Dashboard performance segmented header, Analytics population line and empty N; Part 4 browser check | 4b | sonnet | M `workspaces/versions/versions.ts`, `workspaces/dashboard/panels/trading-performance.ts`, `workspaces/dashboard/dashboard.spec.ts`, `workspaces/analytics/scope-bar.ts`, their specs | — |
 | V179-19 | Layout audit script, allow-list, `ui-design.md` checklist and `AGENTS.md` mirror | 5 | sonnet | C `frontend/scripts/layout-audit.mjs`, `frontend/scripts/layout-audit-lib.mjs`, `frontend/scripts/layout-audit-lib.test.mjs`, `frontend/scripts/layout-audit.allow.json`; M `docs/claude/ui-design.md`, `AGENTS.md` | `ROUTES`, `CHECKS`, `classify`, CLI |
 | V179-20 | Three-width verification: audit to zero, screenshots, Dashboard drawer round trip | 5 | sonnet | C `docs/superpowers/results/2026-10-19-v179-layout-audit.md`; M any file a finding traces to | audit report |
 | V179-21 | Full suite, `npm test`, lint, ui minor bump, merge, `/panel`, `/close-out` | 5 | sonnet | M `VERSION.json`, `version_history.json` (regenerated) | merged branch on `main` |
