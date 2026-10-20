@@ -94,8 +94,19 @@ import { edgeFades, revealActive } from './scroll-rail';
     }
     /* Typography is the global .sb-label (v80 D3); only the UA margin is
        this component's business. */
-    h2 { margin: 0; }
-    .actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
+    h2 { margin: 0; max-width: 100%; overflow-wrap: anywhere; }
+    /* A size-contained toolbar has no intrinsic width. Allocate the header's
+       remaining space before its controls lay out, keeping ordinary actions
+       at the right edge and long log paths inside the padded header. */
+    .actions {
+      display: flex;
+      flex: 1 1 auto;
+      min-width: 0;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-8);
+    }
     .body { padding: var(--space-14); }
     /* v179 §3.3 -- one gap to the first row: the body's padding, never the
        padding plus whatever top margin the first projected element brings
@@ -276,11 +287,25 @@ export class TabBar {
     // v179 §6b.5: after every render in which the active tab or the tab list
     // changed -- including the first, so a tab chosen by the URL is not left
     // off-screen -- bring the active tab into view, then re-measure the fades.
-    afterRenderEffect(() => {
+    afterRenderEffect((onCleanup) => {
       this.active();
       this.tabs();
-      untracked(() => this.reveal());
+      untracked(() => {
+        this.reveal();
+        onCleanup(this.observeGeometry());
+      });
     });
+  }
+
+  private observeGeometry(): () => void {
+    if (typeof ResizeObserver === 'undefined') return () => {};
+    const list = this.tabList().nativeElement;
+    // Font loading can widen preceding tabs after the first reveal without
+    // changing the rail's own width. Observe the items as well as the rail.
+    const observer = new ResizeObserver(() => this.reveal());
+    observer.observe(list);
+    list.querySelectorAll('[role="tab"]').forEach((tab) => observer.observe(tab));
+    return () => observer.disconnect();
   }
 
   protected measure(): void {

@@ -283,6 +283,18 @@ describe('sb-panel header: one height, one baseline (v179 §3.3, §3.4)', () => 
     expect(ruleIn(PANEL, '.body')).toContain('padding: var(--space-14)');
   });
 
+  it('allocates header width to actions even when a toolbar has size containment', () => {
+    const actions = ruleIn(PANEL, '.actions');
+    expect(actions).toContain('flex: 1 1 auto');
+    expect(actions).toContain('min-width: 0');
+    expect(actions).toContain('justify-content: flex-end');
+  });
+
+  it('wraps long headings within the padded header', () => {
+    expect(ruleIn(PANEL, 'h2')).toContain('max-width: 100%');
+    expect(ruleIn(PANEL, 'h2')).toContain('overflow-wrap: anywhere');
+  });
+
   it('renders the actions slot inside the header, beside the label', () => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
     const f = TestBed.createComponent(Panel);
@@ -334,17 +346,29 @@ function overflowEverything(): () => void {
 describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
   let spy: ReturnType<typeof vi.fn>;
   let restore: () => void;
+  let resized: ResizeObserverCallback | undefined;
+  const observe = vi.fn();
+  const disconnect = vi.fn();
 
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
     spy = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: spy });
     restore = overflowEverything();
+    resized = undefined;
+    observe.mockClear();
+    disconnect.mockClear();
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { resized = callback; }
+      observe = observe;
+      disconnect = disconnect;
+    });
   });
 
   afterEach(() => {
     restore();
     delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollIntoView'];
+    vi.unstubAllGlobals();
   });
 
   async function mount(active: string) {
@@ -379,6 +403,22 @@ describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
     // scrollLeft 0 on a 900/390 rail: more tabs off to the right only.
     expect(strip.classList).toContain('fade-end');
     expect(strip.classList).not.toContain('fade-start');
+  });
+
+  it('reveals again when fonts or viewport changes resize the rail or its tabs', async () => {
+    const f = await mount('partials');
+    const el = f.nativeElement as HTMLElement;
+    expect(observe).toHaveBeenCalledWith(el.querySelector('.tabs'));
+    expect(observe).toHaveBeenCalledWith(el.querySelector('.tab.active'));
+    spy.mockClear();
+    resized?.([], {} as ResizeObserver);
+    expect(revealed()).toBe('Partials');
+  });
+
+  it('disconnects geometry observation when the tab bar is destroyed', async () => {
+    const f = await mount('partials');
+    f.destroy();
+    expect(disconnect).toHaveBeenCalled();
   });
 
   it('measures through the shared rail helper, not a private copy', () => {

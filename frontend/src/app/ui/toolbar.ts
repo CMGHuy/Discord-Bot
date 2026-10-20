@@ -73,7 +73,15 @@ export interface ToolbarControl {
     <div class="toolbar-source" hidden #sourceHost><ng-content /></div>
   `,
   styles: `
-    :host { display: flex; align-items: center; gap: var(--space-10); flex-wrap: wrap; container: toolbar / inline-size; }
+    :host {
+      display: flex;
+      flex: 1 1 auto;
+      min-width: 0;
+      align-items: center;
+      gap: var(--space-10);
+      flex-wrap: wrap;
+      container: toolbar / inline-size;
+    }
     .toolbar-inline { display: flex; align-items: center; gap: var(--space-10); flex-wrap: wrap; min-width: 0; max-width: 100%; }
     /* v179 §3.3: the same button as sb-column-picker's .trigger -- one
        height, one surface, the count as a badge. Without these rules the

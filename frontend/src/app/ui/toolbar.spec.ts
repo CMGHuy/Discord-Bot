@@ -157,6 +157,12 @@ describe('sb-toolbar one row pattern (v179 §3.3)', () => {
 
 
 describe('sb-toolbar phone flex ownership (v179 review)', () => {
+  it('grows into the width allocated by a panel action slot', () => {
+    const host = toolbarRule(':host');
+    expect(host).toContain('flex: 1 1 auto');
+    expect(host).toContain('min-width: 0');
+  });
+
   it('puts projected controls and Filters in one flex context below the chip line', () => {
     // A full-width chips host inside a boxed inline row consumes the whole
     // outer line, leaving Filters below Columns instead of beside it.
