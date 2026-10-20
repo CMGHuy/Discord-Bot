@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+from collections import Counter
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -745,3 +746,74 @@ def bar_state_differs(plan, real: ExitResult, engine: ExitResult, df: pd.DataFra
         return True
     return real.exit_index > ov_idx and (real.r_total != engine.r_total
                                          or real.legs != engine.legs)
+
+
+# --------------------------------------------------------------------------
+# V173-10: descriptive totals (spec §3). Counted rows are individual,
+# not approx, and resolved; bulk and approx rows are shown, never summed.
+# --------------------------------------------------------------------------
+
+_SPLIT_KEYS = ("state_at_close", "horizon", "direction")
+
+
+def _sum_r(rows, field: str = "delta_r") -> float:
+    return round(sum(getattr(r, field) for r in rows if getattr(r, field) is not None), 3)
+
+
+def _sum_usd(rows) -> float:
+    return round(sum(r.delta_usd for r in rows if r.delta_usd is not None), 2)
+
+
+def _split(rows, key: str) -> dict:
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault(getattr(r, key), []).append(r)
+    return {value: {"n": len(group), "sum_delta_r": _sum_r(group),
+                    "sum_delta_usd": _sum_usd(group)}
+            for value, group in sorted(groups.items())}
+
+
+def _bulk_dates(rows) -> dict[str, int]:
+    tally = Counter(r.close_date.isoformat() if r.close_date else "unknown"
+                    for r in rows if r.bulk)
+    return dict(sorted(tally.items()))
+
+
+def _shown_only(rows) -> dict:
+    """Bulk rows, and non-bulk approx rows: shown in the table, never summed."""
+    return {"bulk_n": sum(1 for r in rows if r.bulk),
+            "bulk_dates": _bulk_dates(rows),
+            "approx_n": sum(1 for r in rows if r.approx and not r.bulk)}
+
+
+def _outcomes(counted) -> dict:
+    tally = Counter(r.outcome for r in counted)
+    return {"helped": tally["helped"], "hurt": tally["hurt"], "neutral": tally["neutral"]}
+
+
+def _by_status(eligible) -> dict[str, int]:
+    tally = Counter(r.status for r in eligible)
+    return {status: tally[status] for status in STATUSES}
+
+
+def _counted_sums(counted) -> dict:
+    return {"counted_n": len(counted),
+            "sum_delta_r": _sum_r(counted),
+            "sum_delta_r_gross": _sum_r(counted, "delta_r_gross"),
+            "sum_delta_usd": _sum_usd(counted),
+            "usd_missing_n": sum(1 for r in counted if r.delta_usd is None)}
+
+
+def summarise(rows: list[OverrideRow]) -> dict:
+    """N by status, bulk/approx counts, the ΔR sums (net and before costs),
+    Σ$ and helped/hurt/neutral over counted rows, and the splits."""
+    rows = list(rows)
+    eligible = [r for r in rows if not r.bulk and not r.approx]
+    counted = [r for r in eligible if r.status == "resolved"]
+    return {
+        "n_by_status": _by_status(eligible),
+        **_shown_only(rows),
+        **_counted_sums(counted),
+        **_outcomes(counted),
+        "splits": {key: _split(counted, key) for key in _SPLIT_KEYS},
+    }
