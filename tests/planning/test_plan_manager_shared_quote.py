@@ -89,6 +89,35 @@ def test_monitor_quotes_runs_the_worker_and_merges_its_counts(monkeypatch):
     assert asked == [(Asker.STOP_MONITOR, True)] and merged == rows
 
 
+def _count_mode_monitor(monkeypatch, order, flush):
+    from swingbot.core.marketdata import data
+    from swingbot.core.marketdata.shared import counters
+    from swingbot.core.scanning import fetch
+    monkeypatch.setattr(config, "MARKETDATA_LAYER", "count")
+    q = _q(190.0)
+    monkeypatch.setattr(fetch, "_run_bounded", lambda fn, args, timeout, label: fn(*args))
+    monkeypatch.setattr(data, "get_quote_batch",
+                        lambda t, *, asker, fresh_only=False, max_age_s=None: {"AAPL": q})
+    monkeypatch.setattr(counters, "snapshot_and_clear", lambda: [("h", "p", "k", "a", "o", 1)])
+    monkeypatch.setattr(counters, "merge", lambda rows: order.append("merge"))
+    monkeypatch.setattr(counters, "flush", flush)
+    return q
+
+
+def test_monitor_quotes_flushes_the_merged_counts(monkeypatch):
+    order = []
+    q = _count_mode_monitor(monkeypatch, order, lambda **k: order.append("flush") or 0)
+    assert pm.monitor_quotes(["AAPL"]) == {"AAPL": q}
+    assert order == ["merge", "flush"]
+
+
+def test_monitor_quotes_survives_a_raising_flush(monkeypatch):
+    def boom(**k):
+        raise RuntimeError("db down")
+    q = _count_mode_monitor(monkeypatch, [], boom)
+    assert pm.monitor_quotes(["AAPL"]) == {"AAPL": q}
+
+
 def test_monitor_quotes_timeout_is_empty(monkeypatch):
     from swingbot.core.scanning import fetch
     monkeypatch.setattr(config, "MARKETDATA_LAYER", "on")
