@@ -268,6 +268,9 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "entry": plan.get("entry_price"),
         "stop_loss": view.stop,
         "target": view.target,
+        # TP1 as planned, whatever the status: `target` is the live target and
+        # is TP2 once a PARTIAL runner has banked TP1.
+        "target1": plan.get("tp1"),
         "target2": plan.get("tp2"),
         "target_is_banked_tp1": view.target_is_banked_tp1,
         "stop_kind": view.stop_kind,
@@ -476,6 +479,7 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "entry": t.get("entry"),
         "stop_loss": t.get("stop_loss"),
         "target": t.get("take_profit"),
+        "target1": t.get("take_profit"),
         "target2": t.get("target2"),
         "target_is_banked_tp1": False,
         "stop_kind": "risk",
