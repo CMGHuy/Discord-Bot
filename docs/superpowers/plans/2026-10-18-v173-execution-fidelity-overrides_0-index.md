@@ -39,7 +39,45 @@ Not started. Update this block when a phase closes.
 
 Filled by V173-4 (read-only production SELECT) and copied verbatim into `PINNED_PLAN_IDS` by V173-5. Until V173-4 has run, this section says "not yet pinned" and V173-5 must not start.
 
-Not yet pinned.
+Pinned on 2026-10-20 from a read-only production SELECT (V173-4, Query A: last transition `manual`, `at` in 2026-09-30 20:54–20:56 UTC); 15 rows, Query B showed no neighbouring manual closes.
+
+| # | plan_id | ticker | closed_at (UTC) | state before |
+|---|---|---|---|---|
+| 1 | `fc6f5a54-9911-4e6f-87e8-64fb157e7fe8` | `ABNB` | `2026-09-30T20:54:08.198635+00:00` | ACTIVE |
+| 2 | `9e60f623-8f4c-4d21-851a-20bd81e18911` | `ADBE` | `2026-09-30T20:54:09.605131+00:00` | ACTIVE |
+| 3 | `42d752e2-413b-44ea-a432-814e0258aa5c` | `GLW` | `2026-09-30T20:54:11.460717+00:00` | ACTIVE |
+| 4 | `e60436d2-12e8-4163-a825-c530e4873ac7` | `AMD` | `2026-09-30T20:54:12.748735+00:00` | ACTIVE |
+| 5 | `6369c662-6ca7-4b28-be13-cb79bc401474` | `XAUUSD` | `2026-09-30T20:54:14.990983+00:00` | ACTIVE |
+| 6 | `4fae973d-52a0-4959-b6f8-6cd40276255f` | `STX` | `2026-09-30T20:54:16.410449+00:00` | ACTIVE |
+| 7 | `fb6d5ff9-cf3d-48e4-bc8b-1fe1166af091` | `GM` | `2026-09-30T20:54:17.899056+00:00` | ACTIVE |
+| 8 | `02df69da-86ce-4e4c-a721-a5f86a83580e` | `GEV` | `2026-09-30T20:54:21.301654+00:00` | ACTIVE |
+| 9 | `b48202d7-7d3a-4f81-8f80-fa7d6e66b6cf` | `CEG` | `2026-09-30T20:54:29.245966+00:00` | ACTIVE |
+| 10 | `fe08cb81-dcf7-444f-9d27-94374e1aa5b1` | `SNOW` | `2026-09-30T20:54:33.740533+00:00` | ACTIVE |
+| 11 | `839a8283-f232-4c58-8586-1108b95c17ad` | `BA` | `2026-09-30T20:54:40.702872+00:00` | ACTIVE |
+| 12 | `220afd69-841f-42bc-9d55-1c1a8448fb55` | `PEP` | `2026-09-30T20:54:50.206798+00:00` | ACTIVE |
+| 13 | `d4578fd4-2ecf-4ad2-a93e-cf0417d78511` | `ASTS` | `2026-09-30T20:54:55.833270+00:00` | PARTIAL |
+| 14 | `0cbf5e60-165a-4e96-aaaa-e8948c6d9416` | `RKLB` | `2026-09-30T20:55:08.008858+00:00` | ACTIVE |
+| 15 | `f6431f11-7298-44a2-8dfc-aed1a8a87614` | `MSTR` | `2026-09-30T20:55:15.216261+00:00` | ACTIVE |
+
+```python
+PINNED_PLAN_IDS: tuple[str, ...] = (
+    "fc6f5a54-9911-4e6f-87e8-64fb157e7fe8",  # ABNB 2026-09-30T20:54:08.198635+00:00
+    "9e60f623-8f4c-4d21-851a-20bd81e18911",  # ADBE 2026-09-30T20:54:09.605131+00:00
+    "42d752e2-413b-44ea-a432-814e0258aa5c",  # GLW 2026-09-30T20:54:11.460717+00:00
+    "e60436d2-12e8-4163-a825-c530e4873ac7",  # AMD 2026-09-30T20:54:12.748735+00:00
+    "6369c662-6ca7-4b28-be13-cb79bc401474",  # XAUUSD 2026-09-30T20:54:14.990983+00:00
+    "4fae973d-52a0-4959-b6f8-6cd40276255f",  # STX 2026-09-30T20:54:16.410449+00:00
+    "fb6d5ff9-cf3d-48e4-bc8b-1fe1166af091",  # GM 2026-09-30T20:54:17.899056+00:00
+    "02df69da-86ce-4e4c-a721-a5f86a83580e",  # GEV 2026-09-30T20:54:21.301654+00:00
+    "b48202d7-7d3a-4f81-8f80-fa7d6e66b6cf",  # CEG 2026-09-30T20:54:29.245966+00:00
+    "fe08cb81-dcf7-444f-9d27-94374e1aa5b1",  # SNOW 2026-09-30T20:54:33.740533+00:00
+    "839a8283-f232-4c58-8586-1108b95c17ad",  # BA 2026-09-30T20:54:40.702872+00:00
+    "220afd69-841f-42bc-9d55-1c1a8448fb55",  # PEP 2026-09-30T20:54:50.206798+00:00
+    "d4578fd4-2ecf-4ad2-a93e-cf0417d78511",  # ASTS 2026-09-30T20:54:55.833270+00:00
+    "0cbf5e60-165a-4e96-aaaa-e8948c6d9416",  # RKLB 2026-09-30T20:55:08.008858+00:00
+    "f6431f11-7298-44a2-8dfc-aed1a8a87614",  # MSTR 2026-09-30T20:55:15.216261+00:00
+)
+```
 
 ## Global Constraints
 
