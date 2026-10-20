@@ -20,8 +20,9 @@ Spec: docs/superpowers/specs/2026-10-18-v175-normal-bad-luck-variance-band-desig
 from __future__ import annotations
 
 import datetime as dt
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -47,6 +48,8 @@ EXPR_CI_PCT = (2.5, 97.5)
 ZONES = ("normal", "rough", "outside")
 CAVEAT = ("This book's past results are not positive. "
           "A run within their range is still a losing run.")
+
+Band = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -264,3 +267,159 @@ def horizon_band(blocks: list[np.ndarray], h: int, *, paths: int = PATHS,
         "run": _quantiles(path_longest_runs(main), outer_runs, _run_q),
         "drawdown": _quantiles(path_max_drawdowns(main), outer_dds, _dd_q),
     }
+
+
+# --- The band -------------------------------------------------------------
+
+
+class _RItem(NamedTuple):
+    """A trade as ``stats.week_cluster_bootstrap`` sees it: week of the close."""
+
+    entry_date: str
+    r: float
+
+
+def era_of(trade: dict) -> str:
+    """``v2`` for a trade linked to a plan, ``legacy`` (v1) otherwise."""
+    return "v2" if trade.get("plan_id") else "legacy"
+
+
+def _week_count(days: list[CloseDay]) -> int:
+    return len({stats.iso_week_key(d.day.isoformat()) for d in days})
+
+
+def _enough(days: list[CloseDay]) -> bool:
+    return len(days) >= MIN_DAYS and _week_count(days) >= MIN_WEEKS
+
+
+def _usable(closed: list[dict]) -> list[dict]:
+    """Trades with a close stamp and a computable R; the rest are skipped."""
+    return [t for t in closed
+            if t.get("closed_at") and metrics.r_multiple(t) is not None]
+
+
+def pool_trades(closed: list[dict]) -> tuple[list[dict], str]:
+    """The v2 trades once they alone reach the floor, else the whole book."""
+    v2 = [t for t in closed if era_of(t) == "v2"]
+    if _enough(close_days(v2)):
+        return v2, "v2"
+    return list(closed), "all"
+
+
+def composition(closed: list[dict]) -> dict:
+    """Close days per era and trades per horizon, over the whole book."""
+    days_by_era = {era: len(close_days([t for t in closed if era_of(t) == era]))
+                   for era in ("v2", "legacy")}
+    horizons = Counter(t.get("horizon_key") or "unknown" for t in closed)
+    return {"days_by_era": days_by_era, "trades_by_horizon": dict(sorted(horizons.items()))}
+
+
+def _mean_r(draw: list, _component=()) -> float | None:
+    if not draw:
+        return None
+    return sum(item.r for item in draw) / len(draw)
+
+
+def _r_items(pool: list[dict]) -> list[_RItem]:
+    """Sorted, so the input order never changes the bootstrap draw."""
+    items = []
+    for trade in pool:
+        r = metrics.r_multiple(trade)
+        closed_at = trade.get("closed_at")
+        if r is not None and closed_at:
+            items.append(_RItem(et_close_date(closed_at).isoformat(), r))
+    return sorted(items)
+
+
+def _expr_ci(pool: list[dict]) -> list[float] | None:
+    """EXPR_CI_PCT interval of mean R, resampling weeks of the close date."""
+    draws = stats.week_cluster_bootstrap(_r_items(pool), (), _mean_r,
+                                         n_resamples=EXPR_RESAMPLES,
+                                         seed=stats.WEEK_BOOTSTRAP_SEED)
+    if draws.size == 0:
+        return None
+    lo, hi = np.percentile(draws, EXPR_CI_PCT)
+    return [round(float(lo), 3), round(float(hi), 3)]
+
+
+def expr_block(pool: list[dict], days: list[CloseDay]) -> dict:
+    """The pool's ExpR with N, window and week-cluster interval, re-derived
+    on every call; ``not_positive`` drives the caveat."""
+    raw = metrics.expectancy_r(pool)
+    value = None if raw is None else round(raw, 3)
+    ci = _expr_ci(pool)
+    not_positive = (value is None or value <= 0
+                    or (ci is not None and ci[0] <= 0 <= ci[1]))
+    return {"value": value, "n": len(metrics.r_multiples(pool)),
+            "start": days[0].day.isoformat() if days else None,
+            "end": days[-1].day.isoformat() if days else None,
+            "ci": ci, "not_positive": not_positive}
+
+
+def _dollar_risk(trade: dict) -> float | None:
+    """shares x |entry - stop_loss| (the v170 basis), None when unknown."""
+    shares, entry, stop = trade.get("shares"), trade.get("entry"), trade.get("stop_loss")
+    if not shares or entry is None or stop is None:
+        return None
+    risk = float(shares) * abs(entry - stop)
+    return risk if risk > 0 else None
+
+
+def dollars_block(pool: list[dict], drawdown: float) -> dict | None:
+    """The drawdown in dollars at the median per-trade risk; None when no
+    pool trade has a dollar risk (the band then omits the key)."""
+    risks = [risk for trade in pool if (risk := _dollar_risk(trade)) is not None]
+    if not risks:
+        return None
+    median = round(float(np.median(risks)), 2)
+    return {"median_risk": median, "drawdown_usd": round(drawdown * median, 2)}
+
+
+def _age(start: dt.date | None, asof: dt.date) -> int | None:
+    return None if start is None else (asof - start).days + 1
+
+
+def current_state(days: list[CloseDay], band50: dict) -> dict:
+    """The run and window drawdown now, each placed against the 50-day band."""
+    asof = days[-1].day
+    run, run_start = current_run(days)
+    drawdown, peak_day = window_drawdown(days)
+    run_zone = zone_of(run, band50["run"]["p80"], band50["run"]["p95"])
+    drawdown_zone = zone_of(drawdown, band50["drawdown"]["p80"], band50["drawdown"]["p95"])
+    return {"run": run, "run_age_days": _age(run_start, asof),
+            "drawdown": drawdown, "drawdown_age_days": _age(peak_day, asof),
+            "run_zone": run_zone, "drawdown_zone": drawdown_zone,
+            "zone": worse_zone(run_zone, drawdown_zone)}
+
+
+def _horizon_entry(blocks: list[np.ndarray], h: int, n_days: int,
+                   sizes: dict) -> dict:
+    entry = horizon_band(blocks, h, **sizes)
+    return {**entry, "weeks_span": round(h * len(blocks) / n_days, 1)}
+
+
+def variance_band(closed: list[dict], *, paths: int = PATHS,
+                  outer: int = OUTER_RESAMPLES,
+                  outer_paths: int = OUTER_PATHS) -> Band:
+    """The whole-book band, or ``insufficient`` below the floor.
+
+    ``closed`` is the closed book (every ledger, no scope applied)."""
+    usable = _usable(closed)
+    book_days = close_days(usable)
+    if not _enough(book_days):
+        return {"status": "insufficient", "scope": "whole_book",
+                "days": len(book_days), "weeks": _week_count(book_days)}
+    pool, pool_name = pool_trades(usable)
+    days = close_days(pool)
+    blocks = week_blocks(days)
+    sizes = {"paths": paths, "outer": outer, "outer_paths": outer_paths}
+    horizons = [_horizon_entry(blocks, h, len(days), sizes) for h in HORIZONS]
+    current = current_state(days, horizons[-1])
+    band: Band = {"status": "ok", "scope": "whole_book", "asof": days[-1].day.isoformat(),
+                  "days": len(days), "weeks": len(blocks), "pool": pool_name,
+                  "composition": composition(usable), "horizons": horizons,
+                  "current": current, "expr": expr_block(pool, days)}
+    dollars = dollars_block(pool, current["drawdown"])
+    if dollars is not None:
+        band["dollars"] = dollars
+    return band
