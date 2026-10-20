@@ -137,3 +137,10 @@ describe('histogram label overflow', () => {
     expect(label).toMatch(/overflow:\s*hidden/);
   });
 });
+
+describe('Histogram containment (v179 §3.3)', () => {
+  it('has a host that can shrink inside a grid track', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/ui/histogram.ts'), 'utf8');
+    expect(src).toMatch(/:host \{ display: block; min-width: 0; \}/);
+  });
+});
