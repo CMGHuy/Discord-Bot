@@ -666,6 +666,27 @@ def _looks_like_a_plan_id(value: str) -> bool:
     return len(value) == 36 and value.count("-") == 4
 
 
+# v171 D2: response key -> the plan record's flat field (V171-17).
+_QUOTE_PLAN_FIELDS = (("at", "quote_at"), ("kind", "quote_kind"), ("age_s", "quote_age_s"),
+                      ("session", "quote_session"), ("confirmed", "price_confirmed"))
+
+
+def _quote_stamp(plan: dict | None, trade: dict | None) -> dict | None:
+    """The quote a posted plan was built from (v171 D2), or None before v171.
+
+    The trade record's `quote` is written with the trade (V171-20) and wins;
+    a plan with no trade row carries the same values as flat fields. No
+    read-time upcasting: a row without them answers None and the SPA shows
+    n/a (docs/claude/schema-evolution.md).
+    """
+    quote = (trade or {}).get("quote")
+    if isinstance(quote, dict):
+        return {key: quote.get(key) for key, _ in _QUOTE_PLAN_FIELDS}
+    if not plan or plan.get("quote_kind") is None:
+        return None
+    return {key: plan.get(field) for key, field in _QUOTE_PLAN_FIELDS}
+
+
 def _plan_detail(plan: dict, trade: dict | None) -> dict:
     """Heavy fields for a plan-backed position.
 
@@ -702,6 +723,7 @@ def _plan_detail(plan: dict, trade: dict | None) -> dict:
         "target2_sources": t.get("target2_sources") or [],
         "sizing_mode": t.get("sizing_mode"),
         "account_balance_after": t.get("account_balance_after"),
+        "quote": _quote_stamp(plan, trade),
     }
 
 
@@ -740,6 +762,7 @@ def _legacy_detail(t: dict) -> dict:
         "target2_sources": t.get("target2_sources") or [],
         "sizing_mode": t.get("sizing_mode"),
         "account_balance_after": t.get("account_balance_after"),
+        "quote": _quote_stamp(None, t),
     }
 
 
