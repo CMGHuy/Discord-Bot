@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.shared.kinds import Asker, QuoteDetail
 from swingbot.core.planning.rebuild import RebuildOutcome, RebuildPrice, choose_rebuild_price
 
@@ -64,7 +65,8 @@ class Requote:
         try:
             got = self._quote_fn(list(tickers)) or {}
         except Exception as exc:
-            log.warning("Re-quote failed for %d symbol(s): %s", len(tickers), exc)
+            swallowed(log, "scan.requote.fetch", exc, "Re-quote failed for %d symbol(s): %s",
+                      len(tickers), exc, exc_info=True)
             got = {}
         done = self._clock()
         for ticker in tickers:

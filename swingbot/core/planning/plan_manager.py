@@ -17,6 +17,7 @@ from typing import NamedTuple
 
 from swingbot import config
 from swingbot.core.analytics import runner_path as rp
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.session import (RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
                                           is_regular_session, is_tape_open, now_et,
                                           nyse_calendar, session_close, session_date)
@@ -104,8 +105,9 @@ def _stamp_exit_quote(event: PlanEvent, quote, now) -> None:
         return
     try:
         event.detail["quote"] = quote_stamp(quote, now or datetime.now(timezone.utc))
-    except Exception:
-        log.debug("could not stamp the exit quote", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "scan.plan_manager.stamp_exit_quote", exc, "could not stamp the exit quote",
+                  level=logging.DEBUG, exc_info=True)
 
 
 def _quote_suffix(stamp) -> str:
@@ -425,7 +427,8 @@ def _shared_daily(ticker):
     try:
         frame = daily_delta.delta_update([ticker], asker=Asker.STOP_MONITOR).get(key)
     except Exception as exc:  # noqa: BLE001 - any provider/cache error degrades to the cache
-        log.debug("plan_manager: delta_update failed for %s: %s", ticker, exc)
+        swallowed(log, "scan.plan_manager.delta_update", exc,
+                  "plan_manager: delta_update failed for %s: %s", ticker, exc, level=logging.DEBUG)
         return daily_delta.read_daily(ticker)
     if frame is None or frame.empty:
         return None

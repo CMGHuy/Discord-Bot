@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 from flask import g, has_request_context, request
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.shared import kinds
 from swingbot.core.marketdata.shared.kinds import Asker, DataKind, Entry, QuoteDetail
 
@@ -74,8 +75,9 @@ def page_quotes(tickers: list[str], *, dashboard: bool = False) -> dict[str, Quo
         from swingbot.core.marketdata import data
         quotes = data.get_quote_batch(tickers, asker=page_asker(dashboard=dashboard))
         return {str(t).upper(): q for t, q in (quotes or {}).items()}
-    except Exception:
-        log.debug("page_quotes failed", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.freshness.page_quotes", exc, "page_quotes failed",
+                  level=logging.DEBUG, exc_info=True)
         return {}
 
 
@@ -86,8 +88,9 @@ def cached_quotes(tickers: list[str]) -> dict[str, Entry]:
         stored = layer.last_cached(DataKind.QUOTE, tickers)
         return {sym: Entry(QuoteDetail.from_doc(e.value), e.fetched_at, e.source, e.outcome)
                 for sym, e in stored.items()}
-    except Exception:
-        log.debug("cached_quotes failed", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.freshness.cached_quotes", exc, "cached_quotes failed",
+                  level=logging.DEBUG, exc_info=True)
         return {}
 
 
@@ -141,8 +144,9 @@ def _refresh_yf_daily(ticker: str, asker: Asker) -> None:
                 data_store.update_cache([ticker], "1d")
             else:
                 data_refresh.refresh_symbol(ticker, "daily")
-    except Exception:
-        log.debug("yfinance daily refresh failed for %s", ticker, exc_info=True)
+    except Exception as exc:
+        swallowed(log, "marketdata.freshness.yf_refresh", exc, "yfinance daily refresh failed for %s",
+                  ticker, level=logging.DEBUG, exc_info=True)
 
 
 def _read_yf(ticker: str):

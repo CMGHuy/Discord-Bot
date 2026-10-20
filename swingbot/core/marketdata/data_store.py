@@ -387,7 +387,7 @@ def load_normalized_file(path: str, label: str = "") -> pd.DataFrame | None:
     try:
         df = pd.read_csv(path, index_col=0, parse_dates=True)
     except Exception as exc:
-        swallowed(log, "marketdata.load_normalized.read", exc, "cache read failed for %s: %s",
+        swallowed(log, "marketdata.load_normalized.read_csv", exc, "cache read failed for %s: %s",
                   label or path, exc, exc_info=True)
         return None
     df = _normalize_cached(df, label or path)

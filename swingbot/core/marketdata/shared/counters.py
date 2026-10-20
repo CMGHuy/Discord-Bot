@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from swingbot import config
 from swingbot.core.db.repositories.market_shared import market_shared_repo
 from swingbot.core.db.side_engine import side_connection
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.shared.kinds import OUTCOMES, Asker, DataKind
 
 log = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ def flush(*, force: bool = False) -> int:
             market_shared_repo().add_counts(db_rows, conn=conn)
     except Exception as exc:  # noqa: BLE001 - fail open, keep the rows
         merge(rows)
+        swallowed(log, "marketdata.counters.flush", exc, level=logging.DEBUG)
         warn_fail_open("count flush", exc)
         return 0
     return len(rows)

@@ -51,6 +51,7 @@ import pandas as pd
 
 from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata import data_store, spot_metals, yf_safe
 from swingbot.core.marketdata.adjustments import (
     _ADJUSTMENT_RATIO_DISPERSION, DELTA_OVERLAP_TOLERANCE, MIN_OVERLAP_BARS, merge_adjusted)
@@ -325,7 +326,9 @@ def _yf_frames(tickers: list[str], **kwargs) -> dict:
     except yf_safe.BudgetDeferred:
         raise
     except Exception as exc:  # noqa: BLE001 - DownloadBusy or a network failure: a miss
-        log.info("daily delta: yfinance download skipped for %d ticker(s): %s", len(tickers), exc)
+        swallowed(log, "marketdata.daily_delta.download", exc,
+                  "daily delta: yfinance download skipped for %d ticker(s): %s", len(tickers), exc,
+                  level=logging.INFO)
         return {}
     if raw is None or raw.empty:
         return {}

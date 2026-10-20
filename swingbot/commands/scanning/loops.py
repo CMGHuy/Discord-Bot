@@ -581,7 +581,8 @@ async def _live_price_batch(tickers: list) -> dict:
     try:
         quotes = await asyncio.to_thread(plan_manager.monitor_quotes, tickers)
     except Exception as exc:
-        log.warning("trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        swallowed(log, "scan.loops.monitor_prices", exc,
+                  "trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
         return {}
     return {t: q.price for t, q in quotes.items() if q.price}
 
@@ -1001,8 +1002,9 @@ async def _run_reanchor() -> None:
         try:
             await asyncio.to_thread(daily_delta.full_refetch, chunk, asker=Asker.BACKGROUND)
             done += len(chunk)
-        except Exception:
-            log.exception("daily_reanchor: chunk %d/%d failed", n + 1, len(chunks))
+        except Exception as exc:
+            swallowed(log, "scan.loops.reanchor_chunk", exc, "daily_reanchor: chunk %d/%d failed",
+                      n + 1, len(chunks), level=logging.ERROR, exc_info=True)
     log.info("daily_reanchor: re-anchored %d/%d symbol(s)", done, len(symbols))
 
 
@@ -1165,8 +1167,9 @@ async def tape_feed():
         return
     try:
         await asyncio.to_thread(_tape_feed_tick)
-    except Exception:
-        log.exception("tape_feed: refresh failed")
+    except Exception as exc:
+        swallowed(log, "scan.loops.tape_feed", exc, "tape_feed: refresh failed",
+                  level=logging.ERROR, exc_info=True)
 
 
 def _always_on_loops() -> tuple:

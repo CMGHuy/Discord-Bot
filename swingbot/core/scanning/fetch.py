@@ -452,9 +452,10 @@ def _delta_chunk(chunk: list, progress: "ScanProgress" = None) -> dict:
     try:
         got = daily_delta.delta_update(chunk, asker=Asker.SCAN, fetch_window=_delta_window_fetch,
                                        fetch_full=_delta_full_fetch)
-    except Exception:
-        log.exception("Crawl (delta): chunk of %d ticker(s) failed -- falling back to the cold path",
-                      len(chunk))
+    except Exception as exc:
+        swallowed(log, "scan.fetch.delta_chunk", exc,
+                  "Crawl (delta): chunk of %d ticker(s) failed -- falling back to the cold path",
+                  len(chunk), level=logging.ERROR, exc_info=True)
         return {t: df for t, df in _fetch_cold_frames(chunk, progress) if df is not None}
     if progress is not None:
         progress.done += len(chunk)

@@ -13,11 +13,13 @@ allow. Any store error fails open (allow) with a rate-limited warning.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from swingbot import config
 from swingbot.core.db.repositories.market_shared import market_shared_repo
 from swingbot.core.db.side_engine import side_connection
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.shared import counters
 from swingbot.core.marketdata.shared.kinds import (
     PROVIDER_ALPACA,
@@ -25,6 +27,8 @@ from swingbot.core.marketdata.shared.kinds import (
     Asker,
     resolve_asker,
 )
+
+log = logging.getLogger(__name__)
 
 #: Share of the bucket that must remain after a take, by asker priority.
 RESERVE_FRACTION = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.25, 5: 0.50}
@@ -62,6 +66,7 @@ def take(provider: str, asker: Asker) -> bool:
         with side_connection() as conn:
             return bool(market_shared_repo().take_token(provider, cap, cap, reserve, conn=conn))
     except Exception as exc:  # noqa: BLE001 - the layer fails open
+        swallowed(log, "marketdata.budget.take", exc, level=logging.DEBUG)
         counters.warn_fail_open("budget take", exc)
         return True
 
@@ -74,6 +79,7 @@ def breaker_allows(provider: str) -> bool:
         with side_connection() as conn:
             _fails, open_until = market_shared_repo().breaker_state(provider, conn=conn)
     except Exception as exc:  # noqa: BLE001 - the layer fails open
+        swallowed(log, "marketdata.budget.breaker_read", exc, level=logging.DEBUG)
         counters.warn_fail_open("breaker read", exc)
         return True
     return open_until is None or open_until <= datetime.now(timezone.utc)
@@ -89,4 +95,5 @@ def breaker_record(provider: str, ok: bool) -> None:
                 provider, ok, int(config.ALPACA_BREAKER_FAILURES),
                 float(config.ALPACA_BREAKER_COOLDOWN_SECONDS), conn=conn)
     except Exception as exc:  # noqa: BLE001 - the layer fails open
+        swallowed(log, "marketdata.budget.breaker_write", exc, level=logging.DEBUG)
         counters.warn_fail_open("breaker write", exc)

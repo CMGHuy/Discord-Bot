@@ -34,6 +34,8 @@ import threading
 
 from flask import jsonify, request
 
+from swingbot.core.infra.swallowed import swallowed
+
 from . import api_v1, error
 from .auth import require_auth
 
@@ -719,8 +721,9 @@ def _run_tape_self_fetch(symbols: list[str]) -> None:
     from swingbot.core.marketdata.shared.kinds import Asker
     try:
         tape.refresh_tape(symbols, asker=Asker.ADMIN_PAGE)
-    except Exception:
-        logging.getLogger(__name__).warning("tape self-fetch failed", exc_info=True)
+    except Exception as exc:
+        swallowed(logging.getLogger(__name__), "ops.market.tape_self_fetch", exc,
+                  "tape self-fetch failed", exc_info=True)
 
 
 def _tape_self_fetch(symbols: list[str]) -> threading.Thread | None:

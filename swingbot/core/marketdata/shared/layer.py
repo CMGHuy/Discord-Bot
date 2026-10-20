@@ -24,6 +24,7 @@ This module takes no budget tokens; provider calls inside ``fetch`` do.
 from __future__ import annotations
 
 import itertools
+import logging
 import os
 import socket
 import time
@@ -36,11 +37,14 @@ from uuid import uuid4
 from swingbot import config
 from swingbot.core.db.repositories.market_shared import market_shared_repo
 from swingbot.core.db.side_engine import side_connection
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.marketdata.shared import counters
 from swingbot.core.marketdata.shared.budget import BudgetDeferred
 from swingbot.core.marketdata.shared.kinds import (
     Asker, DataKind, Entry, cache_key, resolve_asker)
 from swingbot.core.marketdata.spot_metals import is_spot_metal
+
+log = logging.getLogger(__name__)
 
 #: Process prefix of every lease holder; each ``get``/``lease`` call appends ``#n``.
 #: The random suffix keeps a restarted container (same hostname and pid, ``#n``
@@ -230,6 +234,7 @@ def _claim(call: _Call, symbols: list[str]) -> tuple[list[str], list[str], set[s
                 else:
                     lost.append(s)
     except Exception as exc:  # noqa: BLE001 - fail open to a direct fetch
+        swallowed(log, "marketdata.layer.lease_batch", exc, level=logging.DEBUG)
         counters.warn_fail_open("lease", exc)
         return list(symbols), [], leased
     return owned, lost, leased
@@ -341,6 +346,7 @@ def _acquire(kind: DataKind, symbol: str, key: str, holder: str, asker: Asker,
                 return True
         return asker.priority <= 2
     except Exception as exc:  # noqa: BLE001 - fail open
+        swallowed(log, "marketdata.layer.lease_try", exc, level=logging.DEBUG)
         counters.warn_fail_open("lease", exc)
         return False
 
@@ -368,6 +374,7 @@ def _read(call: _Call, keys: list[str]) -> Optional[dict]:
         with side_connection() as conn:
             return market_shared_repo().read_entries(keys, conn=conn)
     except Exception as exc:  # noqa: BLE001 - fail open to a direct fetch
+        swallowed(log, "marketdata.layer.read_strict", exc, level=logging.DEBUG)
         counters.warn_fail_open("cache read", exc)
         return None
 
@@ -377,6 +384,7 @@ def _read_keys(keys: list[str]) -> dict:
         with side_connection() as conn:
             return market_shared_repo().read_entries(keys, conn=conn)
     except Exception as exc:  # noqa: BLE001 - fail open
+        swallowed(log, "marketdata.layer.read_open", exc, level=logging.DEBUG)
         counters.warn_fail_open("cache read", exc)
         return {}
 
@@ -388,6 +396,7 @@ def _write(rows: list[dict]) -> None:
         with side_connection() as conn:
             market_shared_repo().write_entries(rows, conn=conn)
     except Exception as exc:  # noqa: BLE001 - write-back is best effort
+        swallowed(log, "marketdata.layer.write", exc, level=logging.DEBUG)
         counters.warn_fail_open("cache write", exc)
 
 
@@ -401,6 +410,7 @@ def _release_keys(holder: str, keys) -> None:
             for key in keys:
                 repo.release_lease(key, holder, conn=conn)
     except Exception as exc:  # noqa: BLE001 - an unreleased lease expires on its own
+        swallowed(log, "marketdata.layer.release", exc, level=logging.DEBUG)
         counters.warn_fail_open("lease release", exc)
 
 

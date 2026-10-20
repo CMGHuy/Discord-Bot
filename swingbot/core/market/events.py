@@ -196,7 +196,7 @@ def _warm_legacy(tickers: list[str]) -> None:
             try:
                 fut.result()
             except Exception as exc:
-                swallowed(log, "earnings.warmup", exc,
+                swallowed(log, "earnings.warmup_one", exc,
                           "background earnings warm-up failed for %s", ticker,
                           level=logging.DEBUG, exc_info=True)
 
@@ -429,7 +429,7 @@ def _walk_calendar(candidates: list[str]) -> tuple[list[str], bool]:
         try:
             calendar = yf.Ticker(candidate).calendar
         except Exception as exc:
-            swallowed(log, "earnings.next_date", exc, "Calendar fetch failed for %s: %s",
+            swallowed(log, "earnings.walk_calendar", exc, "Calendar fetch failed for %s: %s",
                       candidate, exc, level=logging.DEBUG)
             continue
         answered = True
@@ -446,7 +446,7 @@ def _walk_dates(candidates: list[str]) -> tuple[list[str], bool]:
         try:
             frame = yf.Ticker(candidate).get_earnings_dates(limit=8)
         except Exception as exc:
-            swallowed(log, "earnings.datetimes", exc, "Earnings-dates fetch failed for %s: %s",
+            swallowed(log, "earnings.walk_dates", exc, "Earnings-dates fetch failed for %s: %s",
                       candidate, exc, level=logging.DEBUG)
             continue
         if frame is None or frame.empty:

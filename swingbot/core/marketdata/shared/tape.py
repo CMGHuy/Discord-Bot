@@ -12,6 +12,7 @@ is a miss, never written, so the last good value stays and its age grows.
 """
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,12 +21,15 @@ from typing import Optional
 from swingbot import config
 from swingbot.core.db.repositories.market_shared import market_shared_repo
 from swingbot.core.db.side_engine import side_connection
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.session import market_today
 from swingbot.core.marketdata import data, yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.shared import counters, layer
 from swingbot.core.marketdata.shared.kinds import (
     PROVIDER_YF, Asker, DataKind, Entry, cache_key)
+
+log = logging.getLogger(__name__)
 
 TAPE_FIXED = ("^GSPC", "^NDX", "^DJI", "^VIX")
 DEMAND_TTL_S = 15 * 60
@@ -112,6 +116,7 @@ def record_demand(symbols: list[str]) -> None:
                 "key": DEMAND_KEY, "kind": DataKind.INDEX_QUOTE.value, "symbol": "TAPE-DEMAND",
                 "fetched_at": now, "source": "admin", "value": stamps}], conn=conn)
     except Exception as exc:  # noqa: BLE001 - demand is best effort
+        swallowed(log, "marketdata.tape.demand_write", exc, level=logging.DEBUG)
         counters.warn_fail_open("tape-demand", exc)
 
 
@@ -124,6 +129,7 @@ def demanded_symbols(now: datetime) -> list[str]:
         with side_connection() as conn:
             stamps = _live_demand(_read_demand(conn), now)
     except Exception as exc:  # noqa: BLE001 - the fixed tape still refreshes
+        swallowed(log, "marketdata.tape.demand_read", exc, level=logging.DEBUG)
         counters.warn_fail_open("tape-demand", exc)
         return fixed
     extra = [s for s in stamps if s not in TAPE_FIXED and is_tape_symbol(s)]
@@ -205,7 +211,8 @@ def _yahoo_docs(symbols: list[str]) -> dict[str, dict]:
                                auto_adjust=False, progress=False)
     except yf_safe.BudgetDeferred:
         raise
-    except Exception:  # noqa: BLE001 - DownloadBusy or a Yahoo error: every symbol blank
+    except Exception as exc:  # noqa: BLE001 - DownloadBusy or a Yahoo error: every symbol blank
+        swallowed(log, "marketdata.tape.yf_fetch", exc, level=logging.DEBUG)
         return {}
     out = {}
     for symbol in symbols:

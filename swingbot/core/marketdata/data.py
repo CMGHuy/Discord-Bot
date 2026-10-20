@@ -360,7 +360,9 @@ def _yf_quote_details(tickers: list) -> dict:
         log.info("yfinance busy, skipped %d ticker(s): %s", len(tickers), exc)
         return {}
     except Exception as exc:
-        log.error("_yf_quote_details failed for %d ticker(s): %s", len(tickers), exc, exc_info=True)
+        swallowed(log, "marketdata.yf_quote_details", exc,
+                  "_yf_quote_details failed for %d ticker(s): %s", len(tickers), exc,
+                  level=logging.ERROR, exc_info=True)
         return {}
     if raw is None or raw.empty:
         return {}
