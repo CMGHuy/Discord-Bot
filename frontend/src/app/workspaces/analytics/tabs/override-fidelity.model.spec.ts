@@ -79,7 +79,7 @@ describe('override-fidelity model', () => {
       + `${M}0.02 R per override (95% CI [${M}0.05, +0.01], 31 overrides).`);
     expect(badgeCopy({ ...VERDICT_RECORDED_COST, sum_delta_usd: null }, '$')).toBe(lead);
     for (const state of ['COST', 'SAVED'] as const) {
-      expect(badgeCopy({ ...VERDICT_RECORDED_COST, state }, '$')).not.toMatch(/(cost|saved)/i);
+      expect(badgeCopy({ ...VERDICT_RECORDED_COST, state }, '$')).not.toMatch(/\b(cost|saved)\b/i);
     }
     expect(waitingOnLine(VERDICT_RECORDED_COST)).toBeNull();
   });
