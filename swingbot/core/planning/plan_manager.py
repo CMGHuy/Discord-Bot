@@ -1569,8 +1569,9 @@ def monitor_quotes(tickers: list) -> dict:
     counters.merge(rows)
     try:  # D9: persist the STOP_MONITOR rows now; no scan flushes them off-session
         counters.flush()
-    except Exception:  # noqa: BLE001 - counting never breaks the monitor tick
-        log.debug("monitor_quotes: counter flush failed", exc_info=True)
+    except Exception as exc:  # counting never breaks the monitor tick
+        swallowed(log, "scan.plan_manager.counter_flush", exc, "D9 counter flush failed",
+                  level=logging.DEBUG, exc_info=True)
     return {t: QuoteDetail.from_doc(d) for t, d in docs.items()}
 
 
