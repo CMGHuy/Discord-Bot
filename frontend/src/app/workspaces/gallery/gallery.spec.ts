@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { ConnectionStore } from '../../stores/connection.store';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
@@ -63,7 +64,8 @@ describe('the gallery shows every primitive', () => {
 describe('the gallery renders', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [provideZonelessChangeDetection(), provideRouter([]),
+        { provide: ConnectionStore, useValue: { marketActive: () => true } }],
     });
   });
 
@@ -141,7 +143,8 @@ describe('the gallery is the v80 D6 reference', () => {
 describe('the gallery covers the v95 content-priority primitives', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [provideZonelessChangeDetection(), provideRouter([]),
+        { provide: ConnectionStore, useValue: { marketActive: () => true } }],
     });
   });
 

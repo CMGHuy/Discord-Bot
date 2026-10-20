@@ -25,6 +25,7 @@ import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
 import { Flash } from '../../ui/flash';
 import { held, money, num, pct, rMultiple, signed } from '../../ui/format';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
+import { AgeHint } from '../../ui/age-hint';
 import { Freshness } from '../../ui/freshness';
 import { Gauge } from '../../ui/gauge';
 import { HeatCell, HeatGrid } from '../../ui/heat-grid';
@@ -124,6 +125,7 @@ interface ContractRow {
     FilterChips,
     Flash,
     Freshness,
+    AgeHint,
     Gauge,
     HeatGrid,
     Hint,
@@ -471,6 +473,7 @@ interface ContractRow {
       <sb-matrix [labels]="matrixLabels" [values]="matrixValues" [clusters]="[['AAPL', 'MSFT']]" />
       <sb-timeline [items]="timelineItems" />
       <sb-freshness [at]="'2026-09-11T14:29:30Z'" [now]="null" />
+      <span class="num">187.42 <sb-age-hint [ageS]="42" [windowS]="15" /></span>
       <sb-control-bar [activeCount]="2">
         <button filters sb-button variant="ghost" type="button">Open</button>
         <sb-select scope label="Range" placeholder="YTD" [options]="selectOptions" />
