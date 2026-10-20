@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-20 19:40:34 UTC",
+  "generated_at": "2026-10-20 19:41:29 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.31.0",
+    "ui": "1.32.0",
     "bot": "2.13.0"
   },
   "releases": [
@@ -1915,6 +1915,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-20",
+      "last_seen": "2026-10-20",
+      "commit": "d744b8b0",
+      "subject": "release(ui): 1.32.0 -- Overrides vs engine panel on Analytics Execution, Bulk close exit label (v173)",
+      "versions": {
+        "ui": "1.32.0",
+        "bot": "2.13.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
