@@ -9,7 +9,8 @@ if TYPE_CHECKING:
 
 from collections import OrderedDict
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait as _futures_wait
-from datetime import date
+from datetime import date, timedelta
+from functools import partial
 
 from swingbot import config
 from swingbot.core.infra.logsetup import with_current_context
@@ -26,6 +27,8 @@ from swingbot.core.marketdata import daily_delta, yf_safe
 from swingbot.core.marketdata.history_splice import splice_cached_history
 from swingbot.core.marketdata.shared import counters
 from swingbot.core.marketdata.shared.kinds import Asker
+from swingbot.core.marketdata.ticker_utils import candidate_symbols
+from swingbot.core.market import session
 
 from . import runstate
 
@@ -457,8 +460,53 @@ def _delta_chunk(chunk: list, progress: "ScanProgress" = None) -> dict:
         progress.done += len(chunk)
         progress.current_ticker = chunk[-1]
     out = {}
+    stale_before = _previous_session(daily_delta._today_ny())
     for ticker in chunk:
         df = got.get(str(ticker).upper().strip())
+        if df is not None:
+            _warn_if_stale(ticker, df, stale_before)
+            out[ticker] = df
+    return out
+
+
+def _previous_session(today: date) -> date | None:
+    """The NYSE session before `today`, or None outside the frozen calendar."""
+    sessions = session.nyse_calendar().sessions(today - timedelta(days=14), today - timedelta(days=1))
+    return sessions[-1] if sessions else None
+
+
+def _warn_if_stale(ticker: str, df, previous: date | None) -> None:
+    """A window miss serves the cached frame with no age limit (D3); say so
+    when its last bar is older than the previous trading session."""
+    if previous is None or df.empty or df.attrs.get("source"):
+        return
+    last = df.index[-1].date()
+    if last < previous:
+        log.warning("Crawl (delta): %s served from cache with last bar %s, older than the previous "
+                    "session %s -- the window fetch missed", ticker, last, previous)
+
+
+def _needs_alias(ticker: str) -> bool:
+    """True when the literal symbol may not be the instrument (SPX, BTC,
+    EURUSD...): only the legacy path tries candidate_symbols() aliases, and
+    the delta caches must never hold another instrument's bars."""
+    return len(candidate_symbols(ticker)) > 1
+
+
+def _crawl_aliased(tickers: list, progress: "ScanProgress" = None) -> dict:
+    """Aliased tickers take exactly the flag-off route: the fresh
+    market_data/daily cache, else today's cold path with its alias fallback."""
+    out, cold = {}, []
+    for ticker in tickers:
+        df = _load_cached_daily(ticker)
+        if df is None:
+            cold.append(ticker)
+            continue
+        out[ticker] = df
+        if progress is not None:
+            progress.done += 1
+            progress.current_ticker = ticker
+    for ticker, df in (_fetch_cold_frames(cold, progress) if cold else []):
         if df is not None:
             out[ticker] = df
     return out
@@ -474,15 +522,19 @@ def _crawl_delta(tickers: list[str], progress: "ScanProgress" = None) -> dict:
     results = LRUFrames(max_frames=len(tickers))
     started = time.monotonic()
     spot, plain = spot_metals.split_spot(tickers)
+    aliased = [t for t in plain if _needs_alias(t)]
     chunk_size = int(getattr(config, "BATCH_FETCH_CHUNK_SIZE", 100))
-    for chunk in _chunked(plain, chunk_size):
+    jobs = [partial(_delta_chunk, chunk, progress)
+            for chunk in _chunked([t for t in plain if t not in aliased], chunk_size)]
+    jobs.append(partial(_crawl_aliased, aliased, progress))
+    for job in jobs:
         if runstate.is_stop_requested():
             log.info("Crawl (delta): stop requested -- ending early (%d/%d ticker(s) resolved so far)",
                      len(results), len(tickers))
             if progress is not None:
                 progress.stopped = True
             return results
-        results.update(_delta_chunk(chunk, progress))
+        results.update(job())
     cold = sum(1 for df in results.values() if df.attrs.get("source"))
     results.update(_crawl_spot(spot, progress))
     log.info("Crawl (delta) complete in %.1fs: %d/%d ticker(s) resolved (%d cold-fetched)",

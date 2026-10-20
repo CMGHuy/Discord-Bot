@@ -8,9 +8,10 @@ import pandas as pd
 import pytest
 
 from swingbot import config
-from swingbot.core.marketdata import daily_delta as dd, data_store
+from swingbot.core.marketdata import daily_delta as dd, data_store, yf_safe
 from swingbot.core.marketdata.shared import counters
-from swingbot.core.scanning import engine as scan_engine, fetch
+from swingbot.core.scanning import engine as scan_engine, fetch, runstate
+from swingbot.core.scanning.scan_run import ScanProgress
 from tests.helpers import make_ohlcv
 from tests.marketdata.daily_fakes import Market
 from tests.scanning.conftest import _InlineProcessPool
@@ -101,3 +102,95 @@ def test_a_failing_delta_chunk_falls_back_to_the_cold_path(monkeypatch, market):
     cold = make_ohlcv([1.0, 2.0, 3.0])
     monkeypatch.setattr(fetch, "_fetch_cold_frames", lambda ts, progress=None: [(t, cold) for t in ts])
     assert scan_engine._crawl_latest_data(["AAPL"])["AAPL"] is cold
+
+
+# -- fix round 1 ------------------------------------------------------------------------
+
+
+def _spy_delta(monkeypatch):
+    seen = []
+    real = dd.delta_update
+
+    def spy(tickers, **kwargs):
+        seen.extend(tickers)
+        return real(tickers, **kwargs)
+    monkeypatch.setattr(dd, "delta_update", spy)
+    return seen
+
+
+def test_an_aliased_ticker_takes_the_legacy_cold_path_and_is_never_cached_by_delta(monkeypatch, market):
+    seen = _spy_delta(monkeypatch)
+    legacy = make_ohlcv([4000.0, 4010.0, 4020.0])
+    cold_asked = []
+    monkeypatch.setattr(fetch, "_load_cached_daily", lambda t: None)
+
+    def cold(ts, progress=None):
+        cold_asked.extend(ts)
+        return [(t, legacy) for t in ts]
+    monkeypatch.setattr(fetch, "_fetch_cold_frames", cold)
+    frames = scan_engine._crawl_latest_data(["SPX", "AAPL"])
+    assert frames["SPX"] is legacy
+    assert cold_asked == ["SPX"]
+    assert seen == ["AAPL"]                                             # the non-aliased one stays on delta
+    assert all("SPX" not in c[-1] for c in market.calls)
+    assert not os.path.exists(dd.cache_file("SPX", dd.BASIS_YF))
+    assert not os.path.exists(dd.cache_file("SPX", dd.BASIS_ALPACA))
+
+
+def test_an_aliased_ticker_with_a_fresh_cache_is_served_from_it(monkeypatch, market):
+    seen = _spy_delta(monkeypatch)
+    cached = make_ohlcv([1.10, 1.11, 1.12])
+    monkeypatch.setattr(fetch, "_load_cached_daily", lambda t: cached if t == "EURUSD" else None)
+    monkeypatch.setattr(fetch, "_fetch_cold_frames", lambda ts, progress=None: pytest.fail("cold fetch"))
+    assert scan_engine._crawl_latest_data(["EURUSD"])["EURUSD"] is cached
+    assert seen == [] and market.calls == []
+
+
+def test_a_failed_window_worker_keeps_the_warm_cached_frame(monkeypatch, market):
+    scan_engine._crawl_latest_data(["AAPL"])
+    cached = dd.read_daily("AAPL", dd.BASIS_ALPACA)
+    monkeypatch.setattr(fetch, "_run_bounded", lambda fn, args, timeout, label: None)   # timed out / raised
+    frames = scan_engine._crawl_latest_data(["AAPL"])
+    assert frames["AAPL"].index[-1] == cached.index[-1] < pd.Timestamp(TODAY)
+    assert len(frames["AAPL"]) == len(cached)
+
+
+def test_budget_deferred_in_the_worker_is_a_miss(monkeypatch, market):
+    def deferred(*a, **k):
+        raise yf_safe.BudgetDeferred("short")
+    monkeypatch.setattr(dd, "provider_full", deferred)
+    monkeypatch.setattr(dd, "provider_window", deferred)
+    assert "AAPL" not in scan_engine._crawl_latest_data(["AAPL"])
+
+
+def test_a_stop_between_chunks_sets_stopped_and_makes_no_calls(monkeypatch, market):
+    monkeypatch.setattr(runstate, "is_stop_requested", lambda: True)
+    progress = ScanProgress()
+    assert dict(scan_engine._crawl_latest_data(["AAPL", "MSFT"], progress)) == {}
+    assert progress.stopped is True
+    assert market.calls == []
+
+
+def test_progress_tracks_each_chunk(monkeypatch, market):
+    monkeypatch.setattr(config, "BATCH_FETCH_CHUNK_SIZE", 1)
+    progress = ScanProgress()
+    scan_engine._crawl_latest_data(["AAPL", "MSFT"], progress)
+    assert (progress.total, progress.done, progress.current_ticker) == (2, 2, "MSFT")
+
+
+def test_a_cached_frame_older_than_the_previous_session_is_warned(monkeypatch, market, caplog):
+    old = make_ohlcv([1.0, 2.0, 3.0])
+    old.index = pd.bdate_range("2026-10-01", periods=3)
+    monkeypatch.setattr(dd, "delta_update", lambda tickers, **k: {"AAPL": old})
+    with caplog.at_level("WARNING", logger=fetch.log.name):
+        assert scan_engine._crawl_latest_data(["AAPL"])["AAPL"] is old
+    assert any("AAPL" in r.getMessage() and r.levelname == "WARNING" for r in caplog.records)
+
+
+def test_a_cached_frame_through_the_previous_session_is_not_warned(monkeypatch, market, caplog):
+    recent = make_ohlcv([1.0, 2.0, 3.0])
+    recent.index = pd.bdate_range("2026-10-13", periods=3)               # ends 2026-10-15
+    monkeypatch.setattr(dd, "delta_update", lambda tickers, **k: {"AAPL": recent})
+    with caplog.at_level("WARNING", logger=fetch.log.name):
+        scan_engine._crawl_latest_data(["AAPL"])
+    assert not [r for r in caplog.records if r.levelname == "WARNING"]
