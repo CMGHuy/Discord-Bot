@@ -86,25 +86,85 @@ def _trade_row(trade_id: str):
 
 # --- close ---------------------------------------------------------------
 
-def _close_plan(store: PlanStore, plan) -> None:
+def _live_quote(ticker: str) -> tuple[float | None, str | None]:
+    """(price, quote_ts) for the override stamp, fetched once. A fetch that
+    raises is "no quote" (one warning), so the stamp falls back to the bar
+    close rather than being lost. Looked up on the module at call time."""
+    try:
+        from swingbot.core.marketdata import data as md
+        quote = md.get_current_price_detail(ticker, allow_stale=False)
+    except Exception as exc:
+        log.warning("override stamp: quote fetch failed for %s: %s", ticker, exc)
+        return None, None
+    quote_ts = datetime.now(timezone.utc).isoformat()
+    if quote is None or not quote.price:
+        return None, None
+    return float(quote.price), quote_ts
+
+
+def _last_bar(bars) -> tuple[str | None, float | None]:
+    """(ISO date, close) of the daily cache's last bar; Nones when empty.
+    A NaN close is no price."""
+    if bars is None or len(bars) == 0:
+        return None, None
+    close = float(bars["Close"].iloc[-1])
+    return bars.index[-1].date().isoformat(), (close if close == close else None)
+
+
+def _build_override_stamp(ticker: str) -> dict:
+    """The four-field `override` stamp (spec v173 §1). May raise; callers
+    go through `_override_stamp`."""
+    price, quote_ts = _live_quote(ticker)
+    bars_asof, last_close = _last_bar(rp.cached_daily_bars(ticker))
+    if price is not None:
+        source = "quote"
+    elif last_close is not None:
+        price, source = last_close, "bar_close"
+    else:
+        source = "none"
+    return {"exit_price": price, "price_source": source,
+            "quote_ts": quote_ts if source == "quote" else None, "bars_asof": bars_asof}
+
+
+def _override_stamp(ticker: str) -> dict | None:
+    """What a manual close records about its exit, read only by the v173
+    override-fidelity report. Never raises: a failure logs and returns None
+    (written as `override: null`), and the close goes ahead."""
+    try:
+        return _build_override_stamp(ticker)
+    except Exception as exc:
+        log.warning("override stamp failed for %s: %s", ticker, exc, exc_info=True)
+        return None
+
+
+def _close_plan(store: PlanStore, plan, reason: str = "manual") -> None:
     """Close one ACTIVE/PARTIAL plan: settle its linked legacy trade, record
     the transition, and queue the bot's notification.
 
     Extracted from close_trade so the bulk endpoint runs exactly this and
     cannot drift from the single-position path. The caller checks status.
+    `reason` is "manual" for a single close and "manual_bulk" for the bulk
+    endpoint (v173): a bulk clear is not a decision, and the override report
+    must be able to tell the two apart.
     """
+    stamp = _override_stamp(plan.ticker)
+    quoted = stamp["exit_price"] if stamp and stamp["price_source"] == "quote" else None
     tl = TradeLog()
     linked = _linked_trade(tl, plan.plan_id)
     if linked and linked.get("status") == _OPEN_LEGACY:
         # Through TradeLog's own locked mutator: the admin and the bot are
         # separate processes over one trades.json, so an unlocked
-        # read-modify-write here could race the scan loop.
-        tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)")
+        # read-modify-write here could race the scan loop. The stamp's quote
+        # is passed in so the stamp and the trade carry one price; a daily
+        # close (bar_close) is never written to the trade as a live fill.
+        tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)",
+                              exit_price=quoted)
     was_partial = plan.status == PlanStatus.PARTIAL
     # `at` is passed explicitly -- record_transition defaults it to None, and
     # the lifecycle strip's "today" counts read status_history[-1]["at"].
-    record_transition(plan, PlanStatus.CLOSED, reason="manual",
-                      at=datetime.now(timezone.utc).isoformat())
+    record_transition(plan, PlanStatus.CLOSED, reason=reason,
+                      at=datetime.now(timezone.utc).isoformat(),
+                      extra={"override": stamp})
     if was_partial:   # v142: a manual runner close stamps its path too; never raises
         rp.stamp_runner_path(plan, rp.cached_daily_bars, source="live")
     store.update(plan)
@@ -241,7 +301,9 @@ def close_open():
     `dashboard.py` applies to `?mode=`.
 
     Per position it runs `_close_plan` -- the same path the single-position
-    close uses, including the manual-close notify record the bot reads.
+    close uses, including the manual-close notify record the bot reads --
+    with reason "manual_bulk" (v173), so a bulk clear is never counted as
+    an individual override.
 
     One failure does not abort the rest: a half-closed book with no report of
     which half is worse than a partial success that says so.
@@ -265,7 +327,7 @@ def close_open():
         if plan.status not in closeable:
             continue
         try:
-            _close_plan(store, plan)
+            _close_plan(store, plan, "manual_bulk")
             closed += 1
             tickers.append(plan.ticker)
         except Exception:
