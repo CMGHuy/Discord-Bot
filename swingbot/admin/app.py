@@ -249,13 +249,20 @@ def index():
     return redirect(url_for("spa_dashboard"))
 
 
+def _live_daily(ticker: str):
+    """The chart's live daily frame: the shared layer's file when on, else today's fetch."""
+    if freshness.layer_on():
+        return freshness.page_daily([ticker]).get(ticker.upper().strip())
+    from swingbot.core.marketdata.data import get_daily_data
+    return get_daily_data(ticker)
+
+
 def _ohlcv_frame(ticker: str):
     """Daily OHLCV for the interactive chart: live fetch first, falling back
     to the backtest CSV cache so the chart still renders offline. Split out
     of the route for testability (tests monkeypatch this)."""
     try:
-        from swingbot.core.marketdata.data import get_daily_data
-        df = get_daily_data(ticker)
+        df = _live_daily(ticker)
         if df is not None and len(df):
             return df
     except Exception:

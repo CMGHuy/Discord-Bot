@@ -183,6 +183,15 @@ def _metric(value: float | None, n: int) -> dict:
     return {"value": value, "n": n}
 
 
+def _risk_bars(symbols: list[str]) -> dict:
+    """Daily bars for the risk view: the shared layer's files when on, else today's batch."""
+    from swingbot.admin import freshness
+    if freshness.layer_on():
+        return freshness.page_daily(symbols)
+    from swingbot.core.marketdata.data import get_daily_data_batch
+    return get_daily_data_batch(symbols)
+
+
 def _risk_metrics_and_correlation() -> tuple[dict, dict]:
     """The institutional metric set (v85 D37) and the correlation matrix
     (D38), both over the open book's notional weights and cached daily
@@ -197,7 +206,6 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
     """
     from swingbot.core.analytics import metrics as trade_metrics
     from swingbot.core.analytics import risk_metrics as rm
-    from swingbot.core.marketdata.data import get_daily_data_batch
     from swingbot.core.tracking.performance import TradeLog
 
     try:
@@ -280,7 +288,7 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
     # empty correlation `values` matrix, rather than 500ing the page over a
     # single missing bar.
     try:
-        bars = get_daily_data_batch(sorted(set(symbols) | {benchmark})) if symbols else {}
+        bars = _risk_bars(sorted(set(symbols) | {benchmark})) if symbols else {}
 
         returns = rm.portfolio_returns(weights, bars)
         # The benchmark's own daily returns, gotten by asking portfolio_returns

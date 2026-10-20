@@ -148,6 +148,14 @@ def _cached_daily(ticker: str) -> pd.DataFrame | None:
         return None
 
 
+def _cold_frames(cold: list[str]) -> dict:
+    """Frames for symbols the warm cache lacks: the shared layer when on, else today's batch."""
+    from swingbot.admin import freshness
+    if freshness.layer_on():
+        return freshness.page_daily(cold, period="6mo")
+    return get_daily_data_batch(cold, period="6mo")
+
+
 def build_market_rows(tickers: list[str]) -> dict[str, dict]:
     """Price, changes and a 30-bar sparkline for every ticker, keyed by symbol.
 
@@ -162,7 +170,7 @@ def build_market_rows(tickers: list[str]) -> dict[str, dict]:
     cold = [t for t, df in cached.items() if df is None]
     # Still one batch call, never one per row -- just for whichever subset
     # (often none, in steady state) the warm cache didn't already cover.
-    fetched = get_daily_data_batch(cold, period="6mo") if cold else {}
+    fetched = _cold_frames(cold) if cold else {}
     frames = {**{t: df for t, df in cached.items() if df is not None}, **fetched}
 
     live, quotes = _overlay(tickers)
