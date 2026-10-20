@@ -1,6 +1,7 @@
 import {
   OverrideRowDto, OverrideStatus, OverrideSummary, OverrideVerdict, OverrideWaitingOn,
 } from '../../../api/models';
+import { num } from '../../../ui/format';
 
 /* v173 — copy and formatting for "Overrides vs engine". Every figure is
  * computed server-side; these helpers only word it. The copy is frozen by
@@ -44,8 +45,7 @@ const be = (n: number): string => (n === 1 ? 'is' : 'are');
 const abs2 = (x: number | null): string => Math.abs(x ?? 0).toFixed(2);
 
 function magnitude(x: number, currency: string): string {
-  return currency + Math.abs(x).toLocaleString('en-US',
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return currency + num(Math.abs(x), 2);
 }
 
 function fixed2(x: number | null): string {
