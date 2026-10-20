@@ -9,6 +9,19 @@ import { AnalyticsStore } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { AttributionTab, TAKEN_CAPTION } from './attribution';
 
+describe('attribution.ts never widens the page (v179 §2.1)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/tabs/attribution.ts'), 'utf8');
+
+  it('sizes its one column to the tab, not to its widest child', () => {
+    expect(src).toContain(':host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); }');
+  });
+
+  it('keeps the phone panel track shrinkable', () => {
+    expect(src).toContain('@media (max-width: 639px) { .panels { grid-template-columns: minmax(0, 1fr); } }');
+    expect(src).not.toMatch(/\.panels \{ grid-template-columns: 1fr; \}/);
+  });
+});
+
 /* The store is stubbed down to the signals this tab reads: a tab component
  * owns no HTTP (spec v94 D12), so its spec asserts rendering, not fetching. */
 function storeStub(over: Record<string, unknown> = {}) {

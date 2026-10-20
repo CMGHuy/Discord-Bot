@@ -151,12 +151,12 @@ export const TAKEN_CAPTION =
     </sb-panel>
   `,
   styles: `
-    :host { display: grid; gap: var(--space-14); }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); }
     .controls { display: flex; }
     .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-14); }
     .breakdown-controls { margin: 0 0 var(--space-10); }
     .caption { margin: 0 0 var(--space-10); color: var(--text-muted); font-size: var(--text-micro); }
-    @media (max-width: 639px) { .panels { grid-template-columns: 1fr; } }
+    @media (max-width: 639px) { .panels { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class AttributionTab {

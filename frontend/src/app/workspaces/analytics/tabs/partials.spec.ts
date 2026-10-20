@@ -125,3 +125,28 @@ describe('partials.ts breakpoints', () => {
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
   });
 });
+
+describe('partials.ts never widens the page (v179 §2.1, §6b.7)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/tabs/partials.ts'), 'utf8');
+
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('sizes its one column to the tab, not to its widest child', () => {
+    expect(src).toContain(':host{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-14)}');
+  });
+
+  it('keeps the phone panel track shrinkable', () => {
+    expect(src).toContain('@media(max-width:639px){.panels{grid-template-columns:minmax(0,1fr)}}');
+    expect(src).not.toMatch(/\.panels\{grid-template-columns:1fr\}/);
+  });
+
+  it('scrolls the seven-column breakdown table inside its panel', () => {
+    expect(src).toContain('<div class="table-scroll"><table class="breakdown">');
+    expect(src).toContain('.table-scroll{overflow-x:auto;max-width:100%}');
+  });
+
+  it('keeps every breakdown column when scrolling', () => {
+    const { el } = render(PARTIALS_FIXTURE);
+    expect([...el.querySelectorAll('.breakdown thead th')]).toHaveLength(7);
+  });
+});
