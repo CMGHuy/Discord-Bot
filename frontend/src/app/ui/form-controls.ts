@@ -190,7 +190,7 @@ export class TextInput {
     /* .top-label's typography is the global .sb-label (v80 D3). */
     /* The control band. Height matched to every other control so the row
        aligns on the box, not on the caption's text. */
-    .box { display: inline-flex; align-items: center; gap: var(--space-6); height: var(--control-h); }
+    .box { display: inline-flex; align-items: center; gap: var(--space-6); height: var(--control-h); min-width: var(--hit-min); }
     .field:has(input:disabled) { opacity: 0.45; cursor: default; }
     input { accent-color: var(--accent); }
   `,

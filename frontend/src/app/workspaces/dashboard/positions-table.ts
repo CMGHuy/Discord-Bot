@@ -63,7 +63,7 @@ const EMPTY_STATES: Record<string, EmptyState> = {
               [skeletonRows]="3" [skeletonCols]="5"
               (retry)="trades.load()">
       <div class="table-head">
-        <a class="all-link" routerLink="/trades" [queryParams]="{ status: active() }">
+        <a class="all-link sb-hit" routerLink="/trades" [queryParams]="{ status: active() }">
           View in Trades →
         </a>
         <ng-content select="[table-actions]" />

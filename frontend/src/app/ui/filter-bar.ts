@@ -100,6 +100,7 @@ export class FilterBar {
       display: inline-flex;
       align-items: center;
       gap: var(--space-6);
+      min-height: var(--control-h);
       padding: var(--space-4) var(--space-10);
       background: transparent;
       border: 1px solid var(--border);

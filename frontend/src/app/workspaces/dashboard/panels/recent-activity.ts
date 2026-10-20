@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<string, string> = {
   imports: [Panel, Icon, DirectionArrow, RouterLink],
   template: `
     <sb-panel heading="Recent activity">
-      <a panel-actions class="all-link" routerLink="/trades">View all</a>
+      <a panel-actions class="all-link sb-hit" routerLink="/trades">View all</a>
 
       @if (events().length) {
         <ul class="feed">

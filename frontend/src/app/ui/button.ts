@@ -194,8 +194,9 @@ export type ButtonVariant =
     :host(.link:not([disabled]):hover) { text-decoration: underline; }
 
     /* v80 D4 -- a finger needs a square target. The same condition as the
-       tokens.css touch block, where --control-h is already 44px. */
-    @media (pointer: coarse), (max-width: 639px) {
+       tokens.css touch block (phone and tablet since v179), where
+       --control-h is already 44px. */
+    @media (pointer: coarse), (max-width: 1023px) {
       :host(.icon), :host(.danger-icon) { min-width: var(--control-h); min-height: var(--control-h); }
     }
   `,

@@ -80,7 +80,7 @@ describe('v80 D4: the button restyle', () => {
   });
 
   it('grows both icon variants to a square touch target', () => {
-    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/);
+    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 1023px\) \{([\s\S]*?)\n {4}\}/);
     expect(block).not.toBeNull();
     expect(block![1]).toContain(':host(.icon), :host(.danger-icon)');
     expect(block![1]).toContain('min-width: var(--control-h)');

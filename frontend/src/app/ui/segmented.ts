@@ -18,7 +18,7 @@ export interface SegmentOption { value: string; label: string; count?: number; }
   styles: `
     :host { display: block; min-width: 0; max-width: 100%; }
     .track { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border: 1px solid var(--border-strong); border-radius: var(--control-radius); }
-    .segment { flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--space-6); min-height: var(--control-h); padding: 0 var(--space-10); background: transparent; border: 0; border-left: 1px solid var(--border); color: var(--text-secondary); font: inherit; font-size: var(--text-table); font-weight: 500; white-space: nowrap; cursor: pointer; transition: color var(--transition), background var(--transition); }
+    .segment { flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--space-6); min-height: var(--control-h); min-width: var(--hit-min); justify-content: center; padding: 0 var(--space-10); background: transparent; border: 0; border-left: 1px solid var(--border); color: var(--text-secondary); font: inherit; font-size: var(--text-table); font-weight: 500; white-space: nowrap; cursor: pointer; transition: color var(--transition), background var(--transition); }
     .segment:first-child { border-left: 0; } .segment:hover { color: var(--text); }
     .segment:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .current { background: var(--accent-soft); color: var(--text); }

@@ -88,6 +88,7 @@ export interface PickableColumn {
       display: inline-flex;
       align-items: center;
       gap: var(--space-6);
+      min-height: var(--control-h);
       padding: var(--space-4) var(--space-10);
       background: var(--surface-raised);
       border: 1px solid var(--border);
@@ -115,6 +116,7 @@ export interface PickableColumn {
       display: flex;
       align-items: center;
       gap: var(--space-8);
+      min-height: var(--hit-min);
       padding: var(--space-4) var(--space-6);
       font-size: var(--text-table);
       cursor: pointer;
@@ -128,6 +130,7 @@ export interface PickableColumn {
     .reset {
       width: 100%;
       margin-top: var(--space-6);
+      min-height: var(--hit-min);
       padding: var(--space-6);
       background: none;
       border: 0;

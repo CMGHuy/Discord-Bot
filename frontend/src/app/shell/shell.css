@@ -209,6 +209,7 @@
   align-items: center;
   gap: var(--space-10);
   padding: var(--space-8) var(--space-10);
+  min-height: var(--control-h);
   border-left: 2px solid transparent;
   border-radius: 0 var(--control-radius) var(--control-radius) 0;
   color: var(--text-secondary);

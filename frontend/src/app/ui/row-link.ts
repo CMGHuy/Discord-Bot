@@ -15,7 +15,7 @@ import { RouterLink } from '@angular/router';
   selector: 'sb-row-link',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
-  template: `<a class="row-link" [routerLink]="link()"><ng-content /></a>`,
+  template: `<a class="row-link sb-hit" [routerLink]="link()"><ng-content /></a>`,
   styles: `
     :host { display: contents; }
     .row-link {
