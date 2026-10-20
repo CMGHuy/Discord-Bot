@@ -53,11 +53,24 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
     </div>
   `,
   styles: `
+    /* v179 §3.3 -- the one tile, everywhere: label, value, secondary, N=,
+       hint, stacked and left-aligned. The host is a block that fills its
+       grid cell: a custom element is inline by default, and an inline host
+       never receives the row's stretched height, which is why two tiles in
+       one row used to differ in height. min-width: 0 and overflow-wrap let
+       a long label wrap instead of widening its grid track. No page
+       restyles the inside of a tile -- workspace-consistency.spec.ts fails
+       a ::ng-deep into sb-stat-tile. */
+    :host { display: block; height: 100%; min-width: 0; }
     .tile {
       display: flex;
       flex-direction: column;
       gap: 2px;
+      height: 100%;
+      box-sizing: border-box;
+      min-width: 0;
       padding: var(--space-14);
+      text-align: start;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--panel-radius);
@@ -67,11 +80,14 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--text-faint);
+      overflow-wrap: anywhere;
     }
     .value {
+      font-family: var(--font-num);
       font-size: var(--text-metric);
       font-variant-numeric: tabular-nums;
       color: var(--text);
+      overflow-wrap: anywhere;
     }
     .pos .value { color: var(--pos); }
     .neg .value { color: var(--neg); }
@@ -81,7 +97,10 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
       font-size: var(--text-micro);
       font-variant-numeric: tabular-nums;
       color: var(--text-faint);
+      overflow-wrap: anywhere;
     }
+    /* Figures in the numeric face; the hint is prose and stays in the UI font. */
+    .sample, .secondary { font-family: var(--font-num); }
     .secondary { color: var(--text-secondary); }
     /* The second cue. Opacity alone would be a colour-only signal, which the
        plan forbids; the .flag span puts the same fact in words. */
