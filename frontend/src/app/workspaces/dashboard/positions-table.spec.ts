@@ -113,6 +113,15 @@ describe('positions table', () => {
     expect(setQuery.mock.calls.at(-1)![0]).toMatchObject({ status: 'CLOSED', today: true });
   });
 
+  it('orders the closed tab by close time, newest first, and the others by open time', () => {
+    const f = mount();
+    expect(setQuery.mock.calls.at(-1)![0].sort).toBe('-opened_at');
+
+    setQuery.mockClear();
+    clickTab(f, 'CLOSED');
+    expect(setQuery.mock.calls.at(-1)![0]).toMatchObject({ status: 'CLOSED', sort: '-closed_at' });
+  });
+
   it('resets to the first page when the tab changes', () => {
     const f = mount();
     setQuery.mockClear();
