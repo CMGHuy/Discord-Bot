@@ -12,11 +12,10 @@ from swingbot.core.marketdata.shared import layer
 from swingbot.core.marketdata.shared.kinds import (PROVIDER_ALPACA, Asker, DataKind,
                                                    Entry, QuoteDetail)
 
-NOW = datetime.now(timezone.utc)
-
 
 def _q(sym, price=190.0, age=1.0, bid=None, ask=None, source="alpaca-iex"):
-    at = NOW - timedelta(seconds=age)
+    # the clock is read per call: an import-time stamp ages by minutes under a long xdist run
+    at = datetime.now(timezone.utc) - timedelta(seconds=age)
     return QuoteDetail(symbol=sym, price=price, trade_at=at if price else None,
                        bid=bid, ask=ask, quote_at=at if bid else None, source=source)
 
