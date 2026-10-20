@@ -237,6 +237,6 @@ def test_v173_001_is_on_the_single_head_chain(scripts):
 
 
 def test_it_chains_onto_an_existing_revision(scripts):
-    assert MIG.down_revision == "v172_001"   # re-chained only by V173-17 if main moved
+    assert MIG.down_revision == "v171_001"   # re-chained only by V173-17 if main moved
     assert scripts.get_revision(MIG.down_revision) is not None
     assert scripts.get_revision("v173_001").down_revision == MIG.down_revision

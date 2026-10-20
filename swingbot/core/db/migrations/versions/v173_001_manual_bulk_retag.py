@@ -18,7 +18,7 @@ nothing written, so `alembic upgrade head` still works there. Downgrade is
 the exact reverse over the same 15 entries.
 
 Revision ID: v173_001
-Revises: v172_001
+Revises: v171_001
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "v173_001"
-down_revision = "v172_001"   # = python -m alembic heads at implementation time (Step 1); v173_002 chains on v173_001
+down_revision = "v171_001"   # = python -m alembic heads on main at release (V173-17); v173_002 chains on v173_001
 branch_labels = None
 depends_on = None
 
