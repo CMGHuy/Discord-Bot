@@ -403,6 +403,20 @@ that's exactly what the admin UI's Settings page and `!account`/
 settings hot-reload the bot in place via `SIGHUP`, no restart needed.
 The CI pipeline above is for *code* changes.
 
+### v171 market-data layer rollout
+
+| Flag | Production value | Set |
+|---|---|---|
+| `MARKETDATA_LAYER` | `count` | 2026-10-20 (V171-36) |
+| `DAILY_DELTA_FETCH` | `false` | code default |
+| `PLAN_REBUILD_ENABLED` | `false` | code default |
+| `TAPE_SHARED_ENABLED` | `false` | code default |
+
+Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin`;
+(2) the previous image per [Rolling back](#rolling-back);
+(3) `scripts/ops/rollback_to.sh` with `--dry-run` first, only for damaged data.
+The `v171_001` tables stay on every rollback.
+
 ## Not scheduled yet: the option-chain archive
 
 `scripts/data/record_option_snapshots.py` is built and tested but **nothing runs
