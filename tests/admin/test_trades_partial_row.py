@@ -101,6 +101,17 @@ def test_a_fully_closed_scaled_out_plan_expands_to_two_closed_rows():
     assert rows[1]["closed_at"] == "2026-09-05T15:00:00+00:00"
 
 
+def test_a_closed_runner_leg_shows_tp2_not_the_closed_plans_tp1():
+    plan = closed_scaled_out_plan(tp2=140.0)
+    rows = _expand_plan_row(plan, {"id": "t1", "shares": 10, "status": "win"}, set())
+    assert [r["target"] for r in rows] == [120.0, 140.0]
+
+
+def test_a_closed_runner_leg_without_tp2_has_no_target():
+    rows = _expand_plan_row(closed_scaled_out_plan(), {"id": "t1", "shares": 10, "status": "win"}, set())
+    assert [r["target"] for r in rows] == [120.0, None]
+
+
 def test_a_negative_r_leg_is_a_loss_not_a_win():
     plan = closed_scaled_out_plan()
     plan["legs_realized"][1]["r"] = -0.4

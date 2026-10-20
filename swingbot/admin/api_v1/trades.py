@@ -397,8 +397,10 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
         "shares": shares,
         "open_shares": None,
         # The TP1 leg is a closed trade of its own: its target is TP1, not the
-        # runner's TP2 that the PARTIAL plan's projection reports.
-        "target": plan.get("tp1") if leg_index == 0 else row["target"],
+        # runner's TP2 that the PARTIAL plan's projection reports. A closed
+        # runner leg is likewise TP2 (None for a trailing runner): the CLOSED
+        # plan's projection falls back to TP1, which the banked leg already shows.
+        "target": plan.get("tp1") if leg_index == 0 else plan.get("tp2"),
         "target_is_banked_tp1": False if leg_index == 0 else row["target_is_banked_tp1"],
         "exit_price": exit_price,
         "realized_pnl_amount": (
