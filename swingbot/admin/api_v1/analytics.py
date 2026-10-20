@@ -728,6 +728,33 @@ def analytics_calibration():
     })
 
 
+def _closed_book() -> list[dict]:
+    """v175: the whole closed book -- every ledger, no BookScope.
+
+    The variance band is whole-book by design (it does not follow the
+    Analytics scope bar), so this deliberately skips `_scope()`/`select()`.
+    A seam: tests monkeypatch it instead of seeding a store."""
+    from swingbot.core.analytics.scope import closed_only
+
+    return closed_only(_all_trades(TradeLog()))
+
+
+@api_v1.route("/analytics/variance-band", methods=["GET"])
+@require_auth
+def analytics_variance_band():
+    """v175: the range of losing-day runs and drawdowns this book's own closed
+    trades produce by chance, and where the book sits now against it.
+
+    Computed on request (no snapshot) so the ExpR beside the band is
+    re-derived every call. Takes no parameters: a scope filter would be a
+    lie here, so any parameter is a 400, never silently ignored."""
+    from swingbot.core.analytics import variance_band as vb
+
+    if request.args:
+        raise ApiError("invalid", f"unknown parameter {sorted(request.args)[0]!r}; allowed: []", 400)
+    return jsonify(vb.variance_band(_closed_book()))
+
+
 @api_v1.route("/analytics/registry", methods=["GET"])
 @require_auth
 def analytics_registry():
