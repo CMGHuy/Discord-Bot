@@ -27,15 +27,17 @@ ALWAYS = [("2000-01-01", "9999-12-31")]
 OLD_IDEAS = ("high52w", "uptrend_pullback", "gap_volume", "turn_of_month",
              "turtle_soup", "quiet_pullback")
 CONTEXT_FROM = "2009-06-01"
-#: TickerScreen digests captured on the code BEFORE v174 (V174-3 Step 2).
+#: TickerScreen digests captured on the code BEFORE v174 (V174-3 Step 2),
+#: floats rounded to 8 significant digits (_norm) so the hash holds across
+#: platforms: Windows and Linux BLAS/libm differ in the last bits.
 PARITY_DIGESTS: dict[str, str] = {
-    "gap_volume": "754ec86aaf08c64a75322ca0163dd0634b80f18f780861eb582daa63ba251d92",
-    "high52w": "ed4fba6e7739def94b33030b8a971c44bb8f9a735911983c3668fdc54eafd10a",
-    "high52w_trail": "eebc95fe42e37adbc1268224bc6e6fa2b38939c4486c5b7f9db5aa5adc2cac75",
-    "quiet_pullback": "f8d99b46c8d618ce3717372b0dfa1b2fb207665b48776500c05044522282b024",
-    "turn_of_month": "5730a7201259ef26727457366e734d8d631d8d29cef807a9723937dd57cb22c0",
-    "turtle_soup": "33e7d4b75ad305ef352b3658ca9ad926400c2e00fb98431622ecc2191fc99b04",
-    "uptrend_pullback": "1ee25ddad46bb88201b1d6fe593561531daa773cfd4b9d9bae78390cf10ec935"
+    "gap_volume": "7e36139c2b09f8712414362e5a0dbfec9a166f4470803831b89e3bb736cd3b0d",
+    "high52w": "7a43c70b765964334cc1f97e4dbda9392310f18c6084290f980bd6cda6a7436b",
+    "high52w_trail": "3dd333d402a6601032736105d9477bb49a0dd7cc35fd9c37a709da5bf3ecaba2",
+    "quiet_pullback": "54626375514c9a476e5998e019fc208d9711eb457083734918d3f8f08998499b",
+    "turn_of_month": "211f5d81d653a398c97600711ab14f9062173ba75d6543d7a3db929109906d94",
+    "turtle_soup": "2879c7f1777a19b48c140cb3ef6eaeabd76b496e82cacb6bd6c8bc989bf211ac",
+    "uptrend_pullback": "2939198f8898199634a92728489f068df38ff24191dbee420ec81ead4401a510",
 }
 
 
@@ -67,18 +69,29 @@ def _ctx_cache(tmp_path, *, tickers=("AAA", "BBB"), context=("TLT", "UUP")) -> P
 
 
 def _plain(value):
-    if isinstance(value, pd.DataFrame):
-        return value.to_csv(float_format="%.17g")
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, np.ndarray):
-        return value.tolist()
     return repr(value)
 
 
+def _norm(value):
+    """Floats to 8 significant digits, recursively; frames via their JSON."""
+    if isinstance(value, float):
+        return float(f"{value:.8g}")
+    if isinstance(value, dict):
+        return {key: _norm(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_norm(item) for item in value]
+    if isinstance(value, np.generic):
+        return _norm(value.item())
+    if isinstance(value, np.ndarray):
+        return _norm(value.tolist())
+    if isinstance(value, pd.DataFrame):
+        return _norm(json.loads(value.to_json(orient="split")))
+    return value
+
+
 def _digest(screen) -> str:
-    """SHA-256 of the eight fields a TickerScreen had before v174. JSON
-    writes floats with repr, so any change in any R moves the digest."""
+    """SHA-256 of the eight fields a TickerScreen had before v174, floats
+    rounded by _norm: any real change in any R still moves the digest."""
     payload = {"ticker": screen.ticker,
                "counters": sorted(screen.counters.items()),
                "events": screen.events,
@@ -87,7 +100,7 @@ def _digest(screen) -> str:
                "rank": screen.rank,
                "null_timeout_r": screen.null_timeout_r,
                "stressed": screen.stressed}
-    text = json.dumps(payload, sort_keys=True, default=_plain)
+    text = json.dumps(_norm(payload), sort_keys=True, default=_plain)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
