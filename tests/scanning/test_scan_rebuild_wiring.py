@@ -138,7 +138,12 @@ def test_main_scan_posts_only_the_rebuilt_plan(monkeypatch, stub_batch_fetch):
     assert all(p.quote_age_s is not None and p.quote_age_s < 5 for p in stored)
     trades = log.get_trades(status=None, limit=None)
     assert trades and all(t["quote"]["kind"] == "trade" for t in trades)
-    assert seen["chart_entries"] == [t["entry"] for t in trades]
+    # One chart per posted alert, each drawn from that alert's rebuilt plan. The
+    # fixture alerts both directions on T0 (dedup keys on ticker+trend); the
+    # second finds T0/4w already open, so it posts without logging a trade.
+    assert len(seen["chart_entries"]) == len(alerts) == len(seen["embed_plans"])
+    assert seen["chart_entries"] == [p.entry for p in seen["embed_plans"]]
+    assert {t["entry"] for t in trades} <= set(seen["chart_entries"])
 
 
 def test_flag_off_scan_is_todays_path(monkeypatch, stub_batch_fetch):
