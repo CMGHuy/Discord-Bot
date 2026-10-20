@@ -192,3 +192,18 @@ def test_a_stamp_without_ladder_or_mfe_is_path_unavailable_not_a_crash():
     cf = pa.counterfactuals([pa.partial_trade(plan)])
     assert cf["giveback"] == [] and cf["path_unavailable"] == 1
     assert [row["n"] for row in cf["ladder"]] == [0] * 5
+
+
+# -- v173: a bulk clear is a manual close for the outcome buckets ------------
+
+def test_a_bulk_cleared_runner_lands_in_the_manual_bucket():
+    plan = _trade("Z", reason="manual_bulk")
+    assert pa.outcome_bucket(plan) == "manual"
+
+
+def test_bulk_and_single_manual_closes_share_one_bucket_row():
+    book = [*_book(), _trade("Z", reason="manual_bulk")]
+    rows = {row["bucket"]: row for row in pa.build_report(book, manual_exits={**MANUAL, "Z": 107.5})["outcomes"]}
+    assert rows["manual"]["n"] == 2
+    assert "other" not in rows
+    assert rows["manual"]["avg_runner_r"] == pytest.approx((2.5 + 1.5) / 2)

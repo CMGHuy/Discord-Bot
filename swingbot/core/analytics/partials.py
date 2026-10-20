@@ -30,6 +30,9 @@ FUNNEL_STAGES = ("filled", "tp1", "runner_closed", "tp2")
 _REASON_BUCKET = {
     "tp1_runner_tp2": "tp2", "tp1_runner_trail": "trail", "tp1_runner_be": "floor",
     "tp1_runner_progress_stall": "stall", "time_exit": "time", "manual": "manual",
+    # v173: a bulk clear is still a human close; it is told apart only by the
+    # override-fidelity report, never by the partials buckets.
+    "manual_bulk": "manual",
 }
 
 
