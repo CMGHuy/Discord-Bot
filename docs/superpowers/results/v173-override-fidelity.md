@@ -10,6 +10,10 @@ Each manual close (`reason == "manual"`, individual, stamped, `resolved`) is rep
 
 The bot's daily job `override_verdict_check` (`swingbot/commands/scanning/loops.py`, 23:50 Europe/Berlin on weekdays) is the only evaluator. It writes the verdict once; the table's primary key makes a second write impossible. Nobody runs the evaluation by hand.
 
+## What the stored row carries
+
+Besides the verdict, `n`, `weeks`, the CI, the means and sums, `bar_close_n` and `excluded_share`, the row's `doc` holds what re-deriving it needs (widened 2026-10-20, spec "Panel review (pre-merge)"): `engine_flags` (two flags, shown by the API and panel), `engine_config` (every setting the replayed exit engine reads) with `engine_config_sha256`, `asof`, `bars_last_date` (each counted ticker's last cached bar) and the counted `rows`, each with `plan_id`, `delta_r` and `bars_sha256` (the sha256 of the fill-to-`asof` bars it was replayed on). To check a re-run, compare `engine_config_sha256` with `override_verdict.config_sha256(override_verdict.engine_config())` and each `bars_sha256` with `override_verdict.frame_sha256(override_fidelity.replay_slice(plan, bars, asof))`.
+
 ## Recorded verdict
 
 Not recorded yet.
