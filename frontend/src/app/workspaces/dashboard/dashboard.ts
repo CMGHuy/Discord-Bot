@@ -392,6 +392,9 @@ export const DASHBOARD_COLUMNS = tradeColumns();
           {{ fmtPct(row.pnl_pct) }}
           <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
         </span>
+        <!-- An open row carries a live pnl_pct too, so it lands here, not in
+             the else branch; price_age_s is null on a closed row. -->
+        <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />
       } @else {
         <span
           class="pnl-plan"
