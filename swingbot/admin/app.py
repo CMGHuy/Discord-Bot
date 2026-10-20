@@ -48,6 +48,7 @@ from swingbot.core.scanning.engine import is_scan_running
 # than from helpers, so it is used even though nothing in this file calls it.
 from .helpers import docker_sdk, _load_or_create_secret_key  # noqa: F401
 from . import login_limiter
+from . import freshness
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -215,6 +216,10 @@ def _reload_env_if_changed():
     config-derived values now.
     """
     config.auto_reload_if_changed()
+
+
+# v171 D2: `X-Swingbot-Fresh: 1` marks one request's market-data calls fresh.
+freshness.install(app)
 
 
 # ---------------------------------------------------------------------------

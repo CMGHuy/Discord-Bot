@@ -138,3 +138,22 @@ def _clear_login_limiter():
     login_limiter.LIMITER.reset()
     yield
     login_limiter.LIMITER.reset()
+
+
+@pytest.fixture
+def layer_quotes(monkeypatch):
+    """v171: MARKETDATA_LAYER=on with data.get_quote_batch answered from
+    `state["quotes"]`; records (tickers, asker, fresh-marked) per call."""
+    from swingbot import config
+    from swingbot.core.marketdata import data
+    from swingbot.core.marketdata.shared import kinds
+
+    monkeypatch.setattr(config, "MARKETDATA_LAYER", "on")
+    state = {"quotes": {}, "calls": []}
+
+    def fake(tickers, *, asker, max_age_s=None, fresh_only=False):
+        state["calls"].append((list(tickers), asker, kinds.is_fresh_request()))
+        wanted = {t.upper() for t in tickers}
+        return {t: q for t, q in state["quotes"].items() if t in wanted}
+    monkeypatch.setattr(data, "get_quote_batch", fake)
+    return state

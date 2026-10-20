@@ -352,6 +352,19 @@ def _append_amount(amounts: list, trade: dict, price) -> None:
         amounts.append(value)
 
 
+def _open_trade_prices(open_trades: list) -> dict:
+    """Live price per open ticker. Layer on: one Dashboard-tier batch (v171);
+    otherwise today's concurrent prefetch, so the per-ticker reads hit the
+    in-memory cache instead of a sequential network call each."""
+    tickers = [t["ticker"] for t in open_trades]
+    from swingbot.admin import freshness
+    if freshness.layer_on():
+        quotes = freshness.page_quotes(tickers, dashboard=True)
+        return {t: (quotes[t.upper()].price if t.upper() in quotes else None) for t in tickers}
+    prefetch_prices(tickers)
+    return {t: get_current_price(t) for t in tickers}
+
+
 def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     """One pass over open trades producing every per-trade map the table needs:
     price, status dot, P&L + SL/TP progress + position bar, holding period, and
@@ -370,13 +383,11 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     unrealized_amounts: list = []
     now_utc = datetime.now(timezone.utc)
 
-    # Fetch all prices concurrently so the loop below hits the in-memory cache
-    # and never blocks on a sequential network call per ticker.
-    prefetch_prices([t["ticker"] for t in open_trades])
+    prices = _open_trade_prices(open_trades)
 
     for t in open_trades:
         tid     = t["id"]
-        price   = get_current_price(t["ticker"])
+        price   = prices.get(t["ticker"])
         entry   = t.get("entry")       or 0.0
         sl      = t.get("stop_loss")   or 0.0
         tp      = t.get("take_profit") or 0.0

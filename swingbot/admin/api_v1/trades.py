@@ -309,6 +309,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "position_value": t.get("position_value"),
         "current_price": None,
         "current_price_stale": False,
+        "price_age_s": None,
+        "price_as_of": None,
         "exit_price": t.get("exit_price"),
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t) if trade else None,
@@ -513,6 +515,8 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "position_value": t.get("position_value"),
         "current_price": None,
         "current_price_stale": False,
+        "price_age_s": None,
+        "price_as_of": None,
         "exit_price": t.get("exit_price"),
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t),
@@ -1083,6 +1087,22 @@ def _strip_internal_fields(rows: list[dict]) -> None:
             row.pop("_display_shares", None)
 
 
+def _attach_layer_prices(live: list[dict]) -> None:
+    """v171: price the live rows with one shared-layer batch. The age fields
+    carry the staleness signal, so `current_price_stale` stays False; an
+    empty cache leaves the row exactly as a failed fetch does today."""
+    from swingbot.admin import freshness
+    quotes = freshness.page_quotes([r["ticker"] for r in live],
+                                   dashboard=freshness.from_dashboard())
+    for r in live:
+        q = quotes.get(str(r["ticker"]).upper())
+        price = q.price if q is not None and q.price and q.price > 0 else None
+        r["current_price"] = price
+        r["current_price_stale"] = False
+        if price is not None:
+            r["price_age_s"], r["price_as_of"] = freshness.quote_age(q)
+
+
 def _attach_current_prices(rows: list[dict]) -> None:
     """Live price for the still-open rows ON THIS PAGE only.
 
@@ -1105,6 +1125,10 @@ def _attach_current_prices(rows: list[dict]) -> None:
     """
     live = [r for r in rows if r["status"] not in _TERMINAL and r.get("ticker")]
     if not live:
+        return
+    from swingbot.admin import freshness
+    if freshness.layer_on():
+        _attach_layer_prices(live)
         return
     try:
         from swingbot.core.marketdata.data import get_current_price_detail, prefetch_prices

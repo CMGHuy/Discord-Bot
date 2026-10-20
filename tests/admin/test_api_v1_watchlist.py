@@ -93,6 +93,8 @@ def test_list_shape(watchlist, logged_in, monkeypatch):
         "next_earnings_datetime": (str, type(None)),
         "price": (int, float, type(None)),
         "price_source": (str, type(None)),
+        "price_age_s": (int, float, type(None)),
+        "price_as_of": (str, type(None)),
         "as_of": (str, type(None)),
         "change_1d_pct": (int, float, type(None)),
         "change_1w_pct": (int, float, type(None)),
