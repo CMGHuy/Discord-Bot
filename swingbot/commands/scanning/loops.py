@@ -1019,8 +1019,10 @@ async def override_verdict_check():
         from swingbot.core.analytics import override_io
         result = await asyncio.to_thread(override_io.run_daily_check, now)
         log.info("override_verdict_check: %s", result)
-    except Exception:
-        log.exception("override_verdict_check: daily check failed")
+    except Exception as exc:
+        swallowed(log, "ops.override_verdict_check", exc,
+                  "override_verdict_check: daily check failed",
+                  level=logging.ERROR, exc_info=True)
 
 
 @tasks.loop(minutes=config.MARKET_DATA_REFRESH_MINUTES)

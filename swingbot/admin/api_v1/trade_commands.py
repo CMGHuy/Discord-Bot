@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from flask import jsonify, request
 
 from swingbot.core.analytics import runner_path as rp
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.planning.plan_engine import PlanStatus, record_transition
 from swingbot.core.planning.plan_store import PlanStore
@@ -94,7 +95,8 @@ def _live_quote(ticker: str) -> tuple[float | None, str | None]:
         from swingbot.core.marketdata import data as md
         quote = md.get_current_price_detail(ticker, allow_stale=False)
     except Exception as exc:
-        log.warning("override stamp: quote fetch failed for %s: %s", ticker, exc)
+        swallowed(log, "ops.override_stamp.quote", exc,
+                  "override stamp: quote fetch failed for %s: %s", ticker, exc, exc_info=True)
         return None, None
     quote_ts = datetime.now(timezone.utc).isoformat()
     if quote is None or not quote.price:
@@ -133,7 +135,8 @@ def _override_stamp(ticker: str) -> dict | None:
     try:
         return _build_override_stamp(ticker)
     except Exception as exc:
-        log.warning("override stamp failed for %s: %s", ticker, exc, exc_info=True)
+        swallowed(log, "ops.override_stamp", exc,
+                  "override stamp failed for %s: %s", ticker, exc, exc_info=True)
         return None
 
 

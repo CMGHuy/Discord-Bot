@@ -27,6 +27,7 @@ import pandas as pd
 from swingbot import config
 from swingbot.core.analytics import override_fidelity as ofi
 from swingbot.core.backtesting.instrument import stats
+from swingbot.core.infra.swallowed import swallowed
 
 log = logging.getLogger(__name__)
 
@@ -216,7 +217,8 @@ def _bars_for(bars_fn: Callable[[str], pd.DataFrame | None], ticker: str,
         try:
             cache[ticker] = bars_fn(ticker)
         except Exception as exc:   # noqa: BLE001 -- one bad file never fails the report
-            log.warning("override_verdict: bars for %s unreadable: %s", ticker, exc)
+            swallowed(log, "ops.override_verdict.bars", exc,
+                      "override_verdict: bars for %s unreadable: %s", ticker, exc, exc_info=True)
             cache[ticker] = None
     return cache[ticker]
 
