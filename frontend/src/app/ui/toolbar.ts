@@ -63,7 +63,7 @@ export interface ToolbarControl {
         (click)="open.set(!open())"
       >
         Filters
-        <span class="count">{{ demoted().length }}</span>
+        <span class="count num">{{ demoted().length }}</span>
         @if (activeCount()) { <span class="active-dot" [attr.data-count]="activeCount()"></span> }
       </button>
     }
@@ -73,11 +73,46 @@ export interface ToolbarControl {
     <div class="toolbar-source" hidden #sourceHost><ng-content /></div>
   `,
   styles: `
-    :host { display: flex; align-items: center; gap: var(--space-10); flex-wrap: wrap; }
-    .toolbar-inline { display: flex; align-items: center; gap: var(--space-10); flex-wrap: wrap; min-width: 0; }
-    .toolbar-sheet-button { min-height: var(--control-h); display: inline-flex; align-items: center; gap: 6px; }
-    .toolbar-sheet { display: none; width: 100%; flex-direction: column; gap: var(--space-10); }
-    .toolbar-sheet.open { display: flex; }
+    :host { display: flex; align-items: center; gap: var(--space-10); flex-wrap: wrap; container: toolbar / inline-size; }
+    .toolbar-inline { display: flex; align-items: center; gap: var(--space-10); flex-wrap: wrap; min-width: 0; max-width: 100%; }
+    /* v179 §3.3: the same button as sb-column-picker's .trigger -- one
+       height, one surface, the count as a badge. Without these rules the
+       browser's default grey button showed through ("Filters 13"). */
+    .toolbar-sheet-button {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-6);
+      min-height: var(--control-h);
+      padding: 0 var(--space-10);
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      color: var(--text);
+      font: inherit;
+      font-size: var(--text-table);
+      cursor: pointer;
+      transition: border-color var(--transition);
+    }
+    .toolbar-sheet-button:hover { border-color: var(--border-strong); }
+    .toolbar-sheet-button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+    .count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.5em;
+      padding: 0 var(--space-4);
+      border-radius: var(--chip-radius);
+      background: var(--accent-soft);
+      color: var(--text);
+      font-size: var(--text-chip);
+    }
+    /* Selects in the sheet share one width rule: equal columns, two on a
+       phone-width bar (the rule sb-filter-bar's container query already uses). */
+    .toolbar-sheet { display: none; width: 100%; gap: var(--space-10); }
+    .toolbar-sheet.open { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); align-items: end; }
+    @container toolbar (max-width: 639px) {
+      .toolbar-sheet.open { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     .active-dot::after { content: attr(data-count); color: var(--accent); }
   `,
 })

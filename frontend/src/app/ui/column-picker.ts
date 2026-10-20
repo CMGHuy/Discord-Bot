@@ -84,12 +84,13 @@ export interface PickableColumn {
   styles: `
     .picker { position: relative; display: inline-block; }
 
+    /* v179 §3.3: the same button as sb-toolbar's Filters button. */
     .trigger {
       display: inline-flex;
       align-items: center;
       gap: var(--space-6);
       min-height: var(--control-h);
-      padding: var(--space-4) var(--space-10);
+      padding: 0 var(--space-10);
       background: var(--surface-raised);
       border: 1px solid var(--border);
       border-radius: var(--control-radius);
@@ -101,7 +102,17 @@ export interface PickableColumn {
     }
     .trigger:hover { border-color: var(--border-strong); }
     .trigger:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-    .count { color: var(--text-muted); font-size: var(--text-chip); }
+    .count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.5em;
+      padding: 0 var(--space-4);
+      border-radius: var(--chip-radius);
+      background: var(--accent-soft);
+      color: var(--text);
+      font-size: var(--text-chip);
+    }
 
     .panel {
       position: absolute;
