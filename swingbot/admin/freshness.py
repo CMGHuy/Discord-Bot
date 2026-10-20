@@ -16,7 +16,7 @@ import contextvars
 import logging
 import threading
 from contextlib import ExitStack
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -108,3 +108,78 @@ def quote_age(q: Optional[QuoteDetail], now: Optional[datetime] = None) -> tuple
         return None, None
     now = now or datetime.now(timezone.utc)
     return max(0.0, (now - at).total_seconds()), at.isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Daily bars for the chart, risk and watchlist pages (V171-26)
+# ---------------------------------------------------------------------------
+_PERIOD_DAYS = {"6mo": 183, "1y": 366, "2y": 731, "5y": 1827}
+
+
+def _daily_stale(ticker: str) -> bool:
+    """The yfinance daily file is missing or older than the page window."""
+    import os
+    import time
+    from swingbot.core.marketdata import data, data_store
+    path = data_store.cache_path(ticker, "daily")
+    try:
+        age = time.time() - os.path.getmtime(path)
+    except OSError:
+        return True
+    limit = page_window_s() if data.is_us_market_active() else config.SCAN_CACHE_MAX_AGE_HOURS * 3600
+    return age > limit
+
+
+def _refresh_yf_daily(ticker: str, asker: Asker) -> None:
+    """Full depth for a cold file, an incremental union otherwise; failures serve the disk."""
+    import os
+    from swingbot.core.marketdata import data_refresh, data_store
+    from swingbot.core.marketdata.providers import router
+    try:
+        with router.asker_scope(asker):
+            if os.path.exists(data_store.cache_path(ticker, "daily")):
+                data_store.update_cache([ticker], "1d")
+            else:
+                data_refresh.refresh_symbol(ticker, "daily")
+    except Exception:
+        log.debug("yfinance daily refresh failed for %s", ticker, exc_info=True)
+
+
+def _read_yf(ticker: str):
+    from swingbot.core.marketdata import daily_delta
+    return daily_delta.read_daily(ticker, basis=daily_delta.BASIS_YF)
+
+
+def _daily_for(ticker: str):
+    """One ticker's yfinance-basis frame, refreshed under the shared daily lease when stale."""
+    df = _read_yf(ticker)
+    if df is not None and not _daily_stale(ticker):
+        return df
+    from swingbot.core.marketdata.shared import layer
+    asker = kinds.resolve_asker(Asker.ADMIN_PAGE)
+    with layer.lease(DataKind.DAILY_BARS, ticker, asker=asker, deadline_s=10.0) as held:
+        df = _read_yf(ticker)
+        if (held and _daily_stale(ticker)) or df is None:
+            _refresh_yf_daily(ticker, asker)
+            df = _read_yf(ticker)
+    return df
+
+
+def _trim(df, period: str):
+    days = _PERIOD_DAYS.get(period)
+    if days is None or df is None or not len(df):
+        return df
+    return df[df.index >= df.index[-1] - timedelta(days=days)]
+
+
+def page_daily(tickers: list[str], *, period: str = "2y") -> dict:
+    """Daily frames for an admin page: spot metals as today, the rest from the shared file."""
+    from swingbot.core.marketdata import data, spot_metals
+    names = [str(t).upper().strip() for t in tickers]
+    spot, regular = spot_metals.split_spot(names)
+    out: dict = dict(data.get_daily_data_batch(list(spot), period=period) or {}) if spot else {}
+    for t in regular:
+        frame = _trim(_daily_for(t), period)
+        if frame is not None and len(frame):
+            out[t] = frame
+    return out
