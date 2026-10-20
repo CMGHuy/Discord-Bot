@@ -577,6 +577,16 @@ def _json_record(row: dict) -> dict:
     return normalise(result)
 
 
+def _manual_close_quote(ticker: str) -> float | None:
+    """The live price a manual close settles at when its caller has none.
+    Never raises: a network hiccup must never block the close itself."""
+    try:
+        from swingbot.core.marketdata.data import get_current_price
+        return get_current_price(ticker, allow_stale=False)
+    except Exception:
+        return None
+
+
 class TradeLog:
     """The trade ledger. Every read goes to the `trades` table and every write
     is a row-level upsert/delete, so an instance holds no snapshot."""
@@ -1414,7 +1424,8 @@ class TradeLog:
                     return True
         return False
 
-    def close_trade_manual(self, trade_id: str, reason: str = "manual") -> bool:
+    def close_trade_manual(self, trade_id: str, reason: str = "manual", *,
+                           exit_price: float | None = None) -> bool:
         """
         Marks an open trade as closed, fetching the live market price to
         stand in as its exit (used by the admin UI's "Close" button -- a
@@ -1428,6 +1439,11 @@ class TradeLog:
         fetch fails or the ticker has no live quote -- a network hiccup
         must never block the close itself.
 
+        `exit_price` (v173): the live quote the caller already fetched for
+        the plan's override stamp. Given, it is the settlement price and no
+        second fetch happens, so the stamp and the trade carry one price.
+        None keeps the fetch above.
+
         Locked the same way as every other mutator here so a concurrent
         write from the bot's own scan loop (a different process, same
         trades table) can't race with it and corrupt or lose data. The
@@ -1438,13 +1454,9 @@ class TradeLog:
         with _LOCK:
             ticker = next((t["ticker"] for t in self._all()
                            if t["id"] == trade_id and t["status"] == "open"), None)
-        price = None
-        if ticker:
-            try:
-                from swingbot.core.marketdata.data import get_current_price
-                price = get_current_price(ticker, allow_stale=False)
-            except Exception:
-                price = None
+        price = exit_price
+        if ticker and price is None:
+            price = _manual_close_quote(ticker)
 
         closed_trade = None
         with _LOCK:
