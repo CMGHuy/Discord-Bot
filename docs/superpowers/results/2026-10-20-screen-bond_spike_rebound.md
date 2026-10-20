@@ -119,7 +119,7 @@ Kept ticker events N = 9118, from 61 shock days in 21 episodes (runs more than 5
 
 ### 2. Null overlap
 
-Official ΔExpR +0.1731R over N = 9118. With the null pool restricted to bars at least 10 sessions from any shock day (same seed, K and cap; an event left with fewer than 5 candidates drops out): ΔExpR +0.3238R, 95% week-clustered interval -0.3241R to +0.8931R, N = 3077. The gap shows how far pre-shock and post-shock null races moved the official figure.
+Official ΔExpR +0.1731R over N = 9118. With the null pool restricted to bars at least 10 sessions from any shock day (same seed, K and cap; an event left with fewer than 5 candidates drops out): ΔExpR +0.3238R, 95% week-clustered interval -0.3241R to +0.8931R, N = 3077. This gap combines changes to the null pool and retained event population.
 
 ### 3. SPY selloff split
 
@@ -130,7 +130,7 @@ SPY's own 5-day return on the shock days: 58 below 0, 3 at or above 0, mean -3.1
 | < 0 | 8706 | +0.2089R | -0.0618R to +0.5044R |
 | >= 0 | 412 | -0.5846R | -0.7680R to +2.1453R |
 
-Kept events with no SPY 5-day return at their signal day: 0. A pass carried by the < 0 half is a mean-reversion effect, not an intermarket one.
+Kept events with no SPY 5-day return at their signal day: 0. A lift concentrated in the < 0 half is consistent with a SPY selloff confound; this split alone cannot establish the mechanism or exclude an intermarket contribution.
 
 ### 4. Concentration by shock episode
 

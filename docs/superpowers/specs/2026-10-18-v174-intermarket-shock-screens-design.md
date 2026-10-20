@@ -116,8 +116,9 @@ argument, as today.
     (`screen_idea.py:60`) silently repairs all three. The frame passed to
     the idea is then the `load_frame` output.
   - The file is missing any SPY session between `CONTEXT_START` and
-    `WINDOW_END`. This contiguity check guards `r5`'s row offset, and it
-    also catches thin early UUP bars.
+    `WINDOW_END`, or contains a date outside that SPY session set. This
+    contiguity check makes `r5`'s row offset a session offset and catches
+    thin early UUP bars.
   - Defined z-scores cover fewer than 95% of SPY sessions in the event
     window (2011-01-01..2019-12-31).
 - **Point in time.** One shared helper, `context_on(df_index, series)`,
