@@ -26,6 +26,7 @@ import pandas as pd
 from swingbot.core.backtesting.instrument import contract, costs
 from swingbot.core.market.session import RTH_OPEN, US_MARKET_TZ, nyse_calendar, session_close
 from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.marketdata import adjustments
 from swingbot.core.planning import exit_sim
 from swingbot.core.planning.exit_sim import ExitResult
 from swingbot.core.planning.exit_sim_v2 import fill_bar_exit, walk_v2
@@ -525,11 +526,10 @@ def _split_band(plan, df: pd.DataFrame, fill_idx: int) -> bool:
 
 
 def _admission(plan, rp: _Replay, asof: dt.date) -> str | None:
-    """stale / split_affected / unreplayable from the bars alone, or None.
-    V173-22 widens stale (calendar gaps) and split_affected (seams)."""
-    if rp.df.index[-1].date() < asof:
+    """stale / split_affected / unreplayable from the bars alone, or None."""
+    if _stale(plan, rp, asof):
         return "stale"
-    if _split_band(plan, rp.df, rp.fill_idx):
+    if split_suspect(plan, rp.df, rp.fill_idx):
         return "split_affected"
     if rp.ov_idx is None or rp.ov_idx < rp.fill_idx:
         return "unreplayable"
@@ -639,16 +639,65 @@ def replay_override(plan, bars: pd.DataFrame | None, asof: dt.date,
     Pure: `bars` is the live scan's cache frame (never fetched here), `asof`
     the latest completed NYSE session, `trade` the linked paper trade (for
     dollars). A failed stamp on an individual close is `unstamped`; a row
-    it cannot place is `unreplayable`; it never raises."""
+    it cannot place is `unreplayable`; it never raises. Bars dated after
+    `asof` are dropped before any index is taken."""
     entry = override_entry(plan)
     hit = assign_session((entry or {}).get("at"))
     if _is_unstamped(entry):
         return _row(plan, entry, hit, "unstamped", trade)
     try:
-        rp = _prepare(plan, bars, hit)
+        settled = None if bars is None else trim_to_asof(bars, asof)
+        rp = _prepare(plan, settled, hit)        # V173-22: nothing after asof
     except _Unreplayable as exc:
         _log.info("override_fidelity: %s unreplayable: %s", plan.plan_id, exc)
         return _row(plan, entry, hit, "unreplayable", trade)
     status, eng = _status(plan, rp, asof)
     arms = _arms(plan, rp, eng) if eng is not None else None
     return _row(plan, entry, hit, status, trade, rp=rp, arms=arms)
+
+
+# --------------------------------------------------------------------------
+# V173-22: data admission (plan panel review). The cache can hold a
+# half-formed bar for today, can miss a session, and is split AND dividend
+# adjusted (auto_adjust=True), rescaled after later corporate actions.
+# --------------------------------------------------------------------------
+
+def trim_to_asof(df: pd.DataFrame, asof: dt.date) -> pd.DataFrame:
+    """The bars dated on or before `asof`: settled sessions only. A partially
+    formed bar for today (data_refresh.py:160-170) never reaches the replay."""
+    return df.loc[df.index.normalize() <= pd.Timestamp(asof)]
+
+
+def missing_sessions(df: pd.DataFrame | None, start: dt.date) -> list[dt.date]:
+    """NYSE sessions from `start` to the frame's last bar that the frame lacks."""
+    if df is None or len(df) == 0:
+        return []
+    present = set(df.index.date)
+    return [day for day in nyse_calendar().sessions(start, df.index[-1].date())
+            if day not in present]
+
+
+def split_suspect(plan, df: pd.DataFrame, fill_idx: int) -> bool:
+    """The cache no longer shares the plan's raw price basis: the fill price
+    outside the fill bar's band, or an adjustment seam from the fill on."""
+    if _split_band(plan, df, fill_idx):
+        return True
+    seam = adjustments.adjustment_seam_issue(df.iloc[fill_idx:], plan.ticker, "daily")
+    return seam is not None
+
+
+def _close_session(plan) -> dt.date | None:
+    hit = assign_session((override_entry(plan) or {}).get("at"))
+    return hit.session if hit is not None else None
+
+
+def _stale(plan, rp: _Replay, asof: dt.date) -> bool:
+    """Bars behind asof, a calendar gap from the fill on, or a close the
+    settled bars have not reached yet."""
+    last = rp.df.index[-1].date()
+    if last < asof:
+        return True
+    if missing_sessions(rp.df, rp.df.index[rp.fill_idx].date()):
+        return True
+    close = _close_session(plan)
+    return close is not None and close > last
