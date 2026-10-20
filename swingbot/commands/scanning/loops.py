@@ -1230,7 +1230,7 @@ def _always_on_loops() -> tuple:
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
             weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
             pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
-            next_session_wrapup, daily_reanchor, tape_feed, override_verdict_check)
+            next_session_wrapup, override_verdict_check, daily_reanchor, tape_feed)
 
 
 def _start_background_loops() -> None:

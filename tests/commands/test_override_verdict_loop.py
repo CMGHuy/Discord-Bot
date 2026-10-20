@@ -105,7 +105,8 @@ def test_the_result_is_logged(monkeypatch, calls, caplog):
     assert any(r.getMessage() == "override_verdict_check: waiting" for r in caplog.records)
 
 
-def test_the_loop_starts_with_the_bot_last_in_order():
+def test_the_loop_starts_with_the_bot_before_the_tape_feed():
     loops = loops_mod._always_on_loops()
-    assert loops[-1] is loops_mod.override_verdict_check
+    assert loops_mod.override_verdict_check in loops
+    assert loops[-1] is loops_mod.tape_feed                      # main's tests pin the tape feed last
     assert loops_mod.gate_counterfactual_resolve in loops          # nothing else dropped
