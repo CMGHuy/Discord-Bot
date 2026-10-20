@@ -180,7 +180,7 @@ def _start_warm_thread(work) -> threading.Thread:
         try:
             work()
         except Exception as exc:
-            swallowed(log, "earnings.warmup", exc, "background earnings warm-up failed",
+            swallowed(log, "earnings.warmup_thread", exc, "background earnings warm-up failed",
                       level=logging.DEBUG, exc_info=True)
 
     t = threading.Thread(target=_run, name="earnings-cache-warm", daemon=True)
@@ -196,7 +196,7 @@ def _warm_legacy(tickers: list[str]) -> None:
             try:
                 fut.result()
             except Exception as exc:
-                swallowed(log, "earnings.warmup_one", exc,
+                swallowed(log, "earnings.warmup", exc,
                           "background earnings warm-up failed for %s", ticker,
                           level=logging.DEBUG, exc_info=True)
 
