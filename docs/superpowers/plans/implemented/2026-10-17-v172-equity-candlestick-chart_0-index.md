@@ -16,7 +16,7 @@
 
 ## Progress
 
-Not started. Update this block when a phase closes.
+Done 2026-10-20. V172-1..V172-14 complete. Suite counts (V172-11) were not recorded in the log. Panel (V172-12): 3 fix commits tagged `(v172 panel)`; per-finding counts not recorded. Released ui 1.30.0, bot 2.11.0. VM backfill (V172-13): run `20261020T152649Z@bars-asof-2026-10-16`, 74 days (2026-07-06..2026-10-16), 296 rows, 44 gaps (XAGUSD/XAUUSD not on yfinance; split-adjusted bars vs raw fills), --allow-gaps on the partner's yes; 82 position-days skipped, counted in skipped_n. Verified: 148 point, 74 day_high, 74 day_low; last backfill row precedes the first live sample. The production three-width browser check (Step 5) was not run.
 
 ## Where to work
 
