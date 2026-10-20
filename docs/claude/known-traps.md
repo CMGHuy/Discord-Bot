@@ -455,3 +455,13 @@ Two things that look broken in the live book but aren't. Don't "fix" either one.
   only when `STRATEGY_ALERTS_MODE` is `live` (`scan_run._maybe_run_strategy_pass`; with `off` it
   returns at once). Production had zero `source="strategy"` plans on 2026-10-09, so the WEAK
   ledger is empty and every WEAK-badged trade is in the main figures.
+
+## Shared market-data layer: one door, two daily caches (v171)
+
+- **A new provider call goes through the layer**: a provider function the layer's `fetch` calls, or a `layer.lease` around a bar writer. Never `import yfinance`/`alpaca` or call `yf_safe.download` anywhere else in `swingbot/`; the guard test's allowlist needs a reason line per entry.
+- **Budget tokens are taken where the provider is called**, at `router.current_asker()`. A contextvar does not cross `_run_bounded`'s spawned process: enter `router.asker_scope(asker)` inside the worker. Unscoped code runs as `SCAN` (tier 3), so admin code always names its asker.
+- **`max_age_s=0.0` means never from cache** (test `is not None`, never truthiness). `METADATA` is persistent for every asker, a fresh admin reload included.
+- **A `None` in a fetch reply is a miss and is never written**, so a blank reply never overwrites the last good value. A confirmed empty answer is an empty doc, not `None`.
+- **Two daily caches, one adjustment basis each.** `market_data/daily_alpaca/` is Alpaca `Adjustment.ALL`, 10 years, written only by `daily_delta.write_daily` under the key's lease; `market_data/daily/` is yfinance `auto_adjust`, full history, written by its existing yfinance writers. Never splice or write a frame across them. The admin reads only the yfinance file (`freshness.page_daily`). Each file has a `.meta.json` sidecar; a failed D4 delta check means a full refetch, never `history_splice`'s shallow live-only path.
+- **`count` mode is the D9 baseline**: it must make exactly today's provider calls. Anything that shares or caches belongs behind `on`.
+- **The admin's fresh mark** (`X-Swingbot-Fresh: 1`) lasts one request (`freshness.install`); a background thread keeps it only through `contextvars.copy_context()`.
