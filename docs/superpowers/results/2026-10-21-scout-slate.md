@@ -101,3 +101,11 @@ Run 2026-10-21 over `66a0445b` (quant-researcher on opus).
 ## Partner pick
 
 On 2026-10-21 the partner sent no ranked row onward and chose to verify the 2026-08-04/05 stop-enforcement lead first (Controller notes). That check is an integrity question for production, not a /screen or /prereg route.
+
+## Stop-enforcement check (2026-10-21)
+
+Read-only, against production and the code.
+
+- **Confirmed (production DB):** no trade or plan closed between `2026-08-03 16:18:02` UTC (SNDK, "auto (price monitor)") and `2026-08-04 18:55:15`. In the batch that followed, 25 trades and 33 plan status entries closed within 28 seconds (18:55:15-43), and 7 more trades closed at `2026-08-05 15:34:01-08`, after about 3.5 h with no closes. The VM had been up since 2026-07-31 14:47, so this was no reboot. The August logs no longer exist (journald reaches back to 2026-10-10 only).
+- **Inferred:** the trade monitor stalled while the process stayed up, then caught up in a single sweep and closed at the quote of the moment. A hung quote fetch is consistent with this, but the logs that could confirm it are gone.
+- **Present-day gap (code):** `trade_monitor` (`swingbot/commands/scanning/loops.py:628`) awaits `asyncio.to_thread(plan_manager.monitor_quotes, …)` with no timeout. The legacy path is bounded through `_run_bounded`. The only liveness stamp, `runstate._write_heartbeat`, is written by `session_scan` (`loops.py:195`), and `scripts/ops/heartbeat_watch.sh` reads only that stamp. A hung monitor therefore leaves the heartbeat fresh, so nothing alerts on stale stops today. `@trade_monitor.error` restarts the loop only when an exception escapes, not when a call hangs.
