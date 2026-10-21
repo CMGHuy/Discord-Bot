@@ -490,7 +490,7 @@ git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v1
 - No colour literal, no `.pos`/`.neg`/`.muted` selector (`primitives.spec.ts`): colours via `var(--pos)`, `var(--neg)`, `var(--text-faint)`, `var(--text-secondary)`; the small label size via the existing `--text-micro` token. Spacing is literal text inside `.sep`, never margins.
 - Each line is its own block with `white-space: nowrap`.
 
-- [ ] **Step 1: Write the failing cell tests**
+- [x] **Step 1: Write the failing cell tests**
 
 In `frontend/src/app/ui/plan-cell.spec.ts`, change the import line (:5) to:
 
@@ -680,7 +680,7 @@ describe('runnerExitLabel', () => {
 
 Why the legacy-line expectation in "stays a single legacy line": with `planTp1` unset, the cell is today's trailing-runner cell (banked fill `58.33 ✓` in the target slot, the trailing stop in the stop slot, unsigned distances `|58.33 − 60.67| / 60.67 = 3.9%`, `|52.437 − 60.67| / 60.67 = 13.6%`).
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -690,7 +690,7 @@ Pop-Location
 
 Expected: FAIL — compile error `'runnerExitLabel' is not exported` (or, once that exists, NG0303 "Can't set value of the 'planTp1' input"). The existing cases cannot run until the file compiles; that is expected.
 
-- [ ] **Step 3: Implement the inputs, template, styles and tooltips**
+- [x] **Step 3: Implement the inputs, template, styles and tooltips**
 
 In `frontend/src/app/ui/plan-cell.ts`, replace the `template:` value (:22-31) with:
 
@@ -907,7 +907,7 @@ Also extend the class doc comment (:15-17) with one paragraph, after the existin
  * (`runnerExit` set). The callers decide which through `runnerCellInputs`.
 ```
 
-- [ ] **Step 4: Add the `TradeRow` fields**
+- [x] **Step 4: Add the `TradeRow` fields**
 
 In `frontend/src/app/api/models.ts`, directly after `best_pnl_pct?: number | null;` (:170), add:
 
@@ -924,7 +924,7 @@ In `frontend/src/app/api/models.ts`, directly after `best_pnl_pct?: number | nul
 
 The fields are optional so the `tradeRow()`/`row()` fixtures in `dashboard.spec.ts` and `trades.spec.ts` (which do not list them) keep compiling.
 
-- [ ] **Step 5: Run the cell tests**
+- [x] **Step 5: Run the cell tests**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -934,7 +934,7 @@ Pop-Location
 
 Expected: every test passes, every existing case unchanged plus the new ones; `0 failed`.
 
-- [ ] **Step 6: Run the primitive gates and lint**
+- [x] **Step 6: Run the primitive gates and lint**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -945,7 +945,7 @@ Pop-Location
 
 Expected: all pass (`gallery.spec.ts` renders the cell with no new inputs; `status-cell.spec.ts` reads `stop_pnl_pct`/`best_pnl_pct` unchanged). `npm run lint` ends with no error and no new entry in `eslint-suppressions.json`. A `primitives.spec.ts` failure naming `plan-cell.ts` means a colour literal or a `.pos`/`.neg`/`.muted` selector slipped in: use the tokens above.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell add frontend/src/app/ui/plan-cell.ts frontend/src/app/ui/plan-cell.spec.ts frontend/src/app/api/models.ts
