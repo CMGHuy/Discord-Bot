@@ -271,6 +271,9 @@ CLOSED_PREREGISTRATION_KNOBS = frozenset({
     "PULLBACK_DRYUP_MAX_RATIO",
     "HEADROOM_SCOPE",
     "HEADROOM_MIN_R",
+    "GIVEBACK_MODE",   # v178: simulator-only runner give-back levels, closed
+    "GIVEBACK_K",
+    "GIVEBACK_F",
 })
 _BACKTEST_SCRIPT_RE = re.compile(r"(?:tune_strategy|run_backtest_range)\.py")
 
