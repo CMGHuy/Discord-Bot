@@ -272,6 +272,67 @@ describe('Dashboard v85 layout', () => {
   });
 });
 
+/* -- v177: the Plan cell's runner forms on the positions table ---------- */
+
+/** `loaded()`, but the positions table's trades request is answered with
+ *  `items` instead of empty (the table constructs, and requests, before the
+ *  dashboard payload lands). One `#planCell` template serves every tab, so
+ *  the tab only changes which rows arrive. */
+async function loadedWithRows(items: TradeRow[]): Promise<HTMLElement> {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  for (const req of backend.match((r) => r.url === '/api/v1/trades')) {
+    req.flush({ items, total: items.length, page: 1, per_page: 10 });
+  }
+  backend.expectOne('/api/v1/dashboard?mode=today').flush(payload());
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
+
+describe('Dashboard Plan cell for runners (v177)', () => {
+  const runner = tradeRow({
+    id: 'p1', status: 'PARTIAL', status_label: 'PARTIAL', direction: 'bearish',
+    entry: 60.67, stop_loss: 52.437, target: null, target_is_banked_tp1: true,
+    stop_kind: 'trailing', bar_kind: 'trailing', banked_fraction: 0.5,
+    banked_exit_price: 58.33, banked_r: 1.98, exit_price: null,
+    risk_stop: 61.85, runner_best: 49.94, tp1: 58.33,
+    best_pnl_pct: 17.69, stop_pnl_pct: 13.57, leg_index: 1, leg_total: 2,
+  });
+  const tp1Leg = tradeRow({
+    id: 'p1', status: 'CLOSED', direction: 'bearish', entry: 60.67,
+    stop_loss: 52.437, target: null, target_is_banked_tp1: true,
+    stop_kind: 'trailing', bar_kind: 'trailing', exit_price: 58.33,
+    risk_stop: 61.85, runner_best: 49.94, tp1: null, best_pnl_pct: null,
+    stop_pnl_pct: null, runner_exit_price: null, leg_index: 0, leg_total: 2,
+  });
+  const closedRunner = tradeRow({
+    id: 'c1', status: 'CLOSED', direction: 'bearish', entry: 60.67,
+    stop_loss: 61.85, target: 58.33, exit_price: 52.44, tp1: null,
+    runner_exit_price: 52.44, runner_exit_reason: 'giveback', leg_index: 1, leg_total: 2,
+  });
+
+  it('reads a PARTIAL trailing runner on two lines', async () => {
+    const [cell] = (await loadedWithRows([runner])).querySelectorAll('sb-plan-cell');
+    expect(cell.querySelector('.l1')!.textContent!.replace(/\s+/g, ' ').trim())
+      .toBe('60.67 → 58.33 / 61.85 (3.9% - 1.9%)');
+    expect(cell.querySelector('.l2')!.textContent!.replace(/\s+/g, ' ').trim())
+      .toBe('Trail 49.94 → 52.44 (+17.7% / +13.6%)');
+  });
+
+  it('keeps today\'s cell on the TP1-leg row of a PARTIAL plan', async () => {
+    const [cell] = (await loadedWithRows([tp1Leg])).querySelectorAll('sb-plan-cell');
+    expect(cell.querySelector('.runner')).toBeNull();
+  });
+
+  it('shows a closed runner\'s exit and names the give-back stop', async () => {
+    const [cell] = (await loadedWithRows([closedRunner])).querySelectorAll('sb-plan-cell');
+    expect(cell.textContent!.replace(/\s+/g, ' ').trim()).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%)');
+    expect(cell.querySelector('[title]')!.getAttribute('title'))
+      .toContain('Runner exit (give-back stop): 52.44');
+  });
+});
+
 describe('Dashboard explanatory help', () => {
   it('merges the Open positions help into one tooltip', async () => {
     const fixture = await loaded();

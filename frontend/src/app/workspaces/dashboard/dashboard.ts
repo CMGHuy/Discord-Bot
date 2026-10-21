@@ -29,6 +29,7 @@ import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.t
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
+import { runnerCellInputs } from '../../ui/runner-cell';
 import { StatusCell } from '../../ui/status-cell';
 import {
   readTableColumns,
@@ -316,6 +317,9 @@ export const DASHBOARD_COLUMNS = tradeColumns();
       <sb-status-cell [row]="row" />
     </ng-template>
     <ng-template #planCell let-row>
+      <!-- v177: runnerCellInputs keys the two-line runner cell and the
+           closed runner's exit on row.status -- identical in trades.ts. -->
+      @let rc = runnerCellInputs(row);
       <sb-plan-cell
         [entry]="row.entry"
         [target]="row.target"
@@ -329,6 +333,9 @@ export const DASHBOARD_COLUMNS = tradeColumns();
         [bankedEntry]="row.banked_exit_price"
         [bankedPct]="bankedLegPct(row.entry, row.banked_exit_price, row.direction)"
         [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.shares, row.direction)"
+        [planTp1]="rc.planTp1" [planStop]="rc.planStop"
+        [trailBest]="rc.trailBest" [trailBestPct]="rc.trailBestPct" [trailExitPct]="rc.trailExitPct"
+        [runnerExit]="rc.runnerExit" [runnerExitPct]="rc.runnerExitPct" [runnerExitReason]="rc.runnerExitReason"
         [currency]="connection.currency()"
       />
     </ng-template>
@@ -956,6 +963,7 @@ export class Dashboard {
   protected expectedPnlPct = expectedPnlPct;
   protected bankedLegPct = bankedLegPct;
   protected bankedLegAmount = bankedLegAmount;
+  protected readonly runnerCellInputs = runnerCellInputs;
   protected expectedSlPct = expectedSlPct;
   protected livePnlPct = livePnlPct;
   protected liveUnrealizedAmount = liveUnrealizedAmount;
