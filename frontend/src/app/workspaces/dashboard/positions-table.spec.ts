@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -145,5 +148,15 @@ describe('positions table', () => {
     expect(seen).toContain('ACTIVE');
     expect(seen).toContain('CLOSED');
     expect(seen).toContain('CANCELLED');
+  });
+
+  it('passes its phone-tap choice to the table, the generic drawer by default (v179 §6a.4)', () => {
+    const f = mount();
+    expect((f.componentInstance as unknown as { phoneTap: () => string }).phoneTap()).toBe('drawer');
+    f.componentRef.setInput('phoneTap', 'emit');
+    f.detectChanges();
+    expect((f.componentInstance as unknown as { phoneTap: () => string }).phoneTap()).toBe('emit');
+    const source = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/positions-table.ts'), 'utf8');
+    expect(source).toMatch(/<sb-data-table[^>]*\[phoneTap\]="phoneTap\(\)"/);
   });
 });
