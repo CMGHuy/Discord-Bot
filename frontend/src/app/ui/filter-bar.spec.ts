@@ -47,7 +47,7 @@ describe('FilterChips on a phone (v179 §3.3)', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
 
   it('is one line that scrolls sideways, never a wrapped block', () => {
-    const phone = SOURCE.match(/\/\* v179 chips \*\/\s*@media \(max-width: 639px\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+    const phone = SOURCE.match(/\/\* v179 chips \*\/\s*@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/)?.[1] ?? '';
     expect(phone).toMatch(/:host \{ flex: 1 1 100%; \}/);
     expect(phone).toMatch(/\.chips \{[^}]*flex-wrap: nowrap;[^}]*overflow-x: auto;/);
   });

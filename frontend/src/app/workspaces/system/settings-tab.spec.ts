@@ -8,7 +8,7 @@ import {
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
@@ -21,17 +21,6 @@ import { SettingsTab } from './settings-tab';
 
 function payload(overrides: Partial<Settings> = {}): Settings {
   return { sections: [], audit: [], restart_available: false, ...overrides };
-}
-
-/** SystemStore's onInit fires all three of settings/logs/scan together
- *  regardless of which tab component is under test. */
-function flushOtherFetches(backend: HttpTestingController): void {
-  backend
-    .expectOne((r) => r.url === '/api/v1/system/logs')
-    .flush({ source: 'bot', lines: 500, path: 'logs/bot.log', content: '' });
-  backend
-    .expectOne((r) => r.url === '/api/v1/system/scan')
-    .flush({ status: 'idle' } as never);
 }
 
 function seed(): { fixture: ComponentFixture<SettingsTab>; backend: HttpTestingController } {

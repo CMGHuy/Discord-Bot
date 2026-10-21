@@ -166,7 +166,7 @@ describe('sb-toolbar phone flex ownership (v179 review)', () => {
   it('puts projected controls and Filters in one flex context below the chip line', () => {
     // A full-width chips host inside a boxed inline row consumes the whole
     // outer line, leaving Filters below Columns instead of beside it.
-    const phone = TOOLBAR_SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+    const phone = TOOLBAR_SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/)?.[1] ?? '';
     expect(phone).toMatch(/\.toolbar-inline \{[^}]*display: contents;/);
   });
 });

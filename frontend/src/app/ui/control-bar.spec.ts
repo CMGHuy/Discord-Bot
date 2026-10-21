@@ -74,7 +74,7 @@ describe('ControlBar one row pattern (v179 §3.3)', () => {
 
   // The phone block, whatever it contains, as one string.
   const phoneBlock = () =>
-    CONTROL_BAR_SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n    \}/)?.[1] ?? '';
+    CONTROL_BAR_SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/)?.[1] ?? '';
 
   it('stacks at the declared phone breakpoint, not one pixel into tablet', () => {
     // 640px is the first `sm` (tablet) width -- BREAKPOINTS.sm in breakpoints.ts.

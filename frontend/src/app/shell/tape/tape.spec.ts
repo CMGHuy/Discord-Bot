@@ -165,7 +165,7 @@ describe('Tape', () => {
 describe('tape.css: nothing is cut at the lane edge (v179 layout audit)', () => {
   const css = readFileSync(join(process.cwd(), 'src/app/shell/tape/tape.css'), 'utf8');
   const rule = (selector: string) => css.match(
-    new RegExp(`^${selector.replaceAll('.', '\.')} \{[^}]*\}`, 'm'),
+    new RegExp(`^${selector.replaceAll('.', '\\.')} \\{[^}]*\\}`, 'm'),
   )?.[0] ?? '';
 
   it('has no sliding marquee: no animation on the track', () => {

@@ -79,6 +79,6 @@ describe('v80 D4: form controls', () => {
     const styles = SOURCE.slice(at, SOURCE.indexOf('export class TextInput', at));
     expect(styles).toMatch(/:host \{ min-width: 0; \}/);
     expect(styles).toMatch(/\.field \{[^}]*max-width: 100%/);
-    expect(styles).toMatch(/\n    input \{[^}]*min-width: 0;/);
+    expect(styles).toMatch(/\n {4}input \{[^}]*min-width: 0;/);
   });
 });

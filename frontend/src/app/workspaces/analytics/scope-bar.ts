@@ -48,7 +48,7 @@ import { Segmented } from '../../ui/segmented';
       <!-- v179 §3.4: a box of its own on the text baseline -- sb-control-bar's
            .scope centres its children, which put the population text and the
            unit toggle's labels at two heights. -->
-      <div scope class="scope-line">
+      <div ngProjectAs="[scope]" class="scope-line">
         <sb-segmented label="Unit" [options]="unitOptions" [value]="unit()"
                       (valueChange)="unitChange.emit($any($event))" />
         @if (!tuning()) {
