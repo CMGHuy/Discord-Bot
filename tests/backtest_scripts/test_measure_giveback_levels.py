@@ -238,3 +238,203 @@ def test_rows_round_trip_gzipped(tmp_path):
 def test_parse_args_refuses_instrument_v2():
     with pytest.raises(SystemExit, match="not wired"):
         mgl.parse_args(["--stage", "pilot", "--instrument", "v2"])
+
+
+# --- V178-6: stages, refusals, report, validation file ----------------------
+
+DELTAS = (0.001, 0.004, 0.002, -0.001, 0.003, 0.0)          # R0.75 .. S0.50
+
+
+def _arm(r, *, moved=False):
+    return {"outcome": "win", "r_net": r, "runner_r": r, "entry_index": 0,
+            "exit_index": 6 if moved else 5, "exit_date": "2019-03-08",
+            "exit_price": 1.5 if moved else 1.0, "reason": "runner_trail",
+            "stop_source": "giveback", "tp1_index": 1, "best": 2.0, "best_index": 2,
+            "allowance_pct": 0.05, "floor_bound": None, "stop_moves": 1, "gap_r": 0.0,
+            "new_best_within_10": False, "shock": False}
+
+
+def _row(ticker, *, moved=(), lift=0.0, arms=None):
+    return {"ticker": ticker, "source": "strategy", "strategy": "Fibonacci", "horizon_key": "2w",
+            "direction": "bullish", "signal_date": "2019-03-01", "planned_rr": 2.0, "risk": 5.0,
+            "runner_fraction": 0.5, "regime": "trend",
+            "arms": {a: _arm(1.0 + (lift if a in moved else 0.0), moved=a in moved)
+                     for a in (arms or mgl.ARM_IDS)}}
+
+
+def _funnel(*, resolvable=(), stage3=None):
+    stage0 = {a: {"delta_r": d, "p": 0.3, "n": 10, "changed": 3,
+                  "verdict": "RESOLVABLE" if a in resolvable else "REFUSED"}
+              for a, d in zip(mgl.funnel.CANDIDATES, DELTAS)}
+    return {"stage0": stage0, "stage1": {}, "stage2": {}, "stage3_arm": stage3,
+            "stopped_at": None if stage3 else "stage0",
+            "holm": dict.fromkeys(mgl.funnel.CANDIDATES, 1.0), "week_interval": {}}
+
+
+def _put(path, blob):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(blob), encoding="utf-8")
+
+
+@pytest.fixture
+def dirs(tmp_path, monkeypatch):
+    out, rows, earnings = tmp_path / "out", tmp_path / "rows", tmp_path / "earnings"
+    earnings.mkdir()
+    (earnings / "AAA.csv").write_text("report_date,timing,report_ts_et\n", encoding="utf-8")
+    monkeypatch.setattr(mgl.training_data, "select", lambda name=None: name)
+    monkeypatch.setattr(mgl.training_data, "write_provenance", lambda path: path)
+    return out, rows, earnings
+
+
+def _main(dirs, *argv):
+    out, rows, earnings = dirs
+    return mgl.main([*argv, "--out-dir", str(out), "--rows-dir", str(rows),
+                     "--earnings-dir", str(earnings)])
+
+
+def _pilot(dirs, survivors=mgl.funnel.CANDIDATES):
+    _put(dirs[0] / "pilot-close.json", {"survivors": list(survivors)})
+
+
+def test_main_refuses_zero_frictions(dirs, monkeypatch, capsys):
+    monkeypatch.setattr(config, "SLIPPAGE_BPS", 0.0)
+    assert _main(dirs, "--stage", "pilot") == 1
+    assert "refused:zero-frictions" in capsys.readouterr().err
+
+
+def test_main_refuses_a_smoke_run_into_the_committed_directories(capsys):
+    assert mgl.main(["--stage", "pilot", "--tickers", "AAA"]) == 1
+    assert "refused:smoke-run" in capsys.readouterr().err
+
+
+def test_main_refuses_an_empty_earnings_directory(tmp_path, capsys):
+    assert mgl.main(["--stage", "pilot", "--out-dir", str(tmp_path / "o"), "--rows-dir",
+                     str(tmp_path / "r"), "--earnings-dir", str(tmp_path)]) == 1
+    assert "refused:no-earnings" in capsys.readouterr().err
+
+
+def test_pilot_reports_reachability_per_candidate_and_is_one_look(dirs, monkeypatch, capsys):
+    rows = [_row(t, moved=("R0.75",), lift=0.1) for t in "ABC"]
+    monkeypatch.setattr(mgl, "build_rows", lambda stage, basis, **kw: rows)
+    assert _main(dirs, "--stage", "pilot") == 0
+    blob = json.loads((dirs[0] / "pilot-close.json").read_text(encoding="utf-8"))
+    assert blob["arms"]["R0.75"] == {"changed": 3, "verdict": "REACHABLE"}
+    assert blob["arms"]["S0.50"] == {"changed": 0, "verdict": "refused:zero-diff"}
+    assert blob["survivors"] == ["R0.75"] and blob["frozen"]["window"] == list(mgl.stage_window("pilot"))
+    assert mgl.read_rows(dirs[1] / "rows-pilot-close.json.gz") == rows
+    assert _main(dirs, "--stage", "pilot") == 1
+    assert "refused:one-look" in capsys.readouterr().err
+
+
+def test_a_pilot_without_changed_outcomes_closes_every_candidate(dirs, monkeypatch):
+    monkeypatch.setattr(mgl, "build_rows", lambda stage, basis, **kw: [_row("A")])
+    assert _main(dirs, "--stage", "pilot") == 1
+    assert json.loads((dirs[0] / "pilot-close.json").read_text(encoding="utf-8"))["survivors"] == []
+
+
+def test_train_needs_a_pilot_survivor(dirs, capsys):
+    assert _main(dirs, "--stage", "train") == 1
+    assert "refused:no-pilot" in capsys.readouterr().err
+    _pilot(dirs, survivors=())
+    assert _main(dirs, "--stage", "train") == 1
+    assert "refused:pilot-closed-everything" in capsys.readouterr().err
+
+
+def test_train_writes_the_rows_file_and_nothing_else(dirs, monkeypatch):
+    seen, rows = [], [_row("A")]
+    monkeypatch.setattr(mgl, "build_rows", lambda stage, basis, **kw: seen.append((stage, basis)) or rows)
+    _pilot(dirs)
+    assert _main(dirs, "--stage", "train") == 0
+    assert seen == [("train", "close")]
+    assert mgl.read_rows(dirs[1] / "rows-train-close.json.gz") == rows
+    assert not (dirs[0] / "funnel-close.json").exists()
+
+
+@pytest.mark.parametrize("stage", ["train", "report"])
+def test_high_low_is_refused_when_every_arm_was_refused_at_stage_0(dirs, capsys, stage):
+    _pilot(dirs)
+    _put(dirs[0] / "funnel-close.json", {"funnel": _funnel()})
+    mgl.write_rows(dirs[1] / "rows-train-high_low.json.gz", [_row("A")])
+    assert _main(dirs, "--stage", stage, "--basis", "high_low") == 1
+    assert "refused:no-sensitivity" in capsys.readouterr().err
+
+
+def test_report_close_runs_the_funnel_and_describes_every_candidate(dirs, monkeypatch):
+    _pilot(dirs)
+    mgl.write_rows(dirs[1] / "rows-train-close.json.gz", [_row("A")])
+    monkeypatch.setattr(mgl.funnel, "run_funnel", lambda rows, n_resamples: _funnel())
+    monkeypatch.setattr(mgl.blocks, "describe_arm",
+                        lambda rows, arm, risk_dollars: {"1_book": arm, "regime": "dropped"})
+    monkeypatch.setattr(mgl.blocks, "regime_split", lambda rows, arm: f"regime-{arm}")
+    assert _main(dirs, "--stage", "report", "--resamples", "50") == 0
+    blob = json.loads((dirs[0] / "funnel-close.json").read_text(encoding="utf-8"))
+    assert list(blob["blocks"]) == list(mgl.funnel.CANDIDATES)
+    assert blob["regime_arms"] == ["R1.00", "S0.33"]              # each family's best stage-0 delta
+    assert "regime" not in blob["blocks"]["R0.75"]
+    assert blob["blocks"]["R1.00"]["regime"] == "regime-R1.00"
+    summary = blob["summary"]
+    assert (summary["best_arm"], summary["ledger_p"], summary["stopped_at"]) == ("R1.00", 0.3, "stage0")
+    assert summary["cells_looked_at"] == mgl.funnel.cells_looked_at()
+
+
+def test_report_drops_a_stage3_arm_the_pilot_refused(dirs, monkeypatch):
+    _pilot(dirs, survivors=("R0.75", "S0.33"))
+    mgl.write_rows(dirs[1] / "rows-train-close.json.gz", [_row("A")])
+    monkeypatch.setattr(mgl.funnel, "run_funnel", lambda rows, n_resamples: _funnel(stage3="R1.00"))
+    monkeypatch.setattr(mgl.blocks, "describe_arm", lambda rows, arm, risk_dollars: {})
+    monkeypatch.setattr(mgl.blocks, "regime_split", lambda rows, arm: {})
+    assert _main(dirs, "--stage", "report") == 0
+    blob = json.loads((dirs[0] / "funnel-close.json").read_text(encoding="utf-8"))
+    assert blob["funnel"]["stage3_arm"] is None and "R1.00" in blob["funnel"]["pilot_refused"]
+
+
+def test_report_high_low_reads_only_the_sensitivity_arms(dirs, monkeypatch):
+    _pilot(dirs)
+    _put(dirs[0] / "funnel-close.json", {"funnel": _funnel(resolvable=("R1.00",))})
+    mgl.write_rows(dirs[1] / "rows-train-high_low.json.gz", [_row("A")])
+    seen = []
+    monkeypatch.setattr(mgl.funnel, "stage0", lambda rows, arm, n_resamples: seen.append(arm) or {})
+    monkeypatch.setattr(mgl.funnel, "stage2", lambda rows, arm: {})
+    assert _main(dirs, "--stage", "report", "--basis", "high_low") == 0
+    blob = json.loads((dirs[0] / "sensitivity-high_low.json").read_text(encoding="utf-8"))
+    assert seen == blob["summary"]["arms"] == ["R0.75", "R1.00", "S0.33"]
+    assert blob["summary"]["cells_looked_at"] == mgl.funnel.cells_looked_at(sensitivity=18)
+
+
+def test_validation_refuses_anything_but_the_stage3_arm_with_a_preregistration(dirs, tmp_path, capsys):
+    assert _main(dirs, "--stage", "validation") == 1
+    assert "refused:no-arm" in capsys.readouterr().err
+    assert _main(dirs, "--stage", "validation", "--arm", "R1.00") == 1
+    assert "refused:no-preregistration" in capsys.readouterr().err
+    spec = tmp_path / "spec.md"
+    spec.write_text("frozen", encoding="utf-8")
+    _put(dirs[0] / "funnel-close.json", {"funnel": _funnel(stage3="R1.00")})
+    assert _main(dirs, "--stage", "validation", "--arm", "S0.33", "--preregistration", str(spec)) == 1
+    assert "refused:not-the-stage3-arm" in capsys.readouterr().err
+
+
+def test_validation_writes_the_component_file_and_the_fixed_readings(dirs, tmp_path, monkeypatch, capsys):
+    import validate_component
+    spec = tmp_path / "spec.md"
+    spec.write_text("frozen", encoding="utf-8")
+    _put(dirs[0] / "funnel-close.json", {"funnel": _funnel(stage3="R1.00")})
+    rows = [_row(t, moved=("R1.00",), lift=0.1, arms=("A", "B", "R1.00")) for t in "ABCDEF"]
+    seen = []
+    monkeypatch.setattr(mgl, "build_rows",
+                        lambda stage, basis, arms, **kw: seen.append((stage, arms)) or rows)
+    for name in ("seven_blocks", "per_horizon", "concentration", "regime_split", "flips"):
+        monkeypatch.setattr(mgl.blocks, name, lambda *a, **k: {})
+    argv = ("--stage", "validation", "--arm", "R1.00", "--preregistration", str(spec),
+            "--resamples", "50")
+    assert _main(dirs, *argv) == 0
+    assert seen == [("validation", ("A", "B", "R1.00"))]
+    baseline, component = validate_component.load_arms(dirs[1] / "validation-arms.json")
+    assert len(baseline) == len(component) == 6
+    assert component[0].r_multiple == pytest.approx(1.1)
+    blob = json.loads((dirs[1] / "validation-arms.json").read_text(encoding="utf-8"))
+    assert blob["provenance"]["bespoke"] == mgl.BESPOKE_REASON
+    readings = json.loads((dirs[0] / "validation-readings.json").read_text(encoding="utf-8"))
+    assert {"arm_vs_a", "a_vs_b", "arm_vs_b", "week_interval", "permutation_p"} <= set(readings)
+    assert readings["changed"] == 6 and readings["frozen"]["window"] == list(mgl.stage_window("validation"))
+    assert _main(dirs, *argv) == 1
+    assert "refused:one-look" in capsys.readouterr().err

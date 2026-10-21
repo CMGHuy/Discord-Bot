@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import copy
+import dataclasses
 import gzip
 import json
 import sys
@@ -41,6 +42,7 @@ from swingbot.core.backtesting import giveback_levels_blocks as blocks  # noqa: 
 from swingbot.core.backtesting import giveback_levels_funnel as funnel  # noqa: E402
 from swingbot.core.backtesting.acceptance import (BOOTSTRAP_RESAMPLES, CLOSED,  # noqa: E402
                                                   planned_rr)
+from swingbot.core.backtesting.acceptance_harvest import permutation_p_expectancy  # noqa: E402
 from swingbot.core.backtesting.arms.windows import STAGES, universe_for  # noqa: E402
 from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
 from swingbot.core.market import indicators  # noqa: E402
@@ -403,3 +405,289 @@ def parse_args(argv=None) -> argparse.Namespace:
     instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_giveback_levels.py",
                               "a later spec (v178 is frozen on instrument v1)")
     return args
+
+
+# --- stages ------------------------------------------------------------------
+
+BESPOKE_REASON = ("v178 bespoke producer (measure_giveback_levels.py): the give-back modes are "
+                  "simulator-only module constants, not searchable knobs, so measure_arms.py "
+                  "cannot produce them; one control-A entry pass re-simulated per arm, R net "
+                  "of frictions")
+V92_OVERLAP = ("family R is adjacent to the closed v92 adaptive trail (nearest cell trigger_r 2.50, "
+               "mult 1.50; dExpR -0.0045R to +0.0091R across its grid, best-cell lower bound "
+               "-0.0131R): context, never a threshold; the partner ruled this a new test")
+UNIVERSE_LIMIT = "75 liquid cached names: the result says nothing about thin names, where ATR is noisy"
+
+
+def _frozen(stage, basis) -> dict:
+    from swingbot.core.backtesting.arms.windows import ALL_HORIZONS
+    return {"stage": stage, "window": list(stage_window(stage)), "frame_end": frame_end(stage),
+            "basis": basis, "data_source": DATA_SOURCE, "arms": funnel.ARMS,
+            "pooled_fold_train": list(funnel.pooled_window()),
+            "fold_train": [[label, list(w)] for label, w in funnel.fold_train_windows()],
+            "fold_test": [[label, list(w)] for label, w in funnel.fold_test_windows()],
+            "entries": "one control-A pass per ticker; every entry re-simulated under each arm",
+            "scale_out": True, "instrument": "v1",
+            "engines": ["StrategyEngine.iter_trades", "replay_scenarios"],
+            "horizons": list(ALL_HORIZONS), "slippage_bps": float(config.SLIPPAGE_BPS),
+            "commission_per_side": float(config.COMMISSION_PER_TRADE),
+            "commission_risk_basis": float(config.COMMISSION_RISK_BASIS),
+            "v92_overlap": V92_OVERLAP, "universe_limit": UNIVERSE_LIMIT}
+
+
+def _rows_path(args, stage) -> Path:
+    return args.rows_dir / f"rows-{stage}-{args.basis if stage == 'train' else 'close'}.json.gz"
+
+
+def _primary_target(args) -> Path:
+    names = {"pilot": "pilot-close.json", "validation": "validation-readings.json",
+             "report": "funnel-close.json" if args.basis == "close" else "sensitivity-high_low.json"}
+    return _rows_path(args, "train") if args.stage == "train" else args.out_dir / names[args.stage]
+
+
+def _secondary_targets(args) -> list[Path]:
+    return {"pilot": [_rows_path(args, "pilot")],
+            "validation": [_rows_path(args, "validation"), args.rows_dir / "validation-arms.json"],
+            }.get(args.stage, [])
+
+
+def _read_json(path):
+    path = Path(path)
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def _write_json(path, blob) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(blob, indent=1), encoding="utf-8")
+    training_data.write_provenance(path)
+    return path
+
+
+# --- refusals -----------------------------------------------------------------
+
+def _refusal(args, target) -> str | None:
+    if float(config.SLIPPAGE_BPS) <= 0 or float(config.COMMISSION_PER_TRADE) <= 0:
+        return "refused:zero-frictions -- the spec needs non-zero frictions in every arm"
+    if args.tickers and (args.out_dir.resolve() == RESULTS.resolve()
+                         or args.rows_dir.resolve() == ROWS_DIR.resolve()):
+        return "refused:smoke-run -- --tickers needs a scratch --out-dir and --rows-dir"
+    if args.basis == "high_low" and not _any_resolvable(args.out_dir):
+        # Before one-look: an all-stage-0 refusal ends the test, whatever files exist.
+        return ("refused:no-sensitivity -- every arm was refused at stage 0 (or funnel-close.json "
+                "is missing): the test ended there and the sensitivity is not run")
+    for path in [target, *_secondary_targets(args)]:
+        if path.exists():
+            return f"refused:one-look -- {path} exists; every output of this measurement is one look"
+    return _stage_refusal(args)
+
+
+def _any_resolvable(out_dir) -> bool:
+    blob = _read_json(Path(out_dir) / "funnel-close.json") or {}
+    stage0 = blob.get("funnel", {}).get("stage0", {})
+    return any(reading.get("verdict") == "RESOLVABLE" for reading in stage0.values())
+
+
+def _stage_refusal(args) -> str | None:
+    if args.stage in ROW_STAGES and not any(Path(args.earnings_dir).glob("*.csv")):
+        return (f"refused:no-earnings -- no earnings CSVs in {args.earnings_dir}; "
+                "pass --earnings-dir <main tree>/market_data/earnings")
+    if args.stage in ("pilot", "validation") and args.basis != "close":
+        return f"refused:basis -- --stage {args.stage} runs on the close basis only"
+    checks = {"train": _train_refusal, "report": _report_refusal, "validation": _validation_refusal}
+    return checks[args.stage](args) if args.stage in checks else None
+
+
+def _train_refusal(args) -> str | None:
+    pilot = _read_json(args.out_dir / "pilot-close.json")
+    if pilot is None:
+        return "refused:no-pilot -- run --stage pilot first (stage -1)"
+    if not pilot["survivors"]:
+        return "refused:pilot-closed-everything -- every candidate was refused at stage -1"
+    return None
+
+
+def _report_refusal(args) -> str | None:
+    if not _rows_path(args, "train").exists():
+        return f"refused:no-rows -- {_rows_path(args, 'train')} is missing; run --stage train first"
+    return _train_refusal(args)
+
+
+def _validation_refusal(args) -> str | None:
+    if args.arm is None:
+        return "refused:no-arm -- --stage validation needs --arm <the stage-3 arm>"
+    if args.preregistration is None or not Path(args.preregistration).exists():
+        return "refused:no-preregistration -- the one shot needs --preregistration <committed spec>"
+    stage3 = (_read_json(args.out_dir / "funnel-close.json") or {}).get("funnel", {}).get("stage3_arm")
+    if stage3 != args.arm:
+        return f"refused:not-the-stage3-arm -- funnel-close.json names {stage3!r}, not {args.arm!r}"
+    return None
+
+
+# --- pilot and train ------------------------------------------------------------
+
+def _pilot_verdict(rows, arm) -> dict:
+    changed = funnel.changed_count(rows, arm)
+    return {"changed": changed, "verdict": "REACHABLE" if changed > 0 else "refused:zero-diff"}
+
+
+def cmd_pilot(args) -> int:
+    """Stage -1: each candidate's knob is read (arm_settings sets it) and changes outcomes."""
+    rows = build_rows("pilot", "close", tickers=args.tickers, workers=args.workers,
+                      earnings_dir=args.earnings_dir)
+    arms = {arm: _pilot_verdict(rows, arm) for arm in funnel.CANDIDATES}
+    survivors = [arm for arm, reading in arms.items() if reading["verdict"] == "REACHABLE"]
+    write_rows(_rows_path(args, "pilot"), rows)
+    blob = {"frozen": _frozen("pilot", "close"), "n": len(rows), "arms": arms,
+            "control_b_changed": funnel.changed_count(rows, "B"), "survivors": survivors}
+    path = _write_json(_primary_target(args), blob)
+    print(json.dumps(arms, indent=1), f"\n-> {path}", flush=True)
+    return 0 if survivors else 1
+
+
+def cmd_train(args) -> int:
+    """Rows only: no ΔExpR is computed or printed until --stage report."""
+    rows = build_rows("train", args.basis, tickers=args.tickers, workers=args.workers,
+                      earnings_dir=args.earnings_dir)
+    path = write_rows(_rows_path(args, "train"), rows)
+    training_data.write_provenance(path)
+    print(f"{len(rows)} rows -> {path}", flush=True)
+    return 0
+
+
+# --- report -----------------------------------------------------------------------
+
+def family_best(result, family) -> str | None:
+    """The family's stage-1 adopted arm, else its best pooled fold-train ΔExpR."""
+    adopted = ((result.get("stage1") or {}).get(family) or {}).get("adopted")
+    if adopted:
+        return adopted
+    scored = [(result["stage0"][arm]["delta_r"], arm) for arm in funnel.FAMILIES[family]
+              if (result["stage0"].get(arm) or {}).get("delta_r") is not None]
+    return max(scored)[1] if scored else None
+
+
+def best_arm(result) -> str | None:
+    scored = [(reading["delta_r"], arm) for arm, reading in result["stage0"].items()
+              if reading.get("delta_r") is not None]
+    return max(scored)[1] if scored else None
+
+
+def regime_arms_for(result) -> list[str]:
+    picks = (family_best(result, "R"), family_best(result, "S"), result.get("stage3_arm"))
+    return list(dict.fromkeys(arm for arm in picks if arm))
+
+
+def sensitivity_arms(result) -> list[str]:
+    return list(dict.fromkeys(("R0.75", *regime_arms_for(result))))
+
+
+def _apply_pilot(result, pilot) -> dict:
+    refused = [arm for arm in funnel.CANDIDATES if arm not in pilot["survivors"]]
+    stage3 = None if result.get("stage3_arm") in refused else result.get("stage3_arm")
+    return {**result, "stage3_arm": stage3, "pilot_refused": refused}
+
+
+def _described(rows, arm, risk, with_regime) -> dict:
+    out = {key: value for key, value in blocks.describe_arm(rows, arm, risk_dollars=risk).items()
+           if key != "regime"}
+    if with_regime:
+        out["regime"] = blocks.regime_split(rows, arm)
+    return out
+
+
+def _report_close(rows, args) -> dict:
+    result = _apply_pilot(funnel.run_funnel(rows, n_resamples=args.resamples),
+                          _read_json(args.out_dir / "pilot-close.json"))
+    regime_arms = regime_arms_for(result)
+    risk = float(config.COMMISSION_RISK_BASIS)
+    best = best_arm(result)
+    return {"frozen": _frozen("train", "close"), "funnel": result, "regime_arms": regime_arms,
+            "blocks": {arm: _described(rows, arm, risk, arm in regime_arms)
+                       for arm in funnel.CANDIDATES},
+            "summary": {"n": len(rows), "stopped_at": result["stopped_at"],
+                        "stage3_arm": result["stage3_arm"], "best_arm": best,
+                        "ledger_p": result["stage0"][best]["p"] if best else None,
+                        "holm": result["holm"], "cells_looked_at": funnel.cells_looked_at()}}
+
+
+def _report_high_low(rows, args) -> dict:
+    close = _read_json(args.out_dir / "funnel-close.json")["funnel"]
+    arms = sensitivity_arms(close)
+    readings = {arm: {"stage0": funnel.stage0(rows, arm, n_resamples=args.resamples),
+                      "stage2": funnel.stage2(rows, arm),
+                      "close_stage0_delta_r": close["stage0"][arm]["delta_r"]} for arm in arms}
+    return {"frozen": _frozen("train", "high_low"), "readings": readings,
+            "summary": {"n": len(rows), "arms": arms,
+                        "cells_looked_at": funnel.cells_looked_at(sensitivity=6 * len(arms))}}
+
+
+def cmd_report(args) -> int:
+    rows = read_rows(_rows_path(args, "train"))
+    blob = (_report_close if args.basis == "close" else _report_high_low)(rows, args)
+    path = _write_json(_primary_target(args), blob)
+    print(json.dumps(blob["summary"], indent=1, default=str), f"\n-> {path}", flush=True)
+    return 0
+
+
+# --- validation (the one shot) ----------------------------------------------------
+
+def validation_arms_blob(rows, arm) -> dict:
+    """validate_component.py arms file: baseline = control A, component = the stage-3 arm."""
+    from swingbot.core.backtesting.arms.provenance import code_hash
+    return {"provenance": {"producer": "measure_giveback_levels.py", "stage": "validation",
+                           "signal_window": list(stage_window("validation")), "arm": arm,
+                           "arm_spec": funnel.ARMS[arm], "baseline_arm": "A",
+                           "data_source": DATA_SOURCE, "instrument": "v1",
+                           "code_hash": code_hash(), "bespoke": BESPOKE_REASON},
+            "baseline": [dataclasses.asdict(t) for t in funnel.arm_trades(rows, "A")],
+            "component": [dataclasses.asdict(t) for t in funnel.arm_trades(rows, arm)]}
+
+
+def validation_readings(rows, arm, *, n_resamples) -> dict:
+    """The spec's fixed stage-3 readings beside the gate: arm-vs-A, A-vs-B, arm-vs-B."""
+    risk = float(config.COMMISSION_RISK_BASIS)
+    return {"arm": arm, "n": len(rows), "changed": funnel.changed_count(rows, arm),
+            "arm_vs_a": funnel.paired_delta(rows, arm, n_resamples=n_resamples),
+            "a_vs_b": funnel.paired_delta(rows, "A", against="B", n_resamples=n_resamples),
+            "arm_vs_b": funnel.paired_delta(rows, arm, against="B", n_resamples=n_resamples),
+            "week_interval": funnel.week_interval(rows, arm, n_resamples=n_resamples),
+            "permutation_p": permutation_p_expectancy(funnel.arm_trades(rows, "A"),
+                                                      funnel.arm_trades(rows, arm),
+                                                      n_perm=200, seed=42),
+            "blocks": blocks.seven_blocks(rows, arm, risk_dollars=risk),
+            "per_horizon": blocks.per_horizon(rows, arm),
+            "concentration": blocks.concentration(rows, arm),
+            "regime": blocks.regime_split(rows, arm), "flips": blocks.flips(rows, arm)}
+
+
+def cmd_validation(args) -> int:
+    rows = build_rows("validation", "close", arms=("A", "B", args.arm), tickers=args.tickers,
+                      workers=args.workers, earnings_dir=args.earnings_dir)
+    write_rows(_rows_path(args, "validation"), rows)
+    arms_file = _write_json(args.rows_dir / "validation-arms.json",
+                            validation_arms_blob(rows, args.arm))
+    readings = {"frozen": _frozen("validation", "close"),
+                "preregistration": str(args.preregistration),
+                **validation_readings(rows, args.arm, n_resamples=args.resamples)}
+    path = _write_json(_primary_target(args), readings)
+    print(f"permutation_p={readings['permutation_p']}\n-> {path}\n-> {arms_file}", flush=True)
+    return 0
+
+
+COMMANDS = {"pilot": cmd_pilot, "train": cmd_train, "report": cmd_report,
+            "validation": cmd_validation}
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    refusal = _refusal(args, _primary_target(args))
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 1
+    training_data.select(DATA_SOURCE)
+    return COMMANDS[args.stage](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
