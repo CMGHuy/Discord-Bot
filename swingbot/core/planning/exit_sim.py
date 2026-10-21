@@ -6,6 +6,7 @@ backtested behaviour. Any change here changes what VALIDATED badges mean.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import pandas as pd
@@ -277,6 +278,82 @@ def giveback_level(extreme: float | None, direction: str) -> float | None:
     return giveback_stop(float(extreme), runner_giveback_pct(), direction)
 
 
+#: v178: simulator-only give-back modes. "pct" is the live v176 rule and the
+#: default; "range" (k x ATR) and "profit_share" (max(f x profit, 1.0 x ATR))
+#: are the pre-registered arms. Module constants, never config: plan_manager
+#: calls giveback_level(), so a mode read from config there would change live
+#: behaviour on a SIGHUP. The v178 measurement script assigns them per arm
+#: (and in its pool workers' initializer).
+GIVEBACK_MODES: tuple[str, ...] = ("pct", "range", "profit_share")
+GIVEBACK_MODE: str = "pct"
+GIVEBACK_K: float = 1.0
+GIVEBACK_F: float = 0.33
+GIVEBACK_FLOOR_ATR: float = 1.0
+GIVEBACK_K_BOUNDS = (0.25, 3.0)
+GIVEBACK_F_BOUNDS = (0.05, 0.95)
+
+
+def _check_giveback_mode(mode: str) -> None:
+    if mode not in GIVEBACK_MODES:
+        raise ValueError(f"GIVEBACK_MODE must be one of {GIVEBACK_MODES}, got {mode!r}")
+
+
+def _check_giveback_bound(name: str, value: float, bounds: tuple[float, float]) -> None:
+    low, high = bounds
+    if not low <= value <= high:
+        raise ValueError(f"{name} must lie in [{low}, {high}], got {value!r}")
+
+
+def _usable_atr(atr: float | None) -> bool:
+    """A real, finite, positive ATR. Anything else means no adaptive term --
+    never _safe_atr_value's 2%-of-entry stand-in, which would be a term."""
+    return atr is not None and math.isfinite(atr) and atr > 0
+
+
+def giveback_allowance(mode: str, extreme: float, entry: float, atr: float | None,
+                       *, k: float, f: float) -> float | None:
+    """v178: the distance from the best price to the give-back level.
+
+    pct: RUNNER_GIVEBACK_PCT of the best price (descriptive only -- the pct
+    walk itself goes through giveback_level). range: ``k x ATR``.
+    profit_share: ``max(f x |best - entry|, GIVEBACK_FLOOR_ATR x ATR)``.
+    The parameter bounds are checked first; then an adaptive mode with no
+    usable ATR (missing, NaN, infinite, zero, negative) returns None."""
+    _check_giveback_mode(mode)
+    if mode == "pct":
+        return abs(float(extreme)) * runner_giveback_pct() / 100.0
+    if mode == "range":
+        _check_giveback_bound("GIVEBACK_K", k, GIVEBACK_K_BOUNDS)
+    else:
+        _check_giveback_bound("GIVEBACK_F", f, GIVEBACK_F_BOUNDS)
+    if not _usable_atr(atr):
+        return None
+    if mode == "range":
+        return k * float(atr)
+    return max(f * abs(float(extreme) - float(entry)), GIVEBACK_FLOOR_ATR * float(atr))
+
+
+def giveback_term(extreme: float | None, entry: float, atr: float | None,
+                  direction: str) -> float | None:
+    """v178: the give-back term under GIVEBACK_MODE, read at call time.
+
+    pct returns giveback_level() itself -- the live v176 rule, byte-identical.
+    range / profit_share return ``best - allowance`` (long) or ``best +
+    allowance`` (short). None with the flag off (control B), before the first
+    extreme, or with no usable ATR: a missing term never loosens a stop."""
+    _check_giveback_mode(GIVEBACK_MODE)
+    if GIVEBACK_MODE == "pct":
+        return giveback_level(extreme, direction)
+    if extreme is None or not config.RUNNER_GIVEBACK_ENABLED:
+        return None
+    best = float(extreme)
+    allowance = giveback_allowance(GIVEBACK_MODE, best, entry, atr,
+                                   k=GIVEBACK_K, f=GIVEBACK_F)
+    if allowance is None:
+        return None
+    return best - allowance if direction == "bullish" else best + allowance
+
+
 def tighter_stop(stop: float, other: float | None, is_bull: bool) -> float:
     """The tighter of two runner stops; a missing term never loosens ``stop``."""
     if other is None:
@@ -471,9 +548,11 @@ def _pre_tp1_phase(ctx) -> ExitResult | int:
                      round((exit_price - ctx.entry_price) * ctx.sign / ctx.risk, 3), "timeout")
 
 
-def _runner_bar_exit(ctx, j, runner_stop, floor, gb_extreme=None):
+def _runner_bar_exit(ctx, j, runner_stop, floor, gb_level=None):
     """Runner stop first, then TP2; the stop checked is the one set BEFORE bar j.
-    (price, index, reason, stop_source); stop_source is None for TP2."""
+    (price, index, reason, stop_source); stop_source is None for TP2.
+    v178: ``gb_level`` is the give-back level that set ``runner_stop``,
+    carried by the loop (_carried_level), not recomputed here."""
     hi, lo = float(ctx.high[j]), float(ctx.low[j])
     if (lo <= runner_stop) if ctx.is_bull else (hi >= runner_stop):
         # v39: "runner_be" means "closed at its initial post-TP1 floor"; the
@@ -481,7 +560,7 @@ def _runner_bar_exit(ctx, j, runner_stop, floor, gb_extreme=None):
         # v176: a give-back close is still "runner_trail"; the term that
         # fired rides on ExitResult.runner_stop_source instead.
         reason = "runner_be" if runner_stop == floor else "runner_trail"
-        return runner_stop, j, reason, _stop_source(ctx, runner_stop, floor, gb_extreme)
+        return runner_stop, j, reason, runner_stop_source(runner_stop, floor, gb_level)
     tp2 = ctx.plan.tp2
     if tp2 is not None and ((hi >= tp2) if ctx.is_bull else (lo <= tp2)):
         return tp2, j, "runner_tp2", None
@@ -522,18 +601,24 @@ def _giveback_extreme(ctx, j: int, extreme: float | None) -> float:
     return max(extreme, price) if ctx.is_bull else min(extreme, price)
 
 
-def _giveback_ratchet(ctx, extreme: float, runner_stop: float) -> float:
-    """v176: tighten the runner stop for the NEXT bar to the give-back level
-    off ``extreme``. Never loosens (tighter_stop); a no-op with the flag off."""
-    return tighter_stop(runner_stop, giveback_level(extreme, ctx.plan.direction), ctx.is_bull)
+def _giveback_term(ctx, j: int, extreme: float | None, atr_series) -> float | None:
+    """v178: the give-back level for bar j + 1, from the extreme through bar j
+    and ATR(14) through bar j -- the index _chandelier_ratchet reads, so the
+    tested bar's own range never enters its level (no lookahead)."""
+    return giveback_term(extreme, ctx.entry_price, float(atr_series.iloc[j]),
+                         ctx.plan.direction)
 
 
-def _stop_source(ctx, runner_stop: float, floor: float, gb_extreme: float | None) -> str:
-    """Which term set the stop that just fired. The give-back level is
-    recomputed from the SAME extreme that set ``runner_stop`` (the extreme is
-    only extended after the bar test), so the float equality is exact."""
-    return runner_stop_source(runner_stop, floor,
-                              giveback_level(gb_extreme, ctx.plan.direction))
+def _carried_level(runner_stop: float, level: float | None,
+                   carried: float | None) -> float | None:
+    """v178: the give-back level that set the runner stop, recorded at the
+    ratchet. An ATR-dependent level set on an earlier bar is not reproduced by
+    recomputing it from a later ATR, so the source is carried with the stop.
+    In pct mode the level only tightens with its extreme, so this equals the
+    old recomputation exactly."""
+    if level is not None and runner_stop == level:
+        return level
+    return carried
 
 
 def _runner_timeout(ctx, checked_stop) -> float:
@@ -548,7 +633,9 @@ def _runner_phase(df, ctx, tp1_index, trace=None):
     the chandelier, from this bar's close, effective next bar; a stall exits at
     the next open. v176: the give-back ratchets after the chandelier and before
     the structure rule (the live order), from its own extreme
-    (GIVEBACK_EXTREME_BASIS), effective next bar."""
+    (GIVEBACK_EXTREME_BASIS), effective next bar.
+    v178: the give-back term follows GIVEBACK_MODE (_giveback_term, ATR through
+    bar j) and the level that set the stop is carried for runner_stop_source."""
     if acceptance_exit(ctx.plan, float(ctx.close[tp1_index])):
         # v129: the TP1 bar itself closed through the threshold -- TP1 banked
         # first (stop -> target -> acceptance), the remainder exits at that
@@ -564,6 +651,7 @@ def _runner_phase(df, ctx, tp1_index, trace=None):
     runner_stop = checked_stop = floor
     extreme_close = float(ctx.close[tp1_index])
     gb_extreme = _giveback_extreme(ctx, tp1_index, None)
+    gb_level = None
     atr_series = atr_indicator(df, 14)
     frame = runner_structure_frame(df) if config.RUNNER_STRUCTURE_EXIT != "off" else None
     stall_pending = False
@@ -571,14 +659,16 @@ def _runner_phase(df, ctx, tp1_index, trace=None):
         if stall_pending:                            # the open comes first
             return float(ctx.open_[j]), j, "runner_progress_stall", None
         checked_stop = runner_stop
-        hit = _runner_bar_exit(ctx, j, runner_stop, floor, gb_extreme)
+        hit = _runner_bar_exit(ctx, j, runner_stop, floor, gb_level)
         if hit is not None:
             return hit
         c = float(ctx.close[j])
         extreme_close = max(extreme_close, c) if ctx.is_bull else min(extreme_close, c)
         gb_extreme = _giveback_extreme(ctx, j, gb_extreme)
         runner_stop = _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series)
-        runner_stop = _giveback_ratchet(ctx, gb_extreme, runner_stop)
+        level = _giveback_term(ctx, j, gb_extreme, atr_series)
+        runner_stop = tighter_stop(runner_stop, level, ctx.is_bull)
+        gb_level = _carried_level(runner_stop, level, gb_level)
         if frame is not None:
             runner_stop, stall_pending = _structure_update(ctx, frame, j, runner_stop, atr_series)
         if trace is not None:
