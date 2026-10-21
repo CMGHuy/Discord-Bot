@@ -4,7 +4,7 @@ Pure functions over the v178 row contract (one row per entry, the result of
 every arm under ``row["arms"][arm_id]``; plan v178 index, "Row contract").
 Every comparison is paired on the same entries against control A, the live
 fixed 5%. The rules are the spec's, frozen 2026-10-19
-(docs/superpowers/specs/2026-10-19-v178-runner-giveback-levels-preregistration-design.md
+(docs/superpowers/specs/implemented/2026-10-19-v178-runner-giveback-levels-preregistration-design.md
 § The test). Nothing here simulates and nothing reads past the walk-forward
 windows: VALIDATION is the script's one shot through validate_component.py.
 """

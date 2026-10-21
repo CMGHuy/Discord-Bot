@@ -1,7 +1,7 @@
 # v178 measurement: runner give-back levels (range-multiple and profit-share arms)
 
-**Plan:** [`2026-10-19-v178-runner-giveback-levels-preregistration_0-index.md`](../plans/2026-10-19-v178-runner-giveback-levels-preregistration_0-index.md)
-**Spec:** [`2026-10-19-v178-runner-giveback-levels-preregistration-design.md`](../specs/2026-10-19-v178-runner-giveback-levels-preregistration-design.md)
+**Plan:** [`2026-10-19-v178-runner-giveback-levels-preregistration_0-index.md`](../plans/implemented/2026-10-19-v178-runner-giveback-levels-preregistration_0-index.md)
+**Spec:** [`2026-10-19-v178-runner-giveback-levels-preregistration-design.md`](../specs/implemented/2026-10-19-v178-runner-giveback-levels-preregistration-design.md)
 **Raw results:** v178/*.json
 **Looks:** one per output (the script refuses an existing file).
 **Verdict:** NO-LIFT — every arm refused at stage 0.
