@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — the short race is instrument plumbing and the two screens are measurements. A `SCREEN-PASS` is evidence for the *trigger* under the generic ATR race only; it would license a later `Edge: volume` short-entry spec, where Schwab's stop and targets are still unmeasured. This spec claims no edge.
 **Screen:** exempt (integrity)
 **Panel:** quant-researcher, quant-engineer, veteran-trader
-**Status:** spec written 2026-10-21 from a brainstorm with the partner (sources: Schwab "The Ins and Outs of a Swing Trade", "Short Selling: The Risks and Rewards", TradingView short-idea format). Partner decisions: more shorts *and* a higher short win rate is the goal; breakdowns only in the stock's own downtrend, no SPY gate; screen both entry triggers; later spec targets TP1 at half the projected move, TP2 at the full projection.
+**Status:** spec written 2026-10-21 from a brainstorm with the partner (sources: Schwab "The Ins and Outs of a Swing Trade", "Short Selling: The Risks and Rewards", TradingView short-idea format). Partner decisions: more shorts *and* a higher short win rate is the goal; breakdowns only in the stock's own downtrend, no SPY gate; screen both entry triggers; later spec targets TP1 at half the projected move, TP2 at the full projection. Panel applied 2026-10-21; partner approved the spec the same day and ruled it distinct from the closed v105 (not a re-run).
 
 ## Why
 
