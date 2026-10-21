@@ -1,7 +1,7 @@
 """API plan rows preserve the projection's provenance."""
 import swingbot.admin.app  # initializes API routes before importing one endpoint
 
-from swingbot.admin.api_v1.trades import _row_from_plan, _expand_plan_row
+from swingbot.admin.api_v1.trades import _expand_plan_row, _row_from_plan, _row_from_trade
 
 
 def partial_plan(**kw):
@@ -204,3 +204,159 @@ def test_risk_stop_is_the_plan_stop_while_stop_loss_is_the_working_stop():
     assert row["risk_stop"] == 90.0
     assert round(row["stop_loss"], 4) == 113.3333
     assert "_risk_stop" not in row
+
+
+# --- v177: the Plan cell's runner fields ----------------------------------
+
+RUNNER_CELL_KEYS = ("tp1", "best_pnl_pct", "stop_pnl_pct",
+                    "runner_exit_price", "runner_exit_reason")
+
+
+def rklb_runner(**kw):
+    """The live RKLB short that motivated v177: TP1 banked, no TP2, the stop
+    trailing down behind a best price of 49.94."""
+    fields = {"ticker": "RKLB", "direction": "bearish", "entry_price": 60.67,
+              "trigger_price": 60.67, "stop_loss": 61.85, "tp1": 58.33,
+              "working_stop": 52.437, "runner_high_close": 49.94,
+              "legs_realized": [{"fraction": 0.5, "exit_price": 58.33, "r": 1.98,
+                                 "reason": "tp1",
+                                 "closed_at": "2026-10-10T14:00:00+00:00"}]}
+    fields.update(kw)
+    return partial_plan(**fields)
+
+
+def manually_closed_partial(**kw):
+    """A PARTIAL plan closed from the admin UI: `_close_plan` records the
+    CLOSED transition with reason "manual" and appends NO runner leg."""
+    plan = partial_plan(status="CLOSED", **kw)
+    plan["legs_realized"] = [
+        {"fraction": 0.5, "exit_price": 121.0, "r": 2.1, "reason": "tp1",
+         "closed_at": "2026-09-02T14:00:00+00:00"},
+    ]
+    plan["status_history"] = [
+        {"status": "PARTIAL", "reason": "tp1", "at": "2026-09-02T14:00:00+00:00"},
+        {"status": "CLOSED", "reason": "manual", "at": "2026-09-04T16:00:00+00:00"},
+    ]
+    return plan
+
+
+def _cell(row):
+    return {key: row[key] for key in RUNNER_CELL_KEYS}
+
+
+def test_rklb_short_runner_carries_tp1_and_both_signed_percentages():
+    row = _row_from_plan(rklb_runner(), None, set())
+    assert row["tp1"] == 58.33
+    assert row["best_pnl_pct"] == 17.69
+    assert row["stop_pnl_pct"] == 13.57
+    assert (row["runner_exit_price"], row["runner_exit_reason"]) == (None, None)
+    # The view fields every other surface agrees on are untouched (v73).
+    assert row["stop_loss"] == 52.437
+    assert row["target"] is None
+    assert row["risk_stop"] == 61.85
+
+
+def test_long_runner_percentages_are_signed_the_other_way():
+    row = _row_from_plan(partial_plan(runner_high_close=130.0), None, set())
+    assert row["tp1"] == 120.0
+    assert row["best_pnl_pct"] == 30.0
+    assert row["stop_pnl_pct"] == 13.33
+
+
+def test_a_runner_with_no_best_price_yet_measures_from_the_tp1_fill():
+    row = _row_from_plan(partial_plan(), None, set())       # runner_high_close absent
+    assert row["runner_best"] is None
+    assert row["best_pnl_pct"] == 21.0                       # the 121.0 TP1 fill
+    assert row["stop_pnl_pct"] == 13.33
+
+
+def test_a_derived_floor_keeps_both_percentages_and_its_stop_kind():
+    row = _row_from_plan(partial_plan(working_stop=None, runner_high_close=130.0), None, set())
+    assert row["stop_kind"] == "derived_floor"
+    assert row["tp1"] == 120.0
+    assert row["stop_pnl_pct"] == 13.33
+    assert row["best_pnl_pct"] == 30.0
+
+
+def test_a_runner_with_a_tp2_gets_none_of_the_runner_cell_fields():
+    row = _row_from_plan(partial_plan(tp2=140.0, runner_high_close=130.0), None, set())
+    assert _cell(row) == dict.fromkeys(RUNNER_CELL_KEYS)
+
+
+def test_an_active_plan_gets_none_of_the_runner_cell_fields():
+    row = _row_from_plan(partial_plan(status="ACTIVE", legs_realized=[]), None, set())
+    assert _cell(row) == dict.fromkeys(RUNNER_CELL_KEYS)
+
+
+def test_the_tp1_leg_row_of_a_still_partial_plan_clears_the_line_two_fields():
+    trade = {"id": "t1", "shares": 10, "status": "open"}
+    leg_row, runner_row = _expand_plan_row(rklb_runner(), trade, set())
+    assert leg_row["status"] == "CLOSED"
+    assert leg_row["bar_kind"] == "trailing"                 # the Trades page's leg icon
+    assert _cell(leg_row) == dict.fromkeys(RUNNER_CELL_KEYS)
+    assert runner_row["status"] == "PARTIAL"
+    assert (runner_row["tp1"], runner_row["best_pnl_pct"], runner_row["stop_pnl_pct"]) == (
+        58.33, 17.69, 13.57)
+
+
+def test_both_rows_of_a_closed_partial_trade_carry_the_runner_exit():
+    trade = {"id": "t1", "shares": 10, "status": "win", "exit_price": 130.0}
+    rows = _expand_plan_row(closed_scaled_out_plan(), trade, set())
+    assert [(r["runner_exit_price"], r["runner_exit_reason"]) for r in rows] == [
+        (130.0, "tp1_runner_tp2"), (130.0, "tp1_runner_tp2")]
+    assert [r["exit_price"] for r in rows] == [121.0, 130.0]  # each leg keeps its own fill
+    for r in rows:
+        assert (r["tp1"], r["best_pnl_pct"], r["stop_pnl_pct"]) == (None, None, None)
+
+
+def test_a_give_back_close_reports_giveback_not_the_trail_reason():
+    plan = closed_scaled_out_plan()
+    plan["legs_realized"][1].update({"exit_price": 126.0, "reason": "tp1_runner_trail",
+                                     "stop_source": "giveback", "giveback_pct": 5.0})
+    rows = _expand_plan_row(plan, {"id": "t1", "shares": 10, "status": "win"}, set())
+    assert [(r["runner_exit_price"], r["runner_exit_reason"]) for r in rows] == [
+        (126.0, "giveback"), (126.0, "giveback")]
+
+
+def test_a_floor_stop_close_passes_its_leg_reason_through():
+    plan = closed_scaled_out_plan()
+    plan["legs_realized"][1].update({"exit_price": 113.5, "reason": "tp1_runner_be",
+                                     "stop_source": "floor"})
+    rows = _expand_plan_row(plan, {"id": "t1", "shares": 10, "status": "win"}, set())
+    assert rows[1]["runner_exit_reason"] == "tp1_runner_be"
+
+
+def test_an_active_stop_out_has_no_runner_exit():
+    plan = partial_plan(status="CLOSED", legs_realized=[
+        {"fraction": 1.0, "exit_price": 90.0, "r": -1.0, "reason": "loss"}])
+    rows = _expand_plan_row(plan, {"id": "t1", "shares": 10, "status": "loss"}, set())
+    assert len(rows) == 1
+    assert (rows[0]["runner_exit_price"], rows[0]["runner_exit_reason"]) == (None, None)
+
+
+def test_a_manual_close_after_tp1_reads_the_trades_own_exit_price():
+    trade = {"id": "t1", "shares": 10, "status": "win", "exit_price": 125.5}
+    rows = _expand_plan_row(manually_closed_partial(), trade, set())
+    assert len(rows) == 1                                     # no runner leg was written
+    assert (rows[0]["runner_exit_price"], rows[0]["runner_exit_reason"]) == (125.5, "manual")
+    assert rows[0]["exit_price"] == 121.0                     # the leg row keeps the TP1 fill
+
+
+def test_a_manual_close_whose_price_fetch_failed_shows_no_runner_exit():
+    trade = {"id": "t1", "shares": 10, "status": "closed", "exit_price": None}
+    rows = _expand_plan_row(manually_closed_partial(), trade, set())
+    assert (rows[0]["runner_exit_price"], rows[0]["runner_exit_reason"]) == (None, None)
+
+
+def test_a_manual_close_with_no_linked_trade_shows_no_runner_exit():
+    rows = _expand_plan_row(manually_closed_partial(), None, set())
+    assert (rows[0]["runner_exit_price"], rows[0]["runner_exit_reason"]) == (None, None)
+
+
+def test_a_legacy_trade_emits_every_runner_cell_key_as_none():
+    trade = {"id": "L1", "ticker": "AAPL", "status": "win", "direction": "bullish",
+             "entry": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "exit_price": 110.0,
+             "opened_at": "2026-09-01T09:00:00+00:00",
+             "closed_at": "2026-09-03T15:00:00+00:00"}
+    row = _row_from_trade(trade, set())
+    assert _cell(row) == dict.fromkeys(RUNNER_CELL_KEYS)
