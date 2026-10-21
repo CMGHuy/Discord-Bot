@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -81,5 +83,64 @@ describe('recent activity panel', () => {
   it('says so when there is nothing yet rather than rendering an empty box', () => {
     const el = render({ events: [] });
     expect(el.textContent).toContain('No activity yet');
+  });
+});
+
+const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/panels/recent-activity.ts'), 'utf8');
+const rule = (selector: string) => SOURCE.match(
+  new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{[^}]*\\}`),
+)?.[0] ?? '';
+
+describe('recent activity rows open a trade (v179 section 3.2, section 6b.3)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    });
+  });
+
+  const EVENTS = [
+    { kind: 'opened', at: '2026-09-11T15:00:00Z', ticker: 'ASTS', direction: 'bullish', status: 'ACTIVE',
+      detail: 'at 60.54', r: null, id: 't1:opened', tradeId: 't1' },
+    { kind: 'closed', at: '2026-09-11T14:00:00Z', ticker: 'HOOD', direction: 'bearish', status: 'CLOSED',
+      detail: 'Closed at +1.20R', r: 1.2, id: 't2:closed', tradeId: 't2' },
+  ];
+
+  function mount() {
+    const f = TestBed.createComponent(RecentActivity);
+    f.componentRef.setInput('events', EVENTS);
+    f.detectChanges();
+    return f;
+  }
+
+  it('renders each event as one native button inside its list item', () => {
+    const el = mount().nativeElement as HTMLElement;
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('li.event > button.event-hit')];
+    expect(buttons).toHaveLength(2);
+    expect(buttons.every((b) => b.type === 'button')).toBe(true);
+    expect(buttons.every((b) => b.getAttribute('aria-haspopup') === 'dialog')).toBe(true);
+    expect(buttons[0].textContent).toContain('ASTS');
+    expect(buttons[0].querySelector('time.at')?.getAttribute('datetime')).toBe(EVENTS[0].at);
+  });
+
+  it('emits only the event that was activated', () => {
+    const f = mount();
+    const picked: unknown[] = [];
+    f.componentInstance.eventActivate.subscribe((e: unknown) => picked.push(e));
+    (f.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button.event-hit')[1].click();
+    expect(picked).toEqual([EVENTS[1]]);
+  });
+
+  it('gives each row a touch-sized hit area and one text baseline', () => {
+    const hit = rule('.event-hit');
+    expect(hit).toContain('min-height: var(--control-h)');
+    expect(hit).toContain('align-items: baseline');
+    expect(hit).toContain('width: 100%');
+    expect(rule('.event-hit sb-icon')).toContain('align-self: center');
+    expect(rule('.event-hit sb-direction-arrow')).toContain('align-self: center');
+    expect(SOURCE).not.toMatch(/\.event \{[^}]*display: grid/);
+  });
+
+  it('shows keyboard focus on the row button', () => {
+    expect(rule('.event-hit:focus-visible')).toContain('outline');
   });
 });

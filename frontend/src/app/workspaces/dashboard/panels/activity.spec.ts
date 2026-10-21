@@ -70,4 +70,16 @@ describe('activity derivation', () => {
       row({ id: `p${i}`, opened_at: `2026-09-11T10:${String(i).padStart(2, '0')}:00Z` }));
     expect(deriveActivity(rows, 6)).toHaveLength(6);
   });
+  it('carries the trade id separately for every event, including ids containing colons', () => {
+    const events = deriveActivity([
+      row({ id: 'PLAN:7', status: 'CLOSED', closed_at: '2026-09-11T16:20:00Z' }),
+      row({ id: 'p2', status: 'CANCELLED', opened_at: null, closed_at: '2026-09-11T12:00:00Z' }),
+    ]);
+    expect(events.map((e) => [e.kind, e.tradeId])).toEqual([
+      ['closed', 'PLAN:7'],
+      ['opened', 'PLAN:7'],
+      ['cancelled', 'p2'],
+    ]);
+  });
+
 });
