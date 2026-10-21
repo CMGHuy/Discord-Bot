@@ -444,3 +444,8 @@ def test_validation_writes_the_component_file_and_the_fixed_readings(dirs, tmp_p
     assert readings["changed"] == 6 and readings["frozen"]["window"] == list(mgl.stage_window("validation"))
     assert _main(dirs, *argv) == 1
     assert "refused:one-look" in capsys.readouterr().err
+
+
+def test_a_ticker_listed_after_the_stage_ends_has_no_rows(tmp_path):
+    df = make_ohlcv(BARS, start="2031-01-04")                   # every bar is past the frame end
+    assert mgl.rows_for("NEW", df, stage="train", basis="close", earnings_dir=tmp_path) == []

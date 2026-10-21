@@ -310,6 +310,8 @@ def rows_for(ticker, df, *, stage, basis, arms=ARM_IDS, earnings_dir=EARNINGS_CS
         raise ValueError("arms must include control A (the pairing baseline)")
     exit_sim.GIVEBACK_EXTREME_BASIS = basis
     df = df.loc[:frame_end(stage)]
+    if df.empty:                                     # listed after the stage ends
+        return []
     series = ticker_series(ticker, df, earnings_dir)
     rows = (entry_row(ticker, df, entry, arms=arms, series=series)
             for entry in _entries(ticker, df, stage_window(stage)))
