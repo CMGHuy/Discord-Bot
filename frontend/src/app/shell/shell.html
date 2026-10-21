@@ -22,7 +22,7 @@
            has no collapsed-rail form. -->
       <a class="brand sb-hit" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
         <sb-icon name="brand" />
-        @if (!railed()) {
+        @if (!railed() || overlay()) {
           <span class="word"><span>Bomeo</span><span>Capital</span></span>
         }
       </a>

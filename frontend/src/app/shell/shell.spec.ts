@@ -335,6 +335,15 @@ describe('shell navigation', () => {
   });
 });
 
+describe('shell wordmark on a phone', () => {
+  it('shows the wordmark in the phone overlay, which is railed by width but is not a rail', () => {
+    // jsdom has no layout: the template rule is what carries it. The overlay
+    // is a full sheet, so only the desktop/tablet rail drops the words.
+    const html = readFileSync(join(process.cwd(), 'src/app/shell/shell.html'), 'utf8');
+    expect(html).toMatch(/@if \(!railed\(\) \|\| overlay\(\)\) \{\s*<span class="word">/);
+  });
+});
+
 describe('shell.css breakpoints', () => {
   const css = readFileSync(join(process.cwd(), 'src/app/shell/shell.css'), 'utf8');
 
