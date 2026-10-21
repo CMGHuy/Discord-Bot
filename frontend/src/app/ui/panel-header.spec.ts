@@ -24,6 +24,15 @@ describe('PanelHeader alignment (v179 §3.4)', () => {
     expect(SOURCE).not.toMatch(/align-items:\s*center/);
   });
 
+  it('does not let the 44px touch hint push its title off a header without one (v179 layout audit)', () => {
+    // The hint's trigger is a 44px box on touch widths; baseline-aligned in the heading it made the line 44px
+    // tall and put the title 2-3px lower than in a sibling panel's header with no hint. Its negative block
+    // margin brings its layout height back to the 14px glyph, the hit area stays 44px.
+    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 1023px\) \{([^}]*\})\s*\}/);
+    expect(block).not.toBeNull();
+    expect(block![1]).toMatch(/sb-hint \{[^}]*margin-block:\s*calc\(\(14px - var\(--control-h\)\) \/ 2\)/);
+  });
+
   it('keeps N=, total and the hint inside the heading line', () => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
     const fixture = TestBed.createComponent(PanelHeader);
