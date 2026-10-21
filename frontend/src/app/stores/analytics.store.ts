@@ -28,6 +28,7 @@ import {
   BookScope,
   LiveLossRow,
   LiveLossWatch,
+  OverrideFidelity,
   TuneDefaults,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
@@ -204,7 +205,7 @@ export const LEGACY_TABS: Record<string, AnalyticsTab> = {
 export type PanelKey =
   | 'performance' | 'equityCurve' | 'byDimension' | 'heatGrid' | 'exitQuality'
   | 'journal' | 'strategies' | 'calibration' | 'plans'
-  | 'byHorizon' | 'byDirection' | 'byDow' | 'partials' | 'varianceBand';
+  | 'byHorizon' | 'byDirection' | 'byDow' | 'partials' | 'overrideFidelity' | 'varianceBand';
 
 export const DEFAULT_SCOPE: BookScope = {
   from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null,
@@ -382,6 +383,9 @@ interface AnalyticsSlice {
   /** v175 — the whole-book losing-run band (Overview's "Normal bad luck"
    *  panel). Unscoped: it never feeds `scopeN`. */
   varianceBand: AnalyticsVarianceBand | null; varianceBandError: string | null;
+  /** v173 — the Execution tab's "Overrides vs engine" panel. Global, never
+   *  scoped, and never feeds scopeN. */
+  overrideFidelity: OverrideFidelity | null; overrideFidelityError: string | null;
 
   /** SR51 — the tracked job's grid, one row per parameter combination.
    *  Empty while it is still running, which the endpoint answers with a 200
@@ -471,6 +475,7 @@ export const AnalyticsStore = signalStore(
       plans: null, plansError: null,
       partials: null, partialsError: null,
       varianceBand: null, varianceBandError: null,
+      overrideFidelity: null, overrideFidelityError: null,
       gridStrategy: null,
       gridDataSource: null,
       tuneDefaults: null,
@@ -696,6 +701,9 @@ export const AnalyticsStore = signalStore(
 
     /** The one scope every scoped request is issued against (v94 D2). */
     const s = (): BookScope => store.scope();
+    /** v173 — global: no scope argument, so a scope change cannot cut the override set. */
+    const loadOverrideFidelity = (): void =>
+      fetchPanel(api.analyticsOverrideFidelity(), 'overrideFidelity', 'overrideFidelityError');
 
     /* -- per-tab loaders -------------------------------------------------
      *
@@ -725,6 +733,7 @@ export const AnalyticsStore = signalStore(
       fetchPanel(api.analyticsExitQuality(s()), 'exitQuality', 'exitQualityError');
       fetchPanel(api.analyticsJournal(s()), 'journal', 'journalError');
       fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+      loadOverrideFidelity();
     };
     const loadEdge = (): void => {
       fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
@@ -864,6 +873,7 @@ export const AnalyticsStore = signalStore(
       resolveOne(api.analyticsExitQuality(s()), 'exitQuality', 'exitQualityError', () => {
         fetchPanel(api.analyticsJournal(s()), 'journal', 'journalError');
         fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
+        loadOverrideFidelity();
       });
 
     const resolveEdge = (): Observable<void> =>
@@ -942,6 +952,7 @@ export const AnalyticsStore = signalStore(
           plans: () => fetchPanel(api.analyticsPlans(), 'plans', 'plansError'),
           partials: () => fetchPanel(api.analyticsPartials(s()), 'partials', 'partialsError'),
           varianceBand: () => fetchPanel(api.analyticsVarianceBand(), 'varianceBand', 'varianceBandError'),
+          overrideFidelity: loadOverrideFidelity,
         };
         one[panel]?.();
       },

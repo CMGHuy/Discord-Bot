@@ -17,6 +17,7 @@ export const EXIT_REASON_LABELS: Readonly<Record<string, string>> = {
   'auto (near-tp stall)': 'Stall exit',
   'stall_exit': 'Stall exit',
   'reversed': 'Reversed',
+  'manual_bulk': 'Bulk close',
 };
 
 export const GAPPED_R = -1.05;

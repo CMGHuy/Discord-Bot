@@ -12,7 +12,8 @@ from swingbot.core.backtesting.screen.ideas import IDEAS, Idea
 def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
     assert ideas.IDEA_MODULES == ("high52w", "uptrend_pullback", "gap_volume",
                                   "turn_of_month", "turtle_soup", "quiet_pullback",
-                                  "bond_spike_rebound", "dollar_drop")
+                                  "bond_spike_rebound", "dollar_drop",
+                                  "sweep_reclaim_bos")
     assert list(IDEAS) == list(ideas.IDEA_MODULES)
     assert all(IDEAS[name].name == name for name in IDEAS)
 
@@ -21,7 +22,7 @@ def test_time_caps_are_the_spec_values():
     assert {n: i.time_cap_bars for n, i in IDEAS.items()} == {
         "high52w": 60, "uptrend_pullback": 10, "gap_volume": 20, "turn_of_month": 4,
         "turtle_soup": 10, "quiet_pullback": 10, "bond_spike_rebound": 10,
-        "dollar_drop": 10}
+        "dollar_drop": 10, "sweep_reclaim_bos": 20}
 
 
 def test_frozen_parameter_sets():
@@ -43,6 +44,8 @@ def test_frozen_parameter_sets():
         "series": "TLT", "lookback": 5, "window": 252, "z": 2.0, "side": "long"}
     assert dict(IDEAS["dollar_drop"].params) == {
         "series": "UUP", "lookback": 5, "window": 252, "z": -2.0, "side": "long"}
+    assert dict(IDEAS["sweep_reclaim_bos"].params) == {
+        "pivot_k": 3, "min_age": 4, "reclaim_bars": 2, "bos_bars": 10}
 
 
 def test_every_idea_is_long_and_cites_its_source():
@@ -76,7 +79,8 @@ def test_every_registered_idea_is_raced_under_one_pinned_shape():
     assert {n: i.race_shape for n, i in IDEAS.items()} == {
         "high52w": "fixed", "uptrend_pullback": "fixed", "gap_volume": "fixed",
         "turn_of_month": "fixed", "turtle_soup": "fixed", "quiet_pullback": "fixed",
-        "bond_spike_rebound": "fixed", "dollar_drop": "fixed"}
+        "bond_spike_rebound": "fixed", "dollar_drop": "fixed",
+        "sweep_reclaim_bos": "fixed"}
 
 
 MURPHY = ("Murphy (2004), Intermarket Analysis — shock proxy, "
@@ -89,7 +93,8 @@ def test_only_the_two_intermarket_ideas_read_context_series():
     assert {n: i.context for n, i in IDEAS.items()} == {
         "high52w": (), "uptrend_pullback": (), "gap_volume": (), "turn_of_month": (),
         "turtle_soup": (), "quiet_pullback": (),
-        "bond_spike_rebound": ("TLT",), "dollar_drop": ("UUP",)}
+        "bond_spike_rebound": ("TLT",), "dollar_drop": ("UUP",),
+        "sweep_reclaim_bos": ()}
     assert IDEAS["bond_spike_rebound"].source == MURPHY
     assert IDEAS["dollar_drop"].source == MURPHY
 

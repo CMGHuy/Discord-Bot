@@ -29,7 +29,7 @@ const HYPOTHESIS_MAX = 90;
 
 /** A verdict's colour says how the measurement came out, never whether to
  *  act on it. A verdict added to the ledger later stays neutral. */
-const VERDICT_TONE: Record<string, ChipTone> = {
+export const VERDICT_TONE: Record<string, ChipTone> = {
   PASS: 'good',
   'SCREEN-PASS': 'good',
   FAIL: 'bad',
@@ -39,6 +39,10 @@ const VERDICT_TONE: Record<string, ChipTone> = {
   UNMEASURABLE: 'muted',
   WITHDRAWN: 'muted',
   'SCREEN-UNDERPOWERED': 'warn',
+  // v173 override fidelity: how the overrides came out against the engine.
+  SAVED: 'good',
+  COST: 'bad',
+  INCONCLUSIVE: 'neutral',
 };
 
 const fixed = (value: number | null, digits: number): string | null =>

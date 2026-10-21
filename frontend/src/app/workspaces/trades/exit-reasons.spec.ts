@@ -105,3 +105,19 @@ describe('exitReasonLabel', () => {
     expect(exitReasonLabel([], [event('CLOSED', 'stop')], -1.5)).toBe('Stop (gapped)');
   });
 });
+
+describe('manual_bulk (v173)', () => {
+  it('labels a bulk clear "Bulk close"', () => {
+    expect(EXIT_REASON_LABELS['manual_bulk']).toBe('Bulk close');
+    expect(reasonLabel('manual_bulk')).toBe('Bulk close');
+  });
+
+  it('uses it as the history fallback for a bulk-closed plan with no leg reason', () => {
+    const history = [event('ACTIVE', 'filled'), event('CLOSED', 'manual_bulk')];
+    expect(exitReasonLabel([], history, null)).toBe('Bulk close');
+  });
+
+  it('leaves a single manual close printed as written', () => {
+    expect(reasonLabel('manual')).toBe('manual');
+  });
+});

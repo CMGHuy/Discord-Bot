@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pandas as pd
+
 from swingbot import config
 from swingbot.core.backtesting.instrument import costs, fills
 from swingbot.core.backtesting.instrument.contract import CostModel, FillModel, InstrumentSpec
@@ -79,19 +81,23 @@ def _leg(fraction: float, exit_price: float, reason: str, kind: str) -> dict:
 
 def _booked(ctx, outcome: str, exit_index: int, legs: list[dict],
             runner_outcome: str | None = None,
-            runner_stop_source: str | None = None) -> ExitResult:
+            runner_stop_source: str | None = None,
+            tp1_index: int | None = None) -> ExitResult:
     """The trade's ExitResult, its raw legs booked once through costs.book.
-    v176: ``runner_stop_source`` rides on the result, never on a leg."""
+    v176: ``runner_stop_source`` rides on the result, never on a leg.
+    v173: ``tp1_index`` is the TP1 bar on the walks that reached TP1."""
     r_total, booked = costs.book(ctx.costs, direction=ctx.plan.direction,
                                  entry_price=ctx.entry_price, stop_loss=ctx.plan.stop_loss,
                                  legs=legs)
     for raw, leg in zip(legs, booked):
         if "price_basis" in raw:
             leg["price_basis"] = raw["price_basis"]
-    return ExitResult(outcome=outcome, runner_outcome=runner_outcome,
-                      entry_index=ctx.entry_index, exit_index=exit_index,
-                      entry_price=ctx.entry_price, r_total=r_total, legs=booked,
-                      runner_stop_source=runner_stop_source)
+    result = ExitResult(outcome=outcome, runner_outcome=runner_outcome,
+                        entry_index=ctx.entry_index, exit_index=exit_index,
+                        entry_price=ctx.entry_price, r_total=r_total, legs=booked,
+                        runner_stop_source=runner_stop_source)
+    result.tp1_index = tp1_index
+    return result
 
 
 def _gross_r(ctx, price: float) -> float:
@@ -161,6 +167,15 @@ def _pre_tp1_v2(ctx) -> ExitResult | int:
     return _timeout(ctx)
 
 
+def _check_indicator_frame(df, indicator_df) -> None:
+    """v173: an indicator frame must line up with the exit frame bar for bar,
+    because ATR and the structure frame are read by position."""
+    if indicator_df is None:
+        return
+    if len(indicator_df) != len(df) or not indicator_df.index.equals(df.index):
+        raise ValueError("indicator_df must have the same index and length as df")
+
+
 def _runner_bar_v2(ctx, j: int, runner_stop: float, floor: float, gb_extreme=None):
     """Runner stop first, then TP2, each filled through fills.exit_fill:
     (price, index, reason, kind, stop_source) or None; stop_source is None for TP2."""
@@ -177,20 +192,25 @@ def _runner_bar_v2(ctx, j: int, runner_stop: float, floor: float, gb_extreme=Non
     return None
 
 
-def _runner_v2(df, ctx, tp1_index: int):
+def _runner_v2(df, ctx, tp1_index: int, indicator_df=None):
     """exit_sim._runner_phase on fills.py's compares: (price, index, reason,
     kind, stop_source) of the post-TP1 leg. The trailing stop set from bar j's
     close is first checked on bar j + 1; v176's give-back ratchets after the
-    chandelier and before the structure rule, as in exit_sim."""
+    chandelier and before the structure rule, as in exit_sim.
+
+    v173: ATR and the structure frame are computed from `indicator_df` when
+    given (same index as `df`), else from `df`; ctx, built from `df`, still
+    drives every exit check."""
     if acceptance_exit(ctx.plan, float(ctx.close[tp1_index])):
         return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit", "close", None
     from swingbot.core.market.indicators import atr as atr_indicator
+    source = df if indicator_df is None else indicator_df
     floor = runner_floor(ctx.entry_price, ctx.plan.tp1)
     runner_stop = checked_stop = floor
     extreme_close = float(ctx.close[tp1_index])
     gb_extreme = _giveback_extreme(ctx, tp1_index, None)
-    atr_series = atr_indicator(df, 14)
-    frame = runner_structure_frame(df) if config.RUNNER_STRUCTURE_EXIT != "off" else None
+    atr_series = atr_indicator(source, 14)
+    frame = runner_structure_frame(source) if config.RUNNER_STRUCTURE_EXIT != "off" else None
     stall_pending = False
     for j in range(tp1_index + 1, ctx.end + 1):
         if stall_pending:                            # the open comes first
@@ -212,10 +232,14 @@ def _runner_v2(df, ctx, tp1_index: int):
 
 def walk_v2(df, entry_index: int, entry_price: float, plan: TradePlanV2,
             max_holding_days: int, instrument: InstrumentSpec, *,
-            scale_out: bool) -> ExitResult:
+            scale_out: bool, indicator_df: pd.DataFrame | None = None) -> ExitResult:
     """The v2 exit walk from a filled entry: bars entry_index + 1 .. entry_index
     + max_holding_days (capped at the data). Single-leg unless `scale_out` and
-    the plan keeps a runner (tp1_fraction < 1.0), as exit_sim._walk_for."""
+    the plan keeps a runner (tp1_fraction < 1.0), as exit_sim._walk_for.
+    v173: a result that reached TP1 carries that bar as `tp1_index`, and
+    `indicator_df` (same index and length as `df`, else ValueError) feeds
+    only the runner's ATR and structure frame; omitted, the walk is unchanged."""
+    _check_indicator_frame(df, indicator_df)
     if abs(entry_price - plan.stop_loss) <= 0:
         return _no_trade(entry_index, entry_price)
     ctx = _context(df, entry_index, entry_price, plan, max_holding_days, instrument, scale_out)
@@ -225,12 +249,13 @@ def walk_v2(df, entry_index: int, entry_price: float, plan: TradePlanV2,
     tp1_fill = fills.exit_fill(ctx.fills, "target", plan.tp1, float(ctx.open_[pre]),
                                plan.direction)
     if not ctx.stall:
-        return _booked(ctx, "win", pre, [_leg(1.0, tp1_fill, "tp1", "target")])
-    price, exit_index, reason, kind, stop_source = _runner_v2(df, ctx, pre)
+        return _booked(ctx, "win", pre, [_leg(1.0, tp1_fill, "tp1", "target")],
+                       tp1_index=pre)
+    price, exit_index, reason, kind, stop_source = _runner_v2(df, ctx, pre, indicator_df)
     legs = [_leg(plan.tp1_fraction, tp1_fill, "tp1", "target"),
             _leg(1.0 - plan.tp1_fraction, price, reason, kind)]
     return _booked(ctx, "win", exit_index, legs, runner_outcome=reason,
-                   runner_stop_source=stop_source)
+                   runner_stop_source=stop_source, tp1_index=pre)
 
 
 def _entry_gap_scratch(j: int, fill: float) -> ExitResult:
@@ -244,11 +269,15 @@ def _entry_gap_scratch(j: int, fill: float) -> ExitResult:
                              "reason": ENTRY_GAP_SCRATCH}])
 
 
-def _fill_bar_v2(df, j: int, fill: float, plan: TradePlanV2,
-                 instrument: InstrumentSpec) -> ExitResult | None:
+def fill_bar_exit(df, j: int, fill: float, plan: TradePlanV2,
+                  instrument: InstrumentSpec) -> ExitResult | None:
     """Every v2 fill bar is checked for the stop, never the target: the path
     after the fill is unknown, so stop first. The open came before the fill,
-    so a stop reached later on the bar fills at the stop itself."""
+    so a stop reached later on the bar fills at the stop itself.
+
+    Public since v173: walk_v2 starts at bar j + 1, so a replay from a live
+    fill (analytics/override_fidelity.py) calls this first, exactly as
+    _filled does."""
     direction = plan.direction
     if fills.at_or_beyond_stop(fill, plan.stop_loss, direction):
         return _entry_gap_scratch(j, fill)
@@ -257,6 +286,10 @@ def _fill_bar_v2(df, j: int, fill: float, plan: TradePlanV2,
         return None
     ctx = _context(df, j, fill, plan, 0, instrument, False)
     return _booked(ctx, "loss", j, [_leg(1.0, plan.stop_loss, "stop", "stop")])
+
+
+#: The pre-v173 private name; `_filled` keeps calling it.
+_fill_bar_v2 = fill_bar_exit
 
 
 def _filled(df, j: int, fill: float, plan: TradePlanV2, instrument: InstrumentSpec,

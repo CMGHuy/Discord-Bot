@@ -18,7 +18,7 @@ because sub-project 3 owns how a sparkline looks.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import jsonify, request
 
@@ -695,6 +695,42 @@ def analytics_partials():
     plans = pa.select_plans(PlanStore().all(), scope)
     report = pa.build_report(plans, manual_exits=_manual_exit_prices())
     return jsonify({**report, **echo(scope, len(plans))})
+
+
+def _override_inputs() -> tuple[list, dict[str, dict]]:
+    """Every plan, and every paper trade keyed by its plan id (v173 override_io)."""
+    from swingbot.core.analytics import override_io as oio
+
+    return oio.load_inputs()
+
+
+def _override_verdict() -> dict | None:
+    """The stored v173 verdict record from preregistration_verdicts, or None. Read only."""
+    from swingbot.core.analytics import override_io as oio
+
+    return oio.stored_verdict()
+
+
+@api_v1.route("/analytics/override-fidelity", methods=["GET"])
+@require_auth
+def analytics_override_fidelity():
+    """Manual overrides vs the engine left alone (spec v173 section 5).
+
+    Computed on request: each manual close replayed from its fill through
+    the v2 exit engine on the live scan's bar cache (never fetched). The
+    verdict is the stored preregistration_verdicts record, or WAITING; this
+    route never evaluates or writes it -- only the bot's daily job does.
+    Global, not scoped: every manual close is in the table."""
+    from swingbot import config
+    from swingbot.core.analytics import override_fidelity as of
+    from swingbot.core.analytics import override_verdict as ov
+    from swingbot.core.analytics import runner_path as rp
+
+    recorded = _override_verdict()
+    plans, trades = _override_inputs()
+    asof = of.latest_completed_session(datetime.now(timezone.utc))
+    return jsonify(ov.build_report(plans, trades, rp.cached_daily_bars, asof, recorded,
+                                   config.CURRENCY_SYMBOL))
 
 
 @api_v1.route("/analytics/cohort", methods=["GET"])

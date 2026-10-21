@@ -7,6 +7,16 @@ from swingbot.core.planning.plan_store import PlanStore
 from tests.admin.test_api_v1_trades import _plan
 from tests.store_seed import seed_store
 
+@pytest.fixture(autouse=True)
+def _no_live_quote(monkeypatch):
+    """v173: _close_plan fetches a quote for the override stamp. Default it to
+    "no quote" so these route tests never reach yfinance."""
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price_detail",
+                        lambda *args, **kwargs: None)
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price",
+                        lambda *args, **kwargs: None)
+
+
 _LOGIN = {"username": "admin", "password": "admin"}
 _PLAN_ID = "55555555-5555-4555-8555-555555555555"
 _STAMP = {"mfe_r": 3.0, "mae_r": 1.5, "sessions_after_tp1": 1, "source": "live",

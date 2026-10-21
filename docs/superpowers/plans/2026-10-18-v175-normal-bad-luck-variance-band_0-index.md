@@ -25,7 +25,7 @@ Success is measured by integrity, not lift: the band reproduces exactly from its
 
 ## Progress
 
-Not started. Update this block when a phase closes. V175-4 records the measured calibration rates here.
+Phase 1 (V175-1..V175-4) done on the branch. Calibration (V175-4, `tests/analytics/test_variance_band_calibration.py`, 400 synthetic books per process, seeded): per-look `outside` rate, run / drawdown: i.i.d. 1.00% / 2.50%; week-correlated 0.75% / 3.25%. Both below the band's 5%, because a look sees the run in progress and peak-to-now, not a whole path's worst. Synthetic books, not the live book.
 
 ## Where to work
 

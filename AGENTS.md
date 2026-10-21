@@ -287,7 +287,8 @@ sign-in lasts; paths without a leading slash). Log in to bomeo-capital.com or a
 local testing instance with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded
 inside the script and never printed, echoed, passed as arguments or written
 elsewhere; build any local test instance from those same `.env` values, never
-the `admin`/`admin` default. A task that runs tests against the database runs
+the `admin`/`admin` default. Reading `.env` (and scripts loading it) is
+partner-allowed; never print, echo, log or quote its values. A task that runs tests against the database runs
 `replicate-prod-db` first and points `DATABASE_URL` at the replica.
 
 ## Efficient repository navigation

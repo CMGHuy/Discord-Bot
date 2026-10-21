@@ -51,6 +51,16 @@ def notify_queue():
     return notify_queue_repo().drain
 
 
+@pytest.fixture(autouse=True)
+def _no_live_quote(monkeypatch):
+    """v173: _close_plan fetches a quote for the override stamp. Default it to
+    "no quote" so these route tests never reach yfinance."""
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price_detail",
+                        lambda *args, **kwargs: None)
+    monkeypatch.setattr("swingbot.core.marketdata.data.get_current_price",
+                        lambda *args, **kwargs: None)
+
+
 # --- auth ----------------------------------------------------------------
 
 @pytest.mark.parametrize("method,path", [
@@ -345,11 +355,11 @@ def test_close_open_reports_failures_without_aborting_the_rest(seed, logged_in, 
     calls = {"n": 0}
     real = trade_commands._close_plan
 
-    def flaky(store, plan):
+    def flaky(store, plan, reason="manual"):
         calls["n"] += 1
         if calls["n"] == 1:
             raise RuntimeError("boom")
-        return real(store, plan)
+        return real(store, plan, reason)
 
     monkeypatch.setattr(trade_commands, "_close_plan", flaky)
 

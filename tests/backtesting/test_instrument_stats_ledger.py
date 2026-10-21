@@ -19,7 +19,7 @@ def test_fields_and_vocabularies_are_the_plan_set():
                                    "exp_r", "p", "verdict", "record")
     assert stats.VERDICTS == ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE",
                               "WITHDRAWN", "OPEN", "SCREEN-PASS", "SCREEN-FAIL",
-                              "SCREEN-UNDERPOWERED")
+                              "SCREEN-UNDERPOWERED", "COST", "SAVED", "INCONCLUSIVE")
     assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1")
 
 

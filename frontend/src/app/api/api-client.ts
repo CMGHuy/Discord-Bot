@@ -43,6 +43,7 @@ import {
   KillswitchResult,
   LogClearResult,
   Logs,
+  OverrideFidelity,
   PnlCalendar,
   Preferences,
   Proposal,
@@ -281,6 +282,11 @@ export class ApiClient {
    *  rejects any query parameter, so no `BookScope` is ever sent. */
   analyticsVarianceBand(): Observable<AnalyticsVarianceBand> {
     return this.http.get<AnalyticsVarianceBand>(`${this.base}/analytics/variance-band`);
+  }
+
+  /** v173 — manual overrides vs the engine. Global: every manual close, never scoped. */
+  analyticsOverrideFidelity(): Observable<OverrideFidelity> {
+    return this.http.get<OverrideFidelity>(`${this.base}/analytics/override-fidelity`);
   }
 
   analyticsExitQuality(scope?: Partial<BookScope> | null): Observable<AnalyticsExitQuality> {
