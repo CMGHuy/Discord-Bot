@@ -44,6 +44,14 @@ describe('marginTone', () => {
 describe('WhyPanel', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
 
+  it('puts a space after "Confirmed by:" (v179 §3.4)', () => {
+    const f = mount({ confirmedBy: [{ strategy: 'Fib', horizon: null }, { strategy: 'RSI', horizon: '2w' }] });
+    const line = [...f.nativeElement.querySelectorAll('p.source')]
+      .map((p: Element) => p.textContent!.replace(/\s+/g, ' ').trim())
+      .find((text: string) => text.startsWith('Confirmed by'));
+    expect(line).toBe('Confirmed by: Fib, RSI (2w)');
+  });
+
   it('accepts a readonly computed section list from its host', () => {
     const f = TestBed.createComponent(ReadonlySectionsHost);
     f.detectChanges();

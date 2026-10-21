@@ -48,7 +48,7 @@ export function entryTypeWord(entryType: string | null, direction: string | null
   styles: `
     :host { display: block; }
     dl { display: grid; gap: var(--space-6); }
-    dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-10); }
     dt, dd { font-size: var(--text-table); }
     dt { color: var(--text-secondary); }
     dd { text-align: right; }

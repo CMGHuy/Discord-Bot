@@ -29,19 +29,19 @@ export function marginTone(
     @if (has('levels')) {
       <sb-panel heading="Levels & methods">
         <dl class="levels">
-          <div><dt>{{ entry() === null ? 'Trigger' : 'Entry' }}</dt><dd>{{ fmtNum(entry() ?? trigger()) }}</dd></div>
-          <div><dt>{{ stopLabel() }}</dt><dd>{{ fmtNum(stop()) }}</dd></div>
-          <div><dt>Target 1</dt><dd>{{ fmtNum(target1()) }}</dd></div>
-          <div><dt>Target 2</dt><dd>{{ fmtNum(target2()) }}</dd></div>
+          <div><dt>{{ entry() === null ? 'Trigger' : 'Entry' }}</dt><dd class="num">{{ fmtNum(entry() ?? trigger()) }}</dd></div>
+          <div><dt>{{ stopLabel() }}</dt><dd class="num">{{ fmtNum(stop()) }}</dd></div>
+          <div><dt>Target 1</dt><dd class="num">{{ fmtNum(target1()) }}</dd></div>
+          <div><dt>Target 2</dt><dd class="num">{{ fmtNum(target2()) }}</dd></div>
           @if (acceptanceLevel() !== null) {
-            <div><dt>Acceptance level</dt><dd>{{ fmtNum(acceptanceLevel()) }}</dd></div>
+            <div><dt>Acceptance level</dt><dd class="num">{{ fmtNum(acceptanceLevel()) }}</dd></div>
           }
         </dl>
         @for (source of sources(); track source.label) {
           <p class="source"><span class="muted">{{ source.label }}:</span> {{ source.values.join(', ') }}</p>
         }
         @if (confirmedBy().length) {
-          <p class="source"><span class="muted">Confirmed by:</span>
+          <p class="source"><span class="muted">Confirmed by:</span>{{ ' ' }}
             @for (confirmation of confirmedBy(); track $index) {
               <span>{{ confirmation.strategy }}@if (confirmation.horizon) { ({{ confirmation.horizon }}) }@if (!$last) {, }</span>
             }
@@ -60,11 +60,11 @@ export function marginTone(
                     <sb-chip label="unevaluated" tone="muted" [caps]="false" title="no data — neutral points awarded" />
                   }
                 </span>
-                <span class="point sb-num" [class.muted]="row.unevaluated">{{ fmtSigned(row.points, 0) }}</span>
+                <span class="point num" [class.muted]="row.unevaluated">{{ fmtSigned(row.points, 0) }}</span>
                 @if (row.note) { <span class="note muted">{{ row.note }}</span> }
               </div>
             }
-            <div class="factor-row total"><span>Total</span><strong class="sb-num">{{ fmtSigned(totalPoints(), 0) }}</strong></div>
+            <div class="factor-row total"><span>Total</span><strong class="num">{{ fmtSigned(totalPoints(), 0) }}</strong></div>
           } @else {
             @for (factor of confidenceFactors(); track $index) {
               <div class="factor-row text-factor"><span>{{ factor.factor }}</span><span class="muted">{{ factor.note }}</span></div>
@@ -75,7 +75,7 @@ export function marginTone(
           <section class="quality">
             <h3 class="sb-label">Quality breakdown</h3>
             @for (factor of qualityFactors(); track $index) {
-              <div class="factor-row"><span>{{ humanFactor(factor.label) }}</span><span class="sb-num">{{ fmtSigned(factor.points, 0) }}</span></div>
+              <div class="factor-row"><span>{{ humanFactor(factor.label) }}</span><span class="num">{{ fmtSigned(factor.points, 0) }}</span></div>
             }
           </section>
         }
@@ -90,9 +90,9 @@ export function marginTone(
               <div class="gate-summary">
                 <span>{{ gate.label }}</span>
                 @if (!gate.applies) { <sb-chip label="off" [caps]="false" title="off in current config" /> }
-                <span>Value <span class="sb-num">{{ gateValue(gate.value) }}</span></span>
-                <span>Threshold <span class="sb-num">{{ fmtNum(gate.threshold) }}</span></span>
-                <span>Margin <span class="margin sb-num" [class.pos]="coloredMargin(gate) > 0" [class.neg]="coloredMargin(gate) < 0">{{ fmtSigned(gate.margin) }}</span></span>
+                <span>Value <span class="num">{{ gateValue(gate.value) }}</span></span>
+                <span>Threshold <span class="num">{{ fmtNum(gate.threshold) }}</span></span>
+                <span>Margin <span class="margin num"[class.pos]="coloredMargin(gate) > 0" [class.neg]="coloredMargin(gate) < 0">{{ fmtSigned(gate.margin) }}</span></span>
               </div>
               @if (gate.parts.length) {
                 <p class="parts">@for (part of gate.parts; track $index) {
@@ -122,7 +122,7 @@ export function marginTone(
     dl, p { margin: 0; }
     .levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-14); }
     dt, .muted { color: var(--text-secondary); }
-    dd { margin: var(--space-4) 0 0; font-variant-numeric: tabular-nums; }
+    dd { margin: var(--space-4) 0 0; }
     .source { margin-top: var(--space-10); }
     /* A 1300px row put the label at one edge and its number at the other, so
        the eye had to travel the whole panel to pair them. */
