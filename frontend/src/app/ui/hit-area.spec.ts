@@ -80,6 +80,9 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/ui/panel-header.ts', /<button type="button" class="table sb-hit"/],
     ['src/app/workspaces/dashboard/positions-table.ts', /<a class="all-link sb-hit"/],
     ['src/app/workspaces/dashboard/panels/recent-activity.ts', /<a panel-actions class="all-link sb-hit"/],
+    // The collapsed rail is 52px wide: a 32px link cannot grow, so it pads with .sb-hit.
+    ['src/app/shell/shell.html', /<a class="brand sb-hit" routerLink="\/dashboard"/],
+    ['src/app/shell/shell.html', /<a\s+class="sb-hit"\s+\[routerLink\]="entry\.path"/],
   ];
 
   it.each(PADDED)('%s pads its control with .sb-hit', (file, markup) => {
