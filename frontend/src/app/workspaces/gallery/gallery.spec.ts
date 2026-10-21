@@ -135,7 +135,7 @@ describe('the gallery is the v80 D6 reference', () => {
     expect(GALLERY).toMatch(/\.numerics-scroll \{[^}]*overflow-x: auto/);
     // Cards side by side start on one baseline only when they share a structure: a card that opens with the
     // 11px reason tag beside one that opens with the 14px title put two first lines 4px apart.
-    const grids = [...GALLERY.matchAll(/<sb-panel-grid track="narrow">((?:(?!<\/sb-panel-grid>)[\s\S])*?<sb-empty-state[\s\S]*?)<\/sb-panel-grid>/g)]
+    const grids = [...GALLERY.matchAll(/<sb-panel-grid track="narrow"[^>]*>((?:(?!<\/sb-panel-grid>)[\s\S])*?<sb-empty-state[\s\S]*?)<\/sb-panel-grid>/g)]
       .map((m) => m[1]).filter((body) => !body.includes('sb-panel '));
     const emptyGrids = grids.filter((body) => (body.match(/<sb-empty-state/g) ?? []).length > 0);
     expect(emptyGrids.length).toBeGreaterThanOrEqual(2);

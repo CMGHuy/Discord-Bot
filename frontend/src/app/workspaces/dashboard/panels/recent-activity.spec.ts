@@ -136,7 +136,8 @@ describe('recent activity rows open a trade (v179 section 3.2, section 6b.3)', (
     expect(hit).toContain('align-items: baseline');
     expect(hit).toContain('width: 100%');
     expect(rule('.event-hit sb-icon')).toContain('align-self: center');
-    expect(rule('.event-hit sb-direction-arrow')).toContain('align-self: center');
+    // The arrow is text-like and shares the baseline (5fc0efa6): no centring rule for it.
+    expect(rule('.event-hit sb-direction-arrow')).toBe('');
     expect(SOURCE).not.toMatch(/\.event \{[^}]*display: grid/);
   });
 
