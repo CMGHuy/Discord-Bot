@@ -126,22 +126,11 @@ const RAIL_SECTIONS = ['Discord', 'Scanning', 'Pipeline', 'Risk'].map((name) => 
 function railGeometry(el: HTMLElement, scrollWidth: number, clientWidth: number, scrollLeft: number): void {
   Object.defineProperty(el, 'scrollWidth', { configurable: true, value: scrollWidth });
   Object.defineProperty(el, 'clientWidth', { configurable: true, value: clientWidth });
-  Object.defineProperty(el, 'scrollLeft', { configurable: true, value: scrollLeft });
+  Object.defineProperty(el, 'scrollLeft', { configurable: true, writable: true, value: scrollLeft });
 }
 
 describe('Settings category rail (v179 §6b.5)', () => {
   const src = readFileSync(join(process.cwd(), 'src/app/workspaces/system/settings-tab.ts'), 'utf8');
-  let spy: ReturnType<typeof vi.fn>;
-
-  beforeEach(() => {
-    spy = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: spy });
-  });
-
-  afterEach(() => {
-    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollIntoView'];
-  });
-
   async function loaded() {
     const { fixture, backend } = seed();
     fixture.detectChanges();
@@ -166,10 +155,12 @@ describe('Settings category rail (v179 §6b.5)', () => {
     const { fixture, rail } = await loaded();
     railGeometry(rail, 700, 358, 0);
     const risk = [...rail.querySelectorAll('button')].find((b) => b.textContent!.includes('Risk'))!;
+    vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 358, 44));
+    vi.spyOn(risk, 'getBoundingClientRect').mockReturnValue(new DOMRect(600, 0, 100, 44));
     risk.click();
     fixture.detectChanges();
     await fixture.whenStable();
-    expect((spy.mock.contexts.at(-1) as HTMLElement).textContent).toContain('Risk');
+    expect(rail.scrollLeft).toBe(342);
   });
 
   it('draws the fades with the same gradient as sb-tab-bar', () => {

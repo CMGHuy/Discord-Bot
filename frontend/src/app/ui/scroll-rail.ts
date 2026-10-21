@@ -7,8 +7,8 @@
  * its fades, and neither rail brought the active item into view, so a tab
  * chosen by the URL could load off-screen with nothing pointing at it.
  *
- * Pure DOM reads, no Angular: each caller decides when to call (after the
- * render in which its active item or its item list changed, and on scroll
+ * DOM geometry and rail scrolling, no Angular: each caller decides when to
+ * call (after the render in which its active item or item list changed, and on scroll
  * and resize for the fades).
  */
 
@@ -25,17 +25,17 @@ export function edgeFades(el: HTMLElement): { start: boolean; end: boolean } {
 /**
  * Scroll `active` into view along `container`, if the container overflows.
  *
- * `block: 'nearest'` moves the page only when the item is out of view
- * vertically (it never is on load or after a click on it); `inline:
- * 'nearest'` scrolls the rail the least distance that shows the whole item.
- * A rail that does not overflow is left alone, so a vertical list (the
- * desktop settings rail) can never move the page. jsdom has no
- * `scrollIntoView`; the call is then a no-op rather than an error.
+ * Embedded rails can start below the viewport (the gallery and Dashboard).
+ * Native scrollIntoView also scrolls their ancestors vertically, even with
+ * block: 'nearest'. Move only this rail's horizontal offset, by the least
+ * distance needed to reveal the item. A rail that does not overflow is left
+ * alone, including the desktop settings rail's vertical list.
  */
 export function revealActive(container: HTMLElement, active: Element | null): void {
   if (!active) return;
-  const reveal = (active as HTMLElement).scrollIntoView as HTMLElement['scrollIntoView'] | undefined;
-  if (typeof reveal !== 'function') return;
   if (container.scrollWidth - container.clientWidth <= 1) return;
-  reveal.call(active, { block: 'nearest', inline: 'nearest' });
+  const rail = container.getBoundingClientRect();
+  const item = active.getBoundingClientRect();
+  if (item.left < rail.left) container.scrollLeft += item.left - rail.left;
+  else if (item.right > rail.right) container.scrollLeft += item.right - rail.right;
 }

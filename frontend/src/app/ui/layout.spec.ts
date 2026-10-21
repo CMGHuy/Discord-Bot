@@ -344,7 +344,8 @@ function overflowEverything(): () => void {
 }
 
 describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
-  let spy: ReturnType<typeof vi.fn>;
+  let bounds: ReturnType<typeof vi.spyOn>;
+  let extraWidth: number;
   let restore: () => void;
   let resized: ResizeObserverCallback | undefined;
   const observe = vi.fn();
@@ -352,8 +353,13 @@ describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
-    spy = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: spy });
+    extraWidth = 0;
+    bounds = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('tabs')) return new DOMRect(0, 0, 390, 44);
+      const list = this.closest('.tabs') as HTMLElement | null;
+      const index = [...(this.parentElement?.children ?? [])].indexOf(this);
+      return new DOMRect(index * (124 + extraWidth) - (list?.scrollLeft ?? 0), 1000, 120 + extraWidth, 44);
+    });
     restore = overflowEverything();
     resized = undefined;
     observe.mockClear();
@@ -367,7 +373,7 @@ describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
 
   afterEach(() => {
     restore();
-    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollIntoView'];
+    bounds.mockRestore();
     vi.unstubAllGlobals();
   });
 
@@ -380,21 +386,17 @@ describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
     return f;
   }
 
-  const revealed = () => (spy.mock.contexts.at(-1) as HTMLElement | undefined)?.textContent?.trim();
-
   it('reveals a tab chosen by the URL on first render', async () => {
-    await mount('partials');
-    expect(spy).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
-    expect(revealed()).toBe('Partials');
+    const f = await mount('partials');
+    expect((f.nativeElement.querySelector('.tabs') as HTMLElement).scrollLeft).toBe(474);
   });
 
   it('reveals the newly active tab whenever the active tab changes', async () => {
     const f = await mount('overview');
-    spy.mockClear();
     f.componentInstance.active.set('tuning');
     f.detectChanges();
     await f.whenStable();
-    expect(revealed()).toBe('Tuning');
+    expect((f.nativeElement.querySelector('.tabs') as HTMLElement).scrollLeft).toBe(350);
   });
 
   it('re-measures the fades after revealing', async () => {
@@ -410,9 +412,9 @@ describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
     const el = f.nativeElement as HTMLElement;
     expect(observe).toHaveBeenCalledWith(el.querySelector('.tabs'));
     expect(observe).toHaveBeenCalledWith(el.querySelector('.tab.active'));
-    spy.mockClear();
+    extraWidth = 20;
     resized?.([], {} as ResizeObserver);
-    expect(revealed()).toBe('Partials');
+    expect((el.querySelector('.tabs') as HTMLElement).scrollLeft).toBe(614);
   });
 
   it('disconnects geometry observation when the tab bar is destroyed', async () => {
