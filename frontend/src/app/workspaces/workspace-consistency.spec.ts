@@ -92,3 +92,24 @@ describe('workspace consistency (v85)', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('compact rows are declared, never hand-built (v179 §3.1, §4)', () => {
+  it('no workspace builds or restyles the compact row or row drawer itself', () => {
+    // sb-data-table owns this DOM. A workspace that writes it (or reaches
+    // into it with ::ng-deep) is hand-rolling cards -- the §4 anti-goal.
+    const offenders = SOURCES
+      .filter((s) => /compact-(?:list|row|hit|footer)|drawer-fields|\.line[12]\b/.test(s.source))
+      .map((s) => s.name);
+    expect(offenders).toEqual([]);
+  });
+
+  it.each([
+    'trades/trades.columns.ts',
+    'watchlist/watchlist.ts',
+    'watchlist/ticker-detail.ts',
+    'research/research.ts',
+    'risk/risk.ts',
+  ])('%s declares its compact row', (name) => {
+    expect(SOURCES.find((s) => s.name === name)?.source ?? '').toContain('compact: { line: 1, order: 1 }');
+  });
+});

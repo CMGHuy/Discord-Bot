@@ -7,7 +7,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Provider, provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 
@@ -19,6 +19,8 @@ import {
 import { Risk as RiskData, RiskMetrics } from '../../api/models';
 import { Risk } from './risk';
 import { RiskStore } from '../../stores/risk.store';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 
 /* v85 D37: every metric a {value, n} pair -- a fixture with real, distinct
  * sample sizes across the distributional (n=118) and trade (n=782) families,
@@ -49,7 +51,7 @@ function payload(overrides: Partial<RiskData> = {}): RiskData {
   } as RiskData;
 }
 
-function seed(): { fixture: ComponentFixture<Risk>; backend: HttpTestingController } {
+function seed(extra: Provider[] = []): { fixture: ComponentFixture<Risk>; backend: HttpTestingController } {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
@@ -57,7 +59,7 @@ function seed(): { fixture: ComponentFixture<Risk>; backend: HttpTestingControll
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
-      RiskStore,
+      RiskStore, ...extra,
     ],
   });
   const fixture = TestBed.createComponent(Risk);
@@ -218,8 +220,8 @@ describe('Risk metric tiles', () => {
 
 /* -- v85 R8-05 -- the heat gauge, the risk budget, and the correlation matrix -- */
 
-async function render(overrides: Partial<RiskData> = {}): Promise<ComponentFixture<Risk>> {
-  const { fixture, backend } = seed();
+async function render(overrides: Partial<RiskData> = {}, extra: Provider[] = []): Promise<ComponentFixture<Risk>> {
+  const { fixture, backend } = seed(extra);
   fixture.detectChanges();
   backend.expectOne('/api/v1/risk').flush(payload({
     // Non-empty by default, or asyncInputs' isEmpty (positions.length === 0)
@@ -367,5 +369,33 @@ describe('Risk data-source panel', () => {
     });
     expect(el.textContent).toContain('yfinance only');
     expect(el.textContent).not.toContain('fallback (');
+  });
+});
+
+describe('Risk exposure on a phone (v179 §3.1)', () => {
+  async function phoneTable(): Promise<{ fixture: ComponentFixture<Risk>; table: HTMLElement }> {
+    installDialogPolyfill();
+    const fixture = await render({}, [phoneViewport()]);
+    return { fixture, table: (fixture.nativeElement as HTMLElement).querySelector('sb-data-table') as HTMLElement };
+  }
+
+  it('keeps the risk and the stop on the compact row (money floor)', async () => {
+    const { table } = await phoneTable();
+    expect(compactKeys(table)).toEqual(['ticker', 'risk_pct', 'stop_loss', 'entry']);
+  });
+
+  it('keeps the shares and Risk % totals as a compact totals line', async () => {
+    const { table } = await phoneTable();
+    expect(table.querySelector('.compact-footer [data-col="shares"]')!.textContent).toContain('10');
+    expect(table.querySelector('.compact-footer [data-col="risk_pct"]')!.textContent).toContain('3.00');
+  });
+
+  it('reaches every column and keeps the link to the trade the ticker cell had', async () => {
+    const { fixture, table } = await phoneTable();
+    openRowDrawer(table);
+    fixture.detectChanges();
+    expect([...compactKeys(table), ...drawerKeys(table)].sort())
+      .toEqual(['entry', 'risk_pct', 'shares', 'stop_loss', 'strategy', 'ticker']);
+    expect(table.querySelector('a.drawer-detail-link')!.getAttribute('href')).toBe('/trades/t1');
   });
 });
