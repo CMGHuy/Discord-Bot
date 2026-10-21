@@ -97,3 +97,7 @@ Run 2026-10-21 over `66a0445b` (quant-researcher on opus).
 - quant-researcher [ADVISORY]: distinct ticker-day counts should sit next to cell N -- recorded under Stacked exposure above.
 - quant-researcher [ADVISORY]: Rank 4 (rs-leader-index-pullback) sits next to the closed v34 RS-leader arm (`docs/claude/backtest-methodology.md:271`). A /screen must freeze an index-relative trigger distinct from `RS_LEADER_PERCENTILE` -- recorded as a condition on that route.
 - quant-researcher [ADVISORY]: the stop-monitor stall, telemetry coverage and the mfe_r inconsistency belong to quant-engineer before full-book cells count as support -- recorded.
+
+## Partner pick
+
+On 2026-10-21 the partner sent no ranked row onward and chose to verify the 2026-08-04/05 stop-enforcement lead first (Controller notes). That check is an integrity question for production, not a /screen or /prereg route.
