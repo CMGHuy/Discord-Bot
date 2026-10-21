@@ -598,6 +598,9 @@ describe('Dashboard trade drawer (v179 §3.2)', () => {
     const back = vi.spyOn(location, 'back');
     const before = location.urlChanges.length;
     drawer(harness)!.querySelector<HTMLButtonElement>('.close')!.click();
+    // SpyLocation.back() moves path() synchronously; the Router's popstate
+    // navigation starts from a setTimeout, so let it run and settle first.
+    await new Promise((resolve) => setTimeout(resolve));
     await settled(harness);
     expect(back).toHaveBeenCalledTimes(1);
     expect(location.path()).toBe('/dashboard');
