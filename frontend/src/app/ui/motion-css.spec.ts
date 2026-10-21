@@ -77,7 +77,7 @@ function keyframeList(css: string): [string, string][] {
 const KEYFRAMES = [
   // moved (v168 §2, amendment 7)
   'sb-pulse-dim', 'sb-pulse-blink', 'sb-spin', 'sb-route-spin', 'sb-scan-sweep',
-  'sb-scan-strip-in', 'sb-flash-up', 'sb-flash-down', 'sb-row-blink', 'sb-tape-slide',
+  'sb-scan-strip-in', 'sb-flash-up', 'sb-flash-down', 'sb-row-blink',
   // new (v168 §3)
   'sb-enter', 'sb-fade-in', 'sb-pop-in', 'sb-drawer-in', 'sb-drawer-out', 'sb-sheet-in', 'sb-sheet-out',
   'sb-fade-out', 'sb-ping', 'sb-shimmer', 'sb-draw-inset', 'sb-draw-circle', 'sb-ambient-drift',

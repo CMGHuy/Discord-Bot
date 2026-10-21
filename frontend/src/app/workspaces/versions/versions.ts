@@ -79,20 +79,21 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
         <p class="basis">{{ basis }}</p>
       }
 
-      <div class="headline">
+      <!-- v179 §3.4: the label is the row's first item, so sb-control-row's
+           last-baseline alignment puts it on the chips' text line (and it
+           heads the stack below 640px rather than floating beside it). -->
+      <sb-control-row class="headline">
         <span class="label">Running now</span>
-        <sb-control-row>
-          @for (component of store.components(); track component) {
-            @if (store.current()[component]; as version) {
-              <button sb-button variant="chip" type="button" class="chip" [class.on]="isFiltered(component, version)"
-                      (click)="store.toggleFilter(component, version)"
-                      [attr.title]="component + ' ' + version + ' — click to filter'">
-                {{ component }} <strong>{{ version }}</strong>
-              </button>
-            }
+        @for (component of store.components(); track component) {
+          @if (store.current()[component]; as version) {
+            <button sb-button variant="chip" type="button" class="chip" [class.on]="isFiltered(component, version)"
+                    (click)="store.toggleFilter(component, version)"
+                    [attr.title]="component + ' ' + version + ' — click to filter'">
+              {{ component }} <strong>{{ version }}</strong>
+            </button>
           }
-        </sb-control-row>
-      </div>
+        }
+      </sb-control-row>
 
       <div class="strip" #strip>
         @for (lane of store.lanes(); track lane.component) {
@@ -105,7 +106,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                      title="This component did not exist yet"></div>
               }
               @for (segment of lane.segments; track segment.start) {
-                <button sb-button variant="segment" type="button" class="segment" [class.current]="segment.current"
+                <button sb-button variant="segment" type="button" class="segment sb-hit" [class.current]="segment.current"
                         [style.left.%]="segment.start * 100"
                         [style.width.%]="segment.width * 100"
                         [style.background]="segment.current ? null : versionTint(segment.version)"
@@ -243,7 +244,6 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .basis { margin: 0; color: var(--text-secondary); font-size: var(--text-table);
              max-width: 68ch; }
 
-    .headline { display: flex; align-items: baseline; gap: var(--register-pad); flex-wrap: wrap; }
     /* --text-micro, not --register-label -- an eyebrow tag; see
        styles.css's register comment for why an eyebrow must not grow. */
     .label { font-size: var(--text-micro); color: var(--text-faint);
@@ -267,7 +267,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .chip.quiet { color: var(--text-faint); cursor: default; }
     .release-meta, .provenance { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-faint); font-size: var(--text-micro); }
     .provenance a { color: var(--accent); }
-    .telemetry-cards { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-14); margin: var(--space-8) 0 0; font-size: var(--text-table); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .telemetry-cards { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-4) var(--space-14); margin: var(--space-8) 0 0; font-size: var(--text-table); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
     .telemetry-cards strong { color: var(--text); font-weight: 600; }
     .telemetry-cards .n { color: var(--text-faint); font-size: var(--text-micro); }
 

@@ -16,7 +16,7 @@ import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
-import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
+import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
 import { dateTime, num, share, text } from '../../ui/format';
 import { Freshness } from '../../ui/freshness';
@@ -304,6 +304,8 @@ import { tablePerPage } from '../../ui/table-per-page';
         [showPerPage]="true"
         [fillPage]="false"
         [emptyState]="emptyState"
+        phoneTap="drawer"
+        [detailLink]="tradeLink"
         (sortChange)="setSort($event)"
         (pageChange)="exposurePage.setPage($event)"
         (perPageChange)="onPerPage($event)"
@@ -685,13 +687,22 @@ export class Risk {
    *  which is the one order this table is read in, and a six-column table
    *  has nothing to hide. */
   protected readonly columns = computed<ColumnDef<RiskPosition>[]>(() => [
-    { key: 'ticker', header: 'Ticker', cell: this.tickerCell(), sortable: true },
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, cell: this.tickerCell(), sortable: true, compact: { line: 1, order: 1 } },
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), sortable: true },
     { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.shares ?? 0), 0), 0) },
-    { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true },
-    { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, sortable: true },
-    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)) },
+    { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true, compact: { line: 2, order: 2 } },
+    { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, sortable: true, compact: { line: 2, order: 1 } },
+    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)), compact: { line: 1, order: 2 } },
   ]);
+
+  /** v179: the money floor keeps Risk % and the stop on the phone row. The
+   *  ticker cell links to the trade; inside the row button it cannot be
+   *  tapped, so the drawer carries the same destination. `ticker`'s `value`
+   *  is the drawer heading only -- its cell renders. */
+  protected readonly tradeLink = (row: RiskPosition): DetailLink => ({
+    commands: ['/trades', row.trade_id],
+    label: 'Open full trade →',
+  });
 
   /** A risk_metrics.py fraction (0.031) as a magnitude, not a movement --
    *  `share()`, not `pct()`: VaR/ES/vol are always-positive loss figures,

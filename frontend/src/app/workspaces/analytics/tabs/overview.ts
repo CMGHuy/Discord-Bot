@@ -138,7 +138,7 @@ function maxDrawdown(values: readonly number[]): number | null {
         @if (monthTableOpen()) {
           <sb-data-table [rows]="monthRows()" [columns]="monthColumns" [visible]="monthVisible" [rowKey]="monthRowKey" clientPaging="analytics-months" />
         }
-        <a routerLink="/calendar">Open the calendar</a>
+        <a class="sb-hit" routerLink="/calendar">Open the calendar</a>
       </sb-panel>
       <sb-variance-band-panel class="wide" />
     </div>

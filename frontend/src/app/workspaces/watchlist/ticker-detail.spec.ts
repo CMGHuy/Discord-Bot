@@ -1,14 +1,25 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { Component, input, provideZonelessChangeDetection } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
+
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 
 import { TradeRow } from '../../api/models';
 import { ChartStore } from '../../stores/chart.store';
 import { TradesStore } from '../../stores/trades.store';
 import { TickerDetail } from './ticker-detail';
+import { TradeChart } from '../../ui/chart/trade-chart';
+
+// The canvas chart needs browser APIs absent in jsdom; these cases exercise
+// the real table and drawer, so replace only that unrelated rendering leaf.
+@Component({ selector: 'sb-trade-chart', template: '' })
+class ChartStub { readonly data = input<unknown>(null); }
 
 function row(overrides: Partial<TradeRow>): TradeRow {
   return {
@@ -50,5 +61,45 @@ describe('TickerDetail rowKey', () => {
     const tp1 = row({ leg_index: 0, leg_total: 2 });
     const runner = row({ leg_index: 1, leg_total: 2 });
     expect(rowKey(tp1)).not.toBe(rowKey(runner));
+  });
+});
+
+describe('TickerDetail trades on a phone (v179 §3.1)', () => {
+  function renderPhone(): ComponentFixture<TickerDetail> {
+    installDialogPolyfill();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(), provideRouter([]),
+        provideHttpClient(), provideHttpClientTesting(),
+        TradesStore, ChartStore, phoneViewport(),
+      ],
+    });
+    TestBed.overrideComponent(TickerDetail, {
+      remove: { imports: [TradeChart] }, add: { imports: [ChartStub] },
+    });
+    const fixture = TestBed.createComponent(TickerDetail);
+    fixture.componentRef.setInput('symbol', 'AAPL');
+    fixture.detectChanges();
+    patchState(unprotected(TestBed.inject(TradesStore)), {
+      data: { items: [row({ id: 't7' })], total: 1, page: 1, per_page: 25 },
+    });
+    fixture.detectChanges();
+    return fixture;
+  }
+  const table = (fixture: ComponentFixture<TickerDetail>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('sb-data-table') as HTMLElement;
+
+  it('shows ticker and P&L on line 1, status and held on line 2', () => {
+    expect(compactKeys(table(renderPhone()))).toEqual(['ticker', 'pnl_pct', 'status', 'held']);
+  });
+
+  it('reaches all six columns and links the drawer to the trade', () => {
+    const fixture = renderPhone();
+    openRowDrawer(table(fixture));
+    fixture.detectChanges();
+    expect([...compactKeys(table(fixture)), ...drawerKeys(table(fixture))].sort())
+      .toEqual(['entry', 'held', 'now', 'pnl_pct', 'status', 'ticker']);
+    expect(table(fixture).querySelector('a.drawer-detail-link')!.getAttribute('href')).toBe('/trades/t7');
   });
 });

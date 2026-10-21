@@ -10,7 +10,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
 
@@ -63,7 +63,11 @@ import {
 } from './dashboard.helpers';
 import { PositionsTable } from './positions-table';
 import { RowActions } from './row-actions';
-import { deriveActivity } from './panels/activity';
+import { Location } from '@angular/common';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
+import { ActivityEvent, deriveActivity } from './panels/activity';
+import { TradeDrawer } from './trade-drawer';
 import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { MarketMovers } from './panels/market-movers';
@@ -131,13 +135,22 @@ export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
  * which instant it is does not matter here. */
 export const DASHBOARD_COLUMNS = tradeColumns();
 
+/** The trade drawer's query parameter (v179 §3.2). dashboard.routes.ts's
+ *  rerun rule names the same string. */
+const TRADE_PARAM = 'trade';
+
+/** First row with this id: a scaled-out trade's legs share it, leg 0 first. */
+function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
+  return rows.find((row) => row.id === id) ?? null;
+}
+
 @Component({
   selector: 'sb-dashboard',
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
     Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
-    RecentActivity, MarketMovers,
+    RecentActivity, MarketMovers, TradeDrawer,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
   // level (dashboard.routes.ts). This instance is this page's own, for the
@@ -244,7 +257,8 @@ export const DASHBOARD_COLUMNS = tradeColumns();
         [visibleFor]="columnsForTab"
         [pinned]="pinned"
         [rowKey]="rowKey"
-        (rowActivate)="open($event)"
+        phoneTap="emit"
+        (rowActivate)="openTrade($event)"
         (reorder)="onReorder($event)"
       >
         <!-- v85 D13/D14: replaces the mockup's "+ New Trade" -- there is no
@@ -298,12 +312,19 @@ export const DASHBOARD_COLUMNS = tradeColumns();
       (cancelled)="confirmCloseAll.set(null)"
     />
 
+    <!-- v179 §3.2: one trade in a drawer on every device (a side panel on
+         desktop, a bottom sheet on a phone). Mounted only while a trade is
+         open; the open trade lives in ?trade= (see openTrade). -->
+    @if (drawerTrade(); as trade) {
+      <sb-trade-drawer [row]="trade" (closed)="closeTrade()" (actionDone)="onTradeAction()" />
+    }
+
     <div class="bottom-row">
       <sb-async [loading]="activityAsync().loading" [error]="activityAsync().error" [empty]="false"
                 emptyReason="measured-zero" emptyTitle="Recent activity"
                 [skeletonRows]="4" [skeletonCols]="3"
                 (retry)="recent.load()">
-        <sb-recent-activity [events]="activity()" />
+        <sb-recent-activity [events]="activity()" (eventActivate)="openActivity($event)" />
       </sb-async>
       <sb-async [loading]="tapeAsync().loading" [error]="tapeAsync().error" [empty]="false"
                 emptyReason="measured-zero" emptyTitle="Market movers"
@@ -615,6 +636,34 @@ export class Dashboard {
       loading: this.recent.loading, error: this.recent.error },
     { isEmpty: () => false },
   ));
+  private readonly route = inject(ActivatedRoute);
+  private readonly location = inject(Location);
+  private readonly tradeParam = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get(TRADE_PARAM))),
+    { initialValue: null },
+  );
+
+  /** The trade in the drawer, held here because a position row comes from
+   *  sb-positions-table's own TradesStore, which this page cannot read
+   *  (spec §3.2 "Row source"); an activity row comes from `recent`. */
+  protected readonly drawerTrade = signal<TradeRow | null>(null);
+  /** Opened from a link (reload, shared URL, Forward): there is no entry of
+   *  ours for × to go back over, so × replaces the URL instead. */
+  private coldOpen = false;
+  /** The id an in-page open is pushing, until the URL carries it -- so a
+   *  refresh landing mid-navigation cannot read the still-empty parameter
+   *  as "closed". */
+  private pendingId: string | null = null;
+  /** The activity rows have answered (rows or an error): only then may a
+   *  link whose trade is absent redirect (index Review Focus). */
+  private readonly recentSettled = computed(() =>
+    !this.recent.loading() && (!this.recent.empty() || this.recent.error() !== null));
+
+  private readonly syncTradeFromUrl = effect(() => {
+    const id = this.tradeParam();
+    const settled = this.recentSettled();
+    untracked(() => this.syncTrade(id, settled));
+  });
   protected readonly tapeAsync = computed(() => asyncInputs(
     { data: () => this.tape.rows(), loading: this.tape.loading, error: this.tape.error },
     { isEmpty: () => false },
@@ -969,9 +1018,64 @@ export class Dashboard {
   protected liveUnrealizedAmount = liveUnrealizedAmount;
   protected expectedR = expectedR;
 
-  /** Mouse activation, matching Trades: a row leads to its detail view. The
-   *  ticker cell's anchor is the keyboard equivalent. */
-  protected open(row: TradeRow): void {
-    void this.router.navigate(['/trades', row.id]);
+  /** A position or activity row: show it at once, then push ?trade= so Back
+   *  closes it and the link can be shared. Pushed, never replaceUrl (spec
+   *  §3.2). The ticker cell's anchor still goes to the full page. */
+  protected openTrade(row: TradeRow): void {
+    this.coldOpen = false;
+    this.pendingId = row.id;
+    this.drawerTrade.set(row);
+    void this.router
+      .navigate([], { relativeTo: this.route, queryParams: { [TRADE_PARAM]: row.id }, queryParamsHandling: 'merge' })
+      .finally(() => { this.pendingId = null; });
+  }
+
+  /** Activity events derive from `recent`'s rows, so the row is there; the
+   *  full page is the fallback if a refresh dropped it in between. */
+  protected openActivity(event: ActivityEvent): void {
+    const row = findTrade(this.recent.rows(), event.tradeId);
+    if (row) this.openTrade(row);
+    else void this.router.navigate(['/trades', event.tradeId]);
+  }
+
+  /** The drawer closed itself (×, Escape, backdrop) or an action finished.
+   *  After Back the parameter is already gone: nothing to undo. */
+  protected closeTrade(): void {
+    const cold = this.coldOpen;
+    this.drawerTrade.set(null);
+    this.coldOpen = false;
+    if (this.tradeParam() === null) return;
+    if (!cold) {
+      this.location.back();
+      return;
+    }
+    void this.router.navigate([], {
+      relativeTo: this.route, queryParams: { [TRADE_PARAM]: null }, queryParamsHandling: 'merge', replaceUrl: true,
+    });
+  }
+
+  /** A close or cancel from the drawer changed the trade: refresh what shows
+   *  it and close the now-stale summary. */
+  protected onTradeAction(): void {
+    this.store.load();
+    this.recent.load();
+    this.closeTrade();
+  }
+
+  /** URL → drawer. Back (no id) closes; a new id from a link opens the row
+   *  once the activity rows have answered, or redirects with replaceUrl. */
+  private syncTrade(id: string | null, settled: boolean): void {
+    if (id === null) {
+      if (this.pendingId === null) this.drawerTrade.set(null);
+      return;
+    }
+    if (this.drawerTrade()?.id === id || !settled) return;
+    const row = findTrade(this.recent.rows(), id);
+    if (row === null) {
+      void this.router.navigate(['/trades', id], { replaceUrl: true });
+      return;
+    }
+    this.coldOpen = true;
+    this.drawerTrade.set(row);
   }
 }

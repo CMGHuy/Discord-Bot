@@ -1,3 +1,4 @@
+import { allSources } from '../ui/testing/all-sources';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -67,6 +68,18 @@ describe('workspace consistency (v85)', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('never restyles the inside of a shared tile (v179 §3.3)', () => {
+    // Calendar's ::ng-deep rules forced sb-stat-tile into an inline,
+    // centred variant that read differently from every other page. A page
+    // places tiles in a grid; the tile owns its inside. allSources(), not
+    // SOURCES: it also reaches nested folders such as calendar/day/.
+    const offenders = allSources()
+      .filter(({ name }) => name.startsWith('app/workspaces/'))
+      .filter(({ source }) => /::ng-deep[^{]*sb-(stat-tile|metric-card)/.test(source))
+      .map(({ name }) => name);
+    expect(offenders).toEqual([]);
+  });
+
   it('declares a freshness marker on every page that fetches (D30)', () => {
     const offenders = SOURCES
       // `sb-async` owns the per-panel stale timestamp when the page's API
@@ -77,5 +90,26 @@ describe('workspace consistency (v85)', () => {
         && !/sb-freshness|\[staleAsOf\]/.test(s.source))
       .map((s) => s.name);
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('compact rows are declared, never hand-built (v179 §3.1, §4)', () => {
+  it('no workspace builds or restyles the compact row or row drawer itself', () => {
+    // sb-data-table owns this DOM. A workspace that writes it (or reaches
+    // into it with ::ng-deep) is hand-rolling cards -- the §4 anti-goal.
+    const offenders = SOURCES
+      .filter((s) => /compact-(?:list|row|hit|footer)|drawer-fields|\.line[12]\b/.test(s.source))
+      .map((s) => s.name);
+    expect(offenders).toEqual([]);
+  });
+
+  it.each([
+    'trades/trades.columns.ts',
+    'watchlist/watchlist.ts',
+    'watchlist/ticker-detail.ts',
+    'research/research.ts',
+    'risk/risk.ts',
+  ])('%s declares its compact row', (name) => {
+    expect(SOURCES.find((s) => s.name === name)?.source ?? '').toContain('compact: { line: 1, order: 1 }');
   });
 });

@@ -214,7 +214,11 @@ Read the `docs/claude/` file before acting:
 - `skills-tools.md`: choosing repo-specific skills or automation.
 - `ui-design.md`: any screen, table or pager: designed for mobile, tablet and
   desktop together and checked at all three widths; tables page
-  5/10/20/50/100/All (10 desktop, 5 tablet/phone).
+  5/10/20/50/100/All (10 desktop, 5 tablet/phone); text >= 11px, mixed sizes
+  on one baseline, 44px hit areas on phone/tablet (`.sb-hit`), phone tables
+  declare `compact` rows. Before merging a UI change,
+  `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
+  exit 0 (allow-list entries carry a reason and a date).
 
 ## Skills: the same ones Claude uses
 

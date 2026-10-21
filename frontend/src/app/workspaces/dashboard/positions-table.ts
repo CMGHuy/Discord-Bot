@@ -6,7 +6,7 @@ import { RouterLink } from '@angular/router';
 import { TradeRow } from '../../api/models';
 import { TradesStore } from '../../stores/trades.store';
 import { DataTable } from '../../ui/data-table/data-table';
-import { ColumnDef, EmptyState } from '../../ui/data-table/data-table.types';
+import { ColumnDef, EmptyState, PhoneTap } from '../../ui/data-table/data-table.types';
 import { STATUS_ICON } from '../../ui/icon';
 import { Tab, TabBar } from '../../ui/layout';
 import { Async, asyncInputs } from '../../ui/async';
@@ -63,7 +63,7 @@ const EMPTY_STATES: Record<string, EmptyState> = {
               [skeletonRows]="3" [skeletonCols]="5"
               (retry)="trades.load()">
       <div class="table-head">
-        <a class="all-link" routerLink="/trades" [queryParams]="{ status: active() }">
+        <a class="all-link sb-hit" routerLink="/trades" [queryParams]="{ status: active() }">
           View in Trades →
         </a>
         <ng-content select="[table-actions]" />
@@ -75,6 +75,7 @@ const EMPTY_STATES: Record<string, EmptyState> = {
         [visible]="visible()"
         [pinned]="pinned()"
         [rowKey]="rowKey()"
+        [phoneTap]="phoneTap()"
         [emptyState]="emptyState()"
         [pagination]="trades.pagination()"
         [fillPage]="false"
@@ -113,6 +114,10 @@ export class PositionsTable {
   readonly visibleFor = input.required<(tab: string) => string[]>();
   readonly pinned = input<string[]>([]);
   readonly rowKey = input.required<(row: TradeRow) => string>();
+  /** What a phone row tap does (v179 §6a.4). The Dashboard sets 'emit': it
+   *  opens its own trade drawer on every device, so the table's generic
+   *  drawer must not open a second one. */
+  readonly phoneTap = input<PhoneTap>('drawer');
   /** Rows per page: saved per device class, 10 on desktop and 5 on tablet
    *  and phone (v167). "All" is sent as the API's cap. */
   private readonly perPageState = tablePerPage('dashboard-positions');

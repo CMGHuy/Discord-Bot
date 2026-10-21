@@ -22,6 +22,8 @@ export interface ActivityEvent {
   /** Stable across refetches, so the list does not re-animate: one row can
    *  produce two events, so the row id alone would not be unique. */
   id: string;
+  /** The source trade row, kept explicit because ids may contain colons. */
+  tradeId: string;
 }
 
 const DEFAULT_LIMIT = 6;
@@ -56,6 +58,7 @@ export function deriveActivity(
           : `Closed${row.r_multiple != null ? ` at ${row.r_multiple > 0 ? '+' : ''}${row.r_multiple.toFixed(2)}R` : ''}`,
         r: cancelled ? null : (row.r_multiple ?? null),
         id: `${row.id}:${cancelled ? 'cancelled' : 'closed'}`,
+        tradeId: row.id,
       });
     }
 
@@ -69,6 +72,7 @@ export function deriveActivity(
         detail: row.entry != null ? `at ${num(row.entry)}` : '',
         r: null,
         id: `${row.id}:opened`,
+        tradeId: row.id,
       });
     }
   }

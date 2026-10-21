@@ -105,22 +105,12 @@
       "count": 2
     }
   },
-  "src/app/workspaces/calendar/calendar.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/app/workspaces/dashboard/panels/exposure-by-horizon.spec.ts": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
   "src/app/workspaces/system/logs-tab.spec.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/app/workspaces/system/settings-tab.spec.ts": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     }

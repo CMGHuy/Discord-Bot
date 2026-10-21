@@ -19,7 +19,7 @@ import { ChartContainer } from '../../ui/chart-container';
 import { TradeChart } from '../../ui/chart/trade-chart';
 import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
-import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
+import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { elapsedHours, held, num, pct } from '../../ui/format';
 import { CLOCK } from '../../ui/clock';
 import { tablePerPage } from '../../ui/table-per-page';
@@ -66,7 +66,7 @@ export const TICKER_TRADES_CAP = 25;
          symbol itself stays visible in the chart caption, the trades panel
          heading and the table's own ticker column, so nothing is lost by
          dropping the h1 sb-section-head used to render here. -->
-    <a class="back" routerLink="/watchlist">← Watchlist</a>
+    <a class="back sb-hit" routerLink="/watchlist">← Watchlist</a>
     <sb-section-head>
       <span actions class="counts">
         {{ openCount() }} open · {{ closedCount() }} closed
@@ -84,7 +84,7 @@ export const TICKER_TRADES_CAP = 25;
     </sb-chart-container>
 
     <sb-panel [heading]="'Trades on ' + symbol()" [flush]="true">
-      <a panel-actions class="all-link" routerLink="/trades" [queryParams]="{ ticker: symbol() }">
+      <a panel-actions class="all-link sb-hit" routerLink="/trades" [queryParams]="{ ticker: symbol() }">
         Open in Trades →
       </a>
 
@@ -105,6 +105,8 @@ export const TICKER_TRADES_CAP = 25;
         [sort]="sort()"
         [pagination]="tradesPage.pageSpec()"
         [showPerPage]="true"
+        phoneTap="drawer"
+        [detailLink]="tradeLink"
         (sortChange)="setSort($event)"
         (pageChange)="tradesPage.setPage($event)"
         (perPageChange)="onPerPage($event)"
@@ -190,14 +192,21 @@ export class TickerDetail {
    *  Trades list. */
   protected readonly visible = ['ticker', 'status', 'entry', 'now', 'pnl_pct', 'held'];
 
+  /** v179 §3.1: ticker and P&L, then status and held on a phone. Entry and
+   *  now move to the row drawer. Ticker's plain value names that drawer. */
   protected readonly columns = computed<ColumnDef<TradeRow>[]>(() => [
-    { key: 'ticker', header: 'Ticker', cell: this.tickerCell() },
-    { key: 'status', header: 'Status', value: (row) => row.status },
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, cell: this.tickerCell(), compact: { line: 1, order: 1 } },
+    { key: 'status', header: 'Status', value: (row) => row.status, compact: { line: 2, order: 1 } },
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true },
     { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true },
-    { key: 'pnl_pct', header: 'P&L %', numeric: true, cell: this.pnlCell() },
-    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, this.now())), numeric: true, sortable: true },
+    { key: 'pnl_pct', header: 'P&L %', numeric: true, cell: this.pnlCell(), compact: { line: 1, order: 2 } },
+    { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, this.now())), numeric: true, sortable: true, compact: { line: 2, order: 2 } },
   ]);
+
+  protected readonly tradeLink = (row: TradeRow): DetailLink => ({
+    commands: ['/trades', row.id],
+    label: 'Open full trade →',
+  });
 
   /** From the rows on screen, because there is no ticker summary endpoint
    *  and inventing one for two numbers would be the wrong trade. Both are

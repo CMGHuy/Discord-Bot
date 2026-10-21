@@ -1,0 +1,4 @@
+{
+  "$comment": "v179 layout audit allow-list (frontend/scripts/layout-audit.mjs). One entry per accepted finding: route (a ROUTES template from layout-audit-lib.mjs, e.g. /trades/:id), width ('*' or a number), check (overflow|offscreen|clipped|tap|text|baseline), selector (exactly as the audit prints it), reason (why this is not a defect), date (YYYY-MM-DD it was added). Only canvas or third-party chart internals and browser-native parts belong here (spec v179 §6a.6); an app control, label or row is fixed, not allowed. An entry nothing matches any more is printed as STALE; --prune removes it.",
+  "entries": []
+}

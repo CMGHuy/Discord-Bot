@@ -98,9 +98,14 @@ export class Select {
     </label>
   `,
   styles: `
-    .field { display: inline-flex; flex-direction: column; gap: var(--space-4); }
+    :host { min-width: 0; }
+    /* max-width + min-width: 0: in a narrow grid cell (the filter bar's two
+       columns at 390) the field shrinks to the cell instead of keeping the
+       native 20-character input width and running past the panel. */
+    .field { display: inline-flex; flex-direction: column; gap: var(--space-4); max-width: 100%; }
     /* Same field as sb-select above (v80 D4). */
     input {
+      min-width: 0;
       height: var(--control-h);
       padding: 0 var(--space-8);
       background: var(--surface);
@@ -190,7 +195,7 @@ export class TextInput {
     /* .top-label's typography is the global .sb-label (v80 D3). */
     /* The control band. Height matched to every other control so the row
        aligns on the box, not on the caption's text. */
-    .box { display: inline-flex; align-items: center; gap: var(--space-6); height: var(--control-h); }
+    .box { display: inline-flex; align-items: center; gap: var(--space-6); height: var(--control-h); min-width: var(--hit-min); }
     .field:has(input:disabled) { opacity: 0.45; cursor: default; }
     input { accent-color: var(--accent); }
   `,

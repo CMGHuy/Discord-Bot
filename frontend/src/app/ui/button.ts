@@ -108,7 +108,7 @@ export type ButtonVariant =
        one place this control should shout. --bg ink on --neg clears 6:1. */
     :host(.danger:not([disabled]):hover) { background: var(--neg); color: var(--bg); }
 
-    :host(.ghost) { background: transparent; color: var(--text-secondary); }
+    :host(.ghost) { min-width: var(--hit-min); background: transparent; color: var(--text-secondary); }
     :host(.ghost:not([disabled]):hover) { color: var(--text); background: var(--surface-raised); }
 
     :host(.icon) {
@@ -151,6 +151,7 @@ export type ButtonVariant =
        state and pairs with aria-pressed at the call site. */
     :host(.chip) {
       min-height: var(--control-h);
+      min-width: var(--hit-min);
       padding: var(--space-4) var(--space-8);
       border-color: var(--border);
       border-radius: var(--chip-radius);
@@ -185,6 +186,7 @@ export type ButtonVariant =
        <a> without an href is not focusable. */
     :host(.link) {
       min-height: var(--control-h);
+      min-width: var(--hit-min);
       padding: 0;
       background: transparent;
       color: var(--accent);
@@ -194,8 +196,9 @@ export type ButtonVariant =
     :host(.link:not([disabled]):hover) { text-decoration: underline; }
 
     /* v80 D4 -- a finger needs a square target. The same condition as the
-       tokens.css touch block, where --control-h is already 44px. */
-    @media (pointer: coarse), (max-width: 639px) {
+       tokens.css touch block (phone and tablet since v179), where
+       --control-h is already 44px. */
+    @media (pointer: coarse), (max-width: 1023px) {
       :host(.icon), :host(.danger-icon) { min-width: var(--control-h); min-height: var(--control-h); }
     }
   `,

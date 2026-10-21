@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { provideLocationMocks } from '@angular/common/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Router, Routes, provideRouter, withComponentInputBinding } from '@angular/router';
+import { ActivatedRouteSnapshot, Router, Routes, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -139,7 +139,9 @@ describe('route data readiness contract', () => {
       const children = await topLevel!.loadChildren!() as Routes;
       const child = children[0]!;
       expect(child.providers).toBeTruthy();
-      expect(child.runGuardsAndResolvers).toBe('always');
+      // v179 §6b.8: the Dashboard alone skips its resolver for a drawer toggle.
+      if (path === 'dashboard') expect(child.runGuardsAndResolvers).toBeTypeOf('function');
+      else expect(child.runGuardsAndResolvers).toBe('always');
       expect(child.resolve?.['ready']).toBeTypeOf('function');
       expect(child.data?.[RESOLVER_ROUTE_DATA]?.loadingLabel).toBeTruthy();
     }
@@ -159,6 +161,15 @@ describe('route data readiness contract', () => {
     expect(systemRefresh('bot', route('settings'))).toBe(false);
     expect(systemRefresh('bot', route('scan'))).toBe(true);
     expect(systemRefresh('settings', route('logs'))).toBe(false);
+  });
+
+  it('re-resolves the Dashboard on every navigation except a trade-drawer toggle (v179 §6b.8)', async () => {
+    const child = (await routes.find((route) => route.path === 'dashboard')!.loadChildren!() as Routes)[0]!;
+    const rule = child.runGuardsAndResolvers as (a: ActivatedRouteSnapshot, b: ActivatedRouteSnapshot) => boolean;
+    const snap = (queryParams: Record<string, string>) => ({ params: {}, queryParams }) as unknown as ActivatedRouteSnapshot;
+    expect(rule(snap({}), snap({ trade: 't1' }))).toBe(false);
+    expect(rule(snap({}), snap({}))).toBe(true);
+    expect(rule(snap({}), snap({ scope: 'all' }))).toBe(true);
   });
 });
 describe('routing, unauthenticated', () => {

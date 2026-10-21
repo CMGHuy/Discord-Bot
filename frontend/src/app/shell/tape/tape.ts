@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy, Component, ElementRef, afterRenderEffect, computed, inject, signal,
+  ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterRenderEffect, computed, inject, signal,
   viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -10,7 +10,7 @@ import { TapeStore } from '../../stores/tape.store';
 import { AgeHint, TAPE_WINDOW_S } from '../../ui/age-hint';
 import { Flash } from '../../ui/flash';
 import { ABSENT, num, pct } from '../../ui/format';
-import { TAPE_MIN_DURATION_S, tapeDurationSeconds } from './tape-speed';
+import { TAPE_PAGE_SECONDS, tapePages } from './tape-pages';
 
 /** Yahoo symbol -> the label the tile shows. `/market/tape` echoes back the
  *  literal symbol it was asked to price, which is never what a reader wants
@@ -51,9 +51,13 @@ interface Tile {
  * there is only ever one width to divide, and it goes to whichever content
  * actually needs it.
  *
- * The track is rendered twice and translated -50% (`tape.css`'s
- * `tape-slide` keyframes) so the loop has no snap-back — same convention
- * the two lanes this replaces already used.
+ * v179 layout audit: the strip no longer slides a doubled track under the
+ * lane's edge (that cut a symbol or a price at the edge by design). It shows
+ * whole tiles only -- as many as the lane fits -- and turns to the next page
+ * every `TAPE_PAGE_SECONDS` (`tape-pages.ts`), so every flagged symbol is
+ * still reached. The page holds while the pointer or focus is on the strip.
+ * Tiles off the current page stay in the DOM (`.off`: out of flow, hidden)
+ * so their width can still be measured.
  */
 @Component({
   selector: 'sb-tape',
@@ -62,38 +66,37 @@ interface Tile {
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
   template: `
-    <div class="lane" role="region" aria-label="Market tape"
+    <div class="lane" role="region" aria-label="Market tape" [class.nothing-fits]="nothingFits()"
          [attr.title]="asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()">
       <div class="cap">mkt</div>
-      <div class="viewport">
-        <div class="track" #track [style.animation-duration.s]="duration()">
-          @for (pass of [0, 1]; track pass) {
-            @for (tile of tiles(); track tile.key) {
-              <a class="tile" [routerLink]="tile.link" [sbFlash]="tile.change_pct"
-                 [attr.aria-hidden]="pass === 1 ? 'true' : null"
-                 [attr.tabindex]="tile.link && pass !== 1 ? null : -1">
-                <span class="sym">{{ tile.label }}</span>
-                @if (tile.proxyLabel) {
-                  @if (tile.change_pct !== null) {
-                    <span [class.up]="up(tile)" [class.down]="down(tile)">{{ pct(tile.change_pct) }}</span>
-                  }
-                  <span class="ctx proxy" title="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.">{{ tile.proxyLabel }}</span>
-                } @else if (tile.price !== null) {
-                  <span class="px" [class.up]="up(tile)" [class.down]="down(tile)">{{ num(tile.price) }}</span>
-                  @if (tile.change_pct !== null) {
-                    <span [class.up]="up(tile)" [class.down]="down(tile)">{{ pct(tile.change_pct) }}</span>
-                  }
-                } @else {
-                  <span class="ctx muted">no price</span>
+      <div class="viewport" #viewport (mouseenter)="hold(true)" (mouseleave)="hold(false)"
+           (focusin)="hold(true)" (focusout)="hold(false)">
+        <div class="track">
+          @for (tile of tiles(); track tile.key; let i = $index) {
+            <a class="tile sb-hit" [routerLink]="tile.link" [sbFlash]="tile.change_pct"
+               [class.off]="!onPage(i)"
+               [attr.tabindex]="tile.link && onPage(i) ? null : -1">
+              <span class="sym">{{ tile.label }}</span>
+              @if (tile.proxyLabel) {
+                @if (tile.change_pct !== null) {
+                  <span [class.up]="up(tile)" [class.down]="down(tile)">{{ pct(tile.change_pct) }}</span>
                 }
-                @if (tile.context_label) {
-                  <span class="ctx" [class.muted]="tile.context_kind === 'earnings'">
-                    {{ tile.context_label }}
-                  </span>
+                <span class="ctx proxy" title="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.">{{ tile.proxyLabel }}</span>
+              } @else if (tile.price !== null) {
+                <span class="px" [class.up]="up(tile)" [class.down]="down(tile)">{{ num(tile.price) }}</span>
+                @if (tile.change_pct !== null) {
+                  <span [class.up]="up(tile)" [class.down]="down(tile)">{{ pct(tile.change_pct) }}</span>
                 }
-                <sb-age-hint [ageS]="tile.ageS" [windowS]="tapeWindowS" />
-              </a>
-            }
+              } @else {
+                <span class="ctx muted">no price</span>
+              }
+              @if (tile.context_label) {
+                <span class="ctx" [class.muted]="tile.context_kind === 'earnings'">
+                  {{ tile.context_label }}
+                </span>
+              }
+              <sb-age-hint [ageS]="tile.ageS" [windowS]="tapeWindowS" />
+            </a>
           }
         </div>
       </div>
@@ -108,11 +111,18 @@ export class Tape {
   protected readonly ABSENT = ABSENT;
   protected readonly tapeWindowS = TAPE_WINDOW_S;
 
-  private readonly trackRef = viewChild<ElementRef<HTMLElement>>('track');
-  /** Measured from the track's own rendered width (after every render the
-   *  row data could have changed it) rather than a fixed duration -- see
-   *  tape-speed.ts. */
-  protected readonly duration = signal(TAPE_MIN_DURATION_S);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly viewportRef = viewChild<ElementRef<HTMLElement>>('viewport');
+  /** The lane's width, kept by a ResizeObserver -- the page split depends on it. */
+  private readonly laneWidth = signal(0);
+  /** Index lists of the tiles that fit together; empty until the first measure. */
+  private readonly pages = signal<number[][]>([]);
+  private readonly page = signal(0);
+  private readonly measured = signal(false);
+  /** The lane is too narrow for even one whole tile (768px leaves ~60px): the strip hides rather than show a sliver. */
+  protected readonly nothingFits = computed(() => this.measured() && this.pages().length === 0);
+  private held = false;
+  private readonly onCurrentPage = computed(() => new Set(this.pages()[this.page()] ?? []));
 
   protected readonly tiles = computed<Tile[]>(() => {
     const indices: Tile[] = this.market.rows().map((r) => ({
@@ -146,14 +156,45 @@ export class Tape {
 
   constructor() {
     afterRenderEffect(() => {
-      // Read for reactivity, not value -- the track element itself does not
-      // change when the row data does, so without a signal read here this
-      // effect would run once on first render (an empty track) and never
-      // again. Same reasoning as the two components this replaces.
+      // Read for reactivity, not value: the tiles' own widths change with the
+      // data and the lane's with the window.
       this.tiles();
-      const el = this.trackRef()?.nativeElement;
-      if (el) this.duration.set(tapeDurationSeconds(el.scrollWidth));
+      const lane = this.laneWidth();
+      if (lane > 0) this.measure(lane);
     });
+    afterRenderEffect(() => {
+      const el = this.viewportRef()?.nativeElement;
+      if (!el) return;
+      this.laneWidth.set(el.clientWidth);
+      if (typeof ResizeObserver === 'undefined') return;
+      const observer = new ResizeObserver(() => this.laneWidth.set(el.clientWidth));
+      observer.observe(el);
+      return () => observer.disconnect();
+    });
+    const timer = setInterval(() => this.turn(), TAPE_PAGE_SECONDS * 1000);
+    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+  }
+
+  private measure(lane: number): void {
+    const widths = [...this.host.nativeElement.querySelectorAll<HTMLElement>('.tile')].map((t) => t.offsetWidth);
+    const next = tapePages(widths, lane);
+    if (JSON.stringify(next) !== JSON.stringify(this.pages())) this.pages.set(next);
+    if (this.page() >= next.length) this.page.set(0);
+    this.measured.set(true);
+  }
+
+  private turn(): void {
+    const count = this.pages().length;
+    if (!this.held && count > 1) this.page.update((p) => (p + 1) % count);
+  }
+
+  protected hold(on: boolean): void {
+    this.held = on;
+  }
+
+  /** Before the first measure every tile counts as on the page. */
+  protected onPage(index: number): boolean {
+    return !this.measured() || this.onCurrentPage().has(index);
   }
 
   protected up(tile: { change_pct: number | null }): boolean {

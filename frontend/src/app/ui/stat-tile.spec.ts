@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -80,5 +82,53 @@ describe('StatTile (v85 D23)', () => {
     preferenceValues = { minSampleN: 100 };
     expect(render({ sample: 50 }).classList).toContain('thin');
     expect(render({ sample: 60 }).querySelector('.sample')!.getAttribute('title')).toContain('40 more');
+  });
+});
+
+describe('StatTile: one variant everywhere (v179 §3.3)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/stat-tile.ts'), 'utf8');
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** The rule whose selector starts a line, so `.value` is not `.pos .value`. */
+  const rule = (selector: string) =>
+    SOURCE.match(new RegExp(`(?:^|\\n)\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+  beforeEach(() => {
+    preferenceValues = {};
+    TestBed.configureTestingModule({ providers: [
+      provideZonelessChangeDetection(),
+      { provide: PreferencesStore, useValue: { values: () => preferenceValues } },
+    ] });
+  });
+
+  it('fills its grid cell, so tiles in one row share a height', () => {
+    for (const declaration of ['display: block', 'height: 100%', 'min-width: 0']) {
+      expect(rule(':host')).toContain(declaration);
+    }
+    expect(rule('.tile')).toContain('height: 100%');
+    expect(rule('.tile')).toContain('box-sizing: border-box');
+    expect(rule('.tile')).toContain('min-width: 0');
+  });
+
+  it('stacks its parts left-aligned and has no inline or centred variant', () => {
+    expect(rule('.tile')).toContain('flex-direction: column');
+    expect(rule('.tile')).toContain('text-align: start');
+    expect(SOURCE).not.toMatch(/justify-content:\s*center|flex-direction:\s*row/);
+  });
+
+  it('sets the value, the secondary and N= in the numeric face', () => {
+    expect(rule('.value')).toContain('font-family: var(--font-num)');
+    expect(SOURCE).toMatch(/\.sample, \.secondary \{ font-family: var\(--font-num\); \}/);
+  });
+
+  it('wraps a long label or caption instead of widening its track', () => {
+    expect(rule('.label')).toContain('overflow-wrap: anywhere');
+    expect(rule('.value')).toContain('overflow-wrap: anywhere');
+  });
+
+  it('renders label, value, secondary, N= and hint in that order, captions kept', () => {
+    const el = render({ secondary: '+1,240.00 €', sample: 412, hint: 'Pre-tax, paper trades.' });
+    expect([...el.children].map((child) => child.className.split(' ')[0]))
+      .toEqual(['label', 'value', 'secondary', 'sample', 'hint']);
+    expect(el.querySelector('.hint')!.textContent).toContain('Pre-tax, paper trades.');
   });
 });

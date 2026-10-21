@@ -124,10 +124,11 @@ export interface StatusCellRow {
     }
   `,
   styles: `
-    .cell { display: inline-flex; align-items: center; gap: var(--space-6); }
+    .cell { display: inline-flex; align-items: baseline; gap: var(--space-6); }
 
     .track {
       position: relative;
+      align-self: center;
       width: 72px;
       height: 4px;
       border-radius: var(--radius-sm);

@@ -86,15 +86,32 @@ describe('trading performance panel', () => {
     expect(card.textContent).toContain('none closed today');
   });
 
+  it('puts Today / All days in one segmented control on the header line (v179 §3.3)', () => {
+    const el = render({ scope: 'today' });
+    const control = el.querySelector('sb-panel header sb-segmented')!;
+    expect(control).not.toBeNull();
+    const segments = [...control.querySelectorAll<HTMLButtonElement>('.segment')];
+    expect(segments.map((s) => s.textContent!.trim())).toEqual(['Today', 'All days']);
+    expect(segments.map((s) => s.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+    expect(el.querySelector('sb-panel header sb-control-row')).toBeNull();
+    expect(el.querySelector('[data-scope]')).toBeNull();
+  });
+
   it('emits the scope the user picked', () => {
     const f = TestBed.createComponent(TradingPerformance);
     f.componentRef.setInput('scope', 'today');
     f.detectChanges();
     let picked: string | undefined;
     f.componentInstance.scopeChange.subscribe((s: string) => (picked = s));
-    (f.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('[data-scope="all"]')!.click();
+    [...(f.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('sb-segmented .segment')]
+      .find((s) => s.textContent!.trim() === 'All days')!.click();
     expect(picked).toBe('all');
+  });
+
+  it('presses no segment for a scope the toggle never sets', () => {
+    const el = render({ scope: 'active' });
+    const pressed = [...el.querySelectorAll('sb-panel header sb-segmented .segment')].map((s) => s.getAttribute('aria-pressed'));
+    expect(pressed).toEqual(['false', 'false']);
   });
 
   it('renders a missing payoff ratio as no value, never as zero', () => {

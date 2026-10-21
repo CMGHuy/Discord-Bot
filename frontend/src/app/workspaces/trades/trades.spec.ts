@@ -18,6 +18,8 @@ import { PreferencesStore } from '../../stores/preferences.store';
 import { TradesStore } from '../../stores/trades.store';
 import { isInline } from '../../ui/priority';
 import { ToolbarControl } from '../../ui/toolbar';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 import { Trades, TRADES_CONTROLS } from './trades';
 
 function row(overrides: Partial<TradeRow>): TradeRow {
@@ -379,5 +381,73 @@ describe('Trades — the Plan cell for runners (v177)', () => {
     expect(cellText(closed)).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%)');
     expect(closed.querySelector('[title]')!.getAttribute('title'))
       .toContain('Runner exit (trailing stop): 52.44');
+  });
+});
+
+/* -- v179 §3.1 -- Trades on a phone: compact rows and the row drawer ------ */
+
+function renderPhone(items: TradeRow[]): ComponentFixture<Trades> {
+  installDialogPolyfill();
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideRouter([]),
+      provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+      provideHttpClientTesting(),
+      TradesStore,
+      { provide: ConnectionStore, useValue: connectionStub },
+      { provide: PreferencesStore, useValue: preferencesStub },
+      phoneViewport(),
+    ],
+  });
+  const fixture = TestBed.createComponent(Trades);
+  fixture.detectChanges();
+  patchState(unprotected(TestBed.inject(TradesStore)), {
+    data: { items, total: items.length, page: 1, per_page: 20 },
+    query: { page: 1, per_page: 20 },
+  });
+  fixture.detectChanges();
+  return fixture;
+}
+
+const tradesTable = (fixture: ComponentFixture<Trades>) =>
+  (fixture.nativeElement as HTMLElement).querySelector('sb-data-table') as HTMLElement;
+
+describe('Trades on a phone (v179 §3.1)', () => {
+  it('reaches every visible column between the compact row and the drawer (§7.5)', () => {
+    const fixture = renderPhone([row({})]);
+    openRowDrawer(tradesTable(fixture));
+    fixture.detectChanges();
+    const shown = (fixture.componentInstance as unknown as { visible: () => string[] }).visible();
+    expect([...compactKeys(tradesTable(fixture)), ...drawerKeys(tradesTable(fixture))].sort()).toEqual([...shown].sort());
+  });
+
+  it('keeps the P&L amount and the stop on the compact row (money floor)', () => {
+    const table = tradesTable(renderPhone([row({ realized_pnl_amount: 50, stop_loss: 95 })]));
+    expect(table.querySelector('.line1 > [data-col="pnl_pct"]')!.textContent).toContain('50.00');
+    expect(table.querySelector('.line2 > [data-col="plan"] .stop')!.textContent).toContain('95.00');
+  });
+
+  it('shows a PENDING row with no fill as em dashes, never NaN, undefined or an empty line', () => {
+    const pending = row({
+      id: 'p1', status: 'PENDING', status_label: 'PENDING', entry: null, stop_loss: null, target: null,
+      exit_price: null, pnl_pct: null, realized_pnl_amount: null, r_multiple: null, shares: null, trigger_price: 101,
+    });
+    const compactRow = tradesTable(renderPhone([pending])).querySelector('li.compact-row')!;
+    expect(compactRow.textContent).not.toMatch(/NaN|undefined|null/);
+    for (const line of compactRow.querySelectorAll('.line1, .line2')) expect(line.textContent!.trim()).not.toBe('');
+    expect(compactRow.querySelector('[data-col="pnl_pct"]')!.textContent).toContain('—');
+  });
+
+  it('links the drawer to the full trade page and does not navigate on the tap', () => {
+    const fixture = renderPhone([row({ id: 't9' })]);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
+    openRowDrawer(tradesTable(fixture));
+    fixture.detectChanges();
+    const link = tradesTable(fixture).querySelector('a.drawer-detail-link')!;
+    expect(link.textContent!.trim()).toBe('Open full trade →');
+    expect(link.getAttribute('href')).toBe('/trades/t9');
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
