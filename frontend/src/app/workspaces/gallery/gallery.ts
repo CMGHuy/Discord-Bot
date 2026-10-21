@@ -330,6 +330,7 @@ interface ContractRow {
          text. sb-magnitude sits beside R, its real home (Task 28). -->
     <sb-section-head [heading]="'Numerics'" [level]="2" />
     <sb-panel heading="num / pct / R / signed / money -- positive, negative, zero, absent">
+      <div class="numerics-scroll">
       <table class="numerics-demo">
         <thead>
           <tr>
@@ -357,6 +358,7 @@ interface ContractRow {
           }
         </tbody>
       </table>
+      </div>
     </sb-panel>
 
     <!-- -- sb-async: all four branches side by side ------------------------ -->
@@ -391,9 +393,13 @@ interface ContractRow {
     <!-- -- empty state ------------------------------------------------------ -->
     <sb-section-head [heading]="'Empty state'" [level]="2" />
     <sb-panel>
+      <!-- Two grids, not one: cards that open with the 11px reason tag beside cards that open with the
+           14px title put two first lines 4px apart in a shared row. -->
       <sb-panel-grid track="narrow">
         <sb-empty-state title="No results" />
         <sb-empty-state title="No results" hint="Widen the date range." />
+      </sb-panel-grid>
+      <sb-panel-grid track="narrow" style="margin-top: var(--space-14)">
         <sb-empty-state title="No trades closed in range" reason="measured-zero" />
         <sb-empty-state title="No quotes yet" hint="The feed has not reported." reason="no-data-yet" />
       </sb-panel-grid>
@@ -764,6 +770,8 @@ interface ContractRow {
        formatted cell (same class every real table cell takes); the header
        cells take it too so the unit-in-header column lines up over its
        own right-aligned figures below it. */
+    /* The six-column table is wider than a phone-width panel: it scrolls in its own box. */
+    .numerics-scroll { min-width: 0; overflow-x: auto; }
     .numerics-demo { border-collapse: collapse; }
     .numerics-demo th, .numerics-demo td {
       padding: var(--space-6) var(--space-10);

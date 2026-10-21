@@ -129,6 +129,23 @@ describe('the gallery is the v80 D6 reference', () => {
     }
   });
 
+  it('scrolls the numerics table in its own box and keeps the plain and reasoned empty states in separate grids (v179 layout audit)', () => {
+    // 6 columns plus sb-magnitude are wider than a 356px panel at 390: the table scrolls inside its panel.
+    expect(GALLERY).toMatch(/<div class="numerics-scroll">\s*<table class="numerics-demo">/);
+    expect(GALLERY).toMatch(/\.numerics-scroll \{[^}]*overflow-x: auto/);
+    // Cards side by side start on one baseline only when they share a structure: a card that opens with the
+    // 11px reason tag beside one that opens with the 14px title put two first lines 4px apart.
+    const grids = [...GALLERY.matchAll(/<sb-panel-grid track="narrow">((?:(?!<\/sb-panel-grid>)[\s\S])*?<sb-empty-state[\s\S]*?)<\/sb-panel-grid>/g)]
+      .map((m) => m[1]).filter((body) => !body.includes('sb-panel '));
+    const emptyGrids = grids.filter((body) => (body.match(/<sb-empty-state/g) ?? []).length > 0);
+    expect(emptyGrids.length).toBeGreaterThanOrEqual(2);
+    for (const body of emptyGrids) {
+      const states = body.match(/<sb-empty-state[^>]*>/g)!;
+      const reasoned = states.filter((tag) => tag.includes('reason='));
+      expect(reasoned.length === 0 || reasoned.length === states.length).toBe(true);
+    }
+  });
+
   it('shows both empty-state reasons', () => {
     expect(GALLERY).toContain('reason="measured-zero"');
     expect(GALLERY).toContain('reason="no-data-yet"');
