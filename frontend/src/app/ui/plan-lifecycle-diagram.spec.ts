@@ -57,6 +57,29 @@ describe('PlanLifecycleDiagram', () => {
     expect(list.closest('[role="img"]')).toBeNull();
   });
 
+  it('sizes the diagram text in user units so it renders at the 11px floor however far the viewBox shrinks', async () => {
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth')!;
+    Object.defineProperty(Element.prototype, 'clientWidth', {
+      configurable: true, get() { return (this as HTMLElement).id.startsWith('root') ? 340 : 0; /* the TestBed host */ },
+    });
+    try {
+      TestBed.configureTestingModule({
+        providers: [provideZonelessChangeDetection(), { provide: ViewportService, useValue: { isPhone: signal(false) } }],
+      });
+      const fixture = TestBed.createComponent(PlanLifecycleDiagram);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      // 340px of a 680-unit viewBox is half scale: 11px text needs 22 units.
+      expect((fixture.nativeElement as HTMLElement).style.getPropertyValue('--lc-scale')).toBe('0.5');
+    } finally {
+      Object.defineProperty(Element.prototype, 'clientWidth', original);
+    }
+    const src = readFileSync(join(process.cwd(), 'src/app/ui/plan-lifecycle-diagram.ts'), 'utf8');
+    expect(src).toMatch(/\.edge-label \{[^}]*font-size:\s*calc\(var\(--text-micro\) \/ var\(--lc-scale, 1\)\)/s);
+    expect(src).toMatch(/\.node text \{[^}]*font-size:\s*calc\(var\(--text-chip\) \/ var\(--lc-scale, 1\)\)/s);
+  });
+
   it('sets the stepper text at the 11px floor tokens and lets it wrap, never scroll sideways', () => {
     const src = readFileSync(join(process.cwd(), 'src/app/ui/plan-lifecycle-diagram.ts'), 'utf8');
     expect(src).toMatch(/\.stepper[^}]*\{[^}]*font-size:\s*var\(--text-chip\)/s);

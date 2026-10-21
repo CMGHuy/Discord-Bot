@@ -1,6 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject } from '@angular/core';
 
 import { ViewportService } from './breakpoints';
+import { chartWidth } from './chart/chart-width';
+
+/** The SVG's viewBox width; the diagram's text is sized against how far the host shrinks it. */
+const VIEWBOX_W = 680;
 
 /** The same five states and transitions the SVG draws, as data for the phone stepper. */
 const STEPS: readonly { state: string; terminal: boolean; moves: readonly { on: string; to: string }[] }[] = [
@@ -45,6 +49,7 @@ const STEPS: readonly { state: string; terminal: boolean; moves: readonly { on: 
 @Component({
   selector: 'sb-plan-lifecycle-diagram',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[style.--lc-scale]': 'scale()' },
   template: `
     @if (phone()) {
       <ol class="stepper" aria-label="Plan lifecycle">
@@ -170,7 +175,9 @@ const STEPS: readonly { state: string; terminal: boolean; moves: readonly { on: 
 
     .edge-label {
       fill: var(--text-secondary);
-      font-size: var(--text-micro);
+      /* The viewBox shrinks with the host (scale < 1), and so would an 11px
+         label: divide by the scale so it renders at the token's size. */
+      font-size: calc(var(--text-micro) / var(--lc-scale, 1));
       text-anchor: middle;
     }
     /* A CSS rule beats a text-anchor="..." presentation attribute on the
@@ -193,7 +200,7 @@ const STEPS: readonly { state: string; terminal: boolean; moves: readonly { on: 
     .node-terminal rect { stroke: var(--border-strong); }
     .node text {
       fill: var(--text);
-      font-size: var(--text-chip);
+      font-size: calc(var(--text-chip) / var(--lc-scale, 1));
       font-weight: 600;
       text-anchor: middle;
       dominant-baseline: middle;
@@ -203,4 +210,8 @@ const STEPS: readonly { state: string; terminal: boolean; moves: readonly { on: 
 export class PlanLifecycleDiagram {
   protected readonly steps = STEPS;
   protected readonly phone = inject(ViewportService).isPhone;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly width = chartWidth(() => this.host.nativeElement, VIEWBOX_W);
+  /** 1 at full size, below 1 as the host narrows; the CSS divides the 11px floor by it. */
+  protected readonly scale = computed(() => Math.round(Math.min(1, this.width() / VIEWBOX_W) * 1000) / 1000);
 }
