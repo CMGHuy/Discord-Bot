@@ -262,3 +262,16 @@ All tasks share one worktree; at most 2 implementers at once, and only on disjoi
 | V179-19 | Layout audit script, allow-list, `ui-design.md` checklist and `AGENTS.md` mirror | 5 | sonnet | C `frontend/scripts/layout-audit.mjs`, `frontend/scripts/layout-audit-lib.mjs`, `frontend/scripts/layout-audit-lib.test.mjs`, `frontend/scripts/layout-audit.allow.json`; M `docs/claude/ui-design.md`, `AGENTS.md` | `ROUTES`, `CHECKS`, `classify`, CLI |
 | V179-20 | Three-width verification: audit to zero, screenshots, Dashboard drawer round trip | 5 | sonnet | C `docs/superpowers/results/2026-10-19-v179-layout-audit.md`; M any file a finding traces to | audit report |
 | V179-21 | Full suite, `npm test`, lint, ui minor bump, merge, `/panel`, `/close-out` | 5 | sonnet | M `VERSION.json`, `swingbot/admin/version_history.json` (regenerated; the bump runs inside `/close-out`); no push — a push to `main` deploys, so it waits for the partner | merged branch on `main` |
+
+## Panel review
+
+Close-out review, 2026-10-21, against 0ac20151. No BLOCKING findings; eight ADVISORY, all answered (none changes what v179 ships; the two with a real follow-up are listed for the partner).
+
+- staff-engineer: `ui-design.md` / `AGENTS.md` audit procedure says `npm run build` but the server serves the gitignored `swingbot/admin/static/app` -- answered: confirmed (the results doc records it); the fix is one sentence in `ui-design.md` plus its `AGENTS.md` mirror, deferred because `AGENTS.md` sits ~500 B under the Codex cap and the mirror must be condensed with it; follow-up.
+- staff-engineer: `layout-audit-lib.test.mjs` and `check-compact-interactions.mjs` run nowhere (not in `package.json`, CI or a suite) -- answered: the audit is documented as a manual pre-merge step (`ui-design.md`); wiring the node tests into the CI `frontend-test` job is a follow-up.
+- staff-engineer: the touch block widened 639px -> 1023px also gives narrow desktop windows 44px controls; the spec's `Bump:` line names phones only -- answered: the level (`ui` minor) is unchanged; stated here as the observable difference.
+- staff-engineer: `dashboard.ts` `drawerTrade` is a snapshot of the clicked row and goes stale while open -- answered: out of staff scope (senior-engineer); the drawer's actions re-read the trade by id; follow-up if a stale figure is ever seen.
+- financial-advisor: the Dashboard drawer shows a P&L amount with no "before tax and costs" caption; the paper chip's wording is a tooltip -- answered: follow-up (add `PAPER_CAPTION` as a footnote under the P&L field).
+- financial-advisor: the generic row drawer (Trades, Risk, Research, Watchlist) has no paper-trade marker -- answered: follow-up with the previous item; the Trades page keeps its paper-fills line.
+- financial-advisor: the drawer labels live and realised P&L alike and shows no risk in currency -- answered: follow-up ("Unrealised P&L" label; shares and risk amount in `tradeDrawerFields`); the Risk page's Risk % covers it there.
+- financial-advisor: compact rows move Live N (Research) and the tier chip and R (Trades) into the drawer -- answered: the spec's accepted trade-off, reachability-tested; Live N on line 2 is a deliberate choice for a later UI spec.
