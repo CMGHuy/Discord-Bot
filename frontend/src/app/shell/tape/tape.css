@@ -20,7 +20,7 @@
 
 /* One lane. The viewport clips; the track slides inside it. */
 .lane { display: flex; align-items: stretch; min-width: 0; max-width: 100%;
-        height: max(32px, var(--control-h)); overflow: hidden;
+        height: 32px; overflow: hidden;
         border-bottom: 1px solid var(--border); background: var(--surface); }
 .cap { flex: none; display: flex; align-items: center; gap: var(--space-4);
        padding: 0 var(--space-8); font-size: var(--text-micro);
@@ -36,15 +36,27 @@
 .viewport { flex: 1 1 0%; min-width: 0; overflow: hidden;
             display: flex; align-items: center; }
 
-/* One page of whole tiles (tape.ts / tape-pages.ts): nothing slides, so
-   nothing is cut at the lane's edge. `.tile.off` is a tile on another page:
-   out of flow (the page's tiles sit flush from the left), invisible and
-   unreachable, but still laid out at its natural width so the page split can
-   measure it. */
-.track { position: relative; display: inline-flex; align-items: center; white-space: nowrap;
-         flex-shrink: 0; }
-.lane.nothing-fits { visibility: hidden; }
-.tile.off { position: absolute; left: 0; visibility: hidden; pointer-events: none; }
+/* Rendered twice and translated -50%, so the loop has no snap-back.
+   animation-duration is set inline per lane (tape-speed.ts), scaled by
+   tile count so every lane scrolls at the same pixels-per-second rate
+   regardless of how many tiles it holds -- see that file's own comment. */
+/* `flex-shrink: 0` overrides the blanket `.lane, .lane * { min-width: 0; }`
+   rule below (that rule exists for the lane HOSTS, not this element -- see
+   its own comment). Without it, `.track` is a flex item of `.viewport`
+   with min-width:0 and default flex-shrink:1, so the flex algorithm
+   compresses the whole doubled (2x, for the seamless loop) content down to
+   fit inside `.viewport`'s width instead of overflowing it -- every tile's
+   text gets squeezed into roughly half its real space and reads as
+   overlapping garbage. `.viewport{overflow:hidden}` is what's supposed to
+   do the clipping; `.track` itself must stay at its natural content width
+   for that clipping to show whole tiles instead of crushed ones. Production
+   incident, 2026-09-14: the whole tape read as illegible overlapping text. */
+.track { display: inline-flex; align-items: center; white-space: nowrap;
+         flex-shrink: 0;
+         animation-name: sb-tape-slide; animation-timing-function: linear;
+         animation-iteration-count: infinite; will-change: transform; }
+.viewport:hover .track { animation-play-state: paused; }
+.viewport:focus-within .track { animation-play-state: paused; }
 
 .tile { display: inline-flex; align-items: baseline; gap: var(--space-6);
         padding: 0 var(--space-14); border-right: 1px solid var(--border);
@@ -61,7 +73,7 @@
 /* Below sm both lanes stay, compressed. Spec: the layered read is wanted on
    every device, not only where it is cheap. */
 @media (max-width: 640px) {
-  .lane { font-size: var(--text-micro); }
+  .lane { font-size: var(--text-micro); height: 28px; }
   .tile { padding: 0 var(--space-10); }
   .px { display: none; }
 }
