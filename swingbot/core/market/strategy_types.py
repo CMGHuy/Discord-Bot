@@ -22,6 +22,10 @@ V104_SHORTS = ("Bull Trap", "Vol Expansion Breakdown", "Earnings Gap Drift")
 FADE_STRATEGY = "Downtrend Overbought Fade"
 # v131: a resting buy limit inside today's Fibonacci retracement zone (masked).
 FIB_LIMIT = "Fibonacci Limit"
+# v180: bullish sweep-and-reclaim of an aged 20-bar low (screen-turtle_soup SCREEN-PASS).
+# Masked, out of backtest.ALL_STRATEGIES; measured only inside the ("bullish", "2w")
+# research cell via entry_filters.gate_override.
+TURTLE_SOUP = "Turtle Soup"
 # v119: bearish-only first release from a TTM squeeze; 2w only after admission.
 COMPRESSION_SHORT = "First Bearish Compression Release"
 SHORT_STRATEGIES = V104_SHORTS + (FADE_STRATEGY, COMPRESSION_SHORT)
@@ -272,6 +276,9 @@ STRATEGY_GATES: dict[str, dict] = {
     # v131 ships masked, out of backtest.ALL_STRATEGIES; its measurement unmasks
     # it through entry_filters.gate_override. Live wiring is a follow-on spec.
     FIB_LIMIT: {"directions": ()},
+    # v180 ships masked; arms/turtle_soup_research.RESEARCH_CELL unmasks ("bullish", "2w")
+    # for the measure_arms.py replay only. Promotion is a follow-on spec.
+    TURTLE_SOUP: {"directions": ()},
     # bullish-only: N=608 WR=85.2 ExpR=+0.140 excl=28% (train, PRE-v31 -- stale)
     "RSI": {"directions": ("bullish",)},
     # bullish-only: N=259 WR=81.1 ExpR=+0.071 excl=25% (train, PRE-v31 -- stale)
