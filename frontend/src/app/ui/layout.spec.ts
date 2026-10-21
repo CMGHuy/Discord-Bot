@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComponentFixture } from '@angular/core/testing';
 
 import { Viewport } from './breakpoints';
-import { Panel, Tab, TabBar } from './layout';
+import { Drawer, Panel, Tab, TabBar } from './layout';
+import { installDialogPolyfill } from '../testing/dialog-polyfill';
+import { provideMotion } from './motion/motion.service';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/layout.ts'), 'utf8');
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -426,5 +428,51 @@ describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
   it('measures through the shared rail helper, not a private copy', () => {
     expect(SOURCE).toMatch(/import \{ edgeFades, revealActive \} from '\.\/scroll-rail';/);
     expect(SOURCE).toContain('afterRenderEffect(');
+  });
+});
+
+/** The Drawer component's own source: `rule('header')` alone would match
+ *  sb-panel's header, which comes first in this file. */
+const DRAWER_SOURCE = SOURCE.slice(SOURCE.indexOf("selector: 'sb-drawer'"));
+const drawerRule = (selector: string) =>
+  DRAWER_SOURCE.match(new RegExp(`\\n\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+@Component({
+  imports: [Drawer],
+  template: `
+    <sb-drawer [open]="true" heading="AAPL">
+      <span drawer-header class="mark">Paper trade</span>
+      <p class="content">Body</p>
+    </sb-drawer>
+  `,
+})
+class DrawerSlotHost {}
+
+describe('sb-drawer header slot (v179 §3.2)', () => {
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideMotion('off')] });
+  });
+
+  it('projects [drawer-header] content into the header, after the heading', () => {
+    const fixture = TestBed.createComponent(DrawerSlotHost);
+    fixture.detectChanges();
+    const header = (fixture.nativeElement as HTMLElement).querySelector('sb-drawer header')!;
+    const children = [...header.children].map((child) => child.tagName.toLowerCase() + (child.className ? `.${child.className}` : ''));
+    expect(children[0]).toBe('h2');
+    expect(header.querySelector('.mark')?.textContent).toBe('Paper trade');
+    expect(header.querySelector('.mark')?.previousElementSibling?.tagName).toBe('H2');
+    const body = (fixture.nativeElement as HTMLElement).querySelector('sb-drawer .body')!;
+    expect(body.querySelector('.content')).not.toBeNull();
+    expect(body.querySelector('.mark')).toBeNull();
+  });
+
+  it('keeps heading, marker and close on one baseline with the close pushed to the end', () => {
+    const header = drawerRule('header');
+    expect(header).toContain('align-items: baseline');
+    expect(header).toContain('flex-wrap: wrap');
+    expect(header).not.toContain('align-items: center');
+    expect(header).not.toContain('justify-content: space-between');
+    expect(drawerRule('.close')).toContain('margin-left: auto');
   });
 });

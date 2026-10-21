@@ -403,6 +403,8 @@ export class ControlRow {
  * `.sb-drawer-out` (a sinking sheet below 640px, styles/motion.css), and only
  * then closes the dialog, so the body stays mounted for the exit. Under Motion
  * Off or pending it closes at once, as before.
+ * `[drawer-header]` content goes beside the heading (v179); everything else
+ * goes to the body.
  */
 @Component({
   selector: 'sb-drawer',
@@ -420,6 +422,7 @@ export class ControlRow {
           <div class="drag-handle" aria-hidden="true"></div>
           <header>
             <h2>{{ heading() }}</h2>
+            <ng-content select="[drawer-header]" />
             <button type="button" class="close" aria-label="Close" (click)="requestClose()">×</button>
           </header>
           <div class="body"><ng-content /></div>
@@ -456,13 +459,15 @@ export class ControlRow {
 
     header {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-10);
       padding: var(--space-14);
       border-bottom: 1px solid var(--border);
     }
     h2 { font-size: var(--text-subhead); font-weight: 600; }
     .close {
+      margin-left: auto;
       min-width: var(--control-h);
       min-height: var(--control-h);
       padding: 0 var(--space-6);
