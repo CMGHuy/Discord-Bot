@@ -238,6 +238,24 @@ describe('EquityCandlesStore', () => {
     expect(store.hasMore()).toBe(false);                  // still the oldest page's answer
   });
 
+  it('drops an older page when a same-view refresh replaces disconnected history', () => {
+    const pending: Subject<EquityCandlesResponse>[] = [];
+    const { api, store } = setup({}, pendingApi(pending));
+    pending[0].next(response('1D', 'mtm', [CANDLE], true));
+    store.loadOlder();
+    store.load();
+    const latest = { ...CANDLE, t: '2026-10-20' };
+    pending[2].next(response('1D', 'mtm', [latest], true));
+    const loadingAfterRefresh = store.pageLoading();
+    pending[1].next(response('1D', 'mtm', [OLDER], false));
+    expect(store.data()?.candles).toEqual([latest]);
+    expect(loadingAfterRefresh).toBe(false);
+    expect(store.hasMore()).toBe(true);
+    store.loadOlder();
+    expect(api.equityCandles).toHaveBeenLastCalledWith('1D', 'mtm', 200, '2026-10-20');
+    expect(pending).toHaveLength(4);
+  });
+
   it('records the live-edge flag and resets it on a timeframe change', () => {
     const { store, tick } = setup();
     store.setAtLiveEdge(false);

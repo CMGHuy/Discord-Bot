@@ -79,7 +79,8 @@ export const EquityCandlesStore = signalStore(
   })),
   withMethods((store, api = inject(ApiClient), prefs = inject(PreferencesStore)) => {
     let latestRequest = 0;
-    // Bumped on every view change; a page answering for an older view is dropped.
+    // Bumped when the view changes or disconnected history replaces its window.
+    // A page answering for an older window is dropped.
     let view = 0;
 
     // untracked throughout: load() runs inside the onInit effect, and a
@@ -89,8 +90,12 @@ export const EquityCandlesStore = signalStore(
       const sameView = shown !== null && shown.tf === response.tf && shown.basis === response.basis;
       const candles = sameView ? mergeLatest(shown.candles, response.candles) : response.candles;
       const keptOlder = candles.length > response.candles.length;
+      const anchor = response.candles[0]?.t;
+      const replacesHistory = sameView && !shown.candles.some((c) => c.t === anchor);
+      if (replacesHistory) view += 1;
       patchState(store, {
         data: { ...response, candles },
+        ...(replacesHistory ? { pageLoading: false, pageError: false } : {}),
         hasMore: keptOlder ? untracked(() => store.hasMore()) : response.has_more === true,
         loading: false,
         error: null,
