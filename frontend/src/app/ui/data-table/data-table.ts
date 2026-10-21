@@ -90,9 +90,9 @@ const PIN_KEYS = ['ticker', 'symbol'];
         <ul class="compact-list">
           @for (row of shownRows(); track rowKey()(row)) {
             <li class="compact-row" [class]="rowClass()(row)">
-              <button type="button" class="compact-hit" (click)="onCompactTap(row)">
+              <button type="button" class="compact-hit" [attr.aria-labelledby]="compactLabelledBy(row)" (click)="onCompactTap(row)">
                 @for (line of compactRow(); track line.name) {
-                  <span [class]="line.name">
+                  <span [class]="line.name" [id]="compactLineId(row, line.name)" inert>
                     @for (col of line.columns; track col.key) {
                       <span class="compact-cell" [class.num]="col.numeric" [attr.data-col]="col.key">
                         <ng-container [ngTemplateOutlet]="cellTemplate" [ngTemplateOutletContext]="{ $implicit: col, row: row }" />
@@ -422,10 +422,10 @@ const PIN_KEYS = ['ticker', 'symbol'];
     }
 
 
-    /* v179 §3.1 -- compact rows. The whole row is one button: a tap does one
-       thing. A link inside a cell (sb-row-link) would otherwise steal it, so
-       links and buttons inside a row take no pointer events here; the same
-       cell renders live in the drawer, beside its detail link. */
+    /* v179 §3.1 -- compact rows. Inert lines suppress caller-owned controls
+       for pointer and keyboard input across Angular style scopes. The row's
+       aria-labelledby explicitly names it from those lines; the same cell
+       remains interactive when rendered in the drawer. */
     .compact-list { margin: 0; padding: 0; list-style: none; }
     .compact-row { border-bottom: 1px solid var(--border); }
     .compact-hit {
@@ -444,7 +444,6 @@ const PIN_KEYS = ['ticker', 'symbol'];
     }
     .compact-hit:hover { background: var(--surface-raised); }
     .compact-hit:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
-    .compact-hit a, .compact-hit button { pointer-events: none; }
     /* Mixed sizes on one line sit on one baseline (§3.4), never centred. */
     .line1, .line2 {
       display: flex;
@@ -473,6 +472,8 @@ const PIN_KEYS = ['ticker', 'symbol'];
   `,
 })
 export class DataTable<T> {
+  private static nextCompactId = 0;
+  private readonly compactId = `sb-compact-${DataTable.nextCompactId++}`;
   readonly rows = input.required<T[]>();
   /** The full set, in the order they are meant to render. */
   readonly columns = input.required<ColumnDef<T>[]>();
@@ -658,6 +659,15 @@ export class DataTable<T> {
   protected readonly compactFooter = computed(() =>
     this.rows().length > 0 ? this.renderedColumns().filter((column) => column.footer) : [],
   );
+
+  /** Explicit references keep inert rich cell content in the button's name. */
+  protected compactLabelledBy(row: T): string {
+    return this.compactRow().map((line) => this.compactLineId(row, line.name)).join(' ');
+  }
+
+  protected compactLineId(row: T, line: string): string {
+    return `${this.compactId}-${encodeURIComponent(this.rowKey()(row))}-${line}`;
+  }
 
   /** A compact-row tap. V179-10 routes it through `phoneTap`. */
   protected onCompactTap(row: T): void {

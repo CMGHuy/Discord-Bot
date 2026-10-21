@@ -10,10 +10,13 @@ import {
   viewChild,
 } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { provideRouter } from '@angular/router';
+import type { Browser, Page } from 'playwright';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Viewport } from '../breakpoints';
 import { isInline } from '../priority';
+import { RowLink } from '../row-link';
 import { DataTable, SPINNER_DELAY_MS } from './data-table';
 import {
   ColumnDef,
@@ -859,8 +862,11 @@ const TRADES: Trade[] = [
 ];
 
 @Component({
-  imports: [DataTable],
+  imports: [DataTable, RowLink],
   template: `
+    <ng-template #tickerCell let-row>
+      <sb-row-link [link]="['/trades', row.id]"><span class="ticker-rich">{{ row.ticker }}</span></sb-row-link>
+    </ng-template>
     <ng-template #pnlCell let-row>
       <span class="pnl-rich">{{ row.pnl === null ? '—' : row.pnl + '%' }}</span>
     </ng-template>
@@ -892,11 +898,12 @@ class CompactHost {
   readonly cardsAt = signal<boolean | null>(true);
   readonly viewportAt = signal<Viewport | null>('xs');
 
+  private readonly tickerCell = viewChild.required<TemplateRef<RowContext<Trade>>>('tickerCell');
   private readonly pnlCell = viewChild.required<TemplateRef<RowContext<Trade>>>('pnlCell');
   readonly expansionTemplate = viewChild.required<TemplateRef<RowContext<Trade>>>('expansion');
 
   readonly columns = computed<ColumnDef<Trade>[]>(() => [
-    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, compact: { line: 1, order: 1 } },
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, cell: this.tickerCell(), sortable: true, compact: { line: 1, order: 1 } },
     { key: 'pnl', header: 'P&L %', cell: this.pnlCell(), numeric: true, sortable: true, compact: { line: 1, order: 2 } },
     { key: 'plan', header: 'Plan', value: (row) => row.plan, compact: { line: 2, order: 1 } },
     // Sortable but below its floor at xs: the table's inline set leaves it
@@ -923,7 +930,7 @@ describe('DataTable compact rows (v179 §3.1)', () => {
   let host: CompactHost;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
     fixture = TestBed.createComponent(CompactHost);
     host = fixture.componentInstance;
     fixture.detectChanges();
@@ -986,6 +993,30 @@ describe('DataTable compact rows (v179 §3.1)', () => {
     expect(host.activated.map((row) => row.ticker)).toEqual(['MSFT']);
   });
 
+  it('keeps caller link content inert and names each row from its rendered rich cells', () => {
+    const buttons = [...el().querySelectorAll<HTMLButtonElement>('.compact-hit')];
+    const labelIds = buttons.flatMap((button) => {
+      const lines = [...button.querySelectorAll('.line1, .line2')];
+      const ids = button.getAttribute('aria-labelledby')!.split(' ');
+      expect(lines.every((line) => line.hasAttribute('inert'))).toBe(true);
+      expect(ids).toEqual(lines.map((line) => line.id));
+      return ids;
+    });
+    expect(new Set(labelIds).size).toBe(labelIds.length);
+    const link = buttons[0].querySelector('sb-row-link a')!;
+    expect(link.textContent!.trim()).toBe('AAPL');
+    expect(link.closest('[inert]')).not.toBeNull();
+    expect(buttons[0].querySelector('.pnl-rich')!.textContent!.trim()).toBe('4.2%');
+    const tableScope = buttons[0].getAttributeNames().find((name) => name.startsWith('_ngcontent-'));
+    expect(tableScope).toBeDefined();
+    expect(link.matches(`.compact-hit[${tableScope}] a[${tableScope}]`)).toBe(false);
+
+    host.cardsAt.set(false);
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    expect(el().querySelector('table sb-row-link a')!.closest('[inert]')).toBeNull();
+  });
+
   it('keeps the table at tablet width even when columns declare a slot', () => {
     host.cardsAt.set(false);
     host.viewportAt.set('sm');
@@ -1015,5 +1046,67 @@ describe('DataTable compact rows (v179 §3.1)', () => {
 
   it("records v179's reversal of v80's no-cards decision in the docstring", () => {
     expect(DATA_TABLE_SOURCE).toMatch(/Phone mode below `sm`[\s\S]{0,900}v179/);
+  });
+});
+
+/* Native inert, focus and click targeting need a browser: jsdom does not
+ * implement them. Run `node scripts/check-compact-interactions.mjs` to opt in.
+ * It uses the compiled Angular fixture (including scoped styles and caller
+ * RowLink), without the app server or a database. Normal unit runs need no
+ * browser. SB_COMPACT_BROWSER_CHANNEL can select another installed channel. */
+describe.runIf(process.env['SB_COMPACT_BROWSER_TESTS'] === '1')('DataTable compact rows own their caller-cell interactions', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    const { chromium } = await import('playwright');
+    browser = await chromium.launch({ channel: process.env['SB_COMPACT_BROWSER_CHANNEL'] ?? 'chrome', headless: true });
+  }, 30000);
+
+  afterAll(async () => { await browser?.close(); }, 30000);
+  afterEach(async () => { await page?.close(); }, 30000);
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
+    const fixture = TestBed.createComponent(CompactHost);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const button = root.querySelector('.compact-hit')!;
+    const link = button.querySelector('sb-row-link a')!;
+    const tableScope = button.getAttributeNames().find((name) => name.startsWith('_ngcontent-'))!;
+    // The caller's anchor has a different scope: the former descendant rule
+    // cannot disable it, even though it sits inside the table's row button.
+    expect(link.matches(`.compact-hit[${tableScope}] a[${tableScope}]`)).toBe(false);
+    const css = [...document.head.querySelectorAll('style')].map((style) => style.textContent).join('\n');
+    page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.route('http://compact.test/**', (route) => route.fulfill({ body: 'Unexpected link navigation' }));
+    await page.setContent(`<base href="http://compact.test/"><style>${css}</style>${root.outerHTML}`);
+    await page.evaluate(() => {
+      document.querySelectorAll<HTMLButtonElement>('.compact-hit').forEach((button) => {
+        button.addEventListener('click', () => {
+          document.body.dataset['activations'] = String(Number(document.body.dataset['activations'] ?? 0) + 1);
+        });
+      });
+    });
+  });
+
+  it('routes a pointer tap over the caller link to the row exactly once', async () => {
+    await page.locator('[data-col="ticker"]').first().click();
+    expect(page.url()).toBe('about:blank');
+    expect(await page.locator('body').getAttribute('data-activations')).toBe('1');
+  });
+
+  it('tabs between row buttons and activates the focused row once with Enter', async () => {
+    await page.locator('.compact-hit').first().focus();
+    await page.keyboard.press('Tab');
+    expect(await page.locator('.compact-hit').nth(1).evaluate((button) => button === document.activeElement)).toBe(true);
+    await page.keyboard.press('Enter');
+    expect(page.url()).toBe('about:blank');
+    expect(await page.locator('body').getAttribute('data-activations')).toBe('1');
+  });
+
+  it('keeps the rich cell content in the accessible name of the row button', async () => {
+    expect(await page.getByRole('button', { name: /AAPL.*4\.2%.*100/ }).count()).toBe(1);
+    expect(await page.getByRole('button', { name: /MSFT.*—/ }).count()).toBe(1);
   });
 });
