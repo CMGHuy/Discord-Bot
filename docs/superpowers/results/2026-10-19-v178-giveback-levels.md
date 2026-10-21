@@ -4,6 +4,7 @@
 **Spec:** [`2026-10-19-v178-runner-giveback-levels-preregistration-design.md`](../specs/2026-10-19-v178-runner-giveback-levels-preregistration-design.md)
 **Raw results:** v178/*.json
 **Looks:** one per output (the script refuses an existing file).
+**Verdict:** NO-LIFT — every arm refused at stage 0.
 
 ## Frozen block (stated before any window is read)
 
@@ -85,3 +86,19 @@ Per-horizon ΔR (vs A):
 R0.75 runner context (4295 runner trades): allowance p10/p50/p90 = 0.0135 / 0.0269 / 0.0648; 3319 stop exits, 66.6% new-best-10 and 99.4% quick; mean give-back 0.422R (p95 1.367R, max 16.33R), 35.1% gapped; worst week 2020-W12 ($16,020, 82 runners). Near-duplicate (S0.33 vs R1.00): {'floor_bound_share': 0.8463329452852154, 'differs_from_r100': 583}.
 
 **Reading for the partner (trade-off, not a pass):** every pooled ΔExpR is positive but below its paired MDE, and every CI spans zero. For the best arm (R0.75) the gain sits in short trades and trend regimes while long trades and chop are negative, so the lift is not uniform. Close-basis figures are an upper bound on any live result.
+
+## Verdict
+
+**NO-LIFT**, produced at stage 0: all six arms were refused on the pooled fold-train window (paired N = 10838 entries per arm), the spec's base case.
+
+- Ledger fields: `n` = 13733, `p` = 0.1705 (pooled fold-train p of the best arm R0.75), Holm-adjusted p = 1.0000 for every arm (R0.75, R1.00, R1.25, S0.25, S0.33, S0.50), `cells_looked_at` = 150.
+- What stays: The live fixed 5% (v176) stays. `GIVEBACK_MODE` defaults to `pct`; the range and profit-share modes ship merged and inert (V178-7). No high/low sensitivity run and no VALIDATION read: VALIDATION is unspent.
+- Reopening needs a mechanism other than a runner stop at the best close since TP1 minus k × ATR(14) for k ∈ {0.75, 1.0, 1.25}, or minus max(f × open profit, 1.0 × ATR(14)) for f ∈ {0.25, 0.33, 0.50}. Another k or f, a horizon-scaled multiple, or a different floor is a new pre-registration (spec § Out of scope).
+- v92 overlap: family R is adjacent to the closed v92 adaptive trail (nearest cell `trigger_r=2.50, mult=1.50`); context only, never a threshold.
+- Liquid-universe limit: 75 liquid cached names; the result says nothing about thin names, where ATR is noisy.
+
+## Ledger row
+
+`v178-giveback-levels: verdict NO-LIFT, p=0.1705, BH q=0.3751 across 11 ledger p-values (71 rows). Reported, not gating.`
+
+The BH q-value is printed for context and never gates (`backtest-methodology.md`).
