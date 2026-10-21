@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
   Component,
   TemplateRef,
@@ -583,9 +586,13 @@ describe('DataTable phone mode', () => {
   }
 
   it('is off by default', () => expect(wrap().classList).not.toContain('phone'));
-  it('keeps the table below the breakpoint -- no cards', () => {
+  /* v80 D4 said "no cards"; v179 §6b.9 reverses that for a table that
+   * declares a compact row, on purpose. A table that declares none -- this
+   * Host's columns -- keeps v80's pinned-column table exactly, and this test
+   * is that path's record. */
+  it('keeps the table below the breakpoint for a table that declares no compact row', () => {
     asPhone(); expect(wrap().classList).toContain('phone'); expect(el().querySelector('table')).not.toBeNull();
-    expect(el().querySelector('.cards, .card')).toBeNull(); expect(el().querySelectorAll('tbody tr.row')).toHaveLength(ROWS.length);
+    expect(el().querySelector('.compact-list, .cards, .card')).toBeNull(); expect(el().querySelectorAll('tbody tr.row')).toHaveLength(ROWS.length);
   });
   it('pins the ticker column, header and cells alike', () => {
     asPhone(); expect([...el().querySelectorAll('thead th.pin')].map((th) => th.textContent!.trim())).toEqual(['Ticker']);
@@ -832,5 +839,181 @@ describe('DataTable single pager below md', () => {
     // renders after the table, not above it.
     expect(pager.compareDocumentPosition(el().querySelector('table')!) &
       Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+});
+
+/* -- v179 §3.1 -- compact rows on a phone ------------------------------------ */
+
+interface Trade {
+  id: string;
+  ticker: string;
+  pnl: number | null;
+  plan: string;
+  held: string;
+  strategy: string;
+}
+
+const TRADES: Trade[] = [
+  { id: 'a', ticker: 'AAPL', pnl: 4.2, plan: '100 → 110 / 95', held: '3d', strategy: 'RSI' },
+  { id: 'b', ticker: 'MSFT', pnl: null, plan: '', held: '1d', strategy: 'EMA' },
+];
+
+@Component({
+  imports: [DataTable],
+  template: `
+    <ng-template #pnlCell let-row>
+      <span class="pnl-rich">{{ row.pnl === null ? '—' : row.pnl + '%' }}</span>
+    </ng-template>
+    <ng-template #expansion let-row>
+      <div class="expansion-body">{{ row.ticker }} detail</div>
+    </ng-template>
+
+    <sb-data-table
+      [rows]="rows()"
+      [columns]="columns()"
+      [visible]="visible()"
+      [rowKey]="rowKey"
+      [sort]="sort()"
+      [pagination]="pagination()"
+      [expansion]="withExpansion() ? expansionTemplate() : null"
+      [cardsAt]="cardsAt()"
+      [viewportAt]="viewportAt()"
+      (sortChange)="lastSort = $event"
+      (rowActivate)="activated.push($event)"
+    />
+  `,
+})
+class CompactHost {
+  readonly rows = signal<Trade[]>(TRADES);
+  readonly visible = signal<string[]>(['ticker', 'pnl', 'plan', 'held', 'strategy']);
+  readonly sort = signal<SortSpec | null>(null);
+  readonly pagination = signal<PageSpec | null>(null);
+  readonly withExpansion = signal(true);
+  readonly cardsAt = signal<boolean | null>(true);
+  readonly viewportAt = signal<Viewport | null>('xs');
+
+  private readonly pnlCell = viewChild.required<TemplateRef<RowContext<Trade>>>('pnlCell');
+  readonly expansionTemplate = viewChild.required<TemplateRef<RowContext<Trade>>>('expansion');
+
+  readonly columns = computed<ColumnDef<Trade>[]>(() => [
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, compact: { line: 1, order: 1 } },
+    { key: 'pnl', header: 'P&L %', cell: this.pnlCell(), numeric: true, sortable: true, compact: { line: 1, order: 2 } },
+    { key: 'plan', header: 'Plan', value: (row) => row.plan, compact: { line: 2, order: 1 } },
+    // Sortable but below its floor at xs: the table's inline set leaves it
+    // out, the compact sort select must not.
+    { key: 'held', header: 'Held', value: (row) => row.held, sortable: true, inlineFrom: 'lg', footer: (rows) => `${rows.length} rows` },
+    { key: 'strategy', header: 'Strategy', value: (row) => row.strategy, inlineFrom: 'lg' },
+  ]);
+
+  readonly rowKey = (row: Trade) => row.id;
+  lastSort: SortSpec | null = null;
+  readonly activated: Trade[] = [];
+}
+
+const DATA_TABLE_SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/data-table/data-table.ts'), 'utf8');
+
+/** The body of the first `<selector> {` rule in data-table.ts's styles. */
+function tableRule(selector: string): string {
+  const at = DATA_TABLE_SOURCE.indexOf(`${selector} {`);
+  return at < 0 ? '' : DATA_TABLE_SOURCE.slice(at, DATA_TABLE_SOURCE.indexOf('}', at));
+}
+
+describe('DataTable compact rows (v179 §3.1)', () => {
+  let fixture: ComponentFixture<CompactHost>;
+  let host: CompactHost;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(CompactHost);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const rowsShown = () => [...el().querySelectorAll('li.compact-row')];
+  const lineKeys = (row: Element, line: string) =>
+    [...row.querySelectorAll(`.${line} > [data-col]`)].map((cell) => cell.getAttribute('data-col'));
+
+  it('renders compact rows instead of a table when a rendered column declares a slot', () => {
+    expect(el().querySelector('ul.compact-list')).not.toBeNull();
+    expect(el().querySelector('table, thead')).toBeNull();
+    expect(rowsShown()).toHaveLength(TRADES.length);
+    expect(rowsShown()[0].querySelector(':scope > button.compact-hit')).not.toBeNull();
+  });
+
+  it('puts each declared column on its line, in slot order', () => {
+    expect(lineKeys(rowsShown()[0], 'line1')).toEqual(['ticker', 'pnl']);
+    expect(lineKeys(rowsShown()[0], 'line2')).toEqual(['plan']);
+  });
+
+  it("renders the column's own cell template, not a second renderer", () => {
+    expect(rowsShown()[0].querySelector('[data-col="pnl"] .pnl-rich')!.textContent!.trim()).toBe('4.2%');
+  });
+
+  it('shows an em dash for a missing value, never an empty line', () => {
+    expect(rowsShown()[1].querySelector('[data-col="plan"]')!.textContent!.trim()).toBe('—');
+    for (const line of rowsShown()[1].querySelectorAll('.line1, .line2')) {
+      expect(line.textContent!.trim()).not.toBe('');
+    }
+  });
+
+  it('draws no header row, no sort buttons and no disclosure chevron', () => {
+    expect(el().querySelector('button.sort, .expander, .detail-toggle')).toBeNull();
+  });
+
+  it('offers every sortable rendered column in the phone sort select', () => {
+    const options = [...el().querySelectorAll('.phone-sort option')].map((option) => option.textContent!.trim());
+    expect(options).toEqual(['Unsorted', 'Ticker ↑', 'Ticker ↓', 'P&L % ↑', 'P&L % ↓', 'Held ↑', 'Held ↓']);
+  });
+
+  it('keeps the pager, below the list', () => {
+    host.pagination.set({ page: 1, perPage: 2, total: 9 });
+    fixture.detectChanges();
+    const pager = el().querySelector('sb-pagination')!;
+    expect(pager).not.toBeNull();
+    expect(pager.compareDocumentPosition(el().querySelector('ul.compact-list')!) &
+      Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
+  it('turns column footers into one totals line', () => {
+    const total = el().querySelector('.compact-footer [data-col="held"]')!;
+    expect(total.textContent).toContain('Held');
+    expect(total.textContent).toContain('2 rows');
+  });
+
+  it('activates the tapped row', () => {
+    (rowsShown()[1].querySelector('button.compact-hit') as HTMLElement).click();
+    expect(host.activated.map((row) => row.ticker)).toEqual(['MSFT']);
+  });
+
+  it('keeps the table at tablet width even when columns declare a slot', () => {
+    host.cardsAt.set(false);
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    expect(el().querySelector('table')).not.toBeNull();
+    expect(el().querySelector('.compact-list')).toBeNull();
+  });
+
+  it('falls back to the scroller when the user hid every compact column', () => {
+    host.visible.set(['held', 'strategy']);
+    fixture.detectChanges();
+    expect(el().querySelector('table')).not.toBeNull();
+    expect(el().querySelector('.compact-list')).toBeNull();
+  });
+
+  it('gives every compact row at least the touch hit area', () => {
+    expect(tableRule('.compact-hit')).toContain('min-height: max(var(--row-h), var(--hit-min))');
+  });
+
+  it('sets mixed sizes on one line on the text baseline, never centred', () => {
+    expect(tableRule('.line1, .line2')).toContain('align-items: baseline');
+  });
+
+  it('gives header sort buttons the shared hit area (§6a.7)', () => {
+    expect(DATA_TABLE_SOURCE).toContain('<button type="button" class="sort sb-hit"');
+  });
+
+  it("records v179's reversal of v80's no-cards decision in the docstring", () => {
+    expect(DATA_TABLE_SOURCE).toMatch(/Phone mode below `sm`[\s\S]{0,900}v179/);
   });
 });

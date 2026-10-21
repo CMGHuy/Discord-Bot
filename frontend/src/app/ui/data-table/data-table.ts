@@ -17,6 +17,7 @@ import { Viewport, ViewportService } from '../breakpoints';
 import { isInline } from '../priority';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { readTablePerPage, writeTablePerPage } from '../table-prefs';
+import { compactLines, hasCompact } from './compact';
 import {
   ColumnDef,
   EmptyState,
@@ -83,6 +84,37 @@ const PIN_KEYS = ['ticker', 'symbol'];
           </select>
         </label>
       }
+      @if (compact()) {
+        <!-- v179 §3.1: two lines per row, the whole row one button. Cells
+             render through #cellTemplate, the same template the drawer uses. -->
+        <ul class="compact-list">
+          @for (row of shownRows(); track rowKey()(row)) {
+            <li class="compact-row" [class]="rowClass()(row)">
+              <button type="button" class="compact-hit" (click)="onCompactTap(row)">
+                @for (line of compactRow(); track line.name) {
+                  <span [class]="line.name">
+                    @for (col of line.columns; track col.key) {
+                      <span class="compact-cell" [class.num]="col.numeric" [attr.data-col]="col.key">
+                        <ng-container [ngTemplateOutlet]="cellTemplate" [ngTemplateOutletContext]="{ $implicit: col, row: row }" />
+                      </span>
+                    }
+                  </span>
+                }
+              </button>
+            </li>
+          }
+        </ul>
+        @if (compactFooter().length) {
+          <p class="compact-footer">
+            @for (col of compactFooter(); track col.key) {
+              <span class="compact-total" [attr.data-col]="col.key">
+                <span class="sb-label">{{ col.header }}</span>
+                <span class="num">{{ footerText(col) }}</span>
+              </span>
+            }
+          </p>
+        }
+      } @else {
       <div class="scroller" tabindex="0">
       <table>
         <thead>
@@ -108,7 +140,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
                 (keydown)="onHeaderKeydown(col.key, $event)"
               >
                 @if (col.sortable) {
-                  <button type="button" class="sort" (click)="toggleSort(col)">
+                  <button type="button" class="sort sb-hit" (click)="toggleSort(col)">
                     <span>{{ col.header }}</span>
                     <span class="arrow" aria-hidden="true">{{ arrow(col) }}</span>
                   </button>
@@ -190,6 +222,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
         }
       </table>
       </div>
+      }
 
       @if (showEmptyState(); as state) {
         <sb-empty-state [title]="state.title" [hint]="state.hint" />
@@ -204,7 +237,19 @@ const PIN_KEYS = ['ticker', 'symbol'];
       <sb-pagination [pagination]="page" [showPerPage]="activeShowPerPage()" [announce]="announce" [navOnly]="!announce"
         [perPageChoice]="perPageChoice()"
         (pageChange)="onPage($event)" (perPageChange)="onPerPage($event)" />
-    </ng-template>  `,
+    </ng-template>
+
+    <!-- One renderer per column (v179 §6a.2): the column's own cell template,
+         else its text with the em-dash rule. Compact rows and the row drawer
+         both render through this. -->
+    <ng-template #cellTemplate let-col let-row="row">
+      @if (col.cell; as cell) {
+        <ng-container [ngTemplateOutlet]="cell" [ngTemplateOutletContext]="{ $implicit: row }" />
+      } @else {
+        {{ text(col, row) }}
+      }
+    </ng-template>
+  `,
   styles: `
     th[draggable='true'] { cursor: grab; }
     th.dragging { opacity: 0.5; }
@@ -375,6 +420,56 @@ const PIN_KEYS = ['ticker', 'symbol'];
       thead th.pin { z-index: 3; }
       .row:hover .pin { background: var(--surface-raised); }
     }
+
+
+    /* v179 §3.1 -- compact rows. The whole row is one button: a tap does one
+       thing. A link inside a cell (sb-row-link) would otherwise steal it, so
+       links and buttons inside a row take no pointer events here; the same
+       cell renders live in the drawer, beside its detail link. */
+    .compact-list { margin: 0; padding: 0; list-style: none; }
+    .compact-row { border-bottom: 1px solid var(--border); }
+    .compact-hit {
+      display: grid;
+      gap: var(--space-4);
+      width: 100%;
+      min-height: max(var(--row-h), var(--hit-min));
+      padding: var(--space-8) var(--space-10);
+      background: none;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      font-size: var(--text-table);
+      text-align: left;
+      cursor: pointer;
+    }
+    .compact-hit:hover { background: var(--surface-raised); }
+    .compact-hit:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+    .compact-hit a, .compact-hit button { pointer-events: none; }
+    /* Mixed sizes on one line sit on one baseline (§3.4), never centred. */
+    .line1, .line2 {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-4) var(--space-10);
+      min-width: 0;
+    }
+    .line2 { color: var(--text-secondary); font-size: var(--text-chip); }
+    .compact-cell { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    /* The first figure on a line goes to the right edge, the rest follow it:
+       identity reads left, the number a trader checks reads right. */
+    .compact-cell.num { margin-left: auto; font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+    .compact-cell.num ~ .compact-cell.num { margin-left: 0; }
+    .compact-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-4) var(--space-14);
+      margin: 0;
+      padding: var(--space-8) var(--space-10);
+      border-top: 1px solid var(--border-strong);
+    }
+    .compact-total { display: inline-flex; align-items: baseline; gap: var(--space-6); }
+    .compact-total .num { font-family: var(--font-num); font-weight: 600; color: var(--text); }
   `,
 })
 export class DataTable<T> {
@@ -517,13 +612,20 @@ export class DataTable<T> {
   });
 
   /**
-   * Phone mode below `sm` — v80 D4.
+   * Phone mode below `sm` — v80 D4, narrowed by v179 §3.1.
    *
-   * NOT cards: v80 replaced card mode with a pinned identity column and a
-   * sort select, and removed `.card`/`.card-value` with it. The test
-   * `'keeps the table below the breakpoint -- no cards'` is that decision's
-   * record; v95 builds on it rather than reversing it (spec v95 §4.1, and
-   * §13 for the comparison that could revisit it).
+   * A table that declares a compact slot on any rendered column
+   * (`ColumnDef.compact`) renders COMPACT ROWS below `sm`: two lines per
+   * row, no header row, the phone sort select and the pager kept, column
+   * footers as one totals line, and a tap that opens the row drawer or only
+   * emits (`phoneTap`). This reverses v80's "NOT cards" on purpose (spec
+   * v179 §6b.9): measured at 390px, the pinned-column table showed two
+   * columns and hid the rest behind a thin scrollbar.
+   *
+   * A table that declares nothing keeps v80's pinned identity column and
+   * sort select. The test 'keeps the table below the breakpoint for a table
+   * that declares no compact row' is that path's record, so nothing
+   * regresses before a table is migrated.
    *
    * Driven by the viewport rather than by an input, so no call site has to
    * remember to ask for it. `cardsAt` keeps its name and type for the same
@@ -535,6 +637,33 @@ export class DataTable<T> {
   protected readonly phone = computed(
     () => this.cardsAt() ?? this.viewportService.isPhone(),
   );
+
+  /** v179 §3.1: phone, and something rendered declares a slot. Reads
+   *  `visible`, so hiding every compact column brings the scroller back. */
+  protected readonly compact = computed(
+    () => this.phone() && hasCompact(this.columns(), this.visible()),
+  );
+
+  /** The compact row's non-empty lines, named for their CSS class. */
+  protected readonly compactRow = computed(() => {
+    const { line1, line2 } = compactLines(this.columns(), this.visible());
+    return [
+      { name: 'line1', columns: line1 },
+      { name: 'line2', columns: line2 },
+    ].filter((line) => line.columns.length > 0);
+  });
+
+  /** Footers in compact mode: every rendered column that has one -- there
+   *  is no inline set to restrict them to. */
+  protected readonly compactFooter = computed(() =>
+    this.rows().length > 0 ? this.renderedColumns().filter((column) => column.footer) : [],
+  );
+
+  /** A compact-row tap. V179-10 routes it through `phoneTap`. */
+  protected onCompactTap(row: T): void {
+    this.rowActivate.emit(row);
+  }
+
 
   /** One pager below md — v95 C4. Two pagers cost ~250px on a phone, more
    *  than the five rows between them; the footer one (which also carries
@@ -578,11 +707,14 @@ export class DataTable<T> {
   });
 
   /* Reads the inline set, so the phone sort select never offers a column the
-   * grid is not drawing. */
-  protected readonly sortOptions = computed(() => this.inlineColumns().filter((column) => column.sortable).flatMap((column) => [
-    { value: `${column.key}:asc`, label: `${column.header} ↑` },
-    { value: `${column.key}:desc`, label: `${column.header} ↓` },
-  ]));
+   * grid is not drawing -- and, in compact mode (v179 §6a.7), every rendered
+   * column, because there is no grid and the select is the only sort control. */
+  protected readonly sortOptions = computed(() => (this.compact() ? this.renderedColumns() : this.inlineColumns())
+    .filter((column) => column.sortable)
+    .flatMap((column) => [
+      { value: `${column.key}:asc`, label: `${column.header} ↑` },
+      { value: `${column.key}:desc`, label: `${column.header} ↓` },
+    ]));
   protected readonly sortValue = computed(() => {
     const sort = this.sort(); return sort ? `${sort.key}:${sort.direction}` : '';
   });
