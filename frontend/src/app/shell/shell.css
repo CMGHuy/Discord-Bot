@@ -137,7 +137,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-20);
-  padding: var(--space-20) var(--space-14);
+  /* 14px, not 20: the wordmark's baseline then meets the page title's. */
+  padding: var(--space-14) var(--space-14) var(--space-20);
   background: var(--surface);
   border-right: 1px solid var(--border);
 }
@@ -258,11 +259,14 @@ sb-nav-indicator {
 
 .topbar {
   display: flex;
-  align-items: center;
+  /* The 20px title, the 11px tape and the 11px status text share one text
+     baseline (v179 §3.4); the textless avatar below centres on the bar. */
+  align-items: baseline;
   gap: var(--space-14);
   padding: var(--space-10) var(--space-20);
   border-bottom: 1px solid var(--border);
 }
+.topbar sb-profile-menu { align-self: center; }
 
 /* Grows to fill the whole gap between the title and the status cluster --
    there is no separate .spacer any more, this element does that job -- and
