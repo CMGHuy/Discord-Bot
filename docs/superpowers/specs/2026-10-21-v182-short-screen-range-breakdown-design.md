@@ -264,7 +264,13 @@ the idea and never tuned after the run):
   `High ≥ R − 0.25 × ATR14[t−1]`.
 - **Own downtrend:** `SMA50[t−1] < SMA50[t−11]` and `Close[t−1] < SMA50[t−1]`.
   No SPY condition (partner's choice).
-- **First break only:** `Close[t−1] ≥ S` (the prior bar was still inside).
+- **First break only:** `Close[t−1] ≥ S[t−1]`, where `S[t−1]` is the
+  support computed for bar t−1 (min Low over t−31..t−2): the prior bar
+  closed at or above *its own* range support, so a breakdown fires once,
+  not on every following day. (Corrected 2026-10-21 before any count or
+  run: the first wording, `Close[t−1] ≥ S` with S over t−30..t−1, could
+  never fail because S includes bar t−1's own Low; found by the plan
+  writer, intent unchanged.)
 - **Numerics:** every clause ends in `.fillna(False)`; ATR14[t−1] that is
   NaN or ≤ 0 means no event. Warm-up: an event needs 61 completed bars
   before t (SMA50 at t−11 needs 60, the window 30, ATR 14); the

@@ -126,7 +126,7 @@ Success means:
   - `R − S ≤ 5 × ATR14[t−1]`;
   - at least 2 window bars with `Low ≤ S + 0.25 × ATR14[t−1]`, earliest and latest ≥ 5 bars apart, and the same for `High ≥ R − 0.25 × ATR14[t−1]`;
   - `SMA50[t−1] < SMA50[t−11]` and `Close[t−1] < SMA50[t−1]`;
-  - first break: `Close[t−1] ≥ S`;
+  - first break: `Close[t−1] ≥ S[t−1]` (support computed for bar t−1, window t−31..t−2; corrected in the spec 2026-10-21);
   - every clause `.fillna(False)`; ATR14[t−1] NaN or ≤ 0 means no event;
   - warm-up: bar position t ≥ 61.
 - `range_breakdown_close`: `Close[t] < S`, ENTRY next_open. `range_breakdown_stop`: `Low[t] < S`, ENTRY level at S. Both are RACE fixed, CAP 20, DIRECTION short, source Schwab "The Ins and Outs of a Swing Trade" (2025-03-07), downswing breakout.
