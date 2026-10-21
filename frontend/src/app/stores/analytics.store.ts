@@ -24,6 +24,7 @@ import {
   AnalyticsPlans,
   AnalyticsStrategies,
   AnalyticsUnit,
+  AnalyticsVarianceBand,
   BookScope,
   LiveLossRow,
   LiveLossWatch,
@@ -204,7 +205,7 @@ export const LEGACY_TABS: Record<string, AnalyticsTab> = {
 export type PanelKey =
   | 'performance' | 'equityCurve' | 'byDimension' | 'heatGrid' | 'exitQuality'
   | 'journal' | 'strategies' | 'calibration' | 'plans'
-  | 'byHorizon' | 'byDirection' | 'byDow' | 'partials' | 'overrideFidelity';
+  | 'byHorizon' | 'byDirection' | 'byDow' | 'partials' | 'overrideFidelity' | 'varianceBand';
 
 export const DEFAULT_SCOPE: BookScope = {
   from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null,
@@ -379,6 +380,9 @@ interface AnalyticsSlice {
   plans: AnalyticsPlans | null;               plansError: string | null;
   /** v142 — the Partials tab's one payload. */
   partials: AnalyticsPartials | null;         partialsError: string | null;
+  /** v175 — the whole-book losing-run band (Overview's "Normal bad luck"
+   *  panel). Unscoped: it never feeds `scopeN`. */
+  varianceBand: AnalyticsVarianceBand | null; varianceBandError: string | null;
   /** v173 — the Execution tab's "Overrides vs engine" panel. Global, never
    *  scoped, and never feeds scopeN. */
   overrideFidelity: OverrideFidelity | null; overrideFidelityError: string | null;
@@ -470,6 +474,7 @@ export const AnalyticsStore = signalStore(
       calibration: null, calibrationError: null,
       plans: null, plansError: null,
       partials: null, partialsError: null,
+      varianceBand: null, varianceBandError: null,
       overrideFidelity: null, overrideFidelityError: null,
       gridStrategy: null,
       gridDataSource: null,
@@ -711,6 +716,7 @@ export const AnalyticsStore = signalStore(
     const loadOverview = (): void => {
       fetchPanel(api.analyticsPerformance(s()), 'performance', 'performanceError');
       fetchPanel(api.analyticsEquityCurve(s()), 'equityCurve', 'equityCurveError');
+      fetchPanel(api.analyticsVarianceBand(), 'varianceBand', 'varianceBandError');
     };
     const loadAttribution = (): void => {
       fetchPanel(api.analyticsByDimension(store.breakdown(), s()), 'byDimension', 'byDimensionError');
@@ -850,6 +856,7 @@ export const AnalyticsStore = signalStore(
     const resolveOverview = (): Observable<void> =>
       resolveOne(api.analyticsPerformance(s()), 'performance', 'performanceError', () => {
         fetchPanel(api.analyticsEquityCurve(s()), 'equityCurve', 'equityCurveError');
+        fetchPanel(api.analyticsVarianceBand(), 'varianceBand', 'varianceBandError');
       });
 
     const resolveAttribution = (): Observable<void> =>
@@ -944,6 +951,7 @@ export const AnalyticsStore = signalStore(
           calibration: () => fetchPanel(api.analyticsCalibration(), 'calibration', 'calibrationError'),
           plans: () => fetchPanel(api.analyticsPlans(), 'plans', 'plansError'),
           partials: () => fetchPanel(api.analyticsPartials(s()), 'partials', 'partialsError'),
+          varianceBand: () => fetchPanel(api.analyticsVarianceBand(), 'varianceBand', 'varianceBandError'),
           overrideFidelity: loadOverrideFidelity,
         };
         one[panel]?.();

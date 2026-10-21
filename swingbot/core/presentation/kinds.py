@@ -1,7 +1,7 @@
 """v110: the one registry of notification kinds the bot pushes unprompted.
 
 Every pushed message belongs to exactly one Family (badge, label, stripe
-colour) and is one Kind (the specific event). The four helpers -- title,
+colour) and is one Kind (the specific event). v175 adds BOOK, the closed book's losing-run status. The four helpers -- title,
 content_line, stripe, footer -- are the only way a pushed builder styles a
 message. Pure: no discord import, so it is testable on its own, and command
 replies (which keep tokens.ACCENT_RAMP) never change colour as a side
@@ -38,6 +38,7 @@ RESULT_GREY = 0x9CA3AF  # scratch / manual / expired / invalidated
 SYSTEM_SLATE = 0x5B6B82
 HEALTH_RED = 0xE11D48
 HEALTH_GREEN = 0x34D399
+BOOK_INDIGO = 0x6366F1  # v175: the whole book's losing-run zone, its own family
 
 #: abs(R) at or below this is a scratch -- the same band instructions._closed
 #: uses to pick its good/bad/neutral tone.
@@ -73,6 +74,7 @@ class Family(Enum):
     WATCH = FamilySpec("👀", "WATCH", WATCH_STOP_ORANGE)
     RESULT = FamilySpec("🏁", "RESULT", RESULT_GREY)
     SYSTEM = FamilySpec("🩺", "SYSTEM", SYSTEM_SLATE)
+    BOOK = FamilySpec("📉", "BOOK", BOOK_INDIGO)
 
     @property
     def badge(self) -> str:
@@ -143,6 +145,9 @@ class Kind(Enum):
     DEEP_SCAN = KindSpec(Family.SYSTEM, "WEEKEND DEEP SCAN", emoji="🔭")
     OUTLOOK = KindSpec(Family.SYSTEM, "OUTLOOK", emoji="🌙")                 # v144: 23:30 digest
     OUTLOOK_WRAPUP = KindSpec(Family.SYSTEM, "OUTLOOK WRAP-UP", emoji="🌅")  # v144: after D's close
+    # BOOK -- v175: one line when the closed book's losing-run zone rises into
+    # rough or outside. No outcome mark, no disclaimer, never on a plan embed.
+    BOOK_STATUS = KindSpec(Family.BOOK, "BOOK STATUS")
 
     @property
     def family(self) -> Family:

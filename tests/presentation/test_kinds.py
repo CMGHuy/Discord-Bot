@@ -163,3 +163,16 @@ def test_side_word():
     assert kinds.side_word("bullish") == "LONG"
     assert kinds.side_word("bearish") == "SHORT"
     assert kinds.side_word(None) == tokens.ABSENT
+
+
+def test_book_status_is_its_own_family_without_an_outcome_mark():
+    """v175: the book-status message is not SYSTEM health and not a RESULT."""
+    assert Kind.BOOK_STATUS.family is Family.BOOK
+    assert kinds.BOOK_INDIGO == 0x6366F1
+    assert kinds.title(Kind.BOOK_STATUS, "") == "📉 BOOK STATUS"
+    assert kinds.content_line(Kind.BOOK_STATUS, "") == "📉 BOOK · BOOK STATUS"
+    assert kinds.stripe(Kind.BOOK_STATUS, level=5, r=-3.0) == kinds.BOOK_INDIGO
+    assert kinds.footer(Kind.BOOK_STATUS) == "BOOK"
+    assert Kind.BOOK_STATUS.disclaimer is False
+    marks = set("".join(kinds.OUTCOME_MARKS.values())) - {"️"}
+    assert not set(kinds.title(Kind.BOOK_STATUS, "")) & marks

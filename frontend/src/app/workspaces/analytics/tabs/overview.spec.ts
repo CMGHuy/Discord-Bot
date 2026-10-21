@@ -10,6 +10,7 @@ import { AnalyticsStore, RELOCATED_METRICS } from '../../../stores/analytics.sto
 import { ConnectionStore } from '../../../stores/connection.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import { OverviewTab } from './overview';
+import { BAND_OK } from './variance-band.fixture';
 
 /* The store is stubbed down to the signals this tab reads: a tab component
  * owns no HTTP (spec v94 D12), so its spec asserts rendering, not fetching. */
@@ -31,6 +32,7 @@ function storeStub(over: Record<string, unknown> = {}) {
       points_n: 2, as_of: '2026-08-02', benchmark: { spy_indexed: [] }, scope: {}, n: 2,
     }),
     equityCurveError: signal(null),
+    varianceBand: signal(null), varianceBandError: signal(null),
     setTableOpen: () => {}, reload: () => {},
   };
   return { ...base, ...over };
@@ -103,6 +105,15 @@ describe('OverviewTab', () => {
     const { el } = render({ equityCurve: signal(null), equityCurveError: signal('The admin is not responding.') });
     expect(el.querySelector('sb-panel-error')).not.toBeNull();
     expect(el.textContent).toContain('Could not load');
+  });
+
+  it('carries the whole-book Normal bad luck panel across both columns', () => {
+    const { el } = render({ varianceBand: signal(BAND_OK) });
+    const panel = el.querySelector('sb-variance-band-panel');
+    expect(panel).not.toBeNull();
+    expect(panel?.classList.contains('wide')).toBe(true);
+    expect(panel?.textContent).toContain('Normal bad luck');
+    expect(panel?.textContent).toContain("Whole book, closed trades only. Filters don't apply.");
   });
 
   /* -- the six relocated metrics (Task T1 gap 6) ------------------------ */
