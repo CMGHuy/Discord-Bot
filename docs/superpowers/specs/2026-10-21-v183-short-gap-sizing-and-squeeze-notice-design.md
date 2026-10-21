@@ -185,12 +185,19 @@ no scan decision changes when the notice data changes.
   alerted plan's rule; balance-driven re-sizing behaves as today. A parity
   test pins alert share count = paper-book share count for a gap-sized
   short.
-- **Caps re-checked on the cut size.** The stop cap, `PORTFOLIO_HEAT_CAP_PCT`
-  and the correlated-heat cap are evaluated on the final gap-cut share count
-  on every alert path (confluence, strategy, v104/v118/v119 lanes), one test
-  per lane. The gap floor can only shrink size, never grow it, in every
-  sizing mode (`kelly`, `vol_target`, `min_of_all`, `risk_pct`,
-  `account_pct`); the size shown equals the size the mode returns.
+- **Caps hold on the cut size.** Heat and correlated-cluster checks
+  (`scan_run.py` confluence, `short_run._stamp_risk_flags` for v118/v119/v144)
+  use the configured `risk_pct`, never the final share count, and the stop
+  cap is a stop-distance check; a gap cut only lowers shares, so every
+  existing check stays a valid upper bound. Pinned by tests per lane that the
+  cut never raises any capped quantity. The strategy lane
+  (`strategy_pass._open_trade`, v104) has no heat check today: an older gap,
+  noted, not fixed here. The gap floor can only shrink size, never grow it,
+  in every sizing mode (`kelly`, `vol_target`, `min_of_all` and `risk_pct`
+  share one branch; `account_pct` is reached only through
+  `MAX_RISK_AMOUNT_ABSOLUTE`); the size shown equals the size returned. The
+  seventh sizing site, `stop_scope.py:71` (`risk_sizing_ok`), stays valid
+  because shares only shrink.
 - **Gap fills book their real R.** A paper short stopped by a gap books the
   R of its actual fill (e.g. −2.4R), never a clamped −1R; pinned by a test.
 - **Failures fall back loudly.** Missing p99 or an exception while threading
@@ -226,10 +233,12 @@ no scan decision changes when the notice data changes.
   lives as long as Part B does and is removed with it.
 
 **Storage and rollback (both parts):**
-- `gap_p99_pct`, the stored sizing rule state and the notice snapshot are
-  new stored fields: an Alembic revision per `docs/claude/schema-evolution.md`
-  § The four operations. A notice cache under `data/` needs a `DATA_READERS`
-  row.
+- Storage per `docs/claude/schema-evolution.md`: a new key in a stored doc
+  (`gap_p99_pct` in `entry_context`, the sizing-rule state, the notice
+  snapshot) is an "add" and needs no Alembic revision; a notice-cache table,
+  if chosen, does. **The notice snapshot is its own plan field, never an
+  `entry_context` key**, because `entry_context` is also built in backtests
+  and live-only data must never enter it.
 - Rollback: both switches off restores today's behaviour without a deploy.
   A code rollback (`rollback_to.sh`) leaves the new columns/keys and cache
   unread and harmless; paper trades already sized by the gap rule stay in
@@ -302,3 +311,5 @@ Run 2026-10-21, serially: risk-manager, veteran-trader, staff-engineer.
 - staff-engineer 4: new stored fields need Alembic and `DATA_READERS` -- applied.
 - staff-engineer 5: refresh owner and lifetime -- applied (bot loop beside `weekly_earnings_refresh`).
 - staff-engineer 6: legacy complexity 18/15 must not rise -- applied (named helpers).
+
+- Post-panel correction from the plan brief (2026-10-21): seven sizing sites, not six; heat/cluster caps read config `risk_pct`, so "re-check on the cut size" became "the cut never raises a capped quantity"; doc-key adds need no Alembic; notice snapshot kept out of `entry_context` -- applied.
