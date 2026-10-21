@@ -40,3 +40,31 @@ describe('Waterfall containment (v179 §3.3)', () => {
     expect(src).toContain(':host { display:block; min-width:0; }');
   });
 });
+
+describe('Waterfall draws at its own width (v179 layout audit: 11px text stays 11px)', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+
+  it('sets the viewBox to the host box width, so one unit is one pixel and the labels never shrink', async () => {
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth')!;
+    Object.defineProperty(Element.prototype, 'clientWidth', {
+      configurable: true, get() { return (this as HTMLElement).classList.contains('host') ? 291 : 0; },
+    });
+    try {
+      const fixture = TestBed.createComponent(Waterfall);
+      fixture.componentRef.setInput('steps', [{ label: 'MACD', value: 4 }]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).querySelector('svg')!.getAttribute('viewBox')).toMatch(/^0 0 291 /);
+    } finally {
+      Object.defineProperty(Element.prototype, 'clientWidth', original);
+    }
+  });
+
+  it('sizes its labels and values from the 11px token, not a literal', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/ui/waterfall.ts'), 'utf8');
+    expect(src).not.toMatch(/font-size:\s*11px/);
+    expect(src).toMatch(/\.label \{[^;]*;\s*font-size:\s*var\(--text-micro\)/);
+    expect(src).toMatch(/\.value \{[^}]*font-size:\s*var\(--text-micro\)/);
+  });
+});
