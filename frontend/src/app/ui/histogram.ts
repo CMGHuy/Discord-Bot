@@ -40,7 +40,7 @@ export interface HistogramBin {
       }
       <ul>
         @for (bin of bins(); track bin.label) {
-          <li tabindex="0" (pointermove)="show($event, bin, host)" (focus)="show($event, bin, host)" (pointerleave)="hover.set(null)" (blur)="hover.set(null)">
+          <li class="sb-hit" tabindex="0" (pointermove)="show($event, bin, host)" (focus)="show($event, bin, host)" (pointerleave)="hover.set(null)" (blur)="hover.set(null)">
             <span class="label num">{{ bin.label }}</span>
             <span class="track">
               <span

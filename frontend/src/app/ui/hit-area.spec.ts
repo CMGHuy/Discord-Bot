@@ -92,6 +92,15 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/workspaces/system/settings-tab.ts', /<summary class="sb-hit">/],
     // The collapsed rail is 52px wide: a 32px link cannot grow, so it pads with .sb-hit.
     ['src/app/shell/shell.html', /<a class="brand sb-hit" routerLink="\/dashboard"/],
+    // Tooltip-only chart marks and the Versions timeline (v179 audit): thin by data, padded by .sb-hit.
+    ['src/app/ui/bar-list.ts', /<li class="sb-hit" tabindex="0"/],
+    ['src/app/ui/histogram.ts', /<li class="sb-hit" tabindex="0"/],
+    ['src/app/ui/share-bar.ts', /<span class="seg sb-hit"/],
+    ['src/app/ui/heat-grid.ts', /<td class="sb-hit" \[class\.withheld\]="cell\?\.value==null"/],
+    ['src/app/workspaces/versions/versions.ts', /class="segment sb-hit"/],
+    // SVG shapes draw no ::after: the waterfall's transparent 44px row rect and the dot plot's r=22 circle are the hit area.
+    ['src/app/ui/waterfall.ts', /<rect class="hit"[^>]*height="44" tabindex="0"/],
+    ['src/app/ui/dot-plot.ts', /<circle class="hit"[^>]*r="22" tabindex="0"/],
     ['src/app/shell/shell.html', /<a\s+class="sb-hit"\s+\[routerLink\]="entry\.path"/],
   ];
 
