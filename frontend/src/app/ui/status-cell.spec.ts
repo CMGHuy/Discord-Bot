@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -115,5 +118,14 @@ describe('StatusCell', () => {
   it('shows no delayed flag on a live bar built from a fresh price', () => {
     const el = render({ ...live, current_price_stale: false });
     expect(el.querySelector('.stale')).toBeNull();
+  });
+});
+
+describe('status cell on one baseline (v179 layout audit)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/ui/status-cell.ts'), 'utf8');
+
+  it('sets the percentage and the hint on the text baseline, the textless bar centred', () => {
+    expect(src.match(/\.cell \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+    expect(src).toMatch(/\.track \{[^}]*align-self:\s*center/);
   });
 });

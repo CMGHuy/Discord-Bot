@@ -144,3 +144,10 @@ describe('recent activity rows open a trade (v179 section 3.2, section 6b.3)', (
     expect(rule('.event-hit:focus-visible')).toContain('outline');
   });
 });
+
+describe('recent activity row glyphs on the text baseline (v179 layout audit)', () => {
+  it('lets the direction arrow, a text glyph, share the ticker baseline; only the svg icon centres', () => {
+    expect(rule('.event-hit sb-direction-arrow')).toBe('');
+    expect(rule('.event-hit sb-icon')).toContain('align-self: center');
+  });
+});

@@ -229,7 +229,7 @@ export function timingLines(t: PlanTiming): string[] {
     .plan-title {
       margin: 0;
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: var(--space-10);
       font-size: var(--text-title);
       font-weight: 600;
@@ -242,7 +242,7 @@ export function timingLines(t: PlanTiming): string[] {
     }
     .tags {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: var(--space-6);
       flex-wrap: wrap;
     }

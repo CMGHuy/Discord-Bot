@@ -1065,4 +1065,10 @@ describe('TradeDetail — one numeric face, one baseline (v179 §3.3, §3.4)', (
     expect(indicator.match(/\.wrap \{[^}]*\}/)![0]).toContain('align-items: baseline');
     expect(indicator).toMatch(/\.dot,\s*\.track \{ align-self: center; \}/);
   });
+
+  it('sets the identity row (title, tags, actions) on one baseline, never centred', () => {
+    const src = read('workspaces/trades/trade-detail.ts');
+    expect(src.match(/\.identity \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+    expect(src.match(/\.tags \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+  });
 });

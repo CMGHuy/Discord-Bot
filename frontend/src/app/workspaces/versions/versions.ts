@@ -267,7 +267,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .chip.quiet { color: var(--text-faint); cursor: default; }
     .release-meta, .provenance { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-faint); font-size: var(--text-micro); }
     .provenance a { color: var(--accent); }
-    .telemetry-cards { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-14); margin: var(--space-8) 0 0; font-size: var(--text-table); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .telemetry-cards { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-4) var(--space-14); margin: var(--space-8) 0 0; font-size: var(--text-table); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
     .telemetry-cards strong { color: var(--text); font-weight: 600; }
     .telemetry-cards .n { color: var(--text-faint); font-size: var(--text-micro); }
 

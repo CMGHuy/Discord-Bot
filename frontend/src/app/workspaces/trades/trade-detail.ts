@@ -424,7 +424,7 @@ function cameFromPlan(): boolean {
 
     .identity {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       flex-wrap: wrap;
       gap: var(--space-10);
       min-width: 0;
@@ -461,7 +461,7 @@ function cameFromPlan(): boolean {
       display: flex;
       flex: 1 1 240px;
       min-width: 0;
-      align-items: center;
+      align-items: baseline;
       gap: var(--space-6);
       flex-wrap: wrap;
     }

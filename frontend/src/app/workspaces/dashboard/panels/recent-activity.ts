@@ -74,7 +74,6 @@ const STATUS_LABEL: Record<string, string> = {
       cursor: pointer;
     }
     .event-hit sb-icon { align-self: center; }
-    .event-hit sb-direction-arrow { align-self: center; }
     .event-hit:hover .ticker { text-decoration: underline; }
     .event-hit:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
     /* Neutral on purpose (2026-09-14): the icon's SHAPE is the status now

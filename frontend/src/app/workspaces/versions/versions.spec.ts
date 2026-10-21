@@ -276,3 +276,11 @@ describe('Versions lane rail', () => {
     expect(strip).not.toMatch(/overflow:\s*hidden/);
   });
 });
+
+describe('Versions telemetry line on one baseline (v179 layout audit)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/versions/versions.ts'), 'utf8');
+
+  it('sets the 13px figures and the 11px N= count on the text baseline', () => {
+    expect(src.match(/\.telemetry-cards \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+  });
+});
