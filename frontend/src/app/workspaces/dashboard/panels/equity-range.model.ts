@@ -221,3 +221,52 @@ export function mergeLatest(
   const at = loaded.findIndex((c) => c.t === latest[0].t);
   return at < 0 ? [...latest] : [...loaded.slice(0, at), ...latest];
 }
+
+/* -- profit/loss tone (§ 5) ----------------------------------------------- */
+
+/** `pos` = good for the account (`--pos`), `neg` = bad (`--neg`), `warn` =
+ *  risk near its cap (`--warn`), `neutral` = no judgement or no data
+ *  (`--text-secondary`). A null figure is always neutral, so an em dash is
+ *  never coloured. The rules live only here; the API sends no colour. */
+export type PnlTone = 'pos' | 'neg' | 'warn' | 'neutral';
+
+/** Half-width of the neutral band around the breakeven win rate, in pp. */
+export const BREAKEVEN_BAND_PP = 0.5;
+/** Fewer closes than this and a win-rate/payoff colour would be noise. */
+export const MIN_CLOSES_FOR_TONE = 5;
+/** Risk used from this share of the cap reads as a warning. */
+export const RISK_WARN_FRACTION = 0.75;
+
+export function signTone(value: number | null): PnlTone {
+  if (value === null || value === 0) return 'neutral';
+  return value > 0 ? 'pos' : 'neg';
+}
+
+/** Any non-zero drawdown is bad; its sign convention does not matter. */
+export function drawdownTone(pct: number | null): PnlTone {
+  return pct === null || pct === 0 ? 'neutral' : 'neg';
+}
+
+/** Win rate and payoff judged as a pair: the book breaks even at a win rate
+ *  of `100 / (1 + payoff)` %, so a 0.8 payoff on a 65 % win rate is green.
+ *  Breakeven ignores costs; the panel caption says the figures are pre-cost. */
+export function breakevenPairTone(
+  winRatePct: number | null,
+  payoff: number | null,
+  closes: number | null,
+): PnlTone {
+  if (winRatePct === null || payoff === null || closes === null) return 'neutral';
+  if (payoff <= 0 || closes < MIN_CLOSES_FOR_TONE) return 'neutral';
+  const breakeven = 100 / (1 + payoff);
+  if (winRatePct > breakeven + BREAKEVEN_BAND_PP) return 'pos';
+  if (winRatePct < breakeven - BREAKEVEN_BAND_PP) return 'neg';
+  return 'neutral';
+}
+
+/** Open risk against its cap: plain below 75 %, warning up to the cap, bad
+ *  at or over it. */
+export function riskTone(usedPct: number | null, capPct: number | null): PnlTone {
+  if (usedPct === null || capPct === null || capPct <= 0) return 'neutral';
+  if (usedPct >= capPct) return 'neg';
+  return usedPct >= capPct * RISK_WARN_FRACTION ? 'warn' : 'neutral';
+}

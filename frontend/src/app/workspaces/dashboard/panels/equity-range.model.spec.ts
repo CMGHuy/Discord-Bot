@@ -3,6 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { EquityCandle, EquityTimeframe } from '../../../api/models';
 import { EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
 import {
+  BREAKEVEN_BAND_PP,
+  MIN_CLOSES_FOR_TONE,
+  RISK_WARN_FRACTION,
+  breakevenPairTone,
+  drawdownTone,
+  riskTone,
+  signTone,
   HISTORY_PAGE_LIMIT,
   PAGE_TRIGGER_CANDLES,
   mergeLatest,
@@ -253,5 +260,54 @@ describe('history paging', () => {
     expect(mergeLatest([day('2026-10-13')], latest)).toEqual(latest);
     expect(mergeLatest([], latest)).toEqual(latest);
     expect(mergeLatest([day('2026-10-13')], [])).toEqual([]);
+  });
+});
+
+describe('profit/loss tones', () => {
+  it('colours by sign, and never a zero or a missing figure', () => {
+    expect([signTone(12.5), signTone(-0.01), signTone(0), signTone(null)])
+      .toEqual(['pos', 'neg', 'neutral', 'neutral']);
+  });
+
+  it('colours any non-zero drawdown as a loss', () => {
+    expect([drawdownTone(3.2), drawdownTone(-3.2), drawdownTone(0), drawdownTone(null)])
+      .toEqual(['neg', 'neg', 'neutral', 'neutral']);
+  });
+
+  it('judges win rate against the breakeven its payoff implies, with a 0.5 pp band', () => {
+    expect(BREAKEVEN_BAND_PP).toBe(0.5);
+    // payoff 1 -> breakeven 50 %
+    expect([50.6, 50.5, 50.4, 49.6, 49.5, 49.4].map((wr) => breakevenPairTone(wr, 1, 20)))
+      .toEqual(['pos', 'neutral', 'neutral', 'neutral', 'neutral', 'neg']);
+  });
+
+  it('reads a low payoff on a high win rate as profitable: the pair, not each alone', () => {
+    // payoff 0.8 -> breakeven 55.6 %; 65 % clears it
+    expect(breakevenPairTone(65, 0.8, 30)).toBe('pos');
+    // payoff 2.34 -> breakeven 29.9 %; 49.1 % clears it
+    expect(breakevenPairTone(49.1, 2.34, 30)).toBe('pos');
+    // payoff 0.5 -> breakeven 66.7 %; 60 % misses it
+    expect(breakevenPairTone(60, 0.5, 30)).toBe('neg');
+  });
+
+  it('stays neutral with a missing figure, a payoff of zero or less, or fewer than 5 closes', () => {
+    expect(MIN_CLOSES_FOR_TONE).toBe(5);
+    expect([breakevenPairTone(null, 1.2, 20), breakevenPairTone(60, null, 20),
+            breakevenPairTone(60, 1.2, null)]).toEqual(['neutral', 'neutral', 'neutral']);
+    expect([breakevenPairTone(60, 0, 20), breakevenPairTone(60, -1, 20)])
+      .toEqual(['neutral', 'neutral']);
+    expect([breakevenPairTone(90, 3, 4), breakevenPairTone(90, 3, 5)]).toEqual(['neutral', 'pos']);
+  });
+
+  it('warns on risk from 75 % of the cap and flags it at or over the cap', () => {
+    expect(RISK_WARN_FRACTION).toBe(0.75);
+    expect([riskTone(0, 6), riskTone(4.4, 6), riskTone(4.5, 6), riskTone(5.9, 6)])
+      .toEqual(['neutral', 'neutral', 'warn', 'warn']);
+    expect([riskTone(6, 6), riskTone(7.2, 6)]).toEqual(['neg', 'neg']);
+  });
+
+  it('leaves risk neutral without a figure or a cap', () => {
+    expect([riskTone(null, 6), riskTone(3, null), riskTone(3, 0)])
+      .toEqual(['neutral', 'neutral', 'neutral']);
   });
 });
