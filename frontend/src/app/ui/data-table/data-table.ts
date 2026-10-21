@@ -11,15 +11,22 @@ import {
   signal,
 } from '@angular/core';
 
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationStart, Router, RouterLink } from '@angular/router';
+import { filter } from 'rxjs';
+
+import { Drawer } from '../layout';
 import { EmptyStateComponent } from '../empty-state';
 import { PaginationComponent } from '../pagination';
 import { Viewport, ViewportService } from '../breakpoints';
 import { isInline } from '../priority';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { readTablePerPage, writeTablePerPage } from '../table-prefs';
-import { compactLines, hasCompact } from './compact';
+import { compactLines, drawerColumns, hasCompact } from './compact';
 import {
   ColumnDef,
+  DetailLink,
+  PhoneTap,
   EmptyState,
   PageSpec,
   RowContext,
@@ -64,7 +71,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
 @Component({
   selector: 'sb-data-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent],
+  imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent, Drawer, RouterLink],
   template: `
     <div class="wrap" [class.phone]="phone()" [attr.aria-busy]="loading()">
       @if (showSpinner()) {
@@ -232,6 +239,36 @@ const PIN_KEYS = ['ticker', 'symbol'];
         <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: true }" />
       }
     </div>
+
+
+    <!-- v179 §3.1 / §6a.4: the generic row drawer -- every rendered column the
+         compact row does not show, through the same #cellTemplate, then the
+         call site's expansion, then the detail link. Component state only. -->
+    @if (phoneTap() === 'drawer' && (compact() || drawerRow() !== null)) {
+      <sb-drawer class="row-drawer" [open]="drawerRow() !== null && compact()" [heading]="drawerHeading()"
+                 (closed)="drawerRow.set(null)">
+        @if (drawerRow(); as row) {
+          <dl class="drawer-fields">
+            @for (col of drawerFields(); track col.key) {
+              <div class="drawer-field" [attr.data-col]="col.key">
+                <dt class="sb-label">{{ col.header || 'Actions' }}</dt>
+                <dd [class.num]="col.numeric">
+                  <ng-container [ngTemplateOutlet]="cellTemplate" [ngTemplateOutletContext]="{ $implicit: col, row: row }" />
+                </dd>
+              </div>
+            }
+          </dl>
+          @if (expansion(); as expansionTemplate) {
+            <div class="drawer-expansion">
+              <ng-container [ngTemplateOutlet]="expansionTemplate" [ngTemplateOutletContext]="{ $implicit: row }" />
+            </div>
+          }
+          @if (drawerLink(); as link) {
+            <a class="drawer-detail-link" [routerLink]="link.commands" (click)="drawerRow.set(null)">{{ link.label }}</a>
+          }
+        }
+      </sb-drawer>
+    }
 
     <ng-template #pagerTemplate let-page let-announce="announce">
       <sb-pagination [pagination]="page" [showPerPage]="activeShowPerPage()" [announce]="announce" [navOnly]="!announce"
@@ -428,6 +465,27 @@ const PIN_KEYS = ['ticker', 'symbol'];
        remains interactive when rendered in the drawer. */
     .compact-list { margin: 0; padding: 0; list-style: none; }
     .compact-row { border-bottom: 1px solid var(--border); }
+
+    /* The row drawer: label/value pairs on one baseline per pair. */
+    .drawer-fields {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: baseline;
+      gap: var(--space-6) var(--space-14);
+      margin: 0;
+    }
+    .drawer-field { display: contents; }
+    .drawer-field dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+    .drawer-field dd.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+    .drawer-expansion { margin-top: var(--space-14); }
+    .drawer-detail-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--control-h);
+      margin-top: var(--space-14);
+      color: var(--accent);
+    }
+
     .compact-hit {
       display: grid;
       gap: var(--space-4);
@@ -550,6 +608,7 @@ export class DataTable<T> {
     return rows.slice(start, start + page.perPage);
   });
   protected onPage(page: number): void {
+    this.drawerRow.set(null);
     if (this.clientPaging() === null) this.pageChange.emit(page);
     else this.requestedPage.set(page);
   }
@@ -592,6 +651,13 @@ export class DataTable<T> {
       const timer = setTimeout(() => this.showSpinner.set(true), SPINNER_DELAY_MS);
       onCleanup(() => clearTimeout(timer));
     });
+
+    // v179 §6a.5: a navigation closes the row drawer. Router is providedIn
+    // root, so this needs no provideRouter in a test that never navigates.
+    inject(Router).events
+      .pipe(filter((event) => event instanceof NavigationStart), takeUntilDestroyed())
+      .subscribe(() => this.drawerRow.set(null));
+
   }
 
   /** Expanded rows, by `rowKey`. Keyed rather than indexed so a refetch that
@@ -660,6 +726,32 @@ export class DataTable<T> {
     this.rows().length > 0 ? this.renderedColumns().filter((column) => column.footer) : [],
   );
 
+
+  /**
+   * What a phone compact-row tap does -- v179 §6a.4. `'drawer'` opens this
+   * table's own row drawer; `'emit'` only emits `rowActivate`, for a page
+   * that already owns a drawer for its rows (Research ledger, Dashboard
+   * positions). Never both: one tap never opens two drawers. Tablet and
+   * desktop rows are unaffected and emit `rowActivate` as before.
+   */
+  readonly phoneTap = input<PhoneTap>('drawer');
+  /** The drawer's "Open full …" link, or null for a table with no detail
+   *  page (Risk, Research registry). */
+  readonly detailLink = input<((row: T) => DetailLink | null) | null>(null);
+
+  /** The row the drawer shows. Component state, never the URL (§6a.5). */
+  protected readonly drawerRow = signal<T | null>(null);
+  protected readonly drawerFields = computed(() => drawerColumns(this.columns(), this.visible()));
+  protected readonly drawerHeading = computed(() => {
+    const row = this.drawerRow();
+    return row === null ? '' : this.rowLabel(row);
+  });
+  protected readonly drawerLink = computed(() => {
+    const row = this.drawerRow();
+    const link = this.detailLink();
+    return row === null || link === null ? null : link(row);
+  });
+
   /** Explicit references keep inert rich cell content in the button's name. */
   protected compactLabelledBy(row: T): string {
     return this.compactRow().map((line) => this.compactLineId(row, line.name)).join(' ');
@@ -669,10 +761,15 @@ export class DataTable<T> {
     return `${this.compactId}-${encodeURIComponent(this.rowKey()(row))}-${line}`;
   }
 
-  /** A compact-row tap. V179-10 routes it through `phoneTap`. */
+  /** A compact-row tap: the drawer, or only the event (`phoneTap`). */
   protected onCompactTap(row: T): void {
-    this.rowActivate.emit(row);
+    if (this.phoneTap() === 'emit') {
+      this.rowActivate.emit(row);
+      return;
+    }
+    this.drawerRow.set(row);
   }
+
 
 
   /** One pager below md — v95 C4. Two pagers cost ~250px on a phone, more

@@ -10,7 +10,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { Router, provideRouter } from '@angular/router';
+
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { compactKeys, drawerKeys, openRowDrawer } from './testing/reachability';
 import type { Browser, Page } from 'playwright';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,6 +24,8 @@ import { RowLink } from '../row-link';
 import { DataTable, SPINNER_DELAY_MS } from './data-table';
 import {
   ColumnDef,
+  DetailLink,
+  PhoneTap,
   EmptyState,
   PageSpec,
   RowContext,
@@ -884,6 +890,8 @@ const TRADES: Trade[] = [
       [expansion]="withExpansion() ? expansionTemplate() : null"
       [cardsAt]="cardsAt()"
       [viewportAt]="viewportAt()"
+      [phoneTap]="phoneTap()"
+      [detailLink]="detailLink()"
       (sortChange)="lastSort = $event"
       (rowActivate)="activated.push($event)"
     />
@@ -897,6 +905,8 @@ class CompactHost {
   readonly withExpansion = signal(true);
   readonly cardsAt = signal<boolean | null>(true);
   readonly viewportAt = signal<Viewport | null>('xs');
+  readonly phoneTap = signal<PhoneTap>('drawer');
+  readonly detailLink = signal<((row: Trade) => DetailLink | null) | null>(null);
 
   private readonly tickerCell = viewChild.required<TemplateRef<RowContext<Trade>>>('tickerCell');
   private readonly pnlCell = viewChild.required<TemplateRef<RowContext<Trade>>>('pnlCell');
@@ -988,10 +998,6 @@ describe('DataTable compact rows (v179 §3.1)', () => {
     expect(total.textContent).toContain('2 rows');
   });
 
-  it('activates the tapped row', () => {
-    (rowsShown()[1].querySelector('button.compact-hit') as HTMLElement).click();
-    expect(host.activated.map((row) => row.ticker)).toEqual(['MSFT']);
-  });
 
   it('keeps caller link content inert and names each row from its rendered rich cells', () => {
     const buttons = [...el().querySelectorAll<HTMLButtonElement>('.compact-hit')];
@@ -1108,5 +1114,112 @@ describe.runIf(process.env['SB_COMPACT_BROWSER_TESTS'] === '1')('DataTable compa
   it('keeps the rich cell content in the accessible name of the row button', async () => {
     expect(await page.getByRole('button', { name: /AAPL.*4\.2%.*100/ }).count()).toBe(1);
     expect(await page.getByRole('button', { name: /MSFT.*—/ }).count()).toBe(1);
+  });
+});
+
+describe('DataTable row drawer (v179 §3.1, §6a.4)', () => {
+  let fixture: ComponentFixture<CompactHost>;
+  let host: CompactHost;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
+    fixture = TestBed.createComponent(CompactHost);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const dialog = () => el().querySelector('sb-drawer.row-drawer dialog') as HTMLDialogElement | null;
+  function open(index = 0) {
+    openRowDrawer(el(), index);
+    fixture.detectChanges();
+  }
+
+  it('opens its own drawer on a tap, without emitting rowActivate', () => {
+    open(1);
+    expect(dialog()!.open).toBe(true);
+    expect(el().querySelector('sb-drawer.row-drawer h2')!.textContent!.trim()).toBe('MSFT');
+    expect(host.activated).toEqual([]);
+  });
+
+  it('lists every rendered column not on the compact row, labelled, through its own cell', () => {
+    open();
+    expect(drawerKeys(el())).toEqual(['held', 'strategy']);
+    const labels = [...el().querySelectorAll('dl.drawer-fields dt')].map((dt) => dt.textContent!.trim());
+    expect(labels).toEqual(['Held', 'Strategy']);
+    expect(el().querySelector('[data-col="strategy"] dd')!.textContent!.trim()).toBe('RSI');
+  });
+
+  it('reaches every rendered column between the compact row and the drawer (§7.5)', () => {
+    open();
+    expect([...compactKeys(el()), ...drawerKeys(el())].sort()).toEqual([...host.visible()].sort());
+  });
+
+  it('keeps a column the user hid out of the drawer too', () => {
+    host.visible.set(['ticker', 'pnl', 'plan', 'held']);
+    fixture.detectChanges();
+    open();
+    expect(drawerKeys(el())).toEqual(['held']);
+  });
+
+  it("renders the call site's expansion after the fields -- the drawer replaces the disclosure", () => {
+    open();
+    expect(el().querySelector('.drawer-expansion .expansion-body')!.textContent!.trim()).toBe('AAPL detail');
+  });
+
+  it('links to the detail page when the table has one', () => {
+    host.detailLink.set((row) => ({ commands: ['/trades', row.id], label: 'Open full trade →' }));
+    fixture.detectChanges();
+    open();
+    const link = el().querySelector('a.drawer-detail-link') as HTMLAnchorElement;
+    expect(link.textContent!.trim()).toBe('Open full trade →');
+    expect(link.getAttribute('href')).toBe('/trades/a');
+  });
+
+  it('shows no link for a table without a detail page', () => {
+    open();
+    expect(el().querySelector('a.drawer-detail-link')).toBeNull();
+  });
+
+  it("only emits under phoneTap 'emit', and renders no drawer of its own", () => {
+    host.phoneTap.set('emit');
+    fixture.detectChanges();
+    open(1);
+    expect(host.activated.map((row) => row.ticker)).toEqual(['MSFT']);
+    expect(el().querySelector('sb-drawer.row-drawer')).toBeNull();
+  });
+
+  it('closes on a page change', () => {
+    host.pagination.set({ page: 1, perPage: 2, total: 9 });
+    fixture.detectChanges();
+    open();
+    const table = fixture.debugElement.query(By.directive(DataTable)).componentInstance as unknown as { onPage(page: number): void };
+    table.onPage(2);
+    fixture.detectChanges();
+    expect(dialog()?.open ?? false).toBe(false);
+  });
+
+  it('closes on navigation', async () => {
+    open();
+    await TestBed.inject(Router).navigateByUrl('/elsewhere').catch(() => false);
+    fixture.detectChanges();
+    expect(dialog()?.open ?? false).toBe(false);
+  });
+
+  it('closes when the viewport leaves compact mode', () => {
+    open();
+    host.cardsAt.set(false);
+    host.viewportAt.set('md');
+    fixture.detectChanges();
+    expect(dialog()?.open ?? false).toBe(false);
+  });
+
+  it('still emits rowActivate from a table row at tablet width', () => {
+    host.cardsAt.set(false);
+    host.viewportAt.set('md');
+    fixture.detectChanges();
+    (el().querySelectorAll('tbody tr.row')[0] as HTMLElement).click();
+    expect(host.activated.map((row) => row.ticker)).toEqual(['AAPL']);
   });
 });
