@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
   CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, formatFinding, inScope, parseArgs, pickIds, resolveRoute, slug, validateAllow,
+  classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug, validateAllow,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -49,7 +49,8 @@ const DEFAULT_ALLOW = join(HERE, 'layout-audit.allow.json');
 class CannotRun extends Error {}
 
 /** Runs inside the page (page.evaluate): self-contained, no imports, no closures over module scope. */
-function auditPage({ touch, minTap, minText, maxBaseline }) {
+function auditPage({ touch, minTap, minText, maxBaseline, hiddenSrc }) {
+  const isVisuallyHidden = new Function(`return ${hiddenSrc}`)();
   const vw = document.documentElement.clientWidth;
   const findings = [];
   const INTERACTIVE = 'a[href], button, [role="button"], [role="tab"], input:not([type="hidden"]), select, textarea, summary, [tabindex="0"]';
@@ -68,7 +69,13 @@ function auditPage({ touch, minTap, minText, maxBaseline }) {
   const label = (el) => (el.innerText || el.textContent || el.getAttribute('aria-label') || '')
     .trim().replace(/\s+/g, ' ').slice(0, 50);
   const add = (check, el, detail) => findings.push({ check, selector: name(el), text: label(el), detail });
-  const srOnly = (el) => Boolean(el.closest('.sr-only, .visually-hidden'));
+  /** The element or an ancestor is visually hidden (an sr-only class, or the collapsed rail's inline pattern). */
+  function srOnly(el) {
+    for (let p = el; p && p !== document.body; p = p.parentElement) {
+      if (isVisuallyHidden(getComputedStyle(p), p.getBoundingClientRect())) return true;
+    }
+    return false;
+  }
   const ownText = (el) => [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
 
   function visible(el) {
@@ -272,7 +279,7 @@ async function auditWidth(width, opts) {
       await page.waitForFunction(ready, null, { timeout: 30_000 })
         .catch(() => console.error(`still loading after 30s: ${route} @${width}`));
       await page.waitForTimeout(opts.settle);
-      const raw = await page.evaluate(auditPage, limits);
+      const raw = await page.evaluate(auditPage, { ...limits, hiddenSrc: isVisuallyHidden.toString() });
       findings.push(...raw.map((f) => ({ route, width, ...f })));
       await screenshot(page, join(opts.out, `${slug(route)}@${width}.png`), width);
       console.error(`${route} @${width}: ${raw.length} raw finding(s)`);

@@ -92,6 +92,17 @@ export function pickIds({ closed, open, pending, tickers }) {
   };
 }
 
+/**
+ * The standard visually-hidden pattern: out of flow, a 1px box, clipped away.
+ * Self-contained -- the audit sends its source into the page (no imports, no closures).
+ */
+export function isVisuallyHidden(style, rect) {
+  const outOfFlow = style.position === 'absolute' || style.position === 'fixed';
+  const tiny = rect.width <= 1 && rect.height <= 1;
+  const clipped = (style.clipPath && style.clipPath !== 'none') || (style.clip && style.clip !== 'auto');
+  return Boolean(outOfFlow && tiny && clipped);
+}
+
 const findingKey = (f) => `${f.route} @${f.width} ${f.check} ${f.selector}`;
 
 export function dedupe(findings) {

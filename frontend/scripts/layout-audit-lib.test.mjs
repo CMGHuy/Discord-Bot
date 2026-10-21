@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  CHECKS, FULL_WIDTHS, ROUTES, classify, countByCheck, dedupe, formatFinding, inScope, parseArgs, pickIds,
+  CHECKS, FULL_WIDTHS, ROUTES, classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds,
   resolveRoute, slug, validateAllow,
 } from './layout-audit-lib.mjs';
 
@@ -182,4 +182,24 @@ test('the checked-in allow-list is valid today', () => {
   assert.equal(typeof doc.$comment, 'string');
   assert.ok(Array.isArray(doc.entries));
   assert.doesNotThrow(() => validateAllow(doc.entries, new Date().toISOString().slice(0, 10)));
+});
+
+test('isVisuallyHidden: the standard clipped 1px absolute box is hidden, however it clips', () => {
+  const box = { position: 'absolute', overflow: 'hidden', clip: 'auto', clipPath: 'inset(50%)' };
+  assert.equal(isVisuallyHidden(box, { width: 1, height: 1 }), true);
+  assert.equal(isVisuallyHidden({ ...box, clipPath: 'none', clip: 'rect(0px, 0px, 0px, 0px)' }, { width: 1, height: 1 }), true);
+});
+
+test('isVisuallyHidden: a visibly clipped or visibly sized element is still audited', () => {
+  const box = { position: 'absolute', overflow: 'hidden', clip: 'auto', clipPath: 'inset(50%)' };
+  assert.equal(isVisuallyHidden({ ...box, position: 'static' }, { width: 1, height: 1 }), false);
+  assert.equal(isVisuallyHidden(box, { width: 120, height: 18 }), false);
+  assert.equal(isVisuallyHidden({ ...box, clipPath: 'none' }, { width: 1, height: 1 }), false);
+  assert.equal(isVisuallyHidden({ position: 'static', overflow: 'hidden', clip: 'auto', clipPath: 'none' }, { width: 90, height: 18 }), false);
+});
+
+test('the audit page code asks the lib predicate, not a class-name list', () => {
+  const src = readFileSync(join(HERE, 'layout-audit.mjs'), 'utf8');
+  assert.match(src, /isVisuallyHidden/);
+  assert.doesNotMatch(src, /closest\('\.sr-only/);
 });
