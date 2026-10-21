@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21 09:14:09 UTC",
+  "generated_at": "2026-10-21 09:14:22 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.32.0",
+    "ui": "1.33.0",
     "bot": "2.14.0"
   },
   "releases": [
@@ -1941,6 +1941,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "last_seen": "2026-10-21",
+      "commit": "4c7d41a9",
+      "subject": "release(ui): 1.33.0 -- Normal bad luck panel on Analytics -> Overview: losing-run and 50-day drawdown bands, whole book (v175)",
+      "versions": {
+        "ui": "1.33.0",
+        "bot": "2.14.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
