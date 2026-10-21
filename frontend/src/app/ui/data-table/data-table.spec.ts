@@ -1223,3 +1223,12 @@ describe('DataTable row drawer (v179 §3.1, §6a.4)', () => {
     expect(host.activated.map((row) => row.ticker)).toEqual(['AAPL']);
   });
 });
+
+describe('DataTable header cells are the column-reorder handle (v179 layout audit)', () => {
+  // A header is focusable and draggable (arrow keys / mouse drag reorder the columns; there is no touch
+  // drag), so on a touch width it is a control: as tall as one and never narrower than the hit minimum.
+  it('gives a header cell the control height and the hit minimum, so the handle is 44px on touch', () => {
+    expect(tableRule('thead th')).toContain('height: var(--control-h)');
+    expect(DATA_TABLE_SOURCE).toMatch(/thead th:not\(\.expander-cell\)\s*\{[^}]*min-width:\s*var\(--hit-min\)/);
+  });
+});
