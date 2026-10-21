@@ -105,8 +105,8 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
         }
       </dl>
       <div class="drawer-actions">
-        <sb-row-actions [row]="row()" (done)="actionDone.emit()" />
         <a class="full-trade sb-hit" [routerLink]="['/trades', row().id]">Open full trade →</a>
+        <sb-row-actions [row]="row()" (done)="actionDone.emit()" />
       </div>
     </sb-drawer>
   `,
@@ -146,6 +146,9 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
       padding-top: var(--space-10);
       border-top: 1px solid var(--border);
     }
+    /* RowActions opens towards its left: keep its trigger at the right edge
+       so the menu stays inside the drawer, including when the line wraps. */
+    sb-row-actions { margin-left: auto; }
     .full-trade { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .full-trade:hover { text-decoration: underline; }
   `,

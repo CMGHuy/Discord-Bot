@@ -167,6 +167,53 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     expect(closed).toBe(1);
   });
 
+  // Native clipping and pointer targeting require layout, which jsdom lacks.
+  // Opt in with SB_DRAWER_BROWSER_TESTS=1; no app server or database needed.
+  it.runIf(process.env['SB_DRAWER_BROWSER_TESTS'] === '1')('keeps every row action visible and clickable inside the drawer', async () => {
+    const { chromium } = await import('playwright');
+    const browser = await chromium.launch({ channel: 'chrome', headless: true });
+    try {
+      for (const width of [390, 768, 1440]) {
+        for (const status of ['ACTIVE', 'PENDING']) {
+          const el = mount(tradeRow({ status }));
+          el.querySelector<HTMLButtonElement>('sb-row-actions .trigger')!.click();
+          fixture.detectChanges();
+          const scopedCss = [...document.head.querySelectorAll('style')].map((style) => style.textContent).join('\n');
+          const globalCss = ['styles/palette.css', 'styles/tokens.css', 'styles.css']
+            .map((path) => readFileSync(join(process.cwd(), 'src', path), 'utf8').replace(/@import[^;]+;/g, '')).join('\n');
+          const page = await browser.newPage({ viewport: { width, height: 844 } });
+          try {
+            await page.setContent(`<style>${scopedCss}\n${globalCss}</style>${el.outerHTML}`);
+            await page.evaluate(() => {
+              const dialog = document.querySelector('dialog')!;
+              dialog.removeAttribute('open');
+              dialog.showModal();
+              document.querySelectorAll<HTMLElement>('[role="menuitem"]').forEach((item) => {
+                item.addEventListener('click', () => { item.dataset['clicked'] = 'true'; });
+              });
+            });
+            const items = page.getByRole('menuitem');
+            expect(await items.allTextContents()).toEqual(status === 'ACTIVE'
+              ? ['Close position', 'Add note'] : ['Cancel plan', 'Add note']);
+            for (const item of await items.all()) {
+              await item.scrollIntoViewIfNeeded();
+              const bounds = await item.evaluate((element) => {
+                const rect = element.getBoundingClientRect();
+                const drawer = element.closest('dialog')!.getBoundingClientRect();
+                return { left: rect.left, right: rect.right, drawerLeft: drawer.left, drawerRight: drawer.right };
+              });
+              expect(bounds.left, `${width}px ${status} menu left`).toBeGreaterThanOrEqual(bounds.drawerLeft);
+              expect(bounds.right, `${width}px ${status} menu right`).toBeLessThanOrEqual(bounds.drawerRight);
+              await item.click({ timeout: 2000 });
+              expect(await item.getAttribute('data-clicked')).toBe('true');
+            }
+          } finally { await page.close(); }
+          fixture.destroy();
+        }
+      }
+    } finally { await browser.close(); }
+  }, 30000);
+
   it('aligns each field and the action line on the text baseline', () => {
     const css = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/trade-drawer.ts'), 'utf8');
     expect(css).toMatch(/\.field \{[^}]*align-items: baseline/);
