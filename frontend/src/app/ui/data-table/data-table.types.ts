@@ -54,6 +54,32 @@ export interface PageSpec {
   perPage: number;
 }
 
+/**
+ * Where a column sits on the phone compact row -- v179 §3.1, §6a.1.
+ *
+ * Below `sm` a table with any rendered `compact` column draws each row as
+ * two lines (identity and the number a trader checks first, then plan or
+ * price context) and puts every other rendered column in a row drawer.
+ * `order` sorts within a line; ties keep `visible` order.
+ */
+export interface CompactSlot {
+  line: 1 | 2;
+  order: number;
+}
+
+/** What a phone compact-row tap does -- v179 §6a.4. `'drawer'` opens the
+ *  table's own row drawer; `'emit'` only emits `rowActivate`, for a page
+ *  that already owns a drawer for its rows. */
+export type PhoneTap = 'drawer' | 'emit';
+
+/** The row drawer's "Open full …" link -- v179 §6a.4. `commands` is a
+ *  `routerLink` array; `label` is the whole link text, arrow included
+ *  (e.g. 'Open full trade →'). */
+export interface DetailLink {
+  commands: unknown[];
+  label: string;
+}
+
 /** What to show when there is nothing to show. */
 export interface EmptyState {
   title: string;
@@ -118,6 +144,17 @@ export interface ColumnDef<T> {
    * a column below its floor is one tap away.
    */
   inlineFrom?: Viewport;
+
+  /**
+   * The column's place on the phone compact row -- v179 §3.1.
+   *
+   * Extends the v95 declaration above rather than adding a second column
+   * list: on a phone the compact row REPLACES pinned-cell inlining, and
+   * `inlineFrom` keeps governing tablet and desktop. Omitted means the
+   * column lives in the row drawer on a phone. A table where no rendered
+   * column says anything keeps today's scroller.
+   */
+  compact?: CompactSlot;
 
   footer?: (rows: T[]) => string | number | null;
 }
