@@ -24,7 +24,7 @@ Never edit the golden files to make a test pass. The two new ideas never enter t
 - V182-10: `null.draw_groups(df, event_pos, eligible, k, seed, *, atr, trend, direction="long", depth=None) -> NullGroups` with fields `event_pos, groups, fills, dropped_no_match, null_slots, null_unfilled, null_depths` — positions and fills only, no race.
 - V182-11: `screen_idea.raw_levels(idea, df) -> np.ndarray | None` (None for a next-open idea); `_books` threads levels and depth for a level idea.
 
-**A spec clause to know before V182-13 (flagged to the controller, not changed here):** the spec's first-break clause `Close[t−1] ≥ S` reads S over bars t−30..t−1, which includes bar t−1's own Low, and every consistent bar has Low ≤ Close. So the clause holds wherever S is defined. The definition is frozen and this part implements it verbatim; V182-13 pins the fact in `test_first_break_is_implied_by_every_consistent_bar` so it is on record before either shot is spent.
+**First-break clause (spec corrected at 0f6a87f7):** `Close[t−1] ≥ S[t−1]`, where `S[t−1]` is the support computed for bar t−1 (min Low over t−31..t−2), i.e. `first_break = Close.shift(1) >= support(df).shift(1)`. The first wording compared with S over t−30..t−1, which includes bar t−1's own Low and so could never fail. V182-13 pins that a second consecutive breakdown bar does not fire.
 
 ---
 
@@ -187,19 +187,34 @@ def test_downtrend_needs_a_falling_sma50_and_the_prior_close_below_it(closes, ex
     assert bool(rb.downtrend(frame(closes)).iloc[101]) is expected
 
 
-def test_first_break_compares_the_prior_close_with_support():
-    assert rb.first_break(breakdown_frame()).iloc[T]
-    # Only an inconsistent bar (Close < Low) can close below a support its own
-    # Low is part of; the comparison direction is pinned on one.
-    bad = breakdown_frame(edit=lambda o, h, l, c: c.__setitem__(89, 98.0))
-    assert not rb.first_break(bad).iloc[T]
+@pytest.mark.parametrize("close89, low89, expected", [
+    (99.0, 99.0, True),           # prior close exactly at its own support S[t-1] = 99
+    (98.9375, 98.875, False),     # prior close already below S[t-1]
+])
+def test_first_break_compares_the_prior_close_with_its_own_support(close89, low89, expected):
+    """Consistent bars only (Low <= Close): S[t-1] is the support of bar t-1's
+    window (t-31..t-2), so bar t-1's own Low is not part of it."""
+    def edit(o, h, l, c):
+        c[89], o[89], l[89] = close89, close89, low89
+    df = breakdown_frame(edit=edit)
+    assert rb.support(df).shift(1).iloc[T] == 99.0
+    assert bool(rb.first_break(df).iloc[T]) is expected
+    assert bool(rb.setup(df).iloc[T]) is expected
 
 
-def test_first_break_is_implied_by_every_consistent_bar():
-    """S includes bar t-1's Low and Low <= Close, so Close[t-1] >= S holds
-    wherever S is defined. Pinned so the frozen clause's reach is on record."""
-    walk = random_walk(3000)
-    assert (rb.first_break(walk) == rb.support(walk).notna()).all()
+def test_a_second_consecutive_breakdown_bar_does_not_fire():
+    """Bar 90 closes below S = 99 (low 98.875); bar 91 closes lower still.
+    Bar 91 meets every other clause (its window now holds 98.875 as S, the
+    99 lows touch it), but its prior close was already below its own support,
+    so only the first break sets up."""
+    df = breakdown_frame(event_close=98.9375, event_low=98.875)
+    assert rb.setup(df).iloc[T]
+    nxt = T + 1
+    assert rb.in_range(df).iloc[nxt] and rb.downtrend(df).iloc[nxt]
+    assert df["Close"].iloc[nxt] < rb.support(df).iloc[nxt]       # a breakdown bar again
+    assert not rb.first_break(df).iloc[nxt]
+    assert not rb.setup(df).iloc[nxt] and not rb.control_setup(df).iloc[nxt]
+    assert _setup_bars(df) == [T]
 
 
 def test_warm_up_needs_61_bars_before_the_event():
@@ -242,7 +257,7 @@ def test_setup_reads_no_later_bar():
     assert_prefix_stable(rb.control_setup, walk, [100, 1500, 2999])
 ```
 
-The fixture numbers were checked against a draft of Step 3's module (25 tests, all green).
+The fixture numbers were checked against a draft of Step 3's module (26 tests, all green).
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -275,7 +290,8 @@ in each idea module.
   earliest and latest at least 5 bars apart; the same for High >= R - 0.25 x
   ATR14[t-1];
 - own downtrend: SMA50[t-1] < SMA50[t-11] and Close[t-1] < SMA50[t-1];
-- first break: Close[t-1] >= S;
+- first break: Close[t-1] >= S[t-1], the support of bar t-1's own window
+  (t-31..t-2), so a breakdown sets up once, not on every following bar;
 - ATR14[t-1] NaN or <= 0 means no event; warm-up: bar position t >= 61.
 
 Not an idea module (no CAP, no events): the leading underscore keeps it out
@@ -361,8 +377,9 @@ def downtrend(df: pd.DataFrame) -> pd.Series:
 
 
 def first_break(df: pd.DataFrame) -> pd.Series:
-    """Close[t-1] >= S: the prior bar was still inside (frozen as written)."""
-    return (df["Close"].shift(1) >= support(df)).fillna(False)
+    """Close[t-1] >= S[t-1]: the prior bar closed at or above its own
+    range support (window t-31..t-2), so only the first breakdown bar sets up."""
+    return (df["Close"].shift(1) >= support(df).shift(1)).fillna(False)
 
 
 def _ready(df: pd.DataFrame) -> pd.Series:
@@ -394,7 +411,7 @@ python scripts/dev/testrun.py file tests/backtesting/screen/test_long_byte_ident
 python scripts/dev/testrun.py file tests/backtest_scripts/test_calibration_long_golden.py
 ```
 
-Expected: `25 passed` for the new file; the other four green; the complexity gate reports no regression.
+Expected: `26 passed` for the new file; the other four green; the complexity gate reports no regression.
 
 - [ ] **Step 5: Commit**
 
