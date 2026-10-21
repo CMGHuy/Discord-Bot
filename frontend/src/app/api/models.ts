@@ -177,6 +177,14 @@ export interface TradeRow {
    *  is hit (bar 0%) and at the best price since TP1 (bar 100%). */
   stop_pnl_pct?: number | null;
   best_pnl_pct?: number | null;
+  /** v177 -- the plan's ORIGINAL TP1, on a PARTIAL trailing-runner row only
+   *  (the Plan cell's line 1); null everywhere else, leg rows included. */
+  tp1?: number | null;
+  /** v177 -- a CLOSED plan that banked TP1 and then closed its runner: the
+   *  runner's actual exit price and what closed it (the runner leg's reason,
+   *  `giveback`, or `manual`). Null on every other row. */
+  runner_exit_price?: number | null;
+  runner_exit_reason?: string | null;
   floor_r: number | null;
   price_r: number | null;
   headroom_r: number | null;

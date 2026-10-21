@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TradesStore } from '../../stores/trades.store';
 import { PositionsTable, POSITION_TABS } from './positions-table';
+import { tradeColumns } from '../trades/trades.columns';
 
 describe('positions table', () => {
   let setQuery: ReturnType<typeof vi.fn>;
@@ -154,5 +155,13 @@ describe('positions table', () => {
     expect(seen).toContain('ACTIVE');
     expect(seen).toContain('CLOSED');
     expect(seen).toContain('CANCELLED');
+  });
+
+  it('keeps the Plan column floor the two-line runner cell was measured against (v177)', () => {
+    // Line 2 adds height, not width: the column keeps its 12rem floor and
+    // stays inline from xs on every tab, PARTIAL and CLOSED included.
+    const plan = tradeColumns().find((c) => c.key === 'plan')!;
+    expect(plan.width).toBe('12rem');
+    expect(plan.inlineFrom).toBe('xs');
   });
 });

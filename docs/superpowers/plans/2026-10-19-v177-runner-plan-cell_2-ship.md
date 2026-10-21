@@ -29,7 +29,7 @@ Never `cd` in Bash: `git -C <tree>`, `npm --prefix <dir>`, absolute paths. Front
 
 This is the spec's § Testing browser check ("Browser check at 390/768/1440 on the PARTIAL tab, the Closed tab and the Trades page") and § Layout's per-line no-wrap rule. The local data is the production replica, so the real RKLB short (or whatever runner the book holds today) is what renders; nothing is seeded and nothing is stubbed.
 
-- [ ] **Step 1: Check that `.env` carries the admin credentials (without reading them out)**
+- [x] **Step 1: Check that `.env` carries the admin credentials (without reading them out)**
 
 ```bash
 node -e "process.loadEnvFile('E:/Documents/Private/Projects/Discord-Bot/.env'); const ok = ['ADMIN_USERNAME', 'ADMIN_PASSWORD'].every((k) => Boolean(process.env[k])); console.log(ok ? 'credentials: present' : 'credentials: missing');"
@@ -45,13 +45,13 @@ Expected: `credentials: present`. On `credentials: missing` (or a `loadEnvFile` 
 
 Do not improvise around it: no default credentials, no manual sign-in in a headed window unless the partner chose answer 2 (and then only the partner types), no second `.env`, no copy of the values anywhere. On answer 1, wait for the partner's go-ahead and repeat this step. On answer 2, record "local browser check skipped (no credentials in `.env`; partner chose the production look)" in the task report, skip Steps 2-6, and end the task (V177-6 Step 5 becomes required).
 
-- [ ] **Step 2: Sync the production replica**
+- [x] **Step 2: Sync the production replica**
 
 Run the `replicate-prod-db` skill (`/replicate-prod-db`): CLAUDE.md requires it before a task's first database-backed run, and this check renders production's own runners from it.
 
 Expected: a verdict line `replicate_prod_db: MATCH|DRIFT target=swingbot_prod_replica tables=… alembic=…`. `MISMATCH` or `FAIL`: stop, report the printed lines in full, and ask the partner (`AskUserQuestion`) whether to run the check on the working local database instead (fixture data: probably no runner row) or on production after the deploy. v177 adds no Alembic revision, so the replica's `alembic=` revision is the one this branch expects; if `python -m alembic heads` (run with `PYTHONPATH=$WT`) names a newer head, report it rather than migrating anything.
 
-- [ ] **Step 3: Start the local admin on the replica, and the dev server**
+- [x] **Step 3: Start the local admin on the replica, and the dev server**
 
 The working local database holds fixture data; the admin must read `swingbot_prod_replica` instead. `swingbot/config.py` loads `.env` with `override=True`, so an environment variable cannot redirect it; the launcher sets `config.DATABASE_URL` in-process after `.env` has loaded, swapping only the database name (user, password, host and port stay what `.env` says, never printed). Create `$SCRATCH/v177-admin-replica.py`:
 
@@ -113,7 +113,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4123/app/
 
 Expected: `200`.
 
-- [ ] **Step 4: Write the check script**
+- [x] **Step 4: Write the check script**
 
 Create `$SCRATCH/v177-widths.cjs`:
 
@@ -285,7 +285,7 @@ function problemsOf(surface, m) {
 })().catch((err) => { console.error(err.message); process.exit(1); });
 ```
 
-- [ ] **Step 5: Run it and read the result**
+- [x] **Step 5: Run it and read the result**
 
 ```bash
 node $SCRATCH/v177-widths.cjs "E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell" "E:/Documents/Private/Projects/Discord-Bot/.env" "$SCRATCH/v177-shots"
@@ -308,7 +308,7 @@ Open the screenshots with the Read tool — at least `dashboard-partial@390.png`
 
 An empty result is a measured answer, not a pass: `api: runners=0` means the replica holds no trailing runner and the two-line form was not seen in a browser; `closedRunners=0` means the closed form was not seen. Say which in the task report; V177-6 Step 5 then looks at that form on production (which holds the same rows, so this only happens when the book has none at all — then say so).
 
-- [ ] **Step 6: Fix a layout defect, if one showed (otherwise skip)**
+- [x] **Step 6: Fix a layout defect, if one showed (otherwise skip)**
 
 A `PROBLEMS:` entry for a line that wraps, overflows its cell, or makes the page scroll is fixed in `$WT/frontend/src/app/ui/plan-cell.ts`'s `styles` only, inside the Global Constraints: each line its own block with `white-space: nowrap`; no margins for spacing (literal text inside `.sep`); colours only through `var(--pos)`/`var(--neg)`/`var(--text-faint)`/`var(--text-secondary)`; no `.pos`/`.neg`/`.muted` selectors; no colour literal; column widths and `inlineFrom` in `trades.columns.ts` unchanged. Add a case to `$WT/frontend/src/app/ui/plan-cell.spec.ts` pinning the corrected style, for example:
 
@@ -345,7 +345,7 @@ Pop-Location
 
 Expected: the spec passes; lint reports nothing new (no new `eslint-suppressions.json` entry). Re-run Step 5: no `PROBLEMS:` entry. A 60 s "Timeout waiting for worker … no tests" from `ng test` is machine load: re-run the same command once (`testing-cost.md`).
 
-- [ ] **Step 7: Stop the servers, commit a fix if there was one, record**
+- [x] **Step 7: Stop the servers, commit a fix if there was one, record**
 
 Stop the background admin and `ng serve` processes, so V177-5's full suite does not share the machine with them.
 

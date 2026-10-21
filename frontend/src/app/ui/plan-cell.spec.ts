@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { PlanCell, bankedLegAmount, bankedLegPct } from './plan-cell';
+import { PlanCell, bankedLegAmount, bankedLegPct, runnerExitLabel } from './plan-cell';
 
 function render(entry: number | null, target: number | null, stop: number | null) {
   const f = TestBed.createComponent(PlanCell);
@@ -259,5 +259,181 @@ describe('bankedLegPct / bankedLegAmount', () => {
 
   it('is null when shares are unknown', () => {
     expect(bankedLegAmount(100, 110, 0.5, null, 'bullish')).toBeNull();
+  });
+});
+
+/* -- v177: the runner's two-line cell and the closed runner's exit ------- */
+
+function renderWith(inputs: Record<string, unknown>): HTMLElement {
+  const f = TestBed.createComponent(PlanCell);
+  for (const [key, value] of Object.entries(inputs)) f.componentRef.setInput(key, value);
+  f.detectChanges();
+  return f.nativeElement as HTMLElement;
+}
+
+const text = (el: Element | null): string => el!.textContent!.replace(/\s+/g, ' ').trim();
+
+/** The live RKLB short: TP1 banked at 58.33, the stop trailing at 52.437
+ *  behind a best price of 49.94. Today's inputs plus the v177 ones. */
+const RKLB_RUNNER = {
+  entry: 60.67, target: null, stop: 52.437, stopKind: 'trailing',
+  targetIsBankedTp1: true, bankedEntry: 58.33,
+  planTp1: 58.33, planStop: 61.85,
+  trailBest: 49.94, trailBestPct: 17.69, trailExitPct: 13.57,
+};
+
+const LONG_RUNNER = {
+  entry: 100, target: null, stop: 113.3333333, stopKind: 'trailing',
+  targetIsBankedTp1: true, bankedEntry: 121,
+  planTp1: 120, planStop: 90,
+  trailBest: 130, trailBestPct: 30, trailExitPct: 13.33,
+};
+
+const PAPER_LEVEL = "The bot's paper level: your broker's resting orders are not synced, update your stop yourself.";
+
+describe('PlanCell runner (two lines)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('reads the original plan on line 1 for the RKLB short', () => {
+    expect(text(renderWith(RKLB_RUNNER).querySelector('.line.l1')))
+      .toBe('60.67 → 58.33 / 61.85 (3.9% - 1.9%)');
+  });
+
+  it('reads best price -> trailing stop with signed per-share gains on line 2', () => {
+    expect(text(renderWith(RKLB_RUNNER).querySelector('.line.l2')))
+      .toBe('Trail 49.94 → 52.44 (+17.7% / +13.6%)');
+  });
+
+  it('leads line 2 with the muted Trail label', () => {
+    expect(text(renderWith(RKLB_RUNNER).querySelector('.l2 .trail'))).toBe('Trail');
+  });
+
+  it('puts the tooltips on the lines, not on the root', () => {
+    const el = renderWith(RKLB_RUNNER);
+    expect(el.querySelector('.plan.runner')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('[title]')).toBe(el.querySelector('.line.l1'));
+  });
+
+  it('explains line 1 as the original plan', () => {
+    expect(renderWith(RKLB_RUNNER).querySelector('.l1')!.getAttribute('title')).toBe(
+      'Original plan (TP1 already filled): entry → TP1 / original stop. '
+      + 'Percentages are the distance from the entry to each level.');
+  });
+
+  it('explains line 2: unrealised peak, per share, before costs, paper level', () => {
+    expect(renderWith(RKLB_RUNNER).querySelector('.l2')!.getAttribute('title')).toBe(
+      'Trailing stop. Best price so far → price the trailing stop would exit at. '
+      + '+17.7% is the peak since TP1 (unrealised); +13.6% is the profit if the stop '
+      + 'fills at 52.44, per share from the original entry, before costs and tax. '
+      + `A short gains when price falls. ${PAPER_LEVEL}`);
+  });
+
+  it('reads a long runner the same way, with the long sentence', () => {
+    const el = renderWith(LONG_RUNNER);
+    expect(text(el.querySelector('.l1'))).toBe('100.00 → 120.00 / 90.00 (20.0% - 10.0%)');
+    expect(text(el.querySelector('.l2'))).toBe('Trail 130.00 → 113.33 (+30.0% / +13.3%)');
+    expect(el.querySelector('.l2')!.getAttribute('title')).toContain('A long gains when price rises.');
+  });
+
+  it('names a derived floor "Locked-in floor" in the line 2 tooltip', () => {
+    const title = renderWith({ ...RKLB_RUNNER, stopKind: 'derived_floor' })
+      .querySelector('.l2')!.getAttribute('title')!;
+    expect(title.startsWith(
+      'Locked-in floor. Best price so far → price the locked-in floor would exit at. ')).toBe(true);
+    expect(title).toContain('is the profit if the stop fills at 52.44');
+  });
+
+  it('keeps an explicit minus on the loss side of line 2', () => {
+    const el = renderWith({ ...RKLB_RUNNER, trailExitPct: -2.5 });
+    expect(text(el.querySelector('.l2'))).toBe('Trail 49.94 → 52.44 (+17.7% / -2.5%)');
+    expect(el.querySelector('.l2 .lock')!.classList).toContain('loss');
+    expect(el.querySelector('.l2 .peak')!.classList).not.toContain('loss');
+  });
+
+  it('shows line 1 alone when a line 2 number is missing, never a dash', () => {
+    for (const missing of ['trailBest', 'trailBestPct', 'trailExitPct', 'stop']) {
+      const el = renderWith({ ...RKLB_RUNNER, [missing]: null });
+      expect(el.querySelector('.l1')).not.toBeNull();
+      expect(el.querySelector('.l2')).toBeNull();
+    }
+  });
+
+  it('never prints TP2', () => {
+    expect(renderWith(RKLB_RUNNER).textContent).not.toContain('TP2');
+  });
+
+  it('stays a single legacy line when planTp1 is not set', () => {
+    const el = renderWith({ ...RKLB_RUNNER, planTp1: null });
+    expect(el.querySelector('.runner')).toBeNull();
+    expect(el.querySelector('.line')).toBeNull();
+    expect(text(el)).toBe('60.67 → 58.33 ✓ / 52.44 (3.9% - 13.6%)');
+  });
+});
+
+describe('PlanCell closed runner', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  const RKLB_CLOSED = {
+    entry: 60.67, target: 58.33, stop: 61.85,
+    runnerExit: 52.44, runnerExitPct: bankedLegPct(60.67, 52.44, 'bearish'),
+    runnerExitReason: 'tp1_runner_trail',
+  };
+
+  it('shows the runner exit in the target slot with a signed gain', () => {
+    const el = renderWith(RKLB_CLOSED);
+    expect(text(el)).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%)');
+    expect(el.querySelector('.runner')).toBeNull();
+  });
+
+  it('names what closed the runner in the tooltip', () => {
+    expect(renderWith(RKLB_CLOSED).querySelector('[title]')!.getAttribute('title')).toBe(
+      'Entry 60.67 · Runner exit (trailing stop): 52.44, +13.6% per share from the original entry · Stop 61.85');
+  });
+
+  it('reads a give-back close as such', () => {
+    const title = renderWith({ ...RKLB_CLOSED, runnerExitReason: 'giveback' })
+      .querySelector('[title]')!.getAttribute('title')!;
+    expect(title).toContain('Runner exit (give-back stop): 52.44');
+  });
+
+  it('signs and colours a runner exit on the loss side of the entry', () => {
+    const el = renderWith({ entry: 100, target: 120, stop: 90,
+      runnerExit: 97, runnerExitPct: -3, runnerExitReason: 'tp1_runner_be' });
+    expect(text(el)).toBe('100.00 → 97.00 / 90.00 (-3.0% - 10.0%)');
+    expect(el.querySelector('.rise')!.classList).toContain('loss');
+    expect(el.querySelector('.target')!.classList).toContain('loss');
+  });
+
+  it('never prints TP2, even when TP2 closed the runner', () => {
+    expect(renderWith({ ...RKLB_CLOSED, runnerExitReason: 'tp1_runner_tp2' }).textContent)
+      .not.toContain('TP2');
+  });
+
+  it('adds no loss class to the legacy cell', () => {
+    const el = renderWith({ entry: 178, target: 195, stop: 170 });
+    expect(el.querySelector('.target')!.classList).not.toContain('loss');
+    expect(el.querySelector('.rise')!.classList).not.toContain('loss');
+  });
+});
+
+describe('runnerExitLabel', () => {
+  it('names every known runner close', () => {
+    expect(runnerExitLabel('tp1_runner_trail')).toBe('trailing stop');
+    expect(runnerExitLabel('giveback')).toBe('give-back stop');
+    expect(runnerExitLabel('tp1_runner_be')).toBe('floor stop');
+    expect(runnerExitLabel('tp1_runner_tp2')).toBe('TP2');
+    expect(runnerExitLabel('manual')).toBe('manual close');
+    expect(runnerExitLabel('tp1_runner_progress_stall')).toBe('progress stall');
+    expect(runnerExitLabel('time_exit')).toBe('time exit');
+  });
+
+  it('falls back to "runner exit" for anything else', () => {
+    expect(runnerExitLabel(null)).toBe('runner exit');
+    expect(runnerExitLabel('something_new')).toBe('runner exit');
+    expect(runnerExitLabel('constructor')).toBe('runner exit');
   });
 });

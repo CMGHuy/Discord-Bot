@@ -47,7 +47,7 @@ A 60 s "Timeout waiting for worker … no tests" from `ng test` is machine load:
 - `best_pnl_pct`/`stop_pnl_pct` are now written by the row builder for every trailing PARTIAL row, priced or not. `_trailing_status_fields`' priced path keeps writing them through the same `_runner_pnl_fields`, so the value is identical on both passes (the attach passes can run twice per request; this stays idempotent). Its chip path (no price, no best, span ≤ 0) is unchanged: it returns no pct keys, so the builder's values survive.
 - `_row_from_leg` clears `tp1`/`best_pnl_pct`/`stop_pnl_pct` on **every** leg row, keeps `bar_kind` (the Trades page's trailing icon reads it) and keeps the runner-exit fields (both rows of a closed partial trade show the runner exit).
 
-- [ ] **Step 1: Create the worktree**
+- [x] **Step 1: Create the worktree**
 
 Invoke the `worktree-lifecycle` skill. Reuse the worktree if `git -C E:/Documents/Private/Projects/Discord-Bot worktree list` already shows `2026-10-19-v177-runner-plan-cell`; otherwise:
 
@@ -60,11 +60,11 @@ npm --prefix E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10
 
 Expected: the log line is the current `main` HEAD (the commit carrying this plan); `npm ci` ends without `ERR!`. Every later step runs in `$WT`. V177-2 may start now.
 
-- [ ] **Step 2: Sync the database replica**
+- [x] **Step 2: Sync the database replica**
 
 Run `/replicate-prod-db` once in this session before the first DB-backed test run (CLAUDE.md; the API tests below seed the Postgres test database through `seed_store`). If the test database is down: `docker compose --profile test up -d db-test` from `$R`. Skip this step if it already ran in this session.
 
-- [ ] **Step 3: Write the failing row-builder tests**
+- [x] **Step 3: Write the failing row-builder tests**
 
 In `tests/admin/test_trades_partial_row.py`, change the import line (:4) to:
 
@@ -231,12 +231,12 @@ def test_a_legacy_trade_emits_every_runner_cell_key_as_none():
     assert _cell(row) == dict.fromkeys(RUNNER_CELL_KEYS)
 ```
 
-- [ ] **Step 4: Run them to verify they fail**
+- [x] **Step 4: Run them to verify they fail**
 
 Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_trades_partial_row.py`
 Expected: the new tests FAIL with `KeyError: 'tp1'` (or `'runner_exit_price'`); the 17 existing tests still pass.
 
-- [ ] **Step 5: Add the helpers to `trades.py`**
+- [x] **Step 5: Add the helpers to `trades.py`**
 
 In `swingbot/admin/api_v1/trades.py`, the last statements of `_row_from_plan` today are `view = plan_view(_AttrPlan(plan), price=None)` followed by `return {` … `"leg_total": 1,` / `}`. Change `return {` to `row = {`, and replace the closing `}` of that dict with:
 
@@ -335,7 +335,7 @@ def _runner_cell_fields(plan: dict, trade: dict | None, row: dict) -> dict:
     return out
 ```
 
-- [ ] **Step 6: Clear the line-2 fields on leg rows**
+- [x] **Step 6: Clear the line-2 fields on leg rows**
 
 In `_row_from_leg`, the `row.update({` call ends with `"leg_index": leg_index,` then `})`. Add the cleared keys as the last entry of that dict:
 
@@ -349,7 +349,7 @@ In `_row_from_leg`, the `row.update({` call ends with `"leg_index": leg_index,` 
     })
 ```
 
-- [ ] **Step 7: Emit the keys on legacy rows**
+- [x] **Step 7: Emit the keys on legacy rows**
 
 In `_row_from_trade`, after `"runner_best": None,` add:
 
@@ -363,7 +363,7 @@ In `_row_from_trade`, after `"runner_best": None,` add:
         "runner_exit_reason": None,
 ```
 
-- [ ] **Step 8: Route the status bar through the shared helper**
+- [x] **Step 8: Route the status bar through the shared helper**
 
 In `_trailing_status_fields`, replace the line
 
@@ -382,12 +382,12 @@ with
 
 `is_bull` is still used above it (span, pos, ent), so no unused-variable warning.
 
-- [ ] **Step 9: Run the row-builder tests**
+- [x] **Step 9: Run the row-builder tests**
 
 Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_trades_partial_row.py`
 Expected: all pass (17 existing + 15 new), `0 failed`.
 
-- [ ] **Step 10: Write the failing contract and API tests**
+- [x] **Step 10: Write the failing contract and API tests**
 
 In `tests/admin/test_api_v1_trades.py`, append directly after `test_trailing_runner_without_a_best_price_keeps_the_plain_chip`:
 
@@ -420,7 +420,7 @@ def test_trailing_runner_without_a_best_price_measures_from_the_tp1_fill(seed, l
 Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_api_v1_trades.py`
 Expected: the two new tests pass (Steps 5-8 are in), and every `assert_collection(…, TRADE_ROW, …)` contract test FAILS with an "unexpected keys" message naming `tp1`, `best_pnl_pct`, `stop_pnl_pct`, `runner_exit_price`, `runner_exit_reason` — the wire grew, the contract has not yet.
 
-- [ ] **Step 11: Declare the keys in the row contract**
+- [x] **Step 11: Declare the keys in the row contract**
 
 In `TRADE_ROW`, directly after `"headroom_r": NULLABLE_NUMBER,` add:
 
@@ -435,7 +435,7 @@ In `TRADE_ROW`, directly after `"headroom_r": NULLABLE_NUMBER,` add:
     "runner_exit_reason": NULLABLE_STR,
 ```
 
-- [ ] **Step 12: Run the API contract files**
+- [x] **Step 12: Run the API contract files**
 
 Run, one at a time:
 - `python $WT/scripts/dev/testrun.py file tests/admin/test_api_v1_trades.py`
@@ -444,7 +444,7 @@ Run, one at a time:
 
 Expected: all pass, `0 failed`. `test_detail_row_fields_match_the_list_exactly` passes unchanged. If a contract test still reports a missing key, the row origin it names is a builder Steps 5-7 missed.
 
-- [ ] **Step 13: Run the surface-agreement and view tests (unchanged expectations)**
+- [x] **Step 13: Run the surface-agreement and view tests (unchanged expectations)**
 
 Run:
 - `python $WT/scripts/dev/testrun.py file tests/presentation/test_surface_agreement.py`
@@ -452,7 +452,7 @@ Run:
 
 Expected: both pass with no edit (the row's `stop_loss`, `target`, `banked_exit_price` are unchanged; `plan_view.py` is not touched).
 
-- [ ] **Step 14: Complexity gate and syntax**
+- [x] **Step 14: Complexity gate and syntax**
 
 Run: `python $WT/scripts/dev/complexity_gate.py --repo $WT`
 Expected: exit 0, no finding. `_row_from_plan` stays at 15 (the change added no branch); every new helper is well below 15. If `_row_from_plan` reads 16, a conditional slipped into it: move it into `_runner_cell_fields`.
@@ -460,7 +460,7 @@ Expected: exit 0, no finding. `_row_from_plan` stays at 15 (the change added no 
 Run: `python -m py_compile $WT/swingbot/admin/api_v1/trades.py`
 Expected: no output.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell add swingbot/admin/api_v1/trades.py tests/admin/test_trades_partial_row.py tests/admin/test_api_v1_trades.py
@@ -490,7 +490,7 @@ git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v1
 - No colour literal, no `.pos`/`.neg`/`.muted` selector (`primitives.spec.ts`): colours via `var(--pos)`, `var(--neg)`, `var(--text-faint)`, `var(--text-secondary)`; the small label size via the existing `--text-micro` token. Spacing is literal text inside `.sep`, never margins.
 - Each line is its own block with `white-space: nowrap`.
 
-- [ ] **Step 1: Write the failing cell tests**
+- [x] **Step 1: Write the failing cell tests**
 
 In `frontend/src/app/ui/plan-cell.spec.ts`, change the import line (:5) to:
 
@@ -680,7 +680,7 @@ describe('runnerExitLabel', () => {
 
 Why the legacy-line expectation in "stays a single legacy line": with `planTp1` unset, the cell is today's trailing-runner cell (banked fill `58.33 ✓` in the target slot, the trailing stop in the stop slot, unsigned distances `|58.33 − 60.67| / 60.67 = 3.9%`, `|52.437 − 60.67| / 60.67 = 13.6%`).
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -690,7 +690,7 @@ Pop-Location
 
 Expected: FAIL — compile error `'runnerExitLabel' is not exported` (or, once that exists, NG0303 "Can't set value of the 'planTp1' input"). The existing cases cannot run until the file compiles; that is expected.
 
-- [ ] **Step 3: Implement the inputs, template, styles and tooltips**
+- [x] **Step 3: Implement the inputs, template, styles and tooltips**
 
 In `frontend/src/app/ui/plan-cell.ts`, replace the `template:` value (:22-31) with:
 
@@ -907,7 +907,7 @@ Also extend the class doc comment (:15-17) with one paragraph, after the existin
  * (`runnerExit` set). The callers decide which through `runnerCellInputs`.
 ```
 
-- [ ] **Step 4: Add the `TradeRow` fields**
+- [x] **Step 4: Add the `TradeRow` fields**
 
 In `frontend/src/app/api/models.ts`, directly after `best_pnl_pct?: number | null;` (:170), add:
 
@@ -924,7 +924,7 @@ In `frontend/src/app/api/models.ts`, directly after `best_pnl_pct?: number | nul
 
 The fields are optional so the `tradeRow()`/`row()` fixtures in `dashboard.spec.ts` and `trades.spec.ts` (which do not list them) keep compiling.
 
-- [ ] **Step 5: Run the cell tests**
+- [x] **Step 5: Run the cell tests**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -934,7 +934,7 @@ Pop-Location
 
 Expected: every test passes, every existing case unchanged plus the new ones; `0 failed`.
 
-- [ ] **Step 6: Run the primitive gates and lint**
+- [x] **Step 6: Run the primitive gates and lint**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -945,7 +945,7 @@ Pop-Location
 
 Expected: all pass (`gallery.spec.ts` renders the cell with no new inputs; `status-cell.spec.ts` reads `stop_pnl_pct`/`best_pnl_pct` unchanged). `npm run lint` ends with no error and no new entry in `eslint-suppressions.json`. A `primitives.spec.ts` failure naming `plan-cell.ts` means a colour literal or a `.pos`/`.neg`/`.muted` selector slipped in: use the tokens above.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell add frontend/src/app/ui/plan-cell.ts frontend/src/app/ui/plan-cell.spec.ts frontend/src/app/api/models.ts
@@ -973,7 +973,7 @@ git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v1
 
 **The gate (index § Gate contract, verbatim).** `status === 'PARTIAL' && bar_kind === 'trailing' && tp1 != null` → runner fields (`planTp1 = tp1`, `planStop = risk_stop`, `trailBest = runner_best ?? banked_exit_price`, `trailBestPct = best_pnl_pct`, `trailExitPct = stop_pnl_pct`); `status === 'CLOSED' && runner_exit_price != null` → closed fields (`runnerExit = runner_exit_price`, `runnerExitPct = bankedLegPct(entry, runner_exit_price, direction)`, `runnerExitReason = runner_exit_reason`); otherwise `NO_RUNNER_CELL`. The status check is what keeps the TP1-leg row of a still-PARTIAL plan (status `CLOSED`, `bar_kind` still `trailing`) on today's cell even if a field leaked; V177-1 also nulls the fields there, so both layers hold.
 
-- [ ] **Step 1: Write the failing gate tests**
+- [x] **Step 1: Write the failing gate tests**
 
 Create `frontend/src/app/ui/runner-cell.spec.ts`:
 
@@ -1092,7 +1092,7 @@ describe('runnerCellInputs', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1102,7 +1102,7 @@ Pop-Location
 
 Expected: FAIL — `Cannot find module './runner-cell'` (or a resolve error naming it).
 
-- [ ] **Step 3: Implement the gate**
+- [x] **Step 3: Implement the gate**
 
 Create `frontend/src/app/ui/runner-cell.ts`:
 
@@ -1167,7 +1167,7 @@ export function runnerCellInputs(row: TradeRow): RunnerCellInputs {
 }
 ```
 
-- [ ] **Step 4: Run the gate tests**
+- [x] **Step 4: Run the gate tests**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1177,7 +1177,7 @@ Pop-Location
 
 Expected: all pass, `0 failed`.
 
-- [ ] **Step 5: Write the failing template-wiring tests**
+- [x] **Step 5: Write the failing template-wiring tests**
 
 In `frontend/src/app/workspaces/trades/trades.spec.ts`, append at the end of the file:
 
@@ -1321,7 +1321,7 @@ In `frontend/src/app/workspaces/dashboard/positions-table.spec.ts`, add `import 
   });
 ```
 
-- [ ] **Step 6: Run them to verify the wiring tests fail**
+- [x] **Step 6: Run them to verify the wiring tests fail**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1331,7 +1331,7 @@ Pop-Location
 
 Expected: the "two lines" and "closed runner" cases FAIL (no `.l1` element; the closed cell still reads `58.33` in the target slot) in both files; the TP1-leg and Plan-column-floor cases already pass (they pin today's behaviour); every pre-existing test passes. If `sb-plan-cell` is not found at all (`renders one Plan cell per row` fails with length 0, or `cell` is `undefined` in the dashboard cases), the rows have not reached the table: in `trades.spec.ts` confirm `TradesStore` is the instance `render()` provided; in `dashboard.spec.ts` log `backend.match(() => true).map((r) => r.request.urlWithParams)` after `loaded()` to see the positions table's request and flush that one. Fix the harness, not the assertion.
 
-- [ ] **Step 7: Wire the two templates**
+- [x] **Step 7: Wire the two templates**
 
 In `frontend/src/app/workspaces/dashboard/dashboard.ts`:
 
@@ -1377,7 +1377,7 @@ import { runnerCellInputs } from '../../ui/runner-cell';
 
 In `frontend/src/app/workspaces/trades/trades.ts`, make the same three edits: the import below the `PlanCell` import (:49); the identical `#planCell` block above replacing :404-419 (comment text: `identical in dashboard.ts`); and `protected readonly runnerCellInputs = runnerCellInputs;` after `protected bankedLegAmount = bankedLegAmount;` (:920).
 
-- [ ] **Step 8: Run the wiring tests**
+- [x] **Step 8: Run the wiring tests**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1387,7 +1387,7 @@ Pop-Location
 
 Expected: all pass, `0 failed`.
 
-- [ ] **Step 9: Gates and lint**
+- [x] **Step 9: Gates and lint**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1398,7 +1398,7 @@ Pop-Location
 
 Expected: all pass; lint clean with no new `eslint-suppressions.json` entry. If a gate spec path does not exist, drop it from the command (they are listed from the v166 plan's gate set) — never skip `primitives.spec.ts`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell add frontend/src/app/ui/runner-cell.ts frontend/src/app/ui/runner-cell.spec.ts frontend/src/app/workspaces/dashboard/dashboard.ts frontend/src/app/workspaces/trades/trades.ts frontend/src/app/workspaces/dashboard/dashboard.spec.ts frontend/src/app/workspaces/trades/trades.spec.ts frontend/src/app/workspaces/dashboard/positions-table.spec.ts

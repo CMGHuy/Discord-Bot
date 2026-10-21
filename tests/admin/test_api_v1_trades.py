@@ -78,6 +78,14 @@ TRADE_ROW = {
     "floor_r": NULLABLE_NUMBER,
     "price_r": NULLABLE_NUMBER,
     "headroom_r": NULLABLE_NUMBER,
+    # v177 -- the Plan cell's runner fields, on every origin (null where they
+    # do not apply). The two percentages used to appear only on priced
+    # trailing rows; they are now written by the row builder itself.
+    "tp1": NULLABLE_NUMBER,
+    "best_pnl_pct": NULLABLE_NUMBER,
+    "stop_pnl_pct": NULLABLE_NUMBER,
+    "runner_exit_price": NULLABLE_NUMBER,
+    "runner_exit_reason": NULLABLE_STR,
     # v58 -- the TP1 leg's own stats, once a PARTIAL plan has banked one.
     # None until then; a legacy trade never scale-outs so always None.
     "banked_fraction": NULLABLE_NUMBER,
@@ -1208,6 +1216,31 @@ def test_trailing_runner_without_a_best_price_keeps_the_plain_chip(seed, logged_
     row = _runner_row(logged_in)
     assert row["progress_pct"] is None
     assert row["status_label"] == "PARTIAL"
+
+
+def test_trailing_runner_keeps_its_percentages_when_the_price_feed_is_down(seed, logged_in, priced):
+    """v177: the Plan cell's line 2 must survive a dead feed -- the bar falls
+    back to its chip, the two percentages do not."""
+    plan, trade = _trailing_short(best=52.0)
+    seed(plans=[plan], trades=[trade])
+    priced(None)
+
+    row = _runner_row(logged_in)
+    assert row["progress_pct"] is None
+    assert row["tp1"] == 58.33
+    assert row["stop_pnl_pct"] == pytest.approx(2.75, abs=0.01)
+    assert row["best_pnl_pct"] == pytest.approx(14.29, abs=0.01)
+
+
+def test_trailing_runner_without_a_best_price_measures_from_the_tp1_fill(seed, logged_in, priced):
+    plan, trade = _trailing_short(best=None)
+    seed(plans=[plan], trades=[trade])
+    priced(55.5)
+
+    row = _runner_row(logged_in)
+    assert row["progress_pct"] is None                 # the bar still needs a best price
+    assert row["best_pnl_pct"] == pytest.approx(10.99, abs=0.01)   # the 54.0 TP1 fill
+    assert row["stop_pnl_pct"] == pytest.approx(2.75, abs=0.01)
 
 
 def test_active_plan_is_unaffected_by_the_partial_fields(seed, logged_in):

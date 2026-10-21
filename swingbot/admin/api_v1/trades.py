@@ -240,7 +240,7 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
     # particular TP1 is banked history, not a current target, and a missing
     # working stop falls back to its locked-in runner floor, never risk stop.
     view = plan_view(_AttrPlan(plan), price=None)
-    return {
+    row = {
         "id": plan["plan_id"],
         "origin": "plan",
         "status": plan.get("status"),
@@ -329,6 +329,94 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "leg_index": 0,
         "leg_total": 1,
     }
+    # v177 -- the Plan cell's runner fields. One call and no branch here:
+    # this function is pinned at complexity 15, every condition lives in the
+    # helpers below.
+    row.update(_runner_cell_fields(plan, trade, row))
+    return row
+
+
+# v177 -- the Plan cell's runner fields. Derived from what the plan already
+# holds; nothing is stored. `tp1` and the two percentages feed the two-line
+# cell of a PARTIAL runner with no TP2; `runner_exit_*` feed the closed cell
+# of a plan that banked TP1 and then closed its runner.
+_RUNNER_CELL_CLEARED = {"tp1": None, "best_pnl_pct": None, "stop_pnl_pct": None}
+_NO_RUNNER_EXIT = {"runner_exit_price": None, "runner_exit_reason": None}
+
+
+def _is_trailing_runner(row: dict) -> bool:
+    """A PARTIAL plan whose runner trails with no TP2 (`plan_view` gives it
+    `bar_kind == "trailing"`)."""
+    return row.get("status") == "PARTIAL" and row.get("bar_kind") == "trailing"
+
+
+def _runner_best_or_fill(row: dict) -> float | None:
+    """The runner's best price since TP1, or the TP1 fill until a tick has
+    recorded one -- a freshly banked runner still has a best price to show."""
+    for key in ("runner_best", "banked_exit_price"):
+        value = row.get(key)
+        if isinstance(value, (int, float)):
+            return value
+    return None
+
+
+def _runner_pnl_fields(row: dict) -> dict:
+    """Per-share P&L % from the original entry at the runner's stop and at its
+    best price. The one entry point for the status bar and the Plan cell, and
+    independent of the live price, so the cell keeps line 2 when the feed is
+    down."""
+    stop, best = row.get("stop_loss"), _runner_best_or_fill(row)
+    numbers = all(isinstance(v, (int, float)) for v in (stop, best))
+    if not (_is_trailing_runner(row) and numbers):
+        return {"stop_pnl_pct": None, "best_pnl_pct": None}
+    return _trailing_pnl_ends(row, stop, best, row.get("direction") != "bearish")
+
+
+def _runner_exit_reason(leg: dict) -> str | None:
+    """What closed the runner. A v176 give-back stop rides a trail-stop leg
+    reason, so `stop_source` names it."""
+    if leg.get("stop_source") == "giveback":
+        return "giveback"
+    return leg.get("reason")
+
+
+def _closed_manually_after_tp1(plan: dict, legs: list) -> bool:
+    """A PARTIAL plan closed from the admin UI: `_close_plan` records a
+    "manual" CLOSED transition and writes no runner leg, so TP1 is the only
+    leg."""
+    history = plan.get("status_history") or []
+    return (plan.get("status") == "CLOSED"
+            and len(legs) == 1 and legs[0].get("reason") == "tp1"
+            and bool(history) and history[-1].get("reason") == "manual")
+
+
+def _runner_exit_fields(plan: dict, trade: dict | None) -> dict:
+    """The runner's actual exit on a CLOSED plan that banked TP1 first.
+
+    An automated runner close appends its own leg (the last one). A manual
+    close appends none, so the trade's own `exit_price` is the runner's exit;
+    it is read here, before `_row_from_leg` overwrites the row's `exit_price`
+    with the leg fill. An ACTIVE stop-out (one leg, `fraction: 1.0`) never
+    banked TP1 and gets nothing.
+    """
+    if plan.get("status") != "CLOSED":
+        return dict(_NO_RUNNER_EXIT)
+    legs = plan.get("legs_realized") or []
+    if len(legs) >= 2 and legs[-1].get("reason") != "tp1":
+        return {"runner_exit_price": legs[-1].get("exit_price"),
+                "runner_exit_reason": _runner_exit_reason(legs[-1])}
+    price = (trade or {}).get("exit_price")
+    if _closed_manually_after_tp1(plan, legs) and price is not None:
+        return {"runner_exit_price": price, "runner_exit_reason": "manual"}
+    return dict(_NO_RUNNER_EXIT)
+
+
+def _runner_cell_fields(plan: dict, trade: dict | None, row: dict) -> dict:
+    """Exactly the five v177 keys, for `_row_from_plan` to merge."""
+    out = {"tp1": plan.get("tp1") if _is_trailing_runner(row) else None}
+    out.update(_runner_pnl_fields(row))
+    out.update(_runner_exit_fields(plan, trade))
+    return out
 
 
 def _leg_closed_at(plan: dict, trade: dict | None, leg: dict,
@@ -428,6 +516,11 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
         "held_hours": _held_hours(row.get("opened_at"), closed_at),
         "today": _in_today_scope("CLOSED", closed_at),
         "leg_index": leg_index,
+        # v177 -- a leg row is always CLOSED: the two-line runner cell never
+        # applies to it, even on the TP1 leg of a still-PARTIAL plan. Keep
+        # `bar_kind` (the Trades page's leg icon) and the runner-exit fields
+        # (both rows of a closed partial trade show the runner's exit).
+        **_RUNNER_CELL_CLEARED,
     })
     return row
 
@@ -489,6 +582,13 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "stop_kind": "risk",
         "bar_kind": "none",
         "runner_best": None,
+        # v177 -- the Plan cell's runner fields. A legacy trade never scales
+        # out, so none apply; emitted as null so both origins share one shape.
+        "tp1": None,
+        "best_pnl_pct": None,
+        "stop_pnl_pct": None,
+        "runner_exit_price": None,
+        "runner_exit_reason": None,
         "distance_to_trigger_r": None,
         "bars_to_expiry": None,
         "floor_r": None,
@@ -1008,7 +1108,10 @@ def _trailing_status_fields(row: dict, price: float | None) -> dict:
            "entry_pct": max(0.0, min(100.0, round(ent, 1))),
            "progress_band": band, "blink_seconds": round(2.2 - 1.6 * urgency, 2),
            "status_label": label}
-    out.update(_trailing_pnl_ends(row, stop, best, is_bull))
+    # Same entry point as the Plan cell (`_row_from_plan` already wrote these
+    # keys; on this priced path `runner_best` is a number, so the value is
+    # identical and a second attach pass stays idempotent).
+    out.update(_runner_pnl_fields(row))
     return out
 
 

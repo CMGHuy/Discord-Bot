@@ -47,6 +47,7 @@ import { DateRange } from '../../ui/date-range';
 import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
+import { runnerCellInputs } from '../../ui/runner-cell';
 import { StatusCell } from '../../ui/status-cell';
 import {
   ACTION_LABELS,
@@ -401,6 +402,9 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
     </ng-template>
 
     <ng-template #planCell let-row>
+      <!-- v177: runnerCellInputs keys the two-line runner cell and the
+           closed runner's exit on row.status -- identical in dashboard.ts. -->
+      @let rc = runnerCellInputs(row);
       <sb-plan-cell
         [entry]="row.entry"
         [target]="row.target"
@@ -414,6 +418,9 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
         [bankedEntry]="row.banked_exit_price"
         [bankedPct]="bankedLegPct(row.entry, row.banked_exit_price, row.direction)"
         [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.shares, row.direction)"
+        [planTp1]="rc.planTp1" [planStop]="rc.planStop"
+        [trailBest]="rc.trailBest" [trailBestPct]="rc.trailBestPct" [trailExitPct]="rc.trailExitPct"
+        [runnerExit]="rc.runnerExit" [runnerExitPct]="rc.runnerExitPct" [runnerExitReason]="rc.runnerExitReason"
         [currency]="connection.currency()"
       />
     </ng-template>
@@ -918,6 +925,7 @@ export class Trades {
   protected openedAt = openedAt;
   protected bankedLegPct = bankedLegPct;
   protected bankedLegAmount = bankedLegAmount;
+  protected readonly runnerCellInputs = runnerCellInputs;
   protected fmtNum(value: number | null, decimals = 2): string {
     return value === null || value === undefined ? '—' : value.toFixed(decimals);
   }

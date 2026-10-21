@@ -319,3 +319,65 @@ describe('Trades toolbar priorities', () => {
     expect(controls.find((c) => c.id === 'columns')!.active).toBe(false);
   });
 });
+
+/* -- v177: the Plan cell's runner forms on the Trades page -------------- */
+
+/** The RKLB plan as V177-1 serves it: the realized TP1 leg (a CLOSED row
+ *  of a still-PARTIAL plan), the open runner, and a second plan whose
+ *  runner has closed. */
+const RUNNER_ROWS: TradeRow[] = [
+  row({ id: 'p1', status: 'CLOSED', direction: 'bearish', entry: 60.67,
+        stop_loss: 52.437, target: null, target_is_banked_tp1: true,
+        stop_kind: 'trailing', bar_kind: 'trailing', exit_price: 58.33,
+        risk_stop: 61.85, runner_best: 49.94, tp1: null, best_pnl_pct: null,
+        stop_pnl_pct: null, runner_exit_price: null, runner_exit_reason: null,
+        leg_index: 0, leg_total: 2 }),
+  row({ id: 'p1', status: 'PARTIAL', status_label: 'PARTIAL', direction: 'bearish',
+        entry: 60.67, stop_loss: 52.437, target: null, target_is_banked_tp1: true,
+        stop_kind: 'trailing', bar_kind: 'trailing', banked_fraction: 0.5,
+        banked_exit_price: 58.33, banked_r: 1.98, exit_price: null,
+        risk_stop: 61.85, runner_best: 49.94, tp1: 58.33,
+        best_pnl_pct: 17.69, stop_pnl_pct: 13.57, leg_index: 1, leg_total: 2 }),
+  row({ id: 'c1', status: 'CLOSED', direction: 'bearish', entry: 60.67,
+        stop_loss: 61.85, target: 58.33, exit_price: 52.44, tp1: null,
+        runner_exit_price: 52.44, runner_exit_reason: 'tp1_runner_trail',
+        leg_index: 1, leg_total: 2 }),
+];
+
+/** Trades with `items` in its store, the way the footer tests seed it. */
+function renderRows(items: TradeRow[]): HTMLElement {
+  const fixture = render();
+  patchState(unprotected(TestBed.inject(TradesStore)), {
+    data: { items, total: items.length, page: 1, per_page: 12 },
+    query: { page: 1, per_page: 12 },
+  });
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
+
+const cellText = (el: Element): string => el.textContent!.replace(/\s+/g, ' ').trim();
+
+describe('Trades — the Plan cell for runners (v177)', () => {
+  it('renders one Plan cell per row', () => {
+    expect(renderRows(RUNNER_ROWS).querySelectorAll('sb-plan-cell')).toHaveLength(3);
+  });
+
+  it('keeps today\'s single-line cell on the TP1-leg row of a still-PARTIAL plan', () => {
+    const [leg] = renderRows(RUNNER_ROWS).querySelectorAll('sb-plan-cell');
+    expect(leg.querySelector('.runner')).toBeNull();
+    expect(leg.querySelector('.line')).toBeNull();
+  });
+
+  it('reads the open runner on two lines', () => {
+    const runner = renderRows(RUNNER_ROWS).querySelectorAll('sb-plan-cell')[1];
+    expect(cellText(runner.querySelector('.l1')!)).toBe('60.67 → 58.33 / 61.85 (3.9% - 1.9%)');
+    expect(cellText(runner.querySelector('.l2')!)).toBe('Trail 49.94 → 52.44 (+17.7% / +13.6%)');
+  });
+
+  it('shows the closed runner\'s exit in the target slot', () => {
+    const closed = renderRows(RUNNER_ROWS).querySelectorAll('sb-plan-cell')[2];
+    expect(cellText(closed)).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%)');
+    expect(closed.querySelector('[title]')!.getAttribute('title'))
+      .toContain('Runner exit (trailing stop): 52.44');
+  });
+});
