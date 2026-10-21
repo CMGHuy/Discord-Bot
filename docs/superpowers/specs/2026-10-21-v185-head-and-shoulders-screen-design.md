@@ -2,7 +2,7 @@
 
 **Version:** ui 1.34.0 · bot 2.14.3 (at writing)
 **Bump:** none — four idea modules under `swingbot/core/backtesting/screen/ideas/` and four one-shot screen runs; nothing the bot or admin serves changes.
-**Edge:** none (integrity) — four measurements. A `SCREEN-PASS` that also earns shape credit (below) is evidence for the *trigger* under the generic ATR race only; it would license a later `Edge: volume` strategy spec, where the pattern's own stop and measured-move target are still unmeasured. This spec claims no edge.
+**Edge:** none (integrity) — four measurements. A `SCREEN-PASS` (with or without shape credit, below — without it the follow-on is flagged) is evidence for the *trigger* under the generic ATR race only; it would license a later `Edge: volume` strategy spec, where the pattern's own stop and measured-move target are still unmeasured. This spec claims no edge.
 **Screen:** exempt (integrity)
 **Panel:** technical-analyst, quant-researcher, veteran-trader
 **Blocked on:** v182 Parts A and B merged (the short race and its calibration). Nothing in this spec is implemented, counted or run before then — partner decision 2026-10-21: all four ideas go together, after v182.
@@ -191,9 +191,11 @@ The control runs through the same race and the same matched null.
 **Shape credit** = the week-cluster bootstrap 95% lower bound
 (`week_cluster_bootstrap`, `instrument/stats.py:57`) of
 `ΔExpR_idea − ΔExpR_control` is above 0. **A `SCREEN-PASS` without shape
-credit does not license the follow-on spec**: the idea is recorded as a pass
-of the trigger with no shape credit, and that is a Break & Retest/MSB
-question, which stays closed.
+credit still licenses the follow-on spec, flagged** (partner decision
+2026-10-21): that spec's `## Why` states in its first paragraph that the
+shape added nothing measurable over a plain swing-level break, quotes the
+bound, and may not credit the five-pivot geometry for the edge. The closed
+Break & Retest/MSB rows stay closed either way.
 
 ### Descriptive blocks in each results doc, never gating
 
@@ -209,7 +211,7 @@ question, which stays closed.
   where the earnings calendar covers the bar; uncovered events are counted
   separately.
 
-### What a pass with shape credit buys (not this spec)
+### What a pass buys (not this spec)
 
 An `Edge: volume` strategy spec. **The screen's 1.5 ATR stop is not the
 pattern's stop, so a pass does not transfer to it;** that spec measures its
@@ -289,7 +291,7 @@ later H&S idea joins this BH family.
 
 BLOCKING
 
-- quant-researcher 1: no frozen rule for "clearly above the control", or for what a pass without it buys -- applied (shape credit = week-cluster bootstrap lower bound of ΔExpR_idea − ΔExpR_control > 0; a pass without it does not license the follow-on).
+- quant-researcher 1: no frozen rule for "clearly above the control", or for what a pass without it buys -- applied (shape credit = week-cluster bootstrap lower bound of ΔExpR_idea − ΔExpR_control > 0; partner then ruled a pass without it still licenses the follow-on, flagged as shape-uncredited).
 - veteran-trader 1: next-open fill and slippage rule for these ideas unstated -- applied (base slippage once per fill, no 2× level multiplier, identical for events and null, pinned by a test).
 - veteran-trader 2: daily-bar retest is not a resting order -- applied (both triggers stated as close-then-open signals; retest bar's high known at the event close; follow-on settles overnight order validity).
 
