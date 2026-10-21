@@ -1,0 +1,8 @@
+{
+ "adjustment": "auto_adjust",
+ "data_source": "yfinance",
+ "excluded": {},
+ "feed": "yfinance",
+ "manifest_hash": null,
+ "store_dir": "E:\\Documents\\Private\\Projects\\Discord-Bot\\data\\backtest_cache"
+}

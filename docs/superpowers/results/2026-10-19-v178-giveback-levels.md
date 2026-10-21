@@ -42,3 +42,46 @@ Pilot run n = 493 entries (window 2018-06-01..2020-12-31, close basis). The froz
 | S0.50 | 10 | REACHABLE |
 
 Control B changed vs A: 3. Survivors: all six candidates. **Gate:** open, continue to the train simulation (V178-9).
+
+## Stage 0 (pooled fold-train, paired MDE)
+
+Close basis, 10838 paired fold-train entries per arm (each vs control A). Ticker-cluster 95% CI; Holm-adjusted p across the six arms; the week-cluster interval is descriptive. v92 context for the R arms: nearest cell `trigger_r=2.50, mult=1.50`, context only, never a threshold.
+
+| Arm | n | Changed | ΔExpR | Ticker-cluster 95% CI | p | Holm p | MDE (paired) | Week-cluster interval | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| R0.75 | 10838 | 778 | +0.0094 | [-0.0077, +0.0320] | 0.1705 | 1.0000 | 0.0251 | [-0.0079, +0.0324] | REFUSED |
+| R1.00 | 10838 | 691 | +0.0078 | [-0.0079, +0.0290] | 0.1973 | 1.0000 | 0.0232 | [-0.0087, +0.0298] | REFUSED |
+| R1.25 | 10838 | 606 | +0.0071 | [-0.0069, +0.0275] | 0.2181 | 1.0000 | 0.0222 | [-0.0077, +0.0284] | REFUSED |
+| S0.25 | 10838 | 683 | +0.0041 | [-0.0105, +0.0236] | 0.3305 | 1.0000 | 0.0216 | [-0.0115, +0.0244] | REFUSED |
+| S0.33 | 10838 | 610 | +0.0057 | [-0.0099, +0.0261] | 0.2767 | 1.0000 | 0.0229 | [-0.0103, +0.0268] | REFUSED |
+| S0.50 | 10838 | 418 | +0.0041 | [-0.0109, +0.0243] | 0.3508 | 1.0000 | 0.0225 | [-0.0105, +0.0242] | REFUSED |
+
+**Gate:** `stopped_at = stage0`, `stage3_arm = null`: every candidate is REFUSED at stage 0. Stages 1 and 2 did not run. Per the frozen stop rule: no high/low sensitivity run, no VALIDATION. Verdict **NO-LIFT** (the spec's base case). Best arm by ΔExpR: R0.75 (p = 0.1705, the ledger p).
+
+## Descriptive only (150 cells looked at; none is an effect claim)
+
+Whole-book view per candidate (n = 13733 train entries, close basis). Trend/chop is computed only for the `regime_arms` (R0.75, S0.33). Nothing here is a pass criterion.
+
+| Arm | Book ExpR (arm / A) | Max DD $ (arm / A) | Long ΔR (n) | Short ΔR (n) | Trend ΔR | Chop ΔR | Shock ΔR | Calm ΔR | vs B ΔR | Top-2 horizon share | Outcome flips |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| R0.75 | 0.0816 / 0.0798 | 45,146 / 49,641 | -0.0068 (8896) | +0.0175 (4837) | +0.0194 | -0.0269 | +0.0941 | -0.0194 | +0.0049 | 0.693 | 0 |
+| R1.00 | 0.0840 / 0.0798 | 46,925 / 49,641 | -0.0022 (8896) | +0.0159 (4837) | n/a | n/a | +0.0465 | +0.0038 | +0.0074 | 0.397 | 0 |
+| R1.25 | 0.0857 / 0.0798 | 50,075 / 49,641 | +0.0029 (8896) | +0.0114 (4837) | n/a | n/a | +0.0221 | +0.0179 | +0.0091 | 0.354 | 0 |
+| S0.25 | 0.0844 / 0.0798 | 48,968 / 49,641 | +0.0001 (8896) | +0.0127 (4837) | n/a | n/a | +0.0190 | +0.0132 | +0.0078 | 0.314 | 0 |
+| S0.33 | 0.0850 / 0.0798 | 50,726 / 49,641 | +0.0020 (8896) | +0.0109 (4837) | +0.0131 | -0.0077 | +0.0355 | +0.0105 | +0.0084 | 0.293 | 0 |
+| S0.50 | 0.0808 / 0.0798 | 51,611 / 49,641 | -0.0022 (8896) | +0.0070 (4837) | n/a | n/a | -0.0357 | +0.0168 | +0.0042 | 0.575 | 0 |
+
+Per-horizon ΔR (vs A):
+
+| Arm | 2w | 4w | 2m | 3m | 4m | 5m | 6m | 7m | 8m | 9m |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R0.75 | +0.0047 | +0.0028 | +0.0052 | +0.0053 | -0.0036 | +0.0008 | -0.0018 | -0.0004 | -0.0009 | +0.0046 |
+| R1.00 | +0.0011 | +0.0037 | +0.0069 | +0.0076 | -0.0001 | +0.0046 | +0.0029 | +0.0031 | +0.0057 | +0.0055 |
+| R1.25 | -0.0020 | +0.0049 | +0.0117 | +0.0066 | +0.0023 | +0.0065 | +0.0069 | +0.0041 | +0.0088 | +0.0082 |
+| S0.25 | +0.0027 | +0.0034 | +0.0060 | +0.0065 | +0.0019 | +0.0052 | +0.0036 | +0.0047 | +0.0063 | +0.0051 |
+| S0.33 | +0.0082 | +0.0063 | +0.0043 | +0.0064 | +0.0060 | +0.0059 | +0.0026 | +0.0021 | +0.0052 | +0.0046 |
+| S0.50 | -0.0001 | -0.0020 | -0.0020 | +0.0013 | +0.0023 | +0.0030 | +0.0007 | +0.0016 | +0.0035 | +0.0034 |
+
+R0.75 runner context (4295 runner trades): allowance p10/p50/p90 = 0.0135 / 0.0269 / 0.0648; 3319 stop exits, 66.6% new-best-10 and 99.4% quick; mean give-back 0.422R (p95 1.367R, max 16.33R), 35.1% gapped; worst week 2020-W12 ($16,020, 82 runners). Near-duplicate (S0.33 vs R1.00): {'floor_bound_share': 0.8463329452852154, 'differs_from_r100': 583}.
+
+**Reading for the partner (trade-off, not a pass):** every pooled ΔExpR is positive but below its paired MDE, and every CI spans zero. For the best arm (R0.75) the gain sits in short trades and trend regimes while long trades and chop are negative, so the lift is not uniform. Close-basis figures are an upper bound on any live result.
