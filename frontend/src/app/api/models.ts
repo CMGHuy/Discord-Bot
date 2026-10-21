@@ -2168,12 +2168,14 @@ export interface EquityCandle {
 /** `GET /api/v1/equity/candles`. `recording_since` is the first live sample
  *  (ISO UTC) or null before the monitor has recorded one. The SPA shows the
  *  currency from `ConnectionStore.currency()`; `currency_symbol` is the same
- *  config value, carried for API consumers. */
+ *  config value, carried for API consumers. `has_more` (v181) is true when
+ *  older candles exist beyond this page; page them with `before`. */
 export interface EquityCandlesResponse {
   tf: EquityTimeframe;
   basis: EquityBasis;
   currency_symbol: string;
   candles: EquityCandle[];
+  has_more: boolean;
   recording_since: string | null;
   as_of: string;
 }

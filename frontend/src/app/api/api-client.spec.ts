@@ -159,11 +159,18 @@ describe('ApiClient — equity candles', () => {
     expect(first.request.params.get('tf')).toBe('4H');
     expect(first.request.params.get('basis')).toBe('realized');
     expect(first.request.params.has('limit')).toBe(false);
+    expect(first.request.params.has('before')).toBe(false);
     first.flush({ tf: '4H', basis: 'realized', ...empty });
 
     api.equityCandles('1D', 'mtm', 30).subscribe();
     const second = http.expectOne((r) => r.url.endsWith('/api/v1/equity/candles'));
     expect(second.request.params.get('limit')).toBe('30');
     second.flush({ tf: '1D', basis: 'mtm', ...empty });
+
+    api.equityCandles('1H', 'mtm', 200, '2026-11-01T01:00:00-05:00').subscribe();
+    const third = http.expectOne((r) => r.url.endsWith('/api/v1/equity/candles'));
+    expect(third.request.params.get('limit')).toBe('200');
+    expect(third.request.params.get('before')).toBe('2026-11-01T01:00:00-05:00');
+    third.flush({ tf: '1H', basis: 'mtm', has_more: false, ...empty });
   });
 });

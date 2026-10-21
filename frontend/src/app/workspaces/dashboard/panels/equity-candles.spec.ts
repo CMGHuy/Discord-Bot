@@ -17,7 +17,7 @@ function candle(t: string, overrides: Partial<EquityCandle> = {}): EquityCandle 
 }
 
 function response(candles: EquityCandle[], overrides: Partial<EquityCandlesResponse> = {}): EquityCandlesResponse {
-  return { tf: '1D', basis: 'mtm', currency_symbol: '€', candles,
+  return { tf: '1D', basis: 'mtm', currency_symbol: '€', has_more: false, candles,
            recording_since: '2026-10-20T13:35:00Z', as_of: '2026-10-21T14:35:00Z', ...overrides };
 }
 

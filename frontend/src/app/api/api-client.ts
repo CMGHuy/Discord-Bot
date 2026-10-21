@@ -550,10 +550,17 @@ export class ApiClient {
   }
 
   /** Equity candles for the Dashboard chart (v172). `limit` is left to the
-   *  server's default (120) unless given. */
-  equityCandles(tf: EquityTimeframe, basis: EquityBasis, limit?: number): Observable<EquityCandlesResponse> {
+   *  server's default (120) unless given. `before` (v181) pages older
+   *  history: an oldest candle's `t`, sent back unchanged. */
+  equityCandles(
+    tf: EquityTimeframe,
+    basis: EquityBasis,
+    limit?: number,
+    before?: string,
+  ): Observable<EquityCandlesResponse> {
     let params = new HttpParams().set('tf', tf).set('basis', basis);
     if (limit !== undefined) params = params.set('limit', String(limit));
+    if (before !== undefined) params = params.set('before', before);
     return this.http.get<EquityCandlesResponse>(`${this.base}/equity/candles`, { params });
   }
 
