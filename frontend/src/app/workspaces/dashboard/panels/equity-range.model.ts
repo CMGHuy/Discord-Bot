@@ -180,3 +180,44 @@ export function nextTimeframe(
   }
   return tf;
 }
+
+/* -- history paging (§ 2) ------------------------------------------------- */
+
+/** Candles asked for per older page. */
+export const HISTORY_PAGE_LIMIT = 200;
+/** Page once the view's left edge is within this many candles of the oldest. */
+export const PAGE_TRIGGER_CANDLES = 20;
+
+/** True when the view nears the oldest loaded candle (logical index 0), the
+ *  last answer said older history exists, and no page is in flight. */
+export function shouldLoadOlder(
+  range: LogicalWindow | null,
+  hasMore: boolean,
+  busy: boolean,
+): boolean {
+  return range !== null && hasMore && !busy && range.from < PAGE_TRIGGER_CANDLES;
+}
+
+/** An older page in front of the loaded candles. A candle already loaded is
+ *  not repeated; `t` is unique per bucket (the fall-back hours differ by
+ *  offset), so it is the key. */
+export function prependPage(
+  loaded: readonly EquityCandle[],
+  page: readonly EquityCandle[],
+): EquityCandle[] {
+  const known = new Set(loaded.map((c) => c.t));
+  return [...page.filter((c) => !known.has(c.t)), ...loaded];
+}
+
+/** A refresh of the newest candles over paged history: loaded candles before
+ *  the refresh's first one stay, everything from it on is replaced (the last
+ *  candle grows between scans). When that first candle is not loaded, the
+ *  refresh replaces everything, so no gap is ever bridged silently. */
+export function mergeLatest(
+  loaded: readonly EquityCandle[],
+  latest: readonly EquityCandle[],
+): EquityCandle[] {
+  if (latest.length === 0) return [];
+  const at = loaded.findIndex((c) => c.t === latest[0].t);
+  return at < 0 ? [...latest] : [...loaded.slice(0, at), ...latest];
+}

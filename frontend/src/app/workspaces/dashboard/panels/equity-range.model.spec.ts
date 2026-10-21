@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { EquityCandle, EquityTimeframe } from '../../../api/models';
 import { EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
 import {
+  HISTORY_PAGE_LIMIT,
+  PAGE_TRIGGER_CANDLES,
+  mergeLatest,
+  prependPage,
+  shouldLoadOlder,
   TF_RATIO,
   TF_STEP_DOWN_BARS,
   TF_STEP_UP_BARS,
@@ -204,5 +209,49 @@ describe('nextTimeframe', () => {
 
   it('still steps up at the edge of history', () => {
     expect(nextTimeframe(300, '1H', true)).toBe('4H');
+  });
+});
+
+describe('history paging', () => {
+  const day = (t: string, c = 100): EquityCandle => candle({ t, c });
+
+  it('pages 200 candles and triggers within 20 candles of the oldest', () => {
+    expect([HISTORY_PAGE_LIMIT, PAGE_TRIGGER_CANDLES]).toEqual([200, 20]);
+    expect(shouldLoadOlder({ from: 19.5, to: 80 }, true, false)).toBe(true);
+    expect(shouldLoadOlder({ from: 20, to: 80 }, true, false)).toBe(false);
+  });
+
+  it('never triggers without more history, while busy, or before the chart reports a range', () => {
+    expect(shouldLoadOlder({ from: 2, to: 80 }, false, false)).toBe(false);
+    expect(shouldLoadOlder({ from: 2, to: 80 }, true, true)).toBe(false);
+    expect(shouldLoadOlder(null, true, false)).toBe(false);
+  });
+
+  it('prepends an older page and drops any candle already loaded', () => {
+    const loaded = [day('2026-10-15'), day('2026-10-16')];
+    const page = [day('2026-10-13'), day('2026-10-14'), day('2026-10-15', 999)];
+    expect(prependPage(loaded, page).map((c) => [c.t, c.c])).toEqual([
+      ['2026-10-13', 100], ['2026-10-14', 100], ['2026-10-15', 100], ['2026-10-16', 100]]);
+  });
+
+  it('keeps the two fall-back 01:00 hours apart: their t differs by offset', () => {
+    const loaded = [day('2026-11-01T01:00:00-05:00')];
+    const page = [day('2026-11-01T01:00:00-04:00')];
+    expect(prependPage(loaded, page)).toHaveLength(2);
+  });
+
+  it('merges a refresh over the paged history, replacing from its first candle on', () => {
+    const loaded = [day('2026-10-13'), day('2026-10-14'), day('2026-10-15'), day('2026-10-16', 1)];
+    const latest = [day('2026-10-15'), day('2026-10-16', 2), day('2026-10-17')];
+    expect(mergeLatest(loaded, latest).map((c) => [c.t, c.c])).toEqual([
+      ['2026-10-13', 100], ['2026-10-14', 100], ['2026-10-15', 100],
+      ['2026-10-16', 2], ['2026-10-17', 100]]);
+  });
+
+  it('takes the refresh whole when its first candle is not loaded', () => {
+    const latest = [day('2026-10-20'), day('2026-10-21')];
+    expect(mergeLatest([day('2026-10-13')], latest)).toEqual(latest);
+    expect(mergeLatest([], latest)).toEqual(latest);
+    expect(mergeLatest([day('2026-10-13')], [])).toEqual([]);
   });
 });
