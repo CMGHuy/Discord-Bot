@@ -39,6 +39,7 @@ from flask import jsonify, request
 
 from swingbot.admin import dashboard as dash
 from swingbot.admin.trade_why import legacy_why_fields, plan_why_fields
+from swingbot.core.analytics.override_fidelity import MANUAL_REASONS
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.tracking.equity import open_shares as _open_shares  # v172: moved to core
 from swingbot.core.planning.plan_store import PlanStore
@@ -386,8 +387,8 @@ def _closed_manually_after_tp1(plan: dict, legs: list) -> bool:
     leg."""
     history = plan.get("status_history") or []
     return (plan.get("status") == "CLOSED"
-            and len(legs) == 1 and legs[0].get("reason") == "tp1"
-            and bool(history) and history[-1].get("reason") == "manual")
+            and len(legs) == 1 and legs[0].get("reason", "tp1") == "tp1"
+            and bool(history) and history[-1].get("reason") in MANUAL_REASONS)
 
 
 def _runner_exit_fields(plan: dict, trade: dict | None) -> dict:
