@@ -15,19 +15,46 @@ import { money, num, pct, rMultiple, share } from './format';
  * Three columns collapse into one here, so the tooltip spells the roles out:
  * the colour pair alone is not readable for everyone, and a bare `178.00 →
  * 195.00 / 170.00` does not say which number is the stop.
+ *
+ * v177: a PARTIAL runner with no TP2 reads on two lines (`planTp1` set) --
+ * the original plan, then `Trail best → exit (peak% / exit%)` -- and a
+ * closed partial trade shows the runner's exit in the target slot
+ * (`runnerExit` set). The callers decide which through `runnerCellInputs`.
  */
 @Component({
   selector: 'sb-plan-cell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <span class="plan" [title]="tooltip()">
-      <span class="entry" [class.pending]="showsTrigger()">{{ fmt(first()) }}</span>
-      <span class="sep">{{ ' → ' }}</span>
-      <span class="target">{{ targetText() }}</span>
-      <span class="sep">{{ ' / ' }}</span>
-      <span class="stop">{{ fmt(stop()) }}</span>
-      <span class="sep">{{ ' (' }}</span><span class="rise">{{ fmtPct(risePct()) }}</span><span class="sep">{{ ' - ' }}</span><span class="drop">{{ fmtPct(dropPct()) }}</span><span class="sep">{{ ')' }}</span>
-    </span>
+    @if (runnerMode()) {
+      <span class="plan runner">
+        <span class="line l1" [title]="planTooltip">
+          <span class="entry">{{ fmt(first()) }}</span>
+          <span class="sep">{{ ' → ' }}</span>
+          <span class="target">{{ fmt(planTp1()) }}</span>
+          <span class="sep">{{ ' / ' }}</span>
+          <span class="stop">{{ fmt(planStop()) }}</span>
+          <span class="sep">{{ ' (' }}</span><span class="rise">{{ fmtPct(planRisePct()) }}</span><span class="sep">{{ ' - ' }}</span><span class="drop">{{ fmtPct(planDropPct()) }}</span><span class="sep">{{ ')' }}</span>
+        </span>
+        @if (trail(); as t) {
+          <span class="line l2" [title]="trailTooltip()">
+            <span class="trail">Trail</span><span class="sep">{{ ' ' }}</span>
+            <span class="best">{{ fmt(t.best) }}</span>
+            <span class="sep">{{ ' → ' }}</span>
+            <span class="exit">{{ fmt(t.exit) }}</span>
+            <span class="sep">{{ ' (' }}</span><span class="peak" [class.loss]="t.bestPct < 0">{{ signedPct(t.bestPct) }}</span><span class="sep">{{ ' / ' }}</span><span class="lock" [class.loss]="t.exitPct < 0">{{ signedPct(t.exitPct) }}</span><span class="sep">{{ ')' }}</span>
+          </span>
+        }
+      </span>
+    } @else {
+      <span class="plan" [title]="tooltip()">
+        <span class="entry" [class.pending]="showsTrigger()">{{ fmt(first()) }}</span>
+        <span class="sep">{{ ' → ' }}</span>
+        <span class="target" [class.loss]="runnerLoss()">{{ targetText() }}</span>
+        <span class="sep">{{ ' / ' }}</span>
+        <span class="stop">{{ fmt(stop()) }}</span>
+        <span class="sep">{{ ' (' }}</span><span class="rise" [class.loss]="runnerLoss()">{{ riseText() }}</span><span class="sep">{{ ' - ' }}</span><span class="drop">{{ fmtPct(dropPct()) }}</span><span class="sep">{{ ')' }}</span>
+      </span>
+    }
   `,
   styles: `
     /* Three prices and two separators read as one plan. The table's scroller
@@ -51,6 +78,20 @@ import { money, num, pct, rMultiple, share } from './format';
        SL-side move -- so the same colour pair carries the same meaning. */
     .rise   { color: var(--pos); }
     .drop   { color: var(--neg); }
+    /* v177 -- a trailing runner with no TP2 reads on two lines: the original
+       plan, then the trail. Each line is its own block and never wraps, so
+       the 375px no-wrap rule (dashboard.ts) holds per line; the second line
+       adds height, not width. */
+    .plan.runner { display: inline-block; }
+    .line { display: block; white-space: nowrap; }
+    /* A small muted label, so line 2 is never read as a second plan. */
+    .trail { color: var(--text-faint); font-size: var(--text-micro); }
+    .best  { color: var(--text-secondary); }
+    .exit  { color: var(--neg); }
+    .peak, .lock { color: var(--pos); }
+    /* A signed figure on the loss side of the entry (a gap through the stop,
+       a runner closed below its fill) keeps the loss colour with its minus. */
+    .target.loss, .rise.loss, .peak.loss, .lock.loss { color: var(--neg); }
     /* Spacing lives in the TEXT, not in a margin. Angular strips whitespace
        between elements, so a margin-only gap renders correctly and leaves
        textContent as '178.00→195.00/170.00' -- which is what a screen reader
@@ -106,6 +147,74 @@ export class PlanCell {
   /** Needed to format `bankedAmount`; the caller's own currency symbol. */
   readonly currency = input<string | null>(null);
 
+  /* -- v177: a trailing runner's two lines, a closed runner's exit -------- */
+
+  /** The plan's ORIGINAL TP1. Non-null switches the cell to two lines:
+   *  line 1 the original plan, line 2 the trail. */
+  readonly planTp1 = input<number | null>(null);
+  /** The plan's ORIGINAL stop (`risk_stop`), line 1's stop slot. */
+  readonly planStop = input<number | null>(null);
+  /** Best price since TP1 (or the TP1 fill until one is recorded). Line 2
+   *  exits at `stop` (the live trailing stop or locked-in floor). */
+  readonly trailBest = input<number | null>(null);
+  /** Per-share % from the original entry at `trailBest` -- signed. */
+  readonly trailBestPct = input<number | null>(null);
+  /** Per-share % from the original entry if `stop` fills -- signed. */
+  readonly trailExitPct = input<number | null>(null);
+  /** A closed runner's actual exit price. Non-null puts it in the target
+   *  slot with a signed `runnerExitPct` in the rise slot. */
+  readonly runnerExit = input<number | null>(null);
+  readonly runnerExitPct = input<number | null>(null);
+  /** What closed the runner, a leg reason (see `runnerExitLabel`). */
+  readonly runnerExitReason = input<string | null>(null);
+
+  protected readonly runnerMode = computed(() => this.planTp1() !== null);
+  protected readonly planRisePct = computed(() => this.movePct(this.planTp1()));
+  protected readonly planDropPct = computed(() => this.movePct(this.planStop()));
+
+  /** Line 2's numbers, or null when any is missing: the line is then
+   *  omitted rather than drawn with a dash for a number that exists. */
+  protected readonly trail = computed((): TrailLine | null => {
+    const best = this.trailBest();
+    const exit = this.stop();
+    const bestPct = this.trailBestPct();
+    const exitPct = this.trailExitPct();
+    if (this.entry() === null || best === null || exit === null || bestPct === null || exitPct === null) {
+      return null;
+    }
+    return { best, exit, bestPct, exitPct };
+  });
+
+  protected readonly planTooltip = PLAN_LINE_TOOLTIP;
+
+  protected readonly trailTooltip = computed(() => {
+    const t = this.trail();
+    if (t === null) return '';
+    const floor = this.stopKind() === 'derived_floor';
+    const head = floor ? 'Locked-in floor' : 'Trailing stop';
+    const level = floor ? 'the locked-in floor' : 'the trailing stop';
+    return `${head}. Best price so far → price ${level} would exit at. `
+      + `${pct(t.bestPct, 1)} is the peak since TP1 (unrealised); `
+      + `${pct(t.exitPct, 1)} is the profit if the stop fills at ${this.fmt(t.exit)}, `
+      + 'per share from the original entry, before costs and tax. '
+      + `${this.isShortRunner() ? SHORT_GAINS : LONG_GAINS} ${PAPER_LEVEL}`;
+  });
+
+  /** Direction is not an input: a short's TP1 sits below its entry. */
+  private readonly isShortRunner = computed(() => {
+    const tp1 = this.planTp1();
+    const entry = this.entry();
+    return tp1 !== null && entry !== null && tp1 < entry;
+  });
+
+  protected readonly riseText = computed(() =>
+    this.runnerExit() !== null ? this.signedPct(this.runnerExitPct()) : this.fmtPct(this.risePct()),
+  );
+
+  protected readonly runnerLoss = computed(() =>
+    this.runnerExit() !== null && (this.runnerExitPct() ?? 0) < 0,
+  );
+
   /** True when the first number is a trigger rather than a fill. */
   protected readonly showsTrigger = computed(
     () => this.entry() === null && this.trigger() !== null,
@@ -136,9 +245,11 @@ export class PlanCell {
 
   private readonly shownTarget = computed(() => this.bankedFill() ?? this.target());
 
-  protected readonly targetText = computed(() =>
-    this.bankedFill() !== null ? `${this.fmt(this.bankedFill())} ✓` : this.fmt(this.target()),
-  );
+  protected readonly targetText = computed(() => {
+    const exit = this.runnerExit();
+    if (exit !== null) return this.fmt(exit);
+    return this.bankedFill() !== null ? `${this.fmt(this.bankedFill())} ✓` : this.fmt(this.target());
+  });
 
   private movePct(level: number | null): number | null {
     const base = this.first();
@@ -147,6 +258,8 @@ export class PlanCell {
   }
 
   protected readonly tooltip = computed(() => {
+    const runnerExit = this.runnerExit();
+    if (runnerExit !== null) return this.closedRunnerTooltip(runnerExit);
     // Names the role, because the styling difference alone does not: an
     // unfilled plan and a filled one are one glyph apart otherwise.
     const lead = this.showsTrigger()
@@ -173,6 +286,12 @@ export class PlanCell {
     return out;
   });
 
+  private closedRunnerTooltip(exit: number): string {
+    return `Entry ${this.fmt(this.entry())} · Runner exit (${runnerExitLabel(this.runnerExitReason())}): `
+      + `${this.fmt(exit)}, ${this.signedPct(this.runnerExitPct())} per share from the original entry`
+      + ` · Stop ${this.fmt(this.stop())}`;
+  }
+
   protected fmt(v: number | null): string {
     return num(v);
   }
@@ -180,9 +299,45 @@ export class PlanCell {
   protected fmtPct(v: number | null): string {
     return share(v, 1);
   }
+
+  /** Signed, one decimal: a gain or loss per share, not a distance. */
+  protected signedPct(v: number | null): string {
+    return pct(v, 1);
+  }
 }
 
 const formatR = (value: number | null): string => value === null ? '—' : `${value.toFixed(1)}R`;
+
+interface TrailLine {
+  best: number;
+  exit: number;
+  bestPct: number;
+  exitPct: number;
+}
+
+const PLAN_LINE_TOOLTIP = 'Original plan (TP1 already filled): entry → TP1 / original stop. '
+  + 'Percentages are the distance from the entry to each level.';
+const SHORT_GAINS = 'A short gains when price falls.';
+const LONG_GAINS = 'A long gains when price rises.';
+const PAPER_LEVEL = "The bot's paper level: your broker's resting orders are not synced, update your stop yourself.";
+
+const RUNNER_EXIT_LABELS: Readonly<Record<string, string>> = {
+  tp1_runner_trail: 'trailing stop',
+  giveback: 'give-back stop',
+  tp1_runner_be: 'floor stop',
+  tp1_runner_tp2: 'TP2',
+  manual: 'manual close',
+  tp1_runner_progress_stall: 'progress stall',
+  time_exit: 'time exit',
+};
+
+/** What closed a runner, in words, for the closed cell's tooltip. The cell
+ *  itself prints numbers only; an unknown leg reason reads "runner exit". */
+export function runnerExitLabel(reason: string | null): string {
+  return reason !== null && Object.hasOwn(RUNNER_EXIT_LABELS, reason)
+    ? RUNNER_EXIT_LABELS[reason]
+    : 'runner exit';
+}
 
 /** %-gain on an already-banked leg, from the position's ORIGINAL entry to
  *  that leg's own fill price, signed by direction -- the number a trader
