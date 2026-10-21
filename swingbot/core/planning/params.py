@@ -5,7 +5,7 @@ import logging
 
 from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_note, get_badge
-from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, FIB_LIMIT
+from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, FIB_LIMIT, TURTLE_SOUP
 from .plan_types import TradePlanV2
 
 log = logging.getLogger(__name__)
@@ -50,6 +50,8 @@ EXIT_V2_PARAMS: dict[str, dict] = {
     "First Bearish Compression Release": {"trail_atr_mult": 2.5, "tp2": False},
     # v131: today's Fibonacci exits, unchanged (spec "The order and the plan").
     FIB_LIMIT: {"trail_atr_mult": 3.0, "tp2": False},
+    # v180: one whole-position target, no runner, fixed by spec § 3 (not a TRAIN-grid result).
+    TURTLE_SOUP: {"trail_atr_mult": 2.5, "tp2": False},
 }
 
 # v113: the shape of a plan whose strategy is traded as resting orders placed at
@@ -78,6 +80,11 @@ PLAN_SHAPES: dict[str, dict] = {
     FIB_LIMIT: {"entry_type": "limit", "expiry_bars": 5, "tp1_fraction": TP1_FRACTION,
                 "breakeven_trigger_fraction": BREAKEVEN_TRIGGER_FRACTION,
                 "limit_price": "fib_zone"},
+    # v180 § 3: market-on-open the next session (exit_sim's next-open fill, V180-5); one
+    # whole-position target; no break-even move; hard exit 10 sessions with the fill as
+    # session 1 (exit_sim.SESSION_ONE_HOLD_CAP).
+    TURTLE_SOUP: {"entry_type": "market", "expiry_bars": 1, "tp1_fraction": 1.0,
+                  "breakeven_trigger_fraction": 1.0, "hold_cap_bars": 10},
 }
 
 

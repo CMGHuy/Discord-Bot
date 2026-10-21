@@ -11,14 +11,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
-from swingbot.core.backtesting.acceptance import ALPHA, CLOSED, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R, VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate, delta_expectancy_r, delta_standardised_win_rate, mde_paired, mde_win_rate, project_target_n, render_json, render_markdown  # noqa: E402
+from swingbot.core.backtesting.acceptance import ALPHA, CLOSED, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R, VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate, delta_expectancy_r, WR_STATISTICS, mde_paired, mde_win_rate, project_target_n, render_json, render_markdown, win_rate_statistic  # noqa: E402
 from swingbot.core.backtesting.acceptance_harvest import HARVEST_VERSION, WIN_RATE_FLOOR_PP, evaluate_harvest, mde_expectancy_r  # noqa: E402
 from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
 from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell, with_clause  # noqa: E402
 from swingbot.core.backtesting.arms import dryup_clauses, headroom_clauses, reachability  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
-from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate, win_rate_fold_row  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cache_dir_source  # noqa: E402
 DECIDED = ("win", "loss")
@@ -69,13 +69,17 @@ def stage_reachability(args):
         print("refused:zero-diff -- the component reached no trade. Budget intact.", file=sys.stderr); return 1
     print("REACHABLE -- the component changes trades; Stage 0 may proceed."); return 0
 
+def _wr_statistic(args):
+    """v180 A1: the clause-1 / fold-row statistic; hand-built args predating the flag read the default."""
+    return getattr(args, "wr_statistic", "standardised")
+
 def _mde_design(args, baseline, component):
     harvest = args.gate == "harvest"
     counted = ("win", "loss", "scratch", "timeout") if harvest else DECIDED
     observed = sum(trade.outcome in counted for trade in baseline)
     days = args.observed_days or _stamp_observed_days(args.arms) or 365
     target = project_target_n(observed_n=observed, observed_days=days, target_days=args.target_days)
-    statistic = delta_expectancy_r if harvest else delta_standardised_win_rate
+    statistic = delta_expectancy_r if harvest else win_rate_statistic(_wr_statistic(args))
     unpaired = mde_expectancy_r(baseline, target_n=target) if harvest else mde_win_rate(baseline, target_n=target)
     paired = None
     if overlap(baseline, component):
@@ -83,16 +87,28 @@ def _mde_design(args, baseline, component):
                             target_n=target, n_resamples=args.resamples, seed=args.seed)
     return harvest, observed, days, target, paired, unpaired
 
+def _claimed_effect(args, baseline, component, harvest):
+    """The TRAIN effect stage mde gates on. v180 A3: with --train-effect-from-arms it is the
+    gate's own statistic on the --arms pair, printed; otherwise the supplied flag."""
+    if not getattr(args, "train_effect_from_arms", False):
+        return args.train_effect_r if harvest else args.train_effect_pp
+    statistic = delta_expectancy_r if harvest else win_rate_statistic(_wr_statistic(args))
+    value = statistic(baseline, component)
+    label, unit = ("dExpR", "R") if harvest else (_wr_statistic(args), "pp")
+    shown = "n/a" if value is None else f"{value:+.4f}{unit}"
+    print(f"train effect ({label}, from --arms): {shown}")
+    return value
+
 def stage_mde(args):
     baseline, component = load_arms(args.arms)
     harvest, observed, days, target, paired, unpaired = _mde_design(args, baseline, component)
     use_paired = args.mde_method == "paired" and paired is not None
     mde = paired if use_paired else unpaired
-    claimed = args.train_effect_r if harvest else args.train_effect_pp
+    claimed = _claimed_effect(args, baseline, component, harvest)
     unit, label = ("R", "dExpR") if harvest else ("pp", "dWR")
     print(f"observed N         : {observed} over {days}d\nprojected target N : {target} over {args.target_days}d")
     print(f"paired MDE   ({label}): {'n/a' if paired is None else f'{paired:.4f}{unit}'}\nunpaired MDE ({label}): {'n/a' if unpaired is None else f'{unpaired:.4f}{unit}'}\ngating on: {'paired' if use_paired else 'unpaired'}")
-    if mde is None or claimed < mde:
+    if mde is None or claimed is None or claimed < mde:
         print("REFUSED -- the TRAIN effect is below the minimum this sample can detect. Budget intact."); return 1
     print("RESOLVABLE -- the shot may proceed."); return 0
 
@@ -121,19 +137,19 @@ def _evaluate_for(args, baseline, component, stage):
 def _count(trades, outcomes):
     return sum(trade.outcome in outcomes for trade in trades)
 
-def _fold_row(fold, harvest):
+def _fold_row(fold, harvest, wr_statistic="standardised"):
     """One fold's judge input. Harvest: dExpR over closed trades, judged by backtest_wf.gate
     (v128 frozen reading of 'the harvest gate's walk-forward rule'). Win rate: unchanged."""
     b, c = fold["baseline"], fold["component"]
     if harvest:
         return {"test_years": fold["test_year"], "delta_expectancy_r": delta_expectancy_r(b, c), "n": min(_count(b, CLOSED), _count(c, CLOSED))}
-    return {"test_years": fold["test_year"], "delta_win_rate_pp": delta_standardised_win_rate(b, c), "n": min(_count(b, DECIDED), _count(c, DECIDED))}
+    return win_rate_fold_row(fold["test_year"], b, c, wr_statistic=wr_statistic)
 
 def stage_walkforward(args):
     folds = load_folds(args.arms)
     if not _folds_are_well_formed(folds): print("REFUSED -- gate_win_rate requires exactly 3 folds with distinct test_year values."); return 1
     harvest = args.gate == "harvest"
-    rows = [_fold_row(fold, harvest) for fold in folds]
+    rows = [_fold_row(fold, harvest, _wr_statistic(args)) for fold in folds]
     verdict = (gate_expectancy if harvest else gate_win_rate)({"folds": rows})
     label = "harvest expectancy fold gate (backtest_wf.gate)" if harvest else "win-rate consistency gate"
     print(f"{verdict} -- stage 2 walkforward {label}")
@@ -177,7 +193,7 @@ def with_mechanism_clause(result, clause):
 
 def _evaluate(args, baseline, component, stage):
     common = dict(stage=stage, permutation_p=args.permutation_p, n_resamples=args.resamples, seed=args.seed)
-    return evaluate_harvest(baseline, component, **common) if args.gate == "harvest" else evaluate(baseline, component, **common)
+    return evaluate_harvest(baseline, component, **common) if args.gate == "harvest" else evaluate(baseline, component, wr_statistic=_wr_statistic(args), **common)
 
 def _run_gate(args, stage):
     baseline, component = load_arms(args.arms); _write_skeleton(args, stage)
@@ -364,6 +380,7 @@ def stage_selection(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(); parser.add_argument("--stage", required=True, choices=("reachability", "mde", "selection", "walkforward", "validation")); parser.add_argument("--arms", type=Path); parser.add_argument("--title", required=True); parser.add_argument("--window", required=True)
     parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=("win_rate", "harvest"), default="win_rate")
+    parser.add_argument("--wr-statistic", choices=tuple(WR_STATISTICS), default="standardised"); parser.add_argument("--train-effect-from-arms", action="store_true")
     parser.add_argument("--grid-arms", action="append", default=[])
     parser.add_argument("--mde-refused", action="append", type=float, default=[])
     parser.add_argument('--dryup-mechanism', action='store_true'); parser.add_argument('--headroom-mechanism', action='store_true'); parser.add_argument("--mechanism-json", default=None)
@@ -376,6 +393,8 @@ def main(argv=None):
         parser.error("--mechanism-json replaces v72 clause 6; the v92 harvest gate has no mechanism clause")
     if args.dryup_mechanism and args.gate == "harvest":
         parser.error("--dryup-mechanism scores v72 clause 6; the v92 harvest gate has no mechanism clause")
+    if _wr_statistic(args) != "standardised" and args.gate == "harvest":
+        parser.error("--wr-statistic selects the v72 win-rate clause-1 statistic; the v92 harvest gate has no win-rate clause")
     if args.stage == "selection":
         return stage_selection(args)
     if args.arms is None:

@@ -22,8 +22,9 @@ import pandas as pd
 from swingbot.core.market.indicators import atr, ema, macd, rolling_vwap, rsi, elliott_wave3_entries
 from swingbot.core.market.strategy_types import (
     FIB_LIMIT, FIB_TOLERANCE_PCT, HORIZONS, MACD_PERIODS_BY_HORIZON, SR_VOLUME_MULTIPLE,
-    STRATEGY_GATES, admits,
+    STRATEGY_GATES, TURTLE_SOUP, admits,
 )
+from swingbot.core.market import turtle_soup as turtle_soup_mod
 from swingbot.core.risk_limits import capped_planned_loss_pct
 
 ATR_FLOOR_PCT = 0.007   # skip dead-flat tape: ATR must be >= 0.7% of price
@@ -560,6 +561,20 @@ def fibonacci_limit_entries(df, horizon_key, params=None):
 
 
 ENTRY_FUNCS[FIB_LIMIT] = fibonacci_limit_entries
+
+
+def turtle_soup_entries(df, horizon_key, params=None):
+    """v180 Turtle Soup: bullish sweep-and-reclaim bars; never bearish. `params` is
+    accepted for the ENTRY_FUNCS contract and ignored -- the trigger is frozen
+    (turtle_soup.CHANNEL, MIN_AGE). While masked (it ships masked) this returns
+    all-False without computing the signal, so the live scan pays nothing for it."""
+    off = _off(df)
+    if not admits(TURTLE_SOUP, "bullish", horizon_key):
+        return off, off.copy()
+    return turtle_soup_mod.turtle_soup_signal(df).astype(bool), off
+
+
+ENTRY_FUNCS[TURTLE_SOUP] = turtle_soup_entries
 
 
 DEFAULT_PARAMS["EMA Crossover"] = {

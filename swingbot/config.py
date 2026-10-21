@@ -1040,6 +1040,14 @@ FIELDS: list[Field] = [
                "Compression Release short in its bearish 2w research cell, admitting only this one "
                "weakness mode. Nothing in the live bot reads it -- the live strategy mask stays "
                "closed. Off (default): the replay runs without the compression short."),
+    Field("TURTLE_SOUP_RESEARCH_MODE", "TURTLE_SOUP_RESEARCH_MODE", "Universe & Scanning",
+          "Turtle Soup: research replay mode (v180)", type="select", default="off",
+          options=["off", "structural"],
+          help="v180 research-only measurement knob: the historical replay "
+               "(scripts/backtest/measure_arms.py, StrategyEngine) adds the masked Turtle Soup long "
+               "in its bullish 2w research cell, with the structural stop and level-map target. "
+               "Nothing in the live bot reads it -- the live strategy mask stays closed. "
+               "Off (default): the replay runs without Turtle Soup."),
     Field("SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_MAX_SYMBOLS", "Universe & Scanning",
           "SHORT extra lane: max symbols per scan", type="number", default="50", min=1, max=500, step=1,
           help="v118 operational safeguard (not a search knob): the extra lane fetches at most this many "
@@ -1449,6 +1457,7 @@ _SEARCH_CLASSES = {
         "HEADROOM_SCOPE", "HEADROOM_MIN_R",
         "SHORT_UNIVERSE_RESEARCH_MODE",
         "COMPRESSION_SHORT_RESEARCH_MODE",
+        "TURTLE_SOUP_RESEARCH_MODE",
         "FVG_LEVELS_MODE", "FVG_DISPLACEMENT_ATR_K",
         "CONFLUENCE_STRUCTURAL_STOP_PCT", "CONFLUENCE_STOP_DROP_PCT",
     },
@@ -1500,6 +1509,7 @@ _MODE_VALUES = {
     "HEADROOM_SCOPE": ("off", "strategy", "confluence"),
     "SHORT_UNIVERSE_RESEARCH_MODE": ("off", "broad", "isolated"),
     "COMPRESSION_SHORT_RESEARCH_MODE": ("off", "broad", "isolated"),
+    "TURTLE_SOUP_RESEARCH_MODE": ("off", "structural"),
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
     "TRAINING_DATA_SOURCE": ("alpaca", "yfinance"),
 }

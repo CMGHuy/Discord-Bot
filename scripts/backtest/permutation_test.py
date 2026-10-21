@@ -7,6 +7,7 @@ the un-shifted expectancy doesn't beat ~95% of shifted runs, the
 
 Run: python scripts/backtest/permutation_test.py --component-json '{...}' [--n 200]
      python scripts/backtest/permutation_test.py --arms stamped.json [--n 200 --seed 42]
+     python scripts/backtest/permutation_test.py --arms stamped.json --shift-replay          [--wr-statistic pooled] [--n 200 --seed 42 --out-json F --data-source alpaca]
 """
 import argparse
 import json
@@ -18,7 +19,9 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from swingbot.core.backtesting.acceptance import WR_STATISTICS, win_rate_statistic  # noqa: E402
 from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
+from swingbot.core.marketdata import training_data  # noqa: E402
 
 
 def permuted_expectancies(run_fn, n_perm: int = 200, seed: int = 42) -> list:
@@ -170,21 +173,28 @@ def _load_arm_pair(path):
     return blob, baseline, component
 
 
-def _arms_main(args) -> int:
+def _stamp_gate_refused(blob, baseline, component) -> bool:
+    """True (and the refusal on stderr) when the arm pair's stamp does not pass."""
     from sqlalchemy.exc import OperationalError
 
-    loaded = _load_arm_pair(args.arms)
-    if loaded is None:
-        return 1
-    blob, baseline, component = loaded
     try:
         refusal = _stamp_refusal(blob, baseline, component)
     except OperationalError:
         print("refused:universe-unavailable -- authoritative Postgres watchlist unavailable. "
               "Budget intact.", file=sys.stderr)
-        return 1
+        return True
     if refusal:
         print(f"{refusal} -- incompatible arm stamp. Budget intact.", file=sys.stderr)
+        return True
+    return False
+
+
+def _arms_main(args) -> int:
+    loaded = _load_arm_pair(args.arms)
+    if loaded is None:
+        return 1
+    blob, baseline, component = loaded
+    if _stamp_gate_refused(blob, baseline, component):
         return 1
     try:
         out = arm_pair_permutation(baseline, component, n_perm=args.n, seed=args.seed)
@@ -204,8 +214,89 @@ def _parser():
     p.add_argument("--arms", default=None)
     p.add_argument("--harvest-arms", default=None)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--shift-replay", action="store_true",
+                   help="v180 A2: circular entry-shift replay of an additive arm's strategy")
+    p.add_argument("--wr-statistic", choices=tuple(WR_STATISTICS), default="standardised")
+    p.add_argument("--out-json", default=None)
+    p.add_argument("--data-source", choices=training_data.DATA_SOURCES, default=None)
     instrument_cli.add_instrument_arg(p)
     return p
+
+
+def _replay_frames(universe) -> dict:
+    from scripts.backtest.measure_arms import load_frame
+
+    frames = {t: f for t in universe if (f := load_frame(t)) is not None}
+    print(f"loaded {len(frames)}/{len(universe)} frames", file=sys.stderr, flush=True)
+    return frames
+
+
+def _shift_replay_for(frames, strategy, stamp):
+    from swingbot.core.backtesting.arms.shift_permutation import strategy_shift_replay
+
+    return strategy_shift_replay(frames, strategy, stamp["horizons"],
+                                 tuple(stamp["signal_window"]), stamp.get("knob_delta") or {})
+
+
+def _select_source(args) -> None:
+    source = training_data.select(args.data_source)
+    print(f"training data: {source} ({len(training_data.excluded())} excluded)",
+          file=sys.stderr, flush=True)
+
+
+def _print_progress(done, total) -> None:
+    print(f"shift replay {done}/{total} ({done / total * 100:.0f}%)", file=sys.stderr, flush=True)
+
+
+def _refuse(code, detail) -> int:
+    print(f"refused:{code} -- {detail}. Budget intact.", file=sys.stderr)
+    return 1
+
+
+def _shift_inputs(args):
+    """(baseline, component, stamp, strategy), or an int exit code when refused."""
+    from swingbot.core.backtesting.arms.shift_permutation import NotAdditive, additive_added
+
+    loaded = _load_arm_pair(args.arms)
+    if loaded is None:
+        return 1
+    blob, baseline, component = loaded
+    if _stamp_gate_refused(blob, baseline, component):
+        return 1
+    try:
+        added = additive_added(baseline, component)
+    except NotAdditive as exc:
+        return _refuse("not-additive", exc)
+    strategies = sorted({trade.strategy for trade in added})
+    if len(strategies) != 1:
+        return _refuse("not-single-strategy", f"added rows carry {strategies}")
+    return baseline, component, blob["provenance"], strategies[0]
+
+
+def _shift_replay_main(args) -> int:
+    from swingbot.core.backtesting.arms.shift_permutation import ReplayMismatch, shift_permutation
+
+    inputs = _shift_inputs(args)
+    if isinstance(inputs, int):
+        return inputs
+    baseline, component, stamp, strategy = inputs
+    _select_source(args)
+    replay = _shift_replay_for(_replay_frames(stamp["universe"]), strategy, stamp)
+    try:
+        out = shift_permutation(baseline, component, replay, win_rate_statistic(args.wr_statistic),
+                                n_perm=args.n, seed=args.seed, progress=_print_progress)
+    except ReplayMismatch as exc:
+        return _refuse("replay-mismatch", exc)
+    out.update(strategy=strategy, wr_statistic=args.wr_statistic,
+               instrument="v180 A2: circular entry-shift replay of the added strategy, "
+                          "real baseline fixed",
+               verdict=("REAL" if out["p_value"] is not None and out["p_value"] < 0.05
+                        else "INDISTINGUISHABLE FROM LUCK"))
+    text = json.dumps(out, indent=1)
+    print(text)
+    if args.out_json:
+        Path(args.out_json).write_text(text, encoding="utf-8")
+    return 0
 
 
 def _fold_main(args) -> int:
@@ -235,6 +326,10 @@ def main(argv=None) -> int:
     args = _parser().parse_args(argv)
     instrument_cli.require_v1(instrument_cli.spec_from_args(args), "permutation_test.py",
                               "phase 6 (cutover: walk-forward on the v2 folds)")
+    if args.shift_replay:
+        if args.arms is None:
+            _parser().error("--shift-replay needs --arms")
+        return _shift_replay_main(args)
     if args.harvest_arms:
         return _harvest_main(args)
     return _arms_main(args) if args.arms else _fold_main(args)

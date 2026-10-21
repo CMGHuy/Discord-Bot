@@ -229,6 +229,28 @@ def delta_expectancy_r(baseline, component) -> float | None:
     return c - b
 
 
+def delta_pooled_win_rate(baseline, component) -> float | None:
+    """v180 A1 (v119 amendment A1): pooled, unstandardised dWR over decided
+    trades, in percentage points; the only win-rate statistic that sees a
+    strategy the baseline lacks."""
+    b, c = win_rate(baseline), win_rate(component)
+    if b is None or c is None:
+        return None
+    return c - b
+
+
+#: v180: clause-1 / fold-row win-rate statistics by name. "standardised" is
+#: the v72 default and stays byte-identical.
+WR_STATISTICS = {"standardised": delta_standardised_win_rate,
+                 "pooled": delta_pooled_win_rate}
+
+
+def win_rate_statistic(name: str):
+    if name not in WR_STATISTICS:
+        raise ValueError(f"wr_statistic must be one of {sorted(WR_STATISTICS)}, got {name!r}")
+    return WR_STATISTICS[name]
+
+
 def _group_by_ticker(trades) -> dict:
     out = defaultdict(list)
     for t in trades:
@@ -436,6 +458,7 @@ class AcceptanceResult:
     seed: int = 42          # recorded so a results doc is reproducible
     version: int = VERSION
     cluster: str = "ticker"  # bootstrap resampling unit (v136 §4)
+    wr_statistic: str = "standardised"  # clause-1 win-rate statistic (v180 A1)
 
     def clause(self, name: str) -> ClauseResult:
         for c in self.clauses:
@@ -478,8 +501,9 @@ def population_split(baseline, component) -> dict:
 
 
 def _clause_win_rate(baseline, component, n_resamples, seed,
-                     cluster: str = "ticker") -> ClauseResult:
-    res = bootstrap_delta(baseline, component, delta_standardised_win_rate,
+                     cluster: str = "ticker",
+                     wr_statistic: str = "standardised") -> ClauseResult:
+    res = bootstrap_delta(baseline, component, win_rate_statistic(wr_statistic),
                           n_resamples=n_resamples, seed=seed, cluster=cluster)
     if res.point is None or res.p_greater_than_zero is None:
         return ClauseResult("win_rate", "FAIL",
@@ -487,7 +511,7 @@ def _clause_win_rate(baseline, component, n_resamples, seed,
     ok = res.point > 0.0 and res.p_greater_than_zero < ALPHA
     return ClauseResult(
         "win_rate", "PASS" if ok else "FAIL",
-        f"standardised dWR {res.point:+.2f}pp [{res.lo:+.2f},{res.hi:+.2f}] "
+        f"{wr_statistic} dWR {res.point:+.2f}pp [{res.lo:+.2f},{res.hi:+.2f}] "
         f"p={res.p_greater_than_zero:.4f}", res.point, 0.0)
 
 
@@ -586,7 +610,8 @@ def _clause_mechanism(split: dict) -> ClauseResult:
 def evaluate(baseline, component, *, stage: str,
              permutation_p: float | None = None,
              n_resamples: int = BOOTSTRAP_RESAMPLES,
-             seed: int = 42, cluster: str = "ticker") -> AcceptanceResult:
+             seed: int = 42, cluster: str = "ticker",
+             wr_statistic: str = "standardised") -> AcceptanceResult:
     """The gate. Every applicable clause must PASS.
 
     A SKIPPED clause never blocks a PASS, but it is always reported -- a
@@ -595,9 +620,11 @@ def evaluate(baseline, component, *, stage: str,
     if stage not in STAGES:
         raise ValueError(f"stage must be one of {STAGES}, got {stage!r}")
     _check_cluster(cluster)
+    win_rate_statistic(wr_statistic)   # v180: refuse an unknown name before any work
     split = population_split(baseline, component)
     clauses = (
-        _clause_win_rate(baseline, component, n_resamples, seed, cluster),
+        _clause_win_rate(baseline, component, n_resamples, seed, cluster,
+                         wr_statistic),
         _clause_profit_floor(baseline, component, n_resamples, seed, cluster),
         _clause_geometry(baseline, component),
         _clause_volume(baseline, component),
@@ -609,7 +636,8 @@ def evaluate(baseline, component, *, stage: str,
                             strata=stratum_table(baseline, component),
                             split={k: len(v) if isinstance(v, list) else v
                                    for k, v in split.items()},
-                            seed=seed, cluster=cluster)
+                            seed=seed, cluster=cluster,
+                            wr_statistic=wr_statistic)
 
 
 def render_json(result: AcceptanceResult) -> dict:
@@ -626,6 +654,8 @@ def render_json(result: AcceptanceResult) -> dict:
     }
     if result.cluster != "ticker":   # v1 output stays key-for-key identical
         out["cluster"] = result.cluster
+    if result.wr_statistic != "standardised":   # v180: standardised output stays key-for-key identical
+        out["wr_statistic"] = result.wr_statistic
     return out
 
 

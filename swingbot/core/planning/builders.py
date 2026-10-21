@@ -11,7 +11,8 @@ import numpy as np
 from swingbot import config
 from swingbot.core.market import levels, opex
 from swingbot.core.market.strategy_types import (BREAKEVEN_TRIGGER_FRACTION, COMPRESSION_SHORT,
-                                                  FIB_LIMIT, HORIZONS, SHORT_STRATEGIES)
+                                                  FIB_LIMIT, HORIZONS, SHORT_STRATEGIES,
+                                                  TURTLE_SOUP)
 from swingbot.core.risk_limits import (HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct,
                                        planned_loss_pct)
 from .acceptance_levels import stamp_confluence_acceptance, stamp_strategy_acceptance
@@ -288,6 +289,13 @@ def _short_branch(inputs):
     return _branch_result(picked[:2], picked[2])
 
 
+def _turtle_soup_branch(inputs):
+    """v180: planning/turtle_soup_plan.py (imported lazily: it imports _bounded_stop from here)."""
+    from .turtle_soup_plan import turtle_soup_branch
+
+    return turtle_soup_branch(inputs)
+
+
 _STRUCTURAL_BRANCHES = {
     "Fibonacci": _fib_branch,
     "Support/Resistance": _sr_branch,
@@ -297,6 +305,7 @@ _STRUCTURAL_BRANCHES = {
 _STRUCTURAL_BRANCHES.update({name: _short_branch for name in SHORT_STRATEGIES})
 _STRUCTURAL_BRANCHES[COMPRESSION_SHORT] = _compression_branch
 _STRUCTURAL_BRANCHES[FIB_LIMIT] = _fib_limit_branch
+_STRUCTURAL_BRANCHES[TURTLE_SOUP] = _turtle_soup_branch
 
 
 # --- v131: resting-limit pricing (PLAN_SHAPES' optional "limit_price") ------
@@ -381,12 +390,16 @@ def _geometry_ok(close, stop, tp1, strategy, horizon_key) -> bool:
     return abs(close - stop) > 0 and reward_floor.clears(close, tp1, strategy, horizon_key)
 
 
+# Strategies whose stop and target are exact structure the level-lifecycle adjuster's
+# re-selection may not move: the v119 compression short and the v180 Turtle Soup.
+_LIFECYCLE_EXEMPT = frozenset({COMPRESSION_SHORT, TURTLE_SOUP})
+
+
 def _lifecycle_pair(df, index, entry, stop, tp1, atr_val, direction, strategy,
                     horizon_key, level_map, candidates):
-    """(stop, tp1) after the level lifecycle. The v119 compression short is
-    exempt: its stop is the exact release-bar structure and its target one
-    confirmed support, neither of which the adjuster's re-selection may move."""
-    if strategy == COMPRESSION_SHORT:
+    """(stop, tp1) after the level lifecycle. _LIFECYCLE_EXEMPT strategies keep their own
+    structural stop and in-band target unchanged."""
+    if strategy in _LIFECYCLE_EXEMPT:
         return stop, tp1
     stop, tp1, _meta = apply_level_lifecycle(
         df, index, entry=entry, stop=stop, tp1=tp1, atr_val=atr_val,

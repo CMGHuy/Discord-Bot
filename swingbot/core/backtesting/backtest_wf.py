@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 
 from swingbot import config
+from swingbot.core.backtesting.acceptance import DECIDED, population_split, win_rate_statistic
 
 log = logging.getLogger(__name__)
 
@@ -243,6 +244,28 @@ def gate_win_rate(result: dict) -> str:
     if any(d < -GATE_MAX_WR_DEGRADATION_PP for d in deltas):
         return "FAIL"
     return "PASS"
+
+
+def _decided(trades) -> int:
+    return sum(t.outcome in DECIDED for t in trades)
+
+
+def win_rate_fold_row(test_year: str, baseline, component, *,
+                      wr_statistic: str = "standardised") -> dict:
+    """One fold's gate_win_rate input row.
+
+    v180 A1: per-fold N of an additive arm counts its own decided trades,
+    never the pooled book (spec § The funnel, stage 2). "standardised"
+    returns exactly the pre-v180 three-key row.
+    """
+    statistic = win_rate_statistic(wr_statistic)
+    delta = statistic(baseline, component)
+    if wr_statistic == "standardised":
+        return {"test_years": test_year, "delta_win_rate_pp": delta,
+                "n": min(_decided(baseline), _decided(component))}
+    added = population_split(baseline, component)["added"]
+    return {"test_years": test_year, "delta_win_rate_pp": delta,
+            "n": _decided(added), "wr_statistic": wr_statistic}
 
 
 #: v123 PRE-REGISTERED Stage 2 rule for an exit-only (harvest) component:
