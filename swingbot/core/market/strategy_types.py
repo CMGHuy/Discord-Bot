@@ -29,6 +29,10 @@ TURTLE_SOUP = "Turtle Soup"
 # v119: bearish-only first release from a TTM squeeze; 2w only after admission.
 COMPRESSION_SHORT = "First Bearish Compression Release"
 SHORT_STRATEGIES = V104_SHORTS + (FADE_STRATEGY, COMPRESSION_SHORT)
+# v180: long strategies whose structural stop is always in the v104 DROP scope -- a stop
+# beyond the horizon's max_risk_pct drops the plan and is never squeezed to the 2% cap.
+# Kept apart from SHORT_STRATEGIES, which also routes to _short_branch and short-only code.
+STRUCTURAL_DROP_STRATEGIES: tuple[str, ...] = (TURTLE_SOUP,)
 
 # MACD (fast, slow, signal) periods scaled by horizon -- module-level so
 # trade_plan.py can recompute the same fast EMA of price as a pullback

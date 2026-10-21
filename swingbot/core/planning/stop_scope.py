@@ -1,12 +1,16 @@
 """v104 stop scope and ceiling helpers for structural stops."""
 from __future__ import annotations
 
-from swingbot.core.market.strategy_types import HORIZONS, SHORT_STRATEGIES
+from swingbot.core.market.strategy_types import (HORIZONS, SHORT_STRATEGIES,
+                                                  STRUCTURAL_DROP_STRATEGIES)
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct
 
 CAP = "cap"
 DROP = "drop"
-_ALWAYS_IN_SCOPE = frozenset(name.lower() for name in SHORT_STRATEGIES)
+# Shorts (v104) and v180's structural-drop longs keep their stop or drop the plan,
+# whatever STRUCTURAL_STOP_SCOPE says.
+_ALWAYS_IN_SCOPE = frozenset(name.lower()
+                             for name in SHORT_STRATEGIES + STRUCTURAL_DROP_STRATEGIES)
 
 
 def scope_pairs(raw: str | None = None) -> frozenset[tuple[str, str]]:
