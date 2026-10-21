@@ -6,6 +6,8 @@ import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { compactKeys, drawerKeys, openRowDrawer } from '../../ui/data-table/testing/reachability';
 import { Gallery } from './gallery';
 
 // The gallery renders a real sb-trade-chart, and lightweight-charts asks for
@@ -165,5 +167,19 @@ describe('the gallery shows the one stat tile (v179 §3.3)', () => {
     const block = from.slice(0, from.indexOf('</div>'));
     expect(block.match(/<sb-stat-tile/g)).toHaveLength(4);
     expect(block).toMatch(/secondary="[^"]+"[^>]*hint="[^"]+"/);
+  });
+});
+
+describe('the gallery shows compact rows (v179 §3.1)', () => {
+  it('renders a compact-row table whose tap opens the row drawer', () => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    const table = (fixture.nativeElement as HTMLElement).querySelector('.compact-demo sb-data-table') as HTMLElement;
+    expect(table.querySelectorAll('li.compact-row')).toHaveLength(2);
+    openRowDrawer(table);
+    fixture.detectChanges();
+    expect([...compactKeys(table), ...drawerKeys(table)].sort()).toEqual(['note', 'outcome', 'pnl', 'ticker']);
   });
 });

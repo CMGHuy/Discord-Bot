@@ -574,6 +574,23 @@ interface ContractRow {
 
     <!-- -- v95: content priority -- four states forced via viewportAt, ------
          the gallery's job is to show them, not to make the reader resize. -->
+    <!-- -- v179: compact rows and the row drawer, forced via cardsAt ------- -->
+    <sb-section-head [heading]="'Compact rows and row drawer (v179)'" [level]="2" />
+    <sb-panel heading="Phone table -- spec §3.1" [flush]="true" class="compact-demo">
+      <p class="section-help">
+        Below 640px a table that declares compact slots shows each row as two
+        lines; a tap opens every other column in a drawer.
+      </p>
+      <sb-data-table
+        [rows]="tableRows"
+        [columns]="compactColumns"
+        [visible]="['ticker', 'pnl', 'note', 'outcome']"
+        [rowKey]="rowKey"
+        [cardsAt]="true"
+        phoneTap="drawer"
+      />
+    </sb-panel>
+
     <sb-section-head [heading]="'Content priority (v95)'" [level]="2" />
     <sb-panel heading="Toolbar sheet -- spec §4.2">
       <p class="section-help">
@@ -1034,6 +1051,13 @@ export class Gallery {
   protected readonly priorityColumns: ColumnDef<GalleryRow>[] = [
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, inlineFrom: 'xs' },
     { key: 'pnl', header: 'P&L', value: (row) => row.pnl, inlineFrom: 'lg' },
+  ];
+  /** v179: the same rows, declared for the phone compact row. */
+  protected readonly compactColumns: ColumnDef<GalleryRow>[] = [
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, compact: { line: 1, order: 1 } },
+    { key: 'pnl', header: 'P&L', value: (row) => row.pnl, numeric: true, compact: { line: 1, order: 2 } },
+    { key: 'note', header: 'Note', value: () => 'Plan or price context', compact: { line: 2, order: 1 } },
+    { key: 'outcome', header: 'Outcome', value: (row) => (row.pnl >= 0 ? 'Winner' : 'Loser') },
   ];
   protected readonly priorityToolbarControls: ToolbarControl[] = [
     { id: 'always', label: 'Always inline', inlineFrom: 'xs' },
