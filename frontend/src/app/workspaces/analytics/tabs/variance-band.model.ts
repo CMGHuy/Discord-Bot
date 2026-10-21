@@ -1,7 +1,7 @@
 import {
   BandCurrent, BandDollars, BandExpR, BandHorizon, BandQuantiles, BandZone, VarianceBandOk,
 } from '../../../api/models';
-import { ABSENT, rMultiple } from '../../../ui/format';
+import { ABSENT, num, rMultiple } from '../../../ui/format';
 
 /* v175 — every word of the "Normal bad luck" panel, and the arithmetic that
  * places its segments and marker. Pure: no Angular, no store, no DOM.
@@ -86,7 +86,7 @@ export function markerPercent(value: number, q: Cuts): number {
 /** Unsigned, symbol first, grouped: `$1,312.35`. The same text the
  *  book-status message shows (`fmt_money` with its sign stripped). */
 export function moneyText(value: number, currency: string): string {
-  const digits = Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const digits = num(Math.abs(value));
   return `${currency}${digits}`;
 }
 

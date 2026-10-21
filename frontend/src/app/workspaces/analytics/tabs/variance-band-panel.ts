@@ -130,7 +130,7 @@ export function bandView(band: VarianceBandOk, currency: string): BandView {
     [data-zone='normal'] .key, .seg[data-zone='normal'] { background: var(--pos); }
     [data-zone='rough'] .key, .seg[data-zone='rough'] { background: var(--warn); }
     [data-zone='outside'] .key, .seg[data-zone='outside'] { background: var(--neg); }
-    .marker { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--text); }
+    .marker { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: var(--radius-sm); background: var(--text); }
     .legend { display: flex; flex-wrap: wrap; gap: var(--space-6) var(--space-14); margin: var(--space-6) 0 0; padding: 0; list-style: none; font-size: var(--text-chip); color: var(--text-secondary); }
     .legend li { display: inline-flex; align-items: center; gap: var(--space-6); min-width: 0; }
     .key { flex: none; width: 10px; height: 10px; border-radius: var(--radius-sm); opacity: 0.55; }
