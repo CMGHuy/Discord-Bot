@@ -82,13 +82,23 @@ if TYPE_CHECKING:
 ENTRY_SHIFT = 0
 
 
+def _signal_close_refusals() -> dict:
+    from swingbot.core.market.strategy_types import COMPRESSION_SHORT, TURTLE_SOUP
+    return {
+        COMPRESSION_SHORT: (f"{COMPRESSION_SHORT} is not backtestable here (signal-close entry, no hold "
+                            "cap); use StrategyEngine with a CompressionResearchContext"),
+        TURTLE_SOUP: (f"{TURTLE_SOUP} is not backtestable here (signal-close entry; it fills at the "
+                      "next open with a ten-session hold cap); use StrategyEngine with "
+                      "TURTLE_SOUP_RESEARCH_MODE=structural"),
+    }
+
+
 def _refuse_compression(strategy: str) -> None:
-    """v119: the compression short rests a sell-stop below the release low with a ten-session hold
-    cap; this signal-close path models neither. Its research arm is arms/strategy_engine.py."""
-    from swingbot.core.market.strategy_types import COMPRESSION_SHORT
-    if strategy == COMPRESSION_SHORT:
-        raise ValueError(f"{COMPRESSION_SHORT} is not backtestable here (signal-close entry, no hold "
-                         "cap); use StrategyEngine with a CompressionResearchContext")
+    """v119/v180: masked research strategies whose fill or hold cap this signal-close path does not
+    model. Their research arm is arms/strategy_engine.py."""
+    message = _signal_close_refusals().get(strategy)
+    if message is not None:
+        raise ValueError(message)
 
 
 @dataclass

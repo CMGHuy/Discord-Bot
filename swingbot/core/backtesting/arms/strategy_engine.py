@@ -17,6 +17,11 @@ weakness mode is admitted, so a broad run and an isolated run are separate cohor
 
 v147: an optional `blocked_sink` records every counted compression decision (rejected -> "blocked",
 passed -> "taken") for the gate counterfactual; it never changes a trade or a counter.
+
+v180: the masked Turtle Soup long joins under ``TURTLE_SOUP_RESEARCH_MODE=structural``, inside its
+own ("bullish", "2w") cell (the same scoped ``gate_override``). Its rows are booked net of the
+screen's costs (``turtle_soup_research.net_r``) while every other row stays gross, and
+``turtle_soup_events`` lists one event per counted Turtle Soup candidate (trade, cancel or plan_none).
 """
 from __future__ import annotations
 
@@ -32,11 +37,12 @@ import pandas as pd
 from swingbot import config
 from swingbot.core.backtesting import backtest as bt
 from swingbot.core.backtesting.acceptance import arm_trade_from_plan
+from swingbot.core.backtesting.arms import turtle_soup_research as tsr
 from swingbot.core.backtesting.arms.confluence_engine import SKIPPED
 from swingbot.core.edge import gates
 from swingbot.core.market import entry_filters
 from swingbot.core.market.levels import build_level_map
-from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS, MIN_BARS
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS, MIN_BARS, TURTLE_SOUP
 from swingbot.core.planning.builders import build_strategy_plan
 from swingbot.core.planning.plan_engine import TradePlanV2, exit_params_for, simulate_exit
 
@@ -47,6 +53,9 @@ _CANCEL_REASONS = {"expired": "expired", "risk_cap": "gap_risk_cancel", "invalid
 #: Fixed, never the horizon being replayed, so no legacy horizon opens with it.
 RESEARCH_CELL = {"directions": (), "cells": {("bearish", "2w")}}
 RESEARCH_KNOB = "COMPRESSION_SHORT_RESEARCH_MODE"
+
+#: Masked strategies the engine reads under their own fixed research cell (scoped gate_override).
+_RESEARCH_CELLS = {COMPRESSION_SHORT: RESEARCH_CELL, TURTLE_SOUP: tsr.RESEARCH_CELL}
 
 #: v147: decide reasons that are research-universe masks, not the compression gate -- never a gate row.
 _NOT_A_GATE_REASONS = frozenset({"not_pit_member"})
@@ -132,6 +141,8 @@ class StrategyEngine:
         self.compression_signals: list[dict] = []
         self.compression_excluded: list[dict] = []
         self.compression_exit_reasons: Counter = Counter()
+        # v180: one event per counted Turtle Soup candidate, in signal order.
+        self.turtle_soup_events: list[dict] = []
         self._candidate: tuple = (None, None)
 
     def run_ticker(self, ticker, df, horizons, signal_window, params) -> list:
@@ -144,6 +155,14 @@ class StrategyEngine:
         return out
 
     def _run_strategies(self) -> tuple:
+        """This run's strategies: the compression short and the v180 Turtle Soup long each join
+        (once) when their research knob is on."""
+        strategies = self._compression_strategies()
+        if tsr.research_mode() == "off" or TURTLE_SOUP in strategies:
+            return strategies
+        return strategies + (TURTLE_SOUP,)
+
+    def _compression_strategies(self) -> tuple:
         """This run's strategies: the compression short joins (once) when the research knob is on,
         reading its as-of inputs from the explicit offline context unless one was supplied."""
         if research_mode() == "off":
@@ -163,8 +182,16 @@ class StrategyEngine:
                 self._record_signal(ticker, df, date, plan, result)
             yield arm_trade_from_plan(
                 plan, entry_date=date, outcome=result.outcome,
-                r_multiple=result.r_total,
+                r_multiple=self._booked_r(ticker, df, date, plan, result),
             )
+
+    def _booked_r(self, ticker, df, date, plan, result) -> float:
+        """Gross R for every strategy but Turtle Soup, whose row is booked net and logged (v180)."""
+        if plan.strategy != TURTLE_SOUP:
+            return result.r_total
+        r_net = tsr.net_r(plan, result)
+        self.turtle_soup_events.append(tsr.trade_event(ticker, df, date, plan, result, r_net))
+        return r_net
 
     def _record_signal(self, ticker, df, date, plan, result) -> None:
         """One supplemental row per scored compression signal: dates, mode and why it closed."""
@@ -183,14 +210,15 @@ class StrategyEngine:
         })
 
     def _entries(self, df, strategy, horizon_key):
-        """Entry series; the compression short alone is read under its scoped research cell."""
-        if strategy != COMPRESSION_SHORT:
+        """Entry series; a masked research strategy is read under its own scoped research cell."""
+        cell = _RESEARCH_CELLS.get(strategy)
+        if cell is None:
             return bt._vectorized_entries(df, strategy, horizon_key)
-        if self.compression_context is None:
+        if strategy == COMPRESSION_SHORT and self.compression_context is None:
             raise CompressionContextError(
                 "compression-short replay needs a CompressionResearchContext (SPY, as-of sector "
                 "frames, as-of earnings snapshots); refusing a silent empty cohort")
-        with entry_filters.gate_override(COMPRESSION_SHORT, RESEARCH_CELL):
+        with entry_filters.gate_override(strategy, cell):
             return bt._vectorized_entries(df, strategy, horizon_key)
 
     def _compression_stamp(self, ticker, window):
@@ -268,8 +296,8 @@ class StrategyEngine:
         """(plan | None, stamp): the shared pre-entry decision (compression short only), then the live
         constructor on bars <= index. A rejection is counted (when `counted`) and returns no plan."""
         stamp = {}
+        self._candidate = (ticker, str(window.index[-1].date()))
         if strategy == COMPRESSION_SHORT:
-            self._candidate = (ticker, str(window.index[-1].date()))
             stamp, reason = self._compression_stamp(ticker, window)
             if reason is not None:
                 self._note_blocked(ticker, window, strategy, horizon_key, direction, params, reason, counted)
@@ -329,14 +357,23 @@ class StrategyEngine:
         return plan
 
     def _skipped(self, result, strategy, stamp, counted=True) -> bool:
-        """Whether the walk produced no scored trade; a compression row says why (expiry, gap-risk...)."""
+        """Whether the walk produced no scored trade; a research row says why (expiry, gap-risk...)."""
         if result.outcome not in SKIPPED:
             return False
-        if strategy == COMPRESSION_SHORT and counted:
-            self._count(stamp, _CANCEL_REASONS.get(result.cancel_reason, "not_triggered"))
+        if counted:
+            self._note_skip(strategy, stamp, result)
         return True
 
+    def _note_skip(self, strategy, stamp, result) -> None:
+        if strategy == COMPRESSION_SHORT:
+            self._count(stamp, _CANCEL_REASONS.get(result.cancel_reason, "not_triggered"))
+        elif strategy == TURTLE_SOUP:
+            self.turtle_soup_events.append(tsr.cancel_event(*self._candidate, result.cancel_reason))
+
     def _count_plan_none(self, strategy, window, horizon_key, stamp) -> None:
+        if strategy == TURTLE_SOUP:
+            self.turtle_soup_events.append(tsr.plan_none_event(*self._candidate))
+            return
         if strategy != COMPRESSION_SHORT:
             return
         from swingbot.core.planning.short_builders import compression_rejection_reason
