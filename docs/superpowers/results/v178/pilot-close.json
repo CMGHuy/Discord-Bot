@@ -1,0 +1,162 @@
+{
+ "frozen": {
+  "stage": "pilot",
+  "window": [
+   "2018-06-01",
+   "2020-12-31"
+  ],
+  "frame_end": "2023-12-31",
+  "basis": "close",
+  "data_source": "yfinance",
+  "arms": {
+   "A": {
+    "enabled": true,
+    "mode": "pct"
+   },
+   "B": {
+    "enabled": false,
+    "mode": "pct"
+   },
+   "R0.75": {
+    "enabled": true,
+    "mode": "range",
+    "k": 0.75
+   },
+   "R1.00": {
+    "enabled": true,
+    "mode": "range",
+    "k": 1.0
+   },
+   "R1.25": {
+    "enabled": true,
+    "mode": "range",
+    "k": 1.25
+   },
+   "S0.25": {
+    "enabled": true,
+    "mode": "profit_share",
+    "f": 0.25
+   },
+   "S0.33": {
+    "enabled": true,
+    "mode": "profit_share",
+    "f": 0.33
+   },
+   "S0.50": {
+    "enabled": true,
+    "mode": "profit_share",
+    "f": 0.5
+   }
+  },
+  "pooled_fold_train": [
+   "2018-06-01",
+   "2022-12-31"
+  ],
+  "fold_train": [
+   [
+    "2020",
+    [
+     "2018-06-01",
+     "2020-12-31"
+    ]
+   ],
+   [
+    "2021",
+    [
+     "2018-06-01",
+     "2021-12-31"
+    ]
+   ],
+   [
+    "2022",
+    [
+     "2018-06-01",
+     "2022-12-31"
+    ]
+   ]
+  ],
+  "fold_test": [
+   [
+    "2021",
+    [
+     "2021-01-01",
+     "2021-12-31"
+    ]
+   ],
+   [
+    "2022",
+    [
+     "2022-01-01",
+     "2022-12-31"
+    ]
+   ],
+   [
+    "2023",
+    [
+     "2023-01-01",
+     "2023-12-31"
+    ]
+   ]
+  ],
+  "entries": "one control-A pass per ticker; every entry re-simulated under each arm",
+  "scale_out": true,
+  "instrument": "v1",
+  "engines": [
+   "StrategyEngine.iter_trades",
+   "replay_scenarios"
+  ],
+  "horizons": [
+   "2w",
+   "4w",
+   "2m",
+   "3m",
+   "4m",
+   "5m",
+   "6m",
+   "7m",
+   "8m",
+   "9m"
+  ],
+  "slippage_bps": 5.0,
+  "commission_per_side": 1.0,
+  "commission_risk_basis": 100.0,
+  "v92_overlap": "family R is adjacent to the closed v92 adaptive trail (nearest cell trigger_r 2.50, mult 1.50; dExpR -0.0045R to +0.0091R across its grid, best-cell lower bound -0.0131R): context, never a threshold; the partner ruled this a new test",
+  "universe_limit": "75 liquid cached names: the result says nothing about thin names, where ATR is noisy"
+ },
+ "n": 493,
+ "arms": {
+  "R0.75": {
+   "changed": 25,
+   "verdict": "REACHABLE"
+  },
+  "R1.00": {
+   "changed": 23,
+   "verdict": "REACHABLE"
+  },
+  "R1.25": {
+   "changed": 14,
+   "verdict": "REACHABLE"
+  },
+  "S0.25": {
+   "changed": 23,
+   "verdict": "REACHABLE"
+  },
+  "S0.33": {
+   "changed": 22,
+   "verdict": "REACHABLE"
+  },
+  "S0.50": {
+   "changed": 10,
+   "verdict": "REACHABLE"
+  }
+ },
+ "control_b_changed": 3,
+ "survivors": [
+  "R0.75",
+  "R1.00",
+  "R1.25",
+  "S0.25",
+  "S0.33",
+  "S0.50"
+ ]
+}

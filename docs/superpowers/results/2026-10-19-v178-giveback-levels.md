@@ -27,3 +27,18 @@
 **v92 overlap disclosure.** Family R is adjacent to the closed v92 adaptive trail (nearest v92 cell `trigger_r=2.50, mult=1.50`, dExpR -0.0045R to +0.0091R across its grid, best cell lower bound -0.0131R). This is context, never a threshold; the partner ruled this a new test.
 
 **Liquid-universe limit.** 75 liquid cached names: the result says nothing about thin names, where ATR is noisy.
+
+## Stage −1 reachability (pilot)
+
+Pilot run n = 493 entries (window 2018-06-01..2020-12-31, close basis). The frozen block in `v178/pilot-close.json` matches the block above on window, arms, frictions, data source, engines, horizons and basis; the first-10-tickers detail has no JSON field and was not compared.
+
+| Arm | Changed vs A | Verdict |
+|---|---|---|
+| R0.75 | 25 | REACHABLE |
+| R1.00 | 23 | REACHABLE |
+| R1.25 | 14 | REACHABLE |
+| S0.25 | 23 | REACHABLE |
+| S0.33 | 22 | REACHABLE |
+| S0.50 | 10 | REACHABLE |
+
+Control B changed vs A: 3. Survivors: all six candidates. **Gate:** open, continue to the train simulation (V178-9).
