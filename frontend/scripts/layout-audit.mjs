@@ -180,7 +180,8 @@ function auditPage({ touch, minTap, minText, maxBaseline }) {
 /** Same page-ready rule as browse.mjs: never 'networkidle' (the SPA holds an event stream open). */
 function ready() {
   const main = document.querySelector('main') ?? document.body;
-  return main.innerText.trim().length > 200 && !/Loading/.test(document.body.innerText);
+  return main.innerText.trim().length > 200 && !/Loading/.test(document.body.innerText)
+    && document.querySelector('.skeleton') === null;
 }
 
 async function signedIn(page, base) {
