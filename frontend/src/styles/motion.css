@@ -57,10 +57,6 @@
   0%, 100% { background: transparent; }
   50% { background: color-mix(in srgb, var(--warn) 16%, transparent); }
 }
-@keyframes sb-tape-slide {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
 
 /* -- #8 cell value flash ----------------------------------------------------
  * Scoped to the cell whose value changed, never the card: under real-time
