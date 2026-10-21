@@ -71,4 +71,14 @@ describe('v80 D4: form controls', () => {
   it('never prints readable text in the divider-only grey', () => {
     expect(SOURCE).not.toContain('--text-faint');
   });
+
+  it('lets a text input shrink to a narrow grid cell instead of keeping the native 20-character width (v179 layout audit)', () => {
+    // At 390 the filter bar's two-column grid gave the host 141px while the input's intrinsic width kept
+    // the label 233px wide, so the field's label was cut by the panel.
+    const at = SOURCE.indexOf("selector: 'sb-text-input'");
+    const styles = SOURCE.slice(at, SOURCE.indexOf('export class TextInput', at));
+    expect(styles).toMatch(/:host \{ min-width: 0; \}/);
+    expect(styles).toMatch(/\.field \{[^}]*max-width: 100%/);
+    expect(styles).toMatch(/\n    input \{[^}]*min-width: 0;/);
+  });
 });
