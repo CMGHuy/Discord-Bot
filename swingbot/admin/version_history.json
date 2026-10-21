@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21 09:15:57 UTC",
+  "generated_at": "2026-10-21 13:38:45 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.33.0",
+    "ui": "1.33.1",
     "bot": "2.14.1"
   },
   "releases": [
@@ -1967,6 +1967,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "last_seen": "2026-10-21",
+      "commit": "d137825a",
+      "subject": "release(ui): 1.33.1 -- Plan cell shows the original plan and a trail line for trailing runners, and the runner's exit on closed partial trades (v177)",
+      "versions": {
+        "ui": "1.33.1",
+        "bot": "2.14.1"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
