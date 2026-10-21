@@ -353,7 +353,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       </p>
       <!-- A plain link, not a fetch: the browser then gets a Save dialog and
            the server's filename, both of which an XHR throws away. -->
-      <a class="export" [href]="exportUrl" download>Download .env</a>
+      <a class="export sb-hit" [href]="exportUrl" download>Download .env</a>
       <!-- SR63. settings.html:209. The asymmetry is the reason an exported
            file is safe to hand around, and it was nowhere on screen. -->
       <span class="asymmetry">
@@ -361,7 +361,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       </span>
 
       <details class="import">
-        <summary>Import from text or file</summary>
+        <summary class="sb-hit">Import from text or file</summary>
         <!-- SR56's fifth gap row. The file is read in the browser and its
              text goes through the SAME import endpoint as the textarea —
              no upload route, no second parser, and the user can see and
@@ -488,6 +488,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       background: var(--accent);
       vertical-align: middle;
     }
+    .import-file input { min-height: var(--control-h); }
     .import-file {
       display: flex;
       align-items: center;

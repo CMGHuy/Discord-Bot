@@ -66,7 +66,7 @@ export const TICKER_TRADES_CAP = 25;
          symbol itself stays visible in the chart caption, the trades panel
          heading and the table's own ticker column, so nothing is lost by
          dropping the h1 sb-section-head used to render here. -->
-    <a class="back" routerLink="/watchlist">← Watchlist</a>
+    <a class="back sb-hit" routerLink="/watchlist">← Watchlist</a>
     <sb-section-head>
       <span actions class="counts">
         {{ openCount() }} open · {{ closedCount() }} closed
@@ -84,7 +84,7 @@ export const TICKER_TRADES_CAP = 25;
     </sb-chart-container>
 
     <sb-panel [heading]="'Trades on ' + symbol()" [flush]="true">
-      <a panel-actions class="all-link" routerLink="/trades" [queryParams]="{ ticker: symbol() }">
+      <a panel-actions class="all-link sb-hit" routerLink="/trades" [queryParams]="{ ticker: symbol() }">
         Open in Trades →
       </a>
 

@@ -88,7 +88,7 @@ export function timingLines(t: PlanTiming): string[] {
   ],
   template: `
     <header class="plan-head">
-      <a class="back" routerLink="/trades">← Trades</a>
+      <a class="back sb-hit" routerLink="/trades">← Trades</a>
 
       @if (store.trade(); as trade) {
         <div class="plan-title" role="heading" aria-level="2">
@@ -207,7 +207,7 @@ export function timingLines(t: PlanTiming): string[] {
 
           <sb-outcome-path [legs]="store.legs()" [timeline]="store.timeline()" />
 
-          <a class="record-link" [routerLink]="['/trades', id()]">Open the full trade record</a>
+          <a class="record-link sb-hit" [routerLink]="['/trades', id()]">Open the full trade record</a>
         </div>
       }
     </sb-async>

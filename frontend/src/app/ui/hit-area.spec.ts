@@ -68,6 +68,7 @@ describe('v179: controls that grow to the hit size', () => {
     ['src/app/ui/column-picker.ts', '.reset', 'min-height: var(--hit-min)'],
     ['src/app/ui/segmented.ts', '.segment', 'min-width: var(--hit-min)'],
     ['src/app/ui/form-controls.ts', '.box', 'min-width: var(--hit-min)'],
+    ['src/app/workspaces/system/settings-tab.ts', '.import-file input', 'min-height: var(--control-h)'],
   ];
 
   it.each(GROWN)('%s %s sets %s', (file, selector, declaration) => {
@@ -81,6 +82,14 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/ui/panel-header.ts', /<button type="button" class="table sb-hit"/],
     ['src/app/workspaces/dashboard/positions-table.ts', /<a class="all-link sb-hit"/],
     ['src/app/workspaces/dashboard/panels/recent-activity.ts', /<a panel-actions class="all-link sb-hit"/],
+    ['src/app/workspaces/plans/plan-detail.ts', /<a class="back sb-hit" routerLink="\/trades"/],
+    ['src/app/workspaces/plans/plan-detail.ts', /<a class="record-link sb-hit"/],
+    ['src/app/workspaces/watchlist/ticker-detail.ts', /<a class="back sb-hit" routerLink="\/watchlist"/],
+    ['src/app/workspaces/watchlist/ticker-detail.ts', /<a panel-actions class="all-link sb-hit"/],
+    ['src/app/workspaces/analytics/tabs/overview.ts', /<a class="sb-hit" routerLink="\/calendar"/],
+    ['src/app/workspaces/system/logs-tab.ts', /<a slot="raw" class="raw sb-hit"/],
+    ['src/app/workspaces/system/settings-tab.ts', /<a class="export sb-hit"/],
+    ['src/app/workspaces/system/settings-tab.ts', /<summary class="sb-hit">/],
     // The collapsed rail is 52px wide: a 32px link cannot grow, so it pads with .sb-hit.
     ['src/app/shell/shell.html', /<a class="brand sb-hit" routerLink="\/dashboard"/],
     ['src/app/shell/shell.html', /<a\s+class="sb-hit"\s+\[routerLink\]="entry\.path"/],
