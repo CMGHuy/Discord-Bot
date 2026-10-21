@@ -259,3 +259,13 @@ Spec review, 2026-10-19 (staff-engineer, financial-advisor).
 - financial-advisor 5: paper levels vs the broker's resting orders -- applied (line 2 tooltip).
 - financial-advisor 6: the peak is unrealised -- applied (line 2 tooltip).
 - financial-advisor 7: per share, not the whole position -- applied (stated in the cell description and both tooltips).
+
+### Implementation review, 2026-10-21 (staff-engineer, financial-advisor)
+
+- staff-engineer 1: manual-close fallback missed `manual_bulk` -- applied (28516d57)
+- staff-engineer 2: manual path required a TP1 leg `reason`, legacy legs carry none -- applied (28516d57)
+- staff-engineer 3: manual exit price read only from the linked trade, the plan's CLOSED transition `extra.override` holds the same quote -- rejected: unlinked manual closes are rare; recorded for a later spec
+- staff-engineer 4: V177-1 and V177-3 stamped `Model: opus` ran on Sonnet -- recorded here; their tests, browser check and both panel reviews hold
+- financial-advisor 1 (BLOCKING): closed-runner tooltip lacked "before costs and tax" -- applied (506c91b4)
+- financial-advisor 2-4: trail tooltip "result" not "profit"; "the bot does not update your broker's orders"; line 1 says its stop is the original -- applied (506c91b4)
+- financial-advisor 5: banked-leg tooltip is also pre-cost, unchanged by v177 -- rejected: outside this plan's scope
