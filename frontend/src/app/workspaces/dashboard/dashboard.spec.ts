@@ -273,7 +273,8 @@ describe('Dashboard v85 layout', () => {
   it('routes the panel scope control back into the store', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-    el.querySelector<HTMLButtonElement>('[data-scope="all"]')!.click();
+    [...el.querySelectorAll<HTMLButtonElement>('sb-trading-performance sb-segmented .segment')]
+      .find((s) => s.textContent!.trim() === 'All days')!.click();
     fixture.detectChanges();
     expect(TestBed.inject(DashboardStore).scope()).toBe('all');
   });
