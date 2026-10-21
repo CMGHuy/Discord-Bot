@@ -84,15 +84,15 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
            heads the stack below 640px rather than floating beside it). -->
       <sb-control-row class="headline">
         <span class="label">Running now</span>
-          @for (component of store.components(); track component) {
-            @if (store.current()[component]; as version) {
-              <button sb-button variant="chip" type="button" class="chip" [class.on]="isFiltered(component, version)"
-                      (click)="store.toggleFilter(component, version)"
-                      [attr.title]="component + ' ' + version + ' — click to filter'">
-                {{ component }} <strong>{{ version }}</strong>
-              </button>
-            }
+        @for (component of store.components(); track component) {
+          @if (store.current()[component]; as version) {
+            <button sb-button variant="chip" type="button" class="chip" [class.on]="isFiltered(component, version)"
+                    (click)="store.toggleFilter(component, version)"
+                    [attr.title]="component + ' ' + version + ' — click to filter'">
+              {{ component }} <strong>{{ version }}</strong>
+            </button>
           }
+        }
       </sb-control-row>
 
       <div class="strip" #strip>
