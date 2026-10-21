@@ -92,7 +92,7 @@ export function marginTone(
                 @if (!gate.applies) { <sb-chip label="off" [caps]="false" title="off in current config" /> }
                 <span>Value <span class="num">{{ gateValue(gate.value) }}</span></span>
                 <span>Threshold <span class="num">{{ fmtNum(gate.threshold) }}</span></span>
-                <span>Margin <span class="margin num"[class.pos]="coloredMargin(gate) > 0" [class.neg]="coloredMargin(gate) < 0">{{ fmtSigned(gate.margin) }}</span></span>
+                <span>Margin <span class="margin num" [class.pos]="coloredMargin(gate) > 0" [class.neg]="coloredMargin(gate) < 0">{{ fmtSigned(gate.margin) }}</span></span>
               </div>
               @if (gate.parts.length) {
                 <p class="parts">@for (part of gate.parts; track $index) {
