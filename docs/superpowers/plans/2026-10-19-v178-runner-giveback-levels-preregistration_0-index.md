@@ -302,3 +302,7 @@ replays at once (shared tree, CPU).
 | V178-9 | Train simulation, stages 0–2 and the TRAIN-side sensitivity (gates) | 2 | sonnet | C `docs/superpowers/results/v178/funnel-close.json`, `docs/superpowers/results/v178/sensitivity-high_low.json` (only if an arm passes stage 0) | `stage3_arm` |
 | V178-10 | Stage 3: the one VALIDATION shot (conditional, partner go) | 2 | sonnet | C `docs/superpowers/results/v178/validation-readings.json`, `docs/superpowers/results/v178/validation-gate.md`, `docs/superpowers/results/v178/validation-gate.json` | stage-3 verdict |
 | V178-11 | Results doc, ledger row, closed row, /panel, /close-out | 3 | sonnet | C results doc; M `docs/superpowers/results/preregistration-ledger.jsonl`, `docs/claude/backtest-methodology.md`, `.claude/hooks/guardrails.py`; plan moved by `/close-out` | ledger row `v178-giveback-levels` |
+
+## Panel review at close-out
+
+Roles: risk-manager, veteran-trader, quant-researcher. No BLOCKING finding; findings recorded in `docs/superpowers/results/2026-10-19-v178-giveback-levels.md` § Panel review at close-out. Follow-ups for any reopening or Phase B spec: report drawdown beside ExpR; state the fill model (legacy path fills the stop level, not the gap open); a live port of a per-bar trailing level needs a stop-move message; consider a test or guard that `GIVEBACK_MODE` returns to `pct` after the measurement script runs in-process; k = 0.75 is not the leading value on the whole train book.

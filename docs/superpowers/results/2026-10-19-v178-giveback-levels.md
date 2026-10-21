@@ -102,3 +102,18 @@ R0.75 runner context (4295 runner trades): allowance p10/p50/p90 = 0.0135 / 0.02
 `v178-giveback-levels: verdict NO-LIFT, p=0.1705, BH q=0.3751 across 11 ledger p-values (71 rows). Reported, not gating.`
 
 The BH q-value is printed for context and never gates (`backtest-methodology.md`).
+
+## Panel review at close-out
+
+No BLOCKING finding. Wording only; no reading changed, no stage re-run, VALIDATION unspent.
+
+- risk-manager 1: arms R1.25, S0.33, S0.50 show higher max drawdown than A (50,075 / 50,726 / 51,611 vs 49,641 dollars) -- applied: stated here; any reopening reports drawdown beside ExpR.
+- risk-manager 2 / veteran-trader 1: the 35.1% gapped share and 16.33R max give-back come from the legacy simulator path, which fills a runner stop at the stop level, not the gap open -- applied: the gap figures are an optimistic fill model for A and every arm alike; the paired ΔExpR largely cancels it, but no gap number here is a live estimate.
+- risk-manager 3: the mode constants are mutable globals set by the measurement script -- declined for now: they are not config, a SIGHUP cannot change them, and the default is `pct`; recorded as a follow-up in the plan index.
+- risk-manager 4 / veteran-trader 5: drawdown caveat and thin-name fill realism not in the closed row -- declined: the closed row stays a verdict record; this document carries both.
+- veteran-trader 2: the shock-week gain (+0.0941 for R0.75, 945 runners) is dominated by 2020-W12; not a mechanism for reopening -- applied (stated here).
+- veteran-trader 3: range and profit-share stops move every bar, so a live port needs a stop-move message -- applied: follow-up for any Phase B spec.
+- veteran-trader 4: "upper bound" means intrabar and gap fills, not frictions (5 bps and $1 per side are applied) -- applied (stated here).
+- quant-researcher 1: "best arm R0.75" holds only on the pooled fold-train window (n = 10838); on the whole train book (n = 13733) the order flips (R1.25 +0.0059, S0.33 +0.0052, S0.25 +0.0046, R1.00 +0.0042, R0.75 +0.0017, S0.50 +0.0010) -- applied: k = 0.75 is not the leading value for any reopening.
+- quant-researcher 2: R0.75's gain is concentrated on shock days (+0.0941, n = 945 vs calm -0.0194, n = 3350) and top-2 horizons (0.693) -- applied (stated here).
+- quant-researcher 3: ledger `n` = 13733 is the whole-book count, `p` = 0.1705 comes from the paired pooled fold-train sample, N = 10838 -- declined: a ledger row is never edited; both counts are named here and in the closed row.
