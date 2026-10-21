@@ -211,12 +211,19 @@ async function requireSession(page, base) {
   throw new CannotRun(`not signed in at ${base}: run \`node frontend/scripts/browse.mjs login --base ${base}\` once, then re-run`);
 }
 
-async function getJson(page, url) {
-  return page.evaluate(async (target) => {
-    const res = await fetch(target, { credentials: 'include' });
-    if (!res.ok) throw new Error(`${res.status} ${target}`);
-    return res.json();
-  }, url);
+async function getJson(page, url, attempts = 3) {
+  try {
+    return await page.evaluate(async (target) => {
+      const res = await fetch(target, { credentials: 'include' });
+      if (!res.ok) throw new Error(`${res.status} ${target}`);
+      return res.json();
+    }, url);
+  } catch (error) {
+    // The SPA's own redirect (/ -> /dashboard) can destroy the context mid-call: settle and retry.
+    if (attempts <= 1 || !/context was destroyed/.test(String(error))) throw error;
+    await page.waitForLoadState('load');
+    return getJson(page, url, attempts - 1);
+  }
 }
 
 async function resolveIds(page, base) {
