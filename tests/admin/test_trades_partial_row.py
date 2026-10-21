@@ -348,6 +348,20 @@ def test_a_manual_close_whose_price_fetch_failed_shows_no_runner_exit():
     assert (rows[0]["runner_exit_price"], rows[0]["runner_exit_reason"]) == (None, None)
 
 
+def test_a_bulk_manual_close_reports_the_trades_exit_as_a_manual_runner_exit():
+    plan = manually_closed_partial()
+    plan["status_history"][-1]["reason"] = "manual_bulk"
+    rows = _expand_plan_row(plan, {"exit_price": 130.0}, set())
+    assert (rows[0]["runner_exit_price"], rows[0]["runner_exit_reason"]) == (130.0, "manual")
+
+
+def test_a_legacy_tp1_leg_with_no_reason_still_reads_as_a_manual_close():
+    plan = manually_closed_partial()
+    del plan["legs_realized"][0]["reason"]
+    rows = _expand_plan_row(plan, {"exit_price": 130.0}, set())
+    assert (rows[0]["runner_exit_price"], rows[0]["runner_exit_reason"]) == (130.0, "manual")
+
+
 def test_a_manual_close_with_no_linked_trade_shows_no_runner_exit():
     rows = _expand_plan_row(manually_closed_partial(), None, set())
     assert (rows[0]["runner_exit_price"], rows[0]["runner_exit_reason"]) == (None, None)
