@@ -87,6 +87,7 @@ class ScanParams:
     pullback_dryup_max_ratio: float
     short_universe_research_mode: str = "off"   # v118 research replay only
     compression_short_research_mode: str = "off"   # v119 research replay only
+    turtle_soup_research_mode: str = "off"   # v180 research replay only
     fvg_levels_mode: str = "all"            # v128: all | displacement | off
     fvg_displacement_atr_k: float = 1.5     # v128: read only in displacement mode
     confluence_structural_stop_pct: float = 0.0   # v139 arm S ceiling c; 0 = today's clamp
@@ -156,6 +157,7 @@ class ScanParams:
             pullback_dryup_max_ratio=config.PULLBACK_DRYUP_MAX_RATIO,
             short_universe_research_mode=config.SHORT_UNIVERSE_RESEARCH_MODE,
             compression_short_research_mode=config.COMPRESSION_SHORT_RESEARCH_MODE,
+            turtle_soup_research_mode=config.TURTLE_SOUP_RESEARCH_MODE,
             fvg_levels_mode=config.FVG_LEVELS_MODE,
             fvg_displacement_atr_k=config.FVG_DISPLACEMENT_ATR_K,
             confluence_structural_stop_pct=config.CONFLUENCE_STRUCTURAL_STOP_PCT,
