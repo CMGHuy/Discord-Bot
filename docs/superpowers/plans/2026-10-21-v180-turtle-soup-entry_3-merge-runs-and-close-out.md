@@ -23,7 +23,17 @@ Every `python` command in V180-10..V180-14 runs from `$R` (`cd "$R"` first), so 
 - **One stage per task, one gate per stage.** A task ends with its gate. A refused or failed gate stops the funnel: skip every later run task and go straight to V180-14, which records whatever stage ended it. Never re-run a stage to get a different answer. A crashed run (no arm JSON written) may be re-run; a written arm JSON is the look.
 - **`backtest-gate` first.** Invoke the `backtest-gate` skill before each run command and before each reading, and confirm the command matches the frozen block of `$PREREG` word for word.
 - **`backtest-runner` runs it.** Dispatch the `backtest-runner` subagent with the exact commands. It backgrounds each one, logs to `logs/v180/<stage>.log`, and returns only the verdict lines and exit codes. Never two heavy replays at once; it checks for a live python job first.
-- **`--data-source alpaca` on every producer and replay command.** `validate_component.py` and `turtle_soup_report.py` read stamped arms only and take no source flag.
+- **`--data-source alpaca` on every producer, replay and judge command.** `validate_component.py` also takes it (`cache_dir_source.add_args`, `validate_component.py:370-372`); without it the judge falls back to `config.TRAINING_DATA_SOURCE`. `turtle_soup_report.py` reads stamped arms only.
+- **`MEASURE_ARMS_UNIVERSE=cache` on every command** (producer, `validate_component.py`, `permutation_test.py`, `turtle_soup_report.py`), the cached universe v129/v139/v147 used. The judges' stamp gates call `measure_arms.cached_universe()` (`validate_component._stamp_gate`, `validate_component.py:38-48`), so a judge without it compares against a different universe.
+- **Freeze check before every run dispatch (V180-10 Step 4, V180-11 Step 1, V180-12 Step 2, V180-13 Steps 2-3).** `measure_arms` stamps `provenance.code_hash()` over `swingbot/**/*.py`, so a concurrent session's commit makes the judges refuse the arms. From `$R`:
+
+  ```bash
+  FREEZE=$(git log --diff-filter=A --format=%H -- docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md | tail -n 1)
+  git log --oneline "$FREEZE"..main -- swingbot/ scripts/backtest/ scripts/data/
+  git status --short -- swingbot/ scripts/backtest/ scripts/data/
+  ```
+
+  Both outputs must be empty. Otherwise stop, run nothing, and report the commits to the partner: a changed engine after the freeze is a partner decision, never a silent re-freeze.
 - **Arm files stay out of git.** They live under `logs/v180/<stage>.json` (the `logs/` tree is ignored). The `.turtle_soup.json` sidecar beside each one, and every gate output, is copied into `docs/superpowers/results/v180/` and committed.
 - **Readings are appended, never edited.** Each stage appends one `### Stage …` block under `## Readings` in `$PREREG`. Nothing above `## Readings` changes after the V180-10 freeze commit.
 
@@ -302,23 +312,23 @@ The instrument was committed and merged before this file (V180-2, V180-3, merged
 Every command runs from the repo root.
 
 - **Stage −1 reachability.**
-  - `python scripts/backtest/measure_arms.py --stage pilot --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/pilot.json --data-source alpaca`
-  - `python scripts/backtest/validate_component.py --stage reachability --arms logs/v180/pilot.json --title "v180 Turtle Soup structural -- stage -1 reachability" --window 2018-06-01..2020-12-31`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/measure_arms.py --stage pilot --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/pilot.json --data-source alpaca`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/validate_component.py --data-source alpaca --stage reachability --arms logs/v180/pilot.json --title "v180 Turtle Soup structural -- stage -1 reachability" --window 2018-06-01..2020-12-31`
   - Gate: the knob is reachable, changed outcomes are nonzero and the split reads `removed=0 … changed=0`; else refused, budget intact.
 - **Stage 0 MDE (A3).**
-  - `python scripts/backtest/measure_arms.py --stage selection --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/selection.json --data-source alpaca`
-  - `python scripts/backtest/validate_component.py --stage mde --arms logs/v180/selection.json --wr-statistic pooled --train-effect-from-arms --mde-method paired --title "v180 Turtle Soup structural -- stage 0 MDE" --window 2018-06-01..2022-12-31`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/measure_arms.py --stage selection --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/selection.json --data-source alpaca`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/validate_component.py --data-source alpaca --stage mde --arms logs/v180/selection.json --wr-statistic pooled --train-effect-from-arms --mde-method paired --title "v180 Turtle Soup structural -- stage 0 MDE" --window 2018-06-01..2022-12-31`
   - Gate: the A1 TRAIN point below the paired MDE prints `REFUSED`; the shot is refused, budget intact.
 - **Stage 1 selection.** No command. It **tests nothing**: one cell, no grid, and `plateau_report()` on a one-element grid always returns a plateau. It is stated, not counted as evidence.
 - **Stage 2 walk-forward.**
-  - `python scripts/backtest/measure_arms.py --stage walkforward --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/walkforward.json --data-source alpaca`
-  - `python scripts/backtest/validate_component.py --stage walkforward --arms logs/v180/walkforward.json --wr-statistic pooled --title "v180 Turtle Soup structural -- stage 2 walk-forward" --window 2021-01-01..2023-12-31 --out-json docs/superpowers/results/v180/walkforward.json`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/measure_arms.py --stage walkforward --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/walkforward.json --data-source alpaca`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/validate_component.py --data-source alpaca --stage walkforward --arms logs/v180/walkforward.json --wr-statistic pooled --title "v180 Turtle Soup structural -- stage 2 walk-forward" --window 2021-01-01..2023-12-31 --out-json docs/superpowers/results/v180/walkforward.json`
   - Gate: `gate_win_rate` on the A1 fold rows: at least 2 of 3 folds improving, no fold worse than −1.0pp, per-fold N ≥ 30 **decided added Turtle Soup trades**.
 - **Stage 3 VALIDATION, one shot, only after the partner's explicit go.**
-  - `python scripts/backtest/measure_arms.py --stage validation --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/validation.json --data-source alpaca`
-  - `python scripts/backtest/permutation_test.py --arms logs/v180/validation.json --shift-replay --wr-statistic pooled --n 200 --seed 42 --data-source alpaca --out-json docs/superpowers/results/v180/permutation.json`
-  - `python scripts/backtest/validate_component.py --stage validation --arms logs/v180/validation.json --wr-statistic pooled --permutation-p <p_value from permutation.json; the flag is omitted when p_value is null, which fails clause 5> --title "v180 Turtle Soup structural -- stage 3 VALIDATION" --window 2024-01-01..2025-12-31 --out-md docs/superpowers/results/v180/validation-gate.md --out-json docs/superpowers/results/v180/validation-gate.json`
-  - `python scripts/backtest/turtle_soup_report.py --arms logs/v180/validation.json --out-json docs/superpowers/results/v180/badge.json`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/measure_arms.py --stage validation --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/validation.json --data-source alpaca`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/permutation_test.py --arms logs/v180/validation.json --shift-replay --wr-statistic pooled --n 200 --seed 42 --data-source alpaca --out-json docs/superpowers/results/v180/permutation.json`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/validate_component.py --data-source alpaca --stage validation --arms logs/v180/validation.json --wr-statistic pooled --permutation-p <p_value from permutation.json; the flag is omitted when p_value is null, which fails clause 5> --title "v180 Turtle Soup structural -- stage 3 VALIDATION" --window 2024-01-01..2025-12-31 --out-md docs/superpowers/results/v180/validation-gate.md --out-json docs/superpowers/results/v180/validation-gate.json`
+  - `MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/turtle_soup_report.py --arms logs/v180/validation.json --out-json docs/superpowers/results/v180/badge.json`
   - Gate: all six clauses with A1/A2 (clause 3 applied, clause 6 `SKIPPED`) **and** the badge check on the added rows: `win_rate >= 50` over win+loss, `expectancy_r > 0`, N ≥ 15, scratches + timeouts ≤ 50% of closed, time-cap exits counted as timeouts.
 
 ## Verdict mapping (ledger row `v180-turtle-soup-structural`)
@@ -373,11 +383,13 @@ Expected: the commit succeeds, and `logs/v180/` holds only `preflight.py`. If an
 
 - [ ] **Step 4: Run stage −1 through `backtest-runner`**
 
+Run the freeze check ("How the funnel is run") first. Any output stops the task.
+
 Invoke the `backtest-gate` skill. Then dispatch `backtest-runner` with these two commands, in order, from `$R`, the first one logged to `logs/v180/pilot.log`:
 
 ```bash
-python scripts/backtest/measure_arms.py --stage pilot --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/pilot.json --data-source alpaca > logs/v180/pilot.log 2>&1
-python scripts/backtest/validate_component.py --stage reachability --arms logs/v180/pilot.json --title "v180 Turtle Soup structural -- stage -1 reachability" --window 2018-06-01..2020-12-31 > docs/superpowers/results/v180/pilot-reachability.txt 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/measure_arms.py --stage pilot --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/pilot.json --data-source alpaca > logs/v180/pilot.log 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/validate_component.py --data-source alpaca --stage reachability --arms logs/v180/pilot.json --title "v180 Turtle Soup structural -- stage -1 reachability" --window 2018-06-01..2020-12-31 > docs/superpowers/results/v180/pilot-reachability.txt 2>&1
 ```
 
 Ask it to return: both exit codes; any `refused:` line; the `knobs:`, `split` and verdict lines of `pilot-reachability.txt`; and whether `logs/v180/pilot.turtle_soup.json` was written (or the `warning:` line in its place).
@@ -436,11 +448,13 @@ Precondition: the V180-10 reading says `REACHABLE`, and V180-9 Step 8 showed `de
 
 - [ ] **Step 1: Run stage 0 through `backtest-runner`**
 
+Run the freeze check ("How the funnel is run") first. Any output stops the task.
+
 Invoke the `backtest-gate` skill and check both commands against the frozen Stage 0 bullet of `$PREREG`, character for character. Then dispatch `backtest-runner` with, in order, from `$R`:
 
 ```bash
-python scripts/backtest/measure_arms.py --stage selection --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/selection.json --data-source alpaca > logs/v180/selection.log 2>&1
-python scripts/backtest/validate_component.py --stage mde --arms logs/v180/selection.json --wr-statistic pooled --train-effect-from-arms --mde-method paired --title "v180 Turtle Soup structural -- stage 0 MDE" --window 2018-06-01..2022-12-31 > docs/superpowers/results/v180/mde.txt 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/measure_arms.py --stage selection --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/selection.json --data-source alpaca > logs/v180/selection.log 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/validate_component.py --data-source alpaca --stage mde --arms logs/v180/selection.json --wr-statistic pooled --train-effect-from-arms --mde-method paired --title "v180 Turtle Soup structural -- stage 0 MDE" --window 2018-06-01..2022-12-31 > docs/superpowers/results/v180/mde.txt 2>&1
 ```
 
 The selection stage is the full cached universe over fold-train, so the producer is a long run. It writes a percent to `logs/measure_arms.<id>.progress`; the runner polls that file, not the log. Ask the runner to return: both exit codes, every line of `mde.txt`, and whether `logs/v180/selection.turtle_soup.json` was written.
@@ -511,11 +525,13 @@ No run. One frozen cell (`TURTLE_SOUP_RESEARCH_MODE=structural`), no grid. `plat
 
 - [ ] **Step 2: Run stage 2 through `backtest-runner`**
 
+Run the freeze check ("How the funnel is run") first. Any output stops the task.
+
 Invoke the `backtest-gate` skill and check both commands against the frozen Stage 2 bullet of `$PREREG`, character for character. Then dispatch `backtest-runner` with, in order, from `$R`:
 
 ```bash
-python scripts/backtest/measure_arms.py --stage walkforward --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/walkforward.json --data-source alpaca > logs/v180/walkforward.log 2>&1
-python scripts/backtest/validate_component.py --stage walkforward --arms logs/v180/walkforward.json --wr-statistic pooled --title "v180 Turtle Soup structural -- stage 2 walk-forward" --window 2021-01-01..2023-12-31 --out-json docs/superpowers/results/v180/walkforward.json > logs/v180/walkforward-gate.txt 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/measure_arms.py --stage walkforward --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/walkforward.json --data-source alpaca > logs/v180/walkforward.log 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/validate_component.py --data-source alpaca --stage walkforward --arms logs/v180/walkforward.json --wr-statistic pooled --title "v180 Turtle Soup structural -- stage 2 walk-forward" --window 2021-01-01..2023-12-31 --out-json docs/superpowers/results/v180/walkforward.json > logs/v180/walkforward-gate.txt 2>&1
 ```
 
 Ask the runner to return both exit codes, every line of `logs/v180/walkforward-gate.txt` (the verdict line and three JSON fold rows), and whether `logs/v180/walkforward.turtle_soup.json` was written.
@@ -613,20 +629,24 @@ On **Go**, record the answer verbatim for Step 6 and continue.
 
 - [ ] **Step 2: Produce the VALIDATION arms (the shot) through `backtest-runner`**
 
+Run the freeze check ("How the funnel is run") first. Any output stops the task.
+
 Invoke the `backtest-gate` skill and check the command against the frozen Stage 3 bullet of `$PREREG`, character for character. Dispatch `backtest-runner` with this one command from `$R`:
 
 ```bash
-python scripts/backtest/measure_arms.py --stage validation --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/validation.json --data-source alpaca > logs/v180/validation.log 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/measure_arms.py --stage validation --knob TURTLE_SOUP_RESEARCH_MODE=structural --preregistration docs/superpowers/results/2026-10-21-v180-turtle-soup-preregistration.md --out logs/v180/validation.json --data-source alpaca > logs/v180/validation.log 2>&1
 ```
 
 Ask it to return the exit code, any `refused:` line, and whether `logs/v180/validation.json` and `logs/v180/validation.turtle_soup.json` exist. The arm file is the look: from here on it is never produced again, whatever any later step shows. If the producer crashed and wrote no arm file, the runner may re-run this same command once; report that it did.
 
 - [ ] **Step 3: The A2 permutation through `backtest-runner`**
 
+Run the freeze check ("How the funnel is run") first. Any output stops the task.
+
 This replays Turtle Soup 200 times over the validation universe, so it is long; it prints `shift replay <done>/<total> (<pct>%)` on stderr. Dispatch `backtest-runner` with:
 
 ```bash
-python scripts/backtest/permutation_test.py --arms logs/v180/validation.json --shift-replay --wr-statistic pooled --n 200 --seed 42 --data-source alpaca --out-json docs/superpowers/results/v180/permutation.json > logs/v180/permutation.log 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/permutation_test.py --arms logs/v180/validation.json --shift-replay --wr-statistic pooled --n 200 --seed 42 --data-source alpaca --out-json docs/superpowers/results/v180/permutation.json > logs/v180/permutation.log 2>&1
 ```
 
 Ask it to return the exit code, any `refused:` line, and `observed`, `p_value`, `n`, `n_valid` and `verdict` from `permutation.json`.
@@ -642,8 +662,8 @@ Ask it to return the exit code, any `refused:` line, and `observed`, `p_value`, 
 Dispatch `backtest-runner` with, in order (each reads only the stamped arms, so each is short):
 
 ```bash
-python scripts/backtest/validate_component.py --stage validation --arms logs/v180/validation.json --wr-statistic pooled --permutation-p <p_value> --title "v180 Turtle Soup structural -- stage 3 VALIDATION" --window 2024-01-01..2025-12-31 --out-md docs/superpowers/results/v180/validation-gate.md --out-json docs/superpowers/results/v180/validation-gate.json > logs/v180/validation-gate.txt 2>&1
-python scripts/backtest/turtle_soup_report.py --arms logs/v180/validation.json --out-json docs/superpowers/results/v180/badge.json > logs/v180/badge.txt 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/validate_component.py --data-source alpaca --stage validation --arms logs/v180/validation.json --wr-statistic pooled --permutation-p <p_value> --title "v180 Turtle Soup structural -- stage 3 VALIDATION" --window 2024-01-01..2025-12-31 --out-md docs/superpowers/results/v180/validation-gate.md --out-json docs/superpowers/results/v180/validation-gate.json > logs/v180/validation-gate.txt 2>&1
+MEASURE_ARMS_UNIVERSE=cache python scripts/backtest/turtle_soup_report.py --arms logs/v180/validation.json --out-json docs/superpowers/results/v180/badge.json > logs/v180/badge.txt 2>&1
 ```
 
 Write `<p_value>` with every digit `permutation.json` holds. Drop the whole `--permutation-p <p_value>` pair when Step 3 said so.
