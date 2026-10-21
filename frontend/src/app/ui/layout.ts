@@ -406,6 +406,9 @@ export class ControlRow {
  * `[drawer-header]` content goes beside the heading (v179); everything else
  * goes to the body.
  */
+/** How far (px) a phone sheet must be pulled down before letting go closes it. */
+const SWIPE_CLOSE_PX = 80;
+
 @Component({
   selector: 'sb-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -414,7 +417,9 @@ export class ControlRow {
     <!-- (cancel) is Escape: it is prevented and routed through requestClose()
          so the exit plays; the native close then fires (close) once. -->
     <dialog #dialog class="drawer elev-overlay" [class.sb-drawer-in]="!closing()"
-            (close)="onClosed()" (cancel)="onCancel($event)" (click)="onDialogClick($event)">
+            (close)="onClosed()" (cancel)="onCancel($event)" (click)="onDialogClick($event)"
+            (touchstart)="onTouchStart($event)" (touchmove)="onTouchMove($event)"
+            (touchend)="onTouchEnd()" (touchcancel)="onTouchEnd()">
       <!-- Only present while open, so sbFocusTrap's constructor/ngOnDestroy
            pair runs on exactly open and close -- see focus-trap.ts. -->
       @if (open()) {
@@ -503,8 +508,11 @@ export class Drawer {
   protected readonly closing = signal(false);
 
   private readonly motion = inject(MotionService);
+  private readonly viewport = inject(ViewportService);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private cancelExit: () => void = () => undefined;
+  /** A downward drag on the phone sheet: where the finger began and how far it has pulled. */
+  private swipe: { y: number; dy: number } | null = null;
 
   constructor() {
     effect(() => {
@@ -528,6 +536,46 @@ export class Drawer {
     if (!inside) this.requestClose();
   }
 
+  /** Phone sheet only: a drag down from the sheet's top, or from its body while
+   *  that is scrolled to the top, pulls the sheet with the finger and closes it
+   *  past SWIPE_CLOSE_PX. Reading a long body by scrolling never closes it. */
+  protected onTouchStart(event: TouchEvent): void {
+    this.swipe = null;
+    if (!this.viewport.isPhone() || event.touches.length !== 1 || this.closing()) return;
+    if (this.bodyScrolled(event.target)) return;
+    this.swipe = { y: event.touches[0].clientY, dy: 0 };
+  }
+
+  protected onTouchMove(event: TouchEvent): void {
+    if (!this.swipe) return;
+    if (this.bodyScrolled(event.target)) {
+      this.swipe = null;
+      this.slide(0);
+      return;
+    }
+    this.swipe.dy = Math.max(0, event.touches[0].clientY - this.swipe.y);
+    this.slide(this.swipe.dy);
+  }
+
+  protected onTouchEnd(): void {
+    const pulled = this.swipe?.dy ?? 0;
+    this.swipe = null;
+    if (pulled > SWIPE_CLOSE_PX) this.requestClose();
+    else this.slide(0);
+  }
+
+  private bodyScrolled(target: EventTarget | null): boolean {
+    const body = this.dialog().nativeElement.querySelector<HTMLElement>('.body');
+    return body !== null && target instanceof Node && body.contains(target) && body.scrollTop > 0;
+  }
+
+  /** Follows the finger without a transition; releasing short of the threshold eases back. */
+  private slide(px: number): void {
+    const style = this.dialog().nativeElement.style;
+    style.transition = px > 0 ? 'none' : 'transform var(--transition)';
+    style.transform = px > 0 ? `translateY(${px}px)` : '';
+  }
+
   /** The × button, Escape and the backdrop: one path, exit first. */
   protected requestClose(): void {
     const element = this.dialog().nativeElement;
@@ -548,6 +596,7 @@ export class Drawer {
   }
 
   private stopExit(): void {
+    this.slide(0);
     this.cancelExit();
     this.cancelExit = () => undefined;
     this.closing.set(false);

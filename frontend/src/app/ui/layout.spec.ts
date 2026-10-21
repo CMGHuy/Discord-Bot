@@ -8,6 +8,7 @@ import { ComponentFixture } from '@angular/core/testing';
 
 import { Viewport } from './breakpoints';
 import { Drawer, Panel, Tab, TabBar } from './layout';
+import { ViewportService } from './breakpoints';
 import { installDialogPolyfill } from '../testing/dialog-polyfill';
 import { provideMotion } from './motion/motion.service';
 
@@ -474,5 +475,55 @@ describe('sb-drawer header slot (v179 §3.2)', () => {
     expect(header).not.toContain('align-items: center');
     expect(header).not.toContain('justify-content: space-between');
     expect(drawerRule('.close')).toContain('margin-left: auto');
+  });
+});
+
+describe('sb-drawer swipe down to close (phone sheet)', () => {
+  function setup(phone: boolean) {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(), provideMotion('off'),
+        { provide: ViewportService, useValue: { isPhone: () => phone } },
+      ],
+    });
+    const fixture = TestBed.createComponent(DrawerSlotHost);
+    fixture.detectChanges();
+    const dialog = (fixture.nativeElement as HTMLElement).querySelector('dialog')!;
+    return { dialog, body: dialog.querySelector<HTMLElement>('.body')! };
+  }
+  const touch = (type: string, y: number, target: Element) => {
+    const event = new Event(type, { bubbles: true });
+    Object.defineProperty(event, 'touches', { value: type === 'touchend' ? [] : [{ clientY: y }] });
+    target.dispatchEvent(event);
+  };
+
+  it('closes when the sheet is pulled down past the threshold', () => {
+    const { dialog, body } = setup(true);
+    touch('touchstart', 100, body); touch('touchmove', 140, body);
+    expect(dialog.style.transform).toBe('translateY(40px)');
+    touch('touchmove', 220, body); touch('touchend', 220, body);
+    expect(dialog.open).toBe(false);
+  });
+
+  it('eases back and stays open on a short pull', () => {
+    const { dialog, body } = setup(true);
+    touch('touchstart', 100, body); touch('touchmove', 130, body); touch('touchend', 130, body);
+    expect(dialog.open).toBe(true);
+    expect(dialog.style.transform).toBe('');
+  });
+
+  it('never closes while the body is scrolled down: that drag is reading', () => {
+    const { dialog, body } = setup(true);
+    body.scrollTop = 50;
+    touch('touchstart', 100, body); touch('touchmove', 300, body); touch('touchend', 300, body);
+    expect(dialog.open).toBe(true);
+  });
+
+  it('does nothing off the phone (tablet and desktop drawers slide from the right)', () => {
+    const { dialog, body } = setup(false);
+    touch('touchstart', 100, body); touch('touchmove', 300, body); touch('touchend', 300, body);
+    expect(dialog.open).toBe(true);
+    expect(dialog.style.transform).toBe('');
   });
 });
