@@ -1359,7 +1359,7 @@ python scripts/dev/testrun.py file tests/backtest_scripts/test_calibration_long_
 
 Expected: all green; the complexity gate reports no regression (`count_ticker`, `render_counts` and `_screen_flags` each stay well under 15). The long golden proves the `ticker_context` / `_null_pool` moves changed nothing.
 
-Then one smoke on the real cache, outcome-blind and allowed by the hook (`--count-only` writes nothing): `python scripts/backtest/screen_idea.py --idea range_breakdown_stop --count-only | tail -25` — Expected: exit 0, the count table, the gate line and the check 5 block. Do **not** record or act on the numbers here; V182-18 runs both counts for the note once every code change is committed.
+Then one smoke on the real cache, outcome-blind and allowed by the hook (`--count-only` writes nothing): `python scripts/backtest/screen_idea.py --idea range_breakdown_stop --count-only --cache-dir E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache_ext | tail -25` (the cache exists only in the main tree) — Expected: exit 0, the count table, the gate line and the check 5 block. Do **not** record or act on the numbers here; V182-18 runs both counts for the note once every code change is committed.
 
 - [ ] **Step 9: Commit**
 
