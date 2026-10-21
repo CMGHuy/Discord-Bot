@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from swingbot import config
-from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS
+from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS, TURTLE_SOUP
 from swingbot.core.risk_limits import planned_loss_pct
 from .stop_scope import plan_stop_ceiling
 from .plan_types import TradePlanV2
@@ -763,6 +763,14 @@ def _is_compression(plan: TradePlanV2) -> bool:
     return plan.strategy == COMPRESSION_SHORT
 
 
+#: v180: strategies whose fill session is session 1 of their hold cap (live: the tenth session closes).
+SESSION_ONE_HOLD_CAP = frozenset({COMPRESSION_SHORT, TURTLE_SOUP})
+
+
+def _counts_fill_session(plan) -> bool:
+    return getattr(plan, "strategy", None) in SESSION_ONE_HOLD_CAP
+
+
 def _compression_fill(df, j: int, entry_price: float, plan: TradePlanV2,
                       scale_out: bool, max_holding_days: int) -> ExitResult:
     """Fill policy for the compression short, mirroring PlanManager._step_pending:
@@ -815,14 +823,26 @@ def _limit_entry_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
 
 def _hold_cap_bars(plan: TradePlanV2, max_holding_days: int) -> int:
     """The walkers' scan length after the plan's hold cap. They scan
-    entry_index+1 .. entry_index+N; the compression short's fill session is
-    session 1, so its cap of N sessions ends at entry_index + N - 1 (live: the
-    tenth session). Every other strategy keeps entry_index + N."""
+    entry_index+1 .. entry_index+N; the compression short's and Turtle Soup's
+    fill session is session 1 (SESSION_ONE_HOLD_CAP), so their cap of N
+    sessions ends at entry_index + N - 1 (live: the tenth session). Every
+    other strategy keeps entry_index + N."""
     hold_cap = getattr(plan, "hold_cap_bars", None)
     if hold_cap is None:
         return max_holding_days
-    cap = int(hold_cap) - 1 if _is_compression(plan) else int(hold_cap)
+    cap = int(hold_cap) - 1 if _counts_fill_session(plan) else int(hold_cap)
     return min(max_holding_days, cap)
+
+
+def _market_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
+                 max_holding_days: int) -> ExitResult:
+    """A market entry: v180 next-open plans fill at Open[t+1] (next_open_entry); every other
+    market plan fills at the signal bar's close, exactly as before."""
+    from . import next_open_entry     # next_open_entry imports this module
+    if next_open_entry.uses_next_open_fill(plan):
+        return next_open_entry.next_open_exit(df, signal_index, plan, max_holding_days)
+    entry_price = float(df["Close"].values[signal_index])
+    return _walk_for(plan, scale_out)(df, signal_index, entry_price, plan, max_holding_days)
 
 
 def simulate_exit(
@@ -841,7 +861,9 @@ def simulate_exit(
     ``exit_sim_v2.simulate_exit_v2`` (next-open market entries, gap-through
     fills, costs booked in R; v136 spec section 2).
 
-    ``market`` entries fill immediately at the signal bar's close.
+    ``market`` entries fill immediately at the signal bar's close, except a
+    v180 next-open strategy (``next_open_entry.NEXT_OPEN_STRATEGIES``), which
+    fills at the next bar's open.
     ``stop_entry`` entries scan forward from signal_index + 1 through the
     plan's expiry window looking for a trigger touch (Task 18's
     ``trigger_hit``/``fill_price``). If the plan invalidates (closes through
@@ -878,9 +900,7 @@ def simulate_exit(
         return _limit_entry_exit(df, signal_index, plan, scale_out, max_holding_days)
 
     if plan.entry_type == "market":
-        entry_index = signal_index
-        entry_price = float(df["Close"].values[signal_index])
-        return _walk_for(plan, scale_out)(df, entry_index, entry_price, plan, max_holding_days)
+        return _market_exit(df, signal_index, plan, scale_out, max_holding_days)
 
     # stop_entry: scan signal_index+1 .. signal_index+plan.expiry_bars for a
     # trigger touch, watching for pre-fill invalidation along the way. df rows
