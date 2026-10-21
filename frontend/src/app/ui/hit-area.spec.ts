@@ -62,6 +62,7 @@ describe('v179: controls that grow to the hit size', () => {
   const GROWN: [file: string, selector: string, declaration: string][] = [
     ['src/app/shell/shell.css', '.nav a', 'min-height: var(--control-h)'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-height: var(--control-h)'],
+    ['src/app/ui/filter-bar.ts', '.chip', 'min-width: var(--hit-min)'],
     ['src/app/ui/column-picker.ts', '.trigger', 'min-height: var(--control-h)'],
     ['src/app/ui/column-picker.ts', 'label', 'min-height: var(--hit-min)'],
     ['src/app/ui/column-picker.ts', '.reset', 'min-height: var(--hit-min)'],

@@ -107,6 +107,8 @@ export class FilterBar {
       gap: var(--space-6);
       flex: 0 0 auto;
       min-height: var(--control-h);
+      min-width: var(--hit-min);
+      justify-content: center;
       padding: 0 var(--space-10);
       background: transparent;
       border: 1px solid var(--border);

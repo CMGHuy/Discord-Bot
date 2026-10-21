@@ -95,6 +95,13 @@ describe('v80 D4: the button restyle', () => {
 describe('button touch floor', () => {
   const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
 
+  it.each([':host(.ghost)', ':host(.chip)', ':host(.link)'])(
+    '%s keeps a one-glyph label at the --hit-min width (v179 layout audit)',
+    (selector) => {
+      expect(rule(selector)).toContain('min-width: var(--hit-min)');
+    },
+  );
+
   it.each([
     'src/app/ui/button.ts',
     'src/app/ui/chip.ts',
