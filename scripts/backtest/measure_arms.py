@@ -2,6 +2,7 @@
 """Produce stamped baseline/component replay arms for the v100 funnel.
 
 v147: `--record-blocked PATH [--from --to]` writes TRAIN compression gate rows instead (see `record_blocked_main`).
+v180: --knob TURTLE_SOUP_RESEARCH_MODE=structural also writes <out stem>.turtle_soup.json (see turtle_soup_sidecar).
 """
 from __future__ import annotations
 
@@ -226,19 +227,71 @@ def compression_sidecar(blob, delta, universe, spec) -> dict | None:
                              component_rows=blob.get("component"))
 
 
-def _write_sidecar(out: Path, sidecar) -> None:
+TURTLE_SOUP_KNOB = "TURTLE_SOUP_RESEARCH_MODE"
+
+
+def _sp500_intervals() -> dict:
+    """The PIT S&P 500 membership spans; {} when the file is missing (the universe block then says None)."""
+    from swingbot.core.marketdata import universe as universe_mod
+    from swingbot.core.marketdata.pit_membership import load_intervals
+    return load_intervals(str(Path(universe_mod.UNIVERSE_DIR) / "sp500_membership.csv"))
+
+
+def _component_and_spans(blob, spec) -> tuple[list, list]:
+    """The stamped component rows and the signal spans they cover: the whole window, or each fold."""
+    if "component" in blob:
+        return blob["component"], [tuple(spec.signal_window)]
+    component = [row for fold in blob.get(spec.fold_key) or [] for row in fold["component"]]
+    return component, [(start, end) for _, start, end in spec.folds]
+
+
+def _matches_component_rows(rows, blob, spec) -> bool:
+    """The sidecar's trades are exactly the stamped component's Turtle Soup rows, by (ticker, signal date)."""
+    from swingbot.core.market.strategy_types import TURTLE_SOUP
+    component, spans = _component_and_spans(blob, spec)
+    stamped = sorted((r["ticker"], r["entry_date"]) for r in component if r["strategy"] == TURTLE_SOUP)
+    traded = sorted((r["ticker"], r["signal_date"]) for r in rows
+                    if r["status"] == "trade" and any(s <= r["signal_date"] <= e for s, e in spans))
+    return stamped == traded
+
+
+def turtle_soup_sidecar(blob, delta, universe, spec) -> dict | None:
+    """v180's descriptive Turtle Soup diagnostics, replayed through a Turtle-Soup-only StrategyEngine under
+    the same delta. The stamped arm rows are never touched. None without the knob."""
+    if delta.get(TURTLE_SOUP_KNOB) in (None, "off"):
+        return None
+    from swingbot import config
+    from swingbot.core.backtesting.arms import turtle_soup_report
+    from swingbot.scan_params import ScanParams
+    frames = {ticker: frame for ticker in universe if (frame := load_frame(ticker)) is not None}
+    spy = load_frame(config.MARKET_REGIME_TICKER)
+    with apply_knobs(delta):
+        measured = turtle_soup_report.measure(frames, spec.signal_window, ScanParams.from_config(),
+                                              spy=spy, intervals=_sp500_intervals())
+    return {**measured, "knob_delta": dict(delta), "universe_count": len(universe),
+            "matches_component_rows": _matches_component_rows(measured["rows"], blob, spec)}
+
+
+#: (file suffix, builder name) per sidecar; looked up by name so a test can monkeypatch the builder.
+_SIDECARS = (("diagnostics", "compression_sidecar"), ("turtle_soup", "turtle_soup_sidecar"))
+
+
+def _write_sidecar(out: Path, sidecar, suffix: str = "diagnostics") -> None:
     if sidecar is not None:
-        out.with_name(f"{out.stem}.diagnostics.json").write_text(json.dumps(sidecar), encoding="utf-8")
+        out.with_name(f"{out.stem}.{suffix}.json").write_text(json.dumps(sidecar), encoding="utf-8")
 
 
 def _write_sidecar_or_warn(out: Path, blob, delta, universe, spec) -> None:
-    """The sidecar is diagnostics only: a failure here warns and never pre-empts the zero-diff refusal
+    """Each sidecar is diagnostics only: a failure here warns and never pre-empts the zero-diff refusal
     (or turns a spent one-shot stage into a traceback that invites a re-run)."""
-    try:
-        _write_sidecar(out, compression_sidecar(blob, delta, universe, spec))
-    except Exception as exc:    # noqa: BLE001
-        print(f"warning: diagnostics sidecar not written ({type(exc).__name__}: {exc}); the arm file is intact.",
-              file=sys.stderr)
+    for suffix, builder in _SIDECARS:
+        try:
+            sidecar = globals()[builder](blob, delta, universe, spec)
+            if sidecar is not None:
+                _write_sidecar(out, sidecar, suffix)
+        except Exception as exc:    # noqa: BLE001
+            print(f"warning: {suffix} sidecar not written ({type(exc).__name__}: {exc}); the arm file is intact.",
+                  file=sys.stderr)
 
 
 def main(argv=None) -> int:
