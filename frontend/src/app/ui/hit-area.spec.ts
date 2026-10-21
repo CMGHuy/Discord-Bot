@@ -100,7 +100,7 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/workspaces/versions/versions.ts', /class="segment sb-hit"/],
     // SVG shapes draw no ::after: the waterfall's transparent 44px row rect and the dot plot's r=22 circle are the hit area.
     ['src/app/ui/waterfall.ts', /<rect class="hit"[^>]*height="44" tabindex="0"/],
-    ['src/app/ui/dot-plot.ts', /<circle class="hit"[^>]*r="22" tabindex="0"/],
+    ['src/app/ui/dot-plot.ts', /<circle class="hit"[^>]*r="26" tabindex="0"/],
     ['src/app/shell/shell.html', /<a\s+class="sb-hit"\s+\[routerLink\]="entry\.path"/],
   ];
 

@@ -247,6 +247,7 @@ async function resolveIds(page, base) {
 async function withContext(width, fn) {
   const context = await chromium.launchPersistentContext(PROFILE, {
     headless: true, viewport: { width, height: 900 }, deviceScaleFactor: 1,
+    serviceWorkers: 'block', // the app's ngsw would serve the profile's cached build, not the one under test
     hasTouch: width <= TOUCH_MAX_WIDTH, isMobile: width < 640,
   });
   try {
