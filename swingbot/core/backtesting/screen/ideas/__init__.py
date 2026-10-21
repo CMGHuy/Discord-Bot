@@ -25,7 +25,8 @@ import pandas as pd
 #: Batch order of the spec, and the run order of V140-15..18; later ideas
 #: append in the order they were frozen.
 IDEA_MODULES = ("high52w", "uptrend_pullback", "gap_volume", "turn_of_month",
-                "turtle_soup", "quiet_pullback", "bond_spike_rebound", "dollar_drop")
+                "turtle_soup", "quiet_pullback", "bond_spike_rebound", "dollar_drop",
+                "sweep_reclaim_bos")
 
 #: The race shapes an idea may declare (v163 spec § One shape per idea).
 RACE_SHAPES = ("fixed", "trail")
