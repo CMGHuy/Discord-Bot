@@ -24,8 +24,8 @@ def _days(*rs, start=date(2026, 1, 5)):
 
 
 def test_frozen_constants():
-    assert (vb.MIN_DAYS, vb.MIN_WEEKS, vb.HORIZONS, vb.WINDOW) == (100, 20, (20, 50), 50)
-    assert vb.WINDOW == vb.HORIZONS[-1]
+    assert (vb.MIN_DAYS, vb.MIN_WEEKS, vb.BAND_HORIZONS, vb.WINDOW) == (100, 20, (20, 50), 50)
+    assert vb.WINDOW == vb.BAND_HORIZONS[-1]
     assert (vb.PATHS, vb.SEED, vb.SCRATCH_R) == (10_000, 42, 0.05)
     assert (vb.ROUGH_PCT, vb.OUTSIDE_PCT) == (80, 95)
     assert (vb.OUTER_RESAMPLES, vb.OUTER_PATHS, vb.CI_PCT) == (200, 1_000, (10, 90))

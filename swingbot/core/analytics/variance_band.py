@@ -33,8 +33,8 @@ from swingbot.core.market.session import US_MARKET_TZ
 # Frozen constants (v175 Global Constraints): changing one is a new spec.
 MIN_DAYS = 100
 MIN_WEEKS = 20
-HORIZONS = (20, 50)
-WINDOW = 50                       # current-drawdown window, == HORIZONS[-1]
+BAND_HORIZONS = (20, 50)
+WINDOW = 50                       # current-drawdown window, == BAND_HORIZONS[-1]
 PATHS = 10_000
 SEED = stats.WEEK_BOOTSTRAP_SEED
 SCRATCH_R = 0.05
@@ -413,7 +413,7 @@ def variance_band(closed: list[dict], *, paths: int = PATHS,
     days = close_days(pool)
     blocks = week_blocks(days)
     sizes = {"paths": paths, "outer": outer, "outer_paths": outer_paths}
-    horizons = [_horizon_entry(blocks, h, len(days), sizes) for h in HORIZONS]
+    horizons = [_horizon_entry(blocks, h, len(days), sizes) for h in BAND_HORIZONS]
     current = current_state(days, horizons[-1])
     band: Band = {"status": "ok", "scope": "whole_book", "asof": days[-1].day.isoformat(),
                   "days": len(days), "weeks": len(blocks), "pool": pool_name,
