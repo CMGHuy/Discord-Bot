@@ -15,7 +15,8 @@ produces no candle.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import re
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Sequence
 
@@ -61,6 +62,28 @@ def bucket_label(start: datetime, tf: str) -> str:
     if tf in _INTRADAY:
         return start.isoformat(timespec="seconds")
     return start.date().isoformat()
+
+
+_DATE_LABEL = re.compile(r"\d{4}-\d{2}-\d{2}")
+_TIME_LABEL = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}")
+
+
+def parse_bucket_label(label: str, tf: str) -> datetime:
+    """The inverse of `bucket_label` (v181 § 6): the aware New York bucket
+    start a candle's `t` names. Accepts exactly the shape `bucket_label`
+    emits for `tf` -- an ISO date for 1D/1W, read as that New York day's
+    midnight; an ISO datetime with offset for 1H/4H, whose offset keeps the
+    two fall-back 01:00 hours apart. Anything else is a ValueError."""
+    if tf not in _FLOORS:
+        raise ValueError(f"tf {tf!r} is not one of {TIMEFRAMES}")
+    if tf in _INTRADAY:
+        if not _TIME_LABEL.fullmatch(label):
+            raise ValueError(f"{label!r} is not a {tf} candle time")
+        return datetime.fromisoformat(label).astimezone(US_MARKET_TZ)
+    if not _DATE_LABEL.fullmatch(label):
+        raise ValueError(f"{label!r} is not a {tf} candle date")
+    day = date.fromisoformat(label)
+    return datetime(day.year, day.month, day.day, tzinfo=US_MARKET_TZ)
 
 
 def _money(value: Decimal) -> float:
