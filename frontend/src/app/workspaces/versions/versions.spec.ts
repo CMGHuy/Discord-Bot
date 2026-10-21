@@ -189,6 +189,19 @@ describe('Versions', () => {
     expect(host.querySelector('.tooltip')).toBeNull();
     expect(host.querySelectorAll('.dim')).toHaveLength(0);
   });
+
+  it('puts "Running now" in the chip row, on the chips\' text baseline (v179 §3.4)', async () => {
+    const fixture = seed(PAIRED);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const row = (fixture.nativeElement as HTMLElement).querySelector('sb-control-row.headline .row')!;
+    expect(row.firstElementChild?.classList).toContain('label');
+    expect(row.firstElementChild?.textContent?.trim()).toBe('Running now');
+    expect(row.querySelectorAll('button.chip').length).toBeGreaterThan(0);
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/versions/versions.ts'), 'utf8');
+    expect(src).not.toMatch(/<div class="headline">/);
+    expect(src).not.toMatch(/\.headline \{[^}]*display: flex/);
+  });
 });
 
 describe('Versions states', () => {
