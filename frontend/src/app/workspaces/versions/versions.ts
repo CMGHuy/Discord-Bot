@@ -106,7 +106,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                      title="This component did not exist yet"></div>
               }
               @for (segment of lane.segments; track segment.start) {
-                <button sb-button variant="segment" type="button" class="segment" [class.current]="segment.current"
+                <button sb-button variant="segment" type="button" class="segment sb-hit" [class.current]="segment.current"
                         [style.left.%]="segment.start * 100"
                         [style.width.%]="segment.width * 100"
                         [style.background]="segment.current ? null : versionTint(segment.version)"
