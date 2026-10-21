@@ -95,9 +95,11 @@ hollow approx candles behave as today across pages.
 - On the mark-to-market basis the equity change includes unrealised drift,
   while the "Realised in range" card counts closes only. The two differ by
   design and are labelled differently ("Equity change" vs "Realised").
-- A caption under the readout and on the panel: **"Paper trades · before
-  costs and tax"**. Every range figure is a simulated, pre-friction,
-  pre-tax number, and a green card must not read as money banked.
+- The existing `ACCOUNT_LABEL` caption ("Paper account · before tax and
+  costs", already under the chart) is repeated directly under the readout
+  and on the KPI grid. Every range figure is a simulated, pre-friction,
+  pre-tax number, and a green card must not read as money banked. Reusing
+  the constant keeps one wording.
 
 ### 5. Profit/loss colour
 
@@ -127,7 +129,12 @@ past window is never read as that window's exposure.
 - **KPI cards**: the card background takes `--pos-soft` / `--neg-soft` with
   its figure's colour; neutral cards stay plain. The phone summary rows take
   the same tint.
-- **Stronger candle palette**: new, more saturated palette primitives
+- **Stronger candle palette** (ripples beyond the CSS: `ui/tokens.spec.ts`
+  pins the current hex and soft values; `swingbot/core/charts/chart_style.py`
+  `THEME` mirrors them for the server-rendered Discord charts and bumps
+  `STYLE_VERSION`; `tests/charts/resolved_tokens.json` is regenerated with
+  `dump_tokens.py`; the gates are `ui/contrast.spec.ts` and
+  `ui/chart-palette.spec.ts`). New, more saturated palette primitives
   (TradingView teal/red direction) wired through `--pos` / `--neg`, so all
   colour stays on two tokens and never disagrees. Every pairing (light, dark,
   figure on its soft tint) must pass `tokens.css`'s existing contrast and ΔE
@@ -180,16 +187,24 @@ rather than changing Today's long-standing meaning.
   branch for `range`. A test asserts each path honours the window.
 - **Extracted, not inlined:** range parsing and validation go into a helper
   (`_parse_range_window`), trade selection into `_scope_trades(window)`.
-  The plan records `dashboard()`'s complexity before and after; it must not
-  rise and must stay < 15.
+  `dashboard()` is a legacy function already at complexity 21 (baselined in
+  `scripts/dev/complexity_baseline.json`); it must not rise, and the
+  extraction is expected to lower it. Every new helper is < 15. The plan
+  records the figure before and after and shrinks the baseline with
+  `--update`.
 - Closes count when `from ≤ closed_at < to`, comparing aware instants;
   stored `closed_at` values are normalised to UTC first, as
   `is_today_berlin` already does.
 - Win rate, expectancy, payoff, realised P&L and lifecycle counts use those
   closes. Point-in-time figures (balance, Open P&L, open trades, risk used)
   stay "now". The Realised card label becomes "Realised in range".
-- The Closed tab's query takes the same window. This is Part 2 only; Part 1
-  does not touch `dashboard.py`.
+- **The Closed tab** does not read `/dashboard`. It queries `/trades`
+  through `TradesStore.setQuery` with a boolean `today` filter (the row's
+  `today` comes from `_in_today_scope`, `trades.py:189`). `/trades` gains
+  `closed_from` / `closed_to` (aware ISO, same `[from, to)` rule and
+  validation as `mode=range`), and the Closed tab sends them in Range and
+  the 5D…1Y presets in place of `today`. This is Part 2 only; Part 1 touches
+  neither `dashboard.py` nor `trades.py`.
 
 **Scope → request mapping (client):** 1D → `mode=today`; All → `mode=all`;
 5D / 1M / 3M / 6M / YTD / 1Y / Range → `mode=range` with New York
@@ -267,7 +282,10 @@ State ownership:
     gives figures identical to `mode=today`. A window covering all history
     gives figures identical to `mode=all`.
   - The Closed tab filter agrees with the KPIs.
-  - `dashboard()`'s complexity is recorded before and after, and stays < 15.
+  - `dashboard()`'s complexity is recorded before and after; it does not
+    rise above its baseline of 21.
+- `/trades?closed_from=&closed_to=`: the same boundary and 400 cases, and
+  agreement with `/dashboard?mode=range` over one window.
 
 **Frontend (spec files)**, as plain unit tests of the §7 functions where
 possible:
