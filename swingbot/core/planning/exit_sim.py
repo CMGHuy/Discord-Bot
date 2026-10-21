@@ -601,20 +601,6 @@ def _giveback_extreme(ctx, j: int, extreme: float | None) -> float:
     return max(extreme, price) if ctx.is_bull else min(extreme, price)
 
 
-def _giveback_ratchet(ctx, extreme: float, runner_stop: float) -> float:
-    """v176: tighten the runner stop for the NEXT bar to the give-back level
-    off ``extreme``. Never loosens (tighter_stop); a no-op with the flag off."""
-    return tighter_stop(runner_stop, giveback_level(extreme, ctx.plan.direction), ctx.is_bull)
-
-
-def _stop_source(ctx, runner_stop: float, floor: float, gb_extreme: float | None) -> str:
-    """Which term set the stop that just fired. The give-back level is
-    recomputed from the SAME extreme that set ``runner_stop`` (the extreme is
-    only extended after the bar test), so the float equality is exact."""
-    return runner_stop_source(runner_stop, floor,
-                              giveback_level(gb_extreme, ctx.plan.direction))
-
-
 def _giveback_term(ctx, j: int, extreme: float | None, atr_series) -> float | None:
     """v178: the give-back level for bar j + 1, from the extreme through bar j
     and ATR(14) through bar j -- the index _chandelier_ratchet reads, so the

@@ -24,11 +24,11 @@ from swingbot.core.backtesting.instrument import costs, fills
 from swingbot.core.backtesting.instrument.contract import CostModel, FillModel, InstrumentSpec
 from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.risk_limits import planned_loss_pct
-from .exit_sim import (ExitResult, _chandelier_ratchet, _giveback_extreme, _giveback_ratchet,
-                       _hold_cap_bars, _is_compression, _limit_unfilled, _no_trade,
-                       _not_triggered, _runner_timeout, _stop_source, _structure_update,
+from .exit_sim import (ExitResult, _carried_level, _chandelier_ratchet, _giveback_extreme,
+                       _giveback_term, _hold_cap_bars, _is_compression, _limit_unfilled,
+                       _no_trade, _not_triggered, _runner_timeout, _structure_update,
                        _tenth_session_reached, acceptance_exit, runner_floor,
-                       runner_structure_frame)
+                       runner_stop_source, runner_structure_frame, tighter_stop)
 from .lifecycle import limit_cancelled, pending_expired, pending_invalidated
 from .plan_types import TradePlanV2
 from .stop_scope import plan_stop_ceiling
@@ -176,15 +176,16 @@ def _check_indicator_frame(df, indicator_df) -> None:
         raise ValueError("indicator_df must have the same index and length as df")
 
 
-def _runner_bar_v2(ctx, j: int, runner_stop: float, floor: float, gb_extreme=None):
+def _runner_bar_v2(ctx, j: int, runner_stop: float, floor: float, gb_level=None):
     """Runner stop first, then TP2, each filled through fills.exit_fill:
-    (price, index, reason, kind, stop_source) or None; stop_source is None for TP2."""
+    (price, index, reason, kind, stop_source) or None; stop_source is None for TP2.
+    v178: ``gb_level`` is the carried give-back level that set ``runner_stop``."""
     hi, lo, op = float(ctx.high[j]), float(ctx.low[j]), float(ctx.open_[j])
     direction = ctx.plan.direction
     if fills.stop_touched(hi, lo, runner_stop, direction):
         reason = "runner_be" if runner_stop == floor else "runner_trail"
         return (fills.exit_fill(ctx.fills, "stop", runner_stop, op, direction), j, reason,
-                "stop", _stop_source(ctx, runner_stop, floor, gb_extreme))
+                "stop", runner_stop_source(runner_stop, floor, gb_level))
     tp2 = ctx.plan.tp2
     if tp2 is not None and fills.target_touched(hi, lo, tp2, direction):
         return (fills.exit_fill(ctx.fills, "target", tp2, op, direction), j, "runner_tp2",
@@ -200,7 +201,9 @@ def _runner_v2(df, ctx, tp1_index: int, indicator_df=None):
 
     v173: ATR and the structure frame are computed from `indicator_df` when
     given (same index as `df`), else from `df`; ctx, built from `df`, still
-    drives every exit check."""
+    drives every exit check.
+    v178: the give-back term follows GIVEBACK_MODE and the level that set the
+    stop is carried, as in exit_sim."""
     if acceptance_exit(ctx.plan, float(ctx.close[tp1_index])):
         return float(ctx.close[tp1_index]), tp1_index, "acceptance_exit", "close", None
     from swingbot.core.market.indicators import atr as atr_indicator
@@ -209,6 +212,7 @@ def _runner_v2(df, ctx, tp1_index: int, indicator_df=None):
     runner_stop = checked_stop = floor
     extreme_close = float(ctx.close[tp1_index])
     gb_extreme = _giveback_extreme(ctx, tp1_index, None)
+    gb_level = None
     atr_series = atr_indicator(source, 14)
     frame = runner_structure_frame(source) if config.RUNNER_STRUCTURE_EXIT != "off" else None
     stall_pending = False
@@ -216,14 +220,16 @@ def _runner_v2(df, ctx, tp1_index: int, indicator_df=None):
         if stall_pending:                            # the open comes first
             return float(ctx.open_[j]), j, "runner_progress_stall", "close", None
         checked_stop = runner_stop
-        hit = _runner_bar_v2(ctx, j, runner_stop, floor, gb_extreme)
+        hit = _runner_bar_v2(ctx, j, runner_stop, floor, gb_level)
         if hit is not None:
             return hit
         c = float(ctx.close[j])
         extreme_close = max(extreme_close, c) if ctx.is_bull else min(extreme_close, c)
         gb_extreme = _giveback_extreme(ctx, j, gb_extreme)
         runner_stop = _chandelier_ratchet(ctx, j, extreme_close, runner_stop, atr_series)
-        runner_stop = _giveback_ratchet(ctx, gb_extreme, runner_stop)
+        level = _giveback_term(ctx, j, gb_extreme, atr_series)
+        runner_stop = tighter_stop(runner_stop, level, ctx.is_bull)
+        gb_level = _carried_level(runner_stop, level, gb_level)
         if frame is not None:
             runner_stop, stall_pending = _structure_update(ctx, frame, j, runner_stop,
                                                            atr_series)
