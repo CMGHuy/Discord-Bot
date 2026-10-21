@@ -77,9 +77,23 @@ A slate row is a hypothesis. No gate moves: it never edits code, config, thresho
 
 ## Controller notes (not slate rows)
 
-These come from a hand pass over the raw export, outside the autopsy's BH family, so they are descriptive only. None is a slate row.
+These are counts from a hand pass over the same export the autopsy hashed (input manifest a74fa6ae… in `2026-10-21-book-autopsy.json`). They sit outside the BH family and are descriptive only. The raw CSV stays in the scratchpad, so no pooled-R figure is quoted here. Each item is a lead for quant-engineer to verify, never evidence for a row.
 
-- **Dropped by the positive-Δ rule:** the two dropped rows rest on the strongest era cell, open_gap_bucket=favourable (N 88, Δ -0.696 [-1.271, -0.370], q 0.001). The merge accepts only cells whose Δ lower bound is above zero, so a filter that removes a losing cell cannot pass it as written. Routing a removal filter on that cell is the partner's call.
-- **Integrity, stop enforcement:** 12 trades closed at `2026-08-04 18:55` UTC for -29.5R gross, and 6 more at `2026-08-05 15:34` for -12.9R. Some fills sat well past their stops (NBIS -6.0R, DELL -3.5R). Losses beyond -1.05R total -56.4R of excess across the book, and over half of it falls in those two minutes. This looks like a stalled price monitor catching up. It is unverified against the logs.
-- **Stacked exposure:** 388 of 776 trades share a ticker, entry day and direction with another trade. On 2026-08-03, 17 long semiconductor trades (8 of them MU) lost -23.3R. In the era, singleton entries made +0.17R and pairs -0.02R. 53 ticker-days carried both a long and a short.
-- **Telemetry gaps:** days_to_earnings is populated on 28 of 776 trades, and regime2_state and stop_width_atr on about 23%. About 4% of rows have mfe_r below the realised R, or a full stop with mae_r under 0.9.
+- **Stop enforcement (integrity):** 12 closed trades share the close timestamp `2026-08-04 18:55` UTC, and 6 more share `2026-08-05 15:34`. Across the book, 82 of 348 losing trades closed beyond -1.05R gross. The largest were NBIS (-6.0R) and DELL, GLW and MRNA (about -3.3 to -3.5R each). The pattern fits a stalled price monitor that caught up later. It is unverified against the logs.
+- **Stacked exposure:** 388 of 776 closed trades share (ticker, entry date, direction) with at least one other trade, across 145 such groups. 53 ticker-days carried both a long and a short. On 2026-08-03, 17 long entries were opened, 8 of them MU. Every cell N above therefore overstates the number of independent bets.
+- **Telemetry gaps:** days_to_earnings is populated on 28 of 776 trades, and regime2_state and stop_width_atr on about 180 each. Among winners, 23 of 392 have mfe_r more than 0.05 below realised R. Among full stops, 30 of 309 have mae_r under 0.9.
+- **Dropped rows:** the merge's rule (Δ lower bound > 0) dropped both rows on open_gap_bucket=favourable. See the panel finding on sign below.
+
+## Panel review
+
+Run 2026-10-21 over `66a0445b` (quant-researcher on opus).
+
+- quant-researcher [BLOCKING]: the Controller notes quoted pooled R without N or a reproducible source -- **applied**: cut down to counts with the export manifest named, and no pooled R.
+- quant-researcher [ADVISORY]: the open_gap_bucket sign is the reverse of both scouts' reading (`scripts/reports/autopsy/bars.py:128-137`, `pct = (open - planned_entry)/planned_entry * sign`). **adverse_large** is a fill-day open more than 1% *past* entry in the trade's direction. **favourable** is an open through entry against the trade, the losing cell. Rank 1's mechanism (a limit filling at a better price) is therefore inverted, and so are the dropped rows' "do not chase" readings. gapped_through_entry is uncovered on 207 of 221 trades, so the cell does not identify an order form -- **applied**: Rank 1 is withdrawn from the partner's choice. The contrast reads as "gaps against the plan through entry lose, gaps with the plan win". Whether that leads to a cancel-at-open rule is a veteran-trader question for a future /screen, not a row.
+- quant-researcher [ADVISORY]: Rank 1 and both dropped rows are one contrast on a single cut (favourable N 88 against adverse_large N 83 of 208) -- applied: counted once, as above.
+- quant-researcher [ADVISORY]: the 2026-09-01 era boundary was chosen after the data was read and is not pinned to a deployment commit; exit changes landed 2026-09-03, 09-09 and 09-10. Both BH families (362 and 244 cells) were looks -- recorded. The full book agrees on both gap cells but is not independent. Any /prereg must use windows that end before 2026-07-20, so the boundary does not reach a gate.
+- quant-researcher [ADVISORY]: Rank 1's interval comes from 8 week-clusters, which tends to run narrow -- recorded; moot after the withdrawal.
+- quant-researcher [ADVISORY]: a removal filter on the favourable cell is a new filter. It needs SCREEN-PASS, scoring on pooled ExpR and total R over the whole population with the N shrink disclosed, and a tradeability check (at the open it becomes a cancel rule) -- recorded; the merge rule stays unbent.
+- quant-researcher [ADVISORY]: distinct ticker-day counts should sit next to cell N -- recorded under Stacked exposure above.
+- quant-researcher [ADVISORY]: Rank 4 (rs-leader-index-pullback) sits next to the closed v34 RS-leader arm (`docs/claude/backtest-methodology.md:271`). A /screen must freeze an index-relative trigger distinct from `RS_LEADER_PERCENTILE` -- recorded as a condition on that route.
+- quant-researcher [ADVISORY]: the stop-monitor stall, telemetry coverage and the mfe_r inconsistency belong to quant-engineer before full-book cells count as support -- recorded.
