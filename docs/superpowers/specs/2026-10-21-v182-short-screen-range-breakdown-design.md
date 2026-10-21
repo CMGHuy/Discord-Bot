@@ -2,7 +2,7 @@
 
 **Version:** ui 1.33.1 · bot 2.14.2 (at writing)
 **Bump:** none — backtesting instrument (`swingbot/core/backtesting/screen/`, `scripts/backtest/screen_idea.py`) and two one-shot screen runs; nothing the bot or admin serves changes.
-**Edge:** none (integrity) — the short race is instrument plumbing and the two screens are measurements. A `SCREEN-PASS` would license a later `Edge: volume` short-entry spec carrying Schwab's stop and targets; this spec claims no edge.
+**Edge:** none (integrity) — the short race is instrument plumbing and the two screens are measurements. A `SCREEN-PASS` is evidence for the *trigger* under the generic ATR race only; it would license a later `Edge: volume` short-entry spec, where Schwab's stop and targets are still unmeasured. This spec claims no edge.
 **Screen:** exempt (integrity)
 **Panel:** quant-researcher, quant-engineer, veteran-trader
 **Status:** spec written 2026-10-21 from a brainstorm with the partner (sources: Schwab "The Ins and Outs of a Swing Trade", "Short Selling: The Risks and Rewards", TradingView short-idea format). Partner decisions: more shorts *and* a higher short win rate is the goal; breakdowns only in the stock's own downtrend, no SPY gate; screen both entry triggers; later spec targets TP1 at half the projected move, TP2 at the full projection.
@@ -14,9 +14,12 @@ trades opened 2026-07-06..2026-10-21, read 2026-10-21 (read-only):
 
 - 333 of 983 closed trades are shorts; their share fell from 45% of July
   closes to 11% of October's; none open now.
-- Shorts: WR 51.3%, ExpR −0.124R (N with R 267). Longs: WR 50.1%, ExpR
-  +0.003R (N 509). Recent months: September WR 25% (N 16), October 36%
-  (N 14) — thin.
+- Shorts: WR 51.3% and ExpR −0.124R over the 267 closed shorts that carry
+  a journal R (of 333). Longs: WR 50.1%, ExpR +0.003R over 509 of 650.
+  About 20% of closed trades have no journal R, so these are a selected
+  subset. Recent months (shorts by entry month, closed): September WR 25%
+  (N 16), October 36% (N 14) — thin. Motivation only; nothing gates on
+  these.
 - Stop-outs average −1.13R for shorts and −1.15R for longs, so stop fill is
   **not** a short-specific problem (cause: 60-second polling including
   extended hours fills at the observed print; the partner's broker also
@@ -59,6 +62,18 @@ pre-registrations). Neither idea reopens them:
   touches; volatility is not read.
 - **Downtrend Overbought Fade / Bull Trap:** fade a rally. Here: no rally
   condition.
+- **Pending range continuation (v105, NO-LIFT, closest relative):** a
+  horizontal 10/15/20-bar range, two visits to the trigger side, a 30-SMA
+  trend before the range, a resting stop-market order beyond the boundary,
+  long and short (`specs/no-lift/2026-09-25-v105-pending-range-continuation-design.md`).
+  What v105 measured and closed was the **directional-pressure predicate**
+  `d` as a component over that range baseline, on 75 tickers, 2020–2023;
+  the short side had component N 10–16 and never reached a test. The bare
+  breakdown was never raced against a null. Its reopening rule bars "a
+  range-pressure PENDING entry at these `(N, d)` values"; v182 has no
+  pressure predicate, a 30-bar window, touches on *both* sides and a
+  falling SMA50, so it is not that mechanism. It is close enough that the
+  partner was told before approving (see `## Panel review`).
 
 ## Design
 
@@ -84,9 +99,13 @@ A short race is the exact mirror of the long race, for both shapes:
 | gross R | (exit − entry) / risk | (entry − exit) / risk |
 | frictions | entry "buy", exit "sell" | entry "sell", exit "buy" |
 
-**Short costs (my call):** besides slippage and commission, a short pays a
-borrow fee of **0.5% a year**, pro rata per calendar day held, converted to
-R. S&P 500 names are general-collateral borrows (roughly 0.25–0.5%); 0.5%
+**Short costs (my call):** slippage and commission come from
+`swingbot/core/edge/frictions.py` as today, applied once per fill. Besides
+those, a short pays a borrow fee of **0.5% a year**, added to `frictions.py`
+as one function (`borrow_r(entry, risk, days)` = entry × 0.005 / 365 ×
+calendar days from entry date to exit date / risk; entry is the fill price,
+including in level mode), charged once on event and null trades alike — a
+test pins that both paths call it exactly once. S&P 500 names are general-collateral borrows (roughly 0.25–0.5%); 0.5%
 is the conservative end. Dividends need no adjustment: the cache is fetched
 with `auto_adjust=True` (`scripts/data/fetch_backtest_data.py:99`), so the
 adjusted series never drops on an ex-date and a short on it already pays
@@ -98,8 +117,11 @@ Forward drift is printed sign-adjusted for shorts (event minus null of
 −forward return), so "positive" means "good for the trade" in both
 directions. The verdict's four clauses are unchanged.
 
-The borrow fee is charged to null trades too. The per-year rank
-correlation is sign-flipped for shorts like the drift. An idea module
+The sign flip for drift and per-year rank correlation is applied once, in
+`forward.py` (the forward return is negated for a short idea before
+`excess_drift` and `yearly_rank_corr` read it), never again in
+`diagnostics.py`; a test pins that a mirrored frame raced short gives the
+same drift and correlation as the original raced long. An idea module
 declares `DIRECTION` and `ENTRY` constants beside `RACE`, read by `_load()`
 with the same `getattr` default pattern.
 
@@ -115,13 +137,21 @@ row):
    = c − Low, Low' = c − High, ATR unchanged). A short race on `P` gives the
    same outcome codes, exit offsets and gross R as a long race on `P'`, for
    both shapes, on random and on hand-built frames (gap through stop, gap
-   through target, same-bar stop and target, timeout).
+   through target, same-bar stop and target, timeout). Hand-built frames use
+   dyadic prices (multiples of 1/8, c a power of two) so reflection is exact
+   and ties stay ties; random frames compare gross R within 1e-9 and compare
+   outcome codes only where no price lies within 1e-9 of a stop or target.
 2. **A/A (my call: the v163 method, not a real-cache run):** 200 seeded
    synthetic replicates (fat-tailed, as `results/2026-10-16-trail-race-calibration.md`),
    random events, short direction, through the screen's race, null and
    verdict. Gate: false-pass rate ≤ 5%; coverage reported, not gated. It
    never reads the 2010–2019 cache. Extend the v163 calibration script with
-   a direction argument rather than writing a second one. **If it fails:**
+   a direction argument rather than writing a second one. The generator must
+   emit OHLC bars with a real intrabar range (High ≥ max(Open, Close),
+   Low ≤ min(Open, Close)), not closes only; if v163's is close-driven, add
+   that. Seeds 0..199, recorded in the doc. Decision rule: the observed
+   false-pass count ≤ 10 of 200 (5%); the Wilson 95% interval is printed
+   beside it, not gating. **If it fails:**
    stop, fix the race, re-run the calibration; no short idea runs and no
    ledger row is written until it passes.
 
@@ -137,8 +167,21 @@ measured as itself, so the race gets an `ENTRY` constant per idea:
 `"level"` (short shown; the long mirror is defined but unused):
 
 - The idea's `events()` returns, besides the boolean series, the level per
-  event bar (`levels()` function in the module).
-- Entry bar = the event bar t; entry = `min(Open[t], level)`.
+  event bar (`levels()` function in the module). The level must be known
+  from bars ≤ t−1 (the order is placed before bar t opens).
+- **The order lives one bar.** It is placed before the open of bar t and
+  cancelled at bar t's close if unfilled. (With the first-break rule an
+  unfilled order means no event, so a longer life would change nothing
+  but the bookkeeping.)
+- Entry bar = the event bar t; entry = `min(Open[t], level)`. The event
+  inequality and the fill agree: `Low[t] < level` fires, a bar that only
+  touches the level does not.
+- **Stop-market slippage (my call):** a level-mode entry is a stop-market
+  order through a broken level, so its entry slippage is **2 ×** the
+  `frictions.py` base (10 bps instead of 5), for events and null alike. A
+  gap fill at `Open[t]` gets the same 2 ×, assuming full size at the open
+  (S&P 500 names; a liquidity floor is the follow-on spec's job). The
+  results doc also prints the book repriced at 3 × base, never gating.
 - Risk = 1.5 × ATR14[t−1] (the ATR known when the order was placed, not the
   event bar's own).
 - **Entry bar, conservative:** the stop counts as hit on bar t if
@@ -146,26 +189,48 @@ measured as itself, so the race gets an `ENTRY` constant per idea:
   assumes the worst). The target never counts on bar t. Bars t+1..t+cap race
   as usual.
 - Cap counts from bar t+1, as now.
-- **The matched null mirrors the fill, not just the mode (my call).** An
-  event's fill comes after price fell from the open to the level, so the
-  worst-case entry-bar rule is pessimistic for it. A null filled at its open
-  would face the same rule accurately, which biases the comparison against
-  the idea before any edge is measured. So each null bar gets a seeded
-  intraday level drawn uniformly in `[Low, Open]` of that bar (a sell-stop
-  below the open that the bar reached), fills at it, and faces the identical
-  entry-bar rule. Null bars with `Low = Open` fill at the open. The level
-  draw uses the null's existing per-idea, per-ticker seed.
+- **The matched null copies each event's fill depth (my call, revised
+  after the panel).** An event's fill comes after price fell from the open
+  to the level, so the worst-case entry-bar rule is pessimistic for it; a
+  null filled at its open would face it accurately, biasing the comparison
+  against the idea. A uniform draw would not fix that (three reviewers: an
+  A/A where both sides draw the same way passes by construction). Instead,
+  each event e records its depth `d_e = (Open[t] − fill) / ATR14[t−1]`
+  (0 for a gap fill at the open). Each of e's null bars fills at
+  `Open − d_e × ATR14` of that bar, a sell-stop the same ATR distance below
+  its own open. A null bar whose Low does not reach that level is not a
+  fill: it is replaced by another draw from the same candidate pool (same
+  ticker, month, trend state); if the pool runs out, the event keeps fewer
+  null trades, counted as `null_unfilled` in the results doc. Null trades
+  face the identical entry-bar rule and slippage.
+- **Random stream:** the level-mode replacement draws come from a child
+  generator (`np.random.default_rng([seed, 1])`), never from the stream
+  `matched_null` uses for positions (`null.py:81-90`), and run only in
+  level mode, so every next-open idea's null is byte-identical to today's.
+  A test pins that.
 - Overlap: an exit on the entry bar has `exit_pos = t`; the non-overlap rule
   is unchanged (next event must start after `exit_pos`). `entry_date` in
   level mode is `index[t]`. Warm-up is checked at t−1, where ATR is read.
 
 `ENTRY` is frozen with the idea and pinned in the registry test like
-`RACE`. Calibration adds: (3) level mode with level = open and no entry-bar
-stop hit reproduces the next-open race shifted one bar (test); (4) the same
-synthetic A/A as (2) in level mode, events and null both drawing levels the
-same way, gate false-pass ≤ 5%. If (4) fails, the asymmetry is not solved:
-`range_breakdown_stop` is not run and the partner is told; the close idea
-can still run.
+`RACE`. Calibration adds:
+
+3. **Equivalence (test):** level mode with level = open and no entry-bar
+   stop hit reproduces the next-open race shifted one bar.
+4. **Synthetic A/A in level mode,** same method and gate as (2). Its job is
+   only to show the level-mode code adds no false passes. It **cannot**
+   show the null is fair to real events, and the spec does not claim it
+   does.
+5. **Fill-depth check on the real cache, outcome-blind:** for
+   `range_breakdown_stop`, print the distribution (quartiles, share of gap
+   fills) of event depths `d_e` and of the realised null depths, plus the
+   `null_unfilled` share. No race, no R. This runs inside `--count-only`.
+   Gate: null median depth within 0.05 ATR of the event median and
+   `null_unfilled` ≤ 20% of the null draws. If it fails,
+   `range_breakdown_stop` is not run and the partner is told; the close
+   idea can still run.
+
+If (4) fails: stop, fix, re-run; no level-mode idea runs until it passes.
 
 ### Part C — the two breakdown ideas
 
@@ -181,6 +246,14 @@ the idea and never tuned after the run):
 - **Own downtrend:** `SMA50[t−1] < SMA50[t−11]` and `Close[t−1] < SMA50[t−1]`.
   No SPY condition (partner's choice).
 - **First break only:** `Close[t−1] ≥ S` (the prior bar was still inside).
+- **Numerics:** every clause ends in `.fillna(False)`; ATR14[t−1] that is
+  NaN or ≤ 0 means no event. Warm-up: an event needs 61 completed bars
+  before t (SMA50 at t−11 needs 60, the window 30, ATR 14); the
+  warm-up check reads t−1 for both ideas. No-lookahead: S, R, ATR, SMA and
+  touches read bars ≤ t−1; the trigger reads bar t (its Close for the close
+  idea, its Low for the stop idea, which fills inside bar t). The truncation
+  test truncates after t, and for the stop idea checks that nothing beyond
+  bar t's Open/Low is read to place the order.
 
 **`range_breakdown_close`** — `Close[t] < S`. `ENTRY = "next_open"`,
 `RACE = "fixed"`, `CAP = 20`, direction short.
@@ -193,7 +266,29 @@ downswing breakout. `SUMMARY` states the rule above in one line.
 
 Two ideas mean two shots, each one-shot under the unchanged pass rule. The
 results docs print both under BH q across the ledger (reported, never
-gating), as today.
+gating), as today. **They are nested:** every close event is a bar whose
+Low also broke S, so they are two looks at one hypothesis and the chance
+that at least one false-passes is above the per-idea 5%. Stated up front:
+
+- Each results doc prints the event overlap (share of close events whose
+  bar is also a stop event, and the reverse).
+- Both pass: the follow-on spec picks the trigger, citing both.
+- Only one passes: the follow-on spec may use only that trigger and must
+  say the other failed; it treats the pass as weaker than a lone pass
+  (family of two, BH q printed).
+- Neither: both closed.
+
+**Descriptive blocks in each results doc, never gating:**
+
+- **Trend-only control:** the screen's null matches `close > SMA200`, but
+  the idea also requires a falling SMA50 below price. A pass could come
+  from that short-term downtrend alone. So the doc prints the same race,
+  short, over bars that meet the trend clauses and the first-break
+  arithmetic against a 30-bar low but **not** the range clauses (height,
+  touches), as ΔExpR against the same null. A pass whose ΔExpR is not
+  clearly above this control cannot be credited to the range.
+- **SPY regime split:** event ΔExpR split by SPY above/below its 200-day
+  average, to inform the follow-on spec's RS-gate and regime choices.
 
 **Event count before the shot (my call).** `--dry-run` cannot do this: it
 races and prints the verdict, and the guardrail caps it at three tickers. So
@@ -203,12 +298,20 @@ non-overlap assumes every trade lasts the full cap, the most conservative
 count) and prints only those counts — no race, no R, no verdict, no file,
 no ledger row. It runs over the full universe; it is not `--dry-run`, so the
 dry-run guardrail does not apply, and it reveals nothing about outcomes.
+It calls the same `events()`, drop and non-overlap functions the real run
+uses, never a reimplementation. In level mode an entry-bar exit makes the
+real count higher, so the full-cap bound errs on the safe side. Each
+count is recorded in a short counts note
+(`docs/superpowers/results/<date>-v182-counts.md`: window, universe,
+command, counts, and check 5's depth table), committed before any run.
 
 - Count ≥ 300: the real one-shot run follows.
 - Count < 300: **no run, no ledger row**; the shot is not spent (the same
   logic as Stage −1 reachability, "refused, budget intact"). The builder
   reports to the partner. Loosening a number would be a new idea with a new
-  name, so it is the partner's call.
+  name, so it is the partner's call. At most **one** renamed variant per
+  idea may be cut from count feedback alone; it is listed in the counts
+  note and both names count as one family in the results doc.
 - A real run that still ends under 300 after the race's actual exits is
   `SCREEN-UNDERPOWERED`, recorded and closed like a fail, as today.
 
@@ -219,10 +322,19 @@ the passing ledger id) would build the live plan from Schwab's levels:
 stop just above the broken support (Schwab: "since a retreat to that price
 would keep losses to a minimum"), TP1 at S − ½(R − S), TP2 at S − (R − S),
 and would run the unchanged acceptance funnel. It would also decide whether
-the breakdown bypasses the RS gate. That spec also covers short-specific
-risks the screen cannot see: squeeze risk (short interest ≥ 10% of float,
-Schwab "What's a Short Squeeze"), holding across earnings or an ex-dividend
-date, and the uptick rule (SEC Rule 201) after a −10% day.
+the breakdown bypasses the RS gate. That spec must also settle, before it can claim
+the plan is placeable:
+
+- **Order form:** the stop idea as a sell-stop placed before the open,
+  valid for the day; the close idea as an alert after the close with a
+  next-open entry. What the alert says when the open is already below TP1,
+  or above the planned stop (a gap through the stop on a short): skip.
+- **Short-specific risks the screen cannot see:** squeeze risk (short
+  interest ≥ 10% of float, Schwab "What's a Short Squeeze"), earnings or
+  an ex-dividend date inside the hold, hard-to-borrow names, the uptick
+  rule (SEC Rule 201) after a −10% day.
+- **A liquidity floor:** the screen runs on S&P 500 names; the live
+  watchlist may hold thinner ones.
 
 A fail closes exactly the frozen definition (30-bar two-touch range,
 falling SMA50, that trigger, the fixed 20-bar race, short only), not
@@ -268,3 +380,35 @@ falling SMA50, that trigger, the fixed 20-bar race, short only), not
 - Inside C: the two idea modules and their tests can be written in
   parallel; the two screen runs are independent but each is one shot, so
   each runs once, by `backtest-runner`.
+
+## Panel review
+
+2026-10-21, on 4cac9ccc. Roles: quant-researcher (opus), quant-engineer,
+veteran-trader (sonnet).
+
+BLOCKING
+
+- veteran-trader 1: resting sell-stop life, order-time knowledge and gap fill unstated -- applied (one-bar order placed before the open, level from bars ≤ t−1, gap fill at open with full size, stop-market slippage 2 ×).
+- veteran-trader 2: frictions source and breakdown slippage unstated -- applied (`frictions.py` once per fill, 2 × base on level entries for events and null, 3 × repricing printed; borrow fee in `frictions.py`).
+
+ADVISORY
+
+- quant-researcher 1: v105 pending range continuation is the closest closed relative and was not cited -- applied (differentiation added; flagged to the partner before approval).
+- quant-researcher 2 / quant-engineer 1 / veteran-trader 6: the level-mode A/A passes by construction and cannot show the uniform null is fair -- applied (null copies each event's fill depth; A/A scoped to code correctness only; outcome-blind fill-depth check 5 on the real cache gates the stop idea).
+- quant-researcher 3: the two ideas are nested -- applied (overlap printed; one-pass and two-pass readings stated up front).
+- quant-researcher 4: null not matched on the SMA50 downtrend -- applied (trend-only control block, never gating; a pass not above it is not credited to the range).
+- quant-researcher 5: Edge line implied Schwab's exits were screened -- applied (trigger-only wording).
+- quant-researcher 6: production figures lacked denominators -- applied.
+- quant-researcher 7: count-driven renaming is a forking path -- applied (at most one renamed variant per idea, same family).
+- quant-engineer 2: level draws must not share the null position stream -- applied (child generator, level mode only, pinned by test).
+- quant-engineer 3: borrow fee location and formula -- applied.
+- quant-engineer 4: float ties in the mirror test -- applied (dyadic hand frames, 1e-9 tolerance, tie-free code comparison).
+- quant-engineer 5: NaN handling and warm-up bound -- applied.
+- quant-engineer 6: level-mode truncation and inequality consistency -- applied.
+- quant-engineer 7: `--count-only` must share the real code path, counts recorded -- applied (counts note committed before any run).
+- quant-engineer 8: single application of the short sign flip -- applied (in `forward.py`, pinned by a mirror test).
+- quant-engineer 9: calibration seeds and decision rule -- applied (seeds 0..199, ≤ 10 of 200, Wilson interval printed).
+- veteran-trader 3: follow-on order form, expiry, gap-through-stop handling -- applied (listed as must-settle items for the follow-on spec).
+- veteran-trader 4: short tradeability risks and liquidity -- applied (follow-on must-settle list, liquidity floor).
+- veteran-trader 5: close-idea alert timing and gaps -- applied (follow-on order form).
+- veteran-trader 7: no regime split promised -- applied (SPY 200-day split block, never gating).
