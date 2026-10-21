@@ -146,13 +146,19 @@ simple), email and push; the plan page reads the same text.
 `exDividendDate`, `dividendRate` or the dividends calendar), fetched by a
 daily background refresh for the watchlist and short universe and cached
 per ticker; the alert reads only the cache. Absent or unparsable → `n/a`;
-older than 35 days → shown with `STALE`. Exact fields and cache location are
+older than 21 days → shown with `STALE` (short interest is published
+semi-monthly and lags); a dividend amount that is a forward estimate is
+labelled `est.`. Exact fields and cache location are
 the builder's, verified against yfinance at build time.
 
-**Coverage and misses (my call):** the daily refresh covers the watchlist
-plus every ticker with an open or pending short plan. A cache miss at alert
-time shows `n/a` and adds the ticker to the next refresh; no alert is held
-or edited afterwards.
+**Coverage and misses (my call):** the daily refresh covers every ticker the
+scan can evaluate for a short (watchlist plus every short lane's universe)
+and every ticker with an open or pending short plan. A cache miss at alert
+time never reads as comfort: the line becomes `⚠ Squeeze data not checked —
+verify short interest at your broker`, and the ticker joins the next
+refresh; no alert is held or edited afterwards. The earnings line reads the
+existing earnings calendar, not this cache; a ticker absent from the
+calendar prints `Earnings: not checked`, never `No earnings in hold`.
 
 **Snapshot (my call):** the notice values are saved with the plan when the
 alert goes out, and the plan page shows that snapshot, so the page always
@@ -161,6 +167,75 @@ Plans created before this ships have no snapshot and show no notice.
 
 **Never** used by any filter, score, confidence or backtest; a test pins that
 no scan decision changes when the notice data changes.
+
+## Requirements added by the panel review
+
+**Sizing (Part A):**
+- **Adverse side only (my call, refining the partner's "p99 gap").** For a
+  short the gap that hurts is an *up* gap through the stop, so
+  `gap_p99_pct` is the 99th percentile of up-gaps (`Open / prev Close − 1 >
+  0`) over the same 250 bars, not of absolute gaps. `gap_stats` gains this
+  as a new key; its existing keys and every existing caller stay unchanged.
+  p99 over ~125 up-gaps is noisy (roughly the 1–2 largest); accepted and
+  disclosed.
+- **One sizing path.** All six sites that size a short (the four re-size
+  sites, `TradeLog.log_trade`, `record_plan_fill`) call one function, which
+  reads the p99 and the `SHORT_GAP_SIZING` state **stored on the plan at
+  creation**. A switch flip or a missing p99 later never changes an already
+  alerted plan's rule; balance-driven re-sizing behaves as today. A parity
+  test pins alert share count = paper-book share count for a gap-sized
+  short.
+- **Caps re-checked on the cut size.** The stop cap, `PORTFOLIO_HEAT_CAP_PCT`
+  and the correlated-heat cap are evaluated on the final gap-cut share count
+  on every alert path (confluence, strategy, v104/v118/v119 lanes), one test
+  per lane. The gap floor can only shrink size, never grow it, in every
+  sizing mode (`kelly`, `vol_target`, `min_of_all`, `risk_pct`,
+  `account_pct`); the size shown equals the size the mode returns.
+- **Gap fills book their real R.** A paper short stopped by a gap books the
+  R of its actual fill (e.g. −2.4R), never a clamped −1R; pinned by a test.
+- **Failures fall back loudly.** Missing p99 or an exception while threading
+  direction/p99 into `log_trade`/`record_plan_fill` (which today swallow
+  exceptions to `sizing = None`) falls back to stop-only sizing, never to
+  unsized, and logs one line in the style of the existing `plan rejected (`
+  lines.
+- **Shown where the order is.** The final share count, and that it was cut
+  for gap risk, appear in the same block as entry, stop and targets.
+- **Open gap risk shown.** The admin risk view (`swingbot/admin/api_v1/risk.py`
+  and its page) adds one figure: summed `gap_risk_amount` across open
+  shorts, beside heat. Display only; heat itself stays on stop risk.
+- **Measured once, after build (not a gate).** A results doc
+  (`docs/superpowers/results/<date>-v183-gap-sizing-impact.md`) re-sizes
+  the live book's closed shorts under the rule from their stored bars:
+  share of shorts gap-sized, mean size cut, dollar P&L at fixed per-trade
+  risk before/after, the worst five dollar losses before/after, and max
+  drawdown of the short book before/after (`edge/ruin.py`,
+  `risk_metrics.py`). The cut is unvalidated until then;
+  `SHORT_GAP_SIZING=off` is the revert path.
+
+**Notice (Part B):**
+- **Never stops a scan or an alert.** A refresh crash, cache-read error or
+  yfinance failure degrades every affected line to its "not checked" form;
+  alert issuance and the scan loop never wait on or fail because of it.
+  Pinned by a test that raises inside the cache read.
+- **Off switch:** `SHORT_RISK_NOTICE` (default on); off reproduces today's
+  short alerts byte-for-byte.
+- **Earnings line carries the distance:** `Earnings in hold: 2026-10-28 (in
+  6 sessions)`, so a wide window stays readable rather than noise.
+- **Refresh owner:** a bot loop beside `weekly_earnings_refresh`
+  (`swingbot/commands/scanning/loops.py:966`), daily after the close; it
+  lives as long as Part B does and is removed with it.
+
+**Storage and rollback (both parts):**
+- `gap_p99_pct`, the stored sizing rule state and the notice snapshot are
+  new stored fields: an Alembic revision per `docs/claude/schema-evolution.md`
+  § The four operations. A notice cache under `data/` needs a `DATA_READERS`
+  row.
+- Rollback: both switches off restores today's behaviour without a deploy.
+  A code rollback (`rollback_to.sh`) leaves the new columns/keys and cache
+  unread and harmless; paper trades already sized by the gap rule stay in
+  the book as recorded (not re-sized), and the rollback note says so.
+- `compute_position_size` (complexity 18) and `TradeLog.log_trade` (15) are
+  legacy ≥ 15: the new branch goes in named helpers so neither score rises.
 
 ## What is left to the builder
 
@@ -201,3 +276,29 @@ quartiles are not monotonic. One shot; a fail closes it. A pass buys an
 **Not pursued:** a short-only earnings blackout (v82 closed; would need a
 partner ruling that it is distinct), an ex-dividend filter (nets ~0),
 smaller short size as a rule (no effect in R).
+
+## Panel review
+
+Run 2026-10-21, serially: risk-manager, veteran-trader, staff-engineer.
+
+- risk-manager 1 (BLOCKING): stop/heat/correlated caps not re-checked on the gap-cut size on every lane -- applied (caps re-checked, one test per lane).
+- risk-manager 2 (BLOCKING): alert vs paper-book sizing can diverge across six sites -- applied (one sizing path reading plan-stored p99 and switch state; parity test).
+- risk-manager 3 (BLOCKING): no drawdown/ruin or dollar-at-fixed-risk effect stated -- applied (post-build results doc on the live book's closed shorts; disclosed as unvalidated until then).
+- risk-manager 4: gap fills must book real R, not −1R -- applied (test).
+- risk-manager 5: heat understates short gap tail -- applied as display (summed gap risk in the admin risk view); heat stays on stop risk.
+- risk-manager 6: gap floor only shrinks size in every mode -- applied.
+- risk-manager 7: silent p99 fallback -- applied (logged fallback).
+- risk-manager 8: which rule re-sizes an alerted plan -- applied (rule state stored on the plan).
+- veteran-trader 1 (BLOCKING): alerted size can change silently after the alert -- applied (same as risk-manager 2/8).
+- veteran-trader 2 (BLOCKING): `n/a` on a cache miss reads as comfort -- applied (explicit "not checked" lines; earnings read from the calendar, not the cache).
+- veteran-trader 3: symmetric p99 over-cuts; p99 is noisy -- applied (up-gaps only, as my call refining the partner's choice); noise accepted and disclosed.
+- veteran-trader 4: show final shares and the cut in the order block -- applied.
+- veteran-trader 5: wide hold window makes the earnings line noise -- applied (sessions-to-earnings shown).
+- veteran-trader 6: 35-day STALE too lenient; forward dividend -- applied (21 days; `est.` label).
+- veteran-trader 7: say the cut is unvalidated and name the revert path -- applied.
+- staff-engineer 1 (BLOCKING): a refresh/cache failure could stop alerts or the scan -- applied (degrade to "not checked"; test).
+- staff-engineer 2 (BLOCKING): Part B has no switch, rollback unstated -- applied (`SHORT_RISK_NOTICE`; rollback note incl. gap-sized paper trades staying as recorded).
+- staff-engineer 3: `log_trade`/`record_plan_fill` swallow exceptions -- applied (fall back to stop sizing, logged).
+- staff-engineer 4: new stored fields need Alembic and `DATA_READERS` -- applied.
+- staff-engineer 5: refresh owner and lifetime -- applied (bot loop beside `weekly_earnings_refresh`).
+- staff-engineer 6: legacy complexity 18/15 must not rise -- applied (named helpers).
