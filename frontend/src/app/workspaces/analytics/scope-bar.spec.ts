@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -48,5 +51,27 @@ describe('ScopeBar', () => {
   it('counts every non-default filter so Clear says how much it clears', () => {
     const { el } = create({ scope: { ...DEFAULT_SCOPE, ledger: 'both', strategy: 'MACD' } });
     expect(el.querySelector('.clear')!.textContent).toContain('2');
+  });
+
+  it('says "no closed trades" for an empty sample, never "N=—" (v179 §3.4)', () => {
+    for (const n of [null, 0]) {
+      const { el } = create({ n });
+      const line = el.querySelector('.population')!;
+      expect(line.textContent!.trim()).toBe('no closed trades');
+      expect(line.classList).not.toContain('num');
+      expect(el.textContent).not.toContain('N=—');
+    }
+    const { el } = create({ n: 972 });
+    expect(el.querySelector('.population')!.textContent!.trim()).toBe('N=972 closed');
+    expect(el.querySelector('.population')!.classList).toContain('num');
+  });
+
+  it('sets the unit toggle, population and freshness on one baseline', () => {
+    const { el } = create();
+    const line = el.querySelector('sb-control-bar .scope .scope-line')!;
+    expect(line.querySelector('sb-segmented')).not.toBeNull();
+    expect(line.querySelector('.population')).not.toBeNull();
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/scope-bar.ts'), 'utf8');
+    expect(src).toMatch(/\.scope-line \{[^}]*align-items: baseline/);
   });
 });

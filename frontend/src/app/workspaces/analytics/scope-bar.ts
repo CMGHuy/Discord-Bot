@@ -45,21 +45,25 @@ import { Segmented } from '../../ui/segmented';
                      [options]="directionOptions" (valueChange)="scopeChange.emit({ direction: $event || null })" />
         }
       </ng-container>
-      <ng-container scope>
+      <!-- v179 §3.4: a box of its own on the text baseline -- sb-control-bar's
+           .scope centres its children, which put the population text and the
+           unit toggle's labels at two heights. -->
+      <div scope class="scope-line">
         <sb-segmented label="Unit" [options]="unitOptions" [value]="unit()"
                       (valueChange)="unitChange.emit($any($event))" />
         @if (!tuning()) {
-          <span class="population num">N={{ n() ?? '—' }} closed</span>
+          <span class="population" [class.num]="hasSample()">{{ population() }}</span>
           @if (asOf()) { <sb-freshness [at]="asOf()!" /> }
           @if (allTimePanels() > 0) {
             <span class="all-time">{{ allTimePanels() }} panels all-time</span>
           }
         }
-      </ng-container>
+      </div>
     </sb-control-bar>
   `,
   styles: `
-    .population { font-size: var(--text-chip); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .scope-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-10); min-width: 0; }
+    .population { font-size: var(--text-chip); color: var(--text-secondary); }
     .all-time { font-size: var(--text-micro); text-transform: uppercase; letter-spacing: .06em; color: var(--warn); }
   `,
 })
@@ -93,6 +97,12 @@ export class ScopeBar {
     return (['from', 'to', 'strategy', 'horizon', 'direction'] as const).filter((k) => s[k]).length
       + (s.ledger === 'main' ? 0 : 1);
   });
+
+  /** Spec §3.4: an empty sample reads as "no data", never a dash beside a
+   *  value. Zero closed trades is the same answer as none. */
+  protected readonly hasSample = computed(() => (this.n() ?? 0) > 0);
+  protected readonly population = computed(() =>
+    this.hasSample() ? `N=${this.n()} closed` : 'no closed trades');
 
   /** Which preset the current bounds correspond to, or `custom`. */
   protected readonly preset = computed(() => {
