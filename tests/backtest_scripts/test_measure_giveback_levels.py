@@ -143,6 +143,12 @@ def test_rows_carry_the_contract_fields(monkeypatch, tmp_path, flat_atr):
     assert a["stop_moves"] == 1 and a["gap_r"] == 0.0           # bar 3 opened at 120 > 114
     assert a["new_best_within_10"] is False                     # 106.5 after the exit
     assert a["shock"] is True                                   # bar 1 TR 11.5 > 2 x ATR 2.0
+
+
+def test_rows_carry_per_arm_allowances_and_net_r(monkeypatch, tmp_path, flat_atr):
+    _one_entry(monkeypatch)
+    [row] = _rows(tmp_path)
+    a = row["arms"]["A"]
     assert row["arms"]["B"]["allowance_pct"] is None and row["arms"]["B"]["stop_moves"] == 0
     assert row["arms"]["R1.00"]["allowance_pct"] == pytest.approx(2.0 / 120.0)
     assert row["arms"]["S0.25"]["allowance_pct"] == pytest.approx(5.0 / 120.0)
