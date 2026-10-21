@@ -747,6 +747,10 @@ describe('Calendar totals: one stat tile (v179 §3.3)', () => {
     expect(calendar.monthWinRate()).toBe('33.3%');
   });
 
+  it('keeps the metric toggle cells a hit-minimum wide: the one-character currency cell was 29px (v179 layout audit)', () => {
+    expect(SOURCE).toMatch(/\.metric button \{[^}]*min-width:\s*var\(--hit-min\)/);
+  });
+
   it('restyles no tile from outside and fixes no row height', () => {
     expect(SOURCE).not.toMatch(/::ng-deep/);
     expect(SOURCE).not.toMatch(/grid-auto-rows/);

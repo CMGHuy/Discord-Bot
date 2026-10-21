@@ -319,6 +319,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
        tighter two-cell toggle; the variant owns colour, weight and the
        active-cell background is our own since this pair has no divider. */
     .metric button {
+      min-width: var(--hit-min);
       padding: 0 var(--space-10);
       border: 0;
     }
