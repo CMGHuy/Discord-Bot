@@ -973,7 +973,7 @@ git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v1
 
 **The gate (index § Gate contract, verbatim).** `status === 'PARTIAL' && bar_kind === 'trailing' && tp1 != null` → runner fields (`planTp1 = tp1`, `planStop = risk_stop`, `trailBest = runner_best ?? banked_exit_price`, `trailBestPct = best_pnl_pct`, `trailExitPct = stop_pnl_pct`); `status === 'CLOSED' && runner_exit_price != null` → closed fields (`runnerExit = runner_exit_price`, `runnerExitPct = bankedLegPct(entry, runner_exit_price, direction)`, `runnerExitReason = runner_exit_reason`); otherwise `NO_RUNNER_CELL`. The status check is what keeps the TP1-leg row of a still-PARTIAL plan (status `CLOSED`, `bar_kind` still `trailing`) on today's cell even if a field leaked; V177-1 also nulls the fields there, so both layers hold.
 
-- [ ] **Step 1: Write the failing gate tests**
+- [x] **Step 1: Write the failing gate tests**
 
 Create `frontend/src/app/ui/runner-cell.spec.ts`:
 
@@ -1092,7 +1092,7 @@ describe('runnerCellInputs', () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1102,7 +1102,7 @@ Pop-Location
 
 Expected: FAIL — `Cannot find module './runner-cell'` (or a resolve error naming it).
 
-- [ ] **Step 3: Implement the gate**
+- [x] **Step 3: Implement the gate**
 
 Create `frontend/src/app/ui/runner-cell.ts`:
 
@@ -1167,7 +1167,7 @@ export function runnerCellInputs(row: TradeRow): RunnerCellInputs {
 }
 ```
 
-- [ ] **Step 4: Run the gate tests**
+- [x] **Step 4: Run the gate tests**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1177,7 +1177,7 @@ Pop-Location
 
 Expected: all pass, `0 failed`.
 
-- [ ] **Step 5: Write the failing template-wiring tests**
+- [x] **Step 5: Write the failing template-wiring tests**
 
 In `frontend/src/app/workspaces/trades/trades.spec.ts`, append at the end of the file:
 
@@ -1321,7 +1321,7 @@ In `frontend/src/app/workspaces/dashboard/positions-table.spec.ts`, add `import 
   });
 ```
 
-- [ ] **Step 6: Run them to verify the wiring tests fail**
+- [x] **Step 6: Run them to verify the wiring tests fail**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1331,7 +1331,7 @@ Pop-Location
 
 Expected: the "two lines" and "closed runner" cases FAIL (no `.l1` element; the closed cell still reads `58.33` in the target slot) in both files; the TP1-leg and Plan-column-floor cases already pass (they pin today's behaviour); every pre-existing test passes. If `sb-plan-cell` is not found at all (`renders one Plan cell per row` fails with length 0, or `cell` is `undefined` in the dashboard cases), the rows have not reached the table: in `trades.spec.ts` confirm `TradesStore` is the instance `render()` provided; in `dashboard.spec.ts` log `backend.match(() => true).map((r) => r.request.urlWithParams)` after `loaded()` to see the positions table's request and flush that one. Fix the harness, not the assertion.
 
-- [ ] **Step 7: Wire the two templates**
+- [x] **Step 7: Wire the two templates**
 
 In `frontend/src/app/workspaces/dashboard/dashboard.ts`:
 
@@ -1377,7 +1377,7 @@ import { runnerCellInputs } from '../../ui/runner-cell';
 
 In `frontend/src/app/workspaces/trades/trades.ts`, make the same three edits: the import below the `PlanCell` import (:49); the identical `#planCell` block above replacing :404-419 (comment text: `identical in dashboard.ts`); and `protected readonly runnerCellInputs = runnerCellInputs;` after `protected bankedLegAmount = bankedLegAmount;` (:920).
 
-- [ ] **Step 8: Run the wiring tests**
+- [x] **Step 8: Run the wiring tests**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1387,7 +1387,7 @@ Pop-Location
 
 Expected: all pass, `0 failed`.
 
-- [ ] **Step 9: Gates and lint**
+- [x] **Step 9: Gates and lint**
 
 ```powershell
 Push-Location E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell/frontend
@@ -1398,7 +1398,7 @@ Pop-Location
 
 Expected: all pass; lint clean with no new `eslint-suppressions.json` entry. If a gate spec path does not exist, drop it from the command (they are listed from the v166 plan's gate set) — never skip `primitives.spec.ts`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell add frontend/src/app/ui/runner-cell.ts frontend/src/app/ui/runner-cell.spec.ts frontend/src/app/workspaces/dashboard/dashboard.ts frontend/src/app/workspaces/trades/trades.ts frontend/src/app/workspaces/dashboard/dashboard.spec.ts frontend/src/app/workspaces/trades/trades.spec.ts frontend/src/app/workspaces/dashboard/positions-table.spec.ts
