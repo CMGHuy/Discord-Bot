@@ -289,7 +289,7 @@ const LONG_RUNNER = {
   trailBest: 130, trailBestPct: 30, trailExitPct: 13.33,
 };
 
-const PAPER_LEVEL = "The bot's paper level: your broker's resting orders are not synced, update your stop yourself.";
+const PAPER_LEVEL = "The bot's paper level: your broker's resting orders are not synced, the bot does not update your broker's orders.";
 
 describe('PlanCell runner (two lines)', () => {
   beforeEach(() => {
@@ -319,13 +319,14 @@ describe('PlanCell runner (two lines)', () => {
   it('explains line 1 as the original plan', () => {
     expect(renderWith(RKLB_RUNNER).querySelector('.l1')!.getAttribute('title')).toBe(
       'Original plan (TP1 already filled): entry → TP1 / original stop. '
-      + 'Percentages are the distance from the entry to each level.');
+      + 'Percentages are the distance from the entry to each level. '
+      + 'The stop shown is the original; the live exit is on the next line.');
   });
 
   it('explains line 2: unrealised peak, per share, before costs, paper level', () => {
     expect(renderWith(RKLB_RUNNER).querySelector('.l2')!.getAttribute('title')).toBe(
       'Trailing stop. Best price so far → price the trailing stop would exit at. '
-      + '+17.7% is the peak since TP1 (unrealised); +13.6% is the profit if the stop '
+      + '+17.7% is the peak since TP1 (unrealised); +13.6% is the result if the stop '
       + 'fills at 52.44, per share from the original entry, before costs and tax. '
       + `A short gains when price falls. ${PAPER_LEVEL}`);
   });
@@ -342,7 +343,7 @@ describe('PlanCell runner (two lines)', () => {
       .querySelector('.l2')!.getAttribute('title')!;
     expect(title.startsWith(
       'Locked-in floor. Best price so far → price the locked-in floor would exit at. ')).toBe(true);
-    expect(title).toContain('is the profit if the stop fills at 52.44');
+    expect(title).toContain('is the result if the stop fills at 52.44');
   });
 
   it('keeps an explicit minus on the loss side of line 2', () => {
@@ -391,7 +392,7 @@ describe('PlanCell closed runner', () => {
 
   it('names what closed the runner in the tooltip', () => {
     expect(renderWith(RKLB_CLOSED).querySelector('[title]')!.getAttribute('title')).toBe(
-      'Entry 60.67 · Runner exit (trailing stop): 52.44, +13.6% per share from the original entry · Stop 61.85');
+      'Entry 60.67 · Runner exit (trailing stop): 52.44, +13.6% per share from the original entry, before costs and tax · Stop 61.85');
   });
 
   it('reads a give-back close as such', () => {

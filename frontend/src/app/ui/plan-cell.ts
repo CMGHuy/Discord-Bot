@@ -195,7 +195,7 @@ export class PlanCell {
     const level = floor ? 'the locked-in floor' : 'the trailing stop';
     return `${head}. Best price so far → price ${level} would exit at. `
       + `${pct(t.bestPct, 1)} is the peak since TP1 (unrealised); `
-      + `${pct(t.exitPct, 1)} is the profit if the stop fills at ${this.fmt(t.exit)}, `
+      + `${pct(t.exitPct, 1)} is the result if the stop fills at ${this.fmt(t.exit)}, `
       + 'per share from the original entry, before costs and tax. '
       + `${this.isShortRunner() ? SHORT_GAINS : LONG_GAINS} ${PAPER_LEVEL}`;
   });
@@ -288,7 +288,7 @@ export class PlanCell {
 
   private closedRunnerTooltip(exit: number): string {
     return `Entry ${this.fmt(this.entry())} · Runner exit (${runnerExitLabel(this.runnerExitReason())}): `
-      + `${this.fmt(exit)}, ${this.signedPct(this.runnerExitPct())} per share from the original entry`
+      + `${this.fmt(exit)}, ${this.signedPct(this.runnerExitPct())} per share from the original entry, before costs and tax`
       + ` · Stop ${this.fmt(this.stop())}`;
   }
 
@@ -316,10 +316,11 @@ interface TrailLine {
 }
 
 const PLAN_LINE_TOOLTIP = 'Original plan (TP1 already filled): entry → TP1 / original stop. '
-  + 'Percentages are the distance from the entry to each level.';
+  + 'Percentages are the distance from the entry to each level. '
+  + 'The stop shown is the original; the live exit is on the next line.';
 const SHORT_GAINS = 'A short gains when price falls.';
 const LONG_GAINS = 'A long gains when price rises.';
-const PAPER_LEVEL = "The bot's paper level: your broker's resting orders are not synced, update your stop yourself.";
+const PAPER_LEVEL = "The bot's paper level: your broker's resting orders are not synced, the bot does not update your broker's orders.";
 
 const RUNNER_EXIT_LABELS: Readonly<Record<string, string>> = {
   tp1_runner_trail: 'trailing stop',
