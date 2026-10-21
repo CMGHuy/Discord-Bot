@@ -77,6 +77,25 @@ pre-registrations). Neither idea reopens them:
 
 ## Design
 
+### The long side stays untouched (partner rule, 2026-10-21)
+
+This spec exists to improve SHORT trades. Nothing LONG may change, and
+where shared code has to change, the long side must come out identical,
+never worse:
+
+- Long races (both shapes), long nulls, long drift/correlation and every
+  existing idea's results are **byte-identical** to before. A regression
+  test re-runs every registered long idea on fixture frames (and the
+  calibration script's long mode on its seeds) and compares against
+  outputs captured before the change.
+- Short-only costs stay short-only: `borrow_r` is never called for a long
+  trade; the 2 × stop-market slippage applies only to level-mode entries,
+  which only short ideas use in this spec.
+- The level-mode long mirror is defined but unused; no existing long idea
+  changes its `ENTRY`, `RACE` or direction.
+- No live code changes at all (RS gate, regime penalty, masks, plans,
+  alerts).
+
 ### Part A — the short race
 
 `Idea.direction` accepts `"short"` (still default `"long"`); the direction is
