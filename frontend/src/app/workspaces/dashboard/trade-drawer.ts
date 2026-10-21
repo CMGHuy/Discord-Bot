@@ -134,8 +134,6 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
     }
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { margin: 0; min-width: 0; font-size: var(--text-table); text-align: right; overflow-wrap: anywhere; }
-    .pos { color: var(--pos); }
-    .neg { color: var(--neg); }
     .drawer-actions {
       display: flex;
       flex-wrap: wrap;

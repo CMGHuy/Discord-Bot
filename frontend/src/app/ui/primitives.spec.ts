@@ -9,8 +9,9 @@ import { resolveToken } from './testing/resolve-token';
 /**
  * Raw buttons that stay raw, each with the reason.
  *
- * One entry, and it should stay that way. A gate that starts life with a
- * fistful of exceptions teaches everyone that exceptions are normal.
+ * Two entries, both whole-surface hit areas, and it should stay that way. A
+ * gate that starts life with a fistful of exceptions teaches everyone that
+ * exceptions are normal.
  */
 const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   // The whole toast IS the dismiss control -- a full-bleed surface with its
@@ -18,6 +19,12 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   // it a variant would mean a variant used exactly once, which is a worse
   // answer than one justified exception.
   ['shell/toast-host.ts', 'class="toast elev-overlay"'],
+  // The whole activity row IS the drawer trigger (v179 §6a.4) -- icon, arrow,
+  // ticker, detail and time laid out inside one native button, so the row
+  // gets keyboard activation and focus for free. sb-button's variants style a
+  // labelled control, not a row of mixed content; a row variant would be used
+  // exactly once.
+  ['workspaces/dashboard/panels/recent-activity.ts', 'class="event-hit"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {
