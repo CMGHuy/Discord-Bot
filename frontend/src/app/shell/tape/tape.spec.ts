@@ -129,6 +129,24 @@ describe('Tape', () => {
       expect(shown(el)).toEqual(['S&P 500', 'NVDA']);
     });
 
+    it('hides the strip when not even one whole tile fits the lane, instead of showing a sliver (768px leaves ~60px)', async () => {
+      fakeLayout(195, 60);
+      const fixture = setup([index], stocks);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.lane')!.classList).toContain('nothing-fits');
+      expect(shown(el)).toEqual([]);
+    });
+
+    it('keeps the strip showing while the tiles fit', async () => {
+      fakeLayout(100, 250);
+      const fixture = setup([index], stocks);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).querySelector('.lane')!.classList).not.toContain('nothing-fits');
+    });
+
     it('holds the page while the pointer is over the strip', async () => {
       vi.useFakeTimers();
       fakeLayout(100, 250);
@@ -152,6 +170,10 @@ describe('tape.css: nothing is cut at the lane edge (v179 layout audit)', () => 
 
   it('has no sliding marquee: no animation on the track', () => {
     expect(css).not.toMatch(/animation-name|@keyframes|sb-tape-slide/);
+  });
+
+  it('hides a lane too narrow for one whole tile, keeping its layout so it can be measured again on resize', () => {
+    expect(rule('.lane.nothing-fits')).toMatch(/visibility:\s*hidden/);
   });
 
   it('takes an off-page tile out of flow and out of sight (and out of reach) without changing its width', () => {

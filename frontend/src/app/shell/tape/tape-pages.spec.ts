@@ -14,8 +14,9 @@ describe('tapePages', () => {
     expect(tapePages([100, 100], 205, 5.5)).toEqual([[0], [1]]);
   });
 
-  it('gives a tile wider than the lane a page of its own and never drops one', () => {
-    expect(tapePages([80, 400, 80], 250)).toEqual([[0], [1], [2]]);
+  it('leaves a tile wider than the whole lane on no page, since it can never be shown whole', () => {
+    expect(tapePages([80, 400, 80], 250)).toEqual([[0, 2]]);
+    expect(tapePages([300, 400], 250)).toEqual([]);
   });
 
   it('has no pages for no tiles, and turns every few seconds', () => {

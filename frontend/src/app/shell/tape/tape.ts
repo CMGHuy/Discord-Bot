@@ -58,7 +58,7 @@ interface Tile {
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
   template: `
-    <div class="lane" role="region" aria-label="Market tape"
+    <div class="lane" role="region" aria-label="Market tape" [class.nothing-fits]="nothingFits()"
          [attr.title]="asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()">
       <div class="cap">mkt</div>
       <div class="viewport" #viewport (mouseenter)="hold(true)" (mouseleave)="hold(false)"
@@ -103,6 +103,9 @@ export class Tape {
   /** Index lists of the tiles that fit together; empty until the first measure. */
   private readonly pages = signal<number[][]>([]);
   private readonly page = signal(0);
+  private readonly measured = signal(false);
+  /** The lane is too narrow for even one whole tile (768px leaves ~60px): the strip hides rather than show a sliver. */
+  protected readonly nothingFits = computed(() => this.measured() && this.pages().length === 0);
   private held = false;
   private readonly onCurrentPage = computed(() => new Set(this.pages()[this.page()] ?? []));
 
@@ -158,6 +161,7 @@ export class Tape {
     const next = tapePages(widths, lane);
     if (JSON.stringify(next) !== JSON.stringify(this.pages())) this.pages.set(next);
     if (this.page() >= next.length) this.page.set(0);
+    this.measured.set(true);
   }
 
   private turn(): void {
@@ -171,7 +175,7 @@ export class Tape {
 
   /** Before the first measure every tile counts as on the page. */
   protected onPage(index: number): boolean {
-    return this.pages().length === 0 || this.onCurrentPage().has(index);
+    return !this.measured() || this.onCurrentPage().has(index);
   }
 
   protected up(tile: { change_pct: number | null }): boolean {
