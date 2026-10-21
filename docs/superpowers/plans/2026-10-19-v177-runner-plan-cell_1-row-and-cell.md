@@ -47,7 +47,7 @@ A 60 s "Timeout waiting for worker … no tests" from `ng test` is machine load:
 - `best_pnl_pct`/`stop_pnl_pct` are now written by the row builder for every trailing PARTIAL row, priced or not. `_trailing_status_fields`' priced path keeps writing them through the same `_runner_pnl_fields`, so the value is identical on both passes (the attach passes can run twice per request; this stays idempotent). Its chip path (no price, no best, span ≤ 0) is unchanged: it returns no pct keys, so the builder's values survive.
 - `_row_from_leg` clears `tp1`/`best_pnl_pct`/`stop_pnl_pct` on **every** leg row, keeps `bar_kind` (the Trades page's trailing icon reads it) and keeps the runner-exit fields (both rows of a closed partial trade show the runner exit).
 
-- [ ] **Step 1: Create the worktree**
+- [x] **Step 1: Create the worktree**
 
 Invoke the `worktree-lifecycle` skill. Reuse the worktree if `git -C E:/Documents/Private/Projects/Discord-Bot worktree list` already shows `2026-10-19-v177-runner-plan-cell`; otherwise:
 
@@ -60,11 +60,11 @@ npm --prefix E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10
 
 Expected: the log line is the current `main` HEAD (the commit carrying this plan); `npm ci` ends without `ERR!`. Every later step runs in `$WT`. V177-2 may start now.
 
-- [ ] **Step 2: Sync the database replica**
+- [x] **Step 2: Sync the database replica**
 
 Run `/replicate-prod-db` once in this session before the first DB-backed test run (CLAUDE.md; the API tests below seed the Postgres test database through `seed_store`). If the test database is down: `docker compose --profile test up -d db-test` from `$R`. Skip this step if it already ran in this session.
 
-- [ ] **Step 3: Write the failing row-builder tests**
+- [x] **Step 3: Write the failing row-builder tests**
 
 In `tests/admin/test_trades_partial_row.py`, change the import line (:4) to:
 
@@ -231,12 +231,12 @@ def test_a_legacy_trade_emits_every_runner_cell_key_as_none():
     assert _cell(row) == dict.fromkeys(RUNNER_CELL_KEYS)
 ```
 
-- [ ] **Step 4: Run them to verify they fail**
+- [x] **Step 4: Run them to verify they fail**
 
 Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_trades_partial_row.py`
 Expected: the new tests FAIL with `KeyError: 'tp1'` (or `'runner_exit_price'`); the 17 existing tests still pass.
 
-- [ ] **Step 5: Add the helpers to `trades.py`**
+- [x] **Step 5: Add the helpers to `trades.py`**
 
 In `swingbot/admin/api_v1/trades.py`, the last statements of `_row_from_plan` today are `view = plan_view(_AttrPlan(plan), price=None)` followed by `return {` … `"leg_total": 1,` / `}`. Change `return {` to `row = {`, and replace the closing `}` of that dict with:
 
@@ -335,7 +335,7 @@ def _runner_cell_fields(plan: dict, trade: dict | None, row: dict) -> dict:
     return out
 ```
 
-- [ ] **Step 6: Clear the line-2 fields on leg rows**
+- [x] **Step 6: Clear the line-2 fields on leg rows**
 
 In `_row_from_leg`, the `row.update({` call ends with `"leg_index": leg_index,` then `})`. Add the cleared keys as the last entry of that dict:
 
@@ -349,7 +349,7 @@ In `_row_from_leg`, the `row.update({` call ends with `"leg_index": leg_index,` 
     })
 ```
 
-- [ ] **Step 7: Emit the keys on legacy rows**
+- [x] **Step 7: Emit the keys on legacy rows**
 
 In `_row_from_trade`, after `"runner_best": None,` add:
 
@@ -363,7 +363,7 @@ In `_row_from_trade`, after `"runner_best": None,` add:
         "runner_exit_reason": None,
 ```
 
-- [ ] **Step 8: Route the status bar through the shared helper**
+- [x] **Step 8: Route the status bar through the shared helper**
 
 In `_trailing_status_fields`, replace the line
 
@@ -382,12 +382,12 @@ with
 
 `is_bull` is still used above it (span, pos, ent), so no unused-variable warning.
 
-- [ ] **Step 9: Run the row-builder tests**
+- [x] **Step 9: Run the row-builder tests**
 
 Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_trades_partial_row.py`
 Expected: all pass (17 existing + 15 new), `0 failed`.
 
-- [ ] **Step 10: Write the failing contract and API tests**
+- [x] **Step 10: Write the failing contract and API tests**
 
 In `tests/admin/test_api_v1_trades.py`, append directly after `test_trailing_runner_without_a_best_price_keeps_the_plain_chip`:
 
@@ -420,7 +420,7 @@ def test_trailing_runner_without_a_best_price_measures_from_the_tp1_fill(seed, l
 Run: `python $WT/scripts/dev/testrun.py file tests/admin/test_api_v1_trades.py`
 Expected: the two new tests pass (Steps 5-8 are in), and every `assert_collection(…, TRADE_ROW, …)` contract test FAILS with an "unexpected keys" message naming `tp1`, `best_pnl_pct`, `stop_pnl_pct`, `runner_exit_price`, `runner_exit_reason` — the wire grew, the contract has not yet.
 
-- [ ] **Step 11: Declare the keys in the row contract**
+- [x] **Step 11: Declare the keys in the row contract**
 
 In `TRADE_ROW`, directly after `"headroom_r": NULLABLE_NUMBER,` add:
 
@@ -435,7 +435,7 @@ In `TRADE_ROW`, directly after `"headroom_r": NULLABLE_NUMBER,` add:
     "runner_exit_reason": NULLABLE_STR,
 ```
 
-- [ ] **Step 12: Run the API contract files**
+- [x] **Step 12: Run the API contract files**
 
 Run, one at a time:
 - `python $WT/scripts/dev/testrun.py file tests/admin/test_api_v1_trades.py`
@@ -444,7 +444,7 @@ Run, one at a time:
 
 Expected: all pass, `0 failed`. `test_detail_row_fields_match_the_list_exactly` passes unchanged. If a contract test still reports a missing key, the row origin it names is a builder Steps 5-7 missed.
 
-- [ ] **Step 13: Run the surface-agreement and view tests (unchanged expectations)**
+- [x] **Step 13: Run the surface-agreement and view tests (unchanged expectations)**
 
 Run:
 - `python $WT/scripts/dev/testrun.py file tests/presentation/test_surface_agreement.py`
@@ -452,7 +452,7 @@ Run:
 
 Expected: both pass with no edit (the row's `stop_loss`, `target`, `banked_exit_price` are unchanged; `plan_view.py` is not touched).
 
-- [ ] **Step 14: Complexity gate and syntax**
+- [x] **Step 14: Complexity gate and syntax**
 
 Run: `python $WT/scripts/dev/complexity_gate.py --repo $WT`
 Expected: exit 0, no finding. `_row_from_plan` stays at 15 (the change added no branch); every new helper is well below 15. If `_row_from_plan` reads 16, a conditional slipped into it: move it into `_runner_cell_fields`.
@@ -460,7 +460,7 @@ Expected: exit 0, no finding. `_row_from_plan` stays at 15 (the change added no 
 Run: `python -m py_compile $WT/swingbot/admin/api_v1/trades.py`
 Expected: no output.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-19-v177-runner-plan-cell add swingbot/admin/api_v1/trades.py tests/admin/test_trades_partial_row.py tests/admin/test_api_v1_trades.py
