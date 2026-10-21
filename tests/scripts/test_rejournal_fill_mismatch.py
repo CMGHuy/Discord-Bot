@@ -51,6 +51,21 @@ def test_the_rebuilt_entry_keeps_the_partners_note():
     assert new["r_realized"] == -1.74
 
 
+def test_only_exit_derived_fields_are_replaced():
+    """v86: the journal freezes what the plan was told at issuance
+    (confidence, risk_features, entry_context); the repair never rewrites it."""
+    old = {"trade_id": "t1", "r_realized": -1.0, "confidence_level": 4,
+           "risk_features": {"a": 1}, "entry_context": {"b": 2}, "outcome": "loss"}
+    rebuilt = {"trade_id": "t1", "r_realized": -1.74, "confidence_level": 5,
+               "risk_features": {"a": 9}, "entry_context": {}, "outcome": "loss",
+               "mfe_r": 0.2, "closed_at": "later"}
+    new = rj.merge_entry(rebuilt, old)
+    assert new["confidence_level"] == 4
+    assert new["risk_features"] == {"a": 1}
+    assert new["entry_context"] == {"b": 2}
+    assert (new["r_realized"], new["mfe_r"], new["closed_at"]) == (-1.74, 0.2, "later")
+
+
 def test_changed_fields_lists_only_real_changes():
     old = {"r_realized": -1.0, "outcome": "loss", "note": "x", "created_at": "a"}
     new = {"r_realized": -1.74, "outcome": "loss", "note": "x", "created_at": "b"}

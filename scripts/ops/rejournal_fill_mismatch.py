@@ -10,8 +10,9 @@ production: 54 of 528 journaled trades closed before 2026-08-20 disagree
 by more than 0.05R, 1 of 248 after.
 
 Each picked row is rebuilt with journal.build_entry() from the trade's
-final record -- the same builder the live close path uses -- keeping the
-partner's note. Nothing is written unless --apply is passed; the default
+final record -- the same builder the live close path uses -- and only its
+exit-derived fields (EXIT_FIELDS) replace the old ones; the note and the
+issuance snapshot stay. Nothing is written unless --apply is passed; the default
 is a dry-run report of every field that would change.
 
     python scripts/ops/rejournal_fill_mismatch.py                  # dry run
@@ -50,9 +51,17 @@ def find_mismatches(trades: list[dict], journal: dict[str, dict]) -> list[tuple[
     return out
 
 
+#: Fields that depend on the exit. Everything else -- above all what the
+#: plan was told at issuance (confidence, risk_features, entry_context),
+#: which the journal freezes (v86, journal.py) -- stays as first written.
+EXIT_FIELDS = ("outcome", "r_realized", "mfe_r", "mae_r", "exit_efficiency",
+               "holding_days", "tags", "auto_lesson", "closed_at")
+
+
 def merge_entry(rebuilt: dict, old: dict) -> dict:
-    """The rebuilt entry with the partner's free-text note carried over."""
-    return dict(rebuilt, note=old.get("note") or "")
+    """The old entry with only its exit-derived fields replaced; the
+    partner's note and the issuance snapshot are kept."""
+    return dict(old, **{k: rebuilt.get(k) for k in EXIT_FIELDS})
 
 
 def changed_fields(old: dict, new: dict) -> list[str]:
