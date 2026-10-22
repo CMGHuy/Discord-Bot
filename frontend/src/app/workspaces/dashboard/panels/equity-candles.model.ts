@@ -191,3 +191,53 @@ export function rangeReadoutParts(stats: RangeStats | null, currency: string): R
 export function isAtLiveEdge(range: LogicalWindow | null, count: number): boolean {
   return range === null || count === 0 || range.to >= count - 1.5;
 }
+
+const TF_SECONDS: Record<EquityTimeframe, number> = {
+  '1H': 3_600,
+  '4H': 14_400,
+  '1D': 86_400,
+  '1W': 604_800,
+};
+
+const NY_ISO_DAY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: NY, year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+/** A run of whole buckets on the New York wall clock, `[from, to)`, in
+ *  seconds read as if UTC — the same convention as `toChartTime`. */
+export interface WallSpan {
+  from: number;
+  to: number;
+}
+
+function wallSeconds(t: string, tf: EquityTimeframe): number {
+  const iso = isIntraday(tf) ? `${t.slice(0, 19)}Z` : `${t.slice(0, 10)}T00:00:00Z`;
+  return Date.parse(iso) / 1000;
+}
+
+/** The span the in-window candles cover: first bucket start to last bucket end. */
+export function wallSpan(candles: readonly EquityCandle[], tf: EquityTimeframe): WallSpan | null {
+  const last = candles.at(-1);
+  if (!last) return null;
+  return { from: wallSeconds(candles[0].t, tf), to: wallSeconds(last.t, tf) + TF_SECONDS[tf] };
+}
+
+/** `setVisibleRange` arguments that show `span` on timeframe `tf`. */
+export function chartRangeFor(span: WallSpan, tf: EquityTimeframe): { from: Time; to: Time } {
+  const last = span.to - 1;
+  if (isIntraday(tf)) return { from: span.from as UTCTimestamp, to: last as UTCTimestamp };
+  const day = (seconds: number) => new Date(seconds * 1000).toISOString().slice(0, 10) as Time;
+  return { from: day(span.from), to: day(last) };
+}
+
+/** v181 §3 edge of history: 1H/4H candles exist only since recording began,
+ *  so zooming into an older 1D window stays on 1D rather than going blank. */
+export function stepDownBlocked(
+  tf: EquityTimeframe,
+  first: EquityCandle | undefined,
+  recordingSince: string | null,
+): boolean {
+  if (tf !== '1D') return false;
+  if (!first || recordingSince === null) return true;
+  return first.t.slice(0, 10) < NY_ISO_DAY.format(new Date(recordingSince));
+}

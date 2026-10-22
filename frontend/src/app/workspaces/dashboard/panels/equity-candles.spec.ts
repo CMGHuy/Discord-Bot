@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EquityCandle, EquityCandlesResponse } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
@@ -52,6 +52,23 @@ function at(fixture: { componentInstance: EquityCandles; detectChanges(): void }
   fixture.componentInstance['onVisibleRange']({ from, to });
   fixture.detectChanges();
 }
+
+/** `count` hourly candles from 2026-10-01 00:00 New York (EDT all month). */
+function hourlyCandles(count: number): EquityCandle[] {
+  return Array.from({ length: count }, (_, i) => {
+    const wall = new Date(Date.UTC(2026, 9, 1) + i * 3_600_000).toISOString().slice(0, 19);
+    return candle(`${wall}-04:00`);
+  });
+}
+
+function dailyCandles(count: number): EquityCandle[] {
+  return Array.from({ length: count }, (_, i) =>
+    candle(new Date(Date.UTC(2026, 8, 1) + i * 86_400_000).toISOString().slice(0, 10)));
+}
+
+type Scale = { fitContent(): void; setVisibleRange(range: unknown): void };
+const scaleOf = (fixture: { componentInstance: EquityCandles }) =>
+  (fixture.componentInstance as unknown as { chart: { timeScale(): Scale } }).chart.timeScale();
 
 describe('sb-equity-candles', () => {
   it('reads out the hovered candle, its change toned by sign', () => {
@@ -320,4 +337,98 @@ describe('sb-equity-candles', () => {
       widthSpy.mockRestore();
     }
   });
+  describe('auto timeframe (v181 §3)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('steps up past 250 visible bars and restores the same span on the new candles', () => {
+      const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 600);
+      try {
+        const { fixture, stub } = render(response(hourlyCandles(300), { tf: '1H' }));
+        at(fixture, 0, 299);
+        expect(stub.calls.tf).toEqual(['4H']);
+
+        const scale = scaleOf(fixture);
+        const restore = vi.spyOn(scale, 'setVisibleRange').mockImplementation(() => {});
+        const fit = vi.spyOn(scale, 'fitContent');
+        stub.data.set(response(hourlyCandles(80), { tf: '4H' }));
+        fixture.detectChanges();
+        const from = Date.UTC(2026, 9, 1) / 1000;
+        expect(restore).toHaveBeenCalledWith({ from, to: from + 300 * 3600 - 1 });
+        expect(fit).not.toHaveBeenCalled();
+      } finally {
+        widthSpy.mockRestore();
+      }
+    });
+
+    it('steps down below 15 visible bars', () => {
+      const { fixture, stub } = render(
+        response(dailyCandles(40), { tf: '1D', recording_since: '2026-08-01T13:30:00Z' }));
+      at(fixture, 0, 9);
+      expect(stub.calls.tf).toEqual(['4H']);
+    });
+
+    it('holds at the edge of history, where no intraday candles exist', () => {
+      const { fixture, stub } = render(
+        response(dailyCandles(40), { tf: '1D', recording_since: '2026-10-01T13:30:00Z' }));
+      at(fixture, 0, 9);
+      expect(stub.calls.tf).toEqual([]);
+    });
+
+    it('holds between 15 and 250 bars', () => {
+      const { fixture, stub } = render(response(dailyCandles(40), { tf: '1D' }));
+      at(fixture, 0, 39);
+      expect(stub.calls.tf).toEqual([]);
+    });
+
+    it('takes one step at a time while the new candles load', () => {
+      const { fixture, stub } = render(response(hourlyCandles(300), { tf: '1H' }));
+      at(fixture, 0, 299);
+      at(fixture, 0, 298);
+      expect(stub.calls.tf).toEqual(['4H']);
+    });
+
+    it('drops a pending restore when the partner picks a timeframe by hand', () => {
+      const { fixture, stub } = render(response(hourlyCandles(300), { tf: '1H' }));
+      at(fixture, 0, 299);
+      fixture.componentInstance['onTimeframe']('1D');
+      expect(fixture.componentInstance['pendingSpan']).toBeNull();
+      expect(stub.calls.tf).toEqual(['4H', '1D']);
+    });
+  });
+
+  describe('programmatic moves (v181 §1, §7)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('holds the flag through the chart\'s next paint, then releases it', () => {
+      // Only the settle timer is under test; jsdom has no canvas paint context.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const { fixture } = render(response(MIXED));
+      const component = fixture.componentInstance as unknown as {
+        programmatic: boolean; moveProgrammatically(fn: () => void): void };
+      let inside = false;
+      component.moveProgrammatically(() => (inside = component.programmatic));
+      expect(inside).toBe(true);
+      expect(component.programmatic).toBe(true);
+      vi.advanceTimersByTime(99);
+      expect(component.programmatic).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(component.programmatic).toBe(false);
+    });
+
+    it('fits a new timeframe under the flag', () => {
+      const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 600);
+      try {
+        const { fixture, stub } = render(response(MIXED));
+        const component = fixture.componentInstance as unknown as { programmatic: boolean };
+        let flagged: boolean | null = null;
+        vi.spyOn(scaleOf(fixture), 'fitContent').mockImplementation(() => (flagged = component.programmatic));
+        stub.data.set(response(MIXED, { tf: '1W' }));
+        fixture.detectChanges();
+        expect(flagged).toBe(true);
+      } finally {
+        widthSpy.mockRestore();
+      }
+    });
+  });
+
 });

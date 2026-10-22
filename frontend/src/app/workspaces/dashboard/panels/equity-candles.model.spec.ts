@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { EquityCandle } from '../../../api/models';
 import {
   ACCOUNT_LABEL,
+  chartRangeFor,
+  stepDownBlocked,
+  wallSpan,
   RANGE_LABELS,
   candleReadout,
   isAtLiveEdge,
@@ -167,5 +170,34 @@ describe('v181 readout parts', () => {
     expect(isAtLiveEdge({ from: 0, to: 8.6 }, 10)).toBe(true);
     expect(isAtLiveEdge({ from: 0, to: 8.4 }, 10)).toBe(false);
     expect(isAtLiveEdge({ from: 0, to: 3 }, 0)).toBe(true);
+  });
+});
+
+describe('v181 timeframe step helpers', () => {
+  const hourly = (iso: string) => candle({ t: `${iso}-04:00` });
+
+  it('spans whole buckets on the New York wall clock', () => {
+    const span = wallSpan([hourly('2026-10-20T09:00:00'), hourly('2026-10-20T15:00:00')], '1H');
+    expect(span).toEqual({ from: Date.UTC(2026, 9, 20, 9) / 1000, to: Date.UTC(2026, 9, 20, 16) / 1000 });
+    expect(wallSpan([candle({ t: '2026-10-19' }), candle({ t: '2026-10-20' })], '1D'))
+      .toEqual({ from: Date.UTC(2026, 9, 19) / 1000, to: Date.UTC(2026, 9, 21) / 1000 });
+    expect(wallSpan([], '1D')).toBeNull();
+  });
+
+  it('turns a span into chart times for the target timeframe', () => {
+    const span = { from: Date.UTC(2026, 9, 19) / 1000, to: Date.UTC(2026, 9, 21) / 1000 };
+    expect(chartRangeFor(span, '4H')).toEqual({ from: span.from, to: span.to - 1 });
+    expect(chartRangeFor(span, '1D')).toEqual({ from: '2026-10-19', to: '2026-10-20' });
+    expect(chartRangeFor(span, '1W')).toEqual({ from: '2026-10-19', to: '2026-10-20' });
+  });
+
+  it('blocks 1D -> 4H only where no intraday candles can exist', () => {
+    const since = '2026-10-20T13:35:00Z';
+    expect(stepDownBlocked('1D', candle({ t: '2026-10-19' }), since)).toBe(true);
+    expect(stepDownBlocked('1D', candle({ t: '2026-10-20' }), since)).toBe(false);
+    expect(stepDownBlocked('1D', candle({ t: '2026-10-20' }), null)).toBe(true);
+    expect(stepDownBlocked('1D', undefined, since)).toBe(true);
+    expect(stepDownBlocked('4H', candle({ t: '2026-01-02T09:00:00-05:00' }), since)).toBe(false);
+    expect(stepDownBlocked('1W', candle({ t: '2025-01-06' }), since)).toBe(false);
   });
 });

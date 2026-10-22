@@ -25,13 +25,17 @@ import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { Async } from '../../../ui/async';
 import { Button } from '../../../ui/button';
 import { BaselinePrimitive } from '../../../ui/chart/primitives/baseline-primitive';
-import { LogicalWindow, inWindowCandles, rangeStats, shouldLoadOlder } from './equity-range.model';
+import { LogicalWindow, inWindowCandles, nextTimeframe, rangeStats, shouldLoadOlder } from './equity-range.model';
 import { chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
 import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
 import {
   ACCOUNT_LABEL,
+  WallSpan,
+  chartRangeFor,
+  stepDownBlocked,
+  wallSpan,
   BASIS_LABEL,
   CHANGE_PCT_TOOLTIP,
   isChangePart,
@@ -61,6 +65,12 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
  * started. Currency comes from the `currency` input (`connection.currency()`
  * upstream), never the API's `currency_symbol`.
  */
+/** How long a viewport change the component made itself stays flagged.
+ *  lightweight-charts reports the new range on its next paint, so the flag
+ *  must outlive the call; 100 ms covers several frames and is far shorter
+ *  than any deliberate gesture that follows it. */
+export const PROGRAMMATIC_SETTLE_MS = 100;
+
 @Component({
   selector: 'sb-equity-candles',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -214,7 +224,9 @@ export class EquityCandles {
    *  which writes it to the server-backed preferences. */
   protected onTimeframe(value: string): void {
     const tf = EQUITY_TIMEFRAMES.find((option) => option === value);
-    if (tf) this.store.setTimeframe(tf as EquityTimeframe);
+    if (!tf) return;
+    this.pendingSpan = null;
+    this.store.setTimeframe(tf as EquityTimeframe);
   }
 
   protected onBasis(value: string): void {
@@ -229,6 +241,13 @@ export class EquityCandles {
   protected baseline: BaselinePrimitive | null = null;
   private renderedView = '';
   private pendingView = '';
+  /** True while a viewport change made by this component (fit, restore, and
+   *  in part 2 a preset move) is still being reported back by the chart. */
+  private programmatic = false;
+  private releaseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** An auto step waiting for its candles: the span to show on them. */
+  private pendingSpan: { tf: EquityTimeframe; span: WallSpan } | null = null;
+
   private resizeObserver: ResizeObserver | null = null;
 
   /** Read once: chart colours come from the tokens at creation, as in
@@ -315,6 +334,7 @@ export class EquityCandles {
     });
 
     destroyRef.onDestroy(() => {
+      if (this.releaseTimer !== null) clearTimeout(this.releaseTimer);
       this.resizeObserver?.disconnect();
       this.chart?.remove();
       this.chart = null;
@@ -338,6 +358,34 @@ export class EquityCandles {
     const atEdge = isAtLiveEdge(range, this.candles().length);
     if (atEdge !== this.store.atLiveEdge()) this.store.setAtLiveEdge(atEdge);
     if (shouldLoadOlder(range, this.store.hasMore(), this.store.pageLoading())) this.store.loadOlder();
+    this.autoTimeframe();
+  }
+
+  /** v181 §3: more than 250 bars → one step coarser, fewer than 15 → one
+   *  step finer, written like a manual pick. The span is kept for the restore. */
+  private autoTimeframe(): void {
+    const data = this.store.data();
+    if (!data || this.pendingSpan) return;
+    const window = this.inWindow();
+    const next = nextTimeframe(window.length, data.tf,
+      stepDownBlocked(data.tf, window[0], data.recording_since));
+    const span = wallSpan(window, data.tf);
+    if (next === data.tf || !span) return;
+    this.pendingSpan = { tf: next, span };
+    this.store.setTimeframe(next);
+  }
+
+  private moveProgrammatically(fn: () => void): void {
+    this.programmatic = true;
+    if (this.releaseTimer !== null) clearTimeout(this.releaseTimer);
+    try {
+      fn();
+    } finally {
+      this.releaseTimer = setTimeout(() => {
+        this.programmatic = false;
+        this.releaseTimer = null;
+      }, PROGRAMMATIC_SETTLE_MS);
+    }
   }
 
   /** "↦ Latest": back to the newest candle at the current zoom. */
@@ -395,9 +443,23 @@ export class EquityCandles {
    *  until the host has a width; the ResizeObserver retries it on unhide. */
   private fitWhenVisible(): void {
     const view = this.pendingView;
-    if (!view || !this.chart || this.host().nativeElement.clientWidth === 0) return;
-    this.chart.timeScale().fitContent();
+    const chart = this.chart;
+    if (!view || !chart || this.host().nativeElement.clientWidth === 0) return;
+    const restore = this.restorableRange();
+    this.moveProgrammatically(() => {
+      if (restore) chart.timeScale().setVisibleRange(restore);
+      else chart.timeScale().fitContent();
+    });
     this.renderedView = view;
     this.pendingView = '';
+    this.pendingSpan = null;
+  }
+
+  /** The recorded span, once the step's own timeframe has candles to show it on. */
+  private restorableRange(): { from: Time; to: Time } | null {
+    const pending = this.pendingSpan;
+    const data = this.store.data();
+    if (!pending || !data || data.tf !== pending.tf || !data.candles.length) return null;
+    return chartRangeFor(pending.span, pending.tf);
   }
 }
