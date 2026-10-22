@@ -1,0 +1,4 @@
+training data: alpaca (11 excluded)
+knobs: {'TURTLE_SOUP_RESEARCH_MODE': 'structural'} baseline N=907 component N=919 changed outcomes: 12
+split removed=0 added=12 changed=0 is_subset=False
+REACHABLE -- the component changes trades; Stage 0 may proceed.

@@ -114,3 +114,11 @@ Read from the `<stage>.turtle_soup.json` sidecar (`arms/turtle_soup_report.measu
 - the added-row share outside the S&P 500.
 
 ## Readings
+
+### Stage −1 — reachability (pilot 2018-06-01..2020-12-31), 2026-10-22
+
+- Exit codes: producer 0, reachability 0.
+- `knobs: {'TURTLE_SOUP_RESEARCH_MODE': 'structural'} baseline N=907 component N=919 changed outcomes: 12`
+- `split removed=0 added=12 changed=0 is_subset=False` (additive: 12 added rows, baseline untouched)
+- Verdict: `REACHABLE -- the component changes trades; Stage 0 may proceed.`, so continue to Stage 0.
+- Descriptive (pilot, never gating), from `v180/pilot.turtle_soup.json`: signals 53; shares by status trade: 0.226, risk_cap: 0.472, no_level_in_band: 0.151, plan_other: 0.000, cancelled_open_through_stop: 0.038, cancelled_risk_cap_fill: 0.113, not_triggered: 0.000, position_open: 0.000; sweep depth median kept 0.225 / dropped 0.215 ATR; early-stop share 0.75; exit mix target 0.083, stop 0.667, gap 0.250, time cap 0.000 (decided win rate 8.3%, n=12); signals per day max 3, p95 1.0; added-row share outside the S&P 500 0.25.
