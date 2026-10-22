@@ -43,7 +43,7 @@ from swingbot.core.backtesting.screen import context as screen_context  # noqa: 
 from swingbot.core.backtesting.screen import context as pit  # noqa: E402
 from swingbot.core.backtesting.screen import diagnostics  # noqa: E402
 from swingbot.core.backtesting.screen.context import CONTEXT_START  # noqa: E402,F401
-from swingbot.core.edge.frictions import commission_r  # noqa: E402
+from swingbot.core.edge.frictions import BORROW_RATE_ANNUAL, commission_r  # noqa: E402
 from swingbot.core.marketdata import pit_membership  # noqa: E402
 
 WINDOW_START = "2010-01-01"
@@ -133,13 +133,15 @@ def _books(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
     the seed are the same either way."""
     cap, shape = idea.time_cap_bars, idea.race_shape
     booked, counts = race.run_book(df, ctx["raw"], cap, member=ctx["member"],
-                                   warm=ctx["warm"], atr=ctx["atr"], shape=shape, **costs)
+                                   warm=ctx["warm"], atr=ctx["atr"], shape=shape,
+                                   direction=idea.direction, **costs)
     eligible = null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], cap)
     if exclude is not None:
         eligible = eligible & ~exclude
     draw = null.matched_null(df, booked.event_pos, eligible,
                              null.K, null.null_seed(idea.name, ticker), cap=cap,
-                             atr=ctx["atr"], trend=ctx["trend"], shape=shape, **costs)
+                             atr=ctx["atr"], trend=ctx["trend"], shape=shape,
+                             direction=idea.direction, **costs)
     counts["dropped_no_match"] = draw.dropped_no_match
     return booked.take(np.isin(booked.event_pos, draw.event_pos)), counts, draw
 
@@ -212,7 +214,8 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
            "member": member, "warm": warm, "atr": atr,
            "trend": null.trend_state(df, sma200)}
     kept, counts, draw = _books(idea, ticker, df, ctx, costs)
-    fwd = {h: forward.forward_atr(df, atr, h) for h in forward.HORIZONS}
+    fwd = {h: forward.forward_atr(df, atr, h, direction=idea.direction)
+           for h in forward.HORIZONS}
     return TickerScreen(
         ticker=ticker, counters=Counter(counts),
         events=_event_rows(ticker, df.index, kept, draw.null_mean_r),
@@ -512,10 +515,32 @@ def _yes(ok: bool) -> str:
     return "yes" if ok else "**no**"
 
 
+def _short_borrow() -> str:
+    return f"borrow {BORROW_RATE_ANNUAL:.1%} a year on calendar days held; "
+
+
+def _short_trade_line(idea, costs: str) -> str:
+    """v182: the short trade line, the exact mirror of the long one plus borrow."""
+    if idea.race_shape == "trail":
+        return ("**Trade:** short; entry next open (sell); initial stop "
+                f"{race.STOP_ATR} x ATR14[t] above (1R); no target; chandelier trail: "
+                "the stop on bar j is the lower of the initial stop and the lowest low "
+                f"of bars t+1..j-1 plus {trail.TRAIL_ATR} x ATR14[t], never raised, ATR "
+                "frozen at the signal bar; a gap through the stop fills at the open; no "
+                f"exit after {idea.time_cap_bars} bars -> out at that close; R in the "
+                "initial 1R; " + _short_borrow() + costs)
+    return (f"**Trade:** short; entry next open (sell); stop {race.STOP_ATR} x ATR14 above; "
+            f"target {race.STOP_ATR * race.REWARD_RISK} x ATR14 below; a gap through "
+            "either level fills at the open; stop first on a bar touching both; "
+            + _short_borrow() + costs)
+
+
 def _render_trade(idea, run) -> str:
     """The trade line for the idea's shape; the fixed text is today's, byte for byte."""
     costs = (f"costs {run['slippage_bps']} bps a side + {run['commission']:.4f}R "
              "commission.")
+    if idea.direction == "short":
+        return _short_trade_line(idea, costs)
     if idea.race_shape == "trail":
         return (f"**Trade:** entry next open; initial stop {race.STOP_ATR} x ATR14[t] (1R); "
                 "no target; chandelier trail: the stop on bar j is the higher of the "
@@ -695,11 +720,31 @@ def _context_hypothesis(idea) -> str:
             + diagnostics.scope_sentence(idea))
 
 
+_SHORT_ENTRY_TEXT = {"next_open": "entry next open",
+                     "level": "sell-stop at the level, filled on the event bar"}
+_SHORT_RACE_TEXT = {
+    "fixed": lambda: f"fixed {race.STOP_ATR}/{race.STOP_ATR * race.REWARD_RISK} ATR race",
+    "trail": lambda: (f"chandelier {trail.TRAIL_ATR} ATR trail race, initial stop "
+                      f"{race.STOP_ATR} ATR"),
+}
+
+
+def _short_hypothesis(idea) -> str:
+    """v182: the short ledger hypothesis, naming direction, entry, shape and borrow."""
+    entry = _SHORT_ENTRY_TEXT[idea.entry]
+    shape = _SHORT_RACE_TEXT[idea.race_shape]()
+    return (f"{idea.name}: {idea.summary}; SHORT, {entry}, {shape} vs K={null.K} matched "
+            f"null raced short, cap {idea.time_cap_bars}, borrow {BORROW_RATE_ANNUAL:.1%} "
+            "a year, PIT S&P 500 2010-2019, after costs (v182 short screen)")
+
+
 def hypothesis(idea) -> str:
     """The ledger hypothesis, naming the shape and cap; the fixed text is
     today's, byte for byte."""
     if idea.context:
         return _context_hypothesis(idea)
+    if idea.direction == "short":
+        return _short_hypothesis(idea)
     if idea.race_shape == "trail":
         return (f"{idea.name}: {idea.summary}; chandelier {trail.TRAIL_ATR} ATR trail race, "
                 f"initial stop {race.STOP_ATR} ATR, cap {idea.time_cap_bars} vs K={null.K} "

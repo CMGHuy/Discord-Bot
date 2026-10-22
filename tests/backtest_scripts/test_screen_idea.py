@@ -648,3 +648,122 @@ def test_fixed_hypothesis_is_unchanged():
     assert screen_idea.hypothesis(idea) == (
         f"gap_volume: {idea.summary}; fixed 1.5/3.0 ATR race vs K=20 matched null, "
         "cap 20, PIT S&P 500 2010-2019, after costs (v140 screen)")
+
+
+from swingbot.core.backtesting.screen import sides as sides_mod  # noqa: E402
+from swingbot.core.edge import frictions as frictions_mod  # noqa: E402
+
+
+def _short_probe(cap=20, shape="fixed"):
+    """turn_of_month's trigger raced short; never registered."""
+    return Idea(name="short_probe", events=IDEAS["turn_of_month"].events,
+                time_cap_bars=cap, direction="short", race_shape=shape,
+                summary="probe", source="test")
+
+
+def test_screen_ticker_passes_the_idea_direction_to_book_and_null(monkeypatch):
+    seen = {"book": [], "null": []}
+    real_book, real_null = race_mod.run_book, null.matched_null
+
+    def book_spy(*args, **kwargs):
+        seen["book"].append(kwargs.get("direction"))
+        return real_book(*args, **kwargs)
+
+    def null_spy(*args, **kwargs):
+        seen["null"].append(kwargs.get("direction"))
+        return real_null(*args, **kwargs)
+
+    monkeypatch.setattr(race_mod, "run_book", book_spy)
+    monkeypatch.setattr(null, "matched_null", null_spy)
+    df = random_walk(2600)
+    screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS)
+    assert seen == {"book": ["long"], "null": ["long"]}
+    seen["book"].clear()
+    seen["null"].clear()
+    screen_idea.screen_ticker(_short_probe(), "AAA", df, ALWAYS)
+    assert seen == {"book": ["short"], "null": ["short"]}
+
+
+def test_a_short_screen_reads_the_flipped_forward_return_once(monkeypatch):
+    draws = []
+    real = null.matched_null
+
+    def spy(*args, **kwargs):
+        out = real(*args, **kwargs)
+        draws.append(out)
+        return out
+
+    monkeypatch.setattr(null, "matched_null", spy)
+    df = random_walk(2600)
+    out = screen_idea.screen_ticker(_short_probe(), "AAA", df, ALWAYS)
+    atr = screen_idea.indicators.atr(df)
+    assert draws and draws[0].event_pos.size
+    for h in forward.HORIZONS:
+        fwd = -forward.forward_atr(df, atr, h)
+        assert out.excess[h] == forward.excess_drift(fwd, draws[0].event_pos, draws[0].groups)
+    long_rank = screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS).rank
+    for h in forward.HORIZONS:
+        assert np.array_equal(out.rank[f"fwd_{h}"].to_numpy(),
+                              -long_rank[f"fwd_{h}"].to_numpy(), equal_nan=True)
+
+
+def _count_borrow(monkeypatch):
+    seen = []
+    real = frictions_mod.borrow_r
+
+    def spy(entry, risk, days):
+        seen.append(int(np.size(days)))
+        return real(entry, risk, days)
+
+    monkeypatch.setattr(frictions_mod, "borrow_r", spy)
+    monkeypatch.setattr(sides_mod, "borrow_r", spy, raising=False)
+    return seen
+
+
+def test_borrow_is_charged_once_on_the_book_and_once_on_the_null_never_on_a_long(monkeypatch):
+    seen = _count_borrow(monkeypatch)
+    df = random_walk(2600)
+    screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS)
+    assert seen == []
+    out = screen_idea.screen_ticker(_short_probe(), "AAA", df, ALWAYS)
+    raced = (len(out.events) + out.counters["skipped_overlap"]
+             + out.counters["dropped_no_match"])
+    assert seen == [raced, sum(out.null_outcomes.values())]
+
+
+def test_short_fixed_trade_line_names_the_mirror_and_the_borrow():
+    assert screen_idea._render_trade(_short_probe(), RUN_INFO) == (
+        "**Trade:** short; entry next open (sell); stop 1.5 x ATR14 above; target 3.0 x "
+        "ATR14 below; a gap through either level fills at the open; stop first on a bar "
+        "touching both; borrow 0.5% a year on calendar days held; "
+        "costs 5.0 bps a side + 0.0200R commission.")
+
+
+def test_short_trail_trade_line_names_the_lowest_low_and_the_borrow():
+    line = screen_idea._render_trade(_short_probe(60, "trail"), RUN_INFO)
+    assert line.startswith("**Trade:** short; entry next open (sell); initial stop 1.5 x "
+                           "ATR14[t] above (1R); no target;")
+    assert "the lower of the initial stop and the lowest low of bars t+1..j-1 plus 3.0 x ATR14[t]" in line
+    assert "never raised" in line and "60 bars" in line
+    assert line.endswith("borrow 0.5% a year on calendar days held; "
+                         "costs 5.0 bps a side + 0.0200R commission.")
+
+
+def test_short_results_header_says_short_only():
+    v = verdict.Verdict("SCREEN-FAIL", 412, 0.03, -0.01, 0.07, 0.2, 6, {}, {})
+    head = "\n".join(screen_idea._render_head(_short_probe(), v, RUN_INFO))
+    assert "time cap 20 bars; short only." in head
+
+
+def test_short_hypothesis_names_the_direction_and_validates():
+    idea = _short_probe()
+    text = screen_idea.hypothesis(idea)
+    assert text == ("short_probe: probe; SHORT, entry next open, fixed 1.5/3.0 ATR race vs "
+                    "K=20 matched null raced short, cap 20, borrow 0.5% a year, PIT S&P 500 "
+                    "2010-2019, after costs (v182 short screen)")
+    trail_text = screen_idea.hypothesis(_short_probe(60, "trail"))
+    assert "SHORT, entry next open, chandelier 3.0 ATR trail race, initial stop 1.5 ATR" in trail_text
+    v = verdict.Verdict("SCREEN-FAIL", 412, 0.03, -0.01, 0.07, 0.2, 6, {}, {})
+    row = screen_idea.ledger_row(idea, v, "docs/superpowers/results/x.md", "2026-10-21")
+    stats.validate_ledger_row(row)
+    assert row["hypothesis"] == text
