@@ -46,6 +46,16 @@ describe('tradeDrawerFields (v179 §3.2)', () => {
     ]);
   });
 
+  it('shows the planned TP1 and stop once PARTIAL, with the working stop beside them', () => {
+    // `target` is the live target (TP2) after TP1 banks; `target1` / `risk_stop` are the plan's own.
+    const row = tradeRow({ status: 'PARTIAL', target: 120, target1: 110, target2: 120, risk_stop: 95, stop_loss: 104 });
+    const byKey = Object.fromEntries(tradeDrawerFields(row, '€', NOW).map((f) => [f.key, f.value]));
+    expect(byKey['tp1']).toBe('110.00');
+    expect(byKey['tp2']).toBe('120.00');
+    expect(byKey['stop']).toBe('95.00');
+    expect(byKey['working_stop']).toBe('104.00');
+  });
+
   it('shows the live P&L of an open position as a percentage and an amount', () => {
     expect(drawerPnl(tradeRow())).toEqual({ pct: 5, amount: 50 });
     const pnl = tradeDrawerFields(tradeRow(), '€', NOW).find((f) => f.key === 'pnl')!;

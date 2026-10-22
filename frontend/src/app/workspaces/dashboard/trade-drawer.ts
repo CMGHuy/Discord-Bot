@@ -57,6 +57,18 @@ function entryField(row: TradeRow): TradeDrawerField {
     : field('entry', 'Entry', num(row.entry), true);
 }
 
+/** The original plan stop, as the trade detail's plan card shows it (`risk_stop`;
+ *  `stop_loss` is the working stop once PARTIAL), then the working stop only
+ *  when it has moved off it. */
+function stopFields(row: TradeRow): TradeDrawerField[] {
+  const planned = row.risk_stop ?? row.stop_loss;
+  const fields = [field('stop', 'Stop', num(planned), true)];
+  if (row.stop_loss !== null && planned !== null && row.stop_loss !== planned) {
+    fields.push(field('working_stop', 'Working stop', num(row.stop_loss), true));
+  }
+  return fields;
+}
+
 /** Everything the drawer shows, from the loaded row alone (spec §3.2: no
  *  fetch). Absent values are the em dash, never NaN or an empty cell. */
 export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number): TradeDrawerField[] {
@@ -65,8 +77,8 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
     field('status', 'Status', text(row.status_label || row.status)),
     field('pnl', 'P&L', pnlText(row, currency), true, toneOf(drawerPnl(row).pct)),
     entryField(row),
-    field('stop', 'Stop', num(row.stop_loss), true),
-    field('tp1', 'TP1', num(row.target), true),
+    ...stopFields(row),
+    field('tp1', 'TP1', num(row.target1 ?? row.target), true),
     field('tp2', 'TP2', num(row.target2), true),
     field('rr', 'R:R', num(row.risk_reward), true),
     field('opened', 'Opened', dateTime(row.opened_at)),
