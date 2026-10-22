@@ -102,10 +102,11 @@ export type DashboardScopeMode = DashboardScope;
        this grid's own width computable when the ancestor asks for its
        content size (.combined's "auto" track above, and -- separately --
        any container that ends up shrink-to-fit sized), which a 1fr track
-       cannot give under those conditions. */
+       cannot give under those conditions. The tracks stretch (1fr max), so the
+       cards span the panel and share the chart's left and right edges. */
     .grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(140px, 180px));
+      grid-template-columns: repeat(4, minmax(140px, 1fr));
       gap: var(--space-14);
     }
     /* The tablet band -- v95 A5.

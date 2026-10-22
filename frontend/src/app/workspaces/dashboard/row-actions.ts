@@ -34,7 +34,7 @@ const CLOSEABLE = new Set(['ACTIVE', 'PARTIAL']);
     </button>
 
     @if (open()) {
-      <div class="menu elev-overlay" role="menu">
+      <div class="menu elev-overlay" role="menu" [class.up]="placement() === 'up'">
         @if (canClose()) {
           <button sb-button variant="ghost" role="menuitem" type="button"
                   (click)="run('close')">Close position</button>
@@ -55,6 +55,9 @@ const CLOSEABLE = new Set(['ACTIVE', 'PARTIAL']);
       min-width: 160px; display: flex; flex-direction: column; gap: var(--space-4);
       padding: var(--space-6);
     }
+    /* In a scrolling container (the drawer body) a menu below the trigger is
+       clipped and stretches the scroll area; "up" opens it over the content. */
+    .menu.up { top: auto; bottom: calc(100% + var(--space-4)); }
     .menu button { justify-content: flex-start; font-size: var(--text-table); }
   `,
 })
@@ -65,6 +68,7 @@ export class RowActions {
 
   readonly row = input.required<TradeRow>();
   readonly done = output<void>();
+  readonly placement = input<'down' | 'up'>('down');
 
   protected readonly open = signal(false);
   protected readonly canClose = computed(() =>

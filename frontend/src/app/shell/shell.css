@@ -1,4 +1,6 @@
 .shell {
+  /* One height for the topbar and the sidebar's wordmark row. */
+  --topbar-h: 68px;
   display: grid;
   /* Fixed sidebar: the nav is six fixed labels and never needs to grow, and
      a fluid one would move the workspace's left edge between routes. */
@@ -137,8 +139,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-20);
-  /* 14px, not 20: the wordmark's baseline then meets the page title's. */
-  padding: var(--space-14) var(--space-14) var(--space-20);
+  /* The wordmark row (.mark) is as tall as the topbar, so its centre meets
+     the page title's; the top inset is that row's own. */
+  padding: 0 var(--space-14) var(--space-20);
   background: var(--surface);
   border-right: 1px solid var(--border);
 }
@@ -146,6 +149,9 @@
 .mark {
   display: flex;
   align-items: center;
+  /* Same height as .topbar (its border included), so both centre on one line. */
+  height: var(--topbar-h);
+  flex: none;
   /* Same inset as a nav link (2px border strip + --space-10 padding), so the
      brand mark sits in the icon column of the entries below it. */
   padding-inline: calc(2px + var(--space-10)) var(--space-10);
@@ -261,14 +267,16 @@ sb-nav-indicator {
 
 .topbar {
   display: flex;
-  /* The 20px title, the 11px tape and the 11px status text share one text
-     baseline (v179 §3.4); the textless avatar below centres on the bar. */
-  align-items: baseline;
+  /* Every child centres on the bar: the title block, the tape, the status
+     cluster and the avatar share one horizontal axis, at one fixed height
+     (--topbar-h) that the sidebar's wordmark row matches. */
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--topbar-h);
   gap: var(--space-14);
-  padding: var(--space-10) var(--space-20);
+  padding: 0 var(--space-20);
   border-bottom: 1px solid var(--border);
 }
-.topbar sb-profile-menu { align-self: center; }
 
 /* Grows to fill the whole gap between the title and the status cluster --
    there is no separate .spacer any more, this element does that job -- and
@@ -414,6 +422,7 @@ sb-nav-indicator {
    stylesheet and ViewportService.isNarrow() disagreed between 640 and 720.
    The clock and the wide tape now survive down to 640px. */
 @media (max-width: 1023px) {
+  .shell { --topbar-h: 56px; }
   .page-subtitle { display: none; }
 }
 @media (max-width: 639px) {
