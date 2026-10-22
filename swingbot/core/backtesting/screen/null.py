@@ -74,9 +74,10 @@ def _empty(dropped: int) -> NullDraw:
 
 def matched_null(df, event_pos, eligible, k: int, seed, *, cap: int, atr,
                  trend, slippage_bps=None, commission=None,
-                 shape: str = "fixed") -> NullDraw:
+                 shape: str = "fixed", direction: str = "long") -> NullDraw:
     """``shape`` is the idea's race shape: a trail idea's null is a trail
-    null (v163). The draw itself does not depend on it."""
+    null (v163). The null is raced in the idea's ``direction`` (v182). The
+    draw itself depends on neither."""
     race_fn = race_mod.race_for(shape)
     rng = np.random.default_rng(seed)
     months = month_key(df.index)
@@ -90,8 +91,9 @@ def matched_null(df, event_pos, eligible, k: int, seed, *, cap: int, atr,
         groups.append(np.sort(rng.choice(pool, size=min(k, len(pool)), replace=False)))
     if not kept:
         return _empty(dropped)
+    extra = {} if direction == "long" else {"direction": direction}
     raced = race_fn(df, np.concatenate(groups), cap, atr=atr,
-                    slippage_bps=slippage_bps, commission=commission)
+                    slippage_bps=slippage_bps, commission=commission, **extra)
     bounds = np.cumsum([len(g) for g in groups])[:-1]
     means = np.array([part.mean() for part in np.split(raced.r, bounds)])
     return NullDraw(np.asarray(kept, dtype=int), tuple(groups), means, raced, dropped)
