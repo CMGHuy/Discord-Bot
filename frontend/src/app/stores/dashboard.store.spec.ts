@@ -11,7 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import {
@@ -19,8 +19,9 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { Dashboard } from '../api/models';
-import { DashboardStore } from './dashboard.store';
+import { Dashboard, Preferences } from '../api/models';
+import { DashboardStore, RANGE_DEBOUNCE_MS } from './dashboard.store';
+import { PreferencesStore } from './preferences.store';
 
 /* NG35/NG36 — the reference store, and the tracer bullet's data path.
  *
@@ -77,12 +78,20 @@ const RESPONSE: Dashboard = {
   default_expiry_bars: 5,
 };
 
+const stored = signal<Preferences>({});
+const preferencesFake = {
+  values: () => stored(),
+  isLoaded: () => true,
+  update: (mutate: (p: Preferences) => Preferences) => stored.update(mutate),
+};
+
 describe('DashboardStore', () => {
   let store: InstanceType<typeof DashboardStore>;
   let backend: HttpTestingController;
   let events: FakeEventStream;
 
   beforeEach(() => {
+    stored.set({});
     events = new FakeEventStream();
     TestBed.configureTestingModule({
       providers: [
@@ -92,6 +101,7 @@ describe('DashboardStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        { provide: PreferencesStore, useValue: preferencesFake },
         DashboardStore,
       ],
     });
@@ -431,5 +441,229 @@ describe('DashboardStore', () => {
       expect(store.appliedScope()).toBeNull();
       expect(store.realizedCount()).toBe(0);
     });
+  });
+  /* -- v181: presets, Range, stale -------------------------------------- */
+
+  describe('the v181 scope selection', () => {
+    // Wed 21 Oct 2026, 10:00 New York. Presets snap to New York midnights.
+    const NOW = new Date('2026-10-21T14:00:00Z');
+    const TO = '2026-10-22T04:00:00.000Z';
+    const W1 = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
+    const W2 = { from: '2026-09-10T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
+    const dashboardRequests = () => backend.match((req) => req.url === '/api/v1/dashboard');
+    const one = () => backend.expectOne((req) => req.url === '/api/v1/dashboard');
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('starts on 1D with no window and no chart move', () => {
+      tick();
+      expect(one().request.params.get('mode')).toBe('today');
+      expect(store.selection()).toEqual({ kind: 'preset', preset: '1D' });
+      expect(store.preset()).toBe('1D');
+      expect(store.closedWindow()).toBeNull();
+      expect(store.chartTarget().seq).toBe(0);
+      expect(store.stale()).toBe(false);
+    });
+
+    it('restores the stored preset before the first load, in one request', () => {
+      stored.set({ 'dashboard.scope.preset': '3M' });
+      tick();
+      const request = one();
+      expect(request.request.params.get('mode')).toBe('range');
+      expect(request.request.params.get('from')).toBe('2026-07-21T04:00:00.000Z');
+      expect(request.request.params.get('to')).toBe(TO);
+      request.flush(RESPONSE);
+      expect(store.preset()).toBe('3M');
+      expect(store.scope()).toBe('range');
+      expect(store.closedWindow()).toEqual({ from: '2026-07-21T04:00:00.000Z', to: TO });
+      expect(store.chartTarget()).toEqual({ window: { from: '2026-07-21T04:00:00.000Z', to: TO }, seq: 1 });
+      backend.verify();
+    });
+
+    it('setPreset writes the preference, refetches with the window and moves the chart', () => {
+      tick();
+      respond();
+      store.setPreset('5D');
+      const request = one();
+      expect(request.request.params.get('from')).toBe('2026-10-15T04:00:00.000Z');
+      expect(request.request.params.get('to')).toBe(TO);
+      expect(stored()['dashboard.scope.preset']).toBe('5D');
+      expect(store.chartTarget().seq).toBe(1);
+    });
+
+    it('maps 1D and All onto today and all, with no window for the Closed tab', () => {
+      tick();
+      respond();
+      store.setPreset('All');
+      const request = one();
+      expect(request.request.params.get('mode')).toBe('all');
+      expect(request.request.params.has('from')).toBe(false);
+      expect(store.closedWindow()).toBeNull();
+      expect(store.chartTarget().window).toBeNull();
+    });
+
+    it('re-choosing the current preset recentres the chart without a refetch or a write', () => {
+      tick();
+      respond();
+      store.setPreset('1D');
+      expect(store.chartTarget().seq).toBe(1);
+      expect(stored()).toEqual({});
+      backend.verify();
+    });
+
+    it('setRange waits 300 ms of quiet, then selects the Range without persisting or moving', () => {
+      expect(RANGE_DEBOUNCE_MS).toBe(300);
+      tick();
+      respond();
+      store.setRange(W1);
+      vi.advanceTimersByTime(200);
+      store.setRange(W2);
+      vi.advanceTimersByTime(299);
+      expect(dashboardRequests()).toHaveLength(0);
+      vi.advanceTimersByTime(1);
+      const request = one();
+      expect(request.request.params.get('mode')).toBe('range');
+      expect(request.request.params.get('from')).toBe(W2.from);
+      expect(store.selection()).toEqual({ kind: 'range', window: W2 });
+      expect(store.preset()).toBeNull();
+      expect(store.closedWindow()).toEqual(W2);
+      expect(store.chartTarget()).toEqual({ window: W2, seq: 0 });
+      expect(stored()).toEqual({});
+    });
+
+    it('ignores a Range equal to the one already selected', () => {
+      tick();
+      respond();
+      store.setRange(W1);
+      vi.advanceTimersByTime(RANGE_DEBOUNCE_MS);
+      one().flush(RESPONSE);
+      store.setRange({ ...W1 });
+      vi.advanceTimersByTime(RANGE_DEBOUNCE_MS);
+      backend.verify();
+    });
+
+    it('a preset click cancels a Range still settling', () => {
+      tick();
+      respond();
+      store.setRange(W1);
+      store.setPreset('1M');
+      one().flush(RESPONSE);
+      vi.advanceTimersByTime(RANGE_DEBOUNCE_MS);
+      backend.verify();
+      expect(store.preset()).toBe('1M');
+    });
+
+    it('drops the response of a superseded request', () => {
+      tick();
+      respond();
+      store.setPreset('All');
+      store.setPreset('5D');
+      const [first, second] = dashboardRequests();
+      second.flush({ ...RESPONSE, account_balance: 2 });
+      first.flush({ ...RESPONSE, account_balance: 1 });
+      expect(store.balance()).toBe(2);
+    });
+
+    it('recomputes a rolling preset on every refresh, so it follows the New York day', () => {
+      tick();
+      respond();
+      store.setPreset('1M');
+      one().flush(RESPONSE);
+      vi.setSystemTime(new Date('2026-10-22T05:00:00Z'));   // 01:00 New York, 22 Oct
+      store.load();
+      const request = one();
+      expect(request.request.params.get('from')).toBe('2026-09-22T04:00:00.000Z');
+      expect(request.request.params.get('to')).toBe('2026-10-23T04:00:00.000Z');
+    });
+
+    it('keeps the last figures, marked stale, when a range refetch fails; a success clears it', () => {
+      tick();
+      respond();
+      store.setPreset('3M');
+      one().error(new ProgressEvent('error'), { status: 0 });
+      expect(store.balance()).toBe(10_000);
+      expect(store.stale()).toBe(true);
+      expect(store.preset()).toBe('3M');
+
+      store.load();
+      one().flush(RESPONSE);
+      expect(store.stale()).toBe(false);
+      expect(store.error()).toBeNull();
+    });
+
+    it('a failed first load is an error, not stale', () => {
+      tick();
+      one().error(new ProgressEvent('error'), { status: 0 });
+      expect(store.stale()).toBe(false);
+      expect(store.error()).not.toBeNull();
+    });
+
+    it('keeps setScope for the Today / All days toggle', () => {
+      tick();
+      respond();
+      store.setScope('all');
+      one().flush({ ...RESPONSE, scope: { mode: 'all' } });
+      expect(store.preset()).toBe('All');
+      expect(store.scope()).toBe('all');
+      expect(stored()['dashboard.scope.preset']).toBe('All');
+    });
+    it('does not refetch again when a selection change reaches the init effect', () => {
+      tick();
+      respond();
+      store.setPreset('5D');
+      one().flush(RESPONSE);
+      tick();
+      vi.advanceTimersByTime(RANGE_DEBOUNCE_MS);
+      backend.verify();
+    });
+
+    it('ignores a superseded failure after the latest figures arrived', () => {
+      tick();
+      respond();
+      store.setPreset('All');
+      store.setPreset('5D');
+      const [older, latest] = dashboardRequests();
+      latest.flush({ ...RESPONSE, account_balance: 20_000 });
+      older.error(new ProgressEvent('error'), { status: 0 });
+      expect(store.balance()).toBe(20_000);
+      expect(store.stale()).toBe(false);
+      expect(store.loading()).toBe(false);
+      expect(store.error()).toBeNull();
+    });
+
+    it('adopts a late stored preset by replacing the default request', () => {
+      tick();
+      const initial = one();
+      store.adoptStoredPreset('3M');
+      const restored = one();
+      expect(restored.request.params.get('from')).toBe('2026-07-21T04:00:00.000Z');
+      restored.flush({ ...RESPONSE, account_balance: 20_000 });
+      initial.flush(RESPONSE);
+      expect(store.balance()).toBe(20_000);
+      expect(store.preset()).toBe('3M');
+      expect(store.chartTarget().seq).toBe(1);
+      expect(stored()).toEqual({});
+    });
+
+    it('never restores over a partner choice even while a Range is settling', () => {
+      tick();
+      respond();
+      store.setRange(W1);
+      store.adoptStoredPreset('3M');
+      expect(store.preset()).toBe('1D');
+      vi.advanceTimersByTime(RANGE_DEBOUNCE_MS);
+      one().flush(RESPONSE);
+      expect(store.selection()).toEqual({ kind: 'range', window: W1 });
+      expect(store.chartTarget().seq).toBe(0);
+      expect(stored()).toEqual({});
+    });
+
   });
 });

@@ -1,4 +1,4 @@
-import { computed, effect, inject } from '@angular/core';
+import { computed, effect, inject, untracked } from '@angular/core';
 import {
   patchState,
   signalStore,
@@ -9,21 +9,65 @@ import {
 } from '@ngrx/signals';
 
 import { ApiClient } from '../api/api-client';
+import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
-import { Observable, Subject, debounceTime } from 'rxjs';
+import { Observable, Subject, debounceTime, defer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { routeRequest } from '../routing/route-request';
 import { Dashboard, DashboardScope } from '../api/models';
+import { readScopePreset, writeScopePreset } from '../ui/equity-chart-prefs';
+import {
+  ChartTarget,
+  ScopePreset,
+  ScopeSelection,
+  TimeWindow,
+  chartWindowFor,
+  scopeToRequest,
+} from '../workspaces/dashboard/panels/equity-range.model';
+import { PreferencesStore } from './preferences.store';
 
 interface DashboardSlice {
   data: Dashboard | null;
   loading: boolean;
   error: string | null;
-  /** SR58 — the date scope. A fetch parameter, so it lives here rather than
-   *  in the component: the server does the date filtering, and a scope held
-   *  in the component could not narrow the realised figures at all. */
-  scope: DashboardScope;
+  /** SR58, reshaped by v181 -- what the panel is scoped to: a preset (1D,
+   *  5D … All) or a Range the partner dragged or zoomed to. A fetch input,
+   *  so it lives here: the server does the date filtering. `scope` is
+   *  derived from it. */
+  selection: ScopeSelection;
+  /** The window the latest request was sent with (null for 1D and All). The
+   *  Closed tab reads it through `closedWindow`, so the table under the KPI
+   *  cards always asks for the window the cards were asked for. */
+  requestWindow: TimeWindow | null;
+  /** A refetch failed while figures were on screen: they are kept, dimmed,
+   *  with a stale hint (spec v181 § 9). Never set by a failed first load. */
+  stale: boolean;
+  /** Bumped on every programmatic chart move (a preset click, a restored
+   *  preset); the chart moves when it changes. 0 = nothing asked yet. */
+  targetSeq: number;
+}
+
+/** How long a pan or zoom must settle before the KPIs refetch (spec § 8). */
+export const RANGE_DEBOUNCE_MS = 300;
+
+const NOT_RESPONDING = 'The admin is not responding.';
+
+function sameWindow(selection: ScopeSelection, window: TimeWindow): boolean {
+  return selection.kind === 'range'
+    && selection.window.from === window.from && selection.window.to === window.to;
+}
+
+function isPreset(selection: ScopeSelection, preset: ScopePreset): boolean {
+  return selection.kind === 'preset' && selection.preset === preset;
+}
+
+function failure(hadData: boolean, error: ApiError): Partial<DashboardSlice> {
+  return {
+    loading: false,
+    stale: hadData,
+    error: error.code === 'unavailable' ? NOT_RESPONDING : error.message,
+  };
 }
 
 /**
@@ -80,13 +124,43 @@ export const DashboardStore = signalStore(
     // open, however old" (see Trades' `today` filter), so a separate
     // "+ open" mode has nothing left to add. 'active' stays a valid value
     // the server accepts, for any link that still names it.
-    data: null, loading: false, error: null, scope: 'today',
+    // v181: 'today' is now the 1D preset, 'all' the All preset.
+    data: null, loading: false, error: null,
+    selection: { kind: 'preset', preset: '1D' },
+    requestWindow: null, stale: false, targetSeq: 0,
   }),
-  withComputed(({ data }) => ({
+  withComputed(({ data, selection, requestWindow, targetSeq }) => ({
     /** True until the first response, and never again. Distinguishes "no
      *  data yet" from "a refetch is in flight", which want different UI:
      *  a skeleton once, and nothing at all thereafter. */
     empty: computed(() => data() === null),
+
+    /* -- v181: the scope selection ---------------------------------------- */
+
+    /** The `/dashboard` mode the selection maps to: 1D -> `today`, All ->
+     *  `all`, every other preset and a Range -> `range`. */
+    scope: computed<DashboardScope>(() => scopeToRequest(selection(), new Date()).mode),
+
+    /** The chosen preset, or null under a hand-picked Range. */
+    preset: computed<ScopePreset | null>(() => {
+      const current = selection();
+      return current.kind === 'preset' ? current.preset : null;
+    }),
+
+    /** The Closed tab's window: the latest KPI request's (null for 1D/All,
+     *  where the tab keeps its `today` flag or no filter). */
+    closedWindow: computed(() => requestWindow()),
+
+    /** Where the chart should move, and a sequence number that changes only
+     *  for a programmatic move. Under a Range the window is the Range itself
+     *  and `seq` does not move, so a hand pan never moves the chart back. */
+    chartTarget: computed<ChartTarget>(() => {
+      const current = selection();
+      const window = current.kind === 'preset'
+        ? chartWindowFor(current.preset, new Date())
+        : current.window;
+      return { window, seq: targetSeq() };
+    }),
 
     balance: computed(() => data()?.account_balance ?? null),
     openPnlPct: computed(() => data()?.open_pnl_pct ?? null),
@@ -206,27 +280,92 @@ export const DashboardStore = signalStore(
       return used / cap;
     }),
   })),
-  withMethods((store, api = inject(ApiClient)) => {
-    const resolve = (): Observable<void> => routeRequest(api.dashboard(store.scope()), {
-      start: () => patchState(store, { loading: true }),
-      next: (data) => patchState(store, { data, loading: false, error: null }),
-      error: (error) => patchState(store, {
-        loading: false,
-        error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message,
-      }),
+  withMethods((store, api = inject(ApiClient), prefs = inject(PreferencesStore)) => {
+    let latestRequest = 0;
+    // Bumped by a preset click, so a Range still inside its debounce never
+    // lands on top of the preset the partner chose after it.
+    let rangeGeneration = 0;
+    let chosen = false;
+    const ranges = new Subject<{ window: TimeWindow; generation: number }>();
+
+    // `defer`: the request number and the window are taken when the route
+    // resolver or a method subscribes. `untracked`: `load()` runs inside the
+    // onInit effect, and a tracked read would refetch on every selection
+    // change on top of the method's own refetch.
+    const resolve = (): Observable<void> => defer(() => {
+      const request = ++latestRequest;
+      const current = (): boolean => request === latestRequest;
+      const { mode, window } = scopeToRequest(untracked(() => store.selection()), new Date());
+      return routeRequest(api.dashboard(mode, window), {
+        start: () => patchState(store, { loading: true, requestWindow: window }),
+        next: (data) => {
+          if (current()) patchState(store, { data, loading: false, error: null, stale: false });
+        },
+        error: (error) => {
+          if (current()) patchState(store, failure(untracked(() => store.data()) !== null, error));
+        },
+      });
     });
+
+    const refetch = (): void => { resolve().subscribe({ error: () => undefined }); };
+
+    const select = (selection: ScopeSelection): void => {
+      patchState(store, { selection });
+      refetch();
+    };
+
+    const setPreset = (preset: ScopePreset): void => {
+      chosen = true;
+      rangeGeneration += 1;
+      patchState(store, { targetSeq: store.targetSeq() + 1 });
+      if (isPreset(store.selection(), preset)) return;
+      prefs.update((current) => writeScopePreset(current, preset));
+      select({ kind: 'preset', preset });
+    };
+
+    ranges.pipe(debounceTime(RANGE_DEBOUNCE_MS), takeUntilDestroyed()).subscribe(
+      ({ window, generation }) => {
+        if (generation !== rangeGeneration || sameWindow(store.selection(), window)) return;
+        select({ kind: 'range', window });
+      },
+    );
+
     return {
       resolve,
-      load(): void { resolve().subscribe({ error: () => undefined }); },
+      load: refetch,
+      setPreset,
+      /** A user pan or zoom settled on `window` (V181-15 calls this). Never
+       *  persisted: a reload returns to the last preset (spec § 1). */
+      setRange(window: TimeWindow): void {
+        chosen = true;
+        ranges.next({ window, generation: rangeGeneration });
+      },
+      /** The pre-v181 Today / All days toggle, kept until V181-14 replaces it. */
       setScope(scope: DashboardScope): void {
-        if (scope === store.scope()) return;
-        patchState(store, { scope });
-        resolve().subscribe({ error: () => undefined });
+        setPreset(scope === 'all' ? 'All' : '1D');
+      },
+      /** The preset restored from preferences, once they have loaded. Moves
+       *  the chart there; refetches only if a load already went out with the
+       *  default. A no-op once the partner has chosen. */
+      adoptStoredPreset(preset: ScopePreset): void {
+        if (chosen || isPreset(store.selection(), preset)) return;
+        patchState(store, { selection: { kind: 'preset', preset }, targetSeq: store.targetSeq() + 1 });
+        if (latestRequest > 0) refetch();
       },
     };
   }),
   withHooks({
-    onInit(store, events = inject(EventStream)) {
+    onInit(store, events = inject(EventStream), prefs = inject(PreferencesStore)) {
+      // v181 -- restore the stored preset once preferences are in. Created
+      // before the load effect below, so on a warm start (preferences already
+      // loaded) it runs first and the initial load asks for the stored scope.
+      let adopted = false;
+      effect(() => {
+        if (adopted || !prefs.isLoaded()) return;
+        adopted = true;
+        const preset = readScopePreset(prefs.values());
+        untracked(() => store.adoptStoredPreset(preset));
+      });
       const account = events.changes('account');
       const trades = events.changes('trades');
       // Coalesces the two signal reads (2026-09-14): closing a trade raises
