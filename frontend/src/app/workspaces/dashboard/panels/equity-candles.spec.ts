@@ -6,6 +6,7 @@ import { EquityCandle, EquityCandlesResponse } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
+import { token } from '../../../ui/chart/chart-theme';
 import { EquityCandles } from './equity-candles';
 
 // A real lightweight-charts chart is created; fancy-canvas needs matchMedia.
@@ -43,9 +44,20 @@ function readout(el: HTMLElement): string[] {
   return [...el.querySelectorAll('.readout .part')].map((p) => p.textContent!.trim());
 }
 
+function tones(el: HTMLElement): (string | null)[] {
+  return [...el.querySelectorAll('.readout .part')].map((p) => p.getAttribute('data-tone'));
+}
+
+function at(fixture: { componentInstance: EquityCandles; detectChanges(): void }, from: number, to: number) {
+  fixture.componentInstance['onVisibleRange']({ from, to });
+  fixture.detectChanges();
+}
+
 describe('sb-equity-candles', () => {
-  it('reads out the latest candle when nothing is hovered', () => {
-    const { el } = render(response(MIXED));
+  it('reads out the hovered candle, its change toned by sign', () => {
+    const { fixture, el } = render(response(MIXED));
+    fixture.componentInstance['onCrosshair']({ logical: 2 });
+    fixture.detectChanges();
     const parts = readout(el);
     expect(parts[0]).toBe('Oct 20, 2026');
     expect(parts).toContain('C 112.00');
@@ -53,26 +65,52 @@ describe('sb-equity-candles', () => {
     expect(parts).toContain('+6.67% vs prev close');
     expect(parts).toContain('Open + closed');
     expect(parts).toContain('2 positions not counted');
+    expect(tones(el)[parts.indexOf('+7.00 €')]).toBe('pos');
+    expect(tones(el)[parts.indexOf('C 112.00')]).toBe('neutral');
+  });
+
+  it('summarises the visible range when nothing is hovered', () => {
+    const { fixture, el } = render(response(MIXED));
+    at(fixture, 0, 2);
+    expect(readout(el)).toEqual([
+      'Equity change +12.00 € (+12.00%)', 'High 120.00', 'Low 90.00',
+      'Max drawdown within range -4.55%',
+    ]);
+    expect(tones(el)).toEqual(['pos', 'neutral', 'neutral', 'neg']);
+  });
+
+  it('falls back to the latest candle with no buckets in view and clears the baseline', () => {
+    const { fixture, el } = render(response(MIXED));
+    at(fixture, 1, 2);
+    expect(fixture.componentInstance['baseline']?.current()?.value).toBe(110);
+    at(fixture, 10, 12);
+    expect(readout(el)[0]).toBe('Oct 20, 2026');
+    expect(readout(el)).toContain('C 112.00');
+    expect(fixture.componentInstance['baseline']?.current()).toBeNull();
   });
 
   it('explains the percentage in a tooltip', () => {
-    const { el } = render(response(MIXED));
+    const { fixture, el } = render(response(MIXED));
+    fixture.componentInstance['onCrosshair']({ logical: 2 });
+    fixture.detectChanges();
     const pctPart = [...el.querySelectorAll('.readout .part')]
       .find((p) => p.textContent!.includes('vs prev close'))!;
     expect(pctPart.getAttribute('title'))
       .toBe("Change from the previous candle's close, not a return on capital");
   });
 
-  it('follows the crosshair, and returns to the latest candle when it leaves', () => {
+  it('follows the crosshair, and returns to the range summary when it leaves', () => {
     const { fixture, el } = render(response(MIXED));
+    at(fixture, 0, 2);
     fixture.componentInstance['onCrosshair']({ logical: 1 });
     fixture.detectChanges();
     expect(readout(el)[0]).toBe('Oct 19, 2026');
     expect(readout(el)).toContain('approx');
+    expect(tones(el)[readout(el).indexOf('-5.00 €')]).toBe('neg');
 
     fixture.componentInstance['onCrosshair']({ logical: undefined });
     fixture.detectChanges();
-    expect(readout(el)[0]).toBe('Oct 20, 2026');
+    expect(readout(el)[0]).toBe('Equity change +12.00 € (+12.00%)');
   });
 
   it('draws rebuilt candles hollow, with the outer-bounds caption and the seam', () => {
@@ -126,17 +164,21 @@ describe('sb-equity-candles', () => {
     expect(stub.calls.load).toBe(1);
   });
 
-  it('always states what the account is', () => {
-    const { el } = render(response(MIXED));
-    expect(el.querySelector('.account')?.textContent?.trim())
-      .toBe('Paper account · before tax and costs');
+  it('states what the account is, directly under the readout', () => {
+    const { fixture, el } = render(response(MIXED));
+    at(fixture, 0, 2);
+    const account = el.querySelector('.readout')!.nextElementSibling;
+    expect(account?.classList.contains('account')).toBe(true);
+    expect(account?.textContent?.trim()).toBe('Paper account · before tax and costs');
+    expect(el.querySelectorAll('.account').length).toBe(1);
   });
 
   it('uses the currency it is given, not the API symbol', () => {
     const { fixture, el } = render(response(MIXED, { currency_symbol: '$' }));
     fixture.componentRef.setInput('currency', '£');
     fixture.detectChanges();
-    expect(readout(el)).toContain('+7.00 £');
+    at(fixture, 0, 2);
+    expect(readout(el)[0]).toContain('+12.00 £');
   });
 
   function buttons(el: HTMLElement, group: string): HTMLButtonElement[] {
@@ -199,6 +241,83 @@ describe('sb-equity-candles', () => {
     } finally {
       widthSpy.mockRestore();
       vi.unstubAllGlobals();
+    }
+  });
+  it('draws the baseline at the first in-window open, washed pos above and neg below', () => {
+    const { fixture } = render(response(MIXED));
+    at(fixture, 1, 2);
+    const base = fixture.componentInstance['baseline']?.current();
+    expect(base?.value).toBe(110);
+    expect(base?.above).toBe(token('--pos-soft'));
+    expect(base?.below).toBe(token('--neg-soft'));
+    expect(base?.line).toBe(token('--text-muted'));
+  });
+
+  it('asks for older history near the left edge, once, only while there is more', () => {
+    const { fixture, stub } = render(response(MIXED));
+    const loadOlder = vi.spyOn(stub, 'loadOlder');
+    stub.hasMore.set(false);
+    at(fixture, 1, 2);
+    expect(loadOlder).not.toHaveBeenCalled();
+
+    stub.hasMore.set(true);
+    at(fixture, 1, 2);
+    expect(loadOlder).toHaveBeenCalledTimes(1);
+
+    stub.pageLoading.set(true);
+    at(fixture, 0, 2);
+    expect(loadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the candles and offers a retry when a history page fails', () => {
+    const { fixture, el, stub } = render(response(MIXED));
+    const loadOlder = vi.spyOn(stub, 'loadOlder');
+    stub.pageError.set(true);
+    fixture.detectChanges();
+    const note = el.querySelector('.page-error')!;
+    expect(note.textContent).toContain("Couldn't load earlier history");
+    expect(fixture.componentInstance['state']()).toBe('chart');
+    note.querySelector('button')!.click();
+    expect(loadOlder).toHaveBeenCalledTimes(1);
+    stub.hasMore.set(true);
+    at(fixture, 0, 2);
+    expect(loadOlder).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports leaving the live edge and offers Latest, which scrolls back', () => {
+    const { fixture, el, stub } = render(response(MIXED));
+    // vi.spyOn calls through, so the stub's atLiveEdge follows what the component reports.
+    const setEdge = vi.spyOn(stub, 'setAtLiveEdge');
+    at(fixture, 0, 0);
+    expect(setEdge).toHaveBeenLastCalledWith(false);
+    expect(stub.atLiveEdge()).toBe(false);
+    const scroll = vi.spyOn(
+      (fixture.componentInstance as unknown as { chart: { timeScale(): { scrollToRealTime(): void } } })
+        .chart.timeScale(), 'scrollToRealTime');
+    const latest = [...el.querySelectorAll('button')].find((b) => b.textContent!.includes('Latest'))!;
+    latest.click();
+    expect(scroll).toHaveBeenCalledTimes(1);
+
+    stub.setAtLiveEdge(true);
+    fixture.detectChanges();
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent!.includes('Latest'))).toBe(false);
+  });
+
+  it('never moves the viewport on a scan refresh while the past is in view', () => {
+    const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 600);
+    try {
+      const { fixture, stub } = render(response(MIXED));
+      const scale = (fixture.componentInstance as unknown as {
+        chart: { timeScale(): { fitContent(): void; scrollToRealTime(): void } } }).chart.timeScale();
+      const fit = vi.spyOn(scale, 'fitContent');
+      const scroll = vi.spyOn(scale, 'scrollToRealTime');
+      stub.setAtLiveEdge(false);
+      stub.data.set(response([...MIXED, candle('2026-10-21', { o: 112, c: 115 })]));
+      fixture.detectChanges();
+      expect(fit).not.toHaveBeenCalled();
+      expect(scroll).not.toHaveBeenCalled();
+    } finally {
+      widthSpy.mockRestore();
     }
   });
 });

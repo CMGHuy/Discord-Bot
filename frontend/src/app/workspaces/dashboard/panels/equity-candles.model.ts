@@ -2,6 +2,7 @@ import type { CandlestickData, Time, UTCTimestamp } from 'lightweight-charts';
 
 import { EquityBasis, EquityCandle, EquityTimeframe } from '../../../api/models';
 import { money, num, pct } from '../../../ui/format';
+import { LogicalWindow, PnlTone, RangeStats, drawdownTone, signTone } from './equity-range.model';
 
 /**
  * Pure helpers for `sb-equity-candles` — spec v172 § 5. Everything here is
@@ -132,4 +133,61 @@ export function seamIndex(candles: readonly EquityCandle[]): number {
     else if (sawApprox) return i;
   }
   return -1;
+}
+
+/** One readout segment and the colour it carries — spec v181 §5. The tone is
+ *  decided here, never in the template, so the colour rule lives once. */
+export interface ReadoutPart {
+  text: string;
+  tone: PnlTone;
+}
+
+/** v181 §4: the range summary's labels. "within range" on the drawdown on
+ *  purpose: it is measured on closes, so it can be smaller than High→Low. */
+export const RANGE_LABELS = {
+  change: 'Equity change',
+  high: 'High',
+  low: 'Low',
+  drawdown: 'Max drawdown within range',
+} as const;
+
+/** The hovered candle (v172 parts), its two change parts toned by sign. */
+export function candleReadout(
+  candle: EquityCandle,
+  basis: EquityBasis,
+  currency: string,
+  tf: EquityTimeframe,
+): ReadoutPart[] {
+  const changeText = money(candle.change, currency);
+  const tone = signTone(candle.change);
+  return readoutParts(candle, basis, currency, tf).map((text) => ({
+    text,
+    tone: text === changeText || (isChangePart(text) && candle.change_pct !== null) ? tone : 'neutral',
+  }));
+}
+
+function drawdownPart(pctValue: number | null): ReadoutPart {
+  // Shown as a loss whichever sign the stats carry; an em dash is never coloured.
+  if (pctValue === null) return { text: `${RANGE_LABELS.drawdown} —`, tone: 'neutral' };
+  // Intl's decimal rounding matches the money/high/low readout at halfway values.
+  const loss = pctValue === 0 ? 0 : -Math.abs(pctValue);
+  return { text: `${RANGE_LABELS.drawdown} ${num(loss)}%`, tone: drawdownTone(pctValue) };
+}
+
+/** The visible range in one line — spec v181 §4. */
+export function rangeReadoutParts(stats: RangeStats | null, currency: string): ReadoutPart[] {
+  if (!stats) return [];
+  const share = stats.changePct === null ? '' : ` (${pct(stats.changePct)})`;
+  return [
+    { text: `${RANGE_LABELS.change} ${money(stats.change, currency)}${share}`, tone: signTone(stats.change) },
+    { text: `${RANGE_LABELS.high} ${num(stats.high)}`, tone: 'neutral' },
+    { text: `${RANGE_LABELS.low} ${num(stats.low)}`, tone: 'neutral' },
+    drawdownPart(stats.maxDrawdownPct),
+  ];
+}
+
+/** True while the newest candle is at least half on screen (a bar spans
+ *  ±0.5 logical units around its index), or before the first range event. */
+export function isAtLiveEdge(range: LogicalWindow | null, count: number): boolean {
+  return range === null || count === 0 || range.to >= count - 1.5;
 }

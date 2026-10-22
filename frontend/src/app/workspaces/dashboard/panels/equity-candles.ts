@@ -23,6 +23,9 @@ import {
 import { EquityBasis, EquityCandlesResponse, EquityTimeframe } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { Async } from '../../../ui/async';
+import { Button } from '../../../ui/button';
+import { BaselinePrimitive } from '../../../ui/chart/primitives/baseline-primitive';
+import { LogicalWindow, inWindowCandles, rangeStats, shouldLoadOlder } from './equity-range.model';
 import { chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
 import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
@@ -36,7 +39,10 @@ import {
   approxCaption,
   emptyMessage,
   isIntraday,
-  readoutParts,
+  ReadoutPart,
+  candleReadout,
+  isAtLiveEdge,
+  rangeReadoutParts,
   seamIndex,
   toSeriesData,
 } from './equity-candles.model';
@@ -58,7 +64,7 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
 @Component({
   selector: 'sb-equity-candles',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Segmented],
+  imports: [Async, Segmented, Button],
   template: `
     <div class="controls">
       <sb-segmented
@@ -75,14 +81,19 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
         [value]="store.basis()"
         (valueChange)="onBasis($event)"
       />
+      @if (state() === 'chart' && !store.atLiveEdge()) {
+        <button sb-button type="button" variant="ghost" class="latest" (click)="toLatest()">↦ Latest</button>
+      }
     </div>
     @if (readout().length) {
       <p class="readout">
         @for (part of readout(); track $index) {
-          <span class="part" [attr.title]="isChangePart(part) ? changeTooltip : null">{{ part }}</span>
+          <span class="part" [attr.data-tone]="part.tone"
+                [attr.title]="isChangePart(part.text) ? changeTooltip : null">{{ part.text }}</span>
         }
       </p>
     }
+    <p class="account">{{ accountLabel }}</p>
     @if (state() !== 'chart') {
       <sb-async
         class="states"
@@ -96,11 +107,18 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
         (retry)="store.load()"
       />
     }
-    <div #host class="chart" [class.hidden]="state() !== 'chart'"></div>
+    <div class="stage">
+      <div #host class="chart" [class.hidden]="state() !== 'chart'"></div>
+      @if (state() === 'chart' && store.pageError()) {
+        <p class="page-error" role="status">
+          Couldn't load earlier history ·
+          <button sb-button type="button" variant="link" (click)="store.loadOlder()">Retry</button>
+        </p>
+      }
+    </div>
     @if (showCaption()) {
       <p class="caption">{{ caption() }}</p>
     }
-    <p class="account">{{ accountLabel }}</p>
   `,
   styles: `
     /* Grid areas carry the three-device order (spec v172 § 5): readout above
@@ -110,7 +128,7 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
     :host {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-areas: "controls" "readout" "chart" "states" "caption" "account";
+      grid-template-areas: "controls" "readout" "account" "chart" "states" "caption";
       row-gap: var(--space-6);
       min-width: 0;
     }
@@ -134,33 +152,49 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
     .part + .part::before { content: '·'; margin: 0 var(--space-4); color: var(--text-faint); }
     .part[title] { text-decoration: underline dotted; cursor: help; }
     .states { grid-area: states; }
-    .chart { grid-area: chart; width: 100%; min-width: 0; height: 200px; }
+    .part[data-tone='pos'] { color: var(--pos); }
+    .part[data-tone='neg'] { color: var(--neg); }
+    .part[data-tone='warn'] { color: var(--warn); }
+    .stage { grid-area: chart; position: relative; min-width: 0; }
+    .chart { width: 100%; min-width: 0; height: 200px; }
     .chart.hidden { display: none; }
+    /* v181 §9: a failed history page never blanks the chart; the note sits
+       over its left edge, where the missing history would be. */
+    .page-error {
+      position: absolute;
+      top: var(--space-4);
+      left: var(--space-4);
+      margin: 0;
+      padding: var(--space-4) var(--space-6);
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--panel-radius);
+      font-size: var(--text-chip);
+      color: var(--text-secondary);
+    }
     .caption, .account { margin: 0; font-size: var(--text-chip); }
     .caption { grid-area: caption; color: var(--text-muted); }
     .account { grid-area: account; color: var(--text-faint); }
 
-    /* Phone: the two controls on their own lines (44px targets come from
-       --control-h in tokens.css), readout and caption under the chart. */
     @media (max-width: 639px) {
-      :host { grid-template-areas: "controls" "chart" "states" "readout" "caption" "account"; }
+      :host { grid-template-areas: "controls" "chart" "states" "readout" "account" "caption"; }
       .controls sb-segmented { flex: 1 1 100%; }
       .chart { height: 160px; }
     }
 
-    /* Desktop: the readout sits inline at the right of the controls. */
     @media (min-width: 1024px) {
       :host {
         grid-template-columns: auto minmax(0, 1fr);
         grid-template-areas:
           "controls readout"
+          "controls account"
           "chart chart"
           "states states"
-          "caption caption"
-          "account account";
+          "caption caption";
         column-gap: var(--space-10);
       }
-      .readout { align-self: center; justify-self: end; text-align: right; }
+      .readout { align-self: end; justify-self: end; text-align: right; }
+      .account { justify-self: end; text-align: right; }
     }
   `,
 })
@@ -192,6 +226,7 @@ export class EquityCandles {
   private chart: IChartApi | null = null;
   private series: ISeriesApi<'Candlestick'> | null = null;
   protected seam: VLinePrimitive | null = null;
+  protected baseline: BaselinePrimitive | null = null;
   private renderedView = '';
   private pendingView = '';
   private resizeObserver: ResizeObserver | null = null;
@@ -200,11 +235,12 @@ export class EquityCandles {
    *  `TradeChart`. `--text-faint` is the hollow candle's wick. */
   private readonly colors = (() => {
     const palette = chartPalette();
-    return { up: palette.up, down: palette.down, faint: token('--text-faint'), muted: palette.textMuted };
+    return { up: palette.up, down: palette.down, faint: token('--text-faint'), muted: palette.textMuted,
+             posSoft: palette.posSoft, negSoft: palette.negSoft };
   })();
 
   private readonly hoverIndex = signal<number | null>(null);
-  protected readonly visible = signal<{ from: number; to: number } | null>(null);
+  protected readonly visible = signal<LogicalWindow | null>(null);
 
   protected readonly candles = computed(() => this.store.data()?.candles ?? []);
 
@@ -220,17 +256,25 @@ export class EquityCandles {
     return data ? toSeriesData(data.candles, data.tf, this.colors) : [];
   });
 
-  /** The hovered candle, or the latest one with no crosshair. */
-  private readonly shown = computed(() => {
-    const candles = this.candles();
+  /** The whole buckets in view (spec v181 §4): readout, baseline and, in
+   *  part 2, the KPI window all read this one list. */
+  protected readonly inWindow = computed(() => inWindowCandles(this.visible(), this.candles()));
+
+  private readonly hovered = computed(() => {
     const index = this.hoverIndex();
-    return (index !== null ? candles[index] : undefined) ?? candles.at(-1) ?? null;
+    return index === null ? null : (this.candles()[index] ?? null);
   });
 
-  protected readonly readout = computed<string[]>(() => {
+  /** Hovered candle, else the visible range, else the latest candle. */
+  protected readonly readout = computed<ReadoutPart[]>(() => {
     const data = this.store.data();
-    const candle = this.shown();
-    return data && candle ? readoutParts(candle, data.basis, this.currency(), data.tf) : [];
+    if (!data) return [];
+    const hovered = this.hovered();
+    if (hovered) return candleReadout(hovered, data.basis, this.currency(), data.tf);
+    const range = rangeReadoutParts(rangeStats(this.inWindow()), this.currency());
+    if (range.length) return range;
+    const latest = this.candles().at(-1);
+    return latest ? candleReadout(latest, data.basis, this.currency(), data.tf) : [];
   });
 
   protected readonly emptyTitle = computed(() =>
@@ -263,20 +307,42 @@ export class EquityCandles {
       untracked(() => this.render(data, points));
     });
 
+    effect(() => {
+      const first = this.inWindow()[0];
+      untracked(() => this.baseline?.setBaseline(first
+        ? { value: first.o, line: this.colors.muted, above: this.colors.posSoft, below: this.colors.negSoft }
+        : null));
+    });
+
     destroyRef.onDestroy(() => {
       this.resizeObserver?.disconnect();
       this.chart?.remove();
       this.chart = null;
       this.series = null;
       this.seam = null;
+      this.baseline = null;
     });
   }
 
   /** Crosshair → candle by bar index; `undefined`/`null` (pointer left the
-   *  pane) falls back to the latest candle. */
+   *  pane) returns to the visible-range summary. */
   protected onCrosshair(param: { logical?: number | null }): void {
     const logical = param.logical;
     this.hoverIndex.set(logical === undefined || logical === null ? null : Math.round(logical));
+  }
+
+  /** Every visible-range change, user or programmatic: remember it, report
+   *  the live edge, and page in older history near the left edge. */
+  protected onVisibleRange(range: LogicalWindow | null): void {
+    this.visible.set(range);
+    const atEdge = isAtLiveEdge(range, this.candles().length);
+    if (atEdge !== this.store.atLiveEdge()) this.store.setAtLiveEdge(atEdge);
+    if (shouldLoadOlder(range, this.store.hasMore(), this.store.pageLoading())) this.store.loadOlder();
+  }
+
+  /** "↦ Latest": back to the newest candle at the current zoom. */
+  protected toLatest(): void {
+    this.chart?.timeScale().scrollToRealTime();
   }
 
   private create(element: HTMLElement): void {
@@ -293,11 +359,13 @@ export class EquityCandles {
       priceLineVisible: false,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
     });
+    this.baseline = new BaselinePrimitive();
+    series.attachPrimitive(this.baseline);
     this.seam = new VLinePrimitive();
     series.attachPrimitive(this.seam);
     chart.subscribeCrosshairMove((param) => this.onCrosshair(param));
     chart.timeScale().subscribeVisibleLogicalRangeChange((range) =>
-      this.visible.set(range ? { from: range.from, to: range.to } : null));
+      this.onVisibleRange(range ? { from: range.from, to: range.to } : null));
     this.chart = chart;
     this.series = series;
     if (typeof ResizeObserver !== 'undefined') {
