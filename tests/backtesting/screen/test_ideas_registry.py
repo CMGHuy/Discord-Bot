@@ -48,11 +48,29 @@ def test_frozen_parameter_sets():
         "pivot_k": 3, "min_age": 4, "reclaim_bars": 2, "bos_bars": 10}
 
 
-def test_every_idea_is_long_and_cites_its_source():
+def test_every_idea_cites_its_source():
     for idea in IDEAS.values():
-        assert idea.direction == "long"
         assert idea.summary.strip() and idea.source.strip()
         assert callable(idea.events)
+
+
+def test_every_registered_idea_pins_its_direction_and_entry():
+    """Direction and entry are frozen with the idea, like RACE (v182 Part A/B).
+    Flipping either means a new idea with a new name, and editing this pin in
+    the same diff."""
+    assert ideas.DIRECTIONS == ("long", "short")
+    assert ideas.ENTRY_MODES == ("next_open", "level")
+    assert {n: i.direction for n, i in IDEAS.items()} == {
+        "high52w": "long", "uptrend_pullback": "long", "gap_volume": "long",
+        "turn_of_month": "long", "turtle_soup": "long", "quiet_pullback": "long",
+        "bond_spike_rebound": "long", "dollar_drop": "long", "sweep_reclaim_bos": "long"}
+    assert {n: i.entry for n, i in IDEAS.items()} == {
+        "high52w": "next_open", "uptrend_pullback": "next_open", "gap_volume": "next_open",
+        "turn_of_month": "next_open", "turtle_soup": "next_open",
+        "quiet_pullback": "next_open", "bond_spike_rebound": "next_open",
+        "dollar_drop": "next_open", "sweep_reclaim_bos": "next_open"}
+    assert {n: (i.levels, i.control, i.family) for n, i in IDEAS.items()} == {
+        n: (None, None, ()) for n in IDEAS}
 
 
 def test_params_are_read_only_and_the_idea_is_frozen():
@@ -63,13 +81,19 @@ def test_params_are_read_only_and_the_idea_is_frozen():
         idea.time_cap_bars = 5
 
 
-def test_an_idea_refuses_a_short_direction_and_a_zero_cap():
-    def events(df):
-        return df["Close"] > 0
+def test_an_idea_refuses_an_unknown_direction_and_a_zero_cap():
+    with pytest.raises(ValueError, match="direction"):
+        Idea(name="x", events=_events, time_cap_bars=5, direction="sideways")
     with pytest.raises(ValueError):
-        Idea(name="x", events=events, time_cap_bars=5, direction="short")
-    with pytest.raises(ValueError):
-        Idea(name="x", events=events, time_cap_bars=0)
+        Idea(name="x", events=_events, time_cap_bars=0)
+
+
+def test_an_idea_accepts_a_short_direction_and_defaults_to_long_next_open():
+    short = Idea(name="x", events=_events, time_cap_bars=20, direction="short")
+    assert short.direction == "short" and short.entry == "next_open"
+    plain = Idea(name="x", events=_events, time_cap_bars=5)
+    assert (plain.direction, plain.entry, plain.levels, plain.control, plain.family) == (
+        "long", "next_open", None, None, ())
 
 
 def test_every_registered_idea_is_raced_under_one_pinned_shape():
@@ -164,3 +188,53 @@ def test_context_is_stored_as_a_tuple():
     idea = Idea(name="x", events=lambda df, context: df["Close"] > 0,
                 time_cap_bars=5, context=["TLT", "UUP"])
     assert idea.context == ("TLT", "UUP")
+
+
+def _levels(df):
+    return df["Low"].shift(1)
+
+
+def test_an_unknown_entry_mode_is_refused():
+    with pytest.raises(ValueError, match="entry"):
+        Idea(name="x", events=_events, time_cap_bars=20, entry="limit")
+
+
+def test_a_level_idea_needs_levels_and_a_next_open_idea_refuses_them():
+    with pytest.raises(ValueError, match="levels"):
+        Idea(name="x", events=_events, time_cap_bars=20, entry="level")
+    with pytest.raises(ValueError, match="levels"):
+        Idea(name="x", events=_events, time_cap_bars=20, levels=_levels)
+    idea = Idea(name="x", events=_events, time_cap_bars=20, direction="short",
+                entry="level", levels=_levels)
+    assert idea.entry == "level" and idea.levels is _levels
+
+
+def test_level_entry_is_fixed_shape_only():
+    with pytest.raises(ValueError, match="fixed"):
+        Idea(name="x", events=_events, time_cap_bars=60, entry="level",
+             levels=_levels, race_shape="trail")
+
+
+def test_family_is_stored_as_a_tuple():
+    idea = Idea(name="x", events=_events, time_cap_bars=5, family=["x", "y"])
+    assert idea.family == ("x", "y")
+
+
+def test_load_reads_direction_entry_levels_control_and_family(monkeypatch):
+    plain = _fake_module(monkeypatch, "fake_long_default", CAP=10)
+    short = _fake_module(monkeypatch, "fake_short_level", CAP=20, DIRECTION="short",
+                         ENTRY="level", levels=_levels, control_events=_events,
+                         FAMILY=["fake_short_level", "fake_other"])
+    loaded = ideas._load(plain)
+    assert (loaded.direction, loaded.entry, loaded.levels, loaded.control, loaded.family) == (
+        "long", "next_open", None, None, ())
+    loaded = ideas._load(short)
+    assert loaded.direction == "short" and loaded.entry == "level"
+    assert loaded.levels is _levels and loaded.control is _events
+    assert loaded.family == ("fake_short_level", "fake_other")
+
+
+def test_load_refuses_a_module_with_an_unknown_direction(monkeypatch):
+    bad = _fake_module(monkeypatch, "fake_bad_direction", CAP=10, DIRECTION="both")
+    with pytest.raises(ValueError, match="direction"):
+        ideas._load(bad)
