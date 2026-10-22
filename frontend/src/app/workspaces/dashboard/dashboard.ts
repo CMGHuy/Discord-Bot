@@ -224,6 +224,8 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
       [selection]="store.selection()"
       [stale]="store.stale()"
       (presetChange)="store.setPreset($event)"
+      [chartTarget]="store.chartTarget()"
+      (chartRangeChange)="store.setRange($event)"
     />
     </sb-async>
 

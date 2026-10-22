@@ -9,6 +9,8 @@ import { PortfolioValue } from './portfolio-value';
 import { amount, pct } from '../../../ui/format';
 import { ACCOUNT_LABEL } from './equity-candles.model';
 import {
+  ChartTarget,
+  TimeWindow,
   SCOPE_PRESETS,
   ScopePreset,
   ScopeSelection,
@@ -76,6 +78,8 @@ const RANGE_OPTION = 'Range';
       <div class="combined">
         <sb-portfolio-value
           class="portfolio"
+          [chartTarget]="chartTarget()"
+          (chartRangeChange)="chartRangeChange.emit($event)"
           [balance]="balance()"
           [changePct]="changePct()"
           [points]="points()"
@@ -221,6 +225,9 @@ export class TradingPerformance {
   /** v181 §9: the last range refetch failed; the figures are the previous ones. */
   readonly stale = input(false);
   readonly presetChange = output<ScopePreset>();
+  /** Pass the chart scope link through to PortfolioValue. */
+  readonly chartTarget = input<ChartTarget | null>(null);
+  readonly chartRangeChange = output<TimeWindow>();
 
   /** Below 640px the presets are one native dropdown (v181 §1). */
   protected readonly phone = inject(ViewportService).isPhone;

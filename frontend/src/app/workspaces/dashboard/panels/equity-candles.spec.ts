@@ -1,13 +1,14 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EquityCandle, EquityCandlesResponse } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
 import { token } from '../../../ui/chart/chart-theme';
-import { EquityCandles } from './equity-candles';
+import { EquityCandles, targetLogicalRange, targetNeedsOlder } from './equity-candles';
+import { TimeWindow, inWindowCandles } from './equity-range.model';
 
 // A real lightweight-charts chart is created; fancy-canvas needs matchMedia.
 installMatchMediaPolyfill();
@@ -70,7 +71,214 @@ type Scale = { fitContent(): void; setVisibleRange(range: unknown): void };
 const scaleOf = (fixture: { componentInstance: EquityCandles }) =>
   (fixture.componentInstance as unknown as { chart: { timeScale(): Scale } }).chart.timeScale();
 
+type LinkScale = Scale & { setVisibleLogicalRange(range: unknown): void; scrollToRealTime(): void };
+const linkScale = (fixture: { componentInstance: EquityCandles }) => scaleOf(fixture) as unknown as LinkScale;
+
+/** 2026-08-01 .. 2026-08-31: the page older than `dailyCandles`' 2026-09-01 start. */
+function augustCandles(): EquityCandle[] {
+  return Array.from({ length: 31 }, (_, i) =>
+    candle(new Date(Date.UTC(2026, 7, 1) + i * 86_400_000).toISOString().slice(0, 10)));
+}
+
+const W = (from: string, to: string): TimeWindow => ({ from, to });
+/** New York midnights (EDT, UTC-4) of 3 Sep and 6 Sep: buckets 3, 4 and 5 Sep. */
+const SEP_3_TO_6 = W('2026-09-03T04:00:00.000Z', '2026-09-06T04:00:00.000Z');
+
+type Linked = { programmatic: boolean; series: { setData(points: unknown): void } };
+const linked = (fixture: { componentInstance: EquityCandles }) => fixture.componentInstance as unknown as Linked;
+
 describe('sb-equity-candles', () => {
+  describe('preset target helpers (v181 §1)', () => {
+    it('selects the whole buckets that meet the window, read back by inWindowCandles', () => {
+      const candles = dailyCandles(10);
+      const range = targetLogicalRange(SEP_3_TO_6, candles, '1D')!;
+      expect(range.from).toBeCloseTo(1.6);
+      expect(range.to).toBeCloseTo(4.4);
+      expect(inWindowCandles(range, candles).map((c) => c.t))
+        .toEqual(['2026-09-03', '2026-09-04', '2026-09-05']);
+    });
+
+    it('has no range for a window no loaded candle meets', () => {
+      expect(targetLogicalRange(W('2026-12-01T05:00:00.000Z', '2026-12-02T05:00:00.000Z'),
+        dailyCandles(10), '1D')).toBeNull();
+    });
+
+    it('needs older history while the window opens before the oldest bucket, and always for all history', () => {
+      const candles = dailyCandles(10);
+      expect(targetNeedsOlder(W('2026-08-20T04:00:00.000Z', '2026-09-05T04:00:00.000Z'), candles, '1D')).toBe(true);
+      expect(targetNeedsOlder(W('2026-09-01T04:00:00.000Z', '2026-09-05T04:00:00.000Z'), candles, '1D')).toBe(false);
+      expect(targetNeedsOlder(null, candles, '1D')).toBe(true);
+      expect(targetNeedsOlder(null, [], '1D')).toBe(false);
+    });
+  });
+
+  describe('two-way scope link (v181 §1)', () => {
+    let widthSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 600);
+    });
+    afterEach(() => widthSpy.mockRestore());
+
+    function emitted(fixture: { componentInstance: EquityCandles }): TimeWindow[] {
+      const seen: TimeWindow[] = [];
+      fixture.componentInstance.rangeChange.subscribe((window: TimeWindow) => seen.push(window));
+      return seen;
+    }
+
+    it('reports a pan or zoom the partner made as whole New York buckets', () => {
+      const { fixture } = render(response(dailyCandles(40)));
+      const seen = emitted(fixture);
+      linked(fixture).programmatic = false;
+      at(fixture, 4.6, 24.4);
+      // Buckets 5..24 = 6 Sep .. 25 Sep; the window ends at 26 Sep's NY midnight.
+      expect(seen).toEqual([{ from: '2026-09-06T04:00:00.000Z', to: '2026-09-26T04:00:00.000Z' }]);
+    });
+
+    it('never reports a move the component made itself', () => {
+      const { fixture } = render(response(dailyCandles(40)));
+      const seen = emitted(fixture);
+      linked(fixture).programmatic = true;
+      at(fixture, 4.6, 24.4);
+      expect(seen).toEqual([]);
+    });
+
+    it('redraws candles under the flag, so a refresh or a prepended page is never a gesture', () => {
+      const { fixture, stub } = render(response(dailyCandles(40)));
+      const component = linked(fixture);
+      component.programmatic = false;
+      let flagged: boolean | null = null;
+      const original = component.series.setData.bind(component.series);
+      vi.spyOn(component.series, 'setData').mockImplementation((points: unknown) => {
+        flagged = component.programmatic;
+        original(points);
+      });
+      stub.data.set(response([...augustCandles(), ...dailyCandles(40)]));
+      fixture.detectChanges();
+      expect(flagged).toBe(true);
+    });
+
+    it('moves to a preset window under the flag, once per seq', () => {
+      const { fixture, stub } = render(response(dailyCandles(40)));
+      const component = linked(fixture);
+      let flagged: boolean | null = null;
+      const move = vi.spyOn(linkScale(fixture), 'setVisibleLogicalRange')
+        .mockImplementation(() => { flagged = component.programmatic; });
+      fixture.componentRef.setInput('target', { window: SEP_3_TO_6, seq: 1 });
+      fixture.detectChanges();
+      expect(move).toHaveBeenCalledTimes(1);
+      expect(move.mock.calls[0][0]).toEqual({ from: expect.closeTo(1.6), to: expect.closeTo(4.4) });
+      expect(flagged).toBe(true);
+
+      stub.data.set(response(dailyCandles(40)));
+      fixture.detectChanges();
+      expect(move).toHaveBeenCalledTimes(1);
+      fixture.componentRef.setInput('target', { window: SEP_3_TO_6, seq: 2 });
+      fixture.detectChanges();
+      expect(move).toHaveBeenCalledTimes(2);
+    });
+
+    it('pages in older history before moving to a window that opens before it', () => {
+      const { fixture, stub } = render(response(dailyCandles(40)));
+      stub.hasMore.set(true);
+      const move = vi.spyOn(linkScale(fixture), 'setVisibleLogicalRange').mockImplementation(() => {});
+      fixture.componentRef.setInput('target',
+        { window: W('2026-08-01T04:00:00.000Z', '2026-09-03T04:00:00.000Z'), seq: 1 });
+      fixture.detectChanges();
+      expect(stub.calls.loadOlder).toBe(1);
+      expect(move).not.toHaveBeenCalled();
+
+      // The older page lands and was the last one.
+      stub.hasMore.set(false);
+      stub.data.set(response([...augustCandles(), ...dailyCandles(40)]));
+      fixture.detectChanges();
+      expect(move).toHaveBeenCalledTimes(1);
+      expect(move.mock.calls[0][0]).toEqual({ from: expect.closeTo(-0.4), to: expect.closeTo(32.4) });
+    });
+
+    it('pages to the start for all history, then fits', () => {
+      const { fixture, stub } = render(response(dailyCandles(40)));
+      stub.hasMore.set(true);
+      const fit = vi.spyOn(linkScale(fixture), 'fitContent');
+      fixture.componentRef.setInput('target', { window: null, seq: 1 });
+      fixture.detectChanges();
+      expect(stub.calls.loadOlder).toBe(1);
+      expect(fit).not.toHaveBeenCalled();
+      stub.hasMore.set(false);
+      fixture.detectChanges();
+      expect(fit).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows what is loaded when the older page failed, and waits while one is in flight', () => {
+      const { fixture, stub } = render(response(dailyCandles(40)));
+      const move = vi.spyOn(linkScale(fixture), 'setVisibleLogicalRange').mockImplementation(() => {});
+      stub.hasMore.set(true);
+      stub.pageLoading.set(true);
+      fixture.componentRef.setInput('target',
+        { window: W('2026-08-01T04:00:00.000Z', '2026-09-03T04:00:00.000Z'), seq: 1 });
+      fixture.detectChanges();
+      expect([stub.calls.loadOlder, move.mock.calls.length]).toEqual([0, 0]);
+
+      stub.pageLoading.set(false);
+      stub.pageError.set(true);
+      fixture.detectChanges();
+      expect(stub.calls.loadOlder).toBe(0);
+      expect(move).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a hidden target on resize, under the flag and only once', () => {
+      let notify: () => void = () => {};
+      class FakeObserver {
+        constructor(cb: () => void) { notify = cb; }
+        observe(): void {}
+        disconnect(): void {}
+      }
+      vi.stubGlobal('ResizeObserver', FakeObserver);
+      widthSpy.mockReturnValue(0);
+      try {
+        const { fixture } = render(response(dailyCandles(40)));
+        const component = linked(fixture);
+        const seen = emitted(fixture);
+        const move = vi.spyOn(linkScale(fixture), 'setVisibleLogicalRange')
+          .mockImplementation(() => {
+            expect(component.programmatic).toBe(true);
+            fixture.componentInstance['onVisibleRange']({ from: 1.6, to: 4.4 });
+          });
+        fixture.componentRef.setInput('target', { window: SEP_3_TO_6, seq: 1 });
+        fixture.detectChanges();
+        expect(move).not.toHaveBeenCalled();
+        widthSpy.mockReturnValue(600);
+        notify();
+        notify();
+        expect(move).toHaveBeenCalledTimes(1);
+        expect(seen).toEqual([]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('reports a Latest click as the partner moving the viewport', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      const seen = emitted(fixture);
+      linked(fixture).programmatic = false;
+      at(fixture, 0, 19);
+      seen.length = 0;
+      vi.spyOn(linkScale(fixture), 'scrollToRealTime').mockImplementation(() => {
+        fixture.componentInstance['onVisibleRange']({ from: 20, to: 39 });
+      });
+      el.querySelector<HTMLButtonElement>('button.latest')!.click();
+      expect(seen).toEqual([{ from: '2026-09-21T04:00:00.000Z', to: '2026-10-11T04:00:00.000Z' }]);
+    });
+
+    it('falls back to the newest candles when no loaded candle meets the window', () => {
+      const { fixture } = render(response(dailyCandles(40)));
+      const latest = vi.spyOn(linkScale(fixture), 'scrollToRealTime').mockImplementation(() => {});
+      fixture.componentRef.setInput('target',
+        { window: W('2026-12-01T05:00:00.000Z', '2026-12-02T05:00:00.000Z'), seq: 1 });
+      fixture.detectChanges();
+      expect(latest).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('reads out the hovered candle, its change toned by sign', () => {
     const { fixture, el } = render(response(MIXED));
     fixture.componentInstance['onCrosshair']({ logical: 2 });

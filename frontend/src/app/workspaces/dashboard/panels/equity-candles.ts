@@ -7,6 +7,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
   untracked,
   viewChild,
@@ -20,12 +21,12 @@ import {
   createChart,
 } from 'lightweight-charts';
 
-import { EquityBasis, EquityCandlesResponse, EquityTimeframe } from '../../../api/models';
+import { EquityBasis, EquityCandle, EquityCandlesResponse, EquityTimeframe } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { Async } from '../../../ui/async';
 import { Button } from '../../../ui/button';
 import { BaselinePrimitive } from '../../../ui/chart/primitives/baseline-primitive';
-import { LogicalWindow, inWindowCandles, nextTimeframe, rangeStats, shouldLoadOlder } from './equity-range.model';
+import { ChartTarget, TimeWindow, bucketEndInstant, bucketStartInstant, windowBounds, LogicalWindow, inWindowCandles, nextTimeframe, rangeStats, shouldLoadOlder } from './equity-range.model';
 import { chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
 import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
@@ -70,6 +71,38 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
  *  must outlive the call; 100 ms covers several frames and is far shorter
  *  than any deliberate gesture that follows it. */
 export const PROGRAMMATIC_SETTLE_MS = 100;
+
+/** v181 §1: the logical range that shows exactly the loaded candles whose
+ *  bucket meets `window`. ±0.4 so `inWindowCandles` reads back the same
+ *  whole buckets (it counts a candle from half a bar in). Null when no
+ *  loaded candle meets the window. */
+export function targetLogicalRange(
+  window: TimeWindow,
+  candles: readonly EquityCandle[],
+  tf: EquityTimeframe,
+): LogicalWindow | null {
+  const from = Date.parse(window.from);
+  const to = Date.parse(window.to);
+  const meets = (candle: EquityCandle) =>
+    bucketStartInstant(candle.t, tf).getTime() < to && bucketEndInstant(candle.t, tf).getTime() > from;
+  const first = candles.findIndex(meets);
+  if (first < 0) return null;
+  const last = candles.length - 1 - [...candles].reverse().findIndex(meets);
+  return { from: first - 0.4, to: last + 0.4 };
+}
+
+/** True while the window opens before the oldest loaded bucket, or is all
+ *  history (null); false with nothing loaded. The caller also needs `hasMore`. */
+export function targetNeedsOlder(
+  window: TimeWindow | null,
+  candles: readonly EquityCandle[],
+  tf: EquityTimeframe,
+): boolean {
+  const oldest = candles[0];
+  if (!oldest) return false;
+  if (window === null) return true;
+  return bucketStartInstant(oldest.t, tf).getTime() > Date.parse(window.from);
+}
 
 @Component({
   selector: 'sb-equity-candles',
@@ -210,6 +243,13 @@ export const PROGRAMMATIC_SETTLE_MS = 100;
 })
 export class EquityCandles {
   readonly currency = input('€');
+  /** v181 §1 preset → chart: where `DashboardStore` wants the view. A new
+   *  `seq` is a new request, even for the same window. */
+  readonly target = input<ChartTarget | null>(null);
+  /** v181 §1 chart → scope: a pan or zoom the partner made, never a move
+   *  this component made itself. */
+  readonly rangeChange = output<TimeWindow>();
+
 
   protected readonly store = inject(EquityCandlesStore);
   protected readonly accountLabel = ACCOUNT_LABEL;
@@ -247,6 +287,9 @@ export class EquityCandles {
   private releaseTimer: ReturnType<typeof setTimeout> | null = null;
   /** An auto step waiting for its candles: the span to show on them. */
   private pendingSpan: { tf: EquityTimeframe; span: WallSpan } | null = null;
+
+  /** The `seq` of the last target shown, so a refresh never re-applies it. */
+  private appliedSeq: number | null = null;
 
   private resizeObserver: ResizeObserver | null = null;
 
@@ -333,6 +376,17 @@ export class EquityCandles {
         : null));
     });
 
+    // v181 §1: re-checked whenever the target, the candles or the paging
+    // state change, so a preset that needs older history lands once it has.
+    effect(() => {
+      const target = this.target();
+      this.store.data();
+      this.store.hasMore();
+      this.store.pageLoading();
+      this.store.pageError();
+      untracked(() => this.applyTarget(target));
+    });
+
     destroyRef.onDestroy(() => {
       if (this.releaseTimer !== null) clearTimeout(this.releaseTimer);
       this.resizeObserver?.disconnect();
@@ -359,6 +413,7 @@ export class EquityCandles {
     if (atEdge !== this.store.atLiveEdge()) this.store.setAtLiveEdge(atEdge);
     if (shouldLoadOlder(range, this.store.hasMore(), this.store.pageLoading())) this.store.loadOlder();
     this.autoTimeframe();
+    this.reportUserRange(range);
   }
 
   /** v181 §3: more than 250 bars → one step coarser, fewer than 15 → one
@@ -386,6 +441,53 @@ export class EquityCandles {
         this.releaseTimer = null;
       }, PROGRAMMATIC_SETTLE_MS);
     }
+  }
+
+  /** v181 §1 chart → scope, in whole New York buckets. Every move this
+   *  component makes (fit, restore, redraw, preset) runs under
+   *  `programmatic` and stops here, which is what keeps the link from looping. */
+  private reportUserRange(range: LogicalWindow | null): void {
+    const tf = this.store.data()?.tf;
+    if (this.programmatic || range === null || !tf) return;
+    const bounds = windowBounds(this.inWindow(), tf);
+    if (bounds) this.rangeChange.emit(bounds);
+  }
+
+  /** v181 §1 preset → chart, once per `seq`: page in the history the window
+   *  needs, then move there under the programmatic flag. */
+  private applyTarget(target: ChartTarget | null): void {
+    const data = this.store.data();
+    if (!target || !data || !this.readyFor(target, data)) return;
+    if (this.needsOlderFor(target, data)) {
+      this.store.loadOlder();
+      return;
+    }
+    this.appliedSeq = target.seq;
+    this.pendingSpan = null;
+    const range = target.window ? targetLogicalRange(target.window, data.candles, data.tf) : null;
+    this.moveProgrammatically(() => this.moveTo(range, target.window !== null));
+  }
+
+  /** Not yet: already shown, nothing loaded, no chart, hidden, or a page in flight. */
+  private readyFor(target: ChartTarget, data: EquityCandlesResponse): boolean {
+    return target.seq !== this.appliedSeq && data.candles.length > 0 && this.chart !== null
+      && this.host().nativeElement.clientWidth > 0 && !this.store.pageLoading();
+  }
+
+  /** More history is needed and can come; after a failed page the move shows what is loaded. */
+  private needsOlderFor(target: ChartTarget, data: EquityCandlesResponse): boolean {
+    return this.store.hasMore() && !this.store.pageError()
+      && targetNeedsOlder(target.window, data.candles, data.tf);
+  }
+
+  /** A window with candles in it is shown whole; one with none falls back to
+   *  the newest candles; all history is fitted. */
+  private moveTo(range: LogicalWindow | null, windowed: boolean): void {
+    const scale = this.chart?.timeScale();
+    if (!scale) return;
+    if (range) scale.setVisibleLogicalRange(range);
+    else if (windowed) scale.scrollToRealTime();
+    else scale.fitContent();
   }
 
   /** "↦ Latest": back to the newest candle at the current zoom. */
@@ -417,7 +519,12 @@ export class EquityCandles {
     this.chart = chart;
     this.series = series;
     if (typeof ResizeObserver !== 'undefined') {
-      this.resizeObserver = new ResizeObserver(() => this.fitWhenVisible());
+      // A resize moves the visible range too, and is not a gesture; it is
+      // also when a target that waited for the host's width can land.
+      this.resizeObserver = new ResizeObserver(() => this.moveProgrammatically(() => {
+        this.fitWhenVisible();
+        this.applyTarget(this.target());
+      }));
       this.resizeObserver.observe(element);
     }
   }
@@ -427,7 +534,7 @@ export class EquityCandles {
     const series = this.series;
     if (!chart || !series) return;
     this.hoverIndex.set(null);
-    series.setData(points);
+    this.moveProgrammatically(() => series.setData(points));
     chart.applyOptions({ timeScale: { timeVisible: data ? isIntraday(data.tf) : false, secondsVisible: false } });
     const seam = data ? seamIndex(data.candles) : -1;
     this.seam?.setLine(seam >= 0
