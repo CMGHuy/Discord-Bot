@@ -199,4 +199,49 @@ describe('positions table', () => {
     expect(setQuery.mock.calls.at(-1)![0].today).toBeUndefined();
   });
 
+  it.each(['CLOSED', 'CANCELLED'])('resets paged %s results when the effective close filter changes', (tab) => {
+    const f = mount({ today: null });
+    clickTab(f, tab);
+    const pager = f.componentInstance as unknown as { goToPage(page: number): void };
+    const firstWindow = { from: '2026-10-15T04:00:00.000Z', to: '2026-10-20T04:00:00.000Z' };
+    const nextWindow = { from: '2026-10-17T04:00:00.000Z', to: '2026-10-20T04:00:00.000Z' };
+    for (const window of [firstWindow, nextWindow, null]) {
+      pager.goToPage(3);
+      f.detectChanges();
+      expect(setQuery.mock.calls.at(-1)![0].page).toBe(3);
+      setQuery.mockClear();
+      f.componentRef.setInput('closedWindow', window);
+      f.detectChanges();
+      expect(setQuery.mock.calls.at(-1)![0]).toMatchObject({ status: tab, page: 1 });
+      expect(setQuery.mock.calls.every(([query]) => query.page === 1)).toBe(true);
+    }
+    pager.goToPage(3);
+    f.detectChanges();
+    f.componentRef.setInput('today', true);
+    f.detectChanges();
+    expect(setQuery.mock.calls.at(-1)![0]).toMatchObject({ today: true, page: 1 });
+  });
+
+  it('preserves the page when a new window has the same effective bounds', () => {
+    const window = { from: '2026-10-15T04:00:00.000Z', to: '2026-10-20T04:00:00.000Z' };
+    const f = mount({ closedWindow: window });
+    clickTab(f, 'CLOSED');
+    (f.componentInstance as unknown as { goToPage(page: number): void }).goToPage(3);
+    f.detectChanges();
+    f.componentRef.setInput('closedWindow', { ...window });
+    f.detectChanges();
+    expect(setQuery.mock.calls.at(-1)![0].page).toBe(3);
+  });
+
+  it('keeps an open tab on its page when the closed filter changes', () => {
+    const f = mount();
+    (f.componentInstance as unknown as { goToPage(page: number): void }).goToPage(3);
+    f.detectChanges();
+    setQuery.mockClear();
+    f.componentRef.setInput('closedWindow', { from: '2026-10-15T04:00:00.000Z', to: '2026-10-20T04:00:00.000Z' });
+    f.componentRef.setInput('today', true);
+    f.detectChanges();
+    expect(setQuery).not.toHaveBeenCalled();
+  });
+
 });

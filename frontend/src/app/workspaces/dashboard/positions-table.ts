@@ -134,6 +134,11 @@ export class PositionsTable {
 
   protected readonly active = signal<string>('ACTIVE');
   private readonly page = signal(1);
+  /** Equivalent bounds keep the same page; only a different result set resets it. */
+  private readonly pageScope = computed(() => {
+    const tab = POSITION_TABS.find((item) => item.id === this.active());
+    return JSON.stringify([this.active(), this.closedScope(tab?.scoped ?? false)]);
+  });
 
   protected readonly rows = computed(() => this.trades.rows());
   protected readonly async = computed(() => asyncInputs(
@@ -177,10 +182,10 @@ export class PositionsTable {
   }
 
   constructor() {
-    // Page resets on tab change: landing on page 3 of a table you just
-    // switched to shows a slice of something you have not seen the start of.
+    // A tab or effective close filter selects a new result set. Start at its
+    // first page so narrowing a paged Closed/Cancelled tab cannot hide its rows.
     effect(() => {
-      this.active();
+      this.pageScope();
       untracked(() => this.page.set(1));
     });
 
