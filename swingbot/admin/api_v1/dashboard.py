@@ -221,6 +221,34 @@ def _live_positions(open_trades: list[dict]) -> list[dict]:
     return held_now(open_trades, load_plans_by_id())
 
 
+def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
+    """Current main-ledger positions and P&L, independent of date scope."""
+    from swingbot.core.tracking.ledger import is_main
+
+    # Open-side figures (open_pnl_pct, the open_trades chip, avg_confidence)
+    # must live on the same ledger as `realized` below -- unfiltered here
+    # would blend weak-ledger open positions into a main-ledger P&L card.
+    open_trades = _live_positions(
+        [t for t in all_trades if t.get("status") == "open" and is_main(t)])
+
+    views = dash.build_open_trade_views(open_trades, account_cfg)
+    pcts = views["unrealized_pcts"]
+    amounts = views["unrealized_amounts"]
+
+    confidences = [
+        t["confidence_level"] for t in open_trades
+        if t.get("confidence_level") is not None
+    ]
+    return {
+        "open_pnl_pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
+        "open_pnl_amount": _total_or_none(amounts),
+        "open_trades": len(open_trades),
+        "avg_confidence": (
+            round(sum(confidences) / len(confidences), 2) if confidences else None
+        ),
+    }
+
+
 @api_v1.route("/dashboard", methods=["GET"])
 @require_auth
 def dashboard():
@@ -228,12 +256,6 @@ def dashboard():
     tl = TradeLog()
     from swingbot.core.tracking.ledger import is_main, is_weak
     all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
-    # Open-side figures (open_pnl_pct, the open_trades chip, avg_confidence)
-    # must live on the same ledger as `realized` below -- unfiltered here
-    # would blend weak-ledger open positions into a main-ledger P&L card.
-    open_trades = _live_positions(
-        [t for t in all_raw if t.get("status") == "open" and is_main(t)])
-
     # win_rate/expectancy_r/payoff_ratio must scope with `mode` the same way
     # `_realized`/`_lifecycle_counts` already do -- get_stats' own `trades`
     # parameter exists for exactly this ("the dashboard's 'Today' mode
@@ -256,28 +278,15 @@ def dashboard():
     scoped_rs = m.r_multiples(closed_scoped)
 
     account_cfg = dash.load_account_config()
-    views = dash.build_open_trade_views(open_trades, account_cfg)
-    pcts = views["unrealized_pcts"]
-    amounts = views["unrealized_amounts"]
-
-    confidences = [
-        t["confidence_level"] for t in open_trades
-        if t.get("confidence_level") is not None
-    ]
     heat, cap = _risk_used(all_raw)
 
     return jsonify({
         # primary
         "account_balance": account_cfg.get("balance"),
-        "open_pnl_pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
-        "open_pnl_amount": _total_or_none(amounts),
+        **_open_figures(all_raw, account_cfg),
         "risk_used_pct": heat,
         "risk_cap_pct": cap,
         # chips
-        "open_trades": len(open_trades),
-        "avg_confidence": (
-            round(sum(confidences) / len(confidences), 2) if confidences else None
-        ),
         "win_rate": m.win_rate(closed_scoped),
         "win_rate_n": sum(1 for t in closed_scoped if t.get("status") in ("win", "loss")),
         "expectancy_r": m.expectancy_r(closed_scoped),
