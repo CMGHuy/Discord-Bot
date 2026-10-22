@@ -491,7 +491,7 @@ describe('ambient live cues (v168 §3 #10)', () => {
 describe('shell topbar centred on one axis (v179 layout audit)', () => {
   const css = readFileSync(join(process.cwd(), 'src/app/shell/shell.css'), 'utf8');
   const rule = (selector: string) => css.match(
-    new RegExp(`^${selector.replaceAll('.', '\.')} \{[^}]*\}`, 'm'),
+    new RegExp(`^${selector.replaceAll('.', '\\.')} \\{[^}]*\\}`, 'm'),
   )?.[0] ?? '';
 
   it('centres the title block, tape, status cluster and avatar on the bar', () => {
