@@ -41,16 +41,17 @@
   --sky-550: #2474d2;
   --sky-600: #1c6dd0;
 
-  /* valence hues */
-  --mint-400: #3ddc97;
-  --coral-400: #ff6f7d;
+  /* valence hues -- v181 §5: more saturated, TradingView's teal/red
+     direction, measured on every surface and on their own tints */
+  --teal-400: #00e5a0;
+  --red-400: #ff4d5e;
   --amber-300: #ffc266;
   --violet-300: #c3a6ff;
 
   /* alpha entries: tints and the overlay dim */
   --navy-950-a72: rgba(7, 11, 20, 0.72);
-  --mint-400-a12: rgba(61, 220, 151, 0.12);
-  --coral-400-a12: rgba(255, 111, 125, 0.12);
+  --teal-400-a12: rgba(0, 229, 160, 0.12);
+  --red-400-a12: rgba(255, 77, 94, 0.12);
   --amber-300-a12: rgba(255, 194, 102, 0.12);
   --sky-600-a18: rgba(28, 109, 208, 0.18);
   --violet-300-a14: rgba(195, 166, 255, 0.14);

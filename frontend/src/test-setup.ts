@@ -12,9 +12,9 @@ import { flattenedRootCss, readFixture } from './app/ui/testing/resolve-token';
  *
  * **Flattened literals, not the CSS files (spec v167, Amendment 1).** Since
  * v167 the tokens come in tiers: palette.css holds the raw colours and
- * tokens.css refers to them (`--pos: var(--mint-400)`). jsdom resolves neither
+ * tokens.css refers to them (`--pos: var(--teal-400)`). jsdom resolves neither
  * a nested `var()` inside a custom property nor `color-mix()`, so injecting the
- * files would hand the charts the string `var(--mint-400)`. Instead this
+ * files would hand the charts the string `var(--teal-400)`. Instead this
  * injects one `:root` block of literals built from
  * tests/charts/resolved_tokens.json. The real browser still loads the tiers.
  *
