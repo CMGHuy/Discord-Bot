@@ -1,4 +1,4 @@
-"""Execution frictions: slippage + commission.
+"""Execution frictions: slippage, commission and (v182) the short borrow fee.
 
 The clean backtest fills at exact trigger/stop/target prices. Real fills
 don't. 5 bps of slippage per side and a commission per trade is a
@@ -26,3 +26,15 @@ def commission_r(risk_dollars: float | None = None, commission: float | None = N
     if basis <= 0:
         return 0.0
     return 2.0 * per_side / basis
+
+
+#: v182: the stock-borrow fee a short pays, a year. S&P 500 names are
+#: general-collateral borrows (about 0.25-0.5%); 0.5% is the conservative end.
+BORROW_RATE_ANNUAL = 0.005
+
+
+def borrow_r(entry, risk, days):
+    """The borrow fee of a short held ``days`` calendar days, in R:
+    entry x BORROW_RATE_ANNUAL / 365 x days / risk. Elementwise on arrays.
+    Never charged on a long trade (v182)."""
+    return entry * BORROW_RATE_ANNUAL / 365.0 * days / risk
