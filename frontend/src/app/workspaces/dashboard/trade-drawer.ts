@@ -113,13 +113,15 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
         @for (item of fields(); track item.key) {
           <div class="field" [attr.data-field]="item.key">
             <dt>{{ item.label }}</dt>
-            <dd [class.num]="item.numeric" [class.pos]="item.tone === 'pos'" [class.neg]="item.tone === 'neg'">{{ item.value }}</dd>
+            <dd [class.num]="item.numeric" [class.pos]="item.tone === 'pos'" [class.neg]="item.tone === 'neg'"
+                [class.long]="item.key === 'direction' && item.value.toLowerCase() === 'long'"
+                [class.short]="item.key === 'direction' && item.value.toLowerCase() === 'short'">{{ item.value }}</dd>
           </div>
         }
       </dl>
       <div class="drawer-actions">
         <a class="full-trade sb-hit" [routerLink]="['/trades', row().id]">Open full trade →</a>
-        <sb-row-actions [row]="row()" (done)="actionDone.emit()" />
+        <sb-row-actions [row]="row()" placement="up" (done)="actionDone.emit()" />
       </div>
     </sb-drawer>
   `,
@@ -145,6 +147,20 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
       gap: var(--space-10);
       min-width: 0;
     }
+    /* Meaning carried by colour: risk levels red, targets green, the setup
+       (strategy, horizon) in the accent; rows get a faint raised surface. */
+    .field { padding: var(--space-4) var(--space-8); border-radius: var(--radius-sm); background: var(--surface-raised); border-left: 2px solid transparent; }
+    .field[data-field='stop'], .field[data-field='working_stop'] { border-left-color: var(--neg); }
+    .field[data-field='stop'] dd, .field[data-field='working_stop'] dd { color: var(--neg); }
+    .field[data-field='tp1'], .field[data-field='tp2'] { border-left-color: var(--pos); }
+    .field[data-field='tp1'] dd, .field[data-field='tp2'] dd { color: var(--pos); }
+    .field[data-field='entry'], .field[data-field='trigger'], .field[data-field='rr'] { border-left-color: var(--accent); }
+    .field[data-field='entry'] dd, .field[data-field='trigger'] dd { color: var(--accent); }
+    .field[data-field='strategy'] dd, .field[data-field='horizon'] dd { color: var(--accent); }
+    .field[data-field='direction'] dd.long { color: var(--pos); font-weight: 600; }
+    .field[data-field='direction'] dd.short { color: var(--neg); font-weight: 600; }
+    dd.pos { color: var(--pos); }
+    dd.neg { color: var(--neg); }
     dt { color: var(--text-secondary); font-size: var(--text-table); }
     dd { margin: 0; min-width: 0; font-size: var(--text-table); text-align: right; overflow-wrap: anywhere; }
     .drawer-actions {
