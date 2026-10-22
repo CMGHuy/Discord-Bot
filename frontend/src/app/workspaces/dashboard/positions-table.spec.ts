@@ -177,4 +177,26 @@ describe('positions table', () => {
     const source = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/positions-table.ts'), 'utf8');
     expect(source).toMatch(/<sb-data-table[^>]*\[phoneTap\]="phoneTap\(\)"/);
   });
+  it('sends the range window, not the Today flag, to the closed and cancelled tabs (v181 §6)', () => {
+    const window = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
+    const f = mount({ today: null, closedWindow: window });
+    // ACTIVE is all-time regardless of the page scope.
+    expect(setQuery.mock.calls.at(-1)![0]).not.toHaveProperty('closedFrom');
+
+    clickTab(f, 'CLOSED');
+    const closed = setQuery.mock.calls.at(-1)![0];
+    expect(closed).toMatchObject({ status: 'CLOSED', closedFrom: window.from, closedTo: window.to });
+    expect(closed.today).toBeUndefined();
+
+    clickTab(f, 'CANCELLED');
+    expect(setQuery.mock.calls.at(-1)![0]).toMatchObject({ closedFrom: window.from, closedTo: window.to });
+  });
+
+  it('lets the window win over a stale Today flag', () => {
+    const window = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
+    const f = mount({ today: true, closedWindow: window });
+    clickTab(f, 'CLOSED');
+    expect(setQuery.mock.calls.at(-1)![0].today).toBeUndefined();
+  });
+
 });

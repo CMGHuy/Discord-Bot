@@ -1,18 +1,26 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 
-import { DashboardScope } from '../../../api/models';
-import { Panel } from '../../../ui/layout';
+import { ViewportService } from '../../../ui/breakpoints';
+import { Button } from '../../../ui/button';
+import { Select, SelectOption } from '../../../ui/form-controls';
+import { ControlRow, Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
-import { ACCOUNT_LABEL } from './equity-candles.model';
-import { breakevenPairTone, riskTone as riskToneOf, signTone } from './equity-range.model';
 import { PortfolioValue } from './portfolio-value';
 import { amount, pct } from '../../../ui/format';
-import { SegmentOption, Segmented } from '../../../ui/segmented';
+import { ACCOUNT_LABEL } from './equity-candles.model';
+import {
+  SCOPE_PRESETS,
+  ScopePreset,
+  ScopeSelection,
+  breakevenPairTone,
+  rangeChipLabel,
+  riskTone as riskToneOf,
+  showsNowLabel,
+  signTone,
+} from './equity-range.model';
 
-/** `DashboardScope` also has a third value, 'active', that this toggle never
- *  sets and never renders as pressed -- reusing the store's real type rather
- *  than a narrower local one so `[scope]="store.scope()"` needs no cast. */
-export type DashboardScopeMode = DashboardScope;
+/** The dropdown's value for a hand-picked range: never a preset, never persisted. */
+const RANGE_OPTION = 'Range';
 
 /**
  * The eight figures — v85 D9.
@@ -22,8 +30,10 @@ export type DashboardScopeMode = DashboardScope;
  * expectancy is what it is rather than only what it is.
  *
  * The scope control sits in this panel's header (D10) and is page-wide: it
- * also re-scopes the Closed tab below. That was chosen deliberately with the
- * caveat understood — it is not an oversight to "fix" by narrowing it.
+ * also re-scopes the Closed tab below. v181 §1 widens it from Today / All
+ * days to the presets 1D · 5D · 1M · 3M · 6M · YTD · 1Y · All, plus a Range
+ * chip that a hand pan or zoom of the chart turns on. Below 640px the same
+ * entries are one native dropdown.
  *
  * Portfolio Value merged in as this panel's first section rather than a
  * sibling card: both describe "how am I doing", and two bordered boxes side
@@ -32,13 +42,36 @@ export type DashboardScopeMode = DashboardScope;
 @Component({
   selector: 'sb-trading-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, MetricCard, Segmented, PortfolioValue],
+  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select],
   template: `
     <sb-panel heading="Trading performance">
-      <!-- v179 §3.3: one segmented control on the header line, in place of a
-           bordered and a borderless button that stacked on a phone. -->
-      <sb-segmented panel-actions label="Date scope" [options]="scopeOptions"
-                    [value]="scope()" (valueChange)="pickScope($event)" />
+      <div panel-actions class="scope">
+        @if (phone()) {
+          <sb-select class="preset-select" ariaLabel="Date scope"
+                     [options]="presetOptions()" [value]="selectValue()"
+                     (valueChange)="onSelect($event)" />
+        } @else {
+          <sb-control-row role="group" aria-label="Date scope">
+            @for (option of presets; track option) {
+              <button
+                sb-button
+                type="button"
+                [attr.data-preset]="option"
+                [variant]="activePreset() === option ? 'secondary' : 'ghost'"
+                [attr.aria-pressed]="activePreset() === option"
+                (click)="presetChange.emit(option)"
+              >{{ option }}</button>
+            }
+            @if (rangeLabel(); as label) {
+              <span class="range-chip" aria-current="true"><span class="range-word">Range</span> {{ label }}</span>
+            }
+          </sb-control-row>
+        }
+      </div>
+
+      @if (stale()) {
+        <p class="stale-hint" role="status">Couldn't refresh for this range · showing the last figures</p>
+      }
 
       <div class="combined">
         <sb-portfolio-value
@@ -49,14 +82,14 @@ export type DashboardScopeMode = DashboardScope;
           [currency]="currency()"
         />
 
-        <div class="grid">
+        <div class="grid" [class.stale]="stale()">
           <sb-metric-card label="Open P&L" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
           <sb-metric-card label="Win rate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" />
           <sb-metric-card label="Expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" />
           <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [tint]="payoffTone()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" />
           <sb-metric-card [label]="realizedLabel()" [value]="realizedAmount()" [tint]="realizedTone()"
                           [unit]="currencyUnit()" [sub]="noCloseHint(realizedAmount())" />
-          <sb-metric-card label="Open trades" [value]="openTrades()" [decimals]="0" />
+          <sb-metric-card label="Open trades" [value]="openTrades()" [decimals]="0" [sub]="openTradesSub()" />
           <sb-metric-card label="Avg confidence" [value]="avgConfidence()" [decimals]="1" />
           <sb-metric-card label="Risk used" [value]="riskUsedPct()" [tint]="riskTone()" unit="%" [sub]="riskSub()" />
         </div>
@@ -67,11 +100,11 @@ export type DashboardScopeMode = DashboardScope;
            eight-card grid does not. This summary carries the figures the grid
            would; its Portfolio and Today rows repeat the figure above on
            purpose, so the summary reads complete on its own. -->
-      <div class="mobile-summary" aria-label="Portfolio summary">
+      <div class="mobile-summary" [class.stale]="stale()" aria-label="Portfolio summary">
         <div><span>Portfolio</span><strong>{{ fmtAmount(balance()) }}</strong></div>
         <div [attr.data-tone]="tinted(changeTone())"><span>Today</span><strong>{{ fmtPct(changePct()) }}</strong></div>
-        <div><span>Open</span><strong>{{ openTrades() }}</strong></div>
-        <div [attr.data-tone]="tinted(riskTone())"><span>Risk</span><strong>{{ fmtPct(riskUsedPct()) }}</strong></div>
+        <div><span>Open{{ nowSuffix() }}</span><strong>{{ openTrades() }}</strong></div>
+        <div [attr.data-tone]="tinted(riskTone())"><span>Risk{{ nowSuffix() }}</span><strong>{{ fmtPct(riskUsedPct()) }}</strong></div>
         <div [attr.data-tone]="tinted(winPairTone())"><span>Win rate</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
         <div [attr.data-tone]="tinted(expectancyTone())"><span>Expectancy</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
         <div [attr.data-tone]="tinted(payoffTone())"><span>Payoff</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
@@ -93,6 +126,28 @@ export type DashboardScopeMode = DashboardScope;
       align-items: start;
     }
     .portfolio { min-width: 0; width: 100%; }
+    .scope { min-width: 0; max-width: 100%; }
+    /* v181 §1: the phone dropdown is a 44px target; --control-h is 28px on a
+       fine pointer and the select's own height reads it. */
+    .preset-select { display: block; --control-h: 44px; }
+    .range-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-4);
+      min-height: var(--control-h);
+      padding: 0 var(--space-10);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--control-radius);
+      background: var(--surface-raised);
+      color: var(--text);
+      font-size: var(--text-chip);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .range-word { color: var(--text-secondary); }
+    /* v181 §9: a failed range refetch keeps the last figures, dimmed. */
+    .grid.stale, .mobile-summary.stale { opacity: 0.55; }
+    .stale-hint { margin: 0 0 var(--space-10); font-size: var(--text-chip); color: var(--warn); }
     .mobile-summary { display: none; }
     /* v181 §4: every figure here is simulated, before costs and tax. */
     .account { margin: var(--space-10) 0 0; font-size: var(--text-chip); color: var(--text-muted); }
@@ -162,18 +217,42 @@ export class TradingPerformance {
    *  either side has no outcomes yet — see payoff_ratio_from_rs. */
   readonly payoffRatio = input<number | null>(null);
   readonly currency = input('€');
-  readonly scope = input<DashboardScopeMode>('today');
-  readonly scopeChange = output<DashboardScopeMode>();
+  readonly selection = input<ScopeSelection>({ kind: 'preset', preset: '1D' });
+  /** v181 §9: the last range refetch failed; the figures are the previous ones. */
+  readonly stale = input(false);
+  readonly presetChange = output<ScopePreset>();
 
-  /** The two scopes this toggle sets. `active` is never offered, so it
-   *  presses no segment (see DashboardScopeMode above). */
-  protected readonly scopeOptions: SegmentOption[] = [
-    { value: 'today', label: 'Today' },
-    { value: 'all', label: 'All days' },
-  ];
+  /** Below 640px the presets are one native dropdown (v181 §1). */
+  protected readonly phone = inject(ViewportService).isPhone;
+  protected readonly presets = SCOPE_PRESETS;
+  protected readonly activePreset = computed(() => {
+    const selection = this.selection();
+    return selection.kind === 'preset' ? selection.preset : null;
+  });
+  protected readonly rangeLabel = computed(() => {
+    const selection = this.selection();
+    return selection.kind === 'range' ? rangeChipLabel(selection.window) : null;
+  });
+  protected readonly presetOptions = computed<SelectOption[]>(() => {
+    const options = SCOPE_PRESETS.map((value) => ({ value, label: value }));
+    const label = this.rangeLabel();
+    return label === null ? options : [...options, { value: RANGE_OPTION, label: `Range · ${label}` }];
+  });
+  protected readonly selectValue = computed(() => this.activePreset() ?? RANGE_OPTION);
+  /** Only a preset leaves the dropdown; picking the Range entry changes nothing. */
+  protected onSelect(value: string): void {
+    const picked = SCOPE_PRESETS.find((option) => option === value);
+    if (picked) this.presetChange.emit(picked);
+  }
 
-  protected pickScope(value: string): void {
-    this.scopeChange.emit(value as DashboardScopeMode);
+  /** v181 §5: open P&L, open trades and risk used are always "now"; outside
+   *  1D a tinted card must not read as that window's exposure. */
+  protected readonly nowLabel = computed(() => showsNowLabel(this.selection()));
+  protected readonly nowSuffix = computed(() => (this.nowLabel() ? ' · now' : ''));
+  protected readonly openTradesSub = computed(() => (this.nowLabel() ? 'now' : null));
+  private withNow(text: string | null): string | null {
+    if (!this.nowLabel()) return text;
+    return text === null ? 'now' : `now · ${text}`;
   }
 
   protected readonly currencyUnit = computed(() => ` ${this.currency()}`);
@@ -183,18 +262,21 @@ export class TradingPerformance {
   protected fmtFigure(value: number | null, unit: string, decimals: number): string {
     return value === null ? '—' : `${value.toFixed(decimals)}${unit}`;
   }
-  /** An em dash alone reads as broken. When the scope is today and the figure
-   *  is absent, say why: nothing has closed yet (the "All days" toggle has it). */
+  /** An em dash alone reads as broken: say why, in the scope's own words.
+   *  All has no hint: nothing closed at all is its own answer. */
   protected noCloseHint(value: number | null): string | null {
-    return value === null && this.scope() === 'today' ? 'none closed today' : null;
+    if (value !== null) return null;
+    const active = this.activePreset();
+    if (active === '1D') return 'none closed today';
+    return active === 'All' ? null : 'none closed in range';
   }
   protected readonly openPnlSub = computed(() => {
     const value = this.openPnlAmount();
-    return value === null ? null : amount(value, this.currency());
+    return this.withNow(value === null ? null : amount(value, this.currency()));
   });
   protected readonly riskSub = computed(() => {
     const cap = this.riskCapPct();
-    return cap === null ? null : `of ${cap.toFixed(1)}% cap`;
+    return this.withNow(cap === null ? null : `of ${cap.toFixed(1)}% cap`);
   });
   protected readonly accountLabel = ACCOUNT_LABEL;
   protected readonly changeTone = computed(() => signTone(this.changePct()));

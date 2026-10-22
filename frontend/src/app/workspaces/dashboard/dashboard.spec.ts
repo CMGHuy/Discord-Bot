@@ -32,6 +32,7 @@ import { equityCandlesStoreStub } from '../../testing/equity-candles-store.stub'
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
 import { dashboardRoutes } from './dashboard.routes';
+import { TradingPerformance } from './panels/trading-performance';
 import { PositionsTable } from './positions-table';
 
 installMatchMediaPolyfill();
@@ -270,14 +271,43 @@ describe('Dashboard v85 layout', () => {
     expect(text).not.toContain('Account Info');
   });
 
-  it('routes the panel scope control back into the store', async () => {
+  it('routes the panel presets back into the store (v181 §1)', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-    [...el.querySelectorAll<HTMLButtonElement>('sb-trading-performance sb-segmented .segment')]
-      .find((s) => s.textContent!.trim() === 'All days')!.click();
+    const store = TestBed.inject(DashboardStore);
+    el.querySelector<HTMLButtonElement>('[data-preset="All"]')!.click();
     fixture.detectChanges();
-    expect(TestBed.inject(DashboardStore).scope()).toBe('all');
+    expect(store.scope()).toBe('all');
+    el.querySelector<HTMLButtonElement>('[data-preset="1M"]')!.click();
+    fixture.detectChanges();
+    expect(store.preset()).toBe('1M');
+    expect(store.scope()).toBe('range');
   });
+
+  it('names the realised window and narrows the Closed tab to it (v181 §6)', async () => {
+    const fixture = await loaded();
+    const store = TestBed.inject(DashboardStore);
+    const panel = fixture.debugElement.query(By.directive(TradingPerformance))
+      .componentInstance as TradingPerformance;
+    const table = fixture.debugElement.query(By.directive(PositionsTable))
+      .componentInstance as PositionsTable;
+    expect([panel.realizedLabel(), table.today(), table.closedWindow()])
+      .toEqual(['Realised today', true, null]);
+
+    store.setPreset('3M');
+    fixture.detectChanges();
+    expect(panel.realizedLabel()).toBe('Realised in range');
+    expect(panel.selection()).toEqual({ kind: 'preset', preset: '3M' });
+    expect(table.today()).toBeNull();
+    expect(table.closedWindow()).not.toBeNull();
+    expect(table.closedWindow()).toEqual(store.closedWindow());
+
+    store.setPreset('All');
+    fixture.detectChanges();
+    expect([panel.realizedLabel(), table.today(), table.closedWindow()])
+      .toEqual(['Realised, all days', null, null]);
+  });
+
 });
 
 /* -- v177: the Plan cell's runner forms on the positions table ---------- */
