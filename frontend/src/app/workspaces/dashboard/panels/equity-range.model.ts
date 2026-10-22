@@ -1,6 +1,8 @@
-import { EquityCandle, EquityTimeframe } from '../../../api/models';
-import { EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
+import { DashboardScope, EquityCandle, EquityTimeframe } from '../../../api/models';
+import { EQUITY_TIMEFRAMES, type ScopePreset } from '../../../ui/equity-chart-prefs';
 import { isIntraday } from './equity-candles.model';
+
+export { SCOPE_PRESETS, type ScopePreset } from '../../../ui/equity-chart-prefs';
 
 /**
  * Pure helpers for the range-aware equity chart — spec v181 § 7. The chart
@@ -269,4 +271,120 @@ export function riskTone(usedPct: number | null, capPct: number | null): PnlTone
   if (usedPct === null || capPct === null || capPct <= 0) return 'neutral';
   if (usedPct >= capPct) return 'neg';
   return usedPct >= capPct * RISK_WARN_FRACTION ? 'warn' : 'neutral';
+}
+
+/* -- scope presets (§ 1, § 6) --------------------------------------------- */
+
+/** What the panel is scoped to: a preset, or the window the partner dragged
+ *  or zoomed to by hand. Only a preset is ever persisted. */
+export type ScopeSelection =
+  | { kind: 'preset'; preset: ScopePreset }
+  | { kind: 'range'; window: TimeWindow };
+
+/** A programmatic chart move. `window` null = all history; `seq` changes on
+ *  every request, so asking for the same window twice still moves. */
+export interface ChartTarget {
+  window: TimeWindow | null;
+  seq: number;
+}
+
+/** The presets that become a `mode=range` window. */
+export type RollingPreset = Exclude<ScopePreset, '1D' | 'All'>;
+
+/** `instant`'s New York calendar date, `YYYY-MM-DD`. */
+function nyDate(instant: Date): string {
+  const parts: Record<string, string> = {};
+  for (const p of NY_PARTS.formatToParts(instant)) parts[p.type] = p.value;
+  return `${parts['year']}-${parts['month']}-${parts['day']}`;
+}
+
+/** The same calendar day `months` away, clamped to that month's last day. */
+function addMonths(isoDate: string, months: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(y, m + months, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m - 1 + months, Math.min(d, lastDay))).toISOString().slice(0, 10);
+}
+
+/** The fifth weekday counting `today` when it is one. Holidays are not known
+ *  here; one simply holds no candle. */
+function fiveWeekdaysBack(today: string): string {
+  let day = today;
+  let seen = 0;
+  for (;;) {
+    const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) seen += 1;
+    if (seen === 5) return day;
+    day = addDays(day, -1);
+  }
+}
+
+const PRESET_START: Record<RollingPreset, (today: string) => string> = {
+  '5D': fiveWeekdaysBack,
+  '1M': (today) => addMonths(today, -1),
+  '3M': (today) => addMonths(today, -3),
+  '6M': (today) => addMonths(today, -6),
+  'YTD': (today) => `${today.slice(0, 4)}-01-01`,
+  '1Y': (today) => addMonths(today, -12),
+};
+
+/** 00:00 New York of today and of tomorrow: the current 1D bucket. */
+function nyDayWindow(now: Date): TimeWindow {
+  const today = nyDate(now);
+  return {
+    from: nyMidnight(today).toISOString(),
+    to: nyMidnight(addDays(today, 1)).toISOString(),
+  };
+}
+
+/** A rolling preset's `[from, to)`: from 00:00 New York on the day it
+ *  reaches back to, to the next New York midnight -- the end of the current
+ *  1D bucket, also a 1H/4H edge -- so the KPIs move only when a day opens. */
+export function presetBounds(preset: RollingPreset, now: Date): TimeWindow {
+  return {
+    from: nyMidnight(PRESET_START[preset](nyDate(now))).toISOString(),
+    to: nyDayWindow(now).to,
+  };
+}
+
+/** Where a preset moves the chart. 1D is the New York day (its KPIs stay the
+ *  Berlin day, spec § 6); All is all history (null). */
+export function chartWindowFor(preset: ScopePreset, now: Date): TimeWindow | null {
+  if (preset === 'All') return null;
+  return preset === '1D' ? nyDayWindow(now) : presetBounds(preset, now);
+}
+
+/** The `/dashboard` request for a scope: 1D -> `today`, All -> `all`, every
+ *  other preset and a Range -> `range` with its window. */
+export function scopeToRequest(
+  scope: ScopeSelection,
+  now: Date,
+): { mode: DashboardScope; window: TimeWindow | null } {
+  if (scope.kind === 'range') return { mode: 'range', window: scope.window };
+  if (scope.preset === '1D') return { mode: 'today', window: null };
+  if (scope.preset === 'All') return { mode: 'all', window: null };
+  return { mode: 'range', window: presetBounds(scope.preset, now) };
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function dayLabel(isoDate: string, withYear: boolean): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return withYear ? `${d} ${MONTHS[m - 1]} ${y}` : `${d} ${MONTHS[m - 1]}`;
+}
+
+/** The Range chip: first and last New York day of the window (`to` is
+ *  exclusive), `3 Sep – 18 Oct`; the year only when the two differ. */
+export function rangeChipLabel(window: TimeWindow): string {
+  const first = nyDate(new Date(window.from));
+  const last = nyDate(new Date(Math.max(Date.parse(window.from), Date.parse(window.to) - 1)));
+  if (last === first) return dayLabel(first, false);
+  const withYear = first.slice(0, 4) !== last.slice(0, 4);
+  return `${dayLabel(first, withYear)} – ${dayLabel(last, withYear)}`;
+}
+
+/** Point-in-time cards (Open P&L, Open trades, Risk used) say "now" under
+ *  every scope but 1D, where "today" and "now" coincide. */
+export function showsNowLabel(scope: ScopeSelection): boolean {
+  return !(scope.kind === 'preset' && scope.preset === '1D');
 }

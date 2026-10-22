@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  SCOPE_PRESETS, SCOPE_PRESET_KEY, readScopePreset, writeScopePreset,
   EQUITY_BASIS_KEY,
   EQUITY_TF_KEY,
   readEquityChartPrefs,
@@ -38,5 +39,28 @@ describe('equity-chart-prefs', () => {
   it('never writes a value the reader would reject', () => {
     const next = writeEquityChartPrefs({}, { tf: 'bogus' as never, basis: 'mtm' });
     expect(next[EQUITY_TF_KEY]).toBe('1D');
+  });
+});
+
+describe('scope preset preference (v181)', () => {
+  it('lists the presets in control order', () => {
+    expect(SCOPE_PRESETS).toEqual(['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y', 'All']);
+    expect(SCOPE_PRESET_KEY).toBe('dashboard.scope.preset');
+  });
+
+  it('defaults to 1D, reads a stored preset, and falls back on anything else', () => {
+    expect(readScopePreset({})).toBe('1D');
+    expect(readScopePreset(undefined as never)).toBe('1D');
+    expect(readScopePreset({ 'dashboard.scope.preset': '3M' })).toBe('3M');
+    expect(readScopePreset({ 'dashboard.scope.preset': '2W' })).toBe('1D');
+    expect(readScopePreset({ 'dashboard.scope.preset': 7 })).toBe('1D');
+    // Range is never a stored value (spec § 1): it reads as the default.
+    expect(readScopePreset({ 'dashboard.scope.preset': 'Range' })).toBe('1D');
+  });
+
+  it('writes the key, leaves every other key alone, and never writes a bad value', () => {
+    const next = writeScopePreset({ 'dashboard.equity.tf': '4H' }, 'YTD');
+    expect(next).toEqual({ 'dashboard.equity.tf': '4H', 'dashboard.scope.preset': 'YTD' });
+    expect(writeScopePreset({}, 'bogus' as never)[SCOPE_PRESET_KEY]).toBe('1D');
   });
 });

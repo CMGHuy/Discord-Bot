@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, of } from 'rxjs';
 
 import { SKIP_ROUTE_REFRESH } from './interceptors';
+import type { TimeWindow } from '../workspaces/dashboard/panels/equity-range.model';
 
 import {
   AnalyticsByDimension,
@@ -129,24 +130,28 @@ export class ApiClient {
   /** SR58 — the scope is a query parameter, so the server does the date
    *  filtering. A client-side scope over an all-time payload could not
    *  narrow the realised figures at all. */
-  dashboard(mode?: DashboardScope): Observable<Dashboard> {
+  dashboard(mode?: DashboardScope, window?: TimeWindow | null): Observable<Dashboard> {
     let params = new HttpParams();
     if (mode) params = params.set('mode', mode);
+    if (window) params = params.set('from', window.from).set('to', window.to);
     return this.http.get<Dashboard>(`${this.base}/dashboard`, { params });
   }
 
   /* -- trades ---------------------------------------------------------- */
 
-  /** `openedFrom`/`openedTo` are handled here rather than by `toParams`: the
+  /** `openedFrom`/`openedTo` and `closedFrom`/`closedTo` are handled here
+   *  rather than by `toParams`: the
    *  wire names (`opened_from`/`opened_to`, R6-01) don't match the store's
    *  own camelCase field names, and `toParams` sends a key as-is. Same
    *  pattern as `analyticsPerformance`'s `from`/`to` below -- an omitted or
    *  null bound is left off the URL rather than sent empty. */
   trades(query: TradeQuery = {}): Observable<TradeCollection> {
-    const { openedFrom, openedTo, ...rest } = query;
+    const { openedFrom, openedTo, closedFrom, closedTo, ...rest } = query;
     let params = toParams(rest);
     if (openedFrom) params = params.set('opened_from', openedFrom);
     if (openedTo) params = params.set('opened_to', openedTo);
+    if (closedFrom) params = params.set('closed_from', closedFrom);
+    if (closedTo) params = params.set('closed_to', closedTo);
     return this.http.get<TradeCollection>(`${this.base}/trades`, {
       params,
     });

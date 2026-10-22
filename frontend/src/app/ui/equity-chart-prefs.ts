@@ -44,3 +44,26 @@ export function writeEquityChartPrefs(prefs: Preferences, value: EquityChartPref
   const clean = readEquityChartPrefs({ [EQUITY_TF_KEY]: value.tf, [EQUITY_BASIS_KEY]: value.basis });
   return { ...prefs, [EQUITY_TF_KEY]: clean.tf, [EQUITY_BASIS_KEY]: clean.basis };
 }
+
+/* -- v181: the Dashboard's scope preset ----------------------------------- */
+
+/** The scope control's presets, in control order (spec v181 § 1). Defined
+ *  here, beside the timeframes, because `equity-range.model.ts` imports from
+ *  this module -- the model re-exports both, and consumers import them from
+ *  there. An ad-hoc Range is not a preset and is never stored. */
+export type ScopePreset = '1D' | '5D' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | 'All';
+export const SCOPE_PRESETS: readonly ScopePreset[] = ['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y', 'All'];
+
+export const SCOPE_PRESET_KEY = 'dashboard.scope.preset';
+
+/** 1D: what the Today toggle showed before v181. */
+export const DEFAULT_SCOPE_PRESET: ScopePreset = '1D';
+
+export function readScopePreset(prefs: Preferences): ScopePreset {
+  return pick(prefs?.[SCOPE_PRESET_KEY], SCOPE_PRESETS, DEFAULT_SCOPE_PRESET);
+}
+
+export function writeScopePreset(prefs: Preferences, preset: ScopePreset): Preferences {
+  // Normalised through the reader, so a bad value is never persisted.
+  return { ...prefs, [SCOPE_PRESET_KEY]: readScopePreset({ [SCOPE_PRESET_KEY]: preset }) };
+}

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EquityCandle, EquityTimeframe } from '../../../api/models';
 import { EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
 import {
+  SCOPE_PRESETS, ScopeSelection, chartWindowFor, presetBounds, rangeChipLabel, scopeToRequest, showsNowLabel,
   BREAKEVEN_BAND_PP,
   MIN_CLOSES_FOR_TONE,
   RISK_WARN_FRACTION,
@@ -309,5 +310,110 @@ describe('profit/loss tones', () => {
   it('leaves risk neutral without a figure or a cap', () => {
     expect([riskTone(null, 6), riskTone(3, null), riskTone(3, 0)])
       .toEqual(['neutral', 'neutral', 'neutral']);
+  });
+});
+
+describe('scope presets (§ 1, § 6)', () => {
+  const at = (s: string) => new Date(s);
+  /** New York wall clock of an ISO instant, `YYYY-MM-DD HH:mm`. */
+  const nyWall = (s: string) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(s)).replace(',', '');
+
+  // Wed 21 Oct 2026, 10:00 in New York.
+  const NOW = at('2026-10-21T14:00:00Z');
+
+  it('re-exports the presets from the prefs module', () => {
+    expect(SCOPE_PRESETS).toHaveLength(8);
+  });
+
+  it('reaches back per preset, to 00:00 New York, and ends at the next New York midnight', () => {
+    const to = '2026-10-22T04:00:00.000Z';
+    expect(presetBounds('5D', NOW)).toEqual({ from: '2026-10-15T04:00:00.000Z', to });
+    expect(presetBounds('1M', NOW)).toEqual({ from: '2026-09-21T04:00:00.000Z', to });
+    expect(presetBounds('3M', NOW)).toEqual({ from: '2026-07-21T04:00:00.000Z', to });
+    expect(presetBounds('6M', NOW)).toEqual({ from: '2026-04-21T04:00:00.000Z', to });
+    expect(presetBounds('YTD', NOW)).toEqual({ from: '2026-01-01T05:00:00.000Z', to });
+    expect(presetBounds('1Y', NOW)).toEqual({ from: '2025-10-21T04:00:00.000Z', to });
+  });
+
+  it('puts every bound on a New York midnight, across both DST changeovers', () => {
+    const nows = ['2026-03-09T15:00:00Z', '2026-11-02T15:00:00Z', '2026-01-01T12:00:00Z', NOW.toISOString()];
+    for (const now of nows) {
+      for (const preset of ['5D', '1M', '3M', '6M', 'YTD', '1Y'] as const) {
+        const { from, to } = presetBounds(preset, at(now));
+        expect(nyWall(from).endsWith('00:00')).toBe(true);
+        expect(nyWall(to).endsWith('00:00')).toBe(true);
+      }
+    }
+    // Monday after the November fall-back: from is EDT, to is EST.
+    expect(presetBounds('5D', at('2026-11-02T15:00:00Z')))
+      .toEqual({ from: '2026-10-27T04:00:00.000Z', to: '2026-11-03T05:00:00.000Z' });
+    // Monday after the March spring-forward: from is EST, to is EDT.
+    expect(presetBounds('1M', at('2026-03-09T15:00:00Z')))
+      .toEqual({ from: '2026-02-09T05:00:00.000Z', to: '2026-03-10T04:00:00.000Z' });
+  });
+
+  it('skips the weekend for 5D', () => {
+    // Sun 25 Oct: the five weekdays are Fri 23 back to Mon 19.
+    expect(presetBounds('5D', at('2026-10-25T15:00:00Z')).from).toBe('2026-10-19T04:00:00.000Z');
+  });
+
+  it('clamps a month back to the shorter month', () => {
+    expect(presetBounds('1M', at('2026-03-31T15:00:00Z')).from).toBe('2026-02-28T05:00:00.000Z');
+  });
+
+  it('reads YTD on the New York calendar, 1 Jan included', () => {
+    // 07:00 New York on 1 Jan: the year just began.
+    expect(presetBounds('YTD', at('2026-01-01T12:00:00Z')))
+      .toEqual({ from: '2026-01-01T05:00:00.000Z', to: '2026-01-02T05:00:00.000Z' });
+    // 22:00 New York on 31 Dec (already 1 Jan in Berlin): still last year.
+    expect(presetBounds('YTD', at('2026-01-01T03:00:00Z')))
+      .toEqual({ from: '2025-01-01T05:00:00.000Z', to: '2026-01-01T05:00:00.000Z' });
+  });
+
+  it('keeps `to` stable within a New York day and moves it when the next one opens', () => {
+    const to = (s: string) => presetBounds('3M', at(s)).to;
+    expect(to('2026-10-21T04:00:00Z')).toBe('2026-10-22T04:00:00.000Z');
+    expect(to('2026-10-22T03:59:59Z')).toBe('2026-10-22T04:00:00.000Z');
+    expect(to('2026-10-22T04:00:00Z')).toBe('2026-10-23T04:00:00.000Z');
+  });
+
+  it('gives the chart today’s New York day for 1D, all history for All, the bounds otherwise', () => {
+    expect(chartWindowFor('1D', NOW))
+      .toEqual({ from: '2026-10-21T04:00:00.000Z', to: '2026-10-22T04:00:00.000Z' });
+    expect(chartWindowFor('All', NOW)).toBeNull();
+    expect(chartWindowFor('6M', NOW)).toEqual(presetBounds('6M', NOW));
+  });
+
+  it('maps a scope to its request: 1D stays the Berlin today, All is all, the rest are ranges', () => {
+    const preset = (p: '1D' | 'All' | '3M'): ScopeSelection => ({ kind: 'preset', preset: p });
+    const window = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
+    expect(scopeToRequest(preset('1D'), NOW)).toEqual({ mode: 'today', window: null });
+    expect(scopeToRequest(preset('All'), NOW)).toEqual({ mode: 'all', window: null });
+    expect(scopeToRequest(preset('3M'), NOW)).toEqual({ mode: 'range', window: presetBounds('3M', NOW) });
+    expect(scopeToRequest({ kind: 'range', window }, NOW)).toEqual({ mode: 'range', window });
+  });
+
+  it('labels a Range chip with its New York dates, `to` exclusive', () => {
+    expect(rangeChipLabel({ from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' }))
+      .toBe('3 Sep – 18 Oct');
+    expect(rangeChipLabel({ from: '2025-12-29T05:00:00.000Z', to: '2026-01-03T05:00:00.000Z' }))
+      .toBe('29 Dec 2025 – 2 Jan 2026');
+    expect(rangeChipLabel({ from: '2026-10-16T04:00:00.000Z', to: '2026-10-17T04:00:00.000Z' }))
+      .toBe('16 Oct');
+    // Four 1H candles inside one day, and an empty window.
+    expect(rangeChipLabel({ from: '2026-10-16T14:00:00.000Z', to: '2026-10-16T18:00:00.000Z' }))
+      .toBe('16 Oct');
+    expect(rangeChipLabel({ from: '2026-10-16T14:00:00.000Z', to: '2026-10-16T14:00:00.000Z' }))
+      .toBe('16 Oct');
+  });
+
+  it('shows the "now" sub-label everywhere but 1D', () => {
+    expect(showsNowLabel({ kind: 'preset', preset: '1D' })).toBe(false);
+    expect(showsNowLabel({ kind: 'preset', preset: '5D' })).toBe(true);
+    expect(showsNowLabel({ kind: 'preset', preset: 'All' })).toBe(true);
+    expect(showsNowLabel({ kind: 'range', window: { from: 'a', to: 'b' } })).toBe(true);
   });
 });
