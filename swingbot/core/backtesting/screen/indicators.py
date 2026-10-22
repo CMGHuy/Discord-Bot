@@ -57,3 +57,8 @@ def sma(values: pd.Series, n: int) -> pd.Series:
 def rolling_max(values: pd.Series, n: int) -> pd.Series:
     """Maximum over the last n bars, t included."""
     return values.rolling(n, min_periods=n).max()
+
+
+def rolling_min(values: pd.Series, n: int) -> pd.Series:
+    """Minimum over the last n bars, t included."""
+    return values.rolling(n, min_periods=n).min()
