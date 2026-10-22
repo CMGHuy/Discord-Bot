@@ -80,7 +80,7 @@
 @keyframes sb-drawer-in { from { transform: translateX(100%); } }
 @keyframes sb-drawer-out { to { transform: translateX(100%); } }
 @keyframes sb-sheet-in { from { transform: translateY(100%); } }
-@keyframes sb-sheet-out { to { transform: translateY(100%); } }
+@keyframes sb-sheet-out { from { transform: translateY(var(--sb-pull, 0px)); } to { transform: translateY(100%); } }
 @keyframes sb-fade-out { to { opacity: 0; } }
 @keyframes sb-ping { from { opacity: 0.6; transform: scale(1); } to { opacity: 0; transform: scale(2.6); } }
 @keyframes sb-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }

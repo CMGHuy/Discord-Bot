@@ -493,6 +493,8 @@ const SWIPE_CLOSE_PX = 80;
     @media (max-width: 639px) {
       .drawer { margin: auto 0 0; width: 100vw; height: auto; max-height: 85dvh; }
       .drawer.elev-overlay { border-radius: var(--panel-radius) var(--panel-radius) 0 0; border-width: 1px 0 0; }
+      .drawer { will-change: transform; }
+      .body { overscroll-behavior: contain; }
       .drag-handle { display: block; width: 36px; height: 4px; margin: var(--space-8) auto 0; border-radius: var(--radius-sm); background: var(--border-strong); }
     }
     @media (min-width: 640px) and (max-width: 1023px) {
@@ -554,14 +556,26 @@ export class Drawer {
       return;
     }
     this.swipe.dy = Math.max(0, event.touches[0].clientY - this.swipe.y);
+    // Own the gesture once the sheet is moving, so the page and body don't scroll or rubber-band under it.
+    if (this.swipe.dy > 0 && event.cancelable) event.preventDefault();
     this.slide(this.swipe.dy);
   }
 
   protected onTouchEnd(): void {
     const pulled = this.swipe?.dy ?? 0;
     this.swipe = null;
-    if (pulled > SWIPE_CLOSE_PX) this.requestClose();
+    if (pulled > SWIPE_CLOSE_PX) this.closeFrom(pulled);
     else this.slide(0);
+  }
+
+  /** The exit keyframes start from the pulled offset, so the sheet carries on
+   *  down from where the finger let go instead of snapping back first. */
+  private closeFrom(px: number): void {
+    const style = this.dialog().nativeElement.style;
+    style.setProperty('--sb-pull', `${px}px`);
+    style.transition = 'none';
+    style.transform = '';
+    this.requestClose();
   }
 
   private bodyScrolled(target: EventTarget | null): boolean {
