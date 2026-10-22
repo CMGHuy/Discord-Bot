@@ -225,6 +225,36 @@ describe('sb-equity-candles', () => {
       expect(move).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps a failed page paused through preset and user callbacks until Retry', () => {
+      const { fixture, stub, el } = render(response(dailyCandles(40)));
+      vi.spyOn(stub, 'loadOlder').mockImplementation(() => {
+        stub.calls.loadOlder += 1;
+        stub.pageError.set(false);
+        stub.pageLoading.set(true);
+      });
+      vi.spyOn(linkScale(fixture), 'setVisibleLogicalRange').mockImplementation(() => {
+        fixture.componentInstance['onVisibleRange']({ from: -0.4, to: 1.4 });
+      });
+      stub.hasMore.set(true);
+      stub.pageError.set(true);
+      fixture.componentRef.setInput('target', {
+        window: W('2026-08-01T04:00:00.000Z', '2026-09-03T04:00:00.000Z'), seq: 1,
+      });
+      fixture.detectChanges();
+      expect(stub.calls.loadOlder).toBe(0);
+      expect(stub.pageError()).toBe(true);
+
+      linked(fixture).programmatic = false;
+      at(fixture, 0, 19);
+      expect(stub.calls.loadOlder).toBe(0);
+      const retry = el.querySelector<HTMLButtonElement>('.page-error button')!;
+      retry.click();
+      fixture.detectChanges();
+      expect(stub.calls.loadOlder).toBe(1);
+      expect(stub.pageLoading()).toBe(true);
+      expect(el.querySelector('.page-error')).toBeNull();
+    });
+
     it('retries a hidden target on resize, under the flag and only once', () => {
       let notify: () => void = () => {};
       class FakeObserver {
@@ -504,6 +534,8 @@ describe('sb-equity-candles', () => {
     expect(fixture.componentInstance['state']()).toBe('chart');
     note.querySelector('button')!.click();
     expect(loadOlder).toHaveBeenCalledTimes(1);
+    // The stub has no HTTP lifecycle: model the retry succeeding before paging resumes.
+    stub.pageError.set(false);
     stub.hasMore.set(true);
     at(fixture, 0, 2);
     expect(loadOlder).toHaveBeenCalledTimes(2);

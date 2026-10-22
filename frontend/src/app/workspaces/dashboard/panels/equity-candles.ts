@@ -411,7 +411,9 @@ export class EquityCandles {
     this.visible.set(range);
     const atEdge = isAtLiveEdge(range, this.candles().length);
     if (atEdge !== this.store.atLiveEdge()) this.store.setAtLiveEdge(atEdge);
-    if (shouldLoadOlder(range, this.store.hasMore(), this.store.pageLoading())) this.store.loadOlder();
+    // A failed page waits for the explicit Retry button, including after a preset fallback.
+    if (!this.store.pageError()
+        && shouldLoadOlder(range, this.store.hasMore(), this.store.pageLoading())) this.store.loadOlder();
     this.autoTimeframe();
     this.reportUserRange(range);
   }
