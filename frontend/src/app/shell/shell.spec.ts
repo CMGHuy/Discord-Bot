@@ -488,23 +488,19 @@ describe('ambient live cues (v168 §3 #10)', () => {
   });
 });
 
-describe('shell topbar on one baseline (v179 layout audit)', () => {
+describe('shell topbar centred on one axis (v179 layout audit)', () => {
   const css = readFileSync(join(process.cwd(), 'src/app/shell/shell.css'), 'utf8');
   const rule = (selector: string) => css.match(
-    new RegExp(`^${selector.replaceAll('.', '\\.')} \\{[^}]*\\}`, 'm'),
+    new RegExp(`^${selector.replaceAll('.', '\.')} \{[^}]*\}`, 'm'),
   )?.[0] ?? '';
 
-  it('sets the 20px title, the 11px tape and the 11px status text on the text baseline', () => {
-    expect(rule('.topbar')).toMatch(/align-items:\s*baseline/);
+  it('centres the title block, tape, status cluster and avatar on the bar', () => {
+    expect(rule('.topbar')).toMatch(/align-items:\s*center/);
   });
 
-  it('seats the wordmark on the title baseline: the sidebar starts 6px higher than the bar padding alone would put it', () => {
-    // "Bomeo" (16px) in the sidebar and the 20px page title sit side by side;
-    // a 20px sidebar top padding left the wordmark's baseline 6px low.
-    expect(rule('.sidebar')).toMatch(/padding:\s*var\(--space-14\) var\(--space-14\) var\(--space-20\);/);
-  });
-
-  it('keeps the textless profile avatar centred on the bar rather than hanging off the baseline', () => {
-    expect(rule('.topbar sb-profile-menu')).toContain('align-self: center');
+  it('gives the topbar and the sidebar wordmark row the same height, so the two centres meet', () => {
+    expect(rule('.topbar')).toContain('height: var(--topbar-h)');
+    expect(rule('.mark')).toContain('height: var(--topbar-h)');
+    expect(rule('.sidebar')).toMatch(/padding:\s*0 var\(--space-14\) var\(--space-20\);/);
   });
 });
