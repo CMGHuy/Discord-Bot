@@ -60,6 +60,9 @@ const STATUS_LABEL: Record<string, string> = {
       display: grid;
       grid-template-columns: auto auto auto 1fr auto;
       align-items: baseline;
+      /* The text row sits in the middle of the 44px target, so the centred
+         icon and the baseline-aligned text share one line. */
+      align-content: center;
       gap: var(--space-8);
       width: 100%;
       min-height: var(--control-h);

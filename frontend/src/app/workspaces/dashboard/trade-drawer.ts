@@ -59,11 +59,12 @@ function entryField(row: TradeRow): TradeDrawerField {
 
 /** The original plan stop, as the trade detail's plan card shows it (`risk_stop`;
  *  `stop_loss` is the working stop once PARTIAL), then the working stop only
- *  when it has moved off it. */
+ *  when it has moved off it on a position that is still live. */
 function stopFields(row: TradeRow): TradeDrawerField[] {
   const planned = row.risk_stop ?? row.stop_loss;
   const fields = [field('stop', 'Stop', num(planned), true)];
-  if (row.stop_loss !== null && planned !== null && row.stop_loss !== planned) {
+  const live = row.status === 'ACTIVE' || row.status === 'PARTIAL';
+  if (live && row.stop_loss !== null && planned !== null && row.stop_loss !== planned) {
     fields.push(field('working_stop', 'Working stop', num(row.stop_loss), true));
   }
   return fields;
@@ -149,7 +150,7 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
     .drawer-actions {
       display: flex;
       flex-wrap: wrap;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
       gap: var(--space-10);
       margin-top: var(--space-14);

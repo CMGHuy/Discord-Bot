@@ -56,6 +56,11 @@ describe('tradeDrawerFields (v179 §3.2)', () => {
     expect(byKey['working_stop']).toBe('104.00');
   });
 
+  it('omits the working stop on a closed leg', () => {
+    const row = tradeRow({ status: 'CLOSED', risk_stop: 95, stop_loss: 104 });
+    expect(tradeDrawerFields(row, '€', NOW).map((f) => f.key)).not.toContain('working_stop');
+  });
+
   it('shows the live P&L of an open position as a percentage and an amount', () => {
     expect(drawerPnl(tradeRow())).toEqual({ pct: 5, amount: 50 });
     const pnl = tradeDrawerFields(tradeRow(), '€', NOW).find((f) => f.key === 'pnl')!;
@@ -224,10 +229,10 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     } finally { await browser.close(); }
   }, 30000);
 
-  it('aligns each field and the action line on the text baseline', () => {
+  it('aligns each field on the text baseline and centres the action line', () => {
     const css = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/trade-drawer.ts'), 'utf8');
     expect(css).toMatch(/\.field \{[^}]*align-items: baseline/);
-    expect(css).toMatch(/\.drawer-actions \{[^}]*align-items: baseline/);
+    expect(css).toMatch(/\.drawer-actions \{[^}]*align-items: center/);
     // No workspace media query (spec §4 anti-goal): the drawer's phone,
     // tablet and desktop geometry is sb-drawer's own.
     expect(css).not.toMatch(/@media/);
