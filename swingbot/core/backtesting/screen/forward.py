@@ -4,6 +4,10 @@ Mean excess forward return in ATR units at h in HORIZONS, event minus its
 matched null, and per-year Spearman rank correlation between the event
 indicator and the h-bar forward return. Printed beside the verdict; the
 verdict never reads it. numpy/pandas only (scipy is not a dependency).
+
+v182: a short idea's forward return is negated here, once, in
+``forward_atr``; ``diagnostics.py`` never flips a sign again, so a positive
+drift means good for the trade in both directions.
 """
 from __future__ import annotations
 
@@ -14,15 +18,16 @@ HORIZONS = (5, 10, 20, 60)
 MIN_RANK_N = 3
 
 
-def forward_atr(df: pd.DataFrame, atr, h: int) -> np.ndarray:
-    """(close[t+h] - close[t]) / ATR14[t]; NaN where t+h is past the frame."""
+def forward_atr(df: pd.DataFrame, atr, h: int, direction: str = "long") -> np.ndarray:
+    """(close[t+h] - close[t]) / ATR14[t]; NaN where t+h is past the frame.
+    A short returns the negated long array (the only sign flip in the screen)."""
     close = df["Close"].to_numpy(dtype=float)
     a = pd.Series(atr).to_numpy(dtype=float)
     out = np.full(len(close), np.nan)
     if h < len(close):
         with np.errstate(divide="ignore", invalid="ignore"):
             out[: len(close) - h] = (close[h:] - close[: len(close) - h]) / a[: len(close) - h]
-    return out
+    return -out if direction == "short" else out
 
 
 def excess_drift(fwd, event_pos, groups) -> list:
