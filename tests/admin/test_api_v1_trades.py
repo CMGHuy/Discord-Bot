@@ -29,8 +29,6 @@ from tests.admin.api_v1_contract import (
 )
 from tests.store_seed import seed_store
 
-_LOGIN = {"username": "admin", "password": "admin"}
-
 # The full row contract: spec 3's seven default columns plus the eleven
 # fields row expansion reveals. Declared once; every response is checked
 # against it, so an endpoint that grows or drops a field fails here.
@@ -193,7 +191,13 @@ def seed(admin_app, tmp_path):
 
 @pytest.fixture
 def logged_in(client):
-    client.post("/api/v1/session", json=_LOGIN)
+    from swingbot.admin import app as admin_app
+
+    response = client.post("/api/v1/session", json={
+        "username": admin_app.ADMIN_USERNAME,
+        "password": admin_app.ADMIN_PASSWORD,
+    })
+    assert response.status_code == 200
     return client
 
 
@@ -1456,3 +1460,144 @@ def test_an_open_ended_range_works_from_either_side(seed, logged_in):
     seed(trades=[t1, t2])
     assert logged_in.get("/api/v1/trades?opened_from=2026-04-15").get_json()["total"] == 1
     assert logged_in.get("/api/v1/trades?opened_to=2026-04-15").get_json()["total"] == 1
+
+
+# --- v181: closed_from / closed_to (the Closed tab under a range scope) -----
+# The Dashboard's range presets and its hand-dragged Range send a `[from, to)`
+# window instead of `today`. The rule is `today`'s with the window in place of
+# the Berlin day: a row that has not closed yet stays in however old it is,
+# and a CLOSED/CANCELLED row counts only when its terminal time is in the
+# window -- the same `closed_in_window` `/dashboard?mode=range` counts with,
+# so the KPI cards and the table under them cannot disagree.
+
+CLOSED_FROM = "2026-01-05T05:00:00+00:00"   # 00:00 New York, Mon 5 Jan
+CLOSED_TO = "2026-01-06T05:00:00+00:00"     # 00:00 New York, Tue 6 Jan
+_INSIDE = "2026-01-05T15:00:00+00:00"
+_AFTER = "2026-01-07T15:00:00+00:00"
+
+
+def _windowed(client, *, start=CLOSED_FROM, end=CLOSED_TO, **extra):
+    # query_string, never an f-string URL: "+00:00" in a URL decodes to a
+    # space and the bound turns naive (a 400).
+    return client.get("/api/v1/trades",
+                      query_string={"closed_from": start, "closed_to": end, **extra})
+
+
+def _closed_plan(plan_id, trade_id, closed_at, *, status="win"):
+    plan = _plan(plan_id, status="CLOSED")
+    trade = _trade(trade_id, plan_id=plan_id, status=status)
+    trade["closed_at"] = closed_at
+    return plan, trade
+
+
+def test_closed_window_counts_a_close_at_from_and_drops_one_at_to(seed, logged_in):
+    at_from = _closed_plan("11111111-1111-4111-8111-111111111111", "a" * 16, CLOSED_FROM)
+    inside = _closed_plan("22222222-2222-4222-8222-222222222222", "b" * 16, _INSIDE)
+    at_to = _closed_plan("33333333-3333-4333-8333-333333333333", "c" * 16, CLOSED_TO)
+    seed(plans=[at_from[0], inside[0], at_to[0]], trades=[at_from[1], inside[1], at_to[1]])
+
+    items = _windowed(logged_in, status="CLOSED").get_json()["items"]
+    assert sorted(r["id"] for r in items) == [at_from[0]["plan_id"], inside[0]["plan_id"]]
+
+
+@pytest.mark.parametrize("status", ["PENDING", "ACTIVE", "PARTIAL"])
+def test_closed_window_keeps_a_still_open_plan_no_matter_how_old(seed, logged_in, status):
+    plan = _plan("11111111-1111-4111-8111-111111111111", status=status)
+    plan["created_at"] = _OLD_ISO
+    seed(plans=[plan])
+
+    items = _windowed(logged_in, status=status).get_json()["items"]
+    assert [r["id"] for r in items] == [plan["plan_id"]]
+
+
+def test_closed_window_scopes_a_cancelled_plan_by_its_status_history(seed, logged_in):
+    inside = _plan("11111111-1111-4111-8111-111111111111", status="CANCELLED")
+    inside["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": _INSIDE}]
+    after = _plan("22222222-2222-4222-8222-222222222222", status="CANCELLED")
+    after["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": _AFTER}]
+    seed(plans=[inside, after])
+
+    items = _windowed(logged_in, status="CANCELLED").get_json()["items"]
+    assert [r["id"] for r in items] == [inside["plan_id"]]
+
+
+def test_closed_window_scopes_a_legacy_trade_by_when_it_closed(seed, logged_in):
+    inside = _trade("aaaaaaaaaaaaaaaa", status="win")
+    inside["opened_at"] = _OLD_ISO
+    inside["closed_at"] = _INSIDE
+    after = _trade("bbbbbbbbbbbbbbbb", status="loss")
+    after["closed_at"] = _AFTER
+    seed(trades=[inside, after])
+
+    items = _windowed(logged_in, status="CLOSED").get_json()["items"]
+    assert [r["id"] for r in items] == ["aaaaaaaaaaaaaaaa"]
+
+
+def test_closed_window_compares_instants_not_wall_clocks(seed, logged_in):
+    """00:30 New York on 5 Jan is 05:30Z -- inside, whatever offset it is written in."""
+    plan, trade = _closed_plan("11111111-1111-4111-8111-111111111111", "a" * 16,
+                               "2026-01-05T00:30:00-05:00")
+    seed(plans=[plan], trades=[trade])
+    assert _windowed(logged_in, status="CLOSED").get_json()["total"] == 1
+
+
+@pytest.mark.parametrize("query, named", [
+    ({"closed_from": CLOSED_FROM}, "closed_to"),
+    ({"closed_to": CLOSED_TO}, "closed_from"),
+    ({"closed_from": "2026-01-05T05:00:00", "closed_to": CLOSED_TO}, "closed_from"),
+    ({"closed_from": "last-tuesday", "closed_to": CLOSED_TO}, "closed_from"),
+    ({"closed_from": CLOSED_TO, "closed_to": CLOSED_FROM}, "closed_from"),
+])
+def test_a_bad_closed_window_is_a_400_naming_the_parameter(seed, logged_in, query, named):
+    seed()
+    resp = logged_in.get("/api/v1/trades", query_string=query)
+    assert_error(resp, "invalid", 400)
+    assert named in resp.get_json()["error"]["message"]
+
+
+def test_no_closed_window_leaves_the_list_unfiltered(seed, logged_in):
+    old = _closed_plan("11111111-1111-4111-8111-111111111111", "a" * 16, _OLD_ISO)
+    seed(plans=[old[0]], trades=[old[1]])
+    assert logged_in.get("/api/v1/trades?status=CLOSED").get_json()["total"] == 1
+
+
+def test_the_closed_tab_agrees_with_the_dashboard_over_one_window(seed, logged_in):
+    """Spec § 6 / Testing: the Closed tab filter agrees with the KPIs. The
+    dashboard's lifecycle strip and realised count, and this endpoint's
+    CLOSED/CANCELLED totals, all over the same `[from, to)` window."""
+    closes = [
+        _closed_plan("11111111-1111-4111-8111-111111111111", "a" * 16, CLOSED_FROM),
+        _closed_plan("22222222-2222-4222-8222-222222222222", "b" * 16, _INSIDE, status="loss"),
+        _closed_plan("33333333-3333-4333-8333-333333333333", "c" * 16, CLOSED_TO),
+        _closed_plan("44444444-4444-4444-8444-444444444444", "d" * 16, _OLD_ISO),
+    ]
+    cancelled = _plan("55555555-5555-4555-8555-555555555555", status="CANCELLED")
+    cancelled["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": _INSIDE}]
+    still_open = _plan("66666666-6666-4666-8666-666666666666", status="PENDING")
+    seed(plans=[p for p, _ in closes] + [cancelled, still_open],
+         trades=[t for _, t in closes])
+
+    dashboard = logged_in.get("/api/v1/dashboard", query_string={
+        "mode": "range", "from": CLOSED_FROM, "to": CLOSED_TO}).get_json()
+    closed_total = _windowed(logged_in, status="CLOSED").get_json()["total"]
+    cancelled_total = _windowed(logged_in, status="CANCELLED").get_json()["total"]
+
+    assert closed_total == 2
+    assert dashboard["lifecycle"]["CLOSED"] == closed_total
+    assert dashboard["lifecycle"]["CANCELLED"] == cancelled_total == 1
+    assert dashboard["realized"]["n"] == closed_total
+
+
+def test_in_closed_scope_keeps_open_rows_and_windows_terminal_ones():
+    from datetime import datetime, timezone
+
+    from swingbot.admin.api_v1.closed_window import ClosedWindow
+    from swingbot.admin.api_v1.trades import _in_closed_scope
+
+    window = ClosedWindow(datetime(2026, 1, 5, 5, tzinfo=timezone.utc),
+                          datetime(2026, 1, 6, 5, tzinfo=timezone.utc))
+    assert _in_closed_scope("ACTIVE", None, window)
+    assert _in_closed_scope("PENDING", _OLD_ISO, window)
+    assert _in_closed_scope("CLOSED", _INSIDE, window)
+    assert not _in_closed_scope("CLOSED", _AFTER, window)
+    assert not _in_closed_scope("CANCELLED", None, window)

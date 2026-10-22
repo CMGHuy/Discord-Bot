@@ -47,6 +47,7 @@ from swingbot.core.presentation.plan_view import plan_view
 
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
+from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 
 # Legacy v1 trades carry their own status vocabulary. They have no PENDING,
 # PARTIAL or CANCELLED equivalent and none is synthesised for them.
@@ -76,7 +77,9 @@ FILTERS = frozenset({"status", "outcome", "ticker", "strategy", "horizon", "tier
                      # `_row_from_plan`'s `today` field.
                      "today",
                      # v85 R6-01: date range filters on opened_at
-                     "opened_from", "opened_to"})
+                     "opened_from", "opened_to",
+                     # v181: Dashboard range scope on the Closed tab.
+                     "closed_from", "closed_to"})
 
 # Query-parameter name -> row key, where the two differ. `confidence` reads
 # better in a URL than `confidence_level` and is what the chip row calls it;
@@ -111,6 +114,10 @@ _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 # Range filters on date fields (as opposed to equality filters).
 _RANGE_FILTERS = {"opened_from", "opened_to"}
+
+# Apply the paired window before the generic filter loop: either bound alone
+# is meaningless, and adding an arm would raise list_trades complexity.
+_CLOSED_WINDOW_FILTERS = ("closed_from", "closed_to")
 
 
 def _as_date(value: str) -> date:
@@ -204,6 +211,27 @@ def _in_today_scope(status: str, closed_at: str | None) -> bool:
     for a legacy one -- both already computed by the caller.
     """
     return status not in _TERMINAL or dash.is_today_berlin(closed_at)
+
+
+def _in_closed_scope(status: str, closed_at: str | None, window: ClosedWindow) -> bool:
+    """Keep open rows; count terminal rows by the dashboard's shared window rule."""
+    return status not in _TERMINAL or closed_in_window(closed_at, window)
+
+
+def _apply_closed_window(rows: list[dict], filters: dict) -> tuple[list[dict], dict]:
+    """Apply the paired closed bounds and return the remaining generic filters.
+
+    Empty values are absent under the collection convention. The shared parser
+    rejects a missing partner, naive, unreadable or reversed bound, naming the
+    query parameter in its 400 response.
+    """
+    rest = {k: v for k, v in filters.items() if k not in _CLOSED_WINDOW_FILTERS}
+    if len(rest) == len(filters):
+        return rows, filters
+    window = parse_closed_window(filters.get("closed_from"), filters.get("closed_to"),
+                                 names=_CLOSED_WINDOW_FILTERS)
+    kept = [r for r in rows if _in_closed_scope(r.get("status"), r.get("closed_at"), window)]
+    return kept, rest
 
 
 def _terminal_at(plan: dict, trade: dict | None) -> str | None:
@@ -968,7 +996,8 @@ def list_trades():
 
     # Filter -> sort -> slice, in that order, so `total` is the post-filter
     # pre-slice count the collection convention requires.
-    for key, value in params.filters.items():
+    rows, filters = _apply_closed_window(rows, params.filters)
+    for key, value in filters.items():
         if key in _BOOLEAN_FILTERS:
             want = str(value).strip().lower() in _TRUTHY
             rows = [r for r in rows if bool(r.get(key)) is want]
