@@ -17,6 +17,8 @@ import {
 } from '../../api/interceptors';
 import { Ticker } from '../../api/models';
 import { date } from '../../ui/format';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 import { SortSpec } from '../../ui/data-table/data-table.types';
 import { isInline } from '../../ui/priority';
 import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS } from './watchlist';
@@ -531,5 +533,57 @@ describe('Watchlist price source', () => {
   it('keeps an Alpaca price quiet', () => {
     const row = firstRow({ price: 171.5, price_source: 'alpaca' });
     expect(row.querySelector('.source-badge')).toBeNull();
+  });
+});
+
+describe('Watchlist on a phone (v179 §3.1)', () => {
+  let fixture: ComponentFixture<Watchlist>;
+
+  beforeEach(async () => {
+    installDialogPolyfill();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+        provideHttpClientTesting(),
+        WatchlistStore,
+        { provide: TapeStore, useValue: { toggle: vi.fn(), symbols: () => [] } },
+        phoneViewport(),
+      ],
+    });
+    fixture = TestBed.createComponent(Watchlist);
+    TestBed.inject(WatchlistStore).load();
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/watchlist/tickers')
+      .flush({ tickers: [ticker({ symbol: 'NVDA', company_name: 'Nvidia' })] });
+    await fixture.whenStable();
+    fixture.detectChanges();
+  });
+
+  const table = () => (fixture.nativeElement as HTMLElement).querySelector('sb-data-table') as HTMLElement;
+
+  it('leads the compact row with symbol, price and the 1-day change', () => {
+    expect(compactKeys(table())).toEqual(['symbol', 'price', 'change_1d_pct', 'company_name', 'signal']);
+  });
+
+  it('reaches every column between the compact row and the drawer (§7.5)', () => {
+    openRowDrawer(table());
+    fixture.detectChanges();
+    const shown = (fixture.componentInstance as unknown as { visible: string[] }).visible;
+    expect([...compactKeys(table()), ...drawerKeys(table())].sort()).toEqual([...shown].sort());
+    expect(table().querySelector('sb-drawer.row-drawer h2')!.textContent!.trim()).toBe('NVDA');
+  });
+
+  it('opens the drawer instead of navigating, and links to the ticker page from it', () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
+    openRowDrawer(table());
+    fixture.detectChanges();
+    expect(navigate).not.toHaveBeenCalled();
+    const link = table().querySelector('a.drawer-detail-link')!;
+    expect(link.textContent!.trim()).toBe('Open ticker →');
+    expect(link.getAttribute('href')).toBe('/watchlist/NVDA');
   });
 });

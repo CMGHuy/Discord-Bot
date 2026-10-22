@@ -15,12 +15,12 @@ import { Panel } from '../../ui/layout';
         <dl>
           <div><dt>Strategy</dt><dd>{{ row.strategy }}</dd></div>
           <div><dt>Status</dt><dd>{{ row.status }}</dd></div>
-          <div><dt>OOS sample</dt><dd>{{ fmt(row.n) }}</dd></div>
-          <div><dt>OOS win rate</dt><dd>{{ fmtPct(row.win_rate) }}</dd></div>
-          <div><dt>OOS expectancy</dt><dd>{{ fmt(row.expectancy_r) }}R</dd></div>
-          <div><dt>Live sample</dt><dd>{{ fmt(row.live_n) }}</dd></div>
-          <div><dt>Live win rate</dt><dd>{{ fmtPct(row.live_wr) }}</dd></div>
-          <div><dt>Live vs OOS</dt><dd>{{ fmtPct(row.delta_vs_oos) }}</dd></div>
+          <div><dt>OOS sample</dt><dd class="num">{{ fmt(row.n) }}</dd></div>
+          <div><dt>OOS win rate</dt><dd class="num">{{ fmtPct(row.win_rate) }}</dd></div>
+          <div><dt>OOS expectancy</dt><dd class="num">{{ fmt(row.expectancy_r) }}R</dd></div>
+          <div><dt>Live sample</dt><dd class="num">{{ fmt(row.live_n) }}</dd></div>
+          <div><dt>Live win rate</dt><dd class="num">{{ fmtPct(row.live_wr) }}</dd></div>
+          <div><dt>Live vs OOS</dt><dd class="num">{{ fmtPct(row.delta_vs_oos) }}</dd></div>
           <div><dt>Window</dt><dd>{{ fmtText(row.window) }}</dd></div>
         </dl>
         @if (row.decayed) {
@@ -34,7 +34,7 @@ import { Panel } from '../../ui/layout';
   styles: `
     :host { display: block; min-width: 0; overflow-wrap: anywhere; }
     dl { display: grid; gap: var(--space-6); margin: 0; }
-    dl > div { display: flex; justify-content: space-between; gap: var(--space-10); min-width: 0; }
+    dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-10); min-width: 0; }
     dt { color: var(--text-secondary); }
     dt, dd { min-width: 0; font-size: var(--text-table); }
     dd { margin: 0; text-align: right; }

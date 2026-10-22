@@ -2,12 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ComponentFixture } from '@angular/core/testing';
 
 import { Viewport } from './breakpoints';
-import { Panel, Tab, TabBar } from './layout';
+import { Drawer, Panel, Tab, TabBar } from './layout';
+import { ViewportService } from './breakpoints';
+import { installDialogPolyfill } from '../testing/dialog-polyfill';
+import { provideMotion } from './motion/motion.service';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/layout.ts'), 'utf8');
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -251,5 +254,276 @@ describe('sb-tab-bar narrow widths', () => {
   it('shows the count beside the icon once the label is hidden', () => {
     expect(SOURCE).toMatch(/\.tab\.iconed \.label \{ display: none; \}/);
     expect(SOURCE).toMatch(/\.tab\.iconed \.count \{ display: inline; \}/);
+  });
+});
+
+/** One component's styles: the source between its selector and its class. */
+function stylesOf(selector: string, className: string): string {
+  return SOURCE.slice(SOURCE.indexOf(`selector: '${selector}'`), SOURCE.indexOf(`export class ${className}`));
+}
+const ruleIn = (styles: string, selector: string) =>
+  styles.match(new RegExp(`(?:^|\\n)\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+describe('sb-panel header: one height, one baseline (v179 §3.3, §3.4)', () => {
+  const PANEL = stylesOf('sb-panel', 'Panel');
+
+  it('aligns label, counts, actions and hint on the text baseline, never their centres', () => {
+    const header = ruleIn(PANEL, 'header');
+    expect(header).toContain('align-items: baseline');
+    expect(header).not.toContain('align-items: center');
+    expect(ruleIn(PANEL, '.actions')).toContain('align-items: baseline');
+  });
+
+  it('gives every header one minimum height and centres its line in it', () => {
+    const header = ruleIn(PANEL, 'header');
+    expect(header).toContain('min-height: calc(var(--control-h) + 2 * var(--space-10) + 1px)');
+    expect(header).toContain('flex-wrap: wrap');
+    expect(header).toContain('align-content: center');
+  });
+
+  it('keeps one gap between the header and the first row of the body', () => {
+    expect(PANEL).toContain(':host ::ng-deep .panel > .body > :first-child { margin-top: 0; }');
+    expect(ruleIn(PANEL, '.body')).toContain('padding: var(--space-14)');
+  });
+
+  it('allocates header width to actions even when a toolbar has size containment', () => {
+    const actions = ruleIn(PANEL, '.actions');
+    expect(actions).toContain('flex: 1 1 auto');
+    expect(actions).toContain('min-width: 0');
+    expect(actions).toContain('justify-content: flex-end');
+  });
+
+  it('wraps long headings within the padded header', () => {
+    expect(ruleIn(PANEL, 'h2')).toContain('max-width: 100%');
+    expect(ruleIn(PANEL, 'h2')).toContain('overflow-wrap: anywhere');
+  });
+
+  it('renders the actions slot inside the header, beside the label', () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(Panel);
+    f.componentRef.setInput('heading', 'Exposure');
+    f.detectChanges();
+    const header = (f.nativeElement as HTMLElement).querySelector('header')!;
+    expect([...header.children].map((child) => child.tagName.toLowerCase() + '.' + child.className))
+      .toEqual(['h2.sb-label', 'div.actions']);
+  });
+});
+
+describe('sb-control-row on the last baseline (v179 §3.4)', () => {
+  const ROW = stylesOf('sb-control-row', 'ControlRow');
+
+  it('aligns controls and plain text on one text line', () => {
+    const row = ruleIn(ROW, '.row');
+    expect(row).toContain('align-items: last baseline');
+    expect(row).not.toContain('flex-end');
+  });
+
+  it('still stacks below 640px', () => {
+    expect(ROW).toMatch(/@media \(max-width: 639px\) \{\s*\.row \{ flex-direction: column; align-items: stretch; \}/);
+  });
+});
+
+@Component({ imports: [TabBar], template: `<sb-tab-bar [tabs]="tabs" [active]="active()" />` })
+class ActiveTabHost {
+  readonly tabs: Tab[] = [
+    { id: 'overview', label: 'Overview' }, { id: 'attribution', label: 'Attribution' },
+    { id: 'execution', label: 'Execution' }, { id: 'edge', label: 'Edge' },
+    { id: 'pipeline', label: 'Pipeline' }, { id: 'tuning', label: 'Tuning' },
+    { id: 'partials', label: 'Partials' },
+  ];
+  readonly active = signal('overview');
+}
+
+/** Every element overflows: 900px of tabs in a 390px phone. Defined on the
+ *  prototype so it holds before the first render, which is when the reveal
+ *  for a tab chosen by the URL runs. */
+function overflowEverything(): () => void {
+  Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 900 });
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 390 });
+  return () => {
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollWidth'];
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['clientWidth'];
+  };
+}
+
+describe('sb-tab-bar keeps the active tab in view (v179 §6b.5)', () => {
+  let bounds: ReturnType<typeof vi.spyOn>;
+  let extraWidth: number;
+  let restore: () => void;
+  let resized: ResizeObserverCallback | undefined;
+  const observe = vi.fn();
+  const disconnect = vi.fn();
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    extraWidth = 0;
+    bounds = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('tabs')) return new DOMRect(0, 0, 390, 44);
+      const list = this.closest('.tabs') as HTMLElement | null;
+      const index = [...(this.parentElement?.children ?? [])].indexOf(this);
+      return new DOMRect(index * (124 + extraWidth) - (list?.scrollLeft ?? 0), 1000, 120 + extraWidth, 44);
+    });
+    restore = overflowEverything();
+    resized = undefined;
+    observe.mockClear();
+    disconnect.mockClear();
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { resized = callback; }
+      observe = observe;
+      disconnect = disconnect;
+    });
+  });
+
+  afterEach(() => {
+    restore();
+    bounds.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  async function mount(active: string) {
+    const f = TestBed.createComponent(ActiveTabHost);
+    f.componentInstance.active.set(active);
+    f.detectChanges();
+    await f.whenStable();
+    f.detectChanges();
+    return f;
+  }
+
+  it('reveals a tab chosen by the URL on first render', async () => {
+    const f = await mount('partials');
+    expect((f.nativeElement.querySelector('.tabs') as HTMLElement).scrollLeft).toBe(474);
+  });
+
+  it('reveals the newly active tab whenever the active tab changes', async () => {
+    const f = await mount('overview');
+    f.componentInstance.active.set('tuning');
+    f.detectChanges();
+    await f.whenStable();
+    expect((f.nativeElement.querySelector('.tabs') as HTMLElement).scrollLeft).toBe(350);
+  });
+
+  it('re-measures the fades after revealing', async () => {
+    const f = await mount('overview');
+    const strip = (f.nativeElement as HTMLElement).querySelector('.strip')!;
+    // scrollLeft 0 on a 900/390 rail: more tabs off to the right only.
+    expect(strip.classList).toContain('fade-end');
+    expect(strip.classList).not.toContain('fade-start');
+  });
+
+  it('reveals again when fonts or viewport changes resize the rail or its tabs', async () => {
+    const f = await mount('partials');
+    const el = f.nativeElement as HTMLElement;
+    expect(observe).toHaveBeenCalledWith(el.querySelector('.tabs'));
+    expect(observe).toHaveBeenCalledWith(el.querySelector('.tab.active'));
+    extraWidth = 20;
+    resized?.([], {} as ResizeObserver);
+    expect((el.querySelector('.tabs') as HTMLElement).scrollLeft).toBe(614);
+  });
+
+  it('disconnects geometry observation when the tab bar is destroyed', async () => {
+    const f = await mount('partials');
+    f.destroy();
+    expect(disconnect).toHaveBeenCalled();
+  });
+
+  it('measures through the shared rail helper, not a private copy', () => {
+    expect(SOURCE).toMatch(/import \{ edgeFades, revealActive \} from '\.\/scroll-rail';/);
+    expect(SOURCE).toContain('afterRenderEffect(');
+  });
+});
+
+/** The Drawer component's own source: `rule('header')` alone would match
+ *  sb-panel's header, which comes first in this file. */
+const DRAWER_SOURCE = SOURCE.slice(SOURCE.indexOf("selector: 'sb-drawer'"));
+const drawerRule = (selector: string) =>
+  DRAWER_SOURCE.match(new RegExp(`\\n\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+@Component({
+  imports: [Drawer],
+  template: `
+    <sb-drawer [open]="true" heading="AAPL">
+      <span drawer-header class="mark">Paper trade</span>
+      <p class="content">Body</p>
+    </sb-drawer>
+  `,
+})
+class DrawerSlotHost {}
+
+describe('sb-drawer header slot (v179 §3.2)', () => {
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideMotion('off')] });
+  });
+
+  it('projects [drawer-header] content into the header, after the heading', () => {
+    const fixture = TestBed.createComponent(DrawerSlotHost);
+    fixture.detectChanges();
+    const header = (fixture.nativeElement as HTMLElement).querySelector('sb-drawer header')!;
+    const children = [...header.children].map((child) => child.tagName.toLowerCase() + (child.className ? `.${child.className}` : ''));
+    expect(children[0]).toBe('h2');
+    expect(header.querySelector('.mark')?.textContent).toBe('Paper trade');
+    expect(header.querySelector('.mark')?.previousElementSibling?.tagName).toBe('H2');
+    const body = (fixture.nativeElement as HTMLElement).querySelector('sb-drawer .body')!;
+    expect(body.querySelector('.content')).not.toBeNull();
+    expect(body.querySelector('.mark')).toBeNull();
+  });
+
+  it('keeps heading, marker and close on one baseline with the close pushed to the end', () => {
+    const header = drawerRule('header');
+    expect(header).toContain('align-items: baseline');
+    expect(header).toContain('flex-wrap: wrap');
+    expect(header).not.toContain('align-items: center');
+    expect(header).not.toContain('justify-content: space-between');
+    expect(drawerRule('.close')).toContain('margin-left: auto');
+  });
+});
+
+describe('sb-drawer swipe down to close (phone sheet)', () => {
+  function setup(phone: boolean) {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(), provideMotion('off'),
+        { provide: ViewportService, useValue: { isPhone: () => phone } },
+      ],
+    });
+    const fixture = TestBed.createComponent(DrawerSlotHost);
+    fixture.detectChanges();
+    const dialog = (fixture.nativeElement as HTMLElement).querySelector('dialog')!;
+    return { dialog, body: dialog.querySelector<HTMLElement>('.body')! };
+  }
+  const touch = (type: string, y: number, target: Element) => {
+    const event = new Event(type, { bubbles: true });
+    Object.defineProperty(event, 'touches', { value: type === 'touchend' ? [] : [{ clientY: y }] });
+    target.dispatchEvent(event);
+  };
+
+  it('closes when the sheet is pulled down past the threshold', () => {
+    const { dialog, body } = setup(true);
+    touch('touchstart', 100, body); touch('touchmove', 140, body);
+    expect(dialog.style.transform).toBe('translateY(40px)');
+    touch('touchmove', 220, body); touch('touchend', 220, body);
+    expect(dialog.open).toBe(false);
+  });
+
+  it('eases back and stays open on a short pull', () => {
+    const { dialog, body } = setup(true);
+    touch('touchstart', 100, body); touch('touchmove', 130, body); touch('touchend', 130, body);
+    expect(dialog.open).toBe(true);
+    expect(dialog.style.transform).toBe('');
+  });
+
+  it('never closes while the body is scrolled down: that drag is reading', () => {
+    const { dialog, body } = setup(true);
+    body.scrollTop = 50;
+    touch('touchstart', 100, body); touch('touchmove', 300, body); touch('touchend', 300, body);
+    expect(dialog.open).toBe(true);
+  });
+
+  it('does nothing off the phone (tablet and desktop drawers slide from the right)', () => {
+    const { dialog, body } = setup(false);
+    touch('touchstart', 100, body); touch('touchmove', 300, body); touch('touchend', 300, body);
+    expect(dialog.open).toBe(true);
+    expect(dialog.style.transform).toBe('');
   });
 });

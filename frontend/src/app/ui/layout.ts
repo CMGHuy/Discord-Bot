@@ -2,7 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  afterNextRender,
+  afterRenderEffect,
   computed,
   effect,
   inject,
@@ -19,6 +19,7 @@ import { Icon, IconName } from './icon';
 import { playExit } from './motion/exit';
 import { MotionService } from './motion/motion.service';
 import { isInline } from './priority';
+import { edgeFades, revealActive } from './scroll-rail';
 
 /* Spec 3's layout inventory: panel, tab bar, split view, drawer. */
 
@@ -71,19 +72,47 @@ import { isInline } from './priority';
       border-radius: var(--panel-radius);
       overflow: hidden;
     }
+    /* v179 §3.3/§3.4 -- one header height and one baseline on every panel.
+       At least one control tall (plus padding and the 1px rule, border-box),
+       so a header holding only its label and one holding a button or a
+       segmented control are the same height. The label, an N= count, an
+       action and the hint glyph sit on the text BASELINE -- centring put an
+       11px label 2-3px off a 14px button's text. align-content centres that
+       one line inside the minimum height; it needs flex-wrap to act, and
+       wrapping also lets the actions drop below the label on a narrow panel
+       rather than squeeze it. */
     header {
       display: flex;
-      align-items: center;
+      flex-wrap: wrap;
+      align-items: baseline;
+      align-content: center;
       justify-content: space-between;
-      gap: var(--space-10);
+      gap: var(--space-6) var(--space-10);
+      min-height: calc(var(--control-h) + 2 * var(--space-10) + 1px);
       padding: var(--space-10) var(--space-14);
       border-bottom: 1px solid var(--border);
     }
     /* Typography is the global .sb-label (v80 D3); only the UA margin is
        this component's business. */
-    h2 { margin: 0; }
-    .actions { display: flex; align-items: center; gap: var(--space-8); }
+    h2 { margin: 0; max-width: 100%; overflow-wrap: anywhere; }
+    /* A size-contained toolbar has no intrinsic width. Allocate the header's
+       remaining space before its controls lay out, keeping ordinary actions
+       at the right edge and long log paths inside the padded header. */
+    .actions {
+      display: flex;
+      flex: 1 1 auto;
+      min-width: 0;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-8);
+    }
     .body { padding: var(--space-14); }
+    /* v179 §3.3 -- one gap to the first row: the body's padding, never the
+       padding plus whatever top margin the first projected element brings
+       (a <p>, a <dl>, a nested heading). .panel > .body is this component's
+       own structure, so the reach is exactly one level. */
+    :host ::ng-deep .panel > .body > :first-child { margin-top: 0; }
     /* Tables draw their own edge-to-edge padding. */
     .flush { padding: 0; }
     .panel-digest { margin: 0; padding: var(--space-10) var(--space-14); color: var(--text-secondary); font-size: var(--text-table); }
@@ -254,13 +283,41 @@ export class TabBar {
   protected readonly fadeStart = signal(false);
   protected readonly fadeEnd = signal(false);
 
-  constructor() { afterNextRender(() => this.measure()); }
+  constructor() {
+    // v179 §6b.5: after every render in which the active tab or the tab list
+    // changed -- including the first, so a tab chosen by the URL is not left
+    // off-screen -- bring the active tab into view, then re-measure the fades.
+    afterRenderEffect((onCleanup) => {
+      this.active();
+      this.tabs();
+      untracked(() => {
+        this.reveal();
+        onCleanup(this.observeGeometry());
+      });
+    });
+  }
+
+  private observeGeometry(): () => void {
+    if (typeof ResizeObserver === 'undefined') return () => {};
+    const list = this.tabList().nativeElement;
+    // Font loading can widen preceding tabs after the first reveal without
+    // changing the rail's own width. Observe the items as well as the rail.
+    const observer = new ResizeObserver(() => this.reveal());
+    observer.observe(list);
+    list.querySelectorAll('[role="tab"]').forEach((tab) => observer.observe(tab));
+    return () => observer.disconnect();
+  }
 
   protected measure(): void {
-    const el = this.tabList().nativeElement;
-    const overflow = el.scrollWidth - el.clientWidth;
-    this.fadeStart.set(overflow > 1 && el.scrollLeft > 1);
-    this.fadeEnd.set(overflow > 1 && el.scrollLeft < overflow - 1);
+    const fades = edgeFades(this.tabList().nativeElement);
+    this.fadeStart.set(fades.start);
+    this.fadeEnd.set(fades.end);
+  }
+
+  private reveal(): void {
+    const list = this.tabList().nativeElement;
+    revealActive(list, list.querySelector('[role="tab"][aria-selected="true"]'));
+    this.measure();
   }
 
   protected onKeydown(event: KeyboardEvent): void {
@@ -287,10 +344,14 @@ export class TabBar {
  * differed by 4px in height. `--control-h` and the checkbox's top label fixed
  * the controls; this fixes the container.
  *
- * **`flex-end`, and the reason matters.** A labelled control is label-band +
- * control-band; a bare button is control-band only. Aligning on the BOTTOM
- * edge is the only rule under which both land on the same line, whatever the
- * label does above it.
+ * **`last baseline`, and the reason matters** (v179 §3.4; it was
+ * `flex-end`). A labelled control is label-band + control-band; a bare
+ * button is control-band only. Both END in a --control-h control with its
+ * text centred, so their last baselines coincide exactly where their bottom
+ * edges did -- the two still land on one line whatever the label does above.
+ * Unlike `flex-end`, a plain text item in the row (the Versions "Running
+ * now" label, a count, an N=) now sits on the controls' text line instead
+ * of on their bottom border.
  *
  * Flexbox already aligns per-line when wrapping — `align-items` applies within
  * each flex line, not across the container — so a wrapped second line aligns
@@ -312,7 +373,7 @@ export class TabBar {
     :host { display: block; }
     .row {
       display: flex;
-      align-items: flex-end;
+      align-items: last baseline;
       align-content: flex-start;
       flex-wrap: wrap;
       gap: var(--space-10);
@@ -342,7 +403,12 @@ export class ControlRow {
  * `.sb-drawer-out` (a sinking sheet below 640px, styles/motion.css), and only
  * then closes the dialog, so the body stays mounted for the exit. Under Motion
  * Off or pending it closes at once, as before.
+ * `[drawer-header]` content goes beside the heading (v179); everything else
+ * goes to the body.
  */
+/** How far (px) a phone sheet must be pulled down before letting go closes it. */
+const SWIPE_CLOSE_PX = 80;
+
 @Component({
   selector: 'sb-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -351,7 +417,9 @@ export class ControlRow {
     <!-- (cancel) is Escape: it is prevented and routed through requestClose()
          so the exit plays; the native close then fires (close) once. -->
     <dialog #dialog class="drawer elev-overlay" [class.sb-drawer-in]="!closing()"
-            (close)="onClosed()" (cancel)="onCancel($event)" (click)="onDialogClick($event)">
+            (close)="onClosed()" (cancel)="onCancel($event)" (click)="onDialogClick($event)"
+            (touchstart)="onTouchStart($event)" (touchmove)="onTouchMove($event)"
+            (touchend)="onTouchEnd()" (touchcancel)="onTouchEnd()">
       <!-- Only present while open, so sbFocusTrap's constructor/ngOnDestroy
            pair runs on exactly open and close -- see focus-trap.ts. -->
       @if (open()) {
@@ -359,6 +427,7 @@ export class ControlRow {
           <div class="drag-handle" aria-hidden="true"></div>
           <header>
             <h2>{{ heading() }}</h2>
+            <ng-content select="[drawer-header]" />
             <button type="button" class="close" aria-label="Close" (click)="requestClose()">×</button>
           </header>
           <div class="body"><ng-content /></div>
@@ -395,13 +464,15 @@ export class ControlRow {
 
     header {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-10);
       padding: var(--space-14);
       border-bottom: 1px solid var(--border);
     }
     h2 { font-size: var(--text-subhead); font-weight: 600; }
     .close {
+      margin-left: auto;
       min-width: var(--control-h);
       min-height: var(--control-h);
       padding: 0 var(--space-6);
@@ -437,8 +508,11 @@ export class Drawer {
   protected readonly closing = signal(false);
 
   private readonly motion = inject(MotionService);
+  private readonly viewport = inject(ViewportService);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private cancelExit: () => void = () => undefined;
+  /** A downward drag on the phone sheet: where the finger began and how far it has pulled. */
+  private swipe: { y: number; dy: number } | null = null;
 
   constructor() {
     effect(() => {
@@ -462,6 +536,46 @@ export class Drawer {
     if (!inside) this.requestClose();
   }
 
+  /** Phone sheet only: a drag down from the sheet's top, or from its body while
+   *  that is scrolled to the top, pulls the sheet with the finger and closes it
+   *  past SWIPE_CLOSE_PX. Reading a long body by scrolling never closes it. */
+  protected onTouchStart(event: TouchEvent): void {
+    this.swipe = null;
+    if (!this.viewport.isPhone() || event.touches.length !== 1 || this.closing()) return;
+    if (this.bodyScrolled(event.target)) return;
+    this.swipe = { y: event.touches[0].clientY, dy: 0 };
+  }
+
+  protected onTouchMove(event: TouchEvent): void {
+    if (!this.swipe) return;
+    if (this.bodyScrolled(event.target)) {
+      this.swipe = null;
+      this.slide(0);
+      return;
+    }
+    this.swipe.dy = Math.max(0, event.touches[0].clientY - this.swipe.y);
+    this.slide(this.swipe.dy);
+  }
+
+  protected onTouchEnd(): void {
+    const pulled = this.swipe?.dy ?? 0;
+    this.swipe = null;
+    if (pulled > SWIPE_CLOSE_PX) this.requestClose();
+    else this.slide(0);
+  }
+
+  private bodyScrolled(target: EventTarget | null): boolean {
+    const body = this.dialog().nativeElement.querySelector<HTMLElement>('.body');
+    return body !== null && target instanceof Node && body.contains(target) && body.scrollTop > 0;
+  }
+
+  /** Follows the finger without a transition; releasing short of the threshold eases back. */
+  private slide(px: number): void {
+    const style = this.dialog().nativeElement.style;
+    style.transition = px > 0 ? 'none' : 'transform var(--transition)';
+    style.transform = px > 0 ? `translateY(${px}px)` : '';
+  }
+
   /** The × button, Escape and the backdrop: one path, exit first. */
   protected requestClose(): void {
     const element = this.dialog().nativeElement;
@@ -482,6 +596,7 @@ export class Drawer {
   }
 
   private stopExit(): void {
+    this.slide(0);
     this.cancelExit();
     this.cancelExit = () => undefined;
     this.closing.set(false);

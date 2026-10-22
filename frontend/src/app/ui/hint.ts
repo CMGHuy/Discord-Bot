@@ -118,8 +118,9 @@ let nextId = 0;
        the trigger's own right edge when this is active -- see the
        reposition() method below. */
     .pop.align-left { transform: translateX(-100%); }
-    /* A fingertip needs 44px around a 14px glyph (v80 D4). */
-    @media (pointer: coarse), (max-width: 639px) {
+    /* A fingertip needs 44px around a 14px glyph (v80 D4; phone and tablet
+       since v179). */
+    @media (pointer: coarse), (max-width: 1023px) {
       .trigger { min-width: var(--control-h); min-height: var(--control-h); }
     }
   `,

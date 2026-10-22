@@ -127,16 +127,24 @@ export const DASHBOARD_TABLE_ID = 'dashboard';
  * PLAN, HELD and CONFIDENCE inline everywhere and let `.scroller` take the
  * overflow): on a phone only TICKER, PLAN and P&L % stay inline — what the
  * desktop row leads with. Everything else, # and R included, is one tap on
- * the row's expand arrow into the detail accordion. */
+ * the row's expand arrow into the detail accordion.
+ *
+ * v179 §3.1 -- the phone compact row. Below sm a phone shows each trade as
+ * two lines: ticker, direction and P&L % (whose cell carries the amount);
+ * then the plan (with its stop) and the status. That keeps money and the
+ * stop on the row (§3.1 money floor). Every other rendered column, the row
+ * actions and the expansion are in the row drawer. `inlineFrom` above keeps
+ * governing tablet and desktop.
+ */
 export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDef<TradeRow>[] {
   return [
     // Rendered by the workspace as a link to the detail view — the keyboard
     // route into a row, since row clicks are mouse-only by design.
     { key: 'num', header: '#', width: '3rem', inlineFrom: 'sm' },
-    { key: 'status', header: 'Status', sortable: true, inlineFrom: 'md' },
-    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, inlineFrom: 'xs' },
+    { key: 'status', header: 'Status', sortable: true, inlineFrom: 'md', compact: { line: 2, order: 2 } },
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, inlineFrom: 'xs', compact: { line: 1, order: 1 } },
     { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true, inlineFrom: 'sm' },
-    { key: 'pnl_pct', header: 'P&L %', numeric: true, sortable: true, inlineFrom: 'xs' },
+    { key: 'pnl_pct', header: 'P&L %', numeric: true, sortable: true, inlineFrom: 'xs', compact: { line: 1, order: 3 } },
     { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, now())), numeric: true, sortable: true, inlineFrom: 'sm' },
     { key: 'actions', header: '', width: '1px', inlineFrom: 'lg' },
 
@@ -152,11 +160,11 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     { key: 'r_multiple', header: 'R', value: (row) => signed(row.r_multiple), numeric: true, sortable: true, inlineFrom: 'sm' },
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), inlineFrom: 'lg' },
     { key: 'horizon', header: 'Horizon', value: (row) => text(row.horizon), inlineFrom: 'lg' },
-    { key: 'direction', header: 'Direction', width: '3.5rem', inlineFrom: 'sm' },
+    { key: 'direction', header: 'Direction', width: '3.5rem', inlineFrom: 'sm', compact: { line: 1, order: 2 } },
     // Entry, target and stop in one cell (SR8). Not sortable: there is no
     // single field behind it, and `sort=plan` is a 400 from the collection
     // endpoint. The three keys remain as separate columns for the picker.
-    { key: 'plan', header: 'Plan', width: '12rem', inlineFrom: 'xs' },
+    { key: 'plan', header: 'Plan', width: '12rem', inlineFrom: 'xs', compact: { line: 2, order: 1 } },
     { key: 'tier', header: 'Tier', inlineFrom: 'lg' },
     { key: 'confidence_level', header: 'Confidence', inlineFrom: 'md' },
     { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, inlineFrom: 'lg' },

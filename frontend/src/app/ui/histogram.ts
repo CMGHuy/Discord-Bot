@@ -40,7 +40,7 @@ export interface HistogramBin {
       }
       <ul>
         @for (bin of bins(); track bin.label) {
-          <li tabindex="0" (pointermove)="show($event, bin, host)" (focus)="show($event, bin, host)" (pointerleave)="hover.set(null)" (blur)="hover.set(null)">
+          <li class="sb-hit" tabindex="0" (pointermove)="show($event, bin, host)" (focus)="show($event, bin, host)" (pointerleave)="hover.set(null)" (blur)="hover.set(null)">
             <span class="label num">{{ bin.label }}</span>
             <span class="track">
               <span
@@ -57,6 +57,7 @@ export interface HistogramBin {
     </div>
   `,
   styles: `
+    :host { display: block; min-width: 0; }
     /* The reference line sits in a grid layer of its own (.wrap), whose
        three columns exactly mirror each .li's own 4rem/1fr/2.5rem grid, so
        an absolutely-positioned line in the middle column lands on the bars

@@ -60,7 +60,11 @@ export function slToTpProgress(
     </span>
   `,
   styles: `
-    .wrap { display: inline-flex; align-items: center; gap: var(--space-6); }
+    /* Baseline (v179 §3.4) so a title or row can align this indicator's
+       status text with its own; the dot and track carry no text and stay
+       centred, which also keeps them out of the container's baseline. */
+    .wrap { display: inline-flex; align-items: baseline; gap: var(--space-6); }
+    .dot, .track { align-self: center; }
 
     .dot {
       width: 6px;

@@ -141,10 +141,10 @@ const MOTION_OPTIONS: SegmentOption[] = [
       font-size: var(--text-chip);
       color: var(--text-secondary);
     }
-    /* Spec v168 §1 and §5: 44px targets on touch. --control-h already gives
-       the height on coarse pointers; this gives a short label like "On" the
-       same width. */
-    @media (pointer: coarse) {
+    /* Spec v168 §1 and §5: 44px targets on touch -- phone and tablet since
+       v179, the tokens.css touch condition. --control-h already gives the
+       height there; this gives a short label like "On" the same width. */
+    @media (pointer: coarse), (max-width: 1023px) {
       :host ::ng-deep .motion-control .segment { min-width: 44px; justify-content: center; }
     }
   `,

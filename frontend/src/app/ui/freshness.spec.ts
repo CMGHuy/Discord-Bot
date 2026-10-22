@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -56,6 +58,11 @@ describe('Freshness (v85 D30)', () => {
     const el = render({ at: '2026-09-10' });
     expect(el.textContent).toContain('as of 2026-09-10');
     expect(el.textContent).not.toContain('00:00:00');
+  });
+
+  it('is hidden below desktop width (phone and tablet)', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/ui/freshness.ts'), 'utf8');
+    expect(source).toMatch(/@media \(max-width: 1023px\) \{ :host \{ display: none; \} \}/);
   });
 
   it('is announced politely rather than interrupting', () => {

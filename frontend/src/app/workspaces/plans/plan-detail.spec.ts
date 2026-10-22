@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -278,5 +281,17 @@ describe('timingLines', () => {
     expect(timingLines({ ...base, holdCapBars: 10 })).toEqual(['Time exit after 10 sessions']);
     expect(timingLines({ ...base, holdCapBars: 10, timeExitOn: '2026-10-19' }))
       .toEqual(['Time exit after 10 sessions — 2026-10-19 at the close (ET)']);
+  });
+});
+
+describe('plan-detail title on one baseline (v179 layout audit)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/plans/plan-detail.ts'), 'utf8');
+  const rule = (selector: string) => src.match(
+    new RegExp(`${selector.replaceAll('.', '\\.')} \\{[^}]*\\}`),
+  )?.[0] ?? '';
+
+  it('sets the 20px ticker and its 12px direction chip on the text baseline, the status glyph centred', () => {
+    expect(rule('.plan-title')).toMatch(/align-items:\s*baseline/);
+    expect(rule('.tags')).toMatch(/align-items:\s*baseline/);
   });
 });

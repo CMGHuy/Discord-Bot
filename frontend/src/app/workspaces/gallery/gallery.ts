@@ -332,6 +332,7 @@ interface ContractRow {
          text. sb-magnitude sits beside R, its real home (Task 28). -->
     <sb-section-head [heading]="'Numerics'" [level]="2" />
     <sb-panel heading="num / pct / R / signed / money -- positive, negative, zero, absent">
+      <div class="numerics-scroll">
       <table class="numerics-demo">
         <thead>
           <tr>
@@ -359,6 +360,7 @@ interface ContractRow {
           }
         </tbody>
       </table>
+      </div>
     </sb-panel>
 
     <!-- -- sb-async: all four branches side by side ------------------------ -->
@@ -393,9 +395,13 @@ interface ContractRow {
     <!-- -- empty state ------------------------------------------------------ -->
     <sb-section-head [heading]="'Empty state'" [level]="2" />
     <sb-panel>
+      <!-- Two grids, not one: cards that open with the 11px reason tag beside cards that open with the
+           14px title put two first lines 4px apart in a shared row. -->
       <sb-panel-grid track="narrow">
         <sb-empty-state title="No results" />
         <sb-empty-state title="No results" hint="Widen the date range." />
+      </sb-panel-grid>
+      <sb-panel-grid track="narrow" style="margin-top: var(--space-14)">
         <sb-empty-state title="No trades closed in range" reason="measured-zero" />
         <sb-empty-state title="No quotes yet" hint="The feed has not reported." reason="no-data-yet" />
       </sb-panel-grid>
@@ -463,11 +469,15 @@ interface ContractRow {
     <!-- -- v85 shared primitives (R2-01..R2-06) --------------------------------- -->
     <sb-section-head [heading]="'v85 primitives'" [level]="2" />
     <sb-panel>
-      <sb-control-row>
+      <!-- v179 §3.3: the one stat tile -- label, value, secondary, N=, hint,
+           stacked and left-aligned -- in an auto-fit grid whose rows share
+           one height. -->
+      <div class="stat-grid">
         <sb-stat-tile label="Win rate" [value]="'68%'" [sample]="412" />
         <sb-stat-tile label="Payoff ratio" [value]="'1.80'" [sample]="7" tone="pos" />
         <sb-stat-tile label="Expectancy" [value]="null" />
-      </sb-control-row>
+        <sb-stat-tile label="Net P&L" [value]="'+1,240.00 €'" secondary="+12.4R" [sample]="412" tone="pos" hint="Pre-tax, paper trades." />
+      </div>
       <sb-gauge label="Heat utilisation" [value]="62" caption="cap 100%" />
       <sb-gauge label="Heat utilisation (over limit)" [value]="130" />
       <sb-matrix [labels]="matrixLabels" [values]="matrixValues" [clusters]="[['AAPL', 'MSFT']]" />
@@ -573,6 +583,23 @@ interface ContractRow {
 
     <!-- -- v95: content priority -- four states forced via viewportAt, ------
          the gallery's job is to show them, not to make the reader resize. -->
+    <!-- -- v179: compact rows and the row drawer, forced via cardsAt ------- -->
+    <sb-section-head [heading]="'Compact rows and row drawer (v179)'" [level]="2" />
+    <sb-panel heading="Phone table -- spec §3.1" [flush]="true" class="compact-demo">
+      <p class="section-help">
+        Below 640px a table that declares compact slots shows each row as two
+        lines; a tap opens every other column in a drawer.
+      </p>
+      <sb-data-table
+        [rows]="tableRows"
+        [columns]="compactColumns"
+        [visible]="['ticker', 'pnl', 'note', 'outcome']"
+        [rowKey]="rowKey"
+        [cardsAt]="true"
+        phoneTap="drawer"
+      />
+    </sb-panel>
+
     <sb-section-head [heading]="'Content priority (v95)'" [level]="2" />
     <sb-panel heading="Toolbar sheet -- spec §4.2">
       <p class="section-help">
@@ -746,6 +773,8 @@ interface ContractRow {
        formatted cell (same class every real table cell takes); the header
        cells take it too so the unit-in-header column lines up over its
        own right-aligned figures below it. */
+    /* The six-column table is wider than a phone-width panel: it scrolls in its own box. */
+    .numerics-scroll { min-width: 0; overflow-x: auto; }
     .numerics-demo { border-collapse: collapse; }
     .numerics-demo th, .numerics-demo td {
       padding: var(--space-6) var(--space-10);
@@ -768,6 +797,8 @@ interface ContractRow {
        positioned ancestor; give it one here so the demo state is visible
        rather than escaping the panel. */
     .tooltip-demo { position: relative; height: 70px; }
+    /* v179 §3.3 -- the stat-tile grid every page uses. */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-14); }
   `,
 })
 export class Gallery {
@@ -1031,6 +1062,13 @@ export class Gallery {
   protected readonly priorityColumns: ColumnDef<GalleryRow>[] = [
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, inlineFrom: 'xs' },
     { key: 'pnl', header: 'P&L', value: (row) => row.pnl, inlineFrom: 'lg' },
+  ];
+  /** v179: the same rows, declared for the phone compact row. */
+  protected readonly compactColumns: ColumnDef<GalleryRow>[] = [
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, compact: { line: 1, order: 1 } },
+    { key: 'pnl', header: 'P&L', value: (row) => row.pnl, numeric: true, compact: { line: 1, order: 2 } },
+    { key: 'note', header: 'Note', value: () => 'Plan or price context', compact: { line: 2, order: 1 } },
+    { key: 'outcome', header: 'Outcome', value: (row) => (row.pnl >= 0 ? 'Winner' : 'Loser') },
   ];
   protected readonly priorityToolbarControls: ToolbarControl[] = [
     { id: 'always', label: 'Always inline', inlineFrom: 'xs' },

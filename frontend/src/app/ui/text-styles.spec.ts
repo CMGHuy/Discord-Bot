@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { allSources } from './testing/all-sources';
 
 /**
  * v80 D3: one label style and one help-text style, defined once in the
@@ -31,5 +32,23 @@ describe('v80 D3: the shared text styles', () => {
     // min(65ch, 100%), not a bare 65ch -- a narrow panel is narrower than 65ch
     // in pixels, and a bare ch cap doesn't know that (v80 F26 browser walk).
     expect(r).toContain('max-width: min(65ch, 100%)');
+  });
+});
+
+describe('v179: numbers in one face', () => {
+  it('.num takes the numeric font token, tabular', () => {
+    const r = rule('num');
+    expect(r).toContain('font-family: var(--font-num)');
+    expect(r).toContain('font-variant-numeric: tabular-nums');
+  });
+});
+
+describe('v179: no literal text size below 11px', () => {
+  it('sets no px font-size under 11px anywhere in the app', () => {
+    const offenders = allSources().flatMap(({ name, source }) =>
+      [...source.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)]
+        .filter((m) => Number(m[1]) < 11)
+        .map((m) => `${name}: ${m[0]}`));
+    expect(offenders).toEqual([]);
   });
 });

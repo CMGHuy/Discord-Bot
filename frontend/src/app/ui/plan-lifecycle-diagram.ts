@@ -1,4 +1,21 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject } from '@angular/core';
+
+import { ViewportService } from './breakpoints';
+import { chartWidth } from './chart/chart-width';
+
+/** The SVG's viewBox width; the diagram's text is sized against how far the host shrinks it. */
+const VIEWBOX_W = 680;
+
+/** The same five states and transitions the SVG draws, as data for the phone stepper. */
+const STEPS: readonly { state: string; terminal: boolean; moves: readonly { on: string; to: string }[] }[] = [
+  { state: 'PENDING', terminal: false, moves: [
+    { on: 'fills', to: 'ACTIVE' }, { on: 'expires / invalidated', to: 'CANCELLED' }] },
+  { state: 'ACTIVE', terminal: false, moves: [
+    { on: 'TP1 hit', to: 'PARTIAL' }, { on: 'stop hit (before TP1)', to: 'CLOSED' }] },
+  { state: 'PARTIAL', terminal: false, moves: [{ on: 'TP2 / trail stop', to: 'CLOSED' }] },
+  { state: 'CLOSED', terminal: true, moves: [] },
+  { state: 'CANCELLED', terminal: true, moves: [] },
+];
 
 /**
  * The plan state machine, drawn -- `plan_engine.py`'s `_LEGAL_TRANSITIONS`,
@@ -23,11 +40,37 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
  * surface/border as every other node. CLOSED and CANCELLED are not
  * coloured win/loss either -- CLOSED covers both, and this diagram is
  * about the shape of the lifecycle, not a trade's result.
+ *
+ * v179 layout audit: below `sm` the SVG's fixed viewBox scales its text down
+ * to 4.7-5.2px, so phones get the same machine as a vertical stepper of real
+ * text (>= 11px, wrapping, no sideways scroll); tablet and desktop keep the
+ * diagram.
  */
 @Component({
   selector: 'sb-plan-lifecycle-diagram',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[style.--lc-scale]': 'scale()' },
   template: `
+    @if (phone()) {
+      <ol class="stepper" aria-label="Plan lifecycle">
+        @for (step of steps; track step.state) {
+          <li class="step" [class.terminal]="step.terminal">
+            <span class="state">{{ step.state }}</span>
+            @if (step.terminal) {
+              <span class="ends">ends here</span>
+            }
+            @if (step.moves.length) {
+              <ul class="moves">
+                @for (move of step.moves; track move.on) {
+                  <li><span class="on">{{ move.on }}</span> <span class="arrow" aria-hidden="true">→</span>
+                    <span class="to">{{ move.to }}</span></li>
+                }
+              </ul>
+            }
+          </li>
+        }
+      </ol>
+    } @else {
     <svg
       viewBox="0 0 680 170"
       role="img"
@@ -85,6 +128,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         <text x="70" y="144">CANCELLED</text>
       </g>
     </svg>
+    }
   `,
   styles: `
     /* flex + centre, not block: the Dashboard stretches this host to match
@@ -103,6 +147,25 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
     }
     svg { display: block; width: 100%; height: auto; overflow: visible; }
 
+    /* Phone stepper: one row per state, its exits listed beneath. Real text at
+       the chip token (>= 11px), wrapping instead of scrolling. */
+    .stepper {
+      display: flex; flex-direction: column; gap: var(--space-10);
+      width: 100%; margin: 0; padding: 0; list-style: none;
+      font-size: var(--text-chip); color: var(--text-secondary);
+      overflow-wrap: anywhere;
+    }
+    .step {
+      min-width: 0; padding: var(--space-8) var(--space-10);
+      border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--surface);
+    }
+    .step.terminal { border-color: var(--border-strong); }
+    .state { font-weight: 600; color: var(--text); }
+    .ends { margin-left: var(--space-8); color: var(--text-muted); }
+    .moves { margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+    .moves li { padding-left: var(--space-10); }
+    .to { color: var(--text); font-weight: 600; }
+
     .edge {
       fill: none;
       stroke: var(--text-faint);
@@ -112,7 +175,9 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 
     .edge-label {
       fill: var(--text-secondary);
-      font-size: var(--text-micro);
+      /* The viewBox shrinks with the host (scale < 1), and so would an 11px
+         label: divide by the scale so it renders at the token's size. */
+      font-size: calc(var(--text-micro) / var(--lc-scale, 1));
       text-anchor: middle;
     }
     /* A CSS rule beats a text-anchor="..." presentation attribute on the
@@ -135,11 +200,18 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
     .node-terminal rect { stroke: var(--border-strong); }
     .node text {
       fill: var(--text);
-      font-size: var(--text-chip);
+      font-size: calc(var(--text-chip) / var(--lc-scale, 1));
       font-weight: 600;
       text-anchor: middle;
       dominant-baseline: middle;
     }
   `,
 })
-export class PlanLifecycleDiagram {}
+export class PlanLifecycleDiagram {
+  protected readonly steps = STEPS;
+  protected readonly phone = inject(ViewportService).isPhone;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly width = chartWidth(() => this.host.nativeElement, VIEWBOX_W);
+  /** 1 at full size, below 1 as the host narrows; the CSS divides the 11px floor by it. */
+  protected readonly scale = computed(() => Math.round(Math.min(1, this.width() / VIEWBOX_W) * 1000) / 1000);
+}

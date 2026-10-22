@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
@@ -167,5 +169,38 @@ describe('ColumnPickerComponent', () => {
 
   it('reports how many of the columns are showing', () => {
     expect(el().querySelector('.count')!.textContent!.trim()).toBe('3/4');
+  });
+});
+
+const read = (file: string) => readFileSync(join(process.cwd(), 'src/app/ui', file), 'utf8');
+const ruleIn = (source: string, selector: string) =>
+  source.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+/** What makes Filters and Columns read as one control family. */
+const SHARED_CONTROL_BUTTON = [
+  'min-height: var(--control-h)',
+  'padding: 0 var(--space-10)',
+  'background: var(--surface-raised)',
+  'border: 1px solid var(--border)',
+  'border-radius: var(--control-radius)',
+  'font-size: var(--text-table)',
+];
+
+describe('ColumnPicker trigger (v179 §3.3)', () => {
+  const picker = read('column-picker.ts');
+  const toolbar = read('toolbar.ts');
+
+  it('matches the Filters button: one height, one look', () => {
+    const trigger = ruleIn(picker, '.trigger');
+    const filters = ruleIn(toolbar, '.toolbar-sheet-button');
+    for (const declaration of SHARED_CONTROL_BUTTON) {
+      expect(trigger).toContain(declaration);
+      expect(filters).toContain(declaration);
+    }
+  });
+
+  it('shows visible/total as the same badge the Filters button uses', () => {
+    expect(picker).toContain('<span class="count num">{{ visible().length }}/{{ columns().length }}</span>');
+    expect(ruleIn(picker, '.count')).toBe(ruleIn(toolbar, '.count'));
   });
 });

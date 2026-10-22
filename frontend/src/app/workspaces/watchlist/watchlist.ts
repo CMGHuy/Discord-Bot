@@ -24,7 +24,7 @@ import { createClientPage } from '../../ui/data-table/client-page';
 import { FilterChip, FilterChips } from '../../ui/filter-bar';
 import { Freshness } from '../../ui/freshness';
 import { tablePerPage } from '../../ui/table-per-page';
-import { ColumnDef, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
+import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { date, num, pct, text } from '../../ui/format';
 import { Select, TextInput } from '../../ui/form-controls';
 import { Icon } from '../../ui/icon';
@@ -129,17 +129,21 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
  * deliberately left undeclared: v80 pins it because a narrow Tape toggle
  * sits before it, B2's pin exemption ignores any floor it carries anyway,
  * and declaring one would be a comment that lies about what the code does.
+ *
+ * v179 §3.1: on a phone each ticker is two lines -- symbol, price and 1D%,
+ * then company and signal; everything else is in the row drawer. Symbol's
+ * plain value supplies the drawer heading; its cell still renders.
  */
 export const WATCHLIST_COLUMNS: ColumnDef<Ticker>[] = [
   { key: 'tape', header: 'Tape', width: '1%', sortable: true, inlineFrom: 'sm' },
-  { key: 'symbol', header: 'Symbol', sortable: true },
-  { key: 'company_name', header: 'Company', value: (row) => text(row.company_name), sortable: true, inlineFrom: 'md' },
-  { key: 'price', header: 'Price', numeric: true, inlineFrom: 'xs' },
-  { key: 'change_1d_pct', header: '1D%', value: (row) => pct(row.change_1d_pct), numeric: true, inlineFrom: 'xs' },
+  { key: 'symbol', header: 'Symbol', value: (row) => row.symbol, sortable: true, compact: { line: 1, order: 1 } },
+  { key: 'company_name', header: 'Company', value: (row) => text(row.company_name), sortable: true, inlineFrom: 'md', compact: { line: 2, order: 1 } },
+  { key: 'price', header: 'Price', numeric: true, inlineFrom: 'xs', compact: { line: 1, order: 2 } },
+  { key: 'change_1d_pct', header: '1D%', value: (row) => pct(row.change_1d_pct), numeric: true, inlineFrom: 'xs', compact: { line: 1, order: 3 } },
   { key: 'change_1w_pct', header: '1W%', value: (row) => pct(row.change_1w_pct), numeric: true, inlineFrom: 'md' },
   { key: 'change_1m_pct', header: '1M%', value: (row) => pct(row.change_1m_pct), numeric: true, inlineFrom: 'md' },
   { key: 'spark', header: '30d', width: '90px', inlineFrom: 'md' },
-  { key: 'signal', header: 'Signal', inlineFrom: 'md' },
+  { key: 'signal', header: 'Signal', inlineFrom: 'md', compact: { line: 2, order: 2 } },
   {
     key: 'next_earnings_date', header: 'Next earnings', sortable: true, inlineFrom: 'md',
     value: (row) => (row.next_earnings_date ? date(row.next_earnings_date) : null),
@@ -359,6 +363,8 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
           (sortChange)="setSort($event)"
           (pageChange)="watchlistPage.setPage($event)"
           (perPageChange)="onPerPage($event)"
+          phoneTap="drawer"
+          [detailLink]="tickerLink"
           (rowActivate)="open($event)"
         />
       </sb-panel>
@@ -852,4 +858,10 @@ export class Watchlist {
   protected open(row: Ticker): void {
     void this.router.navigate(['/watchlist', row.symbol]);
   }
+
+  /** Phone rows open the drawer; its link keeps the existing destination. */
+  protected readonly tickerLink = (row: Ticker): DetailLink => ({
+    commands: ['/watchlist', row.symbol],
+    label: 'Open ticker →',
+  });
 }

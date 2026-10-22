@@ -89,7 +89,7 @@ export function timingLines(t: PlanTiming): string[] {
   ],
   template: `
     <header class="plan-head">
-      <a class="back" routerLink="/trades">← Trades</a>
+      <a class="back sb-hit" routerLink="/trades">← Trades</a>
 
       @if (store.trade(); as trade) {
         <div class="plan-title" role="heading" aria-level="2">
@@ -154,7 +154,7 @@ export function timingLines(t: PlanTiming): string[] {
               [entry]="trade.entry"
               [stop]="trade.stop_loss"
               [stopLabel]="stopLabel()"
-              [target1]="trade.target"
+              [target1]="trade.target1 ?? trade.target"
               [target2]="trade.target2"
               [riskReward]="trade.risk_reward"
               [acceptanceLevel]="store.acceptanceLevel()"
@@ -189,7 +189,7 @@ export function timingLines(t: PlanTiming): string[] {
             [trigger]="store.triggerPrice()"
             [stop]="trade.stop_loss"
             [stopLabel]="stopLabel()"
-            [target1]="trade.target"
+            [target1]="trade.target1 ?? trade.target"
             [target2]="trade.target2"
             [acceptanceLevel]="store.acceptanceLevel()"
             [targetSources]="store.targetSources()"
@@ -209,7 +209,7 @@ export function timingLines(t: PlanTiming): string[] {
 
           <sb-outcome-path [legs]="store.legs()" [timeline]="store.timeline()" />
 
-          <a class="record-link" [routerLink]="['/trades', id()]">Open the full trade record</a>
+          <a class="record-link sb-hit" [routerLink]="['/trades', id()]">Open the full trade record</a>
         </div>
       }
     </sb-async>
@@ -231,7 +231,7 @@ export function timingLines(t: PlanTiming): string[] {
     .plan-title {
       margin: 0;
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: var(--space-10);
       font-size: var(--text-title);
       font-weight: 600;
@@ -244,7 +244,7 @@ export function timingLines(t: PlanTiming): string[] {
     }
     .tags {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       gap: var(--space-6);
       flex-wrap: wrap;
     }

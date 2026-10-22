@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { TRADE_SORTABLE } from '../../api/models';
 import { isInline } from '../../ui/priority';
+import { compactLines, drawerColumns } from '../../ui/data-table/compact';
+import { deriveOpenVisible } from '../dashboard/dashboard.helpers';
 
 import {
   COMPACT_COLUMNS,
@@ -211,5 +213,36 @@ describe('phone column baseline', () => {
     expect(baselineColumns('full', true)).toBe(FULL_COLUMNS);
     expect(baselineColumns('compact', false)).toBe(COMPACT_COLUMNS);
     expect(baselineColumns('compact', true)).toBe(PHONE_COMPACT_COLUMNS);
+  });
+});
+
+describe('Trades compact row -- v179 §3.1', () => {
+  const columns = tradeColumns();
+  const keys = (list: { key: string }[]) => list.map((column) => column.key);
+  const SETS: [string, string[]][] = [
+    ['Trades, phone compact', [...PHONE_COMPACT_COLUMNS, ...PINNED_COLUMNS]],
+    ['Trades, full', [...FULL_COLUMNS, ...PINNED_COLUMNS]],
+    ['Dashboard open positions', deriveOpenVisible([...PHONE_COMPACT_COLUMNS, ...PINNED_COLUMNS])],
+  ];
+
+  it('leads line 1 with identity, direction and P&L; line 2 with the plan and status', () => {
+    const { line1, line2 } = compactLines(columns, FULL_COLUMNS);
+    expect(keys(line1)).toEqual(['ticker', 'direction', 'pnl_pct']);
+    expect(keys(line2)).toEqual(['plan', 'status']);
+  });
+
+  it('declares a slot on those five columns only -- the rest is one tap away', () => {
+    expect(keys(columns.filter((column) => column.compact)).sort()).toEqual(['direction', 'plan', 'pnl_pct', 'status', 'ticker']);
+  });
+
+  it.each(SETS)('%s: P&L (with its amount) and the plan (with its stop) stay on the row', (_, shown) => {
+    const { line1, line2 } = compactLines(columns, shown);
+    expect(keys([...line1, ...line2])).toEqual(expect.arrayContaining(['pnl_pct', 'plan']));
+  });
+
+  it.each(SETS)('%s: the row and the drawer reach every rendered column', (_, shown) => {
+    const { line1, line2 } = compactLines(columns, shown);
+    const reached = [...keys(line1), ...keys(line2), ...keys(drawerColumns(columns, shown))];
+    expect([...reached].sort()).toEqual([...shown].sort());
   });
 });

@@ -20,13 +20,40 @@ each width (Playwright, never claude-in-chrome — `skills-tools.md`).
 ## Checklist for every screen or control
 
 - Touch targets at least 44px (2.75rem) on phone and tablet; hover is never
-  the only affordance.
+  the only affordance. A control whose box may grow takes
+  `min-height: var(--control-h)`; one whose look must stay small takes
+  `class="sb-hit"` (a transparent hit area of `--hit-min`, 44px under
+  `(pointer: coarse), (max-width: 1023px)`).
+- Text is never below 11px: size it with the text tokens (they carry the floor
+  at every zoom step), never a literal `font-size` under 11px.
+- Mixed text sizes on one line align on the baseline (`align-items: baseline`
+  or `last baseline`), never `center`. Numbers use the numeric face (`.num`,
+  `var(--font-num)`); labels stay in the UI font.
 - Layout responds to its **container** where it can sit in a narrow panel
   (`container-type: inline-size` + `@container`), not only the viewport.
-- No horizontal page scroll; a wide table scrolls inside its own box.
+- No horizontal page scroll. A wide chart or grid scrolls inside its own box
+  with an edge fade; a data table on a phone is **declared, not hand-built**:
+  its columns carry a `compact` slot (line 1 or 2, plus an order) and
+  `sb-data-table` renders compact rows and the row drawer (v179). Open-position
+  tables keep the P&L amount and the stop or risk on the compact row; strategy
+  rows keep the badge tier and evidence freshness.
 - Controls that have a desktop row layout say how they wrap on narrow widths.
 - State what each class defaults to (page size, density, columns) and whether a
   saved choice is per device class.
+- **Before merging any UI change, run the layout audit** against a local
+  replica (`/replicate-prod-db`, `cd frontend && npm run build`,
+  `python admin_ui.py`, then sign in once with
+  `node frontend/scripts/browse.mjs login --base http://localhost:1234`):
+  `node frontend/scripts/layout-audit.mjs --base http://localhost:1234`
+  must exit 0 at 390, 768 and 1440. It checks page overflow, off-screen and
+  clipped text, sub-44px targets (phone/tablet), sub-11px text and baseline
+  offsets over 2px on every route and tab. A finding is fixed, not allowed;
+  only canvas/third-party chart internals and browser-native parts go in
+  `frontend/scripts/layout-audit.allow.json`, each entry with a reason and the
+  date it was added. Entries nothing matches any more print as `STALE`; a run
+  with `--prune` removes them. A route or tab added to the app is added to
+  `ROUTES` in `frontend/scripts/layout-audit-lib.mjs` in the same commit. It
+  is not in CI (spec v179 §6a.6).
 
 ## Tables and pagers
 

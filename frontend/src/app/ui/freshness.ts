@@ -32,6 +32,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
     }
     .stale { color: var(--warn); }
     .flag { font-style: italic; }
+    /* Phone and tablet: the clock is chrome, not data; desktop keeps it. */
+    @media (max-width: 1023px) { :host { display: none; } }
   `,
 })
 export class Freshness {

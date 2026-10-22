@@ -11,9 +11,9 @@ import { num } from '../../../ui/format';
       <dl>
         <div>
           <dt>Continues past {{ levelWord() }} 1</dt>
-          <dd class="sb-num">
+          <dd>
             @if (target2() !== null) {
-              next stop {{ fmtNum(target2()) }}
+              next stop <span class="num">{{ fmtNum(target2()) }}</span>
             } @else {
               <span class="absent">no further level found</span>
             }
@@ -21,7 +21,7 @@ import { num } from '../../../ui/format';
         </div>
         <div>
           <dt>Reverses at {{ levelWord() }} 1</dt>
-          <dd class="sb-num">pulls back toward {{ oppositeWord() }} at {{ fmtNum(stopLoss()) }}</dd>
+          <dd>pulls back toward {{ oppositeWord() }} at <span class="num">{{ fmtNum(stopLoss()) }}</span></dd>
         </div>
       </dl>
     </sb-panel>
@@ -29,7 +29,7 @@ import { num } from '../../../ui/format';
   styles: `
     :host { display: block; min-width: 0; }
     dl { display: grid; gap: var(--space-6); margin: 0; }
-    dl > div { display: flex; justify-content: space-between; gap: var(--space-10); }
+    dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-10); }
     dt, .absent { color: var(--text-secondary); }
     dt, dd { font-size: var(--text-table); }
     dd { margin: 0; color: var(--text); }

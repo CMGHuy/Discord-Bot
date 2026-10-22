@@ -8,30 +8,19 @@ import {
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
   errorInterceptor,
   loadingInterceptor,
 } from '../../api/interceptors';
-import { Settings } from '../../api/models';
+import { SettingField, Settings } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
 import { SettingsTab } from './settings-tab';
 
 function payload(overrides: Partial<Settings> = {}): Settings {
   return { sections: [], audit: [], restart_available: false, ...overrides };
-}
-
-/** SystemStore's onInit fires all three of settings/logs/scan together
- *  regardless of which tab component is under test. */
-function flushOtherFetches(backend: HttpTestingController): void {
-  backend
-    .expectOne((r) => r.url === '/api/v1/system/logs')
-    .flush({ source: 'bot', lines: 500, path: 'logs/bot.log', content: '' });
-  backend
-    .expectOne((r) => r.url === '/api/v1/system/scan')
-    .flush({ status: 'idle' } as never);
 }
 
 function seed(): { fixture: ComponentFixture<SettingsTab>; backend: HttpTestingController } {
@@ -107,5 +96,69 @@ describe('System settings touch targets', () => {
 
   it('field grid collapses rather than overflowing a narrow panel', () => {
     expect(src).toMatch(/minmax\(\s*min\(100%,\s*260px\)/);
+  });
+});
+
+/* -- v179 §6b.5 -- the settings category rail fades and reveals ----------- */
+
+function field(key: string): SettingField {
+  return {
+    key, label: key, type: 'str', value: 'x', default: 'x', help: '',
+    min: null, max: null, step: null, options: [], sensitive: false, hot_reloadable: true,
+  };
+}
+
+const RAIL_SECTIONS = ['Discord', 'Scanning', 'Pipeline', 'Risk'].map((name) => ({
+  name, icon: 'settings', description: '', fields: [field(name.toLowerCase())],
+}));
+
+function railGeometry(el: HTMLElement, scrollWidth: number, clientWidth: number, scrollLeft: number): void {
+  Object.defineProperty(el, 'scrollWidth', { configurable: true, value: scrollWidth });
+  Object.defineProperty(el, 'clientWidth', { configurable: true, value: clientWidth });
+  Object.defineProperty(el, 'scrollLeft', { configurable: true, writable: true, value: scrollLeft });
+}
+
+describe('Settings category rail (v179 §6b.5)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/system/settings-tab.ts'), 'utf8');
+  async function loaded() {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/system/settings').flush(payload({ sections: RAIL_SECTIONS }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    return { fixture, el, rail: el.querySelector('nav.category-rail') as HTMLElement };
+  }
+
+  it('fades the far edge while more categories sit off-screen', async () => {
+    const { fixture, el, rail } = await loaded();
+    railGeometry(rail, 700, 358, 0);
+    rail.dispatchEvent(new Event('scroll'));
+    fixture.detectChanges();
+    const strip = el.querySelector('.rail-strip')!;
+    expect(strip.classList).toContain('fade-end');
+    expect(strip.classList).not.toContain('fade-start');
+  });
+
+  it('brings the chosen category into view along the rail', async () => {
+    const { fixture, rail } = await loaded();
+    railGeometry(rail, 700, 358, 0);
+    const risk = [...rail.querySelectorAll('button')].find((b) => b.textContent!.includes('Risk'))!;
+    vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 358, 44));
+    vi.spyOn(risk, 'getBoundingClientRect').mockReturnValue(new DOMRect(600, 0, 100, 44));
+    risk.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(rail.scrollLeft).toBe(342);
+  });
+
+  it('draws the fades with the same gradient as sb-tab-bar', () => {
+    expect(src).toMatch(/\.rail-strip::before \{[^}]*linear-gradient\(to right, var\(--bg\), transparent\)/);
+    expect(src).toMatch(/\.rail-strip\.fade-start::before, \.rail-strip\.fade-end::after \{ opacity: 1; \}/);
+  });
+
+  it('re-measures on window resize and lets the strip shrink in the phone layout', () => {
+    expect(src).toContain(`'(window:resize)': 'measureRail()'`);
+    expect(src).toMatch(/\.rail-strip \{[^}]*min-width: 0;/);
   });
 });

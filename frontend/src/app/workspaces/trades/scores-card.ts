@@ -29,7 +29,7 @@ export function scoreWidth(value: number | null): number | null {
   styles: `
     :host { display: block; min-width: 0; overflow-wrap: anywhere; }
     dl { display: grid; gap: var(--space-10); margin: 0; }
-    dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
+    dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: baseline; gap: var(--space-4); }
     dt { color: var(--text-secondary); }
     dt, dd { min-width: 0; font-size: var(--text-table); }
     dd { margin: 0; text-align: right; }

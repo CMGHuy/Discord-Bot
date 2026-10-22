@@ -425,7 +425,7 @@ function cameFromPlan(): boolean {
 
     .identity {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       flex-wrap: wrap;
       gap: var(--space-10);
       min-width: 0;
@@ -440,10 +440,12 @@ function cameFromPlan(): boolean {
       color: var(--text-secondary);
       font-size: var(--text-table);
     }
+    /* Baseline, not centre (v179 §3.4): the 18px mono ticker, the side and
+       the 11.7px status text sat 3px apart when centred. */
     .trade-title {
       margin: 0;
       display: flex;
-      align-items: center;
+      align-items: baseline;
       flex-wrap: wrap;
       gap: var(--space-10);
       font-size: var(--text-title);
@@ -460,7 +462,7 @@ function cameFromPlan(): boolean {
       display: flex;
       flex: 1 1 240px;
       min-width: 0;
-      align-items: center;
+      align-items: baseline;
       gap: var(--space-6);
       flex-wrap: wrap;
     }

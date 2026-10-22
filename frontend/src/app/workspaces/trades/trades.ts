@@ -34,7 +34,7 @@ import { QualityChip } from '../../ui/chip';
 import { ColumnPickerComponent } from '../../ui/column-picker';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
-import { ColumnDef, SortSpec } from '../../ui/data-table/data-table.types';
+import { ColumnDef, DetailLink, SortSpec } from '../../ui/data-table/data-table.types';
 import { FilterBar, FilterChips } from '../../ui/filter-bar';
 import { Flash } from '../../ui/flash';
 import { dateTime, money, pct, signed, text } from '../../ui/format';
@@ -350,6 +350,8 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
         [sort]="store.sort()"
         [pagination]="store.pagination()"
         [expansion]="expansionTemplate()"
+        phoneTap="drawer"
+        [detailLink]="tradeLink"
         (sortChange)="onSort($event)"
         (pageChange)="navigate({ page: $event }, false)"
         (rowActivate)="open($event)"
@@ -1074,6 +1076,14 @@ export class Trades {
   protected open(row: TradeRow): void {
     this.router.navigate(['/trades', row.id]);
   }
+
+  /** v179 §6b.4: on a phone a tap opens the row drawer instead of `open()`;
+   *  this link keeps the old destination. Tablet and desktop still navigate
+   *  through `rowActivate` → `open()`. */
+  protected readonly tradeLink = (row: TradeRow): DetailLink => ({
+    commands: ['/trades', row.id],
+    label: 'Open full trade →',
+  });
 
   protected ask(kind: TradeActionKind, row: TradeRow): void {
     this.pending.set({ kind, row });

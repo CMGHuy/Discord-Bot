@@ -1025,3 +1025,53 @@ describe('TradeDetail — responsive card layout (v166 TD11)', () => {
     },
   );
 });
+
+describe('TradeDetail — one numeric face, one baseline (v179 §3.3, §3.4)', () => {
+  const APP = join(process.cwd(), 'src/app');
+  const read = (path: string) => readFileSync(join(APP, path), 'utf8');
+  const CARDS = [
+    'workspaces/trades/trade-detail.ts',
+    'workspaces/trades/strategy-record-card.ts',
+    'workspaces/trades/scores-card.ts',
+    'workspaces/trades/why/why-panel.ts',
+    'workspaces/trades/why/levels-block.ts',
+    'workspaces/trades/why/sizing-panel.ts',
+    'workspaces/trades/why/if-it-gets-there.ts',
+  ];
+
+  it('marks numbers with .num, the class that exists, never the undefined sb-num', () => {
+    for (const path of CARDS) expect(read(path), path).not.toMatch(/\bsb-num\b/);
+  });
+
+  it('puts every formatted number in a dd in the numeric face', () => {
+    const bareNumber = /<dd(?![^>]*\bnum\b)[^>]*>\s*\{\{\s*(?:fmt|fmtNum|fmtPct|fmtShare|fmtSigned)\(/;
+    for (const path of CARDS) expect(read(path), path).not.toMatch(bareNumber);
+  });
+
+  it('aligns each label/value row on the text baseline', () => {
+    for (const path of [
+      'workspaces/trades/strategy-record-card.ts',
+      'workspaces/trades/scores-card.ts',
+      'workspaces/trades/why/levels-block.ts',
+      'workspaces/trades/why/sizing-panel.ts',
+      'workspaces/trades/why/if-it-gets-there.ts',
+    ]) {
+      expect(read(path), path).toMatch(/dl > div \{[^}]*align-items: baseline/);
+    }
+  });
+
+  it('sets the ticker, side and status of the title on one baseline', () => {
+    const title = read('workspaces/trades/trade-detail.ts').match(/\.trade-title \{[^}]*\}/)![0];
+    expect(title).toContain('align-items: baseline');
+    expect(title).not.toContain('align-items: center');
+    const indicator = read('ui/status-indicator.ts');
+    expect(indicator.match(/\.wrap \{[^}]*\}/)![0]).toContain('align-items: baseline');
+    expect(indicator).toMatch(/\.dot,\s*\.track \{ align-self: center; \}/);
+  });
+
+  it('sets the identity row (title, tags, actions) on one baseline, never centred', () => {
+    const src = read('workspaces/trades/trade-detail.ts');
+    expect(src.match(/\.identity \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+    expect(src.match(/\.tags \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+  });
+});

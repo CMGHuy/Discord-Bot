@@ -7,8 +7,12 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideZonelessChangeDetection, signal } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import { Router, provideRouter } from '@angular/router';
+import { Location } from '@angular/common';
+import { SpyLocation, provideLocationMocks } from '@angular/common/testing';
+import { By } from '@angular/platform-browser';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -26,6 +30,9 @@ import { ToastService } from '../../shell/toast.service';
 import { EquityCandlesStore } from '../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
+import { provideMotion } from '../../ui/motion/motion.service';
+import { dashboardRoutes } from './dashboard.routes';
+import { PositionsTable } from './positions-table';
 
 installMatchMediaPolyfill();
 
@@ -266,7 +273,8 @@ describe('Dashboard v85 layout', () => {
   it('routes the panel scope control back into the store', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-    el.querySelector<HTMLButtonElement>('[data-scope="all"]')!.click();
+    [...el.querySelectorAll<HTMLButtonElement>('sb-trading-performance sb-segmented .segment')]
+      .find((s) => s.textContent!.trim() === 'All days')!.click();
     fixture.detectChanges();
     expect(TestBed.inject(DashboardStore).scope()).toBe('all');
   });
@@ -563,5 +571,183 @@ describe('Dashboard v171 price age hint', () => {
 
   it('stays silent inside the window', async () => {
     expect((await withActiveRow({ price_age_s: 5 })).length).toBe(0);
+  });
+});
+
+/* v179 §3.2: the trade drawer, driven through a real router so the URL,
+ * history and the route's rerun rule are what is tested. The route copies
+ * the production rerun rule and counts its resolver runs. */
+@Component({ template: '' })
+class TradePage {}
+
+let resolverRuns = 0;
+
+const ACTIVITY_ROW = tradeRow({
+  id: 't1', ticker: 'AAPL', status: 'ACTIVE', status_label: 'Open', opened_at: '2026-10-20T10:00:00Z',
+  pnl_pct: null, realized_pnl_amount: null, exit_price: null, current_price: 105, open_shares: 5,
+});
+
+/** Answers the page's own requests: the activity feed's trades query (no
+ *  status) gets `recentRows`, the positions table's (status set) nothing. */
+async function answer(harness: RouterTestingHarness, backend: HttpTestingController, recentRows: TradeRow[]) {
+  for (const req of backend.match((r) => r.url === '/api/v1/trades')) {
+    const rows = req.request.params.has('status') ? [] : recentRows;
+    req.flush({ items: rows, total: rows.length, page: 1, per_page: 20 });
+  }
+  for (const req of backend.match('/api/v1/dashboard?mode=today')) req.flush(payload());
+  await harness.fixture.whenStable();
+  harness.detectChanges();
+}
+
+async function routed(url: string) {
+  resolverRuns = 0;
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideRouter([
+        {
+          path: 'dashboard', component: Dashboard,
+          runGuardsAndResolvers: dashboardRoutes[0].runGuardsAndResolvers,
+          resolve: { ready: () => { resolverRuns += 1; return true; } },
+        },
+        { path: 'trades/:id', component: TradePage },
+      ]),
+      provideLocationMocks(),
+      provideMotion('off'),
+      provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+      provideHttpClientTesting(),
+      DashboardStore,
+      { provide: ConnectionStore, useValue: connectionStub },
+      { provide: PreferencesStore, useValue: preferencesStub },
+      { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
+    ],
+  });
+  const harness = await RouterTestingHarness.create(url);
+  // The app's bootstrap listener (initialNavigation) is what subscribes the
+  // Router to popstate; the harness never runs it, so Back would be ignored.
+  TestBed.inject(Router).setUpLocationChangeListener();
+  const backend = TestBed.inject(HttpTestingController);
+  const location = TestBed.inject(Location) as SpyLocation;
+  return { harness, backend, location };
+}
+
+async function settled(harness: RouterTestingHarness) {
+  await harness.fixture.whenStable();
+  harness.detectChanges();
+}
+
+const drawer = (harness: RouterTestingHarness) =>
+  harness.routeNativeElement!.querySelector('sb-trade-drawer');
+
+describe('Dashboard trade drawer (v179 §3.2)', () => {
+  it('opens an activity row in the drawer and pushes ?trade=', async () => {
+    const { harness, backend, location } = await routed('/dashboard');
+    await answer(harness, backend, [ACTIVITY_ROW]);
+    const before = location.urlChanges.length;
+    harness.routeNativeElement!.querySelector<HTMLButtonElement>('sb-recent-activity button.event-hit')!.click();
+    await settled(harness);
+    expect(drawer(harness)?.querySelector('header h2')?.textContent?.trim()).toBe('AAPL');
+    expect(location.path()).toBe('/dashboard?trade=t1');
+    expect(location.urlChanges.slice(before)).toEqual(['/dashboard?trade=t1']);
+  });
+
+  it('fetches nothing and re-runs no resolver when only the trade changes', async () => {
+    const { harness, backend } = await routed('/dashboard');
+    await answer(harness, backend, [ACTIVITY_ROW]);
+    backend.match(() => true);              // drain anything unrelated to the drawer
+    const runs = resolverRuns;
+    harness.routeNativeElement!.querySelector<HTMLButtonElement>('sb-recent-activity button.event-hit')!.click();
+    await settled(harness);
+    expect(drawer(harness)).not.toBeNull();
+    expect(backend.match(() => true)).toEqual([]);
+    expect(resolverRuns).toBe(runs);
+  });
+
+  it('closes on Back', async () => {
+    const { harness, backend, location } = await routed('/dashboard');
+    await answer(harness, backend, [ACTIVITY_ROW]);
+    harness.routeNativeElement!.querySelector<HTMLButtonElement>('sb-recent-activity button.event-hit')!.click();
+    await settled(harness);
+    location.back();
+    // The Router starts a popstate navigation from a setTimeout (Angular's
+    // HistoryStateManager), which whenStable() does not wait for.
+    await new Promise((resolve) => setTimeout(resolve));
+    await settled(harness);
+    expect(location.path()).toBe('/dashboard');
+    expect(drawer(harness)).toBeNull();
+  });
+
+  it('goes back on × after an in-page open, adding no history entry', async () => {
+    const { harness, backend, location } = await routed('/dashboard');
+    await answer(harness, backend, [ACTIVITY_ROW]);
+    harness.routeNativeElement!.querySelector<HTMLButtonElement>('sb-recent-activity button.event-hit')!.click();
+    await settled(harness);
+    const back = vi.spyOn(location, 'back');
+    const before = location.urlChanges.length;
+    drawer(harness)!.querySelector<HTMLButtonElement>('.close')!.click();
+    // SpyLocation.back() moves path() synchronously; the Router's popstate
+    // navigation starts from a setTimeout, so let it run and settle first.
+    await new Promise((resolve) => setTimeout(resolve));
+    await settled(harness);
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(location.path()).toBe('/dashboard');
+    // Router bookkeeping may re-write the current entry; a push would be a
+    // plain URL in urlChanges, a replace is prefixed 'replace: '.
+    expect(location.urlChanges.slice(before).filter((url) => !url.startsWith('replace: '))).toEqual([]);
+    expect(drawer(harness)).toBeNull();
+  });
+
+  it('opens a position row on every device: the table emits, the Dashboard holds the row', async () => {
+    const { harness, backend, location } = await routed('/dashboard');
+    await answer(harness, backend, []);
+    const table = harness.routeDebugElement!.query(By.directive(PositionsTable));
+    expect((table.componentInstance as { phoneTap: () => string }).phoneTap()).toBe('emit');
+    const position = tradeRow({ id: 'p9', ticker: 'HOOD', status: 'ACTIVE', opened_at: '2026-10-20T09:00:00Z' });
+    (table.componentInstance as PositionsTable).rowActivate.emit(position);
+    await settled(harness);
+    expect(drawer(harness)?.querySelector('header h2')?.textContent?.trim()).toBe('HOOD');
+    expect(location.path()).toBe('/dashboard?trade=p9');
+  });
+
+  it('waits for the activity rows on a cold link, then opens the trade', async () => {
+    const { harness, backend, location } = await routed('/dashboard?trade=t1');
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
+    harness.detectChanges();
+    expect(drawer(harness)).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    await answer(harness, backend, [ACTIVITY_ROW]);
+    expect(drawer(harness)?.querySelector('header h2')?.textContent?.trim()).toBe('AAPL');
+    expect(location.path()).toBe('/dashboard?trade=t1');
+  });
+
+  it('removes the parameter with replaceUrl on × after a cold open', async () => {
+    const { harness, backend, location } = await routed('/dashboard?trade=t1');
+    await answer(harness, backend, [ACTIVITY_ROW]);
+    const back = vi.spyOn(location, 'back');
+    drawer(harness)!.querySelector<HTMLButtonElement>('.close')!.click();
+    await settled(harness);
+    expect(back).not.toHaveBeenCalled();
+    expect(location.path()).toBe('/dashboard');
+    expect(location.urlChanges.at(-1)).toBe('replace: /dashboard');
+    expect(drawer(harness)).toBeNull();
+  });
+
+  it('sends a link whose trade is not loaded to the full trade page, replacing the entry', async () => {
+    const { harness, backend, location } = await routed('/dashboard?trade=gone');
+    await answer(harness, backend, [ACTIVITY_ROW]);
+    await settled(harness);
+    expect(location.path()).toBe('/trades/gone');
+    expect(location.urlChanges.at(-1)).toBe('replace: /trades/gone');
+  });
+
+  it('opens the full trade page from the drawer link', async () => {
+    const { harness, backend, location } = await routed('/dashboard');
+    await answer(harness, backend, [ACTIVITY_ROW]);
+    harness.routeNativeElement!.querySelector<HTMLButtonElement>('sb-recent-activity button.event-hit')!.click();
+    await settled(harness);
+    drawer(harness)!.querySelector<HTMLAnchorElement>('a.full-trade')!.click();
+    await settled(harness);
+    expect(location.path()).toBe('/trades/t1');
   });
 });

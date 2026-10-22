@@ -80,7 +80,7 @@ describe('v80 D4: the button restyle', () => {
   });
 
   it('grows both icon variants to a square touch target', () => {
-    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/);
+    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 1023px\) \{([\s\S]*?)\n {4}\}/);
     expect(block).not.toBeNull();
     expect(block![1]).toContain(':host(.icon), :host(.danger-icon)');
     expect(block![1]).toContain('min-width: var(--control-h)');
@@ -94,6 +94,13 @@ describe('v80 D4: the button restyle', () => {
 
 describe('button touch floor', () => {
   const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
+
+  it.each([':host(.ghost)', ':host(.chip)', ':host(.link)'])(
+    '%s keeps a one-glyph label at the --hit-min width (v179 layout audit)',
+    (selector) => {
+      expect(rule(selector)).toContain('min-width: var(--hit-min)');
+    },
+  );
 
   it.each([
     'src/app/ui/button.ts',

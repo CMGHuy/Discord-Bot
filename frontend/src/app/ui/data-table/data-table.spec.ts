@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
   Component,
   TemplateRef,
@@ -7,13 +10,22 @@ import {
   viewChild,
 } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { By } from '@angular/platform-browser';
+import { Router, provideRouter } from '@angular/router';
+
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { compactKeys, drawerKeys, openRowDrawer } from './testing/reachability';
+import type { Browser, Page } from 'playwright';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Viewport } from '../breakpoints';
 import { isInline } from '../priority';
+import { RowLink } from '../row-link';
 import { DataTable, SPINNER_DELAY_MS } from './data-table';
 import {
   ColumnDef,
+  DetailLink,
+  PhoneTap,
   EmptyState,
   PageSpec,
   RowContext,
@@ -583,9 +595,13 @@ describe('DataTable phone mode', () => {
   }
 
   it('is off by default', () => expect(wrap().classList).not.toContain('phone'));
-  it('keeps the table below the breakpoint -- no cards', () => {
+  /* v80 D4 said "no cards"; v179 §6b.9 reverses that for a table that
+   * declares a compact row, on purpose. A table that declares none -- this
+   * Host's columns -- keeps v80's pinned-column table exactly, and this test
+   * is that path's record. */
+  it('keeps the table below the breakpoint for a table that declares no compact row', () => {
     asPhone(); expect(wrap().classList).toContain('phone'); expect(el().querySelector('table')).not.toBeNull();
-    expect(el().querySelector('.cards, .card')).toBeNull(); expect(el().querySelectorAll('tbody tr.row')).toHaveLength(ROWS.length);
+    expect(el().querySelector('.compact-list, .cards, .card')).toBeNull(); expect(el().querySelectorAll('tbody tr.row')).toHaveLength(ROWS.length);
   });
   it('pins the ticker column, header and cells alike', () => {
     asPhone(); expect([...el().querySelectorAll('thead th.pin')].map((th) => th.textContent!.trim())).toEqual(['Ticker']);
@@ -832,5 +848,387 @@ describe('DataTable single pager below md', () => {
     // renders after the table, not above it.
     expect(pager.compareDocumentPosition(el().querySelector('table')!) &
       Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+});
+
+/* -- v179 §3.1 -- compact rows on a phone ------------------------------------ */
+
+interface Trade {
+  id: string;
+  ticker: string;
+  pnl: number | null;
+  plan: string;
+  held: string;
+  strategy: string;
+}
+
+const TRADES: Trade[] = [
+  { id: 'a', ticker: 'AAPL', pnl: 4.2, plan: '100 → 110 / 95', held: '3d', strategy: 'RSI' },
+  { id: 'b', ticker: 'MSFT', pnl: null, plan: '', held: '1d', strategy: 'EMA' },
+];
+
+@Component({
+  imports: [DataTable, RowLink],
+  template: `
+    <ng-template #tickerCell let-row>
+      <sb-row-link [link]="['/trades', row.id]"><span class="ticker-rich">{{ row.ticker }}</span></sb-row-link>
+    </ng-template>
+    <ng-template #pnlCell let-row>
+      <span class="pnl-rich">{{ row.pnl === null ? '—' : row.pnl + '%' }}</span>
+    </ng-template>
+    <ng-template #expansion let-row>
+      <div class="expansion-body">{{ row.ticker }} detail</div>
+    </ng-template>
+
+    <sb-data-table
+      [rows]="rows()"
+      [columns]="columns()"
+      [visible]="visible()"
+      [rowKey]="rowKey"
+      [sort]="sort()"
+      [pagination]="pagination()"
+      [expansion]="withExpansion() ? expansionTemplate() : null"
+      [cardsAt]="cardsAt()"
+      [viewportAt]="viewportAt()"
+      [phoneTap]="phoneTap()"
+      [detailLink]="detailLink()"
+      (sortChange)="lastSort = $event"
+      (rowActivate)="activated.push($event)"
+    />
+  `,
+})
+class CompactHost {
+  readonly rows = signal<Trade[]>(TRADES);
+  readonly visible = signal<string[]>(['ticker', 'pnl', 'plan', 'held', 'strategy']);
+  readonly sort = signal<SortSpec | null>(null);
+  readonly pagination = signal<PageSpec | null>(null);
+  readonly withExpansion = signal(true);
+  readonly cardsAt = signal<boolean | null>(true);
+  readonly viewportAt = signal<Viewport | null>('xs');
+  readonly phoneTap = signal<PhoneTap>('drawer');
+  readonly detailLink = signal<((row: Trade) => DetailLink | null) | null>(null);
+
+  private readonly tickerCell = viewChild.required<TemplateRef<RowContext<Trade>>>('tickerCell');
+  private readonly pnlCell = viewChild.required<TemplateRef<RowContext<Trade>>>('pnlCell');
+  readonly expansionTemplate = viewChild.required<TemplateRef<RowContext<Trade>>>('expansion');
+
+  readonly columns = computed<ColumnDef<Trade>[]>(() => [
+    { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, cell: this.tickerCell(), sortable: true, compact: { line: 1, order: 1 } },
+    { key: 'pnl', header: 'P&L %', cell: this.pnlCell(), numeric: true, sortable: true, compact: { line: 1, order: 2 } },
+    { key: 'plan', header: 'Plan', value: (row) => row.plan, compact: { line: 2, order: 1 } },
+    // Sortable but below its floor at xs: the table's inline set leaves it
+    // out, the compact sort select must not.
+    { key: 'held', header: 'Held', value: (row) => row.held, sortable: true, inlineFrom: 'lg', footer: (rows) => `${rows.length} rows` },
+    { key: 'strategy', header: 'Strategy', value: (row) => row.strategy, inlineFrom: 'lg' },
+  ]);
+
+  readonly rowKey = (row: Trade) => row.id;
+  lastSort: SortSpec | null = null;
+  readonly activated: Trade[] = [];
+}
+
+const DATA_TABLE_SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/data-table/data-table.ts'), 'utf8');
+
+/** The body of the first `<selector> {` rule in data-table.ts's styles. */
+function tableRule(selector: string): string {
+  const at = DATA_TABLE_SOURCE.indexOf(`${selector} {`);
+  return at < 0 ? '' : DATA_TABLE_SOURCE.slice(at, DATA_TABLE_SOURCE.indexOf('}', at));
+}
+
+describe('DataTable compact rows (v179 §3.1)', () => {
+  let fixture: ComponentFixture<CompactHost>;
+  let host: CompactHost;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
+    fixture = TestBed.createComponent(CompactHost);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const rowsShown = () => [...el().querySelectorAll('li.compact-row')];
+  const lineKeys = (row: Element, line: string) =>
+    [...row.querySelectorAll(`.${line} > [data-col]`)].map((cell) => cell.getAttribute('data-col'));
+
+  it('renders compact rows instead of a table when a rendered column declares a slot', () => {
+    expect(el().querySelector('ul.compact-list')).not.toBeNull();
+    expect(el().querySelector('table, thead')).toBeNull();
+    expect(rowsShown()).toHaveLength(TRADES.length);
+    expect(rowsShown()[0].querySelector(':scope > button.compact-hit')).not.toBeNull();
+  });
+
+  it('puts each declared column on its line, in slot order', () => {
+    expect(lineKeys(rowsShown()[0], 'line1')).toEqual(['ticker', 'pnl']);
+    expect(lineKeys(rowsShown()[0], 'line2')).toEqual(['plan']);
+  });
+
+  it("renders the column's own cell template, not a second renderer", () => {
+    expect(rowsShown()[0].querySelector('[data-col="pnl"] .pnl-rich')!.textContent!.trim()).toBe('4.2%');
+  });
+
+  it('shows an em dash for a missing value, never an empty line', () => {
+    expect(rowsShown()[1].querySelector('[data-col="plan"]')!.textContent!.trim()).toBe('—');
+    for (const line of rowsShown()[1].querySelectorAll('.line1, .line2')) {
+      expect(line.textContent!.trim()).not.toBe('');
+    }
+  });
+
+  it('draws no header row, no sort buttons and no disclosure chevron', () => {
+    expect(el().querySelector('button.sort, .expander, .detail-toggle')).toBeNull();
+  });
+
+  it('offers every sortable rendered column in the phone sort select', () => {
+    const options = [...el().querySelectorAll('.phone-sort option')].map((option) => option.textContent!.trim());
+    expect(options).toEqual(['Unsorted', 'Ticker ↑', 'Ticker ↓', 'P&L % ↑', 'P&L % ↓', 'Held ↑', 'Held ↓']);
+  });
+
+  it('keeps the pager, below the list', () => {
+    host.pagination.set({ page: 1, perPage: 2, total: 9 });
+    fixture.detectChanges();
+    const pager = el().querySelector('sb-pagination')!;
+    expect(pager).not.toBeNull();
+    expect(pager.compareDocumentPosition(el().querySelector('ul.compact-list')!) &
+      Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
+  it('turns column footers into one totals line', () => {
+    const total = el().querySelector('.compact-footer [data-col="held"]')!;
+    expect(total.textContent).toContain('Held');
+    expect(total.textContent).toContain('2 rows');
+  });
+
+
+  it('keeps caller link content inert and names each row from its rendered rich cells', () => {
+    const buttons = [...el().querySelectorAll<HTMLButtonElement>('.compact-hit')];
+    const labelIds = buttons.flatMap((button) => {
+      const lines = [...button.querySelectorAll('.line1, .line2')];
+      const ids = button.getAttribute('aria-labelledby')!.split(' ');
+      expect(lines.every((line) => line.hasAttribute('inert'))).toBe(true);
+      expect(ids).toEqual(lines.map((line) => line.id));
+      return ids;
+    });
+    expect(new Set(labelIds).size).toBe(labelIds.length);
+    const link = buttons[0].querySelector('sb-row-link a')!;
+    expect(link.textContent!.trim()).toBe('AAPL');
+    expect(link.closest('[inert]')).not.toBeNull();
+    expect(buttons[0].querySelector('.pnl-rich')!.textContent!.trim()).toBe('4.2%');
+    const tableScope = buttons[0].getAttributeNames().find((name) => name.startsWith('_ngcontent-'));
+    expect(tableScope).toBeDefined();
+    expect(link.matches(`.compact-hit[${tableScope}] a[${tableScope}]`)).toBe(false);
+
+    host.cardsAt.set(false);
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    expect(el().querySelector('table sb-row-link a')!.closest('[inert]')).toBeNull();
+  });
+
+  it('keeps the table at tablet width even when columns declare a slot', () => {
+    host.cardsAt.set(false);
+    host.viewportAt.set('sm');
+    fixture.detectChanges();
+    expect(el().querySelector('table')).not.toBeNull();
+    expect(el().querySelector('.compact-list')).toBeNull();
+  });
+
+  it('falls back to the scroller when the user hid every compact column', () => {
+    host.visible.set(['held', 'strategy']);
+    fixture.detectChanges();
+    expect(el().querySelector('table')).not.toBeNull();
+    expect(el().querySelector('.compact-list')).toBeNull();
+  });
+
+  it('gives every compact row at least the touch hit area', () => {
+    expect(tableRule('.compact-hit')).toContain('min-height: max(var(--row-h), var(--hit-min))');
+  });
+
+  it('sets mixed sizes on one line on the text baseline, never centred', () => {
+    expect(tableRule('.line1, .line2')).toContain('align-items: baseline');
+  });
+
+  it('gives header sort buttons the shared hit area (§6a.7)', () => {
+    expect(DATA_TABLE_SOURCE).toContain('<button type="button" class="sort sb-hit"');
+  });
+
+  it("records v179's reversal of v80's no-cards decision in the docstring", () => {
+    expect(DATA_TABLE_SOURCE).toMatch(/Phone mode below `sm`[\s\S]{0,900}v179/);
+  });
+});
+
+/* Native inert, focus and click targeting need a browser: jsdom does not
+ * implement them. Run `node scripts/check-compact-interactions.mjs` to opt in.
+ * It uses the compiled Angular fixture (including scoped styles and caller
+ * RowLink), without the app server or a database. Normal unit runs need no
+ * browser. SB_COMPACT_BROWSER_CHANNEL can select another installed channel. */
+describe.runIf(process.env['SB_COMPACT_BROWSER_TESTS'] === '1')('DataTable compact rows own their caller-cell interactions', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    const { chromium } = await import('playwright');
+    browser = await chromium.launch({ channel: process.env['SB_COMPACT_BROWSER_CHANNEL'] ?? 'chrome', headless: true });
+  }, 30000);
+
+  afterAll(async () => { await browser?.close(); }, 30000);
+  afterEach(async () => { await page?.close(); }, 30000);
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
+    const fixture = TestBed.createComponent(CompactHost);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const button = root.querySelector('.compact-hit')!;
+    const link = button.querySelector('sb-row-link a')!;
+    const tableScope = button.getAttributeNames().find((name) => name.startsWith('_ngcontent-'))!;
+    // The caller's anchor has a different scope: the former descendant rule
+    // cannot disable it, even though it sits inside the table's row button.
+    expect(link.matches(`.compact-hit[${tableScope}] a[${tableScope}]`)).toBe(false);
+    const css = [...document.head.querySelectorAll('style')].map((style) => style.textContent).join('\n');
+    page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.route('http://compact.test/**', (route) => route.fulfill({ body: 'Unexpected link navigation' }));
+    await page.setContent(`<base href="http://compact.test/"><style>${css}</style>${root.outerHTML}`);
+    await page.evaluate(() => {
+      document.querySelectorAll<HTMLButtonElement>('.compact-hit').forEach((button) => {
+        button.addEventListener('click', () => {
+          document.body.dataset['activations'] = String(Number(document.body.dataset['activations'] ?? 0) + 1);
+        });
+      });
+    });
+  });
+
+  it('routes a pointer tap over the caller link to the row exactly once', async () => {
+    await page.locator('[data-col="ticker"]').first().click();
+    expect(page.url()).toBe('about:blank');
+    expect(await page.locator('body').getAttribute('data-activations')).toBe('1');
+  });
+
+  it('tabs between row buttons and activates the focused row once with Enter', async () => {
+    await page.locator('.compact-hit').first().focus();
+    await page.keyboard.press('Tab');
+    expect(await page.locator('.compact-hit').nth(1).evaluate((button) => button === document.activeElement)).toBe(true);
+    await page.keyboard.press('Enter');
+    expect(page.url()).toBe('about:blank');
+    expect(await page.locator('body').getAttribute('data-activations')).toBe('1');
+  });
+
+  it('keeps the rich cell content in the accessible name of the row button', async () => {
+    expect(await page.getByRole('button', { name: /AAPL.*4\.2%.*100/ }).count()).toBe(1);
+    expect(await page.getByRole('button', { name: /MSFT.*—/ }).count()).toBe(1);
+  });
+});
+
+describe('DataTable row drawer (v179 §3.1, §6a.4)', () => {
+  let fixture: ComponentFixture<CompactHost>;
+  let host: CompactHost;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
+    fixture = TestBed.createComponent(CompactHost);
+    host = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const dialog = () => el().querySelector('sb-drawer.row-drawer dialog') as HTMLDialogElement | null;
+  function open(index = 0) {
+    openRowDrawer(el(), index);
+    fixture.detectChanges();
+  }
+
+  it('opens its own drawer on a tap, without emitting rowActivate', () => {
+    open(1);
+    expect(dialog()!.open).toBe(true);
+    expect(el().querySelector('sb-drawer.row-drawer h2')!.textContent!.trim()).toBe('MSFT');
+    expect(host.activated).toEqual([]);
+  });
+
+  it('lists every rendered column not on the compact row, labelled, through its own cell', () => {
+    open();
+    expect(drawerKeys(el())).toEqual(['held', 'strategy']);
+    const labels = [...el().querySelectorAll('dl.drawer-fields dt')].map((dt) => dt.textContent!.trim());
+    expect(labels).toEqual(['Held', 'Strategy']);
+    expect(el().querySelector('[data-col="strategy"] dd')!.textContent!.trim()).toBe('RSI');
+  });
+
+  it('reaches every rendered column between the compact row and the drawer (§7.5)', () => {
+    open();
+    expect([...compactKeys(el()), ...drawerKeys(el())].sort()).toEqual([...host.visible()].sort());
+  });
+
+  it('keeps a column the user hid out of the drawer too', () => {
+    host.visible.set(['ticker', 'pnl', 'plan', 'held']);
+    fixture.detectChanges();
+    open();
+    expect(drawerKeys(el())).toEqual(['held']);
+  });
+
+  it("renders the call site's expansion after the fields -- the drawer replaces the disclosure", () => {
+    open();
+    expect(el().querySelector('.drawer-expansion .expansion-body')!.textContent!.trim()).toBe('AAPL detail');
+  });
+
+  it('links to the detail page when the table has one', () => {
+    host.detailLink.set((row) => ({ commands: ['/trades', row.id], label: 'Open full trade →' }));
+    fixture.detectChanges();
+    open();
+    const link = el().querySelector('a.drawer-detail-link') as HTMLAnchorElement;
+    expect(link.textContent!.trim()).toBe('Open full trade →');
+    expect(link.getAttribute('href')).toBe('/trades/a');
+  });
+
+  it('shows no link for a table without a detail page', () => {
+    open();
+    expect(el().querySelector('a.drawer-detail-link')).toBeNull();
+  });
+
+  it("only emits under phoneTap 'emit', and renders no drawer of its own", () => {
+    host.phoneTap.set('emit');
+    fixture.detectChanges();
+    open(1);
+    expect(host.activated.map((row) => row.ticker)).toEqual(['MSFT']);
+    expect(el().querySelector('sb-drawer.row-drawer')).toBeNull();
+  });
+
+  it('closes on a page change', () => {
+    host.pagination.set({ page: 1, perPage: 2, total: 9 });
+    fixture.detectChanges();
+    open();
+    const table = fixture.debugElement.query(By.directive(DataTable)).componentInstance as unknown as { onPage(page: number): void };
+    table.onPage(2);
+    fixture.detectChanges();
+    expect(dialog()?.open ?? false).toBe(false);
+  });
+
+  it('closes on navigation', async () => {
+    open();
+    await TestBed.inject(Router).navigateByUrl('/elsewhere').catch(() => false);
+    fixture.detectChanges();
+    expect(dialog()?.open ?? false).toBe(false);
+  });
+
+  it('closes when the viewport leaves compact mode', () => {
+    open();
+    host.cardsAt.set(false);
+    host.viewportAt.set('md');
+    fixture.detectChanges();
+    expect(dialog()?.open ?? false).toBe(false);
+  });
+
+  it('still emits rowActivate from a table row at tablet width', () => {
+    host.cardsAt.set(false);
+    host.viewportAt.set('md');
+    fixture.detectChanges();
+    (el().querySelectorAll('tbody tr.row')[0] as HTMLElement).click();
+    expect(host.activated.map((row) => row.ticker)).toEqual(['AAPL']);
+  });
+});
+
+describe('DataTable header cells are the column-reorder handle (v179 layout audit)', () => {
+  // A header is focusable and draggable (arrow keys / mouse drag reorder the columns; there is no touch
+  // drag), so on a touch width it is a control: as tall as one and never narrower than the hit minimum.
+  it('gives a header cell the control height and the hit minimum, so the handle is 44px on touch', () => {
+    expect(tableRule('thead th')).toContain('height: var(--control-h)');
+    expect(DATA_TABLE_SOURCE).toMatch(/thead th:not\(\.expander-cell\)\s*\{[^}]*min-width:\s*var\(--hit-min\)/);
   });
 });

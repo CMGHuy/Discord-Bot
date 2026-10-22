@@ -1,6 +1,6 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Provider, provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, convertToParamMap, provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
@@ -10,6 +10,7 @@ import { LedgerRow, ResearchLedger, StrategyRow } from '../../api/models';
 import { ResearchStore, filtersFromParams } from '../../stores/research.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { DISCLAIMER, Research, VERDICT_TONE } from './research';
+import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 
 /* The page is a renderer over ResearchStore, so these tests look at what a
  * reader sees: which rows, how a missing figure and a missing record read,
@@ -44,6 +45,7 @@ const REGISTRY = [strategy({}), strategy({ strategy: 'EMA', status: 'WEAK', run_
 function create(
   ledger: ResearchLedger = LEDGER,
   registry: StrategyRow[] = REGISTRY,
+  extra: Provider[] = [],
 ): { fixture: ComponentFixture<Research>; store: InstanceType<typeof ResearchStore>; router: Router } {
   // The row drawer is a real <dialog>; jsdom has no showModal()/close().
   installDialogPolyfill();
@@ -54,7 +56,7 @@ function create(
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
-      ResearchStore,
+      ResearchStore, ...extra,
     ],
   });
   const fixture = TestBed.createComponent(Research);
@@ -157,5 +159,48 @@ describe('VERDICT_TONE', () => {
     expect(VERDICT_TONE['INCONCLUSIVE']).toBe('neutral');
     expect(VERDICT_TONE['PASS']).toBe('good');          // the existing entries are untouched
     expect(VERDICT_TONE['SCREEN-UNDERPOWERED']).toBe('warn');
+  });
+});
+
+describe('Research on a phone (v179 §3.1, §6b.2)', () => {
+  it('keeps the badge tier on line 1 and evidence freshness on the registry row (badge floor)', () => {
+    const { fixture } = create(LEDGER, REGISTRY, [phoneViewport()]);
+    const rows = tables(fixture)[0].querySelectorAll('li.compact-row');
+    const weakTier = rows[1].querySelector('.line1 > [data-col="status"]')!.textContent!;
+    expect(weakTier).toContain('WEAK');
+    expect(weakTier).toContain('2026-07-15');
+    expect(rows[0].querySelector('.line2 > [data-col="evidence_decay"]')!.textContent).toContain('fresh');
+  });
+
+  it('reaches every registry column through its own row drawer, with no detail link', () => {
+    const { fixture } = create(LEDGER, REGISTRY, [phoneViewport()]);
+    const registry = tables(fixture)[0];
+    openRowDrawer(registry);
+    fixture.detectChanges();
+    expect([...compactKeys(registry), ...drawerKeys(registry)].sort())
+      .toEqual(['evidence_decay', 'expectancy_r', 'live_n', 'n', 'status', 'strategy']);
+    expect(registry.querySelector('a.drawer-detail-link')).toBeNull();
+  });
+
+  it('sends a ledger tap to its own store drawer only -- one tap, one drawer (§6a.4)', () => {
+    const { fixture, store } = create(LEDGER, REGISTRY, [phoneViewport()]);
+    const ledger = tables(fixture)[1];
+    openRowDrawer(ledger);
+    fixture.detectChanges();
+    const selected = store.selected()!;
+    expect(selected).not.toBeNull();
+    expect(ledger.querySelector('sb-drawer.row-drawer')).toBeNull();
+
+    // Reachability (§7.5): the compact row, plus the store drawer's labels,
+    // plus its heading (the id).
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('sb-drawer:not(.row-drawer) h2')!.textContent!.trim()).toBe(selected.id);
+    const labels = [...page.querySelectorAll('dl.detail dt')].map((dt) => dt.textContent!.trim());
+    const HEADERS: Record<string, string> = {
+      date: 'Date', hypothesis: 'Hypothesis', instrument: 'Instrument', n: 'N', exp_r: 'ExpR', p: 'p', q: 'q', verdict: 'Verdict',
+    };
+    const reached = new Set([...compactKeys(ledger), 'id']);
+    for (const [key, label] of Object.entries(HEADERS)) if (labels.includes(label)) reached.add(key);
+    expect([...reached].sort()).toEqual(['date', 'exp_r', 'hypothesis', 'id', 'instrument', 'n', 'p', 'q', 'verdict']);
   });
 });

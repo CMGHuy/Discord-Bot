@@ -92,6 +92,7 @@ const fixed = (value: number | null, digits: number): string | null =>
             [rowKey]="strategyKey"
             clientPaging="research-registry"
             [fillPage]="false"
+            phoneTap="drawer"
           />
         </sb-async>
       </sb-panel>
@@ -126,6 +127,7 @@ const fixed = (value: number | null, digits: number): string | null =>
           [emptyState]="noMatch"
           (sortChange)="store.setSort($event)"
           (pageChange)="store.setPage($event)"
+          phoneTap="emit"
           (rowActivate)="store.select($event.id)"
         />
         <p class="caption">
@@ -215,26 +217,31 @@ export class Research {
   private readonly hypothesisCell = viewChild.required<TemplateRef<RowContext<LedgerRow>>>('hypothesisCell');
 
   protected readonly registryVisible = ['strategy', 'status', 'n', 'expectancy_r', 'live_n', 'evidence_decay'];
+  /** v179 §3.1 badge floor: on a phone the tier (with its run date and
+   *  window) stays on line 1 and evidence freshness on line 2, so a WEAK or
+   *  decayed strategy never reads like a validated one. */
   protected readonly registryColumns = computed<ColumnDef<StrategyRow>[]>(() => [
-    { key: 'strategy', header: 'Strategy', value: (row) => row.strategy },
-    { key: 'status', header: 'Badge tier', cell: this.tierCell() },
-    { key: 'n', header: 'OOS N', numeric: true, value: (row) => row.n },
-    { key: 'expectancy_r', header: 'OOS ExpR', numeric: true, value: (row) => fixed(row.expectancy_r, 2) },
+    { key: 'strategy', header: 'Strategy', value: (row) => row.strategy, compact: { line: 1, order: 1 } },
+    { key: 'status', header: 'Badge tier', cell: this.tierCell(), compact: { line: 1, order: 2 } },
+    { key: 'n', header: 'OOS N', numeric: true, value: (row) => row.n, compact: { line: 2, order: 2 } },
+    { key: 'expectancy_r', header: 'OOS ExpR', numeric: true, value: (row) => fixed(row.expectancy_r, 2), compact: { line: 2, order: 1 } },
     { key: 'live_n', header: 'Live N', numeric: true, value: (row) => row.live_n },
-    { key: 'evidence_decay', header: 'Evidence', value: (row) => row.evidence_decay },
+    { key: 'evidence_decay', header: 'Evidence', value: (row) => row.evidence_decay, compact: { line: 2, order: 3 } },
   ]);
 
   protected readonly ledgerVisible = ['date', 'id', 'hypothesis', 'instrument', 'n', 'exp_r', 'p', 'q', 'verdict'];
+  /** v179 §6a.4: on a phone a ledger row emits only (`phoneTap="emit"`) and
+   *  opens the store drawer below, which lists every field. */
   protected readonly ledgerColumns = computed<ColumnDef<LedgerRow>[]>(() => [
-    { key: 'date', header: 'Date', sortable: true, value: (row) => row.date },
-    { key: 'id', header: 'Id', sortable: true, value: (row) => row.id },
+    { key: 'date', header: 'Date', sortable: true, value: (row) => row.date, compact: { line: 2, order: 1 } },
+    { key: 'id', header: 'Id', sortable: true, value: (row) => row.id, compact: { line: 1, order: 1 } },
     { key: 'hypothesis', header: 'Hypothesis', cell: this.hypothesisCell(), inlineFrom: 'md' },
     { key: 'instrument', header: 'Instrument', sortable: true, value: (row) => row.instrument, inlineFrom: 'md' },
-    { key: 'n', header: 'N', numeric: true, sortable: true, value: (row) => row.n },
-    { key: 'exp_r', header: 'ExpR', numeric: true, sortable: true, value: (row) => fixed(row.exp_r, 3) },
+    { key: 'n', header: 'N', numeric: true, sortable: true, value: (row) => row.n, compact: { line: 2, order: 2 } },
+    { key: 'exp_r', header: 'ExpR', numeric: true, sortable: true, value: (row) => fixed(row.exp_r, 3), compact: { line: 2, order: 3 } },
     { key: 'p', header: 'p', numeric: true, sortable: true, value: (row) => fixed(row.p, 4), inlineFrom: 'md' },
     { key: 'q', header: 'q', numeric: true, sortable: true, value: (row) => fixed(row.q, 4), inlineFrom: 'md' },
-    { key: 'verdict', header: 'Verdict', sortable: true, cell: this.verdictCell() },
+    { key: 'verdict', header: 'Verdict', sortable: true, cell: this.verdictCell(), compact: { line: 1, order: 2 } },
   ]);
 
   protected readonly noMatch: EmptyState = {

@@ -11,14 +11,22 @@ import {
   signal,
 } from '@angular/core';
 
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationStart, Router, RouterLink } from '@angular/router';
+import { filter } from 'rxjs';
+
+import { Drawer } from '../layout';
 import { EmptyStateComponent } from '../empty-state';
 import { PaginationComponent } from '../pagination';
 import { Viewport, ViewportService } from '../breakpoints';
 import { isInline } from '../priority';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { readTablePerPage, writeTablePerPage } from '../table-prefs';
+import { compactLines, drawerColumns, hasCompact } from './compact';
 import {
   ColumnDef,
+  DetailLink,
+  PhoneTap,
   EmptyState,
   PageSpec,
   RowContext,
@@ -63,7 +71,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
 @Component({
   selector: 'sb-data-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent],
+  imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent, Drawer, RouterLink],
   template: `
     <div class="wrap" [class.phone]="phone()" [attr.aria-busy]="loading()">
       @if (showSpinner()) {
@@ -83,6 +91,37 @@ const PIN_KEYS = ['ticker', 'symbol'];
           </select>
         </label>
       }
+      @if (compact()) {
+        <!-- v179 §3.1: two lines per row, the whole row one button. Cells
+             render through #cellTemplate, the same template the drawer uses. -->
+        <ul class="compact-list">
+          @for (row of shownRows(); track rowKey()(row)) {
+            <li class="compact-row" [class]="rowClass()(row)">
+              <button type="button" class="compact-hit" [attr.aria-labelledby]="compactLabelledBy(row)" (click)="onCompactTap(row)">
+                @for (line of compactRow(); track line.name) {
+                  <span [class]="line.name" [id]="compactLineId(row, line.name)" inert>
+                    @for (col of line.columns; track col.key) {
+                      <span class="compact-cell" [class.num]="col.numeric" [attr.data-col]="col.key">
+                        <ng-container [ngTemplateOutlet]="cellTemplate" [ngTemplateOutletContext]="{ $implicit: col, row: row }" />
+                      </span>
+                    }
+                  </span>
+                }
+              </button>
+            </li>
+          }
+        </ul>
+        @if (compactFooter().length) {
+          <p class="compact-footer">
+            @for (col of compactFooter(); track col.key) {
+              <span class="compact-total" [attr.data-col]="col.key">
+                <span class="sb-label">{{ col.header }}</span>
+                <span class="num">{{ footerText(col) }}</span>
+              </span>
+            }
+          </p>
+        }
+      } @else {
       <div class="scroller" tabindex="0">
       <table>
         <thead>
@@ -108,7 +147,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
                 (keydown)="onHeaderKeydown(col.key, $event)"
               >
                 @if (col.sortable) {
-                  <button type="button" class="sort" (click)="toggleSort(col)">
+                  <button type="button" class="sort sb-hit" (click)="toggleSort(col)">
                     <span>{{ col.header }}</span>
                     <span class="arrow" aria-hidden="true">{{ arrow(col) }}</span>
                   </button>
@@ -190,6 +229,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
         }
       </table>
       </div>
+      }
 
       @if (showEmptyState(); as state) {
         <sb-empty-state [title]="state.title" [hint]="state.hint" />
@@ -200,11 +240,53 @@ const PIN_KEYS = ['ticker', 'symbol'];
       }
     </div>
 
+
+    <!-- v179 §3.1 / §6a.4: the generic row drawer -- every rendered column the
+         compact row does not show, through the same #cellTemplate, then the
+         call site's expansion, then the detail link. Component state only. -->
+    @if (phoneTap() === 'drawer' && (compact() || drawerRow() !== null)) {
+      <sb-drawer class="row-drawer" [open]="drawerRow() !== null && compact()" [heading]="drawerHeading()"
+                 (closed)="drawerRow.set(null)">
+        @if (drawerRow(); as row) {
+          <dl class="drawer-fields">
+            @for (col of drawerFields(); track col.key) {
+              <div class="drawer-field" [attr.data-col]="col.key">
+                <dt class="sb-label">{{ col.header || 'Actions' }}</dt>
+                <dd [class.num]="col.numeric">
+                  <ng-container [ngTemplateOutlet]="cellTemplate" [ngTemplateOutletContext]="{ $implicit: col, row: row }" />
+                </dd>
+              </div>
+            }
+          </dl>
+          @if (expansion(); as expansionTemplate) {
+            <div class="drawer-expansion">
+              <ng-container [ngTemplateOutlet]="expansionTemplate" [ngTemplateOutletContext]="{ $implicit: row }" />
+            </div>
+          }
+          @if (drawerLink(); as link) {
+            <a class="drawer-detail-link" [routerLink]="link.commands" (click)="drawerRow.set(null)">{{ link.label }}</a>
+          }
+        }
+      </sb-drawer>
+    }
+
     <ng-template #pagerTemplate let-page let-announce="announce">
       <sb-pagination [pagination]="page" [showPerPage]="activeShowPerPage()" [announce]="announce" [navOnly]="!announce"
         [perPageChoice]="perPageChoice()"
         (pageChange)="onPage($event)" (perPageChange)="onPerPage($event)" />
-    </ng-template>  `,
+    </ng-template>
+
+    <!-- One renderer per column (v179 §6a.2): the column's own cell template,
+         else its text with the em-dash rule. Compact rows and the row drawer
+         both render through this. -->
+    <ng-template #cellTemplate let-col let-row="row">
+      @if (col.cell; as cell) {
+        <ng-container [ngTemplateOutlet]="cell" [ngTemplateOutletContext]="{ $implicit: row }" />
+      } @else {
+        {{ text(col, row) }}
+      }
+    </ng-template>
+  `,
   styles: `
     th[draggable='true'] { cursor: grab; }
     th.dragging { opacity: 0.5; }
@@ -315,7 +397,10 @@ const PIN_KEYS = ['ticker', 'symbol'];
     .row:hover { background: var(--surface-raised); }
     tr.filler > td { background: var(--bg); border-bottom: 0; height: var(--row-h); }
     tfoot td { border-top: 1px solid var(--border-strong); border-bottom: 0; font-weight: 600; color: var(--text); }
-    thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+    thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); height: var(--control-h); }
+    /* A header is focusable and draggable (the column-reorder handle), so it
+       is a touch target: 44px tall via --control-h, never narrower than --hit-min. */
+    thead th:not(.expander-cell) { min-width: var(--hit-min); }
 
     /* A pulse, not a hard on/off flash: WCAG's flash-rate guidance exists
        for a reason, and an opacity/background fade reads as "attention"
@@ -375,9 +460,81 @@ const PIN_KEYS = ['ticker', 'symbol'];
       thead th.pin { z-index: 3; }
       .row:hover .pin { background: var(--surface-raised); }
     }
+
+
+    /* v179 §3.1 -- compact rows. Inert lines suppress caller-owned controls
+       for pointer and keyboard input across Angular style scopes. The row's
+       aria-labelledby explicitly names it from those lines; the same cell
+       remains interactive when rendered in the drawer. */
+    .compact-list { margin: 0; padding: 0; list-style: none; }
+    .compact-row { border-bottom: 1px solid var(--border); }
+
+    /* The row drawer: label/value pairs on one baseline per pair. */
+    .drawer-fields {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: baseline;
+      gap: var(--space-6) var(--space-14);
+      margin: 0;
+    }
+    .drawer-field { display: contents; }
+    .drawer-field dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+    .drawer-field dd.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+    .drawer-expansion { margin-top: var(--space-14); }
+    .drawer-detail-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--control-h);
+      margin-top: var(--space-14);
+      color: var(--accent);
+    }
+
+    .compact-hit {
+      display: grid;
+      gap: var(--space-4);
+      width: 100%;
+      min-height: max(var(--row-h), var(--hit-min));
+      padding: var(--space-8) var(--space-10);
+      background: none;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      font-size: var(--text-table);
+      text-align: left;
+      cursor: pointer;
+    }
+    .compact-hit:hover { background: var(--surface-raised); }
+    .compact-hit:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+    /* Mixed sizes on one line sit on one baseline (§3.4), never centred. */
+    .line1, .line2 {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-4) var(--space-10);
+      min-width: 0;
+    }
+    .line2 { color: var(--text-secondary); font-size: var(--text-chip); }
+    .compact-cell { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    /* The first figure on a line goes to the right edge, the rest follow it:
+       identity reads left, the number a trader checks reads right. */
+    .compact-cell.num { margin-left: auto; font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+    .compact-cell.num ~ .compact-cell.num { margin-left: 0; }
+    .compact-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-4) var(--space-14);
+      margin: 0;
+      padding: var(--space-8) var(--space-10);
+      border-top: 1px solid var(--border-strong);
+    }
+    .compact-total { display: inline-flex; align-items: baseline; gap: var(--space-6); }
+    .compact-total .num { font-family: var(--font-num); font-weight: 600; color: var(--text); }
   `,
 })
 export class DataTable<T> {
+  private static nextCompactId = 0;
+  private readonly compactId = `sb-compact-${DataTable.nextCompactId++}`;
   readonly rows = input.required<T[]>();
   /** The full set, in the order they are meant to render. */
   readonly columns = input.required<ColumnDef<T>[]>();
@@ -454,6 +611,7 @@ export class DataTable<T> {
     return rows.slice(start, start + page.perPage);
   });
   protected onPage(page: number): void {
+    this.drawerRow.set(null);
     if (this.clientPaging() === null) this.pageChange.emit(page);
     else this.requestedPage.set(page);
   }
@@ -496,6 +654,13 @@ export class DataTable<T> {
       const timer = setTimeout(() => this.showSpinner.set(true), SPINNER_DELAY_MS);
       onCleanup(() => clearTimeout(timer));
     });
+
+    // v179 §6a.5: a navigation closes the row drawer. Router is providedIn
+    // root, so this needs no provideRouter in a test that never navigates.
+    inject(Router).events
+      .pipe(filter((event) => event instanceof NavigationStart), takeUntilDestroyed())
+      .subscribe(() => this.drawerRow.set(null));
+
   }
 
   /** Expanded rows, by `rowKey`. Keyed rather than indexed so a refetch that
@@ -517,13 +682,20 @@ export class DataTable<T> {
   });
 
   /**
-   * Phone mode below `sm` — v80 D4.
+   * Phone mode below `sm` — v80 D4, narrowed by v179 §3.1.
    *
-   * NOT cards: v80 replaced card mode with a pinned identity column and a
-   * sort select, and removed `.card`/`.card-value` with it. The test
-   * `'keeps the table below the breakpoint -- no cards'` is that decision's
-   * record; v95 builds on it rather than reversing it (spec v95 §4.1, and
-   * §13 for the comparison that could revisit it).
+   * A table that declares a compact slot on any rendered column
+   * (`ColumnDef.compact`) renders COMPACT ROWS below `sm`: two lines per
+   * row, no header row, the phone sort select and the pager kept, column
+   * footers as one totals line, and a tap that opens the row drawer or only
+   * emits (`phoneTap`). This reverses v80's "NOT cards" on purpose (spec
+   * v179 §6b.9): measured at 390px, the pinned-column table showed two
+   * columns and hid the rest behind a thin scrollbar.
+   *
+   * A table that declares nothing keeps v80's pinned identity column and
+   * sort select. The test 'keeps the table below the breakpoint for a table
+   * that declares no compact row' is that path's record, so nothing
+   * regresses before a table is migrated.
    *
    * Driven by the viewport rather than by an input, so no call site has to
    * remember to ask for it. `cardsAt` keeps its name and type for the same
@@ -535,6 +707,73 @@ export class DataTable<T> {
   protected readonly phone = computed(
     () => this.cardsAt() ?? this.viewportService.isPhone(),
   );
+
+  /** v179 §3.1: phone, and something rendered declares a slot. Reads
+   *  `visible`, so hiding every compact column brings the scroller back. */
+  protected readonly compact = computed(
+    () => this.phone() && hasCompact(this.columns(), this.visible()),
+  );
+
+  /** The compact row's non-empty lines, named for their CSS class. */
+  protected readonly compactRow = computed(() => {
+    const { line1, line2 } = compactLines(this.columns(), this.visible());
+    return [
+      { name: 'line1', columns: line1 },
+      { name: 'line2', columns: line2 },
+    ].filter((line) => line.columns.length > 0);
+  });
+
+  /** Footers in compact mode: every rendered column that has one -- there
+   *  is no inline set to restrict them to. */
+  protected readonly compactFooter = computed(() =>
+    this.rows().length > 0 ? this.renderedColumns().filter((column) => column.footer) : [],
+  );
+
+
+  /**
+   * What a phone compact-row tap does -- v179 §6a.4. `'drawer'` opens this
+   * table's own row drawer; `'emit'` only emits `rowActivate`, for a page
+   * that already owns a drawer for its rows (Research ledger, Dashboard
+   * positions). Never both: one tap never opens two drawers. Tablet and
+   * desktop rows are unaffected and emit `rowActivate` as before.
+   */
+  readonly phoneTap = input<PhoneTap>('drawer');
+  /** The drawer's "Open full …" link, or null for a table with no detail
+   *  page (Risk, Research registry). */
+  readonly detailLink = input<((row: T) => DetailLink | null) | null>(null);
+
+  /** The row the drawer shows. Component state, never the URL (§6a.5). */
+  protected readonly drawerRow = signal<T | null>(null);
+  protected readonly drawerFields = computed(() => drawerColumns(this.columns(), this.visible()));
+  protected readonly drawerHeading = computed(() => {
+    const row = this.drawerRow();
+    return row === null ? '' : this.rowLabel(row);
+  });
+  protected readonly drawerLink = computed(() => {
+    const row = this.drawerRow();
+    const link = this.detailLink();
+    return row === null || link === null ? null : link(row);
+  });
+
+  /** Explicit references keep inert rich cell content in the button's name. */
+  protected compactLabelledBy(row: T): string {
+    return this.compactRow().map((line) => this.compactLineId(row, line.name)).join(' ');
+  }
+
+  protected compactLineId(row: T, line: string): string {
+    return `${this.compactId}-${encodeURIComponent(this.rowKey()(row))}-${line}`;
+  }
+
+  /** A compact-row tap: the drawer, or only the event (`phoneTap`). */
+  protected onCompactTap(row: T): void {
+    if (this.phoneTap() === 'emit') {
+      this.rowActivate.emit(row);
+      return;
+    }
+    this.drawerRow.set(row);
+  }
+
+
 
   /** One pager below md — v95 C4. Two pagers cost ~250px on a phone, more
    *  than the five rows between them; the footer one (which also carries
@@ -578,11 +817,14 @@ export class DataTable<T> {
   });
 
   /* Reads the inline set, so the phone sort select never offers a column the
-   * grid is not drawing. */
-  protected readonly sortOptions = computed(() => this.inlineColumns().filter((column) => column.sortable).flatMap((column) => [
-    { value: `${column.key}:asc`, label: `${column.header} ↑` },
-    { value: `${column.key}:desc`, label: `${column.header} ↓` },
-  ]));
+   * grid is not drawing -- and, in compact mode (v179 §6a.7), every rendered
+   * column, because there is no grid and the select is the only sort control. */
+  protected readonly sortOptions = computed(() => (this.compact() ? this.renderedColumns() : this.inlineColumns())
+    .filter((column) => column.sortable)
+    .flatMap((column) => [
+      { value: `${column.key}:asc`, label: `${column.header} ↑` },
+      { value: `${column.key}:desc`, label: `${column.header} ↓` },
+    ]));
   protected readonly sortValue = computed(() => {
     const sort = this.sort(); return sort ? `${sort.key}:${sort.direction}` : '';
   });

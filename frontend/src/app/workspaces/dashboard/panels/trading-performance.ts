@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { DashboardScope } from '../../../api/models';
-import { Button } from '../../../ui/button';
-import { ControlRow, Panel } from '../../../ui/layout';
+import { Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
 import { PortfolioValue } from './portfolio-value';
 import { amount, pct } from '../../../ui/format';
+import { SegmentOption, Segmented } from '../../../ui/segmented';
 
 /** `DashboardScope` also has a third value, 'active', that this toggle never
  *  sets and never renders as pressed -- reusing the store's real type rather
@@ -30,21 +30,13 @@ export type DashboardScopeMode = DashboardScope;
 @Component({
   selector: 'sb-trading-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue],
+  imports: [Panel, MetricCard, Segmented, PortfolioValue],
   template: `
     <sb-panel heading="Trading performance">
-      <sb-control-row panel-actions role="group" aria-label="Date scope">
-        @for (option of scopes; track option.mode) {
-          <button
-            sb-button
-            type="button"
-            [attr.data-scope]="option.mode"
-            [variant]="scope() === option.mode ? 'secondary' : 'ghost'"
-            [attr.aria-pressed]="scope() === option.mode"
-            (click)="scopeChange.emit(option.mode)"
-          >{{ option.label }}</button>
-        }
-      </sb-control-row>
+      <!-- v179 §3.3: one segmented control on the header line, in place of a
+           bordered and a borderless button that stacked on a phone. -->
+      <sb-segmented panel-actions label="Date scope" [options]="scopeOptions"
+                    [value]="scope()" (valueChange)="pickScope($event)" />
 
       <div class="combined">
         <sb-portfolio-value
@@ -164,10 +156,16 @@ export class TradingPerformance {
   readonly scope = input<DashboardScopeMode>('today');
   readonly scopeChange = output<DashboardScopeMode>();
 
-  protected readonly scopes: { mode: DashboardScopeMode; label: string }[] = [
-    { mode: 'today', label: 'Today' },
-    { mode: 'all', label: 'All days' },
+  /** The two scopes this toggle sets. `active` is never offered, so it
+   *  presses no segment (see DashboardScopeMode above). */
+  protected readonly scopeOptions: SegmentOption[] = [
+    { value: 'today', label: 'Today' },
+    { value: 'all', label: 'All days' },
   ];
+
+  protected pickScope(value: string): void {
+    this.scopeChange.emit(value as DashboardScopeMode);
+  }
 
   protected readonly currencyUnit = computed(() => ` ${this.currency()}`);
   protected fmtAmount = (value: number | null) => amount(value, this.currency());

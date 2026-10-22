@@ -20,9 +20,9 @@
            an inline path, not images/logo.png (finding 16): the raster mark
            cannot take the accent colour, does not read at 24px on --bg, and
            has no collapsed-rail form. -->
-      <a class="brand" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
+      <a class="brand sb-hit" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
         <sb-icon name="brand" />
-        @if (!railed()) {
+        @if (!railed() || overlay()) {
           <span class="word"><span>Bomeo</span><span>Capital</span></span>
         }
       </a>
@@ -34,6 +34,7 @@
         @for (entry of group.entries; track entry.path) {
           <li>
             <a
+              class="sb-hit"
               [routerLink]="entry.path"
               routerLinkActive="active"
               [routerLinkActiveOptions]="{ exact: false }"

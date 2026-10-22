@@ -335,6 +335,15 @@ describe('shell navigation', () => {
   });
 });
 
+describe('shell wordmark on a phone', () => {
+  it('shows the wordmark in the phone overlay, which is railed by width but is not a rail', () => {
+    // jsdom has no layout: the template rule is what carries it. The overlay
+    // is a full sheet, so only the desktop/tablet rail drops the words.
+    const html = readFileSync(join(process.cwd(), 'src/app/shell/shell.html'), 'utf8');
+    expect(html).toMatch(/@if \(!railed\(\) \|\| overlay\(\)\) \{\s*<span class="word">/);
+  });
+});
+
 describe('shell.css breakpoints', () => {
   const css = readFileSync(join(process.cwd(), 'src/app/shell/shell.css'), 'utf8');
 
@@ -476,5 +485,26 @@ describe('ambient live cues (v168 §3 #10)', () => {
     const css = read('src/app/shell/scan-progress.css');
     expect(css).toMatch(/\.fill\.sweeping\s*\{[^}]*background:\s*linear-gradient\(90deg, transparent, var\(--accent\)\);/s);
     expect(css).toMatch(/\.fill\.sweeping\s*\{[^}]*animation:\s*sb-scan-sweep 1\.4s ease-in-out infinite;/s);
+  });
+});
+
+describe('shell topbar on one baseline (v179 layout audit)', () => {
+  const css = readFileSync(join(process.cwd(), 'src/app/shell/shell.css'), 'utf8');
+  const rule = (selector: string) => css.match(
+    new RegExp(`^${selector.replaceAll('.', '\\.')} \\{[^}]*\\}`, 'm'),
+  )?.[0] ?? '';
+
+  it('sets the 20px title, the 11px tape and the 11px status text on the text baseline', () => {
+    expect(rule('.topbar')).toMatch(/align-items:\s*baseline/);
+  });
+
+  it('seats the wordmark on the title baseline: the sidebar starts 6px higher than the bar padding alone would put it', () => {
+    // "Bomeo" (16px) in the sidebar and the 20px page title sit side by side;
+    // a 20px sidebar top padding left the wordmark's baseline 6px low.
+    expect(rule('.sidebar')).toMatch(/padding:\s*var\(--space-14\) var\(--space-14\) var\(--space-20\);/);
+  });
+
+  it('keeps the textless profile avatar centred on the bar rather than hanging off the baseline', () => {
+    expect(rule('.topbar sb-profile-menu')).toContain('align-self: center');
   });
 });

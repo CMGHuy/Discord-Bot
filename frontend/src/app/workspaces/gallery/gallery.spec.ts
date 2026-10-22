@@ -7,6 +7,8 @@ import { ConnectionStore } from '../../stores/connection.store';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { compactKeys, drawerKeys, openRowDrawer } from '../../ui/data-table/testing/reachability';
 import { Gallery } from './gallery';
 
 // The gallery renders a real sb-trade-chart, and lightweight-charts asks for
@@ -129,6 +131,23 @@ describe('the gallery is the v80 D6 reference', () => {
     }
   });
 
+  it('scrolls the numerics table in its own box and keeps the plain and reasoned empty states in separate grids (v179 layout audit)', () => {
+    // 6 columns plus sb-magnitude are wider than a 356px panel at 390: the table scrolls inside its panel.
+    expect(GALLERY).toMatch(/<div class="numerics-scroll">\s*<table class="numerics-demo">/);
+    expect(GALLERY).toMatch(/\.numerics-scroll \{[^}]*overflow-x: auto/);
+    // Cards side by side start on one baseline only when they share a structure: a card that opens with the
+    // 11px reason tag beside one that opens with the 14px title put two first lines 4px apart.
+    const grids = [...GALLERY.matchAll(/<sb-panel-grid track="narrow"[^>]*>((?:(?!<\/sb-panel-grid>)[\s\S])*?<sb-empty-state[\s\S]*?)<\/sb-panel-grid>/g)]
+      .map((m) => m[1]).filter((body) => !body.includes('sb-panel '));
+    const emptyGrids = grids.filter((body) => (body.match(/<sb-empty-state/g) ?? []).length > 0);
+    expect(emptyGrids.length).toBeGreaterThanOrEqual(2);
+    for (const body of emptyGrids) {
+      const states = body.match(/<sb-empty-state[^>]*>/g)!;
+      const reasoned = states.filter((tag) => tag.includes('reason='));
+      expect(reasoned.length === 0 || reasoned.length === states.length).toBe(true);
+    }
+  });
+
   it('shows both empty-state reasons', () => {
     expect(GALLERY).toContain('reason="measured-zero"');
     expect(GALLERY).toContain('reason="no-data-yet"');
@@ -158,5 +177,29 @@ describe('the gallery covers the v95 content-priority primitives', () => {
     fixture.detectChanges();
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector(selector)).not.toBeNull();
+  });
+});
+
+describe('the gallery shows the one stat tile (v179 §3.3)', () => {
+  it('lays the tiles in an auto-fit grid and shows the full stack once', () => {
+    expect(GALLERY).toMatch(/\.stat-grid \{[^}]*repeat\(auto-fit, minmax\(10rem, 1fr\)\)/);
+    const from = GALLERY.slice(GALLERY.indexOf('<div class="stat-grid">'));
+    const block = from.slice(0, from.indexOf('</div>'));
+    expect(block.match(/<sb-stat-tile/g)).toHaveLength(4);
+    expect(block).toMatch(/secondary="[^"]+"[^>]*hint="[^"]+"/);
+  });
+});
+
+describe('the gallery shows compact rows (v179 §3.1)', () => {
+  it('renders a compact-row table whose tap opens the row drawer', () => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    const table = (fixture.nativeElement as HTMLElement).querySelector('.compact-demo sb-data-table') as HTMLElement;
+    expect(table.querySelectorAll('li.compact-row')).toHaveLength(2);
+    openRowDrawer(table);
+    fixture.detectChanges();
+    expect([...compactKeys(table), ...drawerKeys(table)].sort()).toEqual(['note', 'outcome', 'pnl', 'ticker']);
   });
 });
