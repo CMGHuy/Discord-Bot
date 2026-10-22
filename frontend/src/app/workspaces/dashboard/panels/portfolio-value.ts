@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { amount, pct } from '../../../ui/format';
+import { signTone } from './equity-range.model';
 import { EquityCandles } from './equity-candles';
 
 /**
@@ -27,7 +28,7 @@ import { EquityCandles } from './equity-candles';
     }
 
     @if (changePct() !== null) {
-      <p class="change" [class.pos]="changePct()! > 0" [class.neg]="changePct()! < 0">
+      <p class="change" [class.pos]="changeTone() === 'pos'" [class.neg]="changeTone() === 'neg'">
         {{ fmtPct(changePct()) }} today
       </p>
     }
@@ -66,5 +67,6 @@ export class PortfolioValue {
   readonly currency = input('€');
 
   protected readonly money = computed(() => amount(this.balance(), this.currency()));
+  protected readonly changeTone = computed(() => signTone(this.changePct()));
   protected fmtPct = pct;
 }

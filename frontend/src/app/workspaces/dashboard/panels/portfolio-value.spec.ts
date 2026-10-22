@@ -35,6 +35,11 @@ describe('portfolio value panel', () => {
     return f.nativeElement as HTMLElement;
   }
 
+  it('leaves a flat day uncoloured', () => {
+    const change = render({ balance: 1, changePct: 0, currency: '€' }).querySelector('.change')!;
+    expect(change.classList.contains('pos') || change.classList.contains('neg')).toBe(false);
+  });
+
   it('shows the balance as the hero figure with its currency', () => {
     const el = render({ balance: 997480.01, changePct: 0.36, currency: '€' });
     expect(el.querySelector('.figure')?.textContent).toContain('997,480.01');

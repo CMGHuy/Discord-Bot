@@ -3,6 +3,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { DashboardScope } from '../../../api/models';
 import { Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
+import { ACCOUNT_LABEL } from './equity-candles.model';
+import { breakevenPairTone, riskTone as riskToneOf, signTone } from './equity-range.model';
 import { PortfolioValue } from './portfolio-value';
 import { amount, pct } from '../../../ui/format';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
@@ -48,15 +50,15 @@ export type DashboardScopeMode = DashboardScope;
         />
 
         <div class="grid">
-          <sb-metric-card label="Open P&L" [value]="openPnlPct()" tone="pnl" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
-          <sb-metric-card label="Win rate" [value]="winRate()" unit="%" [decimals]="1" [sub]="sample(winRateN())" />
-          <sb-metric-card label="Expectancy" [value]="expectancyR()" tone="pnl" unit="R" [sub]="sample(expectancyN())" />
-          <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" />
-          <sb-metric-card [label]="realizedLabel()" [value]="realizedAmount()"
-                          tone="pnl" [unit]="currencyUnit()" [sub]="noCloseHint(realizedAmount())" />
+          <sb-metric-card label="Open P&L" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
+          <sb-metric-card label="Win rate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" />
+          <sb-metric-card label="Expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" />
+          <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [tint]="payoffTone()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" />
+          <sb-metric-card [label]="realizedLabel()" [value]="realizedAmount()" [tint]="realizedTone()"
+                          [unit]="currencyUnit()" [sub]="noCloseHint(realizedAmount())" />
           <sb-metric-card label="Open trades" [value]="openTrades()" [decimals]="0" />
           <sb-metric-card label="Avg confidence" [value]="avgConfidence()" [decimals]="1" />
-          <sb-metric-card label="Risk used" [value]="riskUsedPct()" unit="%" [sub]="riskSub()" />
+          <sb-metric-card label="Risk used" [value]="riskUsedPct()" [tint]="riskTone()" unit="%" [sub]="riskSub()" />
         </div>
       </div>
 
@@ -67,14 +69,15 @@ export type DashboardScopeMode = DashboardScope;
            purpose, so the summary reads complete on its own. -->
       <div class="mobile-summary" aria-label="Portfolio summary">
         <div><span>Portfolio</span><strong>{{ fmtAmount(balance()) }}</strong></div>
-        <div><span>Today</span><strong [class.pos]="(changePct() ?? 0) > 0" [class.neg]="(changePct() ?? 0) < 0">{{ fmtPct(changePct()) }}</strong></div>
+        <div [attr.data-tone]="tinted(changeTone())"><span>Today</span><strong>{{ fmtPct(changePct()) }}</strong></div>
         <div><span>Open</span><strong>{{ openTrades() }}</strong></div>
-        <div><span>Risk</span><strong>{{ fmtPct(riskUsedPct()) }}</strong></div>
-        <div><span>Win rate</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
-        <div><span>Expectancy</span><strong [class.pos]="(expectancyR() ?? 0) > 0" [class.neg]="(expectancyR() ?? 0) < 0">{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
-        <div><span>Payoff</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
-        <div><span>{{ realizedLabel() }}</span><strong [class.pos]="(realizedAmount() ?? 0) > 0" [class.neg]="(realizedAmount() ?? 0) < 0">{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
+        <div [attr.data-tone]="tinted(riskTone())"><span>Risk</span><strong>{{ fmtPct(riskUsedPct()) }}</strong></div>
+        <div [attr.data-tone]="tinted(winPairTone())"><span>Win rate</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
+        <div [attr.data-tone]="tinted(expectancyTone())"><span>Expectancy</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
+        <div [attr.data-tone]="tinted(payoffTone())"><span>Payoff</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
+        <div [attr.data-tone]="tinted(realizedTone())"><span>{{ realizedLabel() }}</span><strong>{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
       </div>
+      <p class="account">{{ accountLabel }}</p>
     </sb-panel>
   `,
   styles: `
@@ -91,6 +94,8 @@ export type DashboardScopeMode = DashboardScope;
     }
     .portfolio { min-width: 0; width: 100%; }
     .mobile-summary { display: none; }
+    /* v181 §4: every figure here is simulated, before costs and tax. */
+    .account { margin: var(--space-10) 0 0; font-size: var(--text-chip); color: var(--text-muted); }
     /* A fixed 4 columns, not auto-fit: eight cards read as two even rows of
        four, never an uneven 5+3 or 6+2 split that auto-fit would produce at
        an in-between width. minmax with two lengths (not a bare 1fr) keeps
@@ -123,11 +128,14 @@ export type DashboardScopeMode = DashboardScope;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--space-8);
       }
-      .mobile-summary div { display: flex; justify-content: space-between; gap: var(--space-8); padding: var(--space-6) 0; border-bottom: 1px solid var(--border); font-size: var(--text-table); }
+      .mobile-summary div { display: flex; justify-content: space-between; gap: var(--space-8); padding: var(--space-6); border-bottom: 1px solid var(--border); font-size: var(--text-table); }
       .mobile-summary span { color: var(--text-secondary); }
       .mobile-summary strong { font-family: var(--font-mono); }
-      .mobile-summary .pos { color: var(--pos); }
-      .mobile-summary .neg { color: var(--neg); }
+      .mobile-summary [data-tone='pos'] { background: var(--pos-soft); }
+      .mobile-summary [data-tone='neg'] { background: var(--neg-soft); }
+      .mobile-summary [data-tone='pos'] strong { color: var(--pos); }
+      .mobile-summary [data-tone='neg'] strong { color: var(--neg); }
+      .mobile-summary [data-tone='warn'] strong { color: var(--warn); }
     }
   `,
 })
@@ -187,4 +195,19 @@ export class TradingPerformance {
     const cap = this.riskCapPct();
     return cap === null ? null : `of ${cap.toFixed(1)}% cap`;
   });
+  protected readonly accountLabel = ACCOUNT_LABEL;
+  protected readonly changeTone = computed(() => signTone(this.changePct()));
+  protected readonly openPnlTone = computed(() => signTone(this.openPnlPct()));
+  protected readonly expectancyTone = computed(() => signTone(this.expectancyR()));
+  protected readonly realizedTone = computed(() => signTone(this.realizedAmount()));
+  /** v181 §5: win rate and payoff are judged as a pair against break-even
+   *  (100 / (1 + payoff)), never alone; neutral under 5 closes in scope. */
+  protected readonly winPairTone = computed(() =>
+    breakevenPairTone(this.winRate(), this.payoffRatio(), this.winRateN()));
+  protected readonly payoffTone = computed(() => this.winPairTone());
+  protected readonly riskTone = computed(() => riskToneOf(this.riskUsedPct(), this.riskCapPct()));
+  /** A summary row carries a tone attribute only when it is judged. */
+  protected tinted(tone: string): string | null {
+    return tone === 'neutral' ? null : tone;
+  }
 }

@@ -8,6 +8,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
+import { ACCOUNT_LABEL } from './equity-candles.model';
 import { TradingPerformance } from './trading-performance';
 
 installMatchMediaPolyfill();
@@ -28,6 +29,81 @@ describe('trading performance panel', () => {
     f.detectChanges();
     return f.nativeElement as HTMLElement;
   }
+
+  function card(el: HTMLElement, label: string): HTMLElement {
+    return [...el.querySelectorAll<HTMLElement>('sb-metric-card')]
+      .find((c) => c.querySelector('.label')?.textContent?.trim() === label)!;
+  }
+
+  function tint(c: HTMLElement): 'pos' | 'neg' | null {
+    if (c.classList.contains('tint-pos')) return 'pos';
+    return c.classList.contains('tint-neg') ? 'neg' : null;
+  }
+
+  function row(el: HTMLElement, label: string): HTMLElement {
+    return [...el.querySelectorAll<HTMLElement>('.mobile-summary > div')]
+      .find((d) => d.querySelector('span')?.textContent?.trim() === label)!;
+  }
+
+  it('judges win rate and payoff together against break-even', () => {
+    // payoff 1.0 -> break-even 50%; the band is +/-0.5 pp.
+    const pair = (winRate: number, winRateN = 12) => {
+      const el = render({ winRate, winRateN, payoffRatio: 1, currency: '€', scope: 'today' });
+      return [tint(card(el, 'Win rate')), tint(card(el, 'Payoff ratio'))];
+    };
+    expect(pair(60)).toEqual(['pos', 'pos']);
+    expect(pair(40)).toEqual(['neg', 'neg']);
+    expect(pair(50.3)).toEqual([null, null]);
+    expect(pair(60, 4)).toEqual([null, null]);
+  });
+
+  it('tints open P&L, expectancy and realised by sign, and never a dash', () => {
+    const el = render({ openPnlPct: 1.2, expectancyR: -0.16, realizedAmount: null,
+                        currency: '€', scope: 'today' });
+    expect(tint(card(el, 'Open P&L'))).toBe('pos');
+    expect(tint(card(el, 'Expectancy'))).toBe('neg');
+    const realised = card(el, 'Realised today');
+    expect(tint(realised)).toBeNull();
+    expect(realised.querySelector('.value')!.classList.contains('absent')).toBe(true);
+  });
+
+  it('warns on risk used near the cap and marks it bad at the cap', () => {
+    const risk = (riskUsedPct: number) => card(
+      render({ riskUsedPct, riskCapPct: 6, currency: '€', scope: 'today' }), 'Risk used');
+    expect(risk(3).querySelector('.value')!.className).not.toMatch(/\b(pos|neg|warn)\b/);
+    expect(risk(5).querySelector('.value')!.classList.contains('warn')).toBe(true);
+    expect(tint(risk(5))).toBeNull();
+    expect(tint(risk(6))).toBe('neg');
+  });
+
+  it('never judges open trades or average confidence', () => {
+    const el = render({ openTrades: 3, avgConfidence: 4.5, currency: '€', scope: 'today' });
+    for (const label of ['Open trades', 'Avg confidence']) {
+      expect(tint(card(el, label))).toBeNull();
+      expect(card(el, label).querySelector('.value')!.className).not.toMatch(/\b(pos|neg|warn)\b/);
+    }
+  });
+
+  it('gives the phone summary rows the same tones', () => {
+    const el = render({ changePct: -0.4, winRate: 60, winRateN: 12, payoffRatio: 1, expectancyR: 0.2,
+                        realizedAmount: 15, riskUsedPct: 5, riskCapPct: 6, openTrades: 2,
+                        realizedLabel: 'Realised today', currency: '€', scope: 'today' });
+    expect(row(el, 'Today').getAttribute('data-tone')).toBe('neg');
+    expect(row(el, 'Win rate').getAttribute('data-tone')).toBe('pos');
+    expect(row(el, 'Payoff').getAttribute('data-tone')).toBe('pos');
+    expect(row(el, 'Expectancy').getAttribute('data-tone')).toBe('pos');
+    expect(row(el, 'Realised today').getAttribute('data-tone')).toBe('pos');
+    expect(row(el, 'Risk').getAttribute('data-tone')).toBe('warn');
+    expect(row(el, 'Open').getAttribute('data-tone')).toBeNull();
+  });
+
+  it('states what the account is under the KPI grid, in the chart caption\'s words', () => {
+    const el = render({ currency: '€', scope: 'today' });
+    const captions = [...el.querySelectorAll('.account')]
+      .map((p) => p.textContent?.trim());
+    expect(captions.filter((text) => text === ACCOUNT_LABEL).length).toBe(2);
+    expect(el.querySelector('.mobile-summary + .account')).not.toBeNull();
+  });
 
   it('shows all eight metrics', () => {
     const el = render({
