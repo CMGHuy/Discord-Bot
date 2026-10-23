@@ -7,13 +7,14 @@ import pytest
 
 from swingbot.core.backtesting.screen import ideas
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea
+from swingbot.core.backtesting.screen.ideas import range_breakdown_close
 
 
 def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
     assert ideas.IDEA_MODULES == ("high52w", "uptrend_pullback", "gap_volume",
                                   "turn_of_month", "turtle_soup", "quiet_pullback",
                                   "bond_spike_rebound", "dollar_drop",
-                                  "sweep_reclaim_bos")
+                                  "sweep_reclaim_bos", "range_breakdown_close")
     assert list(IDEAS) == list(ideas.IDEA_MODULES)
     assert all(IDEAS[name].name == name for name in IDEAS)
 
@@ -22,7 +23,7 @@ def test_time_caps_are_the_spec_values():
     assert {n: i.time_cap_bars for n, i in IDEAS.items()} == {
         "high52w": 60, "uptrend_pullback": 10, "gap_volume": 20, "turn_of_month": 4,
         "turtle_soup": 10, "quiet_pullback": 10, "bond_spike_rebound": 10,
-        "dollar_drop": 10, "sweep_reclaim_bos": 20}
+        "dollar_drop": 10, "sweep_reclaim_bos": 20, "range_breakdown_close": 20}
 
 
 def test_frozen_parameter_sets():
@@ -46,6 +47,9 @@ def test_frozen_parameter_sets():
         "series": "UUP", "lookback": 5, "window": 252, "z": -2.0, "side": "long"}
     assert dict(IDEAS["sweep_reclaim_bos"].params) == {
         "pivot_k": 3, "min_age": 4, "reclaim_bars": 2, "bos_bars": 10}
+    assert dict(IDEAS["range_breakdown_close"].params) == {
+        "window": 30, "height_atr": 5.0, "touch_atr": 0.25, "touch_span": 5,
+        "sma": 50, "sma_lag": 10, "warmup": 61, "trigger": "close[t] < S"}
 
 
 def test_every_idea_cites_its_source():
@@ -63,14 +67,22 @@ def test_every_registered_idea_pins_its_direction_and_entry():
     assert {n: i.direction for n, i in IDEAS.items()} == {
         "high52w": "long", "uptrend_pullback": "long", "gap_volume": "long",
         "turn_of_month": "long", "turtle_soup": "long", "quiet_pullback": "long",
-        "bond_spike_rebound": "long", "dollar_drop": "long", "sweep_reclaim_bos": "long"}
+        "bond_spike_rebound": "long", "dollar_drop": "long", "sweep_reclaim_bos": "long",
+        "range_breakdown_close": "short"}
     assert {n: i.entry for n, i in IDEAS.items()} == {
         "high52w": "next_open", "uptrend_pullback": "next_open", "gap_volume": "next_open",
         "turn_of_month": "next_open", "turtle_soup": "next_open",
         "quiet_pullback": "next_open", "bond_spike_rebound": "next_open",
-        "dollar_drop": "next_open", "sweep_reclaim_bos": "next_open"}
-    assert {n: (i.levels, i.control, i.family) for n, i in IDEAS.items()} == {
-        n: (None, None, ()) for n in IDEAS}
+        "dollar_drop": "next_open", "sweep_reclaim_bos": "next_open",
+        "range_breakdown_close": "next_open"}
+    breakdown = ("range_breakdown_close", "range_breakdown_stop")
+    older = {n: i for n, i in IDEAS.items() if n not in breakdown}
+    assert {n: (i.levels, i.control, i.family) for n, i in older.items()} == {
+        n: (None, None, ()) for n in older}
+    close = IDEAS["range_breakdown_close"]
+    assert close.levels is None
+    assert close.control is range_breakdown_close.control_events
+    assert close.family == ("range_breakdown_close", "range_breakdown_stop")
 
 
 def test_params_are_read_only_and_the_idea_is_frozen():
@@ -104,7 +116,7 @@ def test_every_registered_idea_is_raced_under_one_pinned_shape():
         "high52w": "fixed", "uptrend_pullback": "fixed", "gap_volume": "fixed",
         "turn_of_month": "fixed", "turtle_soup": "fixed", "quiet_pullback": "fixed",
         "bond_spike_rebound": "fixed", "dollar_drop": "fixed",
-        "sweep_reclaim_bos": "fixed"}
+        "sweep_reclaim_bos": "fixed", "range_breakdown_close": "fixed"}
 
 
 MURPHY = ("Murphy (2004), Intermarket Analysis — shock proxy, "
@@ -118,7 +130,7 @@ def test_only_the_two_intermarket_ideas_read_context_series():
         "high52w": (), "uptrend_pullback": (), "gap_volume": (), "turn_of_month": (),
         "turtle_soup": (), "quiet_pullback": (),
         "bond_spike_rebound": ("TLT",), "dollar_drop": ("UUP",),
-        "sweep_reclaim_bos": ()}
+        "sweep_reclaim_bos": (), "range_breakdown_close": ()}
     assert IDEAS["bond_spike_rebound"].source == MURPHY
     assert IDEAS["dollar_drop"].source == MURPHY
 
