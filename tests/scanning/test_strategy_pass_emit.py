@@ -32,7 +32,8 @@ def _plan():
     return SimpleNamespace(plan_id="p1", source="strategy", strategy="Fibonacci", direction="bullish",
                            horizon_key="4w", trigger_price=100.0, stop_loss=94.0, tp1=110.0, tp2=None,
                            badge="WEAK", quality_score=0, cohort_label="COHORT_UNKNOWN", cohort_stats={},
-                           risk_features={}, ledger="weak", entry_context={}, ticker="AAPL")
+                           risk_features={}, ledger="weak", entry_context={}, ticker="AAPL",
+                           gap_sizing=None)
 
 
 @pytest.fixture
