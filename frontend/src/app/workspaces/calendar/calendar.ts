@@ -118,6 +118,19 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
         </div>
       </sb-panel>
 
+      <!-- The trade held longest among this month's closes. -->
+      <sb-panel heading="Longest hold this month">
+        @if (store.longestHold(); as hold) {
+          <p class="longest-hold">
+            <a class="hold-ticker" [routerLink]="['/trades', hold.plan_id ?? hold.trade_id]">{{ hold.ticker }}</a>
+            <strong class="hold-duration num">{{ holdLabel(hold.held_hours) }}</strong>
+            <span class="meta">Opened {{ dateTime(hold.opened_at) }} · Closed {{ dateTime(hold.closed_at) }}</span>
+          </p>
+        } @else {
+          <p class="day-empty">No closed trade with a measurable holding time this month.</p>
+        }
+      </sb-panel>
+
       <!-- The day-detail pane that used to sit beside this grid duplicated
            the drawer below word for word (same store signals, same fields)
            and, unselected, only ever said "Select a day to inspect its
@@ -457,6 +470,10 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     .open-day { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: var(--space-10); color: var(--accent); font-weight: 600; text-decoration: none; }
     .open-day:hover, .open-day:focus-visible { text-decoration: underline; }
     .day-caption, .day-sample-note { margin: 0 0 var(--space-8); color: var(--text-secondary); font-size: var(--text-micro); }
+    .longest-hold { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8) var(--space-14); margin: 0; }
+    .longest-hold .hold-ticker { font-weight: 600; }
+    .longest-hold .hold-duration { font-size: var(--text-metric); }
+    .longest-hold .meta { color: var(--text-secondary); font-size: var(--text-micro); }
     .day-leaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-14); margin-bottom: var(--space-14); }
     .day-leaders h3 { margin: 0 0 var(--space-6); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.08em; }
     .day-leaders .leader { display: flex; justify-content: space-between; gap: var(--space-8); white-space: nowrap; }
@@ -708,6 +725,13 @@ export class Calendar {
     const cash = row.pnl === null ? '' : this.ccyLabel(row.pnl);
     const r = row.r === null ? '' : rMultiple(row.r);
     return [cash, r].filter(Boolean).join(' · ');
+  }
+
+  /** "12d 4h" for a hold of a day or more, "7h" under one, ABSENT never null. */
+  protected holdLabel(hours: number): string {
+    const whole = Math.round(hours);
+    const days = Math.floor(whole / 24);
+    return days > 0 ? `${days}d ${whole % 24}h` : `${whole}h`;
   }
 
   protected winRateLabel(value: number | null): string {

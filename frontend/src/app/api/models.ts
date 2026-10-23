@@ -2002,12 +2002,23 @@ export interface CalendarTrade {
 /** `days`/`totals` are the requested month; `day_of_week`, `best_day`,
  *  `worst_day` and `streak` are all of history under the same filter --
  *  a weekday average drawn from one month would be 4-5 observations. */
+/** The trade held longest among the month's closes (null: none measurable). */
+export interface CalendarLongestHold {
+  ticker: string | null;
+  trade_id: string;
+  plan_id: string | null;
+  opened_at: string;
+  closed_at: string;
+  held_hours: number;
+}
+
 export interface PnlCalendar {
   /** Instant the server composed this filtered calendar response. */
   as_of: string;
   month: string;
   days: CalendarDay[];
   totals: CalendarTotals;
+  longest_hold: CalendarLongestHold | null;
   day_of_week: CalendarWeekday[];
   best_day: CalendarDay | null;
   worst_day: CalendarDay | null;

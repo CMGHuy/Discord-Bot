@@ -347,6 +347,24 @@ def month_grid(rows: list[dict], month: str) -> dict:
     return {"month": month, "days": days, "totals": totals}
 
 
+def longest_hold(rows: list[dict], month: str) -> dict | None:
+    """The trade held longest among the month's closes, or None.
+
+    "In that month" means closed in it, the same pool `month_grid` totals. A
+    row whose hold cannot be measured (`held_hours` is None) never wins; a
+    scale-out leg is its own row, so a runner's later close is the one that
+    reports the full hold.
+    """
+    held = [(r, held_hours(r.get("opened_at"), r.get("closed_at")))
+            for r in rows if r["day"][:7] == month]
+    held = [(r, h) for r, h in held if h is not None]
+    if not held:
+        return None
+    row, hours = max(held, key=lambda pair: pair[1])
+    return {"ticker": row["ticker"], "trade_id": row["trade_id"], "plan_id": row.get("plan_id"),
+            "opened_at": row["opened_at"], "closed_at": row["closed_at"], "held_hours": hours}
+
+
 # Monday-first, and only the five days a US-market swing bot can close on.
 # Saturday and Sunday are not modelled: a weekend cell is rendered inert by
 # the frontend rather than reported as a zero here.

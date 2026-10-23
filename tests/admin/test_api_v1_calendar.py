@@ -70,7 +70,7 @@ def test_response_shape(seed, logged_in):
     seed(trades=[_trade("a" * 16)])
     body = logged_in.get("/api/v1/calendar/pnl?month=2026-08").get_json()
     assert_shape(body, {
-        "as_of": str, "month": str, "days": list, "totals": dict, "day_of_week": list,
+        "as_of": str, "month": str, "days": list, "totals": dict, "longest_hold": (dict, type(None)), "day_of_week": list,
         "best_day": (dict, type(None)), "worst_day": (dict, type(None)),
         "streak": dict, "filters": dict,
     })

@@ -36,6 +36,7 @@ const RESPONSE: PnlCalendar = {
     { date: '2026-08-05', net_pnl_amount: -90, net_r: -1.8, trade_count: 1, win_rate: 0 },
   ],
   totals: { net_pnl_amount: -60, net_r: -0.6, trade_count: 3, win_rate: 33.33 },
+  longest_hold: { ticker: 'AAPL', trade_id: 't1', plan_id: null, opened_at: '2026-07-01T14:00:00Z', closed_at: '2026-07-13T18:00:00Z', held_hours: 292 },
   day_of_week: [
     { weekday: 'Mon', avg_pnl_amount: 15, avg_r: 0.6, win_rate: 50, trade_count: 2 },
     { weekday: 'Tue', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
@@ -224,6 +225,16 @@ describe('Calendar summary strip', () => {
     expect(rows[0].textContent).toContain('Mon');
     // Tuesday has n=0 and must read as absent, never as 0.00.
     expect(rows[1].textContent).toContain('—');
+  });
+
+  it('shows the longest hold of the month: 292h reads as 12d 4h, linked to its trade', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = el(fixture);
+    expect(host.querySelector('.longest-hold')!.textContent).toContain('12d 4h');
+    expect(host.querySelector('.hold-ticker')!.textContent).toContain('AAPL');
   });
 
   it('reports the month-summary figures from the visible trading days', async () => {

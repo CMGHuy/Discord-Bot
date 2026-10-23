@@ -111,6 +111,7 @@ export const CalendarStore = signalStore(
     bestDay: computed(() => data()?.best_day ?? null),
     worstDay: computed(() => data()?.worst_day ?? null),
     streak: computed(() => data()?.streak ?? null),
+    longestHold: computed(() => data()?.longest_hold ?? null),
 
     /** `date -> day`, so the grid does not linear-scan per cell. */
     dayIndex: computed(() => {

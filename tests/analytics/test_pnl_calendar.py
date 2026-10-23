@@ -814,3 +814,27 @@ def test_float_or_none_rejects_non_finite_so_return_pct_stays_null(bad):
 
     assert _float_or_none(bad) is None
     assert return_pct(_float_or_none(bad), 10.0, "long") is None
+
+
+# --- the month's longest hold ------------------------------------------------
+
+from swingbot.core.analytics.pnl_calendar import longest_hold
+
+
+def _held_row(ticker, day, opened, closed):
+    return {"ticker": ticker, "trade_id": ticker.lower(), "plan_id": None, "day": day,
+            "opened_at": opened, "closed_at": closed}
+
+
+def test_longest_hold_picks_the_longest_close_in_the_month():
+    rows = [_held_row("AAA", "2026-08-10", "2026-08-09T14:00:00+00:00", "2026-08-10T14:00:00+00:00"),
+            _held_row("BBB", "2026-08-20", "2026-08-05T14:00:00+00:00", "2026-08-20T14:00:00+00:00"),
+            _held_row("CCC", "2026-09-02", "2026-06-01T14:00:00+00:00", "2026-09-02T14:00:00+00:00")]
+    best = longest_hold(rows, "2026-08")
+    assert (best["ticker"], best["held_hours"]) == ("BBB", 360.0)
+
+
+def test_longest_hold_is_none_when_nothing_is_measurable():
+    rows = [_held_row("AAA", "2026-08-10", None, "2026-08-10T14:00:00+00:00")]
+    assert longest_hold(rows, "2026-08") is None
+    assert longest_hold([], "2026-08") is None
