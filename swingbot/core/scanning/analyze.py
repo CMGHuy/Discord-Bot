@@ -34,6 +34,7 @@ from swingbot.core.planning.plan_engine import build_confluence_plan, primary_st
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
 from swingbot.core.planning.gap_sizing import size_for_plan, stamp_gap_sizing
+from swingbot.core.scanning.risk_notice import stamp_risk_notice
 from swingbot.core.planning.builders import confluence_stop_dropped
 from swingbot.core.planning.stop_scope import plan_stop_ceiling, risk_sizing_ok
 from swingbot.core.risk_limits import planned_loss_pct
@@ -469,6 +470,18 @@ def _stamp_gap_sizing_live(plan, df, now) -> None:
     stamp_gap_sizing(plan, frame)
 
 
+def _stamp_risk_notice_live(plan, df, now) -> None:
+    """v183 Part B: stamp the short's squeeze/event snapshot from COMPLETED
+    bars (signal = last completed bar). Never raises -- a frame problem falls
+    back to the plan's creation date."""
+    from .strategy_pass import completed_frame
+    try:
+        frame = completed_frame(df, now or datetime.now(timezone.utc))
+    except Exception:
+        frame = None
+    stamp_risk_notice(plan, frame)
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     regime=None, rs_percentile=None, breadth=None, regime2_state=None,
                     issued_at=None, now=None):
@@ -534,6 +547,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             "rs_combined": getattr(item, "rs_combined", None),
         })
         _stamp_gap_sizing_live(plan, df, now)
+        _stamp_risk_notice_live(plan, df, now)
         try:
             plan.risk_features = risk_features.build(
                 regime2_state=regime2_state,

@@ -202,6 +202,12 @@ class TradePlanV2:
     # plan persisted before v183. Live config, so never an entry_context key.
     # Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
     gap_sizing: dict | None = None
+    # v183 Part B (scanning/risk_notice.py): the squeeze / earnings / ex-div
+    # snapshot shown on the alert and the plan page, stamped at LIVE creation
+    # for shorts while SHORT_RISK_NOTICE is on. Live-only data, so never an
+    # entry_context key; never read by a filter, score or backtest.
+    # Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
+    risk_notice: dict | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
@@ -222,7 +228,7 @@ _PLAN_FIELDS = None   # cached field list
 # v183: optional fields written only when set -- a None here is omitted, never
 # stored as null, so every plan doc without them (every long) stays
 # byte-identical to its pre-v183 shape. plan_from_dict defaults them back.
-_OMIT_WHEN_NONE = ("gap_sizing",)
+_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice")
 
 
 def plan_to_dict(plan: TradePlanV2) -> dict:
