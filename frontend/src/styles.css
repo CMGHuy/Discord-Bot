@@ -271,3 +271,29 @@ a:hover {
   height: max(100%, var(--hit-min));
   transform: translate(-50%, -50%);
 }
+
+
+/* v186 D3 -- the stat-strip grid, shared by sb-stat-strip and sb-async's
+ * 'tiles' skeleton so a loading strip lays out like the strip it stands in
+ * for. No gap: the tiles' hairlines are the separation. Default auto-fit at
+ * 140px; .sb-strip-fixed pins counts from --strip-cols / --strip-cols-md,
+ * which sb-stat-strip sets from its inputs. Global, not in a workspace file,
+ * because an @media cannot read var() and workspace-consistency.spec.ts
+ * flags a fixed repeat(N in a workspace. */
+.sb-strip-grid {
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+}
+
+.sb-strip-grid.sb-strip-fixed {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .sb-strip-grid.sb-strip-fixed { grid-template-columns: repeat(var(--strip-cols-md, 2), minmax(0, 1fr)); }
+}
+
+@media (min-width: 1024px) {
+  .sb-strip-grid.sb-strip-fixed { grid-template-columns: repeat(var(--strip-cols, 4), minmax(0, 1fr)); }
+}
