@@ -9,6 +9,9 @@ regime split, trend-only control), all printed and never gating.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
+
+from swingbot.core.backtesting.screen import indicators
 
 #: |median null depth - median event depth| allowed, in ATR14[t-1] (check 5).
 DEPTH_MEDIAN_TOL = 0.05
@@ -62,3 +65,41 @@ def check_fill_depth(event_depths, null_depths, null_slots: int,
     depth_ok, depth_line = _depth_clause(event_depths, null_depths)
     fill_ok, fill_line = _unfilled_clause(null_slots, null_unfilled)
     return depth_ok and fill_ok, [depth_line, fill_line]
+
+
+#: SPY's regime average, in bars (spec Part C: "SPY above/below its 200-day average").
+SPY_SMA = 200
+
+
+def event_overlap(own, other) -> dict:
+    """Bars flagged by each idea and by both (spec Part C: the two ideas are nested)."""
+    own, other = np.asarray(own, dtype=bool), np.asarray(other, dtype=bool)
+    if own.shape != other.shape:
+        raise ValueError(f"event_overlap needs equal-length flags, got {own.shape} and {other.shape}")
+    return {"own": int(own.sum()), "other": int(other.sum()), "both": int((own & other).sum())}
+
+
+def spy_above_200(spy: pd.DataFrame) -> pd.Series:
+    """SPY's close above its 200-day SMA, only on the bars where the SMA exists."""
+    average = indicators.sma(spy["Close"], SPY_SMA)
+    return (spy["Close"] > average)[average.notna()]
+
+
+def paired_delta(rows) -> tuple[int, float | None]:
+    """(n, mean(R_event - mean R_null)) of event rows; (0, None) for none."""
+    d = [row["r_event"] - row["r_null"] for row in rows]
+    return len(d), (float(np.mean(d)) if d else None)
+
+
+def regime_split(events, above: pd.Series) -> dict:
+    """The event pairs by SPY's regime at the last SPY close strictly before
+    entry: the signal close for a next-open entry, bar t-1 for a level entry
+    -- known when the order is placed either way. Reported, never gating."""
+    index = pd.DatetimeIndex(above.index)
+    flags = above.to_numpy(dtype=bool)
+    groups = {"above": [], "below": [], "unknown": []}
+    for row in events:
+        pos = index.searchsorted(pd.Timestamp(row["entry_date"]), side="left") - 1
+        groups["unknown" if pos < 0 else ("above" if flags[pos] else "below")].append(row)
+    return {"above": paired_delta(groups["above"]), "below": paired_delta(groups["below"]),
+            "unknown": len(groups["unknown"])}
