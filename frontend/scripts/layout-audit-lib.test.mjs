@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   CHECKS, FULL_WIDTHS, ROUTES, classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds,
-  resolveRoute, slug, validateAllow,
+  resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -202,4 +202,41 @@ test('the audit page code asks the lib predicate, not a class-name list', () => 
   const src = readFileSync(join(HERE, 'layout-audit.mjs'), 'utf8');
   assert.match(src, /isVisuallyHidden/);
   assert.doesNotMatch(src, /closest\('\.sr-only/);
+});
+
+const geo = vcenterGeometry();
+const rect = (top, bottom, left = 0, right = 10) => ({ top, bottom, left, right, height: bottom - top });
+
+test('centreOffset: positive when the inner box sits low, negative when high, zero when centred', () => {
+  assert.equal(geo.centreOffset(rect(10, 20), rect(0, 30)), 0);
+  assert.equal(geo.centreOffset(rect(14, 24), rect(0, 30)), 4);
+  assert.equal(geo.centreOffset(rect(5, 15), rect(0, 30)), -5);
+});
+
+test('contentBox: a cell is measured inside its padding and borders, so uneven padding shows as an offset', () => {
+  const box = geo.contentBox(rect(0, 40), { padTop: 6, padBottom: 6, borderTop: 0, borderBottom: 1 });
+  assert.deepEqual(box, { top: 6, bottom: 33 });
+  // Text 10..27 in a 6/6-padded 42px cell (content 6..36): 2.5px high, past the 2px limit.
+  assert.equal(geo.centreOffset(rect(10, 27), geo.contentBox(rect(0, 42), { padTop: 6, padBottom: 6, borderTop: 0, borderBottom: 0 })), -2.5);
+});
+
+test('nearestBeside: picks the closest text on the same line as the icon, either side', () => {
+  const icon = rect(10, 26, 100, 116);
+  const right = rect(11, 27, 120, 180);
+  const left = rect(11, 27, 40, 98);
+  assert.equal(geo.nearestBeside(icon, [right, left]), left);
+  assert.equal(geo.nearestBeside(icon, [right]), right);
+});
+
+test('nearestBeside: ignores text on another line, too far away, or with no height', () => {
+  const icon = rect(10, 26, 100, 116);
+  assert.equal(geo.nearestBeside(icon, [rect(40, 56, 120, 180)]), null);
+  assert.equal(geo.nearestBeside(icon, [rect(11, 27, 141, 200)]), null);
+  assert.equal(geo.nearestBeside(icon, [rect(18, 18, 120, 180)]), null);
+  assert.equal(geo.nearestBeside(icon, []), null);
+});
+
+test('vcenterGeometry survives the trip into the page as source', () => {
+  const shipped = new Function(`return (${vcenterGeometry.toString()})()`)();
+  assert.equal(shipped.centreOffset(rect(14, 24), rect(0, 30)), 4);
 });

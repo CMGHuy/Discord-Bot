@@ -40,7 +40,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
   CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug, validateAllow,
+  classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -51,8 +51,9 @@ const DEFAULT_ALLOW = join(HERE, 'layout-audit.allow.json');
 class CannotRun extends Error {}
 
 /** Runs inside the page (page.evaluate): self-contained, no imports, no closures over module scope. */
-function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc }) {
+function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc, geometrySrc }) {
   const isVisuallyHidden = new Function(`return ${hiddenSrc}`)();
+  const geo = new Function(`return (${geometrySrc})()`)();
   const vw = document.documentElement.clientWidth;
   const findings = [];
   const INTERACTIVE = 'a[href], button, [role="button"], [role="tab"], input:not([type="hidden"]), select, textarea, summary, [tabindex="0"]';
@@ -196,10 +197,11 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc }
     const ink = inkBox(td);
     if (!ink) return;
     const cs = getComputedStyle(td);
-    const r = td.getBoundingClientRect();
-    const boxMid = (r.top + parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth)
-      + r.bottom - parseFloat(cs.paddingBottom) - parseFloat(cs.borderBottomWidth)) / 2;
-    const offset = (ink.top + ink.bottom) / 2 - boxMid;
+    const box = geo.contentBox(td.getBoundingClientRect(), {
+      padTop: parseFloat(cs.paddingTop), padBottom: parseFloat(cs.paddingBottom),
+      borderTop: parseFloat(cs.borderTopWidth), borderBottom: parseFloat(cs.borderBottomWidth),
+    });
+    const offset = geo.centreOffset(ink, box);
     if (Math.abs(offset) > maxCenter) add('vcenter', td, `cell content ${offset > 0 ? 'low' : 'high'} by ${Math.abs(offset).toFixed(1)}px`);
   }
 
@@ -213,14 +215,10 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc }
         if (!n.textContent.trim() || icon.contains(n) || !visible(n.parentElement) || srOnly(n.parentElement)) continue;
         const range = document.createRange();
         range.selectNodeContents(n);
-        rects.push(...[...range.getClientRects()].filter((t) => t.height > 0
-          && Math.min(t.bottom, ir.bottom) - Math.max(t.top, ir.top) > 0
-          && Math.min(Math.abs(t.left - ir.right), Math.abs(ir.left - t.right)) < 24));
+        rects.push(...range.getClientRects());
       }
-      if (rects.length) {
-        return rects.sort((a, b) => Math.min(Math.abs(a.left - ir.right), Math.abs(ir.left - a.right))
-          - Math.min(Math.abs(b.left - ir.right), Math.abs(ir.left - b.right)))[0];
-      }
+      const beside = geo.nearestBeside(ir, rects);
+      if (beside) return beside;
     }
     return null;
   }
@@ -231,7 +229,7 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc }
     if (ir.width > 32 || ir.height > 32 || icon.querySelector?.('text')) return; // a chart, not an icon
     const t = textBeside(icon);
     if (!t) return;
-    const offset = (ir.top + ir.bottom) / 2 - (t.top + t.bottom) / 2;
+    const offset = geo.centreOffset(ir, t);
     if (Math.abs(offset) > maxCenter) add('vcenter', icon, `icon ${offset > 0 ? 'low' : 'high'} by ${Math.abs(offset).toFixed(1)}px against its text`);
   }
 
@@ -348,7 +346,7 @@ async function auditWidth(width, opts) {
       await page.waitForFunction(ready, null, { timeout: 30_000 })
         .catch(() => console.error(`still loading after 30s: ${route} @${width}`));
       await page.waitForTimeout(opts.settle);
-      const raw = await page.evaluate(auditPage, { ...limits, hiddenSrc: isVisuallyHidden.toString() });
+      const raw = await page.evaluate(auditPage, { ...limits, hiddenSrc: isVisuallyHidden.toString(), geometrySrc: vcenterGeometry.toString() });
       findings.push(...raw.map((f) => ({ route, width, ...f })));
       await screenshot(page, join(opts.out, `${slug(route)}@${width}.png`), width);
       console.error(`${route} @${width}: ${raw.length} raw finding(s)`);
