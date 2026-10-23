@@ -1,4 +1,11 @@
-"""The v163 trail race: a chandelier 3 ATR trailing stop, no target. Long only.
+"""The v163 trail race: a chandelier 3 ATR trailing stop, no target.
+
+v182: direction="short" is the exact mirror, run as the long trail on
+negated prices (sides.oriented). Entry = open of t+1; initial stop = entry
++ 1R; the stop on bar j is min(entry + 1R, min(Low[t+1 .. j-1]) + 3 x
+ATR14[t]), never raised. An open at/above the stop exits at the open (gap);
+a high at/above it exits at the stop. Costs: entry "sell", exit "buy", plus
+frictions.borrow_r on the calendar days held. The long description follows.
 
 Event on bar t (known at t's close). Entry = open of t+1; 1R = 1.5 x
 ATR14[t]; initial stop = entry - 1R; no target. The stop in force on bar j
@@ -22,7 +29,7 @@ import pandas as pd
 
 from swingbot.core.backtesting.screen import indicators
 from swingbot.core.backtesting.screen import race as race_mod
-from swingbot.core.edge.frictions import apply_frictions, commission_r
+from swingbot.core.backtesting.screen import sides
 
 TRAIL_ATR = 3.0
 _GAP_STOP, _STOP, _TIMEOUT, _TRAIL, _GAP_TRAIL = (
@@ -62,23 +69,29 @@ def _first_exit_trail(O, H, L, C, stops, initial):
 
 
 def race_trail(df: pd.DataFrame, event_pos, cap: int, *, atr=None,
-               slippage_bps=None, commission=None) -> race_mod.RaceResult:
+               slippage_bps=None, commission=None,
+               direction: str = "long") -> race_mod.RaceResult:
     """Race every event in ``event_pos`` (bar positions) at once."""
     event_pos = np.asarray(event_pos, dtype=int)
     race_mod._check_positions(event_pos, cap, len(df))
     if event_pos.size == 0:
         return race_mod.RaceResult.empty()
     atr_v = (indicators.atr(df) if atr is None else pd.Series(atr)).to_numpy(dtype=float)
-    o, h, l, c = (df[col].to_numpy(dtype=float) for col in ("Open", "High", "Low", "Close"))
+    o, h, l, c = sides.oriented(
+        *(df[col].to_numpy(dtype=float) for col in ("Open", "High", "Low", "Close")),
+        direction)
     bars = event_pos[:, None] + 1 + np.arange(cap)[None, :]
     entry = o[event_pos + 1]
     risk = race_mod.STOP_ATR * atr_v[event_pos]
     stops = trail_stops(h[bars], entry, risk)
     price, code, offset = _first_exit_trail(o[bars], h[bars], l[bars], c[bars],
                                             stops, entry - risk)
-    cost = commission_r() if commission is None else commission
-    net = (apply_frictions(price, "sell", slippage_bps)
-           - apply_frictions(entry, "buy", slippage_bps)) / risk - cost
-    return race_mod.RaceResult(event_pos, event_pos + 1 + offset, entry, risk,
-                               (price - entry) / risk, net,
+    exit_pos = event_pos + 1 + offset
+    gross = (price - entry) / risk
+    if direction == "short":
+        entry, price = -entry, -price            # back to real prices; negation is exact
+    net = sides.net_r(entry, price, risk, direction=direction,
+                      days=sides.holding_days(df.index, event_pos + 1, exit_pos),
+                      slippage_bps=slippage_bps, commission=commission)
+    return race_mod.RaceResult(event_pos, exit_pos, entry, risk, gross, net,
                                np.asarray(race_mod.OUTCOMES)[code])

@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 
 import screen_idea  # noqa: E402
 
-from swingbot.core.backtesting.screen import forward, null, verdict  # noqa: E402
+from swingbot.core.backtesting.screen import forward, null, race, trail, verdict  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS  # noqa: E402
 from tests.backtesting.screen.helpers import random_walk  # noqa: E402
 
@@ -648,3 +648,610 @@ def test_fixed_hypothesis_is_unchanged():
     assert screen_idea.hypothesis(idea) == (
         f"gap_volume: {idea.summary}; fixed 1.5/3.0 ATR race vs K=20 matched null, "
         "cap 20, PIT S&P 500 2010-2019, after costs (v140 screen)")
+
+
+from swingbot.core.backtesting.screen import sides as sides_mod  # noqa: E402
+from swingbot.core.edge import frictions as frictions_mod  # noqa: E402
+
+
+def _short_probe(cap=20, shape="fixed"):
+    """turn_of_month's trigger raced short; never registered."""
+    return Idea(name="short_probe", events=IDEAS["turn_of_month"].events,
+                time_cap_bars=cap, direction="short", race_shape=shape,
+                summary="probe", source="test")
+
+
+def test_screen_ticker_passes_the_idea_direction_to_book_and_null(monkeypatch):
+    seen = {"book": [], "null": []}
+    real_book, real_null = race_mod.run_book, null.matched_null
+
+    def book_spy(*args, **kwargs):
+        seen["book"].append(kwargs.get("direction"))
+        return real_book(*args, **kwargs)
+
+    def null_spy(*args, **kwargs):
+        seen["null"].append(kwargs.get("direction"))
+        return real_null(*args, **kwargs)
+
+    monkeypatch.setattr(race_mod, "run_book", book_spy)
+    monkeypatch.setattr(null, "matched_null", null_spy)
+    df = random_walk(2600)
+    screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS)
+    assert seen == {"book": ["long"], "null": ["long"]}
+    seen["book"].clear()
+    seen["null"].clear()
+    screen_idea.screen_ticker(_short_probe(), "AAA", df, ALWAYS)
+    assert seen == {"book": ["short"], "null": ["short"]}
+
+
+def test_a_short_screen_reads_the_flipped_forward_return_once(monkeypatch):
+    draws = []
+    real = null.matched_null
+
+    def spy(*args, **kwargs):
+        out = real(*args, **kwargs)
+        draws.append(out)
+        return out
+
+    monkeypatch.setattr(null, "matched_null", spy)
+    df = random_walk(2600)
+    out = screen_idea.screen_ticker(_short_probe(), "AAA", df, ALWAYS)
+    atr = screen_idea.indicators.atr(df)
+    assert draws and draws[0].event_pos.size
+    for h in forward.HORIZONS:
+        fwd = -forward.forward_atr(df, atr, h)
+        assert out.excess[h] == forward.excess_drift(fwd, draws[0].event_pos, draws[0].groups)
+    long_rank = screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS).rank
+    for h in forward.HORIZONS:
+        assert np.array_equal(out.rank[f"fwd_{h}"].to_numpy(),
+                              -long_rank[f"fwd_{h}"].to_numpy(), equal_nan=True)
+
+
+def _count_borrow(monkeypatch):
+    seen = []
+    real = frictions_mod.borrow_r
+
+    def spy(entry, risk, days):
+        seen.append(int(np.size(days)))
+        return real(entry, risk, days)
+
+    monkeypatch.setattr(frictions_mod, "borrow_r", spy)
+    monkeypatch.setattr(sides_mod, "borrow_r", spy, raising=False)
+    return seen
+
+
+def test_borrow_is_charged_once_on_the_book_and_once_on_the_null_never_on_a_long(monkeypatch):
+    seen = _count_borrow(monkeypatch)
+    df = random_walk(2600)
+    screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS)
+    assert seen == []
+    out = screen_idea.screen_ticker(_short_probe(), "AAA", df, ALWAYS)
+    raced = (len(out.events) + out.counters["skipped_overlap"]
+             + out.counters["dropped_no_match"])
+    assert seen == [raced, sum(out.null_outcomes.values())]
+
+
+def test_short_fixed_trade_line_names_the_mirror_and_the_borrow():
+    assert screen_idea._render_trade(_short_probe(), RUN_INFO) == (
+        "**Trade:** short; entry next open (sell); stop 1.5 x ATR14 above; target 3.0 x "
+        "ATR14 below; a gap through either level fills at the open; stop first on a bar "
+        "touching both; borrow 0.5% a year on calendar days held; "
+        "costs 5.0 bps a side + 0.0200R commission.")
+
+
+def test_short_trail_trade_line_names_the_lowest_low_and_the_borrow():
+    line = screen_idea._render_trade(_short_probe(60, "trail"), RUN_INFO)
+    assert line.startswith("**Trade:** short; entry next open (sell); initial stop 1.5 x "
+                           "ATR14[t] above (1R); no target;")
+    assert "the lower of the initial stop and the lowest low of bars t+1..j-1 plus 3.0 x ATR14[t]" in line
+    assert "never raised" in line and "60 bars" in line
+    assert line.endswith("borrow 0.5% a year on calendar days held; "
+                         "costs 5.0 bps a side + 0.0200R commission.")
+
+
+def test_short_results_header_says_short_only():
+    v = verdict.Verdict("SCREEN-FAIL", 412, 0.03, -0.01, 0.07, 0.2, 6, {}, {})
+    head = "\n".join(screen_idea._render_head(_short_probe(), v, RUN_INFO))
+    assert "time cap 20 bars; short only." in head
+
+
+def test_short_hypothesis_names_the_direction_and_validates():
+    idea = _short_probe()
+    text = screen_idea.hypothesis(idea)
+    assert text == ("short_probe: probe; SHORT, entry next open, fixed 1.5/3.0 ATR race vs "
+                    "K=20 matched null raced short, cap 20, borrow 0.5% a year, PIT S&P 500 "
+                    "2010-2019, after costs (v182 short screen)")
+    trail_text = screen_idea.hypothesis(_short_probe(60, "trail"))
+    assert "SHORT, entry next open, chandelier 3.0 ATR trail race, initial stop 1.5 ATR" in trail_text
+    v = verdict.Verdict("SCREEN-FAIL", 412, 0.03, -0.01, 0.07, 0.2, 6, {}, {})
+    row = screen_idea.ledger_row(idea, v, "docs/superpowers/results/x.md", "2026-10-21")
+    stats.validate_ledger_row(row)
+    assert row["hypothesis"] == text
+
+
+def _level_probe():
+    """A short sell-stop half an ATR under the prior close, every 7th bar; never registered."""
+    def levels(df):
+        atr = screen_idea.indicators.atr(df)
+        return df["Close"].shift(1) - 0.5 * atr.shift(1)
+
+    def events(df):
+        every = pd.Series(np.arange(len(df)) % 7 == 0, index=df.index)
+        return (every & (df["Low"] < levels(df))).fillna(False)
+
+    return Idea(name="level_probe", events=events, time_cap_bars=20, direction="short",
+                entry="level", levels=levels, summary="probe", source="test")
+
+
+def test_raw_levels_only_for_a_level_idea():
+    df = random_walk(400)
+    assert screen_idea.raw_levels(IDEAS["turn_of_month"], df) is None
+    assert screen_idea.raw_levels(_short_probe(), df) is None
+    probe = _level_probe()
+    assert np.array_equal(screen_idea.raw_levels(probe, df),
+                          probe.levels(df).to_numpy(dtype=float), equal_nan=True)
+
+
+def test_event_rows_enter_on_the_event_bar_in_level_mode():
+    index = pd.bdate_range("2015-01-05", periods=8)
+    kept = race_mod.RaceResult(np.array([3]), np.array([5]), np.array([99.0]),
+                               np.array([3.0]), np.array([0.5]), np.array([0.4]),
+                               np.array(["timeout"]))
+    level = screen_idea._event_rows("AAA", index, kept, [0.1], entry_offset=0)
+    plain = screen_idea._event_rows("AAA", index, kept, [0.1])
+    assert level[0]["entry_date"] == "2015-01-08" and plain[0]["entry_date"] == "2015-01-09"
+    assert level[0]["exit_date"] == plain[0]["exit_date"] == "2015-01-12"
+
+
+def test_a_level_screen_enters_on_the_event_bar():
+    df = random_walk(2600)
+    probe = _level_probe()
+    out = screen_idea.screen_ticker(probe, "AAA", df, ALWAYS)
+    assert out.events                                                  # non-vacuous
+    event_days = set(df.index[probe.events(df).to_numpy()].strftime("%Y-%m-%d"))
+    assert {row["entry_date"] for row in out.events} <= event_days
+
+
+def test_a_level_screen_passes_levels_to_the_book_and_depth_to_the_null(monkeypatch):
+    seen = {"book": [], "null": []}
+    real_book, real_null = race_mod.run_book, null.matched_null
+
+    def book_spy(*args, **kwargs):
+        seen["book"].append(kwargs)
+        return real_book(*args, **kwargs)
+
+    def null_spy(*args, **kwargs):
+        seen["null"].append((len(args[1]), kwargs))
+        return real_null(*args, **kwargs)
+
+    monkeypatch.setattr(race_mod, "run_book", book_spy)
+    monkeypatch.setattr(null, "matched_null", null_spy)
+    df = random_walk(2600)
+    for idea in (IDEAS["turn_of_month"], _short_probe()):
+        screen_idea.screen_ticker(idea, "AAA", df, ALWAYS)
+    assert all(not ({"levels", "level_factor"} & set(kw)) for kw in seen["book"])
+    assert all(not ({"depth", "level_factor"} & set(kw)) for _, kw in seen["null"])
+    seen["book"].clear()
+    seen["null"].clear()
+    screen_idea.screen_ticker(_level_probe(), "AAA", df, ALWAYS)
+    assert [kw["level_factor"] for kw in seen["book"]] == [2.0, 3.0]     # book, repriced
+    assert seen["book"][0]["levels"] is not None
+    for n_events, kw in seen["null"]:
+        assert len(kw["depth"]) == n_events and kw["direction"] == "short"
+    assert [kw["level_factor"] for _, kw in seen["null"]] == [2.0, 3.0]
+
+
+def test_level_depths_slots_and_unfilled_are_reported():
+    df = random_walk(2600)
+    out = screen_idea.screen_ticker(_level_probe(), "AAA", df, ALWAYS)
+    assert len(out.depths["event"]) == len(out.events)
+    assert min(out.depths["event"]) >= 0.0
+    assert len(out.depths["null"]) == sum(out.null_outcomes.values())
+    assert out.null_slots > 0 and 0 <= out.null_unfilled <= out.null_slots
+    plain = screen_idea.screen_ticker(_short_probe(), "AAA", df, ALWAYS)
+    assert plain.depths is None and plain.repriced is None and plain.null_unfilled == 0
+
+
+def test_the_repriced_book_is_the_same_events_at_three_times_slippage():
+    df = random_walk(2600)
+    out = screen_idea.screen_ticker(_level_probe(), "AAA", df, ALWAYS)
+    assert [r["entry_date"] for r in out.repriced] == [r["entry_date"] for r in out.events]
+    for at3, at2 in zip(out.repriced, out.events):
+        assert at3["r_event"] < at2["r_event"] and at3["r_null"] < at2["r_null"]
+
+
+def test_short_level_trade_line():
+    assert screen_idea._render_trade(_level_probe(), RUN_INFO) == (
+        "**Trade:** short; sell-stop resting at the level (known from bars <= t-1), placed "
+        "before bar t opens, valid one bar; fills at the lower of the open and the level, "
+        "entry slippage 2.0 x base; stop 1.5 x ATR14[t-1] above; target 3.0 x ATR14[t-1] "
+        "below; on the fill bar only the stop counts (a high at or above it exits at the "
+        "stop); from bar t+1 a gap through either level fills at the open; stop first on a "
+        "bar touching both; borrow 0.5% a year on calendar days held; "
+        "costs 5.0 bps a side + 0.0200R commission.")
+
+
+def test_short_level_hypothesis():
+    assert screen_idea.hypothesis(_level_probe()) == (
+        "level_probe: probe; SHORT, sell-stop at the level, filled on the event bar, fixed "
+        "1.5/3.0 ATR race vs K=20 matched null raced short, cap 20, borrow 0.5% a year, PIT "
+        "S&P 500 2010-2019, after costs (v182 short screen)")
+
+
+# --- v182: --count-only (outcome-blind count before the shot) -------------
+
+CLOSE = IDEAS["range_breakdown_close"]
+STOP = IDEAS["range_breakdown_stop"]
+
+
+def _spy(calls, name, fn):
+    def wrapped(*args, **kwargs):
+        calls.setdefault(name, []).append((args, kwargs))
+        return fn(*args, **kwargs)
+    return wrapped
+
+
+def _boom(*args, **kwargs):
+    raise AssertionError("--count-only must never race")
+
+
+def test_count_ticker_races_nothing_and_shares_the_real_drop_and_overlap_code(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(race, "candidate_events", _spy(calls, "cand", race.candidate_events))
+    monkeypatch.setattr(race, "non_overlapping", _spy(calls, "overlap", race.non_overlapping))
+    monkeypatch.setattr(null, "draw_groups", _spy(calls, "draw", null.draw_groups))
+    monkeypatch.setattr(screen_idea, "raw_events", _spy(calls, "raw", screen_idea.raw_events))
+    for owner, name in ((race, "race"), (race, "run_book"), (trail, "race_trail"),
+                        (null, "matched_null"), (screen_idea, "_books")):
+        monkeypatch.setattr(owner, name, _boom)
+    out = screen_idea.count_ticker(CLOSE, "AAA", random_walk(2700, seed=7), ALWAYS)
+    assert out["raw"] > 0 and out["events"] > 0                 # non-vacuous
+    assert len(calls["raw"]) == 1
+    (_, cand_kwargs), = calls["cand"]
+    assert cand_kwargs["entry"] == "next_open"
+    (overlap_args, _), = calls["overlap"]
+    np.testing.assert_array_equal(overlap_args[1], overlap_args[0] + CLOSE.time_cap_bars)
+    (draw_args, draw_kwargs), = calls["draw"]
+    assert draw_args[3] == null.K
+    assert draw_args[4] == null.null_seed("range_breakdown_close", "AAA")
+    assert draw_kwargs["direction"] == "short" and draw_kwargs["depth"] is None
+
+
+def test_count_ticker_drop_counters_match_the_real_run():
+    df = random_walk(2700, seed=3)
+    spans = [("2012-01-01", "2016-12-31")]
+    idea = IDEAS["turn_of_month"]
+    real = screen_idea.screen_ticker(idea, "AAA", df, spans)
+    out = screen_idea.count_ticker(idea, "AAA", df, spans)
+    for key in ("dropped_nonmember", "dropped_warmup", "dropped_window"):
+        assert out["counters"][key] == real.counters[key], key
+    assert out["counters"]["dropped_nonmember"] > 0
+    assert set(out["counters"]) == set(screen_idea.COUNTER_ORDER)
+    # The full-cap bound books no more events than the real exits do.
+    assert out["counters"]["skipped_overlap"] >= real.counters["skipped_overlap"]
+    assert (out["events"] + out["counters"]["dropped_no_match"]
+            <= len(real.events) + real.counters["dropped_no_match"])
+    assert out["event_depths"] == [] and out["null_depths"] == []
+
+
+def test_count_ticker_in_level_mode_reports_the_fill_depths():
+    out = screen_idea.count_ticker(STOP, "AAA", random_walk(2700, seed=7), ALWAYS)
+    assert out["events"] > 0
+    assert len(out["event_depths"]) == out["events"]
+    assert all(d >= 0.0 for d in out["event_depths"])
+    assert out["null_slots"] > 0
+    # V182-10: null_unfilled = slots left unfilled; one depth per filled slot.
+    assert out["null_slots"] - out["null_unfilled"] == len(out["null_depths"])
+
+
+def test_count_ticker_is_deterministic():
+    df = random_walk(2700, seed=7)
+    assert (screen_idea.count_ticker(STOP, "AAA", df, ALWAYS)
+            == screen_idea.count_ticker(STOP, "AAA", df, ALWAYS))
+
+
+def _counts(n, **extra):
+    base = {"tickers": 2, "members": 3, "missing": 1, "skipped": Counter(),
+            "counters": Counter({"dropped_warmup": 4}), "raw": n + 4, "events": n,
+            "event_depths": [], "null_depths": [], "null_slots": 0, "null_unfilled": 0}
+    base.update(extra)
+    return base
+
+
+def _count_args(idea):
+    return screen_idea.build_parser().parse_args(["--idea", idea, "--count-only"])
+
+
+def test_render_counts_gates_on_300_events():
+    args = _count_args("range_breakdown_close")
+    assert ("**Gate:** N = 300 ≥ 300: the one shot may run."
+            in screen_idea.render_counts(CLOSE, _counts(300), args))
+    assert ("**Gate:** N = 299 < 300: no run, no ledger row; report to the partner."
+            in screen_idea.render_counts(CLOSE, _counts(299), args))
+
+
+def test_render_counts_prints_check_5_for_a_level_idea_only():
+    args = _count_args("range_breakdown_stop")
+    assert "Check 5" not in screen_idea.render_counts(CLOSE, _counts(300), args)
+    good = _counts(300, event_depths=[0.0, 0.25, 0.5],
+                   null_depths=[0.0, 0.25, 0.296875, 0.5], null_slots=100, null_unfilled=20)
+    text = screen_idea.render_counts(STOP, good, args)
+    assert "## Check 5" in text and "**Check 5:** PASS" in text
+    assert "| events | 3 | 0.125 | 0.250 | 0.375 | 33.3% |" in text
+    bad = _counts(300, event_depths=[0.25], null_depths=[0.3125],
+                  null_slots=100, null_unfilled=21)
+    assert "**Check 5:** FAIL" in screen_idea.render_counts(STOP, bad, args)
+
+
+def test_render_counts_names_no_outcome():
+    text = screen_idea.render_counts(
+        STOP, _counts(300, event_depths=[0.1], null_depths=[0.1], null_slots=5), _count_args(
+            "range_breakdown_stop"))
+    assert text.startswith("# v182 count: `range_breakdown_stop` (outcome-blind: no race, no R)")
+    for word in ("ExpR", "R_event", "R_null", "SCREEN-PASS", "SCREEN-FAIL", "lower 95"):
+        assert word not in text, word
+
+
+def test_count_only_prints_the_counts_and_writes_nothing(tmp_path, capsys):
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--count-only",
+                                  idea="range_breakdown_stop")) == 0
+    out = capsys.readouterr().out
+    assert "# v182 count: `range_breakdown_stop`" in out
+    for needle in ("| raw events |", "| dropped_warmup |", "| skipped_overlap (full-cap bound) |",
+                   "| dropped_no_match |", "< 300: no run, no ledger row", "## Check 5"):
+        assert needle in out, needle
+    assert not (tmp_path / "ledger.jsonl").exists()
+    assert not (tmp_path / "results").exists()
+
+
+def test_count_only_runs_for_an_idea_already_in_the_ledger_and_changes_nothing(tmp_path):
+    ledger = tmp_path / "ledger.jsonl"
+    stats.append_ledger_row(
+        {"id": "screen-range_breakdown_close", "date": "2026-10-09", "hypothesis": "x",
+         "instrument": "screen-v1", "n": 1, "exp_r": 0.0, "p": 0.5,
+         "verdict": "SCREEN-FAIL", "record": "docs/x.md"}, path=ledger)
+    before = ledger.read_bytes()
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--count-only",
+                                  idea="range_breakdown_close")) == 0
+    assert ledger.read_bytes() == before
+    assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.parametrize("extra, idea, needle", [
+    (("--end", "2020-01-02"), "range_breakdown_close", "never reads 2020+"),
+    (("--start", "2012-01-01"), "range_breakdown_close", "pre-registered window"),
+    (("--tickers", "AAA"), "range_breakdown_close", "--tickers belongs to a --dry-run"),
+    ((), "dollar_drop", "without context series"),
+])
+def test_count_only_refusals(tmp_path, capsys, extra, idea, needle):
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--count-only", *extra,
+                                  idea=idea)) == 2
+    assert needle in capsys.readouterr().err
+
+
+def test_count_only_beside_dry_run_is_an_argparse_error(tmp_path):
+    cache, membership = _universe_fixture(tmp_path)
+    with pytest.raises(SystemExit):
+        screen_idea.main(_argv(tmp_path, cache, membership, "--count-only", "--dry-run"))
+
+
+# --- v182 V182-17: short-side blocks in the results doc ---------------------
+
+from swingbot.core.backtesting.screen import descriptive  # noqa: E402
+
+_COSTS = {"slippage_bps": None, "commission": None}
+
+
+def test_a_long_or_familyless_idea_gets_no_control_and_no_overlap():
+    df = random_walk(2600)
+    for idea in (IDEAS["turn_of_month"], _short_probe()):
+        out = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS)
+        assert out.control is None and out.overlap is None, idea.name
+
+
+def test_with_short_blocks_returns_a_long_summary_itself():
+    df = random_walk(2600)
+    out = screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS)
+    summary = screen_idea.summarise([out])
+    assert screen_idea.with_short_blocks(summary, [out], IDEAS["turn_of_month"], None) is summary
+
+
+def test_books_runs_once_for_a_long_idea_and_once_more_for_a_control(monkeypatch):
+    calls = []
+    real = screen_idea._books
+
+    def spy(*args, **kwargs):
+        calls.append(args[0].name)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(screen_idea, "_books", spy)
+    df = random_walk(2700, seed=7)
+    for idea in (IDEAS["turn_of_month"], CLOSE, STOP):
+        screen_idea.screen_ticker(idea, "AAA", df, ALWAYS)
+    assert calls.count("turn_of_month") == 1
+    assert calls.count("range_breakdown_close") == 2      # the book + the control
+    assert calls.count("range_breakdown_stop") == 3       # the book + 3 x repricing + the control
+
+
+def test_the_control_is_the_same_book_over_the_control_events():
+    df = random_walk(2700, seed=7)
+    out = screen_idea.screen_ticker(CLOSE, "AAA", df, ALWAYS)
+    ctx = screen_idea.ticker_context(CLOSE, df, ALWAYS)
+    flags = CLOSE.control(df).reindex(df.index, fill_value=False).to_numpy(dtype=bool)
+    kept, _, draw = screen_idea._books(CLOSE, "AAA", df, {**ctx, "raw": flags}, _COSTS)
+    assert out.events and out.control                                  # non-vacuous
+    assert out.control == screen_idea._event_rows("AAA", df.index, kept, draw.null_mean_r)
+
+
+def test_a_level_control_enters_on_its_event_bar():
+    df = random_walk(2700, seed=7)
+    out = screen_idea.screen_ticker(STOP, "AAA", df, ALWAYS)
+    days = set(df.index[STOP.control(df).to_numpy(dtype=bool)].strftime("%Y-%m-%d"))
+    assert out.control
+    assert {row["entry_date"] for row in out.control} <= days
+
+
+def test_overlap_counts_the_partner_raw_bars_on_member_warm_bars():
+    df = random_walk(2700, seed=7)
+    out = screen_idea.screen_ticker(CLOSE, "AAA", df, ALWAYS)
+    ctx = screen_idea.ticker_context(CLOSE, df, ALWAYS)
+    population = np.asarray(ctx["member"], dtype=bool) & np.asarray(ctx["warm"], dtype=bool)
+    stop_raw = np.asarray(screen_idea.raw_events(STOP, df, None), dtype=bool)
+    assert out.overlap == descriptive.event_overlap(ctx["raw"] & population,
+                                                    stop_raw & population)
+    # Nested by construction: a close below S is a bar whose low is below S.
+    assert out.overlap["both"] == out.overlap["own"] > 0
+    assert screen_idea._family_partner(CLOSE) is STOP
+    assert screen_idea._family_partner(IDEAS["turn_of_month"]) is None
+
+
+def test_with_short_blocks_pools_every_block_for_a_level_idea():
+    df = random_walk(2700, seed=7)
+    screens = [screen_idea.screen_ticker(STOP, t, df, ALWAYS) for t in ("AAA", "BBB")]
+    summary = screen_idea.summarise(screens)
+    spy = random_walk(2900, seed=9, start="2009-06-01")
+    out = screen_idea.with_short_blocks(summary, screens, STOP, spy)
+    block = out["short"]
+    assert out["verdict"] is summary["verdict"]
+    assert block["partner"] == "range_breakdown_close"
+    assert block["overlap"] == {k: sum(s.overlap[k] for s in screens)
+                                for k in ("own", "other", "both")}
+    assert block["control"].n == sum(len(s.control) for s in screens)
+    assert block["repriced"].n == len(summary["events"])
+    assert block["regime"] == descriptive.regime_split(summary["events"],
+                                                       descriptive.spy_above_200(spy))
+    assert block["slots"] == (sum(s.null_slots for s in screens),
+                              sum(s.null_unfilled for s in screens))
+    assert block["depths"] == {
+        "event": descriptive.depth_summary([d for s in screens for d in s.depths["event"]]),
+        "null": descriptive.depth_summary([d for s in screens for d in s.depths["null"]])}
+
+
+def test_a_next_open_short_has_no_level_blocks():
+    df = random_walk(2700, seed=7)
+    screens = [screen_idea.screen_ticker(CLOSE, "AAA", df, ALWAYS)]
+    block = screen_idea.with_short_blocks(screen_idea.summarise(screens), screens, CLOSE,
+                                          None)["short"]
+    assert block["partner"] == "range_breakdown_stop" and block["control"] is not None
+    assert block["regime"] is None
+    assert (block["depths"], block["slots"], block["repriced"]) == (None, None, None)
+
+
+def _v(delta, low, high, n=500):
+    return verdict.Verdict("SCREEN-FAIL", n, delta, low, high, 0.25, 5, {}, {})
+
+
+def _short_block(**extra):
+    block = {"partner": "range_breakdown_stop",
+             "overlap": {"own": 400, "other": 1000, "both": 400},
+             "control": _v(0.0125, -0.0375, 0.0625),
+             "regime": {"above": (120, 0.25), "below": (280, -0.0625), "unknown": 3},
+             "depths": None, "slots": None, "repriced": None}
+    block.update(extra)
+    return block
+
+
+SHORT_BLOCK_TEXT = [
+    "## Short-side blocks (descriptive, never gating)",
+    "",
+    "**Event overlap** with `range_breakdown_stop` (raw event bars on member, warm bars): "
+    "400 of 400 `range_breakdown_close` bars (100.0%) are also `range_breakdown_stop` bars; "
+    "400 of 1000 `range_breakdown_stop` bars (40.0%) are also `range_breakdown_close` bars. "
+    "Nested ideas are two looks at one hypothesis: read both results docs together "
+    "(family of two, BH q above).",
+    "",
+    "**Trend-only control** (`control_events`: the idea's trend and first-break clauses, no "
+    "range clauses; same race, same matched null): N = 500, ΔExpR +0.0125R, 95% "
+    "week-clustered interval -0.0375R to +0.0625R. The idea's ΔExpR minus the control's: "
+    "+0.0187R. A pass whose ΔExpR is not clearly above the control is not credited to the "
+    "range.",
+    "",
+    "**SPY regime split** (SPY close vs its 200-day average at the last close before entry):",
+    "",
+    "| SPY | N | ΔExpR |",
+    "|---|---|---|",
+    "| above its 200-day average | 120 | +0.2500R |",
+    "| below its 200-day average | 280 | -0.0625R |",
+    "",
+    "Events with no SPY average before entry: 3.",
+]
+
+
+def test_short_blocks_render_overlap_control_and_regime():
+    _, summary, _, run = _fixed_doc_inputs()      # the idea's ΔExpR is 0.031234567
+    summary = {**summary, "short": _short_block()}
+    assert screen_idea._render_short_blocks(CLOSE, summary, run) == SHORT_BLOCK_TEXT
+
+
+def test_short_blocks_render_the_level_blocks_for_a_level_idea():
+    _, summary, _, run = _fixed_doc_inputs()
+    block = _short_block(
+        partner="range_breakdown_close", overlap=None, control=None, regime=None,
+        depths={"event": descriptive.depth_summary([0.0, 0.25, 0.5]),
+                "null": descriptive.depth_summary([0.0, 0.25, 0.296875, 0.5])},
+        slots=(100, 20), repriced=_v(-0.0125, -0.0625, 0.0375))
+    lines = screen_idea._render_short_blocks(STOP, {**summary, "short": block}, run)
+    assert lines == [
+        "## Short-side blocks (descriptive, never gating)",
+        "",
+        "**SPY regime split:** not computed (no SPY frame).",
+        "",
+        "**Fill depth** (ATR14[t−1] below the bar's open; 0 = a gap fill at the open):",
+        "",
+        "| depth (ATR14[t−1]) | n | q1 | median | q3 | gap fills |",
+        "|---|---:|---:|---:|---:|---:|",
+        "| events | 3 | 0.125 | 0.250 | 0.375 | 33.3% |",
+        "| null fills | 4 | 0.188 | 0.273 | 0.348 | 25.0% |",
+        "",
+        "**Null slots:** 100; unfilled 20 (20.0%); an event with no filled null is dropped "
+        "as `dropped_no_match`.",
+        "",
+        "**Repriced at 3.0 x base entry slippage** (15.0 bps on the entry fill, events and "
+        "null): ΔExpR -0.0125R, 95% week-clustered interval -0.0625R to +0.0375R; change vs "
+        "the 2.0 x book -0.0437R. Printed, never gating.",
+    ]
+
+
+def test_an_empty_depth_summary_renders_dashes():
+    empty = descriptive.depth_summary([])
+    assert screen_idea._depth_row("null fills", empty) == "| null fills | 0 | – | – | – | – |"
+
+
+def test_render_results_appends_the_short_blocks_after_the_drift():
+    _, summary, universe, run = _fixed_doc_inputs()
+    text = screen_idea.render_results(CLOSE, {**summary, "short": _short_block()}, universe, run)
+    assert "\n\n" + "\n".join(SHORT_BLOCK_TEXT) + "\n" in text
+    assert text.index("## Forward drift") < text.index("## Short-side blocks")
+    plain = screen_idea.render_results(CLOSE, summary, universe, run)
+    assert "Short-side blocks" not in plain
+
+
+def test_a_short_dry_run_prints_the_short_blocks(tmp_path, capsys):
+    cache, membership = _universe_fixture(tmp_path)
+    _write_csv(cache / "SPY.csv", random_walk(2900, seed=9, start="2009-06-01"))
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--dry-run",
+                                  "--tickers", "AAA,BBB", idea="range_breakdown_stop")) == 0
+    out = capsys.readouterr().out
+    for needle in ("## Short-side blocks (descriptive, never gating)",
+                   "**Event overlap** with `range_breakdown_close`",
+                   "**Trend-only control**", "**SPY regime split** (", "**Fill depth**",
+                   "**Null slots:**", "**Repriced at 3.0 x base entry slippage**"):
+        assert needle in out, needle
+    assert not (tmp_path / "results").exists()
+
+
+def test_a_short_run_without_spy_is_refused_before_screening(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(screen_idea, "screen_universe", lambda *a, **k: pytest.fail("screened"))
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--dry-run", "--tickers", "AAA",
+                                  idea="range_breakdown_close")) == 2
+    assert "SPY regime split (v182) cannot load SPY" in capsys.readouterr().err
+
+
+def test_a_long_run_needs_no_spy(tmp_path):
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--dry-run",
+                                  "--tickers", "AAA")) == 0

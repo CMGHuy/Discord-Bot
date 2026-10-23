@@ -168,3 +168,34 @@ def test_matched_null_without_a_shape_is_the_fixed_null():
 def test_matched_null_refuses_an_unknown_shape():
     with pytest.raises(ValueError, match="race shape"):
         _walk_null("donchian")
+
+
+def _walk_null_dir(direction=None, shape="fixed"):
+    df = random_walk(400, start="2019-01-01")
+    eligible = null.eligible_mask(np.zeros(len(df), dtype=bool), _all(df), _all(df), cap=60)
+    kw = {} if direction is None else {"direction": direction}
+    draw = null.matched_null(df, [5, 30], eligible, 20, 3, cap=60, atr=_atr(df),
+                             trend=_all(df), slippage_bps=0.0, commission=0.0,
+                             shape=shape, **kw)
+    return df, draw
+
+
+@pytest.mark.parametrize("shape", ["fixed", "trail"])
+def test_a_short_null_races_the_same_draw_short(shape):
+    _, long_ = _walk_null_dir("long", shape)
+    df, short = _walk_null_dir("short", shape)
+    assert [g.tolist() for g in short.groups] == [g.tolist() for g in long_.groups]
+    race_fn = race_mod.race_for(shape)
+    for k, group in enumerate(short.groups):
+        expected = race_fn(df, group, 60, atr=_atr(df), slippage_bps=0.0,
+                           commission=0.0, direction="short")
+        assert short.null_mean_r[k] == pytest.approx(expected.r.mean())
+    assert short.null_race.r.tolist() != long_.null_race.r.tolist()
+
+
+def test_matched_null_without_a_direction_is_the_long_null():
+    _, default = _walk_null_dir(None)
+    _, long_ = _walk_null_dir("long")
+    assert default.null_mean_r.tolist() == long_.null_mean_r.tolist()
+    assert default.null_race.r.tolist() == long_.null_race.r.tolist()
+    assert default.null_race.outcome.tolist() == long_.null_race.outcome.tolist()

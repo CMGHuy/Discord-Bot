@@ -49,3 +49,46 @@ def test_yearly_rank_corr_drops_nan_and_splits_by_year():
     assert set(out) == {2010, 2011}
     assert out[2010] == pytest.approx(0.894427, abs=1e-6)
     assert out[2011] == pytest.approx(0.866025, abs=1e-6)
+
+
+def _dyadic(n=780, seed=4):
+    """Closes on a 1/8 grid: reflection about 256 is exact in floats."""
+    rng = np.random.default_rng(seed)
+    return frame(rng.integers(400, 1200, n) / 8.0)
+
+
+def test_short_forward_is_the_negated_long_forward():
+    df = _dyadic()
+    atr = pd.Series(2.0, index=df.index)
+    for h in forward.HORIZONS:
+        long_ = forward.forward_atr(df, atr, h)
+        short = forward.forward_atr(df, atr, h, direction="short")
+        assert np.array_equal(short, -long_, equal_nan=True)
+        assert np.array_equal(forward.forward_atr(df, atr, h, direction="long"), long_,
+                              equal_nan=True)
+
+
+def test_a_mirrored_frame_raced_short_gives_the_original_long_drift_and_rank():
+    """Spec § Part A: the flip is applied once, so short on P == long on c - P."""
+    df = _dyadic()
+    mirrored = frame(256.0 - df["Close"].to_numpy(), index=df.index)
+    atr = pd.Series(2.0, index=df.index)
+    rng = np.random.default_rng(9)
+    indicator = (rng.random(len(df)) < 0.1).astype(int)
+    event_pos = np.flatnonzero(indicator)[:20]
+    groups = tuple(np.sort(rng.choice(len(df) - 60, 5, replace=False)) for _ in event_pos)
+    years = np.asarray(df.index.year)
+    for h in forward.HORIZONS:
+        short = forward.forward_atr(df, atr, h, direction="short")
+        long_ = forward.forward_atr(mirrored, atr, h)
+        assert np.array_equal(short, long_, equal_nan=True)
+        assert (forward.excess_drift(short, event_pos, groups)
+                == forward.excess_drift(long_, event_pos, groups))
+        assert (forward.yearly_rank_corr(years, indicator, short)
+                == forward.yearly_rank_corr(years, indicator, long_))
+
+
+def test_diagnostics_never_flips_a_sign_again():
+    from pathlib import Path
+    source = (Path(forward.__file__).with_name("diagnostics.py")).read_text(encoding="utf-8")
+    assert "direction" not in source

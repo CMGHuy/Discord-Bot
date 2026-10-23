@@ -309,8 +309,11 @@ SCREEN_RESULTS_DIR = os.path.join(_HOOK_REPO_ROOT, "docs", "superpowers", "resul
 SCREEN_LEDGER_PATH = os.path.join(SCREEN_RESULTS_DIR, "preregistration-ledger.jsonl")
 _SCREEN_MAX_SMOKE_TICKERS = 3
 _SCREEN_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
+#: Valueless screen flags (v182: --count-only beside --dry-run).
+_SCREEN_FLAG_OPTIONS = ("--dry-run", "--count-only")
 _SCREEN_OPTIONS = ("--idea", "--cache-dir", "--membership", "--start", "--end",
-                   "--date", "--ledger", "--results-dir", "--tickers", "--dry-run")
+                   "--date", "--ledger", "--results-dir", "--tickers",
+                   *_SCREEN_FLAG_OPTIONS)
 _SCREEN_VALUE_KEYS = {"--idea": "idea", "--ledger": "ledger",
                       "--results-dir": "results_dir"}
 
@@ -375,7 +378,8 @@ def _resolve_screen_option(name: str) -> str | None:
 
 def _screen_option_values(tokens: list[str]):
     """Yield (option, value) for each screen option in `tokens`; value is None
-    for --dry-run and for an option with no value after it."""
+    for a valueless flag (--dry-run, --count-only) and for an option with no
+    value after it."""
     i = 0
     while i < len(tokens):
         tok = tokens[i]
@@ -384,7 +388,7 @@ def _screen_option_values(tokens: list[str]):
         opt = _resolve_screen_option(name) if name.startswith("--") else None
         if opt is None:
             continue
-        if opt == "--dry-run" or eq:
+        if opt in _SCREEN_FLAG_OPTIONS or eq:
             yield opt, (inline if eq else None)
         elif i < len(tokens) and not tokens[i].startswith("-"):
             yield opt, tokens[i]
@@ -399,11 +403,11 @@ def _screen_flags(tokens: list[str]) -> dict | None:
     start = next((i for i, tok in enumerate(tokens) if _is_screen_token(tok)), None)
     if start is None:
         return None
-    flags = {"idea": None, "dry_run": False, "tickers": False, "ticker_count": 0,
-             "ledger": None, "results_dir": None}
+    flags = {"idea": None, "dry_run": False, "count_only": False, "tickers": False,
+             "ticker_count": 0, "ledger": None, "results_dir": None}
     for opt, value in _screen_option_values(tokens[start + 1:]):
-        if opt == "--dry-run":
-            flags["dry_run"] = True
+        if opt in _SCREEN_FLAG_OPTIONS:
+            flags[opt[2:].replace("-", "_")] = True
         elif opt == "--tickers":
             flags["tickers"] = bool(value)
             flags["ticker_count"] = sum(
@@ -500,7 +504,11 @@ def _screen_record_reason(idea: str) -> str | None:
 def _screen_deny_reason(flags: dict) -> str | None:
     """The deny text for one screen segment, or None to allow it. The order is
     the index's Decision 10: a dry run is decided by --tickers alone; a real
-    run is denied on a non-default ledger or results dir, then on a record."""
+    run is denied on a non-default ledger or results dir, then on a record.
+    A --count-only segment is allowed first: it races nothing and writes
+    nothing (screen_idea.py refuses it beside --dry-run)."""
+    if flags["count_only"]:
+        return None   # v182: counts only -- no race, no R, writes nothing, any idea
     if flags["dry_run"]:
         if flags["tickers"] and flags["ticker_count"] > _SCREEN_MAX_SMOKE_TICKERS:
             return _screen_text(
