@@ -85,15 +85,30 @@ def _regimes(rng, bars: int) -> np.ndarray:
     return state
 
 
-def synthetic_frame(rng, bars: int = BARS, start: str = START) -> pd.DataFrame:
+def _anchored_open_close(sigma, unit_t, gap) -> tuple[np.ndarray, np.ndarray]:
+    """Open gaps off the prior close; Close = Open x exp(sigma x t)."""
+    close = 100.0 * np.exp(np.cumsum(np.log(gap) + sigma * unit_t))
+    return np.r_[100.0, close[:-1]] * gap, close
+
+
+def synthetic_frame(rng, bars: int = BARS, start: str = START, *,
+                    anchored: bool = False) -> pd.DataFrame:
     """One driftless OHLCV frame: unit-variance Student-t log returns scaled
     by the regime's sigma; the open gaps off the prior close; wicks beyond
-    the open/close body. High >= max(Open, Close), Low <= min(Open, Close)."""
+    the open/close body. High >= max(Open, Close), Low <= min(Open, Close).
+    Default: Close[t] = Close[t-1] x exp(sigma x t), so the open noise is
+    coupled to the close. ``anchored`` (level A/A only): Close = Open x
+    exp(sigma x t), so a bar's open noise (its fill depth) is independent of
+    its own move; same rng calls in the same order."""
     sigma = np.asarray(VOL_STATES)[_regimes(rng, bars)]
     unit_t = rng.standard_t(T_DF, bars) / np.sqrt(T_DF / (T_DF - 2))
-    close = 100.0 * np.exp(np.cumsum(sigma * unit_t))
-    open_ = np.r_[100.0, close[:-1]] * np.exp(0.3 * sigma * rng.standard_normal(bars))
-    high = np.maximum(open_, close) * np.exp(np.abs(0.5 * sigma * rng.standard_normal(bars)))
+    if anchored:
+        open_, close = _anchored_open_close(
+            sigma, unit_t, np.exp(0.3 * sigma * rng.standard_normal(bars)))
+    else:
+        close = 100.0 * np.exp(np.cumsum(sigma * unit_t))
+        open_ = np.r_[100.0, close[:-1]] * np.exp(0.3 * sigma * rng.standard_normal(bars))
+    high =np.maximum(open_, close) * np.exp(np.abs(0.5 * sigma * rng.standard_normal(bars)))
     low = np.minimum(open_, close) * np.exp(-np.abs(0.5 * sigma * rng.standard_normal(bars)))
     return pd.DataFrame({"Open": open_, "High": high, "Low": low, "Close": close,
                          "Volume": np.full(bars, 1e6)},
@@ -162,7 +177,7 @@ def replicate(seed: int, *, tickers: int = TICKERS, bars: int = BARS,
     rng = np.random.default_rng(seed)
     paired = []
     for i in range(tickers):
-        df = synthetic_frame(rng, bars)
+        df = synthetic_frame(rng, bars, anchored=(entry == "level"))
         idea = _replicate_idea(df, rng, rate, direction, entry)
         screen = screen_idea.screen_ticker(idea, f"R{seed}T{i:03d}", df, None)
         paired += [verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
@@ -195,7 +210,16 @@ def calibrate(replicates: int = REPLICATES, seed: int = SEED, *, tickers: int = 
             "mean_n": float(np.mean([v.n for v in verdicts]))}
 
 
-def _generator_paragraph() -> str:
+def _generator_paragraph(entry: str = "next_open") -> str:
+    if entry == "level":
+        return (f"**Generator:** Student-t innovations t, df = {T_DF}, scaled to unit variance; "
+                f"two-state volatility regime, daily sigma {VOL_STATES[0]} / {VOL_STATES[1]}, "
+                f"per-bar switch probability {SWITCH_PROB[0]} (calm -> stressed) / "
+                f"{SWITCH_PROB[1]} (stressed -> calm); no drift. Open-anchored bars: the open "
+                "gaps off the prior close by exp(0.3 x sigma x N(0,1)) and Close = Open x "
+                "exp(sigma x t), so a bar's open noise (its fill depth) is not coupled to its "
+                "own move (the next-open A/A anchors Close to the prior close instead). "
+                "Synthetic data only; no cached price file is read and no ledger row is written.")
     return (f"**Generator:** Student-t innovations, df = {T_DF}, scaled to unit variance; "
             f"two-state volatility regime, daily sigma {VOL_STATES[0]} / {VOL_STATES[1]}, "
             f"per-bar switch probability {SWITCH_PROB[0]} (calm -> stressed) / "
@@ -291,7 +315,7 @@ def _render_head_short(result: dict, params: dict, day: str) -> list:
         f"**Run:** {day}; `{command}`; replicate r uses seed {params['seed']} + r; "
         f"{params['tickers']} tickers x {BARS} business days from {START}; bootstrap "
         f"{params['resamples']:,} week resamples, seed {stats.WEEK_BOOTSTRAP_SEED}.", "",
-        _generator_paragraph(), "",
+        _generator_paragraph(entry), "",
         _race_paragraph(entry),
     ]
 

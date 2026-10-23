@@ -336,7 +336,9 @@ def test_a_short_level_replicate_races_level_mode(monkeypatch):
     assert seen and set(seen) == {("fixed", "short", True)}
 
 
-def test_a_level_replicate_sees_the_long_replicates_frames(monkeypatch):
+def test_a_level_replicate_sees_open_anchored_frames(monkeypatch):
+    """The level A/A races open-anchored frames (Close = Open x exp(sigma x t)),
+    the next-open A/A the default prior-close-anchored ones."""
     seen = {"next_open": [], "level": []}
     real = cal.screen_idea.screen_ticker
 
@@ -348,8 +350,11 @@ def test_a_level_replicate_sees_the_long_replicates_frames(monkeypatch):
     cal.replicate(7, tickers=2, n_resamples=100)
     cal.replicate(7, tickers=2, n_resamples=100, direction="short", entry="level")
     assert len(seen["next_open"]) == len(seen["level"]) == 2
-    for (n1, c1), (n2, c2) in zip(seen["next_open"], seen["level"]):
-        assert n1 == n2 and np.array_equal(c1, c2)
+    first = cal.synthetic_frame(np.random.default_rng(7), cal.BARS)
+    anchored = cal.synthetic_frame(np.random.default_rng(7), cal.BARS, anchored=True)
+    assert np.array_equal(seen["next_open"][0][1], first["Close"].to_numpy())
+    assert np.array_equal(seen["level"][0][1], anchored["Close"].to_numpy())
+    assert not np.array_equal(seen["level"][0][1], seen["next_open"][0][1])
 
 
 def test_render_short_level_states_the_order_the_null_and_the_limit(monkeypatch):
@@ -377,3 +382,82 @@ def test_a_short_level_run_writes_the_level_doc(tmp_path, monkeypatch):
     assert cal.main(argv) == 0
     assert (out_dir / "2026-10-21-short-level-race-calibration.md").exists()
     assert not (out_dir / "2026-10-21-short-race-calibration.md").exists()
+
+
+# --- open-anchored generator for the level A/A (ad-hoc v182 fix) ---
+import hashlib  # noqa: E402
+
+DEFAULT_FRAME_SHA = "ad55a3274886536fe94b47a4dad08e01f0426eabfaa5fd07e791ee8c3095a274"
+
+
+def _ohlc_sha(df):
+    return hashlib.sha256(df[["Open", "High", "Low", "Close"]].to_numpy().tobytes()).hexdigest()
+
+
+def test_the_default_frame_is_byte_identical_to_the_pre_fix_generator():
+    df = cal.synthetic_frame(np.random.default_rng(11), 300)
+    assert _ohlc_sha(df) == DEFAULT_FRAME_SHA
+    assert df["Close"].iloc[0] == pytest.approx(99.72178016305347, rel=0, abs=0)
+    assert _ohlc_sha(cal.synthetic_frame(np.random.default_rng(11), 300, anchored=False)) \
+        == DEFAULT_FRAME_SHA
+
+
+def test_the_anchored_frame_is_valid_ohlcv():
+    df = cal.synthetic_frame(np.random.default_rng(3), anchored=True)
+    assert len(df) == cal.BARS
+    assert list(df.columns) == ["Open", "High", "Low", "Close", "Volume"]
+    assert (df["High"] >= df[["Open", "Close"]].max(axis=1)).all()
+    assert (df["Low"] <= df[["Open", "Close"]].min(axis=1)).all()
+    assert (df[["Open", "High", "Low", "Close"]] > 0).all().all()
+    assert df.index[0] == pd.Timestamp(cal.START)
+
+
+def test_the_anchored_close_is_anchored_to_its_own_open():
+    """Close = Open x exp(sigma x t) and Open = prior Close x gap, drawn from the
+    same rng calls in the same order as the default frame."""
+    bars = 400
+    rng = np.random.default_rng(5)
+    sigma = np.asarray(cal.VOL_STATES)[cal._regimes(rng, bars)]
+    unit_t = rng.standard_t(cal.T_DF, bars) / np.sqrt(cal.T_DF / (cal.T_DF - 2))
+    gap = np.exp(0.3 * sigma * rng.standard_normal(bars))
+    df = cal.synthetic_frame(np.random.default_rng(5), bars, anchored=True)
+    close, open_ = df["Close"].to_numpy(), df["Open"].to_numpy()
+    assert np.allclose(np.log(close / open_), sigma * unit_t)
+    assert np.allclose(open_, np.r_[100.0, close[:-1]] * gap)
+
+
+def test_a_next_open_replicate_never_asks_for_the_anchored_frame(monkeypatch):
+    flags = []
+    real = cal.synthetic_frame
+
+    def spy(rng, bars=cal.BARS, start=cal.START, **kwargs):
+        flags.append(kwargs.get("anchored", False))
+        return real(rng, bars, start, **kwargs)
+
+    monkeypatch.setattr(cal, "synthetic_frame", spy)
+    cal.replicate(2, tickers=2, n_resamples=100)
+    cal.replicate(2, tickers=2, n_resamples=100, direction="short")
+    assert flags == [False] * 4
+    flags.clear()
+    cal.replicate(2, tickers=2, n_resamples=100, direction="short", entry="level")
+    assert flags == [True] * 2
+
+
+def test_the_level_doc_states_the_open_anchored_generator(monkeypatch):
+    _fake_replicates(monkeypatch, FAKE)
+    result = cal.calibrate(4, seed=0, direction="short", entry="level", **QUIET)
+    params = {"replicates": 4, "seed": 0, "tickers": 2, "resamples": 200,
+              "direction": "short", "entry": "level"}
+    text = cal.render(result, params, "2026-10-21")
+    assert "Close = Open x exp(sigma x t)" in text
+
+
+def test_the_next_open_docs_keep_the_old_generator_wording(monkeypatch):
+    for direction in ("long", "short"):
+        _fake_replicates(monkeypatch, FAKE)
+        result = cal.calibrate(4, seed=0, direction=direction, **QUIET)
+        params = {"replicates": 4, "seed": 0, "tickers": 2, "resamples": 200,
+                  "direction": direction, "entry": "next_open"}
+        text = cal.render(result, params, "2026-10-21")
+        assert "Close = Open x exp" not in text
+        assert cal._generator_paragraph() in text
