@@ -118,3 +118,36 @@ def test_refresh_symbols_survives_a_failing_source(monkeypatch):
     monkeypatch.setattr(si, "_short_universe", lambda today: ["XOM"])
     monkeypatch.setattr(si, "_open_short_tickers", lambda: [])
     assert si.refresh_symbols() == ["XOM"]
+
+
+def _info_entry(fetched_at=NOW):
+    from swingbot.core.marketdata.shared.kinds import Entry
+    return Entry({k: INFO.get(k) for k in si.INFO_KEYS}, fetched_at, "yfinance", "fetched")
+
+
+def test_fetch_reads_only_the_parsed_info_keys_through_the_shared_layer(monkeypatch):
+    from swingbot.core.marketdata import data
+    asked = []
+    monkeypatch.setattr(data, "get_info_fields",
+                        lambda t, keys, *, variant: asked.append((t, keys, variant)) or _info_entry())
+    out = si.fetch_short_interest("gme")
+    assert asked == [("gme", si.INFO_KEYS, "short_interest")]
+    assert {k: v for k, v in out.items() if k != "fetched_at"} == {
+        k: v for k, v in si.parse_info(INFO, today=dt.date.today()).items() if k != "fetched_at"}
+    assert set(si.INFO_KEYS) >= {"shortPercentOfFloat", "exDividendDate", "lastDividendValue"}
+
+
+def test_fetch_stamps_when_the_value_was_fetched_not_when_it_was_read(monkeypatch):
+    """A budget-deferred layer serves an older cached doc; its age is not hidden."""
+    from swingbot.core.marketdata import data
+    old = dt.datetime(2026, 10, 1, 21, 40, tzinfo=dt.timezone.utc)
+    monkeypatch.setattr(data, "get_info_fields", lambda t, keys, *, variant: _info_entry(old))
+    assert si.fetch_short_interest("GME")["fetched_at"] == old.isoformat()
+
+
+def test_fetch_with_no_layer_answer_is_a_failure_not_an_empty_entry(_data_dir, monkeypatch):
+    from swingbot.core.marketdata import data
+    monkeypatch.setattr(data, "get_info_fields", lambda t, keys, *, variant: None)
+    with pytest.raises(si.ShortInterestUnavailable):
+        si.fetch_short_interest("GME")
+    assert si.refresh_short_interest(["GME"], now=NOW) == {"updated": 0, "failed": ["GME"]}

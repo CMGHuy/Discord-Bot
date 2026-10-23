@@ -2,7 +2,7 @@
 
 The alert path only ever calls ``cached_short_interest`` and
 ``request_refresh``; only the daily loop calls ``fetch_short_interest``
-(yfinance ``.info``, network). Nothing here feeds a filter, a score or a
+(yfinance ``.info`` via the shared layer, network). Nothing here feeds a filter, a score or a
 backtest, and a missing field stays ``None`` -- never a comfortable 0.
 """
 from __future__ import annotations
@@ -25,11 +25,20 @@ CACHE_NAME = "short_interest.json"
 QUEUE_NAME = "short_interest_queue.json"
 STALE_DAYS = 21
 
+#: The yfinance ``.info`` keys ``parse_info`` reads -- all the layer fetches and caches.
+INFO_KEYS = ("shortPercentOfFloat", "sharesShort", "floatShares", "shortRatio",
+             "dateShortInterest", "exDividendDate", "lastDividendDate", "lastDividendValue")
+INFO_VARIANT = "short_interest"
+
 _QUEUE_LOCK = threading.Lock()
 
 
 class ShortInterestCacheError(Exception):
     """The cache file exists but cannot be read as a symbol map."""
+
+
+class ShortInterestUnavailable(Exception):
+    """The shared layer had no value for a ticker (budget-deferred or failed)."""
 
 
 def _path(name: str) -> str:
@@ -89,8 +98,16 @@ def parse_info(info: dict, *, today: dt.date) -> dict:
 
 
 def fetch_short_interest(ticker) -> dict:
-    import yfinance as yf
-    return parse_info(yf.Ticker(ticker).info or {}, today=dt.date.today())
+    """One ticker's facts through the shared market-data layer (v171 D1): the
+    layer's yfinance provider function reads just ``INFO_KEYS``. ``fetched_at``
+    is when the value was fetched -- a budget-deferred call may serve an older one."""
+    from swingbot.core.marketdata import data
+    entry = data.get_info_fields(ticker, INFO_KEYS, variant=INFO_VARIANT)
+    if entry is None:
+        raise ShortInterestUnavailable(f"{ticker}: no short-interest answer from the layer")
+    parsed = parse_info(entry.value or {}, today=dt.date.today())
+    parsed["fetched_at"] = entry.fetched_at.isoformat()
+    return parsed
 
 
 def _read_cache() -> dict:
