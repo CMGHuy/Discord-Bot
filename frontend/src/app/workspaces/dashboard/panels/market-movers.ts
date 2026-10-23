@@ -18,7 +18,7 @@ type MoverTab = 'gainers' | 'losers';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Panel, TabBar],
   template: `
-    <sb-panel heading="Market movers">
+    <sb-panel heading="Market movers" [divided]="true">
       <sb-tab-bar [tabs]="tabs" [active]="active()" (activeChange)="active.set($any($event))" />
       <ul class="movers">
         @for (row of visible(); track row.symbol) {

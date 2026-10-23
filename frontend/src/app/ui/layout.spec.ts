@@ -102,12 +102,12 @@ describe('sb-tab-bar overflow (v80 D4)', () => {
   });
 });
 
-describe('sb-panel (v80 D4)', () => {
+describe('sb-panel (v80 D4, v186 D1)', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
-  it('sets its heading in the shared label style', () => {
+  it('sets its heading as a panel title, not in the field-label style', () => {
     const f = TestBed.createComponent(Panel); f.componentRef.setInput('heading', 'Exposure'); f.detectChanges();
     const h2 = (f.nativeElement as HTMLElement).querySelector('h2')!;
-    expect(h2.classList).toContain('sb-label'); expect(h2.textContent!.trim()).toBe('Exposure');
+    expect(h2.classList).not.toContain('sb-label'); expect(h2.textContent!.trim()).toBe('Exposure');
   });
 });
 
@@ -305,7 +305,7 @@ describe('sb-panel header: one height, one baseline (v179 §3.3, §3.4)', () => 
     f.detectChanges();
     const header = (f.nativeElement as HTMLElement).querySelector('header')!;
     expect([...header.children].map((child) => child.tagName.toLowerCase() + '.' + child.className))
-      .toEqual(['h2.sb-label', 'div.actions']);
+      .toEqual(['h2.', 'div.actions']);
   });
 });
 
@@ -526,4 +526,95 @@ describe('sb-drawer swipe down to close (phone sheet)', () => {
     expect(dialog.open).toBe(true);
     expect(dialog.style.transform).toBe('');
   });
+});
+
+/** v186 D1: the one panel title -- the same list is pinned in panel-header.spec.ts. */
+const PANEL_TITLE = [
+  'font-family: var(--font-sans);',
+  'font-weight: 600;',
+  'font-size: var(--text-body);',
+  'color: var(--text);',
+  'letter-spacing: normal;',
+];
+
+describe('sb-panel title and conditional header rule (v186 D1, D2)', () => {
+  const PANEL = stylesOf('sb-panel', 'Panel');
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+
+  function mount(inputs: Record<string, unknown>) {
+    const f = TestBed.createComponent(Panel);
+    for (const [key, value] of Object.entries(inputs)) f.componentRef.setInput(key, value);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    return { header: el.querySelector('header'), body: el.querySelector('.body')! };
+  }
+
+  it('sets the title in the UI face, 600, at body size, as the text was given', () => {
+    const h2 = ruleIn(PANEL, 'h2');
+    for (const declaration of PANEL_TITLE) expect(h2, declaration).toContain(declaration);
+    expect(h2).not.toContain('text-transform');
+    expect(PANEL).not.toContain('<h2 class=');
+  });
+
+  it('keeps a 1px header rule on every header, transparent unless ruled', () => {
+    const header = ruleIn(PANEL, 'header');
+    expect(header).toContain('border-bottom: 1px solid transparent;');
+    expect(header).not.toContain('border-bottom: 1px solid var(--border)');
+    expect(header).toContain('min-height: calc(var(--control-h) + 2 * var(--space-10) + 1px)');
+    expect(ruleIn(PANEL, 'header.ruled')).toContain('border-bottom-color: var(--border);');
+  });
+
+  it('rules the header of a flush panel', () => {
+    const { header, body } = mount({ heading: 'Open positions', flush: true });
+    expect(header!.classList).toContain('ruled');
+    expect(body.classList).toContain('flush');
+    expect(body.classList).not.toContain('tight');
+  });
+
+  it('rules the header of a divided panel and keeps its body padding', () => {
+    const { header, body } = mount({ heading: 'Market movers', divided: true });
+    expect(header!.classList).toContain('ruled');
+    expect(body.classList).not.toContain('flush');
+    expect(body.classList).not.toContain('tight');
+  });
+
+  it('leaves a plain headed panel unruled and tightens its first gap', () => {
+    const { header, body } = mount({ heading: 'Exposure' });
+    expect(header!.classList).not.toContain('ruled');
+    expect(body.classList).toContain('tight');
+    expect(ruleIn(PANEL, '.body.tight')).toContain('padding-top: var(--space-4);');
+  });
+
+  it('keeps the full body padding on a panel with no heading', () => {
+    const { header, body } = mount({});
+    expect(header).toBeNull();
+    expect(body.classList).not.toContain('tight');
+    expect(ruleIn(PANEL, '.body')).toContain('padding: var(--space-14)');
+  });
+
+  it('draws the collapse toggle in a readable colour, not the rule colour', () => {
+    const toggle = ruleIn(PANEL, '.panel-toggle');
+    expect(toggle).toContain('color: var(--text-muted);');
+    expect(toggle).not.toContain('--text-faint');
+  });
+});
+
+/** v186 D2: the non-flush headed panels whose body opens with a tab strip or a table. */
+describe('panels whose body opens with a tab strip or a table are divided (v186 D2)', () => {
+  const DIVIDED: [string, string][] = [
+    ['src/app/workspaces/calendar/calendar.ts', 'By weekday (all history)'],
+    ['src/app/workspaces/reports/attribution-tab.ts', 'Factors'],
+    ['src/app/workspaces/reports/attribution-tab.ts', 'Direction and horizon splits'],
+    ['src/app/workspaces/calendar/day/calendar-day.ts', 'What drove it'],
+    ['src/app/workspaces/dashboard/panels/market-movers.ts', 'Market movers'],
+    ['src/app/workspaces/gallery/gallery.ts', 'sb-tab-bar -- scrolls with an edge fade when the tabs do not fit'],
+  ];
+  for (const [path, heading] of DIVIDED) {
+    it(`${path}: "${heading}"`, () => {
+      const source = readFileSync(join(process.cwd(), path), 'utf8');
+      const tag = source.match(new RegExp(`<sb-panel heading="${esc(heading)}"[^>]*>`))?.[0] ?? '';
+      expect(tag, `no <sb-panel heading="${heading}"> in ${path}`).not.toBe('');
+      expect(tag).toContain('[divided]="true"');
+    });
+  }
 });

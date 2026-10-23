@@ -173,7 +173,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
         </sb-panel>
       </div>
 
-      <sb-panel heading="What drove it">
+      <sb-panel heading="What drove it" [divided]="true">
         <sb-tab-bar [tabs]="tabs" [active]="dimension()" (activeChange)="setDimension($event)" />
         <div class="table-wrap"><table class="breakdown">
           <thead>

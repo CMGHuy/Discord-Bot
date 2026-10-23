@@ -217,7 +217,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
          so a THIS MONTH empty state cannot hide it (see the section-head
          comment). Degrades safely via weekdays()'s own [] default before
          the first load. -->
-    <sb-panel heading="By weekday (all history)">
+    <sb-panel heading="By weekday (all history)" [divided]="true">
       <table class="dow">
         <thead>
           <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>

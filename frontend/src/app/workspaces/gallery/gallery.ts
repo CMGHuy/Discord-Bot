@@ -263,7 +263,7 @@ interface ContractRow {
     <sb-panel heading="sb-filter-chips (deprecated, v80 D4: use sb-segmented)">
       <sb-filter-chips [chips]="filterChips" [selected]="'open'" />
     </sb-panel>
-    <sb-panel heading="sb-tab-bar -- scrolls with an edge fade when the tabs do not fit">
+    <sb-panel heading="sb-tab-bar -- scrolls with an edge fade when the tabs do not fit" [divided]="true">
       <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="activeTab.set($event)" />
       <div class="narrow-demo">
         <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="activeTab.set($event)" />
