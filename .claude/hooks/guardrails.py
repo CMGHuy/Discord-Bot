@@ -274,6 +274,7 @@ CLOSED_PREREGISTRATION_KNOBS = frozenset({
     "GIVEBACK_MODE",   # v178: simulator-only runner give-back levels, closed
     "GIVEBACK_K",
     "GIVEBACK_F",
+    "TURTLE_SOUP_RESEARCH_MODE",   # v180: Turtle Soup structural arm, closed
 })
 _BACKTEST_SCRIPT_RE = re.compile(r"(?:tune_strategy|run_backtest_range)\.py")
 
