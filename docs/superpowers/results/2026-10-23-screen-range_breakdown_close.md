@@ -1,5 +1,6 @@
 # v140 screen: `range_breakdown_close` -> SCREEN-FAIL
-n**Definition commit:** 51a1335818f76506268fc4769d09d9b42be8e978
+
+**Definition commit:** 51a1335818f76506268fc4769d09d9b42be8e978
 
 **Ledger id:** `screen-range_breakdown_close` (instrument `screen-v1`); BH q = 1.0000 across the ledger (reported, never gating).
 
