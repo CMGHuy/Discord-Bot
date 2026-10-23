@@ -195,6 +195,13 @@ class TradePlanV2:
     quote_age_s: float | None = None
     quote_session: str | None = None
     price_confirmed: bool | None = None
+    # v183 Part A (planning/gap_sizing.py): the sizing rule in force and the
+    # p99 up-gap, stamped once at LIVE creation for shorts only --
+    # {"rule": "gap_p99" | "stop", "up_gap_p99_pct": float | None,
+    #  "n_up_gaps": int}. None for every long, every replayed plan and every
+    # plan persisted before v183. Live config, so never an entry_context key.
+    # Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
+    gap_sizing: dict | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
@@ -212,10 +219,19 @@ def breakeven_trigger(plan: TradePlanV2, entry: float) -> float:
 _PLAN_FIELDS = None   # cached field list
 
 
+# v183: optional fields written only when set -- a None here is omitted, never
+# stored as null, so every plan doc without them (every long) stays
+# byte-identical to its pre-v183 shape. plan_from_dict defaults them back.
+_OMIT_WHEN_NONE = ("gap_sizing",)
+
+
 def plan_to_dict(plan: TradePlanV2) -> dict:
     d = dataclasses.asdict(plan)
     # tuples (quality_breakdown rows) -> lists so json round-trips cleanly
     d["quality_breakdown"] = [list(row) for row in d.get("quality_breakdown", [])]
+    for key in _OMIT_WHEN_NONE:
+        if d.get(key) is None:
+            d.pop(key, None)
     return d
 
 

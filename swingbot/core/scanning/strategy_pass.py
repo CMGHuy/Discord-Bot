@@ -10,6 +10,7 @@ from swingbot.core.market import market_context
 from swingbot.core.market.entry_filters import ENTRY_FUNCS, entries_for
 from swingbot.core.planning.builders import build_strategy_plan
 from swingbot.core.planning.params import stamp_badge, stamp_cohort, stamp_entry_context
+from swingbot.core.planning.gap_sizing import stamp_gap_sizing
 from swingbot.core.planning.stop_scope import risk_sizing_ok
 from swingbot.core.tracking import ledger as ledger_mod
 from swingbot.core.edge.rs_gate import rs_verdict
@@ -75,6 +76,7 @@ def build_strategy_plan_at(df_completed: pd.DataFrame, *, ticker: str, strategy:
     stamp_badge(plan)
     stamp_cohort(plan, regime2_state)
     stamp_entry_context(plan, df_completed, {**(asof or {}), "regime2_state": regime2_state})
+    stamp_gap_sizing(plan, df_completed)
     plan.ledger = ledger_mod.ledger_for(plan.source, plan.badge)
     return plan
 
