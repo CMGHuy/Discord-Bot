@@ -574,12 +574,28 @@ def day_breakdown(rows: list[dict]) -> dict[str, list[dict]]:
 # --- v165 D4: the day drawer's / day page's summary tiles -------------------
 
 
-def _leaders(rows: list[dict]) -> list[dict]:
-    """The five rows with the largest |R|, as `{ticker, r}`."""
+def _ticker_nets(rows: list[dict]) -> list[dict]:
+    """One `{ticker, pnl, r}` per ticker traded: the day's net money and R."""
+    groups: dict = {}
+    for row in rows:
+        groups.setdefault(row["ticker"], []).append(row)
     return [
-        {"ticker": row["ticker"], "r": row["r_multiple"]}
-        for row in sorted(rows, key=lambda row: abs(row["r_multiple"]), reverse=True)[:5]
+        {"ticker": ticker,
+         "pnl": _sum_or_none([r["pnl_amount"] for r in group]),
+         "r": _sum_or_none([r["r_multiple"] for r in group if r["r_multiple"] is not None])}
+        for ticker, group in groups.items()
     ]
+
+
+def _net(row: dict) -> float:
+    """The sign-carrying figure of a ticker row: money, else R."""
+    return row["pnl"] if row["pnl"] is not None else (row["r"] or 0.0)
+
+
+def _leaders(rows: list[dict], gained: bool) -> list[dict]:
+    """Every ticker traded that day whose net is a gain (or a loss), largest first."""
+    nets = [t for t in _ticker_nets(rows) if (_net(t) > 0) == gained and _net(t) != 0]
+    return sorted(nets, key=lambda t: abs(_net(t)), reverse=True)
 
 
 def _worst_drawdown_r(measured: list[float]) -> float | None:
@@ -606,6 +622,8 @@ def day_totals(day_rows: list[dict]) -> dict:
     measured = [r["r_multiple"] for r in measured_rows]
     winners = [r for r in measured_rows if r["r_multiple"] > 0]
     losers = [r for r in measured_rows if r["r_multiple"] < 0]
+    # Leaders are per ticker over every row traded, netted in money.
+    traded = [r for r in day_rows if r["r_multiple"] is not None or r["pnl_amount"] is not None]
     return {
         # `trades` stays the route's list contract; this is its numeric
         # companion for the tiles.
@@ -617,6 +635,6 @@ def day_totals(day_rows: list[dict]) -> dict:
         "win_rate": metrics.win_rate([{"status": r["outcome"]} for r in day_rows]),
         "avg_trade_r": _avg_or_none(measured),
         "worst_drawdown_r": _worst_drawdown_r(measured),
-        "contributors": _leaders(winners),
-        "detractors": _leaders(losers),
+        "contributors": _leaders(traded, gained=True),
+        "detractors": _leaders(traded, gained=False),
     }

@@ -779,8 +779,8 @@ def test_day_totals_values():
         "avg_trade_r": 0.5,
         # Running R: 2.0 (peak) then 1.0 -> drawdown 1.0.
         "worst_drawdown_r": 1.0,
-        "contributors": [{"ticker": "AAPL", "r": 2.0}],
-        "detractors": [{"ticker": "MSFT", "r": -1.0}],
+        "contributors": [{"ticker": "AAPL", "pnl": 50.0, "r": 2.0}],
+        "detractors": [{"ticker": "MSFT", "pnl": -25.0, "r": -1.0}],
     }
 
 
@@ -792,9 +792,13 @@ def test_day_totals_with_no_measurable_r_is_none_not_zero():
     assert totals["contributors"] == [] and totals["detractors"] == []
 
 
-def test_day_totals_leaders_are_the_five_largest_by_magnitude():
+def test_day_totals_leaders_list_every_ticker_netted_in_money():
     rows = [_tile_row(f"T{i}", float(i), 1.0, "win") for i in range(1, 8)]
-    assert [x["r"] for x in day_totals(rows)["contributors"]] == [7.0, 6.0, 5.0, 4.0, 3.0]
+    rows += [_tile_row("T1", -3.0, -10.0, "loss"), _tile_row("Z", -1.0, -5.0, "loss")]
+    totals = day_totals(rows)
+    assert [x["ticker"] for x in totals["contributors"]] == [f"T{i}" for i in range(2, 8)]
+    assert totals["detractors"] == [{"ticker": "T1", "pnl": -9.0, "r": -2.0},
+                                    {"ticker": "Z", "pnl": -5.0, "r": -1.0}]
 
 
 def test_day_totals_drawdown_walks_the_rows_in_the_order_given():
