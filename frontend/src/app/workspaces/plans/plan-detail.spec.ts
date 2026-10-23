@@ -25,7 +25,7 @@ import {
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
-import { PlanDetail, looksLikePlanId, redirectFor, timingLines } from './plan-detail';
+import { PlanDetail, looksLikePlanId, redirectFor, shortOrderNotes, timingLines } from './plan-detail';
 
 // The page renders sb-plan-chart, whose TradeChart asks for matchMedia.
 installMatchMediaPolyfill();
@@ -128,6 +128,37 @@ function planResponse(status: string, overrides: object = {}, detail: object = {
   };
 }
 
+const NOTICE = [
+  '⚠ SQUEEZE RISK · Short interest 18.2% of float · 4.1 days to cover · float 45.3M (as of 2026-11-13)',
+  'Earnings in hold: 2026-11-30 (in 5 sessions)',
+  'Ex-div in hold: 2026-11-24 · ~$0.42/sh owed',
+  'CHECK BORROW AVAILABILITY',
+];
+const GAP = {
+  rule: 'gap_p99', up_gap_p99_pct: 4, shares: 25, risk_amount: 50, gap_risk_amount: 100,
+  gap_sized: true, line: 'Risk $50 at stop · $100 on a p99 gap (4.0%) · size cut for gap risk',
+};
+
+describe('shortOrderNotes', () => {
+  it('is null without either key (longs, unstamped, pre-v183)', () => {
+    expect(shortOrderNotes(null)).toBeNull();
+    expect(shortOrderNotes({ risk_notice_lines: null, gap_sizing: null })).toBeNull();
+    expect(shortOrderNotes({})).toBeNull();
+  });
+
+  it('carries the size, the gap line verbatim and the notice lines', () => {
+    expect(shortOrderNotes({ risk_notice_lines: NOTICE, gap_sizing: GAP })).toEqual({
+      size: 'Suggested size 25 sh', gapLine: GAP.line, cut: true, lines: NOTICE,
+    });
+  });
+
+  it('formats fractional shares and survives a rule-stop short', () => {
+    const notes = shortOrderNotes({ risk_notice_lines: null,
+      gap_sizing: { ...GAP, rule: 'stop', shares: 1234.567, gap_sized: false, line: null } });
+    expect(notes).toEqual({ size: 'Suggested size 1,234.57 sh', gapLine: null, cut: false, lines: [] });
+  });
+});
+
 describe('PlanDetail', () => {
   let backend: HttpTestingController;
   let navigate: MockInstance<Router['navigate']>;
@@ -198,6 +229,28 @@ describe('PlanDetail', () => {
     expect(el.querySelector('sb-sizing-panel')).toBeTruthy();
     expect(text).not.toContain('Scale-out');
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('puts the size, gap cut and squeeze notice inside the order block of a short', () => {
+    const el = render('PENDING', { direction: 'bearish' },
+      { risk_notice_lines: NOTICE, gap_sizing: GAP });
+    const block = el.querySelector('.order-block');
+    expect(block?.querySelector('sb-levels-block')).toBeTruthy();
+    const notes = block?.querySelector('.order-notes');
+    expect(notes?.textContent).toContain('Suggested size 25 sh');
+    expect(notes?.querySelector('.gap.cut')?.textContent).toContain('size cut for gap risk');
+    const items = [...(notes?.querySelectorAll('li') ?? [])].map((li) => li.textContent?.trim());
+    expect(items).toEqual(NOTICE);
+    expect(notes?.querySelectorAll('li.warn').length).toBe(1);
+  });
+
+  it('keeps the notice on a filled short too', () => {
+    const el = render('ACTIVE', { direction: 'bearish' }, { risk_notice_lines: NOTICE, gap_sizing: null });
+    expect(el.querySelector('.order-notes')?.textContent).toContain('Earnings in hold: 2026-11-30');
+  });
+
+  it('renders no order notes for a long or a pre-v183 plan', () => {
+    expect(render('PENDING').querySelector('.order-notes')).toBeNull();
   });
 
   it('shows the time-exit line once a hold cap is set', () => {

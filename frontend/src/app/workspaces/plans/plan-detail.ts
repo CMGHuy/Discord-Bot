@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
+import type { TradeDetailFields } from '../../api/models';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { QualityChip } from '../../ui/chip';
@@ -61,6 +62,34 @@ export function timingLines(t: PlanTiming): string[] {
     lines.push(`Time exit after ${t.holdCapBars} sessions${on}`);
   }
   return lines;
+}
+
+export interface ShortOrderNotes {
+  size: string | null;
+  gapLine: string | null;
+  cut: boolean;
+  lines: string[];
+}
+
+/** v183: the size, gap-risk line and squeeze/event notice under the order.
+ *  Every string is the API's own wording (the alert's); nothing is re-worded
+ *  here. Null for a long, an unstamped short or a pre-v183 plan. */
+export function shortOrderNotes(
+  detail: Pick<TradeDetailFields, 'risk_notice_lines' | 'gap_sizing'> | null,
+): ShortOrderNotes | null {
+  const lines = detail?.risk_notice_lines ?? [];
+  const gap = detail?.gap_sizing ?? null;
+  if (!lines.length && !gap) return null;
+  const shares = gap?.shares ?? null;
+  return {
+    size:
+      shares === null
+        ? null
+        : `Suggested size ${shares.toLocaleString('en-US', { maximumFractionDigits: 2 })} sh`,
+    gapLine: gap?.line ?? null,
+    cut: gap?.gap_sized === true,
+    lines,
+  };
 }
 
 /**
@@ -147,20 +176,39 @@ export function timingLines(t: PlanTiming): string[] {
       @if (store.trade(); as trade) {
         <div class="body">
           <div class="panels">
-            <sb-levels-block
-              [direction]="trade.direction"
-              [entryType]="store.detail()?.entry_type ?? null"
-              [trigger]="store.triggerPrice()"
-              [entry]="trade.entry"
-              [stop]="trade.stop_loss"
-              [stopLabel]="stopLabel()"
-              [target1]="trade.target1 ?? trade.target"
-              [target2]="trade.target2"
-              [riskReward]="trade.risk_reward"
-              [acceptanceLevel]="store.acceptanceLevel()"
-              [tp1Pct]="store.tp1Pct()"
-              [breakevenTriggerPct]="store.breakevenTriggerPct()"
-            />
+            <div class="order-block">
+              <sb-levels-block
+                [direction]="trade.direction"
+                [entryType]="store.detail()?.entry_type ?? null"
+                [trigger]="store.triggerPrice()"
+                [entry]="trade.entry"
+                [stop]="trade.stop_loss"
+                [stopLabel]="stopLabel()"
+                [target1]="trade.target1 ?? trade.target"
+                [target2]="trade.target2"
+                [riskReward]="trade.risk_reward"
+                [acceptanceLevel]="store.acceptanceLevel()"
+                [tp1Pct]="store.tp1Pct()"
+                [breakevenTriggerPct]="store.breakevenTriggerPct()"
+              />
+              @if (orderNotes(); as notes) {
+                <div class="order-notes" role="group" aria-label="Short order checks">
+                  @if (notes.size) {
+                    <p class="size">{{ notes.size }}</p>
+                  }
+                  @if (notes.gapLine) {
+                    <p class="gap" [class.cut]="notes.cut">{{ notes.gapLine }}</p>
+                  }
+                  @if (notes.lines.length) {
+                    <ul class="risk-notice">
+                      @for (line of notes.lines; track $index) {
+                        <li [class.warn]="line.startsWith('⚠')">{{ line }}</li>
+                      }
+                    </ul>
+                  }
+                </div>
+              }
+            </div>
             <!-- PENDING only: the gap and sizing picture before the trigger
                  fires. A filled plan keeps them on its trade record. -->
             @if (trade.status === 'PENDING') {
@@ -264,6 +312,31 @@ export function timingLines(t: PlanTiming): string[] {
       grid-template-columns: minmax(0, 1fr);
       gap: var(--section-gap);
     }
+    .order-block {
+      display: grid;
+      gap: var(--space-8);
+      min-width: 0;
+    }
+    .order-notes {
+      display: grid;
+      gap: var(--space-6);
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+      overflow-wrap: anywhere;
+    }
+    .order-notes p, .risk-notice {
+      margin: 0;
+    }
+    .risk-notice {
+      display: grid;
+      gap: var(--space-6);
+      padding: 0;
+      list-style: none;
+    }
+    .gap.cut, .risk-notice .warn {
+      color: var(--warn);
+      font-weight: 600;
+    }
     .panels {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -294,6 +367,8 @@ export class PlanDetail {
     const trade = this.store.trade();
     return [trade?.strategy, trade?.horizon].filter((part) => !!part).join(' · ');
   });
+
+  protected readonly orderNotes = computed(() => shortOrderNotes(this.store.detail()));
 
   protected readonly createdAt = computed(() => this.store.detail()?.created_at ?? null);
 
