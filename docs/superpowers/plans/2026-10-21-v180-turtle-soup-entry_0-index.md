@@ -300,3 +300,13 @@ At most 2 implementers at once: V180-1 with V180-2, then V180-3 with V180-4, the
 | V180-14 | Results doc, ledger row, closed row, /panel, /close-out | 3 | sonnet | C `docs/superpowers/results/<date>-v180-turtle-soup-result.md`; M `docs/superpowers/results/preregistration-ledger.jsonl`, `docs/claude/backtest-methodology.md`, `.claude/hooks/guardrails.py`; plan and spec moved by `/close-out` | ledger row `v180-turtle-soup-structural` |
 
 Arm files (large, never committed) live under `logs/v180/<stage>.json`, with the sidecar beside each one as `logs/v180/<stage>.turtle_soup.json`. The run tasks copy each sidecar into `docs/superpowers/results/v180/`.
+
+## Panel review
+
+Run at close-out over the v180 merge diff, the pre-registration and the result doc (funnel ended NO-LIFT at Stage 0). No finding changes a reading or the verdict.
+
+- veteran-trader BLOCKING (next-open cancel is not reproducible by a pre-open market order) -- rejected for v180: verdict-neutral (the sign of A1 alone refused the shot) and the code is masked. Partner decision 2026-10-23: carried as a reuse caveat in the result doc; any live use must fill those cases or prove a conditional order exists.
+- quant-researcher: ExpR comparator (+0.07R raw vs +0.316R paired), decided-N wording, ExpR prediction miss stated (about -0.23R), non-replication of the screen noted, re-run rule cited as a plan-level call, broken spec link (moved at close-out) -- applied in the result doc.
+- quant-researcher: A2 p-value has no +1 correction (`shift_permutation.py:73`); A2 null is not count-matched to the added-row count (`shift_permutation.py:54-58`); A3 is a strict power gate for small additive arms (~45x dilution) -- ADVISORY, left open for any future additive-arm funnel.
+- veteran-trader: gap bucket merges gap_stop and gap_target, trades-per-day, descriptive-n labelling -- applied as wording; slippage at stops, survivorship, MOO/day-10 exit statement -- ADVISORY, carried to any reuse.
+- technical-analyst: trigger, stop and target correct and lookahead-free; check `_LIFECYCLE_EXEMPT` against the chart overlay before any promotion -- ADVISORY.
