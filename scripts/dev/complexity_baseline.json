@@ -96,7 +96,6 @@
     "swingbot.core.tracking.performance:TradeLog.get_extended_stats": 25,
     "swingbot.core.tracking.performance:TradeLog.get_stats": 21,
     "swingbot.core.tracking.performance:TradeLog.get_trades": 18,
-    "swingbot.core.tracking.performance:TradeLog.log_trade": 15,
     "swingbot.core.tracking.performance:TradeLog.update_open_trades": 31,
     "swingbot.core.tracking.retrospective:_analyse": 72,
     "swingbot.core.tracking.retrospective:_collect_weekly_risk_stats": 21,

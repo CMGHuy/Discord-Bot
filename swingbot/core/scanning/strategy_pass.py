@@ -142,7 +142,8 @@ def _open_trade(deps: _PassDeps, plan, *, ticker, strategy, horizon, direction) 
         plan_id=plan.plan_id, badge=plan.badge, quality_score=plan.quality_score,
         source=plan.source, cohort_label=plan.cohort_label,
         cohort_stats=plan.cohort_stats, risk_features=plan.risk_features,
-        ledger=plan.ledger, entry_context=plan.entry_context)
+        ledger=plan.ledger, entry_context=plan.entry_context,
+        gap_sizing=plan.gap_sizing)
 
 
 def _compression_context(ticker, strategy, frame, deps: _PassDeps):

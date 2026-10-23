@@ -201,6 +201,7 @@ def _log_trade(item, nums, explanation, fit, alerts, origin=None, requote=None):
         cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
         risk_features=plan_v2.risk_features if plan_v2 is not None else None,
         entry_context=plan_v2.entry_context if plan_v2 is not None else None, origin=origin,
+        gap_sizing=getattr(plan_v2, "gap_sizing", None),
         **scan_run._confidence_point_kwargs(conf))
 
 
