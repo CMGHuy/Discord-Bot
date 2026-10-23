@@ -1036,3 +1036,222 @@ def test_count_only_beside_dry_run_is_an_argparse_error(tmp_path):
     cache, membership = _universe_fixture(tmp_path)
     with pytest.raises(SystemExit):
         screen_idea.main(_argv(tmp_path, cache, membership, "--count-only", "--dry-run"))
+
+
+# --- v182 V182-17: short-side blocks in the results doc ---------------------
+
+from swingbot.core.backtesting.screen import descriptive  # noqa: E402
+
+_COSTS = {"slippage_bps": None, "commission": None}
+
+
+def test_a_long_or_familyless_idea_gets_no_control_and_no_overlap():
+    df = random_walk(2600)
+    for idea in (IDEAS["turn_of_month"], _short_probe()):
+        out = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS)
+        assert out.control is None and out.overlap is None, idea.name
+
+
+def test_with_short_blocks_returns_a_long_summary_itself():
+    df = random_walk(2600)
+    out = screen_idea.screen_ticker(IDEAS["turn_of_month"], "AAA", df, ALWAYS)
+    summary = screen_idea.summarise([out])
+    assert screen_idea.with_short_blocks(summary, [out], IDEAS["turn_of_month"], None) is summary
+
+
+def test_books_runs_once_for_a_long_idea_and_once_more_for_a_control(monkeypatch):
+    calls = []
+    real = screen_idea._books
+
+    def spy(*args, **kwargs):
+        calls.append(args[0].name)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(screen_idea, "_books", spy)
+    df = random_walk(2700, seed=7)
+    for idea in (IDEAS["turn_of_month"], CLOSE, STOP):
+        screen_idea.screen_ticker(idea, "AAA", df, ALWAYS)
+    assert calls.count("turn_of_month") == 1
+    assert calls.count("range_breakdown_close") == 2      # the book + the control
+    assert calls.count("range_breakdown_stop") == 3       # the book + 3 x repricing + the control
+
+
+def test_the_control_is_the_same_book_over_the_control_events():
+    df = random_walk(2700, seed=7)
+    out = screen_idea.screen_ticker(CLOSE, "AAA", df, ALWAYS)
+    ctx = screen_idea.ticker_context(CLOSE, df, ALWAYS)
+    flags = CLOSE.control(df).reindex(df.index, fill_value=False).to_numpy(dtype=bool)
+    kept, _, draw = screen_idea._books(CLOSE, "AAA", df, {**ctx, "raw": flags}, _COSTS)
+    assert out.events and out.control                                  # non-vacuous
+    assert out.control == screen_idea._event_rows("AAA", df.index, kept, draw.null_mean_r)
+
+
+def test_a_level_control_enters_on_its_event_bar():
+    df = random_walk(2700, seed=7)
+    out = screen_idea.screen_ticker(STOP, "AAA", df, ALWAYS)
+    days = set(df.index[STOP.control(df).to_numpy(dtype=bool)].strftime("%Y-%m-%d"))
+    assert out.control
+    assert {row["entry_date"] for row in out.control} <= days
+
+
+def test_overlap_counts_the_partner_raw_bars_on_member_warm_bars():
+    df = random_walk(2700, seed=7)
+    out = screen_idea.screen_ticker(CLOSE, "AAA", df, ALWAYS)
+    ctx = screen_idea.ticker_context(CLOSE, df, ALWAYS)
+    population = np.asarray(ctx["member"], dtype=bool) & np.asarray(ctx["warm"], dtype=bool)
+    stop_raw = np.asarray(screen_idea.raw_events(STOP, df, None), dtype=bool)
+    assert out.overlap == descriptive.event_overlap(ctx["raw"] & population,
+                                                    stop_raw & population)
+    # Nested by construction: a close below S is a bar whose low is below S.
+    assert out.overlap["both"] == out.overlap["own"] > 0
+    assert screen_idea._family_partner(CLOSE) is STOP
+    assert screen_idea._family_partner(IDEAS["turn_of_month"]) is None
+
+
+def test_with_short_blocks_pools_every_block_for_a_level_idea():
+    df = random_walk(2700, seed=7)
+    screens = [screen_idea.screen_ticker(STOP, t, df, ALWAYS) for t in ("AAA", "BBB")]
+    summary = screen_idea.summarise(screens)
+    spy = random_walk(2900, seed=9, start="2009-06-01")
+    out = screen_idea.with_short_blocks(summary, screens, STOP, spy)
+    block = out["short"]
+    assert out["verdict"] is summary["verdict"]
+    assert block["partner"] == "range_breakdown_close"
+    assert block["overlap"] == {k: sum(s.overlap[k] for s in screens)
+                                for k in ("own", "other", "both")}
+    assert block["control"].n == sum(len(s.control) for s in screens)
+    assert block["repriced"].n == len(summary["events"])
+    assert block["regime"] == descriptive.regime_split(summary["events"],
+                                                       descriptive.spy_above_200(spy))
+    assert block["slots"] == (sum(s.null_slots for s in screens),
+                              sum(s.null_unfilled for s in screens))
+    assert block["depths"] == {
+        "event": descriptive.depth_summary([d for s in screens for d in s.depths["event"]]),
+        "null": descriptive.depth_summary([d for s in screens for d in s.depths["null"]])}
+
+
+def test_a_next_open_short_has_no_level_blocks():
+    df = random_walk(2700, seed=7)
+    screens = [screen_idea.screen_ticker(CLOSE, "AAA", df, ALWAYS)]
+    block = screen_idea.with_short_blocks(screen_idea.summarise(screens), screens, CLOSE,
+                                          None)["short"]
+    assert block["partner"] == "range_breakdown_stop" and block["control"] is not None
+    assert block["regime"] is None
+    assert (block["depths"], block["slots"], block["repriced"]) == (None, None, None)
+
+
+def _v(delta, low, high, n=500):
+    return verdict.Verdict("SCREEN-FAIL", n, delta, low, high, 0.25, 5, {}, {})
+
+
+def _short_block(**extra):
+    block = {"partner": "range_breakdown_stop",
+             "overlap": {"own": 400, "other": 1000, "both": 400},
+             "control": _v(0.0125, -0.0375, 0.0625),
+             "regime": {"above": (120, 0.25), "below": (280, -0.0625), "unknown": 3},
+             "depths": None, "slots": None, "repriced": None}
+    block.update(extra)
+    return block
+
+
+SHORT_BLOCK_TEXT = [
+    "## Short-side blocks (descriptive, never gating)",
+    "",
+    "**Event overlap** with `range_breakdown_stop` (raw event bars on member, warm bars): "
+    "400 of 400 `range_breakdown_close` bars (100.0%) are also `range_breakdown_stop` bars; "
+    "400 of 1000 `range_breakdown_stop` bars (40.0%) are also `range_breakdown_close` bars. "
+    "Nested ideas are two looks at one hypothesis: read both results docs together "
+    "(family of two, BH q above).",
+    "",
+    "**Trend-only control** (`control_events`: the idea's trend and first-break clauses, no "
+    "range clauses; same race, same matched null): N = 500, ΔExpR +0.0125R, 95% "
+    "week-clustered interval -0.0375R to +0.0625R. The idea's ΔExpR minus the control's: "
+    "+0.0187R. A pass whose ΔExpR is not clearly above the control is not credited to the "
+    "range.",
+    "",
+    "**SPY regime split** (SPY close vs its 200-day average at the last close before entry):",
+    "",
+    "| SPY | N | ΔExpR |",
+    "|---|---|---|",
+    "| above its 200-day average | 120 | +0.2500R |",
+    "| below its 200-day average | 280 | -0.0625R |",
+    "",
+    "Events with no SPY average before entry: 3.",
+]
+
+
+def test_short_blocks_render_overlap_control_and_regime():
+    _, summary, _, run = _fixed_doc_inputs()      # the idea's ΔExpR is 0.031234567
+    summary = {**summary, "short": _short_block()}
+    assert screen_idea._render_short_blocks(CLOSE, summary, run) == SHORT_BLOCK_TEXT
+
+
+def test_short_blocks_render_the_level_blocks_for_a_level_idea():
+    _, summary, _, run = _fixed_doc_inputs()
+    block = _short_block(
+        partner="range_breakdown_close", overlap=None, control=None, regime=None,
+        depths={"event": descriptive.depth_summary([0.0, 0.25, 0.5]),
+                "null": descriptive.depth_summary([0.0, 0.25, 0.296875, 0.5])},
+        slots=(100, 20), repriced=_v(-0.0125, -0.0625, 0.0375))
+    lines = screen_idea._render_short_blocks(STOP, {**summary, "short": block}, run)
+    assert lines == [
+        "## Short-side blocks (descriptive, never gating)",
+        "",
+        "**SPY regime split:** not computed (no SPY frame).",
+        "",
+        "**Fill depth** (ATR14[t−1] below the bar's open; 0 = a gap fill at the open):",
+        "",
+        "| depth (ATR14[t−1]) | n | q1 | median | q3 | gap fills |",
+        "|---|---:|---:|---:|---:|---:|",
+        "| events | 3 | 0.125 | 0.250 | 0.375 | 33.3% |",
+        "| null fills | 4 | 0.188 | 0.273 | 0.348 | 25.0% |",
+        "",
+        "**Null slots:** 100; unfilled 20 (20.0%); an event with no filled null is dropped "
+        "as `dropped_no_match`.",
+        "",
+        "**Repriced at 3.0 x base entry slippage** (15.0 bps on the entry fill, events and "
+        "null): ΔExpR -0.0125R, 95% week-clustered interval -0.0625R to +0.0375R; change vs "
+        "the 2.0 x book -0.0437R. Printed, never gating.",
+    ]
+
+
+def test_an_empty_depth_summary_renders_dashes():
+    empty = descriptive.depth_summary([])
+    assert screen_idea._depth_row("null fills", empty) == "| null fills | 0 | – | – | – | – |"
+
+
+def test_render_results_appends_the_short_blocks_after_the_drift():
+    _, summary, universe, run = _fixed_doc_inputs()
+    text = screen_idea.render_results(CLOSE, {**summary, "short": _short_block()}, universe, run)
+    assert "\n\n" + "\n".join(SHORT_BLOCK_TEXT) + "\n" in text
+    assert text.index("## Forward drift") < text.index("## Short-side blocks")
+    plain = screen_idea.render_results(CLOSE, summary, universe, run)
+    assert "Short-side blocks" not in plain
+
+
+def test_a_short_dry_run_prints_the_short_blocks(tmp_path, capsys):
+    cache, membership = _universe_fixture(tmp_path)
+    _write_csv(cache / "SPY.csv", random_walk(2900, seed=9, start="2009-06-01"))
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--dry-run",
+                                  "--tickers", "AAA,BBB", idea="range_breakdown_stop")) == 0
+    out = capsys.readouterr().out
+    for needle in ("## Short-side blocks (descriptive, never gating)",
+                   "**Event overlap** with `range_breakdown_close`",
+                   "**Trend-only control**", "**SPY regime split** (", "**Fill depth**",
+                   "**Null slots:**", "**Repriced at 3.0 x base entry slippage**"):
+        assert needle in out, needle
+    assert not (tmp_path / "results").exists()
+
+
+def test_a_short_run_without_spy_is_refused_before_screening(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(screen_idea, "screen_universe", lambda *a, **k: pytest.fail("screened"))
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--dry-run", "--tickers", "AAA",
+                                  idea="range_breakdown_close")) == 2
+    assert "SPY regime split (v182) cannot load SPY" in capsys.readouterr().err
+
+
+def test_a_long_run_needs_no_spy(tmp_path):
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--dry-run",
+                                  "--tickers", "AAA")) == 0

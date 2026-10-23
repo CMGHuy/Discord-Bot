@@ -18,6 +18,11 @@ prints the results doc and writes nothing; --tickers needs --dry-run.
 --count-only (v182) prints the event count before the shot (the real events,
 drops and null draw, full-cap non-overlap) and, for a level idea, check 5; it
 races nothing, writes nothing and never reads the ledger.
+v182: a short or level idea's results doc ends with the short-side blocks
+(event overlap with its family partner, the trend-only control, the SPY
+200-day regime split, and for a level idea the fill depths, null_unfilled and
+the 3 x repricing) -- all printed, none gating; such a run refuses before
+screening when SPY.csv cannot load.
 """
 from __future__ import annotations
 
@@ -113,6 +118,8 @@ class TickerScreen:
     null_unfilled: int = 0                                # v182: null bars whose order never filled
     depths: dict | None = None                            # v182: level only, {"event": [...], "null": [...]}
     repriced: list | None = None                          # v182: level only, 3 x slippage pairs
+    control: list | None = None                           # v182: rows of the trend-only control book
+    overlap: dict | None = None                           # v182: raw-bar overlap with the family partner
 
 
 #: v182: bars from the event bar to the entry bar, per entry mode.
@@ -277,6 +284,35 @@ def ticker_context(idea: Idea, df: pd.DataFrame, spans, context: Mapping | None 
             "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df)}
 
 
+def _family_partner(idea: Idea) -> Idea | None:
+    """v182: the first registered idea named in ``idea.family`` other than itself."""
+    for name in idea.family:
+        if name != idea.name and name in IDEAS:
+            return IDEAS[name]
+    return None
+
+
+def _overlap(idea: Idea, df: pd.DataFrame, ctx: dict) -> dict | None:
+    """v182: raw event bars shared with the family partner, member and warm bars only."""
+    partner = _family_partner(idea)
+    if partner is None:
+        return None
+    population = np.asarray(ctx["member"], dtype=bool) & np.asarray(ctx["warm"], dtype=bool)
+    other = np.asarray(raw_events(partner, df, None), dtype=bool)
+    return descriptive.event_overlap(ctx["raw"] & population, other & population)
+
+
+def _control(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict) -> list | None:
+    """v182: the trend-only control -- the same book (race, direction, entry
+    mode, levels, matched null and seed) over idea.control(df). Never gating."""
+    if idea.control is None:
+        return None
+    flags = idea.control(df).reindex(df.index, fill_value=False).to_numpy(dtype=bool)
+    kept, _, draw = _books(idea, ticker, df, {**ctx, "raw": flags}, costs)
+    return _event_rows(ticker, df.index, kept, draw.null_mean_r,
+                       entry_offset=_ENTRY_OFFSET[idea.entry])
+
+
 def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
                   slippage_bps=None, commission=None,
                   context: Mapping | None = None) -> TickerScreen:
@@ -296,6 +332,7 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         null_timeout_r=_null_timeout_r(idea, draw),
         stressed=_stressed(idea, ticker, df, ctx, costs),
         restricted=_restricted(idea, ticker, df, ctx, costs),
+        control=_control(idea, ticker, df, ctx, costs), overlap=_overlap(idea, df, ctx),
         **_level_report(idea, ticker, df, ctx, costs, kept, draw))
 
 
@@ -587,6 +624,17 @@ def _context_step(args, idea: Idea) -> tuple[screen_context.ContextData | None, 
     return (None, reason) if reason else (data, None)
 
 
+def _spy_step(args, idea: Idea) -> tuple[pd.DataFrame | None, str | None]:
+    """v182: a short or level idea's doc splits ΔExpR by SPY's 200-day
+    regime, so SPY must load before the one shot; (None, None) otherwise."""
+    if not _needs_short_blocks(idea):
+        return None, None
+    try:
+        return _spy_calendar(args.cache_dir, args.end), None
+    except screen_context.ContextError as exc:
+        return None, f"SPY regime split (v182) cannot load SPY: {exc}"
+
+
 def _context_hash_refusal(args, data) -> str | None:
     """Bind loaded frames and publication to the union checked before screening."""
     if data is None:
@@ -742,6 +790,63 @@ def with_diagnostics(summary: dict, screens, idea: Idea, data, *, end: str) -> d
     diag = diagnostics.compute(idea, summary["events"], _restricted_pairs(screens), data,
                                event_start=EVENT_START, event_end=end)
     return {**summary, "context": diag}
+
+
+def _needs_short_blocks(idea: Idea) -> bool:
+    """v182: a short or level idea's results doc carries the short-side blocks."""
+    return idea.direction == "short" or idea.entry == "level"
+
+
+def _pooled(screens, name: str) -> list | None:
+    """Every ticker's rows of one TickerScreen field, pooled; None if no screen has it."""
+    if all(getattr(screen, name) is None for screen in screens):
+        return None
+    return [row for screen in screens if getattr(screen, name) for row in getattr(screen, name)]
+
+
+def _decide(rows) -> verdict.Verdict | None:
+    if rows is None:
+        return None
+    return verdict.decide([verdict.PairedEvent(r["entry_date"], r["r_event"] - r["r_null"])
+                           for r in rows])
+
+
+def _overlap_total(screens) -> dict | None:
+    """The family-partner overlap counts summed over the screens that have them."""
+    counted = [screen.overlap for screen in screens if screen.overlap is not None]
+    if not counted:
+        return None
+    return {key: sum(one[key] for one in counted) for key in ("own", "other", "both")}
+
+
+def _level_blocks(screens) -> dict:
+    """Level only: pooled fill depths and the null slot counts."""
+    if all(screen.depths is None for screen in screens):
+        return {"depths": None, "slots": None}
+    with_depths = [screen for screen in screens if screen.depths is not None]
+    return {"depths": {side: descriptive.depth_summary(
+                [d for screen in with_depths for d in screen.depths[side]])
+                for side in ("event", "null")},
+            "slots": (sum(screen.null_slots for screen in screens),
+                      sum(screen.null_unfilled for screen in screens))}
+
+
+def with_short_blocks(summary: dict, screens, idea: Idea, spy) -> dict:
+    """v182: the summary plus ``"short"`` -- overlap, trend-only control, SPY
+    regime split and the level blocks -- for a short or level idea; the same
+    dict, untouched, for any other. The verdict object is never rebuilt."""
+    if not _needs_short_blocks(idea):
+        return summary
+    partner = _family_partner(idea)
+    regime = (None if spy is None else
+              descriptive.regime_split(summary["events"], descriptive.spy_above_200(spy)))
+    block = {"partner": None if partner is None else partner.name,
+             "overlap": _overlap_total(screens),
+             "control": _decide(_pooled(screens, "control")),
+             "regime": regime,
+             "repriced": _decide(_pooled(screens, "repriced")),
+             **_level_blocks(screens)}
+    return {**summary, "short": block}
 
 
 def _fmt(value, spec: str = "+.4f") -> str:
@@ -904,6 +1009,94 @@ def _render_trail(summary, run) -> list:
             "", _render_stress(summary, run)]
 
 
+def _ratio(a, b):
+    return a / b if b else None
+
+
+def _minus(a, b):
+    return None if a is None or b is None else a - b
+
+
+def _render_overlap(idea, block) -> list:
+    """v182: raw-bar overlap with the family partner, both shares."""
+    o, own, partner = block["overlap"], idea.name, block["partner"]
+    return [f"**Event overlap** with `{partner}` (raw event bars on member, warm bars): "
+            f"{o['both']} of {o['own']} `{own}` bars ({_share(_ratio(o['both'], o['own']))}) "
+            f"are also `{partner}` bars; {o['both']} of {o['other']} `{partner}` bars "
+            f"({_share(_ratio(o['both'], o['other']))}) are also `{own}` bars. "
+            "Nested ideas are two looks at one hypothesis: read both results docs together "
+            "(family of two, BH q above)."]
+
+
+def _render_control(summary, block) -> list:
+    """v182: the trend-only control book and the idea's margin over it."""
+    c = block["control"]
+    margin = _minus(summary["verdict"].delta_exp_r, c.delta_exp_r)
+    return ["**Trend-only control** (`control_events`: the idea's trend and first-break "
+            "clauses, no range clauses; same race, same matched null): "
+            f"N = {c.n}, ΔExpR {_fmt(c.delta_exp_r)}R, 95% week-clustered interval "
+            f"{_fmt(c.ci_low)}R to {_fmt(c.ci_high)}R. The idea's ΔExpR minus the control's: "
+            f"{_fmt(margin)}R. A pass whose ΔExpR is not clearly above the control is not "
+            "credited to the range."]
+
+
+_REGIME_ROWS = (("above", "above its 200-day average"), ("below", "below its 200-day average"))
+
+
+def _render_regime(block) -> list:
+    """v182: ΔExpR split by SPY's close against its 200-day SMA before entry."""
+    regime = block["regime"]
+    if regime is None:
+        return ["**SPY regime split:** not computed (no SPY frame)."]
+    lines = ["**SPY regime split** (SPY close vs its 200-day average at the last close "
+             "before entry):", "", "| SPY | N | ΔExpR |", "|---|---|---|"]
+    lines += [f"| {label} | {regime[key][0]} | {_fmt(regime[key][1])}R |"
+              for key, label in _REGIME_ROWS]
+    return lines + ["", f"Events with no SPY average before entry: {regime['unknown']}."]
+
+
+def _render_repriced(summary, block, run) -> str:
+    """v182: the level book at REPRICE_SLIPPAGE_FACTOR x base entry slippage."""
+    r = block["repriced"]
+    delta, low, high = (None, None, None) if r is None else (r.delta_exp_r, r.ci_low, r.ci_high)
+    bps = race.REPRICE_SLIPPAGE_FACTOR * run["slippage_bps"]
+    return (f"**Repriced at {race.REPRICE_SLIPPAGE_FACTOR} x base entry slippage** "
+            f"({bps} bps on the entry fill, events and null): ΔExpR {_fmt(delta)}R, "
+            f"95% week-clustered interval {_fmt(low)}R to {_fmt(high)}R; change vs the "
+            f"{race.LEVEL_SLIPPAGE_FACTOR} x book "
+            f"{_fmt(_minus(delta, summary['verdict'].delta_exp_r))}R. Printed, never gating.")
+
+
+def _render_level(summary, block, run) -> list:
+    """v182: fill depths, null slots and null_unfilled, the 3 x repricing."""
+    slots, unfilled = block["slots"]
+    return ["**Fill depth** (ATR14[t−1] below the bar's open; 0 = a gap fill at the open):",
+            "", "| depth (ATR14[t−1]) | n | q1 | median | q3 | gap fills |",
+            "|---|---:|---:|---:|---:|---:|",
+            _depth_row("events", block["depths"]["event"]),
+            _depth_row("null fills", block["depths"]["null"]), "",
+            f"**Null slots:** {slots}; unfilled {unfilled} ({_share(_ratio(unfilled, slots))}); "
+            "an event with no filled null is dropped as `dropped_no_match`.", "",
+            _render_repriced(summary, block, run)]
+
+
+def _render_short_blocks(idea, summary, run) -> list:
+    """v182: the short-side blocks, descriptive and never gating."""
+    block = summary["short"]
+    parts = []
+    if block["overlap"] is not None:
+        parts.append(_render_overlap(idea, block))
+    if block["control"] is not None:
+        parts.append(_render_control(summary, block))
+    parts.append(_render_regime(block))
+    if block["depths"] is not None:
+        parts.append(_render_level(summary, block, run))
+    lines = ["## Short-side blocks (descriptive, never gating)"]
+    for part in parts:
+        lines += [""] + part
+    return lines
+
+
 def _render_years(v) -> list:
     lines = ["## Per year", "", "| Year | N | mean(d) |", "|---|---|---|"]
     lines += [f"| {year} | {n} | {_fmt(mean)}R |" for year, (n, mean) in v.per_year.items()]
@@ -948,6 +1141,8 @@ def render_results(idea, summary, universe, run) -> str:
     if idea.race_shape == "trail":
         sections.append(_render_trail(summary, run))
     sections += [_render_years(v), _render_drift(summary)]
+    if "short" in summary:
+        sections.append(_render_short_blocks(idea, summary, run))
     if idea.context:
         sections.append(_render_context(idea, summary, run))
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
@@ -1081,6 +1276,9 @@ def main(argv=None) -> int:
     data = None
     if reason is None:
         data, reason = _context_step(args, IDEAS[args.idea])
+    spy = None
+    if reason is None:
+        spy, reason = _spy_step(args, IDEAS[args.idea])
     if reason:
         print(f"refused: {reason}", file=sys.stderr)
         return 2
@@ -1090,6 +1288,7 @@ def main(argv=None) -> int:
                                        end=args.end, tickers=tickers,
                                        context=None if data is None else data.frames)
     summary = with_diagnostics(summarise(screens, skipped), screens, idea, data, end=args.end)
+    summary = with_short_blocks(summary, screens, idea, spy)
     return publish(args, idea, universe, summary, rows, data=data)
 
 
