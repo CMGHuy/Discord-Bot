@@ -153,3 +153,19 @@ def test_db_name_swap_keeps_credentials_and_host():
     url = "postgresql+psycopg://u:secret@db.local:5432/swingbot"
     assert imp._with_db(url, "swingbot_prod_replica") == \
         "postgresql+psycopg://u:secret@db.local:5432/swingbot_prod_replica"
+
+
+def test_target_accepts_a_name_or_a_full_url():
+    cfg = "postgresql+psycopg://u:p@h:5/swingbot"
+    assert imp._target("replica", cfg) == ("postgresql+psycopg://u:p@h:5/replica", "replica")
+    full = "postgresql+psycopg://x:y@127.0.0.1:9/other"
+    assert imp._target(full, cfg) == (full, "other")
+
+
+def test_csv_frames_pick_the_freshest_file_per_ticker(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir(), b.mkdir()
+    _bars(0.5, n=5, start="2024-01-01").to_csv(a / "AAA.csv")
+    _bars(0.5, n=9, start="2024-01-01").to_csv(b / "AAA.csv")
+    out = imp._csv_frames(["AAA", "ZZZ"], [a, b])
+    assert len(out["AAA"]) == 9 and out["ZZZ"] is None

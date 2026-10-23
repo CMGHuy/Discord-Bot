@@ -71,6 +71,13 @@ def _with_db(url: str, name: str) -> str:
     return make_url(url).set(database=name).render_as_string(hide_password=False)
 
 
+def _target(db: str, configured: str) -> tuple[str, str]:
+    """(url, database name): --db is a database name on the configured server, or a full URL."""
+    from sqlalchemy.engine import make_url
+    url = db if "://" in db else _with_db(configured, db)
+    return url, make_url(url).database
+
+
 def closed_shorts(trades: list[dict]) -> list[dict]:
     return [t for t in trades if t.get("direction") == "bearish" and t.get("status") in CLOSED]
 
@@ -271,8 +278,24 @@ def render_markdown(result: dict, *, run_date: str, db_name: str, balance: float
 # --------------------------------------------------------------------- main
 
 def _trades() -> list[dict]:
-    from swingbot.core.performance import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
     return TradeLog().get_trades(status="all", limit=None)
+
+
+def _csv_frames(tickers, dirs: list[Path]) -> dict:
+    """Daily bars from local CSV caches; per ticker the file with the latest last bar wins."""
+    out = {}
+    for tk in tickers:
+        best = None
+        for d in dirs:
+            p = d / f"{tk}.csv"
+            if not p.is_file():
+                continue
+            df = pd.read_csv(p, index_col=0, parse_dates=True)
+            if len(df) and (best is None or df.index[-1] > best.index[-1]):
+                best = df
+        out[tk] = best
+    return out
 
 
 def _frames(tickers) -> dict:
@@ -300,22 +323,27 @@ def _stdout_lines(result: dict) -> list[str]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--db", default="swingbot_prod_replica")
+    ap.add_argument("--db", default="swingbot_prod_replica",
+                    help="database name on the configured server, or a full URL (never printed)")
+    ap.add_argument("--bars-dir", type=Path, action="append", default=[],
+                    help="folder of {TICKER}.csv daily bars (repeatable, freshest file wins); "
+                         "default: get_daily_data (network)")
     ap.add_argument("--balance", type=float, default=10_000.0)
     ap.add_argument("--risk-pct", type=float, default=1.0)
     ap.add_argument("--out", type=Path)
     args = ap.parse_args(argv)
     from swingbot import config
     from swingbot.core.db import engine
-    config.DATABASE_URL = _with_db(config.DATABASE_URL, args.db)
+    config.DATABASE_URL, db_name = _target(args.db, config.DATABASE_URL)
     engine.reset_engine()
     trades = _trades()
-    frames = _frames(sorted({t["ticker"] for t in closed_shorts(trades)}))
+    tickers = sorted({t["ticker"] for t in closed_shorts(trades)})
+    frames = _csv_frames(tickers, args.bars_dir) if args.bars_dir else _frames(tickers)
     result = resize_closed_shorts(trades, frames, balance=args.balance, risk_pct=args.risk_pct)
     print("\n".join(_stdout_lines(result)))
     if args.out:
         text = render_markdown(result, run_date=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d"),
-                               db_name=args.db, balance=args.balance, risk_pct=args.risk_pct)
+                               db_name=db_name, balance=args.balance, risk_pct=args.risk_pct)
         args.out.write_text(text, encoding="utf-8")
     return 0
 
