@@ -115,9 +115,25 @@ describe('StatTile: one variant everywhere (v179 §3.3)', () => {
     expect(SOURCE).not.toMatch(/justify-content:\s*center|flex-direction:\s*row/);
   });
 
-  it('sets the value, the secondary and N= in the numeric face', () => {
-    expect(rule('.value')).toContain('font-family: var(--font-num)');
+  it('sets the value in the figure face and the secondary and N= in the numeric face (v186 D4)', () => {
+    const value = rule('.value');
+    expect(value).toContain('font-family: var(--font-figure);');
+    expect(value).toContain('font-weight: var(--figure-weight);');
+    expect(value).toContain('letter-spacing: var(--figure-tracking);');
+    expect(value).toContain('font-variant-numeric: tabular-nums;');
+    expect(value).not.toContain('var(--font-num)');
     expect(SOURCE).toMatch(/\.sample, \.secondary \{ font-family: var\(--font-num\); \}/);
+    const el = render({ secondary: '+1,240.00 €', sample: 412 });
+    expect(el.querySelector('.value')!.classList).not.toContain('num');
+    expect(el.querySelector('.secondary')!.classList).toContain('num');
+  });
+
+  it('leaves table cells in the numeric face (v186 D4 scope)', () => {
+    const table = readFileSync(join(process.cwd(), 'src/app/ui/data-table/data-table.ts'), 'utf8');
+    const global = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
+    expect(table).toMatch(/<td \[class\.num\]="col\.numeric"/);
+    const numRule = global.match(/\n\.num \{[^}]*\}/)?.[0] ?? '';
+    expect(numRule).toContain('font-family: var(--font-num);');
   });
 
   it('wraps a long label or caption instead of widening its track', () => {

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach } from 'vitest';
@@ -76,5 +79,25 @@ describe('portfolio value panel', () => {
   it('passes its currency to the candles', () => {
     const el = render({ balance: 1, changePct: 0, currency: '£' });
     expect(el.querySelector('sb-equity-candles .readout')?.textContent).toContain('£');
+  });
+});
+
+describe('portfolio figure face (v186 D4)', () => {
+  const SOURCE = readFileSync(
+    join(process.cwd(), 'src/app/workspaces/dashboard/panels/portfolio-value.ts'),
+    'utf8',
+  );
+
+  it('tracks the hero figure like every display figure, keeping its Inter 600 title size', () => {
+    const figure = SOURCE.match(/\n\s*\.figure \{[^}]*\}/)![0];
+    expect(figure).toContain('letter-spacing: var(--figure-tracking);');
+    expect(figure).toContain('font-weight: 600;');
+    expect(figure).toContain('font-size: var(--text-title);');
+    expect(figure).toContain('font-variant-numeric: tabular-nums;');
+  });
+
+  it('shows the missing-balance dash in a readable colour', () => {
+    expect(SOURCE).toMatch(/\.figure\.muted \{ color: var\(--text-muted\); \}/);
+    expect(SOURCE).not.toMatch(/color:\s*var\(--text-faint\)/);
   });
 });

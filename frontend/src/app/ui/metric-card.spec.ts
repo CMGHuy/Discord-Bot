@@ -113,3 +113,37 @@ describe('sb-metric-card in and out of a strip (v186 D3)', () => {
     expect(render({ value: null }).querySelector('.value')!.classList).toContain('absent');
   });
 });
+
+describe('sb-metric-card figure face (v186 D4)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/metric-card.ts'), 'utf8');
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** The rule whose selector starts a line, so `.value` is not `:host(.loading) .value`. */
+  const rule = (selector: string) =>
+    SOURCE.match(new RegExp(`\\n\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('sets the value in the figure face at weight 600, not 700', () => {
+    const value = rule('.value');
+    expect(value).toContain('font-family: var(--font-figure);');
+    expect(value).toContain('font-weight: var(--figure-weight);');
+    expect(value).toContain('letter-spacing: var(--figure-tracking);');
+    expect(value).toContain('font-variant-numeric: tabular-nums;');
+    expect(value).not.toContain('font-weight: 700');
+    // The density register still sizes the figure.
+    expect(value).toContain('font-size: var(--register-figure, var(--text-metric));');
+  });
+
+  it('drops the global num class from the value and keeps it on the sub line', () => {
+    const f = TestBed.createComponent(MetricCard);
+    f.componentRef.setInput('label', 'Expectancy');
+    f.componentRef.setInput('value', 0.42);
+    f.componentRef.setInput('sub', 'N=31');
+    f.detectChanges();
+    const host = f.nativeElement as HTMLElement;
+    expect(host.querySelector('.value')!.classList).not.toContain('num');
+    expect(host.querySelector('.sub')!.classList).toContain('num');
+  });
+});

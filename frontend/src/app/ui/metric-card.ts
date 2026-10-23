@@ -46,7 +46,7 @@ function toneClass(tone: MetricTone, value: number): string {
   template: `
     <div class="card sb-lift">
       <span class="label sb-label">{{ label() }}</span>
-      <span class="value num" [class]="valueClass()" [sbCountUp]="value()"
+      <span class="value" [class]="valueClass()" [sbCountUp]="value()"
             [countFormat]="format()" [countKey]="'metric:' + label()"></span>
       @if (sub(); as subtext) {
         <span class="sub num" [class]="subClass()">{{ subtext }}</span>
@@ -82,13 +82,17 @@ function toneClass(tone: MetricTone, value: number): string {
       box-sizing: border-box;
     }
     .value {
+      font-family: var(--font-figure);
+      font-weight: var(--figure-weight);
+      letter-spacing: var(--figure-tracking);
+      font-variant-numeric: tabular-nums;
       /* v54 D1: the register class on an ancestor panel/workspace sets
          --register-figure to the rung its density picked; the fallback is
          what this card rendered before the registers existed, so a card with
          no register ancestor (not yet migrated, or deliberately opted out)
-         is unchanged. */
+         is unchanged. v186 D4: Inter 600 like every display figure (was 700
+         in the code face). */
       font-size: var(--register-figure, var(--text-metric));
-      font-weight: 700;
       line-height: 1.1;
       /* v168: the number counts up once when the route is entered, and eases
          to a new value when a push changes it -- 900ms, scoped to this one

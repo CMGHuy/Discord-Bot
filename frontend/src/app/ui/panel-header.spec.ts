@@ -88,3 +88,28 @@ describe('PanelHeader: the one panel title (v186 D1)', () => {
     expect(h2.textContent).toBe('Equity');
   });
 });
+
+describe('PanelHeader total (v186 D4)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/panel-header.ts'), 'utf8');
+
+  it('sets the total in the figure face at chip size, secondary colour', () => {
+    const total = SOURCE.match(/\.total \{[^}]*\}/)![0];
+    expect(total).toContain('font-family: var(--font-figure);');
+    expect(total).toContain('font-weight: var(--figure-weight);');
+    expect(total).toContain('letter-spacing: var(--figure-tracking);');
+    expect(total).toContain('font-variant-numeric: tabular-nums;');
+    expect(total).toMatch(/font-size:\s*var\(--text-chip\)/);
+    expect(total).toMatch(/color:\s*var\(--text-secondary\)/);
+  });
+
+  it('drops the global num class from the total', () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const fixture = TestBed.createComponent(PanelHeader);
+    fixture.componentRef.setInput('title', 'Equity');
+    fixture.componentRef.setInput('total', '+$1,240');
+    fixture.detectChanges();
+    const total = (fixture.nativeElement as HTMLElement).querySelector('.total')!;
+    expect(total.textContent).toBe('+$1,240');
+    expect(total.classList).not.toContain('num');
+  });
+});

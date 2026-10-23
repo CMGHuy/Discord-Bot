@@ -93,9 +93,11 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
        caps, --text-muted): the one field-label style. Only wrapping is ours. */
     .label { overflow-wrap: anywhere; }
     .value {
-      font-family: var(--font-num);
-      font-size: var(--text-metric);
+      font-family: var(--font-figure);
+      font-weight: var(--figure-weight);
+      letter-spacing: var(--figure-tracking);
       font-variant-numeric: tabular-nums;
+      font-size: var(--text-metric);
       color: var(--text);
       overflow-wrap: anywhere;
     }
