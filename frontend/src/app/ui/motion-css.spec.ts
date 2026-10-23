@@ -80,7 +80,9 @@ const KEYFRAMES = [
   'sb-scan-strip-in', 'sb-flash-up', 'sb-flash-down', 'sb-row-blink', 'sb-tape-slide',
   // new (v168 §3)
   'sb-enter', 'sb-fade-in', 'sb-pop-in', 'sb-drawer-in', 'sb-drawer-out', 'sb-sheet-in', 'sb-sheet-out',
-  'sb-fade-out', 'sb-ping', 'sb-shimmer', 'sb-draw-inset', 'sb-draw-circle', 'sb-ambient-drift', 'sb-halo-blink',
+  'sb-fade-out', 'sb-ping', 'sb-draw-inset', 'sb-draw-circle', 'sb-ambient-drift', 'sb-halo-blink',
+  // new (v186 D5): the skeleton's quiet pulse replaced sb-shimmer
+  'sb-skeleton-pulse',
 ];
 const NEW_KEYFRAMES = KEYFRAMES.slice(KEYFRAMES.indexOf('sb-enter'));
 const COMPOSITOR = new Set(['transform', 'opacity', 'filter', 'clip-path', 'background-position']);
@@ -256,10 +258,19 @@ describe('the mode rules for the new classes (v168 §1)', () => {
     }
   });
 
-  it('gives the skeleton a static tint under Reduced and Off (#4)', () => {
+  it('stills the skeleton bars under Reduced and Off (#4, v186 D5)', () => {
     for (const mode of ['reduced', 'off']) {
-      expect(bodiesFor(MOTION, `[data-motion=${mode}] sb-async .skeleton-cell`), mode).toContain('animation: none;');
+      expect(bodiesFor(MOTION, `[data-motion=${mode}] sb-async .skeleton-cell::before`), mode).toContain('animation: none;');
+      expect(bodiesFor(MOTION, `[data-motion=${mode}] sb-async .skeleton-bar`), mode).toContain('animation: none;');
+      // The cell box paints nothing any more, so the old target is gone.
+      expect(bodiesFor(MOTION, `[data-motion=${mode}] sb-async .skeleton-cell`), mode).toEqual([]);
     }
+  });
+
+  it('pulses the skeleton bars gently, opacity 0.5 to 0.9 and back (v186 D5)', () => {
+    const body = Object.fromEntries(keyframeList(MOTION));
+    expect(body['sb-shimmer']).toBeUndefined();
+    expect(body['sb-skeleton-pulse']).toBe('0%, 100% { opacity: 0.5; } 50% { opacity: 0.9; }');
   });
 
   it('slides the nav indicator on a spring under On, fades it under Reduced (#6)', () => {
