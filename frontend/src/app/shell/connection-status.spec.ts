@@ -68,27 +68,8 @@ describe('ConnectionStatus', () => {
     expect(title).not.toContain('up to date');
   });
 
-  it('marks the dot green once the stream is live and the bot has confirmed alive', () => {
-    // Direct request (2026-09-14), knowingly reintroducing the collision
-    // NG52 argued against for this one dot -- see connection-status.ts.
-    const el = render(true, true);
-    const dot = el.querySelector('.dot')!;
-    expect(dot.classList.contains('bot-up')).toBe(true);
-    expect(dot.classList.contains('bot-down')).toBe(false);
-  });
-
-  it('marks the dot red once the bot reports itself offline, even on a live stream', () => {
-    const el = render(false, false);
-    const dot = el.querySelector('.dot')!;
-    expect(dot.classList.contains('bot-down')).toBe(true);
-    expect(dot.classList.contains('bot-up')).toBe(false);
-  });
-
-  it('does not claim green while bot health is still unknown', () => {
-    const el = render(null, null);
-    const dot = el.querySelector('.dot')!;
-    expect(dot.classList.contains('bot-up')).toBe(false);
-    expect(dot.classList.contains('bot-down')).toBe(false);
+  it('no longer draws a status dot: the bot halo on the profile avatar replaced it', () => {
+    expect(render(true, true).querySelector('.dot')).toBeNull();
   });
 
   it('names the disconnected state in words, not by colour alone', () => {

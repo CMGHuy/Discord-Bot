@@ -142,3 +142,23 @@ describe('ProfileMenu', () => {
     });
   });
 });
+
+describe('ProfileMenu bot-status halo', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+  const halo = (state: 'live' | 'dead', botAlive: boolean | null, marketActive: boolean | null = true) => {
+    const fixture = TestBed.createComponent(ProfileMenu);
+    fixture.componentRef.setInput('state', state);
+    fixture.componentRef.setInput('botAlive', botAlive);
+    fixture.componentRef.setInput('marketActive', marketActive);
+    fixture.detectChanges();
+    return (fixture.nativeElement as HTMLElement).querySelector('.halo')!;
+  };
+
+  it('is green when live and the bot is alive', () => expect(halo('live', true).classList.contains('up')).toBe(true));
+  it('is red when the bot is offline, even on a dead stream', () => expect(halo('dead', false).classList.contains('down')).toBe(true));
+  it('draws nothing while the bot status is unknown', () => {
+    const classes = halo('live', null).classList;
+    expect(classes.contains('up') || classes.contains('down')).toBe(false);
+  });
+  it('stops blinking while the market is closed', () => expect(halo('live', true, false).classList.contains('resting')).toBe(true));
+});

@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 
+import { ConnectionState } from '../stores/connection.store';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { MotionMode, parseMotion } from '../ui/motion/motion.service';
@@ -51,8 +52,10 @@ const MOTION_OPTIONS: SegmentOption[] = [
       [attr.aria-expanded]="open()"
       aria-haspopup="menu"
       [attr.aria-label]="label()"
+      [attr.title]="haloTitle()"
       (click)="toggle($event)"
     >
+      <span class="halo" [class]="halo()" aria-hidden="true"></span>
       <img
         src="bot-profile.png"
         srcset="bot-profile.png 1x, bot-profile@2x.png 2x"
@@ -101,7 +104,17 @@ const MOTION_OPTIONS: SegmentOption[] = [
       border-radius: 50%;
       line-height: 0;
     }
-    .avatar img { border-radius: 50%; display: block; }
+    .avatar { position: relative; }
+    .avatar img { border-radius: 50%; display: block; position: relative; }
+    /* The bot's live status: a blinking disc behind the photo, green while
+       the stream is live and the bot confirmed alive, red when it reported
+       itself offline. Idle (nothing known yet) draws nothing. Stilled by
+       styles/motion.css under Reduced, Off and pending, and while the market
+       is closed (.resting) -- a blink would claim activity that is not there. */
+    .halo { position: absolute; inset: -4px; border-radius: 50%; pointer-events: none; opacity: 0; }
+    .halo.up { background: var(--pos); opacity: 0.55; animation: sb-halo-blink 2s ease-in-out infinite; }
+    .halo.down { background: var(--neg); opacity: 0.6; animation: sb-halo-blink 1.2s ease-in-out infinite; }
+    .halo.resting { animation: none; }
 
     .menu {
       position: absolute;
@@ -150,6 +163,23 @@ const MOTION_OPTIONS: SegmentOption[] = [
   `,
 })
 export class ProfileMenu {
+  readonly state = input<ConnectionState>('connecting');
+  /** Null until the bot has ever reported -- distinct from "offline". */
+  readonly botAlive = input<boolean | null>(null);
+  /** `false` = market closed: the halo stays lit but stops blinking. */
+  readonly marketActive = input<boolean | null>(null);
+
+  /** Red: the bot reported itself offline, whatever the stream says. Green:
+   *  stream live AND bot confirmed alive. Else none (never a false green). */
+  protected readonly halo = computed(() => {
+    const kind = this.botAlive() === false ? 'down'
+      : this.state() === 'live' && this.botAlive() === true ? 'up' : 'idle';
+    return this.marketActive() === false && kind === 'up' ? 'up resting' : kind;
+  });
+  protected readonly haloTitle = computed(() => ({
+    up: 'Bot is live', 'up resting': 'Bot is live (market closed)', down: 'Bot is offline', idle: 'Bot status unknown',
+  })[this.halo()]);
+
   private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
 
   readonly username = signal<string | null>(null);

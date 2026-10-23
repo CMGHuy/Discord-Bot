@@ -139,7 +139,8 @@
           {{ now() }}
         </span>
       </div>
-      <sb-profile-menu [zoom]="zoom()" (zoomCycled)="cycleZoom()"
+      <sb-profile-menu [zoom]="zoom()" [state]="connection.state()"
+                       [botAlive]="connection.botAlive()" [marketActive]="connection.marketActive()" (zoomCycled)="cycleZoom()"
                        [motion]="motionMode()" (motionChanged)="setMotion($event)"
                        (signedOut)="logout()" />
     </header>
