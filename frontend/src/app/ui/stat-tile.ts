@@ -37,7 +37,7 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
   imports: [Sparkline, CountUp],
   template: `
     <div class="tile sb-lift" [class.thin]="thin()" [class]="tone()">
-      <div class="label">{{ label() }}</div>
+      <div class="label sb-label">{{ label() }}</div>
       <div class="value" [sbCountUp]="countValue()" [countFormat]="countFormat()"
            [countKey]="'stat:' + label()" [countAbsent]="value() ?? '—'"></div>
       @if (secondary()) { <div class="secondary num">{{ secondary() }}</div> }
@@ -61,7 +61,19 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
        a long label wrap instead of widening its grid track. No page
        restyles the inside of a tile -- workspace-consistency.spec.ts fails
        a ::ng-deep into sb-stat-tile. */
-    :host { display: block; height: 100%; min-width: 0; }
+    :host {
+      display: block;
+      height: 100%;
+      min-width: 0;
+      /* v186 D3 -- inside an sb-stat-strip the strip sets --figure-rule: 1px
+         and the tile draws a start-edge hairline (left, top) on its host, the
+         sb-figure / sb-figure-strip mechanism; the strip clips the first
+         row's and first column's. Outside a strip the width is 0px: no rule.
+         border-box keeps the rule inside the grid cell. */
+      box-sizing: border-box;
+      border-left: var(--figure-rule, 0px) solid var(--border);
+      border-top: var(--figure-rule, 0px) solid var(--border);
+    }
     .tile {
       display: flex;
       flex-direction: column;
@@ -71,17 +83,15 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
       min-width: 0;
       padding: var(--space-14);
       text-align: start;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--panel-radius);
+      /* v186 D3 -- a strip sets these to transparent / 0 / 0; the fallbacks
+         are the tile's own surface, so a tile outside a strip is unchanged. */
+      background: var(--tile-bg, var(--surface));
+      border: var(--tile-border, 1px solid var(--border));
+      border-radius: var(--tile-radius, var(--panel-radius));
     }
-    .label {
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-faint);
-      overflow-wrap: anywhere;
-    }
+    /* v186 D3 -- typography is the global .sb-label on the element (mono
+       caps, --text-muted): the one field-label style. Only wrapping is ours. */
+    .label { overflow-wrap: anywhere; }
     .value {
       font-family: var(--font-num);
       font-size: var(--text-metric);
@@ -96,7 +106,7 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
     .hint {
       font-size: var(--text-micro);
       font-variant-numeric: tabular-nums;
-      color: var(--text-faint);
+      color: var(--text-muted);
       overflow-wrap: anywhere;
     }
     /* Figures in the numeric face; the hint is prose and stays in the UI font. */

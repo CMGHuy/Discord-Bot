@@ -132,3 +132,56 @@ describe('StatTile: one variant everywhere (v179 §3.3)', () => {
     expect(el.querySelector('.hint')!.textContent).toContain('Pre-tax, paper trades.');
   });
 });
+
+describe('StatTile in and out of a strip (v186 D3)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/stat-tile.ts'), 'utf8');
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** The rule whose selector starts a line, so `.value` is not `.pos .value`. */
+  const rule = (selector: string) =>
+    SOURCE.match(new RegExp(`(?:^|\\n)\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+
+  beforeEach(() => {
+    preferenceValues = {};
+    TestBed.configureTestingModule({ providers: [
+      provideZonelessChangeDetection(),
+      { provide: PreferencesStore, useValue: { values: () => preferenceValues } },
+    ] });
+  });
+
+  it('draws the strip hairline on its host, start edges only, inside its cell', () => {
+    const host = rule(':host');
+    expect(host).toContain('box-sizing: border-box;');
+    expect(host).toContain('border-left: var(--figure-rule, 0px) solid var(--border);');
+    expect(host).toContain('border-top: var(--figure-rule, 0px) solid var(--border);');
+    expect(SOURCE).not.toMatch(/border-(right|bottom):\s*var\(--figure-rule/);
+  });
+
+  it("reads its surface, frame and corner from a strip, defaulting to today's", () => {
+    const tile = rule('.tile');
+    expect(tile).toContain('background: var(--tile-bg, var(--surface));');
+    expect(tile).toContain('border: var(--tile-border, 1px solid var(--border));');
+    expect(tile).toContain('border-radius: var(--tile-radius, var(--panel-radius));');
+  });
+
+  it('labels in the shared field-label style, with no typography of its own', () => {
+    expect(render({}).querySelector('.label')!.classList).toContain('sb-label');
+    const label = rule('.label');
+    for (const property of ['font-size:', 'text-transform:', 'letter-spacing:', 'color:']) {
+      expect(label, property).not.toContain(property);
+    }
+    expect(label).toContain('overflow-wrap: anywhere');
+  });
+
+  it('sets N= and the hint in a readable colour, never the rule colour', () => {
+    const captions = SOURCE.match(/\.sample,\s*\.secondary,\s*\.hint\s*\{[^}]*\}/)![0];
+    expect(captions).toContain('color: var(--text-muted);');
+    expect(SOURCE).not.toMatch(/color:\s*var\(--text-faint\)/);
+  });
+
+  it('keeps both thin-sample cues: the dimmed value and the words', () => {
+    expect(SOURCE).toContain('.thin .value { opacity: 0.62; }');
+    const el = render({ sample: 7 });
+    expect(el.classList).toContain('thin');
+    expect(el.querySelector('.flag')!.textContent).toContain('thin sample');
+  });
+});

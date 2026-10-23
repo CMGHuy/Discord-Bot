@@ -45,7 +45,7 @@ function toneClass(tone: MetricTone, value: number): string {
 
   template: `
     <div class="card sb-lift">
-      <span class="label">{{ label() }}</span>
+      <span class="label sb-label">{{ label() }}</span>
       <span class="value num" [class]="valueClass()" [sbCountUp]="value()"
             [countFormat]="format()" [countKey]="'metric:' + label()"></span>
       @if (sub(); as subtext) {
@@ -61,23 +61,25 @@ function toneClass(tone: MetricTone, value: number): string {
        background -- stayed sized to its own content. block + height: 100%
        is what makes the visible card, not just the host, fill that
        stretched row height. */
-    :host { display: block; height: 100%; }
+    :host {
+      display: block;
+      height: 100%;
+      /* v186 D3 -- the strip hairline, as in sb-stat-tile: start edges only,
+         0px outside a strip, inside the grid cell. */
+      box-sizing: border-box;
+      border-left: var(--figure-rule, 0px) solid var(--border);
+      border-top: var(--figure-rule, 0px) solid var(--border);
+    }
     .card {
       display: flex;
       flex-direction: column;
       gap: var(--space-6);
       padding: var(--space-14) var(--space-20);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--panel-radius);
+      background: var(--tile-bg, var(--surface));
+      border: var(--tile-border, 1px solid var(--border));
+      border-radius: var(--tile-radius, var(--panel-radius));
       height: 100%;
       box-sizing: border-box;
-    }
-    .label {
-      color: var(--text-secondary);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
     }
     .value {
       /* v54 D1: the register class on an ancestor panel/workspace sets
@@ -100,9 +102,13 @@ function toneClass(tone: MetricTone, value: number): string {
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
     .warn { color: var(--warn); }
-    .absent { color: var(--text-faint); }
-    :host(.tint-pos) .card { background: linear-gradient(var(--pos-soft), var(--pos-soft)), var(--surface); }
-    :host(.tint-neg) .card { background: linear-gradient(var(--neg-soft), var(--neg-soft)), var(--surface); }
+    .absent { color: var(--text-muted); }
+    /* v186 D3 -- inside an sb-stat-strip the strip sets --tile-tint-off: none
+       and the card drops its fill: a tinted block in a ruled strip is box in
+       box again, and the value's colour and sign still carry the valence.
+       Unset everywhere else, so the fallback is today's tint. */
+    :host(.tint-pos) .card { background: var(--tile-tint-off, linear-gradient(var(--pos-soft), var(--pos-soft)), var(--surface)); }
+    :host(.tint-neg) .card { background: var(--tile-tint-off, linear-gradient(var(--neg-soft), var(--neg-soft)), var(--surface)); }
 
   `,
 })
