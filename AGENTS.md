@@ -156,15 +156,14 @@ partner **trades real money off the alerts**, so a silent stop move, missing
 expiry or lost send on the alert channel is real-money divergence: that work is
 `Edge: harvest`, not cosmetics (`edge-priorities.md`).
 
-**Training data (v162).** Backtests and grids read `TRAINING_DATA_SOURCE`
-(default `alpaca`: the Alpaca history store under `data/market_data/`, not the
-root `market_data/` live cache). `--data-source yfinance` or that `.env` line
-rolls back; `BACKTEST_CACHE_DIR` or an explicit `--cache-dir` means yfinance.
-A missing store is an error, never an empty run. Live badges always use the
-yfinance registry row, and `merge_registry` refuses an alpaca VALIDATION row
-whose yfinance shot is spent. A new data source resets no validation budget and
-reopens no closed pre-registration; each new one names its `data_source`. Detail: `known-traps.md` § Two OHLCV
-caches, `backtest-methodology.md` § Windows.
+**Training data (v162).** Backtests and grids read `TRAINING_DATA_SOURCE` (default
+`alpaca`: the store under `data/market_data/`, not the root `market_data/` live
+cache); `--data-source yfinance` or that `.env` line rolls back, and
+`BACKTEST_CACHE_DIR` or `--cache-dir` means yfinance. A missing store is an error,
+never an empty run. Live badges use the yfinance registry row. A new data source
+resets no validation budget and reopens no closed pre-registration; each names its
+`data_source`. Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
+§ Windows.
 
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
 cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`; a screen
@@ -188,11 +187,11 @@ it), and split findings into still-firing versus historical
 (`working-conventions.md`).
 
 Every trading and operational store is Postgres-only (v116): no JSON copy, no
-stages, no dual writes. Rollback is point-in-time: `scripts/ops/rollback_to.sh
-"<UTC>" [--dry-run]` on the VM (30 days; scanning restarts paused), with
-`pg_dump` files (90 days) as the day-level fallback
-(`docs/deploy/DEPLOY_HETZNER.md`, `DB_RESTORE.md`). A DB write failure at
-issuance pauses scanning (`StoreWriteHalt`); unpause from the admin UI.
+dual writes. Rollback is point-in-time: `scripts/ops/rollback_to.sh "<UTC>"
+[--dry-run]` on the VM (30 days; scanning restarts paused), with `pg_dump` files
+(90 days) as the fallback (`docs/deploy/DEPLOY_HETZNER.md`, `DB_RESTORE.md`). A DB
+write failure at issuance pauses scanning (`StoreWriteHalt`); unpause from the
+admin UI.
 
 Read the `docs/claude/` file before acting:
 
@@ -261,29 +260,21 @@ findings) may also run implicitly: right after committing a spec with a
 `**Panel:**` line, and before `close-out` of a plan built from one. Skill text
 names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use your equivalent.
 
-Expert role skills (v145) each hold one reviewer's lens -- Lens, Checklist,
-Red flags, Out of scope -- and load when you review from that seat:
-`quant-researcher` (sample size, overfitting, multiple comparisons,
-pre-registration discipline), `risk-manager` (2% dollar risk, portfolio heat,
-correlated exposure, stops), `financial-advisor` (retail suitability, account
-fit, tax drag, alert cadence; educational, not personal financial advice),
-`veteran-trader` (fills, gaps, liquidity, regime, resting orders before the
-open), `technical-analyst` (S/R, pattern and indicator logic),
-`fundamental-analyst` (earnings, catalysts, sector and macro concentration),
-`staff-engineer` (seams, migrations, VM ops, blast radius),
-`quant-engineer` (lookahead, numerics, the OHLCV caches and training-data store, reproducibility),
-`senior-engineer` (code-level quality and the complexity limit).
-A role raises cited `BLOCKING`/`ADVISORY` findings; it never decides or lowers a
-gate.
+Expert role skills (v145) each hold one reviewer's lens (Lens, Checklist, Red
+flags, Out of scope) and load when you review from that seat: `quant-researcher`,
+`risk-manager`, `financial-advisor` (educational, not personal financial advice),
+`veteran-trader`, `technical-analyst`, `fundamental-analyst`, `staff-engineer`,
+`quant-engineer` (lookahead, numerics, the OHLCV caches) and `senior-engineer`
+(code quality, the complexity limit). A role raises cited `BLOCKING`/`ADVISORY`
+findings; it never decides.
 
-Claude Code plugins switched off in `.claude/settings.json` `enabledPlugins`, so
-none of their skills or agents load: the claude.ai-synced knowledge-work plugins
-(`small-business`, `legal`, `finance`, `product-management`, `data`,
-`engineering`, `productivity`, `pdf-viewer`), the `chrome-devtools-mcp` and
-`playwright` MCP plugins, and (v154) `feature-dev`, `code-simplifier`,
-`claude-code-setup`, `claude-md-management` and the marketplace `skill-creator`.
-Codex has no counterpart; do not name their skills or agents (for example
-`feature-dev:code-reviewer`) as a next step.
+Claude Code plugins switched off in `.claude/settings.json` `enabledPlugins` load no
+skills or agents: the claude.ai-synced knowledge-work plugins (`small-business`,
+`legal`, `finance`, `product-management`, `data`, `engineering`, `productivity`,
+`pdf-viewer`), the `chrome-devtools-mcp` and `playwright` MCP plugins, and (v154)
+`feature-dev`, `code-simplifier`, `claude-code-setup`, `claude-md-management` and
+the marketplace `skill-creator`. Codex has no counterpart; never name their skills
+or agents as a next step.
 
 Drive any browser, including production at bomeo-capital.com, with Playwright
 (`node frontend/scripts/browse.mjs shots|api ...`, persistent profile so one
