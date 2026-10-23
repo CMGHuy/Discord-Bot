@@ -15,6 +15,9 @@ docs/superpowers/results/<date>-screen-<idea>.md and appends ledger row
 screen-<idea>. It refuses an idea already in the
 ledger (one shot per idea) and a window end after 2019-12-31. --dry-run
 prints the results doc and writes nothing; --tickers needs --dry-run.
+--count-only (v182) prints the event count before the shot (the real events,
+drops and null draw, full-cap non-overlap) and, for a level idea, check 5; it
+races nothing, writes nothing and never reads the ledger.
 """
 from __future__ import annotations
 
@@ -41,7 +44,7 @@ from swingbot.core.backtesting.instrument import stats  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from swingbot.core.backtesting.screen import context as screen_context  # noqa: E402
 from swingbot.core.backtesting.screen import context as pit  # noqa: E402
-from swingbot.core.backtesting.screen import diagnostics  # noqa: E402
+from swingbot.core.backtesting.screen import descriptive, diagnostics  # noqa: E402
 from swingbot.core.backtesting.screen.context import CONTEXT_START  # noqa: E402,F401
 from swingbot.core.edge.frictions import BORROW_RATE_ANNUAL, commission_r  # noqa: E402
 from swingbot.core.marketdata import pit_membership  # noqa: E402
@@ -140,6 +143,15 @@ def _event_depths(df: pd.DataFrame, event_pos, ctx: dict, direction: str) -> np.
     return race.level_fills(df, event_pos, ctx["levels"], ctx["atr"], direction)[1]
 
 
+def _null_pool(idea: Idea, ctx: dict, exclude: np.ndarray | None = None) -> np.ndarray:
+    """The bars the matched null may draw from; ``exclude`` (v174) removes
+    bars from the pool only."""
+    eligible = null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], idea.time_cap_bars)
+    if exclude is not None:
+        eligible = eligible & ~exclude
+    return eligible
+
+
 def _books(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
            exclude: np.ndarray | None = None,
            level_factor: float = race.LEVEL_SLIPPAGE_FACTOR):
@@ -154,9 +166,7 @@ def _books(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
     booked, counts = race.run_book(df, ctx["raw"], cap, member=ctx["member"],
                                    warm=ctx["warm"], atr=ctx["atr"], shape=shape,
                                    direction=idea.direction, **costs, **book_kw)
-    eligible = null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], cap)
-    if exclude is not None:
-        eligible = eligible & ~exclude
+    eligible = _null_pool(idea, ctx, exclude)
     null_kw = {} if levels is None else {
         "depth": _event_depths(df, booked.event_pos, ctx, idea.direction),
         "level_factor": level_factor}
@@ -256,19 +266,24 @@ def raw_levels(idea: Idea, df: pd.DataFrame) -> np.ndarray | None:
     return idea.levels(df).reindex(df.index).to_numpy(dtype=float)
 
 
-def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
-                  slippage_bps=None, commission=None,
-                  context: Mapping | None = None) -> TickerScreen:
-    costs = {"slippage_bps": slippage_bps, "commission": commission}
+def ticker_context(idea: Idea, df: pd.DataFrame, spans, context: Mapping | None = None) -> dict:
+    """Per-ticker inputs every screen path shares: raw events, membership, warm-up, ATR14 and the null's trend state (v182: moved out of screen_ticker so --count-only reads the same ones)."""
     atr = indicators.atr(df)
     sma200 = indicators.sma(df["Close"], 200)
     member = null.member_mask(df.index, spans)
     warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
-    ctx = {"raw": np.asarray(raw_events(idea, df, context), dtype=bool),
-           "member": member, "warm": warm, "atr": atr,
-           "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df)}
+    return {"raw": np.asarray(raw_events(idea, df, context), dtype=bool),
+            "member": member, "warm": warm, "atr": atr,
+            "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df)}
+
+
+def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
+                  slippage_bps=None, commission=None,
+                  context: Mapping | None = None) -> TickerScreen:
+    costs = {"slippage_bps": slippage_bps, "commission": commission}
+    ctx = ticker_context(idea, df, spans, context)
     kept, counts, draw = _books(idea, ticker, df, ctx, costs)
-    fwd = {h: forward.forward_atr(df, atr, h, direction=idea.direction)
+    fwd = {h: forward.forward_atr(df, ctx["atr"], h, direction=idea.direction)
            for h in forward.HORIZONS}
     return TickerScreen(
         ticker=ticker, counters=Counter(counts),
@@ -277,7 +292,7 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         null_outcomes=Counter(draw.null_race.outcome.tolist()),
         excess={h: forward.excess_drift(fwd[h], draw.event_pos, draw.groups)
                 for h in forward.HORIZONS},
-        rank=_rank_frame(df.index, ctx["raw"], member & warm, fwd),
+        rank=_rank_frame(df.index, ctx["raw"], ctx["member"] & ctx["warm"], fwd),
         null_timeout_r=_null_timeout_r(idea, draw),
         stressed=_stressed(idea, ticker, df, ctx, costs),
         restricted=_restricted(idea, ticker, df, ctx, costs),
@@ -350,7 +365,169 @@ def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
     return screens, skipped
 
 
-RESULTS_DIR = ROOT / "docs" / "superpowers" / "results"
+def _count_depths(idea: Idea, df: pd.DataFrame, ctx: dict, booked: np.ndarray):
+    """Level ideas: each booked event's fill depth in ATR14[t-1], from the
+    function the real run fills with (race.level_fills); None for next_open."""
+    if ctx["levels"] is None:
+        return None
+    return np.asarray(_event_depths(df, booked, ctx, idea.direction), dtype=float)
+
+
+def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans) -> dict:
+    """v182 --count-only for one ticker: the real run's events, drops and
+    null draw, with a race-free exit bound (every trade lasts the full cap).
+    Nothing is raced; no R is computed."""
+    ctx = ticker_context(idea, df, spans)
+    cap = idea.time_cap_bars
+    cand, counts = race.candidate_events(ctx["raw"], ctx["member"], ctx["warm"], cap,
+                                         entry=idea.entry)
+    keep = race.non_overlapping(cand, cand + cap)
+    counts["skipped_overlap"] = int((~keep).sum())
+    booked = cand[keep]
+    depth = _count_depths(idea, df, ctx, booked)
+    groups = null.draw_groups(df, booked, _null_pool(idea, ctx), null.K,
+                              null.null_seed(idea.name, ticker), atr=ctx["atr"],
+                              trend=ctx["trend"], direction=idea.direction, depth=depth)
+    counts["dropped_no_match"] = groups.dropped_no_match
+    matched = np.isin(booked, groups.event_pos)
+    return {"ticker": ticker, "counters": Counter(counts),
+            "raw": int(np.count_nonzero(ctx["raw"])), "events": int(matched.sum()),
+            "event_depths": [] if depth is None else [float(d) for d in depth[matched]],
+            "null_depths": [float(d) for d in groups.null_depths],
+            "null_slots": int(groups.null_slots), "null_unfilled": int(groups.null_unfilled)}
+
+
+_COUNT_SUMS = ("raw", "events", "null_slots", "null_unfilled")
+_COUNT_LISTS = ("event_depths", "null_depths")
+
+
+def _add_count(total: dict, one: dict) -> None:
+    """Fold one count_ticker result into the universe total."""
+    total["tickers"] += 1
+    total["counters"].update(one["counters"])
+    for key in _COUNT_SUMS:
+        total[key] += one[key]
+    for key in _COUNT_LISTS:
+        total[key].extend(one[key])
+
+
+def count_universe(idea: Idea, universe: Universe, cache_dir, *,
+                   start: str = WINDOW_START, end: str = WINDOW_END, out=print) -> dict:
+    """v182 --count-only over every cached member, the screen_universe loop
+    and progress line, summed into one dict."""
+    total = {"tickers": 0, "members": len(universe.members), "missing": len(universe.missing),
+             "skipped": Counter(), "counters": Counter(), "raw": 0, "events": 0,
+             "event_depths": [], "null_depths": [], "null_slots": 0, "null_unfilled": 0}
+    names = universe.cached
+    for i, ticker in enumerate(names, start=1):
+        df = load_frame(Path(cache_dir) / f"{ticker}.csv", start, end)
+        if df is None:
+            total["skipped"]["empty_frame"] += 1
+        else:
+            _add_count(total, count_ticker(idea, ticker, df, universe.intervals.get(ticker, [])))
+        if i % PROGRESS_EVERY == 0 or i == len(names):
+            out(f"[{idea.name}] {i}/{len(names)} tickers ({100.0 * i / len(names):.0f}%)",
+                flush=True)
+    return total
+
+
+def _count_table(counts: dict) -> list[str]:
+    """The count steps, raw events down to the count N."""
+    counters = counts["counters"]
+    return (["| step | events |", "|---|---:|", f"| raw events | {counts['raw']} |"]
+            + [f"| {name} | {counters.get(name, 0)} |" for name in COUNTER_ORDER[:3]]
+            + [f"| skipped_overlap (full-cap bound) | {counters.get('skipped_overlap', 0)} |",
+               f"| dropped_no_match | {counters.get('dropped_no_match', 0)} |",
+               f"| **count N** | **{counts['events']}** |"])
+
+
+def _count_gate(n: int) -> str:
+    if n >= verdict.MIN_N:
+        return f"**Gate:** N = {n} ≥ {verdict.MIN_N}: the one shot may run."
+    return (f"**Gate:** N = {n} < {verdict.MIN_N}: no run, no ledger row; "
+            "report to the partner.")
+
+
+def _cell(value) -> str:
+    return "–" if value is None else f"{value:.3f}"
+
+
+def _depth_row(label: str, summary: dict) -> str:
+    share = "–" if summary["gap_share"] is None else f"{100 * summary['gap_share']:.1f}%"
+    return (f"| {label} | {summary['n']} | {_cell(summary['q1'])} | "
+            f"{_cell(summary['median'])} | {_cell(summary['q3'])} | {share} |")
+
+
+def _check5_block(idea: Idea, counts: dict) -> list[str]:
+    """Check 5 (spec Part B): the fill-depth table, both clauses, the verdict."""
+    ok, lines = descriptive.check_fill_depth(counts["event_depths"], counts["null_depths"],
+                                             counts["null_slots"], counts["null_unfilled"])
+    verdict_line = (f"**Check 5:** PASS -- {idea.name} may run." if ok else
+                    f"**Check 5:** FAIL -- {idea.name} is not run; tell the partner.")
+    return (["", "## Check 5 — fill depth (outcome-blind)", "",
+             "| depth (ATR14[t−1]) | n | q1 | median | q3 | gap fills |",
+             "|---|---:|---:|---:|---:|---:|",
+             _depth_row("events", descriptive.depth_summary(counts["event_depths"])),
+             _depth_row("null fills", descriptive.depth_summary(counts["null_depths"])), ""]
+            + [f"- {line}" for line in lines] + ["", verdict_line])
+
+
+def render_counts(idea: Idea, counts: dict, args) -> str:
+    """The --count-only report: counts, the N gate and (level ideas) check 5."""
+    cap = idea.time_cap_bars
+    lines = [f"# v182 count: `{idea.name}` (outcome-blind: no race, no R)", "",
+             f"**Window:** {args.start}..{args.end} (events from {EVENT_START}). "
+             f"**Universe:** {counts['members']} PIT S&P 500 members, {counts['tickers']} "
+             f"counted, {counts['missing']} missing from the cache, "
+             f"{sum(counts['skipped'].values())} empty frames.",
+             f"**Idea:** {idea.direction}, entry {idea.entry}, {idea.race_shape} race, "
+             f"cap {cap} bars.",
+             f"**Command:** `python scripts/backtest/screen_idea.py --idea {idea.name} "
+             "--count-only`", ""]
+    lines += _count_table(counts)
+    lines += ["", f"Non-overlap here assumes every trade lasts the full {cap}-bar cap, so "
+              "the real run books at least as many events before the null match.", "",
+              _count_gate(counts["events"])]
+    if idea.entry == "level":
+        lines += _check5_block(idea, counts)
+    return "\n".join(lines) + "\n"
+
+
+def count_refusal(args, idea: Idea) -> str | None:
+    """Why this count must not happen, or None. Checked before any data is
+    read; never reads the ledger."""
+    if args.end > WINDOW_END:
+        return f"window end {args.end} is after {WINDOW_END}; the screen never reads 2020+"
+    if (args.start, args.end) != (WINDOW_START, WINDOW_END):
+        return (f"--count-only counts the pre-registered window {WINDOW_START}..{WINDOW_END} "
+                f"only, not {args.start}..{args.end}")
+    if args.tickers:
+        return ("--count-only counts the whole universe; --tickers belongs to a --dry-run "
+                "smoke test")
+    if idea.context:
+        return (f"--count-only counts ideas without context series; {idea.name} reads "
+                f"{', '.join(idea.context)}")
+    return None
+
+
+def run_count(args) -> int:
+    """v182 --count-only: refuse, or print the count report. Writes nothing."""
+    idea = IDEAS[args.idea]
+    reason = count_refusal(args, idea)
+    if reason is None:
+        try:
+            universe = load_universe(args.cache_dir, args.membership, args.start, args.end)
+        except ValueError as exc:
+            reason = str(exc)
+    if reason:
+        print(f"refused: {reason}", file=sys.stderr)
+        return 2
+    counts = count_universe(idea, universe, args.cache_dir, start=args.start, end=args.end)
+    print(render_counts(idea, counts, args))
+    return 0
+
+
+RESULTS_DIR =ROOT / "docs" / "superpowers" / "results"
 INSTRUMENT = "screen-v1"
 
 #: {ticker: sha256} of every registered context CSV, written by the first
@@ -458,7 +635,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--context-hashes", type=Path, default=CONTEXT_HASHES,
                    help="v174 pinned SHA-256 of the context CSVs")
     p.add_argument("--tickers", default=None, help="comma list; smoke test, needs --dry-run")
-    p.add_argument("--dry-run", action="store_true", help="print the doc, write nothing")
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="print the doc, write nothing")
+    mode.add_argument("--count-only", action="store_true",
+                      help="v182: count events, drops and full-cap non-overlap (and check 5 "
+                           "for a level idea); no race, no R, writes nothing")
     return p
 
 
@@ -888,6 +1069,8 @@ def _utf8_stdout() -> None:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     _utf8_stdout()
+    if args.count_only:
+        return run_count(args)
     rows = stats.load_ledger(args.ledger)
     reason = refusal(args, rows)
     if reason is None:

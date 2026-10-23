@@ -595,7 +595,7 @@ def test_screen_flags_read_every_checked_option():
         ["python", "-m", "scripts.backtest.screen_idea", "--idea", "x",
          "--tickers", "AAPL,MSFT", "--dry-run", "--ledger", "l.jsonl",
          "--results-dir=r"])
-    assert flags == {"idea": "x", "dry_run": True, "tickers": True,
+    assert flags == {"idea": "x", "dry_run": True, "count_only": False, "tickers": True,
                      "ticker_count": 2, "ledger": "l.jsonl", "results_dir": "r"}
 
 
@@ -603,7 +603,7 @@ def test_screen_flags_resolve_unique_abbreviations_like_argparse():
     flags = guardrails._screen_flags(
         ["python", "screen_idea.py", "--id", "x", "--dry", "--led", "l.jsonl",
          "--res=r"])
-    assert flags == {"idea": "x", "dry_run": True, "tickers": False,
+    assert flags == {"idea": "x", "dry_run": True, "count_only": False, "tickers": False,
                      "ticker_count": 0, "ledger": "l.jsonl", "results_dir": "r"}
 
 
@@ -878,3 +878,37 @@ def test_mentions_of_the_script_without_a_run_are_allowed(screen_repo):
 def test_screen_rerun_rule_fails_open_on_a_missing_command():
     assert guardrails._rule_screen_rerun({}) is None
     assert guardrails._rule_screen_rerun({"command": 7}) is None
+
+
+# --- v182: --count-only is a valueless, outcome-blind flag ------------------
+
+def test_screen_flags_read_count_only_and_its_unique_abbreviation():
+    for spelling in ("--count-only", "--cou"):
+        flags = guardrails._screen_flags(["python", "screen_idea.py", "--idea", "x", spelling])
+        assert flags["count_only"] is True and flags["dry_run"] is False, spelling
+    assert guardrails._SCREEN_FLAG_OPTIONS == ("--dry-run", "--count-only")
+
+
+def test_count_only_takes_no_value():
+    flags = guardrails._screen_flags(["python", "screen_idea.py", "--count-only",
+                                      "--idea", "x"])
+    assert flags["count_only"] is True and flags["idea"] == "x"
+
+
+def test_a_bare_c_is_ambiguous_between_cache_dir_and_count_only():
+    flags = guardrails._screen_flags(["python", "screen_idea.py", "--idea", "x", "--c"])
+    assert flags["count_only"] is False
+
+
+def test_a_full_universe_count_is_allowed(screen_repo):
+    assert _bash(f"{_SCREEN} --idea range_breakdown_stop --count-only") is None
+
+
+def test_a_count_of_a_screened_idea_is_allowed(screen_repo):
+    _screened(screen_repo, "range_breakdown_close")
+    assert _bash(f"{_SCREEN} --idea range_breakdown_close --count-only") is None
+
+
+def test_a_real_run_beside_a_count_is_still_denied(screen_repo):
+    _screened(screen_repo)
+    _screen_denial(f"{_SCREEN} --idea gap_volume --count-only && {_SCREEN} --idea gap_volume")

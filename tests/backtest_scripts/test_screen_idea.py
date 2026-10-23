@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 
 import screen_idea  # noqa: E402
 
-from swingbot.core.backtesting.screen import forward, null, verdict  # noqa: E402
+from swingbot.core.backtesting.screen import forward, null, race, trail, verdict  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS  # noqa: E402
 from tests.backtesting.screen.helpers import random_walk  # noqa: E402
 
@@ -876,3 +876,163 @@ def test_short_level_hypothesis():
         "level_probe: probe; SHORT, sell-stop at the level, filled on the event bar, fixed "
         "1.5/3.0 ATR race vs K=20 matched null raced short, cap 20, borrow 0.5% a year, PIT "
         "S&P 500 2010-2019, after costs (v182 short screen)")
+
+
+# --- v182: --count-only (outcome-blind count before the shot) -------------
+
+CLOSE = IDEAS["range_breakdown_close"]
+STOP = IDEAS["range_breakdown_stop"]
+
+
+def _spy(calls, name, fn):
+    def wrapped(*args, **kwargs):
+        calls.setdefault(name, []).append((args, kwargs))
+        return fn(*args, **kwargs)
+    return wrapped
+
+
+def _boom(*args, **kwargs):
+    raise AssertionError("--count-only must never race")
+
+
+def test_count_ticker_races_nothing_and_shares_the_real_drop_and_overlap_code(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(race, "candidate_events", _spy(calls, "cand", race.candidate_events))
+    monkeypatch.setattr(race, "non_overlapping", _spy(calls, "overlap", race.non_overlapping))
+    monkeypatch.setattr(null, "draw_groups", _spy(calls, "draw", null.draw_groups))
+    monkeypatch.setattr(screen_idea, "raw_events", _spy(calls, "raw", screen_idea.raw_events))
+    for owner, name in ((race, "race"), (race, "run_book"), (trail, "race_trail"),
+                        (null, "matched_null"), (screen_idea, "_books")):
+        monkeypatch.setattr(owner, name, _boom)
+    out = screen_idea.count_ticker(CLOSE, "AAA", random_walk(2700, seed=7), ALWAYS)
+    assert out["raw"] > 0 and out["events"] > 0                 # non-vacuous
+    assert len(calls["raw"]) == 1
+    (_, cand_kwargs), = calls["cand"]
+    assert cand_kwargs["entry"] == "next_open"
+    (overlap_args, _), = calls["overlap"]
+    np.testing.assert_array_equal(overlap_args[1], overlap_args[0] + CLOSE.time_cap_bars)
+    (draw_args, draw_kwargs), = calls["draw"]
+    assert draw_args[3] == null.K
+    assert draw_args[4] == null.null_seed("range_breakdown_close", "AAA")
+    assert draw_kwargs["direction"] == "short" and draw_kwargs["depth"] is None
+
+
+def test_count_ticker_drop_counters_match_the_real_run():
+    df = random_walk(2700, seed=3)
+    spans = [("2012-01-01", "2016-12-31")]
+    idea = IDEAS["turn_of_month"]
+    real = screen_idea.screen_ticker(idea, "AAA", df, spans)
+    out = screen_idea.count_ticker(idea, "AAA", df, spans)
+    for key in ("dropped_nonmember", "dropped_warmup", "dropped_window"):
+        assert out["counters"][key] == real.counters[key], key
+    assert out["counters"]["dropped_nonmember"] > 0
+    assert set(out["counters"]) == set(screen_idea.COUNTER_ORDER)
+    # The full-cap bound books no more events than the real exits do.
+    assert out["counters"]["skipped_overlap"] >= real.counters["skipped_overlap"]
+    assert (out["events"] + out["counters"]["dropped_no_match"]
+            <= len(real.events) + real.counters["dropped_no_match"])
+    assert out["event_depths"] == [] and out["null_depths"] == []
+
+
+def test_count_ticker_in_level_mode_reports_the_fill_depths():
+    out = screen_idea.count_ticker(STOP, "AAA", random_walk(2700, seed=7), ALWAYS)
+    assert out["events"] > 0
+    assert len(out["event_depths"]) == out["events"]
+    assert all(d >= 0.0 for d in out["event_depths"])
+    assert out["null_slots"] > 0
+    # V182-10: null_unfilled = slots left unfilled; one depth per filled slot.
+    assert out["null_slots"] - out["null_unfilled"] == len(out["null_depths"])
+
+
+def test_count_ticker_is_deterministic():
+    df = random_walk(2700, seed=7)
+    assert (screen_idea.count_ticker(STOP, "AAA", df, ALWAYS)
+            == screen_idea.count_ticker(STOP, "AAA", df, ALWAYS))
+
+
+def _counts(n, **extra):
+    base = {"tickers": 2, "members": 3, "missing": 1, "skipped": Counter(),
+            "counters": Counter({"dropped_warmup": 4}), "raw": n + 4, "events": n,
+            "event_depths": [], "null_depths": [], "null_slots": 0, "null_unfilled": 0}
+    base.update(extra)
+    return base
+
+
+def _count_args(idea):
+    return screen_idea.build_parser().parse_args(["--idea", idea, "--count-only"])
+
+
+def test_render_counts_gates_on_300_events():
+    args = _count_args("range_breakdown_close")
+    assert ("**Gate:** N = 300 ≥ 300: the one shot may run."
+            in screen_idea.render_counts(CLOSE, _counts(300), args))
+    assert ("**Gate:** N = 299 < 300: no run, no ledger row; report to the partner."
+            in screen_idea.render_counts(CLOSE, _counts(299), args))
+
+
+def test_render_counts_prints_check_5_for_a_level_idea_only():
+    args = _count_args("range_breakdown_stop")
+    assert "Check 5" not in screen_idea.render_counts(CLOSE, _counts(300), args)
+    good = _counts(300, event_depths=[0.0, 0.25, 0.5],
+                   null_depths=[0.0, 0.25, 0.296875, 0.5], null_slots=100, null_unfilled=20)
+    text = screen_idea.render_counts(STOP, good, args)
+    assert "## Check 5" in text and "**Check 5:** PASS" in text
+    assert "| events | 3 | 0.125 | 0.250 | 0.375 | 33.3% |" in text
+    bad = _counts(300, event_depths=[0.25], null_depths=[0.3125],
+                  null_slots=100, null_unfilled=21)
+    assert "**Check 5:** FAIL" in screen_idea.render_counts(STOP, bad, args)
+
+
+def test_render_counts_names_no_outcome():
+    text = screen_idea.render_counts(
+        STOP, _counts(300, event_depths=[0.1], null_depths=[0.1], null_slots=5), _count_args(
+            "range_breakdown_stop"))
+    assert text.startswith("# v182 count: `range_breakdown_stop` (outcome-blind: no race, no R)")
+    for word in ("ExpR", "R_event", "R_null", "SCREEN-PASS", "SCREEN-FAIL", "lower 95"):
+        assert word not in text, word
+
+
+def test_count_only_prints_the_counts_and_writes_nothing(tmp_path, capsys):
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--count-only",
+                                  idea="range_breakdown_stop")) == 0
+    out = capsys.readouterr().out
+    assert "# v182 count: `range_breakdown_stop`" in out
+    for needle in ("| raw events |", "| dropped_warmup |", "| skipped_overlap (full-cap bound) |",
+                   "| dropped_no_match |", "< 300: no run, no ledger row", "## Check 5"):
+        assert needle in out, needle
+    assert not (tmp_path / "ledger.jsonl").exists()
+    assert not (tmp_path / "results").exists()
+
+
+def test_count_only_runs_for_an_idea_already_in_the_ledger_and_changes_nothing(tmp_path):
+    ledger = tmp_path / "ledger.jsonl"
+    stats.append_ledger_row(
+        {"id": "screen-range_breakdown_close", "date": "2026-10-09", "hypothesis": "x",
+         "instrument": "screen-v1", "n": 1, "exp_r": 0.0, "p": 0.5,
+         "verdict": "SCREEN-FAIL", "record": "docs/x.md"}, path=ledger)
+    before = ledger.read_bytes()
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--count-only",
+                                  idea="range_breakdown_close")) == 0
+    assert ledger.read_bytes() == before
+    assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.parametrize("extra, idea, needle", [
+    (("--end", "2020-01-02"), "range_breakdown_close", "never reads 2020+"),
+    (("--start", "2012-01-01"), "range_breakdown_close", "pre-registered window"),
+    (("--tickers", "AAA"), "range_breakdown_close", "--tickers belongs to a --dry-run"),
+    ((), "dollar_drop", "without context series"),
+])
+def test_count_only_refusals(tmp_path, capsys, extra, idea, needle):
+    cache, membership = _universe_fixture(tmp_path)
+    assert screen_idea.main(_argv(tmp_path, cache, membership, "--count-only", *extra,
+                                  idea=idea)) == 2
+    assert needle in capsys.readouterr().err
+
+
+def test_count_only_beside_dry_run_is_an_argparse_error(tmp_path):
+    cache, membership = _universe_fixture(tmp_path)
+    with pytest.raises(SystemExit):
+        screen_idea.main(_argv(tmp_path, cache, membership, "--count-only", "--dry-run"))
