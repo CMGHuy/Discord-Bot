@@ -311,6 +311,25 @@ describe('trading performance scope on a phone (v181 §1)', () => {
     expect(el.querySelector('[data-preset]')).toBeNull();
   });
 
+  it('selects a newly added Range entry when a chart drag replaces the phone preset', () => {
+    const f = mount(preset('1D'));
+    const select = (f.nativeElement as HTMLElement)
+      .querySelector<HTMLSelectElement>('sb-select.preset-select select')!;
+    expect(select.value).toBe('1D');
+
+    f.componentRef.setInput('selection', RANGE);
+    f.detectChanges();
+
+    expect(select.value).toBe('Range');
+    expect(select.selectedOptions[0].textContent!.trim())
+      .toBe(`Range · ${rangeChipLabel(RANGE_WINDOW)}`);
+
+    f.componentRef.setInput('selection', preset('1Y'));
+    f.detectChanges();
+    expect(select.value).toBe('1Y');
+    expect([...select.options].some((option) => option.value === 'Range')).toBe(false);
+  });
+
   it('lists the hand-picked range as its own entry and emits a preset picked from the list', () => {
     const f = mount(RANGE);
     const select = (f.nativeElement as HTMLElement)
