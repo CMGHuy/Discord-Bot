@@ -11,6 +11,7 @@ from swingbot.core.backtesting.registry import Badge, decay_for
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.explain import stop_distance_pct, v2_stop_was_moved
 from swingbot.core.planning import account
+from swingbot.core.planning import gap_sizing
 from swingbot.core.planning.plan_engine import WEAK_CAUTION_TEXT, badge_stats_line
 from swingbot.core.presentation import tokens
 from swingbot.core.presentation.ansi import r_multiple
@@ -127,11 +128,12 @@ def _entry_price(plan) -> float:
 
 
 def _sizing_snapshot(entry, plan) -> dict | None:
-    """A fresh account.compute_position_size() snapshot, or None if sizing
-    data isn't available -- swallows the exception rather than crashing,
-    same render-time-snapshot convention used everywhere in this module."""
+    """A fresh sizing snapshot through the one v183 sizing path (a stamped
+    short is gap-sized; a long is compute_position_size exactly), or None if
+    sizing data isn't available -- swallows the exception rather than
+    crashing, same render-time-snapshot convention used everywhere here."""
     try:
-        return account.compute_position_size(entry, plan.stop_loss)
+        return gap_sizing.size_for_plan(plan, entry=entry)
     except Exception as exc:
         swallowed(log, "scan.sizing_snapshot", exc, level=logging.DEBUG)
         return None

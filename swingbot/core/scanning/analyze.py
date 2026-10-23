@@ -29,12 +29,11 @@ from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
 from swingbot.core.marketdata import universe
-from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
-from swingbot.core.planning.gap_sizing import stamp_gap_sizing
+from swingbot.core.planning.gap_sizing import size_for_plan, stamp_gap_sizing
 from swingbot.core.planning.builders import confluence_stop_dropped
 from swingbot.core.planning.stop_scope import plan_stop_ceiling, risk_sizing_ok
 from swingbot.core.risk_limits import planned_loss_pct
@@ -252,8 +251,7 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
         open_trades = trade_log.get_trades(status="open", limit=None)
         heat_before = heat_mod.open_heat(open_trades, balance)
         cap = getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0)
-        sizing = account_module.compute_position_size(
-            plan.trigger_price or plan.entry_price, plan.stop_loss, account_cfg)
+        sizing = size_for_plan(plan, account_cfg=account_cfg)
         cluster_note = None
         if ticker:
             cluster_exp = corr_mod.cluster_exposure(open_trades, ticker, dfs, balance)

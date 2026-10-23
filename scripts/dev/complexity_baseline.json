@@ -87,7 +87,7 @@
     "swingbot.core.planning.plan_manager:PlanManager.poll": 20,
     "swingbot.core.scanning.alert_embeds:build_embed": 33,
     "swingbot.core.scanning.analyze:_scan_one": 35,
-    "swingbot.core.scanning.analyze:build_decision_context": 24,
+    "swingbot.core.scanning.analyze:build_decision_context": 23,
     "swingbot.core.scanning.confidence:_score_confidence_legacy": 40,
     "swingbot.core.scanning.lifecycle_embeds:build_closed_trade_embed": 17,
     "swingbot.core.scanning.scan_run:_sync_run_scan": 96,
