@@ -187,7 +187,7 @@ def label_counts(closed: list[dict]) -> dict[str, int]    # {"scratch": n, "unsc
   "missing_leg_r_case": {"legs": [{"fraction": 0.5, "exit_price": 110.0}, {"fraction": 0.5, "exit_price": 115.0}], "net_r": 2.5},
   "calendar_day": {"golden_case": "manual",
                    "other_trade": {"ticker": "LOSS", "direction": "bullish", "shares": 100, "entry": 50.0, "stop_loss": 48.0, "exit_price": 48.0, "status": "loss"},
-                   "net_r": 1.5, "net_pnl_amount": 1050.0, "trade_count": 2, "win_rate": 50.0},
+                   "net_r": 1.5, "net_pnl_amount": 1050.0, "trade_count": 3, "win_rate": 66.66666666666667},
   "label_table": [
     {"net_r": 0.02, "status": "win", "close_reason": null},
     {"net_r": 0.005, "status": "closed", "close_reason": "scratch"},
@@ -198,7 +198,7 @@ def label_counts(closed: list[dict]) -> dict[str, int]    # {"scratch": n, "unsc
 }
 ```
 
-V189-2 verifies `calendar_day.trade_count` and `win_rate` against `pnl_calendar`'s existing day semantics before committing the file; any different reading of those two keys is a stop-and-ask, not an edit.
+V189-2 verifies `calendar_day.trade_count` and `win_rate` against `pnl_calendar`'s existing day semantics before committing the file; any different reading of those two keys is a stop-and-ask, not an edit. **Resolved by V189-2 (part 1):** `pnl_calendar` makes each leg its own row, so the golden manual-close day is 3 rows (TP1 leg win, runner leg win, −1R loss): `trade_count` 3, `win_rate` 66.67. That is the only reading consistent with `net_r` 1.5 and `net_pnl_amount` 1050.
 
 ### Locks and the guarded store (V189-5, V189-6)
 
