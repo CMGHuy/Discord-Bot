@@ -3,7 +3,21 @@
 **Version:** ui 1.21.1 · bot 2.0.2 (at writing)
 **Bump:** bot minor per phase plan (each ships inert behind `--instrument v1`, the default); bot major at the phase-6 cutover
 **Edge:** none (integrity) — the enabler for later `expectancy` work; ranked above direct ExpR work because recent closures (v104, v122, v123) were power failures, not measured negatives
-**Status:** umbrella spec written 2026-10-06. One plan per phase, each with its own number from the repo counter: phase 1 = v137 (implemented), phase 4 = v138 (implemented), phase 2 = v157 (fills and costs, planned 2026-10-10), phase 3 = v158 (window contract, planned 2026-10-10). Phases 5–6 not yet planned.
+**Status:** umbrella spec written 2026-10-06. One plan per phase, each with its own number from the repo counter: phase 1 = v137 (implemented), phase 4 = v138 (implemented), phase 2 = v157 (fills and costs, planned 2026-10-10), phase 3 = v158 (window contract, planned 2026-10-10). Phases 5–6 not yet planned. **RETIRED 2026-10-23 at the partner's request:** phases 1–4 shipped; phases 5 (cache + scan replay) and 6 (cutover) are dropped, never planned. See `## Retirement`.
+
+## Retirement
+
+An audit on 2026-10-23 (against `0646fa34`) found that phases 5–6 had drifted from the code. The partner chose to retire the spec rather than amend it. What anyone picking this up again needs to know:
+
+- **State left behind.** `--instrument` still defaults to `v1` (`instrument/cli.py`). v2 is opt-in, and every path that needs phase 5 still refuses under v2 with a "phase 5" message: `backtesting/backtest.py` `_refuse_live_state_flags`, `measure_arms.py`, `run_backtest_range.py` `--scenarios`/`--emit-registry`, and `tune_confluence_gates.py`. Those refusals are now permanent unless a new spec lifts them. `backtest-methodology.md` § Windows still governs (TRAIN 2020–23 / VALIDATION 2024–25).
+- **Drift a successor must not repeat:**
+  - A scan replay already exists: `scanning/scan_replay.py` (v118). It lacks the strategy pass, a simulated journal, an indicator cache and a live parity check.
+  - The strategy pass has gained gates this spec does not list: dry-up, compression, sizing fail-closed, and one open trade per ticker.
+  - The 2% cap is per plan and needs no book. The book-dependent caps are `PORTFOLIO_HEAT_CAP_PCT`, `MAX_OPEN_POSITIONS` and `MAX_OPEN_PER_HORIZON`.
+  - The paper book is Postgres-backed.
+  - The registry is `validation_registry.json`, not a table, so it needs no Alembic revision.
+  - The Stage −2 screen window (2010–2019) and the v162 data-source rule would need reconciling.
+  - PIT coverage from 2009-06 in `backtest_cache_ext` is 492 covered, 120 late and 219 missing.
 
 ## Why
 
