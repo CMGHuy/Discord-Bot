@@ -29,6 +29,11 @@ each width (Playwright, never claude-in-chrome — `skills-tools.md`).
 - Mixed text sizes on one line align on the baseline (`align-items: baseline`
   or `last baseline`), never `center`. Numbers use the numeric face (`.num`,
   `var(--font-num)`); labels stay in the UI font.
+- Table cells centre vertically: every cell's content sits on the middle of
+  its row, so a row's figures share one line. A decoration under a figure (a
+  magnitude bar) hangs in the cell's padding, never adds to its content. An
+  icon, checkbox or radio mark is centred on the text beside it (`sb-icon`
+  carries `vertical-align: middle` for inline use).
 - Layout responds to its **container** where it can sit in a narrow panel
   (`container-type: inline-size` + `@container`), not only the viewport.
 - No horizontal page scroll. A wide chart or grid scrolls inside its own box
@@ -46,8 +51,9 @@ each width (Playwright, never claude-in-chrome — `skills-tools.md`).
   `node frontend/scripts/browse.mjs login --base http://localhost:1234`):
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234`
   must exit 0 at 390, 768 and 1440. It checks page overflow, off-screen and
-  clipped text, sub-44px targets (phone/tablet), sub-11px text and baseline
-  offsets over 2px on every route and tab. A finding is fixed, not allowed;
+  clipped text, sub-44px targets (phone/tablet), sub-11px text, baseline
+  offsets over 2px, and (`vcenter`) table-cell content or an icon more than
+  2px off centre, on every route and tab. A finding is fixed, not allowed;
   only canvas/third-party chart internals and browser-native parts go in
   `frontend/scripts/layout-audit.allow.json`, each entry with a reason and the
   date it was added. Entries nothing matches any more print as `STALE`; a run

@@ -82,6 +82,7 @@
 @keyframes sb-sheet-in { from { transform: translateY(100%); } }
 @keyframes sb-sheet-out { from { transform: translateY(var(--sb-pull, 0px)); } to { transform: translateY(100%); } }
 @keyframes sb-fade-out { to { opacity: 0; } }
+@keyframes sb-halo-blink { 50% { opacity: 0.15; } }                               /* bot-status halo */
 @keyframes sb-ping { from { opacity: 0.6; transform: scale(1); } to { opacity: 0; transform: scale(2.6); } }
 @keyframes sb-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes sb-draw-inset { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
@@ -218,7 +219,7 @@ sb-confirm-dialog dialog[open]::backdrop {
 [data-motion=reduced] .sb-draw-in,
 [data-motion=reduced] .sb-draw-in-radial { animation: none; }
 [data-motion=reduced] sb-async .skeleton-cell { animation: none; }
-[data-motion=reduced] sb-connection-status .dot.live::after { animation: none; opacity: 0; }
+[data-motion=reduced] sb-profile-menu .halo { animation: none; }
 
 /* -- Off and pending: no decorative motion ----------------------------------
  * Off's fallbacks for the nine pre-v168 sites (spinners slowed, never
@@ -250,8 +251,8 @@ sb-confirm-dialog dialog[open]::backdrop {
   animation: none;
 }
 [data-motion=off] sb-async .skeleton-cell { animation: none; }
-[data-motion=off] sb-connection-status .dot.live::after,
-[data-motion=pending] sb-connection-status .dot.live::after { animation: none; opacity: 0; }
+[data-motion=off] sb-profile-menu .halo,
+[data-motion=pending] sb-profile-menu .halo { animation: none; }
 
 /* ===== Off / Reduced fallbacks for the pre-v168 motion sites (spec v168 §1) =====
  *
@@ -271,8 +272,8 @@ sb-confirm-dialog dialog[open]::backdrop {
  * slowing it instead is an intended change, spec amendment 6.)
  */
 
-/* connection-status: the live dot keeps its colour and drops the pulse. */
-[data-motion=off] sb-connection-status .dot.live { animation: none !important; }
+/* profile-menu: the bot-status halo keeps its colour and drops the blink. */
+[data-motion=off] sb-profile-menu .halo { animation: none !important; }
 
 /* scan-progress: the strip appears without sliding in; the indeterminate sweep
    becomes a static full-width bar at .4 opacity, still told apart from a

@@ -780,12 +780,16 @@ interface ContractRow {
       padding: var(--space-6) var(--space-10);
       text-align: left;
     }
-    .numerics-demo th.num, .numerics-demo td.num { text-align: right; }
+    /* One line per cell: wrapped, R's bar dropped under its figure and lifted
+       it ~10px off the row's line at phone width. The box scrolls instead. */
+    .numerics-demo th.num, .numerics-demo td.num { text-align: right; white-space: nowrap; }
     .numerics-demo thead th {
       color: var(--text-secondary); font-size: var(--text-micro);
       border-bottom: 1px solid var(--border);
     }
-    .numerics-demo sb-magnitude { display: inline-block; width: 48px; margin-left: var(--space-8); }
+    .numerics-demo sb-magnitude {
+      display: inline-block; width: 48px; margin: 0 0 0 var(--space-8); vertical-align: middle;
+    }
 
     /* v80 D6 -- a phone-width box, so the container-driven layouts (filter
        bar, segmented, tab bar) show their narrow behaviour at any window size. */

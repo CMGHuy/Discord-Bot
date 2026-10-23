@@ -70,7 +70,7 @@ def test_response_shape(seed, logged_in):
     seed(trades=[_trade("a" * 16)])
     body = logged_in.get("/api/v1/calendar/pnl?month=2026-08").get_json()
     assert_shape(body, {
-        "as_of": str, "month": str, "days": list, "totals": dict, "day_of_week": list,
+        "as_of": str, "month": str, "days": list, "totals": dict, "longest_hold": (dict, type(None)), "day_of_week": list,
         "best_day": (dict, type(None)), "worst_day": (dict, type(None)),
         "streak": dict, "filters": dict,
     })
@@ -232,11 +232,11 @@ def test_day_detail_summarises_its_existing_trade_rows(seed, logged_in):
     assert body["total_r"] == 1.0
     assert body["avg_trade_r"] == 0.5
     assert body["worst_drawdown_r"] == 1.0
-    assert body["contributors"] == [{"ticker": "AAPL", "r": 2.0}]
-    assert body["detractors"] == [{"ticker": "AAPL", "r": -1.0}]
+    assert [(x["ticker"], x["r"]) for x in body["contributors"]] == [("AAPL", 1.0)]
+    assert body["detractors"] == []
 
 
-def test_day_detail_orders_leaders_by_r_magnitude_and_keeps_empty_side(seed, logged_in):
+def test_day_detail_lists_every_ticker_and_keeps_empty_side(seed, logged_in):
     trades = [
         _trade(chr(97 + i) * 16, closed_at=f"2026-08-03T{12 + i:02}:00:00+00:00")
         for i in range(6)
@@ -244,7 +244,7 @@ def test_day_detail_orders_leaders_by_r_magnitude_and_keeps_empty_side(seed, log
     entries = [_entry(trade["id"], r=float(i + 1)) for i, trade in enumerate(trades)]
     seed(trades=trades, entries=entries)
     body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
-    assert [row["r"] for row in body["contributors"]] == [6.0, 5.0, 4.0, 3.0, 2.0]
+    assert len(body["contributors"]) == 1  # all six rows are AAPL, netted
     assert body["detractors"] == []
 
 

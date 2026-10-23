@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier and escalate per `docs/claude/model-routing.md`. **Never read a part whole**: `grep -n "^### Task V180-4:" -A 400 docs/superpowers/plans/2026-10-21-v180-turtle-soup-entry_1-signal-instrument-and-plan.md`.
 
 **Bump:** bot patch
-**Edge:** expectancy — adds a long entry on a trigger that passed the idea screen (paired ΔExpR +0.316R [+0.254, +0.381], N = 10,438, PIT S&P 500 2011–2019, yfinance, fixed 1.5/3 ATR race). The screen covers the trigger only, not the structural plan shape tested here. Base case: a fail on the win-rate clause; a pass is the upside.
+**Edge:** expectancy — adds a long entry on a trigger that passed the idea screen (paired ΔExpR +0.316R [+0.254, +0.381], N = 10,438, PIT S&P 500 2011–2019, yfinance, fixed 1.5/3 ATR race). The screen covers the trigger only, not the structural plan shape tested here. Base case: a fail on the win-rate clause; a pass is the upside. Outcome (2026-10-23): NO-LIFT at Stage 0, with the win-rate side as predicted and the engine ExpR negative rather than the small positive implied.
 **Screen:** screen-turtle_soup SCREEN-PASS
 **Spec:** [2026-10-21-v180-turtle-soup-entry-design.md](../specs/2026-10-21-v180-turtle-soup-entry-design.md)
 **Brief:** `.superpowers/briefs/2026-10-21-v180-turtle-soup-entry.md`
@@ -300,3 +300,13 @@ At most 2 implementers at once: V180-1 with V180-2, then V180-3 with V180-4, the
 | V180-14 | Results doc, ledger row, closed row, /panel, /close-out | 3 | sonnet | C `docs/superpowers/results/<date>-v180-turtle-soup-result.md`; M `docs/superpowers/results/preregistration-ledger.jsonl`, `docs/claude/backtest-methodology.md`, `.claude/hooks/guardrails.py`; plan and spec moved by `/close-out` | ledger row `v180-turtle-soup-structural` |
 
 Arm files (large, never committed) live under `logs/v180/<stage>.json`, with the sidecar beside each one as `logs/v180/<stage>.turtle_soup.json`. The run tasks copy each sidecar into `docs/superpowers/results/v180/`.
+
+## Panel review
+
+Run at close-out over the v180 merge diff, the pre-registration and the result doc (funnel ended NO-LIFT at Stage 0). No finding changes a reading or the verdict.
+
+- veteran-trader BLOCKING (next-open cancel is not reproducible by a pre-open market order) -- rejected for v180: verdict-neutral (the sign of A1 alone refused the shot) and the code is masked. Partner decision 2026-10-23: carried as a reuse caveat in the result doc; any live use must fill those cases or prove a conditional order exists.
+- quant-researcher: ExpR comparator (+0.07R raw vs +0.316R paired), decided-N wording, ExpR prediction miss stated (about -0.23R), non-replication of the screen noted, re-run rule cited as a plan-level call, broken spec link (moved at close-out) -- applied in the result doc.
+- quant-researcher: A2 p-value has no +1 correction (`shift_permutation.py:73`); A2 null is not count-matched to the added-row count (`shift_permutation.py:54-58`); A3 is a strict power gate for small additive arms (~45x dilution) -- ADVISORY, left open for any future additive-arm funnel.
+- veteran-trader: gap bucket merges gap_stop and gap_target, trades-per-day, descriptive-n labelling -- applied as wording; slippage at stops, survivorship, MOO/day-10 exit statement -- ADVISORY, carried to any reuse.
+- technical-analyst: trigger, stop and target correct and lookahead-free; check `_LIFECYCLE_EXEMPT` against the chart overlay before any promotion -- ADVISORY.

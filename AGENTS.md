@@ -215,7 +215,7 @@ Read the `docs/claude/` file before acting:
 - `ui-design.md`: any screen, table or pager: designed for mobile, tablet and
   desktop together and checked at all three widths; tables page
   5/10/20/50/100/All (10 desktop, 5 tablet/phone); text >= 11px, mixed sizes
-  on one baseline, 44px hit areas on phone/tablet (`.sb-hit`), phone tables
+  on one baseline, table cells and icons vertically centred, 44px hit areas on phone/tablet (`.sb-hit`), phone tables
   declare `compact` rows. Before merging a UI change,
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
   exit 0 (allow-list entries carry a reason and a date).
@@ -383,6 +383,9 @@ Detail: `docs/claude/testing-cost.md` § Test suites.
 `pytest path::test`), never by re-running the whole suite; a fix touching other
 files widens to `testrun.py changed`. **No full suite after merging back to
 `main`**: it ran once, before the merge.
+Every feature, fix or change you implement ships its own unit tests in the same
+work (backend and frontend, edge and empty cases included), run green before
+you call it done; the partner never has to ask.
 
 **Green means `0 failed` and `0 xfailed`.** A changed pass count is not itself a
 failure; read the output. Timings swing 2-4x with machine load, so do not

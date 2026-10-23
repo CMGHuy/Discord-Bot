@@ -225,6 +225,14 @@ half-written work.
   rules, `known-traps.md` for "looks broken but isn't", `backtest-methodology.md`
   for closed pre-registrations, the spec's own header for component status)
   and commit. Ask only when proceeding would be unsafe or irreversible.
+- **Implementing anything includes its unit tests.** Whenever the partner
+  asks for a feature, fix or change, write the unit tests for it in the same
+  piece of work (pytest for Python, Vitest specs for the frontend), covering
+  the happy path, the empty/`null` case and the boundaries, and fix any
+  fixture a new field breaks. Run them green before reporting done. Say so
+  plainly when a test cannot run here (e.g. the test database is down and the
+  tests skip) rather than counting it as passing. The partner should never
+  have to ask "add unit tests for it".
 - **Prove correctness, then move on.** Run the touched tests, confirm green,
   commit. Timings on this machine swing 2-4x with external load, so do not
   re-measure to justify a change; record an unverifiable timing claim as

@@ -80,7 +80,7 @@ const KEYFRAMES = [
   'sb-scan-strip-in', 'sb-flash-up', 'sb-flash-down', 'sb-row-blink', 'sb-tape-slide',
   // new (v168 §3)
   'sb-enter', 'sb-fade-in', 'sb-pop-in', 'sb-drawer-in', 'sb-drawer-out', 'sb-sheet-in', 'sb-sheet-out',
-  'sb-fade-out', 'sb-ping', 'sb-shimmer', 'sb-draw-inset', 'sb-draw-circle', 'sb-ambient-drift',
+  'sb-fade-out', 'sb-ping', 'sb-shimmer', 'sb-draw-inset', 'sb-draw-circle', 'sb-ambient-drift', 'sb-halo-blink',
 ];
 const NEW_KEYFRAMES = KEYFRAMES.slice(KEYFRAMES.indexOf('sb-enter'));
 const COMPOSITOR = new Set(['transform', 'opacity', 'filter', 'clip-path', 'background-position']);
@@ -250,11 +250,9 @@ describe('the mode rules for the new classes (v168 §1)', () => {
     expect(unscoped).toEqual([]);
   });
 
-  it('stills the live-dot ping outside On (#10)', () => {
+  it('stills the bot-status halo outside On (#10)', () => {
     for (const mode of ['reduced', 'off', 'pending']) {
-      expect(bodiesFor(MOTION, `[data-motion=${mode}] sb-connection-status .dot.live::after`), mode).toEqual([
-        'animation: none; opacity: 0;',
-      ]);
+      expect(new Set(bodiesFor(MOTION, `[data-motion=${mode}] sb-profile-menu .halo`)), mode).toContain('animation: none;');
     }
   });
 
@@ -289,9 +287,9 @@ describe('Off keeps every fallback (spec v168 §1)', () => {
       rules: ['[data-motion=off] { --motion-scale: 0; }'],
     },
     {
-      site: 'connection-status live dot',
-      file: 'app/shell/connection-status.ts',
-      rules: ['[data-motion=off] sb-connection-status .dot.live { animation: none !important; }'],
+      site: 'profile-menu bot-status halo',
+      file: 'app/shell/profile-menu.ts',
+      rules: ['[data-motion=off] sb-profile-menu .halo { animation: none !important; }'],
     },
     {
       site: 'scan-progress strip and sweep',

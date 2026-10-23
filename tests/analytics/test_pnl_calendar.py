@@ -779,8 +779,8 @@ def test_day_totals_values():
         "avg_trade_r": 0.5,
         # Running R: 2.0 (peak) then 1.0 -> drawdown 1.0.
         "worst_drawdown_r": 1.0,
-        "contributors": [{"ticker": "AAPL", "r": 2.0}],
-        "detractors": [{"ticker": "MSFT", "r": -1.0}],
+        "contributors": [{"ticker": "AAPL", "pnl": 50.0, "r": 2.0}],
+        "detractors": [{"ticker": "MSFT", "pnl": -25.0, "r": -1.0}],
     }
 
 
@@ -792,9 +792,13 @@ def test_day_totals_with_no_measurable_r_is_none_not_zero():
     assert totals["contributors"] == [] and totals["detractors"] == []
 
 
-def test_day_totals_leaders_are_the_five_largest_by_magnitude():
+def test_day_totals_leaders_list_every_ticker_netted_in_money():
     rows = [_tile_row(f"T{i}", float(i), 1.0, "win") for i in range(1, 8)]
-    assert [x["r"] for x in day_totals(rows)["contributors"]] == [7.0, 6.0, 5.0, 4.0, 3.0]
+    rows += [_tile_row("T1", -3.0, -10.0, "loss"), _tile_row("Z", -1.0, -5.0, "loss")]
+    totals = day_totals(rows)
+    assert [x["ticker"] for x in totals["contributors"]] == [f"T{i}" for i in range(2, 8)]
+    assert totals["detractors"] == [{"ticker": "T1", "pnl": -9.0, "r": -2.0},
+                                    {"ticker": "Z", "pnl": -5.0, "r": -1.0}]
 
 
 def test_day_totals_drawdown_walks_the_rows_in_the_order_given():
@@ -810,3 +814,43 @@ def test_float_or_none_rejects_non_finite_so_return_pct_stays_null(bad):
 
     assert _float_or_none(bad) is None
     assert return_pct(_float_or_none(bad), 10.0, "long") is None
+
+
+# --- the month's longest hold ------------------------------------------------
+
+from swingbot.core.analytics.pnl_calendar import longest_hold
+
+
+def _held_row(ticker, day, opened, closed):
+    return {"ticker": ticker, "trade_id": ticker.lower(), "plan_id": None, "day": day,
+            "opened_at": opened, "closed_at": closed}
+
+
+def test_longest_hold_picks_the_longest_close_in_the_month():
+    rows = [_held_row("AAA", "2026-08-10", "2026-08-09T14:00:00+00:00", "2026-08-10T14:00:00+00:00"),
+            _held_row("BBB", "2026-08-20", "2026-08-05T14:00:00+00:00", "2026-08-20T14:00:00+00:00"),
+            _held_row("CCC", "2026-09-02", "2026-06-01T14:00:00+00:00", "2026-09-02T14:00:00+00:00")]
+    best = longest_hold(rows, "2026-08")
+    assert (best["ticker"], best["held_hours"]) == ("BBB", 360.0)
+
+
+def test_longest_hold_is_none_when_nothing_is_measurable():
+    rows = [_held_row("AAA", "2026-08-10", None, "2026-08-10T14:00:00+00:00")]
+    assert longest_hold(rows, "2026-08") is None
+    assert longest_hold([], "2026-08") is None
+
+
+def test_longest_hold_reports_the_full_row_and_ignores_unmeasurable_rows():
+    rows = [_held_row("OK", "2026-08-12", "2026-08-10T00:00:00+00:00", "2026-08-12T12:00:00+00:00"),
+            # close before open (hand-edited): never wins, even though |delta| is huge
+            _held_row("BAD", "2026-08-13", "2026-08-20T00:00:00+00:00", "2026-08-13T00:00:00+00:00")]
+    best = longest_hold(rows, "2026-08")
+    assert best == {"ticker": "OK", "trade_id": "ok", "plan_id": None,
+                    "opened_at": "2026-08-10T00:00:00+00:00",
+                    "closed_at": "2026-08-12T12:00:00+00:00", "held_hours": 60.0}
+
+
+def test_longest_hold_counts_only_the_requested_month_by_close_day():
+    rows = [_held_row("JUL", "2026-07-31", "2026-01-01T00:00:00+00:00", "2026-07-31T00:00:00+00:00"),
+            _held_row("AUG", "2026-08-01", "2026-07-31T00:00:00+00:00", "2026-08-01T00:00:00+00:00")]
+    assert longest_hold(rows, "2026-08")["ticker"] == "AUG"

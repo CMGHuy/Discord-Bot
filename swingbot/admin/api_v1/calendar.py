@@ -97,6 +97,7 @@ def calendar_pnl():
         "month": grid["month"],
         "days": grid["days"],
         "totals": grid["totals"],
+        "longest_hold": pc.longest_hold(rows, grid["month"]),
         "day_of_week": pc.day_of_week_breakdown(rows),
         "best_day": extremes["best"],
         "worst_day": extremes["worst"],

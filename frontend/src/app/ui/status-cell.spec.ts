@@ -5,7 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { StatusCell } from './status-cell';
+import { StatusCell, partialOpenTitle } from './status-cell';
 
 const live = {
   status: 'ACTIVE',
@@ -76,13 +76,18 @@ describe('StatusCell', () => {
       ...live, status: 'PARTIAL', progress_pct: null, progress_band: null,
       blink_seconds: null, bar_kind: 'trailing', banked_fraction: 0.5,
     });
-    expect(el.textContent).toContain('50% open');
+    expect(el.textContent).not.toContain('open');
     expect(el.textContent).toContain('trailing');
   });
 
   it('shows the open share for a PARTIAL runner that still has a bar', () => {
     const el = render({ ...live, status: 'PARTIAL', banked_fraction: 0.4 });
-    expect(el.textContent).toContain('60% open');
+    expect(el.textContent).not.toContain('open');
+  });
+
+  it('puts the open share in the partial icon tooltip instead', () => {
+    expect(partialOpenTitle({ status: 'PARTIAL', banked_fraction: 0.5 })).toBe('Partially closed -- 50% still open');
+    expect(partialOpenTitle({ status: 'ACTIVE', banked_fraction: null })).toBeNull();
   });
 
   it('shows the chip alone for a trade that has not opened', () => {

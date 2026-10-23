@@ -471,14 +471,11 @@ describe('ambient live cues (v168 §3 #10)', () => {
     expect(ambient).not.toContain('animation');
   });
 
-  it('rings the live dot with a ping, never while resting or with the bot down', () => {
-    const source = read('src/app/shell/connection-status.ts');
-    expect(source).toMatch(/\.dot\s*\{[^}]*position:\s*relative;/s);
-    expect(source).toMatch(/\.dot\.live::after\s*\{[^}]*animation:\s*sb-ping 2s ease-out infinite;/s);
-    expect(source).toMatch(/\.dot\.live::after\s*\{[^}]*background:\s*inherit;/s);
-    expect(source).toMatch(
-      /\.dot\.live\.resting::after,\s*\.dot\.bot-down::after\s*\{\s*animation:\s*none;\s*opacity:\s*0;\s*\}/s,
-    );
+  it('blinks a halo behind the avatar, green when the bot is live and red when offline', () => {
+    const source = read('src/app/shell/profile-menu.ts');
+    expect(source).toMatch(/\.halo\.up\s*\{[^}]*var\(--pos\)[^}]*animation:\s*sb-halo-blink/s);
+    expect(source).toMatch(/\.halo\.down\s*\{[^}]*var\(--neg\)[^}]*animation:\s*sb-halo-blink/s);
+    expect(source).toMatch(/\.halo\.resting\s*\{\s*animation:\s*none;\s*\}/s);
   });
 
   it('sweeps the scan strip with an accent gradient, same keyframe and timing', () => {

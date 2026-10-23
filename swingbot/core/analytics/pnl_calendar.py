@@ -347,6 +347,24 @@ def month_grid(rows: list[dict], month: str) -> dict:
     return {"month": month, "days": days, "totals": totals}
 
 
+def longest_hold(rows: list[dict], month: str) -> dict | None:
+    """The trade held longest among the month's closes, or None.
+
+    "In that month" means closed in it, the same pool `month_grid` totals. A
+    row whose hold cannot be measured (`held_hours` is None) never wins; a
+    scale-out leg is its own row, so a runner's later close is the one that
+    reports the full hold.
+    """
+    held = [(r, held_hours(r.get("opened_at"), r.get("closed_at")))
+            for r in rows if r["day"][:7] == month]
+    held = [(r, h) for r, h in held if h is not None]
+    if not held:
+        return None
+    row, hours = max(held, key=lambda pair: pair[1])
+    return {"ticker": row["ticker"], "trade_id": row["trade_id"], "plan_id": row.get("plan_id"),
+            "opened_at": row["opened_at"], "closed_at": row["closed_at"], "held_hours": hours}
+
+
 # Monday-first, and only the five days a US-market swing bot can close on.
 # Saturday and Sunday are not modelled: a weekend cell is rendered inert by
 # the frontend rather than reported as a zero here.
@@ -574,12 +592,28 @@ def day_breakdown(rows: list[dict]) -> dict[str, list[dict]]:
 # --- v165 D4: the day drawer's / day page's summary tiles -------------------
 
 
-def _leaders(rows: list[dict]) -> list[dict]:
-    """The five rows with the largest |R|, as `{ticker, r}`."""
+def _ticker_nets(rows: list[dict]) -> list[dict]:
+    """One `{ticker, pnl, r}` per ticker traded: the day's net money and R."""
+    groups: dict = {}
+    for row in rows:
+        groups.setdefault(row["ticker"], []).append(row)
     return [
-        {"ticker": row["ticker"], "r": row["r_multiple"]}
-        for row in sorted(rows, key=lambda row: abs(row["r_multiple"]), reverse=True)[:5]
+        {"ticker": ticker,
+         "pnl": _sum_or_none([r["pnl_amount"] for r in group]),
+         "r": _sum_or_none([r["r_multiple"] for r in group if r["r_multiple"] is not None])}
+        for ticker, group in groups.items()
     ]
+
+
+def _net(row: dict) -> float:
+    """The sign-carrying figure of a ticker row: money, else R."""
+    return row["pnl"] if row["pnl"] is not None else (row["r"] or 0.0)
+
+
+def _leaders(rows: list[dict], gained: bool) -> list[dict]:
+    """Every ticker traded that day whose net is a gain (or a loss), largest first."""
+    nets = [t for t in _ticker_nets(rows) if (_net(t) > 0) == gained and _net(t) != 0]
+    return sorted(nets, key=lambda t: abs(_net(t)), reverse=True)
 
 
 def _worst_drawdown_r(measured: list[float]) -> float | None:
@@ -606,6 +640,8 @@ def day_totals(day_rows: list[dict]) -> dict:
     measured = [r["r_multiple"] for r in measured_rows]
     winners = [r for r in measured_rows if r["r_multiple"] > 0]
     losers = [r for r in measured_rows if r["r_multiple"] < 0]
+    # Leaders are per ticker over every row traded, netted in money.
+    traded = [r for r in day_rows if r["r_multiple"] is not None or r["pnl_amount"] is not None]
     return {
         # `trades` stays the route's list contract; this is its numeric
         # companion for the tiles.
@@ -617,6 +653,6 @@ def day_totals(day_rows: list[dict]) -> dict:
         "win_rate": metrics.win_rate([{"status": r["outcome"]} for r in day_rows]),
         "avg_trade_r": _avg_or_none(measured),
         "worst_drawdown_r": _worst_drawdown_r(measured),
-        "contributors": _leaders(winners),
-        "detractors": _leaders(losers),
+        "contributors": _leaders(traded, gained=True),
+        "detractors": _leaders(traded, gained=False),
     }

@@ -71,7 +71,10 @@ export function sparklinePath(points: readonly number[]): string {
     }
   `,
   styles: `
-    :host { display: inline-block; width: 100%; height: 24px; }
+    /* Block, not inline-block: an inline box sits on the text baseline and
+       the line keeps descender room under it, so the line rode ~2px above
+       the middle of its table row (layout audit vcenter, 2026-10-23). */
+    :host { display: block; width: 100%; height: 24px; }
     svg { display: block; width: 100%; height: 100%; overflow: visible; }
     path {
       fill: none;

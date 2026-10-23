@@ -25,7 +25,7 @@ export const ROUTES = Object.freeze([
   '/ui',
 ]);
 
-export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline']);
+export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter']);
 
 /** Phone, tablet and desktop (docs/claude/ui-design.md § Device classes). */
 export const FULL_WIDTHS = Object.freeze([390, 768, 1440]);
@@ -35,6 +35,8 @@ export const TOUCH_MAX_WIDTH = 1023;
 export const MIN_TAP_PX = 44;
 export const MIN_TEXT_PX = 11;
 export const MAX_BASELINE_OFFSET_PX = 2;
+/** A table cell's content, or an icon beside its text, off centre by more than this. */
+export const MAX_CENTER_OFFSET_PX = 2;
 
 const DEFAULTS = Object.freeze({ base: 'http://localhost:1234', out: null, allow: null, prune: false, settle: 1500 });
 
@@ -103,7 +105,26 @@ export function isVisuallyHidden(style, rect) {
   return Boolean(outOfFlow && tiny && clipped);
 }
 
-const findingKey = (f) => `${f.route} @${f.width} ${f.check} ${f.selector}`;
+/** The vcenter check's geometry, on plain {top, bottom, left, right, height}
+ *  rects. Self-contained (no closures over module scope) because the audit
+ *  ships it into the page as source, as it does isVisuallyHidden. */
+export function vcenterGeometry() {
+  const gap = (icon, t) => Math.min(Math.abs(t.left - icon.right), Math.abs(icon.left - t.right));
+  return {
+    /** How far inner's centre sits below outer's: positive is low, negative high. */
+    centreOffset: (inner, outer) => (inner.top + inner.bottom) / 2 - (outer.top + outer.bottom) / 2,
+    /** A cell's box without its padding and borders: where its content belongs. */
+    contentBox: (rect, { padTop, padBottom, borderTop, borderBottom }) => ({
+      top: rect.top + padTop + borderTop, bottom: rect.bottom - padBottom - borderBottom,
+    }),
+    /** The text line beside an icon: on its line and within maxGap px of either side, nearest first. */
+    nearestBeside: (icon, rects, maxGap = 24) => rects
+      .filter((t) => t.height > 0 && Math.min(t.bottom, icon.bottom) - Math.max(t.top, icon.top) > 0 && gap(icon, t) < maxGap)
+      .sort((a, b) => gap(icon, a) - gap(icon, b))[0] ?? null,
+  };
+}
+
+const findingKey = (f) =>`${f.route} @${f.width} ${f.check} ${f.selector}`;
 
 export function dedupe(findings) {
   const byKey = new Map();

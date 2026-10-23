@@ -5,7 +5,7 @@
  * docs/superpowers/specs/2026-10-19-v179-mobile-layout-consistency-design.md §3.5, §6a.6).
  *
  * Visits every route and tab (layout-audit-lib.mjs ROUTES) at each width,
- * headless, on browse.mjs's persistent profile, and reports six checks:
+ * headless, on browse.mjs's persistent profile, and reports seven checks:
  *   overflow   the page (document, body or the shell's <main> pane) is wider than the viewport
  *   offscreen  text past the right edge of the viewport, outside any scroll box
  *   clipped    text cut by its own overflow/ellipsis or by an overflow:hidden ancestor (never sr-only)
@@ -13,6 +13,8 @@
  *              and a checkbox's label)
  *   text       text under 11px (SVG text at its rendered size)
  *   baseline   side-by-side text in one flex/grid row whose baselines differ by more than 2px
+ *   vcenter    a table cell's content more than 2px off the middle of its row, or an icon
+ *              (svg, img, checkbox/radio) more than 2px off the centre line of the text beside it
  * A finding the allow-list names (with a reason and a date) passes; anything
  * else makes the exit code 1. Entries nothing matches any more print as STALE;
  * --prune removes them (only on a run at 390, 768 and 1440).
@@ -37,8 +39,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
-  CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug, validateAllow,
+  CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, ROUTES, TOUCH_MAX_WIDTH,
+  classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -49,8 +51,9 @@ const DEFAULT_ALLOW = join(HERE, 'layout-audit.allow.json');
 class CannotRun extends Error {}
 
 /** Runs inside the page (page.evaluate): self-contained, no imports, no closures over module scope. */
-function auditPage({ touch, minTap, minText, maxBaseline, hiddenSrc }) {
+function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc, geometrySrc }) {
   const isVisuallyHidden = new Function(`return ${hiddenSrc}`)();
+  const geo = new Function(`return (${geometrySrc})()`)();
   const vw = document.documentElement.clientWidth;
   const findings = [];
   const INTERACTIVE = 'a[href], button, [role="button"], [role="tab"], input:not([type="hidden"]), select, textarea, summary, [tabindex="0"]';
@@ -169,6 +172,67 @@ function auditPage({ touch, minTap, minText, maxBaseline, hiddenSrc }) {
     }
   }
 
+  /** Vertical extent of what a box shows: its text lines plus icons and form marks, never its padding. */
+  function inkBox(root, skip) {
+    let top = Infinity;
+    let bottom = -Infinity;
+    const take = (r) => {
+      if (r.height > 0) [top, bottom] = [Math.min(top, r.top), Math.max(bottom, r.bottom)];
+    };
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.textContent.trim() || skip?.contains(n) || !visible(n.parentElement) || srOnly(n.parentElement)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      [...range.getClientRects()].forEach(take);
+    }
+    root.querySelectorAll('svg, img, input[type="checkbox"], input[type="radio"]').forEach((m) => {
+      if (!m.parentElement?.closest('svg') && visible(m) && !skip?.contains(m)) take(m.getBoundingClientRect());
+    });
+    return top === Infinity ? null : { top, bottom };
+  }
+
+  /** A table cell's content sits in the middle of its row (the cell's box minus its padding). */
+  function checkCell(td) {
+    const ink = inkBox(td);
+    if (!ink) return;
+    const cs = getComputedStyle(td);
+    const box = geo.contentBox(td.getBoundingClientRect(), {
+      padTop: parseFloat(cs.paddingTop), padBottom: parseFloat(cs.paddingBottom),
+      borderTop: parseFloat(cs.borderTopWidth), borderBottom: parseFloat(cs.borderBottomWidth),
+    });
+    const offset = geo.centreOffset(ink, box);
+    if (Math.abs(offset) > maxCenter) add('vcenter', td, `cell content ${offset > 0 ? 'low' : 'high'} by ${Math.abs(offset).toFixed(1)}px`);
+  }
+
+  /** Text on the icon's own line, beside it: the nearest ancestor (3 up) that holds any. */
+  function textBeside(icon) {
+    const ir = icon.getBoundingClientRect();
+    for (let p = icon.parentElement, depth = 0; p && depth < 3; p = p.parentElement, depth += 1) {
+      const rects = [];
+      const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (!n.textContent.trim() || icon.contains(n) || !visible(n.parentElement) || srOnly(n.parentElement)) continue;
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        rects.push(...range.getClientRects());
+      }
+      const beside = geo.nearestBeside(ir, rects);
+      if (beside) return beside;
+    }
+    return null;
+  }
+
+  /** An icon (or checkbox/radio mark) and the text beside it share a centre line. */
+  function checkIcon(icon) {
+    const ir = icon.getBoundingClientRect();
+    if (ir.width > 32 || ir.height > 32 || icon.querySelector?.('text')) return; // a chart, not an icon
+    const t = textBeside(icon);
+    if (!t) return;
+    const offset = geo.centreOffset(ir, t);
+    if (Math.abs(offset) > maxCenter) add('vcenter', icon, `icon ${offset > 0 ? 'low' : 'high'} by ${Math.abs(offset).toFixed(1)}px against its text`);
+  }
+
   const doc = document.documentElement;
   const main = document.querySelector('main');
   const overflowPx = Math.max(doc.scrollWidth - doc.clientWidth, document.body.scrollWidth - document.body.clientWidth,
@@ -180,6 +244,8 @@ function auditPage({ touch, minTap, minText, maxBaseline, hiddenSrc }) {
     if (ownText(el) && !srOnly(el)) checkText(el);
     if (touch && el.matches(INTERACTIVE)) checkTap(el);
     if (!(el instanceof SVGElement) && isRow(getComputedStyle(el))) checkBaselines(el);
+    if (el.matches('tr > td, tr > th') && el.parentElement.children.length > 1) checkCell(el);
+    if (el.matches('svg, img, input[type="checkbox"], input[type="radio"]') && !el.parentElement.closest('svg')) checkIcon(el);
   }
   return findings;
 }
@@ -273,14 +339,14 @@ async function screenshot(page, file, width) {
 async function auditWidth(width, opts) {
   return withContext(width, async (page) => {
     await requireSession(page, opts.base);
-    const limits = { touch: width <= TOUCH_MAX_WIDTH, minTap: MIN_TAP_PX, minText: MIN_TEXT_PX, maxBaseline: MAX_BASELINE_OFFSET_PX };
+    const limits = { touch: width <= TOUCH_MAX_WIDTH, minTap: MIN_TAP_PX, minText: MIN_TEXT_PX, maxBaseline: MAX_BASELINE_OFFSET_PX, maxCenter: MAX_CENTER_OFFSET_PX };
     const findings = [];
     for (const route of ROUTES) {
       await page.goto(`${opts.base}${resolveRoute(route, opts.ids)}`, { waitUntil: 'load' });
       await page.waitForFunction(ready, null, { timeout: 30_000 })
         .catch(() => console.error(`still loading after 30s: ${route} @${width}`));
       await page.waitForTimeout(opts.settle);
-      const raw = await page.evaluate(auditPage, { ...limits, hiddenSrc: isVisuallyHidden.toString() });
+      const raw = await page.evaluate(auditPage, { ...limits, hiddenSrc: isVisuallyHidden.toString(), geometrySrc: vcenterGeometry.toString() });
       findings.push(...raw.map((f) => ({ route, width, ...f })));
       await screenshot(page, join(opts.out, `${slug(route)}@${width}.png`), width);
       console.error(`${route} @${width}: ${raw.length} raw finding(s)`);

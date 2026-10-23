@@ -53,6 +53,7 @@ const RESPONSE: PnlCalendar = {
     { date: '2026-08-05', net_pnl_amount: -90, net_r: -1.8, trade_count: 1, win_rate: 0 },
   ],
   totals: { net_pnl_amount: -60, net_r: -0.6, trade_count: 3, win_rate: 33.33 },
+  longest_hold: null,
   day_of_week: [
     { weekday: 'Mon', avg_pnl_amount: 15, avg_r: 0.6, win_rate: 50, trade_count: 2 },
     { weekday: 'Tue', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
@@ -109,6 +110,20 @@ describe('CalendarStore', () => {
     expect(store.days()).toHaveLength(2);
     expect(store.empty()).toBe(false);
     expect(store.strategyOptions().map((o) => o.value)).toEqual(['EMA20', 'VWAP']);
+  });
+
+  it('exposes the longest hold of the month, or null when none is measurable', () => {
+    tick();
+    respond({
+      longest_hold: {
+        ticker: 'AAPL', trade_id: 't1', plan_id: null,
+        opened_at: '2026-08-01T14:00:00Z', closed_at: '2026-08-13T18:00:00Z', held_hours: 292,
+      },
+    });
+    expect(store.longestHold()?.ticker).toBe('AAPL');
+    store.load();
+    respond({ longest_hold: null });
+    expect(store.longestHold()).toBeNull();
   });
 
   it('defaults to the account-currency metric, not R', () => {
