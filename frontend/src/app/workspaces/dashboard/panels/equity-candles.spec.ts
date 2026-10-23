@@ -10,7 +10,7 @@ import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
 import { token } from '../../../ui/chart/chart-theme';
-import { EquityCandles, targetLogicalRange, targetNeedsOlder } from './equity-candles';
+import { EquityCandles, GESTURE_GRACE_MS, targetLogicalRange, targetNeedsOlder } from './equity-candles';
 import { TimeWindow, inWindowCandles } from './equity-range.model';
 
 // A real lightweight-charts chart is created; fancy-canvas needs matchMedia.
@@ -87,8 +87,13 @@ const W = (from: string, to: string): TimeWindow => ({ from, to });
 /** New York midnights (EDT, UTC-4) of 3 Sep and 6 Sep: buckets 3, 4 and 5 Sep. */
 const SEP_3_TO_6 = W('2026-09-03T04:00:00.000Z', '2026-09-06T04:00:00.000Z');
 
-type Linked = { programmatic: boolean; series: { setData(points: unknown): void } };
+type Linked = { programmatic: boolean; gesture: boolean; series: { setData(points: unknown): void } };
 const linked = (fixture: { componentInstance: EquityCandles }) => fixture.componentInstance as unknown as Linked;
+/** The partner is mid-drag: the chart's own settling is no longer the explanation for a range change. */
+const userGesture = (fixture: { componentInstance: EquityCandles }) => {
+  linked(fixture).programmatic = false;
+  linked(fixture).gesture = true;
+};
 
 describe('sb-equity-candles', () => {
   describe('preset target helpers (v181 §1)', () => {
@@ -131,7 +136,7 @@ describe('sb-equity-candles', () => {
     it('reports a pan or zoom the partner made as whole New York buckets', () => {
       const { fixture } = render(response(dailyCandles(40)));
       const seen = emitted(fixture);
-      linked(fixture).programmatic = false;
+      userGesture(fixture);
       at(fixture, 4.6, 24.4);
       // Buckets 5..24 = 6 Sep .. 25 Sep; the window ends at 26 Sep's NY midnight.
       expect(seen).toEqual([{ from: '2026-09-06T04:00:00.000Z', to: '2026-09-26T04:00:00.000Z' }]);
@@ -143,6 +148,78 @@ describe('sb-equity-candles', () => {
       linked(fixture).programmatic = true;
       at(fixture, 4.6, 24.4);
       expect(seen).toEqual([]);
+    });
+
+    describe('a range change is a user move only during a gesture', () => {
+      const stageOf = (el: HTMLElement) => el.querySelector('.stage')!;
+
+      it('ignores the chart settling on its own, even after the programmatic flag has dropped', () => {
+        const { fixture, el } = render(response(dailyCandles(40)));
+        const seen = emitted(fixture);
+        linked(fixture).programmatic = false; // a late first-paint frame on a slow load
+        at(fixture, 20, 39); // at the newest candle, so the live-edge rule does not show the button either
+        expect(seen).toEqual([]);
+        expect(el.querySelector('button.reset')).toBeNull();
+      });
+
+      it('reports a drag: pointer down, range change, and the Latest button follows', () => {
+        const { fixture, el } = render(response(dailyCandles(40)));
+        const seen = emitted(fixture);
+        linked(fixture).programmatic = false;
+        stageOf(el).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        at(fixture, 4.6, 24.4);
+        expect(seen).toHaveLength(1);
+        expect(el.querySelector('button.reset')).not.toBeNull();
+      });
+
+      it('counts a touch and a wheel turn as gestures too', () => {
+        for (const type of ['touchstart', 'wheel']) {
+          const { fixture, el } = render(response(dailyCandles(40)));
+          const seen = emitted(fixture);
+          linked(fixture).programmatic = false;
+          stageOf(el).dispatchEvent(new Event(type, { bubbles: true }));
+          at(fixture, 4.6, 24.4);
+          expect(seen, type).toHaveLength(1);
+          TestBed.resetTestingModule();
+          TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+        }
+      });
+
+      it('keeps counting for the grace after the hand lifts (a fling), then stops', () => {
+        // Timeouts only: faking requestAnimationFrame would run the chart's canvas draw, which jsdom lacks.
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+          const { fixture, el } = render(response(dailyCandles(40)));
+          const seen = emitted(fixture);
+          linked(fixture).programmatic = false;
+          stageOf(el).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+          stageOf(el).dispatchEvent(new Event('pointerup', { bubbles: true }));
+          vi.advanceTimersByTime(GESTURE_GRACE_MS - 1);
+          at(fixture, 4.6, 24.4);
+          expect(seen).toHaveLength(1);
+          vi.advanceTimersByTime(1);
+          at(fixture, 5.6, 25.4);
+          expect(seen).toHaveLength(1);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('holds a gesture open while the pointer stays down, however long', () => {
+        // Timeouts only: faking requestAnimationFrame would run the chart's canvas draw, which jsdom lacks.
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+          const { fixture, el } = render(response(dailyCandles(40)));
+          const seen = emitted(fixture);
+          linked(fixture).programmatic = false;
+          stageOf(el).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+          vi.advanceTimersByTime(60_000);
+          at(fixture, 4.6, 24.4);
+          expect(seen).toHaveLength(1);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
 
     it('redraws candles under the flag, so a refresh or a prepended page is never a gesture', () => {
@@ -247,7 +324,7 @@ describe('sb-equity-candles', () => {
       expect(stub.calls.loadOlder).toBe(0);
       expect(stub.pageError()).toBe(true);
 
-      linked(fixture).programmatic = false;
+      userGesture(fixture);
       at(fixture, 0, 19);
       expect(stub.calls.loadOlder).toBe(0);
       const retry = el.querySelector<HTMLButtonElement>('.page-error button')!;
@@ -295,7 +372,7 @@ describe('sb-equity-candles', () => {
       const resets: number[] = [];
       fixture.componentInstance.viewReset.subscribe(() => resets.push(1));
       const scroll = vi.spyOn(linkScale(fixture), 'scrollToRealTime').mockImplementation(() => {});
-      linked(fixture).programmatic = false;
+      userGesture(fixture);
       at(fixture, 0, 19);
       el.querySelector<HTMLButtonElement>('button.reset')!.click();
       expect(resets).toHaveLength(1);
@@ -582,7 +659,7 @@ describe('sb-equity-candles', () => {
 
     it('appears after the partner pans or zooms the time axis, even at the newest candle', () => {
       const { fixture, el } = render(response(dailyCandles(40)));
-      linked(fixture).programmatic = false;
+      userGesture(fixture);
       at(fixture, 20, 39);
       expect(latestButton(el)).not.toBeNull();
       expect(latestButton(el)!.textContent).toContain('Latest');
@@ -607,7 +684,7 @@ describe('sb-equity-candles', () => {
       const { fixture, el } = render(response(dailyCandles(40)));
       const resets: number[] = [];
       fixture.componentInstance.viewReset.subscribe(() => resets.push(1));
-      linked(fixture).programmatic = false;
+      userGesture(fixture);
       at(fixture, 20, 39);
       priceScale(fixture).applyOptions({ autoScale: false });
       el.querySelector('.stage')!.dispatchEvent(new Event('pointerup', { bubbles: true }));

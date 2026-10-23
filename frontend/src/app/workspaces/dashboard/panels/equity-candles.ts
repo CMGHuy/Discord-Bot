@@ -71,6 +71,10 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
  *  than any deliberate gesture that follows it. */
 export const PROGRAMMATIC_SETTLE_MS = 100;
 
+/** How long a range change still counts as the partner's after their hand
+ *  left the chart: a touch fling keeps gliding for a moment. */
+export const GESTURE_GRACE_MS = 1000;
+
 /** v181 §1: the logical range that shows exactly the loaded candles whose
  *  bucket meets `window`. ±0.4 so `inWindowCandles` reads back the same
  *  whole buckets (it counts a candle from half a bar in). Null when no
@@ -145,7 +149,10 @@ export function targetNeedsOlder(
         (retry)="store.load()"
       />
     }
-    <div class="stage" (pointerup)="syncPriceMoved()" (touchend)="syncPriceMoved()" (dblclick)="syncPriceMoved()">
+    <div class="stage"
+         (pointerdown)="beginGesture()" (touchstart)="beginGesture()" (wheel)="beginGesture(); endGesture()"
+         (pointerup)="endGesture(); syncPriceMoved()" (touchend)="endGesture(); syncPriceMoved()"
+         (pointercancel)="endGesture()" (dblclick)="syncPriceMoved()">
       <div #host class="chart" [class.hidden]="state() !== 'chart'"></div>
       @if (showReset()) {
         <!-- Like TradingView's reset: shown once the chart was dragged or zoomed
@@ -297,6 +304,12 @@ export class EquityCandles {
    *  in part 2 a preset move) is still being reported back by the chart. */
   private programmatic = false;
   private releaseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The partner has a hand on the chart (pointer, touch or wheel), or just
+   *  lifted it. A range change outside one is the chart settling on its own
+   *  (first paint, a resize, a late frame after a redraw), never a pan or a
+   *  zoom: timing alone cannot tell the two apart on a slow first load. */
+  private gesture = false;
+  private gestureTimer: ReturnType<typeof setTimeout> | null = null;
   /** An auto step waiting for its candles: the span to show on them. */
   private pendingSpan: { tf: EquityTimeframe; span: WallSpan } | null = null;
 
@@ -409,6 +422,7 @@ export class EquityCandles {
 
     destroyRef.onDestroy(() => {
       if (this.releaseTimer !== null) clearTimeout(this.releaseTimer);
+      if (this.gestureTimer !== null) clearTimeout(this.gestureTimer);
       this.resizeObserver?.disconnect();
       this.chart?.remove();
       this.chart = null;
@@ -479,7 +493,7 @@ export class EquityCandles {
   private reportUserRange(range: LogicalWindow | null): void {
     const tf = this.store.data()?.tf;
     if (this.programmatic) this.armRelease();
-    if (this.programmatic || range === null || !tf) return;
+    if (this.programmatic || !this.gesture || range === null || !tf) return;
     this.moved.set(true);
     const bounds = windowBounds(this.inWindow(), tf);
     if (bounds) this.rangeChange.emit(bounds);
@@ -521,6 +535,21 @@ export class EquityCandles {
     if (range) scale.setVisibleLogicalRange(range);
     else if (windowed) scale.scrollToRealTime();
     else scale.fitContent();
+  }
+
+  protected beginGesture(): void {
+    if (this.gestureTimer !== null) clearTimeout(this.gestureTimer);
+    this.gestureTimer = null;
+    this.gesture = true;
+  }
+
+  /** The hand lifted: the gesture's own range changes may still arrive. */
+  protected endGesture(): void {
+    if (this.gestureTimer !== null) clearTimeout(this.gestureTimer);
+    this.gestureTimer = setTimeout(() => {
+      this.gesture = false;
+      this.gestureTimer = null;
+    }, GESTURE_GRACE_MS);
   }
 
   /** Reads the price scale back: a vertical drag switches auto-fit off, and
