@@ -32,6 +32,9 @@ market_data/
 # v162 pull_history_store.sh siblings: the verdict file, the previous store
 # kept for rollback, and a failed pull's partial copy.
 data/market_data.*
+# Point-in-time S&P 500 history store (Alpaca, 2016+), kept apart from the
+# watchlist store so default backtest universes do not silently widen.
+data/market_data_pit/
 data/backtest_cache/
 # v102's extended 2010-2025 OHLCV cache (BACKTEST_CACHE_DIR); rebuilt by
 # scripts/data/fetch_backtest_data.py --start 2010-01-01 --end 2025-12-31.
