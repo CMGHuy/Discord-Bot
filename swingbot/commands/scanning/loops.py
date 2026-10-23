@@ -1016,8 +1016,10 @@ async def daily_short_interest_refresh():
         result = await asyncio.to_thread(short_interest.refresh_short_interest, symbols)
         log.info("daily_short_interest_refresh: %d updated, %d failed of %d symbols",
                  result["updated"], len(result["failed"]), len(symbols))
-    except Exception:
-        log.exception("daily_short_interest_refresh: refresh failed")
+    except Exception as exc:
+        swallowed(log, "ops.daily_short_interest_refresh", exc,
+                  "daily_short_interest_refresh: refresh failed",
+                  level=logging.ERROR, exc_info=True)
 
 
 @tasks.loop(minutes=1)

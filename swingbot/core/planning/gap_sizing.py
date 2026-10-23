@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.planning import account
 
 log = logging.getLogger(__name__)
@@ -47,7 +48,9 @@ def stamp_gap_sizing(plan, df) -> None:
     except Exception as exc:
         plan.gap_sizing = ({"rule": _rule(), "up_gap_p99_pct": None, "n_up_gaps": 0}
                            if plan.direction == "bearish" else None)
-        log.info("%s: gap sizing stamp failed (%s) -- sized on the stop", plan.ticker, exc)
+        swallowed(log, "scan.gap_sizing.stamp", exc,
+                  "%s: gap sizing stamp failed (%s) -- sized on the stop", plan.ticker, exc,
+                  level=logging.INFO)
         return
     if plan.gap_sizing is not None and plan.gap_sizing["up_gap_p99_pct"] is None:
         log.info("%s: gap sizing p99 n/a (%d up-gaps, need %d) -- sized on the stop",
@@ -83,7 +86,8 @@ def size_for(entry, stop_loss, *, direction, gap_sizing, account_cfg=None, label
     try:
         return account.compute_position_size(entry, stop_loss, account_cfg, gap_floor_pct=floor)
     except Exception as exc:
-        log.info("%s: gap sizing fell back to stop (%s)", label, exc)
+        swallowed(log, "scan.gap_sizing.size_fallback", exc,
+                  "%s: gap sizing fell back to stop (%s)", label, exc, level=logging.INFO)
         return _with_no_gap(_stop_only(entry, stop_loss, account_cfg))
 
 

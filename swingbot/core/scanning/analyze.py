@@ -465,7 +465,8 @@ def _stamp_gap_sizing_live(plan, df, now) -> None:
     from .strategy_pass import completed_frame
     try:
         frame = completed_frame(df, now or datetime.now(timezone.utc))
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.analyze.gap_sizing_frame", exc, level=logging.DEBUG)
         frame = None
     stamp_gap_sizing(plan, frame)
 
@@ -477,7 +478,8 @@ def _stamp_risk_notice_live(plan, df, now) -> None:
     from .strategy_pass import completed_frame
     try:
         frame = completed_frame(df, now or datetime.now(timezone.utc))
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.analyze.risk_notice_frame", exc, level=logging.DEBUG)
         frame = None
     stamp_risk_notice(plan, frame)
 

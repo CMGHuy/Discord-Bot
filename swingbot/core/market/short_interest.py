@@ -114,7 +114,7 @@ def _existing_entries() -> dict:
     try:
         entries = _read_cache().get("symbols", {})
     except ShortInterestCacheError as exc:
-        log.warning("short-interest cache unreadable, rebuilding: %s", exc)
+        log.warning("short-interest cache unreadable, rebuilding: %s", exc, exc_info=True)
         return {}
     return dict(entries) if isinstance(entries, dict) else {}
 
@@ -124,7 +124,7 @@ def _fetch_all(symbols: list[str], fetch) -> list[tuple[str, dict | None]]:
         try:
             return sym, fetch(sym)
         except Exception as exc:  # one bad ticker never stops the batch
-            swallowed(log, "short_interest.fetch", exc, level=logging.DEBUG)
+            swallowed(log, "marketdata.short_interest.fetch", exc, level=logging.DEBUG)
             return sym, None
 
     with ThreadPoolExecutor(max_workers=4) as pool:   # Yahoo rate-limits .info
@@ -168,7 +168,7 @@ def request_refresh(ticker) -> None:
                 queue = []
             atomic_write_json(_path(QUEUE_NAME), sorted(set(queue) | {str(ticker).strip().upper()}))
     except Exception as exc:
-        swallowed(log, "short_interest.queue", exc, level=logging.DEBUG)
+        swallowed(log, "marketdata.short_interest.queue", exc, level=logging.DEBUG)
 
 
 def _watchlist() -> list[str]:
@@ -207,5 +207,6 @@ def refresh_symbols() -> list[str]:
         try:
             out.extend(source())
         except Exception as exc:
-            log.warning("short-interest source failed: %s", exc)
+            swallowed(log, "marketdata.short_interest.source", exc,
+                      "short-interest source failed: %s", exc, exc_info=True)
     return _clean(out)

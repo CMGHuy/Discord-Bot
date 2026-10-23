@@ -14,6 +14,7 @@ import logging
 from datetime import date, datetime, timezone
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import short_interest as si_mod
 from swingbot.core.market.earnings_calendar import CachedSource, next_report
 from swingbot.core.market.session import now_et, nyse_calendar
@@ -71,7 +72,8 @@ def _squeeze(entry: dict) -> bool:
 def _short_interest_part(ticker, today: date) -> tuple[str, dict | None]:
     try:
         entry = si_mod.cached_short_interest(ticker)
-    except Exception:  # ShortInterestCacheError or any read failure
+    except Exception as exc:  # ShortInterestCacheError or any read failure
+        swallowed(log, "scan.risk_notice.short_interest_read", exc, level=logging.DEBUG)
         return "not_checked", None
     if entry is None:
         si_mod.request_refresh(ticker)
@@ -104,7 +106,8 @@ def _safe_earnings(ticker, start: date, end: date, source) -> dict:
     try:
         return _earnings_part(ticker, start, end, source)
     except Exception as exc:
-        log.debug("%s: earnings part not checked (%s)", ticker, exc)
+        swallowed(log, "scan.risk_notice.earnings", exc,
+                  "%s: earnings part not checked (%s)", ticker, exc, level=logging.DEBUG)
         return dict(_NOT_CHECKED_EARNINGS)
 
 
@@ -132,8 +135,8 @@ def _signal_date(plan, df) -> date:
     try:
         if df is not None and len(df):
             return df.index[-1].date()
-    except Exception:
-        pass  # an odd index falls back to the plan's creation date
+    except Exception as exc:  # an odd index falls back to the plan's creation date
+        swallowed(log, "scan.risk_notice.signal_date", exc, level=logging.DEBUG)
     created = _parse_date(plan.created_at) if plan.created_at else None
     return created or now_et().date()
 
@@ -146,5 +149,6 @@ def stamp_risk_notice(plan, df) -> None:
     try:
         plan.risk_notice = build_risk_notice(plan, signal)
     except Exception as exc:
-        log.info("%s: risk notice degraded (%s)", plan.ticker, exc)
+        swallowed(log, "scan.risk_notice.build", exc,
+                  "%s: risk notice degraded (%s)", plan.ticker, exc, level=logging.INFO)
         plan.risk_notice = degraded_notice(plan, signal)

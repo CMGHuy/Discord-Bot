@@ -24,6 +24,7 @@ rather than assuming a key is present.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Any, Callable
@@ -31,10 +32,12 @@ from typing import Any, Callable
 from flask import jsonify, request
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 
 from . import api_v1, error
 from .auth import require_auth
 
+log = logging.getLogger(__name__)
 
 def _kill_block(state: dict) -> dict:
     """Normalised to exactly three keys.
@@ -107,7 +110,8 @@ def _heat_gap_block() -> dict:
 
     try:
         return _open_short_gap_risk(TradeLog().get_trades(status="open", limit=None) or [])
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "ops.risk.heat_gap_block", exc, level=logging.DEBUG)
         return {"gap_risk_amount": None, "gap_risk_unknown": 0}
 
 
