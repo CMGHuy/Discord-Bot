@@ -383,6 +383,9 @@ Detail: `docs/claude/testing-cost.md` § Test suites.
 `pytest path::test`), never by re-running the whole suite; a fix touching other
 files widens to `testrun.py changed`. **No full suite after merging back to
 `main`**: it ran once, before the merge.
+Every feature, fix or change you implement ships its own unit tests in the same
+work (backend and frontend, edge and empty cases included), run green before
+you call it done; the partner never has to ask.
 
 **Green means `0 failed` and `0 xfailed`.** A changed pass count is not itself a
 failure; read the output. Timings swing 2-4x with machine load, so do not

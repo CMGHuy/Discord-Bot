@@ -124,7 +124,7 @@ failure. Baseline, and why counts/timings swing with machine load:
 **A failed test is fixed and re-run alone** (`testrun.py file …` or `pytest
 path::test`), never by re-running the whole suite. **No full suite after
 merging back to `main`**: it ran once, before the merge. **Commit in several
-scoped commits, never one big one** (`working-conventions.md`).
+scoped commits, never one big one** (`working-conventions.md`). **Every feature, fix or change you implement ships its own unit tests in the same work** (backend and frontend alike, edge and empty cases included), run green before you call it done; the partner never has to ask (`working-conventions.md` § How the human partner wants work done).
 
 **Tests live in suites** (`tests/suites.toml`; `testrun.py suite <name>`, `suites`
 lists). A new `tests/` directory joins exactly one suite in the same commit; a
