@@ -111,7 +111,7 @@ const MOTION_OPTIONS: SegmentOption[] = [
        itself offline. Idle (nothing known yet) draws nothing. Stilled by
        styles/motion.css under Reduced, Off and pending, and while the market
        is closed (.resting) -- a blink would claim activity that is not there. */
-    .halo { position: absolute; inset: -4px; border-radius: 50%; pointer-events: none; opacity: 0; }
+    .halo { position: absolute; inset: -2px; border-radius: 50%; pointer-events: none; opacity: 0; }
     .halo.up { background: var(--pos); opacity: 0.55; animation: sb-halo-blink 2s ease-in-out infinite; }
     .halo.down { background: var(--neg); opacity: 0.6; animation: sb-halo-blink 1.2s ease-in-out infinite; }
     .halo.resting { animation: none; }
