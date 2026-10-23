@@ -1,7 +1,7 @@
 # v188 — Cancelled-plan precision
 
 **Version:** ui 1.35.0 · bot 2.14.4
-**Bump:** ui minor, bot patch
+**Bump:** ui patch, bot patch
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, quant-researcher, financial-advisor
@@ -57,6 +57,79 @@ cancel rule is its own spec and needs its own screen evidence.
    combined with B: a headline precision figure with R avoided / R missed,
    per-reason cards, right/wrong/unresolved counts with R, and a plan table that
    filters when a count or card is clicked.
+
+## Method additions from the panel review (frozen before any row is scored)
+
+These bind the builder and are fixed here so no threshold is chosen after the
+numbers are seen.
+
+**Reasons and origin.**
+- The reason set is a closed allowlist: `risk_cap`, `invalidated`, `expired`. Any
+  other cancel reason found at build time (for example the `session_expiry` codes
+  written by `plan_manager._expire_window`, `session_expiry.py:27-28`) lands in a
+  visible `other` bucket with its own N; it is never dropped or merged silently.
+- For outlook/NEXT_SESSION plans `invalidated` and `risk_cap` are classified after
+  the fact from the session's bars, while live plans write them from the live
+  price (`plan_manager.py:886-890` vs `:941,958`). Each row records `plan.origin`
+  and the screen can filter by it. Cards pool both by default and say so.
+- The outcome for a plan whose trigger is not reached after the cancel is named
+  `untriggered_after_cancel`, not `never_triggered`, so it cannot collide with the
+  existing `session_expiry` reason code of that name.
+- Each row also carries long/short and horizon, and the results can be split by
+  each. The count figures (76 / 49 / 22 / 5) were read at spec time and must be
+  re-queried at build time, never carried forward.
+
+**The `risk_cap` entry.** `risk_cap` fires only after price has crossed the
+trigger (`fill = max(price, trigger)`, `plan_manager.py:934-949`), so replaying
+from the bare trigger uses a narrower risk than was ever on offer. The
+`cancelled_risk_cap` event detail stores the live `entry_price`. For `risk_cap`
+the screen therefore shows **both** entry models side by side (planned trigger,
+and the event's crossing price) and never one without the other. The pooled
+headline is shown **with and without** `risk_cap`.
+
+**What `risk_cap` precision means.** The cap limits dollar risk, so a TP1 hit does
+not make that cancel a mistake. On the screen the `risk_cap` verdict is labelled
+"outcome of the skipped setup, unaffordable at the cap", never "wrong cancel", and
+the table carries the cap-implied position size.
+
+**Frozen definitions.**
+- `untriggered_after_cancel` means the daily bars never trade through the trigger
+  level inside the window (high >= trigger for a long, low <= trigger for a short).
+  A touch counts. For `risk_cap`, whose fill happened on the cancel day, the
+  re-touch rule applies the same way.
+- R for a TP1 hit is the full target R, `|tp1 - entry| / |entry - stop|`, with no
+  partial exit. The screen says so, because the bot does not bank winners in full.
+- A plan with no stop or TP1 hit inside the window is `unresolved` and is also
+  marked to the window-end close, with its R shown, so the drift is visible. It
+  stays out of precision. The screen shows how many of the plans survive into the
+  precision N, next to the headline.
+- A same-bar double touch counts as the stop, which leans toward "right cancel".
+  The screen shows how many verdicts were decided by such a tie.
+- Small-N marker: any figure with **N < 10** is marked, including the headline of
+  a filtered view and the `risk_cap` secondary row. N is printed on every figure.
+
+**Baseline and uncertainty.**
+- The same stop-before-TP1 replay runs on the **filled** plans from the same
+  window, strategy and horizon, and the screen shows cancelled-plan precision next
+  to that baseline loss rate. Without it, a high "right cancel" rate may just be the
+  base rate of a book that loses most of its plans.
+- Each headline and card carries an interval from `week_cluster_bootstrap`
+  (`swingbot/core/backtesting/instrument/stats.py`), because one gap day can trip
+  `risk_cap` on many tickers together.
+- The window may span rule or config changes (`plan_stop_ceiling`, v183 sizing).
+  The results record the config in force where it is recorded and the screen lists
+  the known rule-change dates in the window, so a pooled figure is not read as one
+  rule.
+
+**Honest labelling (the financial-advisor blockers).**
+- Headline and cards carry a visible caption: "hypothetical replay, before
+  commissions, slippage and tax".
+- The headline pairs **net R** (R avoided minus R missed) with precision at the
+  same prominence, N beside both. Precision alone can sit above 50% while net R is
+  negative, because TP1 wins and stop losses differ in size. Precision stays in the
+  headline because the partner asked for that number.
+- The table carries a strategy badge-tier column, and the screen shows a "data as
+  of" stamp for the bars used.
 
 ## Method (the contract)
 
@@ -117,11 +190,83 @@ Layout A+B, designed for mobile, tablet and desktop together
   pull precision around.
 - **`Edge: none (integrity)`** because this measures and changes nothing. Argue it
   differently if a panel reviewer disagrees.
-- **Bump `ui minor, bot patch`:** a new screen is something you see, and a new
-  read-only route is internal.
+- **Bump `ui patch, bot patch`:** per `working-conventions.md` § The three levels,
+  minor is reserved for a component that is materially different to its users; a
+  new screen is a patch. (Changed from `ui minor` by the panel.)
+
+## Architecture constraints from the panel review
+
+- **Price source.** `scripts/reports/autopsy/bars.py` reads `backtest_cache`-format
+  CSVs from a directory it is given; nothing on the VM refreshes
+  `data/backtest_cache/` (no cron row, `docs/deploy/DEPLOY_HETZNER.md:344-353`). The
+  admin precedent reads `market_data/` through `data_store.load_normalized`
+  (`swingbot/core/analytics/day_sparklines.py:5-9`). The builder picks the source
+  production actually keeps fresh, states which, and confirms it is split-adjusted
+  and lookahead-safe with the `quant-engineer` and `no-lookahead` checks. The
+  screen shows the data-as-of date.
+- **Imports.** The verdict module is pure, with injected bar and plan loaders, as
+  `day_sparklines.py` is. If it needs the stop-before-TP1 rule from the
+  simulators, the spec's builder names that import direction and justifies it
+  against `docs/claude/architecture.md`.
+- **Cost.** Computing on request replays every cancelled plan inside the admin
+  container, which shares a host with the bot (`docker-compose.yml:111-118`). A
+  per-plan cache is a new store, so an Alembic revision with an owner and a rule
+  that a verdict is final once its window closes. The builder chooses and states
+  the cost.
+- **Blast radius.** The route lives only in `admin_ui.py`'s process, never in the
+  bot loop. A failure shows an error on this one screen and nothing else. Rollback
+  is the normal image rollback with no data step.
 
 ## Left to the builder
 
-Module and route names, the table pager size, the card styling, and whether the
-replay is computed on request or cached per plan (a cancelled plan's verdict only
-changes until its window closes).
+Module and route names, the table pager size, the card styling, and the cache
+choice above.
+
+## Panel review
+
+- staff-engineer: reason set omits `session_expiry` codes (`never_triggered`,
+  `no_session_data`) -- applied (closed allowlist plus visible `other` bucket)
+- staff-engineer: outlook plans classify `invalidated`/`risk_cap` after the fact,
+  live plans from live price -- applied (`plan.origin` recorded and filterable)
+- staff-engineer: outcome name `never_triggered` collides with an existing reason
+  code -- applied (renamed `untriggered_after_cancel`)
+- staff-engineer: no production source of fresh bars for the cache -- applied
+  (price-source constraint)
+- staff-engineer: package import directions unnamed -- applied
+- staff-engineer: request-time compute versus a cache store costs -- applied (builder
+  states cost)
+- staff-engineer: blast radius and rollback unwritten -- applied
+- staff-engineer: `ui minor` does not fit the three levels -- applied (`ui patch`)
+- staff-engineer: precision built on mixed small-N buckets (handed on) -- applied via
+  the quant and advisor items
+- quant-researcher: no base rate beside precision -- applied (baseline loss rate on
+  filled plans)
+- quant-researcher: `risk_cap` trigger entry is untradeable and inflates R missed --
+  applied in part: both entry models shown side by side and the headline shown
+  with and without `risk_cap`; the partner's trigger-entry decision stays as the
+  primary replay for the other reasons
+- quant-researcher: `risk_cap` verdict measures the setup, not the decision --
+  applied (relabelled, cap-implied size)
+- quant-researcher: `untriggered_after_cancel` undefined for `risk_cap` -- applied
+  (frozen touch rule)
+- quant-researcher: dropping unresolved plans biases precision -- applied (marked to
+  market, surviving N shown)
+- quant-researcher: same-bar tie leans toward "right" -- applied (tie count shown)
+- quant-researcher: no interval -- applied (`week_cluster_bootstrap`)
+- quant-researcher: small-N threshold unset -- applied (N < 10, frozen)
+- quant-researcher: results split only by reason -- applied (long/short, horizon)
+- quant-researcher: pooling across rule changes -- applied (rule-change dates listed)
+- quant-researcher: counts not re-derived -- applied (re-query at build)
+- quant-researcher: OHLCV cache choice (handed to quant-engineer) -- applied via the
+  price-source constraint
+- financial-advisor BLOCKING: figures not marked hypothetical and pre-cost -- applied
+  (caption)
+- financial-advisor BLOCKING: precision leads, net R secondary -- applied in part:
+  net R now has equal prominence beside precision; precision stays in the headline
+  because the partner explicitly asked for that figure. Raise with the partner if
+  they want net R to lead.
+- financial-advisor: `risk_cap` read as "loosen the cap" -- applied (relabel,
+  position size)
+- financial-advisor: R for a TP1 hit undefined, excluded share hidden -- applied
+- financial-advisor: no badge tier or data-as-of -- applied
+- financial-advisor: small-N marker only on `expired` -- applied (N < 10 everywhere)
