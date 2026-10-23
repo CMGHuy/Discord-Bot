@@ -434,15 +434,22 @@ export class EquityCandles {
 
   private moveProgrammatically(fn: () => void): void {
     this.programmatic = true;
-    if (this.releaseTimer !== null) clearTimeout(this.releaseTimer);
     try {
       fn();
     } finally {
-      this.releaseTimer = setTimeout(() => {
-        this.programmatic = false;
-        this.releaseTimer = null;
-      }, PROGRAMMATIC_SETTLE_MS);
+      this.armRelease();
     }
+  }
+
+  /** The flag drops once the chart has been quiet for the settle: the chart
+   *  glides a moved range over many frames, each a range event, so a frame
+   *  that lands while the flag is still up pushes the release back. */
+  private armRelease(): void {
+    if (this.releaseTimer !== null) clearTimeout(this.releaseTimer);
+    this.releaseTimer = setTimeout(() => {
+      this.programmatic = false;
+      this.releaseTimer = null;
+    }, PROGRAMMATIC_SETTLE_MS);
   }
 
   /** v181 §1 chart → scope, in whole New York buckets. Every move this
@@ -450,6 +457,7 @@ export class EquityCandles {
    *  `programmatic` and stops here, which is what keeps the link from looping. */
   private reportUserRange(range: LogicalWindow | null): void {
     const tf = this.store.data()?.tf;
+    if (this.programmatic) this.armRelease();
     if (this.programmatic || range === null || !tf) return;
     const bounds = windowBounds(this.inWindow(), tf);
     if (bounds) this.rangeChange.emit(bounds);

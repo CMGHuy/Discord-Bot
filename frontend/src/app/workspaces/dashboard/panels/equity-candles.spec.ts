@@ -655,6 +655,26 @@ describe('sb-equity-candles', () => {
       expect(component.programmatic).toBe(false);
     });
 
+    it('keeps the flag while the chart animates a programmatic move, one frame at a time', () => {
+      // lightweight-charts glides a moved range over many frames; every frame is a
+      // range event, and the quiet gap between two of them is under the settle.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const { fixture } = render(response(MIXED));
+      const component = fixture.componentInstance as unknown as {
+        programmatic: boolean; moveProgrammatically(fn: () => void): void };
+      const emitted: unknown[] = [];
+      fixture.componentInstance.rangeChange.subscribe((range) => emitted.push(range));
+      component.moveProgrammatically(() => undefined);
+      for (let frame = 0; frame < 20; frame++) {
+        vi.advanceTimersByTime(60);
+        at(fixture, 0, 3 + frame);
+      }
+      expect(component.programmatic).toBe(true);
+      expect(emitted).toEqual([]);
+      vi.advanceTimersByTime(100);
+      expect(component.programmatic).toBe(false);
+    });
+
     it('fits a new timeframe under the flag', () => {
       const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 600);
       try {
