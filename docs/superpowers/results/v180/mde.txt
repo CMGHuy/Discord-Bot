@@ -1,0 +1,8 @@
+training data: alpaca (11 excluded)
+train effect (pooled, from --arms): -0.2145pp
+observed N         : 9405 over 1675d
+projected target N : 4099 over 730d
+paired MDE   (dWR): 0.3132pp
+unpaired MDE (dWR): 7.4782pp
+gating on: paired
+REFUSED -- the TRAIN effect is below the minimum this sample can detect. Budget intact.

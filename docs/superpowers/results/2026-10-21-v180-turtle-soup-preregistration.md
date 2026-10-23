@@ -122,3 +122,11 @@ Read from the `<stage>.turtle_soup.json` sidecar (`arms/turtle_soup_report.measu
 - `split removed=0 added=12 changed=0 is_subset=False` (additive: 12 added rows, baseline untouched)
 - Verdict: `REACHABLE -- the component changes trades; Stage 0 may proceed.`, so continue to Stage 0.
 - Descriptive (pilot, never gating), from `v180/pilot.turtle_soup.json`: signals 53; shares by status trade: 0.226, risk_cap: 0.472, no_level_in_band: 0.151, plan_other: 0.000, cancelled_open_through_stop: 0.038, cancelled_risk_cap_fill: 0.113, not_triggered: 0.000, position_open: 0.000; sweep depth median kept 0.225 / dropped 0.215 ATR; early-stop share 0.75; exit mix target 0.083, stop 0.667, gap 0.250, time cap 0.000 (decided win rate 8.3%, n=12); signals per day max 3, p95 1.0; added-row share outside the S&P 500 0.25.
+
+### Stage 0 — A3 paired MDE (fold-train 2018-06-01..2022-12-31), 2026-10-23
+
+- Exit codes: producer 0, mde 1. (A first producer attempt on 2026-10-22 died at 124/134 tickers before writing an arm file; this is its re-run, per the funnel rule for a crashed run.)
+- A1 TRAIN point (pooled ΔWR, from the arms): -0.2145pp.
+- Paired MDE (A1): 0.3132pp; unpaired MDE 7.4782pp (reported, not gating); observed decided N 9405 over 1675 days, projected target N 4099.
+- Verdict: `REFUSED`, so the funnel stops here, budget intact.
+- Descriptive (fold-train, never gating), from `v180/selection.turtle_soup.json`: signals 855, trades 210; shares by status trade: 0.246, risk_cap: 0.480, no_level_in_band: 0.188, plan_other: 0.000, cancelled_open_through_stop: 0.018, cancelled_risk_cap_fill: 0.062, not_triggered: 0.000, position_open: 0.007; each population's screen-style ExpR (n) trade: -0.046 (210), risk_cap: -0.018 (410), no_level_in_band: -0.068 (161), cancelled_open_through_stop: -0.571 (15), cancelled_risk_cap_fill: -0.110 (53), position_open: +0.079 (6); sweep depth median kept 0.149 / dropped 0.188 ATR; early-stop share 0.500; exit mix target 0.233, stop 0.629, gap 0.110, time cap 0.029, decided WR 27.1%; SPY above/below 200d ExpR -0.170/-0.380, WR 28.8%/22.8%; signals per day max 15, p95 7.0; added-row share outside the S&P 500 0.210.
