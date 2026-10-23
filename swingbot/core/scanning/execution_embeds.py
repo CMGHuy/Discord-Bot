@@ -5,6 +5,7 @@ the v110 registry kind for each message, adds the ANSI price block where the
 kind carries one (NEW SETUP ticket, ENTRY fill, RESULT close), and applies the
 shared chrome.
 """
+import dataclasses
 import logging
 
 import discord
@@ -16,6 +17,7 @@ from swingbot.core.presentation import kinds
 from swingbot.core.presentation.instructions import (CLOSE_AT_MARKET, DO_NOT_PLACE, Instruction,
                                                      Money, block_warnings, instruction_for,
                                                      money_from, ticket_for, total_r)
+from swingbot.core.presentation.gap_risk import gap_risk_line
 from swingbot.core.presentation.kinds import Family, Kind
 
 from .plan_table import _sizing_snapshot
@@ -86,16 +88,30 @@ def _ticket_money(plan) -> Money:
     return money_from(sizing.get("shares"), config.CURRENCY_SYMBOL)
 
 
+def ticket_gap_line(plan) -> str | None:
+    """The order block's v183 gap-risk line for a v2 plan, from the same sizing
+    snapshot the ticket's share count uses; None for longs, rule-stop and
+    pre-v183 plans, so their alerts are unchanged."""
+    if plan is None:
+        return None
+    return gap_risk_line(_sizing_snapshot(_entry(plan), plan), currency=config.CURRENCY_SYMBOL)
+
+
+def _with_gap_line(instruction: Instruction, plan) -> Instruction:
+    line = ticket_gap_line(plan)
+    return dataclasses.replace(instruction, lines=(*instruction.lines, line)) if line else instruction
+
+
 def build_ticket_embed(item, plan) -> discord.Embed:
     """Render a new v2 alert's order ticket."""
-    instruction = ticket_for(
+    instruction = _with_gap_line(ticket_for(
         plan, logged=item.paper_logged, not_logged_reason=item.not_logged_reason,
         money=_ticket_money(plan),
         warnings=block_warnings(heat=getattr(item, "heat_blocked", None),
                                 cluster=getattr(item, "cluster_blocked", None),
                                 kill=getattr(item, "kill_switch_blocked", None)),
         level=item.conf.level,
-    )
+    ), plan)
     kind = Kind.TICKET_DO_NOT_PLACE if instruction.verb == DO_NOT_PLACE else Kind.TICKET_PLACE
     return render(instruction, kind, block=plan_levels_block(plan, plan.trigger_price))
 

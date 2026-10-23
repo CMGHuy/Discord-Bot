@@ -124,6 +124,13 @@ def _short_notice(item, plan) -> str:
     return alert_notice(plan_v2, context, nums, currency=config.CURRENCY_SYMBOL)
 
 
+def _gap_risk_lines(item) -> list:
+    """[the v183 gap-risk line] for the email/push body, [] when there is none."""
+    from swingbot.core.scanning.execution_embeds import ticket_gap_line
+    line = ticket_gap_line(getattr(item, "plan_v2", None))
+    return [line] if line else []
+
+
 def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
     """
     Build (subject, body) for the secondary alert.
@@ -172,6 +179,7 @@ def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
         "",
         "Technical signal only — not financial advice.",
     ]
+    body_lines[8:8] = _gap_risk_lines(item)  # index 8 = blank after R:R, so the line sits under it
     notice = _short_notice(item, plan)
     if notice:
         body_lines[-1:-1] = [notice, ""]
