@@ -32,6 +32,8 @@ import { equityCandlesStoreStub } from '../../testing/equity-candles-store.stub'
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
 import { dashboardRoutes } from './dashboard.routes';
+import { PANEL_HELP } from './panels/panel-help';
+import { RealizedPnl } from './panels/realized-pnl';
 import { TradingPerformance } from './panels/trading-performance';
 import { EquityCandles } from './panels/equity-candles';
 import { PositionsTable } from './positions-table';
@@ -270,6 +272,100 @@ describe('Dashboard v85 layout', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).not.toContain('Risk & Exposure');
     expect(text).not.toContain('Account Info');
+  });
+
+  it('has no Risk used card and no Paper account caption', async () => {
+    const fixture = await loaded();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Risk used');
+    expect(text).not.toContain('Paper account');
+  });
+
+  describe('Realised P&L panel', () => {
+    const today = { amount: 42.5, pct: 0.6, n: 3, wins: 2, losses: 1 };
+
+    it('sits under Trading performance and shows today by default', async () => {
+      const fixture = await loaded({ scope: { mode: 'today' }, realized: today });
+      const el = fixture.nativeElement as HTMLElement;
+      const stack = el.querySelector('.performance-stack')!;
+      expect([...stack.children].map((c) => c.tagName.toLowerCase()))
+        .toEqual(['sb-trading-performance', 'sb-realized-pnl']);
+      const panel = el.querySelector('sb-realized-pnl')!;
+      expect(panel.querySelector('.amount')!.textContent!.trim()).toBe('+42.50 $');
+      expect(panel.querySelector('.window')!.textContent!.trim()).toBe('Today');
+      expect([...panel.querySelectorAll('.stats dd')].map((d) => d.textContent!.trim())).toEqual(['3', '2', '1']);
+    });
+
+    it('keeps the Realised card in the KPI grid as well', async () => {
+      const fixture = await loaded({ scope: { mode: 'today' }, realized: today });
+      const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('sb-metric-card .label')]
+        .map((l) => l.textContent!.trim());
+      expect(labels).toContain('Realised today');
+    });
+
+    it('follows the chart scope and shows a ring while the new range loads', async () => {
+      const fixture = await loaded({ scope: { mode: 'today' }, realized: today });
+      const store = TestBed.inject(DashboardStore);
+      store.setPreset('1M');
+      fixture.detectChanges();
+      const panel = fixture.nativeElement.querySelector('sb-realized-pnl') as HTMLElement;
+      expect(panel.querySelector('sb-spinner')).not.toBeNull();
+      expect(panel.querySelector('.window')!.textContent!.trim()).toBe('1M');
+      // The KPI cards that depend on the window ring too; the point-in-time ones do not.
+      const busy = [...fixture.nativeElement.querySelectorAll('sb-metric-card.loading .label')]
+        .map((l) => (l as HTMLElement).textContent!.trim());
+      expect(busy).toEqual(expect.arrayContaining(['Win rate', 'Expectancy', 'Payoff ratio']));
+      expect(busy).not.toContain('Open trades');
+      expect(busy).not.toContain('Open P&L');
+    });
+
+    it('is the same component the page binds to the store', async () => {
+      const fixture = await loaded({ scope: { mode: 'today' }, realized: today });
+      const panel = fixture.debugElement.query(By.directive(RealizedPnl)).componentInstance as RealizedPnl;
+      expect(panel.scope()).toEqual(today);
+      expect(panel.today()).toEqual(today);
+    });
+  });
+
+  it('sends the chart Latest button back to Today, moving the chart and every figure', async () => {
+    const fixture = await loaded({ scope: { mode: 'today' } });
+    const store = TestBed.inject(DashboardStore);
+    store.setPreset('3M');
+    fixture.detectChanges();
+    const seq = store.chartTarget().seq;
+    const panel = fixture.debugElement.query(By.directive(TradingPerformance))
+      .componentInstance as TradingPerformance;
+    panel.viewReset.emit();
+    fixture.detectChanges();
+    expect(store.preset()).toBe('1D');
+    expect(store.scope()).toBe('today');
+    expect(store.chartTarget().seq).toBeGreaterThan(seq);
+  });
+
+  it('gives every panel on the page a tooltip saying what it is about', async () => {
+    const fixture = await loaded();
+    const panels = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-panel')];
+    expect(panels.length).toBeGreaterThanOrEqual(5);
+    for (const section of panels) {
+      const heading = section.querySelector('h2')?.textContent?.trim();
+      expect(section.getAttribute('title'), heading).toBeTruthy();
+      // Its own hint or the shared one: always something a tap or a keyboard focus can open.
+      expect(section.querySelector('header sb-hint'), heading).not.toBeNull();
+    }
+    const titles = panels.map((p) => p.getAttribute('title'));
+    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance, PANEL_HELP.realizedPnl, PANEL_HELP.openPositions]));
+  });
+
+  it('explains each KPI card on hover, payoff ratio included', async () => {
+    const fixture = await loaded();
+    const cards = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-metric-card')];
+    expect(cards.length).toBe(7);
+    for (const card of cards) {
+      const label = card.querySelector('.label')!.textContent!.trim();
+      expect(card.getAttribute('title'), label).toBeTruthy();
+    }
+    const payoff = cards.find((c) => c.querySelector('.label')!.textContent!.trim() === 'Payoff ratio')!;
+    expect(payoff.getAttribute('title')).toContain('average winning trade divided by the average losing trade');
   });
 
   it('routes the panel presets back into the store (v181 §1)', async () => {

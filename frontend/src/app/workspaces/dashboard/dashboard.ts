@@ -68,6 +68,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { ActivityEvent, deriveActivity } from './panels/activity';
 import { TradeDrawer } from './trade-drawer';
+import { PANEL_HELP } from './panels/panel-help';
+import { RealizedPnl } from './panels/realized-pnl';
 import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { MarketMovers } from './panels/market-movers';
@@ -156,7 +158,7 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
-    Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
+    Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance, RealizedPnl,
     RecentActivity, MarketMovers, TradeDrawer,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
@@ -203,6 +205,7 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
          Portfolio Value merged into this one panel rather than sitting
          beside it as its own card -- both describe "how am I doing", and
          they never disagree, so one heading now covers both. -->
+    <div class="performance-stack">
     <sb-trading-performance
       [balance]="store.balance()"
       [changePct]="store.equityChangePct()"
@@ -217,19 +220,31 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
       [realizedAmount]="store.realizedAmount()"
       [realizedLabel]="realizedLabel()"
       [openTrades]="store.openTrades()"
-      [riskUsedPct]="store.riskUsedPct()"
-      [riskCapPct]="store.riskCapPct()"
       [payoffRatio]="store.payoffRatio()"
       [currency]="connection.currency()"
       [selection]="store.selection()"
       [stale]="store.stale()"
+      [loading]="store.loading()"
       (presetChange)="store.setPreset($event)"
       [chartTarget]="store.chartTarget()"
       (chartRangeChange)="store.setRange($event)"
+      (viewReset)="store.resetView()"
     />
+    <!-- Realised P&L follows the scope the chart sets (a preset, or the range
+         it was dragged to); Today is one click away whatever the scope is. -->
+    <sb-realized-pnl
+      [scope]="store.realized()"
+      [today]="store.todayRealized()"
+      [selection]="store.selection()"
+      [currency]="connection.currency()"
+      [loading]="store.loading()"
+      [todayLoading]="store.todayLoading()"
+      [stale]="store.stale()"
+    />
+    </div>
     </sb-async>
 
-    <sb-panel class="positions-panel" heading="Open positions" [flush]="true">
+    <sb-panel class="positions-panel" heading="Open positions" [flush]="true" [description]="positionsAbout" [descriptionHint]="false">
       <!-- The lifecycle and sizing context share one help trigger. The
            per-trade sizing mode belongs on the detail view, where its source
            data is available. -->
@@ -519,6 +534,7 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
        so this changes nothing visually while making the rhythm follow the
        register instead of a hardcoded token. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    .performance-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
     /* Both panels below own their OWN top margin, on top of the grid's own
        --register-pad, rather than the panel above owning a bottom margin --
@@ -626,6 +642,7 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
   `,
 })
 export class Dashboard {
+  protected readonly positionsAbout = PANEL_HELP.openPositions;
   private readonly now = inject(CLOCK);
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);

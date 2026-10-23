@@ -3,14 +3,16 @@ import { join } from 'node:path';
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
-import { ACCOUNT_LABEL } from './equity-candles.model';
 import { ViewportService } from '../../../ui/breakpoints';
 import { SCOPE_PRESETS, ScopePreset, ScopeSelection, TimeWindow, rangeChipLabel } from './equity-range.model';
+import { KPI_HELP, PANEL_HELP } from './panel-help';
+import { PortfolioValue } from './portfolio-value';
 import { TradingPerformance } from './trading-performance';
 
 installMatchMediaPolyfill();
@@ -75,13 +77,11 @@ describe('trading performance panel', () => {
     expect(realised.querySelector('.value')!.classList.contains('absent')).toBe(true);
   });
 
-  it('warns on risk used near the cap and marks it bad at the cap', () => {
-    const risk = (riskUsedPct: number) => card(
-      render({ riskUsedPct, riskCapPct: 6, currency: '€' }), 'Risk used');
-    expect(risk(3).querySelector('.value')!.className).not.toMatch(/\b(pos|neg|warn)\b/);
-    expect(risk(5).querySelector('.value')!.classList.contains('warn')).toBe(true);
-    expect(tint(risk(5))).toBeNull();
-    expect(tint(risk(6))).toBe('neg');
+  it('has no Risk used card or row (dropped 2026-10-23)', () => {
+    const el = render({ currency: '€' });
+    expect(card(el, 'Risk used')).toBeUndefined();
+    expect(row(el, 'Risk')).toBeUndefined();
+    expect(el.textContent).not.toContain('Risk used');
   });
 
   it('never judges open trades or average confidence', () => {
@@ -94,40 +94,37 @@ describe('trading performance panel', () => {
 
   it('gives the phone summary rows the same tones', () => {
     const el = render({ changePct: -0.4, winRate: 60, winRateN: 12, payoffRatio: 1, expectancyR: 0.2,
-                        realizedAmount: 15, riskUsedPct: 5, riskCapPct: 6, openTrades: 2,
+                        realizedAmount: 15, openTrades: 2,
                         realizedLabel: 'Realised today', currency: '€' });
     expect(row(el, 'Today').getAttribute('data-tone')).toBe('neg');
     expect(row(el, 'Win rate').getAttribute('data-tone')).toBe('pos');
     expect(row(el, 'Payoff').getAttribute('data-tone')).toBe('pos');
     expect(row(el, 'Expectancy').getAttribute('data-tone')).toBe('pos');
     expect(row(el, 'Realised today').getAttribute('data-tone')).toBe('pos');
-    expect(row(el, 'Risk').getAttribute('data-tone')).toBe('warn');
     expect(row(el, 'Open').getAttribute('data-tone')).toBeNull();
   });
 
-  it('states what the account is under the KPI grid, in the chart caption\'s words', () => {
+  it('carries no "Paper account" caption under the KPI grid (dropped 2026-10-23)', () => {
     const el = render({ currency: '€' });
-    const captions = [...el.querySelectorAll('.account')]
-      .map((p) => p.textContent?.trim());
-    expect(captions.filter((text) => text === ACCOUNT_LABEL).length).toBe(2);
-    expect(el.querySelector('.mobile-summary + .account')).not.toBeNull();
+    expect(el.querySelector('.account')).toBeNull();
+    expect(el.textContent).not.toContain('Paper account');
   });
 
-  it('shows all eight metrics', () => {
+  it('shows all seven metrics', () => {
     const el = render({
       openPnlPct: 0.36, winRate: 49.1, expectancyR: -0.16, avgConfidence: 4.0,
       realizedAmount: 0, realizedLabel: 'Realised today', openTrades: 1,
-      riskUsedPct: 0, riskCapPct: 6, payoffRatio: 2.34, currency: '€',
+      payoffRatio: 2.34, currency: '€',
     });
     const labels = [...el.querySelectorAll('sb-metric-card')]
       .map((c) => c.textContent ?? '');
-    expect(labels.length).toBe(8);
+    expect(labels.length).toBe(7);
     expect(el.textContent).toContain('Payoff ratio');
     expect(el.textContent).toContain('2.34');
   });
 
   it('phone summary carries win rate, expectancy, payoff and realised', () => {
-    // At <=640px the eight-card grid is display:none, so the phone summary is
+    // At <=640px the seven-card grid is display:none, so the phone summary is
     // the only place these four figures can appear.
     const el = render({
       winRate: 49.1, winRateN: 12, expectancyR: -0.16, payoffRatio: 2.34,
@@ -199,24 +196,23 @@ describe('trading performance panel', () => {
 
   it('marks the point-in-time cards "now" outside 1D', () => {
     const subs = (selection: ScopeSelection) => {
-      const el = render({ selection, openTrades: 2, openPnlPct: 1, openPnlAmount: 10,
-                          riskUsedPct: 1, riskCapPct: 6, currency: '€' });
-      return ['Open P&L', 'Open trades', 'Risk used']
+      const el = render({ selection, openTrades: 2, openPnlPct: 1, openPnlAmount: 10, currency: '€' });
+      return ['Open P&L', 'Open trades']
         .map((label) => card(el, label).querySelector('.sub')?.textContent?.trim() ?? null);
     };
     const day = subs(preset('1D'));
     expect(day[1]).toBeNull();
-    expect(subs(preset('1M'))).toEqual([`now · ${day[0]}`, 'now', `now · ${day[2]}`]);
+    expect(subs(preset('1M'))).toEqual([`now · ${day[0]}`, 'now']);
     expect(subs(RANGE)[1]).toBe('now');
     expect(subs(preset('All'))[1]).toBe('now');
   });
 
-  it('marks the phone summary\'s Open and Risk rows "now" outside 1D', () => {
+  it('marks the phone summary\'s Open row "now" outside 1D', () => {
     const labels = (selection: ScopeSelection) =>
       [...render({ selection, currency: '€' }).querySelectorAll('.mobile-summary > div > span')]
         .map((s) => s.textContent!.replace(/\s+/g, ' ').trim());
-    expect(labels(preset('5D'))).toEqual(expect.arrayContaining(['Open · now', 'Risk · now']));
-    expect(labels(preset('1D'))).toEqual(expect.arrayContaining(['Open', 'Risk']));
+    expect(labels(preset('5D'))).toEqual(expect.arrayContaining(['Open · now']));
+    expect(labels(preset('1D'))).toEqual(expect.arrayContaining(['Open']));
   });
 
   it('says why a figure is absent, in the scope\'s own words', () => {
@@ -241,16 +237,71 @@ describe('trading performance panel', () => {
   it('renders a missing payoff ratio as no value, never as zero', () => {
     // null means "not enough outcomes yet". 0 would claim wins are worthless
     // against losses -- a real and very different statement.
-    const el = render({ payoffRatio: null, riskCapPct: 6, currency: '€' });
+    const el = render({ payoffRatio: null, currency: '€' });
     const card = [...el.querySelectorAll('sb-metric-card')]
       .find((c) => c.textContent?.includes('Payoff ratio'))!;
     expect(card.textContent).not.toContain('0.00');
   });
 
   it('carries no risk gauge -- that is the cut Risk & Exposure content', () => {
-    const el = render({ riskUsedPct: 0, riskCapPct: 6, currency: '€' });
+    const el = render({ currency: '€' });
     expect(el.querySelector('sb-donut')).toBeNull();
     expect(el.textContent).not.toContain('Remaining risk');
+  });
+
+  describe('loading rings', () => {
+    const busyLabels = (el: HTMLElement) =>
+      [...el.querySelectorAll('sb-metric-card.loading .label')].map((l) => l.textContent!.trim());
+
+    it('ring the five window-scoped cards while a refetch is in flight, and not the "now" cards', () => {
+      const el = render({ loading: true, currency: '€' });
+      expect(busyLabels(el)).toEqual(
+        ['Win rate', 'Expectancy', 'Payoff ratio', 'Realised today', 'Avg confidence']);
+      expect(card(el, 'Win rate').querySelector('sb-spinner')).not.toBeNull();
+      expect(card(el, 'Open P&L').querySelector('sb-spinner')).toBeNull();
+      expect(card(el, 'Open trades').querySelector('sb-spinner')).toBeNull();
+    });
+
+    it('show nothing when idle', () => {
+      const el = render({ currency: '€' });
+      expect(busyLabels(el)).toEqual([]);
+      expect(el.querySelector('sb-spinner')).toBeNull();
+    });
+
+    it('also ring the phone summary rows, dimming their figures, but not Portfolio, Today or Open', () => {
+      const el = render({ loading: true, currency: '€' });
+      const busyRows = [...el.querySelectorAll('.mobile-summary > div.busy > span')]
+        .map((s) => s.textContent!.replace(/\s+/g, ' ').trim());
+      expect(busyRows).toEqual(['Win rate', 'Expectancy', 'Payoff', 'Realised today']);
+      expect(el.querySelectorAll('.mobile-summary sb-spinner')).toHaveLength(4);
+      expect(row(el, 'Open').classList.contains('busy')).toBe(false);
+      expect(row(el, 'Portfolio').classList.contains('busy')).toBe(false);
+    });
+  });
+
+  describe('tooltips', () => {
+    it('describe the panel and every KPI card', () => {
+      const el = render({ currency: '€' });
+      expect(el.querySelector('sb-panel')!.getAttribute('title')).toBe(PANEL_HELP.tradingPerformance);
+      const titles = new Map([...el.querySelectorAll('sb-metric-card')].map((c) => [
+        c.querySelector('.label')!.textContent!.trim(), c.getAttribute('title')]));
+      expect(titles.get('Open P&L')).toBe(KPI_HELP.openPnl);
+      expect(titles.get('Win rate')).toBe(KPI_HELP.winRate);
+      expect(titles.get('Expectancy')).toBe(KPI_HELP.expectancy);
+      expect(titles.get('Payoff ratio')).toBe(KPI_HELP.payoffRatio);
+      expect(titles.get('Realised today')).toBe(KPI_HELP.realized);
+      expect(titles.get('Open trades')).toBe(KPI_HELP.openTrades);
+      expect(titles.get('Avg confidence')).toBe(KPI_HELP.avgConfidence);
+    });
+  });
+
+  it('passes the chart Latest press up to the scope owner', () => {
+    const f = TestBed.createComponent(TradingPerformance);
+    f.detectChanges();
+    let presses = 0;
+    f.componentInstance.viewReset.subscribe(() => (presses += 1));
+    f.debugElement.query(By.directive(PortfolioValue)).componentInstance.viewReset.emit();
+    expect(presses).toBe(1);
   });
 });
 
@@ -277,6 +328,14 @@ describe('trading-performance tablet band', () => {
     const combined = src.match(/\.combined\s*\{[^}]*\}/)?.[0] ?? '';
     expect(combined).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\);/);
     expect(src).not.toMatch(/\.combined\s*\{\s*display:\s*none/);
+  });
+
+  it('widens the seventh card to fill its row, so seven cards leave no hole', () => {
+    expect(src).toMatch(/\.grid > :last-child:nth-child\(4n \+ 3\)\s*\{\s*grid-column:\s*span 2;\s*\}/);
+  });
+
+  it('lets the odd last phone summary row span both columns', () => {
+    expect(src).toMatch(/\.mobile-summary > div:last-child:nth-child\(odd\)\s*\{\s*grid-column:\s*1 \/ -1;\s*\}/);
   });
 
   it('uses only declared breakpoint values', () => {

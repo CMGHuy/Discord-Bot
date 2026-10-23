@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { PANEL_HELP } from './panel-help';
 import { RouterLink } from '@angular/router';
 
 import { Panel } from '../../../ui/layout';
@@ -25,7 +26,7 @@ const STATUS_LABEL: Record<string, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Panel, Icon, DirectionArrow, RouterLink],
   template: `
-    <sb-panel heading="Recent activity">
+    <sb-panel heading="Recent activity" [description]="about">
       <a panel-actions class="all-link sb-hit" routerLink="/trades">View all</a>
 
       @if (events().length) {
@@ -103,6 +104,7 @@ const STATUS_LABEL: Record<string, string> = {
   `,
 })
 export class RecentActivity {
+  protected readonly about = PANEL_HELP.recentActivity;
   readonly events = input<readonly ActivityEvent[]>([]);
   /** Dashboard opens its drawer from the event's tradeId; this panel emits only. */
   readonly eventActivate = output<ActivityEvent>();
