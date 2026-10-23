@@ -227,14 +227,22 @@ describe('Calendar summary strip', () => {
     expect(rows[1].textContent).toContain('—');
   });
 
-  it('shows the longest hold of the month: 292h reads as 12d 4h, linked to its trade', async () => {
+  /** The Longest holding time tile, inside the summary group. */
+  const holdTile = (fixture: ReturnType<typeof seed>) =>
+    el(fixture).querySelector<HTMLElement>('.totals sb-stat-tile.longest-hold')!;
+
+  it('shows the longest holding time as a tile in the summary group: 292h reads as 12d 4h, ticker beneath', async () => {
     const fixture = seed();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const host = el(fixture);
-    expect(host.querySelector('.longest-hold')!.textContent).toContain('12d 4h');
-    expect(host.querySelector('.hold-ticker')!.textContent).toContain('AAPL');
+    const tile = holdTile(fixture);
+    expect(tile.querySelector('.label')!.textContent!.trim()).toBe('Longest holding time');
+    expect(tile.querySelector('.value')!.textContent).toContain('12d 4h');
+    expect(tile.querySelector('.hint')!.textContent!.trim()).toBe('AAPL');
+    expect(el(fixture).querySelectorAll('.totals sb-stat-tile')).toHaveLength(8);
+    // No separate panel any more.
+    expect(el(fixture).textContent).not.toContain('Longest hold this month');
   });
 
   it('formats a hold in hours under a day and in days plus hours from a day up', async () => {
@@ -243,7 +251,7 @@ describe('Calendar summary strip', () => {
       const fixture = seed({ ...RESPONSE, longest_hold: hold });
       await fixture.whenStable();
       fixture.detectChanges();
-      return el(fixture).querySelector('.hold-duration')!.textContent!.trim();
+      return holdTile(fixture).querySelector('.value')!.textContent!.trim();
     };
     expect(await label(7.4)).toBe('7h');
     expect(await label(23.6)).toBe('1d 0h');
@@ -251,20 +259,13 @@ describe('Calendar summary strip', () => {
     expect(await label(50)).toBe('2d 2h');
   });
 
-  it('links the longest hold to its plan, falling back to the trade id', async () => {
-    const withPlan = seed({ ...RESPONSE, longest_hold: { ...RESPONSE.longest_hold!, plan_id: 'plan9' } });
-    await withPlan.whenStable();
-    withPlan.detectChanges();
-    expect(el(withPlan).querySelector('.hold-ticker')!.getAttribute('href')).toContain('/trades/plan9');
-  });
-
-  it('says so when no trade in the month has a measurable hold', async () => {
+  it('shows a dash and no ticker when no trade in the month has a measurable hold', async () => {
     const fixture = seed({ ...RESPONSE, longest_hold: null });
     await fixture.whenStable();
     fixture.detectChanges();
-    const host = el(fixture);
-    expect(host.querySelector('.longest-hold')).toBeNull();
-    expect(host.textContent).toContain('No closed trade with a measurable holding time this month');
+    const tile = holdTile(fixture);
+    expect(tile.querySelector('.value')!.textContent!.trim()).toBe('—');
+    expect(tile.querySelector('.hint')).toBeNull();
   });
 
   it('reports the month-summary figures from the visible trading days', async () => {
@@ -773,7 +774,8 @@ describe('Calendar totals: one stat tile (v179 §3.3)', () => {
     const totals = el(fixture).querySelector('.totals')!;
     expect(totals.querySelectorAll('sb-metric-card')).toHaveLength(0);
     expect([...totals.querySelectorAll('sb-stat-tile .label')].map((n) => n.textContent!.trim()))
-      .toEqual(['Net this month', 'Trades', 'Win rate', 'Winning days', 'Average day', 'Best day', 'Worst day']);
+      .toEqual(['Net this month', 'Trades', 'Win rate', 'Winning days', 'Average day', 'Best day', 'Worst day',
+        'Longest holding time']);
   });
 
   it('keeps the figures the metric cards showed, units included', async () => {
