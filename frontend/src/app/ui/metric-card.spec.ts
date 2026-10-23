@@ -52,3 +52,50 @@ describe('sb-metric-card tint (v181 §5)', () => {
     expect(host.classList.contains('tint-neg')).toBe(false);
   });
 });
+
+describe('sb-metric-card loading and tooltip', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  function mount(inputs: Record<string, unknown>) {
+    const f = TestBed.createComponent(MetricCard);
+    f.componentRef.setInput('label', 'Win rate');
+    f.componentRef.setInput('value', 55);
+    for (const [key, value] of Object.entries(inputs)) f.componentRef.setInput(key, value);
+    f.detectChanges();
+    return { f, host: f.nativeElement as HTMLElement };
+  }
+
+  it('shows no ring and is not busy by default', () => {
+    const { host } = mount({});
+    expect(host.querySelector('sb-spinner')).toBeNull();
+    expect(host.classList.contains('loading')).toBe(false);
+    expect(host.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('shows a ring inside the card, keeps the figure and marks the card busy while loading', () => {
+    const { host } = mount({ loading: true });
+    expect(host.querySelector('.card sb-spinner')).not.toBeNull();
+    expect(host.classList.contains('loading')).toBe(true);
+    expect(host.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('.value')).not.toBeNull();
+  });
+
+  it('drops the ring again when the refetch lands', () => {
+    const { f, host } = mount({ loading: true });
+    f.componentRef.setInput('loading', false);
+    f.detectChanges();
+    expect(host.querySelector('sb-spinner')).toBeNull();
+    expect(host.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('explains itself as a tooltip over the whole card when given a description', () => {
+    const { host } = mount({ description: 'The share of closed trades that won.' });
+    expect(host.getAttribute('title')).toBe('The share of closed trades that won.');
+  });
+
+  it('has no tooltip without a description', () => {
+    expect(mount({}).host.hasAttribute('title')).toBe(false);
+  });
+});

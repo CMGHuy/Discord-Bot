@@ -15,6 +15,7 @@ import {
 
 import { Viewport, ViewportService } from './breakpoints';
 import { FocusTrap } from './focus-trap';
+import { Hint } from './hint';
 import { Icon, IconName } from './icon';
 import { playExit } from './motion/exit';
 import { MotionService } from './motion/motion.service';
@@ -34,11 +35,23 @@ import { edgeFades, revealActive } from './scroll-rail';
 @Component({
   selector: 'sb-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Hint],
+  // The tooltip sits on the host, so any hover inside the panel shows it; a
+  // child with a title of its own (an icon, a cell) still wins over it.
+  host: { '[attr.title]': 'description()' },
   template: `
     <section class="panel sb-panel sb-lift">
       @if (heading(); as text) {
         <header>
           <h2 class="sb-label">{{ text }}</h2>
+          @if (description(); as about) {
+            <!-- The host's native title answers a hover; the hint answers a
+                 tap or a keyboard focus, which a title never does. A panel
+                 with a richer hint of its own turns this one off. -->
+            @if (descriptionHint()) {
+              <sb-hint [text]="about" [label]="'About ' + text" align="left" />
+            }
+          }
           <div class="actions">
             <ng-content select="[panel-actions]" />
             @if (collapsible()) {
@@ -130,6 +143,13 @@ import { edgeFades, revealActive } from './scroll-rail';
 })
 export class Panel {
   readonly heading = input<string | null>(null);
+  /** What this panel is about, in a sentence or two: shown as a tooltip when
+   *  the panel is hovered, and as an info hint in its header for touch and
+   *  keyboard. Optional, but every Dashboard panel sets one. */
+  readonly description = input<string | null>(null);
+  /** False when the panel already carries a richer hint of its own (Open
+   *  positions): the tooltip still shows, the second glyph does not. */
+  readonly descriptionHint = input(true);
   readonly flush = input(false);
 
   /** The narrowest viewport at which this panel renders in full — v95 §4.3. */

@@ -301,6 +301,9 @@ sb-confirm-dialog dialog[open]::backdrop {
 /* chart-container: the spinner slows. */
 [data-motion=off] sb-chart-container .spinner { animation-duration: 2.4s !important; }
 
+/* spinner: the refetch ring slows, never stops. */
+[data-motion=off] sb-spinner .ring { animation-duration: 2.4s !important; }
+
 /* status-indicator and status-cell: the colour carries the state; the pulse
    only ever carried liveliness. */
 [data-motion=off] sb-status-indicator .open { animation: none !important; }
