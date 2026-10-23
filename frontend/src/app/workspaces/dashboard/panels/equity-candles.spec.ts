@@ -286,17 +286,18 @@ describe('sb-equity-candles', () => {
       }
     });
 
-    it('reports a Latest click as the partner moving the viewport', () => {
+    it('asks the scope owner to go back to today when Latest is pressed, with a target bound', () => {
       const { fixture, el } = render(response(dailyCandles(40)));
-      const seen = emitted(fixture);
+      fixture.componentRef.setInput('target', { window: SEP_3_TO_6, seq: 1 });
+      const resets: number[] = [];
+      fixture.componentInstance.viewReset.subscribe(() => resets.push(1));
+      const scroll = vi.spyOn(linkScale(fixture), 'scrollToRealTime').mockImplementation(() => {});
       linked(fixture).programmatic = false;
       at(fixture, 0, 19);
-      seen.length = 0;
-      vi.spyOn(linkScale(fixture), 'scrollToRealTime').mockImplementation(() => {
-        fixture.componentInstance['onVisibleRange']({ from: 20, to: 39 });
-      });
-      el.querySelector<HTMLButtonElement>('button.latest')!.click();
-      expect(seen).toEqual([{ from: '2026-09-21T04:00:00.000Z', to: '2026-10-11T04:00:00.000Z' }]);
+      el.querySelector<HTMLButtonElement>('button.reset')!.click();
+      expect(resets).toHaveLength(1);
+      // The target's new seq moves the chart; the component does not also scroll.
+      expect(scroll).not.toHaveBeenCalled();
     });
 
     it('falls back to the newest candles when no loaded candle meets the window', () => {
@@ -419,13 +420,11 @@ describe('sb-equity-candles', () => {
     expect(stub.calls.load).toBe(1);
   });
 
-  it('states what the account is, directly under the readout', () => {
+  it('carries no "Paper account" caption under the readout (dropped 2026-10-23)', () => {
     const { fixture, el } = render(response(MIXED));
     at(fixture, 0, 2);
-    const account = el.querySelector('.readout')!.nextElementSibling;
-    expect(account?.classList.contains('account')).toBe(true);
-    expect(account?.textContent?.trim()).toBe('Paper account · before tax and costs');
-    expect(el.querySelectorAll('.account').length).toBe(1);
+    expect(el.querySelector('.account')).toBeNull();
+    expect(el.textContent).not.toContain('Paper account');
   });
 
   it('uses the currency it is given, not the API symbol', () => {
@@ -541,7 +540,7 @@ describe('sb-equity-candles', () => {
     expect(loadOlder).toHaveBeenCalledTimes(2);
   });
 
-  it('reports leaving the live edge and offers Latest, which scrolls back', () => {
+  it('reports leaving the live edge and offers Latest, which scrolls back when no scope owner is bound', () => {
     const { fixture, el, stub } = render(response(MIXED));
     // vi.spyOn calls through, so the stub's atLiveEdge follows what the component reports.
     const setEdge = vi.spyOn(stub, 'setAtLiveEdge');
@@ -558,6 +557,65 @@ describe('sb-equity-candles', () => {
     stub.setAtLiveEdge(true);
     fixture.detectChanges();
     expect([...el.querySelectorAll('button')].some((b) => b.textContent!.includes('Latest'))).toBe(false);
+  });
+
+  describe('Latest button, like the TradingView reset', () => {
+    type PriceScale = { applyOptions(o: { autoScale: boolean }): void; options(): { autoScale: boolean } };
+    const priceScale = (fixture: { componentInstance: EquityCandles }) =>
+      (fixture.componentInstance as unknown as { chart: { priceScale(id: string): PriceScale } })
+        .chart.priceScale('right');
+    const latestButton = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('button.reset');
+
+    it('is hidden while the chart sits at its default view', () => {
+      const { fixture, el } = render(response(MIXED));
+      fixture.detectChanges();
+      expect(latestButton(el)).toBeNull();
+    });
+
+    it('appears after the partner pans or zooms the time axis, even at the newest candle', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      linked(fixture).programmatic = false;
+      at(fixture, 20, 39);
+      expect(latestButton(el)).not.toBeNull();
+      expect(latestButton(el)!.textContent).toContain('Latest');
+    });
+
+    it('does not appear for a move the component made itself', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      linked(fixture).programmatic = true;
+      at(fixture, 20, 39);
+      expect(latestButton(el)).toBeNull();
+    });
+
+    it('appears after a vertical scroll turned the price axis auto-fit off', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      priceScale(fixture).applyOptions({ autoScale: false });
+      el.querySelector('.stage')!.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      fixture.detectChanges();
+      expect(latestButton(el)).not.toBeNull();
+    });
+
+    it('puts the price axis back on auto-fit, hides itself and asks for Today when pressed', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      const resets: number[] = [];
+      fixture.componentInstance.viewReset.subscribe(() => resets.push(1));
+      linked(fixture).programmatic = false;
+      at(fixture, 20, 39);
+      priceScale(fixture).applyOptions({ autoScale: false });
+      el.querySelector('.stage')!.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      fixture.detectChanges();
+
+      latestButton(el)!.click();
+      fixture.detectChanges();
+      expect(priceScale(fixture).options().autoScale).toBe(true);
+      expect(resets).toHaveLength(1);
+      expect(latestButton(el)).toBeNull();
+    });
+
+    it('is not offered while the chart has no candles to move', () => {
+      const { el } = render(response([]));
+      expect(latestButton(el)).toBeNull();
+    });
   });
 
   it('never moves the viewport on a scan refresh while the past is in view', () => {

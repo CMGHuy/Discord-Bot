@@ -1,11 +1,13 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { EquityCandlesResponse } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
+import { EquityCandles } from './equity-candles';
 import { PortfolioValue } from './portfolio-value';
 
 // sb-equity-candles creates a real lightweight-charts chart.
@@ -76,5 +78,15 @@ describe('portfolio value panel', () => {
   it('passes its currency to the candles', () => {
     const el = render({ balance: 1, changePct: 0, currency: '£' });
     expect(el.querySelector('sb-equity-candles .readout')?.textContent).toContain('£');
+  });
+
+  it('passes the chart Latest press up to its host', () => {
+    const f = TestBed.createComponent(PortfolioValue);
+    f.componentRef.setInput('balance', 1);
+    f.detectChanges();
+    let presses = 0;
+    f.componentInstance.viewReset.subscribe(() => (presses += 1));
+    f.debugElement.query(By.directive(EquityCandles)).componentInstance.viewReset.emit();
+    expect(presses).toBe(1);
   });
 });
