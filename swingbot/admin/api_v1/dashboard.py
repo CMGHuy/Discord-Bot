@@ -38,8 +38,9 @@ from swingbot.admin import dashboard as dash
 from swingbot.core.planning.plan_engine import DEFAULT_EXPIRY_BARS
 from swingbot.core.tracking.performance import TradeLog, expand_realized_legs
 
-from . import ApiError, api_v1
+from . import ApiError, api_v1, iso
 from .auth import require_auth
+from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 
 
 def _equity_30d() -> dict:
@@ -96,7 +97,20 @@ def _risk_used(all_trades: list[dict]) -> tuple[float | None, float | None]:
         return None, cap
 
 
-def _lifecycle_counts(mode: str, all_trades: list[dict]) -> dict:
+def _closed_row_in_scope(row: dict, mode: str, window: ClosedWindow | None) -> bool:
+    """Whether a CLOSED/CANCELLED `build_rows` row belongs to the scope.
+
+    The window is checked first, so `range` can never reach the Berlin-day
+    `today` flag. `closed_at` on a row is already its terminal time (the
+    trade's close, or the cancel transition of an unfilled plan).
+    """
+    if window is not None:
+        return closed_in_window(row.get("closed_at"), window)
+    return mode == "all" or bool(row["today"])
+
+
+def _lifecycle_counts(mode: str, all_trades: list[dict],
+                      window: ClosedWindow | None = None) -> dict:
     """The five plan-lifecycle counts the Jinja dashboard's strip showed.
 
     SR53. PENDING/ACTIVE/PARTIAL are all-time -- `_plan_rows` already counts
@@ -115,6 +129,8 @@ def _lifecycle_counts(mode: str, all_trades: list[dict]) -> dict:
     the two structurally unable to disagree. `mode` selects between them the
     same way `today` is bound in trade-group.ts: 'all' counts every close
     ever, anything else counts only today's.
+    v181: with a window, CLOSED/CANCELLED rows count when their terminal
+    time falls inside it, using the same rule as the Closed table.
 
     Returns an empty dict on failure rather than raising: this is the landing
     page, and one degraded panel is better than a 500 for the other nine
@@ -127,23 +143,23 @@ def _lifecycle_counts(mode: str, all_trades: list[dict]) -> dict:
         counts = dict(_plan_rows()["counts"])
         rows = build_rows(all_trades)
         for status in ("CLOSED", "CANCELLED"):
-            matching = [r for r in rows if r["status"] == status]
-            if mode != "all":
-                matching = [r for r in matching if r["today"]]
-            counts[status] = len(matching)
+            counts[status] = sum(
+                1 for r in rows
+                if r["status"] == status and _closed_row_in_scope(r, mode, window))
         return counts
     except Exception:
         return {}
 
 
-_SCOPES = ("active", "today", "all")
+_SCOPES = ("active", "today", "all", "range")
 
 
 def _scope() -> str:
     """SR58 -- the dashboard's date scope, from `?mode=`.
 
     The Jinja dashboard's three modes: `active` (today plus anything still
-    open, the default), `today`, and `all`. An unknown value is a 400 rather
+    open, the default), `today`, and `all` -- plus v181's `range`, whose
+    window `_parse_range_window` reads. An unknown value is a 400 rather
     than a silent fall back to the default -- a scope that quietly ignores
     what was asked for makes all-time numbers read as today's, which is the
     same class of bug SR52 fixed on the Trades list.
@@ -154,7 +170,37 @@ def _scope() -> str:
     return raw
 
 
-def _realized_parts(trades: list[dict], mode: str) -> list[dict]:
+def _parse_range_window(mode: str) -> ClosedWindow | None:
+    """v181 -- `?from=&to=` for `mode=range`, `None` for every other mode.
+
+    Both bounds required, aware, `from <= to`, else a 400 (`closed_window`).
+    The SPA sends whole New York buckets; this side only sees two instants.
+    """
+    if mode != "range":
+        return None
+    return parse_closed_window(request.args.get("from"), request.args.get("to"))
+
+
+def _scope_trades(all_raw: list[dict], mode: str,
+                  window: ClosedWindow | None) -> list[dict]:
+    """The trades the win-rate/expectancy stats read (`scoped_raw`).
+
+    Every still-open trade (it has no outcome yet to exclude) plus only the
+    closes in scope: the window's for `range`, today's (Berlin) for
+    `active`/`today`, all of them for `all`. The window is checked first so
+    `range` can never fall through to the Berlin day.
+    """
+    if window is not None:
+        return [t for t in all_raw
+                if t.get("status") == "open" or closed_in_window(t.get("closed_at"), window)]
+    if mode == "all":
+        return all_raw
+    return [t for t in all_raw
+            if t.get("status") == "open" or dash.is_today_berlin(t.get("closed_at"))]
+
+
+def _realized_parts(trades: list[dict], mode: str,
+                    window: ClosedWindow | None = None) -> list[dict]:
     """Every realized part of `trades` -- whole trades and individual legs --
     scoped by the part's OWN close.
 
@@ -164,8 +210,13 @@ def _realized_parts(trades: list[dict], mode: str) -> list[dict]:
     population the Trades table shows as CLOSED rows under it, and the one
     `get_stats` has counted since v79; scoping whole trades by the trade's
     close left this card and its chips a different book from that table.
+
+    v181: a `window` (`mode=range`) wins over `mode`, so `range` never
+    reaches the Berlin-day branch.
     """
     parts = [part for t in trades for part in expand_realized_legs(t)]
+    if window is not None:
+        return [part for part in parts if closed_in_window(part.get("closed_at"), window)]
     if mode == "all":
         return parts
     return [part for part in parts if dash.is_today_berlin(part.get("closed_at"))]
@@ -203,6 +254,14 @@ def _total_or_none(values: list[float]) -> float | None:
     return round(sum(values), 2) if values else None
 
 
+def _scope_echo(mode: str, window: ClosedWindow | None) -> dict:
+    """SR58's echo of the applied scope, plus the bounds a `range` was read
+    with (UTC ISO) -- null for every other mode."""
+    if window is None:
+        return {"mode": mode, "from": None, "to": None}
+    return {"mode": mode, "from": iso(window.start), "to": iso(window.end)}
+
+
 def _live_positions(open_trades: list[dict]) -> list[dict]:
     """The open trades that are actually held, sized as they are held now.
 
@@ -221,41 +280,16 @@ def _live_positions(open_trades: list[dict]) -> list[dict]:
     return held_now(open_trades, load_plans_by_id())
 
 
-@api_v1.route("/dashboard", methods=["GET"])
-@require_auth
-def dashboard():
-    mode = _scope()
-    tl = TradeLog()
-    from swingbot.core.tracking.ledger import is_main, is_weak
-    all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
+def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
+    """Current main-ledger positions and P&L, independent of date scope."""
+    from swingbot.core.tracking.ledger import is_main
+
     # Open-side figures (open_pnl_pct, the open_trades chip, avg_confidence)
     # must live on the same ledger as `realized` below -- unfiltered here
     # would blend weak-ledger open positions into a main-ledger P&L card.
     open_trades = _live_positions(
-        [t for t in all_raw if t.get("status") == "open" and is_main(t)])
+        [t for t in all_trades if t.get("status") == "open" and is_main(t)])
 
-    # win_rate/expectancy_r/payoff_ratio must scope with `mode` the same way
-    # `_realized`/`_lifecycle_counts` already do -- get_stats' own `trades`
-    # parameter exists for exactly this ("the dashboard's 'Today' mode
-    # passing in just today's opened/closed trades instead of the whole
-    # history", per its docstring) but nothing here was calling it with a
-    # scoped list, so all three chips silently showed all-time figures
-    # under the "Today" toggle. `active`/`today` mean the same thing
-    # `_realized` already gives them: every still-open trade (it has no
-    # outcome yet to exclude) plus only the trades that closed today.
-    scoped_raw = all_raw if mode == "all" else [
-        t for t in all_raw
-        if t.get("status") == "open" or dash.is_today_berlin(t.get("closed_at"))
-    ]
-    scoped_main = [trade for trade in scoped_raw if is_main(trade)]
-    stats = tl.get_stats(trades=scoped_main)
-    stats.update(tl.get_extended_stats(trades=scoped_main))
-    from swingbot.core.analytics import metrics as m
-    # Each realized leg is its own trade here -- see `_realized_parts`.
-    closed_scoped = _realized_parts([t for t in all_raw if is_main(t)], mode)
-    scoped_rs = m.r_multiples(closed_scoped)
-
-    account_cfg = dash.load_account_config()
     views = dash.build_open_trade_views(open_trades, account_cfg)
     pcts = views["unrealized_pcts"]
     amounts = views["unrealized_amounts"]
@@ -264,20 +298,45 @@ def dashboard():
         t["confidence_level"] for t in open_trades
         if t.get("confidence_level") is not None
     ]
+    return {
+        "open_pnl_pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
+        "open_pnl_amount": _total_or_none(amounts),
+        "open_trades": len(open_trades),
+        "avg_confidence": (
+            round(sum(confidences) / len(confidences), 2) if confidences else None
+        ),
+    }
+
+
+@api_v1.route("/dashboard", methods=["GET"])
+@require_auth
+def dashboard():
+    mode = _scope()
+    window = _parse_range_window(mode)
+    tl = TradeLog()
+    from swingbot.core.tracking.ledger import is_main, is_weak
+    all_raw = tl.get_trades(status=None, limit=None, sort_by="opened_at") or []
+    # win_rate/expectancy_r/payoff_ratio must scope with `mode` the same way
+    # `_realized`/`_lifecycle_counts` already do -- see `_scope_trades` for
+    # which trades each mode (and v181's range window) keeps.
+    scoped_main = [trade for trade in _scope_trades(all_raw, mode, window) if is_main(trade)]
+    stats = tl.get_stats(trades=scoped_main)
+    stats.update(tl.get_extended_stats(trades=scoped_main))
+    from swingbot.core.analytics import metrics as m
+    # Each realized leg is its own trade here -- see `_realized_parts`.
+    closed_scoped = _realized_parts([t for t in all_raw if is_main(t)], mode, window)
+    scoped_rs = m.r_multiples(closed_scoped)
+
+    account_cfg = dash.load_account_config()
     heat, cap = _risk_used(all_raw)
 
     return jsonify({
         # primary
         "account_balance": account_cfg.get("balance"),
-        "open_pnl_pct": round(sum(pcts) / len(pcts), 2) if pcts else None,
-        "open_pnl_amount": _total_or_none(amounts),
+        **_open_figures(all_raw, account_cfg),
         "risk_used_pct": heat,
         "risk_cap_pct": cap,
         # chips
-        "open_trades": len(open_trades),
-        "avg_confidence": (
-            round(sum(confidences) / len(confidences), 2) if confidences else None
-        ),
         "win_rate": m.win_rate(closed_scoped),
         "win_rate_n": sum(1 for t in closed_scoped if t.get("status") in ("win", "loss")),
         "expectancy_r": m.expectancy_r(closed_scoped),
@@ -287,7 +346,7 @@ def dashboard():
         "payoff_ratio": m.payoff_ratio_from_rs(scoped_rs),
         "equity_30d": _equity_30d(),
         "position_premium": dash.build_sizing_note(account_cfg),
-        "lifecycle": _lifecycle_counts(mode, all_raw),
+        "lifecycle": _lifecycle_counts(mode, all_raw, window),
         # The Dashboard's own plan-lifecycle diagram names this number in its
         # "Expires" definition -- projected here rather than hardcoded a
         # second time in the SPA, which is exactly the kind of copy that
@@ -299,8 +358,8 @@ def dashboard():
         "default_expiry_bars": DEFAULT_EXPIRY_BARS,
         # SR58 -- the date scope, echoed back so the workspace can label the
         # figures it is showing rather than assume the request applied.
-        "scope": {"mode": mode},
+        "scope": _scope_echo(mode, window),
         "realized": _realized(closed_scoped),
         "realized_weak": _realized(
-            _realized_parts([t for t in all_raw if is_weak(t)], mode)),
+            _realized_parts([t for t in all_raw if is_weak(t)], mode, window)),
     })

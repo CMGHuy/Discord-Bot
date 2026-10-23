@@ -76,3 +76,32 @@ describe('accent legibility (v80 D1)', () => {
     expect(ratio(resolveToken('--on-accent'), resolveToken('--accent-fill-hi'))).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+/** A soft tint is an rgba laid over a surface; the figure is read against
+ *  the blend, so the gate measures the blend. */
+function over(rgba: string, bg: string): string {
+  const [r, g, b, a] = rgba.match(/[\d.]+/g)!.map(Number);
+  const mix = (fg: number, i: number) =>
+    Math.round(a * fg + (1 - a) * parseInt(bg.slice(1 + i * 2, 3 + i * 2), 16));
+  return `#${[r, g, b].map((v, i) => mix(v, i).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** v181 §5: every P&L figure is coloured, so the valence tokens are text. */
+describe('v181: profit/loss figures read on every surface and on their own tint', () => {
+  for (const fg of ['--pos', '--neg', '--warn']) {
+    for (const bg of SURFACES) {
+      it(`${fg} on ${bg} clears 4.5:1`, () => {
+        expect(ratio(resolveToken(fg), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+
+  for (const [fg, soft] of [['--pos', '--pos-soft'], ['--neg', '--neg-soft']]) {
+    for (const bg of ['--surface', '--surface-raised']) {
+      it(`${fg} on ${soft} over ${bg} clears 4.5:1`, () => {
+        const ground = over(resolveToken(soft), resolveToken(bg));
+        expect(ratio(resolveToken(fg), ground)).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
+});

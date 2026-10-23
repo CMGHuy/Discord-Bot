@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { amount, pct } from '../../../ui/format';
+import { ChartTarget, TimeWindow, signTone } from './equity-range.model';
 import { EquityCandles } from './equity-candles';
 
 /**
@@ -27,12 +28,13 @@ import { EquityCandles } from './equity-candles';
     }
 
     @if (changePct() !== null) {
-      <p class="change" [class.pos]="changePct()! > 0" [class.neg]="changePct()! < 0">
+      <p class="change" [class.pos]="changeTone() === 'pos'" [class.neg]="changeTone() === 'neg'">
         {{ fmtPct(changePct()) }} today
       </p>
     }
 
-    <sb-equity-candles [currency]="currency()" />
+    <sb-equity-candles [currency]="currency()" [target]="chartTarget()"
+                       (rangeChange)="chartRangeChange.emit($event)" />
   `,
   styles: `
     :host { display: block; }
@@ -57,6 +59,9 @@ import { EquityCandles } from './equity-candles';
   `,
 })
 export class PortfolioValue {
+  /** DashboardStore owns both ends of the chart scope link. */
+  readonly chartTarget = input<ChartTarget | null>(null);
+  readonly chartRangeChange = output<TimeWindow>();
   readonly balance = input<number | null>(null);
   readonly changePct = input<number | null>(null);
   /** The API's 30-day `equity_30d` series. Still bound by
@@ -66,5 +71,6 @@ export class PortfolioValue {
   readonly currency = input('€');
 
   protected readonly money = computed(() => amount(this.balance(), this.currency()));
+  protected readonly changeTone = computed(() => signTone(this.changePct()));
   protected fmtPct = pct;
 }

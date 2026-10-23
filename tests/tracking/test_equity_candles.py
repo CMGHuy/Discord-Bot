@@ -10,7 +10,8 @@ import pytest
 
 from swingbot.core.tracking.equity import RealizedLeg
 from swingbot.core.tracking.equity_candles import (
-    TIMEFRAMES, add_change, bucket_label, bucket_start, mtm_candles, realized_candles)
+    TIMEFRAMES, add_change, bucket_label, bucket_start, mtm_candles, parse_bucket_label,
+    realized_candles)
 
 UTC = timezone.utc
 
@@ -168,3 +169,58 @@ def test_realized_steps_through_each_leg_of_the_day():
 
 def test_a_day_with_no_leg_has_no_realized_candle():
     assert realized_candles([], Decimal("10000"), "1D") == []
+
+
+# --- parse_bucket_label (v181: the /equity/candles paging cursor) -------------
+
+ROUND_TRIP_INSTANTS = [
+    _utc(2026, 10, 16, 14, 35),            # ordinary EDT session hour
+    _utc(2026, 3, 8, 6, 30),               # 01:30 EST, the hour before spring forward
+    _utc(2026, 3, 8, 7, 30),               # 03:30 EDT, the hour after the skipped one
+    _utc(2026, 11, 1, 5, 30),              # 01:30 EDT, first pass of the repeated hour
+    _utc(2026, 11, 1, 6, 30),              # 01:30 EST, second pass of the repeated hour
+    _utc(2027, 1, 1, 4, 59),               # 23:59 New York on 31 Dec
+]
+
+
+@pytest.mark.parametrize("tf", TIMEFRAMES)
+@pytest.mark.parametrize("at", ROUND_TRIP_INSTANTS)
+def test_a_bucket_label_parses_back_to_its_bucket_start(at, tf):
+    start = bucket_start(at, tf)
+    label = bucket_label(start, tf)
+    parsed = parse_bucket_label(label, tf)
+    assert parsed.tzinfo is not None
+    assert parsed.timestamp() == start.timestamp()     # instants, so `fold` counts
+    assert bucket_label(parsed, tf) == label
+
+
+def test_the_two_repeated_fall_back_hours_parse_to_different_instants():
+    first = parse_bucket_label("2026-11-01T01:00:00-04:00", "1H")
+    second = parse_bucket_label("2026-11-01T01:00:00-05:00", "1H")
+    assert second.timestamp() - first.timestamp() == 3600
+
+
+def test_a_daily_label_is_the_new_york_midnight_instant():
+    parsed = parse_bucket_label("2026-10-16", "1D")
+    assert parsed.astimezone(UTC) == _utc(2026, 10, 16, 4)   # 00:00 EDT
+
+
+@pytest.mark.parametrize("label, tf", [
+    ("2026-10-16", "1H"),                          # a date where a datetime is emitted
+    ("2026-10-16T10:00:00-04:00", "1D"),           # a datetime where a date is emitted
+    ("2026-10-16T10:00:00", "1H"),                 # naive
+    ("2026-10-16T10:00:00Z", "4H"),                # Z is not the emitted offset form
+    ("2026-10-16T10:00-04:00", "1H"),              # no seconds
+    ("20261016", "1D"),                            # compact date
+    ("2026-13-01", "1W"),                          # not a date
+    ("", "1D"),
+    ("abc", "1H"),
+])
+def test_any_other_label_shape_is_refused(label, tf):
+    with pytest.raises(ValueError):
+        parse_bucket_label(label, tf)
+
+
+def test_parse_refuses_an_unknown_timeframe():
+    with pytest.raises(ValueError):
+        parse_bucket_label("2026-10-16", "15m")

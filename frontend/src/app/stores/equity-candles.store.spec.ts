@@ -1,6 +1,6 @@
 import { ApplicationRef, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Subject, of, throwError } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ApiClient } from '../api/api-client';
@@ -21,9 +21,21 @@ const CANDLE: EquityCandle = {
 };
 
 function response(tf: EquityTimeframe = '1D', basis: EquityBasis = 'mtm',
-                  candles: EquityCandle[] = [CANDLE]): EquityCandlesResponse {
-  return { tf, basis, currency_symbol: '€', candles, recording_since: null,
+                  candles: EquityCandle[] = [CANDLE], hasMore = false): EquityCandlesResponse {
+  return { tf, basis, currency_symbol: '€', candles, has_more: hasMore, recording_since: null,
            as_of: '2026-10-17T14:00:00+00:00' };
+}
+
+const OLDER: EquityCandle = { ...CANDLE, t: '2026-10-15', c: 10120.5 };
+
+/** The newest page says there is more; a `before` request answers `older`. */
+function pagingApi(older: () => Observable<EquityCandlesResponse> = () =>
+    of(response('1D', 'mtm', [OLDER], false))) {
+  return {
+    equityCandles: vi.fn().mockImplementation(
+      (tf: EquityTimeframe, basis: EquityBasis, _limit?: number, before?: string) =>
+        before ? older() : of(response(tf, basis, [CANDLE], true))),
+  };
 }
 
 function okApi() {
@@ -156,4 +168,101 @@ describe('EquityCandlesStore', () => {
     stale.next(response('1D', 'mtm', [{ ...CANDLE, c: 1 }]));
     expect(store.data()?.candles[0].c).toBe(2);
   });
+  it('starts with has_more from the first answer and the live edge in view', () => {
+    const { store } = setup({}, pagingApi());
+    expect(store.hasMore()).toBe(true);
+    expect([store.pageLoading(), store.pageError(), store.atLiveEdge()]).toEqual([false, false, true]);
+  });
+
+  it('pages 200 candles before the oldest one and prepends them', () => {
+    const { api, store } = setup({}, pagingApi());
+    store.loadOlder();
+    expect(api.equityCandles).toHaveBeenLastCalledWith('1D', 'mtm', 200, '2026-10-16');
+    expect(store.data()?.candles).toEqual([OLDER, CANDLE]);
+    expect(store.hasMore()).toBe(false);
+    expect(store.pageLoading()).toBe(false);
+  });
+
+  it('does not page once the server said there is no more', () => {
+    const { api, store } = setup();                       // okApi answers has_more: false
+    store.loadOlder();
+    expect(api.equityCandles).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps one page in flight at a time', () => {
+    const pending: Subject<EquityCandlesResponse>[] = [];
+    const { store } = setup({}, pendingApi(pending));
+    pending[0].next(response('1D', 'mtm', [CANDLE], true));
+    store.loadOlder();
+    store.loadOlder();
+    expect(pending).toHaveLength(2);
+    expect(store.pageLoading()).toBe(true);
+  });
+
+  it('drops a page that answers after the timeframe changed', () => {
+    const pending: Subject<EquityCandlesResponse>[] = [];
+    const { store, tick } = setup({}, pendingApi(pending));
+    pending[0].next(response('1D', 'mtm', [CANDLE], true));
+    store.loadOlder();
+    store.setTimeframe('1H');
+    tick();
+    const hour = { ...CANDLE, t: '2026-10-16T10:00:00-04:00' };
+    pending[2].next(response('1H', 'mtm', [hour], false));
+    pending[1].next(response('1D', 'mtm', [OLDER], false));
+    expect(store.data()?.candles).toEqual([hour]);
+    expect(store.pageLoading()).toBe(false);
+  });
+
+  it('keeps the candles on a failed page, flags it, and clears the flag on retry', () => {
+    let fail = true;
+    const { store } = setup({}, pagingApi(() =>
+      fail ? throwError(() => new Error('boom')) : of(response('1D', 'mtm', [OLDER], false))));
+    store.loadOlder();
+    expect(store.data()?.candles).toEqual([CANDLE]);
+    expect([store.pageError(), store.pageLoading(), store.hasMore()]).toEqual([true, false, true]);
+    fail = false;
+    store.loadOlder();
+    expect(store.pageError()).toBe(false);
+    expect(store.data()?.candles).toEqual([OLDER, CANDLE]);
+  });
+
+  it('keeps paged history through a scan refresh and updates the newest candle', () => {
+    const api = pagingApi();
+    const { store, scan, tick } = setup({}, api);
+    store.loadOlder();
+    const grown = { ...CANDLE, c: 10300 };
+    api.equityCandles.mockImplementation(() => of(response('1D', 'mtm', [grown], true)));
+    scan.update((n) => n + 1);
+    tick();
+    expect(store.data()?.candles).toEqual([OLDER, grown]);
+    expect(store.hasMore()).toBe(false);                  // still the oldest page's answer
+  });
+
+  it('drops an older page when a same-view refresh replaces disconnected history', () => {
+    const pending: Subject<EquityCandlesResponse>[] = [];
+    const { api, store } = setup({}, pendingApi(pending));
+    pending[0].next(response('1D', 'mtm', [CANDLE], true));
+    store.loadOlder();
+    store.load();
+    const latest = { ...CANDLE, t: '2026-10-20' };
+    pending[2].next(response('1D', 'mtm', [latest], true));
+    const loadingAfterRefresh = store.pageLoading();
+    pending[1].next(response('1D', 'mtm', [OLDER], false));
+    expect(store.data()?.candles).toEqual([latest]);
+    expect(loadingAfterRefresh).toBe(false);
+    expect(store.hasMore()).toBe(true);
+    store.loadOlder();
+    expect(api.equityCandles).toHaveBeenLastCalledWith('1D', 'mtm', 200, '2026-10-20');
+    expect(pending).toHaveLength(4);
+  });
+
+  it('records the live-edge flag and resets it on a timeframe change', () => {
+    const { store, tick } = setup();
+    store.setAtLiveEdge(false);
+    expect(store.atLiveEdge()).toBe(false);
+    store.setTimeframe('1H');
+    tick();
+    expect(store.atLiveEdge()).toBe(true);
+  });
+
 });

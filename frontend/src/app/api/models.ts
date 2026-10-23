@@ -359,6 +359,10 @@ export interface TradeQuery {
    *  convention every other filter in this interface follows. */
   openedFrom?: string | null;
   openedTo?: string | null;
+  /** Closed-tab half-open window of aware ISO instants; both or neither.
+   *  ApiClient maps these to closed_from/closed_to, omitting null bounds. */
+  closedFrom?: string | null;
+  closedTo?: string | null;
 }
 
 export const TRADE_SORTABLE = [
@@ -396,8 +400,8 @@ export interface Dashboard {
    *  like `position_premium`: the statuses come from `PlanStatus` on the Python
    *  side, and an empty object is what a failed collector returns. */
   lifecycle: Record<string, unknown>;
-  /** SR58 — the date scope the server actually applied, echoed back. */
-  scope: { mode: DashboardScope };
+  /** Applied scope; range bounds are echoed as UTC ISO instants, null otherwise. */
+  scope: { mode: DashboardScope; from?: string | null; to?: string | null };
   /** SR58 — realised P&L over the scoped closes. Amounts are null, never 0,
    *  when nothing closed: "nothing closed today" and "closed exactly flat"
    *  are different facts. */
@@ -414,9 +418,9 @@ export interface Dashboard {
   default_expiry_bars: number;
 }
 
-/** The Jinja dashboard's three date scopes. `active` is today plus anything
- *  still open; `today` is today alone; `all` is every day. */
-export type DashboardScope = 'active' | 'today' | 'all';
+/** Date scopes: active is today plus open positions, today is the Berlin
+ *  day, all is every day, range carries a half-open window of aware instants. */
+export type DashboardScope = 'active' | 'today' | 'all' | 'range';
 
 /* -- analytics ---------------------------------------------------------- */
 
@@ -2179,12 +2183,14 @@ export interface EquityCandle {
 /** `GET /api/v1/equity/candles`. `recording_since` is the first live sample
  *  (ISO UTC) or null before the monitor has recorded one. The SPA shows the
  *  currency from `ConnectionStore.currency()`; `currency_symbol` is the same
- *  config value, carried for API consumers. */
+ *  config value, carried for API consumers. `has_more` (v181) is true when
+ *  older candles exist beyond this page; page them with `before`. */
 export interface EquityCandlesResponse {
   tf: EquityTimeframe;
   basis: EquityBasis;
   currency_symbol: string;
   candles: EquityCandle[];
+  has_more: boolean;
   recording_since: string | null;
   as_of: string;
 }

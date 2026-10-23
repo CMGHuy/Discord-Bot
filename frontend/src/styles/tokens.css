@@ -101,8 +101,8 @@
    * assumes this and this comment is what it checks for. */
   --text-faint: var(--navy-600);
 
-  --pos: var(--mint-400);
-  --neg: var(--coral-400);
+  --pos: var(--teal-400);
+  --neg: var(--red-400);
   --warn: var(--amber-300);
   /* v80 D1: the accent is two tokens. --accent is the colour of interactive
    * TEXT and state -- links, the active tab, the sort arrow, focus -- and
@@ -128,8 +128,8 @@
    * --surface-raised. v167 amendment 2: each is a tier-1 alpha entry in
    * palette.css (literal rgba of the hue), so jsdom and lightweight-charts
    * still receive a plain colour string and this file holds no hued rgba. */
-  --pos-soft: var(--mint-400-a12);
-  --neg-soft: var(--coral-400-a12);
+  --pos-soft: var(--teal-400-a12);
+  --neg-soft: var(--red-400-a12);
   --warn-soft: var(--amber-300-a12);
   --accent-soft: var(--sky-600-a18);
   --info-soft: var(--violet-300-a14);

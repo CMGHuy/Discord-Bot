@@ -14,7 +14,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
 
-import { CloseScope, TradeRow } from '../../api/models';
+import { CloseScope, DashboardScope, TradeRow } from '../../api/models';
 import { ApiClient } from '../../api/api-client';
 import { ToastService } from '../../shell/toast.service';
 import { ConnectionStore } from '../../stores/connection.store';
@@ -144,6 +144,13 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
   return rows.find((row) => row.id === id) ?? null;
 }
 
+/** v181 §6: the Realised card's label per applied scope. */
+const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
+  today: 'Realised today',
+  all: 'Realised, all days',
+  range: 'Realised in range',
+};
+
 @Component({
   selector: 'sb-dashboard',
   imports: [
@@ -214,8 +221,11 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       [riskCapPct]="store.riskCapPct()"
       [payoffRatio]="store.payoffRatio()"
       [currency]="connection.currency()"
-      [scope]="store.scope()"
-      (scopeChange)="store.setScope($event)"
+      [selection]="store.selection()"
+      [stale]="store.stale()"
+      (presetChange)="store.setPreset($event)"
+      [chartTarget]="store.chartTarget()"
+      (chartRangeChange)="store.setRange($event)"
     />
     </sb-async>
 
@@ -253,6 +263,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       <sb-positions-table
         [counts]="lifecycleCounts()"
         [today]="closedToday()"
+        [closedWindow]="store.closedWindow()"
         [columns]="columns()"
         [visibleFor]="columnsForTab"
         [pinned]="pinned"
@@ -698,13 +709,15 @@ export class Dashboard {
    *  one. Same key Trades and the ticker detail use. */
   protected readonly rowKey = (row: TradeRow) => `${row.id}:${row.leg_index}`;
 
-  /** The Closed tab's `today` input: `true` in Today mode (narrows to
-   *  trades closed today, same rule the lifecycle strip's CLOSED count
-   *  already used), `null` in All days (unfiltered -- most recent closes).
-   *  PositionsTable applies this to CLOSED/CANCELLED only. */
+  /** The Closed tab's `today` input: `true` on 1D (trades closed today,
+   *  the rule the lifecycle strip's CLOSED count already used), `null`
+   *  otherwise. On All that means unfiltered; on a range the
+   *  `closedWindow` input narrows it instead (v181 §6). PositionsTable
+   *  applies both to CLOSED/CANCELLED only. */
   protected readonly closedToday = computed(() =>
-    this.store.scope() === 'all' ? null : true,
+    this.store.scope() === 'today' ? true : null,
   );
+
 
   /** The lifecycle strip's counts, reshaped for the tab labels. The strip
    *  itself is gone (R4-07) -- these numbers moved onto the tabs. */
@@ -954,10 +967,11 @@ export class Dashboard {
   });
 
   /** Names the window in the card itself, so a figure cannot be read as
-   *  today's when the toggle is on All days. */
+   *  today's when the scope is All or a range. */
   protected readonly realizedLabel = computed(() =>
-    this.store.scope() === 'all' ? 'Realised, all days' : 'Realised today',
+    REALIZED_LABEL[this.store.scope()] ?? 'Realised today',
   );
+
 
   // v54 Task 28 dropped the unit from both columns on the grounds that the
   // header already names it. That holds for R -- one number per cell, under

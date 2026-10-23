@@ -3,7 +3,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { TradeRow } from '../../api/models';
+import { TradeQuery, TradeRow } from '../../api/models';
 import { TradesStore } from '../../stores/trades.store';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, EmptyState, PhoneTap } from '../../ui/data-table/data-table.types';
@@ -12,6 +12,7 @@ import { Tab, TabBar } from '../../ui/layout';
 import { Async, asyncInputs } from '../../ui/async';
 import { tablePerPage } from '../../ui/table-per-page';
 import { perPageForApi } from '../../ui/table-prefs';
+import { TimeWindow } from './panels/equity-range.model';
 
 /** Lifecycle order, not size order: this is the order a plan moves through,
  *  and sorting by count would reshuffle the strip every time a trade closed.
@@ -108,6 +109,10 @@ export class PositionsTable {
    *  on the tab labels so the strip answers "how many" before it is clicked. */
   readonly counts = input<Record<string, number>>({});
   readonly today = input<boolean | null>(null);
+  /** v181 §6: the scope's `[from, to)` window outside 1D and All. On the
+   *  Closed and Cancelled tabs it replaces `today`. */
+  readonly closedWindow = input<TimeWindow | null>(null);
+
   readonly columns = input.required<ColumnDef<TradeRow>[]>();
   /** Per-tab column order — see R5-02. Takes the tab id so each status can
    *  show the columns that mean something for it. */
@@ -129,6 +134,11 @@ export class PositionsTable {
 
   protected readonly active = signal<string>('ACTIVE');
   private readonly page = signal(1);
+  /** Equivalent bounds keep the same page; only a different result set resets it. */
+  private readonly pageScope = computed(() => {
+    const tab = POSITION_TABS.find((item) => item.id === this.active());
+    return JSON.stringify([this.active(), this.closedScope(tab?.scoped ?? false)]);
+  });
 
   protected readonly rows = computed(() => this.trades.rows());
   protected readonly async = computed(() => asyncInputs(
@@ -152,6 +162,15 @@ export class PositionsTable {
     this.tabChange.emit(id);
   }
 
+  /** The close-time filter for one tab: the window when there is one, else
+   *  the Today flag, and nothing for the tabs that are all-time. */
+  private closedScope(scoped: boolean): Pick<TradeQuery, 'today' | 'closedFrom' | 'closedTo'> {
+    if (!scoped) return { today: undefined };
+    const window = this.closedWindow();
+    if (window) return { today: undefined, closedFrom: window.from, closedTo: window.to };
+    return { today: this.today() ?? undefined };
+  }
+
   /** The pager belongs to the selected server-side lifecycle query. */
   protected goToPage(page: number): void {
     this.page.set(page);
@@ -163,20 +182,20 @@ export class PositionsTable {
   }
 
   constructor() {
-    // Page resets on tab change: landing on page 3 of a table you just
-    // switched to shows a slice of something you have not seen the start of.
+    // A tab or effective close filter selects a new result set. Start at its
+    // first page so narrowing a paged Closed/Cancelled tab cannot hide its rows.
     effect(() => {
-      this.active();
+      this.pageScope();
       untracked(() => this.page.set(1));
     });
 
-    // The one query. Reading `active`/`today`/`perPage`/`page` here IS the
+    // The one query. Reading `active`/`today`/`closedWindow`/`perPage`/`page` here IS the
     // subscription, so a tab change re-queries without a second code path.
     effect(() => {
       const tab = POSITION_TABS.find((t) => t.id === this.active());
       this.trades.setQuery({
         status: tab?.status ?? 'ACTIVE',
-        today: tab?.scoped ? (this.today() ?? undefined) : undefined,
+        ...this.closedScope(tab?.scoped ?? false),
         // Closed reads newest close first; every other tab by when it opened.
         sort: tab?.status === 'CLOSED' ? '-closed_at' : '-opened_at',
         page: this.page(),

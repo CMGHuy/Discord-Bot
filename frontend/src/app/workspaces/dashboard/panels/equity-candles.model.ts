@@ -2,6 +2,7 @@ import type { CandlestickData, Time, UTCTimestamp } from 'lightweight-charts';
 
 import { EquityBasis, EquityCandle, EquityTimeframe } from '../../../api/models';
 import { money, num, pct } from '../../../ui/format';
+import { LogicalWindow, PnlTone, RangeStats, drawdownTone, signTone } from './equity-range.model';
 
 /**
  * Pure helpers for `sb-equity-candles` — spec v172 § 5. Everything here is
@@ -132,4 +133,111 @@ export function seamIndex(candles: readonly EquityCandle[]): number {
     else if (sawApprox) return i;
   }
   return -1;
+}
+
+/** One readout segment and the colour it carries — spec v181 §5. The tone is
+ *  decided here, never in the template, so the colour rule lives once. */
+export interface ReadoutPart {
+  text: string;
+  tone: PnlTone;
+}
+
+/** v181 §4: the range summary's labels. "within range" on the drawdown on
+ *  purpose: it is measured on closes, so it can be smaller than High→Low. */
+export const RANGE_LABELS = {
+  change: 'Equity change',
+  high: 'High',
+  low: 'Low',
+  drawdown: 'Max drawdown within range',
+} as const;
+
+/** The hovered candle (v172 parts), its two change parts toned by sign. */
+export function candleReadout(
+  candle: EquityCandle,
+  basis: EquityBasis,
+  currency: string,
+  tf: EquityTimeframe,
+): ReadoutPart[] {
+  const changeText = money(candle.change, currency);
+  const tone = signTone(candle.change);
+  return readoutParts(candle, basis, currency, tf).map((text) => ({
+    text,
+    tone: text === changeText || (isChangePart(text) && candle.change_pct !== null) ? tone : 'neutral',
+  }));
+}
+
+function drawdownPart(pctValue: number | null): ReadoutPart {
+  // Shown as a loss whichever sign the stats carry; an em dash is never coloured.
+  if (pctValue === null) return { text: `${RANGE_LABELS.drawdown} —`, tone: 'neutral' };
+  // Intl's decimal rounding matches the money/high/low readout at halfway values.
+  const loss = pctValue === 0 ? 0 : -Math.abs(pctValue);
+  return { text: `${RANGE_LABELS.drawdown} ${num(loss)}%`, tone: drawdownTone(pctValue) };
+}
+
+/** The visible range in one line — spec v181 §4. */
+export function rangeReadoutParts(stats: RangeStats | null, currency: string): ReadoutPart[] {
+  if (!stats) return [];
+  const share = stats.changePct === null ? '' : ` (${pct(stats.changePct)})`;
+  return [
+    { text: `${RANGE_LABELS.change} ${money(stats.change, currency)}${share}`, tone: signTone(stats.change) },
+    { text: `${RANGE_LABELS.high} ${num(stats.high)}`, tone: 'neutral' },
+    { text: `${RANGE_LABELS.low} ${num(stats.low)}`, tone: 'neutral' },
+    drawdownPart(stats.maxDrawdownPct),
+  ];
+}
+
+/** True while the newest candle is at least half on screen (a bar spans
+ *  ±0.5 logical units around its index), or before the first range event. */
+export function isAtLiveEdge(range: LogicalWindow | null, count: number): boolean {
+  return range === null || count === 0 || range.to >= count - 1.5;
+}
+
+const TF_SECONDS: Record<EquityTimeframe, number> = {
+  '1H': 3_600,
+  '4H': 14_400,
+  '1D': 86_400,
+  '1W': 604_800,
+};
+
+const NY_ISO_DAY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: NY, year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+/** A run of whole buckets on the New York wall clock, `[from, to)`, in
+ *  seconds read as if UTC — the same convention as `toChartTime`. */
+export interface WallSpan {
+  from: number;
+  to: number;
+}
+
+function wallSeconds(t: string, tf: EquityTimeframe): number {
+  const iso = isIntraday(tf) ? `${t.slice(0, 19)}Z` : `${t.slice(0, 10)}T00:00:00Z`;
+  return Date.parse(iso) / 1000;
+}
+
+/** The span the in-window candles cover: first bucket start to last bucket end. */
+export function wallSpan(candles: readonly EquityCandle[], tf: EquityTimeframe): WallSpan | null {
+  const last = candles.at(-1);
+  if (!last) return null;
+  return { from: wallSeconds(candles[0].t, tf), to: wallSeconds(last.t, tf) + TF_SECONDS[tf] };
+}
+
+/** `setVisibleRange` arguments that show `span` on timeframe `tf`. */
+export function chartRangeFor(span: WallSpan, tf: EquityTimeframe): { from: Time; to: Time } {
+  const last = span.to - 1;
+  if (isIntraday(tf)) return { from: span.from as UTCTimestamp, to: last as UTCTimestamp };
+  const day = (seconds: number) => new Date(seconds * 1000).toISOString().slice(0, 10) as Time;
+  return { from: day(span.from), to: day(last) };
+}
+
+/** v181 §3 edge of history: 1H/4H candles exist only since recording began,
+ *  so zooming into an older 1D window stays on 1D rather than going blank. */
+export function stepDownBlocked(
+  tf: EquityTimeframe,
+  first: EquityCandle | undefined,
+  recordingSince: string | null,
+): boolean {
+  if (tf !== '1D') return false;
+  if (!first || recordingSince === null) return true;
+  return first.t.slice(0, 10) < NY_ISO_DAY.format(new Date(recordingSince));
 }

@@ -29,7 +29,6 @@
     "swingbot.admin.api_v1.analytics:analytics_heat_grid": 16,
     "swingbot.admin.api_v1.analytics:analytics_performance": 17,
     "swingbot.admin.api_v1.analytics:analytics_strategies": 15,
-    "swingbot.admin.api_v1.dashboard:dashboard": 21,
     "swingbot.admin.api_v1.market:chart": 24,
     "swingbot.admin.api_v1.risk:_risk_metrics_and_correlation": 20,
     "swingbot.admin.api_v1.system:_validate": 21,

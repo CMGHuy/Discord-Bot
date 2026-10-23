@@ -159,11 +159,75 @@ describe('ApiClient — equity candles', () => {
     expect(first.request.params.get('tf')).toBe('4H');
     expect(first.request.params.get('basis')).toBe('realized');
     expect(first.request.params.has('limit')).toBe(false);
+    expect(first.request.params.has('before')).toBe(false);
     first.flush({ tf: '4H', basis: 'realized', ...empty });
 
     api.equityCandles('1D', 'mtm', 30).subscribe();
     const second = http.expectOne((r) => r.url.endsWith('/api/v1/equity/candles'));
     expect(second.request.params.get('limit')).toBe('30');
     second.flush({ tf: '1D', basis: 'mtm', ...empty });
+
+    api.equityCandles('1H', 'mtm', 200, '2026-11-01T01:00:00-05:00').subscribe();
+    const third = http.expectOne((r) => r.url.endsWith('/api/v1/equity/candles'));
+    expect(third.request.params.get('limit')).toBe('200');
+    expect(third.request.params.get('before')).toBe('2026-11-01T01:00:00-05:00');
+    third.flush({ tf: '1H', basis: 'mtm', has_more: false, ...empty });
+  });
+});
+
+describe('ApiClient — dashboard range scope (v181)', () => {
+  let api: ApiClient;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: RouteRefreshService, useValue: { requestMutationRefresh: () => undefined } },
+      ],
+    });
+    api = TestBed.inject(ApiClient);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    http.verify();
+  });
+
+  const WINDOW = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
+
+  it('sends from/to on the dashboard only with a window', () => {
+    api.dashboard('today').subscribe();
+    const plain = http.expectOne((r) => r.url.endsWith('/api/v1/dashboard'));
+    expect(plain.request.params.get('mode')).toBe('today');
+    expect(plain.request.params.has('from')).toBe(false);
+    expect(plain.request.params.has('to')).toBe(false);
+    plain.flush({});
+
+    api.dashboard('range', WINDOW).subscribe();
+    const ranged = http.expectOne((r) => r.url.endsWith('/api/v1/dashboard'));
+    expect(ranged.request.params.get('mode')).toBe('range');
+    expect(ranged.request.params.get('from')).toBe(WINDOW.from);
+    expect(ranged.request.params.get('to')).toBe(WINDOW.to);
+    ranged.flush({});
+  });
+
+  it('maps closedFrom/closedTo to closed_from/closed_to, and drops a null bound', () => {
+    api.trades({ status: 'CLOSED', closedFrom: WINDOW.from, closedTo: WINDOW.to }).subscribe();
+    const windowed = http.expectOne((r) => r.url.endsWith('/api/v1/trades'));
+    expect(windowed.request.params.get('closed_from')).toBe(WINDOW.from);
+    expect(windowed.request.params.get('closed_to')).toBe(WINDOW.to);
+    expect(windowed.request.params.has('closedFrom')).toBe(false);
+    windowed.flush({ items: [], total: 0, page: 1, per_page: 25 });
+
+    api.trades({ status: 'CLOSED', closedFrom: null, closedTo: null }).subscribe();
+    const plain = http.expectOne((r) => r.url.endsWith('/api/v1/trades'));
+    expect(plain.request.params.has('closed_from')).toBe(false);
+    expect(plain.request.params.has('closed_to')).toBe(false);
+    plain.flush({ items: [], total: 0, page: 1, per_page: 25 });
   });
 });

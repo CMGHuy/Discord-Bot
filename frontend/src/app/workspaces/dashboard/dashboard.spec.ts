@@ -32,6 +32,8 @@ import { equityCandlesStoreStub } from '../../testing/equity-candles-store.stub'
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
 import { dashboardRoutes } from './dashboard.routes';
+import { TradingPerformance } from './panels/trading-performance';
+import { EquityCandles } from './panels/equity-candles';
 import { PositionsTable } from './positions-table';
 
 installMatchMediaPolyfill();
@@ -39,7 +41,7 @@ installMatchMediaPolyfill();
 /** Answered, so sb-equity-candles shows its chart and not a loading skeleton
  *  (several tests here assert the page has no skeleton once loaded). */
 const CANDLES: EquityCandlesResponse = {
-  tf: '1D', basis: 'mtm', currency_symbol: '€', recording_since: '2026-10-20T13:35:00Z',
+  tf: '1D', basis: 'mtm', currency_symbol: '€', has_more: false, recording_since: '2026-10-20T13:35:00Z',
   as_of: '2026-10-21T14:35:00Z',
   candles: [{ t: '2026-10-20', o: 100, h: 120, l: 90, c: 110, change: 10, change_pct: 10,
               samples: 4, skipped: 0, approx: false }],
@@ -270,14 +272,43 @@ describe('Dashboard v85 layout', () => {
     expect(text).not.toContain('Account Info');
   });
 
-  it('routes the panel scope control back into the store', async () => {
+  it('routes the panel presets back into the store (v181 §1)', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-    [...el.querySelectorAll<HTMLButtonElement>('sb-trading-performance sb-segmented .segment')]
-      .find((s) => s.textContent!.trim() === 'All days')!.click();
+    const store = TestBed.inject(DashboardStore);
+    el.querySelector<HTMLButtonElement>('[data-preset="All"]')!.click();
     fixture.detectChanges();
-    expect(TestBed.inject(DashboardStore).scope()).toBe('all');
+    expect(store.scope()).toBe('all');
+    el.querySelector<HTMLButtonElement>('[data-preset="1M"]')!.click();
+    fixture.detectChanges();
+    expect(store.preset()).toBe('1M');
+    expect(store.scope()).toBe('range');
   });
+
+  it('names the realised window and narrows the Closed tab to it (v181 §6)', async () => {
+    const fixture = await loaded();
+    const store = TestBed.inject(DashboardStore);
+    const panel = fixture.debugElement.query(By.directive(TradingPerformance))
+      .componentInstance as TradingPerformance;
+    const table = fixture.debugElement.query(By.directive(PositionsTable))
+      .componentInstance as PositionsTable;
+    expect([panel.realizedLabel(), table.today(), table.closedWindow()])
+      .toEqual(['Realised today', true, null]);
+
+    store.setPreset('3M');
+    fixture.detectChanges();
+    expect(panel.realizedLabel()).toBe('Realised in range');
+    expect(panel.selection()).toEqual({ kind: 'preset', preset: '3M' });
+    expect(table.today()).toBeNull();
+    expect(table.closedWindow()).not.toBeNull();
+    expect(table.closedWindow()).toEqual(store.closedWindow());
+
+    store.setPreset('All');
+    fixture.detectChanges();
+    expect([panel.realizedLabel(), table.today(), table.closedWindow()])
+      .toEqual(['Realised, all days', null, null]);
+  });
+
 });
 
 /* -- v177: the Plan cell's runner forms on the positions table ---------- */
@@ -749,5 +780,37 @@ describe('Dashboard trade drawer (v179 §3.2)', () => {
     drawer(harness)!.querySelector<HTMLAnchorElement>('a.full-trade')!.click();
     await settled(harness);
     expect(location.path()).toBe('/trades/t1');
+  });
+});
+
+describe('Dashboard v181 scope link', () => {
+  function flushDashboard(): void {
+    for (const req of TestBed.inject(HttpTestingController).match((r) => r.url === '/api/v1/dashboard')) {
+      req.flush(payload());
+    }
+  }
+
+  it('passes the preset target to the chart and a hand-picked range back to the store', async () => {
+    const fixture = await loaded();
+    const store = TestBed.inject(DashboardStore);
+    const chart = fixture.debugElement.query(By.directive(EquityCandles)).componentInstance as EquityCandles;
+
+    store.setPreset('1M');
+    fixture.detectChanges();
+    flushDashboard();
+    expect(chart.target()).toEqual(store.chartTarget());
+    expect(chart.target()!.window).not.toBeNull();
+    const seq = store.chartTarget().seq;
+
+    const window = { from: '2026-09-06T04:00:00.000Z', to: '2026-09-26T04:00:00.000Z' };
+    chart.rangeChange.emit(window);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    flushDashboard();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(store.selection()).toEqual({ kind: 'range', window });
+    // The loop guard: a hand-picked range never comes back to the chart as a target.
+    expect(store.chartTarget().seq).toBe(seq);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.range-chip')).not.toBeNull();
   });
 });

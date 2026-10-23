@@ -10,6 +10,13 @@ Bucketing and `change` live in `swingbot.core.tracking.equity_candles`.
 whole series, so the first returned candle still compares with its real
 predecessor. `currency_symbol` is `config.CURRENCY_SYMBOL`, the symbol the
 Dashboard already shows (no ISO code exists in config).
+
+v181 § 6: `before=<t>` pages older history. It accepts exactly the `t` the
+endpoint emits for that `tf` (`equity_candles.parse_bucket_label`) and keeps
+candles whose bucket starts strictly before it, compared as instants. The
+full series is built and `change`d first, then filtered and sliced, so a
+page's `o`/`change` are the full-history values; `has_more` says whether
+the slice cut older candles. Paging at the database is out of scope.
 """
 from __future__ import annotations
 
@@ -52,6 +59,30 @@ def _limit() -> int:
     return value
 
 
+def _before(tf: str) -> datetime | None:
+    raw = request.args.get("before")
+    if raw is None:
+        return None
+    try:
+        return equity_candles.parse_bucket_label(raw, tf)
+    except ValueError:
+        form = "an ISO datetime with offset" if tf in _INTRADAY else "an ISO date"
+        raise ApiError("invalid", f"before must be {form}, the t of a {tf} candle",
+                       400) from None
+
+
+def _page(candles: list[dict], tf: str, before: datetime | None,
+          limit: int) -> tuple[list[dict], bool]:
+    """The newest `limit` candles older than `before` (all when None), and
+    whether older ones remain. Instants, not wall clock: same-zone aware
+    datetimes ignore `fold`, which would merge the two fall-back hours."""
+    if before is not None:
+        cutoff = before.timestamp()
+        candles = [c for c in candles
+                   if equity_candles.parse_bucket_label(c["t"], tf).timestamp() < cutoff]
+    return candles[-limit:], len(candles) > limit
+
+
 def _mtm(tf: str) -> list[dict]:
     sources = ("live",) if tf in _INTRADAY else ("live", "backfill")
     return equity_candles.mtm_candles(equity_samples_repo().list_rows(sources=sources), tf)
@@ -70,12 +101,15 @@ def equity_candles_view():
     tf = _choice("tf", equity_candles.TIMEFRAMES, "1D")
     basis = _choice("basis", BASES, "mtm")
     limit = _limit()
+    before = _before(tf)
     candles = _mtm(tf) if basis == "mtm" else _realized(tf)
+    page, has_more = _page(candles, tf, before, limit)
     return jsonify({
         "tf": tf,
         "basis": basis,
         "currency_symbol": config.CURRENCY_SYMBOL,
-        "candles": candles[-limit:],
+        "candles": page,
+        "has_more": has_more,
         "recording_since": iso(equity_samples_repo().earliest_at("live")),
         "as_of": iso(datetime.now(timezone.utc)),
     })

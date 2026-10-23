@@ -2,9 +2,27 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { CountUp } from './motion/count-up';
 
-/** How a value should be coloured. `pnl` is the ONLY one that may go green
- *  or red -- those two colours mean P&L direction and nothing else. */
+/** Legacy figure colouring, used when no judged tint is supplied. */
 export type MetricTone = 'plain' | 'pnl' | 'caution';
+
+/** v181 §5: how a figure is judged — the same union as `PnlTone` in
+ *  `equity-range.model.ts` (ui/ does not import from workspaces/; the two
+ *  are structurally one type). pos/neg tint the card, warn colours only. */
+export type CardTint = 'pos' | 'neg' | 'warn' | 'neutral';
+
+const TINT_CLASS: Record<CardTint, string> = { pos: 'pos', neg: 'neg', warn: 'warn', neutral: '' };
+
+/** The v80 rule, used when no tint is given. */
+function toneClass(tone: MetricTone, value: number): string {
+  if (tone === 'caution') return 'warn';
+  if (tone !== 'pnl') return '';
+  // Exactly zero is neither a profit nor a loss, and colouring it green
+  // would overstate a flat position.
+  if (value > 0) return 'pos';
+  if (value < 0) return 'neg';
+  return '';
+}
+
 
 /**
  * Deprecated (v80 D4): use `sb-figure` inside an `sb-figure-strip`.
@@ -20,6 +38,11 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
   selector: 'sb-metric-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CountUp],
+  host: {
+    '[class.tint-pos]': "cardTint() === 'pos'",
+    '[class.tint-neg]': "cardTint() === 'neg'",
+  },
+
   template: `
     <div class="card sb-lift">
       <span class="label">{{ label() }}</span>
@@ -78,6 +101,9 @@ export type MetricTone = 'plain' | 'pnl' | 'caution';
     .neg { color: var(--neg); }
     .warn { color: var(--warn); }
     .absent { color: var(--text-faint); }
+    :host(.tint-pos) .card { background: linear-gradient(var(--pos-soft), var(--pos-soft)), var(--surface); }
+    :host(.tint-neg) .card { background: linear-gradient(var(--neg-soft), var(--neg-soft)), var(--surface); }
+
   `,
 })
 export class MetricCard {
@@ -110,15 +136,20 @@ export class MetricCard {
     return '';
   });
 
+  /** v181 §5: the judged tone of the figure (see `CardTint`). Wins over
+   *  `tone`; null keeps the v80 `tone` rule. */
+  readonly tint = input<CardTint | null>(null);
+
+  /** Only a present figure judged good or bad tints its card. */
+  protected readonly cardTint = computed(() => {
+    const tint = this.tint();
+    return this.value() !== null && (tint === 'pos' || tint === 'neg') ? tint : null;
+  });
+
   protected readonly valueClass = computed(() => {
     const value = this.value();
     if (value === null) return 'absent';
-    if (this.tone() === 'caution') return 'warn';
-    if (this.tone() !== 'pnl') return '';
-    // Exactly zero is neither a profit nor a loss, and colouring it green
-    // would overstate a flat position.
-    if (value > 0) return 'pos';
-    if (value < 0) return 'neg';
-    return '';
+    const tint = this.tint();
+    return tint !== null ? TINT_CLASS[tint] : toneClass(this.tone(), value);
   });
 }

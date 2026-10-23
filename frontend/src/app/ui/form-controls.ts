@@ -37,7 +37,7 @@ export interface SelectOption {
           <option value="">{{ text }}</option>
         }
         @for (option of options(); track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
+          <option [value]="option.value" [selected]="option.value === value()">{{ option.label }}</option>
         }
       </select>
     </label>

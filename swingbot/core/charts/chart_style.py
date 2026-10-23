@@ -60,8 +60,8 @@ THEME = {
     "text": "#e8eef8",
     "text-muted": "#8f9db5",
     "text-faint": "#3a4a66",
-    "pos": "#3ddc97",
-    "neg": "#ff6f7d",
+    "pos": "#00e5a0",
+    "neg": "#ff4d5e",
     "warn": "#ffc266",
     "info": "#c3a6ff",
     "chart-1": "#4c8dff",
@@ -74,7 +74,7 @@ THEME = {
 # so a THEME change, or a rollback across one, never serves a PNG drawn in the
 # other palette from ./exports/chart_cache (spec v167 § 4). Bump it in the same
 # commit as THEME; tests/charts/test_chart_theme.py pins the pair (STYLE_PINS).
-STYLE_VERSION = "v167"
+STYLE_VERSION = "v181"
 
 CHART_BG = THEME["surface"]             # figure + every panel's background: TradingView's chart pane
 GRID_COLOR = THEME["border"]            # gridlines -- subtle, never competes with data

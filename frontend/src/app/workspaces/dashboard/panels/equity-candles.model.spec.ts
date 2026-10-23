@@ -3,6 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { EquityCandle } from '../../../api/models';
 import {
   ACCOUNT_LABEL,
+  chartRangeFor,
+  stepDownBlocked,
+  wallSpan,
+  RANGE_LABELS,
+  candleReadout,
+  isAtLiveEdge,
+  rangeReadoutParts,
   approxCaption,
   candleLabel,
   emptyMessage,
@@ -107,5 +114,90 @@ describe('equity candles model', () => {
 
   it('states the account label exactly', () => {
     expect(ACCOUNT_LABEL).toBe('Paper account · before tax and costs');
+  });
+});
+
+describe('v181 readout parts', () => {
+  it('colours only the change parts of a hovered candle, by its sign', () => {
+    const parts = candleReadout(candle({ change: -12.5, change_pct: -0.12 }), 'mtm', '€', '1D');
+    const toned = parts.filter((p) => p.tone !== 'neutral').map((p) => p.text);
+    expect(toned).toEqual(['-12.50 €', '-0.12% vs prev close']);
+    expect(parts.find((p) => p.text.startsWith('O '))?.tone).toBe('neutral');
+  });
+
+  it('leaves an unavailable hovered percentage uncoloured', () => {
+    const parts = candleReadout(candle({ change: -12.5, change_pct: null }), 'mtm', '€', '1D');
+    expect(parts.find((p) => p.text === '— vs prev close')?.tone).toBe('neutral');
+    expect(parts.find((p) => p.text === '-12.50 €')?.tone).toBe('neg');
+  });
+
+  it('leaves a flat candle uncoloured', () => {
+    const parts = candleReadout(candle({ change: 0, change_pct: 0 }), 'mtm', '€', '1D');
+    expect(parts.every((p) => p.tone === 'neutral')).toBe(true);
+  });
+
+  it('summarises a range: change, high, low, drawdown within range', () => {
+    const parts = rangeReadoutParts(
+      { change: 12, changePct: 12, high: 120, low: 90, maxDrawdownPct: 4.545 }, '€');
+    expect(parts.map((p) => p.text)).toEqual([
+      'Equity change +12.00 € (+12.00%)', 'High 120.00', 'Low 90.00',
+      'Max drawdown within range -4.55%',
+    ]);
+    expect(parts.map((p) => p.tone)).toEqual(['pos', 'neutral', 'neutral', 'neg']);
+  });
+
+  it('shows drawdown as a loss whichever sign the stats carry', () => {
+    const parts = rangeReadoutParts(
+      { change: -3, changePct: -1, high: 1, low: 1, maxDrawdownPct: -2 }, '€');
+    expect(parts[3].text).toBe(`${RANGE_LABELS.drawdown} -2.00%`);
+    expect(parts[0].tone).toBe('neg');
+  });
+
+  it('never colours the dash of an undefined drawdown or percentage', () => {
+    const parts = rangeReadoutParts(
+      { change: 5, changePct: null, high: 1, low: 1, maxDrawdownPct: null }, '€');
+    expect(parts[0].text).toBe('Equity change +5.00 €');
+    expect(parts[3]).toEqual({ text: 'Max drawdown within range —', tone: 'neutral' });
+  });
+
+  it('has nothing to say without stats', () => {
+    expect(rangeReadoutParts(null, '€')).toEqual([]);
+  });
+
+  it('is at the live edge while the last candle is at least partly on screen', () => {
+    expect(isAtLiveEdge(null, 10)).toBe(true);
+    expect(isAtLiveEdge({ from: 0, to: 9 }, 10)).toBe(true);
+    expect(isAtLiveEdge({ from: 0, to: 8.6 }, 10)).toBe(true);
+    expect(isAtLiveEdge({ from: 0, to: 8.4 }, 10)).toBe(false);
+    expect(isAtLiveEdge({ from: 0, to: 3 }, 0)).toBe(true);
+  });
+});
+
+describe('v181 timeframe step helpers', () => {
+  const hourly = (iso: string) => candle({ t: `${iso}-04:00` });
+
+  it('spans whole buckets on the New York wall clock', () => {
+    const span = wallSpan([hourly('2026-10-20T09:00:00'), hourly('2026-10-20T15:00:00')], '1H');
+    expect(span).toEqual({ from: Date.UTC(2026, 9, 20, 9) / 1000, to: Date.UTC(2026, 9, 20, 16) / 1000 });
+    expect(wallSpan([candle({ t: '2026-10-19' }), candle({ t: '2026-10-20' })], '1D'))
+      .toEqual({ from: Date.UTC(2026, 9, 19) / 1000, to: Date.UTC(2026, 9, 21) / 1000 });
+    expect(wallSpan([], '1D')).toBeNull();
+  });
+
+  it('turns a span into chart times for the target timeframe', () => {
+    const span = { from: Date.UTC(2026, 9, 19) / 1000, to: Date.UTC(2026, 9, 21) / 1000 };
+    expect(chartRangeFor(span, '4H')).toEqual({ from: span.from, to: span.to - 1 });
+    expect(chartRangeFor(span, '1D')).toEqual({ from: '2026-10-19', to: '2026-10-20' });
+    expect(chartRangeFor(span, '1W')).toEqual({ from: '2026-10-19', to: '2026-10-20' });
+  });
+
+  it('blocks 1D -> 4H only where no intraday candles can exist', () => {
+    const since = '2026-10-20T13:35:00Z';
+    expect(stepDownBlocked('1D', candle({ t: '2026-10-19' }), since)).toBe(true);
+    expect(stepDownBlocked('1D', candle({ t: '2026-10-20' }), since)).toBe(false);
+    expect(stepDownBlocked('1D', candle({ t: '2026-10-20' }), null)).toBe(true);
+    expect(stepDownBlocked('1D', undefined, since)).toBe(true);
+    expect(stepDownBlocked('4H', candle({ t: '2026-01-02T09:00:00-05:00' }), since)).toBe(false);
+    expect(stepDownBlocked('1W', candle({ t: '2025-01-06' }), since)).toBe(false);
   });
 });

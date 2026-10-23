@@ -44,6 +44,7 @@ D2_SERIES = frozenset(f"chart-{i}" for i in range(1, 7))
 STYLE_PINS: tuple[tuple[str, str], ...] = (
     ("fb0f840658155cd0", "v80"),
     ("96d64692ba7c2abf", "v167"),  # v167 §4: Arctic Navy
+    ("4f15a0f1fb8a6d1e", "v181"),  # v181 §5: saturated teal/red valence pair
 )
 
 # constant -> the THEME key it must equal (the plan's D5 role table)

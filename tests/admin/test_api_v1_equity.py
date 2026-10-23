@@ -10,11 +10,10 @@ from tests.admin.api_v1_contract import (NULLABLE_NUMBER, NULLABLE_STR, NUMBER, 
                                          assert_shape)
 from tests.store_seed import seed_store
 
-_LOGIN = {"username": "admin", "password": "admin"}
 URL = "/api/v1/equity/candles"
 BASE = 10000.0
 
-BODY = {"tf": str, "basis": str, "currency_symbol": str, "candles": list,
+BODY = {"tf": str, "basis": str, "currency_symbol": str, "candles": list, "has_more": bool,
         "recording_since": NULLABLE_STR, "as_of": str}
 CANDLE = {"t": str, "o": NUMBER, "h": NUMBER, "l": NUMBER, "c": NUMBER, "change": NUMBER,
           "change_pct": NULLABLE_NUMBER, "samples": int, "skipped": int, "approx": bool}
@@ -22,7 +21,12 @@ CANDLE = {"t": str, "o": NUMBER, "h": NUMBER, "l": NUMBER, "c": NUMBER, "change"
 
 @pytest.fixture
 def logged_in(client):
-    client.post("/api/v1/session", json=_LOGIN)
+    from swingbot.admin import app
+
+    response = client.post("/api/v1/session", json={
+        "username": app.ADMIN_USERNAME, "password": app.ADMIN_PASSWORD,
+    })
+    assert response.status_code == 200
     return client
 
 
@@ -69,6 +73,23 @@ def _closed(tid, pnl, closed_at):
             "entry": 100.0, "stop_loss": 95.0, "exit_price": 100.0 + pnl / 10, "shares": 10.0,
             "opened_at": "2026-10-13T14:00:00+00:00", "closed_at": closed_at,
             "realized_pnl_amount": pnl, "ledger": "main", "horizon_key": "1m", "strategy": "RSI"}
+
+
+def _utc(year, month, day, hour, minute=0):
+    return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+
+
+def _page_all(client, **query):
+    """Every candle, fetched one page of one candle at a time through the
+    `before` cursor, oldest first."""
+    candles, before = [], None
+    while True:
+        params = {**query, "limit": 1, **({"before": before} if before else {})}
+        body = client.get(URL, query_string=params).get_json()
+        candles = body["candles"] + candles
+        if not body["has_more"]:
+            return candles
+        before = body["candles"][0]["t"]
 
 
 def test_requires_auth(client):
@@ -157,3 +178,124 @@ def test_the_tf_error_lists_every_timeframe(logged_in, account):
 
 def test_the_limit_cap_itself_is_allowed(logged_in, account):
     assert logged_in.get(URL + "?limit=500").status_code == 200
+
+
+# --- v181: the `before` cursor and `has_more` ------------------------------------
+
+def test_has_more_is_false_when_every_candle_fits(logged_in, account):
+    _two_live_days()
+    body = logged_in.get(URL).get_json()
+    assert (len(body["candles"]), body["has_more"]) == (2, False)
+
+
+def test_has_more_is_true_when_the_limit_cut_older_candles(logged_in, account):
+    _two_live_days()
+    body = logged_in.get(URL + "?limit=1").get_json()
+    assert ([c["t"] for c in body["candles"]], body["has_more"]) == (["2026-10-15"], True)
+
+
+def test_before_is_exclusive_of_the_cursor_bucket(logged_in, account):
+    _backfilled_tuesday()
+    _two_live_days()
+    body = logged_in.get(URL + "?before=2026-10-15").get_json()
+    assert [c["t"] for c in body["candles"]] == ["2026-10-13", "2026-10-14"]
+    assert body["has_more"] is False
+
+
+def test_before_with_a_limit_keeps_the_newest_older_candles(logged_in, account):
+    _backfilled_tuesday()
+    _two_live_days()
+    body = logged_in.get(URL + "?before=2026-10-15&limit=1").get_json()
+    assert ([c["t"] for c in body["candles"]], body["has_more"]) == (["2026-10-14"], True)
+
+
+def test_a_page_keeps_the_change_measured_on_the_full_series(logged_in, account):
+    _backfilled_tuesday()
+    _two_live_days()
+    (only,) = logged_in.get(URL + "?before=2026-10-15&limit=1").get_json()["candles"]
+    full_middle = logged_in.get(URL).get_json()["candles"][1]
+    assert only == full_middle                     # change vs Tuesday's close, not its own open
+
+
+def test_before_the_oldest_candle_is_an_empty_page(logged_in, account):
+    _two_live_days()
+    body = logged_in.get(URL + "?before=2026-10-14").get_json()
+    assert (body["candles"], body["has_more"]) == ([], False)
+
+
+def test_before_past_the_newest_candle_returns_the_latest(logged_in, account):
+    _two_live_days()
+    body = logged_in.get(URL + "?before=2026-12-01").get_json()
+    assert [c["t"] for c in body["candles"]] == ["2026-10-14", "2026-10-15"]
+
+
+@pytest.mark.parametrize("tf", ["1H", "4H", "1D", "1W"])
+def test_the_cursor_round_trips_for_every_timeframe(logged_in, account, tf):
+    _two_live_days()
+    full = logged_in.get(URL, query_string={"tf": tf}).get_json()["candles"]
+    assert full                                              # the fixture yields candles on every tf
+    assert _page_all(logged_in, tf=tf) == full
+
+
+def test_paging_works_on_the_realized_basis_and_carries_the_prior_close(logged_in, account):
+    seed_store("trades", [_closed("t1", 50.0, "2026-10-13T15:00:00+00:00"),
+                          _closed("t2", -20.0, "2026-10-14T15:00:00+00:00"),
+                          _closed("t3", 30.0, "2026-10-15T15:00:00+00:00")])
+    newest = logged_in.get(URL + "?basis=realized&limit=1").get_json()
+    assert newest["has_more"] is True
+    (latest,) = newest["candles"]
+    older = logged_in.get(URL, query_string={"basis": "realized", "limit": 1,
+                                             "before": latest["t"]}).get_json()
+    (previous,) = older["candles"]
+    assert (previous["t"], latest["t"]) == ("2026-10-14", "2026-10-15")
+    assert latest["o"] == previous["c"]                      # the first o is the true prior balance
+    assert _page_all(logged_in, basis="realized") == logged_in.get(
+        URL + "?basis=realized").get_json()["candles"]
+
+
+def _fall_back_night():
+    """Sun 1 Nov 2026: 00:30 EDT, 01:30 EDT, 01:30 EST (repeated hour), 02:30 EST."""
+    EquitySampleRepository().upsert_many([
+        _row(_utc(2026, 11, 1, 4, 30), 10000), _row(_utc(2026, 11, 1, 5, 30), 10010),
+        _row(_utc(2026, 11, 1, 6, 30), 10020), _row(_utc(2026, 11, 1, 7, 30), 10030),
+    ])
+
+
+def _spring_forward_night():
+    """Sun 8 Mar 2026: 00:30 EST, 01:30 EST, 03:30 EDT (02:00-03:00 skipped), 04:30 EDT."""
+    EquitySampleRepository().upsert_many([
+        _row(_utc(2026, 3, 8, 5, 30), 10000), _row(_utc(2026, 3, 8, 6, 30), 10010),
+        _row(_utc(2026, 3, 8, 7, 30), 10020), _row(_utc(2026, 3, 8, 8, 30), 10030),
+    ])
+
+
+@pytest.mark.parametrize("night", [_fall_back_night, _spring_forward_night])
+@pytest.mark.parametrize("tf", ["1H", "4H"])
+def test_paging_across_a_dst_change_loses_and_duplicates_no_candle(logged_in, account, night, tf):
+    night()
+    full = logged_in.get(URL, query_string={"tf": tf}).get_json()["candles"]
+    paged = _page_all(logged_in, tf=tf)
+    assert paged == full
+    assert len({c["t"] for c in paged}) == len(paged)
+
+
+def test_the_fall_back_night_has_two_distinct_01_00_candles(logged_in, account):
+    _fall_back_night()
+    times = [c["t"] for c in logged_in.get(URL + "?tf=1H").get_json()["candles"]]
+    assert "2026-11-01T01:00:00-04:00" in times
+    assert "2026-11-01T01:00:00-05:00" in times
+
+
+@pytest.mark.parametrize("query", [
+    {"tf": "1D", "before": "2026-10-15T00:00:00-04:00"},   # datetime on a date timeframe
+    {"tf": "1W", "before": "2026-10-12T00:00:00-04:00"},
+    {"tf": "1H", "before": "2026-10-15"},                  # date on an intraday timeframe
+    {"tf": "4H", "before": "2026-10-15"},
+    {"tf": "1H", "before": "2026-10-15T10:00:00"},         # naive
+    {"tf": "1D", "before": "abc"},
+    {"tf": "1D", "before": ""},
+])
+def test_any_other_before_shape_is_a_400(logged_in, account, query):
+    response = logged_in.get(URL, query_string=query)
+    assert_error(response, "invalid", 400)
+    assert response.get_json()["error"]["message"].startswith("before must be")

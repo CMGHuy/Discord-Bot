@@ -20,13 +20,13 @@ The equity sparkline ships as NUMBERS, not the `<svg>` string
 and a server that ships markup has taken that decision away from it.
 """
 import json
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from tests.admin.api_v1_contract import NULLABLE_NUMBER, assert_error, assert_shape
 from tests.store_seed import seed_store
-
-_LOGIN = {"username": "admin", "password": "admin"}
 
 DASHBOARD = {
     "account_balance": NULLABLE_NUMBER,
@@ -67,7 +67,17 @@ RELOCATED = [
 
 
 @pytest.fixture
-def seed(admin_app, tmp_path):
+def seed(admin_app, tmp_path, monkeypatch):
+    from swingbot.core.analytics import snapshots
+
+    # The independently refreshed sparkline has its own per-test snapshot.
+    # A cached import-time path can otherwise point at an earlier test's
+    # deleted directory and trigger an unrelated full TradeLog refresh.
+    snapshot_path = tmp_path / "analytics_snapshot.json"
+    monkeypatch.setattr(snapshots, "DEFAULT_PATH", str(snapshot_path))
+    snapshot_path.write_text(
+        json.dumps(snapshots.build_snapshot([], 10000.0, [])), encoding="utf-8")
+
     def _seed(trades=(), plans=()):
         seed_store("plans", list(plans))
         seed_store("trades", list(trades))
@@ -76,7 +86,13 @@ def seed(admin_app, tmp_path):
 
 @pytest.fixture
 def logged_in(client):
-    client.post("/api/v1/session", json=_LOGIN)
+    from swingbot.admin import app as admin_app
+
+    response = client.post("/api/v1/session", json={
+        "username": admin_app.ADMIN_USERNAME,
+        "password": admin_app.ADMIN_PASSWORD,
+    })
+    assert response.status_code == 200
     return client
 
 
@@ -450,8 +466,9 @@ def _today_iso():
 def test_scope_defaults_to_active_and_is_echoed_back(seed, logged_in):
     seed()
     body = logged_in.get("/api/v1/dashboard").get_json()
-    assert_shape(body["scope"], {"mode": str}, where="scope")
-    assert body["scope"]["mode"] == "active"
+    assert_shape(body["scope"], {"mode": str, "from": (str, type(None)),
+                                 "to": (str, type(None))}, where="scope")
+    assert body["scope"] == {"mode": "active", "from": None, "to": None}
 
 
 def test_realized_block_is_shaped_even_with_no_trades(seed, logged_in):
@@ -605,3 +622,268 @@ def test_chips_and_realized_count_each_partial_leg_as_its_own_trade(seed, logged
     assert body["realized"]["n"] == 5
     assert (body["realized"]["wins"], body["realized"]["losses"]) == (4, 1)
     assert body["realized"]["amount"] == pytest.approx(135.0)
+
+
+# --------------------------------------------------------------- v181 mode=range
+#
+# One window threads through every consumer of `mode`: the scoped_raw
+# selection (`_scope_trades`), both `_realized_parts` calls (main and weak
+# ledger) and `_lifecycle_counts`. One test per consumer, so none of them can
+# fall through to the Berlin-day branch unnoticed -- `_lifecycle_counts`
+# swallows exceptions and would blank the strip rather than fail.
+
+RANGE_FROM = "2026-01-05T05:00:00+00:00"   # 00:00 New York, Mon 5 Jan
+RANGE_TO = "2026-01-06T05:00:00+00:00"     # 00:00 New York, Tue 6 Jan
+INSIDE = "2026-01-05T15:00:00+00:00"
+BEFORE = "2026-01-04T15:00:00+00:00"
+AFTER = "2026-01-07T15:00:00+00:00"
+
+# The scope-dependent figures, plus the point-in-time ones that must never
+# read the window (open P&L is left out: it prices open trades live).
+_PARITY_KEYS = ("win_rate", "win_rate_n", "expectancy_r", "expectancy_n",
+                "payoff_ratio", "realized", "realized_weak", "lifecycle",
+                "open_trades", "risk_used_pct", "account_balance")
+
+
+def _range(client, start=RANGE_FROM, end=RANGE_TO):
+    # query_string, not an f-string URL: a literal "+00:00" in a URL decodes
+    # to a space and the bound turns naive.
+    return client.get("/api/v1/dashboard",
+                      query_string={"mode": "range", "from": start, "to": end})
+
+
+def _berlin_today_window() -> tuple[str, str]:
+    """Berlin local midnight to the NEXT local midnight -- built from the two
+    midnights, never `+24h`, so the 23 h and 25 h DST days hold."""
+    berlin = ZoneInfo("Europe/Berlin")
+    today = datetime.now(berlin).date()
+    start = datetime.combine(today, time(0), tzinfo=berlin)
+    end = datetime.combine(today + timedelta(days=1), time(0), tzinfo=berlin)
+    return start.isoformat(), end.isoformat()
+
+
+def _weak(trade: dict) -> dict:
+    return {**trade, "ledger": "weak"}
+
+
+def test_range_scope_echoes_its_bounds(seed, logged_in):
+    seed()
+    body = _range(logged_in).get_json()
+    assert body["scope"] == {"mode": "range", "from": RANGE_FROM, "to": RANGE_TO}
+
+
+def test_other_modes_echo_null_bounds(seed, logged_in):
+    seed()
+    for mode in ("today", "all"):
+        scope = logged_in.get(f"/api/v1/dashboard?mode={mode}").get_json()["scope"]
+        assert scope == {"mode": mode, "from": None, "to": None}
+
+
+@pytest.mark.parametrize("query", [
+    {"mode": "range"},
+    {"mode": "range", "from": RANGE_FROM},
+    {"mode": "range", "to": RANGE_TO},
+    {"mode": "range", "from": "2026-01-05T05:00:00", "to": RANGE_TO},
+    {"mode": "range", "from": RANGE_TO, "to": RANGE_FROM},
+])
+def test_a_bad_range_is_a_400(seed, logged_in, query):
+    seed()
+    assert_error(logged_in.get("/api/v1/dashboard", query_string=query), "invalid", 400)
+
+
+def test_a_close_at_from_counts_and_one_at_to_does_not(seed, logged_in):
+    seed(trades=[
+        _closed("a" * 16, closed_at=RANGE_FROM, amount=10.0),
+        _closed("b" * 16, closed_at=INSIDE, amount=5.0),
+        _closed("c" * 16, closed_at=RANGE_TO, amount=999.0),
+    ])
+    realized = _range(logged_in).get_json()["realized"]
+    assert (realized["n"], realized["amount"]) == (2, 15.0)
+
+
+def test_range_scopes_the_main_ledger_realised_parts(seed, logged_in):
+    """Main `_realized_parts`: realised, win rate, expectancy and payoff."""
+    seed(trades=[
+        _closed("d" * 16, closed_at=INSIDE, amount=50.0, status="win"),
+        _closed("e" * 16, closed_at=BEFORE, amount=-20.0, status="loss", pct_exit=90.0),
+        _closed("f" * 16, closed_at=AFTER, amount=-30.0, status="loss", pct_exit=90.0),
+    ])
+    body = _range(logged_in).get_json()
+    assert body["realized"]["n"] == 1
+    assert body["realized"]["amount"] == 50.0
+    assert body["win_rate"] == 100.0
+    assert body["expectancy_n"] == 1
+
+
+def test_range_scopes_the_weak_ledger_realised_parts(seed, logged_in):
+    """Weak `_realized_parts`: the second consumer, kept apart from main."""
+    seed(trades=[
+        _weak(_closed("g" * 16, closed_at=INSIDE, amount=40.0)),
+        _weak(_closed("h" * 16, closed_at=BEFORE, amount=70.0)),
+    ])
+    body = _range(logged_in).get_json()
+    assert (body["realized_weak"]["n"], body["realized_weak"]["amount"]) == (1, 40.0)
+    assert body["realized"]["n"] == 0
+
+
+def test_range_scopes_the_lifecycle_closed_and_cancelled_counts(seed, logged_in):
+    from tests.admin.test_api_v1_trades import _plan, _trade
+
+    inside = _trade("aaaaaaaaaaaaaaaa", status="win")
+    inside["closed_at"] = INSIDE
+    outside = _trade("bbbbbbbbbbbbbbbb", status="loss")
+    outside["closed_at"] = AFTER
+    cancelled_in = _plan("11111111-1111-4111-8111-111111111111", status="CANCELLED")
+    cancelled_in["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": INSIDE}]
+    cancelled_out = _plan("22222222-2222-4222-8222-222222222222", status="CANCELLED")
+    cancelled_out["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": BEFORE}]
+    seed(plans=[cancelled_in, cancelled_out], trades=[inside, outside])
+
+    lifecycle = _range(logged_in).get_json()["lifecycle"]
+    assert (lifecycle["CLOSED"], lifecycle["CANCELLED"]) == (1, 1)
+
+
+def test_range_scopes_the_trades_get_stats_reads(seed, logged_in, monkeypatch):
+    """`scoped_raw` (`_scope_trades`): every open trade, however old, plus the
+    closes in the window -- the same rule `mode=today` applies to its day."""
+    from swingbot.core.tracking.performance import TradeLog
+    from tests.admin.test_api_v1_trades import _trade
+
+    seed(trades=[
+        _trade("aaaaaaaaaaaaaaaa", status="open"),
+        _closed("b" * 16, closed_at=INSIDE, amount=5.0),
+        _closed("c" * 16, closed_at=AFTER, amount=5.0),
+    ])
+    seen = []
+    original = TradeLog.get_stats
+
+    def spy(self, *args, **kwargs):
+        seen.append(sorted(t["id"] for t in kwargs.get("trades") or []))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(TradeLog, "get_stats", spy)
+    assert _range(logged_in).status_code == 200
+    # `in`, not `==`: another collector may call get_stats without `trades`.
+    assert ["aaaaaaaaaaaaaaaa", "b" * 16] in seen
+    assert not any("c" * 16 in ids for ids in seen)
+
+
+def test_scope_trades_never_falls_through_to_today(admin_app):
+    """Unit check on the helper itself: with a window, a close today but
+    outside the window is out, whatever `mode` says."""
+    from datetime import timezone as tz
+
+    from swingbot.admin.api_v1.closed_window import ClosedWindow
+    from swingbot.admin.api_v1.dashboard import _scope_trades
+
+    window = ClosedWindow(datetime(2026, 1, 5, 5, tzinfo=tz.utc),
+                          datetime(2026, 1, 6, 5, tzinfo=tz.utc))
+    trades = [
+        {"id": "open", "status": "open", "closed_at": None},
+        {"id": "in", "status": "win", "closed_at": INSIDE},
+        {"id": "today", "status": "win", "closed_at": _today_iso()},
+    ]
+    assert [t["id"] for t in _scope_trades(trades, "range", window)] == ["open", "in"]
+    assert [t["id"] for t in _scope_trades(trades, "all", None)] == ["open", "in", "today"]
+    assert [t["id"] for t in _scope_trades(trades, "today", None)] == ["open", "today"]
+
+
+def _parity_book():
+    """A today win and loss, an old loss, an open trade, a weak close today
+    and a plan cancelled today -- every consumer has something to count."""
+    from tests.admin.test_api_v1_trades import _plan, _trade
+
+    today = _today_iso()
+    cancelled = _plan("11111111-1111-4111-8111-111111111111", status="CANCELLED")
+    cancelled["status_history"] = [{"status": "CANCELLED", "reason": "expired", "at": today}]
+    return {
+        "plans": [cancelled],
+        "trades": [
+            _closed("a" * 16, closed_at=today, amount=50.0, status="win"),
+            _closed("b" * 16, closed_at=today, amount=-20.0, status="loss", pct_exit=90.0),
+            _closed("c" * 16, closed_at="2026-01-05T15:00:00+00:00", amount=-30.0,
+                    status="loss", pct_exit=90.0),
+            _trade("dddddddddddddddd", status="open"),
+            _weak(_closed("e" * 16, closed_at=today, amount=15.0)),
+        ],
+    }
+
+
+def test_a_berlin_day_window_equals_mode_today(seed, logged_in):
+    seed(**_parity_book())
+    start, end = _berlin_today_window()
+    ranged = _range(logged_in, start, end).get_json()
+    today = logged_in.get("/api/v1/dashboard?mode=today").get_json()
+    assert {k: ranged[k] for k in _PARITY_KEYS} == {k: today[k] for k in _PARITY_KEYS}
+    assert ranged["realized"]["n"] == 2
+
+
+def test_a_window_over_all_history_equals_mode_all(seed, logged_in):
+    seed(**_parity_book())
+    ranged = _range(logged_in, "2000-01-01T00:00:00+00:00", "2100-01-01T00:00:00+00:00").get_json()
+    all_days = logged_in.get("/api/v1/dashboard?mode=all").get_json()
+    assert {k: ranged[k] for k in _PARITY_KEYS} == {k: all_days[k] for k in _PARITY_KEYS}
+    assert ranged["realized"]["n"] == 3
+
+
+def test_range_mode_reads_the_trade_log_once(seed, logged_in, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+
+    seed()
+    calls = []
+    original = TradeLog.get_trades
+
+    def counting(self, *args, **kwargs):
+        calls.append(kwargs.get("status"))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(TradeLog, "get_trades", counting)
+    assert _range(logged_in).status_code == 200
+    assert len(calls) == 1, f"get_trades called {len(calls)} times: {calls}"
+
+
+def test_range_scope_normalizes_offset_bounds_to_utc(seed, logged_in):
+    seed()
+    scope = _range(logged_in, "2026-01-05T00:00:00-05:00",
+                   "2026-01-06T00:00:00-05:00").get_json()["scope"]
+    assert scope == {"mode": "range", "from": RANGE_FROM, "to": RANGE_TO}
+
+
+def test_empty_range_keeps_current_positions_without_realized_closes(seed, logged_in):
+    from tests.admin.test_api_v1_trades import _trade
+
+    seed(trades=[_trade("a" * 16, status="open"),
+                 _closed("b" * 16, closed_at=RANGE_FROM, amount=10.0)])
+    body = _range(logged_in, RANGE_FROM, RANGE_FROM).get_json()
+    assert body["realized"]["n"] == 0
+    assert body["realized"]["amount"] is None
+    assert body["open_trades"] == 1
+    assert body["lifecycle"]["CLOSED"] == 0
+
+
+def test_range_counts_partial_legs_by_their_own_close(seed, logged_in):
+    from tests.admin.test_api_v1_trades import _plan
+
+    runner_plan = _plan("11111111-1111-4111-8111-111111111111", status="PARTIAL")
+    late_plan = _plan("22222222-2222-4222-8222-222222222222", status="CLOSED")
+    runner = _closed("a" * 16, closed_at=None, amount=None, pct_exit=None)
+    runner.update(status="open", legs=[{
+        "fraction": 0.5, "exit_price": 110.0, "r": 2.0, "closed_at": INSIDE,
+    }])
+    late = _closed("b" * 16, closed_at=AFTER, amount=75.0, pct_exit=107.5)
+    late["legs"] = [
+        {"fraction": 0.5, "exit_price": 110.0, "r": 2.0, "closed_at": INSIDE},
+        {"fraction": 0.5, "exit_price": 105.0, "r": 1.0, "closed_at": AFTER},
+    ]
+    # Real scaled-out trades carry their plan join and the plan's matching
+    # legs; the lifecycle strip expands those plan rows, as the table does.
+    for trade, plan in ((runner, runner_plan), (late, late_plan)):
+        trade["plan_id"] = plan["plan_id"]
+        plan.update(entry_price=100.0, legs_realized=trade["legs"])
+    seed(trades=[runner, late], plans=[runner_plan, late_plan])
+    body = _range(logged_in).get_json()
+    assert body["realized"]["n"] == 2
+    assert body["realized"]["amount"] == pytest.approx(100.0)
+    assert body["win_rate_n"] == 2
+    assert body["expectancy_n"] == 2
+    assert body["lifecycle"]["CLOSED"] == 2

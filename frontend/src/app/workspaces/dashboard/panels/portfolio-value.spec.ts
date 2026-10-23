@@ -12,7 +12,7 @@ import { PortfolioValue } from './portfolio-value';
 installMatchMediaPolyfill();
 
 const CANDLES: EquityCandlesResponse = {
-  tf: '1D', basis: 'mtm', currency_symbol: '€', recording_since: '2026-10-20T13:35:00Z',
+  tf: '1D', basis: 'mtm', currency_symbol: '€', has_more: false, recording_since: '2026-10-20T13:35:00Z',
   as_of: '2026-10-21T14:35:00Z',
   candles: [{ t: '2026-10-20', o: 100, h: 120, l: 90, c: 110, change: 10, change_pct: 10,
               samples: 4, skipped: 0, approx: false }],
@@ -34,6 +34,11 @@ describe('portfolio value panel', () => {
     f.detectChanges();
     return f.nativeElement as HTMLElement;
   }
+
+  it('leaves a flat day uncoloured', () => {
+    const change = render({ balance: 1, changePct: 0, currency: '€' }).querySelector('.change')!;
+    expect(change.classList.contains('pos') || change.classList.contains('neg')).toBe(false);
+  });
 
   it('shows the balance as the hero figure with its currency', () => {
     const el = render({ balance: 997480.01, changePct: 0.36, currency: '€' });
