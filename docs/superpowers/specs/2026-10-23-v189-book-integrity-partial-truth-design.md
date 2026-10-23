@@ -189,7 +189,7 @@ ExpR is unaffected by labels, so it stays the comparison to quote across the dep
 
   - **`pnl_pct` basis.** Realized dollars over the entry notional of the **whole** position (100 × 100 = $10,000), which is today's `closed_pnl_pct` basis.
   - **Risk of loss** is $0 in both open cases. **Open profit to stop** at 113 is $316.67.
-  - The calendar assertion uses a **two-trade day** (the golden trade plus a −1R single-leg loss), so its win rate is 50%, not a degenerate 0 or 100.
+  - The calendar assertion uses a day holding the golden manual-close trade plus a −1R single-leg loss. The calendar counts **each leg** as a row (the leg-vs-trade unit is the metric spec's question), so the day has 3 rows with a win rate of 66.67%, not a degenerate 0 or 100.
   - **A seventh case** supplies a leg with `r` absent, to exercise `r_multiple`'s derive-from-exit-price branch.
   - **The parity pin.** The gap case's backtest label (`exit_sim_v2`) is asserted to stay `win`.
 - **D2.** A label table over net R of +0.02, +0.005, 0, −0.005 and −0.02, across all three close paths. A missing risk basis falls back to today's rule with a warning.

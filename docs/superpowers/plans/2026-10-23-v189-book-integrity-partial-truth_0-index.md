@@ -187,7 +187,7 @@ def label_counts(closed: list[dict]) -> dict[str, int]    # {"scratch": n, "unsc
   "missing_leg_r_case": {"legs": [{"fraction": 0.5, "exit_price": 110.0}, {"fraction": 0.5, "exit_price": 115.0}], "net_r": 2.5},
   "calendar_day": {"golden_case": "manual",
                    "other_trade": {"ticker": "LOSS", "direction": "bullish", "shares": 100, "entry": 50.0, "stop_loss": 48.0, "exit_price": 48.0, "status": "loss"},
-                   "net_r": 1.5, "net_pnl_amount": 1050.0, "trade_count": 2, "win_rate": 50.0},
+                   "net_r": 1.5, "net_pnl_amount": 1050.0, "trade_count": 3, "win_rate": 66.66666666666667},
   "label_table": [
     {"net_r": 0.02, "status": "win", "close_reason": null},
     {"net_r": 0.005, "status": "closed", "close_reason": "scratch"},
@@ -198,7 +198,7 @@ def label_counts(closed: list[dict]) -> dict[str, int]    # {"scratch": n, "unsc
 }
 ```
 
-V189-2 verifies `calendar_day.trade_count` and `win_rate` against `pnl_calendar`'s existing day semantics before committing the file; any different reading of those two keys is a stop-and-ask, not an edit.
+V189-2 verifies `calendar_day.trade_count` and `win_rate` against `pnl_calendar`'s existing day semantics before committing the file; any different reading of those two keys is a stop-and-ask, not an edit. **Resolved by V189-2 (part 1):** `pnl_calendar` makes each leg its own row, so the golden manual-close day is 3 rows (TP1 leg win, runner leg win, −1R loss): `trade_count` 3, `win_rate` 66.67. That is the only reading consistent with `net_r` 1.5 and `net_pnl_amount` 1050.
 
 ### Locks and the guarded store (V189-5, V189-6)
 
@@ -408,7 +408,8 @@ At most two `task-implementer`s at once; two tasks that share a file never run t
 |---|---|---|---|
 | 1 | `2026-10-23-v189-book-integrity-partial-truth_1-metrics-and-calendar.md` | V189-1..V189-4 | worktree and prod-db replica; one R and leg contribution; net-R labels and the golden fixture with the backtest parity pin; retrospective on `metrics.r_multiple`; Calendar sums contributions |
 | 2 | `2026-10-23-v189-book-integrity-partial-truth_2-locked-writes.md` | V189-5..V189-7 | per-path lock timeouts and `get_for_update`; the guarded `PlanStore.update` with race tests; `conn=` through TradeLog and the account balance, hooks after commit |
-| 3 | `2026-10-23-v189-book-integrity-partial-truth_3-plan-manager-transactions.md` | V189-8..V189-10 | TP1 leg and fill in the plan's transaction; abort semantics; exit retry and ops notice; stop-first ordering, lock skip and finite-quote guards; net-R labels on runner and time-exit closes |
+| 3 | `2026-10-23-v189-book-integrity-partial-truth_3-plan-manager-transactions.md` | V189-8..V189-9 | TP1 leg and fill in the plan's transaction; abort semantics; exit retry and ops notice; stop-first ordering, lock skip and finite-quote guards; net-R labels on runner and time-exit closes |
+| 3b | `2026-10-23-v189-book-integrity-partial-truth_3b-net-labels.md` | V189-10 | runner and time-exit closes labelled by net R (`_plan_outcome`) |
 | 4 | `2026-10-23-v189-book-integrity-partial-truth_4-book-fixes.md` | V189-11..V189-14 | manual close in one transaction with the A2 runner leg; plan links, reversal against a placeholder; `cancelled_trade_deleted` vocabulary; deletes end linked plans with honest confirmations |
 | 5 | `2026-10-23-v189-book-integrity-partial-truth_5-account-reset.md` | V189-15..V189-17 | archived full reset with reseed and kill-switch refusal; admin and Discord surfaces with `force`; restore script and deploy-doc paragraph |
 | 6 | `2026-10-23-v189-book-integrity-partial-truth_6-partial-display-api.md` | V189-18..V189-20 | trades rows (`entry_shares`, `banked_contribution_r`, blended open R); risk of loss beside enforced heat and the heat-blocked line; analytics label-basis counts |
@@ -427,7 +428,7 @@ At most two `task-implementer`s at once; two tasks that share a file never run t
 | V189-7 | One transaction for TradeLog and the balance; hooks after commit | 2 | opus | M `swingbot/core/planning/account.py`, `swingbot/core/tracking/performance.py`, `tests/tracking/test_close_trade_manual_exit_price.py` (doubles only if needed); C `tests/tracking/test_tradelog_conn.py` | `conn=` on `_sum_realized_pnl`, `load_account_config`, `save_account_config`, `apply_realized_pnl`, `_settle_account_balance`, `append_leg_by_plan`, `record_plan_fill`, `discard_plan_placeholder`; `close_plan_trade(..., close_reason=None, after_commit=None) -> dict \| None`; `run_after_commit(callbacks)` |
 | V189-8 | Plan manager: TP1 leg and fill commit with the plan; aborts emit nothing | 3 | opus | M `swingbot/core/planning/plan_manager.py`; C `tests/planning/test_plan_manager_atomic_writes.py` | `PlanWriteAborted`, `PlanPersistFailed`, `_save`, `_persist_fill`, `_persist_partial`, `_persist_terminal(plan, leg, status, close_reason=None)` with after-commit hooks; `_on_event` no longer writes legs or fills |
 | V189-9 | Exit retry and ops notice; lock skip, stop-first order, finite quotes | 3 | opus | M `swingbot/core/planning/plan_manager.py`, `swingbot/commands/scanning/loops.py`; C `tests/planning/test_plan_manager_exit_retry.py`, `tests/planning/test_plan_manager_quote_guard.py` | `take_exit_failures() -> list[dict]`, `_step_safely`, `_ordered`, `_usable_price`; `loops._post_exit_failures(failures)` |
-| V189-10 | Runner and time-exit closes labelled by net R | 3 | opus | M `swingbot/core/planning/plan_manager.py`; C `tests/planning/test_plan_manager_net_labels.py` | `_plan_outcome(plan) -> tuple[str, str \| None]`; `_close_runner` / `_close_time_exit` pass `close_reason` |
+| V189-10 | Runner and time-exit closes labelled by net R | 3b | opus | M `swingbot/core/planning/plan_manager.py`; C `tests/planning/test_plan_manager_net_labels.py` | `_plan_outcome(plan) -> tuple[str, str \| None]`; `_close_runner` / `_close_time_exit` pass `close_reason` |
 | V189-11 | Manual close in one transaction; the runner leg reaches the plan | 4 | opus | M `swingbot/core/tracking/performance.py`, `swingbot/admin/api_v1/trade_commands.py`; C `tests/admin/test_close_plan_atomic.py`, `tests/tracking/test_manual_close_labels.py` | `close_trade_manual(..., conn=None, after_commit=None)` labels by `net_outcome` when >= 2 legs; `_close_plan` network-first then one tx |
 | V189-12 | Plan links; a reversal never books a never-filled placeholder | 4 | opus | C `swingbot/core/tracking/plan_links.py`, `tests/tracking/test_plan_links.py`, `tests/scanning/test_reversal_placeholder.py`; M `swingbot/core/tracking/performance.py`, `swingbot/core/scanning/scan_run.py` | `LINKED_TERMINAL`, `EndedPlan`, `DeleteResult`, `TRADE_DELETED_EVENT`, `end_linked_plan`, `cancel_if_unfilled`; `_close_linked_plan_safely(plan_id, reason, *, conn=None)`; `scan_run._settle_reversal` |
 | V189-13 | The cancelled_trade_deleted event across the vocabulary | 4 | sonnet | M `swingbot/core/planning/plan_manager.py`, `swingbot/core/presentation/instructions.py`, `swingbot/core/scanning/lifecycle_embeds.py`, `swingbot/core/scanning/execution_embeds.py`, `swingbot/core/planning/session_expiry.py`, `swingbot/commands/scanning/follow_notify.py`; C `tests/presentation/test_trade_deleted_cancel_vocab.py` | `cancelled_trade_deleted` in `PENDING_CANCEL_EVENTS`; `session_expiry.TRADE_DELETED`; `_trade_deleted_fields` |
