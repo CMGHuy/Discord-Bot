@@ -148,7 +148,9 @@ const LABELS: Record<IconName, string> = {
     }
   `,
   styles: `
-    :host { display: inline-flex; line-height: 0; }
+    /* vertical-align centres an icon set inline in running text on that
+       text; in a flex row (every current use) it is ignored. */
+    :host { display: inline-flex; line-height: 0; vertical-align: middle; }
   `,
 })
 export class Icon {
