@@ -767,3 +767,112 @@ def test_short_hypothesis_names_the_direction_and_validates():
     row = screen_idea.ledger_row(idea, v, "docs/superpowers/results/x.md", "2026-10-21")
     stats.validate_ledger_row(row)
     assert row["hypothesis"] == text
+
+
+def _level_probe():
+    """A short sell-stop half an ATR under the prior close, every 7th bar; never registered."""
+    def levels(df):
+        atr = screen_idea.indicators.atr(df)
+        return df["Close"].shift(1) - 0.5 * atr.shift(1)
+
+    def events(df):
+        every = pd.Series(np.arange(len(df)) % 7 == 0, index=df.index)
+        return (every & (df["Low"] < levels(df))).fillna(False)
+
+    return Idea(name="level_probe", events=events, time_cap_bars=20, direction="short",
+                entry="level", levels=levels, summary="probe", source="test")
+
+
+def test_raw_levels_only_for_a_level_idea():
+    df = random_walk(400)
+    assert screen_idea.raw_levels(IDEAS["turn_of_month"], df) is None
+    assert screen_idea.raw_levels(_short_probe(), df) is None
+    probe = _level_probe()
+    assert np.array_equal(screen_idea.raw_levels(probe, df),
+                          probe.levels(df).to_numpy(dtype=float), equal_nan=True)
+
+
+def test_event_rows_enter_on_the_event_bar_in_level_mode():
+    index = pd.bdate_range("2015-01-05", periods=8)
+    kept = race_mod.RaceResult(np.array([3]), np.array([5]), np.array([99.0]),
+                               np.array([3.0]), np.array([0.5]), np.array([0.4]),
+                               np.array(["timeout"]))
+    level = screen_idea._event_rows("AAA", index, kept, [0.1], entry_offset=0)
+    plain = screen_idea._event_rows("AAA", index, kept, [0.1])
+    assert level[0]["entry_date"] == "2015-01-08" and plain[0]["entry_date"] == "2015-01-09"
+    assert level[0]["exit_date"] == plain[0]["exit_date"] == "2015-01-12"
+
+
+def test_a_level_screen_enters_on_the_event_bar():
+    df = random_walk(2600)
+    probe = _level_probe()
+    out = screen_idea.screen_ticker(probe, "AAA", df, ALWAYS)
+    assert out.events                                                  # non-vacuous
+    event_days = set(df.index[probe.events(df).to_numpy()].strftime("%Y-%m-%d"))
+    assert {row["entry_date"] for row in out.events} <= event_days
+
+
+def test_a_level_screen_passes_levels_to_the_book_and_depth_to_the_null(monkeypatch):
+    seen = {"book": [], "null": []}
+    real_book, real_null = race_mod.run_book, null.matched_null
+
+    def book_spy(*args, **kwargs):
+        seen["book"].append(kwargs)
+        return real_book(*args, **kwargs)
+
+    def null_spy(*args, **kwargs):
+        seen["null"].append((len(args[1]), kwargs))
+        return real_null(*args, **kwargs)
+
+    monkeypatch.setattr(race_mod, "run_book", book_spy)
+    monkeypatch.setattr(null, "matched_null", null_spy)
+    df = random_walk(2600)
+    for idea in (IDEAS["turn_of_month"], _short_probe()):
+        screen_idea.screen_ticker(idea, "AAA", df, ALWAYS)
+    assert all(not ({"levels", "level_factor"} & set(kw)) for kw in seen["book"])
+    assert all(not ({"depth", "level_factor"} & set(kw)) for _, kw in seen["null"])
+    seen["book"].clear()
+    seen["null"].clear()
+    screen_idea.screen_ticker(_level_probe(), "AAA", df, ALWAYS)
+    assert [kw["level_factor"] for kw in seen["book"]] == [2.0, 3.0]     # book, repriced
+    assert seen["book"][0]["levels"] is not None
+    for n_events, kw in seen["null"]:
+        assert len(kw["depth"]) == n_events and kw["direction"] == "short"
+    assert [kw["level_factor"] for _, kw in seen["null"]] == [2.0, 3.0]
+
+
+def test_level_depths_slots_and_unfilled_are_reported():
+    df = random_walk(2600)
+    out = screen_idea.screen_ticker(_level_probe(), "AAA", df, ALWAYS)
+    assert len(out.depths["event"]) == len(out.events)
+    assert min(out.depths["event"]) >= 0.0
+    assert len(out.depths["null"]) == sum(out.null_outcomes.values())
+    assert out.null_slots > 0 and 0 <= out.null_unfilled <= out.null_slots
+    plain = screen_idea.screen_ticker(_short_probe(), "AAA", df, ALWAYS)
+    assert plain.depths is None and plain.repriced is None and plain.null_unfilled == 0
+
+
+def test_the_repriced_book_is_the_same_events_at_three_times_slippage():
+    df = random_walk(2600)
+    out = screen_idea.screen_ticker(_level_probe(), "AAA", df, ALWAYS)
+    assert [r["entry_date"] for r in out.repriced] == [r["entry_date"] for r in out.events]
+    for at3, at2 in zip(out.repriced, out.events):
+        assert at3["r_event"] < at2["r_event"] and at3["r_null"] < at2["r_null"]
+
+
+def test_short_level_trade_line():
+    assert screen_idea._render_trade(_level_probe(), RUN_INFO) == (
+        "**Trade:** short; sell-stop resting at the level (known from bars <= t-1), placed "
+        "before bar t opens, valid one bar; fills at the lower of the open and the level, "
+        "entry slippage 2.0 x base; stop 1.5 x ATR14[t-1] above; target 3.0 x ATR14[t-1] "
+        "below; on the fill bar only the stop counts (a high at or above it exits at the "
+        "stop); from bar t+1 a gap through either level fills at the open; stop first on a "
+        "bar touching both; borrow 0.5% a year on calendar days held; "
+        "costs 5.0 bps a side + 0.0200R commission.")
+
+
+def test_short_level_hypothesis():
+    assert screen_idea.hypothesis(_level_probe()) == (
+        "level_probe: probe; SHORT, sell-stop at the level, filled on the event bar, fixed "
+        "1.5/3.0 ATR race vs K=20 matched null raced short, cap 20, borrow 0.5% a year, PIT "
+        "S&P 500 2010-2019, after costs (v182 short screen)")

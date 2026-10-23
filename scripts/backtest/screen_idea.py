@@ -106,11 +106,19 @@ class TickerScreen:
     null_timeout_r: list = field(default_factory=list)   # v163: trail only, net R per null timeout
     stressed: list | None = None                          # v163: trail only, 2 x slippage pairs
     restricted: list | None = None                        # v174: context only, null pool off shock windows
+    null_slots: int = 0                                   # v182: null bars drawn
+    null_unfilled: int = 0                                # v182: null bars whose order never filled
+    depths: dict | None = None                            # v182: level only, {"event": [...], "null": [...]}
+    repriced: list | None = None                          # v182: level only, 3 x slippage pairs
 
 
-def _event_rows(ticker, index, kept, null_mean_r) -> list:
+#: v182: bars from the event bar to the entry bar, per entry mode.
+_ENTRY_OFFSET = {"next_open": 1, "level": 0}
+
+
+def _event_rows(ticker, index, kept, null_mean_r, entry_offset: int = 1) -> list:
     return [{"ticker": ticker,
-             "entry_date": index[pos + 1].strftime("%Y-%m-%d"),
+             "entry_date": index[pos + entry_offset].strftime("%Y-%m-%d"),
              "exit_date": index[out].strftime("%Y-%m-%d"),
              "r_event": float(r), "r_null": float(m), "outcome": str(o)}
             for pos, out, r, m, o in zip(kept.event_pos, kept.exit_pos, kept.r,
@@ -125,23 +133,37 @@ def _rank_frame(index, raw, population, fwd) -> pd.DataFrame:
     return pd.DataFrame(columns)
 
 
+def _event_depths(df: pd.DataFrame, event_pos, ctx: dict, direction: str) -> np.ndarray:
+    """v182: each event's fill depth in ATR14[t-1]; empty for no events."""
+    if len(event_pos) == 0:
+        return np.array([], dtype=float)
+    return race.level_fills(df, event_pos, ctx["levels"], ctx["atr"], direction)[1]
+
+
 def _books(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
-           exclude: np.ndarray | None = None):
+           exclude: np.ndarray | None = None,
+           level_factor: float = race.LEVEL_SLIPPAGE_FACTOR):
     """The kept event book, its counters and its matched null at one cost
     setting, both raced under the idea's own shape (v163). ``exclude`` drops
     bars from the null pool only (v174 restricted null); the event book and
-    the seed are the same either way."""
+    the seed are the same either way.
+    v182: a level idea (ctx["levels"]) books and nulls in level mode at level_factor x base entry slippage."""
     cap, shape = idea.time_cap_bars, idea.race_shape
+    levels = ctx.get("levels")
+    book_kw = {} if levels is None else {"levels": levels, "level_factor": level_factor}
     booked, counts = race.run_book(df, ctx["raw"], cap, member=ctx["member"],
                                    warm=ctx["warm"], atr=ctx["atr"], shape=shape,
-                                   direction=idea.direction, **costs)
+                                   direction=idea.direction, **costs, **book_kw)
     eligible = null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], cap)
     if exclude is not None:
         eligible = eligible & ~exclude
+    null_kw = {} if levels is None else {
+        "depth": _event_depths(df, booked.event_pos, ctx, idea.direction),
+        "level_factor": level_factor}
     draw = null.matched_null(df, booked.event_pos, eligible,
                              null.K, null.null_seed(idea.name, ticker), cap=cap,
                              atr=ctx["atr"], trend=ctx["trend"], shape=shape,
-                             direction=idea.direction, **costs)
+                             direction=idea.direction, **costs, **null_kw)
     counts["dropped_no_match"] = draw.dropped_no_match
     return booked.take(np.isin(booked.event_pos, draw.event_pos)), counts, draw
 
@@ -166,6 +188,30 @@ def _stressed(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict)
     kept, _, draw = _books(idea, ticker, df, ctx, stress)
     return [{"entry_date": row["entry_date"], "r_event": row["r_event"], "r_null": row["r_null"]}
             for row in _event_rows(ticker, df.index, kept, draw.null_mean_r)]
+
+
+def _repriced(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
+    """Level only (v182): the same events -- exits, overlap and the seeded
+    draw do not depend on slippage -- repriced at REPRICE_SLIPPAGE_FACTOR x
+    base entry slippage. Printed, never gating."""
+    if idea.entry != "level":
+        return None
+    kept, _, draw = _books(idea, ticker, df, ctx, costs,
+                           level_factor=race.REPRICE_SLIPPAGE_FACTOR)
+    return [{"entry_date": row["entry_date"], "r_event": row["r_event"], "r_null": row["r_null"]}
+            for row in _event_rows(ticker, df.index, kept, draw.null_mean_r, entry_offset=0)]
+
+
+def _level_report(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
+                  kept, draw) -> dict:
+    """v182: null slot and unfilled counts; depths and the 3 x book for a level idea."""
+    depths = None
+    if idea.entry == "level":
+        depths = {"event": [float(x) for x in
+                            _event_depths(df, kept.event_pos, ctx, idea.direction)],
+                  "null": [float(x) for x in draw.null_depths]}
+    return {"null_slots": draw.null_slots, "null_unfilled": draw.null_unfilled,
+            "depths": depths, "repriced": _repriced(idea, ticker, df, ctx, costs)}
 
 
 def _restricted(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
@@ -202,6 +248,14 @@ def raw_events(idea: Idea, df: pd.DataFrame, context: Mapping | None) -> pd.Seri
     return _EVENT_CALLS[bool(idea.context)](idea, df, context).reindex(df.index, fill_value=False)
 
 
+def raw_levels(idea: Idea, df: pd.DataFrame) -> np.ndarray | None:
+    """v182: the idea's resting-order levels on the ticker's own index (NaN
+    where it has none); ``None`` for a next-open idea."""
+    if idea.entry != "level":
+        return None
+    return idea.levels(df).reindex(df.index).to_numpy(dtype=float)
+
+
 def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
                   slippage_bps=None, commission=None,
                   context: Mapping | None = None) -> TickerScreen:
@@ -212,20 +266,22 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
     warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
     ctx = {"raw": np.asarray(raw_events(idea, df, context), dtype=bool),
            "member": member, "warm": warm, "atr": atr,
-           "trend": null.trend_state(df, sma200)}
+           "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df)}
     kept, counts, draw = _books(idea, ticker, df, ctx, costs)
     fwd = {h: forward.forward_atr(df, atr, h, direction=idea.direction)
            for h in forward.HORIZONS}
     return TickerScreen(
         ticker=ticker, counters=Counter(counts),
-        events=_event_rows(ticker, df.index, kept, draw.null_mean_r),
+        events=_event_rows(ticker, df.index, kept, draw.null_mean_r,
+                           entry_offset=_ENTRY_OFFSET[idea.entry]),
         null_outcomes=Counter(draw.null_race.outcome.tolist()),
         excess={h: forward.excess_drift(fwd[h], draw.event_pos, draw.groups)
                 for h in forward.HORIZONS},
         rank=_rank_frame(df.index, ctx["raw"], member & warm, fwd),
         null_timeout_r=_null_timeout_r(idea, draw),
         stressed=_stressed(idea, ticker, df, ctx, costs),
-        restricted=_restricted(idea, ticker, df, ctx, costs))
+        restricted=_restricted(idea, ticker, df, ctx, costs),
+        **_level_report(idea, ticker, df, ctx, costs, kept, draw))
 
 
 def _spy_calendar(cache_dir, end: str) -> pd.DataFrame:
@@ -519,8 +575,22 @@ def _short_borrow() -> str:
     return f"borrow {BORROW_RATE_ANNUAL:.1%} a year on calendar days held; "
 
 
+def _short_level_line(costs: str) -> str:
+    """v182: the short sell-stop (level entry) trade line."""
+    return ("**Trade:** short; sell-stop resting at the level (known from bars <= t-1), "
+            "placed before bar t opens, valid one bar; fills at the lower of the open and "
+            f"the level, entry slippage {race.LEVEL_SLIPPAGE_FACTOR} x base; stop "
+            f"{race.STOP_ATR} x ATR14[t-1] above; target "
+            f"{race.STOP_ATR * race.REWARD_RISK} x ATR14[t-1] below; on the fill bar only "
+            "the stop counts (a high at or above it exits at the stop); from bar t+1 a gap "
+            "through either level fills at the open; stop first on a bar touching both; "
+            + _short_borrow() + costs)
+
+
 def _short_trade_line(idea, costs: str) -> str:
     """v182: the short trade line, the exact mirror of the long one plus borrow."""
+    if idea.entry == "level":
+        return _short_level_line(costs)
     if idea.race_shape == "trail":
         return ("**Trade:** short; entry next open (sell); initial stop "
                 f"{race.STOP_ATR} x ATR14[t] above (1R); no target; chandelier trail: "
