@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-21 21:03:55 UTC",
+  "generated_at": "2026-10-23 12:14:03 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.34.0",
+    "ui": "1.35.0",
     "bot": "2.14.3"
   },
   "releases": [
@@ -2015,6 +2015,19 @@
       "subject": "release(ui): 1.34.0 -- phone tables become two-line rows with a drawer; Dashboard trades open in a drawer; one look per primitive",
       "versions": {
         "ui": "1.34.0",
+        "bot": "2.14.3"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-23",
+      "last_seen": "2026-10-23",
+      "commit": "cea9f60b",
+      "subject": "release(ui): 1.35.0 -- dashboard scope presets, range chart with history paging and auto timeframe, P&L colour (v181)",
+      "versions": {
+        "ui": "1.35.0",
         "bot": "2.14.3"
       },
       "changed": [
