@@ -36,7 +36,7 @@ Alpaca serves bars from 2016-01-04 for S&P members that were later **delisted**.
 3. **Instrument v3** *(partner)*: v2's contract (fills, costs, PIT masking, causal liquidity floor, purge, embargo, holdout guard) with:
    - store = the PIT Alpaca store;
    - `warmup_start` = 2016-01-04;
-   - research 2017-01-01..2025-12-31 on purged anchored yearly folds;
+   - research 2017-01-01..2025-12-31 on purged anchored yearly folds (test years 2021–2025);
    - `holdout_start` = 2026-01-01.
 4. **No silent change to existing runs.** v1 and v2 runs read exactly the data they read today, and the default ticker list of every script is unchanged.
 5. **A describe-only, powered re-baseline** *(partner)*: every live strategy and confluence under v3, next to the same code under v1 on the watchlist, with N, WR, ExpR, the per-year and per-fold splits, and the MDE each now reaches. It is recorded as a description of the new instrument and decides nothing.
@@ -63,7 +63,7 @@ Alpaca serves bars from 2016-01-04 for S&P members that were later **delisted**.
 ### §1 The store: `data/market_data_pit/`
 
 - Same layout and manifests as the v162 store: `<root>/<timeframe>/<TICKER>.csv`, with **one** `_manifest.json` per timeframe, rewritten after each ticker. Written by `scripts/data/fetch_alpaca_history.py --root data/market_data_pit --backtest-dir data/backtest_cache_ext`. Git-ignored (`24612ce5`).
-- **Three passes, daily first** *(Claude's call)*. The daily pass unblocks §5; the 15-min pass is the long one (a day or more of wall time). Each pass resumes after a kill.
+- **Three member passes, daily first** *(Claude's call)*, **then one context pass**: SPY, the regime ticker and every `data/universe/etfs.json` symbol, all three timeframes (§4). The daily pass and the context pass's daily bars unblock §5; the 15-min pass is the long one (a day or more of wall time). Each pass resumes after a kill.
 - **One fetcher per root at a time.** Each process loads and rewrites the whole per-timeframe manifest (`fetch_alpaca_history.py:159-165`, `store_io.py:101-112`), so two processes on one root lose each other's entries. The plan's first data task waits for the backfill started 2026-10-24 to finish, then verifies and completes it. It never runs a concurrent pass or `--mode update` beside it.
 - **Guards unchanged**: the US-regular-session refusal, the 3 GB disk floor, 120 requests a minute (the key is shared with the live bot on the VM).
 - **Refresh on demand** with `--mode update`, locally, no schedule.
@@ -74,17 +74,38 @@ Alpaca serves bars from 2016-01-04 for S&P members that were later **delisted**.
 
 A `--pit` mode on the existing `scripts/data/check_history_store.py` (which already takes `--root` and runs row-count, gap and hash checks, `check_history_store.py:180-194`). It writes `data/market_data_pit/_integrity.json` and a Markdown summary under `docs/superpowers/results/`. Its output feeds two separate mechanisms, named in §3: **frame trims** (bars removed before any indicator reads them) and **signal-span cuts** (dates removed from the membership mask).
 
-1. **Coverage → signal-span cut.** For each membership span clipped to 2016-01-04..2025-12-31, the report records expected sessions (`swingbot/core/market/session.py`), daily bars present, share present, and the first and last bar. A span under 95% coverage *(Claude's call)* is removed from that ticker's signal spans. The rest of the ticker stays usable.
+1. **Coverage → date-range cuts, causal.** For each membership span clipped to 2016-01-04..2025-12-31, the report records expected sessions (`swingbot/core/market/session.py`), daily bars present, the first and last bar, and every run of missing sessions. **No whole-span verdict**, because a span-level share is lookahead: a 2017 date's admission would depend on bars missing in 2024, and the ragged tails of delisted names would push them out of the mask, rebuilding survivorship (quant-engineer finding 1). Instead:
+   - each run of more than 5 consecutive missing sessions *(Claude's call)* is listed as a cut range;
+   - a signal date is admitted only when the trailing 60 sessions up to and including it hold at least 95% of their expected bars *(Claude's call)*. That rule uses only bars on or before the date.
+
+   Every cut range is listed in `_integrity.json` with its reason.
 2. **Vendor identity → admission.** The fetcher records each ticker's identity status against `backtest_cache_ext` (`scripts/data/alpaca_history/identity.py:30-32`).
    - On the PIT store, `ok` and `flagged: no-reference` are both admitted. The ~220 members without a yfinance reference are mostly the delisted names that remove survivorship, and they get the reused-symbol check instead.
    - `flagged: short-overlap` and `flagged: price-mismatch` stay excluded with their reason.
    - The fetcher's bars-before-reference trim (`fetch_alpaca_history.py:209-213`) is reported per ticker as bars dropped, so that cut is visible too.
+   - `identity.reference_frame` falls back to the mutable root `market_data/daily` cache when `backtest_cache_ext` lacks a file (`identity.py:73-79`). On the PIT store the reference is `backtest_cache_ext` only, no fallback. `_integrity.json` records each ticker's reference source and sha256. An aliased member's reference is read under its membership symbol.
+   - The admission rule is a separate exclusion function for the PIT store. A pin keeps the watchlist store's `_manifest_exclusions` rejecting `flagged: no-reference` exactly as today (`training_data.py:64-73`), since both stores share the status strings.
 3. **Reused symbol → frame trim.** The MON case. The yfinance reference ends at Monsanto's exit, so the divergence check sees nothing after the reuse. The break test therefore runs on **every** member, over the whole stored series. A break looks like an issuer change:
    - an absolute close-to-close move over 50%,
    - together with a ≥ 10× shift in 50-day median volume or in price level,
    - that does not revert within 20 sessions.
 
-   *(Claude's call. The builder calibrates the thresholds against MON and the probe names, and freezes them in the report before any strategy result is read. They are never tuned on outcomes.)* The report also flags every member whose Alpaca series continues more than 20 sessions past its yfinance reference's last bar while its membership ended at the reference's end, and runs the break test there with priority. A confirmed break **trims the frame** at the break: bars on the issuer-change side are removed in `training_data` before indicators or exit walks read them. That covers both a symbol reused before a member joined (its warm-up bars) and a trade still open at a member's exit (its exit walk).
+   *(Claude's call. The builder calibrates the thresholds against MON and the probe names, and freezes them in the report before any strategy result is read. They are never tuned on outcomes.)*
+
+   Price and volume alone miss a reuse by an issuer of similar size, and they cannot use the yfinance reference for the ~220 `no-reference` names. So the report also records, for **every** member, the first and last Alpaca bar against the membership start and end:
+   - A series that starts more than 20 sessions before the first membership start, or continues more than 20 sessions after the last membership end, is flagged *(Claude's call)*. The break test runs on that stretch with priority, whatever the price or volume does.
+   - So does a series that continues more than 20 sessions past its yfinance reference's last bar.
+
+   **Which side is kept** follows the membership spans, not the break:
+   - A break after the last membership end keeps the bars before it, so a trade still open at exit walks only the member's own bars.
+   - A break before the first membership start keeps the bars after it, so warm-up indicators never read the earlier issuer.
+   - A break inside a span is listed for the builder to resolve by hand in the frozen report, never automatically.
+
+   Both kept sides are tested. A break within 20 bars of the series' first or last bar cannot run the no-revert test. It is resolved by the start/end-gap rule above, or listed as `unresolved` and excluded.
+
+   **Splits are not breaks.** The PIT store is fetched with `Adjustment.ALL`, recorded in provenance (`training_data.py:163-164`). The calibration set includes at least one forward split and one reverse split, both of which must not trip the detector.
+
+   A confirmed break **trims the frame**: the dropped side's bars are removed in `training_data` before indicators or exit walks read them.
 4. **Renames.** Members whose membership symbol has no Alpaca bars (FB→META style) are listed as `no-bars`. The ones the report can map go into one committed table, `data/universe/symbol_aliases.json` (membership symbol → Alpaca symbol, with a date range). Any left unmapped stay listed.
 
 ### §3 Selecting the store, and where the cuts land
@@ -92,7 +113,7 @@ A `--pit` mode on the existing `scripts/data/check_history_store.py` (which alre
 - **The store choice belongs to the instrument.** `InstrumentSpec` gains a `store` field: `None` (v1 and v2 keep today's selection, `TRAINING_DATA_SOURCE`/`HISTORY_STORE_DIR` unchanged) or `"pit"` (v3). There is no new environment variable, because a stray one on the VM would break the admin Tuning page that reads `training_data` (staff-engineer finding 5). The `*_pit` universe name does **not** imply the store: v2 already pins `sp500_pit` (`run_backtest_range.py:470-488`), and v2 must not move stores.
 - **`training_data` admission on the PIT store** follows §2.2. The existing `_manifest_exclusions` (`training_data.py:64-73`) keeps its current rule for the watchlist store.
 - **Frame trims** (§2.3) are applied in `training_data.load_daily` (and the intraday loader) for the PIT store, from `_integrity.json`.
-- **Signal-span cuts** (§2.1) intersect the membership spans `pit_membership.membership_map` returns, so they reach the signal mask `run_backtest_range._spans_for` already applies.
+- **Signal-date cuts** (§2.1: the listed cut ranges, and dates failing the trailing-60-session coverage rule) are removed from the membership spans `pit_membership.membership_map` returns, so they reach the signal mask `run_backtest_range._spans_for` already applies. Both are causal: each is decided from bars on or before the date.
 - **Provenance** records `store: watchlist | pit` and the `_integrity.json` sha256 beside `data_source` on every result.
 - **Regression pins:**
   - With the PIT store on disk, the default selection, a v1 smoke run and a v2 smoke run have byte-identical ticker lists and outputs to a run without it.
@@ -103,7 +124,9 @@ A `--pit` mode on the existing `scripts/data/check_history_store.py` (which alre
 - A new `_SPECS["v3"]` in `instrument/contract.py`. It is built from v2 (same fills, costs, liquidity floor, purge, embargo) and differs only in:
   - `store="pit"`, `warmup_start="2016-01-04"`;
   - `research_start="2017-01-01"`, `research_end="2025-12-31"`, `holdout_start="2026-01-01"`;
-  - `fold_test_years=2019..2025` *(Claude's call: the first fold trains on 2017–2018, two years; v2's first fold had four)*.
+  - `fold_test_years=2021..2025`, five folds. `folds.MIN_TRAIN_YEARS = 4` (`instrument/folds.py:33,61-63`) makes 2021 the earliest legal test year after a 2017 research start. Lowering that constant would lower a gate v2 shares, so it stays (quant-engineer finding 2). The regime gate's ~320-bar warm-up already eats into 2017, so even the 2021 fold has a little under four effective training years. The re-baseline states this.
+- **Context frames come from the same store.** SPY (`config.MARKET_REGIME_TICKER`) and the sector and broad ETFs in `data/universe/etfs.json` are not S&P members. Without them `_market_frame()` returns nothing, and the as-of context is disabled or, with regime gates on, every entry is blocked (`run_backtest_range.py:104-129,132-148`). So the PIT store also holds every `etfs.json` symbol and the regime ticker, all three timeframes, fetched in a pass of their own after the member passes (one fetcher per root). A v3 run with any of them missing refuses rather than running without context. The ETF and SPY frames are cut at `research_end` like the ticker frames; today only the ticker frames are cut (`run_backtest_range.py:830`). A test asserts the as-of build reads no bar after `research_end`.
+- **Intraday frames too.** If a v3 run reads the hourly or 15-min loaders, they apply the same `research_end` cut and the same §2.3 frame trims. A v3 test asserts that no intraday bar dated on or after 2026-01-01 is reachable.
 - **Holdout guard.** The existing one: `cli.window_for`/`check_inside_research` refuse windows past research, and `_instrument_frame` cuts each frame at `research_end`, so no exit walk reads a 2026 bar. v3 inherits both.
 - **The plan audits every instrument branch.** It goes through the 24 `spec.version` / `"v2"` comparisons in `swingbot/` and `scripts/`. A branch meaning "every instrument after v1" becomes `!= "v1"` or `live_constructor`. A branch that truly means v2 alone stays, with a comment. A test asserts v3 takes the v2 path at each site.
 - **Coverage gate.** `instrument/coverage.py` and `scripts/data/check_cache_coverage.py` check v3 against the PIT store and `warmup_start` 2016-01-04.
@@ -115,6 +138,7 @@ A `--pit` mode on the existing `scripts/data/check_history_store.py` (which alre
 
 - **Leg A:** every live strategy (registry, both directions where they exist) and confluence, current frozen settings, `--instrument v3`, all folds. **Leg B:** the same code under `--instrument v1` on the watchlist store, TRAIN 2020–2023 (what the funnel runs today). Long runs go to `backtest-runner`, chunked per strategy.
 - **Table, per strategy and horizon:** N per leg and the ratio; WR; ExpR after v2/v3 costs (leg B's v1 zero-cost figure shown with that label); per-year and per-fold splits; the paired ticker-cluster-bootstrap MDE Stage 0 would compute on each leg; whether it clears the 0.10R ceiling.
+- **Reproducibility.** Order: integrity report frozen → re-baseline run → result recorded. No `--mode update` runs on either store in between. `_integrity.json` records the detector thresholds, the detector code's git sha, and the manifest sha256 of all three timeframes (provenance records only the daily one today, `training_data.py:157-165`). Both legs' MDE bootstraps record their seed (`WEEK_BOOTSTRAP_SEED`).
 - **Output:** `docs/superpowers/results/2026-10-v190-v3-rebaseline.md` plus JSON, modelled on `scripts/reports/v162_rebaseline_report.py`, with the standing line *"describes an instrument change; never a lift; selects nothing"*. One ledger row tagged as a description, like v162's.
 
 ### §6 Documentation and test plumbing
@@ -137,17 +161,27 @@ A `--pit` mode on the existing `scripts/data/check_history_store.py` (which alre
 
 ## Claude's calls, for the partner to check
 
-1. Three fetch passes, daily first, one fetcher per root.
-2. 95% coverage floor per membership span; below it, that span leaves the signal mask.
-3. Reused-symbol detection by a price/volume break run on every member, with a priority list of series that outlive their yfinance reference; a confirmed break trims the frame.
-4. `flagged: no-reference` is admitted on the PIT store.
+1. Three member passes, daily first, then a context pass (SPY, regime ticker, `etfs.json`); one fetcher per root.
+2. Coverage cuts at date level: runs of more than 5 missing sessions are cut, and a signal date needs at least 95% of the trailing 60 sessions present.
+3. Reused-symbol detection: a price/volume break test on every member, plus series-start/end gaps of more than 20 sessions against membership; the kept side follows the membership spans.
+4. `flagged: no-reference` is admitted on the PIT store (separate exclusion function; the watchlist store is unchanged).
 5. The store is selected by the instrument (`store` field), never by the universe name or a new environment variable.
-6. v3 fold test years 2019–2025.
+6. v3 fold test years 2021–2025, keeping `MIN_TRAIN_YEARS = 4`.
 7. `Bump: bot patch`.
 
 ## Panel review
 
-Spec review, 2026-10-24. Roles run serially: staff-engineer done; quant-engineer and quant-researcher are recorded below when they return.
+Spec review, 2026-10-24. Roles run serially: staff-engineer, then quant-engineer; quant-researcher is recorded below when it returns.
+
+- quant-engineer 1 (BLOCKING): a span-level 95% coverage cut is lookahead and pushes delisted names out -- applied: date-range cuts plus a causal trailing-60-session rule (§2.1, §3).
+- quant-engineer 2 (BLOCKING): fold years 2019..2025 violate `MIN_TRAIN_YEARS = 4` -- applied: 2021..2025, constant unchanged (§4).
+- quant-engineer 3 (BLOCKING): SPY and the context ETFs are not in an 848-member store -- applied: a context pass in §1; v3 refuses without them; their frames are cut at `research_end` (§4).
+- quant-engineer 4: `no-reference` names get no reuse check; similar-sized reuse missed; edge breaks -- applied: start/end gaps against membership for every member, and an edge-break rule (§2.3).
+- quant-engineer 5: which side is kept; splits -- applied: the kept side follows membership; `Adjustment.ALL` recorded; split cases in calibration (§2.3).
+- quant-engineer 6: the reference falls back to the mutable `market_data/daily` -- applied: `backtest_cache_ext` only on the PIT store, source and sha recorded (§2.2).
+- quant-engineer 7: reproducibility -- applied: frozen order, no updates between steps, all three manifest hashes, detector sha, seeds (§5).
+- quant-engineer 8: intraday frames escape the holdout cut -- applied (§4).
+- quant-engineer 9: the PIT admission needs its own exclusion function and a watchlist pin -- applied (§2.2).
 
 - staff-engineer 1: a third window authority beside `InstrumentSpec` -- applied: the spec is now instrument v3; `windows.py` dropped.
 - staff-engineer 2: `*_pit` implying the store would move v2 runs -- applied: the store is chosen by the instrument (§3), with a v2 byte-identity pin.
