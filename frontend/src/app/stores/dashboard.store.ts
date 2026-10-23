@@ -44,9 +44,18 @@ interface DashboardSlice {
    *  with a stale hint (spec v181 § 9). Never set by a failed first load. */
   stale: boolean;
   /** Bumped on every programmatic chart move (a preset click, a restored
-   *  preset); the chart moves when it changes. 0 = nothing asked yet. */
+   *  preset, a reset); the chart moves when it changes. 0 = nothing asked yet. */
   targetSeq: number;
+  /** Today's realised figures, kept beside the scoped ones so the Realised
+   *  P&L panel can show "today" while a wider range is selected. Under 1D it
+   *  is the scoped block itself. Null until a today fetch lands. */
+  todayRealized: Realized | null;
+  /** A today-only fetch is in flight (the scoped fetch is `loading`). */
+  todayLoading: boolean;
 }
+
+/** The server's realised block (`Dashboard.realized`). */
+export type Realized = Dashboard['realized'];
 
 /** How long a pan or zoom must settle before the KPIs refetch (spec § 8). */
 export const RANGE_DEBOUNCE_MS = 300;
@@ -61,6 +70,8 @@ function sameWindow(selection: ScopeSelection, window: TimeWindow): boolean {
 function isPreset(selection: ScopeSelection, preset: ScopePreset): boolean {
   return selection.kind === 'preset' && selection.preset === preset;
 }
+
+const isDay = (selection: ScopeSelection): boolean => isPreset(selection, '1D');
 
 function failure(hadData: boolean, error: ApiError): Partial<DashboardSlice> {
   return {
@@ -128,6 +139,7 @@ export const DashboardStore = signalStore(
     data: null, loading: false, error: null,
     selection: { kind: 'preset', preset: '1D' },
     requestWindow: null, stale: false, targetSeq: 0,
+    todayRealized: null, todayLoading: false,
   }),
   withComputed(({ data, selection, requestWindow, targetSeq }) => ({
     /** True until the first response, and never again. Distinguishes "no
@@ -177,6 +189,8 @@ export const DashboardStore = signalStore(
      *  what this echo exists to make visible. */
     appliedScope: computed(() => data()?.scope?.mode ?? null),
 
+    /** The scoped realised block whole, for the Realised P&L panel. */
+    realized: computed(() => data()?.realized ?? null),
     realizedAmount: computed(() => data()?.realized?.amount ?? null),
     realizedPct: computed(() => data()?.realized?.pct ?? null),
     realizedCount: computed(() => data()?.realized?.n ?? 0),
@@ -282,6 +296,7 @@ export const DashboardStore = signalStore(
   })),
   withMethods((store, api = inject(ApiClient), prefs = inject(PreferencesStore)) => {
     let latestRequest = 0;
+    let latestToday = 0;
     // Bumped by a preset click, so a Range still inside its debounce never
     // lands on top of the preset the partner chose after it.
     let rangeGeneration = 0;
@@ -299,7 +314,12 @@ export const DashboardStore = signalStore(
       return routeRequest(api.dashboard(mode, window), {
         start: () => patchState(store, { loading: true, requestWindow: window }),
         next: (data) => {
-          if (current()) patchState(store, { data, loading: false, error: null, stale: false });
+          if (!current()) return;
+          // Under 1D the scoped block is today's, so the today figures follow it.
+          patchState(store, {
+            data, loading: false, error: null, stale: false,
+            ...(mode === 'today' ? { todayRealized: data.realized ?? null, todayLoading: false } : {}),
+          });
         },
         error: (error) => {
           if (current()) patchState(store, failure(untracked(() => store.data()) !== null, error));
@@ -309,9 +329,31 @@ export const DashboardStore = signalStore(
 
     const refetch = (): void => { resolve().subscribe({ error: () => undefined }); };
 
+    /** Today's realised figures alone, for the panel's Today view when the
+     *  scope is wider. A failure keeps the previous figures. */
+    const loadToday = (): void => {
+      const request = ++latestToday;
+      patchState(store, { todayLoading: true });
+      api.dashboard('today').subscribe({
+        next: (data) => {
+          if (request === latestToday) patchState(store, { todayRealized: data.realized ?? null, todayLoading: false });
+        },
+        error: () => {
+          if (request === latestToday) patchState(store, { todayLoading: false });
+        },
+      });
+    };
+
+    /** `untracked`: this runs inside the onInit effect, like `resolve`. */
+    const load = (): void => {
+      refetch();
+      if (!untracked(() => isDay(store.selection()))) loadToday();
+    };
+
     const select = (selection: ScopeSelection): void => {
       patchState(store, { selection });
       refetch();
+      if (!isDay(selection) && store.todayRealized() === null) loadToday();
     };
 
     const setPreset = (preset: ScopePreset): void => {
@@ -332,8 +374,13 @@ export const DashboardStore = signalStore(
 
     return {
       resolve,
-      load: refetch,
+      load,
       setPreset,
+      /** Chart "Latest": back to Today -- the 1D window ending now. Moves the
+       *  chart and returns every figure (KPIs, Realised P&L) to today's. */
+      resetView(): void {
+        setPreset('1D');
+      },
       /** A user pan or zoom settled on `window` (V181-15 calls this). Never
        *  persisted: a reload returns to the last preset (spec § 1). */
       setRange(window: TimeWindow): void {
@@ -350,7 +397,7 @@ export const DashboardStore = signalStore(
       adoptStoredPreset(preset: ScopePreset): void {
         if (chosen || isPreset(store.selection(), preset)) return;
         patchState(store, { selection: { kind: 'preset', preset }, targetSeq: store.targetSeq() + 1 });
-        if (latestRequest > 0) refetch();
+        if (latestRequest > 0) load();
       },
     };
   }),
