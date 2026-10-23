@@ -81,7 +81,7 @@ const dayBody = (over: Partial<CalendarDayTrades> = {}): CalendarDayTrades => ({
   as_of: '2026-08-20T12:00:00Z', date: '2026-08-05', trades: [LEG, LOSER], trade_count: 2,
   winners: 1, losers: 1, total_r: -1.8, total_ccy: -90, win_rate: 50,
   avg_trade_r: -0.9, worst_drawdown_r: -2.6,
-  contributors: [{ ticker: 'AAPL', r: 0.8 }], detractors: [{ ticker: 'MSFT', r: -2.6 }],
+  contributors: [{ ticker: 'AAPL', pnl: 40, r: 0.8 }], detractors: [{ ticker: 'MSFT', pnl: -155.73, r: -2.6 }],
   context: CONTEXT,
   breakdown: {
     strategy: [

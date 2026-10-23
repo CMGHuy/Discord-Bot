@@ -2030,8 +2030,8 @@ export interface CalendarDayTrades {
   win_rate: number | null;
   avg_trade_r: number | null;
   worst_drawdown_r: number | null;
-  contributors: Array<{ ticker: string | null; r: number }>;
-  detractors: Array<{ ticker: string | null; r: number }>;
+  contributors: Array<{ ticker: string | null; pnl: number | null; r: number | null }>;
+  detractors: Array<{ ticker: string | null; pnl: number | null; r: number | null }>;
   /** v165 D2 -- this day against the OTHER trading days under the filter. */
   context: DayContext;
   /** v165 D3 -- exactly the rows in `trades`, grouped four ways. */

@@ -241,7 +241,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
         <p class="day-caption">{{ paperCaption }}</p>
         <div class="day-summary">
           <sb-stat-tile label="Total" [value]="rLabel(detail.total_r)" [sample]="detail.trade_count" />
-          <sb-stat-tile label="Total P&L" [value]="ccyLabel(detail.total_ccy)" [sample]="detail.trade_count" />
+          <sb-stat-tile label="Total P&L" [value]="ccyLabel(detail.total_ccy)" [sample]="detail.trade_count" [tone]="toneOf(detail.total_ccy)" />
           <sb-stat-tile label="Win rate" [value]="winRateLabel(detail.win_rate)" [sample]="detail.trade_count" />
           <sb-stat-tile label="Winners" [value]="detail.winners.toString()" [sample]="detail.trade_count" tone="pos" />
           <sb-stat-tile label="Losers" [value]="detail.losers.toString()" [sample]="detail.trade_count" tone="neg" />
@@ -255,13 +255,17 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
           <section class="contributors">
             <h3>Contributors</h3>
             @if (detail.contributors.length) {
-              @for (row of detail.contributors; track $index) { <p>{{ row.ticker }} · {{ rLabel(row.r) }}</p> }
+              @for (row of detail.contributors; track $index) {
+                <p class="leader pos"><span class="who">{{ row.ticker }}</span><span class="amt">{{ leaderLabel(row) }}</span></p>
+              }
             } @else { <p>Nothing gained today.</p> }
           </section>
           <section class="detractors">
             <h3>Detractors</h3>
             @if (detail.detractors.length) {
-              @for (row of detail.detractors; track $index) { <p>{{ row.ticker }} · {{ rLabel(row.r) }}</p> }
+              @for (row of detail.detractors; track $index) {
+                <p class="leader neg"><span class="who">{{ row.ticker }}</span><span class="amt">{{ leaderLabel(row) }}</span></p>
+              }
             } @else { <p>Nothing lost money today.</p> }
           </section>
         </div>
@@ -455,6 +459,9 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     .day-caption, .day-sample-note { margin: 0 0 var(--space-8); color: var(--text-secondary); font-size: var(--text-micro); }
     .day-leaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-14); margin-bottom: var(--space-14); }
     .day-leaders h3 { margin: 0 0 var(--space-6); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.08em; }
+    .day-leaders .leader { display: flex; justify-content: space-between; gap: var(--space-8); white-space: nowrap; }
+    .day-leaders .leader.pos { color: var(--pos); }
+    .day-leaders .leader.neg { color: var(--neg); }
     .day-leaders p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-table); }
   `,
 })
@@ -688,7 +695,19 @@ export class Calendar {
   }
 
   protected ccyLabel(value: number | null): string {
-    return value === null ? ABSENT : money(value, this.currency(), 2);
+    // A no-break space keeps the amount and its currency on one line.
+    return value === null ? ABSENT : money(value, this.currency(), 2).replace(' ', ' ');
+  }
+
+  protected toneOf(value: number | null): 'neutral' | 'pos' | 'neg' {
+    return value === null || value === 0 ? 'neutral' : value > 0 ? 'pos' : 'neg';
+  }
+
+  /** "-155.73 €  (-1.2R)": the ticker's net money, then its net R. */
+  protected leaderLabel(row: { pnl: number | null; r: number | null }): string {
+    const cash = row.pnl === null ? '' : this.ccyLabel(row.pnl);
+    const r = row.r === null ? '' : rMultiple(row.r);
+    return [cash, r].filter(Boolean).join(' · ');
   }
 
   protected winRateLabel(value: number | null): string {
