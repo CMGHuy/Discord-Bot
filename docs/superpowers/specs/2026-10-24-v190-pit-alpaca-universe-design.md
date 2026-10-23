@@ -43,7 +43,7 @@ Alpaca serves bars from 2016-01-04 for S&P members that were later **delisted**.
 
 ## Non-goals
 
-- **No badge re-scoring** and no change to which strategies alert *(partner: describe only)*. A later spec may pre-register moving badges or the default instrument to v3.
+- **No badge re-scoring** and no change to which strategies alert *(partner: describe only)*. A later spec may pre-register moving badges or the default instrument to v3. It may cite **only the re-baseline's power columns** (N, N ratio, MDE, coverage, first counted date), never its WR or ExpR. Any v3 badge rule is frozen before the re-baseline is read, or is scored on the 2026 holdout alone (quant-researcher finding 1).
 - **No change to the default instrument.** `--instrument` stays `v1` by default (`instrument/cli.py:23-26`). Making v3 the default for new pre-registrations is a methodology decision for a follow-up, informed by the re-baseline.
 - **No change to v1 or v2**: not their windows, their data, or their closed rows.
 - **No production change.** The PIT store does not go to the VM, and there is no cron *(partner)*.
@@ -132,14 +132,23 @@ A `--pit` mode on the existing `scripts/data/check_history_store.py` (which alre
 - **Coverage gate.** `instrument/coverage.py` and `scripts/data/check_cache_coverage.py` check v3 against the PIT store and `warmup_start` 2016-01-04.
 - **Events count only on computable bars.** The regime gate needs about 320 bars, so a ticker's first counted signal falls around Q2 2017. The re-baseline reports each strategy's first counted date.
 - **Calibration labels, additive only.** `_WINDOW_KINDS` (`swingbot/core/analytics/calibration.py:283-286`) gains the v3 research string. The two existing strings and their labels stay, pinned by a test on an existing-row fixture, so no production registry row changes label when this deploys.
-- **Methodology.** `backtest-methodology.md` § Windows records v3 beside v1 and v2. The one-shot rules for v1's VALIDATION window and every closed row are unchanged, and the v3 holdout is one pre-registered shot per component.
+- **Methodology.** `backtest-methodology.md` § Windows records v3 beside v1 and v2. The one-shot rules for v1's VALIDATION window and every closed row are unchanged. The § Windows entry also states:
+  - **v3's fold years overlap v1's windows.** 2021–2023 lie inside v1 TRAIN, which tuned every live strategy's current settings. 2024–2025 is v1 VALIDATION, tainted and for many components already spent. For every strategy, filter or knob that exists today, all five v3 folds are **in-sample or tainted**. Their out-of-fold figures are never read as out-of-sample, and a component whose v1 VALIDATION shot is spent gets no gating use of the 2024 or 2025 folds.
+  - **The 2026 holdout budget is shared by v2 and v3.** A 2026 shot spent under v2 is spent under v3. The v104 Part A retries keep their frozen 74-ticker universe and do not move to v3's 848 names.
+- **The funnel does not accept v3 yet.** Stage 2 is wired for exactly three folds with an absolute `GATE_MIN_IMPROVING_FOLDS = 2` (`swingbot/core/backtesting/backtest_wf.py:30,240`). The Funnel stages table hard-codes 2021/22/23 for Stage 2 and 2024–25 for Stage 3. On five folds, "2 improving" would be looser than "2 of 3". So `validate_component.py` (`:150`) **refuses `--instrument v3`** with a message naming the follow-up methodology spec that must map the stages first. This spec freezes no v3 stage thresholds (quant-researcher finding 3).
 
 ### §5 The re-baseline (describe-only)
 
-- **Leg A:** every live strategy (registry, both directions where they exist) and confluence, current frozen settings, `--instrument v3`, all folds. **Leg B:** the same code under `--instrument v1` on the watchlist store, TRAIN 2020–2023 (what the funnel runs today). Long runs go to `backtest-runner`, chunked per strategy.
-- **Table, per strategy and horizon:** N per leg and the ratio; WR; ExpR after v2/v3 costs (leg B's v1 zero-cost figure shown with that label); per-year and per-fold splits; the paired ticker-cluster-bootstrap MDE Stage 0 would compute on each leg; whether it clears the 0.10R ceiling.
+- **Legs.** Long runs go to `backtest-runner`, chunked per strategy. Every leg runs every live strategy (registry, both directions where they exist) and confluence at its current frozen settings.
+  - **Leg A:** `--instrument v3`.
+  - **Leg C:** `--instrument v3` restricted to the watchlist tickers that are PIT members. This separates universe width from window, store and costs, the confound v180's record could not resolve (quant-researcher finding 6).
+  - **Leg B:** `--instrument v1` on the watchlist store, TRAIN 2020–2023 (what the funnel runs today).
+- **Population named.** N and MDE columns use v3's **fold-train** population, the population Stage 0 reads, on legs A and C, and TRAIN on leg B. Fold-test N is shown separately. Per fold, the table prints **effective fold-train N** as well as fold-test N, so a thin 2021 fold reads as thin.
+- **Power columns (citable later):** N per leg and the A/B and C/B ratios; coverage; each strategy's first counted date; and the MDE. The MDE formula is frozen here: unpaired `mde_expectancy_r` at the observed N. The paired form needs a component arm a single-arm baseline does not have (`acceptance_harvest.py:99-122`). It is reported twice: with the ticker-cluster bootstrap, and with `week_cluster_bootstrap`, because same-week trades across 848 names are correlated and ticker clustering alone overstates the power gain. Each bootstrap names its own seed (`WEEK_BOOTSTRAP_SEED` for the week design only).
+- **Descriptive columns (never citable for selection):** WR and ExpR after v2/v3 costs (leg B's v1 zero-cost figure labelled as such), with per-year and per-fold splits.
+- **Forking paths.** The report prints the cell count (strategies × directions × horizons × legs), carries **no per-cell pass/fail or significance mark** against the 0.10R ceiling, and reports concentration: the share of N and of ExpR in the top two horizons. Horizon splits stay closed (v31, v101 row). Any cell later pre-registered counts this family.
 - **Reproducibility.** Order: integrity report frozen → re-baseline run → result recorded. No `--mode update` runs on either store in between. `_integrity.json` records the detector thresholds, the detector code's git sha, and the manifest sha256 of all three timeframes (provenance records only the daily one today, `training_data.py:157-165`). Both legs' MDE bootstraps record their seed (`WEEK_BOOTSTRAP_SEED`).
-- **Output:** `docs/superpowers/results/2026-10-v190-v3-rebaseline.md` plus JSON, modelled on `scripts/reports/v162_rebaseline_report.py`, with the standing line *"describes an instrument change; never a lift; selects nothing"*. One ledger row tagged as a description, like v162's.
+- **Output:** `docs/superpowers/results/2026-10-v190-v3-rebaseline.md` plus JSON, modelled on `scripts/reports/v162_rebaseline_report.py`, with the standing line *"describes an instrument change; never a lift; selects nothing"* and the § Windows note that every v3 fold is in-sample or tainted for today's strategies. `docs/superpowers/results/preregistration-ledger.jsonl` has no precedent for a description row (v162 wrote none). This spec adds one with `p: null` and a `description` tag that `stats.ledger_qvalues` (`instrument/stats.py:226-230`) excludes from the BH family, pinned by a test.
 
 ### §6 Documentation and test plumbing
 
@@ -171,7 +180,7 @@ A `--pit` mode on the existing `scripts/data/check_history_store.py` (which alre
 
 ## Panel review
 
-Spec review, 2026-10-24. Roles run serially: staff-engineer, then quant-engineer; quant-researcher is recorded below when it returns.
+Spec review, 2026-10-24. Roles run serially: staff-engineer, quant-engineer, quant-researcher.
 
 - quant-engineer 1 (BLOCKING): a span-level 95% coverage cut is lookahead and pushes delisted names out -- applied: date-range cuts plus a causal trailing-60-session rule (§2.1, §3).
 - quant-engineer 2 (BLOCKING): fold years 2019..2025 violate `MIN_TRAIN_YEARS = 4` -- applied: 2021..2025, constant unchanged (§4).
@@ -182,6 +191,18 @@ Spec review, 2026-10-24. Roles run serially: staff-engineer, then quant-engineer
 - quant-engineer 7: reproducibility -- applied: frozen order, no updates between steps, all three manifest hashes, detector sha, seeds (§5).
 - quant-engineer 8: intraday frames escape the holdout cut -- applied (§4).
 - quant-engineer 9: the PIT admission needs its own exclusion function and a watchlist pin -- applied (§2.2).
+- quant-researcher 1 (BLOCKING): the per-strategy WR/ExpR table pre-reads any later v3 badge or default rule -- applied: follow-ups may cite power columns only; badge rules are frozen first or scored on the holdout (Non-goals).
+- quant-researcher 2 (BLOCKING): v3 folds 2021–2025 overlap v1 TRAIN and tainted VALIDATION -- applied: in-sample/tainted for all current components; no gating use of 2024/2025 by spent components (§4).
+- quant-researcher 3: Stage 2 is wired for 3 folds; "2 of 5" would be looser -- applied: `validate_component` refuses v3 until a methodology spec maps the stages (§4).
+- quant-researcher 4: ticker-cluster MDE overstates power; seed mix-up -- applied: week-cluster MDE beside it, a seed per design (§5).
+- quant-researcher 5: the paired MDE is undefined for one arm -- applied: unpaired `mde_expectancy_r`, frozen (§5).
+- quant-researcher 6: legs A/B confound four changes; population unnamed -- applied: leg C (v3 on watchlist members); fold-train named (§5).
+- quant-researcher 7: forking paths across cells; horizon splits closed -- applied: cell count, no per-cell marks, concentration (§5).
+- quant-researcher 8: no v162 ledger precedent; BH family -- applied: `p: null`, excluded by tag, reference corrected (§5).
+- quant-researcher 9: the 2026 holdout budget is shared with v2; v104 retries -- applied (§4).
+- quant-researcher 10: effective fold-train N per fold -- applied (§5).
+
+No BLOCKING finding is left open.
 
 - staff-engineer 1: a third window authority beside `InstrumentSpec` -- applied: the spec is now instrument v3; `windows.py` dropped.
 - staff-engineer 2: `*_pit` implying the store would move v2 runs -- applied: the store is chosen by the instrument (§3), with a v2 byte-identity pin.
