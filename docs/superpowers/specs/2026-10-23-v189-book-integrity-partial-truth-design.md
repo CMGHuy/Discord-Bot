@@ -147,8 +147,8 @@ One function, `metrics.net_outcome(trade) -> tuple[status, close_reason | None]`
 |---|---|
 | B1 | The trades API row gains **`entry_shares`**, the original position size, before any leg. `shares` keeps its meaning: the remaining shares on an open PARTIAL. `bankedLegAmount` takes `entry_shares`, and so do `trades.ts:425`, `dashboard.ts:382` and `trade-detail.store.ts:425-427`. Its doc comment already says "original". `models.ts` adds the field. |
 | B2 | `pnl_calendar` uses `metrics.leg_contribution_r` for a leg part's R (`:191`), so day, month and streak sums (`:326,561,603,651`) add contributions. With the golden trade, TP1 (+2R on 50%) plus a runner (+3R) shows **+2.5R**. A whole single-leg trade is unchanged. Dollar figures were already right. |
-| B3 | An open PARTIAL with no live quote returns `r_multiple: null`, and a new **`banked_r`** field holds `Σ leg_contribution_r` of the realized legs. With a quote, `r_multiple` is the blended figure: `banked_r` + open fraction × (quote − entry) / initial risk per share, signed per direction. For the golden trade at quote 113 that is 1.0 + 0.5 × 2.6 = **2.30R**. Both fields use `leg_contribution_r`. The Trades row and Trade detail show banked R as "banked +1.00R", never as the trade's R. |
-| B4 | The figure is **relabelled "Risk of loss (to stop)"**. It is never shown as a gauge against `PORTFOLIO_HEAT_CAP_PCT`. Beside it, **"Heat (enforced)"** shows `open_heat`, the figure the scanner gates on, so the admin view never shows headroom the scanner does not grant. Both carry the hint "assumes a fill at the stop; a gap through it loses more". When the heat cap blocks an alert, the `plan rejected (` log line names the enforced heat value. The current "Risk used" on the Dashboard (`dashboard.py:94` `_risk_used`) and the Risk page rows (`risk.py:63`) show **risk of loss**: Σ over **filled** open trades of open shares × the per-trade distance from entry to the current working stop, measured against the loss side (bull: entry − stop; bear: stop − entry) and **floored at 0 per trade**. A PARTIAL at the runner floor, or a break-even stop, contributes 0. This is the risk the partner chose ("current risk to stop"): money below entry that can still be lost. It is **not** the open profit at risk; see B5. PENDING placeholders are excluded (the `held_now` filter). **Display only.** `heat.open_heat` enforcement at `swingbot/core/scanning/analyze.py:252` is unchanged here. |
+| B3 | An open PARTIAL with no live quote returns `r_multiple: null`. **`banked_r` already exists** (`trades.py:317`, `models.ts:120`, `plan-cell.ts`) and keeps its meaning: the TP1 leg's own R (+2R in the golden trade). A new **`banked_contribution_r`** = `Σ leg_contribution_r` over the realized legs (+1.00R) carries the trade-level figure. That avoids a silent change of meaning on a live field. With a quote, `r_multiple` is the blended figure: `banked_contribution_r` + open fraction × (quote − entry) / initial risk per share, signed per direction. At quote 113 that is 1.0 + 0.5 × 2.6 = **2.30R**. The Trades row and Trade detail show the banked part as "banked +1.00R (TP1 +2.00R on 50%)", never as the trade's R. |
+| B4 | **Dashboard:** the figure is **relabelled "Risk of loss (to stop)"**. It is never shown as a gauge against `PORTFOLIO_HEAT_CAP_PCT`. Beside it, **"Heat (enforced)"** shows `open_heat`, the figure the scanner gates on, so the admin view never shows headroom the scanner does not grant. Both carry the hint "assumes a fill at the stop; a gap through it loses more". When the heat cap blocks an alert (`scan_run.py:1165-1168`, `item.heat_blocked`), a **new** INFO line `heat blocked (enforced X% + Y% > cap Z%)` names the enforced heat. No such line exists today. **Risk page:** `risk._positions` rows are documented to sum to `open_heat`, and the page's utilisation gauge (`risk.py:341-355`) pairs with it. That invariant and the gauge stay on **enforced heat**. Each row gains a **Risk of loss** column beside its enforced figure. The current "Risk used" on the Dashboard (`dashboard.py:94` `_risk_used`) and the Risk page rows (`risk.py:63`) show **risk of loss**: Σ over **filled** open trades of open shares × the per-trade distance from entry to the current working stop, measured against the loss side (bull: entry − stop; bear: stop − entry) and **floored at 0 per trade**. A PARTIAL at the runner floor, or a break-even stop, contributes 0. This is the risk the partner chose ("current risk to stop"): money below entry that can still be lost. It is **not** the open profit at risk; see B5. PENDING placeholders are excluded (the `held_now` filter). **Display only.** `heat.open_heat` enforcement at `swingbot/core/scanning/analyze.py:252` is unchanged here. |
 | B5 | The Trade-detail price tile labels the target it reads: "to T1" before TP1, "to T2" after (`outcome-tiles.ts:84`). The "$ at risk" tile (`trade-detail.store.ts:553`) shows **two labelled figures** so neither reads as the other: **"Risk of loss"** (B4's definition) and **"Open profit to stop"** = open shares × (quote − working stop), signed per direction and floored at 0, shown only with a live quote. For the golden trade at 113 they are $0 and 50 × 6.33 = **$316.67**. |
 
 ### D6 — The label change is visible, not a silent step
@@ -171,7 +171,7 @@ ExpR is unaffected by labels, so it stays the comparison to quote across the dep
   - open with no quote.
 
   For each case, assert against hand-computed values:
-  - the trades API row (`shares`, `entry_shares`, `r_multiple`, `banked_r`, `realized_pnl_amount`, `pnl_pct`, status);
+  - the trades API row (`shares`, `entry_shares`, `r_multiple`, `banked_r`, `banked_contribution_r`, `realized_pnl_amount`, `pnl_pct`, status);
   - the calendar day (`net_r`, `net_pnl_amount`, `trade_count`, win rate);
   - the dashboard realized parts and Risk used;
   - the frontend banked amount ($500 for the TP1 leg), via the store and cell specs.
@@ -184,8 +184,8 @@ ExpR is unaffected by labels, so it stays the comparison to quote across the dep
   | Gap to open 88 | −2.4 | −0.20 | −100 | −1.00% | loss |
   | Time exit 112 | +2.4 | 2.20 | 1100 | 11.00% | win |
   | Manual close 115 | +3.0 | 2.50 | 1250 | 12.50% | win |
-  | Open, quote 113 | live +2.6 | `r_multiple` 2.30, `banked_r` 1.00 | 500 banked, 650 unrealised | — | open |
-  | Open, no quote | — | `r_multiple` null, `banked_r` 1.00 | 500 banked | — | open |
+  | Open, quote 113 | live +2.6 | `r_multiple` 2.30, `banked_contribution_r` 1.00, `banked_r` 2.00 | 500 banked, 650 unrealised | — | open |
+  | Open, no quote | — | `r_multiple` null, `banked_contribution_r` 1.00, `banked_r` 2.00 | 500 banked | — | open |
 
   - **`pnl_pct` basis.** Realized dollars over the entry notional of the **whole** position (100 × 100 = $10,000), which is today's `closed_pnl_pct` basis.
   - **Risk of loss** is $0 in both open cases. **Open profit to stop** at 113 is $316.67.
@@ -227,6 +227,27 @@ Pooled win rate and ExpR computed over history before this spec's deploy carry t
 - **Heat enforcement on current risk.** The partner chose current risk to stop as the heat definition. Making `open_heat` *enforce* it frees heat budget as trades de-risk. That changes how many alerts are sized: `Edge: volume`, measured in walk-forward (`backtest_wf.py` models the heat cap) before shipping. It gets its own spec. This spec changes only the display (B4).
 - **Metric definitions.** The leg-vs-trade counting unit, the day definition, the ledger, the snapshot, the drawdown order, and the live/backtest parity items go to the metric spec.
 - **Frontend hygiene** goes to the frontend spec.
+
+## Corrections from the code brief (2026-10-23)
+
+The plan brief (`.superpowers/briefs/2026-10-23-v189-book-integrity-partial-truth.md`) checked every claim above against the code. Where this section and an earlier one differ, **this section wins**.
+
+1. **`check_bar` has no production caller.** Only `poll` is live. D3's `check_bar` write sites and its exit-retry path are implemented only as far as shared helpers make them correct for free. They get no dedicated tests, and `known-traps.md` records that `check_bar` is test-only.
+2. **The Dashboard win rate counts legs.** It uses `performance._leg_status` per leg, so D2's trade-level status moves Analytics, `get_stats`, the journal and the retrospective only. Whether the Dashboard counts legs or trades is the metric spec's counting-unit question, and v189 does not change it.
+3. **Calendar leg parts carry no fraction.** `expand_trade_legs` emits rows with `legs: None`. B2 adds `fraction` to each leg part it emits, so `leg_contribution_r` can read it.
+4. **Transactions today.**
+   - `_settle_account_balance` and `apply_realized_pnl` take no `conn=` and commit separately.
+   - `_after_close` and `_refresh_snapshot_safely` run inside `close_plan_trade`, before commit.
+   - `TradeLog` reads use their own connection.
+
+   Every new `conn=` parameter defaults to `None` (today's behaviour), so existing tests that monkeypatch `_all`, `_db_upsert(conn=None)` and `_settle_account_balance(self, trade)` keep working. The D3.2 paths pass a connection explicitly.
+5. **Every write goes through `PlanStore.update`.** `plan_manager.py` has **28** `store.update` sites (brief §4), including notice, outlook, structure, pyramid and ack writers. D3.3's lock, terminal guard and tighter-stop merge live **inside `PlanStore.update`**, so all 28 are covered without editing each one. `tighter_stop` lives at `exit_sim.py:357`.
+6. **Deleting terminal plans cascades.** The foreign keys delete the plans' `starred_plans`, `plan_followers` and `plan_notifications` rows. The A6 archive includes those rows, and the restore script re-inserts them. `journal_entries` are the partner's notes, so `clear_history` keeps them.
+7. **A7 delivery path.** `clear_open` and `delete_trade` are `TradeLog` methods with no `PlanManager` involved, so they emit no `PlanEvent`. They end the linked plan through the same helper the admin cancel uses, and queue the follow notice through `_queue_notify`. A test pins that the notice is queued for both the PENDING (`cancelled_trade_deleted`) and the ACTIVE/PARTIAL case.
+8. **Complexity.** Several functions this spec touches are baselined at or above 15 and may only shrink: `_on_event` 15, `poll` 20, `_step_active` 21, `_row_from_plan` 15, `list_trades` 34, `_sync_run_scan` 96. `closed_r_multiple` sits at 14. The A1 reversal block moves out of `_sync_run_scan` into a named helper. `closed_r_multiple` is reduced to a call to `metrics._blended_r_raw` (D1).
+9. **Archives stay out of git.** `data/archives/` is not git-ignored today and will hold account data. It is added to `.gitignore` in the same commit that first writes it. `./data` is mounted at `/app/data` in both containers. `restore_account_reset.py` follows the `scripts/ops/` convention: a dry run by default, `--apply` to write, tested under `tests/scripts/`. The restore paragraph goes at the end of `## PostgreSQL (the only store)` in `docs/deploy/DEPLOY_HETZNER.md`.
+10. **Frontend.** `entry_shares` and `banked_contribution_r` are optional in `models.ts`, because nine spec files build full `TradeRow` literals. The golden fixture is one JSON file read by both pytest and Vitest, in the `tests/charts/resolved_tokens.json` pattern (`ui/testing/resolve-token.ts`).
+11. **Order.** Implementation starts after v187 merges. Both plans edit `plan_manager.py`, `commands/trades.py`, `planning/account.py`, the five event-vocabulary files, and the command-gate tests.
 
 ## Panel review
 
