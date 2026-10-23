@@ -19,6 +19,8 @@ disagree about how exposed the account is for the whole migration.
 That collector try/excepts every sub-collector to a safe default, so any
 value may legitimately be missing. The projections below keep that property
 rather than assuming a key is present.
+
+`heat` also carries the open shorts' summed p99 gap risk (v183, display only).
 """
 from __future__ import annotations
 
@@ -78,6 +80,35 @@ def _positions(balance: float) -> list[dict]:
     ]
     rows.sort(key=lambda r: r["risk_pct"], reverse=True)
     return rows
+
+
+def _open_short_gap_risk(open_trades: list) -> dict:
+    """v183: what the open shorts would lose on a gap the size of each ticker's
+    p99 up-gap, summed -- shown beside heat, never added to it (heat stays on
+    stop risk). A short without a figure is counted, never guessed at."""
+    from swingbot.core.planning.gap_sizing import gap_risk_amount_for
+
+    total, known, unknown = 0.0, 0, 0
+    for t in open_trades:
+        if t.get("direction") != "bearish":
+            continue
+        amount = (gap_risk_amount_for(t["shares"], t.get("entry"), t.get("stop_loss"), t.get("gap_sizing"))
+                  if t.get("shares") else None)
+        if amount is None:
+            unknown += 1
+        else:
+            total, known = total + amount, known + 1
+    return {"gap_risk_amount": round(total, 2) if known else None, "gap_risk_unknown": unknown}
+
+
+def _heat_gap_block() -> dict:
+    """The two gap keys for `heat`; a failed trade read degrades to null, like `_positions`."""
+    from swingbot.core.tracking.performance import TradeLog
+
+    try:
+        return _open_short_gap_risk(TradeLog().get_trades(status="open", limit=None) or [])
+    except Exception:
+        return {"gap_risk_amount": None, "gap_risk_unknown": 0}
 
 
 _DATA_SOURCE_WINDOW = 20
@@ -355,6 +386,7 @@ def get_risk():
             "open_pct": open_pct,
             "cap_pct": cap_pct,
             "utilisation_pct": utilisation,
+            **_heat_gap_block(),
         },
         "positions": _positions(balance),
         "sector_heat": [

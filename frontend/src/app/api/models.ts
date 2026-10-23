@@ -1328,6 +1328,11 @@ export interface RiskHeat {
   open_pct: number | null;
   cap_pct: number | null;
   utilisation_pct: number | null;
+  /** v183. The server always sends both. They are optional here only so
+   *  pre-v183 fixtures stay valid. Null = no open short has a figure;
+   *  `gap_risk_unknown` counts the shorts without one. */
+  gap_risk_amount?: number | null;
+  gap_risk_unknown?: number;
 }
 
 export interface RiskPosition {

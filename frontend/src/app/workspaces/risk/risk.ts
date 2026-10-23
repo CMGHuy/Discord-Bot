@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 
 import { DataSourcesHealth, RiskPosition } from '../../api/models';
+import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { RiskStore } from '../../stores/risk.store';
 import { asyncInputs, Async } from '../../ui/async';
@@ -18,7 +19,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
-import { dateTime, num, share, text } from '../../ui/format';
+import { amount, dateTime, num, share, text } from '../../ui/format';
 import { Freshness } from '../../ui/freshness';
 import { Panel } from '../../ui/layout';
 import { Matrix } from '../../ui/matrix';
@@ -242,6 +243,12 @@ import { tablePerPage } from '../../ui/table-per-page';
 
       <p class="heat-note" [class.warn]="store.heatNearCap()">
         {{ heatNote() }}
+      </p>
+      <!-- v183: display only. Heat above stays on stop risk; this is what the
+           open shorts would lose on a gap the size of each ticker's p99 up-gap. -->
+      <p class="gap-risk" data-testid="gap-risk">
+        <span class="gap-risk-label">Short gap risk</span>
+        <span class="num">{{ gapRiskNote() }}</span>
       </p>
 
       <div class="states">
@@ -514,6 +521,16 @@ import { tablePerPage } from '../../ui/table-per-page';
       color: var(--text-secondary);
       font-size: var(--text-table);
     }
+    .gap-risk {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-4) var(--space-8);
+      margin-top: var(--space-6);
+      font-size: var(--text-table);
+      color: var(--text-secondary);
+      overflow-wrap: anywhere;
+    }
+    .gap-risk-label { color: var(--text-muted); }
     .warn { color: var(--warn); }
 
     .states { display: flex; flex-wrap: wrap; gap: var(--space-8); margin-top: var(--space-10); }
@@ -615,6 +632,7 @@ import { tablePerPage } from '../../ui/table-per-page';
 export class Risk {
   protected readonly store = inject(RiskStore);
   private readonly preferences = inject(PreferencesStore);
+  private readonly connection = inject(ConnectionStore);
 
   static readonly TABLE_ID = 'risk-exposure';
 
@@ -761,6 +779,17 @@ export class Risk {
   );
 
   protected readonly heatClass = computed(() => (this.store.heatNearCap() ? 'warn' : ''));
+
+  /** v183: the short gap-risk line. A short without a figure is counted, never guessed at. */
+  protected readonly gapRiskNote = computed(() => {
+    const value = this.store.gapRiskAmount();
+    const unknown = this.store.gapRiskUnknown();
+    const suffix = unknown > 0 ? ` · ${unknown} short${unknown === 1 ? '' : 's'} without a gap figure` : '';
+    if (value !== null) {
+      return `${amount(value, this.connection.currency(), 0)} if every open short gaps by its p99${suffix}`;
+    }
+    return unknown > 0 ? `n/a${suffix}` : 'no open shorts';
+  });
 
   protected readonly heatNote = computed(() => {
     const utilisation = this.store.heatUtilisationPct();

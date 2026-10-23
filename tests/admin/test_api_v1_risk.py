@@ -133,6 +133,7 @@ def test_risk_shape(logged_in):
     assert_shape(body["heat"], {
         "open_pct": NULLABLE_NUMBER, "cap_pct": NULLABLE_NUMBER,
         "utilisation_pct": NULLABLE_NUMBER,
+        "gap_risk_amount": NULLABLE_NUMBER, "gap_risk_unknown": int,
     }, where="heat")
     assert_shape(body["throttle"], {
         "multiplier": NULLABLE_NUMBER, "paused": bool,
@@ -202,6 +203,56 @@ def test_positions_are_ordered_by_risk(logged_in, tmp_path):
 
     rows = logged_in.get("/api/v1/risk").get_json()["positions"]
     assert [r["ticker"] for r in rows] == ["MSFT", "AAPL"]
+
+
+GAP_STAMP = {"rule": "gap_p99", "up_gap_p99_pct": 4.0, "n_up_gaps": 120}
+
+
+def _short_trade(trade_id, ticker, *, shares=25, gap_sizing=None):
+    trade = dict(_open_trade(trade_id, ticker, entry=100.0, stop=102.0, shares=shares),
+                 direction="bearish", take_profit=96.0)
+    if gap_sizing is not None:
+        trade["gap_sizing"] = gap_sizing
+    return trade
+
+
+def test_heat_carries_the_summed_gap_risk_of_open_shorts(logged_in):
+    """v183: 25 sh x max(2, 100 x 4%) = 100.0 for the stamped short; the unstamped
+    and the switch-off short are counted, not guessed; the long is not a short."""
+    seed_store("trades", [
+        _short_trade("a" * 16, "TSLA", gap_sizing=GAP_STAMP),
+        _short_trade("b" * 16, "NIO"),
+        _short_trade("c" * 16, "RIVN", gap_sizing=dict(GAP_STAMP, rule="stop")),
+        _open_trade("d" * 16, "AAPL"),
+    ])
+    body = logged_in.get("/api/v1/risk").get_json()
+    assert body["heat"]["gap_risk_amount"] == pytest.approx(100.0)
+    assert body["heat"]["gap_risk_unknown"] == 2
+    total = sum(p["risk_pct"] for p in body["positions"])
+    assert total == pytest.approx(body["heat"]["open_pct"], abs=0.01)    # heat stays on stop risk
+
+
+def test_no_open_short_means_no_gap_figure(logged_in):
+    seed_store("trades", [_open_trade("a" * 16, "AAPL")])
+    heat = logged_in.get("/api/v1/risk").get_json()["heat"]
+    assert heat["gap_risk_amount"] is None
+    assert heat["gap_risk_unknown"] == 0
+
+
+def test_only_unknown_shorts_give_null_not_zero(logged_in):
+    seed_store("trades", [_short_trade("a" * 16, "NIO"), _short_trade("b" * 16, "RIVN", shares=0)])
+    heat = logged_in.get("/api/v1/risk").get_json()["heat"]
+    assert heat["gap_risk_amount"] is None
+    assert heat["gap_risk_unknown"] == 2
+
+
+def test_a_failing_trade_read_degrades_the_gap_figure_not_the_page(logged_in, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("db down")
+    monkeypatch.setattr("swingbot.core.tracking.performance.TradeLog.get_trades", boom)
+    response = logged_in.get("/api/v1/risk")
+    assert response.status_code == 200
+    assert response.get_json()["heat"]["gap_risk_amount"] is None
 
 
 def test_utilisation_is_not_clamped_at_100(logged_in, tmp_path):
