@@ -47,5 +47,16 @@ def test_application_services_wait_for_a_healthy_database(compose, service):
     }
 
 
+def test_every_published_port_binds_to_loopback(compose):
+    # Docker-published ports bypass UFW: anything not on 127.0.0.1 is public.
+    published = [
+        (name, port)
+        for name, service in compose["services"].items()
+        for port in service.get("ports", [])
+    ]
+    assert ("admin", "127.0.0.1:${ADMIN_PORT:-1234}:${ADMIN_PORT:-1234}") in published
+    assert all(str(port).startswith("127.0.0.1:") for _, port in published), published
+
+
 def test_admin_writes_env_versions_into_the_host_backups(compose):
     assert "./backups/env:/app/backups/env" in compose["services"]["admin"]["volumes"]

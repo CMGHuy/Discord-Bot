@@ -270,8 +270,13 @@ If it failed, the remedy depends on the image now running:
 
 ## Accessing the admin UI
 
-The admin UI runs on port `1234` (or `$ADMIN_PORT`). The firewall keeps
-that port closed to the internet — reach it via SSH tunnel:
+The admin UI runs on port `1234` (or `$ADMIN_PORT`), published on
+`127.0.0.1` only. **UFW does not protect it:** Docker-published ports bypass
+UFW, so until 2026-10-23 a bare `1234:1234` mapping served the login page over
+plain HTTP to the whole internet. The loopback binding in `docker-compose.yml`
+(pinned by `tests/db/test_compose.py`) is what keeps it closed. Production
+traffic arrives through the Cloudflare Tunnel (`http://admin:1234` on the
+compose network); by hand, reach it via SSH tunnel:
 
 ```bash
 # On your local machine:
@@ -281,15 +286,9 @@ ssh -L 1234:localhost:1234 deploy@167.233.26.185 -N
 
 To keep it open in the background: add `-f` to the ssh command.
 
-If you want to expose it publicly (only with a real `ADMIN_PASSWORD`):
-
-```bash
-ssh deploy@167.233.26.185
-sudo ufw allow 1234/tcp   # opens the port
-```
-
-Or put nginx in front with TLS — see `deploy/nginx.conf.example` for a
-ready-made config.
+Do not expose the port publicly — `ufw allow 1234/tcp` would not even be
+the switch (see above). If a public hostname is needed without the tunnel, put
+nginx in front with TLS — see `deploy/nginx.conf.example`.
 
 A third option needing no open port at all: [CLOUDFLARE_TUNNEL.md](CLOUDFLARE_TUNNEL.md)
 gives the admin UI a real public hostname via a Cloudflare Tunnel
