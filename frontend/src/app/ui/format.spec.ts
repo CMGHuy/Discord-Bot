@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { amount, held, money, signed, timeInZone } from './format';
+import { amount, held, money, quantity, signed, timeInZone } from './format';
 
 /* No prior spec file existed for format.ts; timeInZone is new (Watchlist
  * Earnings calendar) and carries real cross-timezone/DST behaviour worth
@@ -115,5 +115,19 @@ describe('money', () => {
 
   it('renders absence as the em dash, not as zero', () => {
     expect(money(null, '€')).toBe('—');
+  });
+});
+
+describe('quantity (v183: a share count, decimals are a ceiling)', () => {
+  it('drops trailing zeros and groups thousands', () => {
+    expect(quantity(25)).toBe('25');
+    expect(quantity(1234.567)).toBe('1,234.57');
+    expect(quantity(12.5)).toBe('12.5');
+  });
+
+  it('honours a custom ceiling and shows the placeholder for an absent value', () => {
+    expect(quantity(1.23456, 4)).toBe('1.2346');
+    expect(quantity(null)).toBe('—');
+    expect(quantity(undefined)).toBe('—');
   });
 });

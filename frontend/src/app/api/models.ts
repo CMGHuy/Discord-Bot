@@ -237,6 +237,19 @@ export interface QuoteStamp {
   confirmed: boolean | null;
 }
 
+/** v183: a stamped short's order-block sizing (`_gap_sizing_detail`,
+ *  swingbot/admin/api_v1/trades.py). `line` is the alert's own gap-risk
+ *  wording; null for a rule-stop short. */
+export interface GapSizingDetail {
+  rule: string;
+  up_gap_p99_pct: number | null;
+  shares: number | null;
+  risk_amount: number | null;
+  gap_risk_amount: number | null;
+  gap_sized: boolean;
+  line: string | null;
+}
+
 export interface TradeDetailFields {
   /** The underlying trade record's id. The plan id is the public identity,
    *  but close/cancel/delete act on this one. Null when no trade was ever
@@ -289,6 +302,12 @@ export interface TradeDetailFields {
   acceptance_level: number | null;
   /** v171 D2: the quote the plan was built from; null before v171. */
   quote?: QuoteStamp | null;
+  /** v183: the alert's squeeze/earnings/ex-div lines, from the snapshot saved
+   *  when it went out; null for longs and pre-v183 plans. Optional so older
+   *  fixtures stay valid. */
+  risk_notice_lines?: string[] | null;
+  /** v183: see GapSizingDetail; null for longs and unstamped shorts. */
+  gap_sizing?: GapSizingDetail | null;
 }
 
 /** `GET /trades/:id` -- a list row plus the heavy fields. */
@@ -1328,6 +1347,11 @@ export interface RiskHeat {
   open_pct: number | null;
   cap_pct: number | null;
   utilisation_pct: number | null;
+  /** v183. The server always sends both. They are optional here only so
+   *  pre-v183 fixtures stay valid. Null = no open short has a figure;
+   *  `gap_risk_unknown` counts the shorts without one. */
+  gap_risk_amount?: number | null;
+  gap_risk_unknown?: number;
 }
 
 export interface RiskPosition {

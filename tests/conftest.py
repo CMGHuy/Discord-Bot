@@ -86,6 +86,18 @@ def assert_entry_invariants(bull, bear, df):
 TEST_DPI = 30
 
 
+@pytest.fixture
+def no_short_interest_queue(monkeypatch):
+    """v183: building a SHORT plan with SHORT_RISK_NOTICE on (the default)
+    queues every short-interest cache miss via ``request_refresh`` into
+    ``config.DATA_DIR`` -- the checkout's real ``data/`` unless the test moved
+    it. Files that build short plans on the real DATA_DIR opt in with
+    ``pytestmark = pytest.mark.usefixtures("no_short_interest_queue")``; the
+    notice itself still renders (a miss reads as not checked)."""
+    from swingbot.core.market import short_interest
+    monkeypatch.setattr(short_interest, "request_refresh", lambda ticker: None)
+
+
 @pytest.fixture(autouse=True)
 def _low_dpi_renders(monkeypatch):
     """Render test charts at a low DPI -- the tier's dominant cost is raster

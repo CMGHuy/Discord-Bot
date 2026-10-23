@@ -94,3 +94,43 @@ def test_the_notice_never_claims_a_verified_locate():
     text = short_notice.short_lane_notice(
         CONTEXT, {"entry": 100.0, "stop_loss": 98.25, "take_profit": 90.0}, 5)
     assert "not a verified locate" in text.lower()
+
+
+from tests.presentation.test_risk_notice_lines import LINES, SNAP  # noqa: E402
+
+
+def _noticed_item(context=None, snapshot=SNAP):
+    item = _short_item(context=context)
+    item.plan_v2 = dataclasses.replace(item.plan_v2, risk_notice=snapshot)
+    return item
+
+
+def test_a_base_lane_short_carries_the_notice_on_every_surface(monkeypatch):
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")   # LINES quote the ex-div in $
+    for name, text in _renderings(_noticed_item()).items():
+        for line in LINES:
+            assert line in text, (name, line)
+        assert text.count("CHECK BORROW AVAILABILITY") == 1, name
+
+
+def test_an_extra_lane_short_carries_both_notices_and_one_borrow_check():
+    for name, text in _renderings(_noticed_item(context=CONTEXT)).items():
+        assert "isolated" in text.lower() and LINES[1] in text, name
+        assert text.count("CHECK BORROW AVAILABILITY") == 1, name
+
+
+def test_switch_off_short_and_long_never_reach_the_wording(monkeypatch, tmp_path):
+    from swingbot.core.scanning import snapshots
+
+    def fresh(item, tag):
+        # Each render gets an empty scan-snapshot cache, so a "What changed since
+        # last scan" field left by the previous render never enters the comparison.
+        monkeypatch.setattr(snapshots, "_SNAPSHOT_PATH", str(tmp_path / f"{tag}.json"))
+        return _renderings(item)
+
+    before = {"short": fresh(_short_item(context=None), "s0"),
+              "long": fresh(make_item(plan_v2=make_plan_v2(direction="bullish")), "l0")}
+    monkeypatch.setattr(short_notice, "risk_notice_lines",
+                        lambda *a, **k: pytest.fail("a plan without a snapshot was worded"))
+    assert fresh(_short_item(context=None), "s1") == before["short"]
+    assert fresh(make_item(plan_v2=make_plan_v2(direction="bullish")), "l1") == before["long"]

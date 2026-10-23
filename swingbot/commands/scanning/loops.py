@@ -730,6 +730,7 @@ async def _trade_monitor_error(exc: Exception):
 _recap_fired_date: dt.date | None = None   # process-local fast path; persisted below for restart safety
 _weekend_scan_fired_date: dt.date | None = None
 _earnings_refresh_fired_date: dt.date | None = None
+_short_interest_refresh_fired_date: dt.date | None = None
 _reanchor_fired_date: dt.date | None = None
 _REANCHOR_CHUNK = 30       # 10 Alpaca requests of 3 symbols per chunk
 _REANCHOR_PAUSE_S = 10.0   # one chunk per 10 s stays inside the 150/min budget at tier 4's 25 % reserve
@@ -987,6 +988,40 @@ async def weekly_earnings_refresh():
         log.exception("weekly_earnings_refresh: refresh failed")
 
 
+_SHORT_INTEREST_REFRESH_AT = (23, 40)   # Berlin; always after the 16:00 ET close
+
+
+@tasks.loop(minutes=1)
+async def daily_short_interest_refresh():
+    """v183 Part B: refresh the short-interest / float / ex-div cache once per
+    weekday after the US close, off the scan path. The alert only reads the
+    cache (short_interest.cached_short_interest); a failure here leaves the
+    old entries and every short's notice degrades to "not checked"."""
+    global _short_interest_refresh_fired_date
+    now = dt.datetime.now(SESSION_TZ)
+    if now.weekday() >= 5 or (now.hour, now.minute) != _SHORT_INTEREST_REFRESH_AT:
+        return
+    today = now.date()
+    if (_short_interest_refresh_fired_date == today
+            or _scheduled_job_already_fired('daily_short_interest_refresh', today)):
+        return
+    _short_interest_refresh_fired_date = today
+    _mark_scheduled_job_fired('daily_short_interest_refresh', today)
+    if not config.SHORT_RISK_NOTICE:
+        log.info("daily_short_interest_refresh: SHORT_RISK_NOTICE is off -- skipped")
+        return
+    try:
+        from swingbot.core.market import short_interest
+        symbols = await asyncio.to_thread(short_interest.refresh_symbols)
+        result = await asyncio.to_thread(short_interest.refresh_short_interest, symbols)
+        log.info("daily_short_interest_refresh: %d updated, %d failed of %d symbols",
+                 result["updated"], len(result["failed"]), len(symbols))
+    except Exception as exc:
+        swallowed(log, "ops.daily_short_interest_refresh", exc,
+                  "daily_short_interest_refresh: refresh failed",
+                  level=logging.ERROR, exc_info=True)
+
+
 @tasks.loop(minutes=1)
 async def daily_reanchor():
     """v171 D4 backstop: weekly full re-fetch of both daily caches, outside session.
@@ -1229,7 +1264,8 @@ async def tape_feed():
 def _always_on_loops() -> tuple:
     """Loops on_ready starts unconditionally, in start order."""
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
-            weekend_deep_scan_task, weekly_earnings_refresh, gate_counterfactual_resolve,
+            weekend_deep_scan_task, weekly_earnings_refresh, daily_short_interest_refresh,
+            gate_counterfactual_resolve,
             pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
             next_session_wrapup, override_verdict_check, daily_reanchor, tape_feed)
 

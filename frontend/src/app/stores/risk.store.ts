@@ -92,6 +92,11 @@ export const RiskStore = signalStore(
      *  the bar's width is clamped, below, so it cannot overflow its track. */
     heatUtilisationPct: computed(() => data()?.heat?.utilisation_pct ?? null),
 
+    /** v183: the open shorts' summed p99 gap risk; display only, heat stays on stop risk. */
+    gapRiskAmount: computed(() => data()?.heat?.gap_risk_amount ?? null),
+    /** Shorts the figure cannot cover, shown, never hidden. */
+    gapRiskUnknown: computed(() => data()?.heat?.gap_risk_unknown ?? 0),
+
     /** The meter's fill, 0..1. Null rather than 0 when utilisation is
      *  unknown: an empty meter and a meter at zero look identical and mean
      *  opposite things. */

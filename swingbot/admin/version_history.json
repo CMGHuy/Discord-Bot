@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-23 12:14:12 UTC",
+  "generated_at": "2026-10-23 19:11:30 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.35.0",
-    "bot": "2.14.4"
+    "ui": "1.35.1",
+    "bot": "2.15.0"
   },
   "releases": [
     {
@@ -2045,6 +2045,32 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-23",
+      "last_seen": "2026-10-23",
+      "commit": "aec307ac",
+      "subject": "release(bot): 2.15.0 -- short plans sized so a p99 up-gap stays inside the dollar risk, squeeze/earnings/ex-div notice on every short alert (v183)",
+      "versions": {
+        "ui": "1.35.0",
+        "bot": "2.15.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-23",
+      "last_seen": "2026-10-23",
+      "commit": "1e014043",
+      "subject": "release(ui): 1.35.1 -- plan page shows the short notice lines and the gap-risk cut in the order block, risk page shows open shorts' gap risk beside heat (v183)",
+      "versions": {
+        "ui": "1.35.1",
+        "bot": "2.15.0"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]

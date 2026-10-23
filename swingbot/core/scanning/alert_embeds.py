@@ -67,7 +67,7 @@ from .snapshots import _snapshot_and_diff
 from .requirements import _sources_str
 from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows, cohort_line,
                          stop_figures_for_display)
-from .execution_embeds import build_ticket_embed
+from .execution_embeds import build_ticket_embed, ticket_gap_line
 
 
 log = logging.getLogger(__name__)
@@ -137,6 +137,14 @@ def _quote_target(item):
     return item.plan_v2 if getattr(item, "plan_v2", None) is not None else item.plan
 
 
+GAP_RISK_FIELD = "Position risk"
+
+
+def _gap_risk_fields(item) -> list:
+    line = ticket_gap_line(_v2_plan(item))
+    return [(GAP_RISK_FIELD, line, False)] if line else []
+
+
 def _quote_fields(item) -> list:
     line = quote_line(_quote_target(item))
     return [(QUOTE_FIELD, line, False)] if line else []
@@ -192,6 +200,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     stop_pct, stop_r = stop_figures_for_display(plan_v2, nums, plan)
     sections["headline"].extend(_short_notice_fields(item, nums, plan_v2))
     sections["plan"].extend(_quote_fields(item))
+    sections["plan"].extend(_gap_risk_fields(item))
 
     unmet = [(requirement.label, requirement.detail)
              for requirement in item.requirements if not requirement.passed]

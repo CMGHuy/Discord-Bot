@@ -11,6 +11,7 @@ from .commands import check_cmd
 from .loops import (
     config_watcher,
     daily_recap,
+    daily_short_interest_refresh,
     heartbeat,
     market_data_refresh,
     on_ready,
@@ -27,5 +28,5 @@ __all__ = [
     "_ordered_alerts", "digest_payload", "cap_alerts", "route_channel_id",
     "deep_scan_report", "_send_alerts", "check_cmd", "weekend_deep_scan",
     "session_scan", "heartbeat", "config_watcher", "trade_monitor",
-    "daily_recap", "weekend_deep_scan_task", "weekly_earnings_refresh", "market_data_refresh", "on_ready",
+    "daily_recap", "daily_short_interest_refresh", "weekend_deep_scan_task", "weekly_earnings_refresh", "market_data_refresh", "on_ready",
 ]

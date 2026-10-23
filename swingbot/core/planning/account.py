@@ -402,9 +402,29 @@ def apply_realized_pnl(pnl_amount: float, meta: dict = None) -> dict:
     return config
 
 
+def _sizing_distance(entry: float, stop_distance: float, gap_floor_pct: float | None) -> float:
+    """v183: the per-share distance the risk budget is divided by --
+    the stop distance, or entry x gap_floor_pct% when that is wider."""
+    if gap_floor_pct is None:
+        return stop_distance
+    return max(stop_distance, entry * float(gap_floor_pct) / 100.0)
+
+
+def _gap_fields(shares: float, uncut_shares: float, sizing_distance: float,
+                gap_floor_pct: float | None) -> dict:
+    """v183: the gap keys of a floored sizing; {} without a floor, so every
+    stop-only result keeps today's exact key set. gap_sized is true only
+    when the floor actually lowered the final share count."""
+    if gap_floor_pct is None:
+        return {}
+    return {"gap_risk_amount": round(shares * sizing_distance, 2),
+            "gap_sized": round(shares, 2) < round(uncut_shares, 2),
+            "gap_floor_pct": float(gap_floor_pct)}
+
+
 def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = None,
                           *, strategy_stats: dict = None, ticker_atr_pct: float = None,
-                          open_positions: int = 0) -> dict | None:
+                          open_positions: int = 0, gap_floor_pct: float | None = None) -> dict | None:
     """
     Position sizing -- see this module's docstring for the two modes
     (account_cfg["sizing_mode"]: "risk_pct" or "account_pct").
@@ -422,6 +442,13 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
       3. MAX_RISK_AMOUNT_ABSOLUTE -- the REAL risk (final shares x stop
          distance) never exceeds this many currency units either, again
          regardless of mode/%/balance.
+
+    v183 gap_floor_pct (shorts only, passed by planning.gap_sizing): the
+    risk budget and the MAX_RISK_AMOUNT_ABSOLUTE cap divide by
+    max(stop distance, entry x gap_floor_pct%) instead of the stop
+    distance, so shares can only shrink. risk_amount stays shares x STOP
+    distance; the result adds gap_risk_amount, gap_sized, gap_floor_pct.
+    None (every other caller) -> today's result, key for key.
 
     Once every cap is applied, `risk_amount` and `position_value` are ALWAYS
     recomputed from the final (possibly capped) share count -- never left
@@ -489,22 +516,26 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         return None
 
     stop_distance = abs(entry - stop_loss)
+    sizing_distance = _sizing_distance(entry, stop_distance, gap_floor_pct)   # v183
 
     if mode == "account_pct":
         # Fixed allocation: the position is always exactly position_pct% of
         # the account, independent of how far away the stop sits.
         position_value = balance * position_pct / 100.0
         raw_shares = position_value / entry
+        uncut_shares = raw_shares                                              # v183
     else:
         mode = "risk_pct"   # normalize anything unrecognized to the documented default
         if stop_distance <= 0:
             return None
         risk_amount = balance * risk_pct / 100.0
-        raw_shares = risk_amount / stop_distance
+        raw_shares = risk_amount / sizing_distance                             # v183 (was / stop_distance)
+        uncut_shares = risk_amount / stop_distance                             # v183
         position_value = raw_shares * entry
 
     capped = False
     max_position_value = balance * max_position_pct / 100.0
+    uncut_shares = min(uncut_shares, max_position_value / entry)               # v183
     if position_value > max_position_value:
         raw_shares = max_position_value / entry
         capped = True
@@ -514,11 +545,13 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     # or % settings are in play.
     if max_position_value_absolute > 0:
         max_shares_for_position = max_position_value_absolute / entry
+        uncut_shares = min(uncut_shares, max_shares_for_position)              # v183
         if raw_shares > max_shares_for_position:
             raw_shares = max_shares_for_position
             capped = True
     if max_risk_amount_absolute > 0 and stop_distance > 0:
-        max_shares_for_risk = max_risk_amount_absolute / stop_distance
+        uncut_shares = min(uncut_shares, max_risk_amount_absolute / stop_distance)   # v183
+        max_shares_for_risk = max_risk_amount_absolute / sizing_distance       # v183 (was / stop_distance)
         if raw_shares > max_shares_for_risk:
             raw_shares = max_shares_for_risk
             capped = True
@@ -529,7 +562,7 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     position_value = raw_shares * entry
     risk_amount = raw_shares * stop_distance
 
-    return {
+    result = {
         "shares":           round(raw_shares, 2),
         "risk_amount":      round(risk_amount, 2),
         "position_value":   round(position_value, 2),
@@ -542,6 +575,8 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         "max_risk_amount_absolute":    max_risk_amount_absolute,
         "mode":             mode,
     }
+    result.update(_gap_fields(raw_shares, uncut_shares, sizing_distance, gap_floor_pct))   # v183
+    return result
 
 
 @dataclass

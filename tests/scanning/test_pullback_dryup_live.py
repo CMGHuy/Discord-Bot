@@ -11,6 +11,9 @@ from tests.helpers import make_ohlcv
 from tests.scanning.test_strategy_pass_emit import _Store, _Log, _plan
 from tests.scanning.test_engine_v2_plans import _setup_minimal_scan, _structured_df
 
+# v183: short plans here run on the real DATA_DIR -- keep their notice misses out of data/.
+pytestmark = pytest.mark.usefixtures("no_short_interest_queue")
+
 
 @pytest.mark.parametrize('scope,strategy,blocked', [
     ('strategy', 'Fibonacci', True), ('strategy', 'MACD', False),

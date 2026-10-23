@@ -111,17 +111,26 @@ def _clamped_stop_figures(item, plan):
 
 
 def _short_notice(item, plan) -> str:
-    """The extra-lane notice ("" for a base alert), from the same funnel numbers."""
-    from swingbot.core.presentation.short_notice import alert_notice, is_compression
+    """The short notice (extra-lane, compression, or the v183 squeeze/event lines); ""
+    for a long or an unstamped base alert."""
+    from swingbot.core.presentation.short_notice import (
+        alert_notice, has_risk_notice, is_compression)
     from swingbot.core.scanning.plan_table import plan_numbers_for_display
     context = getattr(item, "candidate_context", None)
     plan_v2 = getattr(item, "plan_v2", None)
-    if not context and not is_compression(plan_v2):
+    if not context and not is_compression(plan_v2) and not has_risk_notice(plan_v2):
         return ""
     nums = plan_numbers_for_display(plan_v2, {
         "entry": plan.entry, "stop_loss": plan.stop_loss,
         "take_profit": plan.take_profit, "target2": plan.target2_price})
     return alert_notice(plan_v2, context, nums, currency=config.CURRENCY_SYMBOL)
+
+
+def _gap_risk_lines(item) -> list:
+    """[the v183 gap-risk line] for the email/push body, [] when there is none."""
+    from swingbot.core.scanning.execution_embeds import ticket_gap_line
+    line = ticket_gap_line(getattr(item, "plan_v2", None))
+    return [line] if line else []
 
 
 def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
@@ -172,6 +181,7 @@ def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
         "",
         "Technical signal only — not financial advice.",
     ]
+    body_lines[8:8] = _gap_risk_lines(item)  # index 8 = blank after R:R, so the line sits under it
     notice = _short_notice(item, plan)
     if notice:
         body_lines[-1:-1] = [notice, ""]

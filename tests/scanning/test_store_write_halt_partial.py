@@ -10,6 +10,9 @@ from tests.scanning.test_engine_v2_plans import _structured_df
 
 import sqlalchemy.exc as sa_exc
 
+# v183: short plans here run on the real DATA_DIR -- keep their notice misses out of data/.
+pytestmark = pytest.mark.usefixtures("no_short_interest_queue")
+
 
 class _FailsOnSecondAdd:
     stored: list = []
