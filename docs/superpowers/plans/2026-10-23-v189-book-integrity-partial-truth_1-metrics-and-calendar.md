@@ -428,7 +428,7 @@ cd "$WT" && git add swingbot/core/analytics/metrics.py swingbot/core/tracking/pe
 - Consumes (V189-1): `metrics._blended_r_raw(trade) -> float | None`, `metrics.r_multiple`, `metrics.banked_contribution_r(legs)`, `metrics.open_trade_r(trade, quote)`.
 - Produces:
   - `metrics.SCRATCH_EPS_R: float = 0.01`
-  - `metrics.LABEL_BASIS_SINCE: str | None = None` (V189-26 sets the date)
+  - `metrics.LABEL_BASIS_SINCE: str | None = None` (V189-27 sets the date and updates `test_constants`)
   - `metrics.net_outcome(trade: dict) -> tuple[str, str | None]` — for closes with two or more realized legs: `("win", None)` when the unrounded net R is `> +0.01`, `("loss", None)` when `< -0.01`, `("closed", "scratch")` inside the band (edges exclusive, so exactly ±0.01 is scratch), `("closed", "unscored")` plus a WARNING naming `trade.get("id") or trade.get("plan_id")` when the net is None or not finite. Used by V189-10 (`_plan_outcome`), V189-11 (manual close), V189-20 (`label_counts`).
   - `tests/analytics/golden_partial_trade.json` — the index § Contracts shape, with `calendar_day.trade_count = 3` and `calendar_day.win_rate = 66.66666666666667` (see this part's header note). Read by V189-4, V189-10, V189-11, V189-18, V189-19, V189-21, V189-22.
   - Test helpers in `tests/analytics/test_golden_partial_trade_metrics.py`, importable by later tests: `FIXTURE_PATH`, `load_golden() -> dict`, `closed_case(name) -> dict`, `open_case(name) -> dict`, `golden_closed_trade(case, *, closed_at=None, trade_id="golden-1", runner_reason="manual") -> dict`, `golden_open_trade(*, trade_id="golden-open") -> dict`.

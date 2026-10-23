@@ -869,7 +869,7 @@ cd "$WT" && git add swingbot/core/edge/heat.py swingbot/core/tracking/equity.py 
 - Consumes: `metrics.LABEL_BASIS_SINCE: str | None` and `metrics.net_outcome(trade) -> tuple[str, str | None]` (V189-2); the golden helper `golden_closed_trade(case, *, closed_at=None, trade_id="golden-1", runner_reason="manual")` (V189-2); `tests.admin.test_api_v1_trades._trade` (exists); `tests.store_seed.seed_store`, `tests.admin.api_v1_contract.NULLABLE_STR`, `assert_shape` (exist); `scope.closed_only` with `CLOSED_STATUSES = ("win", "loss", "closed")` (exists).
 - Produces (read by V189-24 in part 7):
   - `metrics.label_counts(closed: list[dict]) -> dict[str, int]` — `{"scratch": n, "unscored": n}`: rows with `status == "closed"` and `close_reason` exactly `"scratch"` / `"unscored"`. Both keys always present; `0` on an empty list. A `win`/`loss`/`open` row never counts, whatever its `close_reason`.
-  - `/api/v1/analytics/performance` top level gains `scratch_n: int`, `unscored_n: int` (over the same scoped `closed` list as `win_rate`), and `label_basis_since: str | None` (= `metrics.LABEL_BASIS_SINCE`, read at request time so V189-26's date reaches it without a code change here). Nothing else in the payload moves; `win_rate` and `win_rate_n` keep excluding `closed` rows.
+  - `/api/v1/analytics/performance` top level gains `scratch_n: int`, `unscored_n: int` (over the same scoped `closed` list as `win_rate`), and `label_basis_since: str | None` (= `metrics.LABEL_BASIS_SINCE`, read at request time so V189-27's date reaches it without a code change here). Nothing else in the payload moves; `win_rate` and `win_rate_n` keep excluding `closed` rows.
 
 `win_rate`, `expectancy_r`, `TradeLog.get_stats`, the Dashboard and the Calendar are not edited: D6 is display only and ExpR is label-free (spec D6, last line).
 
@@ -1018,7 +1018,7 @@ def test_label_basis_since_echoes_the_constant_at_request_time(seed, logged_in, 
     assert _perf(logged_in)["label_basis_since"] == "2026-10-24"
 ```
 
-No test here pins the constant's value: V189-26 sets it, and only metrics.py is in its row.
+No test here pins the constant's value: V189-27 sets it (and updates V189-2's `test_constants` to match).
 
 - [ ] **Step 2: Declare the keys in the two exact-shape contract tests**
 
@@ -1067,7 +1067,7 @@ In `swingbot/admin/api_v1/analytics.py`, `analytics_performance`: add `labels = 
 
 ```python
         # v189 D6 -- the closes the rate leaves out, and the date their basis
-        # changed. Read through `m.` at request time: V189-26 sets the date.
+        # changed. Read through `m.` at request time: V189-27 sets the date.
         "scratch_n": labels["scratch"],
         "unscored_n": labels["unscored"],
         "label_basis_since": m.LABEL_BASIS_SINCE,

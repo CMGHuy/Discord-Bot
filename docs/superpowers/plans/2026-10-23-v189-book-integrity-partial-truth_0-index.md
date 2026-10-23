@@ -8,7 +8,7 @@
 **Spec:** [2026-10-23-v189-book-integrity-partial-truth-design.md](../specs/2026-10-23-v189-book-integrity-partial-truth-design.md) — its `## Corrections from the code brief` section wins over earlier sections.
 **Brief:** `.superpowers/briefs/2026-10-23-v189-book-integrity-partial-truth.md`
 **Depends on:** v187 (`docs/superpowers/plans/2026-10-23-v187-safety-hardening_0-index.md`) merged to `main`. V189-1 checks this first and stops if `PENDING_CANCEL_EVENTS` is not on `main`.
-**Worktree:** implement every task in `.claude/worktrees/2026-10-23-v189-book-integrity-partial-truth` (branch of the same name, created in V189-1's first step; `docs/claude/document-lifecycle.md`). V189-26 runs the full suite in the worktree and merges to `main`; then `/panel staff-engineer,quant-engineer,risk-manager` (the spec's `Panel:` line) and `/close-out` run on `main`.
+**Worktree:** implement every task in `.claude/worktrees/2026-10-23-v189-book-integrity-partial-truth` (branch of the same name, created in V189-1's first step; `docs/claude/document-lifecycle.md`). V189-27 runs the full suite in the worktree and merges to `main`; then `/panel staff-engineer,quant-engineer,risk-manager` (the spec's `Panel:` line) and `/close-out` run on `main`.
 
 ## Goal
 
@@ -119,9 +119,9 @@ D5/D6  admin/api_v1/trades.py rows: entry_shares, banked_contribution_r, open-pa
 - `entry_shares` and `banked_contribution_r` are **optional** in `models.ts` (nine spec files build full `TradeRow` literals).
 - Complexity < 15 for every function written or changed; baselined functions may only shrink (`_on_event` 15, `poll` 20, `_step_active` 21, `_row_from_plan` 15, `list_trades` 34, `_sync_run_scan` 96). Check with `python scripts/dev/complexity_gate.py` in every task that touches one of them.
 - No schema change, no Alembic revision, no backfill of historical records.
-- Run `/replicate-prod-db` once in V189-1, before the first test run (every pytest test uses the autouse Postgres fixture). Per-task runs are `python scripts/dev/testrun.py file <test>`; frontend runs are `cd frontend && npx ng test --watch=false` plus `npm run lint`. The full suite runs once, in V189-26.
+- Run `/replicate-prod-db` once in V189-1, before the first test run (every pytest test uses the autouse Postgres fixture). Per-task runs are `python scripts/dev/testrun.py file <test>`; frontend runs are `cd frontend && npx ng test --watch=false` plus `npm run lint`. The full suite runs once, in V189-27.
 - New tests go in existing directories (`tests/analytics/`, `tests/db/`, `tests/planning/`, `tests/tracking/`, `tests/admin/`, `tests/scanning/`, `tests/edge/`, `tests/presentation/`, `tests/commands/`, `tests/scripts/`); no `tests/suites.toml` edit.
-- Do not touch `CLAUDE.md` or `.claude/`. `docs/claude/known-traps.md` is edited only in V189-25, which also checks the `AGENTS.md` mirror (`tests/hooks/test_codex_mirror.py`).
+- Do not touch `CLAUDE.md` or `.claude/`. `docs/claude/known-traps.md` is edited only in V189-26, which also checks the `AGENTS.md` mirror (`tests/hooks/test_codex_mirror.py`).
 - Work in the worktree; one scoped commit per task (backend and frontend never in one commit). Nothing is deployed by this plan.
 
 ## Spec clarifications (plan-writer decisions, 2026-10-23)
@@ -134,9 +134,11 @@ D5/D6  admin/api_v1/trades.py rows: entry_shares, banked_contribution_r, open-pa
 6. **A1 cancel.** A reversal against an unfilled placeholder cancels the plan with transition reason `reversed` and deletes the placeholder in the same locked transaction; no new event and no P&L.
 7. **Dashboard JSON.** `risk_used_pct` (which was `open_heat`) is renamed `heat_enforced_pct`; `risk_of_loss_pct` and `risk_of_loss_amount` are added. The frontend follows in V189-23.
 8. **`TradeLog.clear_history(*, force=False) -> int`** stays as a thin wrapper over `account_reset.reset_closed_history`; the admin endpoint and Discord handler call `reset_closed_history` directly for the full result.
-9. **`LABEL_BASIS_SINCE`** is `None` until V189-26 sets it to the merge date (`date -u +%F`); deploy follows the merge. If the deploy slips past that date, the controller amends it in the deploy commit.
-10. **`check_bar`** inherits `_save`, `_persist_partial` and `_persist_terminal` (so it is correct for free) but gets no dedicated tests; V189-25 fills the empty `known-traps.md` section.
+9. **`LABEL_BASIS_SINCE`** is `None` until V189-27 sets it to the merge date (`date -u +%F`); deploy follows the merge. If the deploy slips past that date, the controller amends it in the deploy commit.
+10. **`check_bar`** inherits `_save`, `_persist_partial` and `_persist_terminal` (so it is correct for free) but gets no dedicated tests; V189-26 fills the empty `known-traps.md` section.
 11. **`_on_event`'s non-persisted `closed` mapping** is left as is: it is reached only when `trade_log` is None, where `_on_event` does nothing.
+12. **The Dashboard has no risk card to relabel.** The partner removed the Dashboard "Risk used" card in `ce43c07a` (2026-10-23 16:10, before the spec), and `dashboard.spec.ts` / `trading-performance.spec.ts` pin its absence. V189-23 therefore does not bring a card back: it follows the JSON rename in the model and the dashboard store (`heatEnforcedPct`, `riskOfLossPct`, `riskOfLossAmount`, utilisation on enforced heat), and shows "Heat (enforced)" and "Risk of loss (to stop)" side by side on the Risk page, where the breakdown lives. B4's rule (never headroom the scanner does not grant, gap hint on both figures) holds there.
+13. **The SPA surfaces the delete and reset replies (partner decision, 2026-10-23).** V189-14's `ended`/`notice` on clear-open and V189-16's force/refusal/archive reply on clear-history reach the Trades page in V189-25: the notice is shown after the action, a 409 `kill_switch_tripped` shows the refusal text with an explicit, separately confirmed "force" retry, a 500 `archive_failed` reads as its own error, and a 200 names the archive.
 
 ## Contracts
 
@@ -145,7 +147,7 @@ D5/D6  admin/api_v1/trades.py rows: entry_shares, banked_contribution_r, open-pa
 ```python
 # swingbot/core/analytics/metrics.py
 SCRATCH_EPS_R: float = 0.01
-LABEL_BASIS_SINCE: str | None = None          # ISO date, set in V189-26
+LABEL_BASIS_SINCE: str | None = None          # ISO date, set in V189-27
 def leg_contribution_r(leg: dict) -> float | None          # fraction * r; None if either missing
 def _blended_r_raw(trade: dict) -> float | None            # r_multiple's body, unrounded (legs and single)
 def r_multiple(trade: dict) -> float | None                # round(raw, 2) when legs, raw otherwise (unchanged results)
@@ -368,13 +370,14 @@ Frontend: `TradeRow.entry_shares?: number | null`, `TradeRow.banked_contribution
 - V189-12: `_sync_run_scan` complexity strictly below 96 after the extraction; no P&L on a placeholder.
 - V189-15: archive written before anything is deleted; reseed point present; kill switch never cleared.
 - V189-18..24: every golden figure matches the fixture on both sides.
+- V189-25: a refused reset never deletes anything and never retries on its own; the force retry needs its own confirmation; an archive failure is not shown as a refusal.
 
 ## Parallelisation
 
 | Task | May run alongside | Sequential edge and why |
 |---|---|---|
 | V189-1 | none | first task: checks v187 is merged, creates the worktree, runs `/replicate-prod-db`; owns `metrics.py` and `performance.closed_r_multiple` |
-| V189-2 | V189-3, V189-5, V189-25 | after V189-1: same file `metrics.py`, consumes `_blended_r_raw` |
+| V189-2 | V189-3, V189-5, V189-26 | after V189-1: same file `metrics.py`, consumes `_blended_r_raw` |
 | V189-3 | V189-2, V189-4, V189-5, V189-6 | after V189-1: consumes `metrics.r_multiple`; disjoint file `retrospective.py` |
 | V189-4 | V189-3, V189-5, V189-6 | after V189-1 (same file `performance.py`, consumes `leg_contribution_r`) and V189-2 (golden fixture) |
 | V189-5 | V189-2, V189-3, V189-4 | after V189-1's worktree step; disjoint files `engine.py`, `repositories/base.py` |
@@ -394,13 +397,14 @@ Frontend: `TradeRow.entry_shares?: number | null`, `TradeRow.banked_contribution
 | V189-19 | V189-16, V189-17, V189-20 | after V189-12: same file `scan_run.py` (heat-blocked line) |
 | V189-20 | V189-8..V189-19 | after V189-2 (same file `metrics.py`); disjoint `api_v1/analytics.py` |
 | V189-21 | V189-19, V189-20 | after V189-18 (API fields) and V189-2 (fixture); owns `models.ts`, `plan-cell.ts`, `trades.ts`, `dashboard.ts` |
-| V189-22 | V189-19, V189-20, V189-23, V189-25 | after V189-21: consumes `entry_shares` and the fixture loader; disjoint files (trade-detail store, card, tiles) |
-| V189-23 | V189-22, V189-25 | after V189-19 (API keys) and V189-21 (same files `models.ts`, `dashboard.ts`) |
-| V189-24 | V189-22, V189-25 | after V189-20 (API keys) and V189-23 (same file `models.ts`) |
-| V189-25 | V189-2..V189-24 | after V189-1's worktree step; disjoint docs only |
-| V189-26 | none | after every other task: sets `LABEL_BASIS_SINCE`, single full-suite run, complexity gate, merge |
+| V189-22 | V189-19, V189-20, V189-23, V189-26 | after V189-21: consumes `entry_shares` and the fixture loader; disjoint files (trade-detail store, card, tiles) |
+| V189-23 | V189-22, V189-26 | after V189-19 (API keys) and V189-21 (same file `models.ts`) |
+| V189-24 | V189-22, V189-26 | after V189-20 (API keys) and V189-23 (same file `models.ts`) |
+| V189-25 | V189-22, V189-26 | after V189-14 and V189-16 (reply shapes `ended`/`notice`, `?force=true`, 409/500 codes) and V189-24 (same file `models.ts`); owns `api-client.ts`, `trades.store.ts`, and edits `trades.ts` after V189-21 |
+| V189-26 | V189-2..V189-25 | after V189-1's worktree step; disjoint docs only |
+| V189-27 | none | after every other task: sets `LABEL_BASIS_SINCE`, single full-suite run, complexity gate, merge |
 
-At most two `task-implementer`s at once; two tasks that share a file never run together. Backend tasks V189-1..V189-20 and frontend tasks V189-21..V189-24 commit separately.
+At most two `task-implementer`s at once; two tasks that share a file never run together. Backend tasks V189-1..V189-20 and frontend tasks V189-21..V189-25 commit separately.
 
 ## Parts
 
@@ -414,7 +418,8 @@ At most two `task-implementer`s at once; two tasks that share a file never run t
 | 4b | `2026-10-23-v189-book-integrity-partial-truth_4b-delete-vocabulary.md` | V189-13..V189-14 | `cancelled_trade_deleted` vocabulary; deletes end linked plans with honest confirmations |
 | 5 | `2026-10-23-v189-book-integrity-partial-truth_5-account-reset.md` | V189-15..V189-17 | archived full reset with reseed and kill-switch refusal; admin and Discord surfaces with `force`; restore script and deploy-doc paragraph |
 | 6 | `2026-10-23-v189-book-integrity-partial-truth_6-partial-display-api.md` | V189-18..V189-20 | trades rows (`entry_shares`, `banked_contribution_r`, blended open R); risk of loss beside enforced heat and the heat-blocked line; analytics label-basis counts |
-| 7 | `2026-10-23-v189-book-integrity-partial-truth_7-frontend-and-release.md` | V189-21..V189-26 | frontend banked amount and labels, trade detail tiles, dashboard and risk page, analytics win-rate hint; known-traps and audit-doc notes; label-basis date, full suite and merge |
+| 7 | `2026-10-23-v189-book-integrity-partial-truth_7-frontend-and-release.md` | V189-21..V189-24 | frontend banked amount and labels with the golden loader; trade detail banked stats, risk of loss, open profit to stop, T1/T2; dashboard store and Risk page (enforced heat beside risk of loss); analytics win-rate label-basis hint |
+| 7b | `2026-10-23-v189-book-integrity-partial-truth_7b-clear-replies-and-release.md` | V189-25..V189-27 | Trades page shows the clear-open notice and the clear-history archive, refusal and confirmed force; known-traps and audit-doc notes; label-basis date, full suite, merge, and the deploy notes (slash-command re-sync for `force`) |
 
 ## Task ledger
 
@@ -441,8 +446,9 @@ At most two `task-implementer`s at once; two tasks that share a file never run t
 | V189-19 | Risk of loss beside enforced heat; heat-blocked log line | 6 | opus | M `swingbot/core/edge/heat.py`, `swingbot/core/tracking/equity.py`, `swingbot/admin/api_v1/dashboard.py`, `swingbot/admin/api_v1/risk.py`, `swingbot/core/scanning/scan_run.py`, `tests/admin/test_api_v1_dashboard.py`, `tests/admin/test_api_v1_risk.py`; C `tests/edge/test_risk_of_loss.py`, `tests/admin/test_risk_of_loss_api.py` | `heat.risk_of_loss_amount`, `equity.position_risk_of_loss`, `scan_run._log_heat_block`; dashboard keys `heat_enforced_pct`, `risk_of_loss_pct`, `risk_of_loss_amount`; risk row keys `risk_of_loss_pct`, `risk_of_loss_amount` |
 | V189-20 | Analytics carries the label basis and scratch/unscored counts | 6 | sonnet | M `swingbot/core/analytics/metrics.py`, `swingbot/admin/api_v1/analytics.py`, `tests/admin/test_api_v1_analytics.py`, `tests/admin/test_api_analytics.py`; C `tests/admin/test_analytics_label_basis.py` | `metrics.label_counts(closed) -> dict[str, int]`; payload keys `scratch_n`, `unscored_n`, `label_basis_since` |
 | V189-21 | Frontend: banked amount on entry shares; banked label; golden loader | 7 | sonnet | M `frontend/src/app/api/models.ts`, `frontend/src/app/ui/plan-cell.ts`, `frontend/src/app/ui/plan-cell.spec.ts`, `frontend/src/app/workspaces/trades/trades.ts`, `frontend/src/app/workspaces/dashboard/dashboard.ts`; C `frontend/src/app/ui/testing/golden-partial-trade.ts`, `frontend/src/app/ui/plan-cell.golden.spec.ts` | `TradeRow.entry_shares?`, `TradeRow.banked_contribution_r?`; `GOLDEN_FIXTURE_PATH`, `loadGoldenPartialTrade()`; `bankedLegAmount(entry, bankedEntry, bankedFraction, entryShares, direction)` |
-| V189-22 | Frontend: trade detail banked stats, risk of loss, open profit to stop, T1/T2 | 7 | sonnet | M `frontend/src/app/stores/trade-detail.store.ts`, `frontend/src/app/workspaces/trades/position-card.ts`, `frontend/src/app/workspaces/trades/trade-detail.ts`, `frontend/src/app/workspaces/trades/outcome-tiles.ts`; C `frontend/src/app/stores/trade-detail.golden.spec.ts` | store signals `riskOfLoss`, `openProfitToStop` (replace `dollarAtRisk`) |
-| V189-23 | Frontend: dashboard risk-of-loss and enforced-heat tiles; risk page column | 7 | sonnet | M `frontend/src/app/api/models.ts`, `frontend/src/app/stores/dashboard.store.ts`, `frontend/src/app/workspaces/dashboard/dashboard.ts`, `frontend/src/app/workspaces/risk/risk.ts`, `frontend/src/app/stores/risk.store.ts`; C `frontend/src/app/workspaces/dashboard/dashboard-risk.spec.ts` | dashboard model `heat_enforced_pct`, `risk_of_loss_pct`, `risk_of_loss_amount`; risk row `risk_of_loss_pct`, `risk_of_loss_amount` |
-| V189-24 | Frontend: win-rate tile shows the label basis and scratch/unscored counts | 7 | sonnet | M `frontend/src/app/api/models.ts`, `frontend/src/app/stores/analytics.store.ts`, `frontend/src/app/workspaces/analytics/tabs/overview.ts`; C `frontend/src/app/workspaces/analytics/tabs/overview-label-basis.spec.ts` | `AnalyticsPerformance.scratch_n?`, `unscored_n?`, `label_basis_since?` |
-| V189-25 | Known traps and audit doc record what v189 left | 7 | haiku | M `docs/claude/known-traps.md`, `docs/superpowers/results/v187/2026-10-23-repo-audit-findings.md`, `AGENTS.md` (only if the mirror test requires it) | none |
-| V189-26 | Label-basis date, full suite, complexity gate, merge | 7 | sonnet | M `swingbot/core/analytics/metrics.py` (`LABEL_BASIS_SINCE`) | merged branch on `main` |
+| V189-22 | Frontend: trade detail banked stats, risk of loss, open profit to stop, T1/T2 | 7 | sonnet | M `frontend/src/app/stores/trade-detail.store.ts`, `frontend/src/app/stores/trade-detail.store.spec.ts`, `frontend/src/app/workspaces/trades/position-card.ts`, `frontend/src/app/workspaces/trades/position-card.spec.ts`, `frontend/src/app/workspaces/trades/trade-detail.ts`, `frontend/src/app/workspaces/trades/trade-detail.spec.ts`, `frontend/src/app/workspaces/trades/outcome-tiles.ts`, `frontend/src/app/workspaces/trades/outcome-tiles.spec.ts`; C `frontend/src/app/stores/trade-detail.golden.spec.ts` | store signals `riskOfLoss`, `openProfitToStop` (replace `dollarAtRisk`); `PositionFigures.riskOfLoss`, `openProfitToStop`; `RISK_OF_LOSS_SUB`, `OPEN_PROFIT_SUB` (replace `PARTIAL_RISK_SUB`) |
+| V189-23 | Frontend: enforced heat and risk of loss in the dashboard store and on the Risk page | 7 | sonnet | M `frontend/src/app/api/models.ts`, `frontend/src/app/stores/dashboard.store.ts`, `frontend/src/app/stores/dashboard.store.spec.ts`, `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`, `frontend/src/app/stores/risk.store.ts`, `frontend/src/app/workspaces/risk/risk.ts`, `frontend/src/app/workspaces/risk/risk.spec.ts` | dashboard model `heat_enforced_pct`, `risk_of_loss_pct`, `risk_of_loss_amount`; store `heatEnforcedPct`, `riskOfLossPct`, `riskOfLossAmount`; risk row `risk_of_loss_pct?`, `risk_of_loss_amount?`; risk store `riskOfLossTotal`, `riskOfLossPctTotal` |
+| V189-24 | Frontend: win-rate tile shows the label basis and scratch/unscored counts | 7 | sonnet | M `frontend/src/app/api/models.ts`, `frontend/src/app/workspaces/analytics/tabs/overview.ts`; C `frontend/src/app/workspaces/analytics/tabs/overview-label-basis.spec.ts` | `AnalyticsPerformance.scratch_n?`, `unscored_n?`, `label_basis_since?`; `winRateHint(performance) -> string \| undefined` |
+| V189-25 | Frontend: clear-open notice; clear-history force, refusal and archive | 7b | sonnet | M `frontend/src/app/api/models.ts`, `frontend/src/app/api/api-client.ts`, `frontend/src/app/stores/trades.store.ts`, `frontend/src/app/workspaces/trades/trades.ts`; C `frontend/src/app/stores/trades-clear.fixture.ts`, `frontend/src/app/stores/trades-clear.spec.ts`, `frontend/src/app/workspaces/trades/trades-clear.spec.ts` | `EndedPlanRow`, `ClearResult.ended?`, `ClearResult.notice?`, `ClearHistoryResult`; `ApiClient.clearTradeHistory(force = false)`; store state `clearNotice`, `clearRefusal`; `clearHistory(force = false)`; `FORCE_RESET_CONSEQUENCE` |
+| V189-26 | Known traps and audit doc record what v189 left | 7b | haiku | M `docs/claude/known-traps.md`, `docs/superpowers/results/v187/2026-10-23-repo-audit-findings.md`, `AGENTS.md` (only if the mirror test requires it) | none |
+| V189-27 | Label-basis date, full suite, complexity gate, merge | 7b | sonnet | M `swingbot/core/analytics/metrics.py` (`LABEL_BASIS_SINCE`), `tests/analytics/test_net_outcome.py` (`test_constants`) | merged branch on `main` |
