@@ -838,3 +838,19 @@ def test_longest_hold_is_none_when_nothing_is_measurable():
     rows = [_held_row("AAA", "2026-08-10", None, "2026-08-10T14:00:00+00:00")]
     assert longest_hold(rows, "2026-08") is None
     assert longest_hold([], "2026-08") is None
+
+
+def test_longest_hold_reports_the_full_row_and_ignores_unmeasurable_rows():
+    rows = [_held_row("OK", "2026-08-12", "2026-08-10T00:00:00+00:00", "2026-08-12T12:00:00+00:00"),
+            # close before open (hand-edited): never wins, even though |delta| is huge
+            _held_row("BAD", "2026-08-13", "2026-08-20T00:00:00+00:00", "2026-08-13T00:00:00+00:00")]
+    best = longest_hold(rows, "2026-08")
+    assert best == {"ticker": "OK", "trade_id": "ok", "plan_id": None,
+                    "opened_at": "2026-08-10T00:00:00+00:00",
+                    "closed_at": "2026-08-12T12:00:00+00:00", "held_hours": 60.0}
+
+
+def test_longest_hold_counts_only_the_requested_month_by_close_day():
+    rows = [_held_row("JUL", "2026-07-31", "2026-01-01T00:00:00+00:00", "2026-07-31T00:00:00+00:00"),
+            _held_row("AUG", "2026-08-01", "2026-07-31T00:00:00+00:00", "2026-08-01T00:00:00+00:00")]
+    assert longest_hold(rows, "2026-08")["ticker"] == "AUG"

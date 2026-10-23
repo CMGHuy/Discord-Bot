@@ -237,6 +237,36 @@ describe('Calendar summary strip', () => {
     expect(host.querySelector('.hold-ticker')!.textContent).toContain('AAPL');
   });
 
+  it('formats a hold in hours under a day and in days plus hours from a day up', async () => {
+    const label = async (held_hours: number): Promise<string> => {
+      const hold = { ...RESPONSE.longest_hold!, held_hours };
+      const fixture = seed({ ...RESPONSE, longest_hold: hold });
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return el(fixture).querySelector('.hold-duration')!.textContent!.trim();
+    };
+    expect(await label(7.4)).toBe('7h');
+    expect(await label(23.6)).toBe('1d 0h');
+    expect(await label(24)).toBe('1d 0h');
+    expect(await label(50)).toBe('2d 2h');
+  });
+
+  it('links the longest hold to its plan, falling back to the trade id', async () => {
+    const withPlan = seed({ ...RESPONSE, longest_hold: { ...RESPONSE.longest_hold!, plan_id: 'plan9' } });
+    await withPlan.whenStable();
+    withPlan.detectChanges();
+    expect(el(withPlan).querySelector('.hold-ticker')!.getAttribute('href')).toContain('/trades/plan9');
+  });
+
+  it('says so when no trade in the month has a measurable hold', async () => {
+    const fixture = seed({ ...RESPONSE, longest_hold: null });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = el(fixture);
+    expect(host.querySelector('.longest-hold')).toBeNull();
+    expect(host.textContent).toContain('No closed trade with a measurable holding time this month');
+  });
+
   it('reports the month-summary figures from the visible trading days', async () => {
     const fixture = seed();
     await fixture.whenStable();
