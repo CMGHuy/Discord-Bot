@@ -23,6 +23,10 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
   `,
   styles: `
     :host { display: block; height: 3px; background: var(--surface-raised); border-radius: var(--radius-sm); }
+    /* In a table cell the bar hangs in the cell's bottom padding rather than
+       adding to its content: counted, it lifted the R figure ~2px above every
+       other figure on the row (layout audit vcenter, 2026-10-23). */
+    :host-context(td) { margin-bottom: -3px; }
     .bar { display: block; height: 100%; border-radius: var(--radius-sm); background: var(--pos); }
     .bar.neg { background: var(--neg); margin-left: auto; }
   `,
