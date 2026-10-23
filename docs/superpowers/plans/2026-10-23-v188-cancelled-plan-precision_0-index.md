@@ -293,8 +293,9 @@ Effectively sequential after the V188-1 ∥ V188-2 pair: each later task consume
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
-| 1 | `2026-10-23-v188-cancelled-plan-precision_1-backend.md` | V188-1..V188-5 | worktree, `risk_cap` entry persistence, pure replay, rows, aggregation and payload, admin route |
+| 1 | `2026-10-23-v188-cancelled-plan-precision_1-backend.md` | V188-1..V188-4 | worktree, `risk_cap` entry persistence, pure replay, rows, aggregation and payload |
 | 2 | `2026-10-23-v188-cancelled-plan-precision_2-screen.md` | V188-6..V188-9 | API types, store and helpers, summary component, table, page and registration, full-suite verification and merge |
+| 3 | `2026-10-23-v188-cancelled-plan-precision_3-route.md` | V188-5 | admin route `GET /api/v1/cancel-precision` (split from part 1 at write time: five tasks at full code exceeded the 1500-line cap) |
 
 ## Task ledger
 
@@ -304,7 +305,7 @@ Effectively sequential after the V188-1 ∥ V188-2 pair: each later task consume
 | V188-2 | Pure post-cancel replay | 1 | opus | C `swingbot/core/analytics/cancel_replay.py`, `tests/analytics/test_cancel_replay.py` | `OUTCOMES`, `SPLIT_GUARD`, `Replay`, `trading_date`, `window_end`, `split_guard_ok`, `last_bar_day`, `replay` (§ Contracts) |
 | V188-3 | Cancelled and filled plans to replay rows | 1 | opus | C `swingbot/core/analytics/cancel_rows.py`, `tests/analytics/test_cancel_rows.py` | `REASONS`, `OTHER`, `MANUAL`, `FILLED`, `ENTRY_MODELS`, `EXCLUSIONS`, `Loader`, `CancelRow`, `reason_bucket`, `cancel_entry`, `cancel_rows`, `filled_rows`, `manual_count` |
 | V188-4 | Figures, intervals, baseline and payload | 1 | opus | C `swingbot/core/analytics/cancel_precision.py`, `tests/analytics/test_cancel_precision.py` | `SMALL_N`, `CI_PCT`, `CAPTION`, `RISK_CAP_LABEL`, `TP1_NOTE`, `RULE_CHANGES`, `figure`, `baseline_population`, `precision_payload` → Payload JSON |
-| V188-5 | Admin route `GET /api/v1/cancel-precision` | 1 | sonnet | C `swingbot/admin/api_v1/cancel_precision.py`, `tests/admin/test_api_v1_cancel_precision.py`; M `swingbot/admin/api_v1/__init__.py` | endpoint `/api/v1/cancel-precision`; `_load_plans`, `_bar_loader`, `_memo_key`, `_MEMO`, `reset_memo` |
+| V188-5 | Admin route `GET /api/v1/cancel-precision` | 3 | sonnet | C `swingbot/admin/api_v1/cancel_precision.py`, `tests/admin/test_api_v1_cancel_precision.py`; M `swingbot/admin/api_v1/__init__.py` | endpoint `/api/v1/cancel-precision`; `_load_plans`, `_bar_loader`, `_memo_key`, `_MEMO`, `reset_memo` |
 | V188-6 | API types, `CancelsStore` and pure helpers | 2 | sonnet | M `frontend/src/app/api/models.ts`; C `frontend/src/app/stores/cancels.store.ts`, `cancels.store.spec.ts`, `frontend/src/app/workspaces/cancels/cancels.helpers.ts`, `cancels.helpers.spec.ts`, `frontend/src/app/testing/cancel-fixtures.ts` | `CancelOutcome`, `CancelFigure`, `CancelPlanRow`, `CancelPrecision`, `CancelsStore`, `CancelCardKey`, `CancelSplit`, `CancelFilter`, `figureText`, `ciText`, `rText`, `verdictLabel`, `filterRows`, fixture `CANCEL_PAYLOAD`, `EMPTY_CANCEL_PAYLOAD` |
 | V188-7 | Summary: headline, baseline, reason cards, counts, splits | 2 | sonnet | C `frontend/src/app/workspaces/cancels/cancels-summary.ts`, `cancels-summary.spec.ts` | `CancelsSummary` (`sb-cancels-summary`, inputs `data`, `filter`, outputs `card`, `outcome`, `split`) |
 | V188-8 | Plan table, page, route, nav and SPA registration | 2 | sonnet | C `frontend/src/app/workspaces/cancels/cancels-table.ts`, `cancels-table.spec.ts`, `cancels.ts`, `cancels.spec.ts`, `cancels.routes.ts`; M `frontend/src/app/app.routes.ts`, `frontend/src/app/shell/shell.ts`, `swingbot/admin/spa.py` (+ its existing workspace test if one pins `WORKSPACES`) | `CancelsTable`, `Cancels`, `cancelsRoutes`; route `/cancels`; `WORKSPACES` gains `"cancels"` |
