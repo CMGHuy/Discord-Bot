@@ -33,7 +33,7 @@ def _plan():
                            horizon_key="4w", trigger_price=100.0, stop_loss=94.0, tp1=110.0, tp2=None,
                            badge="WEAK", quality_score=0, cohort_label="COHORT_UNKNOWN", cohort_stats={},
                            risk_features={}, ledger="weak", entry_context={}, ticker="AAPL",
-                           gap_sizing=None)
+                           gap_sizing=None, risk_notice=None)
 
 
 @pytest.fixture

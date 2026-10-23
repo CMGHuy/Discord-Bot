@@ -593,6 +593,12 @@ def _gap_sizing_field(gap_sizing: dict | None) -> dict:
     return {"gap_sizing": dict(gap_sizing)} if gap_sizing is not None else {}
 
 
+def _risk_notice_field(risk_notice: dict | None) -> dict:
+    """{"risk_notice": snapshot} for a short alerted with the v183 notice, else
+    {} -- the key stays absent on longs and pre-v183 trades."""
+    return {"risk_notice": dict(risk_notice)} if risk_notice is not None else {}
+
+
 def format_quote_age(quote: dict | None) -> str:
     """The reader side of the v171 trade quote stamp; n/a for pre-v171 rows."""
     age_s = (quote or {}).get("age_s")
@@ -715,7 +721,7 @@ class TradeLog:
                   trendline_fit=None, cohort_label=None, cohort_stats=None,
                   risk_features=None, ledger=None, entry_context=None, origin=None,
                   confidence_points=None, confidence_unevaluated=None,
-                  quote=None, gap_sizing=None) -> str:
+                  quote=None, gap_sizing=None, risk_notice=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -727,6 +733,8 @@ class TradeLog:
         have it; the detail page handles that gracefully.
         `gap_sizing` is the plan's v183 sizing stamp; the share count comes
         from the same `size_for` the alert used.
+        `risk_notice` is the alert's v183 squeeze/event snapshot, copied so the
+        trade page shows what the alert said.
         """
         # 16 characters, drawn from the full alphanumeric set (0-9, a-z, A-Z
         # -- 62 possible characters per position), not just the first 8 hex
@@ -797,6 +805,7 @@ class TradeLog:
             record[TRENDLINE_FIT_KEY] = trendline_fit
         record.update(_quote_field(quote))   # v171 D2: present only when stamped
         record.update(_gap_sizing_field(gap_sizing))   # v183: present only when stamped
+        record.update(_risk_notice_field(risk_notice))   # v183: present only when stamped
 
         # Snapshot position sizing NOW, at the moment the trade is opened --
         # not recomputed later from whatever the account balance happens to

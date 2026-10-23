@@ -765,7 +765,8 @@ class PlanManager:
                         quality_score=plan.quality_score, source=plan.source,
                         cohort_label=plan.cohort_label, cohort_stats=plan.cohort_stats,
                         risk_features=plan.risk_features, origin=plan.origin,
-                        gap_sizing=plan.gap_sizing)
+                        gap_sizing=plan.gap_sizing,
+                        risk_notice=plan.risk_notice)
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)

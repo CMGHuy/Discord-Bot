@@ -37,13 +37,17 @@ from datetime import date, datetime, timezone
 
 from flask import jsonify, request
 
+from swingbot import config
 from swingbot.admin import dashboard as dash
 from swingbot.admin.trade_why import legacy_why_fields, plan_why_fields
 from swingbot.core.analytics.override_fidelity import MANUAL_REASONS
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.tracking.equity import open_shares as _open_shares  # v172: moved to core
 from swingbot.core.planning.plan_store import PlanStore
+from swingbot.core.planning.gap_sizing import gap_risk_amount_for, size_for
+from swingbot.core.presentation.gap_risk import gap_risk_line
 from swingbot.core.presentation.plan_view import plan_view
+from swingbot.core.presentation.short_notice import risk_notice_lines
 
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
@@ -806,6 +810,39 @@ def _quote_stamp(plan: dict | None, trade: dict | None) -> dict | None:
     return {key: plan.get(field) for key, field in _QUOTE_PLAN_FIELDS}
 
 
+def _risk_notice_detail_lines(plan: dict | None, trade: dict | None) -> list[str] | None:
+    """v183: the alert's squeeze/event lines, from the snapshot saved when it went
+    out (plan doc first, then the paper record) -- never rebuilt, so the page
+    matches the alert. None for longs and pre-v183 rows."""
+    snapshot = (plan or {}).get("risk_notice") or (trade or {}).get("risk_notice")
+    return risk_notice_lines(snapshot, currency=config.CURRENCY_SYMBOL) if snapshot else None
+
+
+def _recorded_sizing_view(sizing: dict, shares, entry, stop, stamp) -> dict:
+    """The size_for result re-expressed on the shares actually shown."""
+    if shares is None or "gap_sized" not in sizing:
+        return dict(sizing)
+    return {**sizing, "risk_amount": round(float(shares) * abs(float(entry) - float(stop)), 2),
+            "gap_risk_amount": gap_risk_amount_for(shares, entry, stop, stamp)}
+
+
+def _gap_sizing_detail(plan: dict | None, trade: dict | None) -> dict | None:
+    """v183: the order block's share count and gap-risk line for a stamped short."""
+    p, t = plan or {}, trade or {}
+    stamp = p.get("gap_sizing") or t.get("gap_sizing")
+    if (p or t).get("direction") != "bearish" or not stamp:
+        return None
+    entry = t.get("entry") or p.get("trigger_price") or p.get("entry_price")
+    stop = t.get("stop_loss") or p.get("stop_loss")
+    sizing = size_for(entry, stop, direction="bearish", gap_sizing=stamp) or {}
+    shares = t["shares"] if t.get("shares") is not None else sizing.get("shares")
+    view = _recorded_sizing_view(sizing, shares, entry, stop, stamp)
+    return {"rule": stamp.get("rule"), "up_gap_p99_pct": stamp.get("up_gap_p99_pct"),
+            "shares": shares, "risk_amount": view.get("risk_amount"),
+            "gap_risk_amount": view.get("gap_risk_amount"), "gap_sized": bool(view.get("gap_sized")),
+            "line": gap_risk_line(view, currency=config.CURRENCY_SYMBOL)}
+
+
 def _plan_detail(plan: dict, trade: dict | None) -> dict:
     """Heavy fields for a plan-backed position.
 
@@ -843,6 +880,8 @@ def _plan_detail(plan: dict, trade: dict | None) -> dict:
         "sizing_mode": t.get("sizing_mode"),
         "account_balance_after": t.get("account_balance_after"),
         "quote": _quote_stamp(plan, trade),
+        "risk_notice_lines": _risk_notice_detail_lines(plan, trade),
+        "gap_sizing": _gap_sizing_detail(plan, trade),
     }
 
 
@@ -882,6 +921,8 @@ def _legacy_detail(t: dict) -> dict:
         "sizing_mode": t.get("sizing_mode"),
         "account_balance_after": t.get("account_balance_after"),
         "quote": _quote_stamp(None, t),
+        "risk_notice_lines": _risk_notice_detail_lines(None, t),
+        "gap_sizing": _gap_sizing_detail(None, t),
     }
 
 
