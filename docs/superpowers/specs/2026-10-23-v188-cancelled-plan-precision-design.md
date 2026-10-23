@@ -217,6 +217,41 @@ Layout A+B, designed for mobile, tablet and desktop together
   bot loop. A failure shows an error on this one screen and nothing else. Rollback
   is the normal image rollback with no data step.
 
+## Resolved after the code brief (2026-10-23)
+
+- **The `risk_cap` crossing price is not persisted.** `status_history` holds only
+  reason and time; the live `entry_price` exists only in the in-memory
+  `cancelled_risk_cap` event. The partner chose: history uses an **estimate**,
+  `max(cancel-day open, trigger)` for a long (mirrored for a short), labelled as an
+  estimate on the screen; **future** `risk_cap` cancels record the real entry price
+  as an extra field on the `status_history` entry via `record_transition`'s
+  `**extra`. That is a bot patch that changes no cancel rule. Rows carry which of
+  the two (`estimated` or `recorded`) their `risk_cap` entry is.
+- **Price source: `market_data/`**, which the bot's `MARKET_DATA_AUTO_REFRESH` keeps
+  fresh and the admin container mounts, not `data/backtest_cache` (nothing refreshes
+  it). Alpaca-routed symbols live in `market_data/daily_alpaca/`, which
+  `data_store.load_normalized` does not read, so the builder uses
+  `daily_delta.read_daily`, which follows the scan's routing, or states why not.
+  Mirror `bars.py`'s `SPLIT_GUARD = 0.25`.
+- **Horizon window units.** `HORIZONS[...]["max_holding_days"]` counts calendar
+  days (4w is 28, 6m is 180). The window is that many calendar days after the cancel
+  day, applied to trading bars; the builder states the rule in one place.
+- **Timestamps.** In-session cancels carry a UTC `at`, window cancels an ET-aware
+  one. Both convert to the NYSE trading date before the replay starts after that
+  day's bar.
+- **Core cannot import `scripts/`.** `autopsy/bars.py` sits under `scripts/`, so the
+  verdict module re-implements the bar walk and cites it as the reference. The route
+  registers through `swingbot/admin/api_v1/__init__.py` (`register()`), and
+  `admin_ui.py` registers nothing.
+- **Tests join existing suites:** the pure module under `tests/analytics/` (suite
+  `edge-analytics`), the route under `tests/admin/` (suite `admin`); no new `tests/`
+  directory. Frontend specs are vitest.
+- **Screen home** is left to the builder: a third tab in `workspaces/reports/` fits
+  loosely (it is built for script-produced reports), so its own workspace modelled on
+  `workspaces/calendar/` is the likelier fit.
+- **Bump is unchanged** (`ui patch, bot patch`); the extra persisted field is the
+  bot patch's observable part.
+
 ## Left to the builder
 
 Module and route names, the table pager size, the card styling, and the cache
