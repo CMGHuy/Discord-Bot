@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier and escalate per `docs/claude/model-routing.md`. **Never read a part whole**: `grep -n "^### Task V180-4:" -A 400 docs/superpowers/plans/2026-10-21-v180-turtle-soup-entry_1-signal-instrument-and-plan.md`.
 
 **Bump:** bot patch
-**Edge:** expectancy — adds a long entry on a trigger that passed the idea screen (paired ΔExpR +0.316R [+0.254, +0.381], N = 10,438, PIT S&P 500 2011–2019, yfinance, fixed 1.5/3 ATR race). The screen covers the trigger only, not the structural plan shape tested here. Base case: a fail on the win-rate clause; a pass is the upside.
+**Edge:** expectancy — adds a long entry on a trigger that passed the idea screen (paired ΔExpR +0.316R [+0.254, +0.381], N = 10,438, PIT S&P 500 2011–2019, yfinance, fixed 1.5/3 ATR race). The screen covers the trigger only, not the structural plan shape tested here. Base case: a fail on the win-rate clause; a pass is the upside. Outcome (2026-10-23): NO-LIFT at Stage 0, with the win-rate side as predicted and the engine ExpR negative rather than the small positive implied.
 **Screen:** screen-turtle_soup SCREEN-PASS
 **Spec:** [2026-10-21-v180-turtle-soup-entry-design.md](../specs/2026-10-21-v180-turtle-soup-entry-design.md)
 **Brief:** `.superpowers/briefs/2026-10-21-v180-turtle-soup-entry.md`
