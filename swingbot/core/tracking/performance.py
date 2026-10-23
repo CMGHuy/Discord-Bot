@@ -721,7 +721,7 @@ class TradeLog:
                   trendline_fit=None, cohort_label=None, cohort_stats=None,
                   risk_features=None, ledger=None, entry_context=None, origin=None,
                   confidence_points=None, confidence_unevaluated=None,
-                  quote=None, gap_sizing=None, risk_notice=None) -> str:
+                  gap_sizing=None, risk_notice=None, quote=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
