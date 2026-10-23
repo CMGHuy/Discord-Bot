@@ -25,7 +25,7 @@ export const ROUTES = Object.freeze([
   '/ui',
 ]);
 
-export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline']);
+export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter']);
 
 /** Phone, tablet and desktop (docs/claude/ui-design.md § Device classes). */
 export const FULL_WIDTHS = Object.freeze([390, 768, 1440]);
@@ -35,6 +35,8 @@ export const TOUCH_MAX_WIDTH = 1023;
 export const MIN_TAP_PX = 44;
 export const MIN_TEXT_PX = 11;
 export const MAX_BASELINE_OFFSET_PX = 2;
+/** A table cell's content, or an icon beside its text, off centre by more than this. */
+export const MAX_CENTER_OFFSET_PX = 2;
 
 const DEFAULTS = Object.freeze({ base: 'http://localhost:1234', out: null, allow: null, prune: false, settle: 1500 });
 

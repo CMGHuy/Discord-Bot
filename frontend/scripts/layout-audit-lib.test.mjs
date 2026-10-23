@@ -36,8 +36,8 @@ test('ROUTES visits every route and tab once (spec §2: 27)', () => {
   }
 });
 
-test('CHECKS are the six the spec names, in order', () => {
-  assert.deepEqual([...CHECKS], ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline']);
+test('CHECKS are the spec six plus vcenter, in order', () => {
+  assert.deepEqual([...CHECKS], ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter']);
 });
 
 test('parseArgs: defaults are the local replica at the three widths', () => {
@@ -168,7 +168,7 @@ test('formatFinding names route, width, check, selector, text, detail and repeat
 
 test('countByCheck counts every check, zero included', () => {
   assert.deepEqual(countByCheck([finding(), finding({ check: 'tap' }), finding({ check: 'tap' })]),
-    { overflow: 0, offscreen: 1, clipped: 0, tap: 2, text: 0, baseline: 0 });
+    { overflow: 0, offscreen: 1, clipped: 0, tap: 2, text: 0, baseline: 0, vcenter: 0 });
 });
 
 test('slug matches browse.mjs file names', () => {
