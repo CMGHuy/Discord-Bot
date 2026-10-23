@@ -3,6 +3,7 @@
 
     python scripts/backtest/screen_trail_calibration.py
     python scripts/backtest/screen_trail_calibration.py --direction short --seed 0
+    python scripts/backtest/screen_trail_calibration.py --direction short --entry level --seed 0
     python scripts/backtest/screen_trail_calibration.py --replicates 3 --tickers 2 --resamples 500 --dry-run
 
 Each replicate builds a synthetic universe of TICKERS fat-tailed,
@@ -16,7 +17,9 @@ coverage is reported, not gated. Synthetic data only: no cached price file
 is ever read, and nothing is written to the pre-registration ledger.
 
 v182 adds the short A/A: a fixed cap-20 idea raced short on the same frames
-and events, with the Wilson interval of the false-pass rate printed.
+and events, with the Wilson interval of the false-pass rate printed. v182 level
+mode races a short sell-stop half an ATR under the prior close, filled on the
+event bar, against the depth-copy null.
 """
 from __future__ import annotations
 
@@ -37,7 +40,7 @@ for _path in (ROOT, ROOT / "scripts" / "backtest"):
 
 import screen_idea  # noqa: E402
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
-from swingbot.core.backtesting.screen import null, race, trail, verdict  # noqa: E402
+from swingbot.core.backtesting.screen import indicators, null, race, trail, verdict  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import Idea  # noqa: E402
 from swingbot.core.edge.frictions import BORROW_RATE_ANNUAL  # noqa: E402
 
@@ -56,7 +59,11 @@ SHORT_CAP = 20
 CAL_IDEA_NAMES = {("long", "next_open"): "aa_trail_calibration",
                   ("short", "next_open"): "aa_short_calibration",
                   ("short", "level"): "aa_short_level_calibration"}
-ENABLED_ENTRIES = ("next_open",)
+LEVEL_OFFSET_ATR = 0.5
+LEVEL_RATE_SCALE = 2.5            # draw 2.5 x rate, keep the bars whose order fills
+ENABLED_ENTRIES = ("next_open", "level")
+_SPEC_ITEMS = {"next_open": "§ Part A (calibration item 2)",
+               "level": "§ Part B (calibration item 4)"}
 _DOC_SLUGS = {("long", "next_open"): "trail-race-calibration",
               ("short", "next_open"): "short-race-calibration",
               ("short", "level"): "short-level-race-calibration"}
@@ -96,6 +103,21 @@ def synthetic_frame(rng, bars: int = BARS, start: str = START) -> pd.DataFrame:
 def random_events(index, rng, rate: float = EVENT_RATE) -> pd.Series:
     """Each bar an "event" independently with probability ``rate``."""
     return pd.Series(rng.random(len(index)) < rate, index=index)
+
+
+def level_events(df: pd.DataFrame, rng, rate: float) -> tuple[pd.Series, pd.Series]:
+    """Random bars whose short sell-stop fills: the level is Close[t-1] minus
+    LEVEL_OFFSET_ATR x ATR14[t-1] (bars <= t-1 only); a bar is an event when
+    it is drawn and Low[t] < level. One rng call, as random_events."""
+    levels = df["Close"].shift(1) - LEVEL_OFFSET_ATR * indicators.atr(df).shift(1)
+    return random_events(df.index, rng, rate) & (df["Low"] < levels), levels
+
+
+def _replicate_idea(df: pd.DataFrame, rng, rate: float, direction: str, entry: str) -> Idea:
+    if entry == "level":
+        events, levels = level_events(df, rng, rate * LEVEL_RATE_SCALE)
+        return _idea(events, direction=direction, entry=entry, levels=levels)
+    return _idea(random_events(df.index, rng, rate), direction=direction, entry=entry)
 
 
 def doc_name(direction: str, entry: str, day: str) -> str:
@@ -141,7 +163,7 @@ def replicate(seed: int, *, tickers: int = TICKERS, bars: int = BARS,
     paired = []
     for i in range(tickers):
         df = synthetic_frame(rng, bars)
-        idea = _idea(random_events(df.index, rng, rate), direction=direction, entry=entry)
+        idea = _replicate_idea(df, rng, rate, direction, entry)
         screen = screen_idea.screen_ticker(idea, f"R{seed}T{i:03d}", df, None)
         paired += [verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
                    for row in screen.events]
@@ -230,6 +252,31 @@ def _render_replicates(result: dict, seed: int) -> list:
     return lines
 
 
+def _race_paragraph(entry: str) -> str:
+    if entry == "level":
+        return (f"**Race:** the real `screen_ticker` with a fixed short level idea (cap {SHORT_CAP} bars; "
+                f"a sell-stop at Close[t-1] - {LEVEL_OFFSET_ATR} x ATR14[t-1], placed before bar t opens "
+                "and filled on bar t at the lower of the open and the level, entry slippage "
+                f"{race.LEVEL_SLIPPAGE_FACTOR} x base; stop {race.STOP_ATR} x ATR14[t-1] above, target "
+                f"{race.STOP_ATR * race.REWARD_RISK} x ATR14[t-1] below, only the stop counts on the fill "
+                f"bar; borrow {BORROW_RATE_ANNUAL:.1%} a year on calendar days held) against a short "
+                f"matched null that copies each event's fill depth (K = {null.K}, unfilled draws replaced "
+                "on the child stream), pooled through the real `verdict.decide` (pass rule unchanged). "
+                f"Events: a bar is drawn with probability {EVENT_RATE * LEVEL_RATE_SCALE:g} and is an "
+                "event only when the order fills (Low[t] < level). Decision rule: false-pass rate "
+                f"≤ {FALSE_PASS_MAX:.0%} (10 of 200 at the registered run); the Wilson 95% interval is "
+                "printed, never gating. This A/A shows only that the level-mode code adds no false "
+                "passes; it cannot show that the depth-copy null is fair to real events (check 5 on the "
+                "real cache does that, for range_breakdown_stop).")
+    return (f"**Race:** the real `screen_ticker` with a fixed short idea (cap {SHORT_CAP} bars; "
+            f"entry next open, sold; stop {race.STOP_ATR} x ATR14[t] above, target "
+            f"{race.STOP_ATR * race.REWARD_RISK} x ATR14[t] below; borrow "
+            f"{BORROW_RATE_ANNUAL:.1%} a year on calendar days held) against a short matched "
+            f"null (K = {null.K}), pooled through the real `verdict.decide` (pass rule "
+            f"unchanged). Decision rule: false-pass rate ≤ {FALSE_PASS_MAX:.0%} (10 of 200 at "
+            "the registered run); the Wilson 95% interval is printed, never gating.")
+
+
 def _render_head_short(result: dict, params: dict, day: str) -> list:
     holds = result["false_pass_rate"] <= FALSE_PASS_MAX
     entry = params["entry"]
@@ -240,18 +287,12 @@ def _render_head_short(result: dict, params: dict, day: str) -> list:
         f"# v182 short race A/A calibration ({_ENTRY_LABELS[entry]}) -> "
         f"{'within' if holds else '**over**'} the {FALSE_PASS_MAX:.0%} false-pass limit", "",
         "**Spec:** `docs/superpowers/specs/2026-10-21-v182-short-screen-range-breakdown-design.md` "
-        "§ Part A (calibration item 2).", "",
+        f"{_SPEC_ITEMS[entry]}.", "",
         f"**Run:** {day}; `{command}`; replicate r uses seed {params['seed']} + r; "
         f"{params['tickers']} tickers x {BARS} business days from {START}; bootstrap "
         f"{params['resamples']:,} week resamples, seed {stats.WEEK_BOOTSTRAP_SEED}.", "",
         _generator_paragraph(), "",
-        f"**Race:** the real `screen_ticker` with a fixed short idea (cap {SHORT_CAP} bars; "
-        f"entry next open, sold; stop {race.STOP_ATR} x ATR14[t] above, target "
-        f"{race.STOP_ATR * race.REWARD_RISK} x ATR14[t] below; borrow "
-        f"{BORROW_RATE_ANNUAL:.1%} a year on calendar days held) against a short matched "
-        f"null (K = {null.K}), pooled through the real `verdict.decide` (pass rule "
-        f"unchanged). Decision rule: false-pass rate ≤ {FALSE_PASS_MAX:.0%} (10 of 200 at "
-        "the registered run); the Wilson 95% interval is printed, never gating.",
+        _race_paragraph(entry),
     ]
 
 

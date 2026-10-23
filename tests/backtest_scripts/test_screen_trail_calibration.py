@@ -215,11 +215,6 @@ def test_a_short_replicate_sees_the_long_replicates_frames_and_events(monkeypatc
         assert n1 == n2 and np.array_equal(c1, c2) and np.array_equal(e1, e2)
 
 
-def test_a_replicate_refuses_level_until_level_mode_lands():
-    with pytest.raises(ValueError):
-        cal.replicate(1, tickers=1, n_resamples=100, direction="short", entry="level")
-
-
 def test_calibrate_hands_the_mode_to_every_replicate(monkeypatch):
     seen = []
     feed = iter(FAKE)
@@ -276,8 +271,109 @@ def test_long_level_is_refused_for_good():
     assert exc.value.code == 2
 
 
-def test_short_level_is_refused_until_level_mode_lands():
-    """V182-12 enables level mode and replaces this test."""
-    with pytest.raises(SystemExit) as exc:
-        cal.main(["--direction", "short", "--entry", "level", "--replicates", "1", "--dry-run"])
-    assert exc.value.code == 2
+from swingbot.core.backtesting.screen import indicators  # noqa: E402
+from tests.backtesting.screen.helpers import assert_prefix_stable  # noqa: E402
+
+
+def _synthetic(bars=400, seed=1):
+    return cal.synthetic_frame(np.random.default_rng(seed), bars=bars)
+
+
+def test_level_mode_is_enabled_and_its_constants_are_pinned():
+    assert cal.ENABLED_ENTRIES == ("next_open", "level")
+    assert cal.LEVEL_OFFSET_ATR == 0.5 and cal.LEVEL_RATE_SCALE == 2.5
+
+
+def test_level_events_are_random_bars_whose_order_fills():
+    df = _synthetic()
+    events, levels = cal.level_events(df, np.random.default_rng(3), 0.3)
+    draw = cal.random_events(df.index, np.random.default_rng(3), 0.3)
+    expected = (df["Close"].shift(1) - 0.5 * indicators.atr(df).shift(1)).to_numpy()
+    assert np.array_equal(levels.to_numpy(), expected, equal_nan=True)
+    assert events.tolist() == (draw & (df["Low"] < levels)).tolist()
+    assert 0 < events.sum() < draw.sum()                              # non-vacuous
+
+
+def test_level_events_consume_the_rng_like_random_events():
+    df = _synthetic()
+    a, b = np.random.default_rng(5), np.random.default_rng(5)
+    cal.level_events(df, a, 0.02)
+    cal.random_events(df.index, b, 0.02)
+    assert a.random() == b.random()
+
+
+def test_levels_read_no_later_bar():
+    df = _synthetic(bars=120)
+    assert_prefix_stable(lambda d: cal.level_events(d, np.random.default_rng(0), 0.0)[1],
+                         df, [30, 60, 90, 119])
+
+
+def test_the_short_level_idea_is_fixed_cap_20_short_level():
+    lv = pd.Series(1.0, index=EV.index)
+    idea = cal._idea(EV, direction="short", entry="level", levels=lv)
+    assert (idea.name, idea.time_cap_bars, idea.race_shape, idea.direction, idea.entry) == (
+        "aa_short_level_calibration", 20, "fixed", "short", "level")
+    assert idea.levels(None) is lv
+
+
+def test_a_long_level_replicate_is_refused():
+    with pytest.raises(ValueError):
+        cal.replicate(1, tickers=1, n_resamples=100, direction="long", entry="level")
+
+
+def test_a_short_level_replicate_races_level_mode(monkeypatch):
+    seen = []
+    real = cal.screen_idea.race.run_book
+
+    def spy(*args, **kwargs):
+        seen.append((kwargs.get("shape"), kwargs.get("direction"),
+                     kwargs.get("levels") is not None))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(cal.screen_idea.race, "run_book", spy)
+    v = cal.replicate(5, tickers=1, n_resamples=100, direction="short", entry="level")
+    assert isinstance(v, verdict.Verdict)
+    assert seen and set(seen) == {("fixed", "short", True)}
+
+
+def test_a_level_replicate_sees_the_long_replicates_frames(monkeypatch):
+    seen = {"next_open": [], "level": []}
+    real = cal.screen_idea.screen_ticker
+
+    def spy(idea, name, df, spans, **kwargs):
+        seen[idea.entry].append((name, df["Close"].to_numpy().copy()))
+        return real(idea, name, df, spans, **kwargs)
+
+    monkeypatch.setattr(cal.screen_idea, "screen_ticker", spy)
+    cal.replicate(7, tickers=2, n_resamples=100)
+    cal.replicate(7, tickers=2, n_resamples=100, direction="short", entry="level")
+    assert len(seen["next_open"]) == len(seen["level"]) == 2
+    for (n1, c1), (n2, c2) in zip(seen["next_open"], seen["level"]):
+        assert n1 == n2 and np.array_equal(c1, c2)
+
+
+def test_render_short_level_states_the_order_the_null_and_the_limit(monkeypatch):
+    _fake_replicates(monkeypatch, FAKE)
+    result = cal.calibrate(4, seed=0, direction="short", entry="level", **QUIET)
+    params = {"replicates": 4, "seed": 0, "tickers": 2, "resamples": 200,
+              "direction": "short", "entry": "level"}
+    text = cal.render(result, params, "2026-10-21")
+    assert text.startswith("# v182 short race A/A calibration (level entry) -> **over** "
+                           "the 5% false-pass limit")
+    for needle in ("§ Part B (calibration item 4)", "--direction short --entry level",
+                   "sell-stop at Close[t-1] - 0.5 x ATR14[t-1]", "entry slippage 2.0 x base",
+                   "only the stop counts on the fill bar", "copies each event's fill depth",
+                   "probability 0.05", "borrow 0.5% a year", "10 of 200",
+                   "cannot show that the depth-copy null is fair",
+                   "| Wilson 95% interval of the false-pass rate | 4.6% .. 69.9% | reported, not gated |"):
+        assert needle in text, needle
+
+
+def test_a_short_level_run_writes_the_level_doc(tmp_path, monkeypatch):
+    out_dir = tmp_path / "out"
+    _fake_replicates(monkeypatch, [FAKE[1], FAKE[3]])
+    argv = ["--direction", "short", "--entry", "level", "--replicates", "2", "--seed", "0",
+            "--date", "2026-10-21", "--out-dir", str(out_dir)]
+    assert cal.main(argv) == 0
+    assert (out_dir / "2026-10-21-short-level-race-calibration.md").exists()
+    assert not (out_dir / "2026-10-21-short-race-calibration.md").exists()
