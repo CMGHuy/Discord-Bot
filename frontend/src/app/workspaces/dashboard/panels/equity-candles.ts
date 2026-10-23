@@ -245,7 +245,10 @@ export function targetNeedsOlder(
           "caption caption";
         column-gap: var(--space-10);
       }
-      .readout { align-self: end; justify-self: end; text-align: right; }
+      /* One row now (the account caption that made it two is gone): the
+         timeframe buttons and the readout share a text baseline. */
+      .controls, .readout { align-self: baseline; }
+      .readout { justify-self: end; text-align: right; }
     }
   `,
 })

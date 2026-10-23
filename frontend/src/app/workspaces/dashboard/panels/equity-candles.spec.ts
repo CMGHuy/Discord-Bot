@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -418,6 +421,11 @@ describe('sb-equity-candles', () => {
     const retry = [...el.querySelectorAll('button')].find((b) => b.textContent!.trim() === 'Retry')!;
     retry.click();
     expect(stub.calls.load).toBe(1);
+  });
+
+  it('puts the controls and the readout on one baseline on desktop, now the caption row is gone', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/panels/equity-candles.ts'), 'utf8');
+    expect(source).toMatch(/\.controls, \.readout \{ align-self: baseline; \}/);
   });
 
   it('carries no "Paper account" caption under the readout (dropped 2026-10-23)', () => {
