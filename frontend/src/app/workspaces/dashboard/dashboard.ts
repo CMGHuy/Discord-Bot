@@ -30,7 +30,7 @@ import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
-import { StatusCell } from '../../ui/status-cell';
+import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
 import {
   readTableColumns,
   readTableDensity,
@@ -386,6 +386,9 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
              from the earlier partial exit it shares an id with. -->
         @if (isPartialLeg(row)) {
           <sb-icon name="partial" class="leg-icon" title="Closed after an earlier partial exit of the same position" />
+        }
+        @if (partialOpenTitle(row); as openTitle) {
+          <sb-icon name="partial" class="leg-icon" [title]="openTitle" />
         }
         @if (row.bar_kind === 'trailing') {
           <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
@@ -983,6 +986,8 @@ export class Dashboard {
    *  so leg 0 is always the earliest close and needs no mark; every later
    *  leg shares leg 0's hash and closed after it, so it gets the icon.
    *  Same rule trades.ts's own isPartialLeg uses. */
+  protected readonly partialOpenTitle = partialOpenTitle;
+
   protected isPartialLeg(row: TradeRow): boolean {
     return row.leg_total > 1 && row.leg_index > 0;
   }

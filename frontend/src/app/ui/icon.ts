@@ -115,8 +115,20 @@ const PATHS: Record<IconName, string> = {
   research: 'M7.2 12A4.8 4.8 0 1 0 7.2 2.4a4.8 4.8 0 0 0 0 9.6z M10.7 10.7l3.3 3.3',
 };
 
+/** The tooltip an icon shows when its caller gives none, so no icon is mute. */
+const LABELS: Record<IconName, string> = {
+  dashboard: 'Dashboard', trades: 'Trades', analytics: 'Analytics', calendar: 'Calendar',
+  watchlist: 'Watchlist', risk: 'Risk', system: 'System', versions: 'Versions',
+  collapse: 'Collapse', expand: 'Expand', profile: 'Profile', signout: 'Sign out',
+  menu: 'Menu', trash: 'Delete', clock: 'Clock', more: 'More actions',
+  opened: 'Opened', closed: 'Closed', pending: 'Pending', partial: 'Partially closed',
+  cancelled: 'Cancelled', trailing: 'Trailing stop', brand: 'Swingbot',
+  reports: 'Reports', research: 'Research',
+};
+
 @Component({
   selector: 'sb-icon',
+  host: { '[attr.title]': 'tip()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (path(); as d) {
@@ -141,6 +153,9 @@ const PATHS: Record<IconName, string> = {
 })
 export class Icon {
   readonly name = input.required<IconName>();
+  /** Overrides the default tooltip (the icon's name). */
+  readonly title = input<string | undefined>(undefined);
+  protected readonly tip = computed(() => this.title() ?? LABELS[this.name()]);
 
   /**
    * Undefined for a name with no path, which renders nothing.

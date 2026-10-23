@@ -104,9 +104,6 @@ export interface StatusCellRow {
         } @else {
           <span class="pct">{{ b.pct }}%</span>
         }
-        @if (openLabel(); as o) {
-          <span class="hint">{{ o }}</span>
-        }
         @if (row().current_price_stale) {
           <span
             class="hint stale"
@@ -216,7 +213,7 @@ export class StatusCell {
     // A trailing runner has a price and a stop but no target, so the bar is
     // withheld by design -- saying "no price" there would be false.
     if (r.bar_kind !== 'trailing') return 'no price';
-    return [this.openLabel(), 'trailing'].filter(Boolean).join(' · ');
+    return 'trailing';
   });
 
   /** Signed P&L % at both ends of a trailing runner's bar, or null. */
@@ -226,12 +223,12 @@ export class StatusCell {
     const f = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
     return { stop: f(r.stop_pnl_pct), best: f(r.best_pnl_pct) };
   });
+}
 
-  /** How much of a PARTIAL position is still open ("50% open"), so the chip
-   *  says what is left rather than only that something was banked. */
-  protected readonly openLabel = computed(() => {
-    const r = this.row();
-    if (r.status !== 'PARTIAL' || r.banked_fraction == null) return null;
-    return `${share((1 - r.banked_fraction) * 100)} open`;
-  });
+/** The partial icon's tooltip on a live PARTIAL row: how much is still open.
+ *  The status cell no longer prints it ("50% open"); it lives on the icon. */
+export function partialOpenTitle(row: { status: string; banked_fraction?: number | null }): string | null {
+  if (row.status !== 'PARTIAL') return null;
+  if (row.banked_fraction == null) return 'Partially closed';
+  return `Partially closed -- ${share((1 - row.banked_fraction) * 100)} still open`;
 }
