@@ -42,6 +42,9 @@ from swingbot.core.scanning import strategy_pass as sp
 from tests.helpers import make_ohlcv
 from tests.market.test_squeeze_release_series import _frame
 
+# v183: short plans here run on the real DATA_DIR -- keep their notice misses out of data/.
+pytestmark = pytest.mark.usefixtures("no_short_interest_queue")
+
 ET, UTC, CAL = ZoneInfo("America/New_York"), dt.timezone.utc, nyse_calendar()
 HZ, TARGET = "2w", 95.40
 BEAR = {"broad": True, "isolated": False}

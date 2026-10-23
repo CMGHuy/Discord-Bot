@@ -35,6 +35,9 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
 import measure_arms as ma  # noqa: E402
 
+# v183: short plans here run on the real DATA_DIR -- keep their notice misses out of data/.
+pytestmark = pytest.mark.usefixtures("no_short_interest_queue")
+
 
 @pytest.fixture(autouse=True)
 def _legacy_source(monkeypatch):
