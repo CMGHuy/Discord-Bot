@@ -13,7 +13,7 @@ import type { TradeDetailFields } from '../../api/models';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { QualityChip } from '../../ui/chip';
-import { dateTime, text } from '../../ui/format';
+import { dateTime, quantity, text } from '../../ui/format';
 import { StatusIndicator } from '../../ui/status-indicator';
 import { quoteLine } from '../trades/quote-line';
 import { IfItGetsThere } from '../trades/why/if-it-gets-there';
@@ -85,7 +85,7 @@ export function shortOrderNotes(
     size:
       shares === null
         ? null
-        : `Suggested size ${shares.toLocaleString('en-US', { maximumFractionDigits: 2 })} sh`,
+        : `Suggested size ${quantity(shares)} sh`,
     gapLine: gap?.line ?? null,
     cut: gap?.gap_sized === true,
     lines,
