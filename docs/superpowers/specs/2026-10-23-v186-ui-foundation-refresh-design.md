@@ -41,16 +41,26 @@ New component `sb-stat-strip` in `frontend/src/app/ui/stat-strip.ts`.
 
 **Layout.** One global class in `styles.css`, `.sb-strip-grid`, owns the column rule so the strip and the D5 `'tiles'` skeleton share it rather than duplicating it:
 
-- default: `grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr))`;
-- with `--strip-cols: N` set: N columns from 1024px, `min(N, 3)` from 640–1023px, 2 below 640px (written as three media-query rules reading `--strip-cols` / `--strip-cols-md`, which the component sets from its `cols` input).
+- default: `grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr))` (140px, today's Risk minimum);
+- with `cols` set: `cols` columns from 1024px, `colsMd` columns (default 2) from 640–1023px, 2 below 640px — three media-query rules reading `--strip-cols` / `--strip-cols-md`, which the component sets from its `cols` / `colsMd` inputs.
 
-`sb-stat-strip` takes an optional `cols` input; the migration pins `cols` where today's layout has a fixed count (Dashboard trading performance: 4; Risk metrics: 6 → 3 at md), so column counts do not change by accident. A call site that wants auto-fit omits it and the reflow is accepted explicitly in its migration commit.
+The migration preserves each site's current column counts:
+
+| site | today | strip inputs |
+|---|---|---|
+| Dashboard `trading-performance.ts:89-99` (8 metric-cards) | 4; 2 at ≤1023px; grid hidden ≤639px for `.mobile-summary` | `cols=4`, `colsMd=2`; the ≤639px hide/fallback moves onto the strip host unchanged |
+| Risk `risk.ts:170-174` (6 stat-tiles) | `auto-fit minmax(140px, 1fr)` | no `cols` (default auto-fit 140px) |
+| Calendar `calendar.ts:110-118` (7 stat-tiles) | 4; 2 at ≤639px | `cols=4`, `colsMd=4` |
 
 **Hairlines, start-edge, same geometry as `sb-figure-strip`.** `figure.ts` already rules its cells with `border-left` / `border-top` of `var(--figure-rule, 0px)` and a `-1px` start-edge offset (`figure.ts:15`). The strip reuses that mechanism: it sets `--figure-rule: 1px` on itself (an inherited custom property, so it crosses Angular's emulated encapsulation into projected children without `::ng-deep`), wraps the grid in an `overflow: hidden` box and offsets the grid `margin: -1px 0 0 -1px`, clipping the first row's top rule and the first column's left rule. `sb-stat-tile` (and `sb-metric-card`, if kept — see Migration) read `--figure-rule` on their `:host` exactly as `sb-figure` does. Because the rules are start-edge, an incomplete last row (5 tiles in 4 columns, an odd count at 2-up) leaves no stray rule beside the empty space.
 
 **Tile surface inside a strip.** The strip also sets `--tile-bg: transparent`, `--tile-border: 0` and `--tile-radius: 0`; the tile's `.tile` reads `background: var(--tile-bg, var(--surface))`, `border: var(--tile-border, 1px solid var(--border))`, `border-radius: var(--tile-radius, var(--panel-radius))`. Outside a strip a tile looks as it does today; nothing unmigrated breaks.
 
-**Hover lift.** `overflow: hidden` would clip `.sb-lift`'s translate and shadow (`motion.css` ~137). Inside a strip the lift is off: one global rule in `motion.css`, `sb-stat-strip .sb-lift:hover { transform: none; box-shadow: none; }` (global stylesheet, not `::ng-deep`; adds no shadow, so primitives G3 is unaffected). Tiles are not focusable, so no focus ring is clipped.
+**Hover lift.** `overflow: hidden` would clip `.sb-lift`'s translate and shadow (`motion.css:136-137`). Inside a strip the lift is off, in two parts that keep primitives G3 (which counts `box-shadow:` declarations: exactly two in motion.css, none in components) unchanged:
+- the shadow: `sb-stat-strip`'s `:host` sets the custom property `--panel-shadow-lift: none`, so the existing `box-shadow: var(--panel-shadow-lift)` resolves to none for its descendants (a custom-property declaration, not a `box-shadow:` one);
+- the translate: one global rule in `motion.css`, `[data-motion=on] sb-stat-strip .sb-lift:hover { transform: none; }` — specificity (0,3,1), beating the existing `[data-motion=on] .sb-lift:hover` (0,3,0).
+
+Tiles are not focusable, so no focus ring is clipped. Tile and metric-card hosts take `box-sizing: border-box` so the `--figure-rule` border on the host does not overflow its grid cell.
 
 **Tint.** `sb-metric-card`'s `[tint]` paints a `--pos-soft` / `--neg-soft` gradient via `:host(.tint-*) .card` (`metric-card.ts`, end of styles), which outranks `--tile-bg`. Inside a strip the tint is **dropped**: valence is carried by the value colour and its sign glyph, which is the colour law's primary channel, and a tinted block inside a ruled strip reintroduces the box-in-box this spec removes. Implemented by the tint rule reading `var(--tile-tint-off, <gradient>)`, with the strip setting `--tile-tint-off: none`; tested.
 
@@ -60,16 +70,16 @@ Empty strip renders nothing (no stray rules); one tile renders with no visible r
 
 | part | face | size | colour |
 |---|---|---|---|
-| label | `.sb-label` (mono caps) | `--text-micro` | `--text-muted` (was `--text-faint`) |
+| label | `.sb-label` (mono caps; today a hand-rolled sans uppercase at 0.1em in both stat-tile and metric-card, replaced by the class) | `--text-micro` | `--text-muted` (was `--text-faint`) |
 | value | D4 figure face | `--text-metric` | `--text` / `--pos` / `--neg` |
 | secondary | `--font-num` | `--text-micro` | `--text-secondary` |
 | `N=`, hint | `--font-num` / `--font-sans` | `--text-micro` | `--text-muted` (was `--text-faint`) |
 
 The thin-sample state keeps both cues (value opacity 0.62 **and** the "· thin sample" words).
 
-**Migration.** Every row of two or more tiles inside an `sb-panel` is wrapped in `sb-stat-strip`, replacing its hand-built grid (and that grid's breakpoint rules). The plan's first task greps and lists the call sites; the known ones are Dashboard (`trading-performance.ts`, 8 cards, today `repeat(4, minmax(140px, 1fr))` with a 2-up breakpoint, a `.grid.stale` opacity and a `mobile-summary` fallback — the stale opacity and mobile fallback move onto the strip host unchanged), Analytics (overview tiles), Risk (`.metric-grid`, 6 tiles) and Calendar (month summary). A page-level row of standalone cards outside a panel is left as is.
+**Migration.** Every row of two or more tiles inside an `sb-panel` is wrapped in `sb-stat-strip`, replacing its hand-built grid and breakpoint rules. There are exactly three (table above); the Dashboard `.grid.stale` opacity moves onto the strip host unchanged. Page-level tile rows outside any panel are **not** migrated: Analytics overview (`overview.ts:78-81`) and partials (`partials.ts:158-162`) `.kpis`, the Calendar day drawer (`calendar.ts:256-262`) and `calendar-day.ts:131-137`. They still receive the tile-level changes (label, figure face, readable colours) because those live in the tile.
 
-`sb-metric-card` is marked deprecated in its own doc comment (v80 D4). The plan's brief checks whether `sb-stat-tile` covers every input the strip-bound metric-card call sites use (`tint`, absent value, sub-line); if it does, those call sites move to `sb-stat-tile` and metric-card gains no new API; if not, metric-card gets the same `--figure-rule` / `--tile-*` / `--tile-tint-off` reads and the gap is recorded in the brief.
+`sb-metric-card` is marked deprecated (v80 D4), but `sb-stat-tile` does not cover what the Dashboard strip uses: warn tone, `.absent`, sign-coloured sub text (`subPnl`), number formatting and the `--register-*` density variables. Moving it would rewrite ~15 assertions in `trading-performance.spec.ts` for no visual gain. So metric-card is **kept** for the Dashboard and gains the same `--figure-rule` / `--tile-*` / `--tile-tint-off` reads as stat-tile; retiring it is left to a later spec.
 
 ### D4 — One figure face for display numbers
 
@@ -141,3 +151,12 @@ senior-engineer (2026-10-23), 4 BLOCKING, 8 ADVISORY:
 10. ADVISORY — `'tiles'` cannot use the flex-row skeleton grid; width sequence ambiguous -- applied: separate branch on the shared `.sb-strip-grid`; sequence by column index (D5).
 11. ADVISORY — auto-fit changes migrated column counts; metric-card is deprecated -- applied: `cols` input pins counts per call site; brief decides metric-card → stat-tile (D3).
 12. ADVISORY — metric-card weight 700 → 600 undocumented -- applied: noted in the D4 table.
+
+**Plan brief corrections** (plan-briefer, 2026-10-23, `.superpowers/briefs/2026-10-23-v186-ui-foundation-refresh.md` §0), applied to the spec before the plan:
+
+- Analytics tile rows are page-level, not in a panel -- removed from the migration; listed as untouched sites (D3).
+- Risk `.metric-grid` is auto-fit 140px, not a fixed 6 -- strip default set to auto-fit 140px; per-site column table added (D3).
+- `sb-stat-strip .sb-lift:hover { box-shadow: none }` loses on specificity and breaks G3 -- replaced by a `--panel-shadow-lift: none` custom-property override plus a `[data-motion=on]`-prefixed transform rule (D3).
+- Tile labels are hand-rolled sans caps, not `.sb-label` -- anatomy row states the replacement (D3).
+- Host-level `--figure-rule` borders need `box-sizing: border-box` on tile hosts -- added (D3).
+- metric-card retirement deferred: stat-tile lacks warn tone, `.absent`, `subPnl`, formatting and register vars (D3).
