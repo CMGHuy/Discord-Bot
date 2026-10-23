@@ -16,7 +16,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { routeRequest } from '../routing/route-request';
 import { Dashboard, DashboardScope } from '../api/models';
-import { readScopePreset, writeScopePreset } from '../ui/equity-chart-prefs';
 import {
   ChartTarget,
   ScopePreset,
@@ -25,7 +24,6 @@ import {
   chartWindowFor,
   scopeToRequest,
 } from '../workspaces/dashboard/panels/equity-range.model';
-import { PreferencesStore } from './preferences.store';
 
 interface DashboardSlice {
   data: Dashboard | null;
@@ -36,20 +34,16 @@ interface DashboardSlice {
    *  so it lives here: the server does the date filtering. `scope` is
    *  derived from it. */
   selection: ScopeSelection;
-  /** The window the latest request was sent with (null for 1D and All). The
-   *  Closed tab reads it through `closedWindow`, so the table under the KPI
-   *  cards always asks for the window the cards were asked for. */
-  requestWindow: TimeWindow | null;
   /** A refetch failed while figures were on screen: they are kept, dimmed,
    *  with a stale hint (spec v181 § 9). Never set by a failed first load. */
   stale: boolean;
-  /** Bumped on every programmatic chart move (a preset click, a restored
-   *  preset, a reset); the chart moves when it changes. 0 = nothing asked yet. */
+  /** Bumped on every programmatic chart move (a preset click, a reset); the
+   *  chart moves when it changes. 0 = nothing asked yet. */
   targetSeq: number;
-  /** Today's realised figures, kept beside the scoped ones so the Realised
-   *  P&L panel can show "today" while a wider range is selected. Under 1D it
-   *  is the scoped block itself. Null until a today fetch lands. */
-  todayRealized: Realized | null;
+  /** Today's whole response, kept beside the scoped one: the Realised today
+   *  card and the Open positions tabs read today in every mode. Under 1D it
+   *  is the scoped response itself. Null until a today fetch lands. */
+  todayData: Dashboard | null;
   /** A today-only fetch is in flight (the scoped fetch is `loading`). */
   todayLoading: boolean;
 }
@@ -72,6 +66,36 @@ function isPreset(selection: ScopeSelection, preset: ScopePreset): boolean {
 }
 
 const isDay = (selection: ScopeSelection): boolean => isPreset(selection, '1D');
+
+/**
+ * The five plan-lifecycle counts — SR53.
+ *
+ * The Jinja dashboard had these as a strip of clickable cards; the SPA had
+ * the status chips they navigated to, with no numbers on them. A chip that
+ * says "Pending" and a chip that says "Pending 4" answer different
+ * questions, and the second is the one worth landing on.
+ *
+ * Rendered in lifecycle order rather than by size: PENDING → ACTIVE →
+ * PARTIAL → CLOSED → CANCELLED is the order a plan moves through, and
+ * sorting by count would reshuffle the row every time a trade closed.
+ *
+ * A count of zero is kept, not dropped. "No pending plans" is information;
+ * a strip that shed its empty entries would change width as the session
+ * went on.
+ */
+function lifecycleOf(data: Dashboard | null): { status: string; count: number }[] {
+  const raw = data?.lifecycle;
+  // An EMPTY object, not just a missing one. `_lifecycle_counts` returns
+  // {} rather than raising, because the Dashboard is the landing page and
+  // one degraded panel beats a 500 for the other nine figures — so {} has
+  // to mean "no strip". Rendering five zeros for it would be a claim about
+  // the account rather than an admission the counts are unavailable.
+  if (!raw || Object.keys(raw).length === 0) return [];
+  return ['PENDING', 'ACTIVE', 'PARTIAL', 'CLOSED', 'CANCELLED'].map((status) => ({
+    status,
+    count: finiteNumber(raw[status]) ?? 0,
+  }));
+}
 
 function failure(hadData: boolean, error: ApiError): Partial<DashboardSlice> {
   return {
@@ -135,13 +159,14 @@ export const DashboardStore = signalStore(
     // open, however old" (see Trades' `today` filter), so a separate
     // "+ open" mode has nothing left to add. 'active' stays a valid value
     // the server accepts, for any link that still names it.
-    // v181: 'today' is now the 1D preset, 'all' the All preset.
+    // v181: 'today' is now the 1D preset, 'all' the All preset. Every visit
+    // opens on 1D (Today); a wider preset or a Range lasts for that visit.
     data: null, loading: false, error: null,
     selection: { kind: 'preset', preset: '1D' },
-    requestWindow: null, stale: false, targetSeq: 0,
-    todayRealized: null, todayLoading: false,
+    stale: false, targetSeq: 0,
+    todayData: null, todayLoading: false,
   }),
-  withComputed(({ data, selection, requestWindow, targetSeq }) => ({
+  withComputed(({ data, selection, targetSeq, todayData }) => ({
     /** True until the first response, and never again. Distinguishes "no
      *  data yet" from "a refetch is in flight", which want different UI:
      *  a skeleton once, and nothing at all thereafter. */
@@ -158,10 +183,6 @@ export const DashboardStore = signalStore(
       const current = selection();
       return current.kind === 'preset' ? current.preset : null;
     }),
-
-    /** The Closed tab's window: the latest KPI request's (null for 1D/All,
-     *  where the tab keeps its `today` flag or no filter). */
-    closedWindow: computed(() => requestWindow()),
 
     /** Where the chart should move, and a sequence number that changes only
      *  for a programmatic move. Under a Range the window is the Range itself
@@ -189,8 +210,10 @@ export const DashboardStore = signalStore(
      *  what this echo exists to make visible. */
     appliedScope: computed(() => data()?.scope?.mode ?? null),
 
-    /** The scoped realised block whole, for the Realised P&L panel. */
+    /** The scoped realised block whole. */
     realized: computed(() => data()?.realized ?? null),
+    /** Today's realised block, whatever the scope -- the Realised today card. */
+    todayRealized: computed<Realized | null>(() => todayData()?.realized ?? null),
     realizedAmount: computed(() => data()?.realized?.amount ?? null),
     realizedPct: computed(() => data()?.realized?.pct ?? null),
     realizedCount: computed(() => data()?.realized?.n ?? 0),
@@ -249,35 +272,11 @@ export const DashboardStore = signalStore(
      *  to hold presentation. */
     sizingNote: computed(() => data()?.position_premium ?? null),
 
-    /**
-     * The five plan-lifecycle counts — SR53.
-     *
-     * The Jinja dashboard had these as a strip of clickable cards; the SPA had
-     * the status chips they navigated to, with no numbers on them. A chip that
-     * says "Pending" and a chip that says "Pending 4" answer different
-     * questions, and the second is the one worth landing on.
-     *
-     * Rendered in lifecycle order rather than by size: PENDING → ACTIVE →
-     * PARTIAL → CLOSED → CANCELLED is the order a plan moves through, and
-     * sorting by count would reshuffle the row every time a trade closed.
-     *
-     * A count of zero is kept, not dropped. "No pending plans" is information;
-     * a strip that shed its empty entries would change width as the session
-     * went on.
-     */
-    lifecycle: computed<{ status: string; count: number }[]>(() => {
-      const raw = data()?.lifecycle;
-      // An EMPTY object, not just a missing one. `_lifecycle_counts` returns
-      // {} rather than raising, because the Dashboard is the landing page and
-      // one degraded panel beats a 500 for the other nine figures — so {} has
-      // to mean "no strip". Rendering five zeros for it would be a claim about
-      // the account rather than an admission the counts are unavailable.
-      if (!raw || Object.keys(raw).length === 0) return [];
-      return ['PENDING', 'ACTIVE', 'PARTIAL', 'CLOSED', 'CANCELLED'].map((status) => ({
-        status,
-        count: finiteNumber(raw[status]) ?? 0,
-      }));
-    }),
+    /** The scoped response's lifecycle counts (see `lifecycleOf`). */
+    lifecycle: computed(() => lifecycleOf(data())),
+    /** Today's lifecycle counts, whatever the scope: the Open positions tabs
+     *  list today's closes in every mode, so their counts are today's too. */
+    todayLifecycle: computed(() => lifecycleOf(todayData())),
 
     /** The plan-lifecycle diagram's "Expires" definition names this number.
      *  Null while loading rather than falling back to a guess -- a wrong
@@ -294,13 +293,12 @@ export const DashboardStore = signalStore(
       return used / cap;
     }),
   })),
-  withMethods((store, api = inject(ApiClient), prefs = inject(PreferencesStore)) => {
+  withMethods((store, api = inject(ApiClient)) => {
     let latestRequest = 0;
     let latestToday = 0;
     // Bumped by a preset click, so a Range still inside its debounce never
     // lands on top of the preset the partner chose after it.
     let rangeGeneration = 0;
-    let chosen = false;
     const ranges = new Subject<{ window: TimeWindow; generation: number }>();
 
     // `defer`: the request number and the window are taken when the route
@@ -312,13 +310,13 @@ export const DashboardStore = signalStore(
       const current = (): boolean => request === latestRequest;
       const { mode, window } = scopeToRequest(untracked(() => store.selection()), new Date());
       return routeRequest(api.dashboard(mode, window), {
-        start: () => patchState(store, { loading: true, requestWindow: window }),
+        start: () => patchState(store, { loading: true }),
         next: (data) => {
           if (!current()) return;
-          // Under 1D the scoped block is today's, so the today figures follow it.
+          // Under 1D the scoped response is today's, so the today figures follow it.
           patchState(store, {
             data, loading: false, error: null, stale: false,
-            ...(mode === 'today' ? { todayRealized: data.realized ?? null, todayLoading: false } : {}),
+            ...(mode === 'today' ? { todayData: data, todayLoading: false } : {}),
           });
         },
         error: (error) => {
@@ -329,14 +327,14 @@ export const DashboardStore = signalStore(
 
     const refetch = (): void => { resolve().subscribe({ error: () => undefined }); };
 
-    /** Today's realised figures alone, for the panel's Today view when the
-     *  scope is wider. A failure keeps the previous figures. */
+    /** Today's response alone, for the today-only figures when the scope is
+     *  wider. A failure keeps the previous figures. */
     const loadToday = (): void => {
       const request = ++latestToday;
       patchState(store, { todayLoading: true });
       api.dashboard('today').subscribe({
         next: (data) => {
-          if (request === latestToday) patchState(store, { todayRealized: data.realized ?? null, todayLoading: false });
+          if (request === latestToday) patchState(store, { todayData: data, todayLoading: false });
         },
         error: () => {
           if (request === latestToday) patchState(store, { todayLoading: false });
@@ -353,15 +351,14 @@ export const DashboardStore = signalStore(
     const select = (selection: ScopeSelection): void => {
       patchState(store, { selection });
       refetch();
-      if (!isDay(selection) && store.todayRealized() === null) loadToday();
+      if (!isDay(selection) && store.todayData() === null) loadToday();
     };
 
+    /** Never persisted: every visit opens on 1D (Today). */
     const setPreset = (preset: ScopePreset): void => {
-      chosen = true;
       rangeGeneration += 1;
       patchState(store, { targetSeq: store.targetSeq() + 1 });
       if (isPreset(store.selection(), preset)) return;
-      prefs.update((current) => writeScopePreset(current, preset));
       select({ kind: 'preset', preset });
     };
 
@@ -377,42 +374,23 @@ export const DashboardStore = signalStore(
       load,
       setPreset,
       /** Chart "Latest": back to Today -- the 1D window ending now. Moves the
-       *  chart and returns every figure (KPIs, Realised P&L) to today's. */
+       *  chart and returns every KPI figure to today's. */
       resetView(): void {
         setPreset('1D');
       },
       /** A user pan or zoom settled on `window` (V181-15 calls this). Never
-       *  persisted: a reload returns to the last preset (spec § 1). */
+       *  persisted: a reload returns to 1D. */
       setRange(window: TimeWindow): void {
-        chosen = true;
         ranges.next({ window, generation: rangeGeneration });
       },
       /** The pre-v181 Today / All days toggle, kept until V181-14 replaces it. */
       setScope(scope: DashboardScope): void {
         setPreset(scope === 'all' ? 'All' : '1D');
       },
-      /** The preset restored from preferences, once they have loaded. Moves
-       *  the chart there; refetches only if a load already went out with the
-       *  default. A no-op once the partner has chosen. */
-      adoptStoredPreset(preset: ScopePreset): void {
-        if (chosen || isPreset(store.selection(), preset)) return;
-        patchState(store, { selection: { kind: 'preset', preset }, targetSeq: store.targetSeq() + 1 });
-        if (latestRequest > 0) load();
-      },
     };
   }),
   withHooks({
-    onInit(store, events = inject(EventStream), prefs = inject(PreferencesStore)) {
-      // v181 -- restore the stored preset once preferences are in. Created
-      // before the load effect below, so on a warm start (preferences already
-      // loaded) it runs first and the initial load asks for the stored scope.
-      let adopted = false;
-      effect(() => {
-        if (adopted || !prefs.isLoaded()) return;
-        adopted = true;
-        const preset = readScopePreset(prefs.values());
-        untracked(() => store.adoptStoredPreset(preset));
-      });
+    onInit(store, events = inject(EventStream)) {
       const account = events.changes('account');
       const trades = events.changes('trades');
       // Coalesces the two signal reads (2026-09-14): closing a trade raises

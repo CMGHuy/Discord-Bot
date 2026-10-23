@@ -11,9 +11,6 @@ export const PANEL_HELP = {
     'Your paper account at a glance: its value, the change today and the equity chart, then the '
     + 'figures for the period selected above (1D, 5D … All, or the range you dragged the chart to). '
     + 'Simulated trades, before tax and costs.',
-  realizedPnl:
-    'Profit or loss already locked in by trades that closed in the selected period, how many closed, '
-    + 'and how many won or lost. "Today" shows the New York day alone, whatever period is selected.',
   openPositions:
     'Every trade plan by stage: pending (waiting for entry), active (entered), partial (first target '
     + 'banked, the rest still running) and closed. Open one to see why it was taken.',
@@ -41,9 +38,12 @@ export const KPI_HELP = {
     'The average winning trade divided by the average losing trade, both in R. 2.0 means a typical '
     + 'win is twice the size of a typical loss. Together with the win rate it explains the expectancy: '
     + 'a low win rate can still pay if the payoff ratio is high.',
+  realizedToday:
+    'Profit or loss locked in by trades that closed today (New York day), with how many closed and '
+    + 'how many won or lost. Always today, whatever period is selected.',
   realized:
-    'Profit or loss from trades closed in the selected period, in money. Same figure as the Realised '
-    + 'P&L panel below.',
+    'Profit or loss from trades closed in the selected period, in money. Shown only when a period other '
+    + 'than Today is selected; Realised today sits beside it.',
   openTrades: 'How many positions are open right now.',
   avgConfidence:
     'The average confidence score of the alerts behind the trades in the selected period.',

@@ -33,7 +33,6 @@ import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
 import { dashboardRoutes } from './dashboard.routes';
 import { PANEL_HELP } from './panels/panel-help';
-import { RealizedPnl } from './panels/realized-pnl';
 import { TradingPerformance } from './panels/trading-performance';
 import { EquityCandles } from './panels/equity-candles';
 import { PositionsTable } from './positions-table';
@@ -281,49 +280,67 @@ describe('Dashboard v85 layout', () => {
     expect(text).not.toContain('Paper account');
   });
 
-  describe('Realised P&L panel', () => {
+  describe('Today and Period modes', () => {
     const today = { amount: 42.5, pct: 0.6, n: 3, wins: 2, losses: 1 };
+    const scoped = { amount: 900, pct: 9, n: 30, wins: 18, losses: 12 };
+    const labels = (el: HTMLElement) => [...el.querySelectorAll('sb-metric-card .label')]
+      .map((l) => l.textContent!.trim());
+    const card = (el: HTMLElement, label: string) => [...el.querySelectorAll<HTMLElement>('sb-metric-card')]
+      .find((c) => c.querySelector('.label')!.textContent!.trim() === label)!;
 
-    it('sits under Trading performance and shows today by default', async () => {
+    it('has no separate Realised P&L panel', async () => {
       const fixture = await loaded({ scope: { mode: 'today' }, realized: today });
       const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('sb-realized-pnl')).toBeNull();
       const stack = el.querySelector('.performance-stack')!;
-      expect([...stack.children].map((c) => c.tagName.toLowerCase()))
-        .toEqual(['sb-trading-performance', 'sb-realized-pnl']);
-      const panel = el.querySelector('sb-realized-pnl')!;
-      expect(panel.querySelector('.amount')!.textContent!.trim()).toBe('+42.50 $');
-      expect(panel.querySelector('.window')!.textContent!.trim()).toBe('Today');
-      expect([...panel.querySelectorAll('.stats dd')].map((d) => d.textContent!.trim())).toEqual(['3', '2', '1']);
+      expect([...stack.children].map((c) => c.tagName.toLowerCase())).toEqual(['sb-trading-performance']);
     });
 
-    it('keeps the Realised card in the KPI grid as well', async () => {
+    it("opens in Today: a Realised today card with today's counts, no period card", async () => {
       const fixture = await loaded({ scope: { mode: 'today' }, realized: today });
-      const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('sb-metric-card .label')]
-        .map((l) => l.textContent!.trim());
-      expect(labels).toContain('Realised today');
+      const el = fixture.nativeElement as HTMLElement;
+      expect(labels(el)).toContain('Realised today');
+      expect(labels(el)).not.toContain('Realised in period');
+      expect(card(el, 'Realised today').textContent).toContain('+0.60% · 3 closed · 2W 1L');
+      expect(el.querySelector('[data-preset="1D"]')!.textContent!.trim()).toBe('Today');
     });
 
-    it('follows the chart scope and shows a ring while the new range loads', async () => {
+    it('switches to Period on a wider preset: Realised today stays today, the period card joins it', async () => {
       const fixture = await loaded({ scope: { mode: 'today' }, realized: today });
+      const backend = TestBed.inject(HttpTestingController);
       const store = TestBed.inject(DashboardStore);
       store.setPreset('1M');
       fixture.detectChanges();
-      const panel = fixture.nativeElement.querySelector('sb-realized-pnl') as HTMLElement;
-      expect(panel.querySelector('sb-spinner')).not.toBeNull();
-      expect(panel.querySelector('.window')!.textContent!.trim()).toBe('1M');
-      // The KPI cards that depend on the window ring too; the point-in-time ones do not.
+      // The window-scoped cards ring while the new period loads; the point-in-time ones and today's do not.
       const busy = [...fixture.nativeElement.querySelectorAll('sb-metric-card.loading .label')]
         .map((l) => (l as HTMLElement).textContent!.trim());
-      expect(busy).toEqual(expect.arrayContaining(['Win rate', 'Expectancy', 'Payoff ratio']));
+      expect(busy).toEqual(expect.arrayContaining(['Win rate', 'Expectancy', 'Payoff ratio', 'Realised in period']));
       expect(busy).not.toContain('Open trades');
       expect(busy).not.toContain('Open P&L');
+      expect(busy).not.toContain('Realised today');
+
+      backend.match((r) => r.url === '/api/v1/dashboard').forEach((r) => r.flush(payload({ scope: { mode: 'range' }, realized: scoped })));
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(labels(el)).toHaveLength(8);
+      expect(card(el, 'Realised today').textContent).toContain('3 closed');
+      expect(card(el, 'Realised in period').textContent).toContain('1M');
     });
 
-    it('is the same component the page binds to the store', async () => {
-      const fixture = await loaded({ scope: { mode: 'today' }, realized: today });
-      const panel = fixture.debugElement.query(By.directive(RealizedPnl)).componentInstance as RealizedPnl;
-      expect(panel.scope()).toEqual(today);
-      expect(panel.today()).toEqual(today);
+    it("keeps the Open positions table and its counts on today's closes in Period mode", async () => {
+      const fixture = await loaded({ lifecycle: { CLOSED: 3, CANCELLED: 1 } as never });
+      const backend = TestBed.inject(HttpTestingController);
+      const store = TestBed.inject(DashboardStore);
+      const table = fixture.debugElement.query(By.directive(PositionsTable))
+        .componentInstance as PositionsTable;
+      expect([table.today(), table.closedWindow(), table.counts()['CLOSED']]).toEqual([true, null, 3]);
+
+      store.setPreset('3M');
+      backend.match((r) => r.url === '/api/v1/dashboard')
+        .forEach((r) => r.flush(payload({ scope: { mode: 'range' }, lifecycle: { CLOSED: 50, CANCELLED: 7 } as never })));
+      fixture.detectChanges();
+      expect([table.today(), table.closedWindow(), table.counts()['CLOSED'], table.counts()['CANCELLED']])
+        .toEqual([true, null, 3, 1]);
     });
   });
 
@@ -345,7 +362,7 @@ describe('Dashboard v85 layout', () => {
   it('gives every panel on the page a tooltip saying what it is about', async () => {
     const fixture = await loaded();
     const panels = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-panel')];
-    expect(panels.length).toBeGreaterThanOrEqual(5);
+    expect(panels.length).toBeGreaterThanOrEqual(4);
     for (const section of panels) {
       const heading = section.querySelector('h2')?.textContent?.trim();
       expect(section.getAttribute('title'), heading).toBeTruthy();
@@ -353,7 +370,7 @@ describe('Dashboard v85 layout', () => {
       expect(section.querySelector('header sb-hint'), heading).not.toBeNull();
     }
     const titles = panels.map((p) => p.getAttribute('title'));
-    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance, PANEL_HELP.realizedPnl, PANEL_HELP.openPositions]));
+    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance, PANEL_HELP.openPositions]));
   });
 
   it('explains each KPI card on hover, payoff ratio included', async () => {
@@ -379,30 +396,6 @@ describe('Dashboard v85 layout', () => {
     fixture.detectChanges();
     expect(store.preset()).toBe('1M');
     expect(store.scope()).toBe('range');
-  });
-
-  it('names the realised window and narrows the Closed tab to it (v181 §6)', async () => {
-    const fixture = await loaded();
-    const store = TestBed.inject(DashboardStore);
-    const panel = fixture.debugElement.query(By.directive(TradingPerformance))
-      .componentInstance as TradingPerformance;
-    const table = fixture.debugElement.query(By.directive(PositionsTable))
-      .componentInstance as PositionsTable;
-    expect([panel.realizedLabel(), table.today(), table.closedWindow()])
-      .toEqual(['Realised today', true, null]);
-
-    store.setPreset('3M');
-    fixture.detectChanges();
-    expect(panel.realizedLabel()).toBe('Realised in range');
-    expect(panel.selection()).toEqual({ kind: 'preset', preset: '3M' });
-    expect(table.today()).toBeNull();
-    expect(table.closedWindow()).not.toBeNull();
-    expect(table.closedWindow()).toEqual(store.closedWindow());
-
-    store.setPreset('All');
-    fixture.detectChanges();
-    expect([panel.realizedLabel(), table.today(), table.closedWindow()])
-      .toEqual(['Realised, all days', null, null]);
   });
 
 });

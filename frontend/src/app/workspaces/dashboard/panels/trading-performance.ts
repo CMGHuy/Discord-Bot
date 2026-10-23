@@ -9,6 +9,7 @@ import { MetricCard } from '../../../ui/metric-card';
 import { Spinner } from '../../../ui/spinner';
 import { PortfolioValue } from './portfolio-value';
 import { amount, pct } from '../../../ui/format';
+import { Realized } from '../../../stores/dashboard.store';
 import {
   ChartTarget,
   TimeWindow,
@@ -24,8 +25,19 @@ import {
 /** The dropdown's value for a hand-picked range: never a preset, never persisted. */
 const RANGE_OPTION = 'Range';
 
+/** 1D is the page's default mode, so it reads as the word, not the code. */
+export function presetLabel(preset: ScopePreset): string {
+  return preset === '1D' ? 'Today' : preset;
+}
+
 /**
- * The seven figures — v85 D9 (the Risk used card was dropped 2026-10-23).
+ * The KPI cards — v85 D9 (the Risk used card was dropped 2026-10-23).
+ *
+ * Two modes. **Today** (1D, the default on every visit) shows today's
+ * figures: seven cards. **Period** (any wider preset, or a Range the chart
+ * was dragged to) re-scopes win rate, expectancy, payoff and confidence to
+ * that window and adds a Realised in period card: eight. Realised today is
+ * today's in both modes -- it replaced the separate Realised P&L panel.
  *
  * Win rate, expectancy and payoff ratio travel together on purpose: win rate
  * and payoff ratio decompose expectancy, so read as a triple they say why the
@@ -62,7 +74,7 @@ const RANGE_OPTION = 'Range';
                 [variant]="activePreset() === option ? 'secondary' : 'ghost'"
                 [attr.aria-pressed]="activePreset() === option"
                 (click)="presetChange.emit(option)"
-              >{{ option }}</button>
+              >{{ label(option) }}</button>
             }
             @if (rangeLabel(); as label) {
               <span class="range-chip" aria-current="true"><span class="range-word">Range</span> {{ label }}</span>
@@ -92,8 +104,12 @@ const RANGE_OPTION = 'Range';
           <sb-metric-card label="Win rate" [description]="help.winRate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" [loading]="loading()" />
           <sb-metric-card label="Expectancy" [description]="help.expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" [loading]="loading()" />
           <sb-metric-card label="Payoff ratio" [description]="help.payoffRatio" [value]="payoffRatio()" [tint]="payoffTone()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" [loading]="loading()" />
-          <sb-metric-card [label]="realizedLabel()" [description]="help.realized" [value]="realizedAmount()" [tint]="realizedTone()"
-                          [unit]="currencyUnit()" [sub]="noCloseHint(realizedAmount())" [loading]="loading()" />
+          <sb-metric-card label="Realised today" [description]="help.realizedToday" [value]="todayAmount()" [tint]="todayTone()"
+                          [unit]="currencyUnit()" [sub]="todaySub()" [loading]="todayBusy()" />
+          @if (inPeriod()) {
+            <sb-metric-card label="Realised in period" [description]="help.realized" [value]="realizedAmount()" [tint]="realizedTone()"
+                            [unit]="currencyUnit()" [sub]="periodSub()" [loading]="loading()" />
+          }
           <sb-metric-card label="Open trades" [description]="help.openTrades" [value]="openTrades()" [decimals]="0" [sub]="openTradesSub()" />
           <sb-metric-card label="Avg confidence" [description]="help.avgConfidence" [value]="avgConfidence()" [decimals]="1" [loading]="loading()" />
         </div>
@@ -111,7 +127,10 @@ const RANGE_OPTION = 'Range';
         <div [attr.data-tone]="tinted(winPairTone())" [class.busy]="loading()"><span>Win rate @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
         <div [attr.data-tone]="tinted(expectancyTone())" [class.busy]="loading()"><span>Expectancy @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
         <div [attr.data-tone]="tinted(payoffTone())" [class.busy]="loading()"><span>Payoff @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
-        <div [attr.data-tone]="tinted(realizedTone())" [class.busy]="loading()"><span>{{ realizedLabel() }} @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
+        <div [attr.data-tone]="tinted(todayTone())" [class.busy]="todayBusy()"><span>Realised today @if (todayBusy()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(todayAmount(), currencyUnit(), 2) }}</strong></div>
+        @if (inPeriod()) {
+          <div [attr.data-tone]="tinted(realizedTone())" [class.busy]="loading()"><span>Realised in period @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
+        }
       </div>
     </sb-panel>
   `,
@@ -154,8 +173,9 @@ const RANGE_OPTION = 'Range';
     /* A refetch in flight: the last figure stays, dimmed, beside its ring. */
     .mobile-summary .busy strong { opacity: 0.45; }
     .mobile-summary span { display: inline-flex; align-items: center; gap: var(--space-6); }
-    /* A fixed 4 columns, not auto-fit: seven cards read as a row of four and a
-       row of three (the last widened to fill), never an uneven 5+2 or 6+1
+    /* A fixed 4 columns, not auto-fit: seven cards (Today) read as a row of
+       four and a row of three (the last widened to fill), eight (Period) as
+       two rows of four -- never an uneven 5+2 or 6+1
        split that auto-fit would produce at an in-between width. minmax with two lengths (not a bare 1fr) keeps
        this grid's own width computable when the ancestor asks for its
        content size (.combined's "auto" track above, and -- separately --
@@ -217,8 +237,13 @@ export class TradingPerformance {
   readonly expectancyN = input<number | null>(null);
   protected sample(n: number | null): string | null { return n === null ? null : `N=${n}`; }
   readonly avgConfidence = input<number | null>(null);
+  /** The period's realised amount; shown only in Period mode. */
   readonly realizedAmount = input<number | null>(null);
-  readonly realizedLabel = input('Realised today');
+  /** Today's realised block, in both modes. Null until a response lands. */
+  readonly todayRealized = input<Realized | null>(null);
+  /** The today-only fetch is in flight (Period mode; under 1D the scoped
+   *  fetch is today's, so `loading` covers it). */
+  readonly todayLoading = input(false);
   readonly openTrades = input<number>(0);
   /** Mean winning R over the magnitude of mean losing R. Null, never 0, when
    *  either side has no outcomes yet — see payoff_ratio_from_rs. */
@@ -248,11 +273,12 @@ export class TradingPerformance {
     return selection.kind === 'range' ? rangeChipLabel(selection.window) : null;
   });
   protected readonly presetOptions = computed<SelectOption[]>(() => {
-    const options = SCOPE_PRESETS.map((value) => ({ value, label: value }));
+    const options = SCOPE_PRESETS.map((value) => ({ value, label: presetLabel(value) }));
     const label = this.rangeLabel();
     return label === null ? options : [...options, { value: RANGE_OPTION, label: `Range · ${label}` }];
   });
   protected readonly selectValue = computed(() => this.activePreset() ?? RANGE_OPTION);
+  protected readonly label = presetLabel;
   /** Only a preset leaves the dropdown; picking the Range entry changes nothing. */
   protected onSelect(value: string): void {
     const picked = SCOPE_PRESETS.find((option) => option === value);
@@ -262,6 +288,8 @@ export class TradingPerformance {
   /** v181 §5: open P&L and open trades are always "now"; outside
    *  1D a tinted card must not read as that window's exposure. */
   protected readonly nowLabel = computed(() => showsNowLabel(this.selection()));
+  /** Period mode: anything but 1D. The same test as the "now" labels. */
+  protected readonly inPeriod = this.nowLabel;
   protected readonly nowSuffix = computed(() => (this.nowLabel() ? ' · now' : ''));
   protected readonly openTradesSub = computed(() => (this.nowLabel() ? 'now' : null));
   private withNow(text: string | null): string | null {
@@ -284,6 +312,26 @@ export class TradingPerformance {
     if (active === '1D') return 'none closed today';
     return active === 'All' ? null : 'none closed in range';
   }
+  protected readonly todayAmount = computed(() => this.todayRealized()?.amount ?? null);
+  protected readonly todayTone = computed(() => signTone(this.todayAmount()));
+  protected readonly todayBusy = computed(() => (this.inPeriod() ? this.todayLoading() : this.loading()));
+  /** "+0.40% · 3 closed · 2W 1L"; the % is left out when the server has none. */
+  protected readonly todaySub = computed(() => {
+    const today = this.todayRealized();
+    if (today === null) return null;
+    if (today.n === 0) return 'none closed today';
+    const counts = `${today.n} closed · ${today.wins}W ${today.losses}L`;
+    return today.pct === null ? counts : `${pct(today.pct)} · ${counts}`;
+  });
+  /** Which window the period card covers, with the no-close hint after it. */
+  protected readonly periodSub = computed(() => {
+    const selection = this.selection();
+    const window = selection.kind === 'range'
+      ? rangeChipLabel(selection.window)
+      : (selection.preset === 'All' ? 'All days' : selection.preset);
+    const hint = this.noCloseHint(this.realizedAmount());
+    return hint === null ? window : `${window} · ${hint}`;
+  });
   protected readonly openPnlSub = computed(() => {
     const value = this.openPnlAmount();
     return this.withNow(value === null ? null : amount(value, this.currency()));

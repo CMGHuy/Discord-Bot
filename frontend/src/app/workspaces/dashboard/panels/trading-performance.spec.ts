@@ -13,7 +13,7 @@ import { ViewportService } from '../../../ui/breakpoints';
 import { SCOPE_PRESETS, ScopePreset, ScopeSelection, TimeWindow, rangeChipLabel } from './equity-range.model';
 import { KPI_HELP, PANEL_HELP } from './panel-help';
 import { PortfolioValue } from './portfolio-value';
-import { TradingPerformance } from './trading-performance';
+import { TradingPerformance, presetLabel } from './trading-performance';
 
 installMatchMediaPolyfill();
 
@@ -21,6 +21,7 @@ const preset = (value: ScopePreset): ScopeSelection => ({ kind: 'preset', preset
 /** 3 Sep – 18 Oct on the New York clock: `to` is the exclusive 19 Oct midnight. */
 const RANGE_WINDOW: TimeWindow = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
 const RANGE: ScopeSelection = { kind: 'range', window: RANGE_WINDOW };
+const TODAY_BLOCK = { amount: 15, pct: 0.4, n: 3, wins: 2, losses: 1 };
 
 describe('trading performance panel', () => {
   beforeEach(() => {
@@ -94,8 +95,7 @@ describe('trading performance panel', () => {
 
   it('gives the phone summary rows the same tones', () => {
     const el = render({ changePct: -0.4, winRate: 60, winRateN: 12, payoffRatio: 1, expectancyR: 0.2,
-                        realizedAmount: 15, openTrades: 2,
-                        realizedLabel: 'Realised today', currency: '€' });
+                        todayRealized: TODAY_BLOCK, openTrades: 2, currency: '€' });
     expect(row(el, 'Today').getAttribute('data-tone')).toBe('neg');
     expect(row(el, 'Win rate').getAttribute('data-tone')).toBe('pos');
     expect(row(el, 'Payoff').getAttribute('data-tone')).toBe('pos');
@@ -110,10 +110,10 @@ describe('trading performance panel', () => {
     expect(el.textContent).not.toContain('Paper account');
   });
 
-  it('shows all seven metrics', () => {
+  it('shows all seven metrics in Today mode', () => {
     const el = render({
       openPnlPct: 0.36, winRate: 49.1, expectancyR: -0.16, avgConfidence: 4.0,
-      realizedAmount: 0, realizedLabel: 'Realised today', openTrades: 1,
+      todayRealized: TODAY_BLOCK, openTrades: 1,
       payoffRatio: 2.34, currency: '€',
     });
     const labels = [...el.querySelectorAll('sb-metric-card')]
@@ -128,7 +128,7 @@ describe('trading performance panel', () => {
     // the only place these four figures can appear.
     const el = render({
       winRate: 49.1, winRateN: 12, expectancyR: -0.16, payoffRatio: 2.34,
-      realizedAmount: 5, realizedLabel: 'Realised today', currency: '€',
+      todayRealized: TODAY_BLOCK, currency: '€',
     });
     const text = el.querySelector('.mobile-summary')!.textContent ?? '';
     expect(text).toContain('Win rate');
@@ -170,7 +170,8 @@ describe('trading performance panel', () => {
   it('offers the eight presets as chips above phone width, the active one pressed', () => {
     const el = render({ selection: preset('3M'), currency: '€' });
     const chips = [...el.querySelectorAll<HTMLButtonElement>('[data-preset]')];
-    expect(chips.map((c) => c.textContent!.trim())).toEqual([...SCOPE_PRESETS]);
+    expect(chips.map((c) => c.textContent!.trim())).toEqual(SCOPE_PRESETS.map(presetLabel));
+    expect(chips[0].textContent!.trim()).toBe('Today');
     expect(chips.filter((c) => c.getAttribute('aria-pressed') === 'true')
       .map((c) => c.getAttribute('data-preset'))).toEqual(['3M']);
     expect(el.querySelector('sb-select')).toBeNull();
@@ -279,6 +280,66 @@ describe('trading performance panel', () => {
     });
   });
 
+  describe('Today and Period modes', () => {
+    const labels = (el: HTMLElement) =>
+      [...el.querySelectorAll('sb-metric-card .label')].map((l) => l.textContent!.trim());
+    const sub = (c: HTMLElement) => c.querySelector('.sub')?.textContent?.trim() ?? null;
+
+    it("Today: one realised card, today's amount with % and counts beneath", () => {
+      const el = render({ todayRealized: TODAY_BLOCK, realizedAmount: 999, currency: '€' });
+      expect(labels(el).filter((l) => l.startsWith('Realised'))).toEqual(['Realised today']);
+      const today = card(el, 'Realised today');
+      expect(today.textContent).toContain('15.00');
+      expect(sub(today)).toBe('+0.40% · 3 closed · 2W 1L');
+      expect(tint(today)).toBe('pos');
+    });
+
+    it('Period: eight cards, Realised today still today and Realised in period naming its window', () => {
+      const el = render({ selection: preset('1M'), todayRealized: TODAY_BLOCK, realizedAmount: -40, currency: '€' });
+      expect(labels(el)).toHaveLength(8);
+      expect(card(el, 'Realised today').textContent).toContain('15.00');
+      const period = card(el, 'Realised in period');
+      expect(period.textContent).toContain('40.00');
+      expect(sub(period)).toBe('1M');
+      expect(tint(period)).toBe('neg');
+    });
+
+    it('names a range, All days, and an empty period in the period card', () => {
+      const periodSub = (selection: ScopeSelection, realizedAmount: number | null) =>
+        sub(card(render({ selection, realizedAmount, currency: '€' }), 'Realised in period'));
+      expect(periodSub(RANGE, 5)).toBe(rangeChipLabel(RANGE_WINDOW));
+      expect(periodSub(preset('All'), 5)).toBe('All days');
+      expect(periodSub(preset('All'), null)).toBe('All days');
+      expect(periodSub(preset('3M'), null)).toBe('3M · none closed in range');
+    });
+
+    it("says none closed today, leaves out a missing %, and shows no sub before today's figures land", () => {
+      expect(sub(card(render({ todayRealized: { ...TODAY_BLOCK, amount: null, n: 0, wins: 0, losses: 0 }, currency: '€' }), 'Realised today')))
+        .toBe('none closed today');
+      expect(sub(card(render({ todayRealized: { ...TODAY_BLOCK, pct: null }, currency: '€' }), 'Realised today')))
+        .toBe('3 closed · 2W 1L');
+      expect(sub(card(render({ currency: '€' }), 'Realised today'))).toBeNull();
+    });
+
+    it("rings Realised today on today's own fetch in Period, and on the scoped fetch in Today", () => {
+      const busy = (inputs: Record<string, unknown>) =>
+        card(render({ ...inputs, currency: '€' }), 'Realised today').classList.contains('loading');
+      expect(busy({ selection: preset('1M'), loading: true })).toBe(false);
+      expect(busy({ selection: preset('1M'), todayLoading: true })).toBe(true);
+      expect(busy({ loading: true })).toBe(true);
+      expect(busy({ todayLoading: true })).toBe(false);
+    });
+
+    it('phone summary: Realised today always, Realised in period only in Period', () => {
+      const rows = (selection: ScopeSelection) =>
+        [...render({ selection, todayRealized: TODAY_BLOCK, realizedAmount: 3, currency: '€' })
+          .querySelectorAll('.mobile-summary > div > span')].map((s) => s.textContent!.trim());
+      expect(rows(preset('1D'))).toContain('Realised today');
+      expect(rows(preset('1D'))).not.toContain('Realised in period');
+      expect(rows(RANGE)).toEqual(expect.arrayContaining(['Realised today', 'Realised in period']));
+    });
+  });
+
   describe('tooltips', () => {
     it('describe the panel and every KPI card', () => {
       const el = render({ currency: '€' });
@@ -289,7 +350,7 @@ describe('trading performance panel', () => {
       expect(titles.get('Win rate')).toBe(KPI_HELP.winRate);
       expect(titles.get('Expectancy')).toBe(KPI_HELP.expectancy);
       expect(titles.get('Payoff ratio')).toBe(KPI_HELP.payoffRatio);
-      expect(titles.get('Realised today')).toBe(KPI_HELP.realized);
+      expect(titles.get('Realised today')).toBe(KPI_HELP.realizedToday);
       expect(titles.get('Open trades')).toBe(KPI_HELP.openTrades);
       expect(titles.get('Avg confidence')).toBe(KPI_HELP.avgConfidence);
     });
@@ -367,6 +428,7 @@ describe('trading performance scope on a phone (v181 §1)', () => {
     const el = mount(preset('1D')).nativeElement as HTMLElement;
     const select = el.querySelector<HTMLSelectElement>('sb-select.preset-select select')!;
     expect([...select.options].map((o) => o.value)).toEqual([...SCOPE_PRESETS]);
+    expect(select.options[0].textContent!.trim()).toBe('Today');
     expect(el.querySelector('[data-preset]')).toBeNull();
   });
 

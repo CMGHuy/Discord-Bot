@@ -7,11 +7,12 @@ describe('dashboard tooltip copy', () => {
 
   it('covers every panel and every KPI card on the page', () => {
     expect(Object.keys(PANEL_HELP).sort()).toEqual([
-      'exposureByHorizon', 'marketMovers', 'openPositions', 'realizedPnl', 'recentActivity',
+      'exposureByHorizon', 'marketMovers', 'openPositions', 'recentActivity',
       'tradingPerformance', 'watchlist',
     ]);
     expect(Object.keys(KPI_HELP).sort()).toEqual([
-      'avgConfidence', 'expectancy', 'openPnl', 'openTrades', 'payoffRatio', 'realized', 'winRate',
+      'avgConfidence', 'expectancy', 'openPnl', 'openTrades', 'payoffRatio', 'realized', 'realizedToday',
+      'winRate',
     ]);
   });
 
@@ -28,7 +29,7 @@ describe('dashboard tooltip copy', () => {
   });
 
   it('keeps the two realised figures pointing at each other', () => {
-    expect(KPI_HELP.realized).toContain('Realised P&L panel');
-    expect(PANEL_HELP.realizedPnl).toContain('Today');
+    expect(KPI_HELP.realized).toContain('Realised today');
+    expect(KPI_HELP.realizedToday).toContain('Always today');
   });
 });

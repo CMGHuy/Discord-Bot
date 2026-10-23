@@ -14,7 +14,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
 
-import { CloseScope, DashboardScope, TradeRow } from '../../api/models';
+import { CloseScope, TradeRow } from '../../api/models';
 import { ApiClient } from '../../api/api-client';
 import { ToastService } from '../../shell/toast.service';
 import { ConnectionStore } from '../../stores/connection.store';
@@ -69,7 +69,6 @@ import { map } from 'rxjs';
 import { ActivityEvent, deriveActivity } from './panels/activity';
 import { TradeDrawer } from './trade-drawer';
 import { PANEL_HELP } from './panels/panel-help';
-import { RealizedPnl } from './panels/realized-pnl';
 import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { MarketMovers } from './panels/market-movers';
@@ -146,19 +145,12 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
   return rows.find((row) => row.id === id) ?? null;
 }
 
-/** v181 §6: the Realised card's label per applied scope. */
-const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
-  today: 'Realised today',
-  all: 'Realised, all days',
-  range: 'Realised in range',
-};
-
 @Component({
   selector: 'sb-dashboard',
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
-    Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance, RealizedPnl,
+    Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
     RecentActivity, MarketMovers, TradeDrawer,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
@@ -218,7 +210,8 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
       [expectancyN]="store.expectancyN()"
       [avgConfidence]="store.avgConfidence()"
       [realizedAmount]="store.realizedAmount()"
-      [realizedLabel]="realizedLabel()"
+      [todayRealized]="store.todayRealized()"
+      [todayLoading]="store.todayLoading()"
       [openTrades]="store.openTrades()"
       [payoffRatio]="store.payoffRatio()"
       [currency]="connection.currency()"
@@ -229,17 +222,6 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
       [chartTarget]="store.chartTarget()"
       (chartRangeChange)="store.setRange($event)"
       (viewReset)="store.resetView()"
-    />
-    <!-- Realised P&L follows the scope the chart sets (a preset, or the range
-         it was dragged to); Today is one click away whatever the scope is. -->
-    <sb-realized-pnl
-      [scope]="store.realized()"
-      [today]="store.todayRealized()"
-      [selection]="store.selection()"
-      [currency]="connection.currency()"
-      [loading]="store.loading()"
-      [todayLoading]="store.todayLoading()"
-      [stale]="store.stale()"
     />
     </div>
     </sb-async>
@@ -277,8 +259,7 @@ const REALIZED_LABEL: Partial<Record<DashboardScope, string>> = {
            work for the same answer. -->
       <sb-positions-table
         [counts]="lifecycleCounts()"
-        [today]="closedToday()"
-        [closedWindow]="store.closedWindow()"
+        [today]="true"
         [columns]="columns()"
         [visibleFor]="columnsForTab"
         [pinned]="pinned"
@@ -726,20 +707,13 @@ export class Dashboard {
    *  one. Same key Trades and the ticker detail use. */
   protected readonly rowKey = (row: TradeRow) => `${row.id}:${row.leg_index}`;
 
-  /** The Closed tab's `today` input: `true` on 1D (trades closed today,
-   *  the rule the lifecycle strip's CLOSED count already used), `null`
-   *  otherwise. On All that means unfiltered; on a range the
-   *  `closedWindow` input narrows it instead (v181 §6). PositionsTable
-   *  applies both to CLOSED/CANCELLED only. */
-  protected readonly closedToday = computed(() =>
-    this.store.scope() === 'today' ? true : null,
-  );
-
-
   /** The lifecycle strip's counts, reshaped for the tab labels. The strip
-   *  itself is gone (R4-07) -- these numbers moved onto the tabs. */
+   *  itself is gone (R4-07) -- these numbers moved onto the tabs. Today's
+   *  in every mode: the Closed and Cancelled tabs always list today's
+   *  closes (`[today]="true"`), whatever period the KPI cards show, so the
+   *  counts come from the today response, never the scoped one. */
   protected readonly lifecycleCounts = computed(() =>
-    Object.fromEntries(this.store.lifecycle().map((e) => [e.status, e.count])),
+    Object.fromEntries(this.store.todayLifecycle().map((e) => [e.status, e.count])),
   );
 
   /** Bound as a value, not called in the template: the table takes the
@@ -982,12 +956,6 @@ export class Dashboard {
       + `out, capped at ${cap}. Varies per trade with stop distance — switch to `
       + '!account sizing account for a fixed premium instead.';
   });
-
-  /** Names the window in the card itself, so a figure cannot be read as
-   *  today's when the scope is All or a range. */
-  protected readonly realizedLabel = computed(() =>
-    REALIZED_LABEL[this.store.scope()] ?? 'Realised today',
-  );
 
 
   // v54 Task 28 dropped the unit from both columns on the grounds that the
