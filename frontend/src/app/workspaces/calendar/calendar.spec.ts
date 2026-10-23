@@ -802,6 +802,32 @@ describe('Calendar totals: one stat tile (v179 §3.3)', () => {
 });
 
 
+describe('Calendar totals in a stat strip (v186 D3)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/calendar/calendar.ts'), 'utf8');
+
+  it('rules the seven summary tiles with one stat strip: four columns from sm, two on a phone', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const strip = el(fixture).querySelector<HTMLElement>('sb-stat-strip.totals');
+    expect(strip).not.toBeNull();
+    expect(strip!.querySelectorAll('sb-stat-tile')).toHaveLength(7);
+    expect(strip!.style.getPropertyValue('--strip-cols')).toBe('4');
+    expect(strip!.style.getPropertyValue('--strip-cols-md')).toBe('4');
+    expect(strip!.querySelector('.sb-strip-grid')!.classList).toContain('sb-strip-fixed');
+  });
+
+  it('leaves the day drawer tiles out of any strip (page-level row)', () => {
+    expect(SOURCE).not.toMatch(/<sb-stat-strip[^>]*class="day-summary"/);
+    expect(SOURCE.match(/<sb-stat-strip/g)).toHaveLength(1);
+  });
+
+  it('declares no totals grid of its own', () => {
+    expect(SOURCE).not.toMatch(/\.totals\s*\{[^}]*grid-template-columns/);
+    expect(SOURCE).not.toMatch(/\.totals\s*\{[^}]*gap:/);
+  });
+});
+
 describe('Calendar totals metric formatting and tone (v179)', () => {
   it.each([
     ['currency', '-60.00 €', 'neg'],
