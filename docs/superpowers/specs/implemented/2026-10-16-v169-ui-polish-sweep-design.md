@@ -5,7 +5,29 @@
 **Edge:** none (integrity). This is presentation only.
 **Screen:** exempt (integrity)
 **Panel:** senior-engineer
-**Status:** spec written 2026-10-16 from the same brainstorm as v167 and v168, and approved in chat. Revised the same day after the panel (see `## Panel review`). Depends on **v167 and v168 both merged**.
+**Status:** spec written 2026-10-16 from the same brainstorm as v167 and v168, and approved in chat. Revised the same day after the panel (see `## Panel review`). Depends on **v167 and v168 both merged**. **SUPERSEDED 2026-10-23, never planned** — see `## Superseded`.
+
+## Superseded
+
+Retired with the partner's agreement on 2026-10-23 after an audit against the frontend as of `0646fa34`. It was never planned, and no code was built from it. **Do not plan from the sections below.** They are stale:
+
+- **Overtaken by v179 (mobile layout consistency).** v179 covers the touch targets, the pill-chip wrapping and the screenshot/audit workflow: `frontend/scripts/layout-audit.mjs` at 390/768/1440 (overflow, clipping, tap, text, baseline and vcenter checks), made mandatory by `docs/claude/ui-design.md`. The `audit-targets.mjs` proposed here would duplicate it.
+- **Overlapped by v186 (UI foundation refresh).** v186 is the first of four UI-refresh specs: foundation → shell → toolbars & tables → workspace passes. Those passes are the per-workspace walk this spec planned. v186 D3 also removes box-in-box from stat tiles by another route (transparent tiles plus hairlines), which replaces this spec's "use `--panel-inner-bg`" fix for tiles.
+- **Wrong about today's code:**
+  - The `[sbStaggerIndex]` directive does not exist; v168 stagger runs from the route.
+  - The shimmer skeleton is replaced by v186 D5.
+  - The `ng serve` workflow with a hand-typed login no longer applies. Use `/replicate-prod-db`, a built frontend, and `.env` credentials via `browse.mjs login`.
+  - The v165/v166 coordination section is obsolete; both are merged.
+
+**Residue handed to v186's follow-on specs** (shell, workspace passes), which are not written yet. Whoever writes them folds these in:
+
+1. `sb-figure-strip` cell background (`figure.ts:7` paints `--surface` over the strip's `--panel-bg`): use `--panel-inner-bg` or a transparent background. `--panel-inner-bg`/`--panel-inner-radius` (`tokens.css:400-401`) are still unused.
+2. **Shell:** translucent `.topbar` ground without the `--border` hairline (`shell.css:268-279`). **Login:** the card off `--surface`/`--border` (`login.css:15-16`), the button, and a static glow layer.
+3. Extend `workspace-consistency.spec.ts` (`:9-19`): scan files recursively, include gallery, add a heading rule beyond `<h1>`, and an exemption map.
+4. Five workspace files still hand-roll `<h2>`/`<h3>` (calendar, calendar-day, why-panel, earnings-calendar, and one more): migrate them after v186 D1. Also deeper hand-built grids that miss the route stagger.
+5. A hover-only-affordance check, as a new `layout-audit` check.
+6. Table corners inside rounded panels: clip with `overflow: clip` on the wrapper only.
+7. The `export_data.py:91` disclaimer-grey follow-up, which still has no home.
 
 ## Why
 
