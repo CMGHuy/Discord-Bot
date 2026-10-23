@@ -94,6 +94,7 @@ E8. **Smells:**
     - Components inject `ApiClient` directly (`dashboard.ts:826`, `row-actions.ts:105`, `trades.ts:1142`, `trade-detail.ts:845`, `shell.ts:325`).
     - Duplicated `formatR`, `sign()` and percent helpers.
     - About 75 raw `toFixed` calls.
+E9. **The Discord feed's cancel headline always uses the stop-entry verb.** `_cancelled` headlines a cancelled limit plan as "CANCEL BUY STOP 100.00", and `test_feed_guards` pins that headline. Found while planning v187. It is latent while the limit strategies are masked, and must be fixed before one is unmasked.
 
 The v186 working tree, uncommitted at audit time and owned by another session:
 - `realized-pnl.ts:88-89` declares `about` twice, which does not compile.

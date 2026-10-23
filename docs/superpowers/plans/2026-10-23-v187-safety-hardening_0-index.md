@@ -112,7 +112,7 @@ D3  core/planning/plan_manager.py
 4. **Ceiling tolerance.** `limit = balance * RISK_CEILING_PCT / 100`. The reduction fires when `raw_shares * stop_distance > limit * (1 + 1e-9)`; the floor fires when `round(raw_shares, 2) * stop_distance > limit * (1 + 1e-9)`. Both are skipped when `stop_distance <= 0` (`account_pct` with entry == stop has no stop risk). When floored, `position_value` and `risk_amount` are computed from the floored shares; otherwise they are computed exactly as today.
 5. **Seed fallback.** The `Field` default is read from `swingbot.config.FIELDS` by env key. `RISK_PER_TRADE_PCT`'s default becomes `"1.0"`, so the fallback is a sane 1%.
 6. **Event details and wording** are fixed in § Contracts, so the vocabulary tasks can be written and run alongside V187-9.
-7. **Kinds.** Both new cancel events render as `Kind.CANCEL` (the existing generic 🚫 MANAGE kind) wherever a site maps transitions to kinds. No new `Kind` member is added.
+7. **Kinds.** Both new cancel events render as `Kind.CANCEL` (the existing generic 🚫 MANAGE kind) in the execution feed and history embeds. The exception is `follow_notify`: there they map to `Kind.INVALIDATED`, because `test_follow_notify_policy.py::test_imperative_kinds_are_never_used` bans `Kind.CANCEL` from that module. No new `Kind` member is added. `_CANCEL_LEADS` uses `""` for both, because `FEED_SYMBOLS` (pinned by `test_feed_symbols.py`) has no `limit`/`gap` key. Both of these were synced from part 2's "Part-2 decisions".
 
 ## Contracts
 
@@ -220,14 +220,14 @@ class PlanManager:
 
 | Site | `cancelled_limit` | `cancelled_gap_through_stop` |
 |---|---|---|
-| `instructions._CANCEL_LEADS` | `"limit"` | `"gap"` |
+| `instructions._CANCEL_LEADS` | `""` | `""` |
 | `instructions._cancel_why` | `Price ran past the limit's cancel level {limit_cancel_level} at {live_price} before the order filled. Nothing was opened.` | `Price touched the limit at {live_price}, already at or through the stop {stop_loss}. The order is cancelled, nothing was opened.` |
 | `instructions._BUILDERS` | `_cancelled` | `_cancelled` |
 | `lifecycle_embeds._EVENT_KINDS` / `execution_embeds` kind map | `Kind.CANCEL` | `Kind.CANCEL` |
 | `lifecycle_embeds._EVENT_FIELDS` | `_limit_cancelled_fields` | `_gap_through_stop_fields` |
 | `session_expiry._IN_SESSION_CODES` | `LIMIT_CANCELLED = "limit_cancelled"` | `GAP_THROUGH_STOP = "gap_through_stop"` |
 | `follow_notify._BY_TRANSITION` | `"closed_other"` | `"closed_other"` |
-| `follow_notify._CLOSED_OTHER_KIND` | `Kind.CANCEL` | `Kind.CANCEL` |
+| `follow_notify._CLOSED_OTHER_KIND` | `Kind.INVALIDATED` | `Kind.INVALIDATED` |
 | `follow_notify._CANCEL_LABELS` | `"limit cancelled before fill"` | `"gapped through the stop before fill"` |
 
 Prices in the `_cancel_why` sentences use the module's existing price formatter (the one the risk-cap sentence uses).
@@ -262,7 +262,8 @@ At most two `task-implementer`s at once; two tasks that share a file never run t
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
-| 1 | `2026-10-23-v187-safety-hardening_1-admin-gate-and-account-limits.md` | V187-1..V187-7 | worktree; administrator gates on the account and trades commands with the allowlist coverage test; the account-setting validator and validated `.env` seed; handler refusals and honest copy; the sizing backstop (finite guards, risk clamp, 2% ceiling in both modes, floor on breach) |
+| 1 | `2026-10-23-v187-safety-hardening_1-admin-gate-and-account-limits.md` | V187-1..V187-5 | worktree; administrator gates on the account and trades commands with the allowlist coverage test; the account-setting validator and validated `.env` seed; handler refusals and honest copy |
+| 1b | `2026-10-23-v187-safety-hardening_1b-sizing-backstop.md` | V187-6..V187-7 | the sizing backstop (finite guards, risk clamp, 2% ceiling in both modes, floor on breach); `_apply_size_caps(…, position_value)` |
 | 2 | `2026-10-23-v187-safety-hardening_2-live-limit-entries.md` | V187-8..V187-13 | one pending-cancel event set and the placeholder discard; the live limit branch with its shared fill helper and parity test; the two new events across instructions, embeds, session expiry and follow notices; full suite and merge |
 
 ## Task ledger
