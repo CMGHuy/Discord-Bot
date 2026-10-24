@@ -3,9 +3,11 @@
 Each body lives in one handle_account_<x>(reply, ...) handler. The prefix
 command and the /account <x> subcommand both call it through a Reply
 (swingbot/commands/reply.py), so the two surfaces cannot drift.
+The eight setters are administrator-only (v187 D1); !account and /account show stay open.
 """
 import discord
 from discord import app_commands
+from discord.ext import commands
 
 from swingbot.core.planning.account import (
     load_account_config, set_balance, set_max_open_positions, set_max_position_pct,
@@ -163,6 +165,7 @@ async def account_cmd(ctx):
 
 
 @account_cmd.command(name="balance")
+@commands.has_permissions(administrator=True)
 async def account_balance(ctx, amount: float):
     reply = CtxReply(ctx)
     await handle_account_balance(reply, amount)
@@ -170,6 +173,7 @@ async def account_balance(ctx, amount: float):
 
 
 @account_cmd.command(name="risk")
+@commands.has_permissions(administrator=True)
 async def account_risk(ctx, pct: float):
     reply = CtxReply(ctx)
     await handle_account_risk(reply, pct)
@@ -177,6 +181,7 @@ async def account_risk(ctx, pct: float):
 
 
 @account_cmd.command(name="maxpositions")
+@commands.has_permissions(administrator=True)
 async def account_maxpositions(ctx, n: int):
     reply = CtxReply(ctx)
     await handle_account_maxpositions(reply, n)
@@ -184,6 +189,7 @@ async def account_maxpositions(ctx, n: int):
 
 
 @account_cmd.command(name="sizing")
+@commands.has_permissions(administrator=True)
 async def account_sizing(ctx, mode: str):
     """`!account sizing risk` (fixed-fractional, size varies with stop distance) or
     `!account sizing account` (fixed allocation -- every trade opens at exactly
@@ -194,6 +200,7 @@ async def account_sizing(ctx, mode: str):
 
 
 @account_cmd.command(name="positionpct")
+@commands.has_permissions(administrator=True)
 async def account_positionpct(ctx, pct: float):
     """Only used in 'account' sizing mode -- see `!account sizing`."""
     reply = CtxReply(ctx)
@@ -202,6 +209,7 @@ async def account_positionpct(ctx, pct: float):
 
 
 @account_cmd.command(name="maxpositionpct")
+@commands.has_permissions(administrator=True)
 async def account_maxpositionpct(ctx, pct: float):
     """Position-size cap as a % of balance."""
     reply = CtxReply(ctx)
@@ -210,6 +218,7 @@ async def account_maxpositionpct(ctx, pct: float):
 
 
 @account_cmd.command(name="maxposition")
+@commands.has_permissions(administrator=True)
 async def account_maxposition(ctx, amount: float):
     """Hard currency cap on position value."""
     reply = CtxReply(ctx)
@@ -218,6 +227,7 @@ async def account_maxposition(ctx, amount: float):
 
 
 @account_cmd.command(name="maxrisk")
+@commands.has_permissions(administrator=True)
 async def account_maxrisk(ctx, amount: float):
     """Hard currency cap on the real risk if a trade's stop-loss is hit."""
     reply = CtxReply(ctx)
@@ -241,18 +251,21 @@ async def slash_account_show(interaction: discord.Interaction):
 
 @account_group.command(name="balance", description="Set the base balance (realized P&L keeps adding on top)")
 @app_commands.describe(amount="New base balance")
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_account_balance(interaction: discord.Interaction, amount: float):
     await handle_account_balance(InteractionReply(interaction), amount)
 
 
 @account_group.command(name="risk", description="Set the % of balance risked per trade")
 @app_commands.describe(pct="Risk per trade, in percent")
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_account_risk(interaction: discord.Interaction, pct: float):
     await handle_account_risk(InteractionReply(interaction), pct)
 
 
 @account_group.command(name="maxpositions", description="Set the max number of concurrent open positions")
 @app_commands.describe(n="Max concurrent open positions")
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_account_maxpositions(interaction: discord.Interaction, n: int):
     await handle_account_maxpositions(InteractionReply(interaction), n)
 
@@ -260,30 +273,35 @@ async def slash_account_maxpositions(interaction: discord.Interaction, n: int):
 @account_group.command(name="sizing", description="Choose the position-sizing mode")
 @app_commands.describe(mode="Sizing mode")
 @app_commands.choices(mode=SIZING_CHOICES)
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_account_sizing(interaction: discord.Interaction, mode: app_commands.Choice[str]):
     await handle_account_sizing(InteractionReply(interaction), mode.value)
 
 
 @account_group.command(name="positionpct", description="Set the position size as a % of account (account sizing mode)")
 @app_commands.describe(pct="Position size, in percent of the account")
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_account_positionpct(interaction: discord.Interaction, pct: float):
     await handle_account_positionpct(InteractionReply(interaction), pct)
 
 
 @account_group.command(name="maxpositionpct", description="Cap a position's size as a % of balance")
 @app_commands.describe(pct="Position-size cap, in percent of balance")
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_account_maxpositionpct(interaction: discord.Interaction, pct: float):
     await handle_account_maxpositionpct(InteractionReply(interaction), pct)
 
 
 @account_group.command(name="maxposition", description="Cap a position's value in currency (0 disables)")
 @app_commands.describe(amount="Max position value, absolute")
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_account_maxposition(interaction: discord.Interaction, amount: float):
     await handle_account_maxposition(InteractionReply(interaction), amount)
 
 
 @account_group.command(name="maxrisk", description="Cap the real loss per trade in currency (0 disables)")
 @app_commands.describe(amount="Max loss per trade, absolute")
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_account_maxrisk(interaction: discord.Interaction, amount: float):
     await handle_account_maxrisk(InteractionReply(interaction), amount)
 
