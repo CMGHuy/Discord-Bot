@@ -98,6 +98,48 @@ def no_short_interest_queue(monkeypatch):
     monkeypatch.setattr(short_interest, "request_refresh", lambda ticker: None)
 
 
+_DOTENV_PINNED_TO_DEFAULT = (
+    "AVWAP_LEVELS_ENABLED", "DEFAULT_HISTORY_PERIOD", "MAX_POSITION_SIZE_PCT",
+    "MAX_STOP_LOSS_PCT", "MIN_REWARD_PCT", "POSITION_SIZE_PCT_OF_ACCOUNT",
+    "RISK_PER_TRADE_PCT",
+)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _no_provider_settings_from_dotenv():
+    """``config`` loads the checkout's ``.env`` at import, so a dev machine
+    with real Alpaca keys, or production's ``MARKETDATA_LAYER=count``, would
+    route every price/history test to a live path instead of its mock. Pin
+    both to the shipped defaults for the whole session (session-scoped so
+    module-scoped fixtures see them too); a test that wants another value
+    sets it itself with ``monkeypatch.setattr``."""
+    from swingbot import config
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        _pin_dotenv_settings(config, monkeypatch)
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _repin_dotenv_settings(monkeypatch):
+    """A test that calls ``config.reload()`` re-reads ``.env`` into the module
+    globals and undoes the session pin for everything after it; re-pin per
+    test so order never matters."""
+    from swingbot import config
+    _pin_dotenv_settings(config, monkeypatch)
+
+
+def _pin_dotenv_settings(config, monkeypatch):
+    monkeypatch.setattr(config, "ALPACA_API_KEY_ID", "")
+    monkeypatch.setattr(config, "ALPACA_API_SECRET_KEY", "")
+    monkeypatch.setattr(config, "MARKETDATA_LAYER", "off")
+    # Strategy/plan knobs a deployment tunes in .env; the goldens and witnesses
+    # replay the shipped defaults.
+    by_key = {f.key: f for f in config.FIELDS}
+    for key in _DOTENV_PINNED_TO_DEFAULT:
+        f = by_key[key]
+        monkeypatch.setattr(config, f.attr, config._cast(f, f.default))
+
+
 @pytest.fixture(autouse=True)
 def _low_dpi_renders(monkeypatch):
     """Render test charts at a low DPI -- the tier's dominant cost is raster
