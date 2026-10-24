@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-24 14:55:41 UTC",
+  "generated_at": "2026-10-24 19:51:28 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.35.1",
-    "bot": "2.15.1"
+    "bot": "2.15.2"
   },
   "releases": [
     {
@@ -2081,6 +2081,19 @@
       "versions": {
         "ui": "1.35.1",
         "bot": "2.15.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-24",
+      "last_seen": "2026-10-24",
+      "commit": "88b7c906",
+      "subject": "release(bot): 2.15.2 -- report failed plan steps as unchecked stops (v184)",
+      "versions": {
+        "ui": "1.35.1",
+        "bot": "2.15.2"
       },
       "changed": [
         "bot"
