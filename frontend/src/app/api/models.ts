@@ -2218,3 +2218,86 @@ export interface EquityCandlesResponse {
   recording_since: string | null;
   as_of: string;
 }
+
+/* v188 -- cancelled-plan precision (`GET /api/v1/cancel-precision`).
+ * A hypothetical replay of every bot-cancelled plan; the server computes
+ * every figure and the SPA only formats and filters. Fractions are 0..1,
+ * R values 2 dp. */
+
+/** The four replay outcomes. Frozen names: never `never_triggered`, which
+ *  is an existing session_expiry reason code. */
+export type CancelOutcome = 'right' | 'wrong' | 'unresolved' | 'untriggered_after_cancel';
+
+/** One group's figure. `n` = right + wrong (the precision N); `total`
+ *  counts every row of the group, excluded ones included. */
+export interface CancelFigure {
+  n: number;
+  total: number;
+  excluded: number;
+  precision: number | null;
+  precision_ci: [number, number] | null;
+  r_avoided: number;
+  r_missed: number;
+  net_r: number;
+  net_r_ci: [number, number] | null;
+  counts: Record<CancelOutcome, number>;
+  unresolved_r: number;
+  ties: number;
+  small_n: boolean;
+}
+
+/** One replayed cancel. A `risk_cap` plan yields two rows with the same
+ *  `plan_id`: `entry_model` 'trigger' and 'cancel_fill'. `outcome`, `r`
+ *  and `exit_date` are null on an excluded row. */
+export interface CancelPlanRow {
+  plan_id: string;
+  ticker: string;
+  strategy: string;
+  horizon_key: string;
+  direction: 'long' | 'short';
+  origin: 'regular' | 'next_session';
+  reason: 'risk_cap' | 'invalidated' | 'expired' | 'other';
+  raw_reason: string | null;
+  cancel_date: string;
+  entry_model: 'trigger' | 'cancel_fill';
+  entry_source: 'estimated' | 'recorded' | null;
+  entry: number | null;
+  stop: number | null;
+  tp1: number | null;
+  badge: string | null;
+  stop_ceiling_pct: number | null;
+  cap_size_pct: number | null;
+  outcome: CancelOutcome | null;
+  r: number | null;
+  tie: boolean;
+  exit_date: string | null;
+  excluded: string | null;
+}
+
+/** The whole payload. A split key is present only when it has a row. */
+export interface CancelPrecision {
+  generated_at: string;
+  data_as_of: string | null;
+  caption: string;
+  risk_cap_label: string;
+  tp1_note: string;
+  small_n_threshold: number;
+  window: { first: string | null; last: string | null };
+  rule_changes: { date: string; label: string }[];
+  out_of_scope: { manual: number };
+  headline: { all: CancelFigure; without_risk_cap: CancelFigure };
+  baseline: CancelFigure;
+  cards: {
+    risk_cap: CancelFigure;
+    risk_cap_fill: CancelFigure;
+    invalidated: CancelFigure;
+    expired: CancelFigure;
+    other: CancelFigure;
+  };
+  splits: {
+    origin: Partial<Record<'regular' | 'next_session', CancelFigure>>;
+    direction: Partial<Record<'long' | 'short', CancelFigure>>;
+    horizon: Record<string, CancelFigure>;
+  };
+  rows: CancelPlanRow[];
+}
