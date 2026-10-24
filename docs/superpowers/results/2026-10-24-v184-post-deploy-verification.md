@@ -85,6 +85,10 @@ The partner approved one outward-facing ops Discord test post. The production co
 
 Staff-engineer: CLEAN. Quant-engineer: CLEAN on the final diff `b37c6e44^1...c8fb1be8` and both results documents. The earlier quant-engineer advisory about swallowed plan-step failures was applied in `b933e2f3` and verified by the focused task review. Both panel roles kept the Monday in-session production read as an open close-out gate.
 
+## 7. Next-session read
+
+Read the production `monitor` key on Monday 2026-10-26 at 13:45 UTC and record `market_open`, positions, unquoted names and count, `check_errors`, `outcome`, and `priced_at` age against `STOPS_UNCHECKED_S=600`. The VM clock reports UTC and the bot's NYSE session helper returns true for that time. The read must be through `scripts/ops/ssh-hetzner.sh`; no in-session result has been observed yet. A one-shot VM cron capture was proposed under the repository's far-off scheduling rule and awaits the partner's design approval. If declined, perform the read manually in the next session. Close-out follows only after the result is recorded.
+
 ## Verdict
 
 The final 2.15.2 deployment, all dry-run verdicts, three post-deploy cron runs, the final monitor-key read, and the advancing scan heartbeat pass. The single approved test post delivered on 2.15.1; the watcher script did not change for 2.15.2. The Monday in-session monitor read remains open before close-out. The quant-engineer panel's plan-step finding was applied in `b933e2f3` and merged in `c8fb1be8`.
