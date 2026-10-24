@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-24 08:36:10 UTC",
+  "generated_at": "2026-10-24 14:55:41 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.35.1",
-    "bot": "2.15.0"
+    "bot": "2.15.1"
   },
   "releases": [
     {
@@ -2071,6 +2071,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-24",
+      "last_seen": "2026-10-24",
+      "commit": "d93f80ed",
+      "subject": "release(bot): 2.15.1 -- stop-monitor liveness and VM watcher alerts (v184)",
+      "versions": {
+        "ui": "1.35.1",
+        "bot": "2.15.1"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
