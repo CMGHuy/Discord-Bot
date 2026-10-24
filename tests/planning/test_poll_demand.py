@@ -73,6 +73,29 @@ def test_quote_prices_from_the_shared_batch_are_read_as_a_dict():
     assert mgr.last_poll_demand == PollDemand(("AAPL", "MSFT"), frozenset({"AAPL"}))
 
 
+def test_a_swallowed_plan_step_failure_is_exposed_and_cleared_next_poll(monkeypatch):
+    mgr = _manager(["AAPL"], lambda t: {"AAPL": 190.0})
+    plan = SimpleNamespace(plan_id="p0", ticker="AAPL", status=pm.PlanStatus.ACTIVE)
+    monkeypatch.setattr(mgr.store, "get", lambda plan_id: plan)
+    monkeypatch.setattr(mgr, "_warn_legacy_open_risk", lambda plan: None)
+
+    def fail_step(plan, price, now):
+        raise RuntimeError("step failed")
+
+    monkeypatch.setattr(mgr, "_step", fail_step)
+    mgr.poll()
+    assert mgr.last_poll_demand == PollDemand(("AAPL",), frozenset({"AAPL"}))
+    assert mgr.last_poll_check_errors == ["AAPL"]
+    monkeypatch.setattr(pm, "_MANAGER", mgr)
+    monkeypatch.setattr(config, "INTRADAY_MANAGER_V2", True)
+    assert pm.last_poll_check_errors() == ("AAPL",)
+
+    monkeypatch.setattr(mgr.store, "get", lambda plan_id: None)
+    mgr.poll()
+    assert mgr.last_poll_check_errors == []
+    assert pm.last_poll_check_errors() == ()
+
+
 @pytest.mark.parametrize("result", [None, {}])
 def test_an_empty_or_none_batch_leaves_every_ticker_unpriced(result):
     mgr = _manager(["AAPL", "MSFT"], lambda t: result)

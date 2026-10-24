@@ -500,6 +500,7 @@ class PlanManager:
         # v184: what the last poll() demanded from the quote batch and what it
         # priced. None = nothing demanded (quiet hours, serial seam, not polled).
         self.last_poll_demand: PollDemand | None = None
+        self.last_poll_check_errors: list[str] = []
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -618,6 +619,7 @@ class PlanManager:
 
     def poll(self, now=None) -> list[PlanEvent]:
         self.last_poll_demand = None  # v184: unknown until this poll demands quotes
+        self.last_poll_check_errors = []
         # One gate, and only one (2026-09-14, on direct request): the
         # operator's quiet window. Outside it, the FULL state machine runs
         # on every tick -- break-even arming, TP1 partial-banking, the
@@ -689,6 +691,7 @@ class PlanManager:
             except Exception:
                 log.warning("poll: step failed for plan %s", plan.plan_id,
                             exc_info=True)
+                self.last_poll_check_errors.append(plan.ticker)
                 continue
             if is_tape_open(now):
                 # Prints from a LIVE TAPE only -- not merely "a tick we
@@ -1708,6 +1711,13 @@ def last_poll_demand() -> PollDemand | None:
     if not config.INTRADAY_MANAGER_V2 or _MANAGER is None:
         return None
     return _MANAGER.last_poll_demand
+
+
+def last_poll_check_errors() -> tuple[str, ...]:
+    """Tickers whose plan step failed inside the last manager poll."""
+    if not config.INTRADAY_MANAGER_V2 or _MANAGER is None:
+        return ()
+    return tuple(dict.fromkeys(_MANAGER.last_poll_check_errors))
 
 
 def run_notice_sweep() -> list[PlanEvent]:
