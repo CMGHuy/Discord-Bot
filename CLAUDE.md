@@ -24,7 +24,7 @@ Entry points: `bot.py` and `admin_ui.py` (Flask API + Angular SPA in
 `frontend/`), two Docker containers off one image (`docs/deploy/`). `.env` is
 the single config source, hot-reloaded via SIGHUP (schema: `swingbot/config.py`).
 **Drive bomeo-capital.com (and any browser) with Playwright only**, never claude-in-chrome. **Log in (bomeo-capital.com or a local instance) with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded inside the script and never printed or echoed; build any local test instance from those same `.env` values**, never the `admin`/`admin` default. **Partner-allowed (2026-10-21): reading `.env` (and scripts loading it) is fine; never print, echo, log or quote its values.** `skills-tools.md`.
-**A task that runs tests against the database runs `/replicate-prod-db` first** (sync the production data into the local replica): `skills-tools.md`.
+**A task that runs tests against the database runs `/replicate-prod-db` first** (sync the production data into the local replica) **into this project's one shared `swing-db` container**, never a per-task container or database; parallel tasks share it: `skills-tools.md`.
 
 ## eToro roadmap: demo next, real money much later
 

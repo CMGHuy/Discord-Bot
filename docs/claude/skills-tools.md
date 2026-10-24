@@ -96,6 +96,13 @@ Referenced from the root `CLAUDE.md`.
   per task, not once per test run; re-run it only if the task spans a
   production change you need to see. Pure unit tests that never open a
   database connection don't trigger it.
+  **Always replicate into this project's single local `swing-db` container**
+  (default target `swingbot_prod_replica`); never start another Postgres
+  container or a per-task/per-worktree database for it. Parallel tasks and
+  worktrees share that one replica and just point `DATABASE_URL` at it; the
+  replicate script is idempotent, so a task re-syncs only per the rule above
+  and never drops it from under a sibling task mid-run (check nothing else is
+  mid-test first).
 
 ## The v96 skills layer
 

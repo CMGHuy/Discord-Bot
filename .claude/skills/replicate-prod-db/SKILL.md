@@ -19,6 +19,12 @@ Default is the separate local database `swingbot_prod_replica` in the local
 asked for it by name: that drops and recreates it, and the script requires
 `--i-mean-it` to allow it.
 
+**One container per project.** Always replicate into this project's single
+`swing-db` container; never start another Postgres container or a per-task
+database. Parallel tasks and worktrees share the one replica by pointing
+`DATABASE_URL` at it. Because it is shared, a re-run drops and recreates the
+replica: skip it when a sibling task synced it recently and is still testing.
+
 ## Step 3 — Replicate
 
 ```bash

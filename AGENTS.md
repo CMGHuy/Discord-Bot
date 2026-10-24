@@ -286,7 +286,7 @@ inside the script and never printed, echoed, passed as arguments or written
 elsewhere; build any local test instance from those same `.env` values, never
 the `admin`/`admin` default. Reading `.env` (and scripts loading it) is
 partner-allowed; never print, echo, log or quote its values. A task that runs tests against the database runs
-`replicate-prod-db` first and points `DATABASE_URL` at the replica.
+`replicate-prod-db` first and points `DATABASE_URL` at the replica, always in this project's one shared `swing-db` container (parallel tasks share it; no per-task container).
 
 ## Efficient repository navigation
 
