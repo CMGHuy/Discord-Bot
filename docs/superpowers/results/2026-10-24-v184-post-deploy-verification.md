@@ -1,7 +1,8 @@
 # v184 — post-deploy verification on production
 
-**Plan:** [2026-10-21-v184-stop-monitor-liveness_0-index.md](../plans/2026-10-21-v184-stop-monitor-liveness_0-index.md) · Task V184-12  
-**Spec:** [2026-10-21-v184-stop-monitor-liveness-design.md](../specs/2026-10-21-v184-stop-monitor-liveness-design.md) § Rollout  
+**Plan:** [2026-10-21-v184-stop-monitor-liveness_0-index.md](../plans/2026-10-21-v184-stop-monitor-liveness_0-index.md) · Task V184-12
+
+**Spec:** [2026-10-21-v184-stop-monitor-liveness-design.md](../specs/2026-10-21-v184-stop-monitor-liveness-design.md) § Rollout
 **Run:** 2026-10-24, read-only checks on the Hetzner VM, final bot 2.15.2, checkout `c8fb1be8`
 
 ## 1. Deployed
@@ -54,18 +55,18 @@ heartbeat_watch.log
 
 ## 3. The cron's own runs
 
-The following 2.15.1 readings established a baseline before the correction deployed. The six monitor verdicts were all `ok`, with tick ages 53, 52, 172, 114, 52 and 172 seconds. At least one was below 120 seconds and all were below the 300-second stale threshold. The three heartbeat lines retained the previous format and were all `verdict=ok`. Both state files contained `ok`. The final 2.15.2 cron readings are pending three runs after deployment.
+The last six monitor verdicts were all `ok`. The final three ran after the 2.15.2 deploy and had tick ages 30, 32 and 90 seconds: all below 120 seconds and the 300-second stale threshold. The three post-deploy heartbeat lines retained the previous format and were all `verdict=ok`, with ages 224, 225 and 225 seconds below the 900-second threshold. Both state files contained `ok`.
 
 ```text
-2026-10-24T19:10:02Z monitor verdict=ok tick_age_s=53 priced_age_s=53 market_open=false positions=8 previous=ok action=none
-2026-10-24T19:15:02Z monitor verdict=ok tick_age_s=52 priced_age_s=52 market_open=false positions=8 previous=ok action=none
-2026-10-24T19:20:02Z monitor verdict=ok tick_age_s=172 priced_age_s=172 market_open=false positions=8 previous=ok action=none
-2026-10-24T19:25:02Z monitor verdict=ok tick_age_s=114 priced_age_s=114 market_open=false positions=8 previous=ok action=none
-2026-10-24T19:30:01Z monitor verdict=ok tick_age_s=52 priced_age_s=52 market_open=false positions=8 previous=ok action=none
-2026-10-24T19:35:02Z monitor verdict=ok tick_age_s=172 priced_age_s=172 market_open=false positions=8 previous=ok action=none
-2026-10-24T19:25:01Z verdict=ok age_s=66 threshold_s=900 previous=ok action=none
-2026-10-24T19:30:01Z verdict=ok age_s=66 threshold_s=900 previous=ok action=none
-2026-10-24T19:35:02Z verdict=ok age_s=67 threshold_s=900 previous=ok action=none
+2026-10-24T19:45:02Z monitor verdict=ok tick_age_s=52 priced_age_s=52 market_open=false positions=8 previous=ok action=none
+2026-10-24T19:50:02Z monitor verdict=ok tick_age_s=51 priced_age_s=51 market_open=false positions=8 previous=ok action=none
+2026-10-24T19:55:02Z monitor verdict=ok tick_age_s=52 priced_age_s=52 market_open=false positions=8 previous=ok action=none
+2026-10-24T20:00:01Z monitor verdict=ok tick_age_s=30 priced_age_s=30 market_open=false positions=8 previous=ok action=none
+2026-10-24T20:05:02Z monitor verdict=ok tick_age_s=32 priced_age_s=32 market_open=false positions=8 previous=ok action=none
+2026-10-24T20:10:02Z monitor verdict=ok tick_age_s=90 priced_age_s=90 market_open=false positions=8 previous=ok action=none
+2026-10-24T20:00:01Z verdict=ok age_s=224 threshold_s=900 previous=ok action=none
+2026-10-24T20:05:02Z verdict=ok age_s=225 threshold_s=900 previous=ok action=none
+2026-10-24T20:10:01Z verdict=ok age_s=225 threshold_s=900 previous=ok action=none
 monitor_watch.state=ok
 heartbeat_watch.state=ok
 ```
@@ -74,12 +75,16 @@ heartbeat_watch.state=ok
 
 At 2026-10-24 19:58:33 UTC, the final 2.15.2 read showed `outcome=ok`, `started_at=2026-10-24T19:56:07+00:00`, `tick_at=2026-10-24T19:56:35+00:00`, and `priced_at=2026-10-24T19:56:35+00:00`. All required fields were present: `positions` listed ADBE, AMAT, ARM, GOOGL, INTC, JNJ, PANW and SPCX; `unquoted=[]`; `unquoted_count=0`; `fetch_failed=false`; `check_errors=[]`; `market_open=false`. The scan heartbeat's separate `timestamp` was `2026-10-24T19:56:17.351740+00:00`.
 
-On 2.15.1, the scan heartbeat's `timestamp` advanced from `2026-10-24T19:38:54.788869+00:00` to `2026-10-24T19:43:54.871943+00:00` on a second read at 19:46:02 UTC; the monitor `tick_at` then read `2026-10-24T19:44:10+00:00`. The final 2.15.2 read was outside the NYSE regular session. The next in-session check is due on Monday 2026-10-26 after 13:30 UTC, before close-out; record its `market_open`, positions, unquoted names and count, and `priced_at` age here. Confirm the final scan heartbeat advances on a second 2.15.2 read.
+On 2.15.2, the scan heartbeat's separate `timestamp` advanced from `2026-10-24T19:56:17.351740+00:00` to `2026-10-24T20:01:16.883326+00:00` on a second read at 20:03:48 UTC; the monitor `tick_at` and `priced_at` then both read `2026-10-24T20:01:31+00:00`. The read was outside the NYSE regular session. The next in-session check is due on Monday 2026-10-26 after 13:30 UTC, before close-out; record its `market_open`, positions, unquoted names and count, and `priced_at` age here.
 
 ## 5. Test post
 
 The partner approved one outward-facing ops Discord test post. The production command returned `2026-10-24T19:42:05Z test delivered=yes` and `rc=0`.
 
+## 6. Pre-close-out panel
+
+Staff-engineer: CLEAN. Quant-engineer: CLEAN on the final diff `b37c6e44^1...c8fb1be8` and both results documents. The earlier quant-engineer advisory about swallowed plan-step failures was applied in `b933e2f3` and verified by the focused task review. Both panel roles kept the Monday in-session production read as an open close-out gate.
+
 ## Verdict
 
-The final 2.15.2 deployment and all dry-run verdicts pass. The single approved test post delivered on 2.15.1; the watcher script did not change for 2.15.2. Three final cron runs, a final monitor-key read, and the Monday in-session monitor read remain open before close-out. The quant-engineer panel's plan-step finding was applied in `b933e2f3` and merged in `c8fb1be8`.
+The final 2.15.2 deployment, all dry-run verdicts, three post-deploy cron runs, the final monitor-key read, and the advancing scan heartbeat pass. The single approved test post delivered on 2.15.1; the watcher script did not change for 2.15.2. The Monday in-session monitor read remains open before close-out. The quant-engineer panel's plan-step finding was applied in `b933e2f3` and merged in `c8fb1be8`.
