@@ -106,7 +106,9 @@ arms' VALIDATION p-values are Holm-corrected as a family of two
   already multiplied by the horizon's `atr_stop_multiple` (1.5 or 2.0) and
   would make every band 1.5–2× too wide. The builder computes raw ATR14%
   itself (or receives it); a test pins the difference. No bar after the
-  creating bar is read (NO-LOOKAHEAD).
+  creating bar is read (NO-LOOKAHEAD). Live `attach_plan_v2` can hold a
+  forming bar, so the band reads a completed frame, as
+  `_stamp_gap_sizing_live` does.
 - **Level distance `d`:** `planned_loss_pct(entry, scenario.stop_loss)` —
   the stop the scenario was built with, before any clamp.
 - **Floor grid:** `k ∈ {0.75, 1.0, 1.5}` *(partner)*.
@@ -192,9 +194,12 @@ same rule to LONGS with the p99 **down**-gap, behind a new flag
 - The guarantee stated honestly in the alert text and docs: the planned loss
   never exceeds the preset maximum; a gap beyond the ticker's own p99 still
   can *(partner accepted this residual on 2026-10-24)*.
-- **Coupling (partner, 2026-10-24):** config validation refuses a live
-  `CONFLUENCE_ATR_STOP_FLOOR > 0` unless both `LONG_GAP_SIZING` and
-  `SHORT_GAP_SIZING` are on; the admin settings page shows the refusal.
+- **Coupling (partner, 2026-10-24):** a live `CONFLUENCE_ATR_STOP_FLOOR > 0`
+  is honoured only when both `LONG_GAP_SIZING` and `SHORT_GAP_SIZING` are on.
+  Two guards: the admin settings `_validate` (`api_v1/system.py`) refuses a
+  submitted combination that breaks it, and bot-side code at config load and
+  every SIGHUP reload treats the floor as 0 and logs an error when the flags
+  are off, so a hand-edited `.env` cannot bypass it.
   Replay measures R and is not coupled. `LONG_GAP_SIZING` alone may go live
   without the floor.
 - One sizing function serves the alert's shown shares, the engine and the
@@ -210,10 +215,14 @@ accepted fill to the stop, plus the gap allowance when on) inside
 `RISK_PER_TRADE_PCT` of the balance, the plan is refused and logged, never
 issued.** That includes a size that rounds to zero whole shares
 (`band_size_zero`); a 1-share plan that overshoots the budget is never
-issued. Portfolio heat (`PORTFOLIO_HEAT_CAP_PCT`) and the correlated cap
-(`CORRELATED_HEAT_CAP_PCT`) apply to band plans unchanged, counting each
-plan's sized dollar risk (stop distance plus gap allowance), so wider
-stops never buy extra heat. Each new rejection reason (`band_rr_drop`,
+issued. Shares are fractional to 0.01 (`compute_position_size`), so
+`band_size_zero` means a size that rounds to 0.00. Portfolio heat
+(`PORTFOLIO_HEAT_CAP_PCT`) and the correlated cap (`CORRELATED_HEAT_CAP_PCT`)
+apply to band plans unchanged: candidate heat is the configured risk per
+trade and open trades count |entry − stop| × shares, so a wider stop with
+fewer shares buys no extra heat. Heat does not add the gap allowance
+(disclosed; changing the heat basis is out of scope). A test pins this with
+no edit to the heat call sites. Each new rejection reason (`band_rr_drop`,
 `band_no_target`, `band_no_atr`, `band_size_zero`) writes the existing
 "plan rejected (" log line.
 
@@ -234,7 +243,7 @@ clause 3 (geometry lock) rejects a stop/target change by construction
 
 Every clause is scored on the **floor-moved stratum** (§ Not a re-run).
 No mechanism clause (v72 clause 6 does not apply: the component is not a
-subset of the baseline). Funnel through `measure_arms.py` with `--gate harvest`:
+subset of the baseline). `measure_arms.py` has no harvest gate; the driver follows the v139 precedent (`scripts/backtest/measure_confluence_stop.py` with `confluence_stop_replay.py` / `confluence_stop_funnel.py`: a staged −1..3 driver with verdict chaining), as a sibling for this mechanism:
 
 - Stage −1 reachability.
 - Stage 0: paired MDE on fold-train, statistic **ΔExpR**
@@ -243,20 +252,20 @@ subset of the baseline). Funnel through `measure_arms.py` with `--gate harvest`:
   their count. A cell whose MDE exceeds +0.10R at power 0.80 is refused.
 - Stage 1: fold-train selection over `k`. Winner rule (frozen): the cell
   with the highest ΔExpR whose clauses 1–3 pass on fold-train **and** whose
-  existing neighbour(s) in `{0.75, 1.0, 1.5}` sit within 0.05R of its
-  ΔExpR (`plateau_report()`). An edge cell (0.75 or 1.5) is adoptable with
+  existing neighbour(s) in `{0.75, 1.0, 1.5}` sit within `plateau_report()`'s
+  existing 0.03R tolerance of its ΔExpR (`backtest_wf.plateau_report`, unchanged). An edge cell (0.75 or 1.5) is adoptable with
   its one neighbour; a cell with no eligible neighbour is a spike and does
   not proceed. The uneven steps are the partner's grid and stay as they are.
 - Stage 2: walk-forward folds 2021 / 2022 / 2023, ≥ 2 of 3 with positive
   ΔExpR, per-fold N ≥ 30.
 - Stage 3: one VALIDATION shot per arm, all four clauses; arm K primary,
-  Holm across the two arms.
+  Holm across the two arms (reusing `giveback_levels_funnel.holm`).
 
 Frozen block: instrument **v1**, `data_source` **`alpaca`** (the v162
 training-data store), the watchlist-era universe v139 and v180 used,
 fold-train 2018-06-01..2022-12-31, VALIDATION 2024-01-01..2025-12-31
 *(Claude's call: v190's instrument v3 is refused by the funnel until mapped)*.
-Frictions: `frictions.py` slippage and commission apply identically to the
+Replay does not cancel confluence stop-entry fills on risk_cap today; a fill past the stored ceiling is disclosed as `fill_beyond_ceiling` (v139 precedent), never silently kept. Frictions: `frictions.py` slippage and commission apply identically to the
 baseline and both arms, and a gap through a stop fills at the open, as
 everywhere else. Week-clustered bootstrap. One ledger row per arm.
 
@@ -405,3 +414,5 @@ Spec review 2026-10-24 (risk-manager, veteran-trader, quant-researcher), run ser
 - quant-researcher: ADVISORY — clause 6 cannot apply -- applied (harvest gate has no mechanism clause; stated).
 - quant-researcher: ADVISORY — `data_source` missing -- applied (`alpaca`).
 - quant-researcher: ADVISORY — per-horizon split -- applied.
+
+Plan-briefer corrections (2026-10-24, folded in before the plan): no `--gate harvest` in `measure_arms.py` (v139-style driver instead); plateau tolerance is the existing 0.03R; Holm reused from `giveback_levels_funnel`; heat basis unchanged and pinned by a test; fractional shares define `band_size_zero`; coupling guarded bot-side as well as in the admin validator; replay discloses `fill_beyond_ceiling`; the band ATR reads a completed frame.
