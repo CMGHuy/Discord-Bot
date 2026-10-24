@@ -198,6 +198,15 @@
      separately from --font-mono so a figure says "I am a number", not "I am
      code", and the two can part later without a sweep. */
   --font-num: var(--font-mono);
+  /* v186 D4 -- the face for DISPLAY figures: a tile value, a panel total,
+     the portfolio hero. Inter 600 with slight negative tracking; each
+     figure rule also sets tabular-nums so a count-up does not jitter.
+     Columns, N= and table cells keep --font-num (mono) so digits align.
+     There is no global class: a global .x loses to a component's scoped
+     selector, so each component's own figure rule reads these three. */
+  --font-figure: var(--font-sans);
+  --figure-weight: 600;
+  --figure-tracking: -0.02em;
 
   /* The shell's "Text" control multiplies this, and the scale is the ONLY
    * thing it touches.

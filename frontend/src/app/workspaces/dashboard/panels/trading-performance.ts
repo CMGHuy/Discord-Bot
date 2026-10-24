@@ -7,6 +7,7 @@ import { Select, SelectOption } from '../../../ui/form-controls';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
 import { Spinner } from '../../../ui/spinner';
+import { StatStrip } from '../../../ui/stat-strip';
 import { PortfolioValue } from './portfolio-value';
 import { amount, pct } from '../../../ui/format';
 import { Realized } from '../../../stores/dashboard.store';
@@ -56,7 +57,7 @@ export function presetLabel(preset: ScopePreset): string {
 @Component({
   selector: 'sb-trading-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner],
+  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner, StatStrip],
   template: `
     <sb-panel heading="Trading performance" [description]="about">
       <div panel-actions class="scope">
@@ -99,7 +100,7 @@ export function presetLabel(preset: ScopePreset): string {
           [currency]="currency()"
         />
 
-        <div class="grid" [class.stale]="stale()">
+        <sb-stat-strip class="grid" [class.stale]="stale()" [cols]="4" [colsMd]="2" [fillLast]="true">
           <sb-metric-card label="Open P&L" [description]="help.openPnl" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
           <sb-metric-card label="Win rate" [description]="help.winRate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" [loading]="loading()" />
           <sb-metric-card label="Expectancy" [description]="help.expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" [loading]="loading()" />
@@ -112,7 +113,7 @@ export function presetLabel(preset: ScopePreset): string {
           }
           <sb-metric-card label="Open trades" [description]="help.openTrades" [value]="openTrades()" [decimals]="0" [sub]="openTradesSub()" />
           <sb-metric-card label="Avg confidence" [description]="help.avgConfidence" [value]="avgConfidence()" [decimals]="1" [loading]="loading()" />
-        </div>
+        </sb-stat-strip>
       </div>
 
       <!-- Phone (v172 section 5, reversing v85's hide-on-phone): the portfolio
@@ -173,35 +174,13 @@ export function presetLabel(preset: ScopePreset): string {
     /* A refetch in flight: the last figure stays, dimmed, beside its ring. */
     .mobile-summary .busy strong { opacity: 0.45; }
     .mobile-summary span { display: inline-flex; align-items: center; gap: var(--space-6); }
-    /* A fixed 4 columns, not auto-fit: seven cards (Today) read as a row of
-       four and a row of three (the last widened to fill), eight (Period) as
-       two rows of four -- never an uneven 5+2 or 6+1
-       split that auto-fit would produce at an in-between width. minmax with two lengths (not a bare 1fr) keeps
-       this grid's own width computable when the ancestor asks for its
-       content size (.combined's "auto" track above, and -- separately --
-       any container that ends up shrink-to-fit sized), which a 1fr track
-       cannot give under those conditions. The tracks stretch (1fr max), so the
-       cards span the panel and share the chart's left and right edges. */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(140px, 1fr));
-      gap: var(--space-14);
-    }
-    /* Seven cards: the last one takes the rest of its row (two of four, or
-       the whole two-up row on a tablet), so no hole is left beside it. */
-    .grid > :last-child:nth-child(4n + 3) { grid-column: span 2; }
-    /* The tablet band -- v95 A5.
-       Between sm and md the 4-up KPI grid's 560px floor and the portfolio
-       block cannot both fit: measured at 768px the portfolio column
-       collapsed to ~40px and '997,291.88 EUR' rendered as four fragments.
-       Two KPI columns and a full-width portfolio row is the narrowest
-       arrangement where both are readable. Above md the original four-up
-       returns untouched. Placed after the base rules deliberately -- a media
-       query adds no specificity, so a base .grid declared below it would
-       win. */
-    @media (max-width: 1023px) {
-      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
+    /* v186 D3: the KPI cards sit in one sb-stat-strip, ruled by hairlines
+       instead of framed boxes. The strip owns the columns: 4 from md, 2 in
+       the tablet band (v95 A5: the 4-up floor starved the portfolio block at
+       768px) and 2 below sm, where this panel hides it for .mobile-summary.
+       Fixed counts, not auto-fit, so the cards never split unevenly at an
+       in-between width. The class stays .grid so the stale dim and the phone
+       hide below keep applying to the strip host. */
     @media (max-width: 639px) {
       .grid { display: none; }
       .combined { margin-bottom: var(--space-10); }

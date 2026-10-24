@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { resolveToken } from './testing/resolve-token';
+import { stripComments } from './testing/all-sources';
 
 /**
  * The tokens.css source, read only for the `--text-faint` documentation check
@@ -31,8 +32,9 @@ const SURFACES = ['--bg', '--surface', '--surface-raised', '--surface-overlay'];
  * Tokens that are NOT text and are exempt.
  *
  * `--text-faint` measures ~2.3:1 on --surface. It is a RULE AND DIVIDER
- * colour, never text that must be read — that is decision D6's binding rule,
- * and `no-text-uses-text-faint` below is what enforces it.
+ * colour, never text that must be read — that is decision D6's binding rule
+ * (`no-text-uses-text-faint`). The scoped source scan at the end of this
+ * file enforces it for the primitives v186 touched.
  */
 const NON_TEXT = new Set(['--text-faint']);
 
@@ -103,5 +105,42 @@ describe('v181: profit/loss figures read on every surface and on their own tint'
         expect(ratio(resolveToken(fg), ground)).toBeGreaterThanOrEqual(4.5);
       });
     }
+  }
+});
+
+/**
+ * v186 (D2, D3, D4): no text in the primitives v186 touched is painted in
+ * --text-faint, the rule and divider colour above. A SOURCE scan, because
+ * jsdom does not resolve a component's var() chain. Scoped to these files on
+ * purpose (spec v186 § Testing); the other --text-faint uses are later
+ * specs' work.
+ */
+const V186_FILES = [
+  'src/app/ui/stat-tile.ts',
+  'src/app/ui/metric-card.ts',
+  'src/app/ui/layout.ts',
+  'src/app/ui/panel-header.ts',
+  'src/app/ui/figure.ts',
+  'src/app/workspaces/dashboard/panels/portfolio-value.ts',
+];
+
+/** `color:` as the whole property name, so `border-color:` is not text. */
+const FAINT_TEXT = /(?<![-\w])color:\s*var\(--text-faint\)/;
+
+describe('no faint text in the v186 primitives (source scan)', () => {
+  it('flags a faint text colour and leaves a faint rule alone', () => {
+    expect(FAINT_TEXT.test('.x { color: var(--text-faint); }')).toBe(true);
+    expect(FAINT_TEXT.test('.n,.all-time{font-size:var(--text-micro);color:var(--text-faint);}')).toBe(true);
+    expect(FAINT_TEXT.test('.x { border-color: var(--text-faint); }')).toBe(false);
+    expect(FAINT_TEXT.test('.x { border-bottom: 1px solid var(--text-faint); }')).toBe(false);
+    expect(FAINT_TEXT.test('.x { color: var(--text-muted); }')).toBe(false);
+  });
+
+  for (const file of V186_FILES) {
+    it(`${file} paints no text in --text-faint`, () => {
+      const source = stripComments(readFileSync(join(process.cwd(), file), 'utf8'));
+      const hits = source.split('\n').filter((line) => FAINT_TEXT.test(line)).map((line) => line.trim());
+      expect(hits, file).toEqual([]);
+    });
   }
 });

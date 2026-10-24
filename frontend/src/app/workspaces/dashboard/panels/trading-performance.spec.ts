@@ -373,15 +373,14 @@ describe('trading-performance tablet band', () => {
   );
 
   it('has a treatment between sm and md, not only below sm', () => {
-    // 640 alone leaves iPad portrait on the desktop layout: the 4-up KPI
-    // grid's 560px floor starves the equity block to ~40px and the portfolio
-    // figure breaks into fragments.
-    expect(src).toMatch(/@media\s*\(\s*max-width:\s*1023px\s*\)/);
+    // v186: colsMd carries the tablet band through the strip's shared grid.
+    expect(src).toMatch(/<sb-stat-strip class="grid"[^>]*\[colsMd\]="2"/);
   });
 
   it('never leaves a four-track KPI grid below md', () => {
-    const tabletBlock = src.match(/@media\s*\(\s*max-width:\s*1023px\s*\)\s*\{[\s\S]*?\n\s{0,4}\}/)?.[0] ?? '';
-    expect(tabletBlock).toMatch(/grid-template-columns:\s*repeat\(2,/);
+    expect(src).toMatch(/<sb-stat-strip class="grid"[^>]*\[cols\]="4"/);
+    // The strip owns the columns; the panel declares no grid of its own.
+    expect(src).not.toMatch(/\.grid\s*\{[^}]*grid-template-columns/);
   });
 
   it('gives the portfolio block the full panel width at every width (v172 candles)', () => {
@@ -392,7 +391,12 @@ describe('trading-performance tablet band', () => {
   });
 
   it('widens the seventh card to fill its row, so seven cards leave no hole', () => {
-    expect(src).toMatch(/\.grid > :last-child:nth-child\(4n \+ 3\)\s*\{\s*grid-column:\s*span 2;\s*\}/);
+    // The cards are projected into the strip, so the span rule is the strip's (styles.css).
+    expect(src).toMatch(/<sb-stat-strip[^>]*\[fillLast\]="true"/);
+    const globalCss = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
+    expect(globalCss).toMatch(
+      /\.sb-strip-grid\.sb-strip-fill > :last-child:nth-child\(4n \+ 3\)\s*\{\s*grid-column:\s*span 2;\s*\}/,
+    );
   });
 
   it('lets the odd last phone summary row span both columns', () => {
@@ -463,5 +467,63 @@ describe('trading performance scope on a phone (v181 §1)', () => {
     select.value = '6M';
     select.dispatchEvent(new Event('change'));
     expect(picked).toBe('6M');
+  });
+});
+
+describe('trading performance KPI strip (v186 D3)', () => {
+  const src = readFileSync(
+    join(process.cwd(), 'src/app/workspaces/dashboard/panels/trading-performance.ts'),
+    'utf8',
+  );
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
+        { provide: ViewportService, useValue: { isPhone: signal(false) } },
+      ],
+    });
+  });
+
+  function render(inputs: Record<string, unknown>): HTMLElement {
+    const f = TestBed.createComponent(TradingPerformance);
+    for (const [key, value] of Object.entries(inputs)) f.componentRef.setInput(key, value);
+    f.detectChanges();
+    return f.nativeElement as HTMLElement;
+  }
+
+  it('puts every KPI card in one stat strip: four columns from md, two on a tablet', () => {
+    const el = render({ currency: '€' });
+    const strip = el.querySelector<HTMLElement>('sb-stat-strip.grid');
+    expect(strip).not.toBeNull();
+    expect(strip!.style.getPropertyValue('--strip-cols')).toBe('4');
+    expect(strip!.style.getPropertyValue('--strip-cols-md')).toBe('2');
+    expect(strip!.querySelector('.sb-strip-grid')!.classList).toContain('sb-strip-fixed');
+    const cards = el.querySelectorAll('sb-metric-card');
+    expect(cards.length).toBeGreaterThanOrEqual(7);
+    expect(strip!.querySelectorAll('sb-metric-card')).toHaveLength(cards.length);
+  });
+
+  it('dims the strip host when the figures are stale, and only then', () => {
+    expect(render({ stale: true, currency: '€' }).querySelector('sb-stat-strip')!.classList)
+      .toContain('stale');
+    expect(render({ currency: '€' }).querySelector('sb-stat-strip')!.classList)
+      .not.toContain('stale');
+  });
+
+  it('keeps the stale dim and the phone hand-off to the summary on the strip host', () => {
+    expect(src).toMatch(/\.grid\.stale, \.mobile-summary\.stale \{ opacity: 0\.55; \}/);
+    const phone = src.match(/@media \(max-width: 639px\) \{[\s\S]*?\.mobile-summary \{/)?.[0] ?? '';
+    expect(phone).toMatch(/\.grid \{ display: none; \}/);
+  });
+
+  it('draws no frame or gap of its own around the cards', () => {
+    expect(src).not.toMatch(/\.grid\s*\{[^}]*gap:/);
+    // The projected cards are grandchildren of the strip host.
+    expect(src).not.toMatch(/\.grid\s*>/);
+    if (/nth-child\(4n \+ 3\)/.test(src)) {
+      expect(src).toMatch(/\.grid sb-metric-card:last-child:nth-child\(4n \+ 3\) \{ grid-column: span 2; \}/);
+    }
   });
 });

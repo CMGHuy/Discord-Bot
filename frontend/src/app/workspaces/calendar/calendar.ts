@@ -13,6 +13,7 @@ import { isInline } from '../../ui/priority';
 import { Select } from '../../ui/form-controls';
 import { SectionHead } from '../../ui/section-head';
 import { MIN_SAMPLE_N, StatTile, StatTone } from '../../ui/stat-tile';
+import { StatStrip } from '../../ui/stat-strip';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
 import { PAPER_CAPTION, legsSampleNote } from './day/day-copy';
 
@@ -25,7 +26,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, Panel, RouterLink, SectionHead, Select, StatTile, Async],
+  imports: [Button, ControlRow, Drawer, Panel, RouterLink, SectionHead, Select, StatStrip, StatTile, Async],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -107,7 +108,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
       <sb-panel inlineFrom="md" [digest]="calendarDigest()" [problem]="calendarProblem()">
         <!-- Eight summary figures in reading order; four columns on desktop
              and tablet, two on phone, with content-sized rows. -->
-        <div class="totals">
+        <sb-stat-strip class="totals" [cols]="4" [colsMd]="4">
           <sb-stat-tile label="Net this month" [value]="totalLabel()" [tone]="totalsTone()" />
           <sb-stat-tile label="Trades" [value]="tradesLabel()" />
           <sb-stat-tile label="Win rate" [value]="monthWinRate()" />
@@ -119,7 +120,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
                its ticker beneath. A plain tile like its neighbours. -->
           <sb-stat-tile class="longest-hold" label="Longest holding time"
                         [value]="longestHoldValue()" [hint]="store.longestHold()?.ticker ?? undefined" />
-        </div>
+        </sb-stat-strip>
       </sb-panel>
 
       <!-- The day-detail pane that used to sit beside this grid duplicated
@@ -208,7 +209,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
          so a THIS MONTH empty state cannot hide it (see the section-head
          comment). Degrades safely via weekdays()'s own [] default before
          the first load. -->
-    <sb-panel heading="By weekday (all history)">
+    <sb-panel heading="By weekday (all history)" [divided]="true">
       <table class="dow">
         <thead>
           <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
@@ -334,20 +335,10 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     .metric button.active { background: var(--surface-raised); color: var(--text); }
 
     /* Exactly 4 columns, 2 below sm -- on request (2026-09-14, "at most 2
-       rows"): eight tiles at four per row is two rows. minmax(0, 1fr)
-       cannot overflow. v179 §3.3: no fixed row height and no reaching into
-       the tiles any more -- the 4.5rem row is what forced the inline
-       label-and-value variant, and every tile here is now the same stacked
-       sb-stat-tile as Analytics and Risk. A grid row stretches its tiles to
-       one height on its own (stat-tile.ts fills its cell). */
-    .totals {
-      display: grid;
-      gap: var(--space-14);
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-    @media (max-width: 639px) {
-      .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
+       rows"): eight tiles at four per row is two rows. v186 D3: the totals
+       are one sb-stat-strip (cols 4, colsMd 4), so the strip owns those
+       columns and splits the tiles with hairlines instead of framing each;
+       no fixed row height and no reaching into the tiles (v179 §3.3). */
 
     /* The calendar table's own panel, not .totals -- on request. A plain
        class selector on the host tag works regardless of whatever sb-async

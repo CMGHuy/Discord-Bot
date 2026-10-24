@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -88,5 +91,25 @@ describe('portfolio value panel', () => {
     f.componentInstance.viewReset.subscribe(() => (presses += 1));
     f.debugElement.query(By.directive(EquityCandles)).componentInstance.viewReset.emit();
     expect(presses).toBe(1);
+  });
+});
+
+describe('portfolio figure face (v186 D4)', () => {
+  const SOURCE = readFileSync(
+    join(process.cwd(), 'src/app/workspaces/dashboard/panels/portfolio-value.ts'),
+    'utf8',
+  );
+
+  it('tracks the hero figure like every display figure, keeping its Inter 600 title size', () => {
+    const figure = SOURCE.match(/\n\s*\.figure \{[^}]*\}/)![0];
+    expect(figure).toContain('letter-spacing: var(--figure-tracking);');
+    expect(figure).toContain('font-weight: 600;');
+    expect(figure).toContain('font-size: var(--text-title);');
+    expect(figure).toContain('font-variant-numeric: tabular-nums;');
+  });
+
+  it('shows the missing-balance dash in a readable colour', () => {
+    expect(SOURCE).toMatch(/\.figure\.muted \{ color: var\(--text-muted\); \}/);
+    expect(SOURCE).not.toMatch(/color:\s*var\(--text-faint\)/);
   });
 });

@@ -5,7 +5,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FreshRequestService } from '../api/fresh-request.service';
-import { asyncInputs, Async, skeletonGrid, type AsyncEmptyReason, type SkeletonShape } from './async';
+import { asyncInputs, Async, BAR_WIDTHS, barWidth, skeletonGrid, type AsyncEmptyReason, type SkeletonShape } from './async';
 
 @Component({
   imports: [Async],
@@ -18,7 +18,7 @@ import { asyncInputs, Async, skeletonGrid, type AsyncEmptyReason, type SkeletonS
       [emptyTitle]="'No closed trades'"
       [staleAsOf]="staleAsOf"
       [skeletonRows]="3"
-      [skeletonCols]="2"
+      [skeletonCols]="cols"
       [shape]="shape"
       [announce]="announce"
       (retry)="retried = retried + 1; onRetried()"
@@ -37,6 +37,7 @@ class Host {
   retried = 0;
   onRetried: () => void = () => undefined;
   shape: SkeletonShape = 'table';
+  cols = 2;
 }
 
 function render(patch: Partial<Host> = {}) {
@@ -160,12 +161,73 @@ describe('Async skeleton shapes (v168 #4)', () => {
     expect(skeletonGrid('figure', 6, 4)).toEqual([['label'], ['value']]);
   });
 
-  it('shimmers with a moving gradient instead of pulsing (source text)', () => {
+  /* v186 D5: thin bars by column index, a 'tiles' shape on the strip grid,
+   * and a quiet opacity pulse in place of the shimmer. */
+  const barWidths = (row: Element) =>
+    cells(row).map((cell) => (cell as HTMLElement).style.getPropertyValue('--bar-w'));
+
+  it('sizes the bars by column index: 40, 65, 30, 55 per cent, repeating', () => {
+    expect([...BAR_WIDTHS]).toEqual(['40%', '65%', '30%', '55%']);
+    expect([0, 1, 2, 3, 4, 5, 8].map(barWidth)).toEqual(['40%', '65%', '30%', '55%', '40%', '65%', '40%']);
+  });
+
+  it('gives a 4-column grid the four widths on every row', () => {
+    const { el } = render({ loading: true, cols: 4 });
+    const rows = [...el.querySelectorAll('.skeleton-row')];
+    expect(rows.length).toBe(3);
+    for (const row of rows) expect(barWidths(row)).toEqual(['40%', '65%', '30%', '55%']);
+  });
+
+  it('repeats the sequence across a 6-column grid', () => {
+    const { el } = render({ loading: true, cols: 6 });
+    for (const row of el.querySelectorAll('.skeleton-row')) {
+      expect(barWidths(row)).toEqual(['40%', '65%', '30%', '55%', '40%', '65%']);
+    }
+  });
+
+  it('keeps the cell classes exact while it sets the bar width', () => {
+    const { el } = render({ loading: true, shape: 'figure' });
+    const label = el.querySelector('.skeleton-cell.label') as HTMLElement;
+    expect(label.className).toBe('skeleton-cell label');
+    expect(label.style.getPropertyValue('--bar-w')).toBe('40%');
+  });
+
+  it('draws tiles as label and value bars on the strip grid', () => {
+    const { el } = render({ loading: true, shape: 'tiles', cols: 2 });
+    const skeleton = el.querySelector('.skeleton')!;
+    expect(skeleton.classList).toContain('shape-tiles');
+    expect(skeleton.getAttribute('aria-hidden')).toBe('true');
+    expect(el.querySelector('.skeleton-row')).toBeNull();
+    const grid = skeleton.querySelector(':scope > .sb-strip-grid') as HTMLElement;
+    expect(grid.classList).toContain('sb-strip-fixed');
+    expect(grid.style.getPropertyValue('--strip-cols')).toBe('2');
+    const tiles = [...grid.querySelectorAll(':scope > .skeleton-tile')];
+    expect(tiles.length).toBe(6); // skeletonRows 3 x skeletonCols 2
+    for (const tile of tiles) {
+      expect([...tile.children].map((bar) => bar.className)).toEqual(['skeleton-bar label', 'skeleton-bar value']);
+    }
+  });
+
+  it('keeps aria-busy and the one live region for tiles', () => {
+    const { el } = render({ loading: true, shape: 'tiles', announce: 'Loading' });
+    expect(el.querySelector('sb-async')!.getAttribute('aria-busy')).toBe('true');
+    expect(el.querySelectorAll('[aria-live]').length).toBe(1);
+  });
+
+  it('keeps each cell a table row tall and moves the paint onto a thin bar (source text)', () => {
     const source = readFileSync(join(process.cwd(), 'src/app/ui/async.ts'), 'utf8');
     const cell = source.match(/\.skeleton-cell\s*\{[^}]*\}/)![0];
-    expect(cell).toContain('animation: sb-shimmer 1.6s linear infinite;');
-    expect(cell).toContain('background-size: 200% 100%;');
     expect(cell).toContain('height: var(--control-h);');
+    expect(cell).not.toContain('animation');
+    expect(cell).not.toContain('background');
+    const bar = source.match(/\.skeleton-cell::before,\s*\.skeleton-bar\s*\{[^}]*\}/)![0];
+    expect(bar).toContain('height: 8px;');
+    expect(bar).toContain('border-radius: var(--radius-sm);');
+    expect(bar).toContain('animation: sb-skeleton-pulse calc(1800ms * var(--motion-scale)) ease-in-out infinite;');
+    expect(source.match(/\.skeleton-cell::before\s*\{[^}]*\}/)![0]).toContain('width: var(--bar-w, 60%);');
+    expect(source.match(/\.skeleton-bar\.label\s*\{[^}]*\}/)![0]).toContain('width: 35%;');
+    expect(source.match(/\.skeleton-bar\.value\s*\{[^}]*\}/)![0]).toContain('width: 60%;');
+    expect(source).not.toContain('sb-shimmer');
     expect(source).not.toContain('sb-pulse-soft');
   });
 });

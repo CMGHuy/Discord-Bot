@@ -43,13 +43,14 @@ import { EquityCandles } from './equity-candles';
       margin: 0;
       font-size: var(--text-title);
       font-weight: 600;
+      letter-spacing: var(--figure-tracking);
       color: var(--text);
       font-variant-numeric: tabular-nums;
       line-height: 1.1;
       /* v95 A5: the figure is one number -- wrapped, it reads as several. */
       white-space: nowrap;
     }
-    .figure.muted { color: var(--text-faint); }
+    .figure.muted { color: var(--text-muted); }
     .change {
       margin: var(--space-4) 0 var(--space-10);
       font-size: var(--text-body);

@@ -166,7 +166,9 @@ resets no validation budget and reopens no closed pre-registration; each names i
 § Windows.
 
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
-cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`; a screen
+cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`, except a
+fill-timing veto (decided by price between the alert and the fill), which says
+`exempt (post-signal)` and must clear Stage -1 reachability (v192); a screen
 fail is closed, never re-screened under either race shape; each idea freezes one,
 `fixed` or v163 `trail` with cap >= 60, under the same pass rule) and from v146
 `**Panel:**` (1-3 role skills run through `panel`; an unresolved `BLOCKING`
@@ -284,7 +286,7 @@ inside the script and never printed, echoed, passed as arguments or written
 elsewhere; build any local test instance from those same `.env` values, never
 the `admin`/`admin` default. Reading `.env` (and scripts loading it) is
 partner-allowed; never print, echo, log or quote its values. A task that runs tests against the database runs
-`replicate-prod-db` first and points `DATABASE_URL` at the replica.
+`replicate-prod-db` first and points `DATABASE_URL` at the replica, always in this project's one shared `swing-db` container (parallel tasks share it; no per-task container).
 
 ## Efficient repository navigation
 

@@ -546,3 +546,50 @@ describe('v179: one numeric face', () => {
     expect(resolveToken('--font-num')).toBe(resolveToken('--font-mono'));
   });
 });
+
+/**
+ * v186 D4: one face for DISPLAY figures, named by role beside --font-num.
+ * Tier 2 (a system role), so it sits in the first :root block, before the
+ * tier-3 banner. --font-num stays mono: columns still align.
+ */
+describe('v186: the display-figure tokens', () => {
+  const TIER2 = TIER3 ? CSS.slice(0, CSS.indexOf(TIER3_BANNER)) : CSS;
+  const FIGURE: Record<string, string> = {
+    '--font-figure': 'var(--font-sans)',
+    '--figure-weight': '600',
+    '--figure-tracking': '-0.02em',
+  };
+  const declaredIn = (source: string, name: string) =>
+    source.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].trim();
+  const at = (name: string) => CSS.search(new RegExp(`^\\s*${name}:`, 'm'));
+
+  it('declares the figure face, weight and tracking in tier 2', () => {
+    for (const [name, value] of Object.entries(FIGURE)) {
+      expect(declaredIn(TIER2, name), name).toBe(value);
+    }
+  });
+
+  it('declares each exactly once, never in tier 3', () => {
+    for (const name of Object.keys(FIGURE)) {
+      expect([...CSS.matchAll(new RegExp(`^\\s*${name}:`, 'gm'))], name).toHaveLength(1);
+      expect(declaredIn(TIER3, name), name).toBeUndefined();
+    }
+  });
+
+  it('places them straight after --font-num, in order', () => {
+    expect(at('--font-num')).toBeGreaterThan(-1);
+    expect(at('--font-num')).toBeLessThan(at('--font-figure'));
+    expect(at('--font-figure')).toBeLessThan(at('--figure-weight'));
+    expect(at('--figure-weight')).toBeLessThan(at('--figure-tracking'));
+  });
+
+  it('leaves --font-num on the mono family', () => {
+    expect(CSS).toMatch(/^\s*--font-num:\s*var\(--font-mono\);/m);
+  });
+
+  it('reaches jsdom through the regenerated fixture', () => {
+    expect(resolveToken('--font-figure')).toBe(resolveToken('--font-sans'));
+    expect(resolveToken('--figure-weight')).toBe('600');
+    expect(resolveToken('--figure-tracking')).toBe('-0.02em');
+  });
+});

@@ -210,6 +210,7 @@ the measured evidence that licensed the spec:
 | `expectancy` or `volume`, adding an entry strategy or a filter | `<ledger-id> SCREEN-PASS` — the id must sit in `docs/superpowers/results/preregistration-ledger.jsonl` with that verdict |
 | `expectancy` moving stops/targets, or `harvest` | `harvest-headroom <path>` — a results doc quoting the measured MFE headroom (`scripts/reports/runner_headroom.py`, `analytics/exit_quality.py`) the change claims to capture; the path must exist |
 | `none (integrity)` | `exempt (integrity)` |
+| `expectancy`, a **fill-timing veto** only: a rule decided by price action between the bot's alert and its fill (e.g. the next open), on the bot's own plans. A filter on signal-bar features, regime, sector or anything known at the alert is **not** exempt | `exempt (post-signal)` — the idea screen races events on any bar with no bot signal beneath them, so it cannot measure such a filter; the spec must instead clear Stage −1 reachability on the bot's own replay before any shot (partner, 2026-10-24, v192) |
 
 `tests/hooks/test_spec_screen_header.py` fails a spec whose line is missing,
 cites an absent or non-`SCREEN-PASS` ledger id, cites a headroom path that

@@ -56,6 +56,7 @@ import { Sparkline } from '../../ui/sparkline';
 import { ScatterComponent } from '../../ui/scatter';
 import { Spinner } from '../../ui/spinner';
 import { StatTile } from '../../ui/stat-tile';
+import { StatStrip } from '../../ui/stat-strip';
 import { Status } from '../../ui/status';
 import { StatusCell, StatusCellRow } from '../../ui/status-cell';
 import { StatusIndicator } from '../../ui/status-indicator';
@@ -157,6 +158,7 @@ interface ContractRow {
     SmallMultiples,
     Sparkline,
     StatTile,
+    StatStrip,
     Status,
     StatusCell,
     StatusIndicator,
@@ -265,7 +267,7 @@ interface ContractRow {
     <sb-panel heading="sb-filter-chips (deprecated, v80 D4: use sb-segmented)">
       <sb-filter-chips [chips]="filterChips" [selected]="'open'" />
     </sb-panel>
-    <sb-panel heading="sb-tab-bar -- scrolls with an edge fade when the tabs do not fit">
+    <sb-panel heading="sb-tab-bar -- scrolls with an edge fade when the tabs do not fit" [divided]="true">
       <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="activeTab.set($event)" />
       <div class="narrow-demo">
         <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="activeTab.set($event)" />
@@ -485,6 +487,16 @@ interface ContractRow {
         <sb-stat-tile label="Expectancy" [value]="null" />
         <sb-stat-tile label="Net P&L" [value]="'+1,240.00 €'" secondary="+12.4R" [sample]="412" tone="pos" hint="Pre-tax, paper trades." />
       </div>
+      <!-- v186 D3: tiles inside a panel go in a strip -- hairlines between
+           them, no frame of their own. Five in four columns: the last row
+           is incomplete and shows no stray rule. -->
+      <sb-stat-strip [cols]="4">
+        <sb-stat-tile label="Win rate" [value]="'68%'" [sample]="412" />
+        <sb-stat-tile label="Payoff ratio" [value]="'1.80'" [sample]="7" tone="pos" />
+        <sb-stat-tile label="Expectancy" [value]="null" />
+        <sb-stat-tile label="Net P&L" [value]="'+1,240.00 €'" secondary="+12.4R" [sample]="412" tone="pos" />
+        <sb-stat-tile label="Max drawdown" [value]="'−4.2R'" tone="neg" />
+      </sb-stat-strip>
       <sb-gauge label="Heat utilisation" [value]="62" caption="cap 100%" />
       <sb-gauge label="Heat utilisation (over limit)" [value]="130" />
       <sb-matrix [labels]="matrixLabels" [values]="matrixValues" [clusters]="[['AAPL', 'MSFT']]" />

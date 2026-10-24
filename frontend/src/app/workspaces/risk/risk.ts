@@ -27,6 +27,7 @@ import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
 import { StatTile } from '../../ui/stat-tile';
+import { StatStrip } from '../../ui/stat-strip';
 import { tablePerPage } from '../../ui/table-per-page';
 
 /**
@@ -55,7 +56,7 @@ import { tablePerPage } from '../../ui/table-per-page';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Matrix, Panel, RowLink, SectionHead, Sparkline, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Matrix, Panel, RowLink, SectionHead, Sparkline, StatStrip, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -168,11 +169,13 @@ import { tablePerPage } from '../../ui/table-per-page';
              series behind these six tiles was computed from -- the killswitch
              and exposure numbers above are live and carry no such date. -->
         <sb-freshness [at]="store.metrics()?.as_of ?? null" />
-        <div class="metric-grid">
+        <!-- v186 D3: one strip, tiles split by hairlines; no cols, so the
+             strip's default auto-fit at 140px keeps today's column count. -->
+        <sb-stat-strip class="metric-grid">
           @for (tile of metricTiles(); track tile.label) {
             <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
           }
-        </div>
+        </sb-stat-strip>
         <!-- Sharpe and drawdown here are over every closed trade, in R; the
              Analytics tiles of the same name cover the selected date range
              and annualise returns. Both are right, so say which is which. -->
@@ -568,11 +571,6 @@ import { tablePerPage } from '../../ui/table-per-page';
     .metrics-scope { margin: var(--space-10) 0 0; font-size: var(--text-micro); color: var(--text-faint); }
     /* -- risk metrics -- */
     .metrics { display: grid; gap: var(--space-8); }
-    .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: var(--register-pad);
-    }
 
     /* -- the two side-by-side panels -- */
     /* v89 audit (UA15): this gap is between sibling PANELS, so it takes

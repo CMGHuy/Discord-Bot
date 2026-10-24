@@ -26,7 +26,7 @@
  *
  * Specificity: a mode rule that overrides a component's own rule has to
  * beat the component's emulated `.x[_ngcontent-…]` (0,2,0), so those rules
- * name the host element too (`sb-async .skeleton-cell`).
+ * name the host element too (`sb-async .skeleton-cell::before`).
  *
  * New animations move only transform, opacity, filter, clip-path and
  * background-position (the flash keyframes paint background and color, as
@@ -39,7 +39,7 @@
 
 /* -- moved keyframes: one copy each, every call site keeps its duration ----- */
 /* `pulse` was declared four times in three shapes (spec amendment 7); the
-   skeleton's soft one became the shimmer (MO9), so two shapes remain. */
+   skeleton's soft one became the shimmer (MO9), now sb-skeleton-pulse (v186), so two shapes remain. */
 @keyframes sb-pulse-dim { 50% { opacity: 0.35; } }                             /* live dot, open-trade dot */
 @keyframes sb-pulse-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }  /* status-cell dot */
 /* `spin` was declared twice (data-table, chart-container), identically. */
@@ -84,7 +84,7 @@
 @keyframes sb-fade-out { to { opacity: 0; } }
 @keyframes sb-halo-blink { 50% { opacity: 0.15; } }                               /* bot-status halo */
 @keyframes sb-ping { from { opacity: 0.6; transform: scale(1); } to { opacity: 0; transform: scale(2.6); } }
-@keyframes sb-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes sb-skeleton-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.9; } }  /* sb-async skeleton bars (v186 D5) */
 @keyframes sb-draw-inset { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
 @keyframes sb-draw-circle { from { clip-path: circle(0); } to { clip-path: circle(75%); } }
 @keyframes sb-ambient-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(4%, 3%, 0); } }
@@ -135,6 +135,10 @@
 @media (hover: hover) {
   [data-motion] .sb-lift:hover { border-color: var(--border-strong); box-shadow: var(--panel-shadow-lift); }
   [data-motion=on] .sb-lift:hover { transform: translateY(-2px); }
+  /* v186 D3 -- a tile in an sb-stat-strip does not move: the strip's
+     overflow: hidden would clip the translate (its --panel-shadow-lift: none
+     already removes the shadow). (0,3,1) beats the line above (0,3,0). */
+  [data-motion=on] sb-stat-strip .sb-lift:hover { transform: none; }
 }
 @media (hover: none) {
   [data-motion] .sb-lift:active { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }
@@ -218,7 +222,8 @@ sb-confirm-dialog dialog[open]::backdrop {
 [data-motion=reduced] .sb-drawer-out { animation-name: sb-fade-out; }
 [data-motion=reduced] .sb-draw-in,
 [data-motion=reduced] .sb-draw-in-radial { animation: none; }
-[data-motion=reduced] sb-async .skeleton-cell { animation: none; }
+[data-motion=reduced] sb-async .skeleton-cell::before,
+[data-motion=reduced] sb-async .skeleton-bar { animation: none; }
 [data-motion=reduced] sb-profile-menu .halo { animation: none; }
 
 /* -- Off and pending: no decorative motion ----------------------------------
@@ -250,7 +255,8 @@ sb-confirm-dialog dialog[open]::backdrop {
 [data-motion=pending] sb-confirm-dialog dialog[open]::backdrop {
   animation: none;
 }
-[data-motion=off] sb-async .skeleton-cell { animation: none; }
+[data-motion=off] sb-async .skeleton-cell::before,
+[data-motion=off] sb-async .skeleton-bar { animation: none; }
 [data-motion=off] sb-profile-menu .halo,
 [data-motion=pending] sb-profile-menu .halo { animation: none; }
 

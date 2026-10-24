@@ -39,7 +39,7 @@ Alpaca serves bars from 2016-01-04 for S&P members that were later **delisted**.
    - research 2017-01-01..2025-12-31 on purged anchored yearly folds (test years 2021–2025);
    - `holdout_start` = 2026-01-01.
 4. **No silent change to existing runs.** v1 and v2 runs read exactly the data they read today, and the default ticker list of every script is unchanged.
-5. **A describe-only, powered re-baseline** *(partner)*: every live strategy and confluence under v3, next to the same code under v1 on the watchlist, with N, WR, ExpR, the per-year and per-fold splits, and the MDE each now reaches. It is recorded as a description of the new instrument and decides nothing.
+5. **A describe-only, powered re-baseline** *(partner)*: every live strategy under v3 (confluence is not run: `--scenarios` is refused under every non-v1 instrument until scan replay is wired, a follow-on spec; partner 2026-10-24), next to the same code under v1 on the watchlist, with N, WR, ExpR, the per-year and per-fold splits, and the MDE each now reaches. It is recorded as a description of the new instrument and decides nothing.
 
 ## Non-goals
 
@@ -139,7 +139,7 @@ A `--pit` mode on the existing `scripts/data/check_history_store.py` (which alre
 
 ### §5 The re-baseline (describe-only)
 
-- **Legs.** Long runs go to `backtest-runner`, chunked per strategy. Every leg runs every live strategy (registry, both directions where they exist) and confluence at its current frozen settings.
+- **Legs.** Long runs go to `backtest-runner`, chunked per strategy. Every leg runs every live strategy (registry, both directions where they exist) at its current frozen settings; confluence is left out, because `--scenarios` is refused under v2/v3 (`_V2_UNWIRED`), and the report says so (partner 2026-10-24).
   - **Leg A:** `--instrument v3`.
   - **Leg C:** `--instrument v3` restricted to the watchlist tickers that are PIT members. This separates universe width from window, store and costs, the confound v180's record could not resolve (quant-researcher finding 6).
   - **Leg B:** `--instrument v1` on the watchlist store, TRAIN 2020–2023 (what the funnel runs today).

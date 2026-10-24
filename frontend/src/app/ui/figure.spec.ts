@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'; import { join } from 'node:path';
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core'; import { TestBed } from '@angular/core/testing'; import { beforeEach, describe, expect, it } from 'vitest';
 import { Figure, FigureStrip, FigureTone } from './figure';
 function figure(value: number | null, tone: FigureTone = 'plain', extra: { unit?: string; decimals?: number; sub?: string } = {}) { const f = TestBed.createComponent(Figure); f.componentRef.setInput('label', 'Expectancy'); f.componentRef.setInput('value', value); f.componentRef.setInput('tone', tone); for (const [key, input] of Object.entries(extra)) f.componentRef.setInput(key, input); f.detectChanges(); return f.nativeElement as HTMLElement; }
@@ -8,3 +9,27 @@ describe('Figure (v80 D4)', () => { beforeEach(() => TestBed.configureTestingMod
   it('uses caution and absent states', () => { expect(value(figure(82, 'caution')).classList).toContain('warn'); expect(value(figure(null, 'pnl', { unit: '%' })).textContent!.trim()).toBe('—'); });
   it('shows optional subline', () => { expect(figure(1, 'plain', { sub: 'n = 184' }).querySelector('.sub')!.textContent!.trim()).toBe('n = 184'); }); });
 describe('FigureStrip (v80 D4)', () => { beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] })); it('sets up to four columns', () => { const f = TestBed.createComponent(StripHost); f.detectChanges(); const strip = (f.nativeElement as HTMLElement).querySelector('sb-figure-strip') as HTMLElement; expect(strip.style.getPropertyValue('--figure-columns')).toBe('3'); f.componentInstance.figures.set([1,2,3,4,5]); f.detectChanges(); expect(strip.style.getPropertyValue('--figure-columns')).toBe('4'); }); });
+
+describe('Figure face (v186 D4)', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/figure.ts'), 'utf8');
+
+  it('sets the value in the figure face, not the code face', () => {
+    // The first ` .value {` is the base rule; the @container one only resizes.
+    const rule = SOURCE.match(/\s\.value \{[^}]*\}/)![0];
+    expect(rule).toContain('font-family: var(--font-figure);');
+    expect(rule).toContain('font-weight: var(--figure-weight);');
+    expect(rule).toContain('letter-spacing: var(--figure-tracking);');
+    expect(rule).toContain('font-variant-numeric: tabular-nums;');
+    expect(rule).not.toContain('--font-mono');
+    expect(rule).not.toContain('font-weight: 500');
+  });
+
+  it('drops the global num class from the value and keeps it on the sub line', () => {
+    const e = figure(1.2, 'pnl', { sub: 'n = 184' });
+    const value = e.querySelector('.value')!;
+    expect(value.classList).not.toContain('num');
+    expect(value.classList).toContain('pos');
+    expect(e.querySelector('.sub')!.classList).toContain('num');
+  });
+});
