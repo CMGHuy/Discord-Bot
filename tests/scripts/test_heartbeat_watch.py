@@ -22,10 +22,14 @@ INSTALLER = OPS / "install_heartbeat_watch_cron.sh"
 NAMES = ["heartbeat_watch.sh", "install_heartbeat_watch_cron.sh"]
 URL = "https://discord.example/api/webhooks/1/secret"
 
-# `docker` prints $STUB/age (or fails when it is absent); `curl` records its
-# arguments and returns $STUB/curl_rc.
+# `docker` answers the heartbeat query with $STUB/age (or fails when it is
+# absent) and the v184 monitor query (its SQL names `monitor`) with
+# $STUB/monitor, or `absent` -- a pre-v184 row, which the watch logs and keeps
+# silent; `curl` records its arguments and returns $STUB/curl_rc.
 _STUBS = (
-    'docker() { [ -f "$STUB/age" ] || return 1; cat "$STUB/age"; }; '
+    'docker() { case "$*" in '
+    '*monitor*) if [ -f "$STUB/monitor" ]; then cat "$STUB/monitor"; else echo absent; fi ;; '
+    '*) [ -f "$STUB/age" ] || return 1; cat "$STUB/age" ;; esac; }; '
     'curl() { printf "%s\\n" "$*" >> "$STUB/curl.log"; '
     'return "$(cat "$STUB/curl_rc" 2>/dev/null || echo 0)"; }; '
     "export -f docker curl; "
