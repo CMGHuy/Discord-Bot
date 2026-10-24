@@ -387,17 +387,19 @@ def test_a_short_level_run_writes_the_level_doc(tmp_path, monkeypatch):
 # --- open-anchored generator for the level A/A (ad-hoc v182 fix) ---
 import hashlib  # noqa: E402
 
-DEFAULT_FRAME_SHA = "ad55a3274886536fe94b47a4dad08e01f0426eabfaa5fd07e791ee8c3095a274"
+# Hashed after rounding to 6 decimals: exp/cumprod differ in the last ulp between
+# libm builds (Windows vs the Linux CI runner), which raw float bytes would catch.
+DEFAULT_FRAME_SHA = "dfd8c21f3dbe42d42fb49887d830fc34eb71427fb7eb40fc7a8b93a4d733f8d8"
 
 
 def _ohlc_sha(df):
-    return hashlib.sha256(df[["Open", "High", "Low", "Close"]].to_numpy().tobytes()).hexdigest()
+    return hashlib.sha256(np.round(df[["Open", "High", "Low", "Close"]].to_numpy(), 6).tobytes()).hexdigest()
 
 
 def test_the_default_frame_is_byte_identical_to_the_pre_fix_generator():
     df = cal.synthetic_frame(np.random.default_rng(11), 300)
     assert _ohlc_sha(df) == DEFAULT_FRAME_SHA
-    assert df["Close"].iloc[0] == pytest.approx(99.72178016305347, rel=0, abs=0)
+    assert df["Close"].iloc[0] == pytest.approx(99.72178016305347, rel=0, abs=1e-9)
     assert _ohlc_sha(cal.synthetic_frame(np.random.default_rng(11), 300, anchored=False)) \
         == DEFAULT_FRAME_SHA
 
