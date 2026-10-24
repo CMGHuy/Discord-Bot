@@ -21,7 +21,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
 from swingbot.core.tracking import live_loss_watch as loss_watch
-from . import book_status, cooldown, equity_recorder, notices, ops_watch, outlook, presence, recap, runstate
+from . import book_status, cooldown, equity_recorder, monitor_liveness, notices, ops_watch, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
@@ -735,14 +735,38 @@ async def trade_monitor():
 
     After the closes, one equity sample is recorded (v172, equity_recorder): it
     reuses this tick's prices and never raises.
+
+    v184: every tick ends by stamping the `monitor` key into the heartbeat row
+    (monitor_liveness), in a `finally` so a tick that raises is stamped too.
+    The record starts "unknown" and becomes "ok" only when the work returned;
+    scripts/ops/heartbeat_watch.sh alerts when the stamp ages past 300 s or
+    the stops go unchecked during the regular session. The stamp makes no
+    quote call and never raises.
     """
+    rec = monitor_liveness.TickRecord()
+    try:
+        await _monitor_tick(rec)
+        rec.outcome = "ok"
+    finally:
+        await monitor_liveness.stamp_tick(rec)
+
+
+async def _monitor_tick(rec: "monitor_liveness.TickRecord") -> None:
+    """One monitor tick's work (the pre-v184 body of trade_monitor), filling
+    `rec` as each step completes so a raise part-way leaves the rest unknown."""
+    from swingbot.core.planning import plan_manager
+    plan_manager.reset_monitor_batch_status()
     open_trades = trade_log.get_trades(status="open", limit=200)
     tickers = list({t["ticker"] for t in open_trades})
+    rec.trade_tickers = tickers
 
     live_prices = await _live_price_batch(tickers)
-    all_newly_closed, _check_errors = await _check_open_tickers(tickers, live_prices)
+    rec.live_prices = live_prices
+    all_newly_closed, rec.check_errors = await _check_open_tickers(tickers, live_prices)
 
-    plan_events, _manager_raised = await _run_plan_manager_tick()
+    plan_events, rec.manager_raised = await _run_plan_manager_tick()
+    rec.plan_demand = plan_manager.last_poll_demand()
+    rec.fetch_failed = plan_manager.monitor_batch_failed()
     if plan_events:
         await _post_plan_events(plan_events)
     await _record_equity_sample(live_prices)

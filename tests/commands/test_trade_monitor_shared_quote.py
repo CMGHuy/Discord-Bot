@@ -110,3 +110,37 @@ def test_on_mode_monitor_failure_is_a_warning_and_empty(monkeypatch, caplog):
     with caplog.at_level(logging.DEBUG, logger=loops.log.name):
         assert asyncio.run(loops._live_price_batch(["AAPL"])) == {}
     assert [r.levelno for r in caplog.records if r.name == loops.log.name] == [logging.WARNING]
+
+
+def test_the_stamp_adds_no_quote_call_and_lands_in_the_heartbeat_row(layer_on, shared_db, monkeypatch):
+    """v184: the liveness stamp reuses the tick's own results -- one provider
+    call per tick, the same two monitor_quotes calls as before, and the
+    `monitor` key in the real heartbeat row."""
+    from swingbot.commands.scanning import monitor_liveness
+    from swingbot.core.db.repositories.heartbeat import HeartbeatRepository
+    monkeypatch.setattr(monitor_liveness, "_STATE", monitor_liveness.MonitorLiveness())
+    real = plan_manager.monitor_quotes
+    seen = []
+    monkeypatch.setattr(plan_manager, "monitor_quotes", lambda t: seen.append(list(t)) or real(t))
+    _tick(monkeypatch, [])
+    assert layer_on.calls == 1
+    assert seen == [["AAPL"], ["AAPL"]]          # trade monitor, then the manager's batch
+    row = HeartbeatRepository().last()
+    assert row is not None and row["monitor"]["outcome"] == "ok"
+    assert row["monitor"]["positions"] is not None and "AAPL" in row["monitor"]["positions"]
+
+
+def test_the_stamp_itself_reads_no_quote_and_no_cache(monkeypatch):
+    from swingbot.commands.scanning import monitor_liveness
+    from swingbot.core.marketdata import data
+    for name in ("get_current_price_batch", "get_quote_batch", "peek_cached_batch_price"):
+        monkeypatch.setattr(data, name, lambda *a, **k: pytest.fail("quote read by the stamp"))
+    monkeypatch.setattr(plan_manager, "monitor_quotes", lambda t: pytest.fail("monitor_quotes"))
+    monkeypatch.setattr(plan_manager, "_price_batch_fn", lambda t: pytest.fail("batch fn"))
+    monkeypatch.setattr(monitor_liveness, "_STATE", monitor_liveness.MonitorLiveness())
+    writes = []
+    monkeypatch.setattr(monitor_liveness, "_write", writes.append)
+    rec = monitor_liveness.TickRecord(outcome="ok", trade_tickers=["AAPL"],
+                                      live_prices={"AAPL": 190.0})
+    assert asyncio.run(monitor_liveness.stamp_tick(rec)) is True
+    assert len(writes) == 1
