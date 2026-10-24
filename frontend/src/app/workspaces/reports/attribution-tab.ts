@@ -73,7 +73,7 @@ export function formatInterval(low: number | null, high: number | null): string 
         <p class="caption">95% interval, week-clustered. {{ caption }}</p>
       </sb-panel>
 
-      <sb-panel heading="Factors">
+      <sb-panel heading="Factors" [divided]="true">
         <table class="figures">
           <thead>
             <tr><th>Factor</th><th>Live Δ ExpR</th><th>TRAIN Δ ExpR</th><th></th></tr>
@@ -124,7 +124,7 @@ export function formatInterval(low: number | null, high: number | null): string 
         </sb-panel>
       }
 
-      <sb-panel heading="Direction and horizon splits">
+      <sb-panel heading="Direction and horizon splits" [divided]="true">
         <table class="figures">
           <thead>
             <tr><th>Split</th><th>Live top − bottom</th><th>Live N</th><th>TRAIN top − bottom</th><th>TRAIN N</th></tr>

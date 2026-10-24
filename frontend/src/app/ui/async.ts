@@ -6,22 +6,37 @@ import { EmptyStateComponent } from './empty-state';
 /** Which empty this is. Not optional -- see the class comment. */
 export type AsyncEmptyReason = 'no-data-yet' | 'measured-zero';
 
-/** The placeholder's outline: a table (default), a panel, or one figure. */
-export type SkeletonShape = 'table' | 'panel' | 'figure';
+/** The placeholder's outline: a table (default), a panel, one figure, or a
+ *  row of stat tiles on the strip grid (v186 D5). */
+export type SkeletonShape = 'table' | 'panel' | 'figure' | 'tiles';
+
+/** The shapes drawn as rows of cells. `'tiles'` has its own template branch. */
+export type GridShape = Exclude<SkeletonShape, 'tiles'>;
 
 /**
- * Rows of cell modifier classes for each shape (`''` is a plain cell). Every
- * cell keeps the table-row height (`--control-h`), so whatever replaces the
- * skeleton lands in the space it held and nothing reflows.
+ * Rows of cell modifier classes for each grid shape (`''` is a plain cell).
+ * Every cell keeps the table-row height (`--control-h`), so whatever
+ * replaces the skeleton lands in the space it held and nothing reflows.
  */
-const SKELETON_SHAPES: Record<SkeletonShape, (rows: number, cols: number) => string[][]> = {
+const SKELETON_SHAPES: Record<GridShape, (rows: number, cols: number) => string[][]> = {
   table: (rows, cols) => Array.from({ length: rows }, () => Array.from({ length: cols }, () => '')),
   panel: (rows) => [['head'], ...Array.from({ length: Math.max(rows - 1, 0) }, () => [''])],
   figure: () => [['label'], ['value']],
 };
 
-export function skeletonGrid(shape: SkeletonShape, rows: number, cols: number): string[][] {
+export function skeletonGrid(shape: GridShape, rows: number, cols: number): string[][] {
   return SKELETON_SHAPES[shape](rows, cols);
+}
+
+/**
+ * Bar widths by column index (v186 D5), repeating. A fixed sequence rather
+ * than a random one, so a 4- and a 6-column skeleton are both deterministic
+ * and a ragged right edge still reads as text, not as a progress bar.
+ */
+export const BAR_WIDTHS = ['40%', '65%', '30%', '55%'] as const;
+
+export function barWidth(col: number): string {
+  return BAR_WIDTHS[col % BAR_WIDTHS.length];
 }
 
 /**
@@ -41,9 +56,10 @@ export function skeletonGrid(shape: SkeletonShape, rows: number, cols: number): 
  * The loading branch is a SHAPED skeleton, not a spinner: it occupies the
  * geometry the loaded content will, so nothing reflows at the moment the
  * reader starts reading. A spinner swapped for a table moves every element on
- * the page. `shape` picks the outline (a table by default, a panel, or a
- * single figure); a moving shimmer marks it as loading (spec v168 §3 #4),
- * frozen to a static tint under Motion = Reduced or Off (styles/motion.css).
+ * the page. `shape` picks the outline (a table by default, a panel, a
+ * single figure, or a row of stat tiles); thin bars pulsing quietly mark it
+ * as loading (spec v186 D5, after v168 §3 #4's shimmer), still under
+ * Motion = Reduced or Off (styles/motion.css).
  *
  * Branch order is error > loading > empty > content, so a refetch that fails
  * reports the failure rather than spinning forever.
@@ -65,15 +81,28 @@ export function skeletonGrid(shape: SkeletonShape, rows: number, cols: number): 
         <button class="retry" type="button" (click)="onRetry()">Retry</button>
       </div>
     } @else if (loading()) {
-      <div class="skeleton" [class]="'shape-' + shape()" aria-hidden="true">
-        @for (row of grid(); track $index) {
-          <div class="skeleton-row">
-            @for (cell of row; track $index) {
-              <span class="skeleton-cell" [class]="cell"></span>
+      @if (shape() === 'tiles') {
+        <div class="skeleton shape-tiles" aria-hidden="true">
+          <div class="sb-strip-grid sb-strip-fixed" [style.--strip-cols]="skeletonCols()">
+            @for (tile of tiles(); track $index) {
+              <div class="skeleton-tile">
+                <span class="skeleton-bar label"></span>
+                <span class="skeleton-bar value"></span>
+              </div>
             }
           </div>
-        }
-      </div>
+        </div>
+      } @else {
+        <div class="skeleton" [class]="'shape-' + shape()" aria-hidden="true">
+          @for (row of grid(); track $index) {
+            <div class="skeleton-row">
+              @for (cell of row; track $index) {
+                <span class="skeleton-cell" [class]="cell" [style.--bar-w]="barWidth($index)"></span>
+              }
+            </div>
+          }
+        </div>
+      }
     } @else if (empty()) {
       <div class="empty-wrap">
         <span class="reason" [class]="emptyReason()">
@@ -119,24 +148,50 @@ export function skeletonGrid(shape: SkeletonShape, rows: number, cols: number): 
 
     .skeleton { display: flex; flex-direction: column; gap: var(--space-6); }
     .skeleton-row { display: flex; gap: var(--space-10); }
-    /* A highlight band sweeps across a static base (spec v168 §3 #4). Only
-       background-position moves, so it costs no layout or paint of
-       neighbours. Under Motion = Reduced or Off the animation is dropped
-       (styles/motion.css) and the gradient rests as a static tint.
-       Height matched to a table row so the swap costs no layout shift. */
+    /* The cell is a table row's height so the swap costs no layout shift; it
+       paints nothing itself and centres a thin bar (spec v186 D5). */
     .skeleton-cell {
       flex: 1;
+      display: flex;
+      align-items: center;
+      min-width: 0;
       height: var(--control-h);
-      border-radius: var(--radius-sm);
-      background: linear-gradient(90deg, var(--surface-raised) 30%,
-        color-mix(in srgb, var(--surface-raised) 55%, var(--border-strong)) 50%,
-        var(--surface-raised) 70%);
-      background-size: 200% 100%;
-      animation: sb-shimmer 1.6s linear infinite;
     }
     .skeleton-cell.head { flex: 0 0 40%; }
     .skeleton-cell.label { flex: 0 0 35%; }
     .skeleton-cell.value { flex: 0 0 65%; }
+    /* One quiet bar: an opacity pulse only, so no layout or neighbour paint.
+       Under Motion = Reduced or Off the animation is dropped
+       (styles/motion.css) and the bar rests at the base opacity. */
+    .skeleton-cell::before,
+    .skeleton-bar {
+      content: '';
+      display: block;
+      height: 8px;
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--surface-raised) 55%, var(--border-strong));
+      opacity: 0.7;
+      animation: sb-skeleton-pulse calc(1800ms * var(--motion-scale)) ease-in-out infinite;
+    }
+    .skeleton-cell::before { width: var(--bar-w, 60%); }
+    /* The shaped cells already carry their width in flex-basis. */
+    .skeleton-cell.head::before,
+    .skeleton-cell.label::before,
+    .skeleton-cell.value::before { width: 100%; }
+
+    /* 'tiles': the strip's own grid (styles.css .sb-strip-grid), so the
+       placeholder breaks at the same widths the tiles will. The wrapper clips
+       the grid's -1px start-edge offset, as sb-stat-strip does. */
+    .shape-tiles { overflow: hidden; }
+    .skeleton-tile {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-10);
+      min-width: 0;
+      padding: var(--space-14);
+    }
+    .skeleton-bar.label { width: 35%; }
+    .skeleton-bar.value { width: 60%; }
 
     .empty-wrap { text-align: center; }
     .reason {
@@ -195,7 +250,17 @@ export class Async {
     this.fresh.markFresh(() => this.retry.emit());
   }
 
-  protected readonly grid = computed(() => skeletonGrid(this.shape(), this.skeletonRows(), this.skeletonCols()));
+  protected readonly grid = computed(() => {
+    const shape = this.shape();
+    return shape === 'tiles' ? [] : skeletonGrid(shape, this.skeletonRows(), this.skeletonCols());
+  });
+
+  /** 'tiles': skeletonRows rows of skeletonCols tiles (v186 D5). */
+  protected readonly tiles = computed(() =>
+    Array.from({ length: Math.max(this.skeletonRows(), 1) * Math.max(this.skeletonCols(), 1) }, (_, i) => i),
+  );
+
+  protected readonly barWidth = barWidth;
 }
 
 export interface AsyncSource<T> {

@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input, model } from '@angular/core'
 import { Hint } from './hint';
 
 /** Consistent panel provenance: title, population, scope, definition, and table view. */
-/* v179 §3.4: title, N=, total and the hint share the text baseline; the header is one control tall. */
+/* v179 §3.4: title, N=, total and the hint share the text baseline; the header is one control tall. v186 D1: the title matches sb-panel's. */
 @Component({
   selector: 'sb-panel-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -13,13 +13,13 @@ import { Hint } from './hint';
       <div class="heading"><h2>{{ title() }}</h2>
         @if (n() !== null) { <span class="n num">N={{ n() }}</span> }
         @if (allTime()) { <span class="all-time">all-time</span> }
-        @if (total()) { <span class="total num">{{ total() }}</span> }
+        @if (total()) { <span class="total">{{ total() }}</span> }
         @if (hint()) { <sb-hint [text]="hint()!" [label]="title() + ' definition'" /> }
       </div>
       @if (tableable()) { <button type="button" class="table sb-hit" [attr.aria-pressed]="tableOpen()" (click)="tableOpen.set(!tableOpen())">Table</button> }
     </header>
   `,
-  styles: `header { display:flex; flex-wrap:wrap; align-items:baseline; align-content:center; justify-content:space-between; gap:var(--space-6) var(--space-8); min-height:var(--control-h); } .heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:var(--space-6); } h2 { margin:0; font-size:var(--text-subhead); color:var(--text); } .n,.all-time { font-size:var(--text-micro); letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); } .all-time { color:var(--warn); } .total { font-size:var(--text-chip); color:var(--text-secondary); } .table { border:0; padding:0; background:none; color:var(--accent); cursor:pointer; font:inherit; font-size:var(--text-chip); } .table:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
+  styles: `header { display:flex; flex-wrap:wrap; align-items:baseline; align-content:center; justify-content:space-between; gap:var(--space-6) var(--space-8); min-height:var(--control-h); } .heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:var(--space-6); } h2 { margin:0; font-family: var(--font-sans); font-weight: 600; font-size: var(--text-body); color: var(--text); letter-spacing: normal; } .n,.all-time { font-family: var(--font-num); font-size:var(--text-micro); letter-spacing:.06em; text-transform:uppercase; color: var(--text-muted); } .all-time { color:var(--warn); } .total { font-family: var(--font-figure); font-weight: var(--figure-weight); letter-spacing: var(--figure-tracking); font-variant-numeric: tabular-nums; font-size: var(--text-chip); color: var(--text-secondary); } .table { border:0; padding:0; background:none; color:var(--accent); cursor:pointer; font:inherit; font-size:var(--text-chip); } .table:focus-visible { outline:1px solid var(--accent); outline-offset:2px; }
     @media (pointer: coarse), (max-width: 1023px) {
       sb-hint { margin-block: calc((14px - var(--control-h)) / 2); }
     }`,

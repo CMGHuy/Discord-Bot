@@ -218,6 +218,35 @@ describe('Risk metric tiles', () => {
   });
 });
 
+describe('Risk metric tiles in a stat strip (v186 D3)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/risk/risk.ts'), 'utf8');
+
+  it('rules the six tiles with one stat strip, auto-fit at 140px', async () => {
+    const fixture = await renderWithMetrics();
+    const el = fixture.nativeElement as HTMLElement;
+    const strip = el.querySelector<HTMLElement>('sb-stat-strip.metric-grid');
+    expect(strip).not.toBeNull();
+    expect(strip!.querySelectorAll('sb-stat-tile')).toHaveLength(6);
+    expect(el.querySelectorAll('sb-stat-tile')).toHaveLength(6);
+    // No cols: the default auto-fit column rule, not the fixed-count one.
+    expect(strip!.style.getPropertyValue('--strip-cols')).toBe('');
+    expect(strip!.querySelector('.sb-strip-grid')!.classList).not.toContain('sb-strip-fixed');
+  });
+
+  it('keeps the thin-sample cues inside the strip', async () => {
+    const fixture = await renderWithMetrics({ sharpe_r: { value: 0.96, n: 7 } });
+    const tile = tileHost(fixture, 'Sharpe (R)');
+    expect(tile.closest('sb-stat-strip')).not.toBeNull();
+    expect(tile.classList).toContain('thin');
+    expect(tile.querySelector('.flag')!.textContent).toContain('thin sample');
+  });
+
+  it('declares no metric grid of its own', () => {
+    expect(src).not.toMatch(/\.metric-grid\s*\{/);
+    expect(src).toMatch(/<sb-stat-strip class="metric-grid">/);
+  });
+});
+
 /* -- v85 R8-05 -- the heat gauge, the risk budget, and the correlation matrix -- */
 
 async function render(overrides: Partial<RiskData> = {}, extra: Provider[] = []): Promise<ComponentFixture<Risk>> {

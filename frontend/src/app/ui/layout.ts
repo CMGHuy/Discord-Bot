@@ -42,8 +42,8 @@ import { edgeFades, revealActive } from './scroll-rail';
   template: `
     <section class="panel sb-panel sb-lift">
       @if (heading(); as text) {
-        <header>
-          <h2 class="sb-label">{{ text }}</h2>
+        <header [class.ruled]="flush() || divided()">
+          <h2>{{ text }}</h2>
           @if (description(); as about) {
             <!-- The host's native title answers a hover; the hint answers a
                  tap or a keyboard focus, which a title never does. A panel
@@ -72,7 +72,7 @@ import { edgeFades, revealActive } from './scroll-rail';
         @if (problem(); as reason) {
           <p class="panel-problem" role="status">{{ reason }}</p>
         }
-        <div class="body" [class.flush]="flush()">
+        <div class="body" [class.flush]="flush()" [class.tight]="!!heading() && !flush() && !divided()">
           <ng-content />
         </div>
       }
@@ -103,11 +103,27 @@ import { edgeFades, revealActive } from './scroll-rail';
       gap: var(--space-6) var(--space-10);
       min-height: calc(var(--control-h) + 2 * var(--space-10) + 1px);
       padding: var(--space-10) var(--space-14);
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid transparent;
     }
-    /* Typography is the global .sb-label (v80 D3); only the UA margin is
-       this component's business. */
-    h2 { margin: 0; max-width: 100%; overflow-wrap: anywhere; }
+    /* v186 D2 -- the rule shows only where it separates something: a flush
+       body (a table edge to edge) or a divided one (a body that opens with a
+       tab strip or a table). Unruled headers keep the 1px border, transparent,
+       so the min-height above describes both and two panels side by side
+       still share one header height. */
+    header.ruled { border-bottom-color: var(--border); }
+    /* v186 D1 -- the one panel title, the same declarations as
+       sb-panel-header's h2: sentence case as given, Inter 600 at body size.
+       .sb-label (mono caps) is the FIELD and tile label style, not a title. */
+    h2 {
+      margin: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: var(--text-body);
+      color: var(--text);
+      letter-spacing: normal;
+    }
     /* A size-contained toolbar has no intrinsic width. Allocate the header's
        remaining space before its controls lay out, keeping ordinary actions
        at the right edge and long log paths inside the padded header. */
@@ -121,6 +137,10 @@ import { edgeFades, revealActive } from './scroll-rail';
       gap: var(--space-8);
     }
     .body { padding: var(--space-14); }
+    /* v186 D2 -- with no rule under the title, the full body padding read as
+       a gap; title to first row is the header's --space-10 plus this. */
+    .body.tight { padding-top: var(--space-4); }
+
     /* v179 §3.3 -- one gap to the first row: the body's padding, never the
        padding plus whatever top margin the first projected element brings
        (a <p>, a <dl>, a nested heading). .panel > .body is this component's
@@ -135,7 +155,7 @@ import { edgeFades, revealActive } from './scroll-rail';
       min-width: var(--control-h);
       background: none;
       border: 0;
-      color: var(--text-faint);
+      color: var(--text-muted);
       cursor: pointer;
     }
     .panel-toggle:hover { color: var(--text); }
@@ -151,6 +171,11 @@ export class Panel {
    *  positions): the tooltip still shows, the second glyph does not. */
   readonly descriptionHint = input(true);
   readonly flush = input(false);
+  /** v186 D2: draw the header rule on a non-flush body that opens with a tab
+   *  strip or a table, where the rule separates the title from a second row
+   *  of chrome. A flush panel is always ruled. */
+  readonly divided = input(false);
+
 
   /** The narrowest viewport at which this panel renders in full — v95 §4.3. */
   readonly inlineFrom = input<Viewport | undefined>(undefined);

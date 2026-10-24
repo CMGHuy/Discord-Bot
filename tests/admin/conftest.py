@@ -73,6 +73,15 @@ def admin_app(tmp_path, monkeypatch):
     # caught by re-reading helpers.py closely rather than assuming
     # DATA_DIR alone was enough isolation.
     monkeypatch.setattr(config, "ENV_PATH", str(tmp_path / ".env"))
+    # `config` loaded the checkout's real .env into os.environ at import, and
+    # app.py reads ADMIN_* from os.environ when it is reloaded below, so a dev
+    # machine with its own credentials would 401 every `admin:admin` fixture.
+    # A test that wants other credentials sets them itself afterwards.
+    monkeypatch.setenv("ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("ADMIN_PASSWORD", "admin")
+    # Likewise production's MARKETDATA_LAYER=count would route the tape and
+    # price tests to the shared layer instead of their mocks.
+    monkeypatch.setattr(config, "MARKETDATA_LAYER", "off")
     # app.py's before_request hook calls config.auto_reload_if_changed() on
     # every request (see its docstring), which -- if the tmp .env's mtime
     # signature differs from the cached config._ENV_MTIME, as it always
