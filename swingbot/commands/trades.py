@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import discord
 from discord import app_commands
+from discord.ext import commands
 
 from swingbot import config
 from swingbot.core.planning import account as account_module
@@ -216,6 +217,7 @@ async def trades_cmd(ctx, status: str = "all", per_page: int = DEFAULT_PER_PAGE)
 
 
 @trades_cmd.group(name="clear", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
 async def trades_clear(ctx):
     """Clear all currently OPEN/active trades. Closed trade history is kept.
     Use `!trades clear history` to remove closed trade records instead."""
@@ -225,6 +227,7 @@ async def trades_clear(ctx):
 
 
 @trades_clear.command(name="history")
+@commands.has_permissions(administrator=True)
 async def trades_clear_history(ctx):
     """Clear all CLOSED trade records (win/loss/manually-closed). Open trades are kept."""
     reply = CtxReply(ctx)
@@ -395,6 +398,7 @@ async def trade_cmd(ctx, trade_id: str):
 
 
 @trade_cmd.command(name="delete")
+@commands.has_permissions(administrator=True)
 async def trade_delete(ctx, trade_id: str):
     reply = CtxReply(ctx)
     await handle_trade_delete(reply, trade_id)
@@ -706,11 +710,15 @@ async def slash_trades(
 
 
 @bot.tree.command(name="trades-clear", description="Clear all open trades (closed trade history is kept)")
+@app_commands.default_permissions(administrator=True)
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_trades_clear(interaction: discord.Interaction):
     await handle_trades_clear(InteractionReply(interaction))
 
 
 @bot.tree.command(name="trades-clear-history", description="Clear all closed trade records (open trades are kept)")
+@app_commands.default_permissions(administrator=True)
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_trades_clear_history(interaction: discord.Interaction):
     await handle_trades_clear_history(InteractionReply(interaction))
 
@@ -726,6 +734,7 @@ async def slash_trade_show(interaction: discord.Interaction, trade_id: str):
 
 @trade_group.command(name="delete", description="Delete one logged trade")
 @app_commands.describe(trade_id="Trade ID, as listed by /trades")
+@app_commands.checks.has_permissions(administrator=True)
 async def slash_trade_delete(interaction: discord.Interaction, trade_id: str):
     await handle_trade_delete(InteractionReply(interaction), trade_id)
 
