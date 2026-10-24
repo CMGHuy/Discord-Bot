@@ -105,7 +105,12 @@ interpreting any backtest, grid, or validation result.
   selection window). New `Edge: expectancy` / `volume` specs adding an
   entry strategy or filter cite the pass in their `**Screen:**` header
   (`document-conventions.md`), enforced by
-  `tests/hooks/test_spec_screen_header.py`.
+  `tests/hooks/test_spec_screen_header.py`. **One exemption (v192,
+  partner 2026-10-24):** a filter that acts only after a bot signal, such as
+  a fill-timing veto on the bot's own plans, cannot be measured by the screen
+  (its events have no bot signal beneath them). Its spec says
+  `exempt (post-signal)` and must clear Stage −1 reachability on the bot's
+  own replay before any shot; the funnel's clauses are otherwise unchanged.
 - **The acceptance funnel.** Selection never touches scoring data, and two
   free gates stand in front of the one-shot budget. Run it with
   `python scripts/backtest/validate_component.py --stage <stage>`.
