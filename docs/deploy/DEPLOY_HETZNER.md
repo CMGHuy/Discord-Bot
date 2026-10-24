@@ -217,6 +217,21 @@ SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<good-sha> ./deploy/deploy.sh
 Find the tag under **your profile → Packages → <repo> → versions**, or in
 the "Publishing as …" line of the run that shipped it.
 
+**Rolling back past v184: clear the stop-monitor key.** From v184 the trade
+monitor writes a `monitor` key into the `bot_heartbeat` row, and
+`scripts/ops/heartbeat_watch.sh`, which the checkout keeps across a rollback,
+alerts on it. A pre-v184 image never rewrites that key, so it ages and the
+watch reads `monitor_stale` for good. After rolling back to an image older than
+v184, remove the key once. An absent key reads `not_deployed`, which is logged
+and never posted:
+
+```bash
+bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -v ON_ERROR_STOP=1 -c \"UPDATE bot_heartbeat SET doc = doc - 'monitor' WHERE key = 'bot'\""
+```
+
+Rolling forward again needs nothing: the first tick of a v184-or-later bot
+writes the key back.
+
 **The admin's server is chosen inside the image (v148).** Compose runs the
 admin as `python admin_ui.py`, and it must keep doing so. A v148+ image execs
 gunicorn from there (`deploy/gunicorn.conf.py`, one gthread worker); an older
@@ -335,6 +350,11 @@ A point-in-time rollback restores the images of that moment under the compose
 file already on the VM. Before v148 the admin image runs `app.run`, from v148
 on it runs gunicorn; both start from compose's `python admin_ui.py`, so no
 compose edit is needed either way (see "Rolling back").
+
+The script ends with a `REMINDER (v184)` line. If the restored image predates
+v184 while the `monitor` key survived the restore, clear the key with the
+command in "Rolling back". When the key is absent, that command changes
+nothing, so it is safe to run whenever in doubt.
 
 **Backups.** Installed by `scripts/ops/install_pitr_crons.sh` (idempotent):
 

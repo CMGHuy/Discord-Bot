@@ -91,4 +91,7 @@ docker compose exec -T bot alembic heads </dev/null
 docker compose ps
 echo "Restored: Postgres to $TARGET, market_data to $restic_time, .env $env_file, images of git $git_sha."
 echo "Scanning is PAUSED. Unpause from the admin UI once the book looks right."
+cat <<'V184_REMINDER'
+REMINDER (v184): if the restored image predates v184, clear the stale monitor key: docker compose exec -T db psql -U swingbot -d swingbot -v ON_ERROR_STOP=1 -c "UPDATE bot_heartbeat SET doc = doc - 'monitor' WHERE key = 'bot'"
+V184_REMINDER
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) rollback to $TARGET finished" >> "$LOG"
