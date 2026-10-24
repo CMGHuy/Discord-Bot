@@ -8,6 +8,7 @@ webhook. Skipped where no bash can see both the repo and the tmp dir.
 """
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -61,6 +62,17 @@ def test_installer_schedules_every_five_minutes_and_replaces_its_own_line():
     text = _text("install_heartbeat_watch_cron.sh")
     assert "grep -vF" in text and "MARKER=" in text
     assert "*/5 * * * *" in text and "heartbeat_watch.sh" in text
+
+
+def test_the_heartbeat_block_is_one_function_that_never_exits():
+    """v184: the heartbeat block returns, so a later check always runs after it."""
+    text = _text("heartbeat_watch.sh")
+    assert "\nheartbeat_check() {" in text
+    assert 'HB_VERDICT="$verdict"' in text
+    body = text.split("\nheartbeat_check() {", 1)[1].split("\n}\n", 1)[0]
+    assert "exit" not in body
+    assert body.count("return 0") == 3
+    assert text.rstrip().endswith("exit 0")
 
 
 # --- behaviour (needs bash) --------------------------------------------------
@@ -270,3 +282,47 @@ def test_installer_is_idempotent_and_keeps_other_lines(bash, tmp_path):
     assert len(watch) == 1
     assert watch[0].startswith("*/5 * * * * ")
     assert sum(line.startswith("# v148 heartbeat watch") for line in lines) == 1
+
+
+# --- v184: the heartbeat line is pinned byte for byte --------------------------
+# These pass before and after V184-8 (and must keep passing after V184-9, which
+# adds a second, monitor line *after* this one). They are the "byte-identical"
+# guard the spec asks for.
+
+_ISO = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"
+
+
+@pytest.mark.parametrize("args, kw, tail", [
+    (("--dry-run", "--age", "30"), {},
+     "verdict=ok age_s=30 threshold_s=900 previous=none action=none dry_run=1"),
+    (("--dry-run", "--age", ""), {},
+     "verdict=unreadable age_s=none threshold_s=900 previous=none action=alert dry_run=1"),
+    ((), {"age": 30},
+     "verdict=ok age_s=30 threshold_s=900 previous=none action=none"),
+    ((), {"age": 5000},
+     "verdict=stale age_s=5000 threshold_s=900 previous=none action=alert delivered=yes"),
+    ((), {"age": 5000, "curl_rc": 22},
+     "verdict=stale age_s=5000 threshold_s=900 previous=none action=alert delivered=failed"),
+    ((), {"age": None},
+     "verdict=unreadable age_s=none threshold_s=900 previous=none action=alert delivered=yes"),
+])
+def test_the_heartbeat_line_is_pinned_byte_for_byte(bash, root, args, kw, tail):
+    r = _run(bash, root, *args, **kw)
+    assert r.returncode == 0, r.stderr
+    first = r.stdout.splitlines()[0]
+    assert re.fullmatch(f"{_ISO} {re.escape(tail)}", first), first
+    assert re.fullmatch(f"{_ISO} {re.escape(tail)}", _log(root)[0]), _log(root)[0]
+
+
+def test_the_no_webhook_line_is_pinned_byte_for_byte(bash, root):
+    _env(root, SCAN_INTERVAL_MINUTES="5")
+    r = _run(bash, root, age=5000)
+    tail = "verdict=stale age_s=5000 threshold_s=900 previous=none action=alert delivered=no-webhook"
+    assert re.fullmatch(f"{_ISO} {re.escape(tail)}", r.stdout.splitlines()[0]), r.stdout
+
+
+def test_a_recovery_line_names_the_previous_verdict(bash, root):
+    _run(bash, root, age=5000)
+    r = _run(bash, root, age=12)
+    tail = "verdict=ok age_s=12 threshold_s=900 previous=stale action=recover delivered=yes"
+    assert re.fullmatch(f"{_ISO} {re.escape(tail)}", r.stdout.splitlines()[0]), r.stdout

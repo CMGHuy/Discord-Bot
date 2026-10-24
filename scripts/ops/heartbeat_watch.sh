@@ -107,6 +107,39 @@ post() {        # message -> 0 when delivered; never echoes the URL
     -d "{\"content\":\"$1\"}" "$url"
 }
 
+heartbeat_check() { # the v148 heartbeat verdict: one line, its own state file; sets HB_VERDICT
+  local threshold age verdict previous action line
+  threshold="$(stale_after)"
+  if [ "$DRY_RUN" = 1 ]; then age="$AGE_ARG"; else age="$(read_age)"; fi
+  verdict="$(verdict_for "$age" "$threshold")"
+  HB_VERDICT="$verdict"
+  previous="$(cat "$STATE_FILE" 2>/dev/null || true)"
+  action="$(action_for "$verdict" "$previous")"
+  line="$(now_iso) verdict=$verdict age_s=${age:-none} threshold_s=$threshold previous=${previous:-none} action=$action"
+
+  if [ "$DRY_RUN" = 1 ]; then
+    record "$line dry_run=1"
+    return 0
+  fi
+  if [ "$action" = none ]; then
+    echo "$verdict" > "$STATE_FILE"
+    record "$line"
+    return 0
+  fi
+  if [ -z "$(env_value OPS_ALERT_WEBHOOK_URL)" ]; then
+    # State untouched: the incident posts on the first run after a URL is set.
+    record "$line delivered=no-webhook"
+    return 0
+  fi
+  if post "$(message_for "$action" "$verdict" "$age" "$threshold" "$previous")"; then
+    echo "$verdict" > "$STATE_FILE"
+    record "$line delivered=yes"
+  else
+    # State untouched: retried on the next run.
+    record "$line delivered=failed"
+  fi
+}
+
 mkdir -p "$ROOT/logs"
 touch "$LOG"
 
@@ -119,32 +152,6 @@ if [ "$TEST_POST" = 1 ]; then
   exit 1
 fi
 
-threshold="$(stale_after)"
-if [ "$DRY_RUN" = 1 ]; then age="$AGE_ARG"; else age="$(read_age)"; fi
-verdict="$(verdict_for "$age" "$threshold")"
-previous="$(cat "$STATE_FILE" 2>/dev/null || true)"
-action="$(action_for "$verdict" "$previous")"
-line="$(now_iso) verdict=$verdict age_s=${age:-none} threshold_s=$threshold previous=${previous:-none} action=$action"
-
-if [ "$DRY_RUN" = 1 ]; then
-  record "$line dry_run=1"
-  exit 0
-fi
-if [ "$action" = none ]; then
-  echo "$verdict" > "$STATE_FILE"
-  record "$line"
-  exit 0
-fi
-if [ -z "$(env_value OPS_ALERT_WEBHOOK_URL)" ]; then
-  # State untouched: the incident posts on the first run after a URL is set.
-  record "$line delivered=no-webhook"
-  exit 0
-fi
-if post "$(message_for "$action" "$verdict" "$age" "$threshold" "$previous")"; then
-  echo "$verdict" > "$STATE_FILE"
-  record "$line delivered=yes"
-else
-  # State untouched: retried on the next run.
-  record "$line delivered=failed"
-fi
+HB_VERDICT=""
+heartbeat_check
 exit 0
