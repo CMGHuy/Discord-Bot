@@ -1,0 +1,28 @@
+# v163 trail race A/A calibration -> within the 5% false-pass limit
+
+**Spec:** `docs/superpowers/specs/implemented/2026-10-15-v163-screen-trail-race-design.md` § Testing (A/A calibration).
+
+**Run:** 2026-10-21; `python scripts/backtest/screen_trail_calibration.py --replicates 3 --seed 20261015 --tickers 2 --resamples 500`; replicate r uses seed 20261015 + r; 2 tickers x 2600 business days from 2010-01-04; bootstrap 500 week resamples, seed 42.
+
+**Generator:** Student-t innovations, df = 3, scaled to unit variance; two-state volatility regime, daily sigma 0.01 / 0.025, per-bar switch probability 0.02 (calm -> stressed) / 0.05 (stressed -> calm); no drift. Events: every bar independently with probability 0.02, no planted effect. Synthetic data only; no cached price file is read and no ledger row is written.
+
+**Race:** the real `screen_ticker` with a trail idea (cap 60 bars, chandelier 3.0 x ATR14[t], initial stop 1.5 x ATR14[t]) against a trail matched null (K = 20), pooled through the real `verdict.decide` (pass rule unchanged).
+
+## Result
+
+| | value | rule |
+|---|---|---|
+| full-verdict false-pass rate | 0 of 3 = 0.0% | ≤ 5% (gating) |
+| coverage of the 95% interval for ΔExpR = 0 | 3 of 3 = 100.0% | reported, not gated |
+| mean kept events N per replicate | 65.7 | — |
+
+Verdicts: SCREEN-PASS 0, SCREEN-FAIL 0, SCREEN-UNDERPOWERED 3. A replicate with no interval (no events) counts as not covering.
+
+## Per replicate
+
+| seed | verdict | N | ΔExpR | lower 95% | upper 95% |
+|---|---|---|---|---|---|
+| 20261015 | SCREEN-UNDERPOWERED | 62 | +0.1897 | -0.1404 | +0.5725 |
+| 20261016 | SCREEN-UNDERPOWERED | 60 | -0.2154 | -0.5025 | +0.0616 |
+| 20261017 | SCREEN-UNDERPOWERED | 75 | +0.2023 | -0.0917 | +0.5414 |
+

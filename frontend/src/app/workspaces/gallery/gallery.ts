@@ -54,6 +54,7 @@ import { ShareBar, ShareSegment } from '../../ui/share-bar';
 import { MultiplePane, SmallMultiples } from '../../ui/small-multiples';
 import { Sparkline } from '../../ui/sparkline';
 import { ScatterComponent } from '../../ui/scatter';
+import { Spinner } from '../../ui/spinner';
 import { StatTile } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { Status } from '../../ui/status';
@@ -138,6 +139,7 @@ interface ContractRow {
     Matrix,
     MetricCard,
     MetricChip,
+    Spinner,
     Panel,
     PaginationComponent,
     PanelError,
@@ -455,6 +457,11 @@ interface ContractRow {
       <p class="sb-help">sb-metric-card and sb-metric-chip are deprecated (v80 D4): use sb-figure.</p>
       <sb-control-row>
         <sb-metric-card label="Expectancy" [value]="0.21" unit="R" [tone]="'pnl'" />
+        <!-- A refetch in flight: the last figure stays, dimmed, with the ring in the corner;
+             hover shows the card's tooltip. -->
+        <sb-metric-card label="Updating" [value]="0.21" unit="R" [tone]="'pnl'" [loading]="true"
+                        description="A figure being refetched keeps its last value, dimmed, with a ring." />
+        <sb-spinner label="Loading" />
         <sb-metric-chip label="Win rate" [value]="54.2" unit="%" [decimals]="1" />
       </sb-control-row>
       <sb-sparkline [points]="sparklinePoints" label="Trend" />

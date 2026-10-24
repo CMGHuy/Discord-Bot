@@ -15,6 +15,9 @@ from swingbot.core.scanning.strategy_pass import build_strategy_plan_at
 from tests.backtesting.test_pullback_dryup_witness import pin_code_defaults
 from tests.fixtures.ohlcv_parity import PARITY_CASES, load_ohlcv
 
+# v183: short plans here run on the real DATA_DIR -- keep their notice misses out of data/.
+pytestmark = pytest.mark.usefixtures("no_short_interest_queue")
+
 CONSTRUCTOR_FIELDS = (
     "ticker", "created_at", "source", "strategy", "horizon_key", "direction",
     "entry_type", "trigger_price", "entry_price", "expiry_bars", "stop_loss", "tp1",

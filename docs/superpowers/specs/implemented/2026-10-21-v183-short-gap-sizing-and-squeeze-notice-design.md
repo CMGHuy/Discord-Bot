@@ -5,7 +5,7 @@
 **Edge:** none (integrity) — both parts control and disclose short-side risk. R stays defined on the stop, so neither part moves win rate or ExpR in R; Part A lowers dollar loss on a gap through a short's stop and also lowers dollar profit on the same names.
 **Screen:** exempt (integrity)
 **Panel:** risk-manager, veteran-trader, staff-engineer
-**Status:** spec written 2026-10-21 from a brainstorm with the partner (sources: Schwab "Short Selling: The Risks and Rewards", CMC Markets "What Is a Short Squeeze?", TradersPost "Short Selling Strategies Guide"). Partner decisions are marked **(partner)**; the author's calls are marked **(my call)**.
+**Status:** spec written 2026-10-21 from a brainstorm with the partner (sources: Schwab "Short Selling: The Risks and Rewards", CMC Markets "What Is a Short Squeeze?", TradersPost "Short Selling Strategies Guide"). Partner decisions are marked **(partner)**; the author's calls are marked **(my call)**. **Outcome (2026-10-23):** shipped on main (55a91d1f), bot 2.15.0 / ui 1.35.1. Panel (risk-manager, veteran-trader, staff-engineer): no BLOCKING; advisories in `.superpowers/sdd/progress.md`.
 
 ## Why
 

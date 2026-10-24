@@ -109,6 +109,41 @@ describe('sb-panel (v80 D4, v186 D1)', () => {
     const h2 = (f.nativeElement as HTMLElement).querySelector('h2')!;
     expect(h2.classList).not.toContain('sb-label'); expect(h2.textContent!.trim()).toBe('Exposure');
   });
+
+  describe('description tooltip', () => {
+    function mount(description: string | null) {
+      const f = TestBed.createComponent(Panel);
+      f.componentRef.setInput('heading', 'Realised P&L');
+      f.componentRef.setInput('description', description);
+      f.detectChanges();
+      return f.nativeElement as HTMLElement;
+    }
+
+    it('shows its description when the panel is hovered, and as an info hint for touch and keyboard', () => {
+      const el = mount('Profit already locked in.');
+      expect(el.getAttribute('title')).toBe('Profit already locked in.');
+      const hint = el.querySelector('header sb-hint')!;
+      expect(hint.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe('Profit already locked in.');
+      expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('About Realised P&L');
+    });
+
+    it('adds neither a tooltip nor a hint when it has no description', () => {
+      const el = mount(null);
+      expect(el.hasAttribute('title')).toBe(false);
+      expect(el.querySelector('sb-hint')).toBeNull();
+    });
+
+    it('keeps the tooltip but drops the second glyph when the panel has a hint of its own', () => {
+      const f = TestBed.createComponent(Panel);
+      f.componentRef.setInput('heading', 'Open positions');
+      f.componentRef.setInput('description', 'Every plan by stage.');
+      f.componentRef.setInput('descriptionHint', false);
+      f.detectChanges();
+      const el = f.nativeElement as HTMLElement;
+      expect(el.getAttribute('title')).toBe('Every plan by stage.');
+      expect(el.querySelector('sb-hint')).toBeNull();
+    });
+  });
 });
 
 describe('sb-control-row and sb-drawer on a phone (v80 D4)', () => {

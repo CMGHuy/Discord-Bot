@@ -29,11 +29,12 @@ from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
 from swingbot.core.marketdata import universe
-from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
+from swingbot.core.planning.gap_sizing import size_for_plan, stamp_gap_sizing
+from swingbot.core.scanning.risk_notice import stamp_risk_notice
 from swingbot.core.planning.builders import confluence_stop_dropped
 from swingbot.core.planning.stop_scope import plan_stop_ceiling, risk_sizing_ok
 from swingbot.core.risk_limits import planned_loss_pct
@@ -251,8 +252,7 @@ def build_decision_context(item: "ScanItem", dfs: dict, spy_df) -> dict:
         open_trades = trade_log.get_trades(status="open", limit=None)
         heat_before = heat_mod.open_heat(open_trades, balance)
         cap = getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0)
-        sizing = account_module.compute_position_size(
-            plan.trigger_price or plan.entry_price, plan.stop_loss, account_cfg)
+        sizing = size_for_plan(plan, account_cfg=account_cfg)
         cluster_note = None
         if ticker:
             cluster_exp = corr_mod.cluster_exposure(open_trades, ticker, dfs, balance)
@@ -458,6 +458,32 @@ def _days_to_earnings(ticker: str, df) -> int | None:
         return None
 
 
+def _stamp_gap_sizing_live(plan, df, now) -> None:
+    """v183: stamp the gap-sizing rule from COMPLETED bars (today's forming
+    bar dropped during the session). Never raises -- a frame problem leaves a
+    short with no p99, which sizes on the stop."""
+    from .strategy_pass import completed_frame
+    try:
+        frame = completed_frame(df, now or datetime.now(timezone.utc))
+    except Exception as exc:
+        swallowed(log, "scan.analyze.gap_sizing_frame", exc, level=logging.DEBUG)
+        frame = None
+    stamp_gap_sizing(plan, frame)
+
+
+def _stamp_risk_notice_live(plan, df, now) -> None:
+    """v183 Part B: stamp the short's squeeze/event snapshot from COMPLETED
+    bars (signal = last completed bar). Never raises -- a frame problem falls
+    back to the plan's creation date."""
+    from .strategy_pass import completed_frame
+    try:
+        frame = completed_frame(df, now or datetime.now(timezone.utc))
+    except Exception as exc:
+        swallowed(log, "scan.analyze.risk_notice_frame", exc, level=logging.DEBUG)
+        frame = None
+    stamp_risk_notice(plan, frame)
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     regime=None, rs_percentile=None, breadth=None, regime2_state=None,
                     issued_at=None, now=None):
@@ -522,6 +548,8 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             "sector_pctile": getattr(item, "sector_rs_percentile", None),
             "rs_combined": getattr(item, "rs_combined", None),
         })
+        _stamp_gap_sizing_live(plan, df, now)
+        _stamp_risk_notice_live(plan, df, now)
         try:
             plan.risk_features = risk_features.build(
                 regime2_state=regime2_state,

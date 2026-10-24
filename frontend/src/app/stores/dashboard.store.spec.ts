@@ -19,9 +19,8 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { Dashboard, Preferences } from '../api/models';
+import { Dashboard } from '../api/models';
 import { DashboardStore, RANGE_DEBOUNCE_MS } from './dashboard.store';
-import { PreferencesStore } from './preferences.store';
 
 /* NG35/NG36 — the reference store, and the tracer bullet's data path.
  *
@@ -78,20 +77,12 @@ const RESPONSE: Dashboard = {
   default_expiry_bars: 5,
 };
 
-const stored = signal<Preferences>({});
-const preferencesFake = {
-  values: () => stored(),
-  isLoaded: () => true,
-  update: (mutate: (p: Preferences) => Preferences) => stored.update(mutate),
-};
-
 describe('DashboardStore', () => {
   let store: InstanceType<typeof DashboardStore>;
   let backend: HttpTestingController;
   let events: FakeEventStream;
 
   beforeEach(() => {
-    stored.set({});
     events = new FakeEventStream();
     TestBed.configureTestingModule({
       providers: [
@@ -101,7 +92,6 @@ describe('DashboardStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
-        { provide: PreferencesStore, useValue: preferencesFake },
         DashboardStore,
       ],
     });
@@ -450,8 +440,13 @@ describe('DashboardStore', () => {
     const TO = '2026-10-22T04:00:00.000Z';
     const W1 = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
     const W2 = { from: '2026-09-10T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
-    const dashboardRequests = () => backend.match((req) => req.url === '/api/v1/dashboard');
-    const one = () => backend.expectOne((req) => req.url === '/api/v1/dashboard');
+    // The today-only fetch (mode=today, the Realised today card) is covered by its own describe below;
+    // these helpers see the scoped requests only.
+    const scoped = (req: { url: string; params: { get(k: string): string | null; has(k: string): boolean } }) =>
+      req.url === '/api/v1/dashboard' && !(req.params.get('mode') === 'today' && !req.params.has('from') && lastIsWider());
+    const lastIsWider = () => store.selection().kind === 'range' || store.preset() !== '1D';
+    const dashboardRequests = () => backend.match(scoped);
+    const one = () => backend.expectOne(scoped);
 
     beforeEach(() => {
       vi.useFakeTimers();
@@ -467,58 +462,48 @@ describe('DashboardStore', () => {
       expect(one().request.params.get('mode')).toBe('today');
       expect(store.selection()).toEqual({ kind: 'preset', preset: '1D' });
       expect(store.preset()).toBe('1D');
-      expect(store.closedWindow()).toBeNull();
       expect(store.chartTarget().seq).toBe(0);
       expect(store.stale()).toBe(false);
     });
 
-    it('restores the stored preset before the first load, in one request', () => {
-      stored.set({ 'dashboard.scope.preset': '3M' });
+    it('opens on 1D on every visit: one today request, nothing else', () => {
       tick();
-      const request = one();
-      expect(request.request.params.get('mode')).toBe('range');
-      expect(request.request.params.get('from')).toBe('2026-07-21T04:00:00.000Z');
-      expect(request.request.params.get('to')).toBe(TO);
-      request.flush(RESPONSE);
-      expect(store.preset()).toBe('3M');
-      expect(store.scope()).toBe('range');
-      expect(store.closedWindow()).toEqual({ from: '2026-07-21T04:00:00.000Z', to: TO });
-      expect(store.chartTarget()).toEqual({ window: { from: '2026-07-21T04:00:00.000Z', to: TO }, seq: 1 });
+      const all = backend.match((req) => req.url === '/api/v1/dashboard');
+      expect(all.map((req) => req.request.params.get('mode'))).toEqual(['today']);
+      all[0].flush(RESPONSE);
+      expect(store.preset()).toBe('1D');
       backend.verify();
     });
 
-    it('setPreset writes the preference, refetches with the window and moves the chart', () => {
+    it('setPreset refetches with the window and moves the chart', () => {
       tick();
       respond();
       store.setPreset('5D');
       const request = one();
       expect(request.request.params.get('from')).toBe('2026-10-15T04:00:00.000Z');
       expect(request.request.params.get('to')).toBe(TO);
-      expect(stored()['dashboard.scope.preset']).toBe('5D');
       expect(store.chartTarget().seq).toBe(1);
     });
 
-    it('maps 1D and All onto today and all, with no window for the Closed tab', () => {
+    it('maps 1D and All onto today and all, with no window', () => {
       tick();
       respond();
       store.setPreset('All');
       const request = one();
       expect(request.request.params.get('mode')).toBe('all');
       expect(request.request.params.has('from')).toBe(false);
-      expect(store.closedWindow()).toBeNull();
       expect(store.chartTarget().window).toBeNull();
     });
 
-    it('re-choosing the current preset recentres the chart without a refetch or a write', () => {
+    it('re-choosing the current preset recentres the chart without a refetch', () => {
       tick();
       respond();
       store.setPreset('1D');
       expect(store.chartTarget().seq).toBe(1);
-      expect(stored()).toEqual({});
       backend.verify();
     });
 
-    it('setRange waits 300 ms of quiet, then selects the Range without persisting or moving', () => {
+    it('setRange waits 300 ms of quiet, then selects the Range without moving the chart', () => {
       expect(RANGE_DEBOUNCE_MS).toBe(300);
       tick();
       respond();
@@ -533,9 +518,7 @@ describe('DashboardStore', () => {
       expect(request.request.params.get('from')).toBe(W2.from);
       expect(store.selection()).toEqual({ kind: 'range', window: W2 });
       expect(store.preset()).toBeNull();
-      expect(store.closedWindow()).toEqual(W2);
       expect(store.chartTarget()).toEqual({ window: W2, seq: 0 });
-      expect(stored()).toEqual({});
     });
 
     it('ignores a Range equal to the one already selected', () => {
@@ -612,7 +595,6 @@ describe('DashboardStore', () => {
       one().flush({ ...RESPONSE, scope: { mode: 'all' } });
       expect(store.preset()).toBe('All');
       expect(store.scope()).toBe('all');
-      expect(stored()['dashboard.scope.preset']).toBe('All');
     });
     it('does not refetch again when a selection change reaches the init effect', () => {
       tick();
@@ -637,33 +619,155 @@ describe('DashboardStore', () => {
       expect(store.loading()).toBe(false);
       expect(store.error()).toBeNull();
     });
+  });
 
-    it('adopts a late stored preset by replacing the default request', () => {
-      tick();
-      const initial = one();
-      store.adoptStoredPreset('3M');
-      const restored = one();
-      expect(restored.request.params.get('from')).toBe('2026-07-21T04:00:00.000Z');
-      restored.flush({ ...RESPONSE, account_balance: 20_000 });
-      initial.flush(RESPONSE);
-      expect(store.balance()).toBe(20_000);
-      expect(store.preset()).toBe('3M');
-      expect(store.chartTarget().seq).toBe(1);
-      expect(stored()).toEqual({});
+  describe("today's figures and the chart's Latest button", () => {
+    const NOW = new Date('2026-10-21T14:00:00Z');
+    const TODAY = { amount: 12.5, pct: 0.4, n: 2, wins: 1, losses: 1 };
+    const SCOPED = { amount: 480, pct: 3.1, n: 18, wins: 11, losses: 7 };
+    const requests = () => backend.match((req) => req.url === '/api/v1/dashboard');
+    const modeOf = (req: { request: { params: { get(k: string): string | null } } }) => req.request.params.get('mode');
+    const flushScoped = (reqs: ReturnType<typeof requests>) => {
+      reqs.filter((r) => modeOf(r) !== 'today').forEach((r) => r.flush({ ...RESPONSE, scope: { mode: 'range' }, realized: SCOPED }));
+    };
+    const flushToday = (reqs: ReturnType<typeof requests>, realized = TODAY) => {
+      reqs.filter((r) => modeOf(r) === 'today').forEach((r) => r.flush({ ...RESPONSE, realized }));
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
     });
 
-    it('never restores over a partner choice even while a Range is settling', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('is the scoped block itself under 1D, with no second request', () => {
       tick();
-      respond();
-      store.setRange(W1);
-      store.adoptStoredPreset('3M');
+      const reqs = requests();
+      expect(reqs).toHaveLength(1);
+      reqs[0].flush({ ...RESPONSE, realized: TODAY });
+      expect(store.todayRealized()).toEqual(TODAY);
+      expect(store.realized()).toEqual(TODAY);
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('keeps today, fetching nothing extra, when a wider preset is picked after a 1D load', () => {
+      tick();
+      requests()[0].flush({ ...RESPONSE, realized: TODAY });
+      store.setPreset('1M');
+      const reqs = requests();
+      expect(reqs.map(modeOf)).toEqual(['range']);
+      flushScoped(reqs);
+      expect(store.realized()).toEqual(SCOPED);
+      expect(store.todayRealized()).toEqual(TODAY);
+    });
+
+    /** 1D first (today lands), then a wider preset, then a trades push. */
+    const widenThenPush = () => {
+      tick();
+      requests()[0].flush({ ...RESPONSE, realized: TODAY });
+      store.setPreset('1M');
+      flushScoped(requests());
+      events.raise('trades');
+      tick();
+      vi.advanceTimersByTime(300);
+      return requests();
+    };
+
+    it('fetches today beside the scoped figures when the scope is wider', () => {
+      const reqs = widenThenPush();
+      expect(reqs.map(modeOf).sort()).toEqual(['range', 'today']);
+      expect(store.todayLoading()).toBe(true);
+      expect(store.loading()).toBe(true);
+      flushScoped(reqs);
+      expect(store.todayLoading()).toBe(true);
+      flushToday(reqs, { amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
+      expect(store.todayLoading()).toBe(false);
+      expect(store.todayRealized()).toEqual({ amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
+      expect(store.realized()).toEqual(SCOPED);
+    });
+
+    it('keeps the previous today figures and stops loading when the today fetch fails', () => {
+      const reqs = widenThenPush();
+      flushScoped(reqs);
+      reqs.filter((r) => modeOf(r) === 'today').forEach((r) => r.flush('boom', { status: 500, statusText: 'Server Error' }));
+      expect(store.todayLoading()).toBe(false);
+      expect(store.todayRealized()).toEqual(TODAY);
+    });
+
+    it("keeps today's lifecycle counts while a wider scope's counts differ", () => {
+      tick();
+      requests()[0].flush(RESPONSE);
+      store.setPreset('1M');
+      requests().forEach((r) => r.flush({ ...RESPONSE, lifecycle: { PENDING: 4, ACTIVE: 2, PARTIAL: 1, CLOSED: 40, CANCELLED: 9 } }));
+      const closed = (rows: { status: string; count: number }[]) => rows.find((row) => row.status === 'CLOSED')?.count;
+      expect(closed(store.lifecycle())).toBe(40);
+      expect(closed(store.todayLifecycle())).toBe(3);
+      expect(store.todayLifecycle().map((row) => row.status)).toEqual(['PENDING', 'ACTIVE', 'PARTIAL', 'CLOSED', 'CANCELLED']);
+    });
+
+    it('reports no today counts before a today response, and none when the collector failed', () => {
+      expect(store.todayLifecycle()).toEqual([]);
+      tick();
+      requests()[0].flush({ ...RESPONSE, lifecycle: {} });
+      expect(store.todayLifecycle()).toEqual([]);
+    });
+
+    it('tolerates a response with no realised block', () => {
+      tick();
+      const bare: Partial<Dashboard> = { ...RESPONSE };
+      delete bare.realized;
+      requests()[0].flush(bare);
+      expect(store.todayRealized()).toBeNull();
+      expect(store.realized()).toBeNull();
+    });
+
+    it('resetView returns a Range to 1D: the 1D request, the chart moved, the pending range dropped', () => {
+      tick();
+      requests()[0].flush(RESPONSE);
+      store.setRange({ from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' });
+      vi.advanceTimersByTime(300);
+      flushScoped(requests());
+      expect(store.selection().kind).toBe('range');
+      const seq = store.chartTarget().seq;
+
+      store.resetView();
+      const reqs = requests();
+      expect(reqs.map(modeOf)).toEqual(['today']);
+      expect(store.selection()).toEqual({ kind: 'preset', preset: '1D' });
+      expect(store.chartTarget().seq).toBe(seq + 1);
+      expect(store.chartTarget().window).not.toBeNull();
+    });
+
+    it('resetView returns a wider preset to 1D as well', () => {
+      tick();
+      requests()[0].flush(RESPONSE);
+      store.setPreset('3M');
+      flushScoped(requests());
+      store.resetView();
       expect(store.preset()).toBe('1D');
-      vi.advanceTimersByTime(RANGE_DEBOUNCE_MS);
-      one().flush(RESPONSE);
-      expect(store.selection()).toEqual({ kind: 'range', window: W1 });
-      expect(store.chartTarget().seq).toBe(0);
-      expect(stored()).toEqual({});
+      expect(requests().map(modeOf)).toEqual(['today']);
     });
 
+    it('resetView on 1D only recentres the chart: no refetch', () => {
+      tick();
+      requests()[0].flush(RESPONSE);
+      const seq = store.chartTarget().seq;
+      store.resetView();
+      expect(requests()).toHaveLength(0);
+      expect(store.chartTarget().seq).toBe(seq + 1);
+    });
+
+    it('resetView cancels a Range still settling, so it never lands on top of Today', () => {
+      tick();
+      requests()[0].flush(RESPONSE);
+      store.setRange({ from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' });
+      store.resetView();
+      vi.advanceTimersByTime(300);
+      expect(requests()).toHaveLength(0);
+      expect(store.selection()).toEqual({ kind: 'preset', preset: '1D' });
+    });
   });
 });

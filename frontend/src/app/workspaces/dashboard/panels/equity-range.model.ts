@@ -236,8 +236,6 @@ export type PnlTone = 'pos' | 'neg' | 'warn' | 'neutral';
 export const BREAKEVEN_BAND_PP = 0.5;
 /** Fewer closes than this and a win-rate/payoff colour would be noise. */
 export const MIN_CLOSES_FOR_TONE = 5;
-/** Risk used from this share of the cap reads as a warning. */
-export const RISK_WARN_FRACTION = 0.75;
 
 export function signTone(value: number | null): PnlTone {
   if (value === null || value === 0) return 'neutral';
@@ -263,14 +261,6 @@ export function breakevenPairTone(
   if (winRatePct > breakeven + BREAKEVEN_BAND_PP) return 'pos';
   if (winRatePct < breakeven - BREAKEVEN_BAND_PP) return 'neg';
   return 'neutral';
-}
-
-/** Open risk against its cap: plain below 75 %, warning up to the cap, bad
- *  at or over it. */
-export function riskTone(usedPct: number | null, capPct: number | null): PnlTone {
-  if (usedPct === null || capPct === null || capPct <= 0) return 'neutral';
-  if (usedPct >= capPct) return 'neg';
-  return usedPct >= capPct * RISK_WARN_FRACTION ? 'warn' : 'neutral';
 }
 
 /* -- scope presets (§ 1, § 6) --------------------------------------------- */
@@ -383,7 +373,7 @@ export function rangeChipLabel(window: TimeWindow): string {
   return `${dayLabel(first, withYear)} – ${dayLabel(last, withYear)}`;
 }
 
-/** Point-in-time cards (Open P&L, Open trades, Risk used) say "now" under
+/** Point-in-time cards (Open P&L, Open trades) say "now" under
  *  every scope but 1D, where "today" and "now" coincide. */
 export function showsNowLabel(scope: ScopeSelection): boolean {
   return !(scope.kind === 'preset' && scope.preset === '1D');

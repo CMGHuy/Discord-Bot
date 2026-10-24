@@ -43,6 +43,15 @@ function grouped(value: number, decimals: number): string {
   });
 }
 
+/** A share count: grouped thousands, en-US, up to `maxDecimals` places and no
+ *  trailing zeros (25 reads "25", 1234.567 reads "1,234.57"). Fractional shares
+ *  exist, whole ones are the usual case, so unlike `num` the decimals are a
+ *  ceiling, not a fixed width. */
+export function quantity(value: number | null | undefined, maxDecimals = 2): string {
+  if (value === null || value === undefined) return ABSENT;
+  return value.toLocaleString('en-US', { maximumFractionDigits: maxDecimals });
+}
+
 /** A realised P&L amount, signed like `pct` -- it is the same gain/loss the
  *  percentage names, just in currency rather than relative terms, so the two
  *  read the same way at a glance. `unit` comes from

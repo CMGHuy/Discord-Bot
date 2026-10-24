@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { EquityCandle } from '../../../api/models';
 import {
-  ACCOUNT_LABEL,
   chartRangeFor,
   stepDownBlocked,
   wallSpan,
@@ -110,10 +109,6 @@ describe('equity candles model', () => {
     expect(seamIndex([candle(), candle()])).toBe(-1);
     expect(seamIndex([candle({ approx: true })])).toBe(-1);
     expect(seamIndex([])).toBe(-1);
-  });
-
-  it('states the account label exactly', () => {
-    expect(ACCOUNT_LABEL).toBe('Paper account · before tax and costs');
   });
 });
 

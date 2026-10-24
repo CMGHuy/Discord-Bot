@@ -6,10 +6,8 @@ import {
   SCOPE_PRESETS, ScopeSelection, chartWindowFor, presetBounds, rangeChipLabel, scopeToRequest, showsNowLabel,
   BREAKEVEN_BAND_PP,
   MIN_CLOSES_FOR_TONE,
-  RISK_WARN_FRACTION,
   breakevenPairTone,
   drawdownTone,
-  riskTone,
   signTone,
   HISTORY_PAGE_LIMIT,
   PAGE_TRIGGER_CANDLES,
@@ -298,18 +296,6 @@ describe('profit/loss tones', () => {
     expect([breakevenPairTone(60, 0, 20), breakevenPairTone(60, -1, 20)])
       .toEqual(['neutral', 'neutral']);
     expect([breakevenPairTone(90, 3, 4), breakevenPairTone(90, 3, 5)]).toEqual(['neutral', 'pos']);
-  });
-
-  it('warns on risk from 75 % of the cap and flags it at or over the cap', () => {
-    expect(RISK_WARN_FRACTION).toBe(0.75);
-    expect([riskTone(0, 6), riskTone(4.4, 6), riskTone(4.5, 6), riskTone(5.9, 6)])
-      .toEqual(['neutral', 'neutral', 'warn', 'warn']);
-    expect([riskTone(6, 6), riskTone(7.2, 6)]).toEqual(['neg', 'neg']);
-  });
-
-  it('leaves risk neutral without a figure or a cap', () => {
-    expect([riskTone(null, 6), riskTone(3, null), riskTone(3, 0)])
-      .toEqual(['neutral', 'neutral', 'neutral']);
   });
 });
 

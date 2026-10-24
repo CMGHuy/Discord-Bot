@@ -43,3 +43,53 @@ def test_earnings_blackout_etf_exempt():
     from swingbot.core.edge.gates import in_earnings_blackout
     # default source is ETF-exempt (E14 returns None) -> never blacked out
     assert in_earnings_blackout("SPY", sessions=5) is False
+
+
+def _signed_gaps(n=300, up_pct=2.0, down_pct=6.0):
+    """Close flat at 100; even rows open up_pct above the prior close, odd rows
+    open down_pct below it -> 250 gaps in the 251-row tail, 125 of them up."""
+    idx = pd.bdate_range(start="2025-06-02", periods=n)
+    opens = [100.0 * (1 + up_pct / 100) if i % 2 == 0 else 100.0 * (1 - down_pct / 100)
+             for i in range(n)]
+    closes = [100.0] * n
+    return pd.DataFrame({"Open": opens, "High": [max(o, 100.0) * 1.01 for o in opens],
+                         "Low": [min(o, 100.0) * 0.99 for o in opens], "Close": closes,
+                         "Volume": [1_000_000.0] * n}, index=idx)
+
+
+def test_up_gap_p99_measures_only_the_adverse_side_for_a_short():
+    stats = gap_stats(_signed_gaps())
+    assert stats["p99_gap_pct"] == pytest.approx(6.0)        # absolute: the down gaps dominate
+    assert stats["p99_up_gap_pct"] == pytest.approx(2.0)     # up-gaps only
+    assert stats["n_up"] == 125
+    assert stats["n"] == 250
+
+
+def test_existing_keys_are_unchanged_by_the_new_ones():
+    stats = gap_stats(_with_gaps())
+    assert stats["n"] == 250
+    assert stats["p99_gap_pct"] >= stats["p90_gap_pct"]
+    assert set(stats) == {"p90_gap_pct", "p99_gap_pct", "n", "p99_up_gap_pct", "n_up"}
+
+
+def test_no_up_gaps_gives_none_not_zero():
+    stats = gap_stats(_signed_gaps(up_pct=-1.0))             # every gap is a down gap
+    assert stats["p99_up_gap_pct"] is None
+    assert stats["n_up"] == 0
+
+
+def test_flat_opens_are_not_up_gaps():
+    stats = gap_stats(make_ohlcv(np.full(300, 100.0), spread_pct=1.0))
+    assert stats["n_up"] == 0 and stats["p99_up_gap_pct"] is None
+
+
+def test_empty_frame_carries_the_new_keys():
+    empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
+    assert gap_stats(empty) == {"p90_gap_pct": 0.0, "p99_gap_pct": 0.0, "n": 0,
+                                "p99_up_gap_pct": None, "n_up": 0}
+
+
+def test_up_gap_lookback_bound_respected():
+    df = _signed_gaps(n=400)
+    df.iloc[:100, df.columns.get_loc("Open")] = 150.0          # huge up gaps OUTSIDE the 250-bar window
+    assert gap_stats(df)["p99_up_gap_pct"] == pytest.approx(2.0)

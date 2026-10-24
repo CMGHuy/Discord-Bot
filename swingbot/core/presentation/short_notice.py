@@ -6,12 +6,100 @@ apart. The numbers are whatever the caller already took from
 `plan_numbers_for_display` (the clamped v2 stop included) -- this module never
 re-derives a price. `CHECK BORROW AVAILABILITY` is a manual broker check: the
 bot never verifies a locate and never places an order.
+
+v183 adds the squeeze / earnings / ex-div lines read from the plan's stamped
+`risk_notice` snapshot. `risk_notice_lines` is their only wording: Discord
+full and simple, email, push and the plan page all take them from here, and
+`alert_notice` appends them to every stamped short alert.
 """
 import datetime as dt
 
 BORROW_TEXT = "CHECK BORROW AVAILABILITY"
 NOT_A_LOCATE = "Manual broker check — not a verified locate."
 FIELD_NAME = "SHORT execution check"
+
+SQUEEZE_PREFIX = "⚠ SQUEEZE RISK · "
+SQUEEZE_NOT_CHECKED = "⚠ Squeeze data not checked — verify short interest at your broker"
+EARNINGS_NOT_CHECKED = "Earnings: not checked"
+_NA = "n/a"
+_FLOAT_UNITS = ((1e9, "B"), (1e6, "M"), (1e3, "K"))
+
+
+def _fmt_float_shares(v) -> str:
+    """Float in B / M / K with one decimal; thousands separators below 1e3."""
+    if v is None:
+        return _NA
+    for size, unit in _FLOAT_UNITS:
+        if v >= size:
+            return f"{v / size:.1f}{unit}"
+    return f"{v:,.0f}"
+
+
+def _num_or_na(v, fmt: str) -> str:
+    return _NA if v is None else format(v, fmt)
+
+
+def _si_line(si: dict) -> str:
+    pct = _num_or_na(si.get("short_pct_float"), ".1f")
+    pct = pct if pct == _NA else f"{pct}%"
+    stale = " · STALE" if si.get("stale") else ""
+    line = (f"Short interest {pct} of float · {_num_or_na(si.get('days_to_cover'), '.1f')} "
+            f"days to cover · float {_fmt_float_shares(si.get('float_shares'))} "
+            f"(as of {si.get('si_date') or _NA}{stale})")
+    return f"{SQUEEZE_PREFIX}{line}" if squeeze_tripped(si) else line
+
+
+def _sessions_text(n: int | None) -> str:
+    if n is None:
+        return ""
+    if n == 0:
+        return " (on the signal bar)"
+    return f" (in {n} session{'' if n == 1 else 's'})"
+
+
+_EARNINGS_FIXED = {"none_in_hold": "No earnings in hold", "not_checked": EARNINGS_NOT_CHECKED,
+                   "etf": "Earnings: n/a (ETF)"}
+
+
+def _earnings_line(e: dict | None) -> str:
+    """A missing dict (or an unknown status) reads as not checked -- never comfort."""
+    status = (e or {}).get("status", "not_checked")
+    if status == "in_hold":
+        return f"Earnings in hold: {e.get('date') or _NA}{_sessions_text(e.get('sessions'))}"
+    return _EARNINGS_FIXED.get(status, EARNINGS_NOT_CHECKED)
+
+
+def _ex_div_line(x: dict | None, currency: str) -> str | None:
+    if x is None:
+        return None
+    head = f"Ex-div in hold: {x.get('date') or _NA}"
+    amount = x.get("per_share")
+    if amount is None:
+        return f"{head} · amount n/a"
+    est = " (est.)" if x.get("estimated") else ""
+    return f"{head} · ~{currency}{amount:.2f}/sh owed{est}"
+
+
+def squeeze_tripped(si: dict) -> bool:
+    """The stamped decision; this module never reads the live thresholds, so the
+    plan page cannot drift from the alert."""
+    return bool(si.get("squeeze"))
+
+
+def risk_notice_lines(snapshot: dict | None, *, currency: str = "$") -> list[str]:
+    """The one wording of the v183 notice: short interest, earnings, ex-div."""
+    if snapshot is None:
+        return []
+    si = snapshot.get("short_interest")
+    ok = snapshot.get("si_status") == "ok" and isinstance(si, dict)
+    lines = [_si_line(si) if ok else SQUEEZE_NOT_CHECKED,
+             _earnings_line(snapshot.get("earnings"))]
+    ex_div = _ex_div_line(snapshot.get("ex_div"), currency)
+    return lines if ex_div is None else [*lines, ex_div]
+
+
+def has_risk_notice(plan_v2) -> bool:
+    return getattr(plan_v2, "risk_notice", None) is not None
 
 
 def completed_session_date(now: dt.datetime | None = None) -> str:
@@ -68,11 +156,25 @@ def compression_pending_notice(plan, *, currency: str = "$", shares: int | None 
 
 def alert_notice(plan_v2, context: dict | None, nums: dict, *, currency: str = "$") -> str:
     """The one entry point every alert channel calls: the compression block for a
-    compression plan, else the V118 extra-lane notice ("" for a base alert)."""
+    compression plan, else the V118 extra-lane notice ("" for a base alert),
+    followed by the v183 squeeze/event lines when the plan carries a snapshot."""
     if plan_v2 is not None and is_compression(plan_v2):
-        return compression_pending_notice(plan_v2, currency=currency)
-    return short_lane_notice(context, nums, getattr(plan_v2, "expiry_bars", None),
-                             currency=currency)
+        base = compression_pending_notice(plan_v2, currency=currency)
+    else:
+        base = short_lane_notice(context, nums, getattr(plan_v2, "expiry_bars", None),
+                                 currency=currency)
+    if not has_risk_notice(plan_v2):
+        return base
+    return _with_risk_lines(base, plan_v2.risk_notice, currency)
+
+
+def _with_risk_lines(base: str, snapshot: dict, currency: str) -> str:
+    """base, then the notice lines, then one borrow check (unless base has it)."""
+    parts = [base] if base else []
+    parts.extend(risk_notice_lines(snapshot, currency=currency))
+    if BORROW_TEXT not in base:
+        parts.append(BORROW_TEXT)
+    return "\n".join(parts)
 
 
 CANCEL_STOP_TAIL = ("CANCEL the resting sell stop at your broker -- the bot cannot cancel it "

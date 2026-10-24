@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 # `dash.load_account_config`, so it is used even though nothing in this file
 # calls it.
 from swingbot.core.planning.account import compute_position_size, load_account_config  # noqa: F401
+from swingbot.core.planning.gap_sizing import size_for
 from swingbot.core.marketdata.data import get_current_price, prefetch_prices
 from swingbot.core.tracking.performance import closed_pnl_pct, closed_r_multiple, trade_proximity
 
@@ -444,7 +445,9 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
         else:
             pnl_map[tid] = None
 
-        sizing_map[tid] = compute_position_size(entry=entry, stop_loss=sl, account_cfg=account_cfg)
+        sizing_map[tid] = size_for(entry, sl, direction=t.get("direction"),
+                                   gap_sizing=t.get("gap_sizing"), account_cfg=account_cfg,
+                                   label=t.get("ticker", ""))
 
     return {
         "status": status_map, "price": price_map, "pnl": pnl_map,

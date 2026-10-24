@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { PANEL_HELP } from './panel-help';
 
 import { Panel } from '../../../ui/layout';
 import { DonutComponent, DonutSlice } from '../../../ui/donut';
@@ -24,7 +25,7 @@ import { TradesStore } from '../../../stores/trades.store';
   imports: [Panel, DonutComponent],
   providers: [TradesStore],
   template: `
-    <sb-panel heading="Exposure by horizon">
+    <sb-panel heading="Exposure by horizon" [description]="about">
       @if (slices().length) {
         <sb-donut [slices]="slices()" />
       } @else {
@@ -38,6 +39,7 @@ import { TradesStore } from '../../../stores/trades.store';
   `,
 })
 export class ExposureByHorizon {
+  protected readonly about = PANEL_HELP.exposureByHorizon;
   private readonly trades = inject(TradesStore);
 
   constructor() {

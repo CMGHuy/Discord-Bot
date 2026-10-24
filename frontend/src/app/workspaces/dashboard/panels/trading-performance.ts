@@ -1,14 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { KPI_HELP, PANEL_HELP } from './panel-help';
 
 import { ViewportService } from '../../../ui/breakpoints';
 import { Button } from '../../../ui/button';
 import { Select, SelectOption } from '../../../ui/form-controls';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
+import { Spinner } from '../../../ui/spinner';
 import { StatStrip } from '../../../ui/stat-strip';
 import { PortfolioValue } from './portfolio-value';
 import { amount, pct } from '../../../ui/format';
-import { ACCOUNT_LABEL } from './equity-candles.model';
+import { Realized } from '../../../stores/dashboard.store';
 import {
   ChartTarget,
   TimeWindow,
@@ -17,7 +19,6 @@ import {
   ScopeSelection,
   breakevenPairTone,
   rangeChipLabel,
-  riskTone as riskToneOf,
   showsNowLabel,
   signTone,
 } from './equity-range.model';
@@ -25,8 +26,19 @@ import {
 /** The dropdown's value for a hand-picked range: never a preset, never persisted. */
 const RANGE_OPTION = 'Range';
 
+/** 1D is the page's default mode, so it reads as the word, not the code. */
+export function presetLabel(preset: ScopePreset): string {
+  return preset === '1D' ? 'Today' : preset;
+}
+
 /**
- * The eight figures — v85 D9.
+ * The KPI cards — v85 D9 (the Risk used card was dropped 2026-10-23).
+ *
+ * Two modes. **Today** (1D, the default on every visit) shows today's
+ * figures: seven cards. **Period** (any wider preset, or a Range the chart
+ * was dragged to) re-scopes win rate, expectancy, payoff and confidence to
+ * that window and adds a Realised in period card: eight. Realised today is
+ * today's in both modes -- it replaced the separate Realised P&L panel.
  *
  * Win rate, expectancy and payoff ratio travel together on purpose: win rate
  * and payoff ratio decompose expectancy, so read as a triple they say why the
@@ -45,9 +57,9 @@ const RANGE_OPTION = 'Range';
 @Component({
   selector: 'sb-trading-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, StatStrip],
+  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner, StatStrip],
   template: `
-    <sb-panel heading="Trading performance">
+    <sb-panel heading="Trading performance" [description]="about">
       <div panel-actions class="scope">
         @if (phone()) {
           <sb-select class="preset-select" ariaLabel="Date scope"
@@ -63,7 +75,7 @@ const RANGE_OPTION = 'Range';
                 [variant]="activePreset() === option ? 'secondary' : 'ghost'"
                 [attr.aria-pressed]="activePreset() === option"
                 (click)="presetChange.emit(option)"
-              >{{ option }}</button>
+              >{{ label(option) }}</button>
             }
             @if (rangeLabel(); as label) {
               <span class="range-chip" aria-current="true"><span class="range-word">Range</span> {{ label }}</span>
@@ -81,22 +93,26 @@ const RANGE_OPTION = 'Range';
           class="portfolio"
           [chartTarget]="chartTarget()"
           (chartRangeChange)="chartRangeChange.emit($event)"
+          (viewReset)="viewReset.emit()"
           [balance]="balance()"
           [changePct]="changePct()"
           [points]="points()"
           [currency]="currency()"
         />
 
-        <sb-stat-strip class="grid" [class.stale]="stale()" [cols]="4" [colsMd]="2">
-          <sb-metric-card label="Open P&L" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
-          <sb-metric-card label="Win rate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" />
-          <sb-metric-card label="Expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" />
-          <sb-metric-card label="Payoff ratio" [value]="payoffRatio()" [tint]="payoffTone()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" />
-          <sb-metric-card [label]="realizedLabel()" [value]="realizedAmount()" [tint]="realizedTone()"
-                          [unit]="currencyUnit()" [sub]="noCloseHint(realizedAmount())" />
-          <sb-metric-card label="Open trades" [value]="openTrades()" [decimals]="0" [sub]="openTradesSub()" />
-          <sb-metric-card label="Avg confidence" [value]="avgConfidence()" [decimals]="1" />
-          <sb-metric-card label="Risk used" [value]="riskUsedPct()" [tint]="riskTone()" unit="%" [sub]="riskSub()" />
+        <sb-stat-strip class="grid" [class.stale]="stale()" [cols]="4" [colsMd]="2" [fillLast]="true">
+          <sb-metric-card label="Open P&L" [description]="help.openPnl" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
+          <sb-metric-card label="Win rate" [description]="help.winRate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" [loading]="loading()" />
+          <sb-metric-card label="Expectancy" [description]="help.expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" [loading]="loading()" />
+          <sb-metric-card label="Payoff ratio" [description]="help.payoffRatio" [value]="payoffRatio()" [tint]="payoffTone()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" [loading]="loading()" />
+          <sb-metric-card label="Realised today" [description]="help.realizedToday" [value]="todayAmount()" [tint]="todayTone()"
+                          [unit]="currencyUnit()" [sub]="todaySub()" [loading]="todayBusy()" />
+          @if (inPeriod()) {
+            <sb-metric-card label="Realised in period" [description]="help.realized" [value]="realizedAmount()" [tint]="realizedTone()"
+                            [unit]="currencyUnit()" [sub]="periodSub()" [loading]="loading()" />
+          }
+          <sb-metric-card label="Open trades" [description]="help.openTrades" [value]="openTrades()" [decimals]="0" [sub]="openTradesSub()" />
+          <sb-metric-card label="Avg confidence" [description]="help.avgConfidence" [value]="avgConfidence()" [decimals]="1" [loading]="loading()" />
         </sb-stat-strip>
       </div>
 
@@ -109,13 +125,14 @@ const RANGE_OPTION = 'Range';
         <div><span>Portfolio</span><strong>{{ fmtAmount(balance()) }}</strong></div>
         <div [attr.data-tone]="tinted(changeTone())"><span>Today</span><strong>{{ fmtPct(changePct()) }}</strong></div>
         <div><span>Open{{ nowSuffix() }}</span><strong>{{ openTrades() }}</strong></div>
-        <div [attr.data-tone]="tinted(riskTone())"><span>Risk{{ nowSuffix() }}</span><strong>{{ fmtPct(riskUsedPct()) }}</strong></div>
-        <div [attr.data-tone]="tinted(winPairTone())"><span>Win rate</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
-        <div [attr.data-tone]="tinted(expectancyTone())"><span>Expectancy</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
-        <div [attr.data-tone]="tinted(payoffTone())"><span>Payoff</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
-        <div [attr.data-tone]="tinted(realizedTone())"><span>{{ realizedLabel() }}</span><strong>{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
+        <div [attr.data-tone]="tinted(winPairTone())" [class.busy]="loading()"><span>Win rate @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
+        <div [attr.data-tone]="tinted(expectancyTone())" [class.busy]="loading()"><span>Expectancy @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
+        <div [attr.data-tone]="tinted(payoffTone())" [class.busy]="loading()"><span>Payoff @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
+        <div [attr.data-tone]="tinted(todayTone())" [class.busy]="todayBusy()"><span>Realised today @if (todayBusy()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(todayAmount(), currencyUnit(), 2) }}</strong></div>
+        @if (inPeriod()) {
+          <div [attr.data-tone]="tinted(realizedTone())" [class.busy]="loading()"><span>Realised in period @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
+        }
       </div>
-      <p class="account">{{ accountLabel }}</p>
     </sb-panel>
   `,
   styles: `
@@ -154,15 +171,16 @@ const RANGE_OPTION = 'Range';
     .grid.stale, .mobile-summary.stale { opacity: 0.55; }
     .stale-hint { margin: 0 0 var(--space-10); font-size: var(--text-chip); color: var(--warn); }
     .mobile-summary { display: none; }
-    /* v181 §4: every figure here is simulated, before costs and tax. */
-    .account { margin: var(--space-10) 0 0; font-size: var(--text-chip); color: var(--text-muted); }
+    /* A refetch in flight: the last figure stays, dimmed, beside its ring. */
+    .mobile-summary .busy strong { opacity: 0.45; }
+    .mobile-summary span { display: inline-flex; align-items: center; gap: var(--space-6); }
     /* v186 D3: the KPI cards sit in one sb-stat-strip, ruled by hairlines
-       instead of eight framed boxes. The strip owns the columns: 4 from md,
-       2 in the tablet band (v95 A5: the 4-up floor starved the portfolio
-       block at 768px) and 2 below sm, where this panel hides it for
-       .mobile-summary. Fixed counts, not auto-fit, so the cards never split
-       unevenly at an in-between width. The class stays .grid so the stale
-       dim and the phone hide below keep applying to the strip host. */
+       instead of framed boxes. The strip owns the columns: 4 from md, 2 in
+       the tablet band (v95 A5: the 4-up floor starved the portfolio block at
+       768px) and 2 below sm, where this panel hides it for .mobile-summary.
+       Fixed counts, not auto-fit, so the cards never split unevenly at an
+       in-between width. The class stays .grid so the stale dim and the phone
+       hide below keep applying to the strip host. */
     @media (max-width: 639px) {
       .grid { display: none; }
       .combined { margin-bottom: var(--space-10); }
@@ -171,6 +189,7 @@ const RANGE_OPTION = 'Range';
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--space-8);
       }
+      .mobile-summary > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
       .mobile-summary div { display: flex; justify-content: space-between; gap: var(--space-8); padding: var(--space-6); border-bottom: 1px solid var(--border); font-size: var(--text-table); }
       .mobile-summary span { color: var(--text-secondary); }
       .mobile-summary strong { font-family: var(--font-mono); }
@@ -183,6 +202,8 @@ const RANGE_OPTION = 'Range';
   `,
 })
 export class TradingPerformance {
+  protected readonly help = KPI_HELP;
+  protected readonly about = PANEL_HELP.tradingPerformance;
   readonly balance = input<number | null>(null);
   readonly changePct = input<number | null>(null);
   readonly points = input<readonly number[]>([]);
@@ -195,11 +216,14 @@ export class TradingPerformance {
   readonly expectancyN = input<number | null>(null);
   protected sample(n: number | null): string | null { return n === null ? null : `N=${n}`; }
   readonly avgConfidence = input<number | null>(null);
+  /** The period's realised amount; shown only in Period mode. */
   readonly realizedAmount = input<number | null>(null);
-  readonly realizedLabel = input('Realised today');
+  /** Today's realised block, in both modes. Null until a response lands. */
+  readonly todayRealized = input<Realized | null>(null);
+  /** The today-only fetch is in flight (Period mode; under 1D the scoped
+   *  fetch is today's, so `loading` covers it). */
+  readonly todayLoading = input(false);
   readonly openTrades = input<number>(0);
-  readonly riskUsedPct = input<number | null>(null);
-  readonly riskCapPct = input<number | null>(null);
   /** Mean winning R over the magnitude of mean losing R. Null, never 0, when
    *  either side has no outcomes yet — see payoff_ratio_from_rs. */
   readonly payoffRatio = input<number | null>(null);
@@ -207,10 +231,14 @@ export class TradingPerformance {
   readonly selection = input<ScopeSelection>({ kind: 'preset', preset: '1D' });
   /** v181 §9: the last range refetch failed; the figures are the previous ones. */
   readonly stale = input(false);
+  /** A scoped refetch is in flight: the window-scoped figures show a ring. */
+  readonly loading = input(false);
   readonly presetChange = output<ScopePreset>();
   /** Pass the chart scope link through to PortfolioValue. */
   readonly chartTarget = input<ChartTarget | null>(null);
   readonly chartRangeChange = output<TimeWindow>();
+  /** The chart's reset button was pressed: back to the scope's own window, ending now. */
+  readonly viewReset = output<void>();
 
   /** Below 640px the presets are one native dropdown (v181 §1). */
   protected readonly phone = inject(ViewportService).isPhone;
@@ -224,20 +252,23 @@ export class TradingPerformance {
     return selection.kind === 'range' ? rangeChipLabel(selection.window) : null;
   });
   protected readonly presetOptions = computed<SelectOption[]>(() => {
-    const options = SCOPE_PRESETS.map((value) => ({ value, label: value }));
+    const options = SCOPE_PRESETS.map((value) => ({ value, label: presetLabel(value) }));
     const label = this.rangeLabel();
     return label === null ? options : [...options, { value: RANGE_OPTION, label: `Range · ${label}` }];
   });
   protected readonly selectValue = computed(() => this.activePreset() ?? RANGE_OPTION);
+  protected readonly label = presetLabel;
   /** Only a preset leaves the dropdown; picking the Range entry changes nothing. */
   protected onSelect(value: string): void {
     const picked = SCOPE_PRESETS.find((option) => option === value);
     if (picked) this.presetChange.emit(picked);
   }
 
-  /** v181 §5: open P&L, open trades and risk used are always "now"; outside
+  /** v181 §5: open P&L and open trades are always "now"; outside
    *  1D a tinted card must not read as that window's exposure. */
   protected readonly nowLabel = computed(() => showsNowLabel(this.selection()));
+  /** Period mode: anything but 1D. The same test as the "now" labels. */
+  protected readonly inPeriod = this.nowLabel;
   protected readonly nowSuffix = computed(() => (this.nowLabel() ? ' · now' : ''));
   protected readonly openTradesSub = computed(() => (this.nowLabel() ? 'now' : null));
   private withNow(text: string | null): string | null {
@@ -260,15 +291,30 @@ export class TradingPerformance {
     if (active === '1D') return 'none closed today';
     return active === 'All' ? null : 'none closed in range';
   }
+  protected readonly todayAmount = computed(() => this.todayRealized()?.amount ?? null);
+  protected readonly todayTone = computed(() => signTone(this.todayAmount()));
+  protected readonly todayBusy = computed(() => (this.inPeriod() ? this.todayLoading() : this.loading()));
+  /** "+0.40% · 3 closed · 2W 1L"; the % is left out when the server has none. */
+  protected readonly todaySub = computed(() => {
+    const today = this.todayRealized();
+    if (today === null) return null;
+    if (today.n === 0) return 'none closed today';
+    const counts = `${today.n} closed · ${today.wins}W ${today.losses}L`;
+    return today.pct === null ? counts : `${pct(today.pct)} · ${counts}`;
+  });
+  /** Which window the period card covers, with the no-close hint after it. */
+  protected readonly periodSub = computed(() => {
+    const selection = this.selection();
+    const window = selection.kind === 'range'
+      ? rangeChipLabel(selection.window)
+      : (selection.preset === 'All' ? 'All days' : selection.preset);
+    const hint = this.noCloseHint(this.realizedAmount());
+    return hint === null ? window : `${window} · ${hint}`;
+  });
   protected readonly openPnlSub = computed(() => {
     const value = this.openPnlAmount();
     return this.withNow(value === null ? null : amount(value, this.currency()));
   });
-  protected readonly riskSub = computed(() => {
-    const cap = this.riskCapPct();
-    return this.withNow(cap === null ? null : `of ${cap.toFixed(1)}% cap`);
-  });
-  protected readonly accountLabel = ACCOUNT_LABEL;
   protected readonly changeTone = computed(() => signTone(this.changePct()));
   protected readonly openPnlTone = computed(() => signTone(this.openPnlPct()));
   protected readonly expectancyTone = computed(() => signTone(this.expectancyR()));
@@ -278,7 +324,6 @@ export class TradingPerformance {
   protected readonly winPairTone = computed(() =>
     breakevenPairTone(this.winRate(), this.payoffRatio(), this.winRateN()));
   protected readonly payoffTone = computed(() => this.winPairTone());
-  protected readonly riskTone = computed(() => riskToneOf(this.riskUsedPct(), this.riskCapPct()));
   /** A summary row carries a tone attribute only when it is judged. */
   protected tinted(tone: string): string | null {
     return tone === 'neutral' ? null : tone;

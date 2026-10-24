@@ -34,7 +34,8 @@ import { EquityCandles } from './equity-candles';
     }
 
     <sb-equity-candles [currency]="currency()" [target]="chartTarget()"
-                       (rangeChange)="chartRangeChange.emit($event)" />
+                       (rangeChange)="chartRangeChange.emit($event)"
+                       (viewReset)="viewReset.emit()" />
   `,
   styles: `
     :host { display: block; }
@@ -63,6 +64,8 @@ export class PortfolioValue {
   /** DashboardStore owns both ends of the chart scope link. */
   readonly chartTarget = input<ChartTarget | null>(null);
   readonly chartRangeChange = output<TimeWindow>();
+  /** The chart's reset button, passed up to the scope owner. */
+  readonly viewReset = output<void>();
   readonly balance = input<number | null>(null);
   readonly changePct = input<number | null>(null);
   /** The API's 30-day `equity_30d` series. Still bound by

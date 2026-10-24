@@ -281,6 +281,40 @@ describe('Risk gauge, budget and correlation matrix', () => {
     expect(el.querySelector('.heat-note')!.textContent).toContain('130% of the cap');
   });
 
+  const gapText = (fixture: ComponentFixture<Risk>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gap-risk"]')!.textContent ?? '';
+
+  it('shows the summed short gap risk inside the heat panel', async () => {
+    const fixture = await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52,
+                                           gap_risk_amount: 1234.4, gap_risk_unknown: 0 } });
+    const el = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="gap-risk"]')!;
+    expect(el.closest('sb-panel')!.getAttribute('heading')).toBe('Portfolio heat');
+    expect(gapText(fixture)).toContain('1,234');
+    expect(gapText(fixture)).toContain('p99');
+    expect(gapText(fixture)).not.toContain('without a gap figure');
+  });
+
+  it('counts shorts without a gap figure instead of hiding them', async () => {
+    const fixture = await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52,
+                                           gap_risk_amount: null, gap_risk_unknown: 2 } });
+    expect(gapText(fixture)).toContain('n/a');
+    expect(gapText(fixture)).toContain('2 shorts without a gap figure');
+  });
+
+  it('says so when no short is open', async () => {
+    const fixture = await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52,
+                                           gap_risk_amount: null, gap_risk_unknown: 0 } });
+    expect(gapText(fixture)).toContain('no open shorts');
+  });
+
+  it('keeps the heat figure on stop risk', async () => {
+    const fixture = await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52,
+                                           gap_risk_amount: 900, gap_risk_unknown: 0 } });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.heat-figure')!.textContent).toContain('3.10');
+    expect(el.querySelector('.heat-note')!.textContent).toContain('52% of the risk budget is used');
+  });
+
   it('breaks the risk budget into cap, used and remaining', async () => {
     const el = (await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52 } }))
       .nativeElement as HTMLElement;

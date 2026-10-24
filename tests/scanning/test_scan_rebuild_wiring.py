@@ -14,6 +14,9 @@ from swingbot.core.tracking.performance import TradeLog
 from tests.planning.test_plan_engine_model import _plan
 from tests.scanning.test_engine_v2_plans import _structured_df
 
+# v183: short plans here run on the real DATA_DIR -- keep their notice misses out of data/.
+pytestmark = pytest.mark.usefixtures("no_short_interest_queue")
+
 PRICE = RebuildPrice(101.0, "trade", 1.0, "2026-10-15T15:00:00+00:00", 1000.0, True, "regular")
 
 

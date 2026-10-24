@@ -27,6 +27,7 @@ _TRADE_ID_ALPHABET = string.ascii_letters + string.digits
 
 from swingbot import config
 from swingbot.core.planning import account as account_module
+from swingbot.core.planning import gap_sizing as gap_sizing_mod
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
 from swingbot.core.market.strategy_types import HORIZONS as _HORIZONS
 
@@ -563,6 +564,41 @@ def _quote_field(quote: dict | None) -> dict:
     return {} if quote is None else {"quote": dict(quote)}
 
 
+def _stop_only_sizing(entry, stop_loss) -> dict | None:
+    """Today's sizing: the stop distance alone. None when it cannot be computed
+    (balance 0, zero stop distance) -- the pre-v183 behaviour, kept."""
+    try:
+        return account_module.compute_position_size(entry, stop_loss)
+    except Exception:
+        return None
+
+
+def _paper_sizing(entry, stop_loss, direction, gap_sizing, label) -> dict | None:
+    """The paper book's share count, from the alert's one sizing path (v183).
+
+    A failure in the gap path logs one line and sizes on the stop, never
+    leaving the trade unsized; a long never logs and never leaves today's path."""
+    try:
+        return gap_sizing_mod.size_for(entry, stop_loss, direction=direction,
+                                       gap_sizing=gap_sizing, label=label)
+    except Exception as exc:
+        if direction == "bearish" and gap_sizing:
+            log.info("%s: gap sizing fell back to stop (%s)", label, exc)
+        return _stop_only_sizing(entry, stop_loss)
+
+
+def _gap_sizing_field(gap_sizing: dict | None) -> dict:
+    """{"gap_sizing": stamp} for a stamped short, else {} -- the key stays absent
+    on longs and pre-v183 plans so their records are byte-identical."""
+    return {"gap_sizing": dict(gap_sizing)} if gap_sizing is not None else {}
+
+
+def _risk_notice_field(risk_notice: dict | None) -> dict:
+    """{"risk_notice": snapshot} for a short alerted with the v183 notice, else
+    {} -- the key stays absent on longs and pre-v183 trades."""
+    return {"risk_notice": dict(risk_notice)} if risk_notice is not None else {}
+
+
 def format_quote_age(quote: dict | None) -> str:
     """The reader side of the v171 trade quote stamp; n/a for pre-v171 rows."""
     age_s = (quote or {}).get("age_s")
@@ -685,7 +721,7 @@ class TradeLog:
                   trendline_fit=None, cohort_label=None, cohort_stats=None,
                   risk_features=None, ledger=None, entry_context=None, origin=None,
                   confidence_points=None, confidence_unevaluated=None,
-                  quote=None) -> str:
+                  gap_sizing=None, risk_notice=None, quote=None) -> str:
         """
         The extra keyword args (confidence_score/breakdown, target/stop
         sources, explanation, confirmed_by) are optional and purely for
@@ -695,6 +731,10 @@ class TradeLog:
         best-effort reconstruction from today's (possibly since-moved)
         levels. Trades logged before this field existed simply won't
         have it; the detail page handles that gracefully.
+        `gap_sizing` is the plan's v183 sizing stamp; the share count comes
+        from the same `size_for` the alert used.
+        `risk_notice` is the alert's v183 squeeze/event snapshot, copied so the
+        trade page shows what the alert said.
         """
         # 16 characters, drawn from the full alphanumeric set (0-9, a-z, A-Z
         # -- 62 possible characters per position), not just the first 8 hex
@@ -764,6 +804,8 @@ class TradeLog:
         if trendline_fit:
             record[TRENDLINE_FIT_KEY] = trendline_fit
         record.update(_quote_field(quote))   # v171 D2: present only when stamped
+        record.update(_gap_sizing_field(gap_sizing))   # v183: present only when stamped
+        record.update(_risk_notice_field(risk_notice))   # v183: present only when stamped
 
         # Snapshot position sizing NOW, at the moment the trade is opened --
         # not recomputed later from whatever the account balance happens to
@@ -774,10 +816,7 @@ class TradeLog:
         # two sizing modes. `shares` is None (and no P&L is ever settled to
         # the account) if sizing can't be computed at all -- e.g. account
         # balance is 0/unset, or (risk_pct mode) stop distance is zero.
-        try:
-            sizing = account_module.compute_position_size(entry, stop_loss)
-        except Exception:
-            sizing = None
+        sizing = _paper_sizing(entry, stop_loss, direction, gap_sizing, ticker)
         record["shares"] = sizing["shares"] if sizing else None
         record["position_value"] = sizing["position_value"] if sizing else None
         record["sizing_mode"] = sizing["mode"] if sizing else None
@@ -808,8 +847,8 @@ class TradeLog:
 
         Re-derives shares/position_value from the fill (not the trigger price
         scan-detection sized against) -- stop_loss is unchanged by a fill, so
-        this is the same compute_position_size() call log_trade() made, just
-        with the corrected entry. Returns the trade id, or None if no
+        this is the same `_paper_sizing` call `log_trade()` made (the stamp is
+        read back from the record), just with the corrected entry. Returns the trade id, or None if no
         placeholder trade exists for this plan (log_trade may have failed,
         or trade_log was wired in after the alert was built) -- PlanManager
         falls back to creating one fresh in that case.
@@ -824,10 +863,8 @@ class TradeLog:
             if t is None:
                 return None
             t["entry"] = fill_price
-            try:
-                sizing = account_module.compute_position_size(fill_price, t["stop_loss"])
-            except Exception:
-                sizing = None
+            sizing = _paper_sizing(fill_price, t["stop_loss"], t.get("direction"),
+                                   t.get("gap_sizing"), t.get("ticker", ""))
             if sizing is not None:
                 t["shares"] = sizing["shares"]
                 t["position_value"] = sizing["position_value"]

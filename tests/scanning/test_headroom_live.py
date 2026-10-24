@@ -15,6 +15,9 @@ from tests.helpers import make_ohlcv
 from tests.scanning.test_engine_v2_plans import _setup_minimal_scan
 from tests.scanning.test_strategy_pass_emit import _Log, _plan, _Store
 
+# v183: short plans here run on the real DATA_DIR -- keep their notice misses out of data/.
+pytestmark = pytest.mark.usefixtures("no_short_interest_queue")
+
 # test_strategy_pass_emit._plan(): bullish, trigger 100.0, stop 94.0 -> risk 6.0.
 # A two-family resistance at 101.0 is 0.167R beyond entry: inside every grid value.
 BLOCKED_MAP = ([], [Level(101.0, ["EMA50", "Rolling S/R"])])

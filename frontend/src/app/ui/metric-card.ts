@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { CountUp } from './motion/count-up';
+import { Spinner } from './spinner';
 
 /** Legacy figure colouring, used when no judged tint is supplied. */
 export type MetricTone = 'plain' | 'pnl' | 'caution';
@@ -37,15 +38,21 @@ function toneClass(tone: MetricTone, value: number): string {
 @Component({
   selector: 'sb-metric-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CountUp],
+  imports: [CountUp, Spinner],
   host: {
     '[class.tint-pos]': "cardTint() === 'pos'",
     '[class.tint-neg]': "cardTint() === 'neg'",
+    '[class.loading]': 'loading()',
+    '[attr.aria-busy]': 'loading() || null',
+    '[attr.title]': 'description()',
   },
 
   template: `
     <div class="card sb-lift">
       <span class="label sb-label">{{ label() }}</span>
+      @if (loading()) {
+        <sb-spinner class="busy" label="Updating" />
+      }
       <span class="value" [class]="valueClass()" [sbCountUp]="value()"
             [countFormat]="format()" [countKey]="'metric:' + label()"></span>
       @if (sub(); as subtext) {
@@ -71,6 +78,7 @@ function toneClass(tone: MetricTone, value: number): string {
       border-top: var(--figure-rule, 0px) solid var(--border);
     }
     .card {
+      position: relative;
       display: flex;
       flex-direction: column;
       gap: var(--space-6);
@@ -103,6 +111,10 @@ function toneClass(tone: MetricTone, value: number): string {
       color: var(--text-muted);
       font-size: var(--register-label, var(--text-table));
     }
+    /* A refetch in flight: the last figure stays, dimmed, with the ring in the
+       card's top-right corner (it has no layout of its own, so nothing moves). */
+    .busy { position: absolute; top: var(--space-10); right: var(--space-14); }
+    :host(.loading) .value, :host(.loading) .sub { opacity: 0.45; }
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
     .warn { color: var(--warn); }
@@ -128,6 +140,11 @@ export class MetricCard {
   /** When set, the sub line takes the P&L colour of this number's sign (same
    *  rule as the main value). Leave null for a plain muted sub line. */
   readonly subPnl = input<number | null>(null);
+  /** The figure is being refetched: a ring appears in the card and the last
+   *  value dims. Never hides the value (a failed refetch keeps it). */
+  readonly loading = input(false);
+  /** What the figure means, as a tooltip over the whole card. */
+  readonly description = input<string | null>(null);
 
   /** The value's text for any number. `null` is CountUp's em dash, not "0"
    *  or "—%": a metric with no value yet is not a metric that is zero, and on

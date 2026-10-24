@@ -30,7 +30,7 @@ _TOLERANCE = 1e-12    # mean([0.1] * n) may land one ulp under 0.1
 
 @dataclass(frozen=True)
 class PairedEvent:
-    entry_date: str   # entry bar t+1 (frozen reading F9)
+    entry_date: str   # entry bar t+1 (frozen reading F9); v182 level mode: the event bar t
     d: float
 
 

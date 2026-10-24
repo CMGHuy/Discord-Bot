@@ -191,6 +191,21 @@ describe('RiskStore', () => {
     expect(store.heatMeterFraction()).toBeNull();
   });
 
+  it("exposes the open shorts' summed gap risk beside heat", () => {
+    tick();
+    respond({ heat: { open_pct: 3, cap_pct: 6, utilisation_pct: 50,
+                      gap_risk_amount: 340, gap_risk_unknown: 1 } });
+    expect(store.gapRiskAmount()).toBe(340);
+    expect(store.gapRiskUnknown()).toBe(1);
+  });
+
+  it('reads an absent gap figure as unknown, never as zero risk', () => {
+    tick();
+    respond();
+    expect(store.gapRiskAmount()).toBeNull();
+    expect(store.gapRiskUnknown()).toBe(0);
+  });
+
   it('flags the cap as near from 80% of it', () => {
     tick();
     respond({ heat: { open_pct: 4.8, cap_pct: 6, utilisation_pct: 80 } });

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +10,7 @@ import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
 import { token } from '../../../ui/chart/chart-theme';
-import { EquityCandles, targetLogicalRange, targetNeedsOlder } from './equity-candles';
+import { EquityCandles, GESTURE_GRACE_MS, targetLogicalRange, targetNeedsOlder } from './equity-candles';
 import { TimeWindow, inWindowCandles } from './equity-range.model';
 
 // A real lightweight-charts chart is created; fancy-canvas needs matchMedia.
@@ -84,8 +87,13 @@ const W = (from: string, to: string): TimeWindow => ({ from, to });
 /** New York midnights (EDT, UTC-4) of 3 Sep and 6 Sep: buckets 3, 4 and 5 Sep. */
 const SEP_3_TO_6 = W('2026-09-03T04:00:00.000Z', '2026-09-06T04:00:00.000Z');
 
-type Linked = { programmatic: boolean; series: { setData(points: unknown): void } };
+type Linked = { programmatic: boolean; gesture: boolean; series: { setData(points: unknown): void } };
 const linked = (fixture: { componentInstance: EquityCandles }) => fixture.componentInstance as unknown as Linked;
+/** The partner is mid-drag: the chart's own settling is no longer the explanation for a range change. */
+const userGesture = (fixture: { componentInstance: EquityCandles }) => {
+  linked(fixture).programmatic = false;
+  linked(fixture).gesture = true;
+};
 
 describe('sb-equity-candles', () => {
   describe('preset target helpers (v181 §1)', () => {
@@ -128,7 +136,7 @@ describe('sb-equity-candles', () => {
     it('reports a pan or zoom the partner made as whole New York buckets', () => {
       const { fixture } = render(response(dailyCandles(40)));
       const seen = emitted(fixture);
-      linked(fixture).programmatic = false;
+      userGesture(fixture);
       at(fixture, 4.6, 24.4);
       // Buckets 5..24 = 6 Sep .. 25 Sep; the window ends at 26 Sep's NY midnight.
       expect(seen).toEqual([{ from: '2026-09-06T04:00:00.000Z', to: '2026-09-26T04:00:00.000Z' }]);
@@ -140,6 +148,78 @@ describe('sb-equity-candles', () => {
       linked(fixture).programmatic = true;
       at(fixture, 4.6, 24.4);
       expect(seen).toEqual([]);
+    });
+
+    describe('a range change is a user move only during a gesture', () => {
+      const stageOf = (el: HTMLElement) => el.querySelector('.stage')!;
+
+      it('ignores the chart settling on its own, even after the programmatic flag has dropped', () => {
+        const { fixture, el } = render(response(dailyCandles(40)));
+        const seen = emitted(fixture);
+        linked(fixture).programmatic = false; // a late first-paint frame on a slow load
+        at(fixture, 20, 39); // at the newest candle, so the live-edge rule does not show the button either
+        expect(seen).toEqual([]);
+        expect(el.querySelector('button.reset')).toBeNull();
+      });
+
+      it('reports a drag: pointer down, range change, and the Latest button follows', () => {
+        const { fixture, el } = render(response(dailyCandles(40)));
+        const seen = emitted(fixture);
+        linked(fixture).programmatic = false;
+        stageOf(el).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        at(fixture, 4.6, 24.4);
+        expect(seen).toHaveLength(1);
+        expect(el.querySelector('button.reset')).not.toBeNull();
+      });
+
+      it('counts a touch and a wheel turn as gestures too', () => {
+        for (const type of ['touchstart', 'wheel']) {
+          const { fixture, el } = render(response(dailyCandles(40)));
+          const seen = emitted(fixture);
+          linked(fixture).programmatic = false;
+          stageOf(el).dispatchEvent(new Event(type, { bubbles: true }));
+          at(fixture, 4.6, 24.4);
+          expect(seen, type).toHaveLength(1);
+          TestBed.resetTestingModule();
+          TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+        }
+      });
+
+      it('keeps counting for the grace after the hand lifts (a fling), then stops', () => {
+        // Timeouts only: faking requestAnimationFrame would run the chart's canvas draw, which jsdom lacks.
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+          const { fixture, el } = render(response(dailyCandles(40)));
+          const seen = emitted(fixture);
+          linked(fixture).programmatic = false;
+          stageOf(el).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+          stageOf(el).dispatchEvent(new Event('pointerup', { bubbles: true }));
+          vi.advanceTimersByTime(GESTURE_GRACE_MS - 1);
+          at(fixture, 4.6, 24.4);
+          expect(seen).toHaveLength(1);
+          vi.advanceTimersByTime(1);
+          at(fixture, 5.6, 25.4);
+          expect(seen).toHaveLength(1);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('holds a gesture open while the pointer stays down, however long', () => {
+        // Timeouts only: faking requestAnimationFrame would run the chart's canvas draw, which jsdom lacks.
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+          const { fixture, el } = render(response(dailyCandles(40)));
+          const seen = emitted(fixture);
+          linked(fixture).programmatic = false;
+          stageOf(el).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+          vi.advanceTimersByTime(60_000);
+          at(fixture, 4.6, 24.4);
+          expect(seen).toHaveLength(1);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
 
     it('redraws candles under the flag, so a refresh or a prepended page is never a gesture', () => {
@@ -244,7 +324,7 @@ describe('sb-equity-candles', () => {
       expect(stub.calls.loadOlder).toBe(0);
       expect(stub.pageError()).toBe(true);
 
-      linked(fixture).programmatic = false;
+      userGesture(fixture);
       at(fixture, 0, 19);
       expect(stub.calls.loadOlder).toBe(0);
       const retry = el.querySelector<HTMLButtonElement>('.page-error button')!;
@@ -286,17 +366,18 @@ describe('sb-equity-candles', () => {
       }
     });
 
-    it('reports a Latest click as the partner moving the viewport', () => {
+    it('asks the scope owner to go back to today when Latest is pressed, with a target bound', () => {
       const { fixture, el } = render(response(dailyCandles(40)));
-      const seen = emitted(fixture);
-      linked(fixture).programmatic = false;
+      fixture.componentRef.setInput('target', { window: SEP_3_TO_6, seq: 1 });
+      const resets: number[] = [];
+      fixture.componentInstance.viewReset.subscribe(() => resets.push(1));
+      const scroll = vi.spyOn(linkScale(fixture), 'scrollToRealTime').mockImplementation(() => {});
+      userGesture(fixture);
       at(fixture, 0, 19);
-      seen.length = 0;
-      vi.spyOn(linkScale(fixture), 'scrollToRealTime').mockImplementation(() => {
-        fixture.componentInstance['onVisibleRange']({ from: 20, to: 39 });
-      });
-      el.querySelector<HTMLButtonElement>('button.latest')!.click();
-      expect(seen).toEqual([{ from: '2026-09-21T04:00:00.000Z', to: '2026-10-11T04:00:00.000Z' }]);
+      el.querySelector<HTMLButtonElement>('button.reset')!.click();
+      expect(resets).toHaveLength(1);
+      // The target's new seq moves the chart; the component does not also scroll.
+      expect(scroll).not.toHaveBeenCalled();
     });
 
     it('falls back to the newest candles when no loaded candle meets the window', () => {
@@ -419,13 +500,16 @@ describe('sb-equity-candles', () => {
     expect(stub.calls.load).toBe(1);
   });
 
-  it('states what the account is, directly under the readout', () => {
+  it('puts the controls and the readout on one baseline on desktop, now the caption row is gone', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/panels/equity-candles.ts'), 'utf8');
+    expect(source).toMatch(/\.controls, \.readout \{ align-self: baseline; \}/);
+  });
+
+  it('carries no "Paper account" caption under the readout (dropped 2026-10-23)', () => {
     const { fixture, el } = render(response(MIXED));
     at(fixture, 0, 2);
-    const account = el.querySelector('.readout')!.nextElementSibling;
-    expect(account?.classList.contains('account')).toBe(true);
-    expect(account?.textContent?.trim()).toBe('Paper account · before tax and costs');
-    expect(el.querySelectorAll('.account').length).toBe(1);
+    expect(el.querySelector('.account')).toBeNull();
+    expect(el.textContent).not.toContain('Paper account');
   });
 
   it('uses the currency it is given, not the API symbol', () => {
@@ -541,7 +625,7 @@ describe('sb-equity-candles', () => {
     expect(loadOlder).toHaveBeenCalledTimes(2);
   });
 
-  it('reports leaving the live edge and offers Latest, which scrolls back', () => {
+  it('reports leaving the live edge and offers Latest, which scrolls back when no scope owner is bound', () => {
     const { fixture, el, stub } = render(response(MIXED));
     // vi.spyOn calls through, so the stub's atLiveEdge follows what the component reports.
     const setEdge = vi.spyOn(stub, 'setAtLiveEdge');
@@ -558,6 +642,65 @@ describe('sb-equity-candles', () => {
     stub.setAtLiveEdge(true);
     fixture.detectChanges();
     expect([...el.querySelectorAll('button')].some((b) => b.textContent!.includes('Latest'))).toBe(false);
+  });
+
+  describe('Latest button, like the TradingView reset', () => {
+    type PriceScale = { applyOptions(o: { autoScale: boolean }): void; options(): { autoScale: boolean } };
+    const priceScale = (fixture: { componentInstance: EquityCandles }) =>
+      (fixture.componentInstance as unknown as { chart: { priceScale(id: string): PriceScale } })
+        .chart.priceScale('right');
+    const latestButton = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('button.reset');
+
+    it('is hidden while the chart sits at its default view', () => {
+      const { fixture, el } = render(response(MIXED));
+      fixture.detectChanges();
+      expect(latestButton(el)).toBeNull();
+    });
+
+    it('appears after the partner pans or zooms the time axis, even at the newest candle', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      userGesture(fixture);
+      at(fixture, 20, 39);
+      expect(latestButton(el)).not.toBeNull();
+      expect(latestButton(el)!.textContent).toContain('Latest');
+    });
+
+    it('does not appear for a move the component made itself', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      linked(fixture).programmatic = true;
+      at(fixture, 20, 39);
+      expect(latestButton(el)).toBeNull();
+    });
+
+    it('appears after a vertical scroll turned the price axis auto-fit off', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      priceScale(fixture).applyOptions({ autoScale: false });
+      el.querySelector('.stage')!.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      fixture.detectChanges();
+      expect(latestButton(el)).not.toBeNull();
+    });
+
+    it('puts the price axis back on auto-fit, hides itself and asks for Today when pressed', () => {
+      const { fixture, el } = render(response(dailyCandles(40)));
+      const resets: number[] = [];
+      fixture.componentInstance.viewReset.subscribe(() => resets.push(1));
+      userGesture(fixture);
+      at(fixture, 20, 39);
+      priceScale(fixture).applyOptions({ autoScale: false });
+      el.querySelector('.stage')!.dispatchEvent(new Event('pointerup', { bubbles: true }));
+      fixture.detectChanges();
+
+      latestButton(el)!.click();
+      fixture.detectChanges();
+      expect(priceScale(fixture).options().autoScale).toBe(true);
+      expect(resets).toHaveLength(1);
+      expect(latestButton(el)).toBeNull();
+    });
+
+    it('is not offered while the chart has no candles to move', () => {
+      const { el } = render(response([]));
+      expect(latestButton(el)).toBeNull();
+    });
   });
 
   it('never moves the viewport on a scan refresh while the past is in view', () => {

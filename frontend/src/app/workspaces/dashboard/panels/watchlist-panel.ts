@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { PANEL_HELP } from './panel-help';
 import { RouterLink } from '@angular/router';
 
 import { TapeRow } from '../../../api/models';
@@ -12,7 +13,7 @@ import { num, pct } from '../../../ui/format';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Panel, RouterLink],
   template: `
-    <sb-panel heading="Watchlist">
+    <sb-panel heading="Watchlist" [description]="about">
       <a panel-actions class="all-link" routerLink="/watchlist">View all</a>
       <table>
         <thead>
@@ -56,6 +57,7 @@ import { num, pct } from '../../../ui/format';
   `,
 })
 export class WatchlistPanel {
+  protected readonly about = PANEL_HELP.watchlist;
   readonly rows = input<readonly TapeRow[]>([]);
   readonly limit = input(6);
 

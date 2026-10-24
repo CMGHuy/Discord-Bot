@@ -85,6 +85,10 @@ def test_monitor_quotes_runs_the_worker_and_merges_its_counts(monkeypatch):
                         asked.append((asker, fresh_only)) or {"AAPL": q})
     monkeypatch.setattr(counters, "snapshot_and_clear", lambda: list(rows))
     monkeypatch.setattr(counters, "merge", merged.extend)
+    # The real flush is interval-gated and, when it fails open (no DB reachable),
+    # merge()s its rows back -- into merged.extend above, doubling them. Its
+    # own behaviour is pinned by the two flush tests below.
+    monkeypatch.setattr(counters, "flush", lambda **k: 0)
     assert pm.monitor_quotes(["AAPL"]) == {"AAPL": q}
     assert asked == [(Asker.STOP_MONITOR, True)] and merged == rows
 

@@ -5,6 +5,7 @@
 | expectancy / volume adding an entry strategy or filter | `<ledger-id> SCREEN-PASS` (row must exist)  |
 | expectancy moving stops/targets, or harvest            | `harvest-headroom <path>` (path must exist) |
 | none (integrity)                                       | `exempt (integrity)`                        |
+| expectancy, a fill-timing veto (alert-to-fill price)   | `exempt (post-signal)` (v192, 2026-10-24)   |
 
 v140 and earlier are grandfathered by number. A split spec carries the line
 in its _0-index part. See
@@ -25,10 +26,11 @@ SCREEN_PASS = "SCREEN-PASS"
 _NUMBER = re.compile(r"^\d{4}-\d{2}-\d{2}-v(\d+)-")
 _PART = re.compile(r"_(\d+)[a-z]?(?:-[^.]*)?\.md$")
 _EXEMPT = re.compile(r"^exempt\b")
+_POST_SIGNAL = re.compile(r"^exempt\s*\(post-signal\)")
 _HEADROOM = re.compile(r"^harvest-headroom\s+`?([^`\s]+)`?")
 _LEDGER = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-PASS\b")
-_EDGES_FOR = {"exempt": {"none"}, "headroom": {"expectancy", "harvest"},
-              "ledger": {"expectancy", "volume"}}
+_EDGES_FOR = {"exempt": {"none"}, "post_signal": {"expectancy"},
+              "headroom": {"expectancy", "harvest"}, "ledger": {"expectancy", "volume"}}
 
 
 def spec_number(path: Path) -> int | None:
@@ -70,6 +72,8 @@ def _ledger_problem(row_id: str, ledger) -> str | None:
 
 def _classify(screen: str, ledger, root: Path):
     """(kind, problem) for one Screen: value."""
+    if _POST_SIGNAL.match(screen):
+        return "post_signal", None
     if _EXEMPT.match(screen):
         return "exempt", None
     match = _HEADROOM.match(screen)
@@ -148,6 +152,13 @@ def test_exempt_needs_an_integrity_edge():
     assert screen_problems(_spec("none (integrity)", "exempt (integrity)"), ledger=LEDGER) == []
     problems = screen_problems(_spec("expectancy", "exempt (integrity)"), ledger=LEDGER)
     assert problems and "does not fit" in problems[0]
+
+
+def test_post_signal_exemption_fits_only_an_expectancy_edge():
+    assert screen_problems(_spec("expectancy", "exempt (post-signal)"), ledger=LEDGER) == []
+    for edge in ("volume", "harvest", "none (integrity)"):
+        problems = screen_problems(_spec(edge, "exempt (post-signal)"), ledger=LEDGER)
+        assert problems and "does not fit" in problems[0]
 
 
 def test_a_ledger_pass_does_not_fit_a_harvest_edge():

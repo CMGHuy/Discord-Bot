@@ -1103,6 +1103,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 cohort_stats=plan_v2.cohort_stats if plan_v2 is not None else None,
                 risk_features=plan_v2.risk_features if plan_v2 is not None else None,
                 entry_context=plan_v2.entry_context if plan_v2 is not None else None,
+                gap_sizing=getattr(plan_v2, "gap_sizing", None),
+                risk_notice=getattr(plan_v2, "risk_notice", None),
                 **_confidence_point_kwargs(conf),
                 quote=_trade_quote(requote, result.ticker),
             )

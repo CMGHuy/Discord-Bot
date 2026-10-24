@@ -578,6 +578,14 @@ FIELDS: list[Field] = [
                "in that sector past this % of equity. Prevents overconcentration in a single sector. Blocking "
                "is flagged, not hidden -- a blocked plan still alerts, labeled with the sector name and heat, "
                "so you can diversify deliberately."),
+    Field("SHORT_GAP_SIZING", "SHORT_GAP_SIZING", "Account Defaults",
+          "SHORT gap-aware sizing (v183)", type="checkbox", default="true",
+          help="v183. On (default): a SHORT plan is sized on max(stop distance, entry x the ticker's "
+               "p99 up-gap over 250 completed bars), so a routine bad squeeze gap stays inside the per-trade "
+               "dollar risk. The stop never moves and R stays measured on the stop; only the share count can "
+               "shrink. The rule in force is stamped on each plan when it is created, so flipping this never "
+               "changes an alerted plan. Off: every new short is sized on the stop, byte-for-byte as before "
+               "v183. Longs are never affected."),
     Field("MAX_OPEN_PER_HORIZON", "MAX_OPEN_PER_HORIZON", "Account Defaults",
           "Max open trades per horizon",
           type="number", default="4", min=1, max=20, step=1,
@@ -1057,6 +1065,21 @@ FIELDS: list[Field] = [
           type="number", default="120", min=10, max=1800, step=10,
           help="v118 operational safeguard (not a search knob): the extra lane stops fetching further "
                "chunks once this much time has passed and records budget_exhausted. Base scan unaffected."),
+    Field("SHORT_RISK_NOTICE", "SHORT_RISK_NOTICE", "Universe & Scanning",
+          "SHORT squeeze/event notice (v183)", type="checkbox", default="true",
+          help="v183. On (default): every SHORT alert and plan page shows short interest, days to cover and "
+               "float (with their report date), any earnings and ex-dividend date inside the planned hold. "
+               "Display only -- never a filter, score or gate. Off: short alerts are byte-for-byte as before v183."),
+    Field("SHORT_SQUEEZE_SI_PCT", "SHORT_SQUEEZE_SI_PCT", "Universe & Scanning",
+          "SHORT squeeze warning: short interest (% of float)", type="float", default="10.0",
+          min=1, max=100, step=0.5,
+          help="v183. The notice line is prefixed with the squeeze-risk warning when short interest is at "
+               "least this % of the float (or days to cover reaches the threshold below). Display only."),
+    Field("SHORT_SQUEEZE_DTC", "SHORT_SQUEEZE_DTC", "Universe & Scanning",
+          "SHORT squeeze warning: days to cover", type="float", default="5.0",
+          min=0.5, max=30, step=0.5,
+          help="v183. The notice line is prefixed with the squeeze-risk warning when days to cover is at "
+               "least this many days (or short interest reaches the threshold above). Display only."),
     Field("EARNINGS_BLACKOUT_SESSIONS", "EARNINGS_BLACKOUT_SESSIONS", "Universe & Scanning",
           "Earnings blackout (sessions before the reaction)", type="number", default="0", min=0, max=5, step=1,
           help="Blocks a setup when the next earnings reaction is 1 to this many trading sessions away (0 = off). "
@@ -1477,6 +1500,7 @@ _SEARCH_CLASSES = {
         "EXTENDED_HOURS_DEBOUNCE_TICKS",
         "SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
         "ALERT_SYMBOL_COOLDOWN_HOURS",
+        "SHORT_GAP_SIZING", "SHORT_RISK_NOTICE", "SHORT_SQUEEZE_SI_PCT", "SHORT_SQUEEZE_DTC",
     },
     "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
 }

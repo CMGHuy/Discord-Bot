@@ -32,7 +32,6 @@ import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
 import {
-  ACCOUNT_LABEL,
   WallSpan,
   chartRangeFor,
   stepDownBlocked,
@@ -71,6 +70,10 @@ type ChartState = 'loading' | 'error' | 'empty' | 'chart';
  *  must outlive the call; 100 ms covers several frames and is far shorter
  *  than any deliberate gesture that follows it. */
 export const PROGRAMMATIC_SETTLE_MS = 100;
+
+/** How long a range change still counts as the partner's after their hand
+ *  left the chart: a touch fling keeps gliding for a moment. */
+export const GESTURE_GRACE_MS = 1000;
 
 /** v181 §1: the logical range that shows exactly the loaded candles whose
  *  bucket meets `window`. ±0.4 so `inWindowCandles` reads back the same
@@ -124,9 +127,6 @@ export function targetNeedsOlder(
         [value]="store.basis()"
         (valueChange)="onBasis($event)"
       />
-      @if (state() === 'chart' && !store.atLiveEdge()) {
-        <button sb-button type="button" variant="ghost" class="latest" (click)="toLatest()">↦ Latest</button>
-      }
     </div>
     @if (readout().length) {
       <p class="readout">
@@ -136,7 +136,6 @@ export function targetNeedsOlder(
         }
       </p>
     }
-    <p class="account">{{ accountLabel }}</p>
     @if (state() !== 'chart') {
       <sb-async
         class="states"
@@ -150,8 +149,19 @@ export function targetNeedsOlder(
         (retry)="store.load()"
       />
     }
-    <div class="stage">
+    <div class="stage"
+         (pointerdown)="beginGesture()" (touchstart)="beginGesture()" (wheel)="beginGesture(); endGesture()"
+         (pointerup)="endGesture(); syncPriceMoved()" (touchend)="endGesture(); syncPriceMoved()"
+         (pointercancel)="endGesture()" (dblclick)="syncPriceMoved()">
       <div #host class="chart" [class.hidden]="state() !== 'chart'"></div>
+      @if (showReset()) {
+        <!-- Like TradingView's reset: shown once the chart was dragged or zoomed
+             on either axis (or scrolled off the newest candle). One press goes
+             back to Today -- the scope owner re-targets 1D, which also returns
+             the figures -- with the price axis auto-fitted again. -->
+        <button sb-button type="button" variant="ghost" class="reset"
+                aria-label="Back to today" title="Back to today: chart and figures" (click)="onReset()">↺ Latest</button>
+      }
       @if (state() === 'chart' && store.pageError()) {
         <p class="page-error" role="status">
           Couldn't load earlier history ·
@@ -171,7 +181,7 @@ export function targetNeedsOlder(
     :host {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-areas: "controls" "readout" "account" "chart" "states" "caption";
+      grid-template-areas: "controls" "readout" "chart" "states" "caption";
       row-gap: var(--space-6);
       min-width: 0;
     }
@@ -201,6 +211,15 @@ export function targetNeedsOlder(
     .stage { grid-area: chart; position: relative; min-width: 0; }
     .chart { width: 100%; min-width: 0; height: 200px; }
     .chart.hidden { display: none; }
+    /* Bottom-right, clear of the price axis and the time axis, like TradingView's. */
+    .reset {
+      position: absolute;
+      right: calc(var(--space-14) + 56px);
+      bottom: calc(var(--space-14) + 22px);
+      z-index: 2;
+      background: var(--surface-raised);
+      border: 1px solid var(--border-strong);
+    }
     /* v181 §9: a failed history page never blanks the chart; the note sits
        over its left edge, where the missing history would be. */
     .page-error {
@@ -215,12 +234,10 @@ export function targetNeedsOlder(
       font-size: var(--text-chip);
       color: var(--text-secondary);
     }
-    .caption, .account { margin: 0; font-size: var(--text-chip); }
-    .caption { grid-area: caption; color: var(--text-muted); }
-    .account { grid-area: account; color: var(--text-faint); }
+    .caption { grid-area: caption; margin: 0; font-size: var(--text-chip); color: var(--text-muted); }
 
     @media (max-width: 639px) {
-      :host { grid-template-areas: "controls" "chart" "states" "readout" "account" "caption"; }
+      :host { grid-template-areas: "controls" "chart" "states" "readout" "caption"; }
       .controls sb-segmented { flex: 1 1 100%; }
       .chart { height: 160px; }
     }
@@ -230,14 +247,15 @@ export function targetNeedsOlder(
         grid-template-columns: auto minmax(0, 1fr);
         grid-template-areas:
           "controls readout"
-          "controls account"
           "chart chart"
           "states states"
           "caption caption";
         column-gap: var(--space-10);
       }
-      .readout { align-self: end; justify-self: end; text-align: right; }
-      .account { justify-self: end; text-align: right; }
+      /* One row now (the account caption that made it two is gone): the
+         timeframe buttons and the readout share a text baseline. */
+      .controls, .readout { align-self: baseline; }
+      .readout { justify-self: end; text-align: right; }
     }
   `,
 })
@@ -249,10 +267,11 @@ export class EquityCandles {
   /** v181 §1 chart → scope: a pan or zoom the partner made, never a move
    *  this component made itself. */
   readonly rangeChange = output<TimeWindow>();
+  /** The reset button: the scope owner moves the chart back to its window ending now. */
+  readonly viewReset = output<void>();
 
 
   protected readonly store = inject(EquityCandlesStore);
-  protected readonly accountLabel = ACCOUNT_LABEL;
   protected readonly changeTooltip = CHANGE_PCT_TOOLTIP;
   protected readonly isChangePart = isChangePart;
   protected readonly timeframeOptions: SegmentOption[] =
@@ -285,6 +304,12 @@ export class EquityCandles {
    *  in part 2 a preset move) is still being reported back by the chart. */
   private programmatic = false;
   private releaseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The partner has a hand on the chart (pointer, touch or wheel), or just
+   *  lifted it. A range change outside one is the chart settling on its own
+   *  (first paint, a resize, a late frame after a redraw), never a pan or a
+   *  zoom: timing alone cannot tell the two apart on a slow first load. */
+  private gesture = false;
+  private gestureTimer: ReturnType<typeof setTimeout> | null = null;
   /** An auto step waiting for its candles: the span to show on them. */
   private pendingSpan: { tf: EquityTimeframe; span: WallSpan } | null = null;
 
@@ -303,6 +328,14 @@ export class EquityCandles {
 
   private readonly hoverIndex = signal<number | null>(null);
   protected readonly visible = signal<LogicalWindow | null>(null);
+  /** The partner dragged or zoomed the time axis since the last reset or
+   *  programmatic move. */
+  private readonly moved = signal(false);
+  /** The partner scrolled the price axis, which turns its auto-fit off. */
+  private readonly priceMoved = signal(false);
+  /** The Latest button: any axis moved, or the newest candle off screen. */
+  protected readonly showReset = computed(() =>
+    this.state() === 'chart' && (this.moved() || this.priceMoved() || !this.store.atLiveEdge()));
 
   protected readonly candles = computed(() => this.store.data()?.candles ?? []);
 
@@ -389,6 +422,7 @@ export class EquityCandles {
 
     destroyRef.onDestroy(() => {
       if (this.releaseTimer !== null) clearTimeout(this.releaseTimer);
+      if (this.gestureTimer !== null) clearTimeout(this.gestureTimer);
       this.resizeObserver?.disconnect();
       this.chart?.remove();
       this.chart = null;
@@ -416,6 +450,7 @@ export class EquityCandles {
         && shouldLoadOlder(range, this.store.hasMore(), this.store.pageLoading())) this.store.loadOlder();
     this.autoTimeframe();
     this.reportUserRange(range);
+    this.syncPriceMoved();
   }
 
   /** v181 §3: more than 250 bars → one step coarser, fewer than 15 → one
@@ -458,7 +493,8 @@ export class EquityCandles {
   private reportUserRange(range: LogicalWindow | null): void {
     const tf = this.store.data()?.tf;
     if (this.programmatic) this.armRelease();
-    if (this.programmatic || range === null || !tf) return;
+    if (this.programmatic || !this.gesture || range === null || !tf) return;
+    this.moved.set(true);
     const bounds = windowBounds(this.inWindow(), tf);
     if (bounds) this.rangeChange.emit(bounds);
   }
@@ -474,6 +510,7 @@ export class EquityCandles {
     }
     this.appliedSeq = target.seq;
     this.pendingSpan = null;
+    this.moved.set(false);
     const range = target.window ? targetLogicalRange(target.window, data.candles, data.tf) : null;
     this.moveProgrammatically(() => this.moveTo(range, target.window !== null));
   }
@@ -500,9 +537,37 @@ export class EquityCandles {
     else scale.fitContent();
   }
 
-  /** "↦ Latest": back to the newest candle at the current zoom. */
-  protected toLatest(): void {
-    this.chart?.timeScale().scrollToRealTime();
+  protected beginGesture(): void {
+    if (this.gestureTimer !== null) clearTimeout(this.gestureTimer);
+    this.gestureTimer = null;
+    this.gesture = true;
+  }
+
+  /** The hand lifted: the gesture's own range changes may still arrive. */
+  protected endGesture(): void {
+    if (this.gestureTimer !== null) clearTimeout(this.gestureTimer);
+    this.gestureTimer = setTimeout(() => {
+      this.gesture = false;
+      this.gestureTimer = null;
+    }, GESTURE_GRACE_MS);
+  }
+
+  /** Reads the price scale back: a vertical drag switches auto-fit off, and
+   *  the library reports no event for it, so this runs after a gesture ends. */
+  protected syncPriceMoved(): void {
+    const scale = this.chart?.priceScale('right');
+    this.priceMoved.set(scale ? !scale.options().autoScale : false);
+  }
+
+  /** "↺ Latest": price axis auto-fit back on, then the time axis back to now.
+   *  The scope owner re-targets Today (a new `seq` runs `applyTarget`);
+   *  with no target bound the chart just scrolls to the newest candle. */
+  protected onReset(): void {
+    this.chart?.priceScale('right').applyOptions({ autoScale: true });
+    this.priceMoved.set(false);
+    this.moved.set(false);
+    this.viewReset.emit();
+    if (this.target() === null) this.moveProgrammatically(() => this.chart?.timeScale().scrollToRealTime());
   }
 
   private create(element: HTMLElement): void {
@@ -567,6 +632,7 @@ export class EquityCandles {
       if (restore) chart.timeScale().setVisibleRange(restore);
       else chart.timeScale().fitContent();
     });
+    this.moved.set(false);
     this.renderedView = view;
     this.pendingView = '';
     this.pendingSpan = null;

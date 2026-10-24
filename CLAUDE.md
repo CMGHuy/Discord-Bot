@@ -65,8 +65,8 @@ alternative. Every spec/plan carries **`Edge:`** (`expectancy` / `harvest` /
 `volume` / `none (integrity)`) — it governs what to work on, **never what
 threshold to accept** or licence to re-run a closed pre-registration or shrink
 `N`. **A new entry strategy or filter needs a `SCREEN-PASS` ledger row before
-its spec** (`**Screen:**` header from v141). Detail: `edge-priorities.md`,
-`backtest-methodology.md` § Stage −2.
+its spec** (`**Screen:**` from v141; post-signal fill vetoes `exempt (post-signal)`,
+v192). Detail: `edge-priorities.md`, `backtest-methodology.md` § Stage −2.
 
 ## Token discipline (read first — this repo has context landmines)
 

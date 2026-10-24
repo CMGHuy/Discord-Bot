@@ -14,9 +14,6 @@ export const BASIS_LABEL: Record<EquityBasis, string> = {
   realized: 'Closed trades only',
 };
 
-/** v172 correction 7: `realized_pnl_amount` carries no slippage or
- *  commission, so the label states both exclusions. */
-export const ACCOUNT_LABEL = 'Paper account · before tax and costs';
 export const SEAM_LABEL = 'Recording started';
 const CHANGE_PART_SUFFIX = 'vs prev close';
 

@@ -190,6 +190,13 @@ describe('the strip grid (styles.css, v186 D3)', () => {
     );
   });
 
+  it('widens a lone last tile only on a strip that asks for it', () => {
+    expect(GLOBAL).toMatch(
+      /\.sb-strip-grid\.sb-strip-fill > :last-child:nth-child\(4n \+ 3\)\s*\{\s*grid-column:\s*span 2;\s*\}/,
+    );
+    expect(STRIP).toContain('[class.sb-strip-fill]="fillLast()"');
+  });
+
   it('comes after the elevation rules and casts nothing', () => {
     expect(GLOBAL.search(/\.sb-strip-grid\s*\{/)).toBeGreaterThan(GLOBAL.search(/\.elev-overlay\s*\{/));
     expect(GLOBAL.slice(GLOBAL.search(/\.sb-strip-grid\s*\{/))).not.toContain('box-shadow');

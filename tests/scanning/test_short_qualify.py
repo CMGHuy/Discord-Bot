@@ -32,6 +32,12 @@ HARD_FILTERS = dict(min_reward_pct=3.0, max_stop_loss_pct=7.0, min_stop_distance
 REFERENCE_RELS = [0.3, 0.2, 0.25, 0.1, 0.15, 0.4]
 
 
+@pytest.fixture(autouse=True)
+def _no_notice_queue_write(monkeypatch):
+    """V183-12 snapshot would queue AAA into the real data/short_interest_queue.json."""
+    monkeypatch.setattr(config, "SHORT_RISK_NOTICE", False)
+
+
 class MemoryState(StateStore):
     """The real confirm/revoke state machine over a dict instead of Postgres."""
 

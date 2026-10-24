@@ -1,5 +1,7 @@
 """Fetches daily OHLC data for a ticker."""
+import functools
 import logging
+import math
 import os
 import threading
 import time
@@ -18,7 +20,8 @@ from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.providers.base import SOURCE_YF, is_alpaca_eligible
 from swingbot.core.marketdata.shared import counters, layer
 from swingbot.core.marketdata.shared.budget import BudgetDeferred
-from swingbot.core.marketdata.shared.kinds import (PROVIDER_ALPACA, PROVIDER_YF, Asker, DataKind, QuoteDetail,
+from swingbot.core.marketdata.shared.kinds import (PROVIDER_ALPACA, PROVIDER_YF, Asker, DataKind, Entry,
+                                                   QuoteDetail,
                                                    resolve_asker)
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 
@@ -603,6 +606,35 @@ def _ticker_meta(ticker: str) -> dict:
                         asker=Asker.BACKGROUND, provider=PROVIDER_YF)
     entry = got.get(ticker)
     return dict(entry.value) if entry is not None and entry.value else {}
+
+
+def _finite_or_none(value):
+    """A JSON-safe ``.info`` value: NaN/inf (Yahoo sends them) become None."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
+def _fetch_info_fields(symbols: list, *, keys: tuple) -> dict:
+    """Provider function: only ``keys`` of each symbol's yfinance ``.info``, one
+    budget token per symbol. An error propagates so the layer counts a failure."""
+    out = {}
+    for symbol in symbols:
+        yf_safe._take_yf_token()
+        info = yf.Ticker(symbol).info or {}
+        out[symbol] = {k: _finite_or_none(info.get(k)) for k in keys}
+    return out
+
+
+def get_info_fields(ticker: str, keys, *, variant: str) -> Entry | None:
+    """v183: selected ``.info`` fields through the shared layer (v171 D1) as
+    background metadata under their own cache variant, refetched on every call
+    (``max_age_s=0``); None when the layer has no value (deferred or failed)."""
+    fetch = functools.partial(_fetch_info_fields, keys=tuple(keys))
+    with router.asker_scope(Asker.BACKGROUND):
+        got = layer.get(DataKind.METADATA, [ticker], fetch, asker=Asker.BACKGROUND,
+                        provider=PROVIDER_YF, params=variant, max_age_s=0.0)
+    return got.get(ticker)
 
 
 def _count_meta_fetch() -> None:

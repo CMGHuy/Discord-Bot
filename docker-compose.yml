@@ -218,8 +218,12 @@ services:
       # restart the bot yourself with `docker compose restart bot` after
       # saving .env.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Loopback only: Docker-published ports bypass UFW, so a bare
+    # "1234:1234" served the login page over plain HTTP to the whole
+    # internet. The tunnel reaches http://admin:1234 over the compose
+    # network; by hand, use an SSH tunnel (DEPLOY_HETZNER.md).
     ports:
-      - "${ADMIN_PORT:-1234}:${ADMIN_PORT:-1234}"
+      - "127.0.0.1:${ADMIN_PORT:-1234}:${ADMIN_PORT:-1234}"
     # Health check: asks Flask for the root page and accepts 200 (logged
     # in) or 401 (auth gate hit -- server is up). Any other status or a
     # connection refusal means the admin UI is not healthy.

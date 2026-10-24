@@ -22,7 +22,9 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  *
  * Columns: the global .sb-strip-grid (styles.css), shared with sb-async's
  * 'tiles' skeleton. With no `cols`, auto-fit at 140px. With `cols`, that many
- * from 1024px, `colsMd` (default 2) from 640px, and 2 below.
+ * from 1024px, `colsMd` (default 2) from 640px, and 2 below. `fillLast`
+ * widens a last tile that would sit alone in a row of two or four columns
+ * (a seventh of eight places, say) across the rest of its row.
  */
 @Component({
   selector: 'sb-stat-strip',
@@ -31,7 +33,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     '[style.--strip-cols]': 'cols()',
     '[style.--strip-cols-md]': 'colsMd()',
   },
-  template: `<div class="sb-strip-grid" [class.sb-strip-fixed]="cols() !== null"><ng-content /></div>`,
+  template: `<div class="sb-strip-grid" [class.sb-strip-fixed]="cols() !== null" [class.sb-strip-fill]="fillLast()"><ng-content /></div>`,
   styles: `
     :host {
       --figure-rule: 1px;
@@ -52,4 +54,6 @@ export class StatStrip {
   readonly cols = input<number | null>(null);
   /** Columns from 640px to 1023px, when `cols` is set. */
   readonly colsMd = input<number>(2);
+  /** Span the last tile across the row it starts (4 or 2 columns only). */
+  readonly fillLast = input(false);
 }

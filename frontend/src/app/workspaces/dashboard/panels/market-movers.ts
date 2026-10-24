@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { PANEL_HELP } from './panel-help';
 
 import { TapeRow } from '../../../api/models';
 import { Panel, TabBar } from '../../../ui/layout';
@@ -18,7 +19,7 @@ type MoverTab = 'gainers' | 'losers';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Panel, TabBar],
   template: `
-    <sb-panel heading="Market movers" [divided]="true">
+    <sb-panel heading="Market movers" [description]="about" [divided]="true">
       <sb-tab-bar [tabs]="tabs" [active]="active()" (activeChange)="active.set($any($event))" />
       <ul class="movers">
         @for (row of visible(); track row.symbol) {
@@ -53,6 +54,7 @@ type MoverTab = 'gainers' | 'losers';
   `,
 })
 export class MarketMovers {
+  protected readonly about = PANEL_HELP.marketMovers;
   readonly rows = input<readonly TapeRow[]>([]);
   readonly limit = input(10);
 

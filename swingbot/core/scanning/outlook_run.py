@@ -33,6 +33,7 @@ from swingbot.core.market.session import US_MARKET_TZ, session_close
 from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS
 from swingbot.core.marketdata import data_store
 from swingbot.core.planning import account as account_module
+from swingbot.core.planning import gap_sizing
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.tracking.origin import NEXT_SESSION
 from swingbot.scan_params import ScanParams
@@ -198,7 +199,7 @@ def _plan_line(item, plan, risk: float | None = None) -> OutlookLine:
 
 def _risk_dollars(plan) -> float | None:
     try:
-        sizing = account_module.compute_position_size(plan.trigger_price, plan.stop_loss)
+        sizing = gap_sizing.size_for_plan(plan, entry=plan.trigger_price)
     except Exception as exc:
         swallowed(log, "scan.outlook_run.risk_dollars", exc, level=logging.DEBUG)
         return None
