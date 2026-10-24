@@ -110,6 +110,8 @@ restart gives `priced_at = null` and the watch counts from `started_at`.
 
 V184-1 appends its measured verdict here (a dated line: kept 600 s, or the new value with its reason) and in its results doc. V184-9 reads this line before it writes `STOPS_UNCHECKED_S`. V184-11 refuses to merge if the line is missing.
 
+- **2026-10-24:** kept `STOPS_UNCHECKED_S=600` (case 1: L=0s, U=0.0000; source A 3 sessions, source B 6 sessions; [results](../results/2026-10-24-v184-stops-unchecked-threshold.md); recheck per-tick evidence in V184-12).
+
 ## Contracts
 
 ### Session helper (V184-2)
