@@ -40,11 +40,9 @@ drift); never edit them. Nor edit the Claude side from Codex: for a requested
 convention change, edit the Claude source, run the script and condense the
 change into this file, all in one commit.
 
-**Where this file lives matters.** Codex auto-loads `AGENTS.md` only from
-`~/.codex` and from the git root downward. A copy at `.codex/AGENTS.md` is never
-read, which is why this file sits at the repository root. Codex stops adding
-instructions at 32 KiB combined (`project_doc_max_bytes`), so this file stays
-condensed and pushes detail into `docs/claude/`.
+Codex reads `AGENTS.md` from `~/.codex` and the git root downward, not from
+`.codex/`. Keep this file below the 32 KiB `project_doc_max_bytes` limit;
+detail belongs in `docs/claude/`.
 
 ## Far-off scheduled work
 
@@ -285,8 +283,9 @@ local testing instance with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded
 inside the script and never printed, echoed, passed as arguments or written
 elsewhere; build any local test instance from those same `.env` values, never
 the `admin`/`admin` default. Reading `.env` (and scripts loading it) is
-partner-allowed; never print, echo, log or quote its values. A task that runs tests against the database runs
-`replicate-prod-db` first and points `DATABASE_URL` at the replica, always in this project's one shared `swing-db` container (parallel tasks share it; no per-task container).
+partner-allowed; never print, echo, log or quote its values. Before database
+tests, run `replicate-prod-db` and point `DATABASE_URL` at the replica in the
+shared `swing-db` container; never make a per-task container.
 
 ## Efficient repository navigation
 
