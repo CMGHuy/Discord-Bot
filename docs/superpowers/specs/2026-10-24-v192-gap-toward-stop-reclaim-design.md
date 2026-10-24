@@ -55,9 +55,10 @@ funnel's expectancy, geometry, volume and mechanism clauses.
 
 - **Signal bar `t`:** the plan's creating bar; ATR14 is Wilder ATR14 of
   completed bars through `t` (`a_t`, in price). No bar after `t` is read to
-  decide the threshold (NO-LOOKAHEAD). `a_t` is the same Wilder ATR14 the
-  plan's own `atr` field carries, from the same bars, so live and replay
-  read one value.
+  decide the threshold (NO-LOOKAHEAD). `TradePlanV2` has no ATR field, so
+  `a_t` (Wilder ATR14 from the plan's own bars) is computed once at
+  creation and stored on the plan beside `reclaim_level`; live and replay
+  read that one value.
 - **`E` in replay** is the plan's `trigger_price`, which equals `Close[t]`
   for a replayed market plan; live it is the scan price. A parity test pins
   `E`, `a_t` and `X` in both.
@@ -78,9 +79,12 @@ At session `t+1`:
 
 0. **Overnight stop cross (partner, 2026-10-24):** live, a waiting market
    plan whose stop is crossed in premarket is cancelled `open_through_stop`
-   at once, by the same `EXTENDED_HOURS_EXIT_CHECK` poll and
-   `EXTENDED_HOURS_DEBOUNCE_TICKS` confirmation that already close open
-   trades in extended hours. Replay sees only daily bars, so it cancels on
+   at once, after two consecutive confirming 60 s polls. This is **new
+   code**: `EXTENDED_HOURS_EXIT_CHECK` / `EXTENDED_HOURS_DEBOUNCE_TICKS`
+   (`config.py:708`, `:725`) are read by nothing since v70's `_step_extended`
+   was removed on 2026-09-14; `poll` gates only on quiet hours. The plan adds
+   a market-plan step ahead of `_step_pending` (whose stop-entry rule would
+   otherwise fill a waiting market plan at any price ≥ E). Replay sees only daily bars, so it cancels on
    the open alone; a premarket cross that recovers by the open is a known
    live-only cancel, counted live and reported, never simulated.
 1. Open at or beyond the stop → cancelled, `open_through_stop` (new for ordinary market plans: today only v180 Turtle Soup has this cancel, in replay).
@@ -88,8 +92,9 @@ At session `t+1`:
 3. Gap `≥ g × a_t` → the plan becomes a resting order at `E` for that session:
    - reclaim → fills at `E` as a DAY stop order (buy-stop for a long,
      sell-stop for a short); an open already past `E` cannot occur here by
-     construction. `frictions.py` slippage is applied once, on the adverse
-     side, at this fill price;
+     construction. The v1 arm replay carries no frictions (raw R in both
+     arms), so the stop order's slippage is modelled as a fill at `E + 1
+     tick` (`E − 1 tick` for a short);
    - no reclaim → cancelled, reason `gap_no_reclaim`, with a Discord
      follow-up "cancelled: opened toward stop, no reclaim" through the
      existing follow-up path.
@@ -145,15 +150,21 @@ feature** (panel): reclaimed trades fill at `E` in the component and at
 `is_subset=False` and `_clause_mechanism` would return SKIPPED. Frozen
 here, before TRAIN:
 
-- three strata: **removed** (`gap_no_reclaim` cancels), **re-priced**
-  (reclaimed fills) and **unchanged** (everything else; `open_through_stop`
-  cancels are `not_triggered` in both arms and excluded from both);
+- strata: **removed** (`gap_no_reclaim` cancels), **re-priced**
+  (reclaimed fills), **added** (component trades with no baseline twin,
+  which `StrategyEngine.open_until` creates when a baseline trade is
+  cancelled) and **unchanged** (everything else; `open_through_stop`
+  cancels are `not_triggered` in both arms and excluded from both).
+  `population_split` cannot label these today (re-priced trades pair on the
+  same key), so the plan adds the labelling;
 - clause 6 (mechanism) is scored removed vs unchanged: removed WR <
   unchanged WR and removed ExpR ≤ 0; the re-priced stratum is reported as
   a third row and decides nothing;
 - volume cut = removed ÷ baseline N; the geometry lock is computed on every
   kept trade, re-priced included;
-- the plan adds this scoring explicitly; a SKIPPED clause counts as a fail.
+- the plan adds this scoring explicitly; a SKIPPED clause counts as a fail
+  (`evaluate` does not fail on SKIPPED today, so this is a code change
+  behind an opt-in, leaving other components' verdicts as they are).
 
 - **Stage −1 reachability (mandatory, the exemption's condition):** market
   plans per horizon and direction; how many arm the veto at each `g`; how
@@ -162,7 +173,8 @@ here, before TRAIN:
 - **Stage 0:** paired MDE on fold-train, statistic ΔWR
   (`acceptance.mde_paired(..., statistic=...)` as v72 uses it).
 - **Stage 1:** winner = the `g` with the highest pooled fold-train ΔWR
-  (the three fold-train windows pooled into one trade list) among cells
+  (on the whole fold-train window's rows, once; the selection folds are
+  expanding, so pooling them would triple-count the early years) among cells
   with ΔExpR ≥ −0.01R; ties go to the smaller `g`. The plateau check is
   `plateau_report()` (scores ExpR)
   existing tolerance; an edge cell is adoptable with its one neighbour; a
@@ -173,9 +185,9 @@ here, before TRAIN:
   R fall ≤ 2%), volume cut ≤ 25%, permutation p < 0.05, mechanism (removed
   WR < retained WR and removed ExpR ≤ 0).
 
-Frictions: `frictions.py` applied once at each arm's own fill price, the
-same bps model at the open and at `E`, adverse side for the reclaim stop
-order; a gap through a stop fills at the open. Intervals come from
+Frictions: the v1 arm replay applies none (`frictions.py` runs only in the
+legacy loop), so both arms are raw R alike; the reclaim fill takes one
+adverse tick instead; a gap through a stop fills at the open. Intervals come from
 `week_cluster_bootstrap` (`instrument/stats.py`), since one scan day's
 plans gap together on market-wide opens. Multiple comparisons: three `g`
 cells searched; the source, direction and horizon splits are descriptive
@@ -200,7 +212,7 @@ One ledger row.
   replay's is reported after the knob is flipped.
 - **Every market plan waits for the next open** *(partner, 2026-10-24)*:
   with `MARKET_ENTRY_NEXT_OPEN` on, a market plan is built PENDING, not
-  ACTIVE (`builders.py:487`, `:710` today set `entry_price = close` and
+  ACTIVE (`builders.py:477/:488`, `:702/:711` today set `entry_price = close` and
   activate at build), and the trade is logged at the fill, not at creation.
   At the next open it fills at the open, cancels on an open through the
   stop, or (veto armed) rests at `E` for the session and cancels at the
@@ -258,7 +270,9 @@ today, pinned by a flag-off golden captured before any behaviour change.
   top-two-horizon share.
 - Baseline basis: next-open baseline vs today's v1 close-fill WR and ExpR,
   on fold-train only.
-- Regime (`regime2`) cut, descriptive; earnings-proximity cut, descriptive, if the replay row carries a point-in-time earnings date.
+- Regime (`regime2`) cut, descriptive. No earnings-proximity cut: the v1
+  row (`ArmTrade`) has no earnings date and no as-of earnings archive exists
+  (`compression_research.py:7-13`); recorded as unavailable.
 
 ## On a pass / on a fail
 
@@ -284,9 +298,10 @@ today, pinned by a flag-off golden captured before any behaviour change.
   TP1 (stop-first); `_fill_bar_exit`'s 0R `gap_through_stop` scratch is not
   reused, the open-through-stop case is a `not_triggered` cancel in both arms.
 - Hold cap: the fill session counts as session 1 for next-open market plans
-  only when `MARKET_ENTRY_NEXT_OPEN` is on (`_counts_fill_session` widened
-  behind the knob; `SESSION_ONE_HOLD_CAP` unchanged otherwise), live
-  activation-at-open counting matches.
+  that have a hold cap, only when `MARKET_ENTRY_NEXT_OPEN` is on
+  (`_counts_fill_session` widened behind the knob). Confluence plans have
+  no `hold_cap_bars`, so `_hold_cap_bars` returns early and nothing
+  changes for them.
 - `measure_arms.py`: the baseline delta is stamped in the artifact beside
   `knob_delta`, `static_refusal` / `population_refusal` run on it, and
   `apply_knobs` enforces the `GAP_RECLAIM_ATR`-needs-next-open guard (not
@@ -363,7 +378,21 @@ Builder-check corrections (2026-10-24, before the panel): open-through-stop is n
 - quant-engineer: gap/a_t distribution and ATR source -- applied.
 - quant-engineer: golden coverage unstated -- applied.
 - quant-engineer + veteran-trader: ambiguous bars bias the comparison -- applied: a sensitivity run with ambiguous bars as cancels.
-- veteran-trader: frictions at the open -- applied (same bps model at each arm's own fill).
+- veteran-trader: frictions at the open -- applied as one adverse tick on the reclaim fill (the v1 arm replay carries no frictions in either arm; plan-briefer).
 - veteran-trader: time-in-force -- applied: DAY.
 - veteran-trader: liquidity for the reclaim order -- rejected: the replay universe is the liquid watchlist era v139/v180 used; sizing is unchanged and the 2% dollar cap holds.
-- veteran-trader: event days not split -- applied as descriptive only: the plan adds an earnings-proximity cut if the v1 replay row has a point-in-time earnings date (the plan-briefer checks), otherwise it records that the cut is unavailable; depth is left to a fundamental-analyst follow-up.
+- veteran-trader: event days not split -- rejected: no point-in-time earnings date exists for the replay (plan-briefer); left to a fundamental-analyst follow-up.
+
+Plan-briefer corrections (2026-10-24, after the panel): `TradePlanV2` has no
+ATR field (stored at creation); the extended-hours exit fields are dead
+config, so the premarket cancel is new code; the v1 arm replay applies no
+frictions (one adverse tick on the reclaim fill instead); the fold-train
+winner reads the whole window once; confluence plans have no hold cap;
+`population_split` needs re-priced/added labels and `evaluate` a
+SKIPPED-fails opt-in; no point-in-time earnings date exists; builder line
+numbers fixed. New cancel and reclaim-instruction events need entries in
+`NOTICE_EVENTS`, `instructions._CANCEL_LEADS`/`_BUILDERS`,
+`PLAN_EVENT_KINDS`, `execution_embeds`, `_TRANSITION_LOG`, the `_on_event`
+discard tuple and the `follow_notify` tables (`instructions._cancel_why`
+would KeyError otherwise); `_on_event`, `poll` and `_step_active` are
+already at or over complexity 15, so the plan splits before it adds.
