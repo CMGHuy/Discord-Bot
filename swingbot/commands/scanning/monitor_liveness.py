@@ -147,7 +147,8 @@ _STATE = MonitorLiveness()
 
 
 def _write(doc: dict) -> None:
-    runstate._update_heartbeat({"monitor": doc})
+    if runstate._update_heartbeat({"monitor": doc}) is False:
+        raise RuntimeError("monitor heartbeat merge failed")
 
 
 async def stamp_tick(rec: TickRecord, *, now: dt.datetime | None = None) -> bool:

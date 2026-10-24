@@ -20,16 +20,19 @@ def _read_heartbeat() -> dict:
         return {}
 
 
-def _update_heartbeat(fields: dict) -> None:
+def _update_heartbeat(fields: dict) -> bool:
     """Merge `fields` into the heartbeat row key by key (`doc || fields` in
     SQL, v148): no read first, so the bot and the admin never write a stale
     whole-doc view over each other's keys. A failed write is counted and
-    logged, never raised -- the heartbeat must not take down a tick."""
+    logged, never raised -- the heartbeat must not take down a tick.
+    Return whether the merge succeeded so callers can retry a failed write."""
     try:
         from swingbot.core.db.repositories.heartbeat import heartbeat_repo
         heartbeat_repo().merge(fields)
+        return True
     except Exception as exc:
         swallowed(log, "runstate.update_heartbeat", exc, "heartbeat write failed")
+        return False
 
 
 def _write_heartbeat() -> None:

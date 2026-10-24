@@ -282,3 +282,28 @@ def test_stamp_tick_runs_the_write_in_a_worker_thread(fresh_state, monkeypatch):
     assert asyncio.run(ml.stamp_tick(_rec(), now=NOW)) is True
     assert len(writer_threads) == 1
     assert writer_threads[0] != event_thread
+
+
+def test_repository_merge_failure_retries_before_the_write_interval(
+    fresh_state, monkeypatch, data_dir, db_committed, db_url,
+):
+    merge = HeartbeatRepository.merge
+    attempts = []
+
+    def fail_once(repo, fields, **kwargs):
+        attempts.append(fields)
+        if len(attempts) == 1:
+            raise RuntimeError("repository unavailable")
+        return merge(repo, fields, **kwargs)
+
+    monkeypatch.setattr(HeartbeatRepository, "merge", fail_once)
+    before = swallowed_mod.snapshot().get("ops.monitor_stamp", {}).get("count", 0)
+    assert asyncio.run(ml.stamp_tick(_rec(), now=NOW)) is False
+    assert swallowed_mod.snapshot()["ops.monitor_stamp"]["count"] == before + 1
+    later = NOW + dt.timedelta(seconds=60)
+    assert asyncio.run(ml.stamp_tick(_rec(), now=later)) is True
+    assert len(attempts) == 2
+    persisted = HeartbeatRepository().last(conn=db_committed)
+    assert persisted["monitor"]["tick_at"] == "2026-10-21T15:01:00+00:00"
+    assert asyncio.run(ml.stamp_tick(_rec(), now=later)) is False
+    assert len(attempts) == 2
