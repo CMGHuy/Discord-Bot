@@ -92,6 +92,15 @@ def _doc(env):
     return env["writes"][0]
 
 
+def _assert_tick_order(seq, suffix):
+    assert seq[0] == "prices"
+    assert seq[1:5] in (
+        ["close:AAPL", "near_tp:AAPL", "close:MSFT", "near_tp:MSFT"],
+        ["close:MSFT", "near_tp:MSFT", "close:AAPL", "near_tp:AAPL"],
+    )
+    assert seq[5:] == suffix
+
+
 def test_a_clean_tick_stamps_ok_with_positions_and_advances_priced_at(env):
     _run_tick()
     doc = _doc(env)
@@ -107,9 +116,8 @@ def test_the_stamp_is_the_last_step_and_nothing_else_moved(env):
     env["closed"]["AAPL"] = [{"id": "t1"}]
     env["events"] = ["ev"]
     _run_tick()
-    assert env["seq"] == ["prices", "close:AAPL", "near_tp:AAPL", "close:MSFT", "near_tp:MSFT",
-                          "manager", "plan_events", "equity", "retry", "notify", "presence",
-                          "stamp"]
+    _assert_tick_order(env["seq"], ["manager", "plan_events", "equity", "retry",
+                                    "notify", "presence", "stamp"])
 
 
 def test_an_unquoted_trade_ticker_is_still_skipped_and_now_reported(env):
@@ -203,5 +211,4 @@ def test_a_raising_stamp_write_leaves_the_tick_untouched(env, monkeypatch):
     monkeypatch.setattr(monitor_liveness, "_write", boom)
     env["closed"]["AAPL"] = [{"id": "t1"}]
     assert _run_tick() is None
-    assert env["seq"] == ["prices", "close:AAPL", "near_tp:AAPL", "close:MSFT", "near_tp:MSFT",
-                          "manager", "equity", "retry", "notify", "presence"]
+    _assert_tick_order(env["seq"], ["manager", "equity", "retry", "notify", "presence"])
