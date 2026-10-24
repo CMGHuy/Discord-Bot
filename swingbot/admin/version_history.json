@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-23 19:11:30 UTC",
+  "generated_at": "2026-10-24 08:36:10 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
