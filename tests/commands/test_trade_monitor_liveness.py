@@ -31,7 +31,8 @@ def env(monkeypatch):
     """A stubbed tick: two open trades (AAPL, MSFT), both priced; closes
     return nothing; the manager returns no events and demanded nothing.
     `env["seq"]` records the order of every step, the stamp write last."""
-    state = {"prices": {"AAPL": 100.0, "MSFT": 200.0}, "demand": None, "events": [],
+    state = {"prices": {"AAPL": 100.0, "MSFT": 200.0}, "demand": None,
+             "plan_errors": (), "events": [],
              "closed": {}, "seq": [], "writes": []}
     seq = state["seq"]
     monkeypatch.setattr(monitor_liveness, "_STATE", monitor_liveness.MonitorLiveness(started_at=START))
@@ -64,6 +65,8 @@ def env(monkeypatch):
         return state["events"]
     monkeypatch.setattr(plan_manager, "run_manager_tick", tick)
     monkeypatch.setattr(plan_manager, "last_poll_demand", lambda: state["demand"])
+    monkeypatch.setattr(plan_manager, "last_poll_check_errors",
+                        lambda: state["plan_errors"], raising=False)
 
     async def post_events(events):
         seq.append("plan_events")
@@ -150,6 +153,19 @@ def test_a_raising_close_call_is_a_check_error(env, monkeypatch):
     assert doc["check_errors"] == ["AAPL"]
     assert "near_tp:AAPL" not in env["seq"] and "near_tp:MSFT" in env["seq"]
     assert doc["outcome"] == "ok" and doc["priced_at"] is None
+
+
+def test_a_swallowed_plan_step_failure_does_not_refresh_priced_at(env, monkeypatch):
+    monkeypatch.setattr(loops.trade_log, "get_trades",
+                        lambda status=None, limit=None: [])
+    env["demand"] = PollDemand(demanded=("NVDA",), priced=frozenset({"NVDA"}))
+    env["plan_errors"] = ("NVDA",)
+    _run_tick()
+    doc = _doc(env)
+    assert doc["positions"] == ["NVDA"]
+    assert doc["unquoted"] == []
+    assert doc["check_errors"] == ["NVDA"]
+    assert doc["priced_at"] is None
 
 
 def test_a_raising_manager_reads_as_unknown_not_checked(env, monkeypatch):

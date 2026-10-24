@@ -766,6 +766,7 @@ async def _monitor_tick(rec: "monitor_liveness.TickRecord") -> None:
 
     plan_events, rec.manager_raised = await _run_plan_manager_tick()
     rec.plan_demand = plan_manager.last_poll_demand()
+    rec.check_errors.extend(plan_manager.last_poll_check_errors())
     rec.fetch_failed = plan_manager.monitor_batch_failed()
     if plan_events:
         await _post_plan_events(plan_events)
