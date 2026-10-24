@@ -106,9 +106,11 @@ interpreting any backtest, grid, or validation result.
   entry strategy or filter cite the pass in their `**Screen:**` header
   (`document-conventions.md`), enforced by
   `tests/hooks/test_spec_screen_header.py`. **One exemption (v192,
-  partner 2026-10-24):** a filter that acts only after a bot signal, such as
-  a fill-timing veto on the bot's own plans, cannot be measured by the screen
-  (its events have no bot signal beneath them). Its spec says
+  partner 2026-10-24):** a fill-timing veto -- a rule decided by price
+  action between the bot's alert and its fill, on the bot's own plans --
+  cannot be measured by the screen (its events have no bot signal beneath
+  them). A filter on anything known at the alert (signal-bar features,
+  regime, sector) is not exempt. Its spec says
   `exempt (post-signal)` and must clear Stage −1 reachability on the bot's
   own replay before any shot; the funnel's clauses are otherwise unchanged.
 - **The acceptance funnel.** Selection never touches scoring data, and two

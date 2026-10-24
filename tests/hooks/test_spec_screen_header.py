@@ -5,7 +5,7 @@
 | expectancy / volume adding an entry strategy or filter | `<ledger-id> SCREEN-PASS` (row must exist)  |
 | expectancy moving stops/targets, or harvest            | `harvest-headroom <path>` (path must exist) |
 | none (integrity)                                       | `exempt (integrity)`                        |
-| expectancy, a filter acting only after a bot signal    | `exempt (post-signal)` (v192, 2026-10-24)   |
+| expectancy, a fill-timing veto (alert-to-fill price)   | `exempt (post-signal)` (v192, 2026-10-24)   |
 
 v140 and earlier are grandfathered by number. A split spec carries the line
 in its _0-index part. See
