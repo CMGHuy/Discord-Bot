@@ -584,6 +584,7 @@ async def _live_price_batch(tickers: list) -> dict:
     except Exception as exc:
         swallowed(log, "scan.loops.monitor_prices", exc,
                   "trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        plan_manager.mark_monitor_batch_failed()
         return {}
     return {t: q.price for t, q in quotes.items() if q.price}
 
@@ -602,14 +603,19 @@ async def _legacy_live_price_batch(tickers: list) -> dict:
     trade is checked against its stop or target."""
     if not tickers:
         return {}
+    from swingbot.core.planning import plan_manager
     try:
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
             (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
-            f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
+            f"trade_monitor: live-price batch of {len(tickers)} ticker(s)")
     except Exception as exc:
         log.warning("trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        plan_manager.mark_monitor_batch_failed()
         return {}
+    if result is None:  # v184: _run_bounded failed or timed out, not merely empty
+        plan_manager.mark_monitor_batch_failed()
+    return result or {}
 
 
 async def _record_equity_sample(live_prices: dict) -> None:

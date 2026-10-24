@@ -1503,6 +1503,30 @@ class PlanManager:
 _MANAGER: PlanManager | None = None
 
 
+# -- v184: per-tick "the shared quote batch failed" flag ---------------------
+# monitor_quotes / _price_batch_fn return {} both for a failed or timed-out
+# batch (_run_bounded -> None) and for an empty one; the stop-monitor stamp
+# needs the difference. trade_monitor resets the flag first thing each tick;
+# any bounded batch that fails in that tick marks it. Sticky until the next
+# reset. Return types are deliberately unchanged.
+_MONITOR_BATCH: dict[str, bool] = {"failed": False}
+
+
+def reset_monitor_batch_status() -> None:
+    """Start a monitor tick with no batch failure recorded."""
+    _MONITOR_BATCH["failed"] = False
+
+
+def mark_monitor_batch_failed() -> None:
+    """Record that a monitor quote batch failed or timed out this tick."""
+    _MONITOR_BATCH["failed"] = True
+
+
+def monitor_batch_failed() -> bool:
+    """Whether any monitor quote batch failed since the last reset."""
+    return _MONITOR_BATCH["failed"]
+
+
 def _price_fn(ticker):                      # module-level so tests can patch it
     from swingbot.core.marketdata.data import get_current_price
     # Never a stale cached print: this feeds live stop/target decisions, and
@@ -1539,6 +1563,8 @@ def _legacy_price_batch(tickers):
     fn = functools.partial(get_current_price_batch, allow_stale=False)
     result = _run_bounded(fn, (tickers,), timeout,
                           label=f"plan manager: live-price batch of {len(tickers)} ticker(s)")
+    if result is None:  # v184: failed or timed out, not merely empty
+        mark_monitor_batch_failed()
     return result or {}
 
 
@@ -1565,6 +1591,9 @@ def monitor_quotes(tickers: list) -> dict:
     out = fetch._run_bounded(_monitor_quote_worker, (list(tickers),),
                              float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
                              label=f"stop monitor: shared quote batch of {len(tickers)} ticker(s)")
+    if out is None:  # v184: failed or timed out, not merely empty
+        mark_monitor_batch_failed()
+        return {}
     if not out:
         return {}
     docs, rows = out
