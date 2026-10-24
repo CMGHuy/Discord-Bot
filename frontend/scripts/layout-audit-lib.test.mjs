@@ -23,8 +23,9 @@ const entry = (over = {}) => ({
   reason: 'canvas internals of a third-party chart', date: '2026-10-19', ...over,
 });
 
-test('ROUTES visits every route and tab once (spec §2: 27)', () => {
-  assert.equal(ROUTES.length, 27);
+test('ROUTES visits every route and tab once (spec §2 plus v188 /cancels: 28)', () => {
+  assert.equal(ROUTES.length, 28);
+  assert.ok(ROUTES.includes('/cancels'));
   assert.equal(new Set(ROUTES).size, ROUTES.length);
   assert.ok(ROUTES.every((route) => route.startsWith('/')));
   for (const tab of ['attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials']) {

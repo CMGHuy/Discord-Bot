@@ -74,6 +74,13 @@ export const routes: Routes = [
     loadChildren: () => import('./workspaces/calendar/calendar.routes').then((m) => m.calendarRoutes),
   },
   {
+    path: 'cancels',
+    canMatch: [authGuard],
+    title: 'Cancels',
+    data: { subtitle: "Were the bot's own cancels right?" },
+    loadChildren: () => import('./workspaces/cancels/cancels.routes').then((m) => m.cancelsRoutes),
+  },
+  {
     path: 'watchlist',
     canMatch: [authGuard],
     title: 'Watchlist',
