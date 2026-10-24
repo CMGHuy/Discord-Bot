@@ -43,3 +43,26 @@ def test_it_logs_every_rollback_and_never_sed(src):
     assert "sed -i" not in src
     assert "set -euo pipefail" in src
     assert b"\r" not in SCRIPT.read_bytes()
+
+
+MONITOR_KEY_SQL = "UPDATE bot_heartbeat SET doc = doc - 'monitor' WHERE key = 'bot'"
+DEPLOY_DOC = SCRIPT.parents[2] / "docs" / "deploy" / "DEPLOY_HETZNER.md"
+
+
+def test_it_reminds_to_clear_the_v184_monitor_key_after_the_restart(src):
+    """v184 spec section 3: a stale `monitor` key reads monitor_stale for good."""
+    assert "REMINDER (v184)" in src and MONITOR_KEY_SQL in src
+    start = src.index("docker compose up -d --no-build --wait bot admin")
+    paused = src.index("Scanning is PAUSED")
+    reminder = src.index("REMINDER (v184)")
+    finished = src.index('rollback to $TARGET finished')
+    assert start < paused < reminder < finished
+
+
+def test_the_deploy_doc_names_the_key_removal_in_both_rollback_sections():
+    doc = DEPLOY_DOC.read_text(encoding="utf-8")
+    image = doc.split("\n## Rolling back\n", 1)[1].split("\n### After every deploy or rollback", 1)[0]
+    pitr = doc.split("\n### Point-in-time rollback\n", 1)[1].split("\n**Backups.**", 1)[0]
+    assert MONITOR_KEY_SQL in image
+    assert "not_deployed" in image and "monitor_stale" in image
+    assert "REMINDER (v184)" in pitr and "Rolling back" in pitr

@@ -79,6 +79,21 @@ class QuotePrices(dict):
         self.details = details
 
 
+@dataclass(frozen=True)
+class PollDemand:
+    """v184: the open-plan tickers one poll() asked the shared quote batch for,
+    in store order and de-duplicated, and the subset that came back with a
+    usable price -- truthy and > 0, the filter poll() applies before stepping a
+    plan. The stop-monitor stamp reads it instead of fetching again."""
+    demanded: tuple[str, ...]
+    priced: frozenset[str]
+
+    @property
+    def unpriced(self) -> tuple[str, ...]:
+        """Demanded tickers with no usable price, in demanded order."""
+        return tuple(t for t in self.demanded if t not in self.priced)
+
+
 def _session_label(now) -> str:
     if is_regular_session(now):
         return "regular"
@@ -482,6 +497,9 @@ class PlanManager:
         # v144: ticker -> hourly bars from disk, for the outlook expiry reason
         # (session_expiry). None = hourly unused, the daily bar decides.
         self.hourly_frame_fn = hourly_frame_fn
+        # v184: what the last poll() demanded from the quote batch and what it
+        # priced. None = nothing demanded (quiet hours, serial seam, not polled).
+        self.last_poll_demand: PollDemand | None = None
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -586,7 +604,20 @@ class PlanManager:
         if added:
             self.store.update(plan)
 
+    def _record_poll_demand(self, open_plans, prices) -> None:
+        """v184: remember what this poll() demanded and priced. ``prices`` is
+        poll()'s own batch result (no second fetch); None with plans open is the
+        serial seam, which demands nothing from the batch, so the record stays
+        None. No open plans is a known, empty demand."""
+        if prices is None and open_plans:
+            return
+        tickers = tuple(dict.fromkeys(plan.ticker for plan in open_plans))
+        got = prices or {}
+        self.last_poll_demand = PollDemand(
+            tickers, frozenset(t for t in tickers if (got.get(t) or 0) > 0))
+
     def poll(self, now=None) -> list[PlanEvent]:
+        self.last_poll_demand = None  # v184: unknown until this poll demands quotes
         # One gate, and only one (2026-09-14, on direct request): the
         # operator's quiet window. Outside it, the FULL state machine runs
         # on every tick -- break-even arming, TP1 partial-banking, the
@@ -631,6 +662,7 @@ class PlanManager:
                 # stale or serial quote requests that delay every plan.
                 log.debug("poll: batch price fetch failed: %s", exc)
                 prices = {}
+        self._record_poll_demand(open_plans, prices)
         details = getattr(prices, "details", {})
         for plan in open_plans:
             if prices is not None:
@@ -1503,6 +1535,30 @@ class PlanManager:
 _MANAGER: PlanManager | None = None
 
 
+# -- v184: per-tick "the shared quote batch failed" flag ---------------------
+# monitor_quotes / _price_batch_fn return {} both for a failed or timed-out
+# batch (_run_bounded -> None) and for an empty one; the stop-monitor stamp
+# needs the difference. trade_monitor resets the flag first thing each tick;
+# any bounded batch that fails in that tick marks it. Sticky until the next
+# reset. Return types are deliberately unchanged.
+_MONITOR_BATCH: dict[str, bool] = {"failed": False}
+
+
+def reset_monitor_batch_status() -> None:
+    """Start a monitor tick with no batch failure recorded."""
+    _MONITOR_BATCH["failed"] = False
+
+
+def mark_monitor_batch_failed() -> None:
+    """Record that a monitor quote batch failed or timed out this tick."""
+    _MONITOR_BATCH["failed"] = True
+
+
+def monitor_batch_failed() -> bool:
+    """Whether any monitor quote batch failed since the last reset."""
+    return _MONITOR_BATCH["failed"]
+
+
 def _price_fn(ticker):                      # module-level so tests can patch it
     from swingbot.core.marketdata.data import get_current_price
     # Never a stale cached print: this feeds live stop/target decisions, and
@@ -1539,6 +1595,8 @@ def _legacy_price_batch(tickers):
     fn = functools.partial(get_current_price_batch, allow_stale=False)
     result = _run_bounded(fn, (tickers,), timeout,
                           label=f"plan manager: live-price batch of {len(tickers)} ticker(s)")
+    if result is None:  # v184: failed or timed out, not merely empty
+        mark_monitor_batch_failed()
     return result or {}
 
 
@@ -1565,6 +1623,9 @@ def monitor_quotes(tickers: list) -> dict:
     out = fetch._run_bounded(_monitor_quote_worker, (list(tickers),),
                              float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
                              label=f"stop monitor: shared quote batch of {len(tickers)} ticker(s)")
+    if out is None:  # v184: failed or timed out, not merely empty
+        mark_monitor_batch_failed()
+        return {}
     if not out:
         return {}
     docs, rows = out
@@ -1637,6 +1698,16 @@ def run_manager_tick() -> list[PlanEvent]:
         return []
     # Production reads the wall clock; poll's optional clock is test injection.
     return _manager().poll()
+
+
+def last_poll_demand() -> PollDemand | None:
+    """v184: what the live manager's last poll() demanded and priced, for the
+    stop-monitor stamp. None while INTRADAY_MANAGER_V2 is off or the manager was
+    never built (the plan side demanded nothing). Never builds the manager and
+    never fetches."""
+    if not config.INTRADAY_MANAGER_V2 or _MANAGER is None:
+        return None
+    return _MANAGER.last_poll_demand
 
 
 def run_notice_sweep() -> list[PlanEvent]:

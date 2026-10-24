@@ -9,9 +9,9 @@ TRADE = {"id": "T1", "ticker": "AAPL", "strategy": "RSI", "horizon_key": "2w",
          "entry": 100.0, "stop_loss": 98.0}
 
 
-def test_the_app_engine_is_the_test_database_without_asking():
+def test_the_app_engine_is_the_test_database_without_asking(db_engine):
     with engine_module.get_engine().connect() as conn:
-        assert conn.exec_driver_sql("select current_database()").scalar().startswith("swingbot_test")
+        assert conn.exec_driver_sql("select current_database()").scalar() == db_engine.url.database
 
 
 def test_seed_store_writes_through_the_real_importer():

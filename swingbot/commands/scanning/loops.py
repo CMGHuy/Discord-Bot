@@ -21,7 +21,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
 from swingbot.core.tracking import live_loss_watch as loss_watch
-from . import book_status, cooldown, equity_recorder, notices, ops_watch, outlook, presence, recap, runstate
+from . import book_status, cooldown, equity_recorder, monitor_liveness, notices, ops_watch, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
 log = logging.getLogger(__name__)
@@ -584,6 +584,7 @@ async def _live_price_batch(tickers: list) -> dict:
     except Exception as exc:
         swallowed(log, "scan.loops.monitor_prices", exc,
                   "trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        plan_manager.mark_monitor_batch_failed()
         return {}
     return {t: q.price for t, q in quotes.items() if q.price}
 
@@ -602,14 +603,19 @@ async def _legacy_live_price_batch(tickers: list) -> dict:
     trade is checked against its stop or target."""
     if not tickers:
         return {}
+    from swingbot.core.planning import plan_manager
     try:
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             _run_bounded, functools.partial(get_current_price_batch, allow_stale=False),
             (tickers,), float(getattr(config, "LIVE_PRICE_TIMEOUT_SECONDS", 60)),
-            f"trade_monitor: live-price batch of {len(tickers)} ticker(s)") or {}
+            f"trade_monitor: live-price batch of {len(tickers)} ticker(s)")
     except Exception as exc:
         log.warning("trade_monitor: batch price fetch failed: %s", exc, exc_info=True)
+        plan_manager.mark_monitor_batch_failed()
         return {}
+    if result is None:  # v184: _run_bounded failed or timed out, not merely empty
+        plan_manager.mark_monitor_batch_failed()
+    return result or {}
 
 
 async def _record_equity_sample(live_prices: dict) -> None:
@@ -623,6 +629,73 @@ async def _record_equity_sample(live_prices: dict) -> None:
         swallowed(log, "ops.equity_sample_handoff", exc,
                   "trade_monitor: equity sample failed: %s", exc,
                   level=logging.WARNING, exc_info=True)
+
+
+async def _check_open_ticker(ticker: str, live: float) -> tuple[list, bool]:
+    """Exact SL/TP check, then the near-TP timeout, for one priced ticker.
+
+    Returns (trades closed, errored). `errored` is True when either call
+    raised: that ticker's stops were not (fully) checked this tick (v184).
+    A raising close skips the near-TP check, as the loop always did."""
+    closed_all: list = []
+    try:
+        closed = await asyncio.to_thread(trade_log.close_if_live_price_hit, ticker, live)
+    except Exception as exc:
+        log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc, exc_info=True)
+        return closed_all, True
+    if closed:
+        log.info("trade_monitor: %d trade(s) closed for %s (live=%.4f)", len(closed), ticker, live)
+        closed_all.extend(closed)
+
+    # Near-TP timeout exit: for whatever's STILL open on this ticker
+    # after the exact SL/TP check above (a trade that just tapped its
+    # real target this same tick is already gone from "open" status by
+    # the time this runs) -- locks in profit on a trade that got most
+    # of the way to target and then stalled instead of actually
+    # touching it. See config.NEAR_TP_TIMEOUT_* / performance.py's
+    # check_near_tp_timeout docstring for the exact rule.
+    try:
+        near_tp_closed = await asyncio.to_thread(trade_log.check_near_tp_timeout, ticker, live)
+    except Exception as exc:
+        log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc, exc_info=True)
+        return closed_all, True
+    if near_tp_closed:
+        log.info("trade_monitor: %d trade(s) closed for %s via near-TP timeout (live=%.4f)",
+                 len(near_tp_closed), ticker, live)
+        closed_all.extend(near_tp_closed)
+    return closed_all, False
+
+
+async def _check_open_tickers(tickers: list, live_prices: dict) -> tuple[list, list[str]]:
+    """Run `_check_open_ticker` for every ticker with a usable price.
+
+    The skip rule is the close call's own filter (`not live or live <= 0`):
+    v184's `unquoted` field reuses it, so it must never drift. Returns
+    (all newly closed trades, tickers whose check raised)."""
+    all_newly_closed: list = []
+    check_errors: list[str] = []
+    for ticker in tickers:
+        live = live_prices.get(ticker)
+        if not live or live <= 0:
+            continue
+        closed, errored = await _check_open_ticker(ticker, live)
+        all_newly_closed.extend(closed)
+        if errored:
+            check_errors.append(ticker)
+    return all_newly_closed, check_errors
+
+
+async def _run_plan_manager_tick() -> tuple[list, bool]:
+    """v2 plan lifecycle tick (flag-gated; no-op while INTRADAY_MANAGER_V2=false).
+
+    Returns (plan events, raised); a raise is logged and yields no events."""
+    from swingbot.core.planning import plan_manager
+    try:
+        plan_events = await asyncio.to_thread(plan_manager.run_manager_tick)
+    except Exception as exc:
+        log.warning("trade_monitor: plan manager tick failed: %s", exc, exc_info=True)
+        return [], True
+    return plan_events, False
 
 
 @tasks.loop(seconds=60)
@@ -662,50 +735,38 @@ async def trade_monitor():
 
     After the closes, one equity sample is recorded (v172, equity_recorder): it
     reuses this tick's prices and never raises.
+
+    v184: every tick ends by stamping the `monitor` key into the heartbeat row
+    (monitor_liveness), in a `finally` so a tick that raises is stamped too.
+    The record starts "unknown" and becomes "ok" only when the work returned;
+    scripts/ops/heartbeat_watch.sh alerts when the stamp ages past 300 s or
+    the stops go unchecked during the regular session. The stamp makes no
+    quote call and never raises.
     """
+    rec = monitor_liveness.TickRecord()
+    try:
+        await _monitor_tick(rec)
+        rec.outcome = "ok"
+    finally:
+        await monitor_liveness.stamp_tick(rec)
+
+
+async def _monitor_tick(rec: "monitor_liveness.TickRecord") -> None:
+    """One monitor tick's work (the pre-v184 body of trade_monitor), filling
+    `rec` as each step completes so a raise part-way leaves the rest unknown."""
+    from swingbot.core.planning import plan_manager
+    plan_manager.reset_monitor_batch_status()
     open_trades = trade_log.get_trades(status="open", limit=200)
     tickers = list({t["ticker"] for t in open_trades})
-    all_newly_closed = []
+    rec.trade_tickers = tickers
 
     live_prices = await _live_price_batch(tickers)
+    rec.live_prices = live_prices
+    all_newly_closed, rec.check_errors = await _check_open_tickers(tickers, live_prices)
 
-    for ticker in tickers:
-        live = live_prices.get(ticker)
-        if not live or live <= 0:
-            continue
-        try:
-            closed = await asyncio.to_thread(trade_log.close_if_live_price_hit, ticker, live)
-        except Exception as exc:
-            log.warning("trade_monitor: close_if_live_price_hit failed for %s: %s", ticker, exc, exc_info=True)
-            continue
-        if closed:
-            log.info("trade_monitor: %d trade(s) closed for %s (live=%.4f)", len(closed), ticker, live)
-            all_newly_closed.extend(closed)
-
-        # Near-TP timeout exit: for whatever's STILL open on this ticker
-        # after the exact SL/TP check above (a trade that just tapped its
-        # real target this same tick is already gone from "open" status by
-        # the time this runs) -- locks in profit on a trade that got most
-        # of the way to target and then stalled instead of actually
-        # touching it. See config.NEAR_TP_TIMEOUT_* / performance.py's
-        # check_near_tp_timeout docstring for the exact rule.
-        try:
-            near_tp_closed = await asyncio.to_thread(trade_log.check_near_tp_timeout, ticker, live)
-        except Exception as exc:
-            log.warning("trade_monitor: check_near_tp_timeout failed for %s: %s", ticker, exc, exc_info=True)
-            continue
-        if near_tp_closed:
-            log.info("trade_monitor: %d trade(s) closed for %s via near-TP timeout (live=%.4f)",
-                      len(near_tp_closed), ticker, live)
-            all_newly_closed.extend(near_tp_closed)
-
-    # v2 plan lifecycle tick (flag-gated; no-op while INTRADAY_MANAGER_V2=false)
-    from swingbot.core.planning import plan_manager
-    try:
-        plan_events = await asyncio.to_thread(plan_manager.run_manager_tick)
-    except Exception as exc:
-        log.warning("trade_monitor: plan manager tick failed: %s", exc, exc_info=True)
-        plan_events = []
+    plan_events, rec.manager_raised = await _run_plan_manager_tick()
+    rec.plan_demand = plan_manager.last_poll_demand()
+    rec.fetch_failed = plan_manager.monitor_batch_failed()
     if plan_events:
         await _post_plan_events(plan_events)
     await _record_equity_sample(live_prices)

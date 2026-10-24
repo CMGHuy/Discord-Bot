@@ -231,6 +231,18 @@ def session_close(d: dt.date) -> dt.time:
     return EARLY_CLOSE if is_early_close(d) else RTH_CLOSE
 
 
+def is_nyse_regular_session(now: dt.datetime | None = None) -> bool:
+    """NYSE regular session at ``now``: a weekday, not in NYSE_HOLIDAYS, and
+    RTH_OPEN <= t < session_close(d) in ET. Holiday- and half-day-aware,
+    unlike is_regular_session (and unlike bot_core.in_session, the Berlin
+    scan window). v184: the stop-monitor stamp's ``market_open``."""
+    et = now_et(now)
+    d = et.date()
+    if et.weekday() >= 5 or d in NYSE_HOLIDAYS:
+        return False
+    return RTH_OPEN <= et.time() < session_close(d)
+
+
 @functools.lru_cache(maxsize=1)
 def nyse_calendar() -> SessionCalendar:
     """Every NYSE session covered by the frozen holiday table."""
