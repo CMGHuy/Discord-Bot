@@ -1,12 +1,18 @@
 """Print one plan part writer's whole context (v193, spec section C).
 
     python scripts/dev/plan_slice.py <index> <part> [--brief <path>]
+    python scripts/dev/plan_slice.py <index> --gaps [--brief <path>]
 
 Prints the index preamble, ## Global Constraints, ## Handoff (if any) and
 ## Task ledger; the spec sections the part's ledger rows cite; the brief
 sections (## <repo path>) for the files those rows modify, plus ## Traps.
 Whatever it cannot find is a trailing `MISSING:` line. Exit 2 on bad usage
 or a part with no ledger rows.
+
+--gaps lists, across every part, each file a ledger row modifies that the
+brief has no section for (`GAP: <path> (parts ...)`), so the controller can
+have plan-briefer top the brief up once on Sonnet instead of every Opus part
+writer exploring it (exit 2 when the brief file is missing).
 """
 from __future__ import annotations
 
@@ -23,7 +29,7 @@ FILE_ITEM_RE = re.compile(r"(?:\b([CM])\s+)?`([^`]+)`")
 INDEX_SECTIONS = ("Global Constraints", "Handoff", "Task ledger")
 OPTIONAL_INDEX = ("Handoff",)
 EMPTY_REFS = ("", "—", "-")
-USAGE = "usage: python scripts/dev/plan_slice.py <index> <part> [--brief <path>]"
+USAGE = "usage: python scripts/dev/plan_slice.py <index> <part|--gaps> [--brief <path>]"
 
 
 def default_brief(index: Path) -> Path:
@@ -115,6 +121,32 @@ def slice_part(index: Path, part: str, brief: Path | None = None) -> tuple[str, 
     return "".join(b.rstrip("\n") + "\n\n" for b in blocks), missing
 
 
+def brief_gaps(index: Path, brief: Path) -> dict[str, list[str]]:
+    """Modified repo path -> parts whose rows modify it, for paths the brief has no section for."""
+    secs = list(plan_doc.sections(brief.read_text(encoding="utf-8"), 2))
+    gaps: dict[str, list[str]] = {}
+    for row in plan_doc.ledger_rows(index.read_text(encoding="utf-8")):
+        part = row.get(plan_doc.COL_PART, "").strip()
+        for path in modified_paths([row]):
+            if plan_doc.resolve_ref(path, secs) is None:
+                gaps.setdefault(path, [])
+                if part not in gaps[path]:
+                    gaps[path].append(part)
+    return gaps
+
+
+def print_gaps(index: Path, brief: Path | None) -> int:
+    brief = brief or default_brief(index)
+    if not brief.is_file():
+        print(f"MISSING: brief file {brief}")
+        return 2
+    gaps = brief_gaps(index, brief)
+    for path, parts in gaps.items():
+        print(f"GAP: {path} (parts {', '.join(parts)})")
+    print(f"BRIEF GAPS: {len(gaps)} file(s)")
+    return 0
+
+
 def parse_args(argv: list[str]) -> tuple[Path, str, Path | None] | None:
     args, brief = list(argv[1:]), None
     if "--brief" in args:
@@ -135,6 +167,8 @@ def main(argv: list[str]) -> int:
     if parsed is None:
         print(USAGE)
         return 2
+    if parsed[1] == "--gaps":
+        return print_gaps(parsed[0], parsed[2])
     try:
         text, missing = slice_part(*parsed)
     except ValueError as exc:

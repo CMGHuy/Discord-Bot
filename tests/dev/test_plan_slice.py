@@ -104,3 +104,31 @@ def test_default_brief_strips_part_suffix():
     assert mod.default_brief(Path("docs/p/2026-10-25-v900-demo_0-index.md")) == want
     assert mod.default_brief(Path("docs/p/2026-10-25-v900-demo_2b-spill.md")) == want
     assert mod.default_brief(Path("docs/p/2026-10-25-v900-demo.md")) == want
+
+
+GAP_ROWS = ("| V900-1 | one | 1 | sonnet | A | M `scripts/dev/x.py`; M `scripts/dev/z.py` | — | — |\n"
+            "| V900-2 | two | 2 | sonnet | B | M `scripts/dev/z.py`; M `tests/dev/test_q.py`; "
+            "C `scripts/dev/new_tool.py` | — | — |\n"
+            "| V900-3 | three | 2b | sonnet | B | M `scripts/dev/y.py` | — | — |\n")
+
+
+def test_gaps_lists_unbriefed_modified_files_once_with_parts(tmp_path):
+    code, out = _slice(tmp_path, part="--gaps", rows=GAP_ROWS)
+    assert code == 0, out
+    assert out.splitlines() == [
+        "GAP: scripts/dev/z.py (parts 1, 2)",
+        "GAP: tests/dev/test_q.py (parts 2)",
+        "BRIEF GAPS: 2 file(s)",
+    ]
+
+
+def test_gaps_none_when_brief_covers_every_modified_file(tmp_path):
+    code, out = _slice(tmp_path, part="--gaps")
+    assert code == 0, out
+    assert out.splitlines() == ["BRIEF GAPS: 0 file(s)"]
+
+
+def test_gaps_without_brief_file(tmp_path):
+    code, out = _slice(tmp_path, part="--gaps", brief="absent.md")
+    assert code == 2
+    assert "MISSING: brief file" in out
