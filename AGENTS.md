@@ -397,10 +397,17 @@ same work to them so bulk output stays out of your context:
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
 from a `task-brief`), `plan-briefer` (gathers a spec's code context into
-`.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
-approved spec and that brief: `mode=index` (index and task ledger) first,
-then one `mode=part <N>` per part, one at a time here, each appending task by
-task to disk; at most 2 plans in progress per session; a plan cut off
+`.superpowers/briefs/<plan base>.md` first, one `## <repo path>` section per
+file plus `## Traps`), `plan-writer` (a plan from an approved spec and that
+brief: `mode=index` (index and task ledger) first, sizing tasks at the p90 of
+`python scripts/dev/plan_lint.py --stats` and fixing the ledger until
+`python scripts/dev/plan_lint.py --ledger <index>` prints PASS; then one
+`mode=part <N>` per part, one at a time here, each reading
+`python scripts/dev/plan_slice.py <index> <N>` instead of the spec, index and
+brief and appending task by task to disk: every task ends with a `Close:`
+line, cites existing code by repo path and line range, stays under ~400
+lines, and a part past ~1400 lines spills into `_<N>b-<slug>.md`;
+at most 2 plans in progress per session; a plan cut off
 mid-write resumes from its first missing task, never skipped or restarted. The
 SessionStart hook prints `PLAN WIP` for such a plan: resume it before new work.
 Record partner decisions in the index's `## Handoff` section as made, and commit
