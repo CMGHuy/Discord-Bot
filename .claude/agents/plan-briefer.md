@@ -47,6 +47,18 @@ whole file. Write the brief section by section as you go (append), never all
 at the end. Never put two files under one `##` heading — the slice would miss
 the second.
 
+## mode=top-up
+
+After the index ledger passes, the controller runs
+`python scripts/dev/plan_slice.py <index> --gaps` and sends you its `GAP:`
+lines: files a ledger row modifies that the brief has no section for. Append
+one `## <repo path>` section per GAP to the existing brief, same content
+rules as above (a test file: fixtures, helpers, one representative test).
+Never rewrite sections already there. Finish when `--gaps` prints
+`BRIEF GAPS: 0` (a glob or a path that does not exist gets a one-line
+section saying so). Every gap you close is one an Opus part writer would
+otherwise explore turn by turn.
+
 ## Return shape
 
 ```

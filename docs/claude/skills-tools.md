@@ -339,6 +339,16 @@ in parts, two at a time, to disk as it goes:
    exists in the repo or comes from an earlier ledger row; every `Spec §`
    names a spec heading). A FAIL goes back to the index writer (`SendMessage`
    it the problem lines), never to the part writers.
+   Then run `python scripts/dev/plan_slice.py <index> --gaps`: every `GAP:`
+   is a file a ledger row modifies that the brief never covered (the briefer
+   ran before the ledger existed). Non-zero → dispatch `plan-briefer`
+   `mode=top-up` with the GAP lines and the brief path before any part
+   writer. v194 had 45 gaps; its Opus part writers each spent ~25 turns of a
+   growing context exploring them (~4M cached tokens per part).
+   A briefer finding that changes scope (a spec assumption the code
+   contradicts) is resolved with the partner and written into the spec
+   **before** `mode=index` — v194's mid-plan B7 change re-opened the index
+   writer after parts were out.
 2. On `PARTS`, dispatch one `plan-writer` per part with `mode=part <N>`, the
    spec, index and brief paths — **at most 2 part writers at once**: two in
    one message, the next pair only when both have returned (a part that

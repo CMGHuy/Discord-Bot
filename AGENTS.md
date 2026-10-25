@@ -400,7 +400,8 @@ from a `task-brief`), `plan-briefer` (gathers a spec's code into
 `.superpowers/briefs/<plan base>.md` first, `## <repo path>` per file),
 `plan-writer` (a plan from an approved spec and that brief: `mode=index` first,
 sized by `plan_lint.py --stats`, ledger fixed until `plan_lint.py --ledger <index>`
-PASSes; then `mode=part <N>` per part, one at a time, each reading
+PASSes and `plan_slice.py <index> --gaps` is 0 (else `plan-briefer`
+`mode=top-up` first); then `mode=part <N>` per part, one at a time, each reading
 `plan_slice.py <index> <N>` and appending task by task: every task ends with a
 `Close:` line and stays under ~400 lines; a part past ~1400 lines spills into
 `_<N>b-<slug>.md`; at most 2 plans in progress per session; a cut-off plan

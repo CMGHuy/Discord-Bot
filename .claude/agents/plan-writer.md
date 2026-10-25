@@ -48,7 +48,9 @@ delimiter.)
 
 ### Self-spill
 
-Before each append, check `wc -l` of your file. If the file plus the next
+Before each append, check `wc -l` of your file — in the same command as the
+append (`wc -l < "$f"; cat >> "$f" <<'PLAN_TASK_EOF' ...`), never a separate
+call, and never via a scratch file plus a second `cat`. If the file plus the next
 task would pass ~1400 lines, create `<plan base>_<N>b-<slug>.md` (the same
 short header as any part) and append there from that task on; a second spill
 is `_<N>c-<slug>.md`. List every file in `FILES:`. **Never edit the index**:
@@ -70,9 +72,13 @@ section per file, then `## Traps`.
   `brief section '<path>'`, `brief file <path>`) names a gap: `sed -n` the
   range you need from the repo file or the spec, never a whole document.
 
-Read code only for what the slice or brief does not cover, in a few
-batched commands — every call re-reads your whole context. No brief in your
-prompt? Ask for one (`BLOCKED:`) rather than exploring.
+Read code only for what the slice or brief does not cover: **at most ~5
+batched read commands per part**, `sed -n` line ranges only, **never `cat` a
+whole file** — every call re-reads your whole context, so a part writer that
+explores 25 times (v194) costs as much as two that don't. More `MISSING:`
+gaps than that budget covers means the brief was not topped up: return
+`BLOCKED: brief gaps <paths>` instead of exploring. No brief in your prompt?
+Ask for one (`BLOCKED:`) rather than exploring.
 
 ## Lint before returning
 

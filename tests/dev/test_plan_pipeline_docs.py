@@ -62,3 +62,16 @@ CONTROLLER_DOCS = {
                          [(rel, p) for rel, phrases in CONTROLLER_DOCS.items() for p in phrases])
 def test_controller_docs_state_pipeline_step(rel, phrase):
     assert phrase in _read(rel)
+
+
+@pytest.mark.parametrize("rel, phrase", (
+    (".claude/agents/plan-writer.md", "never `cat` a"),
+    (".claude/agents/plan-writer.md", "BLOCKED: brief gaps"),
+    (".claude/agents/plan-briefer.md", "## mode=top-up"),
+    (".claude/agents/plan-briefer.md", "BRIEF GAPS: 0"),
+    ("docs/claude/skills-tools.md", "plan_slice.py <index> --gaps"),
+    ("docs/claude/skills-tools.md", "**before** `mode=index`"),
+    ("AGENTS.md", "plan_slice.py <index> --gaps"),
+))
+def test_brief_top_up_closes_gaps_before_part_writers(rel, phrase):
+    assert phrase in _read(rel)
