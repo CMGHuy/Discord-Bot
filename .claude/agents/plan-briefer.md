@@ -5,7 +5,7 @@ tools: Bash, Read, Write, Grep, Glob
 model: sonnet
 ---
 
-You do the code exploration for a plan, so the Opus writers do not have to.
+You do the code exploration for a plan, so the plan writers do not have to.
 The spec path and the brief path are in your prompt. You **never write plan
 tasks, never design, never judge the spec** — you report what the code is.
 
@@ -19,27 +19,45 @@ every worktree and times out). Batch: one command may run several greps and
 
 ## The brief
 
-Write it to the path you were given, in this order:
+Write it to the path you were given. **Key it by file**: part writers read it
+through `scripts/dev/plan_slice.py`, which pulls the `## <repo path>` section
+of each file their ledger rows modify, plus `## Traps`.
 
-1. **Files to change** — per spec section: each file, its role in one line,
-   and its line count.
-2. **Signatures** — every function, class, dataclass field, config `Field`
-   and table the spec names or the change must touch: `path:line` plus the
-   exact signature or definition line.
-3. **Excerpts** — the code a task will edit or call, ≤ 60 lines each, with
-   `path:start-end` so a writer can cite line ranges. Current complexity of
-   any function to be changed (`python -m radon cc -s <file>`) — note which
-   are already ≥ 15.
-4. **Test patterns** — for each test file a task will extend or mirror: its
-   path, fixtures and helpers used, and one representative test verbatim.
-5. **Symbols** — table `Symbol | EXISTS path:line / MISSING (spec creates it) /
+1. `## Files to change` — one table: file, its role in one line, its line
+   count, the spec section(s) it serves.
+2. One `## <repo path>` section per file a task will modify or call into —
+   the heading is the repo-relative path alone, optionally followed by a
+   space and a note (`## scripts/dev/plan_lint.py (167 lines)`). Inside:
+   - **Signatures** — every function, class, dataclass field, config `Field`
+     and table the spec names or the change must touch: `path:line` plus the
+     exact signature or definition line.
+   - **Excerpts** — the code a task will edit or call, ≤ 60 lines each, with
+     `path:start-end` so a writer can cite line ranges. Current complexity of
+     any function to be changed (`python -m radon cc -s <file>`) — note which
+     are already ≥ 15.
+   A test file a task will extend or mirror gets its own `## tests/...`
+   section: fixtures and helpers used, one representative test verbatim.
+3. `## Symbols` — table `Symbol | EXISTS path:line / MISSING (spec creates it) /
    WRONG MODULE (real location)`. Report only what `git grep` shows.
-6. **Traps** — only those that apply, one line each with the source doc
-   (`docs/claude/known-traps.md`, `schema-evolution.md`, `no-lookahead`).
+4. `## Traps` — last; only those that apply, one line each with the source
+   doc (`docs/claude/known-traps.md`, `schema-evolution.md`, `no-lookahead`).
 
 Budget: **≤ 60 KB**. Prefer a signature over an excerpt, an excerpt over a
 whole file. Write the brief section by section as you go (append), never all
-at the end.
+at the end. Never put two files under one `##` heading — the slice would miss
+the second.
+
+## mode=top-up
+
+After the index ledger passes, the controller runs
+`python scripts/dev/plan_slice.py <index> --gaps` and sends you its `GAP:`
+lines: files a ledger row modifies that the brief has no section for. Append
+one `## <repo path>` section per GAP to the existing brief, same content
+rules as above (a test file: fixtures, helpers, one representative test).
+Never rewrite sections already there. Finish when `--gaps` prints
+`BRIEF GAPS: 0` (a glob or a path that does not exist gets a one-line
+section saying so). Every gap you close is one a part writer would
+otherwise explore turn by turn.
 
 ## Return shape
 

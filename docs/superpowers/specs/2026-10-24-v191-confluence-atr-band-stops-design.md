@@ -407,7 +407,7 @@ Spec review 2026-10-24 (risk-manager, veteran-trader, quant-researcher), run ser
 - quant-researcher: BLOCKING — winner rule and clause set not frozen; v72 clause 3 waived -- applied (v92 harvest gate frozen, Stage 0 statistic ΔExpR, winner rule frozen).
 - quant-researcher: BLOCKING — arm R's untouched stratum is v139 arm S re-gridded -- applied (decision on the floor-moved stratum alone; overlap range corrected to (2%, 4.75%]).
 - quant-researcher: ADVISORY — two shots at one hypothesis -- applied (arm K primary, Holm across two arms, `ledger_qvalues` reported).
-- quant-researcher: ADVISORY — plateau with a 3-cell uneven grid -- applied (edge-cell rule and 0.05R tolerance frozen; grid kept as the partner's).
+- quant-researcher: ADVISORY — plateau with a 3-cell uneven grid -- applied (edge-cell rule and 0.05R tolerance frozen; grid kept as the partner's). *Superseded on tolerance by the plan-briefer correction below: § Gate's existing 0.03R governs.*
 - quant-researcher: ADVISORY — prediction not falsifiable -- applied (+4pp ΔWR, arm K ΔExpR > 0, arm R ΔExpR < 0).
 - quant-researcher: ADVISORY — prior looks understated -- applied (§ Why, prior looks).
 - quant-researcher: ADVISORY — `Screen:` headroom is target-side -- applied as disclosure; the citation stays (no stop-side headroom doc exists) and Stage −1 measures stop-then-reversal counts.

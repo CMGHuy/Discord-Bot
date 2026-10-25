@@ -1043,7 +1043,7 @@ class PlanManager:
         ceiling_pct = plan_stop_ceiling(plan)
         if risk_pct > ceiling_pct:
             record_transition(plan, PlanStatus.CANCELLED, reason="risk_cap",
-                              at=self._now())
+                              at=self._now(), extra={"entry_price": fill})
             self.store.update(plan)
             return [PlanEvent(plan.plan_id, "cancelled_risk_cap", {
                 "entry_price": fill,

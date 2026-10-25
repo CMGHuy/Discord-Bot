@@ -31,7 +31,7 @@ from swingbot.admin import spa
 # The four whose URL the Jinja UI does not already own. `/risk` and
 # `/trades/<trade_id>` are still Jinja routes until NG57 -- see
 # test_a_workspace_the_jinja_ui_still_owns_stays_jinja.
-SPA_WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system", "plans")
+SPA_WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system", "plans", "cancels")
 
 
 @pytest.fixture

@@ -181,6 +181,16 @@ def test_a_limit_fill_over_the_risk_cap_is_cancelled(direction, stop):
     assert _reason(plan) == "risk_cap"
 
 
+@pytest.mark.parametrize("direction, stop", [("bullish", 97.0), ("bearish", 103.0)])
+def test_limit_risk_cap_history_records_limit_instead_of_the_better_tick(direction, stop):
+    tick = _TICKS[direction]["through"]
+    plan, events = _step(_limit(direction, stop_loss=stop), tick)
+    assert [e.transition for e in events] == ["cancelled_risk_cap"]
+    assert plan.status_history[-1]["entry_price"] == 100.0
+    assert plan.status_history[-1]["entry_price"] != tick
+    assert plan.entry_price is None
+
+
 # --- what stays as it was ------------------------------------------------------
 
 def test_a_limit_plan_still_expires_on_its_bar_count_first():

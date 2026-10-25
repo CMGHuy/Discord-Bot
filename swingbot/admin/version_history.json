@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-24 19:51:28 UTC",
+  "generated_at": "2026-10-25 09:34:36 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.35.1",
-    "bot": "2.15.2"
+    "ui": "1.36.1",
+    "bot": "2.15.3"
   },
   "releases": [
     {
@@ -2094,6 +2094,45 @@
       "versions": {
         "ui": "1.35.1",
         "bot": "2.15.2"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-24",
+      "last_seen": "2026-10-24",
+      "commit": "45fc07d3",
+      "subject": "release(ui): 1.36.0 -- one panel title, stat strips, Inter figures and quiet skeletons (v186)",
+      "versions": {
+        "ui": "1.36.0",
+        "bot": "2.15.2"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "last_seen": "2026-10-25",
+      "commit": "715871f5",
+      "subject": "release(ui): 1.36.1 -- Cancels workspace: cancelled-plan precision screen (v188)",
+      "versions": {
+        "ui": "1.36.1",
+        "bot": "2.15.2"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "last_seen": "2026-10-25",
+      "commit": "fcf6463d",
+      "subject": "release(bot): 2.15.3 -- cancelled-plan precision payload; risk_cap cancels record entry_price (v188)",
+      "versions": {
+        "ui": "1.36.1",
+        "bot": "2.15.3"
       },
       "changed": [
         "bot"
