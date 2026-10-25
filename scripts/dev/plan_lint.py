@@ -11,6 +11,8 @@ Checks the whole plan (a split plan's index and every part):
   * task ids unique; every ledger id has a ### Task and vice versa
   * plans above v145: **Model:** <tier> is the first line under every task
   * every `Modify:` path exists (tracked or on disk) or is created by an earlier task
+  * plans from v194 (NEW_RULES_FROM): every task has a Close: line, no task runs
+    over TASK_CEILING (400) lines, every `Modify: path:a-b` range ends inside the file
   * no leftover heredoc delimiter, no TBD / "similar to Task" placeholders
 
 Prints one line per problem and a verdict; exit code 1 when anything failed.
@@ -30,6 +32,10 @@ LEDGER_ROW_RE = re.compile(r"^\|\s*`?([A-Z][A-Za-z0-9-]*\d[a-z]?)`?\s*\|")
 PATH_RE = re.compile(r"^- (Create|Modify):\s*`([^`:]+)")
 PLACEHOLDER_RE = re.compile(r"\bTBD\b|[Ss]imilar to Task|^PLAN_TASK_EOF$")
 PART_SUFFIX_RE = re.compile(r"_\d+[a-z]?(-[^.]*)?\.md$")
+NEW_RULES_FROM = 194
+TASK_CEILING = 400
+CLOSE_RE = re.compile(r"^\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?)?(?:\*\*)?Close:(?:\*\*)?\s*\S")
+MODIFY_RANGE_RE = re.compile(r"^- Modify:\s*`([^`:]+):(\d+)(?:-(\d+))?")
 
 
 def plan_files(any_file: Path) -> list[Path]:
@@ -103,20 +109,62 @@ def check_paths(name: str, line: str, created: set[str], tracked: set[str]) -> l
     return []
 
 
+def task_spans(lines: list[str]) -> list[tuple[str, int, int]]:
+    """(task id, start, end exclusive): a task runs to the next ### Task or EOF."""
+    starts = [(i, m.group(1)) for i, line in enumerate(lines) if (m := TASK_RE.match(line))]
+    ends = [i for i, _ in starts[1:]] + [len(lines)]
+    return [(task, i, end) for (i, task), end in zip(starts, ends)]
+
+
+def check_task_body(name: str, task: str, body: list[str]) -> list[str]:
+    problems = []
+    if not any(CLOSE_RE.match(line) for line in body):
+        problems.append(f"{name}: Task {task} -- no Close: line (index ### Standard task close)")
+    if len(body) > TASK_CEILING:
+        problems.append(f"{name}: Task {task} -- {len(body)} lines (ceiling {TASK_CEILING})"
+                        " -- split into two tasks, never compress")
+    return problems
+
+
+def check_modify_range(name: str, line: str, created: set[str]) -> list[str]:
+    m = MODIFY_RANGE_RE.match(line)
+    if not m:
+        return []
+    path, start = m.group(1).strip(), int(m.group(2))
+    end = int(m.group(3) or start)
+    if path in created or not Path(path).is_file():
+        return []
+    length = len(Path(path).read_text(encoding="utf-8", errors="replace").splitlines())
+    if end <= length:
+        return []
+    return [f"{name}: Modify `{path}:{start}-{end}` ends past line {length} of the file"]
+
+
 def scan_file(path: Path, ctx: dict) -> list[str]:
     lines = path.read_text(encoding="utf-8").splitlines()
     problems = []
     if len(lines) > MAX_LINES:
         problems.append(f"{path.name}: {len(lines)} lines (cap {MAX_LINES}) -- split, never compress")
-    for i, line in enumerate(lines):
-        m = TASK_RE.match(line)
-        if m:
-            problems += record_task(path.name, m.group(1), ctx)
-            if ctx["needs_model"]:
-                problems += check_model_line(path.name, lines, i, m.group(1))
-        problems += check_paths(path.name, line, ctx["created"], ctx["tracked"])
-        if PLACEHOLDER_RE.search(line):
-            problems.append(f"{path.name}:{i + 1}: placeholder or leftover delimiter: {line.strip()[:60]}")
+    for i in range(len(lines)):
+        problems += scan_line(path.name, lines, i, ctx)
+    if ctx["new_rules"]:
+        for task, start, end in task_spans(lines):
+            problems += check_task_body(path.name, task, lines[start:end])
+    return problems
+
+
+def scan_line(name: str, lines: list[str], i: int, ctx: dict) -> list[str]:
+    line, problems = lines[i], []
+    m = TASK_RE.match(line)
+    if m:
+        problems += record_task(name, m.group(1), ctx)
+        if ctx["needs_model"]:
+            problems += check_model_line(name, lines, i, m.group(1))
+    problems += check_paths(name, line, ctx["created"], ctx["tracked"])
+    if ctx["new_rules"]:
+        problems += check_modify_range(name, line, ctx["created"])
+    if PLACEHOLDER_RE.search(line):
+        problems.append(f"{name}:{i + 1}: placeholder or leftover delimiter: {line.strip()[:60]}")
     return problems
 
 
@@ -141,8 +189,9 @@ def check_ledger(ledger: list[str], tasks: list[str]) -> list[str]:
 def lint(any_file: Path) -> list[str]:
     files = plan_files(any_file)
     head = files[0].read_text(encoding="utf-8")
+    number = plan_number(files)
     ctx = {"tasks": [], "created": set(), "tracked": tracked_paths(),
-           "needs_model": plan_number(files) > 145}
+           "needs_model": number > 145, "new_rules": number >= NEW_RULES_FROM}
     problems = check_header(head)
     for path in files:
         problems += scan_file(path, ctx)
