@@ -35,6 +35,12 @@ def _stub_bad_sizing(monkeypatch):
     monkeypatch.setattr(account_mod, "set_sizing_mode", boom)
 
 
+def _stub_bad_risk(monkeypatch):
+    def boom(pct):
+        raise ValueError(f"Risk per trade must be above 0% and at most 2.0% (got {pct}).")
+    monkeypatch.setattr(account_mod, "set_risk_pct", boom)
+
+
 CASES = [
     ParityCase("account_show_risk_pct", account_mod.handle_account_show,
                stub=_stub("load_account_config")),
@@ -66,4 +72,8 @@ CASES = [
     ParityCase("account_maxrisk", account_mod.handle_account_maxrisk,
                args=(150.0,), stub=_stub("set_max_risk_amount_absolute",
                                          max_risk_amount_absolute=150.0)),
+    ParityCase("account_risk_invalid", account_mod.handle_account_risk,
+               args=(10.0,), stub=_stub_bad_risk, expect="error"),
+    ParityCase("account_show_legacy_risk_above_cap", account_mod.handle_account_show,
+               stub=_stub("load_account_config", risk_pct=10.0)),
 ]

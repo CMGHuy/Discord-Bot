@@ -5,10 +5,13 @@ command and the /account <x> subcommand both call it through a Reply
 (swingbot/commands/reply.py), so the two surfaces cannot drift.
 The eight setters are administrator-only (v187 D1); !account and /account show stay open.
 """
+import math
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from swingbot.core.edge.sizing import RISK_CEILING_PCT
 from swingbot.core.planning.account import (
     load_account_config, set_balance, set_max_open_positions, set_max_position_pct,
     set_max_position_value_absolute, set_max_risk_amount_absolute, set_position_pct,
@@ -36,14 +39,23 @@ SIZING_CHOICES = [
 # Text builders
 # ──────────────────────────────────────────────
 
+def _risk_used_text(cfg: dict) -> str:
+    """The stored risk %, or `10% stored → 2% used (hard cap)` when a legacy
+    row sits above the cap compute_position_size clamps it to (v187 D2)."""
+    stored = cfg.get("risk_pct")
+    if isinstance(stored, (int, float)) and math.isfinite(stored) and stored > RISK_CEILING_PCT:
+        return f"{stored:g}% stored → {RISK_CEILING_PCT:g}% used (hard cap)"
+    return f"{stored}%"
+
+
 def _sizing_line(cfg: dict) -> str:
     mode = cfg.get("sizing_mode", "risk_pct")
     if mode == "account_pct":
         return f"Position sizing: **Account %** -- {cfg.get('position_pct', 0.1)}% of balance per trade"
     if mode in _EDGE_SIZING_LABELS:
         return (f"Position sizing: **{_EDGE_SIZING_LABELS[mode]}** -- effective risk computed "
-                f"per-trade from strategy/volatility stats (config risk % {cfg['risk_pct']} is the ceiling)")
-    return f"Position sizing: **Risk %** -- {cfg['risk_pct']}% of balance risked per trade"
+                f"per-trade from strategy/volatility stats (config risk {_risk_used_text(cfg)} is the ceiling)")
+    return f"Position sizing: **Risk %** -- {_risk_used_text(cfg)} of balance risked per trade"
 
 
 def _sizing_set_text(cfg: dict) -> str:
@@ -57,17 +69,27 @@ def _sizing_set_text(cfg: dict) -> str:
         return (
             f"Position sizing set to **{_EDGE_SIZING_LABELS[cfg['sizing_mode']]}** -- effective risk is "
             f"computed per-trade from strategy/volatility stats, never above your risk % "
-            f"({cfg['risk_pct']}%, the ceiling) or the frozen 2% hard cap."
+            f"({cfg['risk_pct']}%, the ceiling) or the frozen {RISK_CEILING_PCT:g}% hard cap."
         )
     return (
         f"Position sizing set to **Risk %** -- every trade is now sized so a full "
-        f"stop-out costs {cfg['risk_pct']}% of the account balance."
+        f"stop-out costs {_risk_used_text(cfg)} of the account balance."
     )
 
 
 # ──────────────────────────────────────────────
 # Handlers (one body per command, shared by ! and /)
 # ──────────────────────────────────────────────
+
+async def _apply_setting(reply, setter, value) -> dict | None:
+    """setter(value), or None after replying with the validator's message
+    (v187 D2: nothing was saved, the setter raised before loading)."""
+    try:
+        return setter(value)
+    except ValueError as exc:
+        await reply.send_error(str(exc))
+        return None
+
 
 async def handle_account_show(reply) -> None:
     cfg = load_account_config()
@@ -85,7 +107,9 @@ async def handle_account_show(reply) -> None:
 
 
 async def handle_account_balance(reply, amount: float) -> None:
-    cfg = set_balance(amount)
+    cfg = await _apply_setting(reply, set_balance, amount)
+    if cfg is None:
+        return
     await reply.send(
         f"Base balance set to {amount} -- effective balance is now {cfg['balance']} "
         f"(base + all-time realized P&L). This will keep accounting for realized "
@@ -94,12 +118,16 @@ async def handle_account_balance(reply, amount: float) -> None:
 
 
 async def handle_account_risk(reply, pct: float) -> None:
-    cfg = set_risk_pct(pct)
+    cfg = await _apply_setting(reply, set_risk_pct, pct)
+    if cfg is None:
+        return
     await reply.send(f"Risk per trade set to {cfg['risk_pct']}%.")
 
 
 async def handle_account_maxpositions(reply, n: int) -> None:
-    cfg = set_max_open_positions(n)
+    cfg = await _apply_setting(reply, set_max_open_positions, n)
+    if cfg is None:
+        return
     await reply.send(f"Max concurrent open positions set to {cfg['max_open_positions']}.")
 
 
@@ -117,7 +145,9 @@ async def handle_account_sizing(reply, mode: str) -> None:
 
 async def handle_account_positionpct(reply, pct: float) -> None:
     """Only used in 'account' sizing mode -- see `!account sizing`."""
-    cfg = set_position_pct(pct)
+    cfg = await _apply_setting(reply, set_position_pct, pct)
+    if cfg is None:
+        return
     note = "" if cfg.get("sizing_mode") == "account_pct" else " (currently unused -- switch with `!account sizing account` to apply it)"
     await reply.send(f"Position size set to {cfg['position_pct']}% of account per trade{note}.")
 
@@ -125,7 +155,9 @@ async def handle_account_positionpct(reply, pct: float) -> None:
 async def handle_account_maxpositionpct(reply, pct: float) -> None:
     """Position-size cap as a % of balance -- see `!account maxposition` for the
     absolute currency cap that holds regardless of balance."""
-    cfg = set_max_position_pct(pct)
+    cfg = await _apply_setting(reply, set_max_position_pct, pct)
+    if cfg is None:
+        return
     await reply.send(
         f"Max position size set to {cfg['max_position_pct']}% of balance "
         f"(still also capped at {cfg.get('max_position_value_absolute', 1000)} absolute)."
@@ -135,7 +167,9 @@ async def handle_account_maxpositionpct(reply, pct: float) -> None:
 async def handle_account_maxposition(reply, amount: float) -> None:
     """Hard currency cap on position value -- holds no matter what the account
     balance or % settings are. Set to 0 to disable and rely on maxpositionpct alone."""
-    cfg = set_max_position_value_absolute(amount)
+    cfg = await _apply_setting(reply, set_max_position_value_absolute, amount)
+    if cfg is None:
+        return
     await reply.send(
         f"Max position size set to {cfg['max_position_value_absolute']} absolute -- "
         f"no trade will ever open larger than this, regardless of balance or % settings."
@@ -145,7 +179,9 @@ async def handle_account_maxposition(reply, amount: float) -> None:
 async def handle_account_maxrisk(reply, amount: float) -> None:
     """Hard currency cap on the REAL risk if a trade's stop-loss is hit -- holds no
     matter what the account balance, sizing mode, or risk % are. Set to 0 to disable."""
-    cfg = set_max_risk_amount_absolute(amount)
+    cfg = await _apply_setting(reply, set_max_risk_amount_absolute, amount)
+    if cfg is None:
+        return
     await reply.send(
         f"Max loss per trade set to {cfg['max_risk_amount_absolute']} absolute -- "
         f"no trade's real risk-if-stopped will ever exceed this, regardless of balance, "
