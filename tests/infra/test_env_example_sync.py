@@ -13,13 +13,12 @@ three:
   someone filling the file in than the schema's empty string.
 * **Deliberate example values.** The file is a working starting point, not a
   restatement of `config.py`.
-* **Schema defaults that are themselves wrong.** `RISK_PER_TRADE_PCT` and
-  `MAX_POSITION_SIZE_PCT` are documented as percentages -- their help text
-  says "1% means..." and `MAX_POSITION_SIZE_PCT` is capped at `max=100` --
-  but default to `0.01` and `0.1`, i.e. 0.01% and 0.1%. `account.py:466`'s
-  own fallback is `1.0`, and `build_sizing_note` divides by 100. A test that
-  forced the example to match the schema would push a nonsense risk setting
-  onto every fresh install.
+* **Schema defaults that are themselves wrong.** `MAX_POSITION_SIZE_PCT` is
+  documented as a percentage (capped at `max=100`) but defaults to `0.1`,
+  i.e. 0.1%. A test that forced the example to match the schema would push
+  that onto every fresh install. (`RISK_PER_TRADE_PCT` was the second case
+  until v187 set its default to `1.0`; it is now pinned equal below, because
+  the default is the seed fallback for an invalid `.env` value.)
 
 The reverse direction is checked too: a key in `.env.example` that the schema
 does not define is silently ignored by the parser, so someone setting it gets
@@ -95,3 +94,13 @@ def test_env_example_defines_no_setting_the_schema_does_not():
         f"not define: {unknown}. The parser ignores these, so anyone setting "
         f"one gets no error and no effect."
     )
+
+
+def test_risk_per_trade_default_matches_env_example():
+    # v187 D2: the schema default is the seed fallback for an invalid .env
+    # value, so it must be the sane 1% .env.example ships, not 0.01%.
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[2] / ".env.example").read_text(encoding="utf-8")
+    m = re.search(r"^RISK_PER_TRADE_PCT=(.*)$", text, re.MULTILINE)
+    schema = {f.key: f.default for f in config.FIELDS}
+    assert m and m.group(1).strip() == schema["RISK_PER_TRADE_PCT"] == "1.0"

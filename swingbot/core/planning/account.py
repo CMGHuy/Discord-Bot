@@ -54,6 +54,7 @@ incrementally-updated running total. This means:
     recomputes itself correctly again from base_balance + the trades table --
     there is no drifting running total that can silently lose history.
 """
+import logging
 import math
 import numbers
 from dataclasses import dataclass
@@ -63,6 +64,9 @@ from swingbot import config as app_config
 from swingbot.core.edge.sizing import RISK_CEILING_PCT
 from swingbot.core.market import opex
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
+
+
+log = logging.getLogger(__name__)
 
 
 # balance_history is append-only and grows one entry per closed trade (plus
@@ -105,6 +109,37 @@ def _sum_realized_pnl() -> float:
     return round(total, 2)
 
 
+# v187 D2: account key -> the .env key that seeds it on a brand-new row.
+_SEED_ENV_KEYS: dict[str, str] = {
+    "base_balance": "ACCOUNT_BALANCE",
+    "risk_pct": "RISK_PER_TRADE_PCT",
+    "max_open_positions": "MAX_OPEN_POSITIONS",
+    "max_position_pct": "MAX_POSITION_SIZE_PCT",
+    "position_pct": "POSITION_SIZE_PCT_OF_ACCOUNT",
+    "max_position_value_absolute": "MAX_POSITION_VALUE_ABSOLUTE",
+    "max_risk_amount_absolute": "MAX_RISK_AMOUNT_ABSOLUTE",
+}
+
+
+def _field_default(env_key: str) -> str:
+    """The schema default for an .env key (swingbot.config.FIELDS)."""
+    return next(f.default for f in app_config.FIELDS if f.key == env_key)
+
+
+def _validated_seed(defaults: dict) -> dict:
+    """`defaults` with every seeded setting validated; an invalid .env value
+    falls back to its schema default, with a warning."""
+    seeded = dict(defaults)
+    for key, env_key in _SEED_ENV_KEYS.items():
+        try:
+            seeded[key] = _validated(key, defaults[key])
+        except ValueError as exc:
+            seeded[key] = _validated(key, float(_field_default(env_key)))
+            log.warning("account seed: %s=%r is invalid (%s); seeding the default %r instead",
+                        env_key, defaults[key], exc, seeded[key])
+    return seeded
+
+
 def load_account_config() -> dict:
     # Canonical defaults -- every key that exists in the account config schema.
     # Used both as the seed for a brand-new account row AND as a fallback for
@@ -145,6 +180,7 @@ def load_account_config() -> dict:
     # Brand-new account -- seed balance_history with a starting point so the
     # "balance over time" chart has something to plot from before the first
     # trade ever closes, instead of an empty series until then.
+    defaults = _validated_seed(defaults)  # .env values obey the setters' validation rules
     defaults["balance"] = round(defaults["base_balance"] + _sum_realized_pnl(), 2)
     defaults["balance_history"] = [{
         "ts": datetime.now(timezone.utc).isoformat(),
