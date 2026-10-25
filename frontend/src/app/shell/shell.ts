@@ -133,6 +133,7 @@ export class Shell {
         { path: '/analytics', label: 'Analytics', icon: 'analytics' },
         { path: '/research', label: 'Research', icon: 'research' },
         { path: '/reports', label: 'Reports', icon: 'reports' },
+        { path: '/cancels', label: 'Cancels', icon: 'cancelled' },
       ],
     },
     {

@@ -22,6 +22,7 @@ export const ROUTES = Object.freeze([
   '/system', '/system?tab=logs', '/system?tab=scan',
   '/versions', '/research',
   '/reports', '/reports?tab=gates',
+  '/cancels',
   '/ui',
 ]);
 
