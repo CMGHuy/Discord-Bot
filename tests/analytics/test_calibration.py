@@ -1,4 +1,8 @@
+import pytest
+
+from swingbot.core.analytics import calibration
 from swingbot.core.analytics.calibration import score_deciles, level_calibration, badge_drift
+from swingbot.core.backtesting.instrument.contract import resolve
 
 
 def _t(score, status, entry=100.0, stop_loss=95.0, exit_price=None):
@@ -108,3 +112,36 @@ def test_badge_drift_matches_direct_strategy_field():
     assert rows[0]["live_n"] == 25
     assert round(rows[0]["live_wr"], 1) == 64.0
     assert rows[0]["drift_alert"] is True
+
+
+# --- v190: registry window labels grow additively ---------------------------------------
+
+def test_registry_window_kind_keeps_the_two_methodology_labels():
+    assert calibration.registry_window_kind("2020-01-01..2023-12-31") == "TRAIN"
+    assert calibration.registry_window_kind("2024-01-01..2025-12-31") == "VALIDATION"
+
+
+def test_registry_window_kind_labels_the_v3_research_span():
+    assert "..".join(resolve("v3").research_span) == "2017-01-01..2025-12-31"
+    assert calibration.registry_window_kind("2017-01-01..2025-12-31") == "RESEARCH"
+
+
+@pytest.mark.parametrize("window", [None, "", "2010-01-01..2025-12-31", "2018-06-01..2022-12-31"])
+def test_any_other_window_stays_unlabelled(window):
+    assert calibration.registry_window_kind(window) is None
+
+
+def test_window_kinds_only_grew():
+    assert calibration._WINDOW_KINDS == {"2020-01-01..2023-12-31": "TRAIN",
+                                         "2024-01-01..2025-12-31": "VALIDATION",
+                                         "2017-01-01..2025-12-31": "RESEARCH"}
+
+
+@pytest.mark.parametrize("window, kind", [("2020-01-01..2023-12-31", "TRAIN"),
+                                          ("2024-01-01..2025-12-31", "VALIDATION"),
+                                          ("2018-06-01..2022-12-31", None),
+                                          (None, None)])
+def test_an_existing_registry_row_keeps_its_label(window, kind):
+    entry = {"source": "strategy", "strategy": "RSI", "horizon": "3m", "status": "WEAK",
+             "window": window, "run_date": "2026-05-01", "expectancy_r": -0.05}
+    assert calibration.live_loss_row(entry, [])["registry_window_kind"] == kind
