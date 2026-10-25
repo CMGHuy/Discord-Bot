@@ -274,7 +274,8 @@ At most 2 implementers at once (shared tree, CPU). Suggested pairs: V192-2 + V19
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
-| 1 | `2026-10-24-v192-gap-toward-stop-reclaim_1-foundations-and-replay.md` | V192-1..V192-7 | worktree and flag-off golden, the two knobs with ScanParams, reachability, the load coupling and the `apply_knobs` guard, the four plan fields, the `gap_reclaim` rule module, builders building waiting market plans, the replay next-open fill with its fill-bar check and hold cap, the veto branch |
+| 1 | `2026-10-24-v192-gap-toward-stop-reclaim_1-foundations-and-replay.md` | V192-1..V192-4 | worktree and flag-off golden, the two knobs with ScanParams, reachability, the load coupling and the `apply_knobs` guard, the four plan fields, the `gap_reclaim` rule module |
+| 1b | `2026-10-24-v192-gap-toward-stop-reclaim_1b-builders-and-replay.md` | V192-5..V192-7 | builders building waiting market plans, the replay next-open fill with its fill-bar check and hold cap, the veto branch |
 | 2 | `2026-10-24-v192-gap-toward-stop-reclaim_2-live-path.md` | V192-8..V192-13 | live session timing and the open decision with the premarket cancel, the reclaim wait and close cancel, feed instruction copy and the new Kind, manager notices and follower wiring, the alert line, scan-to-fill integration and live/replay parity |
 | 3 | `2026-10-24-v192-gap-toward-stop-reclaim_3-measurement-code.md` | V192-14..V192-19 | the baseline knob delta, the census sidecar, strata and the SKIPPED-fails verdict, permutation/selection/sensitivity/report functions, CLI wiring and the report script, the autopsy entry-type filter |
 | 4 | `2026-10-24-v192-gap-toward-stop-reclaim_4-runs-docs-and-release.md` | V192-20..V192-26 | docs, the pre-TRAIN market-only autopsy disclosure, Stage −1, Stages 0–1 with the next-open basis, Stage 2, Stage 3 with reports, results record and ledger row, release and full suite |
