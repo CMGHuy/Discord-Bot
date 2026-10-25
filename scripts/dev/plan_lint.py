@@ -4,6 +4,7 @@ Plan writing).
 
     python scripts/dev/plan_lint.py docs/superpowers/plans/<any file of the plan>
     python scripts/dev/plan_lint.py --stats [dir]   # median/p90 lines per task, newest 5 plans
+    python scripts/dev/plan_lint.py --fix-parts <index>   # regenerate the index's ## Parts table
 
 Checks the whole plan (a split plan's index and every part):
   * header: **Bump:**, **Edge:** (one of the four classes), **Spec:**
@@ -43,9 +44,12 @@ MODIFY_RANGE_RE = re.compile(r"^- Modify:\s*`([^`:]+):(\d+)(?:-(\d+))?")
 STATS_DIR = Path("docs/superpowers/plans/implemented")
 PART_BUDGET = 1400
 DATED_PLAN_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-v(\d+)-")
+PART_LABEL_RE = re.compile(r"_(\d+)([a-z]?)-([^.]*)\.md$")
+PARTS_END_RE = re.compile(r"#{1,2} ")
 USAGE = """usage:
   python scripts/dev/plan_lint.py <any file of a plan>   lint the whole plan
-  python scripts/dev/plan_lint.py --stats [dir]          lines per task, newest 5 plans in dir (default plans/implemented)"""
+  python scripts/dev/plan_lint.py --stats [dir]          lines per task, newest 5 plans in dir (default plans/implemented)
+  python scripts/dev/plan_lint.py --fix-parts <index>    regenerate the index's ## Parts table from the part files"""
 
 
 def plan_files(any_file: Path) -> list[Path]:
@@ -263,6 +267,80 @@ def cmd_stats(args: list[str]) -> int:
     return 0
 
 
+def _part_files(index: Path) -> list[tuple[str, str, Path]]:
+    """(label, slug, path) of every part file of index's plan, in part order."""
+    found = []
+    for path in plan_files(index):
+        m = PART_LABEL_RE.search(path.name)
+        if path.name != index.name and m and m.group(1) != "0":
+            found.append((int(m.group(1)), m.group(2), m.group(3), path))
+    found.sort(key=lambda t: (t[0], t[1]))
+    return [(f"{num}{letter}", slug, path) for num, letter, slug, path in found]
+
+
+def _task_range(path: Path) -> str:
+    ids = [task for task, _, _ in task_spans(path.read_text(encoding="utf-8").splitlines())]
+    if not ids:
+        return "—"
+    return ids[0] if len(ids) == 1 else f"{ids[0]}..{ids[-1]}"
+
+
+def parts_table(index: Path, old_scopes: dict[str, str]) -> list[str]:
+    rows = ["| Part | File | Tasks | Scope |", "|---|---|---|---|"]
+    for label, slug, path in _part_files(index):
+        scope = old_scopes.get(label) or slug.replace("-", " ")
+        rows.append(f"| {label} | `{path.name}` | {_task_range(path)} | {scope} |")
+    return rows
+
+
+def _old_scopes(table: list[str]) -> dict[str, str]:
+    """Part label -> raw Scope cell of an existing parts table (header and separator skipped)."""
+    scopes = {}
+    for line in table[2:]:
+        cells = [c.strip() for c in re.split(r"(?<!\\)\|", line.strip())[1:-1]]
+        if len(cells) >= 4:
+            scopes[cells[0]] = cells[-1]
+    return scopes
+
+
+def _parts_block(lines: list[str]) -> tuple[int, int] | None:
+    """(start, end exclusive) of the ## Parts table; start == end when it has none."""
+    head = next((i for i, line in enumerate(lines) if line.strip() == "## Parts"), None)
+    if head is None:
+        return None
+    end = next((i for i in range(head + 1, len(lines)) if PARTS_END_RE.match(lines[i])), len(lines))
+    rows = [i for i in range(head + 1, end) if lines[i].lstrip().startswith("|")]
+    return (rows[0], rows[-1] + 1) if rows else (head + 1, head + 1)
+
+
+def fix_parts(index: Path) -> int:
+    text = index.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    block = _parts_block(lines)
+    if block is None:
+        return -1
+    start, end = block
+    table = parts_table(index, _old_scopes(lines[start:end]))
+    pad = [""] if start == end else []
+    new = "\n".join(lines[:start] + pad + table + lines[end:])
+    if new != text:
+        index.write_text(new, encoding="utf-8", newline="\n")
+    return len(table) - 2
+
+
+def cmd_fix_parts(args: list[str]) -> int:
+    if len(args) != 1 or not Path(args[0]).is_file():
+        print(USAGE)
+        return 2
+    index = Path(args[0])
+    written = fix_parts(index)
+    if written < 0:
+        print(f"PARTS TABLE: no ## Parts section in {index.name}")
+        return 1
+    print(f"PARTS TABLE: {written} part(s) in {index.name}")
+    return 0
+
+
 def cmd_lint(args: list[str]) -> int:
     if len(args) != 1 or not Path(args[0]).is_file():
         print(USAGE)
@@ -278,6 +356,7 @@ def cmd_lint(args: list[str]) -> int:
 
 COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "--stats": cmd_stats,
+    "--fix-parts": cmd_fix_parts,
 }
 
 
