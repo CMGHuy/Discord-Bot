@@ -5,6 +5,7 @@ Plan writing).
     python scripts/dev/plan_lint.py docs/superpowers/plans/<any file of the plan>
     python scripts/dev/plan_lint.py --stats [dir]   # median/p90 lines per task, newest 5 plans
     python scripts/dev/plan_lint.py --fix-parts <index>   # regenerate the index's ## Parts table
+    python scripts/dev/plan_lint.py --ledger <index>      # check the ledger's contracts before parts are written
 
 Checks the whole plan (a split plan's index and every part):
   * header: **Bump:**, **Edge:** (one of the four classes), **Spec:**
@@ -29,6 +30,9 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import plan_doc  # noqa: E402  (scripts/dev has no __init__.py)
+
 MAX_LINES = 1500
 EDGES = ("expectancy", "harvest", "volume", "none (integrity)")
 MODEL_TIERS = ("haiku", "sonnet", "opus")
@@ -49,7 +53,8 @@ PARTS_END_RE = re.compile(r"#{1,2} ")
 USAGE = """usage:
   python scripts/dev/plan_lint.py <any file of a plan>   lint the whole plan
   python scripts/dev/plan_lint.py --stats [dir]          lines per task, newest 5 plans in dir (default plans/implemented)
-  python scripts/dev/plan_lint.py --fix-parts <index>    regenerate the index's ## Parts table from the part files"""
+  python scripts/dev/plan_lint.py --fix-parts <index>    regenerate the index's ## Parts table from the part files
+  python scripts/dev/plan_lint.py --ledger <index>       check the index's ledger contracts before parts are written"""
 
 
 def plan_files(any_file: Path) -> list[Path]:
@@ -354,9 +359,111 @@ def cmd_lint(args: list[str]) -> int:
     return 1 if problems else 0
 
 
+LEDGER_TITLE = "Title"
+IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def required_columns() -> tuple[str, ...]:
+    return (plan_doc.COL_TASK, plan_doc.COL_SPEC, plan_doc.COL_FILES,
+            plan_doc.COL_CREATES, plan_doc.COL_CONSUMES)
+
+
+def spec_headings(spec_text: str) -> list[str]:
+    return [h for level in (1, 2, 3, 4) for h in plan_doc.sections(spec_text, level)]
+
+
+def row_provides(row: dict[str, str]) -> set[str]:
+    """Names a ledger row makes available to later rows."""
+    names: set[str] = set()
+    for column in (LEDGER_TITLE, plan_doc.COL_FILES, plan_doc.COL_CREATES):
+        for token in plan_doc.backticked(row.get(column, "")):
+            names.add(plan_doc.symbol_name(token))
+            ident = IDENT_RE.match(token)
+            if ident:
+                names.add(ident.group(0))
+            names.update(w for w in token.split() if w.startswith("-"))
+    return names
+
+
+def in_repo(name: str, tracked: set[str]) -> bool:
+    if "/" in name:
+        return name in tracked or Path(name).exists()
+    proc = subprocess.run(["git", "grep", "-q", "-F", "-e", name, "--", ".",
+                           ":(exclude)docs/superpowers"],
+                          capture_output=True, check=False)
+    return proc.returncode == 0
+
+
+def check_spec_refs(row: dict[str, str], headings: list[str], spec_name: str) -> list[str]:
+    task = row.get(plan_doc.COL_TASK, "?")
+    refs = plan_doc.spec_refs(row.get(plan_doc.COL_SPEC, ""))  # drops '—' / empty
+    if not refs:
+        return [f"ledger: {task} has no Spec § reference"]
+    return [f"ledger: {task} Spec § '{r}' matches no heading in {spec_name}"
+            for r in refs if plan_doc.resolve_ref(r, headings) is None]
+
+
+def check_consumes(i: int, rows: list[dict[str, str]], provides: list[set[str]],
+                   tracked: set[str]) -> list[str]:
+    task = rows[i].get(plan_doc.COL_TASK, "?")
+    earlier = set().union(*provides[:i])
+    problems = []
+    for token in plan_doc.backticked(rows[i].get(plan_doc.COL_CONSUMES, "")):
+        name = plan_doc.symbol_name(token)
+        if name in earlier or in_repo(name, tracked):
+            continue
+        later = [rows[j].get(plan_doc.COL_TASK, "?")
+                 for j in range(i + 1, len(rows)) if name in provides[j]]
+        problems.append(
+            f"ledger: {task} consumes `{name}`, created only by later row {later[0]}"
+            if later else
+            f"ledger: {task} consumes `{name}`: neither in the repo nor created by an earlier row")
+    return problems
+
+
+def check_contracts(index: Path) -> list[str]:
+    text = index.read_text(encoding="utf-8")
+    rows = plan_doc.ledger_rows(text)
+    if not rows:
+        return ["ledger: no rows under ## Task ledger"]
+    missing = [f"ledger: no `{c}` column" for c in required_columns() if c not in rows[0]]
+    if missing:
+        return missing
+    problems: list[str] = []
+    spec = plan_doc.spec_path(index, text)
+    if spec is None or not spec.is_file():
+        problems.append(f"ledger: spec file not found ({spec})")
+    else:
+        headings = spec_headings(spec.read_text(encoding="utf-8"))
+        for row in rows:
+            problems += check_spec_refs(row, headings, spec.name)
+    provides = [row_provides(r) for r in rows]
+    tracked = tracked_paths()
+    for i in range(len(rows)):
+        problems += check_consumes(i, rows, provides, tracked)
+    return problems
+
+
+def cmd_ledger(args: list[str]) -> int:
+    if len(args) != 1 or not Path(args[0]).is_file():
+        print(USAGE)
+        return 2
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    index = Path(args[0])
+    rows = plan_doc.ledger_rows(index.read_text(encoding="utf-8"))
+    problems = check_contracts(index)
+    for p in problems:
+        print(f"  {p}")
+    verdict = "FAIL" if problems else "PASS"
+    print(f"LEDGER CHECK: {verdict}  {len(rows)} row(s), {len(problems)} problem(s)")
+    return 1 if problems else 0
+
+
 COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "--stats": cmd_stats,
     "--fix-parts": cmd_fix_parts,
+    "--ledger": cmd_ledger,
 }
 
 
