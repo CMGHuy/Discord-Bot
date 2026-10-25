@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-25 09:34:24 UTC",
+  "generated_at": "2026-10-25 09:34:36 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.36.1",
-    "bot": "2.15.2"
+    "bot": "2.15.3"
   },
   "releases": [
     {
@@ -2123,6 +2123,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "last_seen": "2026-10-25",
+      "commit": "fcf6463d",
+      "subject": "release(bot): 2.15.3 -- cancelled-plan precision payload; risk_cap cancels record entry_price (v188)",
+      "versions": {
+        "ui": "1.36.1",
+        "bot": "2.15.3"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
