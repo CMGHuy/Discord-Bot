@@ -388,36 +388,33 @@ rewritten each unit (never summed by the reader) in a log deleted on completion.
 
 Use at most one subagent at a time by default: dispatch, wait for its result,
 then decide on another. Parallel subagents need the partner's explicit request;
-a plan's parallelisation section only describes what could run concurrently.
-The Codex config enforces this.
+a plan's parallelisation section only describes what could run concurrently. The
+project Codex config enforces this one-agent limit.
 
 Claude's role agents are mirrored as Codex agents (`.codex/agents/`); route the
 same work to them so bulk output stays out of your context:
 `test-runner` (full or fast suite), `backtest-runner` (runs past ~2 minutes),
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
-from a `task-brief`), `plan-briefer` (gathers a spec's code into
-`.superpowers/briefs/<plan base>.md` first, `## <repo path>` per file),
-`plan-writer` (a plan from an approved spec and that brief: `mode=index` first,
-sized by `plan_lint.py --stats`, ledger fixed until `plan_lint.py --ledger <index>`
-PASSes and `plan_slice.py <index> --gaps` is 0 (else `plan-briefer`
-`mode=top-up` first); then `mode=part <N>` per part, one at a time, each reading
-`plan_slice.py <index> <N>` and appending task by task: every task ends with a
-`Close:` line and stays under ~400 lines; a part past ~1400 lines spills into
-`_<N>b-<slug>.md`; at most 2 plans in progress per session; a cut-off plan
-resumes from its first missing task. Record
-partner decisions in the index's `## Handoff`; commit the index, parts and partials
-(`docs(vN): plan WIP`) as you go;
-`plan_lint.py <index>` must PASS before commit,
-`plan_lint.py --ledger <index>` must PASS before parts are dispatched,
-`plan_lint.py --fix-parts <index>` rebuilds the parts table; every
-plan writers run on opus, never `model: sonnet`), and
+from a `task-brief`), `plan-briefer` (gathers a spec's code context into
+`.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
+approved spec and that brief: `mode=index` (index and task ledger) first,
+then one `mode=part <N>` per part, one at a time here, each appending task by
+task to disk; at most 2 plans in progress per session; a plan cut off
+mid-write resumes from its first missing task, never skipped or restarted. The
+SessionStart hook prints `PLAN WIP` for such a plan: resume it before new work.
+Record partner decisions in the index's `## Handoff` section as made, and commit
+the index, each part and partial files (`docs(vN): plan WIP`) as you go --
+progress lives in the repo, never in session memory;
+`python scripts/dev/plan_lint.py <index>` must print PASS before the plan is
+committed as finished), and
 `expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
 `BLOCKING`/`ADVISORY` findings or `CLEAN`; dispatched by `panel` one role at a
 time). Dispatch `task-implementer` at the plan task's `**Model:**` tier. When
-`task-reviewer` (always sonnet) keeps blocking, climb `docs/claude/model-routing.md`'s
-ladder (same implementer once, a fresh one a tier up, then the main session);
-log each step in `.superpowers/sdd/progress.md`.
+`task-reviewer` (always sonnet) keeps blocking, climb the ladder in
+`docs/claude/model-routing.md`: the same implementer once, then a fresh one a
+tier up with the findings, then the main session implements the task; log
+each step in `.superpowers/sdd/progress.md`.
 
 ## Function complexity limit
 

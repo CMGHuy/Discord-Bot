@@ -38,16 +38,6 @@ Review is never weaker than the implementation: `task-reviewer` stays on
 dispatched by `/panel`) run at their role's model from `skills-tools.md`
 § Expert roles, never on haiku.
 
-## Plan-writer tier
-
-The `Model:` stamps route implementers. The plan writers themselves --
-`mode=index` and every `mode=part <N>` -- run on `plan-writer`'s pinned
-`opus`, never on `model: sonnet` (partner decision, v194: a plan's quality is
-not traded for tokens). The token savings come from the brief top-up, the
-`plan_slice.py` gap block, the read budget and writing each task once, not
-from a cheaper model. (A trial of Sonnet part writers on v194 parts 4-6 needed
-a full rewrite of two parts to reach Opus-level code detail.)
-
 ## The escalation ladder
 
 This replaces the old rule "a task that fails review twice is implemented by
