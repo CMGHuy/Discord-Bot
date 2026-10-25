@@ -47,6 +47,24 @@ whole file. Write the brief section by section as you go (append), never all
 at the end. Never put two files under one `##` heading — the slice would miss
 the second.
 
+**Scale to the spec, not to the prompt.** The spec decides which files get
+a section; a file list in the dispatch prompt is a hint, never a mandate.
+Once `## Files to change` is written, count its rows:
+
+- **≤ 25 files** — the method above.
+- **> 25 files** (a restyle, a rename sweep, a whole-UI spec) — tier the
+  files. *Logic* files (a function, store, route, test or check changes
+  behaviour) get the full treatment, excerpts ≤ 40 lines. *Restyle-only*
+  files (CSS, a template whose bindings stay, a token consumer) get a
+  heading, line count and the selectors or tokens they read: three lines,
+  no excerpt, no radon. Run radon only on functions a task will change.
+
+Check the size after every section (`wc -c <brief>`). At 50 KB, stop
+writing excerpts: give each remaining file its heading and signatures only,
+then write `## Symbols` and `## Traps`. A short section per file still
+beats a merged heading, because `plan_slice.py --gaps` and top-up mode
+cover the rest.
+
 ## mode=top-up
 
 After the index ledger passes, the controller runs
