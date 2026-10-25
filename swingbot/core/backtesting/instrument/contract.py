@@ -13,7 +13,8 @@ values from spec section 2 (``V2_FILLS``, ``V2_COSTS``): they are read by
 a new instrument version. Phase 3 (v158) appends the span, universe, fold and liquidity-floor fields
 after ``cost_model`` as keyword fields whose defaults are v1's values, and
 sets v2's with ``dataclasses.replace`` below ``_SPECS``, so neither positional
-``_SPECS`` line changes.
+``_SPECS`` line changes. v190 appends ``store`` as the last keyword field and
+adds ``v3``, built from v2 by ``replace``, so neither positional ``_SPECS`` line changes.
 v1 is frozen: a change to its values breaks
 tests/backtesting/instrument/test_v1_golden.py, which is the point.
 
@@ -56,6 +57,11 @@ class LiquidityFloor:
     lookback_bars: int
 
 
+# None = today's selection (TRAINING_DATA_SOURCE / HISTORY_STORE_DIR); "pit" =
+# data/market_data_pit/ (v190).
+STORES = (None, "pit")
+
+
 @dataclass(frozen=True)
 class InstrumentSpec:
     """One backtest instrument: fills and costs (phases 1-2), then the window,
@@ -78,6 +84,12 @@ class InstrumentSpec:
     validation_window: tuple[str, str] | None = ("2024-01-01", "2025-12-31")   # v1 only
     warmup_start: str | None = None         # first bar the cache must hold (coverage.py)
     liquidity_floor: LiquidityFloor | None = None   # v2: causal floor on the signal date
+    # --- v190; the default keeps v1 and v2 on today's store ---------------------
+    store: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.store not in STORES:
+            raise ValueError(f"unknown store {self.store!r}; known: {STORES}")
 
     @property
     def live_constructor(self) -> bool:
@@ -124,6 +136,19 @@ _V2_WINDOW = {
     "liquidity_floor": V2_LIQUIDITY_FLOOR,
 }
 _SPECS["v2"] = replace(_SPECS["v2"], **_V2_WINDOW)
+
+# v190 instrument v3: v2's contract on the point-in-time Alpaca store. Alpaca
+# serves bars from 2016-01-04, so research starts 2017-01-01 and, with
+# folds.MIN_TRAIN_YEARS = 4 unchanged, the first legal test year is 2021.
+_V3_WINDOW = {
+    "store": "pit",
+    "warmup_start": "2016-01-04",
+    "research_start": "2017-01-01",
+    "research_end": "2025-12-31",
+    "holdout_start": "2026-01-01",
+    "fold_test_years": tuple(range(2021, 2026)),
+}
+_SPECS["v3"] = replace(_SPECS["v2"], version="v3", **_V3_WINDOW)
 VERSIONS = tuple(_SPECS)
 
 

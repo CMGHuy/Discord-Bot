@@ -30,9 +30,9 @@ def test_flag_accepts_every_contract_version():
 
 def test_flag_refuses_an_unknown_version(capsys):
     with pytest.raises(SystemExit) as exc:
-        _parser().parse_args(["--instrument", "v3"])
+        _parser().parse_args(["--instrument", "v4"])
     assert exc.value.code == 2
-    assert "invalid choice: 'v3'" in capsys.readouterr().err
+    assert "invalid choice: 'v4'" in capsys.readouterr().err
 
 
 # --- run_instrument: v1 passes None, exactly as today ------------------------
@@ -109,3 +109,36 @@ def test_require_v1_names_the_script_and_the_owning_phase_under_v2():
     assert "measure_arms.py" in message
     assert "--instrument v2" in message
     assert "phase 5 (v2 stage table)" in message
+
+
+# --- v190: v3 inherits v2's windows and refusals ------------------------------------
+
+def test_v3_train_is_its_research_span():
+    assert cli.window_for(resolve("v3"), "train") == ("2017-01-01", "2025-12-31")
+
+
+def test_v3_validation_is_the_sealed_holdout():
+    with pytest.raises(SystemExit) as exc:
+        cli.window_for(resolve("v3"), "validation")
+    assert cli.HOLDOUT_SEALED in str(exc.value)
+    assert "2026-01-01" in str(exc.value)
+
+
+@pytest.mark.parametrize("date_from, date_to", [
+    ("2016-01-04", "2018-12-31"),     # warm-up is not research
+    ("2025-06-01", "2026-01-02"),     # reaches the sealed holdout
+])
+def test_v3_window_outside_the_research_span_is_refused(date_from, date_to):
+    with pytest.raises(SystemExit) as exc:
+        cli.check_inside_research(resolve("v3"), date_from, date_to)
+    assert "research span 2017-01-01..2025-12-31" in str(exc.value)
+
+
+def test_require_v1_refuses_v3_like_v2():
+    with pytest.raises(SystemExit) as exc:
+        cli.require_v1(resolve("v3"), "measure_arms.py", "phase 5")
+    assert "--instrument v3 is not wired yet" in str(exc.value)
+
+
+def test_help_names_v3_and_its_store():
+    assert "market_data_pit" in _parser().format_help()
