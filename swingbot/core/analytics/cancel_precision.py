@@ -19,7 +19,7 @@ from swingbot.core.analytics.cancel_rows import (ENTRY_MODELS, OTHER, REASONS, C
                                                  Loader, cancel_rows, filled_rows,
                                                  manual_count)
 from swingbot.core.backtesting.instrument.stats import iso_week_key, week_cluster_bootstrap
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 
 SMALL_N = 10
 CI_PCT = (2.5, 97.5)
@@ -179,7 +179,7 @@ def _split(rows: list[CancelRow], attr: str, order: tuple[str, ...]) -> dict:
 def _splits(pooled: list[CancelRow]) -> dict:
     return {"origin": _split(pooled, "origin", _ORIGINS),
             "direction": _split(pooled, "direction", _DIRECTIONS),
-            "horizon": _split(pooled, "horizon_key", tuple(HORIZONS))}
+            "horizon": _split(pooled, "horizon_key", LEGACY_HORIZONS)}
 
 
 def _replay_json(row: CancelRow) -> dict:
