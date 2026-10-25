@@ -334,6 +334,11 @@ in parts, two at a time, to disk as it goes:
    index first (header, constraints, parallelisation, a task ledger fixing
    every cross-task file and contract). A single-file plan (≤ ~1300 lines)
    comes back `DONE` from this one run.
+   Then run `python scripts/dev/plan_lint.py --ledger <index>`: it must print
+   `LEDGER CHECK: PASS` before any part is dispatched (every consumed name
+   exists in the repo or comes from an earlier ledger row; every `Spec §`
+   names a spec heading). A FAIL goes back to the index writer (`SendMessage`
+   it the problem lines), never to the part writers.
 2. On `PARTS`, dispatch one `plan-writer` per part with `mode=part <N>`, the
    spec, index and brief paths — **at most 2 part writers at once**: two in
    one message, the next pair only when both have returned (a part that
@@ -341,9 +346,18 @@ in parts, two at a time, to disk as it goes:
    serial dispatch, and it stops at two: four Opus writers at once drain the
    5h window before any part is committed. A resume counts the same —
    incomplete parts are re-dispatched two at a time.
+   Each part writer reads `python scripts/dev/plan_slice.py <index> <N>`
+   instead of the spec, the index and the brief. A part whose ledger rows are
+   all docs, runs or release tasks is dispatched with `model: sonnet`
+   (`model-routing.md` § Plan-writer tier for prose parts). A writer whose
+   file would pass ~1400 lines spills into `_<N>b-<slug>.md` itself.
    **Commit the index as soon as phase 1 returns**
    (`docs(vN): plan index -- parts pending`), and each part as it returns, so
-   a session that runs out of tokens leaves committed, resumable work.
+   a session that runs out of tokens leaves committed, resumable work. Before
+   committing a part, run `python scripts/dev/plan_lint.py --fix-parts <index>`:
+   it rebuilds the index's `## Parts` table from the files on disk (spill
+   files included) and keeps each Scope cell; commit the index with the part
+   when it changed. Never hand-edit that table.
 3. When all return, run `python scripts/dev/plan_lint.py <index>` — header,
    ledger vs tasks, `Model:` lines, the 1500-line cap, `Modify:` paths,
    placeholders, in one call. It must print `PASS`; then review and commit.
@@ -352,7 +366,11 @@ in parts, two at a time, to disk as it goes:
 
 Every writer appends one task per tool call, so the files fill visibly; a
 part that finds a wrong shared contract returns `BLOCKED:` instead of
-diverging from the ledger.
+diverging from the ledger. Tasks stay short so each append lands sooner and
+re-reads less: the standard close is stated once in the index
+(`### Standard task close`, each task ends `Close: standard (test: <path>)`),
+existing code is cited by repo path and line range, and a task over ~400
+lines is split into two.
 
 **Never more than 2 plans being written at once in one session.** A plan
 counts from its `mode=index` dispatch until all its parts are committed; a
