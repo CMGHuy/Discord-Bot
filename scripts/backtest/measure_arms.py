@@ -128,7 +128,7 @@ def _run_arm_all(label, universe, engines, horizons, signal_window, delta, worke
             record(*_worker(task))
     else:
         with ProcessPoolExecutor(max_workers=workers, initializer=training_data.select,
-                                 initargs=(training_data.active(),)) as pool:
+                                 initargs=training_data.selection_args()) as pool:
             for future in as_completed([pool.submit(_worker, task) for task in tasks]):
                 record(*future.result())
     return [trade for ticker in sorted(by_ticker) for trade in by_ticker[ticker]]

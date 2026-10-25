@@ -157,7 +157,7 @@ def test_alpaca_provenance(store_root):
     training_data.select("alpaca")
     assert training_data.provenance() == {
         "data_source": "alpaca", "feed": "sip", "adjustment": "all", "manifest_hash": "abc123",
-        "store_dir": str(store_root),
+        "store": "watchlist", "store_dir": str(store_root),
         "excluded": {"GLD": "skipped: not Alpaca-eligible", "SNDK": "flagged: short-overlap"}}
 
 
