@@ -1,737 +1,1245 @@
-# v194 — UI integrity, part 5: leg surfaces and the title audit (V194-13..V194-15)
+# v194 — UI integrity: tooltips that open, figures that are true — Part 5: leg surfaces and title conversions
 
-> **For agentic workers:** constraints, `### Standard task close`, `## Handoff` and `## Parallelisation` live in the index: [2026-10-25-v194-ui-tooltips-and-data-truth_0-index.md](2026-10-25-v194-ui-tooltips-and-data-truth_0-index.md). Pull one task at a time: `grep -n "^### Task V194-14:" -A 400 <this file>`.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Bump:** ui patch, bot patch
-**Edge:** none (integrity)
-**Screen:** exempt (integrity)
-**Spec:** [2026-10-25-v194-ui-tooltips-and-data-truth.md](../specs/2026-10-25-v194-ui-tooltips-and-data-truth.md) — § B3, § A3
+**Spec:** [2026-10-25-v194-ui-tooltips-and-data-truth.md](../specs/2026-10-25-v194-ui-tooltips-and-data-truth.md)
+**Index:** [2026-10-25-v194-ui-tooltips-and-data-truth_0-index.md](2026-10-25-v194-ui-tooltips-and-data-truth_0-index.md) — Global Constraints, `### Standard task close`, Parallelisation and the task ledger live there; every task below inherits them.
 
-`WT` below is the v194 worktree's absolute path; all frontend paths are under `frontend/src/app/`. Line numbers are those on `main` at plan time; where an earlier task moved them, the task says "as left by V194-n" and the edit anchors on the quoted snippet, never on a line number alone.
+# Phase 5 — B3 surfaces and A3 title conversions
 
-# Phase 5 — Legs named, titles that explain become hints
+### Task V194-13: B3 surfaces — leg label and hint on Trades (table, compact rows, drawer) and the Dashboard; Trades total stated as rows; missing-FX-rate caveat on Trades and Dashboard
 
-### Task V194-13: B3 surfaces — leg label and hint on Trades and the Dashboard; the row total says "rows"; missing-FX-rate caveat
-
-**Model:** sonnet — template swaps and one helper at known sites, every name fixed by V194-6c and V194-12.
-
-**Spec:** § B3. Two icons stand for "this row is a leg" today (`<sb-icon name="partial" title="Closed after an earlier partial exit …">`), saying nothing a tap can open and nothing about which leg. After this task every leg row shows **"Leg N of M[ · reason]"** beside its id, followed by an `sb-hint` reading `LEG_HINT_TEXT` (plus the open-partial sentence where one applies). The Trades page states what its total counts: **the API's `total` is `len(rows)` after legs are expanded (`swingbot/admin/api_v1/trades.py:1086`), so it counts rows (legs), not plans**; the live-region summary reads "N rows" and a one-line note under the table says so whenever a leg row is on the page. The same task shows the missing-FX-rate caveat (V194-6b/6c) on Trades and the Dashboard. The label and hint sit **beside** the `sb-row-link`, not inside it: the link renders an `<a>`, and a hint button nested in an anchor would navigate on tap.
+**Model:** sonnet — template and pure-helper wiring across two pages against contracts V194-12 and V194-6c already fixed; no design choice left open.
 
 **Files:**
-- Modify: `frontend/src/app/workspaces/trades/trades.columns.ts` (add the exported helper `legHintText` at the end of the file)
-- Modify: `frontend/src/app/workspaces/trades/trades.ts:51` (status-cell import), `:133` (imports array), `:364` (`</sb-async>`), `:386-397` (`#numCell` leg icons), `:563` (styles), `:850-853` (`announce`), `:962-972` (`partialOpenTitle` / `isPartialLeg`)
-- Modify: `frontend/src/app/workspaces/dashboard/dashboard.ts:33` (status-cell import), `:150` (imports array), `:200-201` (`<sb-trading-performance`), `:390-402` (`#numCell`), `:579` (styles), `:983-992`
-- Modify: `frontend/src/app/workspaces/dashboard/trade-drawer.ts:72-90` (`tradeDrawerFields`), `:104-122` (template), `:190-194` (class)
+- Modify: `frontend/src/app/workspaces/trades/trades.columns.ts:143` (the `num` column) and its imports
+- Modify: `frontend/src/app/workspaces/trades/trades.ts` (imports `:40-51`, component `imports` array, `#numCell` `:381-398`, count line `:376-378`, expansion `Detail` group `:497-509`, styles `:558-563`, `announce` `:850-854`, `countText` `:868-878`, `isPartialLeg` `:962-972`)
+- Modify: `frontend/src/app/workspaces/dashboard/dashboard.ts` (imports `:33`, `.performance-stack` `:201-224`, `#numCell` `:387-404`, styles `:579`, `isPartialLeg` `:983-992`)
+- Modify: `frontend/src/app/workspaces/dashboard/trade-drawer.ts` (imports `:1-11`, `tradeDrawerFields` `:76-91`, template `:113-119`, component `imports` `:106`)
 - Test: `frontend/src/app/workspaces/trades/trades.spec.ts`, `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`
 
 **Interfaces:**
-- Consumes (V194-12): `legLabel(row: LegLike): string | null` and `LEG_HINT_TEXT` from `workspaces/trades/leg-label.ts`; `TradeRow.leg_exit_reason?: string | null`. (V194-6c): `fxMissingText(n: number): string` and `fxMissingOf(...payloads): number` from `workspaces/analytics/scope-bar.ts`; `TradeRow.fx_missing?: boolean`; `fx_missing_count?: number` on `Dashboard` and `Dashboard.realized`. Existing: `partialOpenTitle(row)` (`ui/status-cell.ts:230`, returns `string | null`), `Hint` (`ui/hint.ts`).
-- Produces: `legHintText(row: TradeRow): string | null` exported from `trades.columns.ts`. Class hooks the specs and the V194-17 audit use: `.leg-label`, `.leg-note`, `.fx-note`.
+- Consumes (V194-12, `frontend/src/app/workspaces/trades/leg-label.ts`): `legLabel(row: LegLike): string | null` (`"Leg N of M"`, `" · <reasonLabel>"` appended when a reason is present, `null` for a single-leg row) and `LEG_HINT_TEXT`; `TradeRow.leg_exit_reason?: string | null`.
+- Consumes (V194-6c): `TradeRow.fx_missing?: boolean`; `Dashboard.fx_missing_count?: number`; `fxMissingText(n: number): string` from `frontend/src/app/workspaces/analytics/scope-bar.ts` (`''` for 0).
+- Existing: `partialOpenTitle` (`ui/status-cell.ts:230`), `Hint` (`ui/hint.ts`, inputs `text`, `label`, `align`), `DashboardStore.data` (state, `stores/dashboard.store.ts:29`), `TradesStore.data` (state, `stores/trades.store.ts:20`).
+- Produces: `numText(row: TradeRow): string` (exported from `trades.columns.ts`); `ROW_COUNT_NOTE` (exported from `trades.ts`). Nothing later in the ledger consumes them.
 
-- [ ] **Step 1: Write the failing tests.** Run `git grep -n "leg-icon" -- 'frontend/src/**/*.spec.ts'` first: any spec that reads the old partial `.leg-icon` title moves to the `.leg-label` assertions below.
+**What the Trades total counts (stated, as the spec requires).** Rows, not plans. `swingbot/admin/api_v1/trades.py:766` expands every plan into one row per realised leg plus one for a still-open remainder (`_expand_plan_row`, `:561-579`), and `:1086` takes `total = len(rows)` after that expansion; `tests/admin/test_api_v1_trades.py:246` (`test_status_filter_returns_the_closed_leg_and_the_open_remainder_separately`) already pins a closed leg and its open remainder as two rows of one plan. The page therefore says "rows" (the live-region summary and a count note under the table), and this task's tests pin that wording.
 
-In `trades.spec.ts`: extend `FooterFixture` (`:80-85`) with `items?: TradeRow[]`, and in `render()` (`:93`) replace the seeded `items: footer.total > 0 ? [row({})] : [],` inside its `patchState` call with `items: footer.items ?? (footer.total > 0 ? [row({})] : []),`. Add imports `legLabel, LEG_HINT_TEXT` from `./leg-label`, `legHintText` from `./trades.columns`, `partialOpenTitle` from `../../ui/status-cell`, `fxMissingText` from `../analytics/scope-bar`. Append:
+**Removed, not kept:** both `isPartialLeg` methods and the `title="Closed after an earlier partial exit of the same position"` icon they guarded. The label and its `sb-hint` replace the icon on every leg row (leg 1 too: spec B3 labels every leg). The `partialOpenTitle` and trailing-stop icons stay as they are; V194-14 classifies them. Before deleting, `git -C "$WT" grep -n "isPartialLeg" frontend/src/app` must list only the two definitions and their two template uses.
+
+- [ ] **Step 1: Write the failing Trades tests.** In `frontend/src/app/workspaces/trades/trades.spec.ts`, extend the imports:
 
 ```ts
-describe('legHintText (v194 B3)', () => {
-  it('is null for a plain single-leg row', () => {
-    expect(legHintText(row({ leg_index: 0, leg_total: 1 }))).toBeNull();
-  });
+import { LEG_HINT_TEXT } from './leg-label';
+import { numText } from './trades.columns';
+import { fxMissingText } from '../analytics/scope-bar';
+import { ROW_COUNT_NOTE, Trades, TRADES_CONTROLS } from './trades';
+```
 
-  it('is the plans-not-legs sentence for a leg row', () => {
-    expect(legHintText(row({ leg_index: 1, leg_total: 2 }))).toBe(LEG_HINT_TEXT);
-  });
+(`import { Trades, TRADES_CONTROLS } from './trades';` becomes the last line above.) Append at the end of the file:
 
-  it('adds the open-partial sentence after it when both apply', () => {
-    const open = row({ leg_index: 0, leg_total: 2, status: 'TP1_HIT', open_shares: 3 });
-    expect(partialOpenTitle(open), 'fixture must be an open partial').not.toBeNull();
-    expect(legHintText(open)).toBe(`${LEG_HINT_TEXT} ${partialOpenTitle(open)}`);
-  });
+```ts
+/* -- v194 B3 -- leg rows say which part of the plan they are ------------- */
 
-  it('is only the open-partial sentence for a single-leg open partial', () => {
-    const open = row({ leg_index: 0, leg_total: 1, status: 'TP1_HIT', open_shares: 3 });
-    expect(partialOpenTitle(open), 'fixture must be an open partial').not.toBeNull();
-    expect(legHintText(open)).toBe(partialOpenTitle(open));
+/** Mount Trades with `items` as the loaded page, in full density so the
+ *  `#` column (and its `#numCell` template) is inline at jsdom's width. */
+function renderRows(items: TradeRow[]): HTMLElement {
+  const fixture = render();
+  (fixture.componentInstance as unknown as { setDensity(d: 'full' | 'compact'): void }).setDensity('full');
+  patchState(unprotected(TestBed.inject(TradesStore)), {
+    data: { items, total: items.length, page: 1, per_page: 50 },
+    query: { page: 1, per_page: 50 },
   });
-});
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
 
 describe('Trades — leg rows (v194 B3)', () => {
-  const legs = [
-    row({ id: 'plan-abc123', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
-    row({ id: 'plan-abc123', leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' }),
-  ];
-  const mount = (items: TradeRow[]) =>
-    render({ total: items.length, page: 1, perPage: 12, items }).nativeElement as HTMLElement;
-  const announceOf = (f: ComponentFixture<Trades>) =>
-    (f.componentInstance as unknown as { announce(): string | null }).announce();
-
-  it('names each leg beside its id, with its exit reason', () => {
-    const labels = [...mount(legs).querySelectorAll('.leg-label')].map((el) => el.textContent!.trim());
-    expect(labels).toEqual([legLabel(legs[0])!, legLabel(legs[1])!]);
+  it('labels both legs of a two-leg plan with their exit reason', () => {
+    const el = renderRows([
+      row({ id: 'plan-aaaaaa', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      row({ id: 'plan-aaaaaa', leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' }),
+    ]);
+    const labels = [...el.querySelectorAll('.leg')].map((n) => n.firstChild!.textContent!.trim());
     expect(labels[0]).toMatch(/^Leg 1 of 2 · /);
     expect(labels[1]).toMatch(/^Leg 2 of 2 · /);
   });
 
-  it('keeps the label and hint out of the row link', () => {
-    const el = mount(legs);
-    expect(el.querySelector('a.row-link .leg-label')).toBeNull();
-    expect(el.querySelector('a.row-link sb-hint')).toBeNull();
+  it('labels a leg with no recorded reason by its position alone', () => {
+    const el = renderRows([row({ leg_index: 2, leg_total: 3, leg_exit_reason: null })]);
+    expect(el.querySelector('.leg')!.firstChild!.textContent!.trim()).toBe('Leg 3 of 3');
   });
 
-  it('shows no label and no note for a single-leg trade', () => {
-    const el = mount([row({ leg_index: 0, leg_total: 1 })]);
-    expect(el.querySelector('.leg-label')).toBeNull();
-    expect(el.querySelector('.leg-note')).toBeNull();
+  it('shows no label and no leg hint on a single-leg trade', () => {
+    const el = renderRows([row({ leg_index: 0, leg_total: 1 })]);
+    expect(el.querySelector('.leg')).toBeNull();
+    expect(el.querySelector('.leg sb-hint')).toBeNull();
   });
 
-  it('puts the plans-not-legs hint beside the label', () => {
-    const tip = mount(legs).querySelector('.leg-label + sb-hint [role="tooltip"]')!;
-    expect(tip.textContent!.trim()).toBe(LEG_HINT_TEXT);
-    expect(LEG_HINT_TEXT).toContain('plans, not legs');
+  it('puts an sb-hint naming plans-not-legs on every leg row, in place of the old icon', () => {
+    const el = renderRows([
+      row({ leg_index: 0, leg_total: 2 }),
+      row({ leg_index: 1, leg_total: 2 }),
+    ]);
+    const hints = [...el.querySelectorAll('.leg sb-hint')];
+    expect(hints).toHaveLength(2);
+    expect(hints[0].textContent).toContain(LEG_HINT_TEXT);
+    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
   });
 
-  it('states that the total counts rows, not plans', () => {
-    const fixture = render({ total: 2, page: 1, perPage: 12, items: legs });
-    expect(announceOf(fixture)).toBe('2 rows');
-    expect((fixture.nativeElement as HTMLElement).querySelector('.leg-note')!.textContent).toContain('Rows, not plans');
-  });
-
-  it('says "1 row" for a lone row', () => {
-    expect(announceOf(render({ total: 1, page: 1, perPage: 12 }))).toBe('1 row');
+  it('carries the label into the expansion the phone drawer reuses', () => {
+    const el = renderRows([row({ leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' })]);
+    // The expansion template is stamped only for an expanded row; the
+    // numText value is what the drawer's "Hidden in this view" list prints
+    // for the `#` column whenever that column is not inline.
+    expect(numText(row({ id: 'plan-123456', leg_index: 1, leg_total: 2, leg_exit_reason: null })))
+      .toBe('123456 · Leg 2 of 2');
+    expect(el.querySelector('.leg')).not.toBeNull();
   });
 });
 
-describe('Trades — missing exchange rate caveat (v194 B7)', () => {
-  it('names how many rows on the page lack a rate', () => {
-    const items = [row({ fx_missing: true }), row({ id: 't2', fx_missing: true }), row({ id: 't3' })];
-    const el = render({ total: 3, page: 1, perPage: 12, items }).nativeElement as HTMLElement;
-    expect(el.querySelector('.fx-note')!.textContent!.trim()).toBe(fxMissingText(2));
+describe('numText', () => {
+  it('is the short id alone for a single-leg trade', () => {
+    expect(numText(row({ id: 'abcdefghij', leg_total: 1 }))).toBe('efghij');
   });
 
-  it('prints nothing when every row has a rate', () => {
-    const el = render({ total: 1, page: 1, perPage: 12 }).nativeElement as HTMLElement;
-    expect(el.querySelector('.fx-note')).toBeNull();
+  it('keeps a short id whole', () => {
+    expect(numText(row({ id: 't1', leg_total: 1 }))).toBe('t1');
+  });
+});
+
+describe('Trades — the total counts rows, not plans (v194 B3)', () => {
+  it('says so under a non-empty table, and the pager still prints the range once', () => {
+    const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')!.textContent!.trim()).toBe(ROW_COUNT_NOTE);
+    expect(el.querySelectorAll('.bar .range')).toHaveLength(1);
+  });
+
+  it('announces rows, not trades', () => {
+    const fixture = render({ total: 3, page: 1, perPage: 12 });
+    const announce = (fixture.componentInstance as unknown as { announce: () => string | null }).announce;
+    expect(announce()).toBe('3 rows');
+  });
+});
+
+describe('Trades — missing FX rate caveat (v194 B7)', () => {
+  it('names how many rows on the page have no rate', () => {
+    const el = renderRows([
+      row({ id: 'a', fx_missing: true, realized_pnl_amount: null }),
+      row({ id: 'b', fx_missing: true, realized_pnl_amount: null }),
+      row({ id: 'c', fx_missing: false }),
+    ]);
+    expect(el.querySelector('.fx-caveat')!.textContent!.trim()).toBe(fxMissingText(2));
+  });
+
+  it('is absent when every row converted', () => {
+    const el = renderRows([row({ fx_missing: false }), row({ id: 'b' })]);
+    expect(el.querySelector('.fx-caveat')).toBeNull();
   });
 });
 ```
 
-(If the two open-partial fixtures do not satisfy `partialOpenTitle`, read how `ui/status-cell.spec.ts` builds an open partial and reuse that row shape rather than guessing fields.)
-
-In `dashboard.spec.ts` add imports `legLabel, LEG_HINT_TEXT` (from `../trades/leg-label`), `fxMissingText` (from `../analytics/scope-bar`), `tradeDrawerFields` (from `./trade-drawer`) and append (`tradeRow` is the spec's own factory at `:125`, `loadedWithRows` at `:409`, `loaded` at `:223`):
+Also replace the first count-footer test (`:261-266`), whose premise this task changes:
 
 ```ts
-describe('Dashboard — leg rows (v194 B3)', () => {
-  const legs = [
-    tradeRow({ id: 'plan-xyz789', leg_index: 0, leg_total: 3, leg_exit_reason: 'tp1' }),
-    tradeRow({ id: 'plan-xyz789', leg_index: 1, leg_total: 3, leg_exit_reason: 'timeout' }),
-    tradeRow({ id: 'plan-xyz789', leg_index: 2, leg_total: 3, leg_exit_reason: 'stop' }),
-  ];
+  it('leaves the non-empty range to the pager, printed once', () => {
+    const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')).toBeNull();
+```
+→
+```ts
+  it('leaves the non-empty range to the pager, printed once', () => {
+    const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')!.textContent).not.toMatch(/\d+–\d+/);
+```
 
-  it('labels every leg of a three-leg plan, with its reason', async () => {
-    const el = await loadedWithRows(legs);
-    const labels = [...el.querySelectorAll('.leg-label')].map((n) => n.textContent!.trim());
-    expect(labels).toEqual(legs.map((r) => legLabel(r)!));
-    expect(labels[2]).toMatch(/^Leg 3 of 3/);
+- [ ] **Step 2: Run them to see them fail.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/workspaces/trades/trades.spec.ts`. Expected: FAIL — `numText` and `ROW_COUNT_NOTE` are not exported (compile error naming them).
+
+- [ ] **Step 3: `numText` and the `num` column value.** In `frontend/src/app/workspaces/trades/trades.columns.ts`, add the import and the helper after the imports:
+
+```ts
+import { legLabel } from './leg-label';
+
+/** What the `#` cell says as text -- the short plan id, then "Leg N of M"
+ *  for a leg row (v194 B3). The table renders `#numCell`; this is what the
+ *  phone drawer's "Hidden in this view" list and the compact card print
+ *  when the column is not inline. Same 6-character trim as `shortId` in
+ *  trades.ts and dashboard.ts. */
+export function numText(row: TradeRow): string {
+  const id = row.id.length > 6 ? row.id.slice(-6) : row.id;
+  const leg = legLabel(row);
+  return leg ? `${id} · ${leg}` : id;
+}
+```
+
+and at `:143`:
+
+```ts
+    { key: 'num', header: '#', width: '3rem', inlineFrom: 'sm' },
+```
+→
+```ts
+    // No fixed width: a leg row's "Leg 2 of 2 · stop" sits under the id
+    // (v194 B3); a page with no leg rows still sizes to the 6-char id.
+    { key: 'num', header: '#', value: (row) => numText(row), inlineFrom: 'sm' },
+```
+
+- [ ] **Step 4: Trades template, count note and caveat.** In `frontend/src/app/workspaces/trades/trades.ts`:
+  - imports: after `import { StatusCell, partialOpenTitle } from '../../ui/status-cell';` add
+    ```ts
+    import { Hint } from '../../ui/hint';
+    import { fxMissingText } from '../analytics/scope-bar';
+    import { LEG_HINT_TEXT, legLabel } from './leg-label';
+    ```
+    and add `Hint` to the `@Component` `imports: [...]` array.
+  - after the `export const` block nearest the top of the file (or directly above `@Component`), add
+    ```ts
+    /** v194 B3: what the Trades total counts. The API expands every plan
+     *  into one row per realised leg plus its open remainder
+     *  (`swingbot/admin/api_v1/trades.py` `_expand_plan_row`) before it
+     *  counts, so the pager's "1–50 of 120" is rows. */
+    export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts lists one row per leg.';
+    ```
+  - `:376-378`:
+    ```html
+        @if (countText(); as count) {
+          <p class="count">{{ count }}</p>
+        }
+    ```
+    →
+    ```html
+        @if (countText(); as count) {
+          <p class="count">{{ count }}</p>
+        }
+        <!-- v194 B7: a row with no exchange rate for its exit date shows no
+             amount; say how many on this page rather than let a dash pass
+             for a zero. -->
+        @if (fxMissing() > 0) {
+          <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
+        }
+    ```
+  - `#numCell` `:381-398`:
+    ```html
+        <ng-template #numCell let-row>
+          <sb-row-link [link]="['/trades', row.id]">
+            {{ shortId(row) }}
+            <!-- v79 split a scaled-out position into one row per leg, both
+                 carrying the same id -- unmarked, the later-closing leg reads
+                 as a duplicate of the earlier partial exit it shares an id
+                 with. -->
+            @if (isPartialLeg(row)) {
+              <sb-icon name="partial" class="leg-icon" title="Closed after an earlier partial exit of the same position" />
+            }
+            @if (partialOpenTitle(row); as openTitle) {
+    ```
+    →
+    ```html
+        <ng-template #numCell let-row>
+          <sb-row-link [link]="['/trades', row.id]">
+            {{ shortId(row) }}
+            @if (partialOpenTitle(row); as openTitle) {
+    ```
+    and after that template's `</sb-row-link>` (before `</ng-template>`) add
+    ```html
+          <!-- v79 split a scaled-out position into one row per leg, all
+               carrying the same id. v194 B3: every leg says which part it
+               is, and the hint (outside the link: a button cannot sit in an
+               anchor) says what a leg row's P&L and the page's N mean. -->
+          @if (legLabel(row); as leg) {
+            <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+          }
+    ```
+  - expansion `Detail` group: after `<div><dt>Note</dt><dd>{{ row.has_note ? 'Yes' : 'No' }}</dd></div>` (`:508`) add
+    ```html
+              @if (legLabel(row); as leg) {
+                <div class="leg-detail">
+                  <dt>Leg</dt>
+                  <dd>{{ leg }} <sb-hint [text]="legHint" label="About leg rows" align="left" /></dd>
+                </div>
+              }
+    ```
+  - styles: after `.count { ... }` (`:558`) add
+    ```css
+    .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
+    ```
+  - `announce` `:850-854`: `` return page ? `${page.total} trades` : null; `` → `` return page ? `${page.total} rows` : null; ``
+  - `countText` `:868-878`: the final `return null;` → `return ROW_COUNT_NOTE;`, and its doc comment's last paragraph gains: "A non-zero total is rows, not plans (v194 B3): the note says so; the range itself stays the pager's."
+  - add, next to `announce`:
+    ```ts
+      /** v194 B7: rows on this page whose amount has no exchange rate. */
+      protected readonly fxMissing = computed(
+        () => (this.store.data()?.items ?? []).filter((r) => r.fx_missing === true).length,
+      );
+      protected readonly fxText = fxMissingText;
+    ```
+  - `:962-972`: delete the `isPartialLeg` doc comment and method, keep `protected readonly partialOpenTitle = partialOpenTitle;`, and add
+    ```ts
+      /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
+      protected readonly legLabel = legLabel;
+      protected readonly legHint = LEG_HINT_TEXT;
+    ```
+
+- [ ] **Step 5: Run the Trades spec.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/workspaces/trades/trades.spec.ts`. Expected: PASS, the three existing count-footer tests included.
+
+- [ ] **Step 6: Write the failing Dashboard tests.** In `frontend/src/app/workspaces/dashboard/dashboard.spec.ts` add the imports
+```ts
+import { LEG_HINT_TEXT } from '../trades/leg-label';
+import { fxMissingText } from '../analytics/scope-bar';
+import { tradeDrawerFields } from './trade-drawer';
+```
+and append:
+
+```ts
+describe('Dashboard — leg rows and missing FX rates (v194 B3, B7)', () => {
+  it('labels each leg of a split plan in the positions table, with the plans-not-legs hint', async () => {
+    const el = await loadedWithRows([
+      tradeRow({ id: 'p1', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      tradeRow({ id: 'p1', leg_index: 1, leg_total: 2, leg_exit_reason: null }),
+    ]);
+    const legs = [...el.querySelectorAll('sb-positions-table .leg')];
+    expect(legs.map((n) => n.firstChild!.textContent!.trim())).toEqual([
+      expect.stringMatching(/^Leg 1 of 2 · /),
+      'Leg 2 of 2',
+    ]);
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain(LEG_HINT_TEXT);
+    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
   });
 
-  it('labels a leg with no recorded reason by the bare label', async () => {
-    const el = await loadedWithRows([tradeRow({ leg_index: 0, leg_total: 2, leg_exit_reason: null })]);
-    expect(el.querySelector('.leg-label')!.textContent!.trim()).toBe('Leg 1 of 2');
-  });
-
-  it('shows no label for a single-leg trade', async () => {
+  it('shows no leg label for a single-leg row', async () => {
     const el = await loadedWithRows([tradeRow({ leg_index: 0, leg_total: 1 })]);
-    expect(el.querySelector('.leg-label')).toBeNull();
+    expect(el.querySelector('sb-positions-table .leg')).toBeNull();
   });
 
-  it('opens a hint that says plans, not legs, outside the row link', async () => {
-    const el = await loadedWithRows(legs);
-    expect(el.querySelector('.leg-label + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(LEG_HINT_TEXT);
-    expect(el.querySelector('a.row-link sb-hint')).toBeNull();
+  it('names the trades left out of the money figures', async () => {
+    const fixture = await loaded({ fx_missing_count: 2 } as Partial<DashboardData>);
+    const caveat = (fixture.nativeElement as HTMLElement).querySelector('.performance-stack .fx-caveat');
+    expect(caveat!.textContent!.trim()).toBe(fxMissingText(2));
   });
 
-  it('lists the leg in the row drawer fields, and only for a leg', () => {
-    expect(tradeDrawerFields(legs[0], '$', Date.now()).find((f) => f.key === 'leg')!.value).toBe(legLabel(legs[0]));
-    const single = tradeDrawerFields(tradeRow({ leg_total: 1, leg_index: 0 }), '$', Date.now());
+  it('shows no caveat when every rate was found or the field is absent', async () => {
+    for (const overrides of [{ fx_missing_count: 0 }, {}] as Partial<DashboardData>[]) {
+      const fixture = await loaded(overrides);
+      expect((fixture.nativeElement as HTMLElement).querySelector('.fx-caveat')).toBeNull();
+    }
+  });
+
+  it('lists the leg in the trade drawer for a leg row only', () => {
+    const leg = tradeDrawerFields(tradeRow({ leg_index: 1, leg_total: 3, leg_exit_reason: null }), '$', 0);
+    expect(leg.find((f) => f.key === 'leg')?.value).toBe('Leg 2 of 3');
+    const single = tradeDrawerFields(tradeRow({ leg_index: 0, leg_total: 1 }), '$', 0);
     expect(single.some((f) => f.key === 'leg')).toBe(false);
   });
 });
-
-describe('Dashboard — missing exchange rate caveat (v194 B7)', () => {
-  it('shows the count from the realised block', async () => {
-    const fixture = await loaded({ realized: { amount: 42.5, pct: 0.6, n: 3, wins: 2, losses: 1, fx_missing_count: 2 } });
-    expect((fixture.nativeElement as HTMLElement).querySelector('.fx-note')!.textContent!.trim()).toBe(fxMissingText(2));
-  });
-
-  it('shows nothing when no rate is missing', async () => {
-    const fixture = await loaded();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.fx-note')).toBeNull();
-  });
-});
 ```
 
-- [ ] **Step 2: Run them to see them fail.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/workspaces/trades/trades.spec.ts`, then the same with `src/app/workspaces/dashboard/dashboard.spec.ts`. Expected: FAIL (`legHintText` undefined, no `.leg-label`, no `.fx-note`, `announce()` reads "2 trades").
+- [ ] **Step 7: Run them to see them fail.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/workspaces/dashboard/dashboard.spec.ts`. Expected: FAIL — no `.leg`, no `.fx-caveat`, no `leg` drawer field.
 
-- [ ] **Step 3: Add `legHintText` to `trades.columns.ts`.** Add `import { legLabel, LEG_HINT_TEXT } from './leg-label';` and `import { partialOpenTitle } from '../../ui/status-cell';` (and `TradeRow` from `'../../api/models'` if the file does not already import it), then append:
-
-```ts
-/** The hint beside a leg row's label: the plans-not-legs sentence for any leg, then
- *  the open-partial sentence where the row is a still-open partial. Null for a plain row. */
-export function legHintText(row: TradeRow): string | null {
-  const parts = [legLabel(row) === null ? null : LEG_HINT_TEXT, partialOpenTitle(row)];
-  const present = parts.filter((p): p is string => p !== null);
-  return present.length > 0 ? present.join(' ') : null;
-}
-```
-
-- [ ] **Step 4: Trades template and class (`trades.ts`).**
-  - Imports: add `import { Hint } from '../../ui/hint';` next to the other `ui/` imports and `Hint,` to the component `imports: [` array (`:133`, after `Async,`); add `import { legLabel, LEG_HINT_TEXT } from './leg-label';`, `legHintText` to the existing `./trades.columns` import, and `import { fxMissingText } from '../analytics/scope-bar';`. `:51`: `import { StatusCell, partialOpenTitle } from '../../ui/status-cell';` → `import { StatusCell } from '../../ui/status-cell';`.
-  - `#numCell` (`:383-399`), old → new. The two icon blocks leave the link, the trailing icon stays inside it, and the pair lands right after the link:
-
-```html
-OLD (:389-397)
-        @if (isPartialLeg(row)) {
-          <sb-icon name="partial" class="leg-icon" title="Closed after an earlier partial exit of the same position" />
+- [ ] **Step 8: Dashboard template and drawer.** In `frontend/src/app/workspaces/dashboard/dashboard.ts`:
+  - imports: after `import { StatusCell, partialOpenTitle } from '../../ui/status-cell';` (`:33`) add
+    ```ts
+    import { fxMissingText } from '../analytics/scope-bar';
+    import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
+    ```
+    (`Hint` is already imported at `:51` and in the component's `imports`.)
+  - `.performance-stack`: after the `<sb-trading-performance ... />` element's closing `/>` (`:224`) and before `</div>` add
+    ```html
+        <!-- v194 B7: closes and positions with no exchange rate are left out
+             of the money figures above; say how many. -->
+        @if (fxMissing() > 0) {
+          <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
         }
-        @if (partialOpenTitle(row); as openTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="openTitle" />
-        }
-        @if (row.bar_kind === 'trailing') {
-          <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
-        }
-      </sb-row-link>
-NEW
-        @if (row.bar_kind === 'trailing') {
-          <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
-        }
-      </sb-row-link>
-      @if (legLabel(row); as leg) { <span class="leg-label">{{ leg }}</span> }
-      @if (legHintText(row); as legHint) { <sb-hint [text]="legHint" label="About leg rows" /> }
-```
-  - Class (`:962-972`): delete the doc comment, `protected readonly partialOpenTitle = partialOpenTitle;` (`:968`) and `isPartialLeg` (`:970-972`) once `git grep -n "isPartialLeg\|partialOpenTitle" frontend/src/app/workspaces/trades/trades.ts` shows no other reader; in their place:
+    ```
+  - `#numCell` `:387-404`: the same edit as Trades' — delete the `<!-- v79 split ... -->` comment and the `@if (isPartialLeg(row)) { ... }` block inside `sb-row-link`, and after `</sb-row-link>` add
+    ```html
+          <!-- v194 B3: every leg says which part of the plan it is; the hint
+               sits outside the link (a button cannot nest in an anchor). -->
+          @if (legLabel(row); as leg) {
+            <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+          }
+    ```
+  - styles: after `sb-row-link .leg-icon { color: var(--text-muted); flex: none; }` (`:579`) add
+    ```css
+    .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
+    ```
+  - `:983-992`: delete the `isPartialLeg` doc comment and method; keep `partialOpenTitle`; add
+    ```ts
+      /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
+      protected readonly legLabel = legLabel;
+      protected readonly legHint = LEG_HINT_TEXT;
 
-```ts
-  protected readonly legLabel = legLabel;
-  protected readonly legHintText = legHintText;
-  protected readonly legNoteHint = LEG_HINT_TEXT;
-  protected readonly fxMissingText = fxMissingText;
-  /** A leg row is on this page: the total counts rows, and the note under the table says so. */
-  protected readonly hasLegRows = computed(() => this.store.rows().some((r) => r.leg_total > 1));
-  protected readonly fxMissingRows = computed(() => this.store.rows().filter((r) => r.fx_missing).length);
-```
-  - `announce` (`:850-853`), the wording of `Pagination.rangeLabel` (`ui/pagination.ts:86`):
+      /** v194 B7: the main ledger's rows left out of the money figures. */
+      protected readonly fxMissing = computed(() => this.store.data()?.fx_missing_count ?? 0);
+      protected readonly fxText = fxMissingText;
+    ```
 
-```ts
-OLD   return page ? `${page.total} trades` : null;
-NEW   return page ? `${page.total} ${page.total === 1 ? 'row' : 'rows'}` : null;
-```
-  - After `</sb-async>` (`:364`) add:
-
-```html
-    @if (hasLegRows()) {
-      <p class="leg-note">Rows, not plans: a plan closed in parts lists one row per leg.
-        <sb-hint [text]="legNoteHint" label="About leg rows" /></p>
-    }
-    @if (fxMissingRows() > 0) { <p class="fx-note" role="note">{{ fxMissingText(fxMissingRows()) }}</p> }
-```
-  - Styles (`:563`), existing tokens only:
-
-```css
-OLD     sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
-NEW     sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
-        .leg-label { color: var(--text-muted); font-size: 0.85em; white-space: nowrap; }
-        .leg-note, .fx-note { margin: 0.5rem 0 0; color: var(--text-muted); font-size: 0.85em; }
-```
-
-- [ ] **Step 5: Dashboard (`dashboard.ts`).**
-  - `:33` `import { StatusCell, partialOpenTitle } from '../../ui/status-cell';` → `import { StatusCell } from '../../ui/status-cell';`; `Hint` is already imported (`:51`) and listed in `imports:`; add `import { legLabel } from '../trades/leg-label';`, `legHintText` to the `../trades/trades.columns` import (add the import if the file has none), `import { fxMissingOf, fxMissingText } from '../analytics/scope-bar';`.
-  - `#numCell` (`:390-402`): the same old → new as Trades Step 4 (the two icon blocks at `:394-399` go, the trailing icon stays in the link, the label and hint pair follows `</sb-row-link>`); the v79 comment above stays.
-  - Class (`:983-992`): delete the doc comment, `partialOpenTitle` (`:988`) and `isPartialLeg` (`:990-992`) once `git grep -n "isPartialLeg\|partialOpenTitle" frontend/src/app/workspaces/dashboard/dashboard.ts` shows no other reader; add
-
-```ts
-  protected readonly legLabel = legLabel;
-  protected readonly legHintText = legHintText;
-  protected readonly fxMissingText = fxMissingText;
-  protected readonly fxMissing = computed(() => fxMissingOf(this.store.realized(), this.store.todayRealized()));
-```
-  - Styles (`:579`): the same two-rule addition as Trades (`.leg-label`, `.leg-note, .fx-note`).
-  - Template (`:200-201`):
-
-```html
-OLD     <div class="performance-stack">
-        <sb-trading-performance
-NEW     <div class="performance-stack">
-        @if (fxMissing() > 0) { <p class="fx-note" role="note">{{ fxMissingText(fxMissing()) }}</p> }
-        <sb-trading-performance
-```
-
-- [ ] **Step 6: Row drawer (`trade-drawer.ts`).** Imports: `import { legLabel } from '../trades/leg-label';`, `import { legHintText } from '../trades/trades.columns';`, `import { fxMissingText } from '../analytics/scope-bar';`. Above the `tradeDrawerFields` doc comment (`:72`) add:
-
-```ts
-/** One "Leg N of M · reason" field, only for a row that is a leg. */
-function legFields(row: TradeRow): TradeDrawerField[] {
-  const leg = legLabel(row);
-  return leg === null ? [] : [field('leg', 'Leg', leg)];
-}
-```
-  In `tradeDrawerFields` (`:78`):
-
-```ts
-OLD     field('status', 'Status', text(row.status_label || row.status)),
-NEW     field('status', 'Status', text(row.status_label || row.status)),
+  In `frontend/src/app/workspaces/dashboard/trade-drawer.ts`:
+  - imports: add `import { Hint } from '../../ui/hint';` and `import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';`; the component's `imports: [Drawer, RowActions, RouterLink]` → `imports: [Drawer, Hint, RowActions, RouterLink]`.
+  - `tradeDrawerFields`:
+    ```ts
+        field('status', 'Status', text(row.status_label || row.status)),
+    ```
+    →
+    ```ts
+        field('status', 'Status', text(row.status_label || row.status)),
         ...legFields(row),
-```
-  Class (`:190-194`) gains `protected readonly legNote = computed(() => legHintText(this.row()));` and `protected readonly fxMissingText = fxMissingText;`. Template, directly under `</dl>` (`:121`), plain visible text because the drawer has room (no hint):
+    ```
+    with, above `tradeDrawerFields`:
+    ```ts
+    /** v194 B3: a leg row says which part of the plan it is; a single-leg
+     *  trade gets no field at all. */
+    function legFields(row: TradeRow): TradeDrawerField[] {
+      const leg = legLabel(row);
+      return leg ? [field('leg', 'Leg', leg)] : [];
+    }
+    ```
+  - template, `:116`: `<dt>{{ item.label }}</dt>` →
+    ```html
+            <dt>{{ item.label }}@if (item.key === 'leg') { <sb-hint [text]="legHint" label="About leg rows" align="left" /> }</dt>
+    ```
+    and in the class add `protected readonly legHint = LEG_HINT_TEXT;` after `paperMarker`.
 
-```html
-      </dl>
-      @if (legNote(); as note) { <p class="leg-note">{{ note }}</p> }
-      @if (row().fx_missing) { <p class="fx-note" role="note">{{ fxMissingText(1) }}</p> }
-```
-  and the styles gain `.leg-note, .fx-note { margin: 0.5rem 0 0; color: var(--text-muted); font-size: 0.85em; }`. Trades' own row drawer and compact rows render the same `#numCell` template, so they carry the label and hint with no further edit.
+- [ ] **Step 9: Run the Dashboard spec.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/workspaces/dashboard/dashboard.spec.ts`, then `--include src/app/workspaces/dashboard/trade-drawer.spec.ts` (unchanged, must stay green: a single-leg row adds no field). Expected: PASS.
 
-- [ ] **Step 7: Run to see them pass.** The two commands from Step 2. Expected: PASS, including the existing count-footer, plan-cell and Dashboard hint specs. If the compact row is reachable through `compactKeys` / `openRowDrawer` (`ui/data-table/testing/reachability`), add one assertion to the first leg test in `trades.spec.ts`: the drawer's number cell contains `.leg-label`.
+- [ ] **Step 10: Three widths.** With the frontend dev server on the local replica (Global Constraints: `.env` login loaded inside the script, never printed), one Playwright screenshot of `/app/trades?status=CLOSED` at 390, 768 and 1440 with at least one split plan on the page: the `#` column holds the id and "Leg N of M · reason" without overlapping the Status column, the hint glyph is a 44px target at 390/768 (the coarse-pointer `@media` in `hint.ts`), and the page shows the count note. Note the result in the commit body.
 
-- [ ] **Step 8: Screenshot check.** Playwright against the local replica at 390, 768 and 1440 on `/trades` and `/dashboard` with a partially exited plan on screen: the label stays on one line beside the id, the hint opens in the top layer, `.leg-note` wraps. One screenshot per width into the scratchpad directory; the full layout audit still runs once, in V194-17.
+Close: standard (test: `frontend/src/app/workspaces/trades/trades.spec.ts`), plus the narrow run of `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`; one commit `feat(v194): leg labels and plans-not-legs hint on Trades and Dashboard; rows count note; FX caveat (V194-13)`.
 
-Close: standard (test: frontend/src/app/workspaces/trades/trades.spec.ts); also run the narrow `dashboard/dashboard.spec.ts`. Commit: `feat(v194): leg label and plans-not-legs hint on Trades and Dashboard, rows total stated, FX caveat (V194-13)`.
+### Task V194-14: A3 part 1 — `title-usage.spec.ts` scanner and allow-list (classifies every site, converts nothing)
 
-### Task V194-14: A3 part 1 — `title-usage.spec.ts` scanner, allow-list, and every explanation `title` outside Analytics becomes an `sb-hint`
-
-**Model:** sonnet — one scanner spec plus per-site mechanical conversions, every site written as its own old → new.
-
-**Spec:** § A3. A native `title` answers a mouse hover only; a tap or a keyboard focus never opens it. Each site is classified once (measured on `main` at plan time with the A3 counting rule in the index): **echo** (repeats a truncated or labelled value the row already shows) and **control name** (names an icon-only control) stay; **explanation** becomes an `sb-hint` beside the thing it explains, with the same words. A scanner spec then fails on any `title` binding not in the allow-list, so new explanation cannot hide in a `title` again. Analytics was inventoried too: its tab files hold no native-title explanation (every `title=` there is an `sb-panel-header` / `sb-confirm-dialog` input, which the scanner skips by element), so `TITLE_PENDING` starts empty and V194-15 only locks that in. `workspaces/gallery/gallery.ts` appears in the ledger but holds only `sb-empty-state` / `sb-panel-header` / `sb-confirm-dialog` inputs: no edit.
+**Model:** sonnet — a source scanner and a classified list; the classification is fixed below, the scanner is plain string work.
 
 **Files:**
-- Create: `frontend/src/app/ui/title-usage.spec.ts`, `frontend/src/app/ui/title-usage.allow.ts`, `frontend/src/app/testing/hint-text.ts`
-- Modify (conversions, Step 3; each adds `Hint` to the component's `imports:` and an import line when it renders one): `shell/tape/tape.ts`, `ui/layout.ts`, `ui/metric-card.ts`, `ui/stat-tile.ts`, `ui/plan-cell.ts`, `ui/status-cell.ts`, `workspaces/calendar/day/calendar-day.ts`, `workspaces/calendar/day/day-trade-card.ts`, `workspaces/calendar/day/trade-sparkline.ts`, `workspaces/cancels/cancels-summary.ts`, `workspaces/dashboard/dashboard.ts`, `workspaces/dashboard/panels/equity-candles.ts`, `workspaces/dashboard/trade-drawer.ts`, `workspaces/trades/position-card.ts`, `workspaces/trades/why/sizing-panel.ts`, `workspaces/trades/why/why-panel.ts`, `workspaces/trades/trade-detail.ts`, `workspaces/trades/trades.ts`, `workspaces/versions/versions.ts`, `workspaces/watchlist/watchlist.ts`, `workspaces/system/settings-tab.ts` (all under `frontend/src/app/`)
-- Modify (specs that read a converted `title`, Step 5; the list is closed by Step 7): `shell/tape/tape.spec.ts`, `ui/layout.spec.ts`, `ui/metric-card.spec.ts`, `ui/stat-tile.spec.ts`, `ui/plan-cell.spec.ts`, `ui/status-cell.spec.ts` (grep), `workspaces/calendar/day/calendar-day.spec.ts`, `workspaces/calendar/day/day-trade-card.spec.ts`, `workspaces/dashboard/dashboard.spec.ts`, `workspaces/dashboard/panels/trading-performance.spec.ts`, `workspaces/dashboard/panels/equity-candles.spec.ts`, `workspaces/trades/trade-detail.spec.ts`, `workspaces/trades/why/sizing-panel.spec.ts`, `workspaces/trades/why/why-panel.spec.ts`
+- Create: `frontend/src/app/ui/title-usage.allow.ts`
+- Create: `frontend/src/app/ui/title-usage.spec.ts`
 
 **Interfaces:**
-- Consumes: `Hint` (`ui/hint.ts`; inputs `text`, `label`, `align`), `StatTile.about` (V194-11: `input<string | undefined>`, renders an `sb-hint` beside the label).
-- Produces: `TitleSite { file: string; binding: string; kind: 'echo' | 'control-name' | 'explanation-pending'; note: string }` (`file` relative to `frontend/src/app/`, `binding` the matched attribute text exactly as written, or `host '[attr.title]'` for a component-metadata key); `TITLE_ALLOW: readonly TitleSite[]`; `TITLE_PENDING: readonly TitleSite[]` (the `explanation-pending` subset, empty); `TITLE_INPUT_ELEMENTS: readonly string[]` (`['sb-panel-header', 'sb-empty-state', 'sb-confirm-dialog']`); `hintTexts(root: ParentNode): string[]` in `testing/hint-text.ts` (the whitespace-collapsed text of every `sb-hint [role="tooltip"]` under `root`, in document order: the pop-up is in the DOM whether or not it is open, so specs read hint copy without opening it).
+- Consumes: nothing at runtime. `Hint` and `StatTile.about` are what V194-14b/15/15b convert *to*; this task only names the sites.
+- Produces (all exported from `title-usage.allow.ts`): `interface TitleSite { file: string; binding: string; kind: 'echo' | 'control-name' | 'explanation-pending'; note: string }`; `TITLE_ALLOW: readonly TitleSite[]`; `TITLE_PENDING: readonly TitleSite[]` (the `explanation-pending` subset — no site in `workspaces/analytics/`, which holds none); `TITLE_INPUT_ELEMENTS: readonly string[]`. V194-14b, V194-15 and V194-15b delete `explanation-pending` entries as they convert them; V194-15b asserts `TITLE_PENDING` is empty.
 
-- [ ] **Step 1: Write the helper and the scanner spec.** `frontend/src/app/testing/hint-text.ts`:
+**The counting rule (index § Global Constraints, A3).** A site is `title="`, `[title]="` or `[attr.title]="` preceded by whitespace, or a host-metadata key `'[attr.title]': '…'`, in `frontend/src/app/**/*.ts` minus `*.spec.ts` and `src/app/testing/**`, minus occurrences inside an element named in `TITLE_INPUT_ELEMENTS` (their `title` is an input that renders visible heading text). The element is found by looking back from the occurrence to the nearest `<` with no `>` between, so a multi-line `<sb-confirm-dialog … title="…">` is excluded like a one-line one. Occurrences are counted, not lines: three identical `[attr.title]="rTooltip"` in one file are three entries.
 
-```ts
-/** The copy of every `sb-hint` under `root`, whitespace-collapsed, in document order. */
-export function hintTexts(root: ParentNode): string[] {
-  return [...root.querySelectorAll('sb-hint [role="tooltip"]')].map(
-    (el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-  );
-}
-```
+**Measured on `main` after V194-13 (2026-10-25): 55 sites** — 21 stay (echo / control-name), 34 explanation (9 for V194-14b, 20 for V194-15, 5 for V194-15b). Analytics: 0 (its 49 `title=` are `sb-panel-header`, `sb-empty-state` and `sb-confirm-dialog` inputs). If the scan in Step 3 finds a site not listed (an earlier v194 task moved or added one), classify it by spec A3 (definition, caveat or why-absent → `explanation-pending`; repeats a value the row drawer or detail view shows → `echo`; names an icon-only control → `control-name`), add it, and say so in the commit.
 
-`frontend/src/app/ui/title-usage.spec.ts` (a source scan like `hint.spec.ts`'s `readFileSync`; `process.cwd()` is `frontend/`):
+- [ ] **Step 1: Write the allow-list.** Create `frontend/src/app/ui/title-usage.allow.ts`:
 
 ```ts
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, sep } from 'node:path';
-
-import { TITLE_ALLOW, TITLE_INPUT_ELEMENTS } from './title-usage.allow';
-
-const APP = join(process.cwd(), 'src/app');
-const ATTR = /(?:^|\s)(\[attr\.title\]|\[title\]|title)="([^"]*)"/g;
-const HOST = /'\[attr\.title\]'\s*:/;
-
-interface Found { file: string; binding: string; element: string }
-
-function sourceFiles(): string[] {
-  return (readdirSync(APP, { recursive: true }) as string[])
-    .map((p) => p.split(sep).join('/'))
-    .filter((p) => p.endsWith('.ts') && !p.endsWith('.spec.ts') && !p.startsWith('testing/'));
-}
-
-/** The tag a binding at `index` belongs to: the nearest `<name` before it. */
-function elementAt(src: string, index: number): string {
-  const open = src.lastIndexOf('<', index);
-  return /^<([a-z][\w-]*)/.exec(src.slice(open, open + 48))?.[1] ?? '';
-}
-
-function scan(): Found[] {
-  const found: Found[] = [];
-  for (const file of sourceFiles()) {
-    const src = readFileSync(join(APP, file), 'utf8');
-    for (const m of src.matchAll(ATTR)) {
-      const element = elementAt(src, m.index!);
-      if (TITLE_INPUT_ELEMENTS.includes(element)) continue; // a heading input, not a tooltip
-      found.push({ file, binding: `${m[1]}="${m[2]}"`, element });
-    }
-    if (HOST.test(src)) found.push({ file, binding: "host '[attr.title]'", element: 'host' });
-  }
-  return found;
-}
-
-const key = (s: { file: string; binding: string }) => `${s.file}::${s.binding}`;
-
-describe('native title usage (v194 A3)', () => {
-  const found = scan();
-
-  it('finds the title sites it is meant to police (the scan is not vacuous)', () => {
-    expect(found.length).toBeGreaterThan(10);
-    expect(found.some((s) => s.file === 'ui/icon.ts' && s.element === 'host')).toBe(true);
-  });
-
-  it('allows only echoes and control names: explanation belongs in an sb-hint', () => {
-    const allowed = new Set(TITLE_ALLOW.map(key));
-    const rogue = found.filter((s) => !allowed.has(key(s))).map((s) => `${s.file} <${s.element}> ${s.binding}`);
-    expect(rogue, `${found.length} sites scanned, ${rogue.length} unclassified`).toEqual([]);
-  });
-
-  it('has no stale allow-list entry', () => {
-    const seen = new Set(found.map(key));
-    expect(TITLE_ALLOW.filter((s) => !seen.has(key(s))).map(key)).toEqual([]);
-  });
-});
-```
-
-Create `title-usage.allow.ts` now with the types and three exports shown in Step 4 and `TITLE_ALLOW = []`, so the spec compiles and fails on every site.
-
-- [ ] **Step 2: Run it to see it fail.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/ui/title-usage.spec.ts`. Expected: FAIL on "allows only echoes…" with the message `N sites scanned, N unclassified` and the list. **Record N: the commit message states it** (A3 counting rule). The list must match Steps 3 and 4; a site in it that neither names is classified at the site by the A3 rule and added to Step 4's entries (say so in the commit).
-
-- [ ] **Step 3: Convert the explanation sites, shell and `ui/` first.** One recipe: delete the `title` binding, put `<sb-hint … label="About …" />` directly after the element it explained (same words as the old title; `[text]` for a binding, `text` for a literal), add `Hint` to the component's `imports:` and an `import { Hint } from '<relative>/ui/hint';` line (`'./hint'` inside `ui/`, `'../../ui/hint'` from `shell/tape/` and `workspaces/<x>/`, `'../../../ui/hint'` from `workspaces/<x>/<y>/`). Each block is one site, `-` the line as it stands on `main`, `+` its replacement; edit by the quoted text.
-
-`shell/tape/tape.ts` (`imports: [RouterLink, Flash, AgeHint]` `:61` gains `Hint`):
-
-```diff
- :65-67   the whole-lane tooltip leaves the region; the as-of time becomes a hint on the caption
--    <div class="lane" role="region" aria-label="Market tape"
--         [attr.title]="asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()">
--      <div class="cap">mkt</div>
-+    <div class="lane" role="region" aria-label="Market tape">
-+      <div class="cap">mkt@if (asOfTime() !== ABSENT) { <sb-hint [text]="'Tape data as of ' + asOfTime()" label="About the tape" /> }</div>
- :80      the proxy chip
--                  <span class="ctx proxy" title="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.">{{ tile.proxyLabel }}</span>
-+                  <span class="ctx proxy">{{ tile.proxyLabel }}<sb-hint text="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price." label="About this proxy" /></span>
-```
-
-`ui/layout.ts` (`sb-panel`; `Hint` is already imported). The host title is deleted with its comment; the header hint at `:52` already carries `description()`:
-
-```diff
- :39-41   delete the `host` entry and the two comment lines above it
--  host: { '[attr.title]': 'description()' },
-```
-Then `git grep -n "description=\|\[description\]" -- 'frontend/src/app/**/*.ts' ':!*.spec.ts'`: every `<sb-panel>` that passes a description must also pass a heading, because without one no hint renders; fix any that does not. The `:261` `[attr.title]="tab.icon ? tab.label : null"` stays (control name).
-
-`ui/metric-card.ts` (`:41` `imports: [CountUp, Spinner]` → `[CountUp, Spinner, Hint]`; `import { Hint } from './hint';`):
-
-```diff
- :47      host entry deleted
--    '[attr.title]': 'description()',
- :52      template, after the label span
-       <span class="label sb-label">{{ label() }}</span>
-+      @if (description(); as about) { <sb-hint [text]="about" [label]="'About ' + label()" /> }
-```
-
-`ui/stat-tile.ts` (`:37` `imports: [Sparkline, CountUp]` → `[Sparkline, CountUp, Hint]`; `import { Hint } from './hint';`). The `.sample` div keeps `thin()`; the hint goes inside it, after the N text:
-
-```diff
- :45-46
--        <div class="sample" [title]="sampleTitle()">
--          N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample</span>}
-+        <div class="sample">
-+          N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample</span>}@if (sampleTitle()) {<sb-hint [text]="sampleTitle()!" label="About this sample size" />}
-```
-
-`ui/plan-cell.ts` (the component has no `imports:` today: add `imports: [Hint],` after `changeDetection:` at `:26`; `import { Hint } from './hint';`). `:30` (`planTooltip`) and `:49` (`tooltip()`) stay as echoes; only the trail line converts:
-
-```diff
- :39 and the `</span>` closing `.l2`
--          <span class="line l2" [title]="trailTooltip()">
-+          <span class="line l2">
- …(body unchanged)…
-           </span>
-+          <sb-hint [text]="trailTooltip()" label="About the trailing stop" />
-```
-
-`ui/status-cell.ts` (`:74` `imports: [StatusIndicator]` → `[StatusIndicator, Hint]`; `import { Hint } from './hint';`). `:95` `[title]="row().status_label"` stays (echo of the progressbar's `aria-label`):
-
-```diff
- :86
--          <span class="end neg" title="P&L if the trailing stop is hit">{{ e.stop }}</span>
-+          <span class="end neg">{{ e.stop }}</span><sb-hint text="P&L if the trailing stop is hit" label="About the stop P&L" />
- :103
--          <span class="end pos" title="P&L at the best price since TP1">{{ e.best }}</span>
-+          <span class="end pos">{{ e.best }}</span><sb-hint text="P&L at the best price since TP1" label="About the best-price P&L" />
- :107-112
--          <span
--            class="hint stale"
--            title="This position's price could not be freshly fetched -- the number shown may be delayed."
--          >delayed</span>
-+          <span class="hint stale">delayed</span>
-+          <sb-hint text="This position's price could not be freshly fetched -- the number shown may be delayed." label="About the delayed price" />
-```
-
-**Workspaces** (same recipe and notation):
-
-`workspaces/calendar/day/calendar-day.ts` (`:105` imports gain `Hint`). The three `[attr.title]="rTooltip"` on stat tiles become V194-11's `about` input; the others get a hint beside the figure (the `<p class="r-note">` at `:139` keeps printing the same text, untouched):
-
-```diff
- :131, :136, :137   the end of each of the three `sb-stat-tile`s (Total, Average trade, Worst drawdown)
--        <sb-stat-tile label="Total" [value]="r(day.total_r)" [sample]="day.trade_count" [attr.title]="rTooltip" />
-+        <sb-stat-tile label="Total" [value]="r(day.total_r)" [sample]="day.trade_count" [about]="rTooltip" />
- (Average trade and Worst drawdown: ` [attr.title]="rTooltip" />` → ` [about]="rTooltip" />`, the rest of each line unchanged)
- :170
--            <span class="mtd-r" [title]="rTooltip">{{ r(store.monthCtx()?.mtdR ?? null) }}</span>
-+            <span class="mtd-r">{{ r(store.monthCtx()?.mtdR ?? null) }}</span><sb-hint [text]="rTooltip" label="About R" />
- :184
--              <th class="num r-head" [title]="rTooltip">R</th>
-+              <th class="num r-head">R<sb-hint [text]="rTooltip" label="About R" /></th>
- :196     the win-rate cell: the note appears only where the rate is withheld
--                <td class="num win" [class.withheld]="breakdownWinRate(row) === absent" [attr.title]="breakdownWinRate(row) === absent ? winNote : null">{{ breakdownWinRate(row) }}</td>
-+                <td class="num win" [class.withheld]="breakdownWinRate(row) === absent">{{ breakdownWinRate(row) }}@if (breakdownWinRate(row) === absent) { <sb-hint [text]="winNote" label="Why no win rate" /> }</td>
-```
-
-`day-trade-card.ts`, `trade-sparkline.ts`, `cancels-summary.ts`, `trade-drawer.ts`, `trade-detail.ts`, `watchlist.ts`, `settings-tab.ts` each add `Hint` to `imports:` (`day-trade-card` `:40`, `trade-sparkline` `[RouterLink]` `:99`, `cancels-summary` `:34`, `trade-drawer` `:107`, `trade-detail` `:107`, `watchlist` `:174`, `settings-tab` `:33`). Staying: `trade-detail.ts:182` (echo), `settings-tab.ts:175` (echo) and `:201` (control name), `watchlist.ts:375` (a dialog input). `trade-drawer.ts` was edited by V194-13, so anchor on the quoted text:
-
-```diff
- workspaces/calendar/day/day-trade-card.ts:54
--          <span class="r" [title]="rTooltip" [class.pos]="rSign() === 'pos'" [class.neg]="rSign() === 'neg'">{{ r(t.r_multiple) }}</span>
-+          <span class="r" [class.pos]="rSign() === 'pos'" [class.neg]="rSign() === 'neg'">{{ r(t.r_multiple) }}</span>
-+          <sb-hint [text]="rTooltip" label="About R" />
- workspaces/calendar/day/trade-sparkline.ts:122
--      <span class="spark-empty" title="No cached daily bars for this row">—</span>
-+      <span class="spark-empty">—<sb-hint text="No cached daily bars for this row" label="Why no chart" /></span>
- workspaces/cancels/cancels-summary.ts:38
--        <span class="small-n" title="Fewer than {{ data().small_n_threshold }} resolved plans: an anecdote, not a rate">N &lt; {{ data().small_n_threshold }}</span>
-+        <span class="small-n">N &lt; {{ data().small_n_threshold }}<sb-hint [text]="'Fewer than ' + data().small_n_threshold + ' resolved plans: an anecdote, not a rate'" label="About small samples" /></span>
- workspaces/dashboard/trade-drawer.ts:110-111
--      <span drawer-header class="paper-marker"
--            title="The bot places no orders: every trade on this page is a paper trade.">{{ paperMarker }}</span>
-+      <span drawer-header class="paper-marker">{{ paperMarker }}<sb-hint text="The bot places no orders: every trade on this page is a paper trade." label="About paper trades" /></span>
- workspaces/trades/trade-detail.ts:174
--              <sb-chip [label]="cohortChipLabel()" [tone]="tone" [title]="cohortTooltip()" />
-+              <sb-chip [label]="cohortChipLabel()" [tone]="tone" /><sb-hint [text]="cohortTooltip()" label="About this cohort" />
- workspaces/watchlist/watchlist.ts:416
--        <span class="source-badge" title="Alpaca missed this quote; yfinance answered instead">fallback</span>
-+        <span class="source-badge">fallback</span><sb-hint text="Alpaca missed this quote; yfinance answered instead" label="About the fallback quote" />
- workspaces/system/settings-tab.ts:181
--                    <span class="restart" title="Restart required to take effect">restart</span>
-+                    <span class="restart">restart<sb-hint text="Restart required to take effect" label="About restart" /></span>
-```
-
-`workspaces/dashboard/dashboard.ts` (`Hint` already imported and listed; `:401` `title="Trailing stop"` stays, and `:395`/`:398` are V194-13's). Both sites lose the title and a hint follows the element:
-
-```diff
- :437-441
-         <span
-           class="pnl-plan"
--          title="Live P&L, then projected P&L at target and at stop"
-         >
- …                                  (the span's body and closing tag are unchanged)
-+        <sb-hint text="Live P&L, then projected P&L at target and at stop" label="About this P&L" />
- :480-484   (the `.expected` span; its closing `</span>` is on the line with `{{ fmtSigned(expectedR(row)) }}`)
-           [class]="pnlClass(expectedR(row))"
--          title="Projected R if price reaches target"
-         >{{ fmtSigned(expectedR(row)) }}</span>
-+        <sb-hint text="Projected R if price reaches target" label="About expected R" />
-```
-
-`workspaces/dashboard/panels/equity-candles.ts` (`:113` `imports: [Async, Segmented, Button]` gains `Hint`). `:163` `title="Back to today: chart and figures"` stays (control name). The hint sits between readout parts, so the middle-dot separator rule must also match a part that follows a hint, and the dotted-underline `help` cue that keyed on `[title]` goes:
-
-```diff
- :134-135
--          <span class="part" [attr.data-tone]="part.tone"
--                [attr.title]="isChangePart(part.text) ? changeTooltip : null">{{ part.text }}</span>
-+          <span class="part" [attr.data-tone]="part.tone">{{ part.text }}</span>
-+          @if (isChangePart(part.text)) { <sb-hint [text]="changeTooltip" label="About this change" /> }
- :205-206   styles
--    .part + .part::before { content: '·'; margin: 0 var(--space-4); color: var(--text-faint); }
--    .part[title] { text-decoration: underline dotted; cursor: help; }
-+    .part + .part::before, sb-hint + .part::before { content: '·'; margin: 0 var(--space-4); color: var(--text-faint); }
-```
-
-`workspaces/trades/position-card.ts` (`:41` `imports: [Panel, Chip]` gains `Hint`) and `workspaces/trades/why/sizing-panel.ts` (`:9` `imports: [Panel, Chip]` gains `Hint`) carry the same two lines, at `:52-53` and `:26-27`:
-
-```diff
--                <sb-chip label="fragile" tone="warn" [caps]="false"
--                  title="The stop sits inside 90th-percentile gap noise: an overnight gap can jump it." />
-+                <sb-chip label="fragile" tone="warn" [caps]="false" />
-+                <sb-hint text="The stop sits inside 90th-percentile gap noise: an overnight gap can jump it." label="About fragile stops" />
-```
-
-`workspaces/trades/why/why-panel.ts` (`:27` `imports: [Panel, Chip, InlineMd]` gains `Hint`):
-
-```diff
- :60
--                    <sb-chip label="unevaluated" tone="muted" [caps]="false" title="no data — neutral points awarded" />
-+                    <sb-chip label="unevaluated" tone="muted" [caps]="false" /><sb-hint text="no data — neutral points awarded" label="About unevaluated" />
- :92
--                @if (!gate.applies) { <sb-chip label="off" [caps]="false" title="off in current config" /> }
-+                @if (!gate.applies) { <sb-chip label="off" [caps]="false" /><sb-hint text="off in current config" label="About this gate" /> }
-```
-
-`workspaces/trades/trades.ts` (V194-13 already added `Hint` to its imports). The export anchor is projected into `sb-toolbar` by its `slot` attribute and reparented as one element (`ui/toolbar.ts:25-37`), so a second `slot="export"` element is not safe: the anchor and its hint share one wrapper that carries the slot:
-
-```diff
- :217-224
--      <a
--        slot="export"
--        class="export"
--        [href]="store.exportUrl()"
--        title="Downloads the entire trade log. The filters above do not narrow it."
--        download
--        >Export CSV</a
--      >
-+      <span slot="export" class="export-group">
-+        <a class="export" [href]="store.exportUrl()" download>Export CSV</a>
-+        <sb-hint text="Downloads the entire trade log. The filters above do not narrow it." label="About the export" />
-+      </span>
-```
-(`:396` `title="Trailing stop"` stays. If a style selector or spec reads `a[slot="export"]` or `.export` as the slotted element, move it to `.export-group`: `git grep -n "slot=\"export\"\|\[slot=.export.\]" -- frontend/src` finds them.)
-
-`workspaces/versions/versions.ts` (`:47` `imports` gain `Hint`). An empty bar is a non-focusable `<div>`, so a hint cannot sit on it; the two titles become one row-level hint each. `:91` `[attr.title]="component + ' ' + version + ' — click to filter'"` stays (control name):
-
-```diff
- :105-106   the absent bar loses its title
--                     [style.width.%]="lane.absentWidth * 100"
--                     title="This component did not exist yet"></div>
-+                     [style.width.%]="lane.absentWidth * 100"></div>
- :99      the lane's name cell, first line inside `<div class="lane">`
-             <span class="lane-name">{{ lane.component }}</span>
-+            @if (lane.absentWidth > 0) { <sb-hint text="A bar with no fill means this component did not exist yet at that release." label="About empty bars" /> }
- :120-123 the bracket
--          <div class="bracket" [style.left.%]="store.bracket().start * 100"
--               [style.width.%]="store.bracket().width * 100"
--               title="The releases listed below"></div>
-+          <div class="bracket" [style.left.%]="store.bracket().start * 100"
-+               [style.width.%]="store.bracket().width * 100"></div>
-+          <sb-hint text="The bar spans the releases listed below." label="About the bars" />
-```
-
-- [ ] **Step 4: Write `title-usage.allow.ts` in full** (echoes and control names only; anything else Step 2 listed is classified now by the A3 rule, added here and named in the commit):
-
-```ts
+/**
+ * v194 A3 -- every native `title` left in `src/app`, classified once.
+ *
+ * A `title` only answers a mouse hover: a phone, a keyboard and a screen
+ * reader never see it. So a `title` may only carry what is said elsewhere
+ * too (`echo`) or name an icon-only control (`control-name`, beside an
+ * `aria-label`). Anything that explains -- a definition, a caveat, why a
+ * value is absent -- is an `sb-hint` or visible text instead.
+ * `explanation-pending` marks the sites a later v194 task converts; it is
+ * empty once V194-15b lands, and `title-usage.spec.ts` fails on any
+ * `title` binding not listed here.
+ *
+ * `binding` is the attribute exactly as written (whitespace runs collapsed
+ * to one space); `file` is relative to `src/app`.
+ */
 export interface TitleSite {
   file: string;
   binding: string;
   kind: 'echo' | 'control-name' | 'explanation-pending';
   note: string;
 }
+
+/** Elements whose `title` is a component input rendering visible heading
+ *  text, not a tooltip. */
 export const TITLE_INPUT_ELEMENTS: readonly string[] = ['sb-panel-header', 'sb-empty-state', 'sb-confirm-dialog'];
-const echo = (file: string, binding: string, note: string): TitleSite => ({ file, binding, kind: 'echo', note });
-const control = (file: string, binding: string, note: string): TitleSite => ({ file, binding, kind: 'control-name', note });
+
+const FRAGILE = 'title="The stop sits inside 90th-percentile gap noise: an overnight gap can jump it."';
 
 export const TITLE_ALLOW: readonly TitleSite[] = [
-  control('shell/connection-status.ts', '[title]="hint()"', 'icon-only status dot: aria-label names it, the title gives the detail'),
-  control('shell/profile-menu.ts', '[attr.title]="haloTitle()"', 'names the avatar button'),
-  echo('ui/age-hint.ts', `[attr.title]="'Price is ' + t.replace(' ago', '') + ' old'"`, 'restates the visible age'),
-  echo('ui/bar-list.ts', '[title]="row.label"', 'the full label of a truncated bar label'),
-  control('ui/direction-arrow.ts', '[title]="text"', 'glyph-only, same text as its aria-label'),
-  control('ui/icon.ts', "host '[attr.title]'", "an icon's own name (LABELS)"),
-  control('ui/layout.ts', '[attr.title]="tab.icon ? tab.label : null"', 'icon-only tab label'),
-  echo('ui/matrix.ts', '[attr.title]="cellTitle(row, col, r, c)"', 'row and column names for a value the cell prints'),
-  echo('ui/plan-cell.ts', '[title]="planTooltip"', 'the full text of the truncated plan line'),
-  echo('ui/plan-cell.ts', '[title]="tooltip()"', 'the full text of the truncated plan line'),
-  echo('ui/status-cell.ts', '[title]="row().status_label"', 'same text as the progressbar aria-label'),
-  control('workspaces/dashboard/dashboard.ts', 'title="Trailing stop"', 'icon name'),
-  control('workspaces/trades/trades.ts', 'title="Trailing stop"', 'icon name'),
-  control('workspaces/dashboard/panels/equity-candles.ts', 'title="Back to today: chart and figures"', 'the button name, which also has an aria-label'),
-  echo('workspaces/dashboard/panels/recent-activity.ts', '[title]="statusLabel(event)"', 'status name of an icon inside a button that names the event'),
-  echo('workspaces/research/research.ts', '[attr.title]="row.hypothesis"', 'full text of a truncated cell'),
-  echo('workspaces/system/settings-tab.ts', 'title="Default value"', 'names the badge printing the default'),
-  control('workspaces/system/settings-tab.ts', `[title]="'Reset to ' + field.default"`, 'icon button name'),
-  echo('workspaces/system/swallowed-errors-panel.ts', '[attr.title]="line.lastSeenAt"', 'the exact timestamp behind a relative time'),
-  echo('workspaces/trades/trade-detail.ts', `[title]="'Trade ID: ' + trade.id"`, 'the full id the page prints'),
-  control('workspaces/versions/versions.ts', `[attr.title]="component + ' ' + version + ' — click to filter'"`, 'names the filter button'),
+  // -- shell ---------------------------------------------------------------
+  { file: 'shell/connection-status.ts', binding: '[title]="hint()"', kind: 'control-name', note: 'status dot; aria-label carries the state word, panels carry data age' },
+  { file: 'shell/profile-menu.ts', binding: '[attr.title]="haloTitle()"', kind: 'control-name', note: 'the avatar menu button: bot up/down beside its aria-label' },
+  { file: 'shell/tape/tape.ts', binding: "[attr.title]=\"asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()\"", kind: 'echo', note: 'as-of time; each tile shows its own age' },
+  { file: 'shell/tape/tape.ts', binding: 'title="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF\'s price."', kind: 'explanation-pending', note: 'V194-14b: proxy caveat' },
+  // -- ui primitives ---------------------------------------------------------
+  { file: 'ui/age-hint.ts', binding: "[attr.title]=\"'Price is ' + t.replace(' ago', '') + ' old'\"", kind: 'echo', note: 'restates the visible age' },
+  { file: 'ui/bar-list.ts', binding: '[title]="row.label"', kind: 'echo', note: 'full text of a truncated bar label' },
+  { file: 'ui/direction-arrow.ts', binding: '[title]="text"', kind: 'control-name', note: 'glyph name, same as its aria-label' },
+  { file: 'ui/icon.ts', binding: "'[attr.title]': 'tip()'", kind: 'control-name', note: 'names an icon' },
+  { file: 'ui/layout.ts', binding: "'[attr.title]': 'description()'", kind: 'explanation-pending', note: 'V194-14b: sb-panel description; the header sb-hint already says it' },
+  { file: 'ui/layout.ts', binding: '[attr.title]="tab.icon ? tab.label : null"', kind: 'control-name', note: 'icon-only tab, beside its aria-label' },
+  { file: 'ui/matrix.ts', binding: '[attr.title]="cellTitle(row, col, r, c)"', kind: 'echo', note: 'row, column and value the cell colour encodes' },
+  { file: 'ui/metric-card.ts', binding: "'[attr.title]': 'description()'", kind: 'explanation-pending', note: 'V194-14b: card definition' },
+  { file: 'ui/plan-cell.ts', binding: '[title]="planTooltip"', kind: 'explanation-pending', note: 'V194-14b: runner line 1 definition' },
+  { file: 'ui/plan-cell.ts', binding: '[title]="trailTooltip()"', kind: 'explanation-pending', note: 'V194-14b: runner line 2 definition and caveats' },
+  { file: 'ui/plan-cell.ts', binding: '[title]="tooltip()"', kind: 'echo', note: 'the levels the trade detail plan card shows, spelled out' },
+  { file: 'ui/stat-tile.ts', binding: '[title]="sampleTitle()"', kind: 'explanation-pending', note: 'V194-14b: thin-sample shortfall' },
+  { file: 'ui/status-cell.ts', binding: 'title="P&L if the trailing stop is hit"', kind: 'explanation-pending', note: 'V194-14b: bar end definition' },
+  { file: 'ui/status-cell.ts', binding: '[title]="row().status_label"', kind: 'echo', note: 'the status label the cell prints' },
+  { file: 'ui/status-cell.ts', binding: 'title="P&L at the best price since TP1"', kind: 'explanation-pending', note: 'V194-14b: bar end definition' },
+  { file: 'ui/status-cell.ts', binding: 'title="This position\'s price could not be freshly fetched -- the number shown may be delayed."', kind: 'explanation-pending', note: 'V194-14b: stale-price caveat' },
+  // -- calendar --------------------------------------------------------------
+  { file: 'workspaces/calendar/day/calendar-day.ts', binding: '[attr.title]="rTooltip"', kind: 'explanation-pending', note: 'V194-15: Total tile, R definition' },
+  { file: 'workspaces/calendar/day/calendar-day.ts', binding: '[attr.title]="rTooltip"', kind: 'explanation-pending', note: 'V194-15: Average trade tile' },
+  { file: 'workspaces/calendar/day/calendar-day.ts', binding: '[attr.title]="rTooltip"', kind: 'explanation-pending', note: 'V194-15: Worst drawdown tile' },
+  { file: 'workspaces/calendar/day/calendar-day.ts', binding: '[title]="rTooltip"', kind: 'explanation-pending', note: 'V194-15: month-to-date R' },
+  { file: 'workspaces/calendar/day/calendar-day.ts', binding: '[title]="rTooltip"', kind: 'explanation-pending', note: 'V194-15: breakdown R column head' },
+  { file: 'workspaces/calendar/day/calendar-day.ts', binding: '[attr.title]="breakdownWinRate(row) === absent ? winNote : null"', kind: 'explanation-pending', note: 'V194-15: why win % is withheld' },
+  { file: 'workspaces/calendar/day/day-trade-card.ts', binding: '[title]="rTooltip"', kind: 'explanation-pending', note: 'V194-15: R definition' },
+  { file: 'workspaces/calendar/day/trade-sparkline.ts', binding: 'title="No cached daily bars for this row"', kind: 'explanation-pending', note: 'V194-15: why the sparkline is absent' },
+  // -- cancels / dashboard ---------------------------------------------------
+  { file: 'workspaces/cancels/cancels-summary.ts', binding: 'title="Fewer than {{ data().small_n_threshold }} resolved plans: an anecdote, not a rate"', kind: 'explanation-pending', note: 'V194-15b: small-N caveat' },
+  { file: 'workspaces/dashboard/dashboard.ts', binding: '[title]="openTitle"', kind: 'explanation-pending', note: 'V194-15: share still open on a PARTIAL row' },
+  { file: 'workspaces/dashboard/dashboard.ts', binding: 'title="Trailing stop"', kind: 'control-name', note: 'names the trailing-stop icon' },
+  { file: 'workspaces/dashboard/dashboard.ts', binding: 'title="Live P&L, then projected P&L at target and at stop"', kind: 'explanation-pending', note: 'V194-15: P&L cell reading order' },
+  { file: 'workspaces/dashboard/dashboard.ts', binding: 'title="Projected R if price reaches target"', kind: 'explanation-pending', note: 'V194-15: expected R definition' },
+  { file: 'workspaces/dashboard/panels/equity-candles.ts', binding: '[attr.title]="isChangePart(part.text) ? changeTooltip : null"', kind: 'explanation-pending', note: 'V194-15: change is not a return on capital' },
+  { file: 'workspaces/dashboard/panels/equity-candles.ts', binding: 'title="Back to today: chart and figures"', kind: 'control-name', note: 'reset button, beside its aria-label' },
+  { file: 'workspaces/dashboard/panels/recent-activity.ts', binding: '[title]="statusLabel(event)"', kind: 'control-name', note: 'status icon, beside its aria-label' },
+  { file: 'workspaces/dashboard/trade-drawer.ts', binding: 'title="The bot places no orders: every trade on this page is a paper trade."', kind: 'explanation-pending', note: 'V194-15: paper-trade caveat' },
+  // -- research / system -----------------------------------------------------
+  { file: 'workspaces/research/research.ts', binding: '[attr.title]="row.hypothesis"', kind: 'echo', note: 'full text of a truncated hypothesis' },
+  { file: 'workspaces/system/settings-tab.ts', binding: 'title="Default value"', kind: 'echo', note: 'names the default badge the row prints' },
+  { file: 'workspaces/system/settings-tab.ts', binding: 'title="Restart required to take effect"', kind: 'explanation-pending', note: 'V194-15b: restart caveat' },
+  { file: 'workspaces/system/settings-tab.ts', binding: "[title]=\"'Reset to ' + field.default\"", kind: 'echo', note: 'the default the badge beside it shows' },
+  { file: 'workspaces/system/swallowed-errors-panel.ts', binding: '[attr.title]="line.lastSeenAt"', kind: 'echo', note: 'exact timestamp of the relative time shown' },
+  // -- trades ----------------------------------------------------------------
+  { file: 'workspaces/trades/position-card.ts', binding: FRAGILE, kind: 'explanation-pending', note: 'V194-15: gap-fragile stop caveat' },
+  { file: 'workspaces/trades/trade-detail.ts', binding: '[title]="cohortTooltip()"', kind: 'explanation-pending', note: 'V194-15: cohort chip meaning' },
+  { file: 'workspaces/trades/trade-detail.ts', binding: "[title]=\"'Trade ID: ' + trade.id\"", kind: 'echo', note: 'the id printed beside it' },
+  { file: 'workspaces/trades/trades.ts', binding: 'title="Downloads the entire trade log. The filters above do not narrow it."', kind: 'explanation-pending', note: 'V194-15: export scope caveat' },
+  { file: 'workspaces/trades/trades.ts', binding: '[title]="openTitle"', kind: 'explanation-pending', note: 'V194-15: share still open on a PARTIAL row' },
+  { file: 'workspaces/trades/trades.ts', binding: 'title="Trailing stop"', kind: 'control-name', note: 'names the trailing-stop icon' },
+  { file: 'workspaces/trades/why/sizing-panel.ts', binding: FRAGILE, kind: 'explanation-pending', note: 'V194-15: gap-fragile stop caveat' },
+  { file: 'workspaces/trades/why/why-panel.ts', binding: 'title="no data — neutral points awarded"', kind: 'explanation-pending', note: 'V194-15: unevaluated factor' },
+  { file: 'workspaces/trades/why/why-panel.ts', binding: 'title="off in current config"', kind: 'explanation-pending', note: 'V194-15: gate switched off' },
+  // -- versions / watchlist --------------------------------------------------
+  { file: 'workspaces/versions/versions.ts', binding: "[attr.title]=\"component + ' ' + version + ' — click to filter'\"", kind: 'control-name', note: 'filter chip button: names what a click does' },
+  { file: 'workspaces/versions/versions.ts', binding: 'title="This component did not exist yet"', kind: 'explanation-pending', note: 'V194-15b: hatched lane segment' },
+  { file: 'workspaces/versions/versions.ts', binding: 'title="The releases listed below"', kind: 'explanation-pending', note: 'V194-15b: bracket under the lanes' },
+  { file: 'workspaces/watchlist/watchlist.ts', binding: 'title="Alpaca missed this quote; yfinance answered instead"', kind: 'explanation-pending', note: 'V194-15b: fallback badge' },
 ];
+
+/** Sites a later v194 task converts. Empty once V194-15b lands. */
 export const TITLE_PENDING: readonly TitleSite[] = TITLE_ALLOW.filter((s) => s.kind === 'explanation-pending');
 ```
 
-- [ ] **Step 5: Flip the specs that read a converted `title`** (import `hintTexts` from the `testing/hint-text` path as fits; every hint is in the DOM, so no spec opens one). Mechanical flips, `X.getAttribute('title')` → `hintTexts(C)[0]` and `X.hasAttribute('title')).toBe(false)` → `expect(hintTexts(C)).toEqual([])`, with `C` the container named:
+- [ ] **Step 2: Write the scanner spec.** Create `frontend/src/app/ui/title-usage.spec.ts`:
 
-| Spec (lines on `main`) | `C` |
-|---|---|
-| `shell/tape/tape.spec.ts:63` | `.cap` |
-| `ui/layout.spec.ts:124,132,143`; `ui/metric-card.spec.ts:190,194` | the `sb-panel` / `sb-metric-card` host |
-| `ui/stat-tile.spec.ts:64,84` | `.sample` |
-| `ui/plan-cell.spec.ts:327,338,343,399` (the `.l2` reads; `.l1` and `.plan` reads are echoes and stay) | the render root: the trail hint is its first hint |
-| `workspaces/calendar/day/calendar-day.spec.ts:220` / `:272` / `:280` | each stat tile / `.mtd` / `th.r-head` |
-| `workspaces/calendar/day/day-trade-card.spec.ts:111` | `.figures` |
-| `workspaces/dashboard/dashboard.spec.ts:371,374,382,385` | each panel's `header` / each `sb-metric-card` |
-| `workspaces/dashboard/panels/trading-performance.spec.ts:346,348` | `sb-panel header` / each `sb-metric-card` |
-| `workspaces/trades/why/sizing-panel.spec.ts:45` | `chip.parentElement` |
+```ts
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
-The four that change shape, old → new (anchor on the quoted call):
+import { TITLE_ALLOW, TITLE_INPUT_ELEMENTS, TITLE_PENDING } from './title-usage.allow';
 
-```diff
- workspaces/dashboard/panels/equity-candles.spec.ts:434
--    expect(pctPart.getAttribute('title'))
-+    expect(pctPart.nextElementSibling!.querySelector('[role="tooltip"]')!.textContent!.trim())
- workspaces/trades/trade-detail.spec.ts:430-431, :464
--    expect(host.getAttribute('title')).toContain('41.2% WR');
-+    expect(hintTexts(el).find((t) => t.includes('41.2% WR'))).toBeDefined();
--    const title = host.getAttribute('title') ?? '';
-+    const title = hintTexts(el).find((t) => t.includes('Not enough closed trades')) ?? '';
- workspaces/trades/why/why-panel.spec.ts:105, :145
--    expect(f.nativeElement.querySelector('[title="no data — neutral points awarded"]')).not.toBeNull();
-+    expect(hintTexts(f.nativeElement)).toContain('no data — neutral points awarded');
--    expect(f.nativeElement.querySelector('[title="off in current config"]').textContent).toContain('off');
-+    expect(hintTexts(f.nativeElement)).toContain('off in current config');
+const ROOT = join(process.cwd(), 'src/app');
+
+/** `title="…"`, `[title]="…"`, `[attr.title]="…"` after whitespace, or the
+ *  host-metadata key `'[attr.title]': '…'`. */
+const SITE = /(?<=\s)(?:\[attr\.title\]|\[title\]|title)="[^"]*"|'\[attr\.title\]':\s*'[^']*'/g;
+
+interface Found { file: string; binding: string }
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return path === join(ROOT, 'testing') ? [] : sourceFiles(path);
+    return name.endsWith('.ts') && !name.endsWith('.spec.ts') ? [path] : [];
+  });
+}
+
+/** The element an attribute at `index` sits on: the nearest `<` before it
+ *  with no `>` in between. Null outside a tag (host metadata). */
+function enclosingTag(source: string, index: number): string | null {
+  const open = source.lastIndexOf('<', index);
+  if (open < 0 || source.lastIndexOf('>', index) > open) return null;
+  return /^<([a-z][\w-]*)/i.exec(source.slice(open))?.[1].toLowerCase() ?? null;
+}
+
+function findTitleSites(file: string, source: string): Found[] {
+  const found: Found[] = [];
+  for (const match of source.matchAll(SITE)) {
+    const tag = enclosingTag(source, match.index!);
+    if (tag !== null && TITLE_INPUT_ELEMENTS.includes(tag)) continue;
+    found.push({ file, binding: match[0].replace(/\s+/g, ' ') });
+  }
+  return found;
+}
+
+function scan(): Found[] {
+  return sourceFiles(ROOT).flatMap((path) =>
+    findTitleSites(relative(ROOT, path).split('\\').join('/'), readFileSync(path, 'utf8')));
+}
+
+const key = (s: Found): string => `${s.file} :: ${s.binding}`;
+
+describe('findTitleSites', () => {
+  it('finds plain, bound and attr titles, and host metadata', () => {
+    const src = `template: \`<span title="a">x</span> <b [title]="b()"></b> <i [attr.title]="c"></i>\`,
+      host: { '[attr.title]': 'd()' },`;
+    expect(findTitleSites('f.ts', src).map((s) => s.binding)).toEqual([
+      'title="a"', '[title]="b()"', '[attr.title]="c"', "'[attr.title]': 'd()'",
+    ]);
+  });
+
+  it('skips title inputs of heading components, one line or several', () => {
+    const src = `<sb-panel-header title="Equity" [n]="3" />
+      <sb-confirm-dialog
+        [open]="x"
+        title="Delete this?"
+      />
+      <sb-empty-state [title]="error()!" />`;
+    expect(findTitleSites('f.ts', src)).toEqual([]);
+  });
+
+  it('ignores names that only end in "title"', () => {
+    const src = `<x subtitle="a" data-title="b" [pageTitle]="c"></x>`;
+    expect(findTitleSites('f.ts', src)).toEqual([]);
+  });
+
+  it('counts two identical bindings in one file twice', () => {
+    expect(findTitleSites('f.ts', `<a [title]="r"></a> <b [title]="r"></b>`)).toHaveLength(2);
+  });
+});
+
+describe('native title usage (v194 A3)', () => {
+  const found = scan();
+
+  it('lists every title binding in the allow-list, so no new explanation hides in a title', () => {
+    const allowed = new Map<string, number>();
+    for (const s of TITLE_ALLOW) allowed.set(key(s), (allowed.get(key(s)) ?? 0) + 1);
+    const unlisted = found.filter((s) => {
+      const left = allowed.get(key(s)) ?? 0;
+      allowed.set(key(s), left - 1);
+      return left <= 0;
+    });
+    expect(unlisted.map(key)).toEqual([]);
+  });
+
+  it('keeps no stale allow-list entry once a site is converted', () => {
+    expect(found.map(key).sort()).toEqual(TITLE_ALLOW.map(key).sort());
+  });
+
+  it('gives every entry a reason', () => {
+    expect(TITLE_ALLOW.filter((s) => s.note.trim() === '')).toEqual([]);
+  });
+
+  it('marks as pending exactly the explanation sites', () => {
+    expect(TITLE_PENDING).toEqual(TITLE_ALLOW.filter((s) => s.kind === 'explanation-pending'));
+    expect(TITLE_PENDING.some((s) => s.file.startsWith('workspaces/analytics/'))).toBe(false);
+  });
+});
 ```
-  Where a panel renders its own richer header hint (`descriptionHint()` false), assert that header hint is non-empty instead of equal to the shared description, and say so in the commit.
 
-- [ ] **Step 6: Re-run, then close the list.** `title-usage.spec.ts` PASS (zero unclassified, zero stale), then every spec named under **Files**. `git grep -n "getAttribute('title')" -- 'frontend/src/**/*.spec.ts'`: each remaining hit must sit on an allow-listed site; any other spec failing in the whole-frontend run reads a converted title: flip it by the same rule.
+- [ ] **Step 3: Run it.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/ui/title-usage.spec.ts`. Expected: PASS, 8 tests. A failure in the first `native title usage` test prints each unlisted `file :: binding` — classify it (rule above) and add it; a failure in the second prints a stale entry (a site already moved by an earlier task) — remove it. Then count for the commit message: `grep -c "^  { file:" "$WT/frontend/src/app/ui/title-usage.allow.ts"` (total, expected 55) and `grep -c "kind: 'explanation-pending', note" "$WT/frontend/src/app/ui/title-usage.allow.ts"` (pending, expected 34).
 
-Close: standard (test: frontend/src/app/ui/title-usage.spec.ts); the whole-frontend run is the real gate here (many specs). Commit: `feat(v194): explanatory titles become sb-hints, scanner and allow-list for the rest (V194-14)`, stating the measured site count N from Step 2.
+Close: standard (test: `frontend/src/app/ui/title-usage.spec.ts`); commit `test(v194): title-usage scanner and classified allow-list, <total> sites, <pending> pending (V194-14)` with the measured counts.
 
-### Task V194-15: A3 part 2 — Analytics explanation sites converted; `TITLE_PENDING` empty and locked
+### Task V194-14b: A3 part 2 — convert the shared primitives' explanation titles (`sb-panel`, `sb-metric-card`, `sb-stat-tile`, `sb-plan-cell`, `sb-status-cell`, the tape)
 
-**Model:** sonnet — an inventory command, four assertions, and the V194-14 recipe applied to whatever the inventory still finds.
-
-**Spec:** § A3 (Analytics batch). The index's ledger reserves Analytics for this task because it holds the largest hint surface (`hint=` / `[hint]=` on `sb-panel-header`). The plan-time inventory (`git grep` over `frontend/src/app/workspaces/analytics/`, with the scanner's element rule) found **no native-title explanation there**: every `title=` in `partials.ts`, `attribution.ts`, `tuning.ts`, `pipeline.ts`, `edge.ts`, `overview.ts`, `execution.ts`, `override-fidelity-panel.ts`, `variance-band-panel.ts` is an input of `sb-panel-header` (a visible heading) or `sb-confirm-dialog` (`tuning.ts:236,249`), which the scanner skips by element. This task therefore (1) re-checks that with the scanner as built in V194-14, (2) converts any Analytics site the scan does report, by the V194-14 recipe, and (3) makes "no pending title" an assertion instead of a convention.
+**Model:** sonnet — nine mechanical title → `sb-hint` / visible-text conversions in shared components, each with its spec updated.
 
 **Files:**
-- Modify: `frontend/src/app/ui/title-usage.spec.ts`, `frontend/src/app/ui/title-usage.allow.ts`
-- Modify (only if Step 1 lists a site there): the `frontend/src/app/workspaces/analytics/tabs/*.ts` file it names (candidates: `partials.ts`, `attribution.ts`, `tuning.ts`, `pipeline.ts`, `edge.ts`, `overview.ts`, `execution.ts`, `override-fidelity-panel.ts`, `variance-band-panel.ts`) and its spec
+- Modify: `frontend/src/app/ui/layout.ts:39-41,47-53` (`Panel`)
+- Modify: `frontend/src/app/ui/metric-card.ts:41-56` (`MetricCard`)
+- Modify: `frontend/src/app/ui/stat-tile.ts:45-46,158-164` (`StatTile`)
+- Modify: `frontend/src/app/ui/plan-cell.ts:30,39,46-47,188-190` (`PlanCell`)
+- Modify: `frontend/src/app/ui/status-cell.ts:74,85-87,102-104,107-111` (`StatusCell`)
+- Modify: `frontend/src/app/shell/tape/tape.ts:61,66-67,80,117` (`Tape`)
+- Modify: `frontend/src/app/ui/title-usage.allow.ts` (delete the 9 entries noted `V194-14b`)
+- Test: `frontend/src/app/ui/layout.spec.ts:122-145`, `frontend/src/app/ui/metric-card.spec.ts:188-195`, `frontend/src/app/ui/stat-tile.spec.ts`, `frontend/src/app/ui/plan-cell.spec.ts:313-347`, `frontend/src/app/ui/status-cell.spec.ts`, `frontend/src/app/shell/tape/tape.spec.ts` (these existing specs assert the old `title` attributes, so they change with the components; the ledger row lists only the components)
 
 **Interfaces:**
-- Consumes: `TITLE_ALLOW`, `TITLE_PENDING`, `TitleSite`, `TITLE_INPUT_ELEMENTS` (V194-14), `hintTexts` (`testing/hint-text.ts`).
-- Produces: nothing new; `TITLE_PENDING` stays exported and is the constant `[]`; `TitleSite['kind']` narrows to `'echo' | 'control-name'`.
+- Consumes: `Hint` (`ui/hint.ts`; inputs `text`, `label`, `align`; its tooltip text is in the element with `role="tooltip"`, its trigger is a `button` whose `aria-label` is `label`), `TITLE_ALLOW` / `TITLE_PENDING` (V194-14).
+- Produces: `STATUS_ENDS_HINT`, `STATUS_STALE_HINT` (exported from `status-cell.ts`), `TAPE_PROXY_HINT` (exported from `tape.ts`); `PlanCell.runnerHint` (protected computed). Nothing later in the ledger consumes them.
 
-- [ ] **Step 1: Inventory.** Temporarily add `console.info(found.filter((s) => s.file.startsWith('workspaces/analytics/')));` as the first line of the first `it` in `title-usage.spec.ts`, run `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/ui/title-usage.spec.ts`, read the output, remove the line. Expected: an empty array. For each site it does list: classify by the A3 rule (echo / control name → a `TITLE_ALLOW` entry in the `echo(...)` / `control(...)` shape of V194-14 Step 4; explanation → the V194-14 recipe: delete the `title`, put `<sb-hint [text]="…" label="About …" />` right after the element, `Hint` into `imports:`, wording kept, no word that reads as a recommendation, a win-rate hint naming ExpR and N, a performance figure saying paper / gross or net / pre-tax) and flip the spec that read it with `hintTexts`.
+**Rule for every site:** a `title` that explains becomes an `sb-hint` beside the thing it explains (never inside an `<a>`: a button cannot nest in an anchor), or visible text when it is short. The text keeps its meaning; copy fixes belong to V194-16.
 
-- [ ] **Step 2: Write the locking tests.** In `title-usage.spec.ts` change the import line, then append the four tests inside the `describe`:
+- [ ] **Step 1: Update the specs to the new behaviour (they fail first).**
 
-```ts
-OLD   import { TITLE_ALLOW, TITLE_INPUT_ELEMENTS } from './title-usage.allow';
-NEW   import { TITLE_ALLOW, TITLE_INPUT_ELEMENTS, TITLE_PENDING } from './title-usage.allow';
-```
+`frontend/src/app/ui/layout.spec.ts`, the three tests at `:122-145`:
 
 ```ts
-  it('leaves no explanation pending: every Analytics title is converted', () => {
-    expect(TITLE_PENDING).toEqual([]);
-  });
+    it('explains itself through the header hint, not a native title', () => {
+      const el = mount('Profit already locked in.');
+      expect(el.hasAttribute('title')).toBe(false);
+      const hint = el.querySelector('header sb-hint')!;
+      expect(hint.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe('Profit already locked in.');
+      expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('About Realised P&L');
+    });
 
-  it('keeps native-title explanation out of the Analytics tabs entirely', () => {
-    const inTabs = found.filter((s) => s.file.startsWith('workspaces/analytics/'));
-    const allowed = new Set(TITLE_ALLOW.map(key));
-    expect(inTabs.filter((s) => !allowed.has(key(s))).map(key)).toEqual([]);
-  });
+    it('adds neither a tooltip nor a hint when it has no description', () => {
+      const el = mount(null);
+      expect(el.hasAttribute('title')).toBe(false);
+      expect(el.querySelector('sb-hint')).toBeNull();
+    });
 
-  it('gives every entry a class and a reason', () => {
-    for (const s of TITLE_ALLOW) {
-      expect(['echo', 'control-name'], key(s)).toContain(s.kind);
-      expect(s.note.length, key(s)).toBeGreaterThan(10);
-    }
-  });
-
-  it('skips exactly the heading-input elements', () => {
-    expect(TITLE_INPUT_ELEMENTS).toEqual(['sb-panel-header', 'sb-empty-state', 'sb-confirm-dialog']);
-  });
+    it('adds no title and no hint when the panel has a hint of its own', () => {
+      const f = TestBed.createComponent(Panel);
+      f.componentRef.setInput('heading', 'Open positions');
+      f.componentRef.setInput('description', 'Every plan by stage.');
+      f.componentRef.setInput('descriptionHint', false);
+      f.detectChanges();
+      const el = f.nativeElement as HTMLElement;
+      expect(el.hasAttribute('title')).toBe(false);
+      expect(el.querySelector('sb-hint')).toBeNull();
+    });
 ```
-  Run the spec. Expected: PASS when Step 1 found nothing (the first test guards a retired mechanism, the second the invariant); if Step 1 found sites not yet converted, the second FAILs until Step 1's conversions are done.
 
-- [ ] **Step 3: Narrow the type.** In `title-usage.allow.ts`:
+`frontend/src/app/ui/metric-card.spec.ts`, the two tests at `:188-195`:
 
 ```ts
-OLD   kind: 'echo' | 'control-name' | 'explanation-pending';
-NEW   kind: 'echo' | 'control-name';
-OLD   export const TITLE_PENDING: readonly TitleSite[] = TITLE_ALLOW.filter((s) => s.kind === 'explanation-pending');
-NEW   /** The pending batch is retired: every explanation title is an sb-hint, so nothing waits. */
-NEW   export const TITLE_PENDING: readonly TitleSite[] = [];
+  it('explains itself through a hint beside its label when given a description', () => {
+    const { host } = mount({ description: 'The share of closed trades that won.' });
+    expect(host.hasAttribute('title')).toBe(false);
+    const hint = host.querySelector('.label-row sb-hint')!;
+    expect(hint.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe('The share of closed trades that won.');
+    expect(hint.querySelector('button')!.getAttribute('aria-label')).toMatch(/^About /);
+    expect(host.querySelector('.label')!.textContent).not.toContain('The share of closed trades');
+  });
+
+  it('has no tooltip and no hint without a description', () => {
+    const { host } = mount({});
+    expect(host.hasAttribute('title')).toBe(false);
+    expect(host.querySelector('sb-hint')).toBeNull();
+  });
 ```
 
-- [ ] **Step 4: Run to see it pass.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/ui/title-usage.spec.ts`. Expected: PASS with zero unclassified and zero stale; `npm --prefix "$WT/frontend" run lint` clean.
+`frontend/src/app/ui/stat-tile.spec.ts`, append inside its top-level `describe` (its `render(inputs)` helper is at `:12`):
 
-Close: standard (test: frontend/src/app/ui/title-usage.spec.ts). Commit: `test(v194): lock the title audit, no pending Analytics explanation (V194-15)`; if Step 1 converted a site, name each in the body.
+```ts
+  it('says inline how many more trades a thin sample needs, with no native title (v194 A3)', () => {
+    const el = render({ label: 'Win rate', value: '50%', sample: 12 });
+    expect(el.querySelector('.sample')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.flag')!.textContent).toContain(`thin sample, ${MIN_SAMPLE_N - 12} more needed`);
+  });
+
+  it('prints no shortfall once the sample is large enough', () => {
+    const el = render({ label: 'Win rate', value: '50%', sample: MIN_SAMPLE_N });
+    expect(el.querySelector('.flag')).toBeNull();
+  });
+```
+
+(add `MIN_SAMPLE_N` to the spec's import from `./stat-tile`; the existing `toContain('thin sample')` checks at `:74` and `:201` stay valid).
+
+`frontend/src/app/ui/plan-cell.spec.ts`: add below `const text = …` (`:274`)
+
+```ts
+const hintText = (el: Element): string =>
+  el.querySelector('.plan.runner sb-hint [role="tooltip"]')!.textContent!.replace(/\s+/g, ' ').trim();
+```
+
+and replace the five tests `:313-347` (`puts the tooltips on the lines…` through `names a derived floor…`) with:
+
+```ts
+  it('explains both runner lines in one hint, with no native titles', () => {
+    const el = renderWith(RKLB_RUNNER);
+    expect(el.querySelector('.plan.runner [title]')).toBeNull();
+    expect(el.querySelector('.plan.runner')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelectorAll('.plan.runner sb-hint')).toHaveLength(1);
+  });
+
+  it('explains line 1 as the original plan', () => {
+    expect(hintText(renderWith(RKLB_RUNNER)).startsWith(
+      'Original plan (TP1 already filled): entry → TP1 / original stop. '
+      + 'Percentages are the distance from the entry to each level. '
+      + 'The stop shown is the original; the live exit is on the next line.')).toBe(true);
+  });
+
+  it('explains line 2: unrealised peak, per share, before costs, paper level', () => {
+    expect(hintText(renderWith(RKLB_RUNNER))).toContain(
+      'Trailing stop. Best price so far → price the trailing stop would exit at. '
+      + '+17.7% is the peak since TP1 (unrealised); +13.6% is the result if the stop '
+      + 'fills at 52.44, per share from the original entry, before costs and tax. '
+      + `A short gains when price falls. ${PAPER_LEVEL}`);
+  });
+
+  it('reads a long runner the same way, with the long sentence', () => {
+    const el = renderWith(LONG_RUNNER);
+    expect(text(el.querySelector('.l1'))).toBe('100.00 → 120.00 / 90.00 (20.0% - 10.0%)');
+    expect(text(el.querySelector('.l2'))).toBe('Trail 130.00 → 113.33 (+30.0% / +13.3%)');
+    expect(hintText(el)).toContain('A long gains when price rises.');
+  });
+
+  it('names a derived floor "Locked-in floor" in the hint', () => {
+    const hint = hintText(renderWith({ ...RKLB_RUNNER, stopKind: 'derived_floor' }));
+    expect(hint).toContain('Locked-in floor. Best price so far → price the locked-in floor would exit at. ');
+    expect(hint).toContain('is the result if the stop fills at 52.44');
+  });
+```
+
+`frontend/src/app/ui/status-cell.spec.ts`: hoist the row literal the existing trailing-ends test renders at `:58-62` (the one ending `stop_pnl_pct: 1.25, best_pnl_pct: 6 }`) into `const TRAILING = { … };` above that test, have that test call `render(TRAILING)`, add `STATUS_ENDS_HINT, STATUS_STALE_HINT` to the import from `./status-cell`, and append inside `describe('StatusCell')`:
+
+```ts
+  it('explains the two trailing P&L ends in one hint, not two titles (v194 A3)', () => {
+    const el = render(TRAILING);
+    expect(el.querySelector('.end[title]')).toBeNull();
+    expect(el.querySelector('sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(STATUS_ENDS_HINT);
+  });
+
+  it('explains a delayed price in a hint beside the word', () => {
+    const el = render({ ...live, current_price_stale: true });
+    expect(el.querySelector('.stale')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.stale')!.textContent!.trim()).toBe('delayed');
+    expect(el.querySelector('.stale + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(STATUS_STALE_HINT);
+  });
+```
+
+`frontend/src/app/shell/tape/tape.spec.ts`: add `TAPE_PROXY_HINT` to the import from `./tape` and append after the proxy test at `:75`:
+
+```ts
+  it('explains proxy figures once, beside the lane caption, never inside a tile link (v194 A3)', () => {
+    const el = setup([proxy], []).nativeElement as HTMLElement;
+    expect(el.querySelector('.proxy')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('a sb-hint')).toBeNull();
+    expect(el.querySelector('.cap-row sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(TAPE_PROXY_HINT);
+  });
+
+  it('shows no proxy hint when no tile is a proxy', () => {
+    const el = setup([index], [stock]).nativeElement as HTMLElement;
+    expect(el.querySelector('.cap-row sb-hint')).toBeNull();
+  });
+```
+
+- [ ] **Step 2: Run them to see them fail.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/ui/layout.spec.ts --include src/app/ui/metric-card.spec.ts --include src/app/ui/stat-tile.spec.ts --include src/app/ui/plan-cell.spec.ts --include src/app/ui/status-cell.spec.ts --include src/app/shell/tape/tape.spec.ts`. Expected: FAIL — titles still present, `STATUS_ENDS_HINT` / `TAPE_PROXY_HINT` not exported, no `.label-row`.
+
+- [ ] **Step 3: `sb-panel`** (`ui/layout.ts`). Delete `:39-41`:
+
+```ts
+  // The tooltip sits on the host, so any hover inside the panel shows it; a
+  // child with a title of its own (an icon, a cell) still wins over it.
+  host: { '[attr.title]': 'description()' },
+```
+
+and in the header (`:50-52`) the comment
+
+```html
+            <!-- The host's native title answers a hover; the hint answers a
+                 tap or a keyboard focus, which a title never does. A panel
+                 with a richer hint of its own turns this one off. -->
+```
+→
+```html
+            <!-- v194 A3: the hint answers hover, tap and keyboard focus alike;
+                 the host carries no native title. A panel with a richer hint
+                 of its own turns this one off. -->
+```
+
+- [ ] **Step 4: `sb-metric-card`** (`ui/metric-card.ts`). Add `import { Hint } from './hint';`; `imports: [CountUp, Spinner],` → `imports: [CountUp, Spinner, Hint],`; delete the host line `'[attr.title]': 'description()',` (`:47`); and in the template
+
+```html
+      <span class="label sb-label">{{ label() }}</span>
+```
+→
+```html
+      <span class="label-row">
+        <span class="label sb-label">{{ label() }}</span>
+        @if (description(); as about) {
+          <sb-hint [text]="about" [label]="'About ' + label()" align="left" />
+        }
+      </span>
+```
+
+with, in `styles`, `.label-row { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }`.
+
+- [ ] **Step 5: `sb-stat-tile`** (`ui/stat-tile.ts`). Template `:45-46`:
+
+```html
+        <div class="sample" [title]="sampleTitle()">
+          N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample</span>}
+```
+→
+```html
+        <div class="sample">
+          N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample, {{ shortfall() }} more needed</span>}
+```
+
+and replace `sampleTitle` (`:158-164`) with
+
+```ts
+  /** v194 A3: how many more closed trades before the figure is worth
+   *  reading -- printed inline beside "thin sample" (it used to hide in a
+   *  native title a phone never shows). */
+  protected readonly shortfall = computed(() => {
+    const n = this.sample();
+    return n === null ? 0 : Math.max(0, this.minimumSample() - n);
+  });
+```
+
+- [ ] **Step 6: `sb-plan-cell`** (`ui/plan-cell.ts`). Add `import { Hint } from './hint';` and `imports: [Hint],` to the `@Component` (it has none today). Template: `:30` `<span class="line l1" [title]="planTooltip">` → `<span class="line l1">`; `:39` `<span class="line l2" [title]="trailTooltip()">` → `<span class="line l2">`; between the trail block's closing `}` (`:46`) and the runner span's `</span>` (`:47`) add
+
+```html
+        <sb-hint [text]="runnerHint()" label="About this runner's plan" align="left" />
+```
+
+After `protected readonly trailTooltip = computed(...)` add
+
+```ts
+  /** v194 A3: one hint for both runner lines -- what line 1 is and, when
+   *  line 2 shows, what its trail figures mean. */
+  protected readonly runnerHint = computed(() => {
+    const trail = this.trailTooltip();
+    return trail ? `${this.planTooltip} ${trail}` : this.planTooltip;
+  });
+```
+
+The legacy `<span class="plan" [title]="tooltip()">` (`:49`) stays (`echo`).
+
+- [ ] **Step 7: `sb-status-cell`** (`ui/status-cell.ts`). Add `import { Hint } from './hint';`; `imports: [StatusIndicator],` → `imports: [StatusIndicator, Hint],`. Above the `@Component` add
+
+```ts
+/** v194 A3: what the two ends of a trailing runner's bar are. */
+export const STATUS_ENDS_HINT = 'Left figure: P&L if the trailing stop is hit. Right figure: P&L at the best price since TP1.';
+/** v194 A3: why "delayed" shows. */
+export const STATUS_STALE_HINT = "This position's price could not be freshly fetched; the number shown may be delayed.";
+```
+
+Template `:86`: `<span class="end neg" title="P&L if the trailing stop is hit">{{ e.stop }}</span>` → `<span class="end neg">{{ e.stop }}</span>`. `:103`: `<span class="end pos" title="P&L at the best price since TP1">{{ e.best }}</span>` →
+
+```html
+          <span class="end pos">{{ e.best }}</span>
+          <sb-hint [text]="endsHint" label="About the two P&L figures" align="left" />
+```
+
+`:107-111`:
+
+```html
+          <span
+            class="hint stale"
+            title="This position's price could not be freshly fetched -- the number shown may be delayed."
+          >delayed</span>
+```
+→
+```html
+          <span class="hint stale">delayed</span>
+          <sb-hint [text]="staleHint" label="About delayed prices" align="left" />
+```
+
+In the class: `protected readonly endsHint = STATUS_ENDS_HINT;` and `protected readonly staleHint = STATUS_STALE_HINT;`.
+
+- [ ] **Step 8: the tape** (`shell/tape/tape.ts`). Add `import { Hint } from '../../ui/hint';`; `imports: [RouterLink, Flash, AgeHint],` → `imports: [RouterLink, Flash, AgeHint, Hint],`. Above the `@Component`:
+
+```ts
+/** v194 A3: what a proxy tile's figure is. One hint for the lane: the tiles
+ *  are links, and a hint button cannot sit inside a link. */
+export const TAPE_PROXY_HINT = "Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.";
+```
+
+`:80`: `<span class="ctx proxy" title="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.">{{ tile.proxyLabel }}</span>` → `<span class="ctx proxy">{{ tile.proxyLabel }}</span>`. `:67` `<div class="cap">mkt</div>` →
+
+```html
+      <div class="cap-row">
+        <div class="cap">mkt</div>
+        @if (hasProxy()) {
+          <sb-hint [text]="proxyHint" label="About proxy figures" align="left" />
+        }
+      </div>
+```
+
+After `protected readonly tiles = computed<Tile[]>(…)` (`:117`) add
+
+```ts
+  protected readonly hasProxy = computed(() => this.tiles().some((t) => t.proxyLabel !== null));
+  protected readonly proxyHint = TAPE_PROXY_HINT;
+```
+
+In `tape.css`, `.cap-row` takes the box `.cap` had in the lane: `.cap-row { display: flex; align-items: center; gap: var(--space-4); flex: none; }` (move `.cap`'s `flex`/margin declarations onto `.cap-row` if it has any).
+
+- [ ] **Step 9: Allow-list.** In `frontend/src/app/ui/title-usage.allow.ts` delete the nine entries whose note starts `V194-14b:` (tape proxy, `sb-panel` host, metric-card host, plan-cell `planTooltip` and `trailTooltip()`, stat-tile `sampleTitle()`, the two status-cell ends and the stale caveat).
+
+- [ ] **Step 10: Run.** The Step 2 command plus `--include src/app/ui/title-usage.spec.ts`. Expected: PASS. Then the whole frontend run: specs that read a panel's or metric card's host `title` elsewhere fail here — `git -C "$WT" grep -n "getAttribute('title')" frontend/src/app -- '*.spec.ts'` lists them; move each to the hint's `[role="tooltip"]` text the same way as Step 1.
+
+Close: standard (test: `frontend/src/app/ui/title-usage.spec.ts`); commit `feat(v194): shared primitives explain through sb-hint, not native titles (V194-14b)`.
+
+### Task V194-15: A3 part 3 — convert the Calendar, Dashboard and Trades explanation titles
+
+**Model:** sonnet — twenty title → `sb-hint` / visible-text conversions across known templates, each with its spec assertion moved.
+
+**Files:**
+- Modify: `frontend/src/app/workspaces/calendar/day/calendar-day.ts:105,131,136,137,170,176,184,196`
+- Modify: `frontend/src/app/workspaces/calendar/day/day-trade-card.ts:40,54`
+- Modify: `frontend/src/app/workspaces/calendar/day/trade-sparkline.ts:122`
+- Modify: `frontend/src/app/workspaces/dashboard/dashboard.ts` (`#numCell` partial icon, `:243`, `:439`, `:483`)
+- Modify: `frontend/src/app/workspaces/dashboard/panels/equity-candles.ts:113,135,276`
+- Modify: `frontend/src/app/workspaces/dashboard/trade-drawer.ts:110-111`
+- Modify: `frontend/src/app/workspaces/trades/trades.ts:217-224` and the `#numCell` partial icon
+- Modify: `frontend/src/app/workspaces/trades/trade-detail.ts:107,174`
+- Modify: `frontend/src/app/workspaces/trades/position-card.ts:52-53`, `frontend/src/app/workspaces/trades/why/sizing-panel.ts:9,26-27`, `frontend/src/app/workspaces/trades/why/why-panel.ts:27,60,92`
+- Modify: `frontend/src/app/ui/title-usage.allow.ts` (delete the 20 entries noted `V194-15`)
+- Test: `calendar/day/calendar-day.spec.ts:272,280,290-295`, `calendar/day/day-trade-card.spec.ts`, `calendar/day/trade-sparkline.spec.ts:139`, `dashboard/dashboard.spec.ts`, `dashboard/panels/equity-candles.spec.ts:428-436`, `dashboard/trade-drawer.spec.ts`, `trades/trades.spec.ts`, `trades/trade-detail.spec.ts:~428-431`, `trades/position-card.spec.ts:30-37`, `trades/why/sizing-panel.spec.ts:40-47`, `trades/why/why-panel.spec.ts:105,145` (all under `frontend/src/app/workspaces/`; existing specs asserting the old titles move with the templates)
+
+**Interfaces:**
+- Consumes: `Hint`; `StatTile.about` (V194-11, `input<string | undefined>`, renders `<sb-hint>` labelled `'About ' + label()`); `R_TOOLTIP` (`calendar/day/day-copy.ts:13`); `CHANGE_PCT_TOOLTIP` (`dashboard/panels/equity-candles.model.ts:23`); `partialOpenTitle` (`ui/status-cell.ts:230`); V194-13's `#numCell` layout (link, then `.leg` span); `TITLE_ALLOW`.
+- Produces: `EXPORT_HINT` (`trades.ts`), `PAPER_HINT` (`trade-drawer.ts`), `GAP_FRAGILE_HINT` (`why/sizing-panel.ts`), `WHY_UNEVALUATED_HINT`, `WHY_GATE_OFF_HINT` (`why/why-panel.ts`). Nothing later consumes them.
+
+**Depends on V194-13** (same `#numCell` templates in `trades.ts` and `dashboard.ts`) and V194-11 (`StatTile.about`). A hint never goes inside an `<a>`/`sb-row-link`.
+
+- [ ] **Step 1: Move the spec assertions (they fail first).** Paths below are under `frontend/src/app/workspaces/`.
+
+`calendar/day/calendar-day.spec.ts`: `:272`
+```ts
+    expect(root.querySelector('.mtd-r')?.getAttribute('title')).toBe(R_TOOLTIP);
+```
+→
+```ts
+    expect(root.querySelector('.mtd-r')?.hasAttribute('title')).toBe(false);
+    expect(root.querySelector('.mtd-r + sb-hint [role="tooltip"]')?.textContent?.trim()).toBe(R_TOOLTIP);
+```
+`:280`
+```ts
+    expect(el(fixture).querySelector('.breakdown thead th.r-head')?.getAttribute('title')).toBe(R_TOOLTIP);
+```
+→
+```ts
+    expect(el(fixture).querySelector('.breakdown thead th.r-head')?.hasAttribute('title')).toBe(false);
+    const drove = [...el(fixture).querySelectorAll('sb-panel')].find((p) => p.querySelector('h2')?.textContent?.trim() === 'What drove it')!;
+    expect(drove.querySelector('header sb-hint [role="tooltip"]')?.textContent?.trim()).toBe(R_TOOLTIP);
+    const tileHints = el(fixture).querySelectorAll('.tiles sb-stat-tile sb-hint');
+    expect(tileHints).toHaveLength(3);
+    expect(el(fixture).querySelector('.tiles [title]')).toBeNull();
+```
+and in `greys win% out below five rows…` after `expect(cellOf(thin)?.classList.contains('withheld')).toBe(true);` add `expect(cellOf(thin)?.hasAttribute('title')).toBe(false);` (the `.win-note` line already says it visibly).
+
+`calendar/day/day-trade-card.spec.ts`: the assertion that reads `R_TOOLTIP` off the `.r` figure's `title` becomes
+```ts
+    expect(el.querySelector('.r')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.r + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(R_TOOLTIP);
+```
+(using that test's own root element variable; if no test reads it yet, add these two lines to the first test that renders `TRADE`).
+
+`calendar/day/trade-sparkline.spec.ts:139`: `.toBe('—')` → `.toBe('no cached bars')`, and add `expect(el.querySelector('.spark-empty')?.hasAttribute('title')).toBe(false);`.
+
+`dashboard/panels/equity-candles.spec.ts:434-435`:
+```ts
+    expect(pctPart.getAttribute('title'))
+      .toBe("Change from the previous candle's close, not a return on capital");
+```
+→
+```ts
+    expect(pctPart.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.readout sb-hint [role="tooltip"]')!.textContent!.trim())
+      .toBe("Change from the previous candle's close, not a return on capital");
+```
+
+`dashboard/dashboard.spec.ts`: add `import { partialOpenTitle } from '../../ui/status-cell';` and append
+```ts
+describe('Dashboard — explanations are hints, not titles (v194 A3)', () => {
+  it('explains a partly closed position in a hint outside the row link', async () => {
+    const row = tradeRow({ id: 'p9', status: 'PARTIAL', status_label: 'PARTIAL', banked_fraction: 0.5 });
+    const el = await loadedWithRows([row]);
+    expect(el.querySelector('sb-row-link sb-hint')).toBeNull();
+    const texts = [...el.querySelectorAll('sb-positions-table sb-hint [role="tooltip"]')].map((n) => n.textContent!.trim());
+    expect(texts).toContain(partialOpenTitle(row)!);
+    expect(el.querySelector('.leg-icon[title]')).toBeNull();
+  });
+
+  it('defines the P&L and expected-R cells in the positions help, not on each cell', async () => {
+    const el = await loadedWithRows([tradeRow({ status: 'ACTIVE', status_label: 'ACTIVE', exit_price: null, pnl_pct: null })]);
+    expect(el.querySelector('.pnl-plan[title], .expected[title]')).toBeNull();
+    const help = el.querySelector('.lifecycle-hint')!.textContent!;
+    expect(help).toContain('live P&L, then projected P&L at target and at stop');
+    expect(help).toContain('projected R if price reaches target');
+  });
+});
+```
+
+`dashboard/trade-drawer.spec.ts`: add `PAPER_HINT` to its import from `./trade-drawer` and append inside its top-level `describe` (mount it the way its existing "Paper trade" marker test does):
+```ts
+  it('explains the paper marker in a hint, not a native title (v194 A3)', () => {
+    const el = mountDrawer(tradeRow());
+    expect(el.querySelector('.paper-marker')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.paper-marker-row sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(PAPER_HINT);
+  });
+```
+where `mountDrawer` is that existing marker test's mounting lines extracted into `function mountDrawer(row: TradeRow): HTMLElement` beside `tradeRow` (`:22`), and the marker test calls it.
+
+`trades/trades.spec.ts`: add `EXPORT_HINT` to the import from `./trades` (now `ROW_COUNT_NOTE, EXPORT_HINT, Trades, TRADES_CONTROLS`), add `import { partialOpenTitle } from '../../ui/status-cell';`, and append
+```ts
+describe('Trades — explanations are hints, not titles (v194 A3)', () => {
+  it('says the export ignores the filters, in a hint beside the link', () => {
+    const el = render().nativeElement as HTMLElement;
+    expect(el.querySelector('a.export')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.export-wrap sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(EXPORT_HINT);
+  });
+
+  it('explains a partly closed position in a hint outside the row link', () => {
+    const r = row({ status: 'PARTIAL', status_label: 'PARTIAL', banked_fraction: 0.25, exit_price: null });
+    const el = renderRows([r]);
+    expect(el.querySelector('sb-row-link sb-hint')).toBeNull();
+    const texts = [...el.querySelectorAll('sb-hint [role="tooltip"]')].map((n) => n.textContent!.trim());
+    expect(texts).toContain(partialOpenTitle(r)!);
+  });
+});
+```
+
+`trades/trade-detail.spec.ts`, the COHORT_POOR test's two host-title lines and the comment above them:
+```ts
+    const host = el.querySelector('.tags > sb-chip')!;
+    expect(host.getAttribute('title')).toContain('41.2% WR');
+    expect(host.getAttribute('title')).toContain('-0.38R');
+```
+→
+```ts
+    expect(el.querySelector('.tags > sb-chip')!.hasAttribute('title')).toBe(false);
+    const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
+    expect(hint).toContain('41.2% WR');
+    expect(hint).toContain('-0.38R');
+```
+
+`trades/position-card.spec.ts`, after `expect(el.querySelector('sb-chip')?.textContent).toContain('fragile');` (`:36`) add
+```ts
+    expect(el.querySelector('sb-chip')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('sb-chip + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(GAP_FRAGILE_HINT);
+```
+with `import { GAP_FRAGILE_HINT } from './why/sizing-panel';`.
+
+`trades/why/sizing-panel.spec.ts:44-45`:
+```ts
+    expect(chip?.getAttribute('title'))
+      .toBe('The stop sits inside 90th-percentile gap noise: an overnight gap can jump it.');
+```
+→
+```ts
+    expect(chip!.hasAttribute('title')).toBe(false);
+    expect(f.nativeElement.querySelector('dl > div:last-child sb-hint [role="tooltip"]')!.textContent!.trim())
+      .toBe('The stop sits inside 90th-percentile gap noise: an overnight gap can jump it.');
+```
+
+`trades/why/why-panel.spec.ts`: add `WHY_GATE_OFF_HINT, WHY_UNEVALUATED_HINT` to the import from `./why-panel`; `:105`
+```ts
+    expect(f.nativeElement.querySelector('[title="no data — neutral points awarded"]')).not.toBeNull();
+```
+→
+```ts
+    const factorHints = [...f.nativeElement.querySelectorAll('.factor-row sb-hint [role="tooltip"]')].map((n: Element) => n.textContent!.trim());
+    expect(factorHints).toContain(WHY_UNEVALUATED_HINT);
+```
+`:145`
+```ts
+    expect(f.nativeElement.querySelector('[title="off in current config"]').textContent).toContain('off');
+```
+→
+```ts
+    expect(f.nativeElement.querySelector('.gate-summary sb-chip').textContent).toContain('off');
+    expect(f.nativeElement.querySelector('.gate-summary sb-hint [role="tooltip"]').textContent.trim()).toBe(WHY_GATE_OFF_HINT);
+```
+
+- [ ] **Step 2: Run them to see them fail.** `npm --prefix "$WT/frontend" test -- --watch=false --include src/app/workspaces/calendar/day --include src/app/workspaces/dashboard --include src/app/workspaces/trades`. Expected: FAIL — titles present, new constants not exported.
+
+- [ ] **Step 3: Calendar** (`calendar/day/`).
+  - `calendar-day.ts`: add `import { Hint } from '../../../ui/hint';`, add `Hint` to `imports` (`:105`).
+  - `:131`, `:136`, `:137`: `[attr.title]="rTooltip"` → `[about]="rTooltip"` on each of the three `sb-stat-tile`s (Total, Average trade, Worst drawdown).
+  - `:170`: `<span class="mtd-r" [title]="rTooltip">{{ r(store.monthCtx()?.mtdR ?? null) }}</span>` → `<span class="mtd-r">{{ r(store.monthCtx()?.mtdR ?? null) }}</span><sb-hint [text]="rTooltip" label="About R" align="left" />`.
+  - `:176`: `<sb-panel heading="What drove it" [divided]="true">` → `<sb-panel heading="What drove it" [divided]="true" [description]="rTooltip">`; `:184`: `<th class="num r-head" [title]="rTooltip">R</th>` → `<th class="num r-head">R</th>` (a hint inside the `th` would join the column heads' text).
+  - `:196`: delete ` [attr.title]="breakdownWinRate(row) === absent ? winNote : null"` from the `td.win`; the `.win-note` line already prints `winNote`.
+  - `day-trade-card.ts`: add the `Hint` import and to `imports: [Chip, RouterLink, TradeSparkline]` (`:40`); `:54` `<span class="r" [title]="rTooltip" [class.pos]="rSign() === 'pos'" [class.neg]="rSign() === 'neg'">{{ r(t.r_multiple) }}</span>` → `<span class="r" [class.pos]="rSign() === 'pos'" [class.neg]="rSign() === 'neg'">{{ r(t.r_multiple) }}</span><sb-hint [text]="rTooltip" label="About R" align="left" />` (the card is an `<article>`, not a link).
+  - `trade-sparkline.ts:122`: `<span class="spark-empty" title="No cached daily bars for this row">—</span>` → `<span class="spark-empty">no cached bars</span>`.
+
+- [ ] **Step 4: Dashboard.**
+  - `dashboard.ts` `#numCell` (as left by V194-13): inside `sb-row-link`
+    ```html
+            @if (partialOpenTitle(row); as openTitle) {
+              <sb-icon name="partial" class="leg-icon" [title]="openTitle" />
+            }
+    ```
+    →
+    ```html
+            @if (partialOpenTitle(row)) {
+              <sb-icon name="partial" class="leg-icon" />
+            }
+    ```
+    and directly after `</sb-row-link>` (before V194-13's `@if (legLabel(row); as leg)`):
+    ```html
+          @if (partialOpenTitle(row); as openTitle) {
+            <sb-hint [text]="openTitle" label="About this partial position" align="left" />
+          }
+    ```
+  - `:439`: delete the line `title="Live P&L, then projected P&L at target and at stop"` from `<span class="pnl-plan">`; `:483`: delete `title="Projected R if price reaches target"` from the `.expected` span.
+  - `:243`, after `<sb-plan-lifecycle-diagram />` in the `.lifecycle-hint`:
+    ```html
+            <span class="hint-heading">Columns</span>
+            <span class="hint-copy">
+              <strong>P&amp;L:</strong> live P&L, then projected P&L at target and at stop.
+              <strong>Expected R:</strong> projected R if price reaches target.
+            </span>
+    ```
+  - `panels/equity-candles.ts`: add the `Hint` import (`'../../../ui/hint'`) and to `imports: [Async, Segmented, Button]` (`:113`); `:134-135`
+    ```html
+          <span class="part" [attr.data-tone]="part.tone"
+                [attr.title]="isChangePart(part.text) ? changeTooltip : null">{{ part.text }}</span>
+    ```
+    →
+    ```html
+          <span class="part" [attr.data-tone]="part.tone">{{ part.text }}</span>
+    ```
+    and after that `@for` block, still inside `<p class="readout">`:
+    ```html
+        @if (hasChange()) {
+          <sb-hint [text]="changeTooltip" label="About the change figure" align="left" />
+        }
+    ```
+    with, after `protected readonly isChangePart = isChangePart;` (`:276`):
+    ```ts
+      /** v194 A3: the change figure's definition, once, when the readout has one. */
+      protected readonly hasChange = computed(() => this.readout().some((p) => isChangePart(p.text)));
+    ```
+  - `trade-drawer.ts`: above `PAPER_MARKER` add
+    ```ts
+    /** v194 A3: what the marker means, in a hint (a native title never shows on a phone). */
+    export const PAPER_HINT = 'The bot places no orders: every trade on this page is a paper trade.';
+    ```
+    `:110-111`
+    ```html
+          <span drawer-header class="paper-marker"
+                title="The bot places no orders: every trade on this page is a paper trade.">{{ paperMarker }}</span>
+    ```
+    →
+    ```html
+          <span drawer-header class="paper-marker-row">
+            <span class="paper-marker">{{ paperMarker }}</span>
+            <sb-hint [text]="paperHint" label="About paper trades" align="left" />
+          </span>
+    ```
+    styles: `.paper-marker-row { display: inline-flex; align-items: center; gap: var(--space-4); }`; class: `protected readonly paperHint = PAPER_HINT;` (`Hint` is already imported by V194-13).
+
+- [ ] **Step 5: Trades.**
+  - `trades.ts`: beside `ROW_COUNT_NOTE` add `export const EXPORT_HINT = 'Downloads the entire trade log. The filters above do not narrow it.';`; `:217-224`
+    ```html
+          <a
+            slot="export"
+            class="export"
+            [href]="store.exportUrl()"
+            title="Downloads the entire trade log. The filters above do not narrow it."
+            download
+            >Export CSV</a
+          >
+    ```
+    →
+    ```html
+          <span slot="export" class="export-wrap">
+            <a class="export" [href]="store.exportUrl()" download>Export CSV</a>
+            <sb-hint [text]="exportHint" label="About the CSV export" align="left" />
+          </span>
+    ```
+    style `.export-wrap { display: inline-flex; align-items: center; gap: var(--space-4); }`; class `protected readonly exportHint = EXPORT_HINT;`. The comment above (`:212-216`) ends "The title names what comes out" → "The hint names what comes out".
+  - `#numCell`: the same two edits as the Dashboard's in Step 4.
+  - `trade-detail.ts`: `Hint` import and into the `imports` array (`:107`); `:174` `<sb-chip [label]="cohortChipLabel()" [tone]="tone" [title]="cohortTooltip()" />` → `<sb-chip [label]="cohortChipLabel()" [tone]="tone" /><sb-hint [text]="cohortTooltip()" label="About the cohort chip" align="left" />`.
+  - `why/sizing-panel.ts`: export `GAP_FRAGILE_HINT = 'The stop sits inside 90th-percentile gap noise: an overnight gap can jump it.';` above its `@Component`; `imports: [Panel, Chip]` → `[Panel, Chip, Hint]` (import from `'../../../ui/hint'`); `:26-27`
+    ```html
+              <sb-chip label="fragile" tone="warn" [caps]="false"
+                title="The stop sits inside 90th-percentile gap noise: an overnight gap can jump it." />
+    ```
+    → `<sb-chip label="fragile" tone="warn" [caps]="false" /><sb-hint [text]="fragileHint" label="About fragile stops" align="left" />`, class `protected readonly fragileHint = GAP_FRAGILE_HINT;`.
+  - `position-card.ts:52-53`: the same chip edit; `import { GAP_FRAGILE_HINT } from './why/sizing-panel';`, `Hint` into its `imports`, class `protected readonly fragileHint = GAP_FRAGILE_HINT;`.
+  - `why/why-panel.ts`: export
+    ```ts
+    export const WHY_UNEVALUATED_HINT = 'No data: neutral points awarded.';
+    export const WHY_GATE_OFF_HINT = 'This gate is off in the current config.';
+    ```
+    `imports: [Panel, Chip, InlineMd]` → add `Hint`; `:60` `<sb-chip label="unevaluated" tone="muted" [caps]="false" title="no data — neutral points awarded" />` → `<sb-chip label="unevaluated" tone="muted" [caps]="false" /><sb-hint [text]="unevaluatedHint" label="About unevaluated factors" align="left" />`; `:92` `@if (!gate.applies) { <sb-chip label="off" [caps]="false" title="off in current config" /> }` → `@if (!gate.applies) { <sb-chip label="off" [caps]="false" /><sb-hint [text]="gateOffHint" label="About gates that are off" align="left" /> }`; class `protected readonly unevaluatedHint = WHY_UNEVALUATED_HINT;` and `protected readonly gateOffHint = WHY_GATE_OFF_HINT;`.
+
+- [ ] **Step 6: Allow-list.** Delete the 20 entries whose note starts `V194-15:` from `frontend/src/app/ui/title-usage.allow.ts`.
+
+- [ ] **Step 7: Run.** The Step 2 command plus `--include src/app/ui/title-usage.spec.ts`. Expected: PASS. One Playwright screenshot of the Calendar day view and the Dashboard positions table at 390 (hint glyphs 44px, nothing overlapping the `#` column).
+
+Close: standard (test: `frontend/src/app/ui/title-usage.spec.ts`); commit `feat(v194): Calendar, Dashboard and Trades explain through sb-hint, not native titles (V194-15)`.
