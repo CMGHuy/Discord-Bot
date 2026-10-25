@@ -80,7 +80,6 @@
     "swingbot.core.market.trendlines:_find_best_trendline": 15,
     "swingbot.core.market.trendlines:_volume_confirmed_pivots": 15,
     "swingbot.core.marketdata.data_refresh:refresh_all": 17,
-    "swingbot.core.planning.account:compute_position_size": 18,
     "swingbot.core.planning.account:get_daily_summary": 16,
     "swingbot.core.planning.plan_manager:PlanManager._on_event": 15,
     "swingbot.core.planning.plan_manager:PlanManager._step_active": 21,

@@ -17,7 +17,7 @@ modes (account_cfg["sizing_mode"], set via `!account sizing`):
     balance, regardless of stop distance --
         position_value = balance x position_pct / 100
         shares         = position_value / entry
-    e.g. a €1,000,000 account at 0.1% always opens a €1,000 position.
+    e.g. a â‚¬1,000,000 account at 0.1% always opens a â‚¬1,000 position.
 
 A MAX_POSITION_SIZE_PCT cap prevents the position from consuming too
 large a fraction of the account (e.g. a tiny stop on a cheap stock
@@ -524,6 +524,59 @@ def _gap_fields(shares: float, uncut_shares: float, sizing_distance: float,
             "gap_floor_pct": float(gap_floor_pct)}
 
 
+_EDGE_SIZING_MODES = ("kelly", "vol_target", "min_of_all")
+
+
+def _edge_risk_pct(mode: str, risk_pct: float, strategy_stats, ticker_atr_pct,
+                   open_positions) -> tuple[float, str]:
+    """Resolve edge modes to risk_pct; a missing estimator does not participate."""
+    if mode not in _EDGE_SIZING_MODES:
+        return risk_pct, mode
+    from swingbot.core.edge import sizing as edge_sizing
+    kelly = vol = None
+    if mode in ("kelly", "min_of_all") and strategy_stats:
+        kelly = edge_sizing.kelly_risk_pct(strategy_stats)
+    if mode in ("vol_target", "min_of_all") and ticker_atr_pct:
+        vol = edge_sizing.vol_target_risk_pct(
+            ticker_atr_pct, app_config.PORTFOLIO_TARGET_DAILY_VOL_PCT, open_positions)
+    return edge_sizing.effective_risk_pct(risk_pct, kelly_risk=kelly, vol_risk=vol), "risk_pct"
+
+
+def _uncut_size_caps(shares: float, entry: float, stop_distance: float, balance: float,
+                     max_position_pct: float, max_value_abs: float, max_risk_abs: float) -> float:
+    """The stop-only comparison for v183's gap_sized flag, with the original caps."""
+    shares = min(shares, (balance * max_position_pct / 100.0) / entry)
+    if max_value_abs > 0:
+        shares = min(shares, max_value_abs / entry)
+    if max_risk_abs > 0 and stop_distance > 0:
+        shares = min(shares, max_risk_abs / stop_distance)
+    return shares
+
+
+def _apply_size_caps(raw_shares: float, position_value: float, entry: float, stop_distance: float,
+                     balance: float, max_position_pct: float, max_value_abs: float,
+                     max_risk_abs: float, *, sizing_distance: float | None = None) -> tuple[float, bool]:
+    """Apply the existing caps in order, preserving the mode's original position_value.
+
+    v183's gap floor only changes the absolute-risk divisor, never the zero-stop guard.
+    """
+    capped = False
+    max_position_value = balance * max_position_pct / 100.0
+    if position_value > max_position_value:
+        raw_shares = max_position_value / entry
+        capped = True
+    if max_value_abs > 0 and raw_shares > max_value_abs / entry:
+        raw_shares = max_value_abs / entry
+        capped = True
+    if max_risk_abs > 0 and stop_distance > 0:
+        distance = stop_distance if sizing_distance is None else sizing_distance
+        max_shares_for_risk = max_risk_abs / distance
+        if raw_shares > max_shares_for_risk:
+            raw_shares = max_shares_for_risk
+            capped = True
+    return raw_shares, capped
+
+
 def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = None,
                           *, strategy_stats: dict = None, ticker_atr_pct: float = None,
                           open_positions: int = 0, gap_floor_pct: float | None = None) -> dict | None:
@@ -585,25 +638,8 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         "max_position_value_absolute", app_config.MAX_POSITION_VALUE_ABSOLUTE))
     max_risk_amount_absolute = float(account_cfg.get(
         "max_risk_amount_absolute", app_config.MAX_RISK_AMOUNT_ABSOLUTE))
-    mode = account_cfg.get("sizing_mode", "risk_pct")
-
-    # --- Edge sizing modes (E6): resolve to an effective risk_pct, then
-    # fall through to the ordinary risk_pct branch below. Optional inputs
-    # missing -> that estimator simply doesn't participate in the min().
-    # NOTE: this overrides the local risk_pct/mode variables directly --
-    # both were already extracted from account_cfg above, so rewriting
-    # account_cfg itself at this point (as an earlier draft of this
-    # change assumed) would silently do nothing.
-    if mode in ("kelly", "vol_target", "min_of_all"):
-        from swingbot.core.edge import sizing as edge_sizing
-        kelly = vol = None
-        if mode in ("kelly", "min_of_all") and strategy_stats:
-            kelly = edge_sizing.kelly_risk_pct(strategy_stats)
-        if mode in ("vol_target", "min_of_all") and ticker_atr_pct:
-            vol = edge_sizing.vol_target_risk_pct(
-                ticker_atr_pct, app_config.PORTFOLIO_TARGET_DAILY_VOL_PCT, open_positions)
-        risk_pct = edge_sizing.effective_risk_pct(risk_pct, kelly_risk=kelly, vol_risk=vol)
-        mode = "risk_pct"
+    risk_pct, mode = _edge_risk_pct(account_cfg.get("sizing_mode", "risk_pct"), risk_pct,
+                                    strategy_stats, ticker_atr_pct, open_positions)
 
     # Opex size reduction, applied after the edge estimators so it composes
     # with kelly/vol_target rather than being overwritten by them. BOTH modes
@@ -635,28 +671,13 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         uncut_shares = risk_amount / stop_distance                             # v183
         position_value = raw_shares * entry
 
-    capped = False
-    max_position_value = balance * max_position_pct / 100.0
-    uncut_shares = min(uncut_shares, max_position_value / entry)               # v183
-    if position_value > max_position_value:
-        raw_shares = max_position_value / entry
-        capped = True
-
-    # Absolute currency caps -- always enforced last, on top of whatever the
-    # %-based sizing/cap above produced, so they hold no matter what balance
-    # or % settings are in play.
-    if max_position_value_absolute > 0:
-        max_shares_for_position = max_position_value_absolute / entry
-        uncut_shares = min(uncut_shares, max_shares_for_position)              # v183
-        if raw_shares > max_shares_for_position:
-            raw_shares = max_shares_for_position
-            capped = True
-    if max_risk_amount_absolute > 0 and stop_distance > 0:
-        uncut_shares = min(uncut_shares, max_risk_amount_absolute / stop_distance)   # v183
-        max_shares_for_risk = max_risk_amount_absolute / sizing_distance       # v183 (was / stop_distance)
-        if raw_shares > max_shares_for_risk:
-            raw_shares = max_shares_for_risk
-            capped = True
+    uncut_shares = _uncut_size_caps(
+        uncut_shares, entry, stop_distance, balance, max_position_pct,
+        max_position_value_absolute, max_risk_amount_absolute)
+    raw_shares, capped = _apply_size_caps(
+        raw_shares, position_value, entry, stop_distance, balance,
+        max_position_pct, max_position_value_absolute, max_risk_amount_absolute,
+        sizing_distance=sizing_distance)
 
     # Always the REAL figures for the final (possibly capped) share count --
     # never a pre-cap "intended" number -- so what's shown is always what
