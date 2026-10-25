@@ -30,6 +30,26 @@ Inlined from the `/new-doc` skill and `docs/claude/document-conventions.md` —
 - Verify every named symbol exists (`git grep -n`) or mark it created by an earlier task.
 - **Do not commit** — the controller reviews and commits on `main`.
 
+## Quality bar (never traded for tokens)
+
+Saving tokens means reading less and writing each task once -- never writing
+less plan. A task an implementer can finish without guessing:
+
+- **Every step that creates or changes code carries the code.** A new
+  function, class, component, hook or test body appears in full in a fenced
+  block; changed code appears as the old → new lines with the file and line
+  range. "Implement `foo` per the rules above", "create the helper as
+  described" or a prose list of behaviours is a defect -- put the body in.
+- **Test-first, with real test code**: a failing-test step with the test
+  bodies in full, the exact run command and the expected failure, then the
+  implementation step, the run command with the expected pass, then the
+  commit step.
+- Every new name in the ledger's `Creates` cell (function, component,
+  constant, endpoint, field) is defined in a code block of its own task.
+- Before returning, check each task against these three lines and fix the
+  file; a task you cannot complete this way is a `BLOCKED:` question, not a
+  shorter task. The spec's tests and edge cases all appear.
+
 ## Write as you go
 
 The partner watches the files fill. **Never hold a finished task in memory
@@ -44,7 +64,13 @@ PLAN_TASK_EOF
 ```
 
 (If a task's text itself contains a `PLAN_TASK_EOF` line, pick another
-delimiter.)
+delimiter.) **Always quote the delimiter** (`<<'PLAN_TASK_EOF'`, never bare),
+so backticks, `$` and quotes in the task's code reach the file verbatim, and
+put the closing `PLAN_TASK_EOF` alone at column 0. If an append still errors
+(v194 saw `unexpected EOF while looking for matching`), first
+`grep -c "^### Task <id>" "$f"` — the heredoc may not have written anything —
+then `Write` that one task to a scratch file and `cat` it across **once**;
+never re-draft it. A failed append is not a reason to shorten the task.
 
 **Write each task once, straight into the plan file.** Never draft a task
 into a scratchpad file (`Write` to a scratch path, then `cat`/`sed` it across)
