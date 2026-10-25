@@ -142,7 +142,9 @@ def load(ticker: str, timeframe: str, session: str = "rth", *,
          store: str | None = None) -> pd.DataFrame | None:
     """One ticker's bars from the store, or None when the file is missing or
     the result is empty. `session` filters 15min only: "rth" keeps the bars
-    starting 09:30-15:45, "all" keeps every stored bar."""
+    starting 09:30-15:45, "all" keeps every stored bar. A PIT frame is returned
+    already trimmed to its integrity report's window; an empty trim result is
+    None like an empty file."""
     if session not in SESSIONS:
         raise ValueError(f"unknown session {session!r}; expected one of {SESSIONS}")
     path = file_path(ticker, timeframe, store=store)
@@ -151,7 +153,21 @@ def load(ticker: str, timeframe: str, session: str = "rth", *,
     frame = _read(path, timeframe)
     if timeframe == "15min" and session == "rth":
         frame = _regular_hours(frame)
-    return frame if len(frame) else None
+    if store_key(store) == PIT:
+        frame = _pit_trim(frame, ticker)
+    return frame if frame is not None and len(frame) else None
+
+
+def _pit_trim(frame: pd.DataFrame, ticker: str) -> pd.DataFrame | None:
+    """The integrity report's trim window for one PIT ticker (spec section 2.3)."""
+    from swingbot.core.marketdata import pit_integrity
+    root = store_root(PIT)
+    integrity = pit_integrity.cached_integrity(root)
+    if integrity is None:
+        raise MissingStoreError(
+            f"PIT store has no integrity report: {pit_integrity.integrity_path(root)} -- "
+            f"build it with scripts/data/check_history_store.py --pit before any run reads it")
+    return pit_integrity.apply_trim(frame, integrity.trim_window(ticker))
 
 
 def _read(path: Path, timeframe: str) -> pd.DataFrame:
