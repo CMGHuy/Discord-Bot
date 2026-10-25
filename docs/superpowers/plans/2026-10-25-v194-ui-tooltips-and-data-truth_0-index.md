@@ -24,9 +24,10 @@ keyboard. Second, eight figures and labels are wrong or misleading: tab
 counts that read "Open 0" over eight open rows, "All" rows that render
 ten, partial-exit legs that look like duplicate trades, fractional shares
 rounded to whole, tiny risk percentages shown as zero, a sector-heat panel
-that says "No sector exposure" because the sector map is empty, a `$`/`€`
-unit label that has to be checked against what the money actually is, and
-two Sharpe/drawdown pairs with the same names and different populations.
+that says "No sector exposure" because the sector map is empty, money in
+the instruments' quote currency (USD) shown as if it were the account's
+(€) with no conversion anywhere, and two Sharpe/drawdown pairs with the
+same names and different populations.
 
 Once this ships, every hint renders in the browser's top layer (Popover
 API), clamped to the viewport, so no ancestor transform, clip or stacking
@@ -39,16 +40,22 @@ reads what the API returns: counts follow the lifecycle payload, "All"
 asks for the 200-row cap, leg rows say "Leg N of M" plus the exit reason
 and that win rate counts plans, shares and risk percentages keep their
 precision with totals summed unrounded, a missing sector map shows a
-banner instead of a reassuring zero, and Sharpe/drawdown tiles name their
-basis, population, N and the paper / gross / pre-tax caveat.
+banner instead of a reassuring zero, every money figure the admin API
+serves is converted into the account currency at each leg's exit-date FX
+rate (a missing rate shown as a caveat, never assumed 1.0), and
+Sharpe/drawdown tiles name their basis, population, N and the paper /
+gross / pre-tax caveat.
 
 In idea: fix the primitive once (`sb-hint`), make the audit prove it on a
 real browser, then correct each figure at the point it is formatted or
 labelled, adding one backend field where the data exists but the response
 does not carry it (`unmapped_count`, `leg_exit_reason`,
-`max_drawdown_amount`). Nothing the bot computes for trading changes:
-`universe.sector_map` and the universe data stay as they are because the
-walk-forward replay and the weekly retrospective read them too.
+`max_drawdown_amount`), plus one read-side FX conversion seam for admin
+money (partner decision, 2026-10-25). Nothing the bot computes for trading
+changes: `universe.sector_map` and the universe data stay as they are
+because the walk-forward replay and the weekly retrospective read them
+too, and the stored `realized_pnl_amount` (which feeds the account
+balance, hence sizing and the kill-switch) stays in quote currency.
 
 Left alone (spec C, next): panel-heading style, pagers, compact tables,
 Risk/System regrouping, phone tab labels; every other overlay component.
@@ -85,6 +92,13 @@ V194-16's notes; and by each B item's acceptance tests.
   (from `collect_portfolio_state`, through extracted helpers since that
   function is complexity 22), `metrics.max_drawdown_amount` on the same
   endpoint, and `leg_exit_reason` on trade leg rows.
+- **FX conversion (V194-6..V194-6c).** `swingbot/core/marketdata/fx.py`
+  (`fx_rate`, `quote_currency_code`, `account_currency_code`) reads FX
+  pairs through the shared daily-bar cache;
+  `swingbot/admin/api_v1/money.py` `to_account_currency` converts closed
+  trade and leg rows once, where the admin read paths load them, before
+  any sum; rows without a rate carry `fx_missing` and payloads
+  `fx_missing_count`, which the frontend turns into a caveat.
 - **Titles (V194-14, V194-15).** `frontend/src/app/ui/title-usage.spec.ts`
   scans the source with the counting rule below and fails on any binding
   not listed in `frontend/src/app/ui/title-usage.allow.ts`.
@@ -190,28 +204,53 @@ code reading, 2026-10-25):
   `queryFor`: `Number('0') || DEFAULT_PER_PAGE` turns "All" (`ALL_PER_PAGE
   = 0`) into 10, and the resolver ignores the saved per-page preference;
   `runGuardsAndResolvers: 'always'` reruns it on every navigate.
-- **B7 finding (code).** No FX conversion exists anywhere in `swingbot/`:
-  leg `realized_pnl_amount` is `shares * (exit_price - entry)` in the
-  instruments' quote currency (`swingbot/admin/api_v1/trades.py:529`),
-  and `CURRENCY_SYMBOL` only picks a symbol. V194-6 confirms on production
-  (`prod-inspector`: the distinct quote currencies of closed-trade tickers)
-  and then, as the spec allows, **keeps an honest `$`** on the Analytics
-  toggle through `QUOTE_CURRENCY_SYMBOL` instead of relabelling to `€`;
-  the spec's "€, $, £" toggle test becomes "the label is
-  `QUOTE_CURRENCY_SYMBOL` whatever the account currency is € / $ / £, and
-  the value key stays `'money'`". Only if the inspection finds a
-  conversion does V194-6 use `connection.currency()` instead. Calendar's
-  `€` toggle (`calendar.ts:489-497`) and every other `money(value,
-  currency)` display over these same sums are recorded as V194-16 audit
-  rows (`fixed text` only where the item is a hint or chart tooltip); an
-  app-wide relabel or a real conversion is a follow-up spec, not this one.
+- **B7 -- partner decision (2026-10-25, AskUserQuestion): add FX
+  conversion in v194**, replacing the honest-`$` relabel. Found by the
+  brief and the index writer: no FX conversion exists anywhere in
+  `swingbot/`; `realized_pnl_amount` is `shares * (exit_price - entry)` in
+  each instrument's quote currency (settled at
+  `swingbot/core/tracking/performance.py:960-972`, leg split at `:511-517`,
+  leg rows recomputed at `swingbot/admin/api_v1/trades.py:529`), and
+  `CURRENCY_SYMBOL` (`swingbot/config.py:510`) only picks a symbol.
+  Defaults set by the controller (no paid services):
+  - **Rate source:** yfinance FX pairs (`EURUSD=X` style,
+    `{QUOTE}{ACCOUNT}=X`) daily close, fetched through the shared daily-bar
+    path (`swingbot/core/marketdata/providers/router.py`
+    `daily_bars_between`) so it lands in the existing OHLCV cache
+    (`docs/claude/known-traps.md`: two caches; never add a third).
+  - **Point in time:** the rate on each leg's exit date (`closed_at`; a leg
+    row's own close); fallback the last prior trading day's close.
+  - **Per instrument:** the quote currency comes from the ticker
+    (`swingbot/core/marketdata/data.py` `_provider_currency_code`; a
+    Euronext ticker is already EUR). The account currency's ISO code is
+    derived from `CURRENCY_SYMBOL` through the inverse of
+    `CURRENCY_SYMBOLS`. Same currency -> identity, no fetch (a USD account
+    converts nothing).
+  - **One conversion, server-side:** every money figure the admin API
+    serves (trade and leg rows, dashboard P&L, analytics sums and equity
+    `cum_pnl`, calendar, risk `max_drawdown_amount`) is in the account
+    currency, and the frontend keeps `connection.currency()` as the symbol
+    everywhere, the Analytics toggle included (the spec's "€, $, £" test
+    stands). V194-6b's first step maps every admin money path to the loader
+    it reads and wraps the shared loader(s), not each sum.
+  - **A missing rate is visible, never 1.0:** the row keeps
+    `realized_pnl_amount: null` plus `fx_missing: true`, sums report
+    `fx_missing_count`, and the UI shows a caveat naming the count.
+  - **Stored data and trading stay as they are (partner confirmed
+    display-only, 2026-10-25):** the stored
+    `realized_pnl_amount` stays in quote currency because it also feeds the
+    account balance (`swingbot/core/planning/account.py`
+    `_sum_realized_pnl`), hence 2% sizing, the kill-switch drawdown and the
+    growth path, which this spec excludes. Conversion is read-side at the
+    admin API seam: no schema change, no `schema-evolution.md` step.
+    Discord commands (`!trades`, `!pnl`) keep today's figures and are
+    recorded as a follow-up.
 - **B8 money drawdown.** `GET /risk` metrics carry R only. V194-10 adds
-  `metrics.max_drawdown_amount` (`{value, n}` like the other metrics): the
-  peak-to-trough decline of the cumulative realised P&L amount over all
-  closed trades, in the quote currency (B7 finding), so Risk's tile shows
-  it with `QUOTE_CURRENCY_SYMBOL`, and Analytics' existing money line uses
-  the same symbol. A conversion to the account currency is not well
-  defined without FX data; V194-10's commit records that.
+  `metrics.max_drawdown_amount` (`{value, n, fx_missing_count}`): the
+  peak-to-trough decline of the cumulative realised P&L **converted to the
+  account currency** (`to_account_currency`, V194-6b) over all closed
+  trades; Risk's tile shows it with `connection.currency()`. Trades with a
+  missing rate are excluded and counted.
 - **B3 data.** `TradeRow` has no per-leg exit reason; stored legs carry
   `reason` (and `stop_source`, read by `_runner_exit_reason`). V194-12 adds
   `leg_exit_reason` to leg rows in `swingbot/admin/api_v1/trades.py`
@@ -249,7 +288,12 @@ code reading, 2026-10-25):
   - V194-4 (B1): `dashboard.store.ts`, `dashboard.ts`, the trading
     performance panel.
   - V194-5 (B2): `trades.routes.ts` and its spec.
-  - V194-6 (B7): `analytics/scope-bar.ts`, `ui/unit-format.ts`.
+  - **FX lane** V194-6 → V194-6b → V194-6c (B7): sequential; V194-6b
+    consumes V194-6's `fx_rate`, V194-6c the response fields V194-6b
+    adds. Files: `swingbot/core/marketdata/fx.py`,
+    `swingbot/admin/api_v1/money.py`, the admin `trades.py` /
+    `analytics.py` / `dashboard.py` and `core/analytics/pnl_calendar.py`
+    read paths, then `analytics/scope-bar.ts` and `calendar.ts`.
   - **Backend lane** V194-8 → V194-10: sequential, both edit
     `swingbot/admin/api_v1/risk.py` and `tests/admin/test_api_v1_risk.py`.
   - **Risk / models lane** V194-7 → V194-9 → V194-11 → V194-12 → V194-13:
@@ -259,23 +303,28 @@ code reading, 2026-10-25):
     `trades.columns.ts`.
 - Cross-lane contract edges: V194-9 starts after V194-8 (consumes
   `unmapped_count`); V194-11 after V194-10 (`max_drawdown_amount`) and
-  V194-6 (`QUOTE_CURRENCY_SYMBOL`, and both touch Analytics); V194-13 after
-  V194-4 (both edit `dashboard.ts`).
+  V194-6c (`fx_missing_count`, both touch Analytics and `models.ts`);
+  V194-10 after V194-6b (consumes `to_account_currency`); V194-12 after
+  V194-6b (both edit `swingbot/admin/api_v1/trades.py`) and V194-6c
+  (both edit `calendar.ts`); V194-9 after V194-6c (both edit
+  `models.ts`); V194-13 after V194-4 (both edit `dashboard.ts`).
 - **V194-14 after every B task** (it sweeps `title` sites in files B tasks
   edit, and B3/B8 add hints the allow-list must not list); V194-15 after
   V194-14 (same allow-list file); V194-16 after V194-15 (it audits every
-  hint, including those added by A3, B3 and B8); V194-17 last.
+  hint, including those added by A3, B3 and B8); V194-16b (docs only)
+  after V194-3, parallel to everything else; V194-17 last.
 
 ## Parts
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
 | 1 | `2026-10-25-v194-ui-tooltips-and-data-truth_1-hint-top-layer-and-audit.md` | V194-1..V194-3 | worktree; popover polyfill; `sb-hint` top layer, clamp, dialog host close; layout-audit `hint` check |
-| 2 | `2026-10-25-v194-ui-tooltips-and-data-truth_2-dashboard-trades-unit.md` | V194-4..V194-6 | B1 lifecycle counts (diagnose first); B2 "All" rows; B7 money unit label |
+| 2 | `2026-10-25-v194-ui-tooltips-and-data-truth_2-dashboard-trades-unit.md` | V194-4..V194-6 | B1 lifecycle counts (diagnose first); B2 "All" rows; B7 FX rate provider |
+| 2b | `2026-10-25-v194-ui-tooltips-and-data-truth_2b-fx-conversion.md` | V194-6b..V194-6c | B7 server-side conversion seam; currency label and missing-rate caveat |
 | 3 | `2026-10-25-v194-ui-tooltips-and-data-truth_3-risk-format-and-sectors.md` | V194-7..V194-9 | B4/B5 formatters; B6 backend `unmapped_count`; B6 banner |
 | 4 | `2026-10-25-v194-ui-tooltips-and-data-truth_4-metric-basis-and-legs.md` | V194-10..V194-12 | B8 backend money drawdown; B8 tiles; B3 leg label and `leg_exit_reason` |
 | 5 | `2026-10-25-v194-ui-tooltips-and-data-truth_5-leg-surfaces-and-titles.md` | V194-13..V194-15 | B3 Trades/Dashboard surfaces; A3 scanner, allow-list, conversions |
-| 6 | `2026-10-25-v194-ui-tooltips-and-data-truth_6-content-audit-and-release.md` | V194-16..V194-17 | A4 content audit; full suite, replica layout audit, merge |
+| 6 | `2026-10-25-v194-ui-tooltips-and-data-truth_6-content-audit-and-release.md` | V194-16..V194-17 | A4 content audit; ui-design checklist names the `hint` check; full suite, replica layout audit, merge |
 
 ## Task ledger
 
@@ -288,15 +337,18 @@ code reading, 2026-10-25):
 | V194-3 | Layout audit `hint` check: pure `hintVerdict`, eighth `CHECKS` entry, Playwright hover/tap | 1 | sonnet | A2 | M `frontend/scripts/layout-audit-lib.mjs`, `frontend/scripts/layout-audit-lib.test.mjs`, `frontend/scripts/layout-audit.mjs` | `hintVerdict(rect: { left, top, width, height }, viewport: { width, height }, hits: { center: boolean, corner: boolean }) -> { ok: boolean, reason: 'zero-size' \| 'off-screen' \| 'covered-center' \| 'covered-corner' \| null }`; `CHECKS` gains `'hint'` (eighth, last); finding shape `{ route, width, check: 'hint', selector, text, detail }` with the trigger `aria-label` in `detail` | `CHECKS`, `vcenterGeometry`, `auditPage`, `auditWidth` |
 | V194-4 | B1: diagnose on the replica, then fix lifecycle tab counts and the stuck Trading performance skeleton | 2 | opus | B1 | M `frontend/src/app/stores/dashboard.store.ts`, `frontend/src/app/stores/dashboard.store.spec.ts`, `frontend/src/app/workspaces/dashboard/dashboard.ts`, `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`, `frontend/src/app/workspaces/dashboard/panels/trading-performance.ts` | — | `todayLifecycle`, `loadToday`, `lifecycleOf`, `lifecycleCounts`, `todayBusy` |
 | V194-5 | B2: "All" rows asks for `per_page=200`, fresh and restored from prefs | 2 | sonnet | B2 | M `frontend/src/app/workspaces/trades/trades.routes.ts`; C `frontend/src/app/workspaces/trades/trades.routes.spec.ts` | — | `queryFor`, `ALL_PER_PAGE`, `perPageForApi`, `readTablePerPage`, `DEFAULT_PER_PAGE` |
-| V194-6 | B7: verify the money unit on production, then label the Analytics money toggle honestly | 2 | sonnet | B7 | M `frontend/src/app/ui/unit-format.ts`, `frontend/src/app/workspaces/analytics/scope-bar.ts`, `frontend/src/app/workspaces/analytics/scope-bar.spec.ts` | `QUOTE_CURRENCY_SYMBOL = '$'` (exported from `ui/unit-format.ts`; the symbol of the instruments' quote currency, used wherever a figure is shares × price difference) | `unitLabel`, `unitOptions`, `currency` |
+| V194-6 | B7 FX: `prod-inspector` check (distinct quote currencies of closed-trade tickers, the account symbol); FX rate provider over the shared daily-bar cache | 2 | sonnet | B7 | C `swingbot/core/marketdata/fx.py`, `tests/marketdata/test_fx.py` | `account_currency_code() -> str` (ISO code from `CURRENCY_SYMBOL` via the inverse of `CURRENCY_SYMBOLS`, `EUR` when unknown); `quote_currency_code(ticker: str) -> str \| None`; `fx_rate(from_code: str, to_code: str, on: date) -> float \| None` (1.0 when equal; `{FROM}{TO}=X` daily close on `on`, else the last prior close within 7 days, else `None`) | `daily_bars_between`, `_provider_currency_code`, `CURRENCY_SYMBOLS` |
+| V194-6b | B7 FX: one server-side conversion seam for admin money (trade and leg rows, dashboard, analytics sums and equity, calendar); `fx_missing` flags | 2b | opus | B7 | C `swingbot/admin/api_v1/money.py`, `tests/admin/test_api_v1_money.py`; M `swingbot/admin/api_v1/trades.py`, `swingbot/admin/api_v1/analytics.py`, `swingbot/admin/api_v1/dashboard.py`, `swingbot/core/analytics/pnl_calendar.py`, `tests/admin/test_api_v1_trades.py`, `tests/admin/test_api_v1_analytics.py` | `to_account_currency(rows: list[dict], *, account: str \| None = None) -> list[dict]` (copies; converts `realized_pnl_amount` by `fx_rate(quote_currency_code(row['ticker']), account, closed date)`; sets `fx_missing: bool`, and `realized_pnl_amount: None` when the rate is missing); `MONEY_FIELDS`; response field `fx_missing_count: int` on analytics, dashboard and calendar payloads; row field `fx_missing: bool` | `fx_rate`, `quote_currency_code`, `account_currency_code`, `_row_from_leg`, `realized_pnl_amount` |
+| V194-6c | B7 frontend: Analytics money toggle labelled `connection.currency()`; missing-rate caveat where `fx_missing_count > 0` | 2b | sonnet | B7 | M `frontend/src/app/api/models.ts`, `frontend/src/app/workspaces/analytics/scope-bar.ts`, `frontend/src/app/workspaces/analytics/scope-bar.spec.ts`, `frontend/src/app/workspaces/calendar/calendar.ts`, `frontend/src/app/workspaces/calendar/calendar.spec.ts` | `fx_missing_count?: number` on the analytics, dashboard and calendar interfaces; `TradeRow.fx_missing?: boolean`; `fxMissingText(n: number): string` (exported from `scope-bar.ts`) | `fx_missing_count`, `fx_missing`, `currency`, `unitOptions` |
 | V194-7 | B4/B5: `shareCount` and `riskPct` formatters; unrounded totals; Risk, trade detail and row drawer use them | 3 | sonnet | B4; B5 | M `frontend/src/app/ui/format.ts`, `frontend/src/app/ui/format.spec.ts`, `frontend/src/app/workspaces/risk/risk.ts`, `frontend/src/app/workspaces/risk/risk.spec.ts`, `frontend/src/app/workspaces/trades/position-card.ts`, `frontend/src/app/workspaces/trades/why/sizing-panel.ts`, `frontend/src/app/workspaces/trades/trades.columns.ts` | `shareCount(value: number \| null \| undefined): string` (up to 2 decimals, trailing zeros dropped, null → `ABSENT`); `riskPct(value: number \| null \| undefined): string` (`"0.00%"` for exact zero, `"<0.01%"` for 0 < \|v\| < 0.01 with the sign kept, else 2 decimals + `%`, null → `ABSENT`) | `num`, `ABSENT`, `riskCell` |
 | V194-8 | B6 backend: `prod-inspector` cause check; warning logs; `unmapped_count` through extracted helpers; `/risk` field and docstring | 3 | opus | B6 | M `swingbot/core/edge/portfolio_state.py`, `swingbot/admin/api_v1/risk.py`, `tests/admin/test_api_v1_risk.py`; C `tests/edge/test_portfolio_state_sectors.py` | `_load_sector_map() -> dict` and `_unmapped_count(open_trades: list, sectors: dict) -> int` (in `portfolio_state.py`); `state["unmapped_count"]`; `/api/v1/risk` response key `unmapped_count: int` | `collect_portfolio_state`, `sector_heat`, `sector_map`, `get_risk`, `_cached`, `portfolio_report` |
 | V194-9 | B6 frontend: "Sector concentration cannot be assessed" banner vs true-zero state | 3 | sonnet | B6 | M `frontend/src/app/api/models.ts`, `frontend/src/app/stores/risk.store.ts`, `frontend/src/app/workspaces/risk/risk.ts`, `frontend/src/app/workspaces/risk/risk.spec.ts` | `Risk.unmapped_count?: number`; `RiskStore.unmappedCount` (computed, `data()?.unmapped_count ?? 0`) | `unmapped_count`, `sectorHeat`, `positions` |
-| V194-10 | B8 backend: `metrics.max_drawdown_amount` on `/risk` over all closed trades | 4 | sonnet | B8 | M `swingbot/admin/api_v1/risk.py`, `tests/admin/test_api_v1_risk.py` | `/api/v1/risk` `metrics.max_drawdown_amount: {value: float \| None, n: int}`; `_pnl_amounts(closed: list) -> list[float]` (in `risk.py`) | `max_drawdown_r`, `_metric`, `r_multiples` |
-| V194-11 | B8 frontend: `sb-stat-tile` `about` hint; basis-named Sharpe / Max drawdown tiles on Risk and Analytics; money drawdown on Risk; footnote removed | 4 | sonnet | B8 | M `frontend/src/app/ui/stat-tile.ts`, `frontend/src/app/ui/stat-tile.spec.ts`, `frontend/src/app/api/models.ts`, `frontend/src/app/workspaces/risk/risk.ts`, `frontend/src/app/workspaces/risk/risk.spec.ts`, `frontend/src/app/workspaces/analytics/tabs/overview.ts`, `frontend/src/app/workspaces/analytics/tabs/overview.spec.ts` | `StatTile.about` (`input<string \| undefined>(undefined)`, renders `<sb-hint [text]="about()" [label]="'About ' + label()">` beside the label); `RiskMetrics.max_drawdown_amount?: RiskMetric` | `max_drawdown_amount`, `QUOTE_CURRENCY_SYMBOL`, `metricTiles`, `kpiTiles`, `Hint` |
+| V194-10 | B8 backend: `metrics.max_drawdown_amount` on `/risk` over all closed trades, converted to the account currency | 4 | sonnet | B8 | M `swingbot/admin/api_v1/risk.py`, `tests/admin/test_api_v1_risk.py` | `/api/v1/risk` `metrics.max_drawdown_amount: {value: float \| None, n: int, fx_missing_count: int}`; `_pnl_amounts(closed: list) -> list[float]` (in `risk.py`) | `max_drawdown_r`, `_metric`, `r_multiples`, `to_account_currency` |
+| V194-11 | B8 frontend: `sb-stat-tile` `about` hint; basis-named Sharpe / Max drawdown tiles on Risk and Analytics; money drawdown on Risk; footnote removed | 4 | sonnet | B8 | M `frontend/src/app/ui/stat-tile.ts`, `frontend/src/app/ui/stat-tile.spec.ts`, `frontend/src/app/api/models.ts`, `frontend/src/app/workspaces/risk/risk.ts`, `frontend/src/app/workspaces/risk/risk.spec.ts`, `frontend/src/app/workspaces/analytics/tabs/overview.ts`, `frontend/src/app/workspaces/analytics/tabs/overview.spec.ts` | `StatTile.about` (`input<string \| undefined>(undefined)`, renders `<sb-hint [text]="about()" [label]="'About ' + label()">` beside the label); `RiskMetrics.max_drawdown_amount?: RiskMetric` | `max_drawdown_amount`, `fx_missing_count`, `metricTiles`, `kpiTiles`, `Hint` |
 | V194-12 | B3 data and helper: `leg_exit_reason` on leg rows; shared `legLabel` and `LEG_HINT_TEXT`; Calendar uses them | 4 | sonnet | B3 | M `swingbot/admin/api_v1/trades.py`, `tests/admin/test_api_v1_trades.py`, `frontend/src/app/api/models.ts`, `frontend/src/app/workspaces/calendar/day/day-trade-card.ts`, `frontend/src/app/workspaces/calendar/calendar.ts`; C `frontend/src/app/workspaces/trades/leg-label.ts`, `frontend/src/app/workspaces/trades/leg-label.spec.ts` | leg-row field `leg_exit_reason: str \| None`; `TradeRow.leg_exit_reason?: string \| null`; `interface LegLike { leg_index: number; leg_total: number; leg_exit_reason?: string \| null; exit_reason?: string \| null }`; `legLabel(row: LegLike): string \| null` (`"Leg N of M"`, `" · <reasonLabel>"` appended when a reason is present, `null` for single-leg); `LEG_HINT_TEXT` (one plan, each row its part's share, win rate and N count plans, not legs) | `_row_from_leg`, `_runner_exit_reason`, `reasonLabel`, `CalendarTrade` |
 | V194-13 | B3 surfaces: leg label and hint on Trades (table, compact rows, drawer) and the Dashboard positions table; Trades total counts legs or plans, stated | 5 | sonnet | B3 | M `frontend/src/app/workspaces/trades/trades.ts`, `frontend/src/app/workspaces/trades/trades.spec.ts`, `frontend/src/app/workspaces/trades/trades.columns.ts`, `frontend/src/app/workspaces/dashboard/dashboard.ts`, `frontend/src/app/workspaces/dashboard/dashboard.spec.ts`, `frontend/src/app/workspaces/dashboard/trade-drawer.ts` | — | `legLabel`, `LEG_HINT_TEXT`, `leg_exit_reason`, `isPartialLeg`, `partialOpenTitle`, `rangeLabel` |
 | V194-14 | A3 part 1: `title-usage.spec.ts` scanner, allow-list, conversions outside Analytics | 5 | sonnet | A3 | C `frontend/src/app/ui/title-usage.spec.ts`, `frontend/src/app/ui/title-usage.allow.ts`; M `frontend/src/app/ui/layout.ts`, `frontend/src/app/ui/stat-tile.ts`, `frontend/src/app/ui/status-cell.ts`, `frontend/src/app/ui/plan-cell.ts`, `frontend/src/app/workspaces/calendar/day/calendar-day.ts`, `frontend/src/app/workspaces/trades/trades.ts`, `frontend/src/app/workspaces/trades/trade-detail.ts`, `frontend/src/app/workspaces/dashboard/dashboard.ts`, `frontend/src/app/workspaces/gallery/gallery.ts`, `frontend/src/app/workspaces/system/settings-tab.ts`, `frontend/src/app/workspaces/versions/versions.ts` (and every other non-Analytics file the scan lists, named in the task) | `TitleSite`; `interface TitleSite { file: string; binding: string; kind: 'echo' \| 'control-name' \| 'explanation-pending'; note: string }`; `TITLE_ALLOW: readonly TitleSite[]`; `TITLE_PENDING` (the `explanation-pending` subset, Analytics only); `TITLE_INPUT_ELEMENTS` | `Hint`, `StatTile.about` |
 | V194-15 | A3 part 2: convert the Analytics explanation sites; `TITLE_PENDING` empty | 5 | sonnet | A3 | M `frontend/src/app/ui/title-usage.allow.ts`, `frontend/src/app/ui/title-usage.spec.ts`, `frontend/src/app/workspaces/analytics/tabs/partials.ts`, `frontend/src/app/workspaces/analytics/tabs/attribution.ts`, `frontend/src/app/workspaces/analytics/tabs/tuning.ts`, `frontend/src/app/workspaces/analytics/tabs/pipeline.ts`, `frontend/src/app/workspaces/analytics/tabs/edge.ts`, `frontend/src/app/workspaces/analytics/tabs/overview.ts`, `frontend/src/app/workspaces/analytics/tabs/execution.ts`, `frontend/src/app/workspaces/analytics/tabs/override-fidelity-panel.ts`, `frontend/src/app/workspaces/analytics/tabs/variance-band-panel.ts` | — | `TITLE_ALLOW`, `TITLE_PENDING`, `TitleSite` |
-| V194-16 | A4 content audit: every `sb-hint` text and chart tooltip against the code that computes it; fixes; audit table in the task notes | 6 | opus | A4 | M the hint and chart-tooltip sites the audit marks `caveat added` / `fixed text` / `fixed figure` (named per row in the task; candidates `frontend/src/app/ui/chart-tooltip.ts` consumers `bar-list.ts`, `dot-plot.ts`, `heat-grid.ts`, `histogram.ts`, `share-bar.ts`, `strip-plot.ts`, `waterfall.ts`, and `analytics/tabs/*.ts`) | the A4 audit table (route, label, verdict) in the task notes | `LEG_HINT_TEXT`, `StatTile.about`, `QUOTE_CURRENCY_SYMBOL`, `TITLE_ALLOW` |
+| V194-16 | A4 content audit: every `sb-hint` text and chart tooltip against the code that computes it; fixes; audit table in the task notes | 6 | opus | A4 | M the hint and chart-tooltip sites the audit marks `caveat added` / `fixed text` / `fixed figure` (named per row in the task; candidates `frontend/src/app/ui/chart-tooltip.ts` consumers `bar-list.ts`, `dot-plot.ts`, `heat-grid.ts`, `histogram.ts`, `share-bar.ts`, `strip-plot.ts`, `waterfall.ts`, and `analytics/tabs/*.ts`) | the A4 audit table (route, label, verdict) in the task notes | `LEG_HINT_TEXT`, `StatTile.about`, `fx_missing_count`, `TITLE_ALLOW` |
+| V194-16b | `docs/claude/ui-design.md` § Checklist names the layout audit's `hint` check; `AGENTS.md` mirror | 6 | haiku | A2 | M `docs/claude/ui-design.md`, `AGENTS.md` | — | `hintVerdict`, `CHECKS` |
 | V194-17 | Full suite; replica layout audit (`hint` included) at 390/768/1440; merge to `main`; post-deploy check recorded | 6 | haiku | Verification | — | — | `hintVerdict`, `CHECKS` |

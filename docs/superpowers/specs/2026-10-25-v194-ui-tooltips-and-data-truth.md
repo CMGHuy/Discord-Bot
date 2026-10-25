@@ -151,9 +151,20 @@ Applies wherever leg rows render: Trades (table, compact rows, drawer), the Dash
 
 **Symptom.** Analytics' R / % / $ toggle shows "$"; the account currency is €.
 
-**Acceptance.** First, verify that the money values the toggle shows are in the account currency (converted from USD-quoted instruments), not USD figures. A "€" over USD-computed P&L would be worse than today's "$". If they are USD, the fix is the conversion (or a "$" label kept honestly), and the finding is recorded. Then the money option's label is the account currency symbol from `connection.currency()` everywhere the toggle appears, matching Calendar's existing use (`calendar.ts:494`). Its value key is unchanged, so saved preferences survive.
+**Finding (plan, 2026-10-25).** No FX conversion exists anywhere in `swingbot/`: `realized_pnl_amount` is `shares × (exit − entry)` in each instrument's quote currency (settled in `swingbot/core/tracking/performance.py`, leg rows recomputed in `swingbot/admin/api_v1/trades.py`), and `CURRENCY_SYMBOL` only picks the symbol. Every money figure on a € account is therefore USD labelled €.
 
-**Tests.** Toggle renders €, $ and £ for the three currencies; the stored value is the same key.
+**Decision (partner, 2026-10-25, after the finding).** Add the FX conversion in v194, rather than keep an honest "$".
+
+**Acceptance.**
+
+- **Rate source.** yfinance FX pairs (e.g. `EURUSD=X`) daily close, fetched through the shared daily-bar path so they land in the existing OHLCV cache (`known-traps.md`: no third cache). No paid service.
+- **Point in time.** Each leg converts at the rate on its own exit date; when that day has no bar, the last prior trading day's close.
+- **Per instrument.** The quote currency is the ticker's own (a Euronext ticker is already EUR); same currency as the account → identity, no fetch. A USD account converts nothing.
+- **Once, server-side.** Every money figure the admin API serves — trade and leg rows, dashboard P&L, Analytics sums and equity, Calendar, Risk's max-drawdown money equivalent (B8) — is in the account currency. The frontend keeps `connection.currency()` as the symbol everywhere, the Analytics money toggle included (matching Calendar, `calendar.ts:494`); its value key is unchanged, so saved preferences survive.
+- **A missing rate is visible.** A row without a rate carries no converted amount and a flag; sums report how many rows were left out; the page shows a caveat naming the count. Never a silent 1.0.
+- **Trading unchanged.** The stored `realized_pnl_amount` stays in quote currency: it also feeds the account balance (`swingbot/core/planning/account.py`), hence 2% sizing, the kill-switch drawdown and the growth path, which this spec excludes. The conversion is read-side only, so no stored record changes and `schema-evolution.md` does not apply. Discord commands keep today's figures (follow-up). *Partner confirmed display-only, 2026-10-25.*
+
+**Tests.** Rate lookup: same currency → 1.0 with no fetch, exit-date close, prior-day fallback, missing → `None`. Conversion: a USD leg on a € account converts at its exit date's rate; a EUR-quoted leg is unchanged; a missing rate yields a flagged row and a counted sum, never 1.0. Toggle renders €, $ and £ for the three currencies; the stored value is the same key; the caveat renders when rows were left out.
 
 ## B8. Risk vs Analytics: same names, different figures
 
@@ -183,7 +194,7 @@ Grouped by the files they edit, not only by topic (panel, staff-engineer):
   - A2 (`frontend/scripts/` only);
   - B1 (dashboard store and tabs);
   - B2 (pagination and Trades store);
-  - B7 (Analytics toggle);
+  - B7 (FX rate provider, then the read-side conversion seam, then the Analytics toggle and caveat; sequential within the group);
   - **Risk group** — B4+B5 (the shared formatter), the B6 frontend banner and B8's tiles, sequential within the group because all three edit `workspaces/risk/risk.ts`;
   - the B6 backend (`swingbot/`, independent of the frontend).
 - **B3 after B1.** Both touch `dashboard.ts`.
