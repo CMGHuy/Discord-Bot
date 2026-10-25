@@ -513,13 +513,15 @@ def _sizing_distance(entry: float, stop_distance: float, gap_floor_pct: float | 
 
 
 def _gap_fields(shares: float, uncut_shares: float, sizing_distance: float,
-                gap_floor_pct: float | None) -> dict:
+                gap_floor_pct: float | None, *, basis_for_figures: float | None = None) -> dict:
     """v183: the gap keys of a floored sizing; {} without a floor, so every
     stop-only result keeps today's exact key set. gap_sized is true only
-    when the floor actually lowered the final share count."""
+    when the floor actually lowered the final share count. v187 supplies
+    the settled basis for money figures without attributing other cuts to gaps."""
     if gap_floor_pct is None:
         return {}
-    return {"gap_risk_amount": round(shares * sizing_distance, 2),
+    basis = shares if basis_for_figures is None else basis_for_figures
+    return {"gap_risk_amount": round(basis * sizing_distance, 2),
             "gap_sized": round(shares, 2) < round(uncut_shares, 2),
             "gap_floor_pct": float(gap_floor_pct)}
 
@@ -577,6 +579,37 @@ def _apply_size_caps(raw_shares: float, position_value: float, entry: float, sto
     return raw_shares, capped
 
 
+# Relative slack on the 2% ceiling, so a config sitting exactly at
+# RISK_CEILING_PCT is not reported as capped because of float noise.
+_RISK_TOLERANCE = 1e-9
+
+
+def _risk_limit(balance: float) -> float:
+    return balance * RISK_CEILING_PCT / 100.0
+
+
+def _cap_to_risk_ceiling(raw_shares: float, stop_distance: float, balance: float) -> tuple[float, bool]:
+    """Shares cut so shares x stop_distance <= RISK_CEILING_PCT of balance, in
+    both sizing modes (v187 D2); (shares, capped). No stop risk, no cut."""
+    if stop_distance <= 0:
+        return raw_shares, False
+    limit = _risk_limit(balance)
+    if raw_shares * stop_distance > limit * (1 + _RISK_TOLERANCE):
+        return limit / stop_distance, True
+    return raw_shares, False
+
+
+def _settle_shares(raw_shares: float, stop_distance: float, balance: float) -> tuple[float, float]:
+    """(basis_for_figures, reported_shares). Today's round(raw, 2), unless the
+    rounded figure would breach the ceiling: then floored to 2 decimals and the
+    floored count is also the basis for risk_amount / position_value."""
+    rounded = round(raw_shares, 2)
+    if stop_distance > 0 and rounded * stop_distance > _risk_limit(balance) * (1 + _RISK_TOLERANCE):
+        floored = math.floor(raw_shares * 100) / 100
+        return floored, floored
+    return raw_shares, rounded
+
+
 def _sizing_inputs_finite(balance: float, entry: float, stop_loss: float, ticker: str | None) -> bool:
     """Refuse non-finite inputs, including overflow of an otherwise finite price pair."""
     stop_distance = entry - stop_loss
@@ -615,7 +648,7 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     Position sizing -- see this module's docstring for the two modes
     (account_cfg["sizing_mode"]: "risk_pct" or "account_pct").
 
-    Three caps are applied, in order, and the TIGHTEST one wins:
+    Four caps are applied, in order, and the TIGHTEST one wins:
       1. max_position_pct  -- position_value never exceeds this % of balance.
       2. MAX_POSITION_VALUE_ABSOLUTE -- position_value never exceeds this
          many currency units, full stop, regardless of balance or any %
@@ -628,6 +661,9 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
       3. MAX_RISK_AMOUNT_ABSOLUTE -- the REAL risk (final shares x stop
          distance) never exceeds this many currency units either, again
          regardless of mode/%/balance.
+      4. RISK_CEILING_PCT (v187) -- in BOTH modes, the real risk (final
+         shares x stop distance) never exceeds this % of balance; shares
+         are floored instead of rounded when rounding would breach it.
 
     v183 gap_floor_pct (shorts only, passed by planning.gap_sizing): the
     risk budget and the MAX_RISK_AMOUNT_ABSOLUTE cap divide by
@@ -718,13 +754,17 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         raw_shares, position_value, entry, stop_distance, balance,
         max_position_pct, max_position_value_absolute, max_risk_amount_absolute,
         sizing_distance=sizing_distance)
+    gap_comparison_shares = raw_shares  # Keep the gap flag independent of later safety cuts.
+    # The 2% ceiling binds last, in both modes, and on the RETURNED figure.
+    raw_shares, ceiling_capped = _cap_to_risk_ceiling(raw_shares, stop_distance, balance)
+    capped |= ceiling_capped
+    basis, shares = _settle_shares(raw_shares, stop_distance, balance)
 
     # Always the REAL figures for the final (possibly capped) share count --
     # never a pre-cap "intended" number -- so what's shown is always what
     # this trade would actually do to the account.
-    position_value = raw_shares * entry
-    risk_amount = raw_shares * stop_distance
-    shares = round(raw_shares, 2)
+    position_value = basis * entry
+    risk_amount = basis * stop_distance
     if not math.isfinite(shares):
         log.warning("sizing: ticker=%s share count %r is not finite; alert left unsized", ticker or "?", shares)
         return None
@@ -742,7 +782,8 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         "max_risk_amount_absolute":    max_risk_amount_absolute,
         "mode":             mode,
     }
-    result.update(_gap_fields(raw_shares, uncut_shares, sizing_distance, gap_floor_pct))   # v183
+    result.update(_gap_fields(gap_comparison_shares, uncut_shares, sizing_distance, gap_floor_pct,
+                              basis_for_figures=basis))   # v183
     return result
 
 
