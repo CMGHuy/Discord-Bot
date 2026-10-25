@@ -64,18 +64,20 @@ PLAN_TASK_EOF
 ```
 
 (If a task's text itself contains a `PLAN_TASK_EOF` line, pick another
-delimiter.) **Always quote the delimiter** (`<<'PLAN_TASK_EOF'`, never bare),
-so backticks, `$` and quotes in the task's code reach the file verbatim, and
-put the closing `PLAN_TASK_EOF` alone at column 0. If an append still errors
-(v194 saw `unexpected EOF while looking for matching`), first
-`grep -c "^### Task <id>" "$f"` — the heredoc may not have written anything —
-then `Write` that one task to a scratch file and `cat` it across **once**;
-never re-draft it. A failed append is not a reason to shorten the task.
+delimiter.) **Always quote the delimiter** (`<<'PLAN_TASK_EOF'`, never bare), with the
+closing `PLAN_TASK_EOF` alone at column 0. A long task (v194: 200+ lines of
+mixed TS, Python and backticks) can still die with `unexpected EOF while
+looking for matching` for no visible reason, so for such a task skip the
+heredoc: `Write` it **once** to a scratch file, then append it with one
+`cat "$scratch" >> "$f"` (`wc -l < "$f"` in the same command). That is still
+one write of the text. After any failed append,
+`grep -c "^### Task <id>" "$f"` before retrying; never re-draft, never
+shorten the task.
 
-**Write each task once, straight into the plan file.** Never draft a task
-into a scratchpad file (`Write` to a scratch path, then `cat`/`sed` it across)
-and never rewrite a task you already appended: a task costs its output tokens
-once per draft (v194's part 1 wrote 24 KB tasks twice, then re-cut them as
+**Write each task once.** Never draft a task twice (a heredoc, then a
+rewritten scratch copy, then edits) and never rewrite a task you already
+appended; the scratch file above is the transport for one finished draft, not
+a drafting step. A task costs its output tokens once per draft (v194's part 1 wrote 24 KB tasks twice, then re-cut them as
 `t1`/`t1b`). Size a task against the ~400-line ceiling *before* writing it;
 too long means the ledger needs another row, which is a `BLOCKED:`.
 
