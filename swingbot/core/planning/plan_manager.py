@@ -60,10 +60,10 @@ def poll_stop_fill(price: float, stop: float, continuous: bool) -> float:
 @dataclass
 class PlanEvent:
     plan_id: str
-    transition: str      # "filled"|"cancelled_expired"|"cancelled_invalidated"|
-                         # "cancelled_risk_cap"|"be_moved"|"tp1_partial"|
-                         # "closed"|"pyramid_add"; close reasons include
-                         # "tp1_runner_progress_stall" (v123 structure exit)
+    transition: str      # "filled"|"be_moved"|"tp1_partial"|"closed"|
+                         # "pyramid_add"|any PENDING_CANCEL_EVENTS member;
+                         # close reasons include "tp1_runner_progress_stall"
+                         # (v123 structure exit)
     detail: dict = field(default_factory=dict)
 
 
@@ -136,8 +136,15 @@ def _quote_suffix(stamp) -> str:
 # plan.pending_notice and re-sent until acknowledged. Neither field is read
 # by any exit path (tests/planning/test_plan_manager_feed.py pins that).
 STOP_EVENTS = frozenset({"be_moved", "tp1_partial", "stop_moved"})
-NOTICE_EVENTS = frozenset({"filled", "cancelled_expired", "cancelled_invalidated",
-                           "cancelled_risk_cap", "closed"})
+# v187 D3: every way a PENDING plan ends without a position. The placeholder
+# discard in PlanManager._on_event and NOTICE_EVENTS both derive from this one
+# set, so a new cancel event cannot be wired into one and missed by the other
+# (a missed discard left placeholder trades "open" forever: 2026-09-11).
+PENDING_CANCEL_EVENTS = frozenset({
+    "cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap",
+    "cancelled_limit", "cancelled_gap_through_stop",
+})
+NOTICE_EVENTS = frozenset({"filled", "closed"}) | PENDING_CANCEL_EVENTS
 NOTICE_RESEND_DAYS = 5
 
 # v152 D1: events only the notify channel (commands/scanning/follow_notify.py)
@@ -160,6 +167,8 @@ _TRANSITION_LOG = {
     "cancelled_expired": ("expired", None),
     "cancelled_invalidated": ("invalidated", "live_price"),
     "cancelled_risk_cap": ("risk cap hit", "entry_price"),
+    "cancelled_limit": ("limit cancelled", "live_price"),
+    "cancelled_gap_through_stop": ("gap through stop", "live_price"),
 }
 # Closes where a stop took the position out (initial, break-even, the
 # post-TP1 runner floor, or the chandelier trail), not a target or a time rule.
@@ -805,8 +814,7 @@ class PlanManager:
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
-            elif event.transition in ("cancelled_expired", "cancelled_invalidated",
-                                      "cancelled_risk_cap"):
+            elif event.transition in PENDING_CANCEL_EVENTS:
                 # A PENDING plan never filled -- scan_run.py's placeholder
                 # trade for it (still open, sized against the trigger price)
                 # has no real position behind it. Left unhandled, it sat
@@ -814,6 +822,7 @@ class PlanManager:
                 # incident, 2026-09-11 (INTU, META among 10 stuck trades
                 # found via a dashboard mismatch -- the other 8 were the
                 # separate double-logging bug 5d72c1ab already fixed).
+                # v187: the set, not a hand list, so no cancel is missed.
                 self.trade_log.discard_plan_placeholder(plan.plan_id)
             elif event.transition == "closed":
                 if event.detail.get("_terminal_persisted"):
