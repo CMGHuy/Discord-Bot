@@ -52,7 +52,8 @@ def _violations(cmds) -> list[str]:
 
 
 def _gated(cmds) -> list:
-    return [c for c in cmds if c.qualified_name not in READ_ONLY_COMMANDS]
+    return sorted((c for c in cmds if c.qualified_name not in READ_ONLY_COMMANDS),
+                  key=lambda c: c.qualified_name)
 
 
 def _ctx(permissions: discord.Permissions) -> MagicMock:
@@ -87,6 +88,13 @@ def test_every_allowlisted_name_is_registered_and_open():
     assert READ_ONLY_COMMANDS <= names, sorted(READ_ONLY_COMMANDS - names)
     assert [c.qualified_name for c in cmds
             if c.qualified_name in READ_ONLY_COMMANDS and _is_admin_gated(c)] == []
+
+
+def test_gated_cases_have_stable_order_and_keep_every_mutation():
+    cmds = [SimpleNamespace(qualified_name=name)
+            for name in ("trade delete", "account", "account risk")]
+    assert [c.qualified_name for c in _gated(cmds)] == ["account risk", "trade delete"]
+    assert _gated(reversed(cmds)) == _gated(cmds)
 
 
 def test_the_expected_commands_are_gated():
