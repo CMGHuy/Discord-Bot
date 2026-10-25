@@ -54,7 +54,7 @@ The partner asked for "a better, more professional and clean design" of the whol
 | text | `#e6e8eb` |
 | text secondary | `#c9d1d9` |
 | text muted | `#9aa4b2` |
-| text faint | `#6b7280` |
+| faint (`--text-faint`, rules and dividers only, never text: see correction 13) | `#6b7280` |
 | accent (interactive only) | `#6ea8fe` |
 | pos | `#3fb68b` |
 | neg | `#e5534b` |
@@ -187,7 +187,7 @@ Every phase ships its own unit tests, test-first:
 - `sb-page`: each slot present/absent, actions slot, destructive actions open the confirm dialog.
 - Workspaces: each rebuilt route's existing spec kept green; the regrouping (panels present on System, absent on Risk); `workspace-consistency.spec.ts` extended to assert every route uses `sb-page`.
 - Charts: chart palette spec, `test_chart_theme.py` with the new THEME.
-- Every function stays under complexity 15 (`complexity_gate.py`).
+- Every function stays under complexity 15. `complexity_gate.py` measures the Python side (`chart_style.py`). TypeScript functions are held to the same limit by `task-reviewer` (correction 16).
 
 ## Risks
 
@@ -197,7 +197,7 @@ Every phase ships its own unit tests, test-first:
 
 ## Rollback
 
-The UI ships as one image. Rolling back means redeploying the previous image tag; no data migrates. The orphaned `shell.sidebar` key is read again by the old shell. The new `ui.density` (localStorage) and `?tab=providers` (unknown tab: falls back to Scan) are ignored by it. Discord chart images return to the old palette with the bot image; `STYLE_VERSION` rows are append-only, so a rollback never needs a test edit. There is no chart cache to purge: alert images are rendered per alert.
+The UI ships as one image. Rolling back means redeploying the previous image tag; no data migrates. The orphaned `shell.sidebar` key is read again by the old shell. The new `ui.density` (localStorage) and `?tab=providers` (unknown tab: falls back to the default, Settings) are ignored by it. Discord chart images return to the old palette with the bot image; `STYLE_VERSION` rows are append-only, so a rollback never needs a test edit. The chart cache (`cache.py`) folds `STYLE_VERSION` into its keys, so the bump invalidates old images by itself and a rollback reads the old keys again. No manual purge either way.
 
 ## Parallelisation
 
@@ -230,3 +230,26 @@ Run 2026-10-25 on `0889f13f` (staff-engineer on opus, financial-advisor on sonne
 - financial-advisor 6: killswitch looks like housekeeping; phone reach; state -- applied (`danger` vs `danger-quiet`, killswitch state chip in top bar on all devices, §2/§3/§4).
 - financial-advisor 7: staleness leaves Risk -- applied (freshness chip always visible, phone included, §3).
 - financial-advisor 8: concentration on Risk only -- applied (stated in §5.1, Dashboard links to it).
+
+## Spec corrections (from the plan brief, 2026-10-25)
+
+The plan-briefer (`.superpowers/briefs/2026-10-25-v195-graphite-frontend-redesign.md`, § Traps and the per-file sections) found these gaps between the spec and the code. Each one is resolved here, and **this section wins over the body where they differ**.
+
+1. **Search icon.** `search` is absent from `ICON_NAMES`. Phase 3 adds it (top-bar trigger, phone search icon).
+2. **Dashboard performance order.** `trading-performance.ts` lists Win rate before Expectancy today. Phase 5 reorders it to ExpR first (§5.2 rule).
+3. **Scan health data source.** The moved computeds read the `GET /risk` payload (`scan_health`). `SystemStore` gains a read of the **existing** `api.risk()` for them, so there is no new endpoint and `RiskStore` stops exposing them.
+4. **System default tab stays Settings** (route, component fallback, `goToTab`), because Settings holds unsaved-draft state and changing the landing tab would surprise. The tab *order* is Scan · Providers · Settings · Logs. An unknown `?tab=` falls back to Settings.
+5. **True minus everywhere.** Only `signed()` prints U+2212 today. `pct()`, `money()` and `rMultiple()` switch to the true minus for negatives, with format specs to match. `−$212` in §1.1 is illustrative: `money()` keeps its existing unit suffix form.
+6. **Button variants.** Today's `danger` already has the quiet, bordered look. Every existing `variant="danger"` call site is renamed to `danger-quiet` with no visual change; `danger` becomes the new solid fill, used by the killswitch only.
+7. **One pager.** `data-table.ts` renders a top pager (`showHeaderPager`) and a bottom one. The top pager is deleted, and the spec asserting two pagers is updated to assert one, at the bottom.
+8. **Tablet collapse reuses what exists** (`inlineFrom`, `demotedColumns`, the row expansion). On Trades, `stop_loss` and `tier` lose `inlineFrom 'lg'` and always show. `TradeRow` has no risk-$ field, so risk $ is required in the never-collapse set only where the row already carries it (positions and plans). There is no new field and no new computation.
+9. **One `<h1>`.** Today the shell top bar owns `<h1 class="page-title">`, `route-focus.ts` focuses `.workspace h1`, and `workspace-consistency.spec` bans `<h1` in workspace sources. After v195 the breadcrumb is not a heading, and `sb-page` (in `ui/`, so the ban still holds) renders the page's single `<h1>`. `route-focus.ts` targets it.
+10. **Rail labels.** `sb-hint` is a glyph `<button>` and cannot nest in an `<a>`. The rail uses a new `Hint` label mode: a sibling popover anchored to the link, opened by the link's hover and focus, with no extra tab stop.
+11. **Naming collisions.** `Density = 'compact'|'full'` already exists in `data-table.types.ts` (column sets) and stays. The new row-height axis is the TS type `RowDensity` (`'dense'|'comfortable'`) on the attribute `data-density`. `.register-instrument` sets `--register-figure` to 13px; it rises to 14px so order figures meet the §1.4 floor.
+12. **More pinning specs move with Phase 1–2:** `primitives.spec` (the index.html `#070b14` allowlist, G3 shadows, `.sb-lift` markers), `hit-area.spec`, `register.spec`, `breakpoint-guard.spec` and `chart-palette.spec`. `tokens.spec`'s 11px floor rises to 12px to match the micro/chip step.
+13. **`--text-faint` is not a text colour.** `contrast.spec` treats it as a rule/divider colour and requires that wording in `tokens.css`. That stays. Micro labels and captions use `--text-muted` (`#9aa4b2`, which passes AA on every surface), and `#6b7280` is used only for rules, dividers and disabled glyphs.
+14. **Python chart pins.** `STYLE_PINS` is append-only and only its last row is asserted. Moving `ENTRY_COLOR` to `accent` also changes its `COLOUR_CONSTANTS` row in `test_chart_theme.py`. Chart-cache keys include `STYLE_VERSION` (`cache.py`), as noted in Rollback.
+15. **Touch devices ≥ 1024px.** The touch tokens (`--row-h` etc.) already switch at `max-width: 1023px`. A coarse-pointer device wider than that (a tablet in landscape) would otherwise get dense rows, so the touch rules also apply under `(pointer: coarse)` at any width. This widens protection and lowers no gate.
+16. **Complexity gate scope.** `complexity_gate.py` measures Python only. TypeScript functions are held under 15 by `task-reviewer`, and split by the same rules (`code-complexity.md`).
+
+Post-v194 line numbers in the brief (`hint.ts`, `layout.ts`, `metric-card.ts`, `stat-tile.ts`, `layout-audit-lib.mjs`) are pre-v194. Every task touching those files re-reads them after v194 merges.
