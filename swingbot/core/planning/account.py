@@ -758,6 +758,9 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     # The 2% ceiling binds last, in both modes, and on the RETURNED figure.
     raw_shares, ceiling_capped = _cap_to_risk_ceiling(raw_shares, stop_distance, balance)
     capped |= ceiling_capped
+    if not math.isfinite(raw_shares):
+        log.warning("sizing: ticker=%s share count %r is not finite; alert left unsized", ticker or "?", raw_shares)
+        return None
     basis, shares = _settle_shares(raw_shares, stop_distance, balance)
 
     # Always the REAL figures for the final (possibly capped) share count --
@@ -765,9 +768,6 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     # this trade would actually do to the account.
     position_value = basis * entry
     risk_amount = basis * stop_distance
-    if not math.isfinite(shares):
-        log.warning("sizing: ticker=%s share count %r is not finite; alert left unsized", ticker or "?", shares)
-        return None
 
     result = {
         "shares":           shares,

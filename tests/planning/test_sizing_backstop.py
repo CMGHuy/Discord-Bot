@@ -182,10 +182,18 @@ def test_overflowing_stop_distance_is_rejected_and_named(caplog):
     assert "stop_distance=inf" in msg and "ticker=AAPL" in msg
 
 
-def test_non_finite_final_shares_are_rejected_and_warned(caplog):
-    assert _size(caplog, entry=1e-308, stop=0.0, balance=1e308) is None
+@pytest.mark.parametrize("balance", [10_000.0, 1e308])
+def test_non_finite_final_shares_are_rejected_and_warned(caplog, balance):
+    assert _size(caplog, entry=1e-308, stop=0.0, balance=balance) is None
     [msg] = _warnings(caplog)
     assert "share count inf" in msg and "ticker=AAPL" in msg
+
+
+def test_finite_position_cap_rescues_overflowing_raw_shares(caplog):
+    out = _size(caplog, entry=1e-308, stop=0.0, max_position_value_absolute=1e-307)
+    assert out["shares"] == 10.0
+    assert out["capped"] is True
+    assert _warnings(caplog) == []
 
 
 @pytest.mark.parametrize("cfg,entry", [({"balance": 0.0}, 100.0), ({}, 0.0)])
