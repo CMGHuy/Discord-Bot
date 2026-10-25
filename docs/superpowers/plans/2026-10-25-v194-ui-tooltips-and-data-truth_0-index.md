@@ -323,7 +323,7 @@ code reading, 2026-10-25):
 | 2b | `2026-10-25-v194-ui-tooltips-and-data-truth_2b-fx-conversion.md` | V194-6b..V194-6c | B7 server-side conversion seam; currency label and missing-rate caveat |
 | 3 | `2026-10-25-v194-ui-tooltips-and-data-truth_3-risk-format-and-sectors.md` | V194-7..V194-9 | B4/B5 formatters; B6 backend `unmapped_count`; B6 banner |
 | 4 | `2026-10-25-v194-ui-tooltips-and-data-truth_4-metric-basis-and-legs.md` | V194-10..V194-12 | B8 backend money drawdown; B8 tiles; B3 leg label and `leg_exit_reason` |
-| 5 | `2026-10-25-v194-ui-tooltips-and-data-truth_5-leg-surfaces-and-titles.md` | V194-13..V194-15 | B3 Trades/Dashboard surfaces; A3 scanner, allow-list, conversions |
+| 5 | `2026-10-25-v194-ui-tooltips-and-data-truth_5-leg-surfaces-and-titles.md` | — | B3 Trades/Dashboard surfaces; A3 scanner, allow-list, conversions |
 | 6 | `2026-10-25-v194-ui-tooltips-and-data-truth_6-content-audit-and-release.md` | V194-16..V194-17 | A4 content audit; ui-design checklist names the `hint` check; full suite, replica layout audit, merge |
 
 ## Task ledger
