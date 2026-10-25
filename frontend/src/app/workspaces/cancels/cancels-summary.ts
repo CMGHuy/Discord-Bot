@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import { CancelFigure, CancelOutcome, CancelPrecision } from '../../api/models';
 import { CancelCardKey, CancelFilter, CancelSplit } from '../../stores/cancels.store';
+import { Button } from '../../ui/button';
 import { Panel } from '../../ui/layout';
 import { ciText, figureText, rText } from './cancels.helpers';
 
@@ -30,7 +31,7 @@ interface SplitGroup { dim: CancelSplit['dim']; title: string; rows: SplitRow[] 
 @Component({
   selector: 'sb-cancels-summary',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, NgTemplateOutlet],
+  imports: [Panel, Button, NgTemplateOutlet],
   template: `
     <ng-template #mark let-f>
       @if (f.small_n) {
@@ -100,7 +101,7 @@ interface SplitGroup { dim: CancelSplit['dim']; title: string; rows: SplitRow[] 
     </sb-panel>
 
     <ng-template #cardTpl let-c>
-      <button type="button" class="card" [attr.data-card]="c.key" [attr.aria-pressed]="filter().card === c.key" (click)="card.emit(c.key)">
+      <button sb-button type="button" variant="ghost" class="card" [attr.data-card]="c.key" [attr.aria-pressed]="filter().card === c.key" (click)="card.emit(c.key)">
         <span class="title">{{ c.title }}</span>
         <span class="num">{{ figureText(cardFig(c.key)) }}</span>
         <span class="n">N {{ cardFig(c.key).n }}</span>
@@ -118,7 +119,7 @@ interface SplitGroup { dim: CancelSplit['dim']; title: string; rows: SplitRow[] 
         <ng-container *ngTemplateOutlet="mark; context: { $implicit: active() }" />
         <div class="counts-row">
           @for (o of outcomes; track o) {
-            <button type="button" class="count" [attr.data-outcome]="o" [attr.aria-pressed]="filter().outcome === o" (click)="outcome.emit(o)">
+            <button sb-button type="button" variant="ghost" class="count" [attr.data-outcome]="o" [attr.aria-pressed]="filter().outcome === o" (click)="outcome.emit(o)">
               <span class="word">{{ words()[o] }}</span>&ngsp;<span class="num">{{ active().counts[o] }}</span>&ngsp;<span class="r num">{{ countR(o, active()) }}</span>
             </button>
           }
@@ -133,7 +134,7 @@ interface SplitGroup { dim: CancelSplit['dim']; title: string; rows: SplitRow[] 
           <section class="split-group">
             <p class="group-title">{{ g.title }}</p>
             @for (r of g.rows; track r.key) {
-              <button type="button" class="split-row" [attr.data-split]="g.dim + ':' + r.key" [attr.aria-pressed]="isSplit(g.dim, r.key)" (click)="split.emit({ dim: g.dim, value: r.key })">
+              <button sb-button type="button" variant="ghost" class="split-row" [attr.data-split]="g.dim + ':' + r.key" [attr.aria-pressed]="isSplit(g.dim, r.key)" (click)="split.emit({ dim: g.dim, value: r.key })">
                 <span class="label">{{ r.label }}</span>
                 <span class="num">{{ figureText(r.figure) }}</span>
                 <span class="net num">net {{ rText(r.figure.net_r) }}</span>
@@ -155,8 +156,11 @@ interface SplitGroup { dim: CancelSplit['dim']; title: string; rows: SplitRow[] 
     .figure-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
     .value { font-size: var(--text-hero); line-height: 1.1; }
     .num { font-family: var(--font-num); }
+    /* sb-button ghost supplies the paint; layout, border and ink are set back
+       here so each stays one full-width, 44px touch target. */
     .card, .count, .split-row {
-      min-height: var(--control-h); display: grid; gap: var(--space-4); align-content: start;
+      min-height: var(--control-h); display: grid; gap: var(--space-4); align-content: start; justify-content: stretch;
+      width: 100%; font-weight: 400;
       padding: var(--space-8) var(--space-10); text-align: left; font: inherit; color: inherit;
       background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;
     }
