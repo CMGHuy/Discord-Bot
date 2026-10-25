@@ -38,6 +38,15 @@ Review is never weaker than the implementation: `task-reviewer` stays on
 dispatched by `/panel`) run at their role's model from `skills-tools.md`
 § Expert roles, never on haiku.
 
+## Plan-writer tier for prose parts
+
+The `Model:` stamps route implementers. The plan writers themselves run on
+`plan-writer`'s pinned `opus`, with one exception (v193): a part whose ledger
+rows are all docs, runs or release tasks -- every row's `Model:` is haiku or
+sonnet and no row's `Files created / modified` cell creates or modifies code
+(`.py`, `.ts`, `.html`, `.scss`) -- is dispatched with `model: sonnet`.
+`mode=index` always runs on opus.
+
 ## The escalation ladder
 
 This replaces the old rule "a task that fails review twice is implemented by

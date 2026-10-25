@@ -414,7 +414,10 @@ Record partner decisions in the index's `## Handoff` section as made, and commit
 the index, each part and partial files (`docs(vN): plan WIP`) as you go --
 progress lives in the repo, never in session memory;
 `python scripts/dev/plan_lint.py <index>` must print PASS before the plan is
-committed as finished), and
+committed as finished; `python scripts/dev/plan_lint.py --ledger <index>` must PASS
+before any part is dispatched, `python scripts/dev/plan_lint.py --fix-parts <index>`
+rebuilds the parts table before parts are committed, and a part whose rows
+are all docs, runs or release tasks runs its writer with `model: sonnet`), and
 `expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
 `BLOCKING`/`ADVISORY` findings or `CLEAN`; dispatched by `panel` one role at a
 time). Dispatch `task-implementer` at the plan task's `**Model:**` tier. When

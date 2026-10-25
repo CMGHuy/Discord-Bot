@@ -348,6 +348,24 @@ was split from was deleted outright rather than kept alongside the parts —
 recover it from git history if a session ever genuinely needs the pre-split
 version.
 
+**Parts are sized from measurements and spill themselves (v193).**
+`python scripts/dev/plan_lint.py --stats` reports median and p90 lines per
+task over the last five implemented plans; the index writer sizes parts at
+p90, and a part writer whose file would pass ~1400 lines opens
+`_<N>b-<slug>.md` itself (v189, v191 and v192 were re-split by hand). The
+index's `## Parts` table (`| Part | File | Tasks | Scope |`) is never
+hand-edited: `python scripts/dev/plan_lint.py --fix-parts <index>` rebuilds
+it from the files on disk and keeps each Scope cell by part label. The task
+ledger is
+`| Task | Title | Part | Model | Spec § | Files created / modified | Creates | Consumes |`,
+checked by `plan_lint.py --ledger <index>` before any part is written. The
+index ends `## Global Constraints` with `### Standard task close` and every
+task ends `Close: standard (test: <path>)`. Citing existing code by line
+range and lifting the shared close are not thinning -- every new function
+and test body stays in full; a task over ~400 lines is split, never
+compressed. From v194, `plan_lint.py` enforces the `Close:` line, the task
+ceiling and `Modify:` ranges.
+
 A spec over budget usually is not one spec. Check whether it is really two
 subjects sharing a document — `v22` and `v23` were separated during their own
 brainstorm for exactly this reason. Decompose first; split only what genuinely
