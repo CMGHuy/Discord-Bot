@@ -143,7 +143,7 @@ task. **Full suite once per plan, as its final task.** Specs and plans are
 committed on `main` **the moment written (each plan index/part once `plan_lint.py` passes), never left uncommitted**; branch only to implement. Run `/new-doc`; detail: `document-conventions.md`, `document-lifecycle.md`.
 **Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
 into one brief: `plan-writer` `mode=index`, then one (its **Goal** explains *why* and *what changes*: `document-conventions.md`)
-`mode=part <N>` per part, **at most 2 part writers at once**; each writer appends task by
+`mode=part <N>` per part on `model: sonnet` (index stays Opus), **at most 2 part writers at once**; each writer appends task by
 task to disk; `scripts/dev/plan_lint.py` must pass. **At most 2 plans in progress per session**; a plan cut off by
 tokens is resumed from its first missing task, never skipped or restarted.
 Progress lives in the repo (ledger, `## Handoff`, WIP commits), never in

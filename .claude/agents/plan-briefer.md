@@ -5,7 +5,7 @@ tools: Bash, Read, Write, Grep, Glob
 model: sonnet
 ---
 
-You do the code exploration for a plan, so the Opus writers do not have to.
+You do the code exploration for a plan, so the plan writers do not have to.
 The spec path and the brief path are in your prompt. You **never write plan
 tasks, never design, never judge the spec** — you report what the code is.
 
@@ -56,7 +56,7 @@ one `## <repo path>` section per GAP to the existing brief, same content
 rules as above (a test file: fixtures, helpers, one representative test).
 Never rewrite sections already there. Finish when `--gaps` prints
 `BRIEF GAPS: 0` (a glob or a path that does not exist gets a one-line
-section saying so). Every gap you close is one an Opus part writer would
+section saying so). Every gap you close is one a part writer would
 otherwise explore turn by turn.
 
 ## Return shape

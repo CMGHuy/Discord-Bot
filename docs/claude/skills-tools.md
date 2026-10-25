@@ -301,7 +301,7 @@ Serial, one at a time — except plan parts (§ Plan writing below). Opus
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
 | Propose hypotheses from a book autopsy through one generator role (via `/trade-scout`) | `scout` | sonnet |
 | Gather a plan's code context into one brief | `plan-briefer` | sonnet |
-| Draft a plan from an approved spec — index, then parts two at a time | `plan-writer` | opus |
+| Draft a plan from an approved spec — index, then parts two at a time | `plan-writer` | opus for `mode=index`, sonnet for `mode=part` |
 | Read-only production question | `prod-inspector` | haiku |
 | Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
 | Full or fast suite run | `test-runner` | sonnet |
@@ -343,7 +343,7 @@ in parts, two at a time, to disk as it goes:
    is a file a ledger row modifies that the brief never covered (the briefer
    ran before the ledger existed). Non-zero → dispatch `plan-briefer`
    `mode=top-up` with the GAP lines and the brief path before any part
-   writer. v194 had 45 gaps; its Opus part writers each spent ~25 turns of a
+   writer. v194 had 45 gaps; its part writers each spent ~25 turns of a
    growing context exploring them (~4M cached tokens per part).
    A briefer finding that changes scope (a spec assumption the code
    contradicts) is resolved with the partner and written into the spec
@@ -353,12 +353,12 @@ in parts, two at a time, to disk as it goes:
    spec, index and brief paths — **at most 2 part writers at once**: two in
    one message, the next pair only when both have returned (a part that
    returns `BLOCKED:` frees its slot). This is the standing exception to
-   serial dispatch, and it stops at two: four Opus writers at once drain the
+   serial dispatch, and it stops at two: four writers at once drain the
    5h window before any part is committed. A resume counts the same —
    incomplete parts are re-dispatched two at a time.
    Each part writer reads `python scripts/dev/plan_slice.py <index> <N>`
-   instead of the spec, the index and the brief. A part whose ledger rows are
-   all docs, runs or release tasks is dispatched with `model: sonnet`
+   instead of the spec, the index and the brief. Every part writer is dispatched with
+   `model: sonnet`; only the index runs on opus
    (`model-routing.md` § Plan-writer tier for prose parts). A writer whose
    file would pass ~1400 lines spills into `_<N>b-<slug>.md` itself.
    **Commit the index as soon as phase 1 returns**

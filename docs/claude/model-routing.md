@@ -41,11 +41,15 @@ dispatched by `/panel`) run at their role's model from `skills-tools.md`
 ## Plan-writer tier for prose parts
 
 The `Model:` stamps route implementers. The plan writers themselves run on
-`plan-writer`'s pinned `opus`, with one exception (v193): a part whose ledger
-rows are all docs, runs or release tasks -- every row's `Model:` is haiku or
-sonnet and no row's `Files created / modified` cell creates or modifies code
-(`.py`, `.ts`, `.html`, `.scss`) -- is dispatched with `model: sonnet`.
-`mode=index` always runs on opus.
+`plan-writer`'s pinned `opus` for `mode=index` only: the ledger fixes every
+cross-task contract and is where a spec gap is caught. Every `mode=part <N>`
+is dispatched with `model: sonnet` (since v194; docs, runs or release parts
+did so from v193): by then the ledger, the brief and `plan_slice.py` hold the
+decisions, and `plan_lint.py` catches the mechanical slips. Escalate one part
+to `model: opus` only when a Sonnet run returned `BLOCKED:` on a contract or
+left lint problems it could not fix; note the reason in the commit message.
+Compare the first Sonnet parts' lint results and rework against the Opus
+parts of the same plan before trusting the default.
 
 ## The escalation ladder
 
