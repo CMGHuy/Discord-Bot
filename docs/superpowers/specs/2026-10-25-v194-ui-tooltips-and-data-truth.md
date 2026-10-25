@@ -44,13 +44,22 @@ Added: the popover is clamped inside the viewport with an 8px margin (it flips a
 
 `.sb-lift` keeps its hover lift. No other overlay component changes in this spec.
 
-**Tests (`hint.spec.ts`):** opens on hover, focus and tap; pin survives mouseleave; Escape and outside pointer close; the popover element carries `popover` and is `:popover-open` when open; with a `transform` on an ancestor the popover's rect stays at trigger-bottom + 4px (the regression); viewport clamping at the right, left and bottom edges; empty projected content still renders a trigger with its label.
+Robustness rules (panel, staff-engineer):
+
+- **Feature detection.** When `HTMLElement.prototype.showPopover` is absent, the hint keeps today's `position: fixed` path, so an old browser loses only the clipped cases, never every hint.
+- **Guarded calls.** `showPopover()` is called only when the element is connected and not already open; `hidePopover()` only when open (both throw `InvalidStateError` otherwise on some engines).
+- **Host close.** A hint inside a modal `<dialog>` host (`sb-drawer`, `layout.ts:464`; `sb-confirm-dialog`, `confirm-dialog.ts`) hides when that dialog starts closing, not when it is removed — a pinned manual popover is not hidden by its ancestor dialog closing, so without this it would stay painted through the drawer's exit animation. B3 and B5 put hints in the drawer, so this case is real.
+- The `[hidden]` binding on `.pop` (`hint.ts:61`) is removed; the popover's own UA display rule replaces it.
+
+**Test environment.** jsdom (the unit-test DOM, `frontend/package.json`) has no Popover API and no layout. A popover polyfill (`showPopover` / `hidePopover` / `togglePopover` and the `:popover-open` state as a toggled attribute) goes into the **global** test setup (`src/test-setup.ts`), not per spec as `testing/dialog-polyfill.ts` is, because every `sb-panel` heading renders an `sb-hint` and any page spec that hovers it would otherwise throw.
+
+**Tests (`hint.spec.ts`, behaviour only):** opens on hover, focus and tap; pin survives mouseleave; Escape and outside pointer close; the popover element carries `popover` and is shown/hidden through the API when open changes; no double show or hide; the fallback path when the API is absent; a hint in a closing dialog host hides. **Geometry** (the ancestor-transform regression and viewport clamping) cannot be measured in jsdom and is proven by A2's browser check, not asserted in unit tests.
 
 ## A2. Layout audit: `hint` check
 
-`frontend/scripts/layout-audit-lib.mjs` gains an eighth check, `hint`, added to `CHECKS`. On every route and tab, at every width, the audit opens each visible `sb-hint` trigger (hover at 1440; tap at 390 and 768) and fails when the opened popover is not (a) inside the viewport and (b) the topmost element at both its centre and its top-left + 8px. Findings name the route, width and trigger `aria-label`. Allow-list rules are unchanged (a `hint` finding is fixed, never allowed). The probe used for this spec's evidence is the reference behaviour.
+`frontend/scripts/layout-audit-lib.mjs` gains an eighth check, `hint`, added to `CHECKS`. On every route and tab, at every width, the audit opens each visible `sb-hint` trigger (hover at 1440; tap at 390 and 768) and fails when the opened popover is not (a) inside the viewport and (b) the topmost element at both its centre and its top-left + 8px. Findings name the route, width and trigger `aria-label`. Allow-list rules are unchanged (a `hint` finding is fixed, never allowed). The ad-hoc probe that produced this spec's evidence was never committed; **from this spec on, the `hint` check is the probe** — the post-deploy check below runs it, nothing else.
 
-**Tests:** the audit library's unit tests cover the new check's pass and fail decisions on a fixture page (one clipped popover, one visible).
+**Tests:** `layout-audit-lib.test.mjs` is the pure, browser-free half (`node --test`). The decision is a pure function, geometry in and verdict out, the way `vcenterGeometry` already is: popover rect, viewport size and the elements found at the sample points → pass or fail with a reason. Its cases: visible, clipped by an ancestor (topmost element not inside the popover), off-screen, zero-size. The existing `CHECKS` assertion grows to eight in the same task. The browser half is proven by the replica audit run under Verification.
 
 ## A3. Explanatory `title` → `sb-hint`
 
@@ -62,9 +71,19 @@ Every `title=` / `[title]=` in `frontend/src/app` is classified once, in the pla
 
 A new spec test (`frontend/src/app/ui/title-usage.spec.ts`) scans the source and fails on any `title` binding not in an allow-list of echo and control-name sites, so new explanation cannot be hidden in a `title` again. The allow-list lives beside the test with one line per site saying which class it is.
 
+Copy rules for converted text (panel, financial-advisor): a win-rate hint never stands alone — it names ExpR and N beside it (`edge-priorities.md`); no hint reads as a recommendation ("take", "safe", "buy").
+
 ## A4. Content audit: every hint and chart tooltip says what the number is
 
-For each `sb-hint` text and each chart tooltip (`chart-tooltip.ts` consumers), the plan records the claim it makes and the code that computes the figure, then fixes whichever is wrong. Known findings going in (B7, B8 below) are fixed under B; A4 covers the rest. Specifically checked: the population (all closed, range-scoped, open book), the sample size it names, the unit (R, %, account currency), and that an "all-time" hint is not on a range-scoped figure or vice versa. The audit's record is a table in the plan's final task notes, one row per hint: route, label, verdict (`correct` / `fixed text` / `fixed figure`).
+For each `sb-hint` text and each chart tooltip (`chart-tooltip.ts` consumers), the plan records the claim it makes and the code that computes the figure, then fixes whichever is wrong. Known findings going in (B7, B8 below) are fixed under B; A4 covers the rest. Specifically checked:
+
+- the population (all closed, range-scoped, open book; plans vs legs);
+- the sample size it names;
+- the unit (R, %, account currency), and for money that the values are **actually in the account currency**, not USD relabelled (instruments are USD-quoted);
+- that an "all-time" hint is not on a range-scoped figure or vice versa;
+- whether the figure is gross or net of commissions and slippage, pre-tax, and paper (simulated fills) — a performance figure states all three.
+
+The audit's record is a table in the plan's final task notes, one row per hint: route, label, verdict (`correct` / `caveat added` — figure right but a population, N or cost caveat was missing / `fixed text` / `fixed figure`).
 
 # Phase B — Figures and labels
 
@@ -90,15 +109,19 @@ Each item: the confirmed symptom, the acceptance rule, the test.
 
 **Symptom.** A partially exited trade lists as two rows with the same id prefix and different P&L (API: same `id`, `leg_index` 0 and 1). Data is correct; the table does not say which row is which.
 
-**Acceptance.** A leg row shows a leg label beside its id: `leg_index` 0 → "TP1", the last leg → "Runner" (intermediate legs "TP2", …). The existing icon on the leg row becomes an `sb-hint` explaining that one plan exited in parts. Applies wherever leg rows render (Trades table, its compact rows and drawer).
+**Acceptance.** A leg row shows **"Leg N of M"** beside its id — the vocabulary Calendar already uses (`calendar.ts:291`, `day-trade-card.ts:17`), so one trade is never named two ways. Not "TP1"/"Runner": `leg_index` follows the order legs realised (`dashboard.ts:983-987`), so leg 1 may be a stop-out and the last leg may exit at the stop or by timeout. Where the leg's recorded exit reason is available, it follows the label ("Leg 1 of 2 · target", "Leg 2 of 2 · stop"); where it is not, the label stands alone.
 
-**Tests.** Label mapping for 1, 2 and 3 legs; a single-leg trade shows no label.
+The existing icon on the leg row becomes an `sb-hint` that says: these rows are parts of **one plan**, each row's P&L is that part's share, and win rate and N count **plans, not legs**. The plan states, and tests, whether the Trades page's row total counts legs or plans, and the range label says which.
+
+Applies wherever leg rows render: Trades (table, compact rows, drawer), the Dashboard positions table (`dashboard.ts:708`, `:990-992`), and Calendar (already "Leg N of M"; it gets the same hint).
+
+**Tests.** Label for 1, 2 and 3 legs, with and without an exit reason; a single-leg trade shows no label; the hint text names plans-not-legs.
 
 ## B4. Fractional shares rounded to whole
 
 **Symptom.** `/api/v1/risk` `positions[].shares` = 2.72; Exposure by position shows 3.
 
-**Acceptance.** Shares render with up to 2 decimals, trailing zeros dropped (2.72, 3, 0.5), via one shared formatter used on Risk, trade detail and the row drawer. The column total uses the same formatter.
+**Acceptance.** Shares render with up to 2 decimals, trailing zeros dropped (2.72, 3, 0.5), via one shared formatter used on Risk, trade detail and the row drawer. The column total is the **sum of the unrounded values**, then formatted. The shares column's hint says the count is the paper book's size, computed unrounded under the 2% dollar-risk cap; a broker may fill whole shares or another fraction.
 
 **Tests.** Formatter cases: integer, one and two decimals, rounding at the third decimal, zero, null → em dash.
 
@@ -106,7 +129,7 @@ Each item: the confirmed symptom, the acceptance rule, the test.
 
 **Symptom.** Per-row `risk_pct` 0.002 renders "0.00%"; the column total renders "0.02" with no unit.
 
-**Acceptance.** One percentage formatter for heat, rows and totals: a non-zero value below 0.01 renders "<0.01%" with the exact value available in an `sb-hint` or the drawer; totals carry "%". Exact zero renders "0.00%".
+**Acceptance.** One percentage formatter for heat, rows and totals: a non-zero value below 0.01 renders "<0.01%" with the exact value available in an `sb-hint` or the drawer; totals carry "%". Exact zero renders "0.00%". A total is the sum of unrounded values, then formatted, so rows and total reconcile; when rounded rows visibly do not add up to the total, the total's hint says totals use unrounded values.
 
 **Tests.** Formatter: 0, 0.002, 0.01, 1.234, negative, null.
 
@@ -114,15 +137,21 @@ Each item: the confirmed symptom, the acceptance rule, the test.
 
 **Symptom.** `/api/v1/risk` `sector_heat: []` while 8 positions are open. `swingbot/core/edge/portfolio_state.py` builds it from `universe.sector_map(SCAN_UNIVERSE)` and swallows every exception into `{}`, so a missing map and a real zero are indistinguishable, and the page says "No sector exposure".
 
-**Acceptance.** (1) The cause is established read-only on production (`prod-inspector`) before any change. (2) The swallowed exceptions log at warning with the exception text. (3) The open tickers resolve to a sector, or the plan records why they cannot. (4) The API distinguishes "no sector data for N open positions" from "no exposure" (an added field, documented in the endpoint's response shape), and the panel renders the two differently.
+**Acceptance.**
 
-**Tests.** Backend: sector heat with a populated map, an empty map, and a map missing some tickers; the endpoint reports the unmapped count. Frontend: both empty states render their own text.
+1. The cause is established read-only on production (`prod-inspector`) before any change.
+2. The swallowed exceptions log at warning with the exception text.
+3. **The fix stays on the read side.** `universe.sector_map(SCAN_UNIVERSE)` and the universe data behind it also feed the walk-forward replay's sector cap (`swingbot/core/backtesting/backtest_wf.py:427,545`) and the weekly risk report (`swingbot/core/tracking/retrospective.py:305,762`). Changing that data changes backtest results, which this spec excludes. If the cause is missing universe data, this spec ships only (2) and (4) and records the cause; the data fix becomes its own spec, reviewed by quant-engineer.
+4. The API distinguishes "no sector data for N open positions" from "no exposure" through an added `unmapped_count` field. This is a response-shape change, not a stored record, so `schema-evolution.md` does not apply. It is recorded in the endpoint docstring (`swingbot/admin/api_v1/risk.py`, around 359–405) and the TypeScript interface (`frontend/src/app/api/models.ts`). The value is cached with `collect_portfolio_state` (`risk.py` `_cached`). Its other consumer, `!growth` (`swingbot/commands/growth.py`), is checked to still render.
+5. When sector data is missing, the panel shows a visible banner — "Sector concentration cannot be assessed: no sector data for N of M open positions" — never a reassuring zero, a blank grid or "No sector exposure".
+
+**Tests.** Backend: sector heat with a populated map, an empty map, and a map missing some tickers; the endpoint reports the unmapped count; `!growth` output is unchanged for a populated map. Frontend: the banner and the true-zero state render their own text.
 
 ## B7. Unit toggle shows "$" on a € account
 
 **Symptom.** Analytics' R / % / $ toggle shows "$"; the account currency is €.
 
-**Acceptance.** The money option's label is the account currency symbol from `connection.currency()` everywhere the toggle appears; its value key is unchanged so saved preferences survive.
+**Acceptance.** First, verify that the money values the toggle shows are in the account currency (converted from USD-quoted instruments), not USD figures. A "€" over USD-computed P&L would be worse than today's "$". If they are USD, the fix is the conversion (or a "$" label kept honestly), and the finding is recorded. Then the money option's label is the account currency symbol from `connection.currency()` everywhere the toggle appears, matching Calendar's existing use (`calendar.ts:494`). Its value key is unchanged, so saved preferences survive.
 
 **Tests.** Toggle renders €, $ and £ for the three currencies; the stored value is the same key.
 
@@ -130,19 +159,61 @@ Each item: the confirmed symptom, the acceptance rule, the test.
 
 **Symptom.** Risk shows Sharpe (R) −0.07 and Max drawdown (R) −123.17R; Analytics shows Sharpe −1.62 and Max drawdown −120.66R. Both are correct for different populations; only a 10px footnote says so.
 
-**Acceptance.** Each such tile's label names its basis (e.g. "Sharpe · per-trade R, all closed", "Sharpe · annualised, selected range") and carries an `sb-hint` with the definition, population and N. The footnote is removed once the labels carry it.
+**Acceptance.**
 
-**Tests.** Tile labels and hint text present on both pages.
+- **Basis in the label, mandatory on both pages.** Every Sharpe and max-drawdown tile on Risk (`risk.ts:755-756`, today "Sharpe (R)" / "Max drawdown (R)") and on Analytics names its basis in the label: "Sharpe · per-trade R, all closed" and "Sharpe · annualised, selected range". The two never read as the same quantity.
+- **Hint per tile.** Each tile carries an `sb-hint` stating the definition, the population, the closed-trade N (the tile's existing `sample`), and that the figure is **paper, gross of commissions and slippage, and pre-tax**, unless A4 finds the computation nets any of them.
+- **Max drawdown in money too.** Max drawdown shows an account-currency equivalent next to the R figure on both pages. Analytics already shows one under its tile; Risk gains it. If the plan finds the R-to-currency conversion not well defined for the all-closed population, it records why and shows the percent of account instead.
+- The footnote is removed once the labels carry it.
+
+**Tests.** Tile labels, the money equivalent, and hint text (including the paper / gross / pre-tax caveat) present on both pages.
 
 ## Verification
 
 - `testrun.py changed` while iterating; the plan's final task runs the full suite once.
 - The layout audit, including the new `hint` check, exits 0 at 390, 768 and 1440 against a local replica (`/replicate-prod-db`, built bundle, `.env` credentials) before merge.
-- After deploy, the probe is re-run against production: 0 hints not visible at all three widths.
+- After deploy, the layout audit's `hint` check is run against production at all three widths: 0 findings.
 
 ## Parallelisation
 
-- **A1 first, alone** — A2's check and A3's conversions both depend on a hint that can actually be seen.
-- **Then in parallel:** A2 (audit script) · A3 (title sweep) · B1 · B2 · B3 · B4+B5 (one shared formatter module, one group) · B6 (backend, independent of the frontend) · B7.
-- **B8 after A1** (it adds hints) and may run beside the group above.
-- **A4 last before the full suite** — it audits hint text, including those A3 and B8 add.
+Grouped by the files they edit, not only by topic (panel, staff-engineer):
+
+- **A1 first, alone.** Every later item either adds hints or checks them.
+- **Then in parallel, file-disjoint:**
+  - A2 (`frontend/scripts/` only);
+  - B1 (dashboard store and tabs);
+  - B2 (pagination and Trades store);
+  - B7 (Analytics toggle);
+  - **Risk group** — B4+B5 (the shared formatter), the B6 frontend banner and B8's tiles, sequential within the group because all three edit `workspaces/risk/risk.ts`;
+  - the B6 backend (`swingbot/`, independent of the frontend).
+- **B3 after B1.** Both touch `dashboard.ts`.
+- **A3 after B3, B8 and the Risk group.** A3 sweeps `title` sites across `frontend/src/app`. B3 converts the leg-row `partialOpenTitle` site (`dashboard.ts:988` and its twin in `trades.ts`), and B8 adds hints to the same tiles. Running A3 alongside them would make every branch edit its allow-list file at once.
+- **A4 last before the full suite.** It audits hint text, including the hints A3, B3 and B8 add.
+
+## Panel review
+
+Run 2026-10-25 on `2a0cc8bd`: staff-engineer (opus), financial-advisor (sonnet).
+
+**BLOCKING**
+
+- financial-advisor 1: B8 left pre-cost/pre-tax unlabelled and drawdown only in R -- applied (B8: paper/gross/pre-tax caveat in each hint; max drawdown in account currency, or percent of account with the reason recorded).
+
+**ADVISORY**
+
+- staff-engineer 1: jsdom has no Popover API and no layout -- applied (global polyfill in test-setup; geometry proven by A2, not unit tests).
+- staff-engineer 2: pinned popover outlives a closing dialog host; unguarded `showPopover`; `[hidden]` conflict -- applied (A1 robustness rules).
+- staff-engineer 3: the parallel group shares files (`risk.ts`, `dashboard.ts`, A3's allow-list) -- applied (file-grouped Parallelisation; A3 serialised).
+- staff-engineer 4: the B6 fix point feeds the backtest and retrospective -- applied (read-side only; a data fix becomes its own spec).
+- staff-engineer 5: B6 shape record unnamed; cache and `!growth` consumer -- applied (docstring + `models.ts` named, `!growth` checked).
+- staff-engineer 6: A2 test plan does not fit the pure `node --test` file -- applied (pure geometry decision function; `CHECKS` assertion updated).
+- staff-engineer 7: the probe is not committed -- applied (the `hint` check is the probe from now on).
+- staff-engineer 8: B3 misses the Dashboard and Calendar leg surfaces; TP1 assumption -- applied (all three surfaces; "Leg N of M" vocabulary).
+- staff-engineer 9: no fallback without the Popover API -- applied (feature detection keeps today's path).
+- financial-advisor 2: basis labels mandatory on both pages, N named -- applied (B8).
+- financial-advisor 3: TP1/Runner by `leg_index` is unsafe -- applied (B3: "Leg N of M" plus exit reason where recorded).
+- financial-advisor 4: leg hint must say plans-not-legs for win rate and N -- applied (B3).
+- financial-advisor 5: totals must reconcile with rounded rows -- applied (B4, B5: sum of unrounded values; shares hint).
+- financial-advisor 6: missing sector data must show a banner, not a reassuring zero -- applied (B6 item 5).
+- financial-advisor 7: verify money is truly in the account currency before relabelling -- applied (B7 verification first; A4 unit check).
+- financial-advisor 8: A4 needs gross/net/pre-tax/paper and a "caveat added" verdict -- applied (A4).
+- financial-advisor 9: win-rate hints never alone; no recommendation wording -- applied (A3 copy rules).
