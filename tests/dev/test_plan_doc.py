@@ -120,7 +120,7 @@ def test_symbol_name(token, want):
 
 
 def test_real_v193_index_ledger_resolves_against_its_spec():
-    index = ROOT / "docs/superpowers/plans/2026-10-25-v193-plan-writer-pipeline_0-index.md"
+    index = ROOT / "docs/superpowers/plans/implemented/2026-10-25-v193-plan-writer-pipeline_0-index.md"
     text = index.read_text(encoding="utf-8")
     rows = plan_doc.ledger_rows(text)
     assert [r[plan_doc.COL_TASK] for r in rows][:2] == ["V193-1", "V193-2"]

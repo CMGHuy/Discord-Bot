@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time: `grep -n "^### Task V193-6:" -A 300 <this file>`.
 
-**Spec:** [2026-10-25-v193-plan-writer-pipeline.md](../specs/2026-10-25-v193-plan-writer-pipeline.md)
+**Spec:** [2026-10-25-v193-plan-writer-pipeline.md](../../specs/implemented/2026-10-25-v193-plan-writer-pipeline.md)
 **Index:** [2026-10-25-v193-plan-writer-pipeline_0-index.md](2026-10-25-v193-plan-writer-pipeline_0-index.md) — Global Constraints, `### Standard task close`, Review Focus, Parallelisation and the task ledger live there; every task below implicitly includes them.
 
 Tasks V193-5..V193-9. Every task runs in the worktree

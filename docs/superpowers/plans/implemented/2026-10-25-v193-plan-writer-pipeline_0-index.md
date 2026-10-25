@@ -5,7 +5,7 @@
 **Bump:** none
 **Edge:** none (integrity) — faster, cheaper, visibly progressing plan writing; no signal, gate, stop, size or badge changes.
 **Screen:** exempt (integrity)
-**Spec:** [2026-10-25-v193-plan-writer-pipeline.md](../specs/2026-10-25-v193-plan-writer-pipeline.md)
+**Spec:** [2026-10-25-v193-plan-writer-pipeline.md](../../specs/implemented/2026-10-25-v193-plan-writer-pipeline.md)
 **Brief:** `.superpowers/briefs/2026-10-25-v193-plan-writer-pipeline.md`
 **Worktree:** every task runs in `.claude/worktrees/2026-10-25-v193-plan-writer-pipeline` (branch of the same name, created in V193-1's first step; `docs/claude/document-lifecycle.md`). The merge to `main` is V193-9's last step.
 

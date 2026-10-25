@@ -4,7 +4,7 @@
 
 **Bump:** none
 **Edge:** none (integrity) — see the index.
-**Spec:** [2026-10-25-v193-plan-writer-pipeline.md](../specs/2026-10-25-v193-plan-writer-pipeline.md)
+**Spec:** [2026-10-25-v193-plan-writer-pipeline.md](../../specs/implemented/2026-10-25-v193-plan-writer-pipeline.md)
 **Index:** [2026-10-25-v193-plan-writer-pipeline_0-index.md](2026-10-25-v193-plan-writer-pipeline_0-index.md) — Goal, Architecture (ledger shape), Global Constraints, `### Standard task close`, Review Focus, Parallelisation and the task ledger live there and bind every task below. **Never read a part whole:** `grep -n "^### Task V193-3:" -A 300 <this file>`.
 
 **Scope of this part (V193-1..V193-4):** the worktree; `scripts/dev/plan_doc.py`, the one markdown/ledger parser `plan_lint.py` and `plan_slice.py` share; the per-task lint checks (`Close:` line, task ceiling, `Modify:` range) gated to plans numbered 194 and up; `plan_lint.py --stats` with the table-driven `COMMANDS` dispatch; `plan_lint.py --fix-parts <index>`.
