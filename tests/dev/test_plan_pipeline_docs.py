@@ -47,14 +47,13 @@ CONTROLLER_DOCS = {
     "docs/claude/skills-tools.md": (
         "plan_lint.py --ledger <index>", "LEDGER CHECK: PASS",
         "plan_lint.py --fix-parts <index>", "scripts/dev/plan_slice.py",
-        "model: sonnet", "_<N>b-<slug>.md", "### Standard task close"),
+        "_<N>b-<slug>.md", "### Standard task close"),
     "docs/claude/document-conventions.md": (
         "plan_lint.py --stats", "plan_lint.py --fix-parts <index>", "Spec §",
         "| Task | Title | Part | Model | Spec § | Files created / modified | Creates | Consumes |",
         "### Standard task close", "_<N>b-<slug>.md", "~400"),
-    "docs/claude/model-routing.md": ("## Plan-writer tier for prose parts", "model: sonnet",
-                                     "docs, runs or release"),
-    "AGENTS.md": ("--fix-parts <index>", "model: sonnet", "--ledger <index>` must PASS"),
+    "docs/claude/model-routing.md": ("## Plan-writer tier", "never on `model: sonnet`"),
+    "AGENTS.md": ("--fix-parts <index>", "never `model: sonnet`", "--ledger <index>` must PASS"),
 }
 
 

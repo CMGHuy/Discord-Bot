@@ -411,7 +411,7 @@ partner decisions in the index's `## Handoff`; commit the index, parts and parti
 `plan_lint.py <index>` must PASS before commit,
 `plan_lint.py --ledger <index>` must PASS before parts are dispatched,
 `plan_lint.py --fix-parts <index>` rebuilds the parts table; every
-`mode=part` runs with `model: sonnet`, `mode=index` on opus), and
+plan writers run on opus, never `model: sonnet`), and
 `expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
 `BLOCKING`/`ADVISORY` findings or `CLEAN`; dispatched by `panel` one role at a
 time). Dispatch `task-implementer` at the plan task's `**Model:**` tier. When

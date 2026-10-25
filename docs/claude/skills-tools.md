@@ -301,7 +301,7 @@ Serial, one at a time — except plan parts (§ Plan writing below). Opus
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
 | Propose hypotheses from a book autopsy through one generator role (via `/trade-scout`) | `scout` | sonnet |
 | Gather a plan's code context into one brief | `plan-briefer` | sonnet |
-| Draft a plan from an approved spec — index, then parts two at a time | `plan-writer` | opus for `mode=index`, sonnet for `mode=part` |
+| Draft a plan from an approved spec — index, then parts two at a time | `plan-writer` | opus |
 | Read-only production question | `prod-inspector` | haiku |
 | Backtest / grid / fold run > ~2 min | `backtest-runner` | sonnet |
 | Full or fast suite run | `test-runner` | sonnet |
@@ -357,9 +357,8 @@ in parts, two at a time, to disk as it goes:
    5h window before any part is committed. A resume counts the same —
    incomplete parts are re-dispatched two at a time.
    Each part writer reads `python scripts/dev/plan_slice.py <index> <N>`
-   instead of the spec, the index and the brief. Every part writer is dispatched with
-   `model: sonnet`; only the index runs on opus
-   (`model-routing.md` § Plan-writer tier for prose parts). A writer whose
+   instead of the spec, the index and the brief. Every part writer runs on opus, as the
+   index does (`model-routing.md` § Plan-writer tier). A writer whose
    file would pass ~1400 lines spills into `_<N>b-<slug>.md` itself.
    **Commit the index as soon as phase 1 returns**
    (`docs(vN): plan index -- parts pending`), and each part as it returns, so
