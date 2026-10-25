@@ -32,11 +32,16 @@ Every choice below is ranked by total tokens spent (writer output + context re-r
 
 ## D. Write-as-you-go granularity (agreed 2026-10-25)
 
-**Adaptive append unit:**
+**One append per task — no extra writes** (revised 2026-10-25; supersedes the adaptive per-step rule, which cost extra context re-reads per write).
 
-1. A task estimated **≤ ~200 lines** is appended in one call, as today.
-2. A longer task is appended **per step**: heading + `**Model:**` + `**Files:**` first, then each step (failing test, run, implementation, run, commit) as its own append.
-3. `mode=index`: sections are appended as each is decided; the ledger is appended in one call once complete (it is short, and rows depend on each other).
+Visibility comes from making each write land sooner and cost less, not from writing more often:
+
+1. **One append per task**, in id order, as today — the cheapest write count.
+2. **Shorter tasks land sooner:** B's ~400-line ceiling and dedupe+cite roughly halve the time between appends; the 500–700-line gaps are gone.
+3. **Cheaper writes:** slice-only context (C) cuts each write's re-read from ~60–100k to ~20–30k tokens.
+4. **Outline first:** the index and its ledger are written before any task, so the plan's full shape is on disk at once.
+
+Net: fewer tokens than today, steady file growth.
 
 ## B. Shorter tasks — dedupe + cite (agreed 2026-10-25)
 
@@ -73,8 +78,3 @@ Unit tests for `plan_lint.py --stats/--fix-parts/--ledger`, the new lint checks 
 
 Line-level streaming; contract-level (code-free) tasks; changing the 2-writer / 2-plan caps; rewriting existing plans.
 
-## D rationale
-
-Why not per step always: each append re-reads the writer's whole context (60–100k tokens); per-step on every task adds ~8–10M cached-input tokens to a 26-task plan. Adaptive keeps the long, previously invisible tasks moving at a fraction of that. Slice-only context (C/A below) makes each extra append cheaper still.
-
-Resume rule follows the unit: a task cut off mid-step is detected by its missing closing commit step; the writer deletes only the trailing incomplete task and re-appends it (unchanged from today).
