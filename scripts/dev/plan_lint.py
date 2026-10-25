@@ -3,6 +3,7 @@ scripts plan writers used to improvise (see docs/claude/skills-tools.md,
 Plan writing).
 
     python scripts/dev/plan_lint.py docs/superpowers/plans/<any file of the plan>
+    python scripts/dev/plan_lint.py --stats [dir]   # median/p90 lines per task, newest 5 plans
 
 Checks the whole plan (a split plan's index and every part):
   * header: **Bump:**, **Edge:** (one of the four classes), **Spec:**
@@ -19,9 +20,12 @@ Prints one line per problem and a verdict; exit code 1 when anything failed.
 """
 from __future__ import annotations
 
+import math
 import re
+import statistics
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 MAX_LINES = 1500
@@ -36,6 +40,12 @@ NEW_RULES_FROM = 194
 TASK_CEILING = 400
 CLOSE_RE = re.compile(r"^\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?)?(?:\*\*)?Close:(?:\*\*)?\s*\S")
 MODIFY_RANGE_RE = re.compile(r"^- Modify:\s*`([^`:]+):(\d+)(?:-(\d+))?")
+STATS_DIR = Path("docs/superpowers/plans/implemented")
+PART_BUDGET = 1400
+DATED_PLAN_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-v(\d+)-")
+USAGE = """usage:
+  python scripts/dev/plan_lint.py <any file of a plan>   lint the whole plan
+  python scripts/dev/plan_lint.py --stats [dir]          lines per task, newest 5 plans in dir (default plans/implemented)"""
 
 
 def plan_files(any_file: Path) -> list[Path]:
@@ -199,17 +209,82 @@ def lint(any_file: Path) -> list[str]:
     return problems
 
 
-def main(argv: list[str]) -> int:
-    if len(argv) != 2 or not Path(argv[1]).is_file():
-        print(__doc__.strip().splitlines()[3].strip())
+def task_line_counts(files: list[Path]) -> list[int]:
+    counts = []
+    for path in files:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        counts += [end - start for _, start, end in task_spans(lines)]
+    return counts
+
+
+def _plan_key(files: list[Path]) -> tuple[str, int]:
+    m = DATED_PLAN_RE.match(files[0].name)
+    return m.group(1), int(m.group(2))
+
+
+def recent_plans(directory: Path, n: int = 5) -> list[list[Path]]:
+    """The newest n dated plans under directory that have tasks, newest first."""
+    groups: dict[str, list[Path]] = {}
+    for path in directory.glob("*.md"):
+        if DATED_PLAN_RE.match(path.name):
+            base = PART_SUFFIX_RE.sub("", path.name).removesuffix(".md")
+            groups.setdefault(base, []).append(path)
+    ordered = sorted((sorted(files) for files in groups.values()), key=_plan_key, reverse=True)
+    picked: list[list[Path]] = []
+    for files in ordered:
+        if len(picked) == n:
+            break
+        if task_line_counts(files):
+            picked.append(files)
+    return picked
+
+
+def plan_stats(directory: Path, n: int = 5) -> dict[str, int]:
+    plans = recent_plans(directory, n)
+    counts = sorted(c for files in plans for c in task_line_counts(files))
+    if not counts:
+        return {"plans": 0, "tasks": 0, "median": 0, "p90": 0, "per_part": 0}
+    p90 = counts[math.ceil(0.9 * len(counts)) - 1]
+    return {"plans": len(plans), "tasks": len(counts), "median": int(statistics.median(counts)),
+            "p90": p90, "per_part": max(1, PART_BUDGET // p90)}
+
+
+def cmd_stats(args: list[str]) -> int:
+    directory = Path(args[0]) if args else STATS_DIR
+    if len(args) > 1 or not directory.is_dir():
+        print(USAGE)
         return 2
-    problems = lint(Path(argv[1]))
+    s = plan_stats(directory)
+    if not s["tasks"]:
+        print(f"PLAN STATS: no dated plan with ### Task headings under {directory}")
+        return 1
+    print(f"PLAN STATS: {s['plans']} plan(s), {s['tasks']} task(s) -- median {s['median']}, "
+          f"p90 {s['p90']} lines/task; {s['per_part']} task(s) per part at p90 (budget {PART_BUDGET})")
+    return 0
+
+
+def cmd_lint(args: list[str]) -> int:
+    if len(args) != 1 or not Path(args[0]).is_file():
+        print(USAGE)
+        return 2
+    problems = lint(Path(args[0]))
     for p in problems:
         print(f"  {p}")
-    files = plan_files(Path(argv[1]))
+    files = plan_files(Path(args[0]))
     verdict = "FAIL" if problems else "PASS"
     print(f"PLAN LINT: {verdict}  {len(files)} file(s), {len(problems)} problem(s)")
     return 1 if problems else 0
+
+
+COMMANDS: dict[str, Callable[[list[str]], int]] = {
+    "--stats": cmd_stats,
+}
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) > 1 and argv[1] in COMMANDS:
+        return COMMANDS[argv[1]](argv[2:])
+    return cmd_lint(argv[1:])
 
 
 if __name__ == "__main__":
