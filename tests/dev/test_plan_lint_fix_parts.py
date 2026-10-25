@@ -83,6 +83,24 @@ def test_fix_parts_numeric_order_and_part_without_tasks(tmp_path):
     assert two < ten
 
 
+def test_fix_parts_keeps_rows_of_parts_not_written_yet(tmp_path):
+    planned = ("## Parts\n\n| Part | File | Tasks | Scope |\n|---|---|---|---|\n"
+               f"| 1 | `{BASE}_1-first.md` | V900-1..V900-2 | alpha |\n"
+               f"| 2 | `{BASE}_2-second.md` | V900-4..V900-5 | gamma |\n"
+               f"| 10 | `{BASE}_10-tenth.md` | V900-9 | delta |\n\n")
+    index = _plan(tmp_path, BEFORE + planned + AFTER, {"1-first": _task("V900-1"),
+                                                       "1b-spill-over": _task("V900-3")})
+    code, out = _run("--fix-parts", str(index))
+    assert code == 0, out
+    assert f"PARTS TABLE: 4 part(s) in {index.name}" in out
+    want = ("## Parts\n\n| Part | File | Tasks | Scope |\n|---|---|---|---|\n"
+            f"| 1 | `{BASE}_1-first.md` | V900-1 | alpha |\n"
+            f"| 1b | `{BASE}_1b-spill-over.md` | V900-3 | spill over |\n"
+            f"| 2 | `{BASE}_2-second.md` | V900-4..V900-5 | gamma |\n"
+            f"| 10 | `{BASE}_10-tenth.md` | V900-9 | delta |\n\n")
+    assert index.read_text(encoding="utf-8") == BEFORE + want + AFTER
+
+
 def test_fix_parts_without_parts_section(tmp_path):
     index = _plan(tmp_path, BEFORE + AFTER, SPLIT)
     code, out = _run("--fix-parts", str(index))

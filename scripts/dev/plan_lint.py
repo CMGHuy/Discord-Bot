@@ -290,22 +290,31 @@ def _task_range(path: Path) -> str:
     return ids[0] if len(ids) == 1 else f"{ids[0]}..{ids[-1]}"
 
 
-def parts_table(index: Path, old_scopes: dict[str, str]) -> list[str]:
-    rows = ["| Part | File | Tasks | Scope |", "|---|---|---|---|"]
+def _label_key(label: str) -> tuple[int, str]:
+    m = re.fullmatch(r"(\d+)([a-z]?)", label)
+    return (int(m.group(1)), m.group(2)) if m else (10**9, label)
+
+
+def parts_table(index: Path, old_rows: dict[str, tuple[str, str]]) -> list[str]:
+    """Rows from the part files on disk; a planned part with no file yet keeps its old row."""
+    rows = {}
     for label, slug, path in _part_files(index):
-        scope = old_scopes.get(label) or slug.replace("-", " ")
-        rows.append(f"| {label} | `{path.name}` | {_task_range(path)} | {scope} |")
-    return rows
+        scope = old_rows.get(label, ("", ""))[0] or slug.replace("-", " ")
+        rows[label] = f"| {label} | `{path.name}` | {_task_range(path)} | {scope} |"
+    for label, (_, line) in old_rows.items():
+        rows.setdefault(label, line)
+    ordered = [rows[label] for label in sorted(rows, key=_label_key)]
+    return ["| Part | File | Tasks | Scope |", "|---|---|---|---|"] + ordered
 
 
-def _old_scopes(table: list[str]) -> dict[str, str]:
-    """Part label -> raw Scope cell of an existing parts table (header and separator skipped)."""
-    scopes = {}
+def _old_rows(table: list[str]) -> dict[str, tuple[str, str]]:
+    """Part label -> (raw Scope cell, raw row) of an existing parts table (header and separator skipped)."""
+    old = {}
     for line in table[2:]:
         cells = [c.strip() for c in re.split(r"(?<!\\)\|", line.strip())[1:-1]]
         if len(cells) >= 4:
-            scopes[cells[0]] = cells[-1]
-    return scopes
+            old[cells[0]] = (cells[-1], line.strip())
+    return old
 
 
 def _parts_block(lines: list[str]) -> tuple[int, int] | None:
@@ -325,7 +334,7 @@ def fix_parts(index: Path) -> int:
     if block is None:
         return -1
     start, end = block
-    table = parts_table(index, _old_scopes(lines[start:end]))
+    table = parts_table(index, _old_rows(lines[start:end]))
     pad = [""] if start == end else []
     new = "\n".join(lines[:start] + pad + table + lines[end:])
     if new != text:
