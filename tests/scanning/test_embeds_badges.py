@@ -65,7 +65,7 @@ def test_entry_line_market():
 
 def test_leg_rows_show_both_legs(monkeypatch):
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: {"shares": 100.0,
+                        lambda entry, stop, *, ticker=None: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
     p = _plan(entry_type="market", trigger_price=100.0, entry_price=100.0,
@@ -77,7 +77,7 @@ def test_leg_rows_show_both_legs(monkeypatch):
 
 def test_leg_rows_no_tp2(monkeypatch):
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: {"shares": 100.0,
+                        lambda entry, stop, *, ticker=None: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
     p = _plan(trigger_price=100.0, stop_loss=99.0, tp1=100.35, tp2=None)
@@ -87,7 +87,7 @@ def test_leg_rows_no_tp2(monkeypatch):
 
 def test_leg_rows_unsized(monkeypatch):
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: None)
+                        lambda entry, stop, *, ticker=None: None)
     tp1_row, _ = leg_rows(_plan(trigger_price=100.0, stop_loss=99.0,
                                 tp1=100.35), currency="$")
     assert "@ 100.35" in tp1_row and "$" not in tp1_row   # price shown, no P&L
@@ -96,7 +96,7 @@ def test_leg_rows_unsized(monkeypatch):
 def test_banked_leg_pct_and_amount(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: {"shares": 100.0,
+                        lambda entry, stop, *, ticker=None: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
     p = _plan(entry_price=100.0, stop_loss=95.0, direction="bullish")
@@ -108,7 +108,7 @@ def test_banked_leg_pct_and_amount(monkeypatch):
 def test_banked_leg_pct_and_amount_bearish_signs_correctly(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: {"shares": 100.0,
+                        lambda entry, stop, *, ticker=None: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
     p = _plan(entry_price=100.0, stop_loss=105.0, direction="bearish")
@@ -120,7 +120,7 @@ def test_banked_leg_pct_and_amount_bearish_signs_correctly(monkeypatch):
 def test_banked_leg_pct_and_amount_unsized(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: None)
+                        lambda entry, stop, *, ticker=None: None)
     p = _plan(entry_price=100.0, stop_loss=95.0, direction="bullish")
     pct, amount = embeds.banked_leg_pct_and_amount(p, 110.0, 0.5)
     assert pct == 10.0
@@ -133,7 +133,7 @@ def test_banked_leg_pct_and_amount_omits_everything_when_entry_is_unusable(monke
     ZeroDivisionError/TypeError, per this surface's omit-never-crash rule."""
     import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: {"shares": 100.0,
+                        lambda entry, stop, *, ticker=None: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
     zero_entry = _plan(entry_price=0.0, trigger_price=0.0, stop_loss=95.0)
@@ -145,7 +145,7 @@ def test_banked_leg_pct_and_amount_omits_everything_when_entry_is_unusable(monke
 def test_banked_leg_pct_and_amount_falls_back_to_trigger_price(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: None)
+                        lambda entry, stop, *, ticker=None: None)
     p = _plan(entry_price=None, trigger_price=100.0, stop_loss=95.0, direction="bullish")
     pct, _ = embeds.banked_leg_pct_and_amount(p, 105.0, 0.5)
     assert pct == 5.0

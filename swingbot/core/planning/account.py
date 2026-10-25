@@ -17,7 +17,7 @@ modes (account_cfg["sizing_mode"], set via `!account sizing`):
     balance, regardless of stop distance --
         position_value = balance x position_pct / 100
         shares         = position_value / entry
-    e.g. a â‚¬1,000,000 account at 0.1% always opens a â‚¬1,000 position.
+    e.g. a Ã¢â€šÂ¬1,000,000 account at 0.1% always opens a Ã¢â€šÂ¬1,000 position.
 
 A MAX_POSITION_SIZE_PCT cap prevents the position from consuming too
 large a fraction of the account (e.g. a tiny stop on a cheap stock
@@ -577,9 +577,40 @@ def _apply_size_caps(raw_shares: float, position_value: float, entry: float, sto
     return raw_shares, capped
 
 
+def _sizing_inputs_finite(balance: float, entry: float, stop_loss: float, ticker: str | None) -> bool:
+    """Refuse non-finite inputs, including overflow of an otherwise finite price pair."""
+    stop_distance = entry - stop_loss
+    if all(math.isfinite(x) for x in (balance, entry, stop_loss, stop_distance)):
+        return True
+    log.warning("sizing: ticker=%s non-finite input (balance=%r entry=%r stop_loss=%r "
+                "stop_distance=%r); alert left unsized", ticker or "?", balance, entry, stop_loss, stop_distance)
+    return False
+
+
+def _usable_risk_pct(stored: float, effective: float, ticker: str | None) -> float | None:
+    """Refuse corrupt stored/effective risk and clamp oversized risk; throttles stay silent."""
+    name = ticker or "?"
+    if not math.isfinite(stored) or stored <= 0:
+        log.warning("sizing: ticker=%s stored risk_pct=%r is not a positive finite number; alert left unsized",
+                    name, stored)
+        return None
+    if not math.isfinite(effective):
+        log.warning("sizing: ticker=%s effective risk_pct=%r (stored %r) is not finite; alert left unsized",
+                    name, effective, stored)
+        return None
+    if effective <= 0:
+        return None
+    if effective > RISK_CEILING_PCT:
+        log.warning("sizing: ticker=%s risk_pct=%r (stored %r) is above the %s%% hard cap; sized at %s%%",
+                    name, effective, stored, RISK_CEILING_PCT, RISK_CEILING_PCT)
+        return RISK_CEILING_PCT
+    return effective
+
+
 def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = None,
                           *, strategy_stats: dict = None, ticker_atr_pct: float = None,
-                          open_positions: int = 0, gap_floor_pct: float | None = None) -> dict | None:
+                          open_positions: int = 0, gap_floor_pct: float | None = None,
+                          ticker: str | None = None) -> dict | None:
     """
     Position sizing -- see this module's docstring for the two modes
     (account_cfg["sizing_mode"]: "risk_pct" or "account_pct").
@@ -611,8 +642,12 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     would actually happen if this trade were stopped out, not a theoretical
     figure the real position was never actually sized at.
 
-    Returns None when balance <= 0, entry <= 0, or (risk_pct mode only)
-    stop distance is zero.
+    Returns None when balance <= 0, entry <= 0, an input or final share count
+    is non-finite, or (risk_pct mode only) stop distance is zero or risk is
+    unusable. Stored risk must be positive and finite; effective risk must
+    be finite and positive. Effective risk above RISK_CEILING_PCT is clamped
+    to it. Invalid values and clamps log a sizing: warning naming ticker;
+    deliberate nonpositive effective risk remains a silent throttle.
 
     Return dict keys:
         shares          -- suggested whole/fractional share count
@@ -631,14 +666,14 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         account_cfg = load_account_config()
 
     balance = float(account_cfg.get("balance", 0))
-    risk_pct = float(account_cfg.get("risk_pct", 1.0))
+    stored_risk_pct = float(account_cfg.get("risk_pct", 1.0))
     position_pct = float(account_cfg.get("position_pct", app_config.POSITION_SIZE_PCT_OF_ACCOUNT))
     max_position_pct = float(account_cfg.get("max_position_pct", app_config.MAX_POSITION_SIZE_PCT))
     max_position_value_absolute = float(account_cfg.get(
         "max_position_value_absolute", app_config.MAX_POSITION_VALUE_ABSOLUTE))
     max_risk_amount_absolute = float(account_cfg.get(
         "max_risk_amount_absolute", app_config.MAX_RISK_AMOUNT_ABSOLUTE))
-    risk_pct, mode = _edge_risk_pct(account_cfg.get("sizing_mode", "risk_pct"), risk_pct,
+    risk_pct, mode = _edge_risk_pct(account_cfg.get("sizing_mode", "risk_pct"), stored_risk_pct,
                                     strategy_stats, ticker_atr_pct, open_positions)
 
     # Opex size reduction, applied after the edge estimators so it composes
@@ -651,6 +686,8 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         position_pct *= _opex_size_mult
 
     if balance <= 0 or entry <= 0:
+        return None
+    if not _sizing_inputs_finite(balance, entry, stop_loss, ticker):
         return None
 
     stop_distance = abs(entry - stop_loss)
@@ -665,6 +702,9 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     else:
         mode = "risk_pct"   # normalize anything unrecognized to the documented default
         if stop_distance <= 0:
+            return None
+        risk_pct = _usable_risk_pct(stored_risk_pct, risk_pct, ticker)
+        if risk_pct is None:
             return None
         risk_amount = balance * risk_pct / 100.0
         raw_shares = risk_amount / sizing_distance                             # v183 (was / stop_distance)
@@ -684,9 +724,13 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     # this trade would actually do to the account.
     position_value = raw_shares * entry
     risk_amount = raw_shares * stop_distance
+    shares = round(raw_shares, 2)
+    if not math.isfinite(shares):
+        log.warning("sizing: ticker=%s share count %r is not finite; alert left unsized", ticker or "?", shares)
+        return None
 
     result = {
-        "shares":           round(raw_shares, 2),
+        "shares":           shares,
         "risk_amount":      round(risk_amount, 2),
         "position_value":   round(position_value, 2),
         "capped":           capped,

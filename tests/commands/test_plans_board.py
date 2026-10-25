@@ -89,7 +89,7 @@ def test_partial_row_shows_the_banked_leg_not_the_stale_original_levels(monkeypa
     from swingbot.core.scanning import plan_table
     from swingbot import config
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: {"shares": 100.0,
+                        lambda entry, stop, *, ticker=None: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
@@ -103,7 +103,7 @@ def test_partial_row_shows_the_banked_leg_not_the_stale_original_levels(monkeypa
 def test_partial_row_labels_the_tp1_fallback_when_there_is_no_tp2(monkeypatch):
     from swingbot.core.scanning import plan_table
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: None)
+                        lambda entry, stop, *, ticker=None: None)
     line = _line_for(_partial(tp2=None))
     # v73: TP1 is banked history; a no-TP2 runner has a floor/trail, not a target.
     assert "runner entry 110.00 trailing 104.00" in line
@@ -115,7 +115,7 @@ def test_partial_row_omits_the_dollar_figure_when_unsized(monkeypatch):
     from swingbot.core.scanning import plan_table
     from swingbot import config
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: None)
+                        lambda entry, stop, *, ticker=None: None)
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     line = _line_for(_partial())
     assert "banked 2.0R/+10.0% on 50%" in line
@@ -127,7 +127,7 @@ def test_partial_row_survives_a_plan_with_no_recorded_leg(monkeypatch):
     dropped, runner entry falling back to the tp1 level."""
     from swingbot.core.scanning import plan_table
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: None)
+                        lambda entry, stop, *, ticker=None: None)
     line = _line_for(_partial(legs_realized=[], working_stop=None))
     assert "banked" not in line
     assert "runner entry 110.00 floor 106.67" in line
