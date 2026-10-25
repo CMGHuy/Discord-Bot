@@ -264,7 +264,8 @@ At most 2 implementers at once (shared tree, CPU). Suggested pairs: V191-2 + V19
 |---|---|---|---|
 | 1 | `2026-10-24-v191-confluence-atr-band-stops_1-foundations-and-gap-sizing.md` | V191-1..V191-6 | worktree and flag-off golden, the three config fields with ScanParams and reachability, the coupling guard (config load and admin validator), `stop_moved_by`, Part B long gap sizing core and its direction-aware readers |
 | 2 | `2026-10-24-v191-confluence-atr-band-stops_2-band-stop-path.md` | V191-7..V191-13 | `atr_band.py` arithmetic, the builder's arm R / arm K geometry, admission bypass on the replay and live sides, band sizing and the dollar invariant, `attach_plan_v2` wiring, the alert band line |
-| 3 | `2026-10-24-v191-confluence-atr-band-stops_3-measurement-code.md` | V191-14..V191-18 | band replay rows, funnel Stages −1..1, Stages 2..3 with Holm and reports, the stage driver, the Part B impact report `--side` |
+| 3 | `2026-10-24-v191-confluence-atr-band-stops_3-measurement-code.md` | V191-14..V191-15 | band replay rows, funnel Stages −1..1 |
+| 3b | `2026-10-24-v191-confluence-atr-band-stops_3b-funnel-tail-driver-and-impact-report.md` | V191-16..V191-18 | Stages 2..3 with Holm and reports, the stage driver, the Part B impact report `--side` |
 | 4 | `2026-10-24-v191-confluence-atr-band-stops_4-runs-docs-and-release.md` | V191-19..V191-25 | docs and Codex mirror, Stage −1 run, arm K chain, arm R chain, results doc and ledger rows, Part B live-book impact, release and full suite |
 
 ## Task ledger
