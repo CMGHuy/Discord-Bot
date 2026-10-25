@@ -54,10 +54,13 @@ incrementally-updated running total. This means:
     recomputes itself correctly again from base_balance + the trades table --
     there is no drifting running total that can silently lose history.
 """
+import math
+import numbers
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from swingbot import config as app_config
+from swingbot.core.edge.sizing import RISK_CEILING_PCT
 from swingbot.core.market import opex
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
@@ -166,6 +169,62 @@ def _append_balance_history(cfg: dict, entry: dict) -> dict:
     return cfg
 
 
+# v187 D2: every account setter (and the .env seed, see _validated_seed)
+# goes through _validated. key: (lower bound, lower bound inclusive,
+# upper bound or None, message). "{ceiling}" renders RISK_CEILING_PCT, so
+# the 2% never appears as a second literal here.
+_SETTING_RULES: dict[str, tuple[float, bool, float | None, str]] = {
+    "risk_pct": (0.0, False, None,
+                 "Risk per trade must be above 0% and at most {ceiling}% (got {value})."),
+    "position_pct": (0.0, False, 100.0,
+                     "Position size must be above 0% and at most 100% of the account (got {value})."),
+    "max_position_pct": (0.0, False, 100.0,
+                         "Max position size must be above 0% and at most 100% of the account (got {value})."),
+    "max_position_value_absolute": (0.0, True, None, "Max position value must be 0 (off) or more (got {value})."),
+    "max_risk_amount_absolute": (0.0, True, None, "Max risk per trade must be 0 (off) or more (got {value})."),
+    "base_balance": (0.0, False, None, "Balance must be above 0 (got {value})."),
+    "max_open_positions": (1.0, True, None,
+                           "Max open positions must be a whole number of 1 or more (got {value})."),
+}
+_INTEGER_SETTINGS = frozenset({"max_open_positions"})
+
+
+def _upper_bound(key: str, high: float | None) -> float | None:
+    # risk_pct's ceiling is read at call time so it always tracks the constant.
+    return RISK_CEILING_PCT if key == "risk_pct" else high
+
+
+def _as_finite_number(value) -> float | None:
+    """`value` as a finite float, or None for a bool, a non-number, NaN, +-inf
+    or an int too large for a float."""
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _in_range(number: float, low: float, low_inclusive: bool, high: float | None) -> bool:
+    above = number >= low if low_inclusive else number > low
+    return above and (high is None or number <= high)
+
+
+def _validated(key: str, value) -> float | int:
+    """Normalised value for an account setting, or ValueError naming the setting and its range."""
+    low, low_inclusive, high, message = _SETTING_RULES[key]
+    error = ValueError(message.format(value=value, ceiling=RISK_CEILING_PCT))
+    number = _as_finite_number(value)
+    if number is None or not _in_range(number, low, low_inclusive, _upper_bound(key, high)):
+        raise error
+    if key in _INTEGER_SETTINGS:
+        if not number.is_integer():
+            raise error
+        return int(number)
+    return number
+
+
 def set_balance(balance: float) -> dict:
     """
     Sets the account's BASE balance -- not the final displayed balance.
@@ -175,6 +234,7 @@ def set_balance(balance: float) -> dict:
     reflects that new base plus everything ever realized on top of it, and
     keeps adding future realized P&L to that new base going forward.
     """
+    balance = _validated("base_balance", balance)
     config = load_account_config()
     config["base_balance"] = balance
     realized_total = _sum_realized_pnl()
@@ -197,22 +257,25 @@ def set_balance(balance: float) -> dict:
 
 
 def set_risk_pct(risk_pct: float) -> dict:
+    value = _validated("risk_pct", risk_pct)
     config = load_account_config()
-    config["risk_pct"] = risk_pct
+    config["risk_pct"] = value
     save_account_config(config)
     return config
 
 
 def set_max_open_positions(max_open: int) -> dict:
+    value = _validated("max_open_positions", max_open)
     config = load_account_config()
-    config["max_open_positions"] = max_open
+    config["max_open_positions"] = value
     save_account_config(config)
     return config
 
 
 def set_max_position_pct(max_pct: float) -> dict:
+    value = _validated("max_position_pct", max_pct)
     config = load_account_config()
-    config["max_position_pct"] = max_pct
+    config["max_position_pct"] = value
     save_account_config(config)
     return config
 
@@ -220,8 +283,9 @@ def set_max_position_pct(max_pct: float) -> dict:
 def set_max_position_value_absolute(amount: float) -> dict:
     """Hard currency cap on position value -- see compute_position_size()'s
     docstring for why this exists alongside (not instead of) max_position_pct."""
+    value = _validated("max_position_value_absolute", amount)
     config = load_account_config()
-    config["max_position_value_absolute"] = amount
+    config["max_position_value_absolute"] = value
     save_account_config(config)
     return config
 
@@ -229,8 +293,9 @@ def set_max_position_value_absolute(amount: float) -> dict:
 def set_max_risk_amount_absolute(amount: float) -> dict:
     """Hard currency cap on real risk-if-stopped -- see compute_position_size()'s
     docstring for why this exists alongside (not instead of) risk_pct."""
+    value = _validated("max_risk_amount_absolute", amount)
     config = load_account_config()
-    config["max_risk_amount_absolute"] = amount
+    config["max_risk_amount_absolute"] = value
     save_account_config(config)
     return config
 
@@ -257,8 +322,9 @@ def set_sizing_mode(mode: str) -> dict:
 
 
 def set_position_pct(pct: float) -> dict:
+    value = _validated("position_pct", pct)
     config = load_account_config()
-    config["position_pct"] = pct
+    config["position_pct"] = value
     save_account_config(config)
     return config
 
