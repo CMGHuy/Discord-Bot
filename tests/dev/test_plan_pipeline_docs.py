@@ -67,6 +67,7 @@ def test_controller_docs_state_pipeline_step(rel, phrase):
 @pytest.mark.parametrize("rel, phrase", (
     (".claude/agents/plan-writer.md", "never `cat` a"),
     (".claude/agents/plan-writer.md", "BLOCKED: brief gaps"),
+    (".claude/agents/plan-writer.md", "Write each task once"),
     (".claude/agents/plan-briefer.md", "## mode=top-up"),
     (".claude/agents/plan-briefer.md", "BRIEF GAPS: 0"),
     ("docs/claude/skills-tools.md", "plan_slice.py <index> --gaps"),

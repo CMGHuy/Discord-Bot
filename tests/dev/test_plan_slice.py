@@ -114,7 +114,7 @@ GAP_ROWS = ("| V900-1 | one | 1 | sonnet | A | M `scripts/dev/x.py`; M `scripts/
 
 def test_gaps_lists_unbriefed_modified_files_once_with_parts(tmp_path):
     code, out = _slice(tmp_path, part="--gaps", rows=GAP_ROWS)
-    assert code == 0, out
+    assert code == 1, out
     assert out.splitlines() == [
         "GAP: scripts/dev/z.py (parts 1, 2)",
         "GAP: tests/dev/test_q.py (parts 2)",
@@ -132,3 +132,21 @@ def test_gaps_without_brief_file(tmp_path):
     code, out = _slice(tmp_path, part="--gaps", brief="absent.md")
     assert code == 2
     assert "MISSING: brief file" in out
+
+
+def test_slice_blocks_when_brief_gaps_exceed_budget(tmp_path):
+    rows = "".join(
+        f"| V900-{n} | t | 1 | sonnet | A | M `scripts/dev/g{n}.py` | — | — |\n"
+        for n in range(1, 8))
+    code, out = _slice(tmp_path, part="1", rows=rows)
+    assert code == 3, out
+    assert "BLOCKED: brief gaps (7 files, budget 5)" in out
+
+
+def test_slice_within_gap_budget_is_not_blocked(tmp_path):
+    rows = "".join(
+        f"| V900-{n} | t | 1 | sonnet | A | M `scripts/dev/g{n}.py` | — | — |\n"
+        for n in range(1, 4))
+    code, out = _slice(tmp_path, part="1", rows=rows)
+    assert code == 0, out
+    assert "BLOCKED" not in out

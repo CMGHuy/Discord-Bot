@@ -12,7 +12,12 @@ or a part with no ledger rows.
 --gaps lists, across every part, each file a ledger row modifies that the
 brief has no section for (`GAP: <path> (parts ...)`), so the controller can
 have plan-briefer top the brief up once on Sonnet instead of every Opus part
-writer exploring it (exit 2 when the brief file is missing).
+writer exploring it (exit 2 when the brief file is missing, exit 1 when any
+gap is listed, so a controller script can gate on it).
+
+A part slice whose ledger rows leave more than GAP_BUDGET brief sections
+missing prints `BLOCKED: brief gaps ...` and exits 3: the part writer returns
+that instead of exploring turn by turn on a growing Opus context (v194).
 """
 from __future__ import annotations
 
@@ -29,6 +34,8 @@ FILE_ITEM_RE = re.compile(r"(?:\b([CM])\s+)?`([^`]+)`")
 INDEX_SECTIONS = ("Global Constraints", "Handoff", "Task ledger")
 OPTIONAL_INDEX = ("Handoff",)
 EMPTY_REFS = ("", "—", "-")
+GAP_BUDGET = 5
+BRIEF_MISSING_PREFIX = "MISSING: brief section"
 USAGE = "usage: python scripts/dev/plan_slice.py <index> <part|--gaps> [--brief <path>]"
 
 
@@ -144,7 +151,7 @@ def print_gaps(index: Path, brief: Path | None) -> int:
     for path, parts in gaps.items():
         print(f"GAP: {path} (parts {', '.join(parts)})")
     print(f"BRIEF GAPS: {len(gaps)} file(s)")
-    return 0
+    return 1 if gaps else 0
 
 
 def parse_args(argv: list[str]) -> tuple[Path, str, Path | None] | None:
@@ -177,6 +184,11 @@ def main(argv: list[str]) -> int:
     print(text, end="")
     for line in missing:
         print(line)
+    unbriefed = [m for m in missing if m.startswith(BRIEF_MISSING_PREFIX)]
+    if len(unbriefed) > GAP_BUDGET:
+        print(f"BLOCKED: brief gaps ({len(unbriefed)} files, budget {GAP_BUDGET}); "
+              "the controller tops the brief up (plan_slice.py <index> --gaps)")
+        return 3
     return 0
 
 

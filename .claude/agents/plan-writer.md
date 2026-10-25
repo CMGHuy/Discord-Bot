@@ -46,6 +46,13 @@ PLAN_TASK_EOF
 (If a task's text itself contains a `PLAN_TASK_EOF` line, pick another
 delimiter.)
 
+**Write each task once, straight into the plan file.** Never draft a task
+into a scratchpad file (`Write` to a scratch path, then `cat`/`sed` it across)
+and never rewrite a task you already appended: a task costs its output tokens
+once per draft (v194's part 1 wrote 24 KB tasks twice, then re-cut them as
+`t1`/`t1b`). Size a task against the ~400-line ceiling *before* writing it;
+too long means the ledger needs another row, which is a `BLOCKED:`.
+
 ### Self-spill
 
 Before each append, check `wc -l` of your file — in the same command as the
@@ -71,6 +78,8 @@ section per file, then `## Traps`.
   Each `MISSING:` line at its end (`spec section '<ref>'`,
   `brief section '<path>'`, `brief file <path>`) names a gap: `sed -n` the
   range you need from the repo file or the spec, never a whole document.
+  A slice that ends `BLOCKED: brief gaps ...` (exit 3, more than five
+  unbriefed files) is your return value: stop and return it.
 
 Read code only for what the slice or brief does not cover: **at most ~5
 batched read commands per part**, `sed -n` line ranges only, **never `cat` a
