@@ -1,7 +1,8 @@
 """v144: why an outlook (next_session) plan was cancelled, in one line.
 
-Two cancellations happen DURING session D through the existing live transitions
-(cancelled_invalidated, cancelled_risk_cap); `in_session_message` only words
+Four cancellations happen DURING session D through the existing live transitions
+(cancelled_invalidated, cancelled_risk_cap, and v187's cancelled_limit and
+cancelled_gap_through_stop for a limit entry); `in_session_message` only words
 them. Two are decided AT D's close by `classify_expiry`, from D's own bars:
 `never_triggered` (the common case, with the distance in percent and ATR) and
 `no_session_data`.
@@ -28,11 +29,18 @@ NEVER_TRIGGERED = "never_triggered"
 NO_SESSION_DATA = "no_session_data"
 INVALIDATED = "invalidated"
 RISK_CAP = "risk_cap"
+LIMIT_CANCELLED = "limit_cancelled"
+GAP_THROUGH_STOP = "gap_through_stop"
 
 REASON_CODE = "reason_code"
 REASON_MESSAGE = "reason_message"
 
-_IN_SESSION_CODES = {"cancelled_invalidated": INVALIDATED, "cancelled_risk_cap": RISK_CAP}
+_IN_SESSION_CODES = {
+    "cancelled_invalidated": INVALIDATED,
+    "cancelled_risk_cap": RISK_CAP,
+    "cancelled_limit": LIMIT_CANCELLED,
+    "cancelled_gap_through_stop": GAP_THROUGH_STOP,
+}
 _ATR_PERIOD = 14
 
 
@@ -125,14 +133,34 @@ def _risk_cap_message(plan, detail: dict) -> str:
             f"is over the {float(detail['max_planned_loss_pct']):g}% cap")
 
 
+def _limit_cancelled_message(plan, detail: dict) -> str:
+    return (f"Ran to {float(detail['live_price']):.2f}, past the "
+            f"{float(detail['limit_cancel_level']):.2f} cancel level, before the "
+            f"{float(plan.trigger_price):.2f} limit filled")
+
+
+def _gap_through_stop_message(plan, detail: dict) -> str:
+    return (f"Touched the {float(plan.trigger_price):.2f} limit at "
+            f"{float(detail['live_price']):.2f}, already at or through the "
+            f"{float(plan.stop_loss):.2f} stop; nothing opened")
+
+
+#: v187 D3: the limit-entry cancellations, worded from their own detail keys.
+_LIMIT_MESSAGES = {
+    "cancelled_limit": _limit_cancelled_message,
+    "cancelled_gap_through_stop": _gap_through_stop_message,
+}
+
+
 def in_session_message(plan, transition: str, detail: dict) -> str | None:
-    """Words for the two in-session cancellations; None for anything else."""
+    """Words for the in-session cancellations; None for anything else."""
     if transition == "cancelled_invalidated":
         return (f"Traded {float(detail['live_price']):.2f} through the {float(plan.stop_loss):.2f} "
                 "stop before triggering; the setup broke")
     if transition == "cancelled_risk_cap":
         return _risk_cap_message(plan, detail)
-    return None
+    builder = _LIMIT_MESSAGES.get(transition)
+    return builder(plan, detail) if builder is not None else None
 
 
 def code_for(transition: str) -> str | None:

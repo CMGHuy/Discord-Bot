@@ -53,6 +53,8 @@ _BY_TRANSITION: dict[str, str] = {
     "cancelled_expired": "expired",
     "cancelled_invalidated": "closed_other",
     "cancelled_risk_cap": "closed_other",
+    "cancelled_limit": "closed_other",
+    "cancelled_gap_through_stop": "closed_other",
     "closed": "closed_other",
 }
 
@@ -63,10 +65,13 @@ _KIND_BY_EVENT = {
     "stopped": Kind.STOPPED,
     "expired": Kind.EXPIRED,
 }
+# v187: limit cancels withdraw the plan before entry; the channel stays factual.
 _CLOSED_OTHER_KIND = {
     "closed": Kind.EXITED,
     "cancelled_invalidated": Kind.INVALIDATED,
     "cancelled_risk_cap": Kind.RISK_CAP,
+    "cancelled_limit": Kind.INVALIDATED,
+    "cancelled_gap_through_stop": Kind.INVALIDATED,
 }
 
 FOLLOWING_DEFAULTS: dict[str, bool] = dict.fromkeys(NOTIFY_EVENTS, True)
@@ -139,6 +144,8 @@ _EXIT_LABELS = {
 _CANCEL_LABELS = {
     "cancelled_invalidated": "invalidated before entry",
     "cancelled_risk_cap": "risk cap reached",
+    "cancelled_limit": "limit cancelled before fill",
+    "cancelled_gap_through_stop": "gapped through the stop before fill",
 }
 
 

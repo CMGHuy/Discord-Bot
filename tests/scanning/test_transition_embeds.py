@@ -57,7 +57,7 @@ def test_tp1_partial_embed_shows_banked_stats_and_partial_position(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     from swingbot import config
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: {"shares": 100.0,
+                        lambda entry, stop, *, ticker=None: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
@@ -79,7 +79,7 @@ def test_tp1_partial_embed_omits_dollar_figure_when_unsized(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     from swingbot import config
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: None)
+                        lambda entry, stop, *, ticker=None: None)
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     e = _embed("tp1_partial", {"fraction": 0.5, "exit_price": 110.0, "r": 2.0},
               legs_realized=[{"fraction": 0.5, "exit_price": 110.0,
@@ -95,7 +95,7 @@ def test_tp1_partial_embed_signs_a_negative_banked_amount(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     from swingbot import config
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: {"shares": 100.0,
+                        lambda entry, stop, *, ticker=None: {"shares": 100.0,
                                              "position_value": 10_000.0,
                                              "mode": "risk_pct"})
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
@@ -115,7 +115,7 @@ def test_tp1_partial_embed_omits_pct_when_entry_is_unusable(monkeypatch):
     import swingbot.core.scanning.embeds as embeds
     from swingbot import config
     monkeypatch.setattr(plan_table.account, "compute_position_size",
-                        lambda entry, stop: None)
+                        lambda entry, stop, *, ticker=None: None)
     monkeypatch.setattr(config, "CURRENCY_SYMBOL", "$")
     e = _embed("tp1_partial", {"fraction": 0.5, "exit_price": 110.0, "r": 2.0},
               entry_price=0.0, trigger_price=0.0,
