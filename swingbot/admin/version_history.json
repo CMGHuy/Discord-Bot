@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-25 09:34:36 UTC",
+  "generated_at": "2026-10-26 09:34:17 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.36.1",
-    "bot": "2.15.3"
+    "bot": "2.15.4"
   },
   "releases": [
     {
@@ -2133,6 +2133,19 @@
       "versions": {
         "ui": "1.36.1",
         "bot": "2.15.3"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-26",
+      "last_seen": "2026-10-26",
+      "commit": "42382d23",
+      "subject": "release(bot): 2.15.4 -- administrator gates, safe account sizing and live limit entries",
+      "versions": {
+        "ui": "1.36.1",
+        "bot": "2.15.4"
       },
       "changed": [
         "bot"

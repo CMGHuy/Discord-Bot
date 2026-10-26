@@ -5,7 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { StatusCell, partialOpenTitle } from './status-cell';
+import { StatusCell, partialIconTitle, partialOpenTitle } from './status-cell';
 
 const live = {
   status: 'ACTIVE',
@@ -132,5 +132,24 @@ describe('status cell on one baseline (v179 layout audit)', () => {
   it('sets the percentage and the hint on the text baseline, the textless bar centred', () => {
     expect(src.match(/\.cell \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
     expect(src).toMatch(/\.track \{[^}]*align-self:\s*center/);
+  });
+});
+
+describe('partialIconTitle', () => {
+  const base = { status: 'CLOSED', banked_fraction: null, leg_index: 0, leg_total: 1 };
+
+  it('is null for an ordinary single-leg row', () => {
+    expect(partialIconTitle(base)).toBeNull();
+    expect(partialIconTitle({ ...base, status: 'ACTIVE' })).toBeNull();
+  });
+
+  it('marks a later closed leg of a scale-out split', () => {
+    expect(partialIconTitle({ ...base, leg_index: 1, leg_total: 2 })).toMatch(/earlier partial exit/);
+    expect(partialIconTitle({ ...base, leg_index: 0, leg_total: 2 })).toBeNull();
+  });
+
+  it('gives a live PARTIAL row one title, even when it is also a later leg', () => {
+    const row = { status: 'PARTIAL', banked_fraction: 0.5, leg_index: 1, leg_total: 2 };
+    expect(partialIconTitle(row)).toBe('Partially closed -- 50% still open');
   });
 });

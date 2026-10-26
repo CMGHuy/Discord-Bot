@@ -5,7 +5,7 @@
 **Bump:** bot patch
 **Edge:** none (integrity) — closes three safety holes and buys no expectancy. Production runs `risk_pct` mode at 1% with every stored setting valid, and the limit strategies are masked, so the live book's ExpR and win rate are predicted unchanged. The value is in what can no longer happen: a follower resetting the balance or wiping history, a 10% or negative risk setting sizing every alert, and a limit plan filling on the wrong side the day a limit strategy is unmasked.
 **Screen:** exempt (integrity)
-**Spec:** [2026-10-23-v187-safety-hardening-design.md](../specs/2026-10-23-v187-safety-hardening-design.md)
+**Spec:** [2026-10-23-v187-safety-hardening-design.md](../../specs/implemented/2026-10-23-v187-safety-hardening-design.md)
 **Brief:** `.superpowers/briefs/2026-10-23-v187-safety-hardening.md`
 **Worktree:** implement every task in `.claude/worktrees/2026-10-23-v187-safety-hardening` (branch of the same name, created in V187-1's first step; `docs/claude/document-lifecycle.md`). V187-13 runs the full suite in the worktree and merges to `main`; then `/panel risk-manager,staff-engineer,quant-engineer` (the spec's `Panel:` line) and `/close-out` run on `main`.
 
@@ -283,3 +283,18 @@ At most two `task-implementer`s at once; two tasks that share a file never run t
 | V187-11 | Lifecycle and execution embeds for the two new cancel events | 2 | sonnet | M `swingbot/core/scanning/lifecycle_embeds.py`, `swingbot/core/scanning/execution_embeds.py`; C `tests/scanning/test_lifecycle_embeds_limit_cancels.py` | `_limit_cancelled_fields`, `_gap_through_stop_fields` |
 | V187-12 | Session-expiry codes and follow notices for the two new cancel events | 2 | sonnet | M `swingbot/core/planning/session_expiry.py`, `swingbot/commands/scanning/follow_notify.py`; C `tests/commands/test_follow_notify_limit_cancels.py` | `session_expiry.LIMIT_CANCELLED`, `session_expiry.GAP_THROUGH_STOP` |
 | V187-13 | Full suite, complexity gate, merge | 2 | sonnet | none (merge commit; `/close-out` bumps bot patch and regenerates `version_history.json`) | merged branch on `main` |
+
+
+## Completion record (2026-10-26)
+
+Implementation tasks V187-1 through V187-12 landed in scoped commits on the existing worktree; V187-13 merged them to `main` at `a7c30ecf`. The integration preserves v188's recorded fill-price history. A final review caught non-finite share settlement, fixed by `9854ab43`; xdist collection order was made deterministic in `d8291854`; seed-validation warnings retain tracebacks in `6cf95f98`.
+
+The full suite at `558da35d` completed with **14,640 passed, 72 failed, 8 skipped, 0 xfailed**. All failures were resolved: 70 shell tests needed Git Bash/coreutils on PATH, the guidance size check was fixed by the incoming main revision, and the account warning needed `exc_info=True`. Fourteen focused file runs then returned **270 passed, 2 skipped, 0 failed, 0 xfailed**, including every originally failing file. Four formerly skipped shell tests now execute. The full suite was not repeated. Remaining platform/cache omissions are POSIX file modes, a POSIX-only installer, unavailable symlink creation and the optional missing `data/backtest_cache/AAPL.csv` fixture. No database tests were skipped in the focused verification.
+
+The fresh V187-13 end-to-end render check passed for both cancellation events, and `python scripts/dev/complexity_gate.py` passed with 104 legacy functions and none new, risen, improved or gone. Detailed evidence is retained locally in `.superpowers/sdd/2026-10-23-v187-safety-hardening/`.
+
+**Deployment and rollback constraint:** no limit strategy may be unmasked before v187 is deployed, and none may stay unmasked across a rollback past v187. Deployment is outside this plan.
+
+**Residual integrity limitations:** the implementation panel qualified the spec's heat assurance because candidate checks still read stored risk. It also found that cancellation persistence and placeholder deletion remain separate writes; a deletion failure can leave a cancelled plan's placeholder open. The latter's blocking classification was rejected as an inherited mechanism explicitly retained by V187-8 and belonging with v189's cross-store transaction work; the defect is recorded, not treated as fixed. See the spec's Implementation panel for evidence, scope ruling and failure cost.
+
+**Close-out:** bot `2.15.4` released locally (`42382d23`), version history regenerated in `d1e6600c`, and `testrun.py file tests/scripts/test_build_version_matrix.py` passed all 13 tests. Panel outcomes are recorded in the spec; no unresolved blocking finding remains. The merged worktree and branch were removed after preserving their local evidence. No deployment or push was performed.

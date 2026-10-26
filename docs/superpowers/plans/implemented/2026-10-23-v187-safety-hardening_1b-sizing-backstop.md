@@ -4,7 +4,7 @@
 
 **Bump:** bot patch
 **Edge:** none (integrity)
-**Spec:** [2026-10-23-v187-safety-hardening-design.md](../specs/2026-10-23-v187-safety-hardening-design.md) — § D2 "Backstop", "Numerics", "The 2% cap also binds in account_pct mode", § Testing (D2, Numerics, D2 additions)
+**Spec:** [2026-10-23-v187-safety-hardening-design.md](../../specs/implemented/2026-10-23-v187-safety-hardening-design.md) — § D2 "Backstop", "Numerics", "The 2% cap also binds in account_pct mode", § Testing (D2, Numerics, D2 additions)
 **Index:** [2026-10-23-v187-safety-hardening_0-index.md](2026-10-23-v187-safety-hardening_0-index.md) — Goal, Global Constraints, Spec clarifications 1–7, Contracts and the task ledger. This file continues part 1 ([`_1-admin-gate-and-account-limits.md`](2026-10-23-v187-safety-hardening_1-admin-gate-and-account-limits.md), V187-1..V187-5), split off only for the 1500-line cap.
 
 **Paths.** `$R` = `E:/Documents/Private/Projects/Discord-Bot`, `$WT` = `$R/.claude/worktrees/2026-10-23-v187-safety-hardening` (created in V187-1). Paths below are relative to `$WT`; git via `git -C "$WT"`; tests via `(cd "$WT" && python scripts/dev/testrun.py file <test>)`. Run `/replicate-prod-db` before the first run if part 1 has not already (the sizing callers' tests touch the store).

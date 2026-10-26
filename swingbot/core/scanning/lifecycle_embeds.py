@@ -304,6 +304,8 @@ PLAN_EVENT_KINDS = {
     "cancelled_expired": Kind.EXPIRED,
     "cancelled_invalidated": Kind.INVALIDATED,
     "cancelled_risk_cap": Kind.RISK_CAP,
+    "cancelled_limit": Kind.CANCEL,
+    "cancelled_gap_through_stop": Kind.CANCEL,
     "be_moved": Kind.BE_MOVED,
     "tp1_partial": Kind.TP1_HIT,
 }
@@ -404,6 +406,24 @@ def _risk_cap_fields(embed, plan, d) -> None:
         inline=False)
 
 
+def _limit_cancelled_fields(embed, plan, d) -> None:
+    """v187 D3: a resting limit cancelled beyond its cancel level."""
+    embed.description = plan_levels_block(plan, plan.trigger_price)
+    embed.add_field(name="Why", value=(
+        f"Price ran to {d['live_price']:.2f}, past the limit's cancel level "
+        f"{d['limit_cancel_level']:.2f}, before the {plan.trigger_price:.2f} limit filled. "
+        "Never opened; no position, no P&L."), inline=False)
+
+
+def _gap_through_stop_fields(embed, plan, d) -> None:
+    """v187 D3: a limit touched at or through its stop opens nothing."""
+    embed.description = plan_levels_block(plan, plan.trigger_price)
+    embed.add_field(name="Why", value=(
+        f"Touched the {d['entry_price']:.2f} limit at {d['live_price']:.2f}, already at "
+        f"or through the stop {d['stop_loss']:.2f}. Never opened; no position, no P&L."),
+        inline=False)
+
+
 def _outlook_cancel_fields(embed, plan, d) -> None:
     """v144: an outlook plan's cancellation, in the catalogue's words and code."""
     embed.description = plan_levels_block(plan, plan.trigger_price)
@@ -418,6 +438,8 @@ _EVENT_FIELDS = {
     "cancelled_expired": _expired_fields,
     "cancelled_invalidated": _invalidated_fields,
     "cancelled_risk_cap": _risk_cap_fields,
+    "cancelled_limit": _limit_cancelled_fields,
+    "cancelled_gap_through_stop": _gap_through_stop_fields,
 }
 
 

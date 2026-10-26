@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 from dataclasses import dataclass
+from typing import Callable
 
 from swingbot.core.planning.exit_sim import runner_floor
 from swingbot.core.planning.plan_types import breakeven_trigger
@@ -541,12 +542,34 @@ def _stop_moved(plan, event, side: dict, common: dict, money: Money | None) -> I
 
 #: cancel transition -> its headline's FEED_SYMBOLS key ('' = no glyph, v170 Decision 4).
 _CANCEL_LEADS = {"cancelled_expired": "expiry", "cancelled_invalidated": "invalid",
-                 "cancelled_risk_cap": ""}
+                 "cancelled_risk_cap": "", "cancelled_limit": "",
+                 "cancelled_gap_through_stop": ""}
+
+
+def _limit_cancel_why(detail: dict) -> str:
+    return (f"Price ran past the limit's cancel level {_price(detail['limit_cancel_level'])} "
+            f"at {_price(detail['live_price'])} before the order filled. Nothing was opened.")
+
+
+def _gap_through_stop_why(detail: dict) -> str:
+    return (f"Price touched the limit at {_price(detail['live_price'])}, already at or "
+            f"through the stop {_price(detail['stop_loss'])}. The order is cancelled, "
+            "nothing was opened.")
+
+
+#: v187 D3: the limit-entry cancels, each worded from its own detail keys.
+_CANCEL_WHY: dict[str, Callable[[dict], str]] = {
+    "cancelled_limit": _limit_cancel_why,
+    "cancelled_gap_through_stop": _gap_through_stop_why,
+}
 
 
 def _cancel_why(plan, transition: str, detail: dict) -> str:
     if detail.get("reason_message"):
         return detail["reason_message"]             # v144: an outlook plan states its reason
+    why = _CANCEL_WHY.get(transition)
+    if why is not None:
+        return why(detail)                          # v187: limit-entry cancels
     if short_notice.is_compression(plan) and transition != "cancelled_invalidated":
         return short_notice.compression_cancel_why(plan, transition, detail)
     if transition == "cancelled_expired":
@@ -577,6 +600,8 @@ _BUILDERS = {
     "cancelled_expired": _cancelled,
     "cancelled_invalidated": _cancelled,
     "cancelled_risk_cap": _cancelled,
+    "cancelled_limit": _cancelled,
+    "cancelled_gap_through_stop": _cancelled,
     "time_exit_due": _time_exit,
     "time_exit_unresolved": _time_exit,
     "closed": _closed_event,

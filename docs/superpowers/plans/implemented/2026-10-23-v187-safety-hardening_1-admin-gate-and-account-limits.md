@@ -4,7 +4,7 @@
 
 **Bump:** bot patch
 **Edge:** none (integrity)
-**Spec:** [2026-10-23-v187-safety-hardening-design.md](../specs/2026-10-23-v187-safety-hardening-design.md) — § Why 1–2, § D1, § D2, § Testing (D1, D2, Numerics, D2 additions)
+**Spec:** [2026-10-23-v187-safety-hardening-design.md](../../specs/implemented/2026-10-23-v187-safety-hardening-design.md) — § Why 1–2, § D1, § D2, § Testing (D1, D2, Numerics, D2 additions)
 **Index:** [2026-10-23-v187-safety-hardening_0-index.md](2026-10-23-v187-safety-hardening_0-index.md) — Goal, Global Constraints, Spec clarifications 1–7, Contracts and the task ledger live there. Every task below implicitly includes the Global Constraints; the ledger's names, signatures and paths are final.
 
 **Part 1 is two files.** V187-1..V187-5 are here; V187-6 and V187-7 (the sizing backstop) are in [2026-10-23-v187-safety-hardening_1b-sizing-backstop.md](2026-10-23-v187-safety-hardening_1b-sizing-backstop.md), because the seven tasks with full code do not fit one file under the 1500-line cap. Same part, same ledger rows.

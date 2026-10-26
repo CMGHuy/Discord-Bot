@@ -320,12 +320,12 @@ def test_context_carries_the_gate_inputs(monkeypatch):
 
 def test_risk_dollars_sizes_the_stop_distance(monkeypatch):
     plan = _plan(entry_type="stop_entry", trigger_price=102.0, stop_loss=100.0)
-    monkeypatch.setattr(orun.account_module, "compute_position_size", lambda entry, stop: {"shares": 10})
+    monkeypatch.setattr(orun.account_module, "compute_position_size", lambda entry, stop, *, ticker=None: {"shares": 10})
     assert orun._risk_dollars(plan) == 20.0
-    monkeypatch.setattr(orun.account_module, "compute_position_size", lambda entry, stop: {"shares": 0})
+    monkeypatch.setattr(orun.account_module, "compute_position_size", lambda entry, stop, *, ticker=None: {"shares": 0})
     assert orun._risk_dollars(plan) is None
 
-    def boom(entry, stop):
+    def boom(entry, stop, *, ticker=None):
         raise ValueError("no account")
 
     monkeypatch.setattr(orun.account_module, "compute_position_size", boom)

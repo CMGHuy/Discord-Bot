@@ -33,6 +33,8 @@ _EVENT_KINDS = {
     "cancelled_expired": Kind.EXPIRED,
     "cancelled_invalidated": Kind.INVALIDATED,
     "cancelled_risk_cap": Kind.RISK_CAP,
+    "cancelled_limit": Kind.CANCEL,
+    "cancelled_gap_through_stop": Kind.CANCEL,
 }
 
 

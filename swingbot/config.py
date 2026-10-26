@@ -519,16 +519,16 @@ FIELDS: list[Field] = [
           type="float", default="1000000", min=0, step=100,
           help="Seed value the first time data/account.json is created. Edit anytime with !account balance -- not read from .env after that."),
     Field("RISK_PER_TRADE_PCT", "RISK_PER_TRADE_PCT", "Account Defaults", "Risk per trade %",
-          type="float", default="0.01", min=0, step=0.01,
-          help="The % of account balance you're willing to lose on a single trade if its stop-loss is hit -- "
-               "a classic position-sizing input (e.g. 1% means a full stop-out only costs 1% of the account). "
-               "This is informational only: seeded into data/account.json and shown by !account, but nothing "
-               "in the live alert/scan pipeline uses it to size a position -- how many shares to actually buy "
-               "is left entirely up to you. Edit anytime with !account risk PCT."),
+          type="float", default="1.0", min=0, max=2, step=0.01,
+          help="The % of account balance a single trade loses if its stop-loss is hit (1% means a full "
+               "stop-out costs 1% of the account). Seeds the account's risk-per-trade the first time the "
+               "account is created; that setting sizes the suggested position on every alert, capped at "
+               "2%. Edit anytime with !account risk PCT (administrators only)."),
     Field("MAX_OPEN_POSITIONS", "MAX_OPEN_POSITIONS", "Account Defaults", "Max open positions",
           type="number", default="30", min=1, step=1,
-          help="Informational only, same as the two fields above: once this many paper trades are open, "
-               "new alerts still post but the Discord embed shows a position-limit warning."),
+          help="Seeds the account's open-position limit. It never blocks an alert: once this many paper "
+               "trades are open, new alerts still post but the Discord embed shows a position-limit "
+               "warning. Edit anytime with !account maxpositions N (administrators only)."),
     Field("MAX_POSITION_SIZE_PCT", "MAX_POSITION_SIZE_PCT", "Account Defaults", "Max position size % of account",
           type="float", default="0.1", min=0.01, max=100, step=0.01,
           help="Position-size cap: the suggested share count is clipped so shares × entry never exceeds "

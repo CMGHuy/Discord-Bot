@@ -17,7 +17,7 @@ modes (account_cfg["sizing_mode"], set via `!account sizing`):
     balance, regardless of stop distance --
         position_value = balance x position_pct / 100
         shares         = position_value / entry
-    e.g. a €1,000,000 account at 0.1% always opens a €1,000 position.
+    e.g. a Ã¢â€šÂ¬1,000,000 account at 0.1% always opens a Ã¢â€šÂ¬1,000 position.
 
 A MAX_POSITION_SIZE_PCT cap prevents the position from consuming too
 large a fraction of the account (e.g. a tiny stop on a cheap stock
@@ -54,12 +54,19 @@ incrementally-updated running total. This means:
     recomputes itself correctly again from base_balance + the trades table --
     there is no drifting running total that can silently lose history.
 """
+import logging
+import math
+import numbers
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from swingbot import config as app_config
+from swingbot.core.edge.sizing import RISK_CEILING_PCT
 from swingbot.core.market import opex
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
+
+
+log = logging.getLogger(__name__)
 
 
 # balance_history is append-only and grows one entry per closed trade (plus
@@ -102,6 +109,37 @@ def _sum_realized_pnl() -> float:
     return round(total, 2)
 
 
+# v187 D2: account key -> the .env key that seeds it on a brand-new row.
+_SEED_ENV_KEYS: dict[str, str] = {
+    "base_balance": "ACCOUNT_BALANCE",
+    "risk_pct": "RISK_PER_TRADE_PCT",
+    "max_open_positions": "MAX_OPEN_POSITIONS",
+    "max_position_pct": "MAX_POSITION_SIZE_PCT",
+    "position_pct": "POSITION_SIZE_PCT_OF_ACCOUNT",
+    "max_position_value_absolute": "MAX_POSITION_VALUE_ABSOLUTE",
+    "max_risk_amount_absolute": "MAX_RISK_AMOUNT_ABSOLUTE",
+}
+
+
+def _field_default(env_key: str) -> str:
+    """The schema default for an .env key (swingbot.config.FIELDS)."""
+    return next(f.default for f in app_config.FIELDS if f.key == env_key)
+
+
+def _validated_seed(defaults: dict) -> dict:
+    """`defaults` with every seeded setting validated; an invalid .env value
+    falls back to its schema default, with a warning."""
+    seeded = dict(defaults)
+    for key, env_key in _SEED_ENV_KEYS.items():
+        try:
+            seeded[key] = _validated(key, defaults[key])
+        except ValueError as exc:
+            seeded[key] = _validated(key, float(_field_default(env_key)))
+            log.warning("account seed: %s=%r is invalid (%s); seeding the default %r instead",
+                        env_key, defaults[key], exc, seeded[key], exc_info=True)
+    return seeded
+
+
 def load_account_config() -> dict:
     # Canonical defaults -- every key that exists in the account config schema.
     # Used both as the seed for a brand-new account row AND as a fallback for
@@ -142,6 +180,7 @@ def load_account_config() -> dict:
     # Brand-new account -- seed balance_history with a starting point so the
     # "balance over time" chart has something to plot from before the first
     # trade ever closes, instead of an empty series until then.
+    defaults = _validated_seed(defaults)  # .env values obey the setters' validation rules
     defaults["balance"] = round(defaults["base_balance"] + _sum_realized_pnl(), 2)
     defaults["balance_history"] = [{
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -166,6 +205,62 @@ def _append_balance_history(cfg: dict, entry: dict) -> dict:
     return cfg
 
 
+# v187 D2: every account setter (and the .env seed, see _validated_seed)
+# goes through _validated. key: (lower bound, lower bound inclusive,
+# upper bound or None, message). "{ceiling}" renders RISK_CEILING_PCT, so
+# the 2% never appears as a second literal here.
+_SETTING_RULES: dict[str, tuple[float, bool, float | None, str]] = {
+    "risk_pct": (0.0, False, None,
+                 "Risk per trade must be above 0% and at most {ceiling}% (got {value})."),
+    "position_pct": (0.0, False, 100.0,
+                     "Position size must be above 0% and at most 100% of the account (got {value})."),
+    "max_position_pct": (0.0, False, 100.0,
+                         "Max position size must be above 0% and at most 100% of the account (got {value})."),
+    "max_position_value_absolute": (0.0, True, None, "Max position value must be 0 (off) or more (got {value})."),
+    "max_risk_amount_absolute": (0.0, True, None, "Max risk per trade must be 0 (off) or more (got {value})."),
+    "base_balance": (0.0, False, None, "Balance must be above 0 (got {value})."),
+    "max_open_positions": (1.0, True, None,
+                           "Max open positions must be a whole number of 1 or more (got {value})."),
+}
+_INTEGER_SETTINGS = frozenset({"max_open_positions"})
+
+
+def _upper_bound(key: str, high: float | None) -> float | None:
+    # risk_pct's ceiling is read at call time so it always tracks the constant.
+    return RISK_CEILING_PCT if key == "risk_pct" else high
+
+
+def _as_finite_number(value) -> float | None:
+    """`value` as a finite float, or None for a bool, a non-number, NaN, +-inf
+    or an int too large for a float."""
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _in_range(number: float, low: float, low_inclusive: bool, high: float | None) -> bool:
+    above = number >= low if low_inclusive else number > low
+    return above and (high is None or number <= high)
+
+
+def _validated(key: str, value) -> float | int:
+    """Normalised value for an account setting, or ValueError naming the setting and its range."""
+    low, low_inclusive, high, message = _SETTING_RULES[key]
+    error = ValueError(message.format(value=value, ceiling=RISK_CEILING_PCT))
+    number = _as_finite_number(value)
+    if number is None or not _in_range(number, low, low_inclusive, _upper_bound(key, high)):
+        raise error
+    if key in _INTEGER_SETTINGS:
+        if not number.is_integer():
+            raise error
+        return int(number)
+    return number
+
+
 def set_balance(balance: float) -> dict:
     """
     Sets the account's BASE balance -- not the final displayed balance.
@@ -175,6 +270,7 @@ def set_balance(balance: float) -> dict:
     reflects that new base plus everything ever realized on top of it, and
     keeps adding future realized P&L to that new base going forward.
     """
+    balance = _validated("base_balance", balance)
     config = load_account_config()
     config["base_balance"] = balance
     realized_total = _sum_realized_pnl()
@@ -197,22 +293,25 @@ def set_balance(balance: float) -> dict:
 
 
 def set_risk_pct(risk_pct: float) -> dict:
+    value = _validated("risk_pct", risk_pct)
     config = load_account_config()
-    config["risk_pct"] = risk_pct
+    config["risk_pct"] = value
     save_account_config(config)
     return config
 
 
 def set_max_open_positions(max_open: int) -> dict:
+    value = _validated("max_open_positions", max_open)
     config = load_account_config()
-    config["max_open_positions"] = max_open
+    config["max_open_positions"] = value
     save_account_config(config)
     return config
 
 
 def set_max_position_pct(max_pct: float) -> dict:
+    value = _validated("max_position_pct", max_pct)
     config = load_account_config()
-    config["max_position_pct"] = max_pct
+    config["max_position_pct"] = value
     save_account_config(config)
     return config
 
@@ -220,8 +319,9 @@ def set_max_position_pct(max_pct: float) -> dict:
 def set_max_position_value_absolute(amount: float) -> dict:
     """Hard currency cap on position value -- see compute_position_size()'s
     docstring for why this exists alongside (not instead of) max_position_pct."""
+    value = _validated("max_position_value_absolute", amount)
     config = load_account_config()
-    config["max_position_value_absolute"] = amount
+    config["max_position_value_absolute"] = value
     save_account_config(config)
     return config
 
@@ -229,8 +329,9 @@ def set_max_position_value_absolute(amount: float) -> dict:
 def set_max_risk_amount_absolute(amount: float) -> dict:
     """Hard currency cap on real risk-if-stopped -- see compute_position_size()'s
     docstring for why this exists alongside (not instead of) risk_pct."""
+    value = _validated("max_risk_amount_absolute", amount)
     config = load_account_config()
-    config["max_risk_amount_absolute"] = amount
+    config["max_risk_amount_absolute"] = value
     save_account_config(config)
     return config
 
@@ -257,8 +358,9 @@ def set_sizing_mode(mode: str) -> dict:
 
 
 def set_position_pct(pct: float) -> dict:
+    value = _validated("position_pct", pct)
     config = load_account_config()
-    config["position_pct"] = pct
+    config["position_pct"] = value
     save_account_config(config)
     return config
 
@@ -411,25 +513,142 @@ def _sizing_distance(entry: float, stop_distance: float, gap_floor_pct: float | 
 
 
 def _gap_fields(shares: float, uncut_shares: float, sizing_distance: float,
-                gap_floor_pct: float | None) -> dict:
+                gap_floor_pct: float | None, *, basis_for_figures: float | None = None) -> dict:
     """v183: the gap keys of a floored sizing; {} without a floor, so every
     stop-only result keeps today's exact key set. gap_sized is true only
-    when the floor actually lowered the final share count."""
+    when the floor actually lowered the final share count. v187 supplies
+    the settled basis for money figures without attributing other cuts to gaps."""
     if gap_floor_pct is None:
         return {}
-    return {"gap_risk_amount": round(shares * sizing_distance, 2),
+    basis = shares if basis_for_figures is None else basis_for_figures
+    return {"gap_risk_amount": round(basis * sizing_distance, 2),
             "gap_sized": round(shares, 2) < round(uncut_shares, 2),
             "gap_floor_pct": float(gap_floor_pct)}
 
 
+_EDGE_SIZING_MODES = ("kelly", "vol_target", "min_of_all")
+
+
+def _edge_risk_pct(mode: str, risk_pct: float, strategy_stats, ticker_atr_pct,
+                   open_positions) -> tuple[float, str]:
+    """Resolve edge modes to risk_pct; a missing estimator does not participate."""
+    if mode not in _EDGE_SIZING_MODES:
+        return risk_pct, mode
+    from swingbot.core.edge import sizing as edge_sizing
+    kelly = vol = None
+    if mode in ("kelly", "min_of_all") and strategy_stats:
+        kelly = edge_sizing.kelly_risk_pct(strategy_stats)
+    if mode in ("vol_target", "min_of_all") and ticker_atr_pct:
+        vol = edge_sizing.vol_target_risk_pct(
+            ticker_atr_pct, app_config.PORTFOLIO_TARGET_DAILY_VOL_PCT, open_positions)
+    return edge_sizing.effective_risk_pct(risk_pct, kelly_risk=kelly, vol_risk=vol), "risk_pct"
+
+
+def _uncut_size_caps(shares: float, entry: float, stop_distance: float, balance: float,
+                     max_position_pct: float, max_value_abs: float, max_risk_abs: float) -> float:
+    """The stop-only comparison for v183's gap_sized flag, with the original caps."""
+    shares = min(shares, (balance * max_position_pct / 100.0) / entry)
+    if max_value_abs > 0:
+        shares = min(shares, max_value_abs / entry)
+    if max_risk_abs > 0 and stop_distance > 0:
+        shares = min(shares, max_risk_abs / stop_distance)
+    return shares
+
+
+def _apply_size_caps(raw_shares: float, position_value: float, entry: float, stop_distance: float,
+                     balance: float, max_position_pct: float, max_value_abs: float,
+                     max_risk_abs: float, *, sizing_distance: float | None = None) -> tuple[float, bool]:
+    """Apply the existing caps in order, preserving the mode's original position_value.
+
+    v183's gap floor only changes the absolute-risk divisor, never the zero-stop guard.
+    """
+    capped = False
+    max_position_value = balance * max_position_pct / 100.0
+    if position_value > max_position_value:
+        raw_shares = max_position_value / entry
+        capped = True
+    if max_value_abs > 0 and raw_shares > max_value_abs / entry:
+        raw_shares = max_value_abs / entry
+        capped = True
+    if max_risk_abs > 0 and stop_distance > 0:
+        distance = stop_distance if sizing_distance is None else sizing_distance
+        max_shares_for_risk = max_risk_abs / distance
+        if raw_shares > max_shares_for_risk:
+            raw_shares = max_shares_for_risk
+            capped = True
+    return raw_shares, capped
+
+
+# Relative slack on the 2% ceiling, so a config sitting exactly at
+# RISK_CEILING_PCT is not reported as capped because of float noise.
+_RISK_TOLERANCE = 1e-9
+
+
+def _risk_limit(balance: float) -> float:
+    return balance * RISK_CEILING_PCT / 100.0
+
+
+def _cap_to_risk_ceiling(raw_shares: float, stop_distance: float, balance: float) -> tuple[float, bool]:
+    """Shares cut so shares x stop_distance <= RISK_CEILING_PCT of balance, in
+    both sizing modes (v187 D2); (shares, capped). No stop risk, no cut."""
+    if stop_distance <= 0:
+        return raw_shares, False
+    limit = _risk_limit(balance)
+    if raw_shares * stop_distance > limit * (1 + _RISK_TOLERANCE):
+        return limit / stop_distance, True
+    return raw_shares, False
+
+
+def _settle_shares(raw_shares: float, stop_distance: float, balance: float) -> tuple[float, float]:
+    """(basis_for_figures, reported_shares). Today's round(raw, 2), unless the
+    rounded figure would breach the ceiling: then floored to 2 decimals and the
+    floored count is also the basis for risk_amount / position_value."""
+    rounded = round(raw_shares, 2)
+    if stop_distance > 0 and rounded * stop_distance > _risk_limit(balance) * (1 + _RISK_TOLERANCE):
+        floored = math.floor(raw_shares * 100) / 100
+        return floored, floored
+    return raw_shares, rounded
+
+
+def _sizing_inputs_finite(balance: float, entry: float, stop_loss: float, ticker: str | None) -> bool:
+    """Refuse non-finite inputs, including overflow of an otherwise finite price pair."""
+    stop_distance = entry - stop_loss
+    if all(math.isfinite(x) for x in (balance, entry, stop_loss, stop_distance)):
+        return True
+    log.warning("sizing: ticker=%s non-finite input (balance=%r entry=%r stop_loss=%r "
+                "stop_distance=%r); alert left unsized", ticker or "?", balance, entry, stop_loss, stop_distance)
+    return False
+
+
+def _usable_risk_pct(stored: float, effective: float, ticker: str | None) -> float | None:
+    """Refuse corrupt stored/effective risk and clamp oversized risk; throttles stay silent."""
+    name = ticker or "?"
+    if not math.isfinite(stored) or stored <= 0:
+        log.warning("sizing: ticker=%s stored risk_pct=%r is not a positive finite number; alert left unsized",
+                    name, stored)
+        return None
+    if not math.isfinite(effective):
+        log.warning("sizing: ticker=%s effective risk_pct=%r (stored %r) is not finite; alert left unsized",
+                    name, effective, stored)
+        return None
+    if effective <= 0:
+        return None
+    if effective > RISK_CEILING_PCT:
+        log.warning("sizing: ticker=%s risk_pct=%r (stored %r) is above the %s%% hard cap; sized at %s%%",
+                    name, effective, stored, RISK_CEILING_PCT, RISK_CEILING_PCT)
+        return RISK_CEILING_PCT
+    return effective
+
+
 def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = None,
                           *, strategy_stats: dict = None, ticker_atr_pct: float = None,
-                          open_positions: int = 0, gap_floor_pct: float | None = None) -> dict | None:
+                          open_positions: int = 0, gap_floor_pct: float | None = None,
+                          ticker: str | None = None) -> dict | None:
     """
     Position sizing -- see this module's docstring for the two modes
     (account_cfg["sizing_mode"]: "risk_pct" or "account_pct").
 
-    Three caps are applied, in order, and the TIGHTEST one wins:
+    Four caps are applied, in order, and the TIGHTEST one wins:
       1. max_position_pct  -- position_value never exceeds this % of balance.
       2. MAX_POSITION_VALUE_ABSOLUTE -- position_value never exceeds this
          many currency units, full stop, regardless of balance or any %
@@ -442,6 +661,9 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
       3. MAX_RISK_AMOUNT_ABSOLUTE -- the REAL risk (final shares x stop
          distance) never exceeds this many currency units either, again
          regardless of mode/%/balance.
+      4. RISK_CEILING_PCT (v187) -- in BOTH modes, the real risk (final
+         shares x stop distance) never exceeds this % of balance; shares
+         are floored instead of rounded when rounding would breach it.
 
     v183 gap_floor_pct (shorts only, passed by planning.gap_sizing): the
     risk budget and the MAX_RISK_AMOUNT_ABSOLUTE cap divide by
@@ -456,8 +678,12 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
     would actually happen if this trade were stopped out, not a theoretical
     figure the real position was never actually sized at.
 
-    Returns None when balance <= 0, entry <= 0, or (risk_pct mode only)
-    stop distance is zero.
+    Returns None when balance <= 0, entry <= 0, an input or final share count
+    is non-finite, or (risk_pct mode only) stop distance is zero or risk is
+    unusable. Stored risk must be positive and finite; effective risk must
+    be finite and positive. Effective risk above RISK_CEILING_PCT is clamped
+    to it. Invalid values and clamps log a sizing: warning naming ticker;
+    deliberate nonpositive effective risk remains a silent throttle.
 
     Return dict keys:
         shares          -- suggested whole/fractional share count
@@ -476,32 +702,15 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         account_cfg = load_account_config()
 
     balance = float(account_cfg.get("balance", 0))
-    risk_pct = float(account_cfg.get("risk_pct", 1.0))
+    stored_risk_pct = float(account_cfg.get("risk_pct", 1.0))
     position_pct = float(account_cfg.get("position_pct", app_config.POSITION_SIZE_PCT_OF_ACCOUNT))
     max_position_pct = float(account_cfg.get("max_position_pct", app_config.MAX_POSITION_SIZE_PCT))
     max_position_value_absolute = float(account_cfg.get(
         "max_position_value_absolute", app_config.MAX_POSITION_VALUE_ABSOLUTE))
     max_risk_amount_absolute = float(account_cfg.get(
         "max_risk_amount_absolute", app_config.MAX_RISK_AMOUNT_ABSOLUTE))
-    mode = account_cfg.get("sizing_mode", "risk_pct")
-
-    # --- Edge sizing modes (E6): resolve to an effective risk_pct, then
-    # fall through to the ordinary risk_pct branch below. Optional inputs
-    # missing -> that estimator simply doesn't participate in the min().
-    # NOTE: this overrides the local risk_pct/mode variables directly --
-    # both were already extracted from account_cfg above, so rewriting
-    # account_cfg itself at this point (as an earlier draft of this
-    # change assumed) would silently do nothing.
-    if mode in ("kelly", "vol_target", "min_of_all"):
-        from swingbot.core.edge import sizing as edge_sizing
-        kelly = vol = None
-        if mode in ("kelly", "min_of_all") and strategy_stats:
-            kelly = edge_sizing.kelly_risk_pct(strategy_stats)
-        if mode in ("vol_target", "min_of_all") and ticker_atr_pct:
-            vol = edge_sizing.vol_target_risk_pct(
-                ticker_atr_pct, app_config.PORTFOLIO_TARGET_DAILY_VOL_PCT, open_positions)
-        risk_pct = edge_sizing.effective_risk_pct(risk_pct, kelly_risk=kelly, vol_risk=vol)
-        mode = "risk_pct"
+    risk_pct, mode = _edge_risk_pct(account_cfg.get("sizing_mode", "risk_pct"), stored_risk_pct,
+                                    strategy_stats, ticker_atr_pct, open_positions)
 
     # Opex size reduction, applied after the edge estimators so it composes
     # with kelly/vol_target rather than being overwritten by them. BOTH modes
@@ -513,6 +722,8 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         position_pct *= _opex_size_mult
 
     if balance <= 0 or entry <= 0:
+        return None
+    if not _sizing_inputs_finite(balance, entry, stop_loss, ticker):
         return None
 
     stop_distance = abs(entry - stop_loss)
@@ -528,42 +739,38 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         mode = "risk_pct"   # normalize anything unrecognized to the documented default
         if stop_distance <= 0:
             return None
+        risk_pct = _usable_risk_pct(stored_risk_pct, risk_pct, ticker)
+        if risk_pct is None:
+            return None
         risk_amount = balance * risk_pct / 100.0
         raw_shares = risk_amount / sizing_distance                             # v183 (was / stop_distance)
         uncut_shares = risk_amount / stop_distance                             # v183
         position_value = raw_shares * entry
 
-    capped = False
-    max_position_value = balance * max_position_pct / 100.0
-    uncut_shares = min(uncut_shares, max_position_value / entry)               # v183
-    if position_value > max_position_value:
-        raw_shares = max_position_value / entry
-        capped = True
-
-    # Absolute currency caps -- always enforced last, on top of whatever the
-    # %-based sizing/cap above produced, so they hold no matter what balance
-    # or % settings are in play.
-    if max_position_value_absolute > 0:
-        max_shares_for_position = max_position_value_absolute / entry
-        uncut_shares = min(uncut_shares, max_shares_for_position)              # v183
-        if raw_shares > max_shares_for_position:
-            raw_shares = max_shares_for_position
-            capped = True
-    if max_risk_amount_absolute > 0 and stop_distance > 0:
-        uncut_shares = min(uncut_shares, max_risk_amount_absolute / stop_distance)   # v183
-        max_shares_for_risk = max_risk_amount_absolute / sizing_distance       # v183 (was / stop_distance)
-        if raw_shares > max_shares_for_risk:
-            raw_shares = max_shares_for_risk
-            capped = True
+    uncut_shares = _uncut_size_caps(
+        uncut_shares, entry, stop_distance, balance, max_position_pct,
+        max_position_value_absolute, max_risk_amount_absolute)
+    raw_shares, capped = _apply_size_caps(
+        raw_shares, position_value, entry, stop_distance, balance,
+        max_position_pct, max_position_value_absolute, max_risk_amount_absolute,
+        sizing_distance=sizing_distance)
+    gap_comparison_shares = raw_shares  # Keep the gap flag independent of later safety cuts.
+    # The 2% ceiling binds last, in both modes, and on the RETURNED figure.
+    raw_shares, ceiling_capped = _cap_to_risk_ceiling(raw_shares, stop_distance, balance)
+    capped |= ceiling_capped
+    if not math.isfinite(raw_shares):
+        log.warning("sizing: ticker=%s share count %r is not finite; alert left unsized", ticker or "?", raw_shares)
+        return None
+    basis, shares = _settle_shares(raw_shares, stop_distance, balance)
 
     # Always the REAL figures for the final (possibly capped) share count --
     # never a pre-cap "intended" number -- so what's shown is always what
     # this trade would actually do to the account.
-    position_value = raw_shares * entry
-    risk_amount = raw_shares * stop_distance
+    position_value = basis * entry
+    risk_amount = basis * stop_distance
 
     result = {
-        "shares":           round(raw_shares, 2),
+        "shares":           shares,
         "risk_amount":      round(risk_amount, 2),
         "position_value":   round(position_value, 2),
         "capped":           capped,
@@ -575,7 +782,8 @@ def compute_position_size(entry: float, stop_loss: float, account_cfg: dict = No
         "max_risk_amount_absolute":    max_risk_amount_absolute,
         "mode":             mode,
     }
-    result.update(_gap_fields(raw_shares, uncut_shares, sizing_distance, gap_floor_pct))   # v183
+    result.update(_gap_fields(gap_comparison_shares, uncut_shares, sizing_distance, gap_floor_pct,
+                              basis_for_figures=basis))   # v183
     return result
 
 

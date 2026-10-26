@@ -65,11 +65,12 @@ def gap_floor_for(direction: str | None, gap_sizing: dict | None) -> float | Non
     return float(p99) if p99 is not None and p99 > 0 else None
 
 
-def _stop_only(entry, stop_loss, account_cfg):
-    # Two positional args when no config is given: today's exact call shape.
+def _stop_only(entry, stop_loss, account_cfg, label=""):
+    # Preserve positional call shapes when there is no ticker to report.
+    kwargs = {"ticker": label} if label else {}
     if account_cfg is None:
-        return account.compute_position_size(entry, stop_loss)
-    return account.compute_position_size(entry, stop_loss, account_cfg)
+        return account.compute_position_size(entry, stop_loss, **kwargs)
+    return account.compute_position_size(entry, stop_loss, account_cfg, **kwargs)
 
 
 def _with_no_gap(result):
@@ -79,16 +80,17 @@ def _with_no_gap(result):
 def size_for(entry, stop_loss, *, direction, gap_sizing, account_cfg=None, label: str = "") -> dict | None:
     """The share count for one plan or trade under its stamped rule."""
     if direction != "bearish" or (gap_sizing or {}).get("rule") == RULE_STOP:
-        return _stop_only(entry, stop_loss, account_cfg)
+        return _stop_only(entry, stop_loss, account_cfg, label)
     floor = gap_floor_for(direction, gap_sizing)
     if floor is None:
-        return _with_no_gap(_stop_only(entry, stop_loss, account_cfg))
+        return _with_no_gap(_stop_only(entry, stop_loss, account_cfg, label))
     try:
-        return account.compute_position_size(entry, stop_loss, account_cfg, gap_floor_pct=floor)
+        kwargs = {"ticker": label} if label else {}
+        return account.compute_position_size(entry, stop_loss, account_cfg, gap_floor_pct=floor, **kwargs)
     except Exception as exc:
         swallowed(log, "scan.gap_sizing.size_fallback", exc,
                   "%s: gap sizing fell back to stop (%s)", label, exc, level=logging.INFO)
-        return _with_no_gap(_stop_only(entry, stop_loss, account_cfg))
+        return _with_no_gap(_stop_only(entry, stop_loss, account_cfg, label))
 
 
 def size_for_plan(plan, entry=None, account_cfg=None) -> dict | None:

@@ -7,7 +7,8 @@
    within Discord's limits, so a rejected sync fails here, not as a WARNING
    in on_ready (loops.py:1048-1049) that is never retried.
 4. Tip helper over every prefix name.
-5. /killswitch is the only admin-gated command, guild-only, with a runtime check.
+5. Admin-gated payloads are exactly /killswitch, /trades-clear and
+   /trades-clear-history (v187); /killswitch is guild-only with a runtime check.
 Offline: no gateway, no HTTP.
 """
 import ast
@@ -249,12 +250,16 @@ def test_prefix_tip_names_the_twin_until_the_cutoff(name):
 
 # ── 5. /killswitch ──────────────────────────────────────────────────────
 
-def test_killswitch_is_the_only_admin_gated_command_and_is_guild_only():
+def test_admin_default_permissions_are_exactly_killswitch_and_the_trade_wipes():
     from swingbot.commands.growth import slash_killswitch
 
+    admin = discord.Permissions(administrator=True).value
     gated = {p["name"]: p["default_member_permissions"] for p in _payloads()
              if p.get("default_member_permissions") is not None}
-    assert gated == {"killswitch": discord.Permissions(administrator=True).value}
+    # v187 D1: the two top-level trade wipes are hidden from non-admins too;
+    # /account and /trade are groups holding a read-only `show`, so they
+    # rely on their subcommands' runtime checks instead.
+    assert gated == {"killswitch": admin, "trades-clear": admin, "trades-clear-history": admin}
     payload = slash_killswitch.to_dict(bot.tree)
     assert payload["dm_permission"] is False
     assert slash_killswitch.guild_only is True

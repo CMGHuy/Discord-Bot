@@ -48,7 +48,7 @@ import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
-import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
+import { StatusCell, partialIconTitle } from '../../ui/status-cell';
 import {
   ACTION_LABELS,
   ACTION_TITLES,
@@ -386,11 +386,8 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
              carrying the same id -- unmarked, the later-closing leg reads
              as a duplicate of the earlier partial exit it shares an id
              with. -->
-        @if (isPartialLeg(row)) {
-          <sb-icon name="partial" class="leg-icon" title="Closed after an earlier partial exit of the same position" />
-        }
-        @if (partialOpenTitle(row); as openTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="openTitle" />
+        @if (partialIconTitle(row); as partialTitle) {
+          <sb-icon name="partial" class="leg-icon" [title]="partialTitle" />
         }
         @if (row.bar_kind === 'trailing') {
           <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
@@ -960,16 +957,10 @@ export class Trades {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
   }
 
-  /** True for every leg of a v79 scale-out split except the first-closed
-   *  one -- `leg_index` is assigned in the order legs actually realized,
-   *  so leg 0 is always the earliest close and needs no mark; every later
-   *  leg shares leg 0's hash and closed after it, so it gets the icon.
-   *  Same rule dashboard.ts's own isPartialLeg uses. */
-  protected readonly partialOpenTitle = partialOpenTitle;
-
-  protected isPartialLeg(row: TradeRow): boolean {
-    return row.leg_total > 1 && row.leg_index > 0;
-  }
+  /** The ID cell's single partial icon tooltip: "still open" for a live PARTIAL
+   *  row, "closed after an earlier partial exit" for a later closed leg of a v79
+   *  scale-out split (`leg_index > 0`), else null. One icon, never two. */
+  protected readonly partialIconTitle = partialIconTitle;
 
   /**
    * Every control routes through here. `resetPage` is the default because a

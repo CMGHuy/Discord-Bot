@@ -33,6 +33,7 @@ from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        record_transition, runner_floor,
                                        runner_giveback_pct, runner_stop_source,
                                        tighter_stop)
+from swingbot.core.planning.lifecycle import at_or_beyond_stop, limit_cancelled, limit_hit
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning.stop_scope import plan_stop_ceiling
 from swingbot.core.planning.plan_types import breakeven_trigger, effective_stop
@@ -60,10 +61,10 @@ def poll_stop_fill(price: float, stop: float, continuous: bool) -> float:
 @dataclass
 class PlanEvent:
     plan_id: str
-    transition: str      # "filled"|"cancelled_expired"|"cancelled_invalidated"|
-                         # "cancelled_risk_cap"|"be_moved"|"tp1_partial"|
-                         # "closed"|"pyramid_add"; close reasons include
-                         # "tp1_runner_progress_stall" (v123 structure exit)
+    transition: str      # "filled"|"be_moved"|"tp1_partial"|"closed"|
+                         # "pyramid_add"|any PENDING_CANCEL_EVENTS member;
+                         # close reasons include "tp1_runner_progress_stall"
+                         # (v123 structure exit)
     detail: dict = field(default_factory=dict)
 
 
@@ -136,8 +137,15 @@ def _quote_suffix(stamp) -> str:
 # plan.pending_notice and re-sent until acknowledged. Neither field is read
 # by any exit path (tests/planning/test_plan_manager_feed.py pins that).
 STOP_EVENTS = frozenset({"be_moved", "tp1_partial", "stop_moved"})
-NOTICE_EVENTS = frozenset({"filled", "cancelled_expired", "cancelled_invalidated",
-                           "cancelled_risk_cap", "closed"})
+# v187 D3: every way a PENDING plan ends without a position. The placeholder
+# discard in PlanManager._on_event and NOTICE_EVENTS both derive from this one
+# set, so a new cancel event cannot be wired into one and missed by the other
+# (a missed discard left placeholder trades "open" forever: 2026-09-11).
+PENDING_CANCEL_EVENTS = frozenset({
+    "cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap",
+    "cancelled_limit", "cancelled_gap_through_stop",
+})
+NOTICE_EVENTS = frozenset({"filled", "closed"}) | PENDING_CANCEL_EVENTS
 NOTICE_RESEND_DAYS = 5
 
 # v152 D1: events only the notify channel (commands/scanning/follow_notify.py)
@@ -160,6 +168,8 @@ _TRANSITION_LOG = {
     "cancelled_expired": ("expired", None),
     "cancelled_invalidated": ("invalidated", "live_price"),
     "cancelled_risk_cap": ("risk cap hit", "entry_price"),
+    "cancelled_limit": ("limit cancelled", "live_price"),
+    "cancelled_gap_through_stop": ("gap through stop", "live_price"),
 }
 # Closes where a stop took the position out (initial, break-even, the
 # post-TP1 runner floor, or the chandelier trail), not a target or a time rule.
@@ -805,8 +815,7 @@ class PlanManager:
                 event.detail["trade_id"] = trade_id
             elif event.transition == "tp1_partial":
                 self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
-            elif event.transition in ("cancelled_expired", "cancelled_invalidated",
-                                      "cancelled_risk_cap"):
+            elif event.transition in PENDING_CANCEL_EVENTS:
                 # A PENDING plan never filled -- scan_run.py's placeholder
                 # trade for it (still open, sized against the trigger price)
                 # has no real position behind it. Left unhandled, it sat
@@ -814,6 +823,7 @@ class PlanManager:
                 # incident, 2026-09-11 (INTU, META among 10 stuck trades
                 # found via a dashboard mismatch -- the other 8 were the
                 # separate double-logging bug 5d72c1ab already fixed).
+                # v187: the set, not a hand list, so no cancel is missed.
                 self.trade_log.discard_plan_placeholder(plan.plan_id)
             elif event.transition == "closed":
                 if event.detail.get("_terminal_persisted"):
@@ -953,6 +963,9 @@ class PlanManager:
         return events
 
     def _step_pending(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        """One tick for a PENDING plan: expiry first, then the entry rule for
+        its entry_type (v187 D3: a limit rests and fills at its own price;
+        every other type is a stop entry), then pre-entry invalidation."""
         is_bull = plan.direction == "bullish"
 
         if _has_session_window(plan):
@@ -968,28 +981,16 @@ class PlanManager:
                 return [PlanEvent(plan.plan_id, "cancelled_expired",
                                   {"bars_waited": bars})]
 
-        crossed = price >= plan.trigger_price if is_bull else price <= plan.trigger_price
-        if crossed:
-            fill = max(price, plan.trigger_price) if is_bull \
-                else min(price, plan.trigger_price)
-            risk_pct = planned_loss_pct(fill, plan.stop_loss)
-            ceiling_pct = plan_stop_ceiling(plan)
-            if risk_pct > ceiling_pct:
-                record_transition(plan, PlanStatus.CANCELLED, reason="risk_cap",
-                                  at=self._now(), extra={"entry_price": fill})
-                self.store.update(plan)
-                return [PlanEvent(plan.plan_id, "cancelled_risk_cap", {
-                    "entry_price": fill,
-                    "stop_loss": plan.stop_loss,
-                    "planned_loss_pct": round(risk_pct, 4),
-                    "max_planned_loss_pct": ceiling_pct,
-                })]
-            plan.entry_price = fill
-            record_transition(plan, PlanStatus.ACTIVE, reason="stop_entry_fill",
-                              at=self._now())
-            self.store.update(plan)
-            return [PlanEvent(plan.plan_id, "filled",
-                              {"entry_price": fill, "live_price": price})]
+        if plan.entry_type == "limit":
+            limit_events = self._step_limit(plan, price)
+            if limit_events is not None:
+                return limit_events
+        else:
+            crossed = price >= plan.trigger_price if is_bull else price <= plan.trigger_price
+            if crossed:
+                fill = max(price, plan.trigger_price) if is_bull \
+                    else min(price, plan.trigger_price)
+                return self._fill_pending(plan, fill, price, "stop_entry_fill")
 
         if pending_invalidated(plan, price):
             record_transition(plan, PlanStatus.CANCELLED, reason="invalidated",
@@ -998,6 +999,63 @@ class PlanManager:
             return [PlanEvent(plan.plan_id, "cancelled_invalidated",
                               {"live_price": price})]
         return []
+
+    def _step_limit(self, plan: TradePlanV2, price: float) -> list[PlanEvent] | None:
+        """v187 D3: a resting limit on one tick, the live twin of
+        exit_sim._limit_entry_exit. A tick is a one-print bar (High = Low =
+        price), so limit_strict_fill keeps its meaning. The fill is checked
+        before the cancel level, as in the backtest.
+
+        Fills AT the limit, never at the better tick: a 60s poll that first
+        sees price through the limit usually missed the print at the limit,
+        and booking the tick would beat the backtest's non-gap fill.
+        A tick at or through the stop opens nothing (the backtest's 0R
+        gap_through_stop scratch); checked on the tick, before the risk cap,
+        because planned_loss_pct takes abs() and would pass a stop on the
+        wrong side. None when nothing happened this tick."""
+        if limit_hit(plan, price, price):
+            if at_or_beyond_stop(plan, price):
+                record_transition(plan, PlanStatus.CANCELLED, reason="gap_through_stop",
+                                  at=self._now())
+                self.store.update(plan)
+                return [PlanEvent(plan.plan_id, "cancelled_gap_through_stop", {
+                    "entry_price": plan.trigger_price,
+                    "live_price": price,
+                    "stop_loss": plan.stop_loss,
+                })]
+            return self._fill_pending(plan, plan.trigger_price, price, "limit_fill")
+        if limit_cancelled(plan, price, price):
+            record_transition(plan, PlanStatus.CANCELLED, reason="limit_cancelled",
+                              at=self._now())
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "cancelled_limit", {
+                "live_price": price,
+                "limit_cancel_level": plan.limit_cancel_level,
+            })]
+        return None
+
+    def _fill_pending(self, plan: TradePlanV2, fill: float, price: float,
+                      reason: str) -> list[PlanEvent]:
+        """Fill a PENDING plan at `fill` (tick `price`), or cancel it when the
+        planned loss from that fill is over the plan's stop ceiling. Shared by
+        the stop-entry and limit branches; only the ACTIVE reason differs."""
+        risk_pct = planned_loss_pct(fill, plan.stop_loss)
+        ceiling_pct = plan_stop_ceiling(plan)
+        if risk_pct > ceiling_pct:
+            record_transition(plan, PlanStatus.CANCELLED, reason="risk_cap",
+                              at=self._now(), extra={"entry_price": fill})
+            self.store.update(plan)
+            return [PlanEvent(plan.plan_id, "cancelled_risk_cap", {
+                "entry_price": fill,
+                "stop_loss": plan.stop_loss,
+                "planned_loss_pct": round(risk_pct, 4),
+                "max_planned_loss_pct": ceiling_pct,
+            })]
+        plan.entry_price = fill
+        record_transition(plan, PlanStatus.ACTIVE, reason=reason, at=self._now())
+        self.store.update(plan)
+        return [PlanEvent(plan.plan_id, "filled",
+                          {"entry_price": fill, "live_price": price})]
 
     def _active_stop(self, plan: TradePlanV2, now=None) -> tuple[float, bool]:
         if plan.working_stop is None:
@@ -1008,8 +1066,8 @@ class PlanManager:
         """Bars elapsed since the fill that moved this plan PENDING -> ACTIVE
         -- the live equivalent of exit_sim's `j - entry_index`. TradePlanV2
         has no dedicated entry-timestamp field, so this reads the fill's
-        `at` off status_history (recorded once, by the stop_entry_fill
-        transition) and hands it to bar_count_fn exactly as _step_pending
+        `at` off status_history (recorded once, by the fill transition:
+        stop_entry_fill or limit_fill) and hands it to bar_count_fn exactly as _step_pending
         already does with plan.created_at. None (no stall check possible)
         when the fill was never recorded -- a plan persisted before this
         history existed, or one filled some other way."""
