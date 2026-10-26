@@ -258,3 +258,172 @@ def test_run_summary_render_lists_counts_and_reasons():
     assert text.splitlines()[0] == ("written 1, unchanged 0, refetched 0, skipped 1, "
                                     "flagged 1, requests 3")
     assert "skipped GC=F: skipped: futures" in text and "flagged SNDK: flagged: short-overlap" in text
+
+
+# --- v190: --universe sp500_pit, aliases, no identity fallback -------------------------
+
+from alpaca_history import aliases as alias_mod  # noqa: E402
+from swingbot.core.marketdata import universe as universe_mod  # noqa: E402
+
+FB_TO_META = {"member": "FB", "alpaca": "META", "start": "2023-06-01", "end": None,
+              "note": "renamed 2022-06-09"}
+
+
+@pytest.fixture
+def pit(dirs, tmp_path, monkeypatch):
+    """dirs plus a PIT root, a fixture universe dir and a (not yet written) alias table."""
+    folder = tmp_path / "universe"
+    folder.mkdir()
+    monkeypatch.setattr(universe_mod, "UNIVERSE_DIR", str(folder))
+    return {**dirs, "pit": tmp_path / "market_data_pit", "universe": folder,
+            "aliases": tmp_path / "symbol_aliases.json"}
+
+
+def _members(pit, *symbols) -> None:
+    rows = [{"symbol": s, "name": s, "sector": "Unknown", "etf": False} for s in symbols]
+    (pit["universe"] / "sp500_pit.json").write_text(json.dumps(rows), encoding="utf-8")
+
+
+def _alias_table(pit, *entries) -> None:
+    pit["aliases"].write_text(json.dumps({"aliases": list(entries)}), encoding="utf-8")
+
+
+def _pit_argv(pit, *extra: str) -> list[str]:
+    return ["--universe", "sp500_pit", "--start", "2023-01-01", "--root", str(pit["pit"]),
+            "--backtest-dir", str(pit["bt"]), "--aliases", str(pit["aliases"]), *extra]
+
+
+def test_universe_run_fetches_the_member_list(pit):
+    cli = load_cli()
+    _members(pit, "AAPL", "NVDA")
+    prov = FakeHistory(["AAPL", "NVDA"])
+    assert cli.main(_pit_argv(pit), provider=prov, now=NOW) == 0
+    assert {c[0] for c in prov.calls} == {"AAPL", "NVDA"}
+    assert set(_manifest(pit["pit"], "daily")["tickers"]) == {"AAPL", "NVDA"}
+    assert not (pit["root"] / "daily").exists()          # the watchlist store is untouched
+
+
+def test_universe_run_never_falls_back_to_the_market_dir_reference(pit):
+    cli = load_cli()
+    write_reference(pit["md"], "NVDA", DAYS, daily_closes(DAYS))
+    assert cli.main(_argv(pit, "NVDA"), provider=FakeHistory(["NVDA"]), now=NOW) == 0
+    assert _manifest(pit["root"], "daily")["tickers"]["NVDA"]["status"] == "ok"   # watchlist: fallback
+    _members(pit, "NVDA")
+    assert cli.main(_pit_argv(pit), provider=FakeHistory(["NVDA"]), now=NOW) == 0
+    assert _manifest(pit["pit"], "daily")["tickers"]["NVDA"]["status"] == "flagged: no-reference"
+
+
+def test_alias_fetches_the_alpaca_symbol_and_stores_the_member(pit):
+    cli = load_cli()
+    _members(pit, "FB")
+    _alias_table(pit, FB_TO_META)
+    write_reference(pit["bt"], "FB", DAYS, daily_closes(DAYS))      # reference under the member
+    prov = FakeHistory(["META"])
+    assert cli.main(_pit_argv(pit), provider=prov, now=NOW) == 0
+    assert {c[0] for c in prov.calls} == {"META"}
+    for tf in TF:
+        assert (pit["pit"] / tf / "FB.csv").exists() and not (pit["pit"] / tf / "META.csv").exists()
+        entry = _manifest(pit["pit"], tf)["tickers"]["FB"]
+        assert entry["alias"] == "META" and entry["status"] == "ok"
+    daily = pd.read_csv(pit["pit"] / "daily" / "FB.csv", index_col="Date", parse_dates=True)
+    assert daily.index.min() >= pd.Timestamp("2023-06-01")
+
+
+def test_alias_without_bars_is_skipped_with_the_alias_recorded(pit):
+    cli = load_cli()
+    _members(pit, "FB")
+    _alias_table(pit, FB_TO_META)
+    assert cli.main(_pit_argv(pit), provider=FakeHistory([]), now=NOW) == 0
+    entry = _manifest(pit["pit"], "daily")["tickers"]["FB"]
+    assert entry["status"] == cli.NO_BARS and entry["alias"] == "META"
+
+
+def test_watchlist_entries_carry_no_alias_key(dirs):
+    cli = load_cli()
+    assert cli.main(_argv(dirs, "AAPL"), provider=FakeHistory(["AAPL"]), now=NOW) == 0
+    for tf in TF:
+        assert "alias" not in _manifest(dirs["root"], tf)["tickers"]["AAPL"]
+
+
+def test_tickers_replace_the_member_list_for_the_context_pass(pit):
+    cli = load_cli()
+    _members(pit, "AAPL")
+    prov = FakeHistory(["SPY"])
+    assert cli.main(_pit_argv(pit, "--tickers", "SPY"), provider=prov, now=NOW) == 0
+    assert {c[0] for c in prov.calls} == {"SPY"}
+    assert set(_manifest(pit["pit"], "daily")["tickers"]) == {"SPY"}
+
+
+def test_update_mode_hands_an_aliased_member_to_the_full_path(pit, monkeypatch):
+    cli = load_cli()
+    _members(pit, "FB")
+    _alias_table(pit, FB_TO_META)
+    assert cli.main(_pit_argv(pit), provider=FakeHistory(["META"]), now=NOW) == 0
+    def refuse_incremental(*args, **kwargs):
+        pytest.fail("an alias must use full_ticker instead of update_ticker")
+
+    monkeypatch.setattr(cli.update, "update_ticker", refuse_incremental)
+    prov = FakeHistory(["META"])
+    assert cli.main(_pit_argv(pit, "--mode", "update", "--force"), provider=prov, now=NOW) == 0
+    assert prov.calls and all(call[0] == "META" for call in prov.calls)
+
+
+def test_an_empty_universe_file_stops_the_run(pit):
+    cli = load_cli()
+    _members(pit)
+    with pytest.raises(SystemExit, match="sp500_pit"):
+        cli.main(_pit_argv(pit), provider=FakeHistory([]), now=NOW)
+
+
+def test_universe_flag_combinations_that_are_refused(pit, store_root):
+    cli = load_cli()
+    pit_root = ["--root", str(pit["pit"])]
+    for argv in (["--universe", "sp500_pit"],                                     # no --root
+                 ["--universe", "sp500_pit", "--root", str(store_root)],          # the watchlist root
+                 ["--universe", "sp500_pit", *pit_root, "--market-dir", str(pit["md"])],
+                 ["--aliases", str(pit["aliases"])],                              # aliases alone
+                 ["--universe", "sp500", *pit_root]):                             # unknown universe
+        with pytest.raises(SystemExit):
+            cli.parse_args(argv)
+    _alias_table(pit, FB_TO_META, {**FB_TO_META, "alpaca": "META2"})               # duplicate member
+    with pytest.raises(SystemExit):
+        cli.parse_args(["--universe", "sp500_pit", *pit_root, "--aliases", str(pit["aliases"])])
+
+
+def test_parse_args_universe_defaults(pit):
+    cli = load_cli()
+    plain = cli.parse_args([])
+    assert plain.universe is None and plain.alias_map == {} and plain.market_dir is not None
+    args = cli.parse_args(["--universe", "sp500_pit", "--root", str(pit["pit"]),
+                           "--aliases", str(pit["aliases"])])
+    assert args.market_dir is None and args.alias_map == {}
+    default = cli.parse_args(["--universe", "sp500_pit", "--root", str(pit["pit"])])
+    assert default.aliases == cli.ROOT / alias_mod.ALIASES_PATH
+
+
+def test_skip_manifest_refreshes_a_changed_alias(pit):
+    cli = load_cli()
+    _members(pit, "FB")
+    _alias_table(pit, FB_TO_META)
+    assert cli.main(_pit_argv(pit), provider=FakeHistory([]), now=NOW) == 0
+    _alias_table(pit, {**FB_TO_META, "alpaca": "META2"})
+    assert cli.main(_pit_argv(pit), provider=FakeHistory([]), now=NOW) == 0
+    for tf in TF:
+        assert _manifest(pit["pit"], tf)["tickers"]["FB"]["alias"] == "META2"
+
+
+def test_alias_empty_intraday_entries_retain_the_alias(pit, monkeypatch):
+    cli = load_cli()
+    _members(pit, "FB")
+    _alias_table(pit, FB_TO_META)
+    prov = FakeHistory(["META"])
+    original = prov.history_bars
+
+    def daily_only(ticker, timeframe, start, end):
+        return original(ticker, timeframe, start, end) if timeframe == "1d" else None
+
+    monkeypatch.setattr(prov, "history_bars", daily_only)
+    assert cli.main(_pit_argv(pit), provider=prov, now=NOW) == 0
+    for tf in ("hourly", "15min"):
+        entry = _manifest(pit["pit"], tf)["tickers"]["FB"]
+        assert entry["status"] == cli.NO_BARS and entry["alias"] == "META"

@@ -5,6 +5,12 @@
     docker compose run --rm bot python scripts/data/fetch_alpaca_history.py --mode update
     python scripts/data/fetch_alpaca_history.py --tickers AAPL,SPY --timeframes daily --root /tmp/s
 
+    python scripts/data/fetch_alpaca_history.py --universe sp500_pit --root data/market_data_pit --backtest-dir data/backtest_cache_ext --timeframes daily
+
+A --universe run writes its own root (never the watchlist store), uses
+backtest_cache_ext as its only identity reference, and applies
+data/universe/symbol_aliases.json.
+
 15min (all sessions), hourly (from 30-minute bars, RTH) and daily bars from
 the SIP tape, Adjustment.ALL, one calendar year per request. Refuses during
 the US regular session (--force-hours overrides) and when free disk would drop
@@ -29,7 +35,7 @@ for _p in (ROOT, ROOT / "scripts" / "data"):
 
 import pandas as pd  # noqa: E402
 
-from alpaca_history import fetch, guards, identity, store_io, update  # noqa: E402
+from alpaca_history import aliases, fetch, guards, identity, store_io, update  # noqa: E402
 from swingbot.core.marketdata import history_store  # noqa: E402
 from swingbot.core.marketdata.data_store import safe_symbol  # noqa: E402
 from swingbot.core.marketdata.providers.alpaca_provider import SIP_DELAY, AlpacaAuthError  # noqa: E402
@@ -38,6 +44,7 @@ DEFAULT_START = "2016-01-01"
 NO_BARS = "skipped: no Alpaca bars"
 # Daily first: the intraday entries copy the daily status and identity.
 RUN_ORDER = ("daily", "hourly", "15min")
+UNIVERSES = ("sp500_pit",)
 
 
 @dataclass
@@ -69,7 +76,8 @@ class _Run:
     limiter: guards.TokenBucket
     now: datetime
     backtest_dir: Path
-    market_dir: Path
+    market_dir: Path | None
+    aliases: dict = field(default_factory=dict)
 
     @property
     def stamp(self) -> str:
@@ -114,16 +122,53 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="identity reference (default: data/backtest_cache)")
     ap.add_argument("--market-dir", type=Path, default=None,
                     help="identity fallback (default: market_data/daily)")
+    ap.add_argument("--universe", choices=UNIVERSES, default=None)
+    ap.add_argument("--aliases", type=Path, default=None)
     args = ap.parse_args(argv)
+    _check_universe_args(ap, args)
     args.root = args.root or history_store.store_root()
     args.backtest_dir = args.backtest_dir or Path(backtest_cache.CACHE_DIR)
-    args.market_dir = args.market_dir or ROOT / "market_data" / "daily"
+    args.market_dir = None if args.universe else (args.market_dir or ROOT / "market_data" / "daily")
+    args.alias_map = _alias_map(ap, args)
     return args
+
+
+def _check_universe_args(ap, args) -> None:
+    if args.aliases and not args.universe:
+        ap.error("--aliases requires --universe")
+    if not args.universe:
+        return
+    if args.root is None:
+        ap.error("--universe requires an explicit --root")
+    if args.market_dir is not None:
+        ap.error("--universe refuses --market-dir")
+    if Path(args.root).resolve() == Path(history_store.store_root()).resolve():
+        ap.error("a --universe run never writes the watchlist store; pass the PIT root")
+
+
+def _alias_map(ap, args) -> dict:
+    if not args.universe:
+        return {}
+    args.aliases = args.aliases or ROOT / aliases.ALIASES_PATH
+    try:
+        return aliases.load_aliases(args.aliases)
+    except ValueError as exc:
+        ap.error(str(exc))
+
+
+def _universe_members(name: str) -> list[str]:
+    from swingbot.core.marketdata import universe
+    members = sorted({s.upper() for s in universe.universe_symbols(name)})
+    if not members:
+        raise SystemExit(f"--universe {name}: {universe.UNIVERSE_DIR}/{name}.json is missing or empty")
+    return members
 
 
 def _resolve_tickers(args: argparse.Namespace) -> list[str]:
     if args.tickers:
         return sorted({t.upper() for t in _csv_list(args.tickers)})
+    if args.universe:
+        return _universe_members(args.universe)
     import fetch_backtest_data
     from swingbot import config
     return fetch_backtest_data.training_tickers(
@@ -149,7 +194,9 @@ def make_provider():
 def _make_run(args, provider, limiter, now: datetime) -> _Run:
     return _Run(root=Path(args.root), start=args.start, timeframes=tuple(args.timeframes),
                 force=args.force, provider=provider, limiter=limiter, now=now,
-                backtest_dir=Path(args.backtest_dir), market_dir=Path(args.market_dir))
+                backtest_dir=Path(args.backtest_dir),
+                market_dir=Path(args.market_dir) if args.market_dir else None,
+                aliases=dict(getattr(args, "alias_map", None) or {}))
 
 
 def _store_path(root: Path, timeframe: str, ticker: str) -> Path:
@@ -172,21 +219,35 @@ def _todo(run: _Run, manifests: dict[str, dict], ticker: str) -> list[str]:
             if not store_io.is_complete(manifests[tf]["tickers"].get(ticker), run.start)]
 
 
+def _with_alias(entry: dict, run: _Run, ticker: str) -> dict:
+    alias = run.aliases.get(ticker)
+    if alias:
+        entry["alias"] = alias.alpaca
+    return entry
+
+
 def _record_skip(ticker: str, reason: str, run: _Run, manifests, summary: RunSummary) -> None:
     summary.skipped[ticker] = reason
-    stale = [tf for tf in run.timeframes
-             if (manifests[tf]["tickers"].get(ticker) or {}).get("status") != reason]
+    alias = run.aliases.get(ticker)
+    expected = (reason, alias.alpaca if alias else None)
+    stale = []
+    for tf in run.timeframes:
+        entry = manifests[tf]["tickers"].get(ticker) or {}
+        if (entry.get("status"), entry.get("alias")) != expected:
+            stale.append(tf)
     for tf in stale:
-        manifests[tf]["tickers"][ticker] = store_io.skipped_entry(
-            reason, start=run.start, fetched_at=run.stamp)
+        entry = store_io.skipped_entry(reason, start=run.start, fetched_at=run.stamp)
+        manifests[tf]["tickers"][ticker] = _with_alias(entry, run, ticker)
     if stale:
         _save(run, manifests, stale)
 
 
 def _fetch(run: _Run, ticker: str, timeframe: str) -> pd.DataFrame | None:
-    return fetch.fetch_store_frame(run.provider, ticker, timeframe,
-                                   date.fromisoformat(run.start), run.now - SIP_DELAY,
-                                   limiter=run.limiter)
+    alias = run.aliases.get(ticker)
+    frame = fetch.fetch_store_frame(run.provider, alias.alpaca if alias else ticker, timeframe,
+                                    date.fromisoformat(run.start), run.now - SIP_DELAY,
+                                    limiter=run.limiter)
+    return alias.clip(frame) if alias else frame
 
 
 def _daily_identity(ticker: str, run: _Run, manifests, todo: list[str]):
@@ -214,9 +275,10 @@ def _trim(frame: pd.DataFrame | None, dropped_before: str | None) -> pd.DataFram
 
 def _write(ticker, timeframe, frame, run: _Run, manifests, status, ident) -> None:
     sha = store_io.write_frame(frame, _store_path(run.root, timeframe, ticker), timeframe)
-    manifests[timeframe]["tickers"][ticker] = store_io.ok_entry(
+    entry = store_io.ok_entry(
         frame, timeframe, start=run.start, sha256=sha, identity=ident, status=status,
         fetched_at=run.stamp)
+    manifests[timeframe]["tickers"][ticker] = _with_alias(entry, run, ticker)
 
 
 def _write_timeframes(ticker, todo, run: _Run, manifests, verdict, summary) -> None:
@@ -225,8 +287,8 @@ def _write_timeframes(ticker, todo, run: _Run, manifests, verdict, summary) -> N
     for tf in todo:
         frame = daily if tf == "daily" else _trim(_fetch(run, ticker, tf), dropped)
         if frame is None:
-            manifests[tf]["tickers"][ticker] = store_io.skipped_entry(
-                NO_BARS, start=run.start, fetched_at=run.stamp)
+            entry = store_io.skipped_entry(NO_BARS, start=run.start, fetched_at=run.stamp)
+            manifests[tf]["tickers"][ticker] = _with_alias(entry, run, ticker)
             summary.skipped[f"{ticker}/{tf}"] = NO_BARS
             continue
         _write(ticker, tf, frame, run, manifests, status, ident)
@@ -280,7 +342,7 @@ _OUTCOME_FIELD = {"unchanged": "unchanged", "appended": "written", "refetched": 
 
 
 def _update_one(ticker: str, run: _Run, summary: RunSummary) -> None:
-    if identity.skip_reason(ticker) or not _updatable(run, ticker):
+    if identity.skip_reason(ticker) or ticker in run.aliases or not _updatable(run, ticker):
         full_ticker(ticker, run, summary)
         return
     daily = store_io.load_manifest(run.root, "daily")["tickers"][ticker]
