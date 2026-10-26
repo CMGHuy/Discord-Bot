@@ -236,19 +236,23 @@ def _report(tmp_path, *, sha=None):
                             integrity_doc=doc, n_resamples=50)
 
 
-def test_build_report_names_populations_ratios_and_coverage(tmp_path):
+def test_build_report_names_populations_ratios_and_folds(tmp_path):
     report = _report(tmp_path)
-    assert report["standing_line"] == rep.STANDING_LINE
     assert report["legs"]["A"]["population"] == "fold-train 2017-01-01..2024-12-31 (purged)"
     assert report["legs"]["A"]["power"]["n"] == 3 and report["legs"]["C"]["power"]["n"] == 1
     assert report["legs"]["B"]["population"] == "TRAIN 2020-01-01..2023-12-31"
     assert report["ratios"] == {"A/B": 3.0, "C/B": 1.0}
+    assert [f["test_year"] for f in report["legs"]["A"]["folds"]] == [2021, 2022, 2023, 2024, 2025]
+    assert report["legs"]["B"]["folds"] == []
+
+
+def test_build_report_names_coverage_first_dates_and_seeds(tmp_path):
+    report = _report(tmp_path)
+    assert report["standing_line"] == rep.STANDING_LINE
     assert report["coverage"] == {"tickers": 3, "admitted": 2,
                                   "excluded": {"flagged: price-mismatch": 1},
                                   "no_bars": 1, "trimmed": 1, "with_signal_cuts": 1}
     assert report["legs"]["A"]["first_counted"] == {"RSI": "2017-05-01"}
-    assert [f["test_year"] for f in report["legs"]["A"]["folds"]] == [2021, 2022, 2023, 2024, 2025]
-    assert report["legs"]["B"]["folds"] == []
     assert report["seeds"] == {"ticker": 190, "week": stats.WEEK_BOOTSTRAP_SEED}
 
 
