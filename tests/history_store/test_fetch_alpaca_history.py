@@ -364,7 +364,7 @@ def test_update_mode_hands_an_aliased_member_to_the_full_path(pit, monkeypatch):
 
     monkeypatch.setattr(cli.update, "update_ticker", refuse_incremental)
     prov = FakeHistory(["META"])
-    assert cli.main(_pit_argv(pit, "--mode", "update", "--force"), provider=prov, now=NOW) == 0
+    assert cli.main(_pit_argv(pit, "--mode", "update"), provider=prov, now=NOW) == 0
     assert prov.calls and all(call[0] == "META" for call in prov.calls)
 
 
@@ -427,3 +427,32 @@ def test_alias_empty_intraday_entries_retain_the_alias(pit, monkeypatch):
     for tf in ("hourly", "15min"):
         entry = _manifest(pit["pit"], tf)["tickers"]["FB"]
         assert entry["status"] == cli.NO_BARS and entry["alias"] == "META"
+
+
+@pytest.mark.parametrize("timeframes", ["daily", "daily,hourly,15min"])
+def test_alias_update_refreshes_complete_history_without_force(pit, timeframes):
+    cli = load_cli()
+    _members(pit, "FB")
+    _alias_table(pit, FB_TO_META)
+    write_reference(pit["bt"], "FB", DAYS, daily_closes(DAYS))
+    assert cli.main(_pit_argv(pit), provider=FakeHistory(["META"]), now=NOW) == 0
+    assert _manifest(pit["pit"], "daily")["tickers"]["FB"]["status"] == "ok"
+    newer_days = DAYS.append(pd.DatetimeIndex(["2024-06-03"]))
+    provider = FakeHistory(["META"], days=newer_days)
+    later = datetime(2024, 6, 8, 12, 0, tzinfo=UTC)
+    argv = _pit_argv(pit, "--mode", "update", "--timeframes", timeframes)
+    assert cli.main(argv, provider=provider, now=later) == 0
+    assert provider.calls and {call[0] for call in provider.calls} == {"META"}
+    daily = pd.read_csv(pit["pit"] / "daily" / "FB.csv", index_col="Date", parse_dates=True)
+    assert daily.index.max() == pd.Timestamp("2024-06-03")
+    assert daily.index.min() >= pd.Timestamp(FB_TO_META["start"])
+    _assert_alias_refresh_manifests(pit, timeframes.split(","))
+
+
+def _assert_alias_refresh_manifests(pit, requested):
+    for tf in TF:
+        entry = _manifest(pit["pit"], tf)["tickers"]["FB"]
+        assert entry["alias"] == "META" and entry["status"] == "ok"
+        assert entry["identity"]["status"] == "ok"
+        last = "2024-06-03" if tf in requested else "2024-05-31"
+        assert entry["last"].startswith(last)

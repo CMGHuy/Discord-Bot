@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -342,7 +342,10 @@ _OUTCOME_FIELD = {"unchanged": "unchanged", "appended": "written", "refetched": 
 
 
 def _update_one(ticker: str, run: _Run, summary: RunSummary) -> None:
-    if identity.skip_reason(ticker) or ticker in run.aliases or not _updatable(run, ticker):
+    if ticker in run.aliases:
+        full_ticker(ticker, replace(run, force=True), summary)
+        return
+    if identity.skip_reason(ticker) or not _updatable(run, ticker):
         full_ticker(ticker, run, summary)
         return
     daily = store_io.load_manifest(run.root, "daily")["tickers"][ticker]
