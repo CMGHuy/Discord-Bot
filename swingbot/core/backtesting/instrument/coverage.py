@@ -10,6 +10,9 @@ It reads the BACKTEST cache only (``data/backtest_cache[_ext]/``, see
 ``swingbot.core.marketdata.backtest_cache``), never ``market_data/``, and only
 the first dated row of each CSV. ``cache_dir`` is always passed in:
 ``BACKTEST_CACHE_DIR`` is read once at import, so callers decide.
+
+v190 adds the PIT store reader (``<root>/daily/<SAFE>.csv``, the history-store
+layout) for instrument v3; the backtest-cache reader is unchanged.
 """
 from __future__ import annotations
 
@@ -17,7 +20,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import pandas as pd
+
 from swingbot.core.marketdata import backtest_cache, pit_membership
+from swingbot.core.marketdata.data_store import safe_symbol
 
 _ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
@@ -80,11 +86,12 @@ def first_membership(spec, symbols) -> dict[str, str]:
     return out
 
 
-def check_coverage(symbols, required_start: str, cache_dir: Path) -> CoverageReport:
-    """Classify each distinct symbol by its cached first bar against `required_start`."""
+def _classify(symbols, required_start: str, first_of) -> CoverageReport:
+    """Each distinct symbol into covered / late / missing by `first_of(symbol)`,
+    an ISO day or None."""
     covered, late, missing = [], [], []
     for sym in sorted(set(symbols)):
-        first = first_bar_date(Path(cache_dir) / backtest_cache.cache_path(sym).name)
+        first = first_of(sym)
         if first is None:
             missing.append(sym)
         elif first > required_start:
@@ -92,6 +99,29 @@ def check_coverage(symbols, required_start: str, cache_dir: Path) -> CoverageRep
         else:
             covered.append(sym)
     return CoverageReport(required_start, tuple(covered), tuple(late), tuple(missing))
+
+
+def check_coverage(symbols, required_start: str, cache_dir: Path) -> CoverageReport:
+    """Classify each distinct symbol by its cached first bar against `required_start`."""
+    return _classify(symbols, required_start, lambda sym: first_bar_date(
+        Path(cache_dir) / backtest_cache.cache_path(sym).name))
+
+
+def store_first_bar(root: Path, symbol: str) -> pd.Timestamp | None:
+    """First dated bar of a history store's daily file, `<root>/daily/<SAFE>.csv`
+    (the layout `history_store.file_path` writes), or None when the file is
+    absent or holds no dated row. The raw file: frame trims apply on load."""
+    day = first_bar_date(Path(root) / "daily" / f"{safe_symbol(symbol)}.csv")
+    return None if day is None else pd.Timestamp(day)
+
+
+def check_store_coverage(symbols, required_start: str, root: Path) -> CoverageReport:
+    """`check_coverage` against a history store's daily files (instrument v3's
+    PIT store) instead of the backtest cache."""
+    def first_of(sym):
+        bar = store_first_bar(root, sym)
+        return None if bar is None else bar.date().isoformat()
+    return _classify(symbols, required_start, first_of)
 
 
 def _summary_lines(report: CoverageReport) -> list[str]:
