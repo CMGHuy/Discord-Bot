@@ -698,6 +698,12 @@ The type floor: the spec's scale is 12/13/14/16/20/28 with micro and chip at 12.
   });
 ```
 
+2b. Same file, `describe('v80 D3: type, shape and touch', ...)`: in the `defines the two elevation shadows` case, replace only the `--panel-shadow` expectation (the `--shadow-overlay` lines stay):
+
+```ts
+    expect(TIER3).toMatch(/^\s*--panel-shadow:\s*none;/m);
+```
+
 3. Same file: replace the whole `describe('v179: the 11px text floor', ...)` block, and its doc comment, with:
 
 ```ts
