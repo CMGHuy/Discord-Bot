@@ -136,7 +136,7 @@ def _validated_seed(defaults: dict) -> dict:
         except ValueError as exc:
             seeded[key] = _validated(key, float(_field_default(env_key)))
             log.warning("account seed: %s=%r is invalid (%s); seeding the default %r instead",
-                        env_key, defaults[key], exc, seeded[key])
+                        env_key, defaults[key], exc, seeded[key], exc_info=True)
     return seeded
 
 
