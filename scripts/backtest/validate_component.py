@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 from swingbot.core.backtesting.acceptance import ALPHA, CLOSED, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R, VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate, delta_expectancy_r, WR_STATISTICS, mde_paired, mde_win_rate, project_target_n, render_json, render_markdown, win_rate_statistic  # noqa: E402
 from swingbot.core.backtesting.acceptance_harvest import HARVEST_VERSION, WIN_RATE_FLOOR_PP, evaluate_harvest, mde_expectancy_r  # noqa: E402
 from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
+from swingbot.core.backtesting.instrument import cli as instrument_cli, contract  # noqa: E402
 from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell, with_clause  # noqa: E402
 from swingbot.core.backtesting.arms import dryup_clauses, headroom_clauses, reachability  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
@@ -22,6 +23,30 @@ from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cache_dir_source  # noqa: E402
 DECIDED = ("win", "loss")
+
+_V3_YEARS = contract.resolve("v3").fold_test_years
+#: v190 spec §4: Stage 2 is wired for exactly three folds with an absolute
+#: GATE_MIN_IMPROVING_FOLDS = 2 (backtest_wf.py), and "2 improving" on five
+#: folds would be looser than "2 of 3". No v3 stage threshold is frozen here.
+V3_FUNNEL_REFUSAL = (
+    "validate_component.py: --instrument v3 is refused. The funnel's Stage 2 is wired for "
+    "exactly three folds with an absolute GATE_MIN_IMPROVING_FOLDS = 2, and Stage 3 reads "
+    "v1's VALIDATION window; v3 has five folds "
+    f"(test years {_V3_YEARS[0]}-{_V3_YEARS[-1]}) and a sealed holdout. A follow-up "
+    "methodology spec must map Stage 2 and Stage 3 to five folds before the funnel accepts "
+    "v3 (v190 spec §4). Run with --instrument v1 (the default).")
+#: Instruments the funnel refuses outright, each with its own reason; any other
+#: non-v1 instrument exits through require_v1.
+_FUNNEL_REFUSALS = {"v3": V3_FUNNEL_REFUSAL}
+
+
+def _instrument_gate(args) -> None:
+    """Refuse every instrument but v1 before any data is selected (v190)."""
+    spec = instrument_cli.spec_from_args(args)
+    refusal = _FUNNEL_REFUSALS.get(spec.version)
+    if refusal:
+        raise SystemExit(refusal)
+    instrument_cli.require_v1(spec, "validate_component.py", "a later methodology spec")
 
 def load_arms(path):
     blob = json.loads(Path(path).read_text())
@@ -385,7 +410,9 @@ def main(argv=None):
     parser.add_argument("--mde-refused", action="append", type=float, default=[])
     parser.add_argument('--dryup-mechanism', action='store_true'); parser.add_argument('--headroom-mechanism', action='store_true'); parser.add_argument("--mechanism-json", default=None)
     cache_dir_source.add_args(parser)
+    instrument_cli.add_instrument_arg(parser)
     args = parser.parse_args(argv)
+    _instrument_gate(args)
     cache_dir_source.resolve(args)
     if args.dryup_mechanism and args.headroom_mechanism:
         parser.error("--dryup-mechanism and --headroom-mechanism are different clause-6 readings; pass one")
