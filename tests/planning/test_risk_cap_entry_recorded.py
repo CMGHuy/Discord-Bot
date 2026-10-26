@@ -57,9 +57,11 @@ def test_stored_plan_is_byte_identical_but_for_the_new_key(tmp_path, monkeypatch
     control = _pending(stop_loss=95.0)
     record_transition(control, PlanStatus.CANCELLED, reason="risk_cap", at=AT)
     expected = plan_to_dict(control)
-    # created_at is normalised by the store and pending_notice is the v81 feed
-    # bookkeeping of any poll; neither is touched by v188.
-    for key in ("created_at", "pending_notice"):
+    # created_at is normalised by the store, pending_notice is the v81 feed
+    # bookkeeping of any poll, and first_seen_price is the v93 stamp a poll
+    # writes only while the real US tape is open (poll() reads the wall clock
+    # there, not the pinned _now) -- none is touched by v188.
+    for key in ("created_at", "pending_notice", "first_seen_price"):
         stored.pop(key), expected.pop(key)
     assert stored == expected
     assert store.get("p1").entry_price is None        # a cancel never sets entry_price
