@@ -4,7 +4,7 @@
 
 **Bump:** bot patch
 **Edge:** none (integrity)
-**Spec:** [2026-10-23-v187-safety-hardening-design.md](../specs/2026-10-23-v187-safety-hardening-design.md) — § D3, § Testing (D3), § Blast radius
+**Spec:** [2026-10-23-v187-safety-hardening-design.md](../../specs/implemented/2026-10-23-v187-safety-hardening-design.md) — § D3, § Testing (D3), § Blast radius
 **Index:** [2026-10-23-v187-safety-hardening_0-index.md](2026-10-23-v187-safety-hardening_0-index.md) — Goal, Global Constraints, Contracts, Parallelisation and the task ledger live there. Tasks V187-8..V187-13.
 
 ## Parallelisation

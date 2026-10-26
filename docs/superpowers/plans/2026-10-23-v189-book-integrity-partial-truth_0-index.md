@@ -7,7 +7,7 @@
 **Screen:** exempt (integrity)
 **Spec:** [2026-10-23-v189-book-integrity-partial-truth-design.md](../specs/2026-10-23-v189-book-integrity-partial-truth-design.md) — its `## Corrections from the code brief` section wins over earlier sections.
 **Brief:** `.superpowers/briefs/2026-10-23-v189-book-integrity-partial-truth.md`
-**Depends on:** v187 (`docs/superpowers/plans/2026-10-23-v187-safety-hardening_0-index.md`) merged to `main`. V189-1 checks this first and stops if `PENDING_CANCEL_EVENTS` is not on `main`.
+**Depends on:** v187 (`docs/superpowers/plans/implemented/2026-10-23-v187-safety-hardening_0-index.md`) merged to `main`. V189-1 checks this first and stops if `PENDING_CANCEL_EVENTS` is not on `main`.
 **Worktree:** implement every task in `.claude/worktrees/2026-10-23-v189-book-integrity-partial-truth` (branch of the same name, created in V189-1's first step; `docs/claude/document-lifecycle.md`). V189-27 runs the full suite in the worktree and merges to `main`; then `/panel staff-engineer,quant-engineer,risk-manager` (the spec's `Panel:` line) and `/close-out` run on `main`.
 
 ## Goal
