@@ -64,7 +64,7 @@
     "swingbot.core.charts.trade_chart:generate_all_strategy_charts": 17,
     "swingbot.core.charts.trade_chart:generate_trade_chart": 191,
     "swingbot.core.edge.context:entry_context": 17,
-    "swingbot.core.edge.portfolio_state:collect_portfolio_state": 22,
+    "swingbot.core.edge.portfolio_state:collect_portfolio_state": 20,
     "swingbot.core.edge.strategy_soak:soak_verdict": 15,
     "swingbot.core.market.chart_patterns:dead_cat_bounce": 15,
     "swingbot.core.market.earnings_history:refresh_watchlist_earnings": 25,

@@ -360,6 +360,20 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
 @api_v1.route("/risk", methods=["GET"])
 @require_auth
 def get_risk():
+    """The Risk page in one read; the shape is `Risk` in
+    `frontend/src/app/api/models.ts`.
+
+    Top-level keys: `heat`, `positions`, `sector_heat`, `unmapped_count`,
+    `clusters`, `throttle`, `killswitch`, `scan_health`, `metrics`,
+    `correlation`.
+
+    `unmapped_count` (v194 B6): open positions with no sector in the scan
+    universe's sector map, and therefore absent from `sector_heat`. With it,
+    an empty `sector_heat` over open positions reads as "no sector data for
+    N of M positions", never as "no exposure". A response field, not a
+    stored record; cached with the rest of `collect_portfolio_state`
+    (`_cached`, `_RISK_TTL_S`); 0 when the collector produced none.
+    """
     from swingbot.admin import dashboard as dash
     from swingbot.core.edge.portfolio_state import collect_portfolio_state
 
@@ -400,6 +414,7 @@ def get_risk():
                 key=lambda kv: kv[1] or 0.0, reverse=True,
             )
         ],
+        "unmapped_count": int(state.get("unmapped_count") or 0),
         # A list of ticker lists, as the collector produces them. The page
         # numbers them 1..n for display; that numbering is presentation.
         "clusters": state.get("clusters") or [],

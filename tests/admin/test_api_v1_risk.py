@@ -126,7 +126,7 @@ def test_requires_auth(client):
 def test_risk_shape(logged_in):
     body = logged_in.get("/api/v1/risk").get_json()
     assert_shape(body, {
-        "heat": dict, "positions": list, "sector_heat": list,
+        "heat": dict, "positions": list, "sector_heat": list, "unmapped_count": int,
         "clusters": list, "throttle": dict, "killswitch": dict,
         "scan_health": dict, "metrics": dict, "correlation": dict,
     })
@@ -577,6 +577,30 @@ def test_sector_heat_is_a_sorted_list_not_a_map(logged_in):
     for row in body["sector_heat"]:
         assert_shape(row, {"sector": str, "heat_pct": NULLABLE_NUMBER},
                      where="sector_heat row")
+
+
+def test_unmapped_count_carries_the_collectors_count(logged_in, monkeypatch):
+    """v194 B6: `sector_heat: []` over open positions is "no sector data for
+    N positions", and the response says N."""
+    monkeypatch.setattr("swingbot.core.edge.portfolio_state.collect_portfolio_state",
+                        lambda: {"sector_heat": {}, "unmapped_count": 8})
+    body = logged_in.get("/api/v1/risk").get_json()
+    assert body["sector_heat"] == []
+    assert body["unmapped_count"] == 8
+
+
+def test_unmapped_count_is_zero_when_the_collector_has_none(logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.core.edge.portfolio_state.collect_portfolio_state", lambda: {})
+    assert logged_in.get("/api/v1/risk").get_json()["unmapped_count"] == 0
+
+
+def test_unmapped_count_from_a_real_book_with_a_partial_sector_map(open_book, client, monkeypatch):
+    monkeypatch.setattr("swingbot.core.marketdata.universe.sector_map",
+                        lambda name: {"AAPL": "Technology"})
+    open_book(["AAPL", "ZZZZ"])
+    body = client.get("/api/v1/risk").get_json()
+    assert body["unmapped_count"] == 1
+    assert [row["sector"] for row in body["sector_heat"]] == ["Technology"]
 
 
 def test_scan_health_ships_numbers_not_svg(logged_in, tmp_path, monkeypatch):

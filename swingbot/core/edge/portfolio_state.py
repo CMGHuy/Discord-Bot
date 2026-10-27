@@ -7,10 +7,39 @@ sub-collector degrades to a safe default on its own.
 Moved unchanged out of `swingbot.commands.growth` by v153 (task P), so the
 admin process reads it without importing a Discord command module.
 """
+import logging
+
 from swingbot import config
 from swingbot.core.edge.growth import growth_path
 from swingbot.core.planning import account as account_module
 from swingbot.core.tracking.performance import TradeLog
+
+log = logging.getLogger(__name__)
+
+
+def _load_sector_map() -> dict:
+    """v194 B6: the scan universe's ticker -> sector map, or {} when it
+    cannot be read. A failure logs at warning with the exception text; an
+    empty map, raised or not, shows up as `unmapped_count`.
+
+    Read side only: `universe.sector_map` and the files behind it also feed
+    the walk-forward replay's sector cap and the weekly risk report, so they
+    are not this module's to change."""
+    from swingbot.core.marketdata import universe
+
+    name = getattr(config, "SCAN_UNIVERSE", "watchlist") or "watchlist"
+    try:
+        return universe.sector_map(name)
+    except Exception as exc:
+        log.warning("sector map for SCAN_UNIVERSE=%r unavailable: %s", name, exc)
+        return {}
+
+
+def _unmapped_count(open_trades: list, sectors: dict) -> int:
+    """v194 B6: open positions `heat.sector_heat` leaves out for want of a
+    sector. The same test it applies (`sectors.get(ticker)` falsy), so the
+    count and the heat never disagree about which positions were skipped."""
+    return sum(1 for trade in open_trades if not sectors.get(trade.get("ticker")))
 
 
 def collect_portfolio_state() -> dict:
@@ -20,8 +49,6 @@ def collect_portfolio_state() -> dict:
     so a missing/broken piece never kills the whole command."""
     from swingbot.core.edge import correlation, heat, throttle
     from swingbot.core.marketdata.data import get_daily_data
-    from swingbot.core.marketdata import universe
-
     state: dict = {}
 
     try:
@@ -43,16 +70,16 @@ def collect_portfolio_state() -> dict:
         state["open_heat"] = 0.0
     state["heat_cap"] = getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0)
 
-    sectors: dict = {}
-    try:
-        sectors = universe.sector_map(getattr(config, "SCAN_UNIVERSE", "watchlist") or "watchlist")
-    except Exception:
-        sectors = {}
+    sectors = _load_sector_map()
 
     try:
         state["sector_heat"] = heat.sector_heat(open_trades, balance, sectors)
-    except Exception:
+    except Exception as exc:
+        log.warning("sector heat unavailable: %s", exc)
         state["sector_heat"] = {}
+    # v194 B6: with this, `sector_heat == {}` over open positions reads as
+    # "no sector data", never as "no exposure".
+    state["unmapped_count"] = _unmapped_count(open_trades, sectors)
 
     try:
         equity_points = [bal for _, bal in account_module.get_balance_history_points()]
