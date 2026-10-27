@@ -65,6 +65,9 @@ export interface PageSpec {
 export interface CompactSlot {
   line: 1 | 2;
   order: number;
+  /** Repeat this cell in the row drawer when it has an interactive hint:
+   *  compact-row contents are inert, so the drawer makes it reachable. */
+  drawer?: boolean;
 }
 
 /** What a phone compact-row tap does -- v179 §6a.4. `'drawer'` opens the

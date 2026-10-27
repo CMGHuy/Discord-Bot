@@ -241,9 +241,10 @@ const PIN_KEYS = ['ticker', 'symbol'];
     </div>
 
 
-    <!-- v179 §3.1 / §6a.4: the generic row drawer -- every rendered column the
-         compact row does not show, through the same #cellTemplate, then the
-         call site's expansion, then the detail link. Component state only. -->
+    <!-- v179 §3.1 / §6a.4: the generic row drawer -- columns outside the
+         compact row, plus opted-in interactive cells (v194), through the same
+         #cellTemplate, then the call site's expansion and the detail link.
+         Component state only. -->
     @if (phoneTap() === 'drawer' && (compact() || drawerRow() !== null)) {
       <sb-drawer class="row-drawer" [open]="drawerRow() !== null && compact()" [heading]="drawerHeading()"
                  (closed)="drawerRow.set(null)">
