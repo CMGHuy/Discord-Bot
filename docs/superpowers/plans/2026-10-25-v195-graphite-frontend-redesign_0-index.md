@@ -283,7 +283,8 @@ in order, and spells out only its deviations:
 | 3 | `2026-10-25-v195-graphite-frontend-redesign_3-signs-buttons-panels.md` | V195-7..V195-9 | true minus and `riskUnits`; `danger`/`danger-quiet`; panel and panel header |
 | 3b | `2026-10-25-v195-graphite-frontend-redesign_3b-local-formatters.md` | V195-7b | local R and drawdown formatters take the true minus (`rText`, `formatR`, `drawdownPart`, regime line, `fmtFigure`) |
 | 4 | `2026-10-25-v195-graphite-frontend-redesign_4-controls-kpi-states.md` | V195-10..V195-12 | flat controls; one KPI strip; states and overlays |
-| 5 | `2026-10-25-v195-graphite-frontend-redesign_5-tables-hint-nav.md` | V195-13..V195-15 | one pager, never-collapsed columns; `search` icon and `Hint.anchor`; nav model and breadcrumb |
+| 5 | `2026-10-25-v195-graphite-frontend-redesign_5-tables-hint-nav.md` | V195-13..V195-14 | one pager, never-collapsed columns; `search` icon and `Hint.anchor` |
+| 5b | `2026-10-25-v195-graphite-frontend-redesign_5b-nav-breadcrumb.md` | V195-15 | nav model in four groups, phone tabs, breadcrumb and `RouteTitleService.detail` |
 | 6 | `2026-10-25-v195-graphite-frontend-redesign_6-shell-rail-topbar-phone.md` | V195-16..V195-18 | icon rail; top-bar cluster and density menu; phone tab bar and More sheet |
 | 7 | `2026-10-25-v195-graphite-frontend-redesign_7-palette-and-page.md` | V195-19..V195-21 | `SearchIndexStore` and ranking; command palette; `sb-page` |
 | 8 | `2026-10-25-v195-graphite-frontend-redesign_8-system-regrouping.md` | V195-22..V195-24 | scan health to `SystemStore`; Providers tab; System on `sb-page` |
