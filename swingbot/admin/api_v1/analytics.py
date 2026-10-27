@@ -137,6 +137,23 @@ def analytics_soak():
                     "verdict": verdict})
 
 
+def _weak_in_account_currency(weak: dict, money_closed: list[dict]) -> tuple[dict, int]:
+    """`weak_summary()` with `total_pnl` re-summed from converted rows (v194 B7).
+
+    The store sums stored quote-currency amounts; the weak ledger's rows are
+    the same closes, so the overlay reads them from `money_closed`. Returns
+    the block and how many weak rows lacked a rate (left out of the sum)."""
+    from swingbot.core.tracking import ledger
+
+    from .money import missing_count
+
+    rows = [t for t in money_closed
+            if ledger.is_weak(t) and t.get("status") in ("win", "loss", "closed")]
+    total = sum(float(t["realized_pnl_amount"]) for t in rows
+                if t.get("realized_pnl_amount") is not None)
+    return {**weak, "total_pnl": round(total, 2)}, missing_count(rows)
+
+
 @api_v1.route("/analytics/performance", methods=["GET"])
 @require_auth
 def analytics_performance():
@@ -179,6 +196,7 @@ def analytics_performance():
     # percent below keep reading the stored rows (see api_v1/money.py).
     money_closed = to_account_currency(all_closed)
     money_scoped = select(money_closed, scope)
+    weak, weak_missing = _weak_in_account_currency(tl.weak_summary(), money_closed)
     start, end = scope.start, scope.end
     stats = tl.get_stats(trades=all_raw)             # totals.total/open stay book-wide
     stats.update(tl.get_extended_stats(trades=all_raw))
@@ -215,7 +233,7 @@ def analytics_performance():
         "expectancy_r": m.expectancy_r(closed),
         "expectancy_n": len(m.r_multiples(closed)),
         "by_confidence": tl.get_stats_by_confidence(),
-        "weak": tl.weak_summary(),
+        "weak": weak,
 
         "range": {
             "from": start, "to": end,
@@ -278,7 +296,7 @@ def analytics_performance():
         # route (never the unscoped book): a streak that crossed a scope
         # boundary the user drew is not a streak the user asked to see.
         "streaks": m.streaks(closed),
-        "fx_missing_count": missing_count(money_scoped),
+        "fx_missing_count": missing_count(money_scoped) + weak_missing,
         **echo(scope, len(scoped)),
     })
 

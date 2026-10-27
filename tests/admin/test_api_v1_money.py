@@ -168,3 +168,13 @@ def test_calendar_converts_and_counts_the_month_and_the_day(seed, logged_in, rat
     assert day["fx_missing_count"] == 1
     assert day["total_ccy"] is None
     assert day["trades"][0]["fx_missing"] is True
+
+
+def test_weak_ledger_pnl_is_converted_and_counted(seed, logged_in, rates):
+    weak = [{**_closed("d" * 16), "ledger": "weak"},
+            {**_closed("e" * 16, pnl=30.0, closed_at="2026-08-05T20:00:00+00:00"), "ledger": "weak"}]
+    seed(weak)
+    body = logged_in.get("/api/v1/analytics/performance").get_json()
+    assert body["weak"]["total_pnl"] == 45.0       # 50 USD at 0.9, not the stored 80
+    assert body["weak"]["n"] == 2
+    assert body["fx_missing_count"] == 1
