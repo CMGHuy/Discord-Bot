@@ -29,6 +29,7 @@
 - Modify: `frontend/src/app/shell/shell.html` (a phone search button in the top bar; the tab bar and the sheet after `div.main`)
 - Modify: `frontend/src/app/shell/shell.css` (the phone block hides the rail, drops the rail column and reserves the tab bar's height)
 - Modify: `frontend/src/app/shell/shell.spec.ts` (two new describes)
+- Modify: `frontend/src/app/ui/primitives.spec.ts` (two justified `RAW_BUTTON_ALLOWLIST` entries: the More tab cell and the sheet's search row)
 
 **Interfaces:**
 - Consumes: `NAV_GROUPS`, `PHONE_TABS`, `NavGroup`, `navEntryFor` (`shell/nav.ts`, V195-15); `KillswitchChip`, `FreshnessChip` and the V195-17 top-bar markup; `ViewportService.isPhone` (`ui/breakpoints.ts`, root; true below 640px); `FocusTrap` (`[sbFocusTrap]`, `ui/focus-trap.ts`: focuses the first focusable element on init, traps Tab, restores focus on destroy); `Icon` with `'search'` and `'more'` (`ui/icon.ts`); `Button` (`ui/button.ts`); the global `.elev-overlay` and `.sb-sheet-in` classes (`styles.css`, `styles/motion.css`); `--scrim-soft` (`tokens.css`).
@@ -518,6 +519,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { RouterLink } from '@angular/router';
 
 import { FocusTrap } from '../ui/focus-trap';
+import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { NAV_GROUPS, NavEntry, NavGroup, PHONE_TABS } from './nav';
 
@@ -549,7 +551,7 @@ export function morePageGroups(
 @Component({
   selector: 'sb-more-sheet',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, FocusTrap],
+  imports: [RouterLink, Icon, FocusTrap, Button],
   host: { '(document:keydown.escape)': 'onEscape()' },
   template: `
     @if (open()) {
@@ -572,7 +574,7 @@ export function morePageGroups(
             }
           </ul>
         }
-        <button type="button" class="close" (click)="closed.emit()">Close</button>
+        <button sb-button variant="secondary" type="button" class="close" (click)="closed.emit()">Close</button>
       </div>
     }
   `,
@@ -632,15 +634,6 @@ export function morePageGroups(
     }
     .page:hover { background: var(--surface-raised); color: var(--text); }
     .glyph { display: inline-flex; line-height: 0; }
-    .close {
-      min-height: var(--control-h);
-      border: 1px solid var(--border);
-      border-radius: var(--control-radius);
-      background: none;
-      color: var(--text-secondary);
-      font: inherit;
-      cursor: pointer;
-    }
   `,
 })
 export class MoreSheet {
@@ -655,6 +648,23 @@ export class MoreSheet {
   }
 }
 ```
+
+- [ ] **Step 6b: Justify the two raw buttons in the button gate**
+
+`primitives.spec.ts`'s `no call site hand-rolls a button` gate scans every template outside `ui/`, `shell/` included. Close is already an `sb-button` (Step 6). The other two stay raw because each IS a whole-surface hit area, the same kind as the two existing entries. In `frontend/src/app/ui/primitives.spec.ts`, append to the `RAW_BUTTON_ALLOWLIST` map, after the `recent-activity.ts` entry:
+
+```ts
+  // The More tab IS a tab-bar cell -- glyph over label, laid out exactly like
+  // its sibling <a class="tab"> cells so the five read as one bar. A button
+  // variant would style a labelled control, not a bar cell (v195 V195-18).
+  ['shell/phone-tab-bar.ts', 'class="tab more"'],
+  // The More sheet's search row IS a field-shaped trigger for the palette --
+  // glyph and placeholder text across the sheet's full width. It opens the
+  // palette rather than taking input, so it is not a text input (v195 V195-18).
+  ['shell/more-sheet.ts', 'class="search"'],
+```
+
+and change the docblock's `Two entries, both whole-surface hit areas, and it should stay that way.` to `Four entries, all whole-surface hit areas, and it should stay that way.`
 
 - [ ] **Step 7: The phone branch in the shell**
 
@@ -741,10 +751,10 @@ export class MoreSheet {
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-25-v195-graphite-frontend-redesign
-npm --prefix "$WT/frontend" test -- --watch=false --include src/app/shell/phone-tab-bar.spec.ts --include src/app/shell/more-sheet.spec.ts --include src/app/shell/shell.spec.ts --include src/app/ui/title-usage.spec.ts --include src/app/ui/breakpoint-guard.spec.ts --include src/app/ui/spacing.spec.ts --include src/app/ui/hit-area.spec.ts --include src/app/ui/elevation.spec.ts
+npm --prefix "$WT/frontend" test -- --watch=false --include src/app/shell/phone-tab-bar.spec.ts --include src/app/shell/more-sheet.spec.ts --include src/app/shell/shell.spec.ts --include src/app/ui/title-usage.spec.ts --include src/app/ui/breakpoint-guard.spec.ts --include src/app/ui/spacing.spec.ts --include src/app/ui/hit-area.spec.ts --include src/app/ui/elevation.spec.ts --include src/app/ui/primitives.spec.ts
 ```
 
-Expected: PASS, `0 failed`, `0 xfailed`. `title-usage.spec.ts` finds no new site (neither new component binds a `title`; their icons sit in `aria-hidden` spans). `hit-area.spec.ts` stays green: no phone-only `@media (pointer: coarse), (max-width: 639px)` block was added (the new rules sit in the existing width-only phone block). If the sheet's focus case finds focus on `body`, the fixture is not attached to the document: TestBed attaches it by default; do not add a manual `focus()` to the component. If the `forgets an open sheet` case fails, the effect wrote `moreOpen` while tracked: keep the write inside `untracked`.
+Expected: PASS, `0 failed`, `0 xfailed`. `primitives.spec.ts` finds no unlisted raw button (Step 6b). `title-usage.spec.ts` finds no new site (neither new component binds a `title`; their icons sit in `aria-hidden` spans). `hit-area.spec.ts` stays green: no phone-only `@media (pointer: coarse), (max-width: 639px)` block was added (the new rules sit in the existing width-only phone block). If the sheet's focus case finds focus on `body`, the fixture is not attached to the document: TestBed attaches it by default; do not add a manual `focus()` to the component. If the `forgets an open sheet` case fails, the effect wrote `moreOpen` while tracked: keep the write inside `untracked`.
 
 Then the whole frontend and lint:
 
@@ -765,7 +775,7 @@ Close: standard (test: `frontend/src/app/shell/shell.spec.ts`), plus `frontend/s
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-25-v195-graphite-frontend-redesign
-git -C "$WT" add frontend/src/app/shell/phone-tab-bar.ts frontend/src/app/shell/phone-tab-bar.spec.ts frontend/src/app/shell/more-sheet.ts frontend/src/app/shell/more-sheet.spec.ts frontend/src/app/shell/shell.ts frontend/src/app/shell/shell.html frontend/src/app/shell/shell.css frontend/src/app/shell/shell.spec.ts
+git -C "$WT" add frontend/src/app/shell/phone-tab-bar.ts frontend/src/app/shell/phone-tab-bar.spec.ts frontend/src/app/shell/more-sheet.ts frontend/src/app/shell/more-sheet.spec.ts frontend/src/app/shell/shell.ts frontend/src/app/shell/shell.html frontend/src/app/shell/shell.css frontend/src/app/shell/shell.spec.ts frontend/src/app/ui/primitives.spec.ts
 git -C "$WT" commit -m "feat(v195): phone tab bar and More sheet (V195-18)" -m "Spec Phase 3: below 640px the rail gives way to a bottom tab bar (Dashboard, Watchlist, Trades, Risk, More; 56px plus the safe-area inset, current tab from the nav model) and a modal More sheet with the seven remaining pages by group and the search field. The phone top bar is the current crumb, the killswitch and freshness chips, a search icon and the avatar. The shell owns the sheet's state; onSearchRequested() closes it, and V195-20 opens the palette from there." -m "<Co-Authored-By trailer from the session's attribution reminder>"
 ```
 
