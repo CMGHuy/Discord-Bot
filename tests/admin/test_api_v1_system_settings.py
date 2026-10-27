@@ -231,6 +231,47 @@ def test_custom_variables_survive_a_save(logged_in, env_file):
 
 # --- validation ---------------------------------------------------------
 
+# v191: a live ATR stop floor needs both gap-sizing switches (spec § Part B, Coupling).
+
+def test_a_floor_without_long_gap_sizing_is_rejected(logged_in, env_file):
+    env_file({"SHORT_GAP_SIZING": "true", "LONG_GAP_SIZING": "false"})
+    response = logged_in.put("/api/v1/system/settings",
+                             json={"settings": {"CONFLUENCE_ATR_STOP_FLOOR": "1.0"}})
+    assert_error(response, "invalid", 400)
+    assert "LONG_GAP_SIZING" in response.get_json()["error"]["message"]
+    assert env_file.read().get("CONFLUENCE_ATR_STOP_FLOOR") in (None, "0"), "nothing written"
+
+
+def test_a_floor_with_both_switches_in_the_same_body_is_saved(logged_in, env_file):
+    env_file({"SHORT_GAP_SIZING": "true"})
+    response = logged_in.put("/api/v1/system/settings", json={"settings": {
+        "CONFLUENCE_ATR_STOP_FLOOR": "1.0", "LONG_GAP_SIZING": True}})
+    assert response.status_code == 200
+    saved = env_file.read()
+    assert (saved["CONFLUENCE_ATR_STOP_FLOOR"], saved["LONG_GAP_SIZING"]) == ("1.0", "true")
+
+
+def test_turning_short_gap_sizing_off_under_a_live_floor_is_rejected(logged_in, env_file):
+    env_file({"CONFLUENCE_ATR_STOP_FLOOR": "1.0", "LONG_GAP_SIZING": "true", "SHORT_GAP_SIZING": "true"})
+    assert_error(logged_in.put("/api/v1/system/settings",
+                               json={"settings": {"SHORT_GAP_SIZING": False}}), "invalid", 400)
+    assert env_file.read()["SHORT_GAP_SIZING"] == "true"
+
+
+def test_the_preview_refuses_the_same_combination(logged_in, env_file):
+    env_file({"LONG_GAP_SIZING": "false"})
+    assert_error(logged_in.post("/api/v1/system/settings/preview",
+                                json={"settings": {"CONFLUENCE_ATR_STOP_FLOOR": "0.75"}}),
+                 "invalid", 400)
+
+
+def test_a_zero_floor_never_needs_the_switches(logged_in, env_file):
+    env_file({"LONG_GAP_SIZING": "false", "SHORT_GAP_SIZING": "false"})
+    response = logged_in.put("/api/v1/system/settings",
+                             json={"settings": {"CONFLUENCE_ATR_STOP_FLOOR": "0"}})
+    assert response.status_code == 200
+
+
 def test_a_missing_settings_object_is_rejected(logged_in, env_file):
     assert_error(logged_in.put("/api/v1/system/settings", json={}), "invalid", 400)
 

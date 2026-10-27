@@ -1607,6 +1607,33 @@ def _cast(f: Field, raw: str):
     return caster(raw) if caster else raw
 
 
+def enforce_atr_band_coupling() -> bool:
+    """Require both gap-sizing switches for a live v191 ATR stop floor.
+
+    Import and reload call this through _apply_env; replay's apply_knobs
+    bypasses it so measurement remains uncoupled. Return whether the floor
+    was zeroed, logging a broken live combination at ERROR.
+    """
+    g = globals()
+    floor = g.get("CONFLUENCE_ATR_STOP_FLOOR", 0.0)
+    long_on = g.get("LONG_GAP_SIZING", False)
+    short_on = g.get("SHORT_GAP_SIZING", False)
+    if floor <= 0 or (long_on and short_on):
+        return False
+    log.error("CONFLUENCE_ATR_STOP_FLOOR=%s needs LONG_GAP_SIZING and SHORT_GAP_SIZING "
+              "both on (LONG_GAP_SIZING=%s, SHORT_GAP_SIZING=%s) -- treated as 0 "
+              "(v191 coupling)", floor, long_on, short_on)
+    g["CONFLUENCE_ATR_STOP_FLOOR"] = 0.0
+    return True
+
+
+def _note_floor_change(changed: dict, before) -> None:
+    """Restate the floor change after coupling zeroed it."""
+    changed.pop("CONFLUENCE_ATR_STOP_FLOOR", None)
+    if before != 0.0:
+        changed["CONFLUENCE_ATR_STOP_FLOOR"] = (before, 0.0)
+
+
 def _apply_env() -> dict:
     """
     Reads every FIELDS entry from the current environment (after
@@ -1616,6 +1643,7 @@ def _apply_env() -> dict:
     """
     changed = {}
     g = globals()
+    floor_before = g.get("CONFLUENCE_ATR_STOP_FLOOR")
     for f in FIELDS:
         raw = os.getenv(f.key, f.default)
         try:
@@ -1640,6 +1668,8 @@ def _apply_env() -> dict:
         g[f.attr] = new_value
         if old_value != new_value:
             changed[f.attr] = (old_value, new_value)
+    if enforce_atr_band_coupling():
+        _note_floor_change(changed, floor_before)
     return changed
 
 
