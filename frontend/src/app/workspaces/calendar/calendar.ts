@@ -15,6 +15,7 @@ import { SectionHead } from '../../ui/section-head';
 import { MIN_SAMPLE_N, StatTile, StatTone } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
+import { fxMissingText } from '../analytics/scope-bar';
 import { PAPER_CAPTION, legsSampleNote } from './day/day-copy';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
@@ -122,6 +123,9 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
                         [value]="longestHoldValue()" [hint]="store.longestHold()?.ticker ?? undefined" />
         </sb-stat-strip>
       </sb-panel>
+      @if (monthFxMissing() > 0) {
+        <p class="fx-caveat" role="note">{{ fxText(monthFxMissing()) }}</p>
+      }
 
       <!-- The day-detail pane that used to sit beside this grid duplicated
            the drawer below word for word (same store signals, same fields)
@@ -244,6 +248,9 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
         <p class="day-empty">No closed trades on this day under the current filter.</p>
       } @else if (store.dayDetail(); as detail) {
         <p class="day-caption">{{ paperCaption }}</p>
+        @if ((detail.fx_missing_count ?? 0) > 0) {
+          <p class="fx-caveat" role="note">{{ fxText(detail.fx_missing_count!) }}</p>
+        }
         <div class="day-summary">
           <sb-stat-tile label="Total" [value]="rLabel(detail.total_r)" [sample]="detail.trade_count" />
           <sb-stat-tile label="Total P&L" [value]="ccyLabel(detail.total_ccy)" [sample]="detail.trade_count" [tone]="toneOf(detail.total_ccy)" />
@@ -452,6 +459,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     .open-day { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: var(--space-10); color: var(--accent); font-weight: 600; text-decoration: none; }
     .open-day:hover, .open-day:focus-visible { text-decoration: underline; }
     .day-caption, .day-sample-note { margin: 0 0 var(--space-8); color: var(--text-secondary); font-size: var(--text-micro); }
+    .fx-caveat { margin: 0 0 var(--space-8); color: var(--warn); font-size: var(--text-micro); overflow-wrap: anywhere; }
     .day-leaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-14); margin-bottom: var(--space-14); }
     .day-leaders h3 { margin: 0 0 var(--space-6); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.08em; }
     .day-leaders .leader { display: flex; justify-content: space-between; gap: var(--space-8); white-space: nowrap; }
@@ -487,6 +495,10 @@ export class Calendar {
    *  note. An admin running a euro account must not read euro figures
    *  labelled in dollars. */
   protected readonly currency = computed(() => this.connection.currency());
+  /** v194 B7: the month's closes the money figures left out (no exchange
+   *  rate for the exit date), and the caveat copy shared with Analytics. */
+  protected readonly monthFxMissing = computed(() => this.store.data()?.fx_missing_count ?? 0);
+  protected readonly fxText = fxMissingText;
 
   /** The toggle's two choices. Computed rather than a module constant so
    *  the money side is labelled with the account's currency. */

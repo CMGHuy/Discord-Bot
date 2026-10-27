@@ -142,6 +142,8 @@ export interface TradeRow {
   price_as_of?: string | null;
   exit_price: number | null;
   realized_pnl_amount: number | null;
+  /** v194 B7: no exchange rate for the exit date; `realized_pnl_amount` is then null. */
+  fx_missing?: boolean;
   pnl_pct: number | null;
   r_multiple: number | null;
   held_hours: number | null;
@@ -404,6 +406,8 @@ export interface Dashboard {
   open_pnl_pct: number | null;
   /** Sum of shares x (price - entry) over open positions; null when none has a share count. */
   open_pnl_amount: number | null;
+  /** v194 B7: closes and positions left out of the money figures for want of a rate (main ledger). */
+  fx_missing_count?: number;
   risk_used_pct: number | null;
   risk_cap_pct: number | null;
   open_trades: number;
@@ -430,6 +434,7 @@ export interface Dashboard {
     n: number;
     wins: number;
     losses: number;
+    fx_missing_count?: number;
   };
   /** The plan-lifecycle diagram's "Expires" definition names this number --
    *  projected from the server's own DEFAULT_EXPIRY_BARS constant rather
@@ -556,6 +561,8 @@ export interface AnalyticsEquityCurve extends Scoped {
   points_n: number;
   as_of: string | null;
   benchmark: { spy_indexed: { date: string; pct: number }[] };
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /** One strategy or horizon's aggregate (v85 D40, R9-02). `total_r` is a
@@ -579,6 +586,8 @@ export interface AnalyticsByDimension extends Scoped {
   rows: AnalyticsByDimensionRow[];
   as_of: string | null;
   min_cell_n: number;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 export interface AnalyticsPerformance extends Scoped {
@@ -615,6 +624,8 @@ export interface AnalyticsPerformance extends Scoped {
     best_win_streak: number;
     worst_loss_streak: number;
   };
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /**
@@ -2052,6 +2063,8 @@ export interface PnlCalendar {
   worst_day: CalendarDay | null;
   streak: CalendarStreak;
   filters: CalendarFilters;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 export interface CalendarDayTrades {
@@ -2075,6 +2088,8 @@ export interface CalendarDayTrades {
   context: DayContext;
   /** v165 D3 -- exactly the rows in `trades`, grouped four ways. */
   breakdown: DayBreakdown;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /** A difference from a reference day. Null when either side has no figure. */
