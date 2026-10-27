@@ -178,3 +178,10 @@ def test_weak_ledger_pnl_is_converted_and_counted(seed, logged_in, rates):
     assert body["weak"]["total_pnl"] == 45.0       # 50 USD at 0.9, not the stored 80
     assert body["weak"]["n"] == 2
     assert body["fx_missing_count"] == 1
+
+
+@pytest.mark.parametrize("ledger", ["weak", "both"])
+def test_a_rateless_weak_row_in_scope_is_counted_once(seed, logged_in, rates, ledger):
+    seed([{**_closed("e" * 16, pnl=30.0, closed_at="2026-08-05T20:00:00+00:00"), "ledger": "weak"}])
+    body = logged_in.get(f"/api/v1/analytics/performance?ledger={ledger}").get_json()
+    assert body["fx_missing_count"] == 1
