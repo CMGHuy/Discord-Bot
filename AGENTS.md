@@ -399,10 +399,8 @@ symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
 from a `task-brief`), `plan-briefer` (gathers a spec's code context into
 `.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
 approved spec and that brief: `mode=index` (index and task ledger) first,
-returning `SCOPE` when the ledger passes 20 tasks,
 then one `mode=part <N>` per part, one at a time here, each appending task by
-task to disk; a task past 20 KB is written as `<id>` + `<id>b` and reported as
-`SPLIT:`; at most 2 plans in progress per session; a plan cut off
+task to disk; at most 2 plans in progress per session; a plan cut off
 mid-write resumes from its first missing task, never skipped or restarted. The
 SessionStart hook prints `PLAN WIP` for such a plan: resume it before new work.
 Record partner decisions in the index's `## Handoff` section as made, and commit
@@ -487,11 +485,8 @@ after bumping.
 
 No plan file may exceed 1500 lines. Split it into more `_N` parts (lettered
 `_2a`/`_2b`), never compress a task or split one across files, and afterwards
-confirm the `^### Task` sequence has no gap. Plans above v196 also cap a task
-at 20 KB (aim 14 KB; split an over-cap task into `<id>` and `<id>b`, the
-controller adds the `b` ledger row) and a plan at 20 tasks (`plan-writer`
-returns `SCOPE`: ask the partner where to cut and split the spec into two
-numbered specs); `plan_lint.py` checks both. A plan runs the full suite ONCE, as
+confirm the `^### Task` sequence has no gap. From v197 a task is ≤ 20 KB
+(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan runs the full suite ONCE, as
 its own final verification task, never per task and never again after a clean
 merge; the per-task check is the one narrow test file (or `npm test --include`
 one spec). Full cadence: `document-conventions.md`.
