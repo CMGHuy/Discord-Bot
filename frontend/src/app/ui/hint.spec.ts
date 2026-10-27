@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Hint } from './hint';
+import { Hint, supportsPopover } from './hint';
 import { POPOVER_OPEN_ATTR, installPopoverPolyfill } from '../testing/popover-polyfill';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/hint.ts'), 'utf8');
@@ -37,7 +37,8 @@ describe('Hint (v80 D4)', () => {
     target.dispatchEvent(event);
     fixture.detectChanges();
   };
-  const isOpen = () => !pop().hidden;
+  // The polyfill reflects :popover-open as an attribute (jsdom cannot match the pseudo-class).
+  const isOpen = () => pop().hasAttribute(POPOVER_OPEN_ATTR);
 
   it('is closed at rest, and already describes its trigger', () => {
     expect(isOpen()).toBe(false);
@@ -98,6 +99,93 @@ describe('Hint (v80 D4)', () => {
     expect(block).not.toBeNull();
     expect(block![1]).toContain('min-width: var(--control-h)');
     expect(block![1]).toContain('min-height: var(--control-h)');
+  });
+
+  describe('top layer (v194 A1)', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('carries popover="manual" and no hidden attribute', () => {
+      expect(supportsPopover()).toBe(true);
+      expect(pop().getAttribute('popover')).toBe('manual');
+      expect(pop().hasAttribute('hidden')).toBe(false);
+    });
+
+    it('opens and closes through showPopover() and hidePopover() on the popover element', () => {
+      const show = vi.spyOn(HTMLElement.prototype, 'showPopover');
+      const hide = vi.spyOn(HTMLElement.prototype, 'hidePopover');
+      fire(hint(), new MouseEvent('mouseenter'));
+      expect(show).toHaveBeenCalledTimes(1);
+      expect(show.mock.contexts[0]).toBe(pop());
+      expect(hide).not.toHaveBeenCalled();
+      fire(hint(), new MouseEvent('mouseleave'));
+      expect(hide).toHaveBeenCalledTimes(1);
+      expect(hide.mock.contexts[0]).toBe(pop());
+    });
+
+    it('never shows twice or hides twice while open reasons overlap', () => {
+      const show = vi.spyOn(HTMLElement.prototype, 'showPopover');
+      const hide = vi.spyOn(HTMLElement.prototype, 'hidePopover');
+      // A phone tap: emulated hover, then focus, then the pinning click.
+      fire(hint(), new MouseEvent('mouseenter'));
+      fire(trigger(), new FocusEvent('focusin', { bubbles: true }));
+      fire(trigger(), new MouseEvent('click', { bubbles: true }));
+      fire(hint(), new MouseEvent('mouseleave'));
+      fire(trigger(), new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      expect(isOpen()).toBe(true);
+      expect(show).toHaveBeenCalledTimes(1);
+      expect(hide).not.toHaveBeenCalled();
+      fire(trigger(), new MouseEvent('click', { bubbles: true }));
+      expect(isOpen()).toBe(false);
+      expect(hide).toHaveBeenCalledTimes(1);
+      // The strict polyfill throws on a double call, so reaching here also proves the guards.
+    });
+
+    it('tears down an open hint without throwing', () => {
+      fire(trigger(), new MouseEvent('click', { bubbles: true }));
+      expect(isOpen()).toBe(true);
+      expect(() => fixture.destroy()).not.toThrow();
+    });
+  });
+
+});
+
+describe('Hint without the Popover API (v194 A1 fallback)', () => {
+  const NAMES = ['showPopover', 'hidePopover', 'togglePopover'] as const;
+  const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
+  const saved: Record<string, unknown> = {};
+  let fixture: ComponentFixture<Host>;
+
+  beforeEach(() => {
+    for (const name of NAMES) {
+      saved[name] = proto[name];
+      delete proto[name];
+    }
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(Host);
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    for (const name of NAMES) proto[name] = saved[name];
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const hint = () => el().querySelector('sb-hint') as HTMLElement;
+  const pop = () => el().querySelector('sb-hint [role=tooltip]') as HTMLElement;
+  const fire = (target: Element, event: Event) => {
+    target.dispatchEvent(event);
+    fixture.detectChanges();
+  };
+
+  it('keeps the fixed-position path: no popover attribute, hidden by class until open', () => {
+    expect(supportsPopover()).toBe(false);
+    expect(pop().hasAttribute('popover')).toBe(false);
+    expect(pop().classList).toContain('fallback-closed');
+    fire(hint(), new MouseEvent('mouseenter'));
+    expect(pop().classList).not.toContain('fallback-closed');
+    expect(pop().hasAttribute(POPOVER_OPEN_ATTR)).toBe(false);
+    fire(hint(), new MouseEvent('mouseleave'));
+    expect(pop().classList).toContain('fallback-closed');
   });
 });
 

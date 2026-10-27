@@ -469,7 +469,7 @@ describe('Dashboard explanatory help', () => {
     expect(hint).not.toBeNull();
     hint.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
-    expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hidden).toBe(false);
+    expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hasAttribute('data-popover-open')).toBe(true);
     expect(el.textContent).toContain('Only trades that meet');
     expect(el.querySelector('sb-hint.lifecycle-hint sb-plan-lifecycle-diagram')).not.toBeNull();
     expect(el.textContent).toContain('Share counts are snapshotted');

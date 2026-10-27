@@ -7,9 +7,19 @@ import {
   inject,
   input,
   signal,
+  viewChild,
 } from '@angular/core';
 
 let nextId = 0;
+
+/**
+ * Whether this engine has the Popover API (spec v194 A1, feature detection).
+ * Without it the hint keeps the old position: fixed path, so an old browser
+ * loses only the cases an ancestor transform clips -- never every hint.
+ */
+export function supportsPopover(): boolean {
+  return typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.showPopover === 'function';
+}
 
 /**
  * An info popover -- spec v80 D4.
@@ -28,6 +38,16 @@ let nextId = 0;
  * The trigger is a real button with `aria-expanded`, and the popover is
  * `role="tooltip"` referenced by `aria-describedby`, so a screen reader reads
  * the text on focus without opening anything.
+ *
+ * Since v194 the popover is a native `popover="manual"` element shown with
+ * `showPopover()`: the browser paints it in the top layer, outside every
+ * ancestor's containing block, overflow clip and stacking context. An
+ * `.sb-lift` card's hover transform (`motion.css`) made the old
+ * `position: fixed` popover position against the card and clip with it,
+ * which is how a hint on a tile or panel heading opened invisibly. `open`
+ * stays the single source of truth; the effect below maps it onto the API,
+ * guarded, because engines throw `InvalidStateError` on a double show or
+ * hide.
  */
 @Component({
   selector: 'sb-hint',
@@ -52,13 +72,15 @@ let nextId = 0;
       <span class="glyph" aria-hidden="true">{{ glyph() }}</span>
     </button>
     <span
+      #pop
       class="pop elev-overlay"
       [class.wide]="wide()"
       [class.xl]="xl()"
       [class.align-left]="align() === 'left'"
+      [class.fallback-closed]="!native && !open()"
+      [attr.popover]="native ? 'manual' : null"
       role="tooltip"
       [id]="id"
-      [hidden]="!open()"
       [style.top.px]="popTop()"
       [style.left.px]="popLeft()"
     >@if (text()) {
@@ -91,13 +113,20 @@ let nextId = 0;
       font-size: var(--text-micro);
       line-height: 1;
     }
-    /* position: fixed, not absolute -- an sb-panel body clips overflow
-       (layout.ts's .panel { overflow: hidden }), which is everywhere this
-       component gets used, so a panel-relative popover was invisible under
-       its own trigger (v80 F26 browser walk). popTop/popLeft measure the
-       trigger's own viewport rect instead of trusting an ancestor's box. */
+    /* Native path (v194 A1): popover="manual" puts this box in the top
+       layer, whose containing block is the viewport whatever the ancestors
+       do, so popTop/popLeft -- measured from the trigger's viewport rect --
+       are exact. The UA's [popover] rules (inset: 0, margin: auto,
+       overflow: auto) are reset here; .elev-overlay's border and background
+       are author styles and already win over the UA's. Fallback path (no
+       Popover API): the same position: fixed box, which an ancestor
+       transform can still clip -- the pre-v194 behaviour, hidden by
+       .fallback-closed instead of the UA's popover display rule. */
     .pop {
       position: fixed;
+      inset: auto;
+      margin: 0;
+      overflow: visible;
       z-index: 20;
       width: max-content;
       max-width: min(280px, 90vw);
@@ -109,6 +138,7 @@ let nextId = 0;
       text-align: left;
       white-space: normal;
     }
+    .pop.fallback-closed { display: none; }
     .pop.wide { max-width: min(420px, 90vw); }
     /* 50% past .wide, on request (2026-09-14) -- for a hint whose content
        (a diagram, not a sentence) reads as cramped even at .wide's 420px. */
@@ -149,6 +179,14 @@ export class Hint {
   protected readonly focused = signal(false);
   protected readonly open = computed(() => this.pinned() || this.hovered() || this.focused());
 
+  /** Read once: an engine does not gain or lose the Popover API mid-session. */
+  protected readonly native = supportsPopover();
+  private readonly pop = viewChild.required<ElementRef<HTMLElement>>('pop');
+  /** This instance showed its popover and has not hidden it yet. Tracked
+   *  here rather than read back from :popover-open, so the guards hold the
+   *  same way under the test polyfill (jsdom cannot match that selector). */
+  private shown = false;
+
   protected readonly popTop = signal(0);
   protected readonly popLeft = signal(0);
 
@@ -166,19 +204,23 @@ export class Hint {
   };
 
   constructor() {
-    /** Fixed positioning (see the .pop comment) tracks the trigger's own
-     *  rect, not the flow, so it has to be told explicitly: once on open,
-     *  and on every scroll/resize while open -- a panel body scrolls its
-     *  content (layout.ts's .body { overflow-y: auto }) without moving the
-     *  window, which a plain window-resize listener would miss. */
+    /** Open -> show the popover (top layer, or the fallback's fixed box),
+     *  then place it from the trigger's viewport rect: once on open, and on
+     *  every scroll/resize while open -- a panel body scrolls its content
+     *  (layout.ts's .body { overflow-y: auto }) without moving the window,
+     *  which a plain window-resize listener would miss. Closed -> the
+     *  cleanup hides it. */
     effect((onCleanup) => {
       if (!this.open()) return;
+      const pop = this.pop().nativeElement;
+      this.show(pop);
       this.reposition();
       window.addEventListener('scroll', this.reposition, { capture: true, passive: true });
       window.addEventListener('resize', this.reposition, { passive: true });
       onCleanup(() => {
         window.removeEventListener('scroll', this.reposition, true);
         window.removeEventListener('resize', this.reposition);
+        this.hide(pop);
       });
     });
   }
@@ -204,4 +246,21 @@ export class Hint {
   protected onDocumentPointer(event: Event): void {
     if (!this.host.contains(event.target as Node)) this.close();
   }
+
+  /** Guarded (v194 A1): showPopover() throws InvalidStateError on a
+   *  disconnected or already-open popover on some engines. */
+  private show(pop: HTMLElement): void {
+    if (!this.native || this.shown || !pop.isConnected) return;
+    pop.showPopover();
+    this.shown = true;
+  }
+
+  /** Guarded the same way. A popover removed from the document was already
+   *  hidden by the browser, so only a connected one is hidden here. */
+  private hide(pop: HTMLElement): void {
+    if (!this.shown) return;
+    this.shown = false;
+    if (pop.isConnected) pop.hidePopover();
+  }
+
 }
