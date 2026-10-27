@@ -255,7 +255,10 @@ export function exactRiskText(value: number | null | undefined): string | null {
         <span class="heat-figure num" [class]="heatClass()">
           {{ fmtRisk(store.openHeatPct()) }}
         </span>
-        <span class="heat-cap num">of {{ fmt(store.heatCapPct(), 1) }}% cap</span>
+        @if (exactRisk(store.openHeatPct()); as exact) {
+          <sb-hint [text]="exact" label="Exact portfolio heat" />
+        }
+        <span class="heat-cap num">of {{ fmtRisk(store.heatCapPct()) }} cap</span>
       </div>
 
       <!-- An explicit null check, not a truthiness one: zero heat is a real
@@ -326,9 +329,15 @@ export function exactRiskText(value: number | null | undefined): string | null {
             <!-- riskPct, like the heat figure above (v194 B5): two places,
                  and "<0.01%" for a used budget too small to print -- 1 place
                  once rounded 0.03% used to a flat "0.0%". -->
-            <div><span class="label">Cap</span><span class="num">{{ fmtRisk(budget.cap) }}</span></div>
-            <div><span class="label">Used</span><span class="num">{{ fmtRisk(budget.used) }}</span></div>
-            <div><span class="label">Remaining</span><span class="num remaining">{{ fmtRisk(budget.remaining) }}</span></div>
+            <div><span class="label">Cap</span><span class="num">{{ fmtRisk(budget.cap) }}
+              @if (exactRisk(budget.cap); as exact) { <sb-hint [text]="exact" label="Exact budget cap" /> }
+            </span></div>
+            <div><span class="label">Used</span><span class="num">{{ fmtRisk(budget.used) }}
+              @if (exactRisk(budget.used); as exact) { <sb-hint [text]="exact" label="Exact budget used" /> }
+            </span></div>
+            <div><span class="label">Remaining</span><span class="num remaining">{{ fmtRisk(budget.remaining) }}
+              @if (exactRisk(budget.remaining); as exact) { <sb-hint [text]="exact" label="Exact budget remaining" /> }
+            </span></div>
             @if (budget.over) {
               <p class="budget-note warn">
                 Usage is over the cap — remaining shown as 0.
@@ -366,7 +375,11 @@ export function exactRiskText(value: number | null | undefined): string | null {
           @for (row of store.sectorHeat(); track row.sector) {
             <div>
               <dt>{{ fmtText(row.sector) }}</dt>
-              <dd class="num">{{ fmtRisk(row.heat_pct) }}</dd>
+              <dd class="num"><span>{{ fmtRisk(row.heat_pct) }}</span>
+                @if (exactRisk(row.heat_pct); as exact) {
+                  <sb-hint [text]="exact" [label]="'Exact sector heat for ' + row.sector" />
+                }
+              </dd>
             </div>
           }
         </dl>
@@ -754,7 +767,10 @@ export class Risk {
     { key: 'shares', header: 'Shares', value: (row) => shareCount(row.shares), numeric: true, sortable: true, footer: (rows) => shareCount(rows.reduce((sum, row) => sum + (row.shares ?? 0), 0)) },
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true, compact: { line: 2, order: 2 } },
     { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, sortable: true, compact: { line: 2, order: 1 } },
-    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => riskPct(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)), compact: { line: 1, order: 2, drawer: true } },
+    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => riskPct(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)), footerHint: (rows) => {
+      const text = exactRiskText(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0));
+      return text ? { text, label: 'Exact Risk % total' } : null;
+    }, compact: { line: 1, order: 2, drawer: true } },
   ]);
 
   /** v179: the money floor keeps Risk % and the stop on the phone row. The
@@ -851,7 +867,7 @@ export class Risk {
     // says which one it is and what the heat figure is measured against.
     return cap === null
       ? `${used}% of the risk budget is used.`
-      : `${used}% of the risk budget is used (heat is measured against a ${num(cap, 1)}% cap).`;
+      : `${used}% of the risk budget is used (heat is measured against a ${riskPct(cap)} cap).`;
   });
 
   /** Who engaged it and when, when the server recorded it. */

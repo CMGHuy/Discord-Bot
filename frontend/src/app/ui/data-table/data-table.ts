@@ -17,6 +17,7 @@ import { filter } from 'rxjs';
 
 import { Drawer } from '../layout';
 import { EmptyStateComponent } from '../empty-state';
+import { Hint } from '../hint';
 import { PaginationComponent } from '../pagination';
 import { Viewport, ViewportService } from '../breakpoints';
 import { isInline } from '../priority';
@@ -71,7 +72,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
 @Component({
   selector: 'sb-data-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, EmptyStateComponent, PaginationComponent, Drawer, RouterLink],
+  imports: [NgTemplateOutlet, EmptyStateComponent, Hint, PaginationComponent, Drawer, RouterLink],
   template: `
     <div class="wrap" [class.phone]="phone()" [attr.aria-busy]="loading()">
       @if (showSpinner()) {
@@ -116,7 +117,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
             @for (col of compactFooter(); track col.key) {
               <span class="compact-total" [attr.data-col]="col.key">
                 <span class="sb-label">{{ col.header }}</span>
-                <span class="num">{{ footerText(col) }}</span>
+                <span class="num"><ng-container [ngTemplateOutlet]="footerTemplate" [ngTemplateOutletContext]="{ $implicit: col }" /></span>
               </span>
             }
           </p>
@@ -224,7 +225,9 @@ const PIN_KEYS = ['ticker', 'symbol'];
         @if (hasFooter()) {
           <tfoot><tr>
             @if (hasDetail()) { <td class="expander-cell"></td> }
-            @for (col of inlineColumns(); track col.key) { <td [class.num]="col.numeric">{{ footerText(col) }}</td> }
+            @for (col of inlineColumns(); track col.key) {
+              <td [class.num]="col.numeric"><ng-container [ngTemplateOutlet]="footerTemplate" [ngTemplateOutletContext]="{ $implicit: col }" /></td>
+            }
           </tr></tfoot>
         }
       </table>
@@ -270,6 +273,13 @@ const PIN_KEYS = ['ticker', 'symbol'];
         }
       </sb-drawer>
     }
+
+    <ng-template #footerTemplate let-col>
+      {{ footerText(col) }}
+      @if (col.footerHint?.(shownRows()); as hint) {
+        <sb-hint [text]="hint.text" [label]="hint.label" />
+      }
+    </ng-template>
 
     <ng-template #pagerTemplate let-page let-announce="announce">
       <sb-pagination [pagination]="page" [showPerPage]="activeShowPerPage()" [announce]="announce" [navOnly]="!announce"

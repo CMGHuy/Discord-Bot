@@ -7,7 +7,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Provider, provideZonelessChangeDetection } from '@angular/core';
+import { Provider, provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 
@@ -19,6 +19,7 @@ import {
 import { Risk as RiskData, RiskMetrics } from '../../api/models';
 import { EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, exactRiskText, reconciles } from './risk';
 import { RiskStore } from '../../stores/risk.store';
+import { ViewportService } from '../../ui/breakpoints';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 
@@ -529,7 +530,7 @@ describe('Risk exposure figures (v194 B4/B5)', () => {
     })).nativeElement as HTMLElement;
     expect(el.querySelector('.heat-figure')!.textContent).toContain('<0.01%');
     expect(el.querySelector('.risk-budget')!.textContent).toContain('<0.01%');
-    expect(el.querySelector('.sectors dd')!.textContent!.trim()).toBe('<0.01%');
+    expect(el.querySelector('.sectors dd > span')!.textContent!.trim()).toBe('<0.01%');
   });
 });
 
@@ -548,5 +549,54 @@ describe('Risk exposure helpers (v194 B4/B5)', () => {
     expect(exactRiskText(0.002)).toContain('0.002%');
     expect(exactRiskText(-0.002)).toContain('-0.002%');
     for (const shown of [0, 0.01, 3, null]) expect(exactRiskText(shown)).toBeNull();
+  });
+});
+describe('Risk exact tiny figures across device classes (v194 B5)', () => {
+  const devices = ['lg', 'sm', 'xs'] as const;
+
+  for (const device of devices) {
+    it(`opens exact heat, budget, sector and total hints at ${device}`, async () => {
+      const fixture = await render({
+        heat: { open_pct: 0.002, cap_pct: 0.006, utilisation_pct: 33.3333333333 },
+        sector_heat: [{ sector: 'Technology', heat_pct: 0.003 }],
+        positions: [{ ...FRACTIONAL_BOOK[0], risk_pct: 0.002 }],
+      }, [{
+        provide: ViewportService,
+        useValue: { viewport: signal(device), isPhone: signal(device === 'xs'), isNarrow: signal(device !== 'lg') },
+      }]);
+      const root = fixture.nativeElement as HTMLElement;
+      const cases = [
+        ['Exact portfolio heat', '0.002%'],
+        ['Exact budget cap', '0.006%'],
+        ['Exact budget used', '0.002%'],
+        ['Exact budget remaining', '0.004%'],
+        ['Exact sector heat for Technology', '0.003%'],
+        ['Exact Risk % total', '0.002%'],
+      ];
+      for (const [label, value] of cases) {
+        const trigger = root.querySelector<HTMLButtonElement>(`sb-hint > button[aria-label="${label}"]`);
+        expect(trigger, label).not.toBeNull();
+        expect(trigger!.closest('[inert]'), label).toBeNull();
+        const tip = root.querySelector<HTMLElement>(`[id="${trigger!.getAttribute('aria-describedby')}"]`)!;
+        expect(tip.textContent, label).toContain(value);
+        trigger!.click();
+        fixture.detectChanges();
+        expect(tip.hasAttribute('data-popover-open'), label).toBe(true);
+        trigger!.click();
+        fixture.detectChanges();
+      }
+      const footer = root.querySelector(device === 'xs' ? '.compact-footer [data-col="risk_pct"]' : 'tfoot td:last-child')!;
+      expect(footer.textContent).toContain('<0.01%');
+      expect(footer.querySelector('sb-hint button')!.getAttribute('aria-label')).toBe('Exact Risk % total');
+    });
+  }
+
+  it('does not add exact-value controls to zero or fully displayed figures', async () => {
+    const root = (await render({
+      heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 },
+      sector_heat: [{ sector: 'Technology', heat_pct: 0.01 }],
+      positions: [{ ...FRACTIONAL_BOOK[0], risk_pct: 0 }],
+    })).nativeElement as HTMLElement;
+    expect(root.querySelector('sb-hint button[aria-label^="Exact"]')).toBeNull();
   });
 });

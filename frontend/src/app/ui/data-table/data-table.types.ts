@@ -160,4 +160,8 @@ export interface ColumnDef<T> {
   compact?: CompactSlot;
 
   footer?: (rows: T[]) => string | number | null;
+
+  /** An accessible explanation beside the total, in both table and compact
+   *  layouts. Uses the same shown rows as `footer`. */
+  footerHint?: (rows: T[]) => { text: string; label: string } | null;
 }
