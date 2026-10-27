@@ -715,6 +715,7 @@ export class Dashboard {
    *  in every mode: the Closed and Cancelled tabs always list today's
    *  closes (`[today]="true"`), whatever period the KPI cards show, so the
    *  counts come from the today response, never the scoped one. */
+  /** An empty today list (fetch failed or not landed yet) falls back to the all-time open counts. */
   protected readonly lifecycleCounts = computed(() => {
     const today = this.store.todayLifecycle();
     const rows = today.length > 0

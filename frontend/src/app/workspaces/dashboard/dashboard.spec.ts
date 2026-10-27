@@ -960,4 +960,12 @@ describe('Dashboard lifecycle tab counts (v194 B1)', () => {
     expect(card.classList.contains('loading')).toBe(false);
     expect(card.textContent).toContain("couldn't load today's figures");
   });
+
+  it("says today's figures could not load in the 390px phone summary too", async () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390);
+    const fixture = await todayFailedInPeriod();
+    const row = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.mobile-summary > div')]
+      .find((d) => d.querySelector('span')!.textContent!.includes('Realised today'))!;
+    expect(row.querySelector('strong')!.textContent).toContain("couldn't load today's figures");
+  });
 });
