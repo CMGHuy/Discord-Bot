@@ -16,7 +16,9 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   `core/` is fully packaged (v27 repo restructure, 2026-08-15) — no flat
   `.py` modules remain under it, only ten subpackages: `core/marketdata/`
   (fetching and caching: both OHLCV caches, the v162 Alpaca history store
-  `history_store.py` and the training-data switch `training_data.py`), `core/market/`
+  `history_store.py`, the training-data switch `training_data.py`, and since
+  v190 the PIT store's integrity reader `pit_integrity.py`; instrument v3
+  selects that store through `training_data.select(name, store, until)`), `core/market/`
   (everything computed from bars — indicators, levels, strategies, entry
   filters), `core/planning/` (plan construction, lifecycle and sizing —
   `plan_engine.py`, `plan_manager.py`, `plan_store.py`), `core/backtesting/`
