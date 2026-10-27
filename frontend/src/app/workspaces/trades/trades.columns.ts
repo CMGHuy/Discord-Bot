@@ -1,7 +1,7 @@
 import { Signal, signal } from '@angular/core';
 import { TradeRow } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { age, elapsedHours, held, num, signed, text } from '../../ui/format';
+import { age, elapsedHours, held, num, shareCount, signed, text } from '../../ui/format';
 
 /**
  * The columns the Trades list shows by default — spec 3 Decision 2.
@@ -167,7 +167,7 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     { key: 'plan', header: 'Plan', width: '12rem', inlineFrom: 'xs', compact: { line: 2, order: 1 } },
     { key: 'tier', header: 'Tier', inlineFrom: 'lg' },
     { key: 'confidence_level', header: 'Confidence', inlineFrom: 'md' },
-    { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, inlineFrom: 'lg' },
+    { key: 'shares', header: 'Shares', value: (row) => shareCount(row.shares), numeric: true, inlineFrom: 'lg' },
     { key: 'position_value', header: 'Deployed', value: (row) => num(row.position_value), numeric: true, inlineFrom: 'lg' },
     {
       key: 'realized_pnl_amount',

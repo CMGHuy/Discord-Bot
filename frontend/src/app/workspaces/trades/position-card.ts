@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { Chip } from '../../ui/chip';
-import { date, num, share, text } from '../../ui/format';
+import { date, num, share, shareCount, text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 
 export interface PositionFigures {
@@ -22,7 +22,7 @@ export function positionRows(f: PositionFigures): PositionRow[] {
     if (raw !== null) rows.push({ label, value, sub, fragile });
   };
   const partial = f.status === 'PARTIAL';
-  add(partial ? 'Open shares' : 'Shares', f.shares, num(f.shares, 0));
+  add(partial ? 'Open shares' : 'Shares', f.shares, shareCount(f.shares));
   add('Deployed', f.positionValue, num(f.positionValue));
   add('$ at risk', f.dollarAtRisk, num(f.dollarAtRisk), partial ? PARTIAL_RISK_SUB : null);
   add('Sizing mode', f.sizingMode, text(f.sizingMode));

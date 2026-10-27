@@ -27,6 +27,11 @@ describe('PositionCard', () => {
     expect(positionRows(absent)).toEqual([]);
     expect(positionRows({ ...absent, shares: 0, dollarAtRisk: 0, tp1Pct: 0, holdCapBars: 0 }).map(row => row.value)).toEqual(['0', '0.00', '0%', '0 bars']);
   });
+  it('renders a fractional share count with its decimals (v194 B4)', () => {
+    expect(positionRows({ ...base, shares: 2.72 })[0].value).toBe('2.72');
+    expect(positionRows({ ...base, status: 'ACTIVE', shares: 0.5 })[0]).toMatchObject({ label: 'Shares', value: '0.5' });
+  });
+
   it('shows the fragile chip with gap risk and explains only absent snapshots', () => {
     const f = TestBed.createComponent(PositionCard);
     f.componentRef.setInput('figures', base); f.detectChanges();

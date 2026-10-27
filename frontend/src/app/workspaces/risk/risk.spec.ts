@@ -17,7 +17,7 @@ import {
   loadingInterceptor,
 } from '../../api/interceptors';
 import { Risk as RiskData, RiskMetrics } from '../../api/models';
-import { Risk } from './risk';
+import { EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, exactRiskText, reconciles } from './risk';
 import { RiskStore } from '../../stores/risk.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
@@ -457,8 +457,96 @@ describe('Risk exposure on a phone (v179 §3.1)', () => {
     const { fixture, table } = await phoneTable();
     openRowDrawer(table);
     fixture.detectChanges();
-    expect([...compactKeys(table), ...drawerKeys(table)].sort())
+    expect([...new Set([...compactKeys(table), ...drawerKeys(table)])].sort())
       .toEqual(['entry', 'risk_pct', 'shares', 'stop_loss', 'strategy', 'ticker']);
     expect(table.querySelector('a.drawer-detail-link')!.getAttribute('href')).toBe('/trades/t1');
+  });
+});
+
+/* -- v194 B4/B5 -- shares and risk percentages that are true -- */
+
+const FRACTIONAL_BOOK = [
+  { trade_id: 'a', ticker: 'AAA', strategy: 'VWAP', shares: 2.72, entry: 100, stop_loss: 95, risk_pct: 0.004 },
+  { trade_id: 'b', ticker: 'BBB', strategy: 'VWAP', shares: 3, entry: 50, stop_loss: 49, risk_pct: 0.004 },
+  { trade_id: 'c', ticker: 'CCC', strategy: 'VWAP', shares: 0.5, entry: 10, stop_loss: 9, risk_pct: 0.004 },
+];
+
+describe('Risk exposure figures (v194 B4/B5)', () => {
+  async function phone(): Promise<{ fixture: ComponentFixture<Risk>; table: HTMLElement }> {
+    installDialogPolyfill();
+    const fixture = await render({ positions: FRACTIONAL_BOOK }, [phoneViewport()]);
+    return { fixture, table: (fixture.nativeElement as HTMLElement).querySelector('sb-data-table') as HTMLElement };
+  }
+  const drawerField = (table: HTMLElement, key: string) =>
+    table.querySelector(`sb-drawer.row-drawer dl.drawer-fields > [data-col="${key}"]`)!;
+  const exposureTip = (fixture: ComponentFixture<Risk>) =>
+    (fixture.nativeElement as HTMLElement)
+      .querySelector('sb-panel[heading="Exposure by position"] header sb-hint [role="tooltip"]')!.textContent ?? '';
+
+  it('renders fractional shares in the drawer and totals the unrounded values', async () => {
+    const { fixture, table } = await phone();
+    // 2.72 + 3 + 0.5 = 6.22 -- not 3 + 3 + 1 = 7.
+    expect(table.querySelector('.compact-footer [data-col="shares"]')!.textContent).toContain('6.22');
+    openRowDrawer(table);
+    fixture.detectChanges();
+    expect(drawerField(table, 'shares').textContent).toContain('2.72');
+  });
+
+  it('renders a tiny non-zero risk as <0.01%, never 0.00%, and the total with its unit', async () => {
+    const { table } = await phone();
+    const cell = table.querySelector('.compact-cell[data-col="risk_pct"]')!;
+    expect(cell.textContent).toContain('<0.01%');
+    expect(cell.textContent).not.toContain('0.00%');
+    // 3 x 0.004 = 0.012 -> "0.01%", with the "%" the old footer dropped.
+    expect(table.querySelector('.compact-footer [data-col="risk_pct"]')!.textContent).toContain('0.01%');
+  });
+
+  it('puts the exact tiny value in an sb-hint, reachable in the row drawer', async () => {
+    const { fixture, table } = await phone();
+    openRowDrawer(table);
+    fixture.detectChanges();
+    const hint = drawerField(table, 'risk_pct').querySelector('sb-hint')!;
+    expect(hint.querySelector('[role="tooltip"]')!.textContent).toContain('0.004%');
+    expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('Exact risk for AAA');
+    hint.querySelector('button')!.click();
+    fixture.detectChanges();
+    expect(hint.querySelector('[role="tooltip"]')!.hasAttribute('data-popover-open')).toBe(true);
+  });
+
+  it('says totals use unrounded values only when the rounded rows do not add up', async () => {
+    const mismatch = exposureTip(await render({ positions: FRACTIONAL_BOOK }));
+    expect(mismatch).toContain('paper book');
+    expect(mismatch).toContain('2% dollar-risk cap');
+    expect(mismatch).toContain(UNROUNDED_TOTALS_NOTE);
+    const reconciled = exposureTip(await render());
+    expect(reconciled.trim()).toBe(EXPOSURE_HINT);
+  });
+
+  it('formats the heat figure, the budget and sector heat through the same formatter', async () => {
+    const el = (await render({
+      heat: { open_pct: 0.003, cap_pct: 6, utilisation_pct: 0.1 },
+      sector_heat: [{ sector: 'Technology', heat_pct: 0.003 }],
+    })).nativeElement as HTMLElement;
+    expect(el.querySelector('.heat-figure')!.textContent).toContain('<0.01%');
+    expect(el.querySelector('.risk-budget')!.textContent).toContain('<0.01%');
+    expect(el.querySelector('.sectors dd')!.textContent!.trim()).toBe('<0.01%');
+  });
+});
+
+describe('Risk exposure helpers (v194 B4/B5)', () => {
+  it('reconciles when the rounded rows add up to the rounded total', () => {
+    expect(reconciles([2.72, 3.5], 2)).toBe(true);
+    expect(reconciles([], 2)).toBe(true);
+    expect(reconciles([null, 1], 2)).toBe(true);
+    expect(reconciles([0.004, 0.004, 0.004], 2)).toBe(false);
+    // The Intl display is 1.01 + 0.01, while the unrounded total displays 1.01.
+    expect(reconciles([1.005, 0.005], 2)).toBe(false);
+    expect(reconciles([1.005, 0.004], 2)).toBe(true);
+  });
+
+  it('gives an exact value only for a tiny non-zero risk', () => {
+    expect(exactRiskText(0.002)).toContain('0.002%');
+    expect(exactRiskText(-0.002)).toContain('-0.002%');
+    for (const shown of [0, 0.01, 3, null]) expect(exactRiskText(shown)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { amount, held, money, quantity, signed, timeInZone } from './format';
+import { amount, held, money, quantity, riskPct, shareCount, signed, timeInZone } from './format';
 
 /* No prior spec file existed for format.ts; timeInZone is new (Watchlist
  * Earnings calendar) and carries real cross-timezone/DST behaviour worth
@@ -129,5 +129,56 @@ describe('quantity (v183: a share count, decimals are a ceiling)', () => {
     expect(quantity(1.23456, 4)).toBe('1.2346');
     expect(quantity(null)).toBe('—');
     expect(quantity(undefined)).toBe('—');
+  });
+});
+
+describe('shareCount (v194 B4: fractional shares are not rounded to whole)', () => {
+  it('renders integers bare and keeps one or two decimals, trailing zeros dropped', () => {
+    expect(shareCount(3)).toBe('3');
+    expect(shareCount(0.5)).toBe('0.5');
+    expect(shareCount(2.7)).toBe('2.7');
+    expect(shareCount(2.72)).toBe('2.72');
+    expect(shareCount(1234.4)).toBe('1,234.4');
+  });
+
+  it('rounds at the third decimal', () => {
+    expect(shareCount(1.236)).toBe('1.24');
+    expect(shareCount(1.234)).toBe('1.23');
+    expect(shareCount(2.999)).toBe('3');
+  });
+
+  it('renders a real zero as 0 and absence as the em dash', () => {
+    expect(shareCount(0)).toBe('0');
+    expect(shareCount(null)).toBe('—');
+    expect(shareCount(undefined)).toBe('—');
+  });
+});
+
+describe('riskPct (v194 B5: a tiny risk never reads as zero)', () => {
+  it('renders an exact zero, and -0, as 0.00%', () => {
+    expect(riskPct(0)).toBe('0.00%');
+    expect(riskPct(-0)).toBe('0.00%');
+  });
+
+  it('renders a non-zero value below 0.01 as <0.01%, and 0.01 itself at two decimals', () => {
+    expect(riskPct(0.002)).toBe('<0.01%');
+    expect(riskPct(0.0099)).toBe('<0.01%');
+    expect(riskPct(0.01)).toBe('0.01%');
+  });
+
+  it('renders two grouped decimals with the unit, unsigned when positive', () => {
+    expect(riskPct(1.234)).toBe('1.23%');
+    expect(riskPct(3)).toBe('3.00%');
+    expect(riskPct(1234.5)).toBe('1,234.50%');
+  });
+
+  it('keeps the sign of a negative value, tiny or not', () => {
+    expect(riskPct(-1.234)).toBe('-1.23%');
+    expect(riskPct(-0.002)).toBe('-<0.01%');
+  });
+
+  it('renders absence as the em dash', () => {
+    expect(riskPct(null)).toBe('—');
+    expect(riskPct(undefined)).toBe('—');
   });
 });

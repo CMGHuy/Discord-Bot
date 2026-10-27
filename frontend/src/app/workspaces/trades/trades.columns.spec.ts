@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TRADE_SORTABLE } from '../../api/models';
+import { TRADE_SORTABLE, TradeRow } from '../../api/models';
 import { isInline } from '../../ui/priority';
 import { compactLines, drawerColumns } from '../../ui/data-table/compact';
 import { deriveOpenVisible } from '../dashboard/dashboard.helpers';
@@ -174,6 +174,13 @@ describe('trade column sets', () => {
       );
     }
   });
+  it('renders the shares column, and so its row drawer, with fractional shares (v194 B4)', () => {
+    const shares = tradeColumns().find((column) => column.key === 'shares')!;
+    expect(shares.value!({ shares: 2.72 } as TradeRow)).toBe('2.72');
+    expect(shares.value!({ shares: 3 } as TradeRow)).toBe('3');
+    expect(shares.value!({ shares: null } as TradeRow)).toBe('—');
+  });
+
 });
 
 /* -- v95 C2 -- column floors, amended 2026-09-28 --------------------------- */

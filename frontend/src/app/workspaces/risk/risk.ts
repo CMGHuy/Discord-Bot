@@ -19,7 +19,8 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
-import { amount, dateTime, num, share, text } from '../../ui/format';
+import { amount, dateTime, num, riskPct, share, shareCount, text } from '../../ui/format';
+import { Hint } from '../../ui/hint';
 import { Freshness } from '../../ui/freshness';
 import { Panel } from '../../ui/layout';
 import { Matrix } from '../../ui/matrix';
@@ -29,6 +30,43 @@ import { Sparkline } from '../../ui/sparkline';
 import { StatTile } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { tablePerPage } from '../../ui/table-per-page';
+
+/** v194 B4/B5: what the Exposure table's figures are, shown as the panel's
+ *  hint. Copy rules (index Global Constraints): paper, no recommendation. */
+export const EXPOSURE_HINT =
+  "Shares are the paper book's size, computed unrounded under the 2% dollar-risk cap; " +
+  "a broker may fill whole shares or another fraction. Risk % is each position's risk " +
+  'to its stop as a share of the account balance; a figure under 0.01% shows as "<0.01%", ' +
+  'its exact value in the hint beside it.';
+
+export const UNROUNDED_TOTALS_NOTE =
+  'Totals add the unrounded values, so they can differ from the sum of the rounded rows.';
+
+/** True when the rows, each rounded to `decimals`, add up to the rounded
+ *  total of the unrounded values: the footer visibly reconciles. Integer
+ *  units of the last decimal, so float noise cannot flip it. */
+export function reconciles(values: readonly (number | null | undefined)[], decimals: number): boolean {
+  const factor = 10 ** decimals;
+  // Use the same en-US rounding as the displayed share/risk formatters;
+  // Math.round(value * factor) disagrees at decimal midpoints such as 1.005.
+  const units = (value: number): number => Math.round(Number(num(value, decimals).replaceAll(',', '')) * factor);
+  const roundedRows = values.reduce<number>((sum, value) => sum + units(value ?? 0), 0);
+  const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  return roundedRows === units(total);
+}
+
+/** The Exposure panel's hint for the rows on screen: the base text, plus the
+ *  unrounded-totals note only when shares or Risk % visibly fail to add up. */
+export function exposureHint(rows: readonly RiskPosition[]): string {
+  const ok = reconciles(rows.map((row) => row.shares), 2) && reconciles(rows.map((row) => row.risk_pct), 2);
+  return ok ? EXPOSURE_HINT : `${EXPOSURE_HINT} ${UNROUNDED_TOTALS_NOTE}`;
+}
+
+/** The exact value behind a "<0.01%" cell; null when the cell already shows it. */
+export function exactRiskText(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || value === 0 || Math.abs(value) >= 0.01) return null;
+  return `Exact risk: ${value}% of the account balance.`;
+}
 
 /**
  * Risk — exposure, heat against `PORTFOLIO_HEAT_CAP_PCT`, and the killswitch.
@@ -56,7 +94,7 @@ import { tablePerPage } from '../../ui/table-per-page';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Matrix, Panel, RowLink, SectionHead, Sparkline, StatStrip, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Panel, RowLink, SectionHead, Sparkline, StatStrip, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -215,7 +253,7 @@ import { tablePerPage } from '../../ui/table-per-page';
     <sb-panel heading="Portfolio heat">
       <div class="heat">
         <span class="heat-figure num" [class]="heatClass()">
-          {{ fmt(store.openHeatPct()) }}%
+          {{ fmtRisk(store.openHeatPct()) }}
         </span>
         <span class="heat-cap num">of {{ fmt(store.heatCapPct(), 1) }}% cap</span>
       </div>
@@ -285,12 +323,12 @@ import { tablePerPage } from '../../ui/table-per-page';
       <div class="gauge-budget">
         @if (riskBudget(); as budget) {
           <div class="risk-budget">
-            <!-- Same precision as the heat figure above (fmt()'s default 2
-                 places) -- 1 place was rounding 0.03% used to a flat "0.0%"
-                 that visually contradicted the figure right above it. -->
-            <div><span class="label">Cap</span><span class="num">{{ fmt(budget.cap) }}%</span></div>
-            <div><span class="label">Used</span><span class="num">{{ fmt(budget.used) }}%</span></div>
-            <div><span class="label">Remaining</span><span class="num remaining">{{ fmt(budget.remaining) }}%</span></div>
+            <!-- riskPct, like the heat figure above (v194 B5): two places,
+                 and "<0.01%" for a used budget too small to print -- 1 place
+                 once rounded 0.03% used to a flat "0.0%". -->
+            <div><span class="label">Cap</span><span class="num">{{ fmtRisk(budget.cap) }}</span></div>
+            <div><span class="label">Used</span><span class="num">{{ fmtRisk(budget.used) }}</span></div>
+            <div><span class="label">Remaining</span><span class="num remaining">{{ fmtRisk(budget.remaining) }}</span></div>
             @if (budget.over) {
               <p class="budget-note warn">
                 Usage is over the cap — remaining shown as 0.
@@ -303,7 +341,7 @@ import { tablePerPage } from '../../ui/table-per-page';
 
     <!-- exposure -------------------------------------------------------- -->
 
-    <sb-panel heading="Exposure by position" [flush]="true">
+    <sb-panel heading="Exposure by position" [flush]="true" [description]="exposureAbout()">
       <sb-data-table
         [rows]="exposurePage.visible()"
         [columns]="columns()"
@@ -328,7 +366,7 @@ import { tablePerPage } from '../../ui/table-per-page';
           @for (row of store.sectorHeat(); track row.sector) {
             <div>
               <dt>{{ fmtText(row.sector) }}</dt>
-              <dd class="num">{{ fmt(row.heat_pct) }}%</dd>
+              <dd class="num">{{ fmtRisk(row.heat_pct) }}</dd>
             </div>
           }
         </dl>
@@ -446,8 +484,13 @@ import { tablePerPage } from '../../ui/table-per-page';
 
     <ng-template #riskCell let-row>
       <!-- Plain, not red. This is risk budget, not a loss -- painting it red
-           would claim money that has not been lost. -->
-      <span class="num" [sbFlash]="row.risk_pct">{{ fmt(row.risk_pct) }}%</span>
+           would claim money that has not been lost. v194 B5: a tiny risk
+           reads "<0.01%" with its exact value in a hint; the row drawer
+           renders this same template, hint included. -->
+      <span class="num" [sbFlash]="row.risk_pct">{{ fmtRisk(row.risk_pct) }}</span>
+      @if (exactRisk(row.risk_pct); as exact) {
+        <sb-hint [text]="exact" [label]="'Exact risk for ' + row.ticker" />
+      }
     </ng-template>
   `,
   styles: `
@@ -660,6 +703,9 @@ export class Risk {
     () => this.perPage(),
   );
 
+  /** v194 B4/B5: the hint reads the rows the footer sums (the visible page). */
+  protected readonly exposureAbout = computed(() => exposureHint(this.exposurePage.visible()));
+
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.positions.length === 0 }),
   );
@@ -705,10 +751,10 @@ export class Risk {
   protected readonly columns = computed<ColumnDef<RiskPosition>[]>(() => [
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, cell: this.tickerCell(), sortable: true, compact: { line: 1, order: 1 } },
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), sortable: true },
-    { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.shares ?? 0), 0), 0) },
+    { key: 'shares', header: 'Shares', value: (row) => shareCount(row.shares), numeric: true, sortable: true, footer: (rows) => shareCount(rows.reduce((sum, row) => sum + (row.shares ?? 0), 0)) },
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true, compact: { line: 2, order: 2 } },
     { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, sortable: true, compact: { line: 2, order: 1 } },
-    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)), compact: { line: 1, order: 2 } },
+    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => riskPct(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)), compact: { line: 1, order: 2, drawer: true } },
   ]);
 
   /** v179: the money floor keeps Risk % and the stop on the phone row. The
@@ -848,5 +894,7 @@ export class Risk {
   }
 
   protected fmt = num;
+  protected fmtRisk = riskPct;
+  protected exactRisk = exactRiskText;
   protected fmtText = text;
 }

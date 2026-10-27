@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { Chip } from '../../../ui/chip';
-import { num, share, text } from '../../../ui/format';
+import { num, share, shareCount, text } from '../../../ui/format';
 import { Panel } from '../../../ui/layout';
 
 @Component({
@@ -14,7 +14,7 @@ import { Panel } from '../../../ui/layout';
         no sizing snapshot was logged before that feature existed.
       </p>
       <dl>
-        <div><dt>Shares</dt><dd class="num">{{ fmtNum(shares(), 0) }}</dd></div>
+        <div><dt>Shares</dt><dd class="num">{{ fmtShares(shares()) }}</dd></div>
         <div><dt>Deployed</dt><dd class="num">{{ fmtNum(positionValue()) }}</dd></div>
         <div><dt>Sizing mode</dt><dd>{{ fmtText(sizingMode()) }}</dd></div>
         <div><dt>Working stop</dt><dd class="num">{{ fmtNum(workingStop()) }}</dd></div>
@@ -50,6 +50,7 @@ export class SizingPanel {
   readonly gapFragile = input<boolean | null>(null);
 
   protected readonly fmtNum = num;
+  protected readonly fmtShares = shareCount;
   protected readonly fmtShare = share;
   protected readonly fmtText = text;
 }
