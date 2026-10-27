@@ -32,9 +32,13 @@ Before Step 3, list what exists: `docker ps -a --format '{{.Names}}' | grep swin
 Start the existing `swing-db` with `docker start swing-db` (never `make up`: it
 also starts the bot, admin and tunnel containers) if it is stopped; if it will not
 start (a port the OS refuses), fix that one container, do not stand up another.
-The one sanctioned exception is `swing-db-test` (compose profile `test`, port
-55432), the disposable database the suite's DB tests read, until the partner
-folds it into `swing-db`. Any other `swing-*` Postgres container is a stray:
+`swing-db` also serves the test suite: it is published on `127.0.0.1:55432` by
+the git-ignored `docker-compose.override.yml` (`ports: 127.0.0.1:55432:5432` on
+service `db`), its `swingbot` role password is the test default and
+`swingbot_test` exists, so tests and replicas share the one server. Recreate
+it with `docker compose up -d db` from the main checkout, never from a
+worktree. `swing-db-test` (compose profile `test`, CI only) must not run
+locally. Any other `swing-*` Postgres container is a stray:
 report it to the partner, never point a plan at it, and never delete one without
 asking.
 

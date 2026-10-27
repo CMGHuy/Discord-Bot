@@ -39,8 +39,10 @@ there is fine; a `failed` anywhere is yours.
 **5819 passed, 2 skipped, 0 failed** (the 2 skips are Windows-only: POSIX modes,
 symlinks). The suite is ~5x larger than the numbers below; full `-n 4` is now
 roughly 5 minutes, and single runs swing 250-380s with machine load. The DB
-tests need the `swing-db-test` container running (`docker start swing-db-test`),
-otherwise ~1200 tests skip silently.
+tests use the project's one database container, `swing-db`, published on
+`127.0.0.1:55432` by the git-ignored `docker-compose.override.yml` (`docker compose
+up -d db`; test login `swingbot`/`swingbot`, base database `swingbot_test`);
+if it is down ~1200 tests skip silently.
 
 `full` uses `--dist worksteal` so one long test cannot leave workers idle at the
 tail: 295s vs 337s for default `load` back to back (one sample each, noisy).
