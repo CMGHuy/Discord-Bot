@@ -73,6 +73,11 @@ import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { MarketMovers } from './panels/market-movers';
 
+/** Lifecycle statuses the server counts all-time in every scope
+ *  (`_lifecycle_counts`): the scoped answer's numbers for these are as true
+ *  as today's, so they stand in when today's fetch has failed. */
+const ALL_TIME_STATUSES = new Set(['PENDING', 'ACTIVE', 'PARTIAL']);
+
 /**
  * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
  * what is currently open.
@@ -212,6 +217,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       [realizedAmount]="store.realizedAmount()"
       [todayRealized]="store.todayRealized()"
       [todayLoading]="store.todayLoading()"
+      [todayError]="store.todayError()"
       [openTrades]="store.openTrades()"
       [payoffRatio]="store.payoffRatio()"
       [currency]="connection.currency()"
@@ -709,9 +715,13 @@ export class Dashboard {
    *  in every mode: the Closed and Cancelled tabs always list today's
    *  closes (`[today]="true"`), whatever period the KPI cards show, so the
    *  counts come from the today response, never the scoped one. */
-  protected readonly lifecycleCounts = computed(() =>
-    Object.fromEntries(this.store.todayLifecycle().map((e) => [e.status, e.count])),
-  );
+  protected readonly lifecycleCounts = computed(() => {
+    const today = this.store.todayLifecycle();
+    const rows = today.length > 0
+      ? today
+      : this.store.lifecycle().filter((e) => ALL_TIME_STATUSES.has(e.status));
+    return Object.fromEntries(rows.map((e) => [e.status, e.count]));
+  });
 
   /** Bound as a value, not called in the template: the table takes the
    *  function and applies it per tab.

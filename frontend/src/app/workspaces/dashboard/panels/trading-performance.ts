@@ -23,6 +23,10 @@ import {
   signTone,
 } from './equity-range.model';
 
+/** The Realised today sub-line when today's fetch failed and nothing
+ *  earlier landed: an em dash alone would read as "nothing closed". */
+const TODAY_UNAVAILABLE = "couldn't load today's figures";
+
 /** The dropdown's value for a hand-picked range: never a preset, never persisted. */
 const RANGE_OPTION = 'Range';
 
@@ -223,6 +227,8 @@ export class TradingPerformance {
   /** The today-only fetch is in flight (Period mode; under 1D the scoped
    *  fetch is today's, so `loading` covers it). */
   readonly todayLoading = input(false);
+  /** Today's fetch failed (`DashboardStore.todayError`); the card says so. */
+  readonly todayError = input<string | null>(null);
   readonly openTrades = input<number>(0);
   /** Mean winning R over the magnitude of mean losing R. Null, never 0, when
    *  either side has no outcomes yet — see payoff_ratio_from_rs. */
@@ -297,7 +303,7 @@ export class TradingPerformance {
   /** "+0.40% · 3 closed · 2W 1L"; the % is left out when the server has none. */
   protected readonly todaySub = computed(() => {
     const today = this.todayRealized();
-    if (today === null) return null;
+    if (today === null) return this.todayError() === null ? null : TODAY_UNAVAILABLE;
     if (today.n === 0) return 'none closed today';
     const counts = `${today.n} closed · ${today.wins}W ${today.losses}L`;
     return today.pct === null ? counts : `${pct(today.pct)} · ${counts}`;

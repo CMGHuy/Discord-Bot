@@ -903,3 +903,61 @@ describe('Dashboard v181 scope link', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.range-chip')).not.toBeNull();
   });
 });
+
+describe('Dashboard lifecycle tab counts (v194 B1)', () => {
+  const LIFECYCLE = { PENDING: 2, ACTIVE: 8, PARTIAL: 1, CLOSED: 4, CANCELLED: 0 };
+  const OPEN_COUNTS = { PENDING: 2, ACTIVE: 8, PARTIAL: 1 };
+  const counts = (fixture: ComponentFixture<Dashboard>) =>
+    (fixture.debugElement.query(By.directive(PositionsTable)).componentInstance as PositionsTable).counts();
+  const tabLabels = (el: HTMLElement) => [...el.querySelectorAll('[role="tab"] .label')]
+    .map((node) => node.textContent?.replace(/\s+/g, ' ').trim());
+  const fail = (req: { flush(body: unknown, opts: { status: number; statusText: string }): void }) =>
+    req.flush('boom', { status: 500, statusText: 'Server Error' });
+
+  for (const width of [1440, 768, 390]) {
+    it(`feeds the API's counts to the tabs at ${width}px`, async () => {
+      // ViewportService reads innerWidth when created; seed() resets the module first.
+      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(width);
+      const fixture = await loaded({ lifecycle: LIFECYCLE as never });
+      expect(counts(fixture)).toEqual(LIFECYCLE);
+    });
+  }
+
+  it('labels the tabs with those counts on desktop', async () => {
+    const fixture = await loaded({ lifecycle: LIFECYCLE as never });
+    expect(tabLabels(fixture.nativeElement as HTMLElement).slice(0, 3)).toEqual(['Pending 2', 'Open 8', 'Partial 1']);
+  });
+
+  /** 1D load superseded by 1M, then every today request fails; the 1M answer carries the counts. */
+  async function todayFailedInPeriod(): Promise<ComponentFixture<Dashboard>> {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    flushTradeGroups(backend);
+    const store = TestBed.inject(DashboardStore);
+    const first = backend.expectOne('/api/v1/dashboard?mode=today');
+    store.setPreset('1M');
+    fail(first);
+    for (const req of backend.match((r) => r.url === '/api/v1/dashboard')) {
+      if (req.request.params.get('mode') === 'today') fail(req);
+      else req.flush(payload({ scope: { mode: 'range' }, lifecycle: { ...LIFECYCLE, CLOSED: 40 } as never }));
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it("falls back to the scoped answer's open counts when today's fetch failed", async () => {
+    const fixture = await todayFailedInPeriod();
+    // PENDING/ACTIVE/PARTIAL are all-time in every scope (dashboard.py
+    // _lifecycle_counts); CLOSED/CANCELLED are today's only, so they stay unknown.
+    expect(counts(fixture)).toEqual(OPEN_COUNTS);
+  });
+
+  it("says today's figures could not load instead of ringing forever", async () => {
+    const fixture = await todayFailedInPeriod();
+    const card = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-metric-card')]
+      .find((c) => c.querySelector('.label')!.textContent!.trim() === 'Realised today')!;
+    expect(card.classList.contains('loading')).toBe(false);
+    expect(card.textContent).toContain("couldn't load today's figures");
+  });
+});
