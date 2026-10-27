@@ -399,8 +399,10 @@ symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
 from a `task-brief`), `plan-briefer` (gathers a spec's code context into
 `.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
 approved spec and that brief: `mode=index` (index and task ledger) first,
+returning `SCOPE` when the ledger passes 20 tasks,
 then one `mode=part <N>` per part, one at a time here, each appending task by
-task to disk; at most 2 plans in progress per session; a plan cut off
+task to disk; a task past 20 KB is written as `<id>` + `<id>b` and reported as
+`SPLIT:`; at most 2 plans in progress per session; a plan cut off
 mid-write resumes from its first missing task, never skipped or restarted. The
 SessionStart hook prints `PLAN WIP` for such a plan: resume it before new work.
 Record partner decisions in the index's `## Handoff` section as made, and commit
