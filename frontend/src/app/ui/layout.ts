@@ -15,7 +15,7 @@ import {
 
 import { Viewport, ViewportService } from './breakpoints';
 import { FocusTrap } from './focus-trap';
-import { Hint } from './hint';
+import { DIALOG_CLOSING_EVENT, Hint } from './hint';
 import { Icon, IconName } from './icon';
 import { playExit } from './motion/exit';
 import { MotionService } from './motion/motion.service';
@@ -640,6 +640,8 @@ export class Drawer {
     const element = this.dialog().nativeElement;
     if (this.closing() || !element.open) return;
     this.closing.set(true);
+    // Hints inside close now, not after the exit (v194 A1; hint.ts).
+    element.dispatchEvent(new Event(DIALOG_CLOSING_EVENT));
     this.cancelExit = playExit(element, 'sb-drawer-out', this.motion.active(), () => element.close());
   }
 

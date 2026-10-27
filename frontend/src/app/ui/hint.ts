@@ -56,6 +56,13 @@ export function clampPopover(
   };
 }
 
+
+/** Fired (non-bubbling) on a modal <dialog> host the moment it starts to
+ *  close -- sb-drawer and sb-confirm-dialog, from requestClose(). A hint
+ *  inside listens and closes, because a pinned manual popover is not hidden
+ *  by its ancestor dialog closing and would stay painted through the exit. */
+export const DIALOG_CLOSING_EVENT = 'sb-dialog-closing';
+
 /**
  * An info popover -- spec v80 D4.
  *
@@ -251,10 +258,12 @@ export class Hint {
       this.show(pop);
       this.reposition();
       const frame = requestAnimationFrame(this.reposition);
+      const unwatch = this.watchHostDialog();
       window.addEventListener('scroll', this.reposition, { capture: true, passive: true });
       window.addEventListener('resize', this.reposition, { passive: true });
       onCleanup(() => {
         cancelAnimationFrame(frame);
+        unwatch();
         window.removeEventListener('scroll', this.reposition, true);
         window.removeEventListener('resize', this.reposition);
         this.hide(pop);
@@ -298,6 +307,26 @@ export class Hint {
     if (!this.shown) return;
     this.shown = false;
     if (pop.isConnected) pop.hidePopover();
+  }
+
+
+  /** A hint inside a modal <dialog> host (sb-drawer, sb-confirm-dialog)
+   *  closes when that dialog starts closing (v194 A1). A pinned manual
+   *  popover is not hidden by its ancestor dialog closing, so it would stay
+   *  painted in the top layer through the drawer's exit animation. `close`
+   *  covers a host shut without its exit (the drawer's [open] input going
+   *  false). Looked up on open, not in the constructor: a projected hint is
+   *  not inside its dialog yet when it is created. Returns the remover. */
+  private watchHostDialog(): () => void {
+    const dialog = this.host.closest('dialog');
+    if (!dialog) return () => undefined;
+    const onClosing = (): void => this.close();
+    dialog.addEventListener(DIALOG_CLOSING_EVENT, onClosing);
+    dialog.addEventListener('close', onClosing);
+    return () => {
+      dialog.removeEventListener(DIALOG_CLOSING_EVENT, onClosing);
+      dialog.removeEventListener('close', onClosing);
+    };
   }
 
 }

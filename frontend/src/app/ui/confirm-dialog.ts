@@ -13,6 +13,7 @@ import {
 
 import { Button } from './button';
 import { FocusTrap } from './focus-trap';
+import { DIALOG_CLOSING_EVENT } from './hint';
 import { ControlRow } from './layout';
 import { playExit } from './motion/exit';
 import { MotionService } from './motion/motion.service';
@@ -144,6 +145,8 @@ export class ConfirmDialog {
     const element = this.dialog().nativeElement;
     if (this.closing() || !element.open) return;
     this.closing.set(true);
+    // Hints inside close now, not after the fade (v194 A1; hint.ts).
+    element.dispatchEvent(new Event(DIALOG_CLOSING_EVENT));
     this.cancelExit = playExit(element, 'sb-fade-out', this.motion.active(), () => element.close());
   }
 

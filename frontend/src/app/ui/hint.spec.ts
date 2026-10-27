@@ -1,10 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Hint, clampPopover, supportsPopover } from './hint';
+import { DIALOG_CLOSING_EVENT, Hint, clampPopover, supportsPopover } from './hint';
+import { ConfirmDialog } from './confirm-dialog';
+import { Drawer } from './layout';
+import { provideMotion } from './motion/motion.service';
+import { installDialogPolyfill } from '../testing/dialog-polyfill';
 import { POPOVER_OPEN_ATTR, installPopoverPolyfill } from '../testing/popover-polyfill';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/hint.ts'), 'utf8');
@@ -308,6 +312,107 @@ describe('clampPopover (v194 A1)', () => {
 
   it('takes the margin as a parameter', () => {
     expect(clampPopover(trig(1420, 100), POP, DESKTOP, 'center', 0).left).toBe(1240);
+  });
+});
+
+@Component({
+  imports: [Drawer, Hint],
+  template: `
+    <sb-drawer [open]="open()" heading="AAPL">
+      <sb-hint text="Leg 1 of 2 of one plan." label="About legs" />
+    </sb-drawer>
+  `,
+})
+class DrawerHost {
+  readonly open = signal(true);
+}
+
+describe('Hint inside a closing dialog host (v194 A1)', () => {
+  let fixture: ComponentFixture<DrawerHost>;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    // Motion on, so the drawer's exit is still running when we look: the hint
+    // must hide when the close STARTS, not when the dialog finally closes.
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideMotion('on')] });
+    fixture = TestBed.createComponent(DrawerHost);
+    fixture.detectChanges();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const dialog = () => el().querySelector('sb-drawer dialog') as HTMLDialogElement;
+  const trigger = () => el().querySelector('sb-hint button') as HTMLButtonElement;
+  const pop = () => el().querySelector('sb-hint [role=tooltip]') as HTMLElement;
+  /** Twice: the host's close sets the hint's signals, which need their own pass. */
+  const settle = () => {
+    fixture.detectChanges();
+    fixture.detectChanges();
+  };
+
+  it('hides a pinned hint as soon as the drawer starts its exit', () => {
+    trigger().click();
+    settle();
+    expect(pop().hasAttribute(POPOVER_OPEN_ATTR)).toBe(true);
+    (el().querySelector('sb-drawer button.close') as HTMLButtonElement).click();
+    settle();
+    expect(dialog().hasAttribute('open')).toBe(true); // the exit animation is still running
+    expect(pop().hasAttribute(POPOVER_OPEN_ATTR)).toBe(false);
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('hides a pinned hint when its dialog closes without the drawer exit', () => {
+    trigger().click();
+    settle();
+    expect(pop().hasAttribute(POPOVER_OPEN_ATTR)).toBe(true);
+    dialog().close();
+    settle();
+    expect(dialog().hasAttribute('open')).toBe(false);
+    expect(pop().hasAttribute(POPOVER_OPEN_ATTR)).toBe(false);
+  });
+
+  it('removes the pinned hint when the drawer open input becomes false', () => {
+    trigger().click();
+    settle();
+    expect(pop().hasAttribute(POPOVER_OPEN_ATTR)).toBe(true);
+    fixture.componentInstance.open.set(false);
+    settle();
+    expect(dialog().hasAttribute('open')).toBe(false);
+    expect(el().querySelector('sb-hint [role=tooltip]')).toBeNull();
+  });
+
+  it('ignores a closing event on some other dialog', () => {
+    trigger().click();
+    settle();
+    const other = document.createElement('dialog');
+    document.body.appendChild(other);
+    other.dispatchEvent(new Event(DIALOG_CLOSING_EVENT));
+    settle();
+    expect(pop().hasAttribute(POPOVER_OPEN_ATTR)).toBe(true);
+    other.remove();
+  });
+});
+
+@Component({
+  imports: [ConfirmDialog],
+  template: `<sb-confirm-dialog [open]="true" title="Close AAPL" consequence="The paper trade closes at the last price." />`,
+})
+class ConfirmHost {}
+
+describe('ConfirmDialog announces its close (v194 A1)', () => {
+  it('dispatches a non-bubbling sb-dialog-closing on its <dialog> when Cancel starts the exit', () => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideMotion('on')] });
+    const fixture = TestBed.createComponent(ConfirmHost);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const seen: Event[] = [];
+    root.querySelector('dialog')!.addEventListener(DIALOG_CLOSING_EVENT, (event) => seen.push(event));
+    const cancel = [...root.querySelectorAll('button')].find((b) => b.textContent!.trim() === 'Cancel')!;
+    cancel.click();
+    fixture.detectChanges();
+    expect(seen).toHaveLength(1);
+    expect(seen[0].bubbles).toBe(false);
+    expect(DIALOG_CLOSING_EVENT).toBe('sb-dialog-closing');
   });
 });
 
