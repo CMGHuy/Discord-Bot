@@ -51,17 +51,41 @@ new tools, flags or agent steps.
 
 ### A. Byte budget per task (plan_lint)
 
-- `plan_lint.py` measures each task's bytes (UTF-8) from its `### Task` line to
-  the next `### Task`, `# Phase` or end of file.
-- **Hard cap 20 KB per task** (about the p90 of v186–v194). Over the cap is a
-  lint failure: `<file>: Task <id> is <N> KB (cap 20 KB) -- split into two tasks, never compress`.
+- `plan_lint.py` measures each task from its `### Task` line up to the next
+  `### Task`, the next `# ` or `## ` heading (so `# Phase`, `## Handoff` and a
+  closing `## Self-review` never count against the last task), or the end of
+  **that file**. The count resets per file, so the last task of part N never
+  runs into part N+1.
+- **Counting rule:** `read_text().splitlines()` drops line terminators, so each
+  line costs `len(line.encode("utf-8")) + 1` bytes.
+- **Hard cap `MAX_TASK_BYTES = 20_000`** (decimal KB; about the p90 of v186–v194).
+  A task over the cap fails lint with
+  `<file>: Task <id> is <N> KB (cap 20 KB) -- split into two tasks, never compress`,
+  where `N` is bytes / 1000 to one decimal.
 - **Aim: 14 KB or less.** This lives in the writer's instructions only. Lint
   does not report it, because a warning nobody acts on is just more tokens.
 - **The fix for an over-cap task is a split, never compression:** the task becomes
   two tasks (two ledger rows, e.g. `V197-4` and `V197-4b`). Each keeps real test
   code, real implementation code and exact paths. A task is never thinned to fit.
-- Applies to plans numbered **above v196** (the same gate as `needs_model` for
-  v145). Older plans are history and are never re-linted into failure.
+- **Who adds the split row:** the part writer that finds its task heading
+  past the cap writes it as two tasks, `<id>` and `<id>b`, appended in order. It
+  returns them as `SPLIT: <id> -> <id>b` in its report and never edits the index.
+  Before running lint on the parts, the controller adds the `b` row to the
+  index ledger, directly below `<id>`. This is the same seam as today's parts
+  table: part writers own their file, the controller owns the index.
+- **No per-append lint.** The cap is enforced by the writer's own sizing (aim
+  14 KB) and by the `plan_lint` run that already happens after each part. Running
+  lint after every task append would be exactly the extra tool calls v193 added.
+- Applies to plans numbered **above v196**: `CAPS_FROM = 196`, next to the
+  existing `> 145` gate for `needs_model`, and read the same way. A file name
+  with no version (`plan_number` returns 0) is unchecked. Older plans are
+  history and are never re-linted into failure.
+- **Shape in `plan_lint.py`:** `scan_file` already carries about six branch
+  points, so the byte tracking does not go inline. A per-file state dict holds
+  the open task id and its byte total. Two helpers use it: `track_task_bytes(name, line, state)`,
+  called once per line in the existing loop, adds the line and closes the open
+  task on a boundary; `close_task(name, state)`, called after the loop, handles
+  end of file. Every function stays under complexity 15.
 
 ### B. Task cap per plan (plan_lint + plan-writer index mode)
 
@@ -75,9 +99,22 @@ new tools, flags or agent steps.
   rule in `document-conventions.md`) and asks the partner where to cut via `AskUserQuestion`.
   Catching it at the index costs one small file. Catching it after the parts
   are written costs the whole plan.
-- `plan_lint.py` also fails a plan above v196 whose ledger has more than 20 ids:
-  `ledger: <N> tasks (cap 20) -- split the spec`. It is a backstop, since the index
-  check should already have stopped it.
+- **The return contract:** `SCOPE` joins `DONE | PARTS | BLOCKED` in
+  `plan-writer.md`'s Return shape (line ~107). The controller's plan-writing steps in
+  `docs/claude/skills-tools.md` § Plan writing gain one line: on `SCOPE`, stop,
+  ask the partner where to cut, and split the spec.
+- **Numbering after a split:** the committed spec keeps its `vN` and is revised
+  in place to hold the first half, with a `**Split:** second half in vM` line under
+  `Status:`. The second half is a new spec, numbered through `/new-doc` (`vM`),
+  with its own `Panel:` run. The first half's panel trail stands, and it is not
+  re-panelled unless its scope changed beyond the cut. The index already
+  written for vN is deleted (it was never committed) and rewritten from the
+  revised spec.
+- `plan_lint.py` also fails a plan above v196 that has more than 20 tasks, using
+  `ledger: <N> tasks (cap 20) -- split the spec`. It counts the ledger ids,
+  or the `### Task` headings when the plan has no ledger (a single-file plan),
+  so the backstop is never silent. It is a backstop because the index check should
+  already have stopped the plan.
 - A task split under A that pushes the ledger past 20 means the plan is
   over-scoped too. The same `SCOPE` rule applies, and the cap is never raised.
 
@@ -97,6 +134,10 @@ new tools, flags or agent steps.
 - `CLAUDE.md` § Naming specs and plans: extend the existing "No plan file over
   1500 lines" sentence in place (the file is at 199 of 200 lines, so no new line
   is added) to "no file over 1500 lines, no task over 20 KB, no plan over 20 tasks".
+  If the reworded sentence would wrap the paragraph onto an extra line, move
+  "split into `_N` parts, never compress a task" out to `document-conventions.md`
+  (it is already there) and keep the three caps plus the pointer. `wc -l CLAUDE.md`
+  must read 200 or fewer.
 - Codex mirror in the same commit: `AGENTS.md` (the condensed plan-writing
   paragraph near line 486) and `python scripts/dev/sync_codex.py` for the
   agent file. `tests/hooks/test_codex_mirror.py` must stay green.
@@ -115,18 +156,24 @@ new tools, flags or agent steps.
 
 ## Acceptance
 
-- `tests/dev/test_plan_lint.py` gains cases for each of these:
-  - a 21 KB task fails;
-  - a 19 KB task passes;
-  - a task's size ends at `# Phase`;
-  - 21 ledger rows fail;
-  - 20 rows pass;
-  - a v196 plan is not checked for either cap;
-  - the multi-byte UTF-8 count is in bytes, not characters.
-- `plan_lint.py` on every existing plan at or below v196 gives the same verdict as before (no new failures).
-- `plan_lint.py` stays a single pass: the per-task size comes from the same line
-  loop in `scan_file`, with no second read and no new module. Every function stays
-  under complexity 15.
+- `tests/dev/test_plan_lint.py` gains cases for each of these (the fixtures use
+  `-v900-`, so they fall under both caps):
+  - a task of exactly 20 000 bytes passes, and 20 001 fails;
+  - the failure message prints `N` to one decimal;
+  - the size ends at `# Phase`, and at `## Handoff`;
+  - the last task of part 1 does not absorb part 2 (per-file reset);
+  - a task under the cap in characters but over it in UTF-8 bytes fails;
+  - 21 ledger rows fail and 20 pass;
+  - 21 `### Task` headings with no ledger fail;
+  - `-v196-` is unchecked, `-v197-` is checked, and a file name with no version is unchecked.
+- A regression test runs `lint()` on the committed v195 plan (37 tasks, tasks up
+  to 45 KB) and asserts that neither cap's message appears. This pins the
+  version gate on real data. "No new failures on existing plans" is this test,
+  not a manual check.
+- `plan_lint.py` stays a single pass: the per-task size comes from the existing
+  line loop in `scan_file` through the two helpers above, with no second read
+  and no new module. Every function stays under complexity 15
+  (`complexity_gate.py`).
 - The Codex mirror test is green.
 
 ## Expected effect
@@ -136,3 +183,21 @@ tasks each, with every task at or under 20 KB. That is roughly 400 KB per plan o
 less (20 × 20 KB), against 1146 KB in one plan. The real saving shows up as
 fewer bytes per plan written and read. It is not measured here; the next two
 plans' sizes are the check, recorded in their close-out.
+
+## Panel review
+
+2026-10-27, staff-engineer (opus) and senior-engineer (sonnet), run serially.
+
+- senior-engineer [BLOCKING]: inline byte tracking would push `scan_file` toward complexity 15 -- applied: `track_task_bytes` / `close_task` helpers and a per-file state dict named in § A.
+- senior-engineer [BLOCKING]: `splitlines()` drops terminators, so the byte rule was unpinned -- applied: `len(line.encode("utf-8")) + 1` per line, with a bytes-over/characters-under test.
+- senior-engineer: "20 KB" was ambiguous and the rounding was unstated -- applied: `MAX_TASK_BYTES = 20_000`, `N` to one decimal, a 20 000 / 20 001 boundary test.
+- senior-engineer: trailing `##` sections counted against the last task -- applied: a span also ends at the next `# ` or `## ` heading.
+- senior-engineer: the ledger cap was silent when a plan has no ledger -- applied: it counts the `### Task` headings instead.
+- senior-engineer: the gate constant was unnamed and its edges untested -- applied: `CAPS_FROM = 196`, tests for v196, v197 and a file name with no version.
+- senior-engineer: "same verdict on existing plans" was not testable -- applied: a regression test lints the committed v195 plan.
+- staff-engineer: no owner for the split ledger row across the index/part seam -- applied: the part writer returns `SPLIT:` and the controller adds the row.
+- staff-engineer: `SCOPE` was missing from the return enum and the controller steps -- applied: added to Return shape and to skills-tools.md § Plan writing.
+- staff-engineer: numbering and panel after a `SCOPE` split were unstated -- applied: vN keeps the first half; the second half gets a new number and its own panel.
+- staff-engineer: a single-file plan is only caught at the final lint -- rejected: linting after every task append is the per-write overhead v193 added; the writer's 14 KB aim and the existing post-part lint stay the checkpoints.
+- staff-engineer: CLAUDE.md may pass 200 lines -- applied: the fallback is named and `wc -l` checked.
+- staff-engineer: no per-file reset test -- applied: an acceptance case.
