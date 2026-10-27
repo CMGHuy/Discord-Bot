@@ -29,10 +29,14 @@ shared, a re-run drops and recreates the replica: skip it when a sibling task
 synced it recently and is still testing.
 
 Before Step 3, list what exists: `docker ps -a --format '{{.Names}}' | grep swing`.
-Start the existing `swing-db` (`make up`) if it is stopped; if it will not start
-(a port the OS refuses), fix that one container, do not stand up another. Any
-extra `swing-*` Postgres container is a stray: report it to the partner, never
-point a plan at it, and never delete one without asking.
+Start the existing `swing-db` with `docker start swing-db` (never `make up`: it
+also starts the bot, admin and tunnel containers) if it is stopped; if it will not
+start (a port the OS refuses), fix that one container, do not stand up another.
+The one sanctioned exception is `swing-db-test` (compose profile `test`, port
+55432), the disposable database the suite's DB tests read, until the partner
+folds it into `swing-db`. Any other `swing-*` Postgres container is a stray:
+report it to the partner, never point a plan at it, and never delete one without
+asking.
 
 ## Step 3 — Replicate
 
