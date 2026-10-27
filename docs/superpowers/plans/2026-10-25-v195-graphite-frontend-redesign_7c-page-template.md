@@ -23,6 +23,7 @@
 **Files:**
 - Create: `frontend/src/app/ui/page.ts`
 - Create: `frontend/src/app/ui/page.spec.ts`
+- Modify: `frontend/src/app/workspaces/gallery/gallery.ts` (a minimal `sb-page` wrapper, Step 3b; V195-33 replaces it)
 
 **Interfaces:**
 - Consumes: `RouteTitleService.title(): string`, `RouteTitleService.subtitle(): string | null` (`routing/route-title.service.ts`); `focusWorkspaceHeading` (`shell/route-focus.ts`, spec only); `ConfirmDialog` (`sb-confirm-dialog`: `open`, `title`, `consequence`, `confirmLabel`, `dangerVariant`, outputs `confirmed`, `cancelled`), `Button` (`button[sb-button]`, `variant`) and `installDialogPolyfill` (spec only).
@@ -333,14 +334,23 @@ export class Page {
 }
 ```
 
+- [ ] **Step 3b: Give the gallery a minimal `sb-page` wrapper**
+
+`gallery.spec.ts`'s `the gallery shows every primitive` generates one `renders <selector>` case from every `selector: 'sb-…'` under `ui/`, so `ui/page.ts` adds `renders sb-page`, which fails until `gallery.ts` contains `<sb-page`. V195-33 lays the gallery out on the full template; until then it gets the smallest wrapper that keeps that case green and the page at one `<h1>`. In `$WT/frontend/src/app/workspaces/gallery/gallery.ts`:
+
+1. Add `import { Page } from '../../ui/page';` beside the other `../../ui/` imports, and `Page,` to the `@Component` `imports` array in its alphabetical place.
+2. In the `template`, replace the line `    <h1>UI gallery</h1>` with `    <sb-page>` followed by `      <div page-primary>`, and directly before the line `` `, `` that closes the `template` (the first line in the file that is exactly two spaces, a backtick and a comma) add `      </div>` and `    </sb-page>`. Everything between keeps its text; do not re-indent it (a whitespace-only diff hides the real change). The heading now comes from the route title, `UI gallery`, through `sb-page`'s `h1.title`.
+
+No other edit: the gallery's host padding and every section stay as they are. V195-33 says to replace exactly this wrapper.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-25-v195-graphite-frontend-redesign
-npm --prefix "$WT/frontend" test -- --watch=false --include src/app/ui/page.spec.ts --include src/app/ui/breakpoint-guard.spec.ts --include src/app/ui/spacing.spec.ts --include src/app/ui/text-styles.spec.ts --include src/app/ui/primitives.spec.ts --include src/app/ui/elevation.spec.ts --include src/app/workspaces/workspace-consistency.spec.ts
+npm --prefix "$WT/frontend" test -- --watch=false --include src/app/ui/page.spec.ts --include src/app/ui/breakpoint-guard.spec.ts --include src/app/ui/spacing.spec.ts --include src/app/ui/text-styles.spec.ts --include src/app/ui/primitives.spec.ts --include src/app/ui/elevation.spec.ts --include src/app/workspaces/workspace-consistency.spec.ts --include src/app/workspaces/gallery/gallery.spec.ts
 ```
 
-Expected: PASS, `0 failed`, `0 xfailed`. `breakpoint-guard.spec.ts` accepts the one width query (1440 is on its list). `workspace-consistency.spec.ts` is unchanged and green: `page.ts` is in `ui/`, which its no-`<h1` scan never reads. If the empty-slot case finds a slot not `:empty`, a whitespace text node got between the wrapper and its `ng-content`: keep each wrapper and its `ng-content` on one line, as above. If the destructive case finds the dialog closed after the click, the polyfill is missing: `beforeAll(() => installDialogPolyfill())` must run before the first render. If the confirm button lacks `danger-quiet`, V195-8's `dangerVariant` binding is not in `confirm-dialog.ts`: that is V195-8's defect, fix it there, not here.
+Expected: PASS, `0 failed`, `0 xfailed`. `gallery.spec.ts` finds `<sb-page` (Step 3b) and every other primitive as before. `breakpoint-guard.spec.ts` accepts the one width query (1440 is on its list). `workspace-consistency.spec.ts` is unchanged and green: `page.ts` is in `ui/`, which its no-`<h1` scan never reads. If the empty-slot case finds a slot not `:empty`, a whitespace text node got between the wrapper and its `ng-content`: keep each wrapper and its `ng-content` on one line, as above. If the destructive case finds the dialog closed after the click, the polyfill is missing: `beforeAll(() => installDialogPolyfill())` must run before the first render. If the confirm button lacks `danger-quiet`, V195-8's `dangerVariant` binding is not in `confirm-dialog.ts`: that is V195-8's defect, fix it there, not here.
 
 Then the whole frontend and lint:
 
@@ -357,6 +367,6 @@ Close: standard (test: `frontend/src/app/ui/page.spec.ts`). No browser pass in t
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-25-v195-graphite-frontend-redesign
-git -C "$WT" add frontend/src/app/ui/page.ts frontend/src/app/ui/page.spec.ts
+git -C "$WT" add frontend/src/app/ui/page.ts frontend/src/app/ui/page.spec.ts frontend/src/app/workspaces/gallery/gallery.ts
 git -C "$WT" commit -m "feat(v195): sb-page template with the page's one h1 (V195-21)" -m "Spec Phase 4 and correction 9: sb-page renders a header (the page's single h1 and a one-line description, defaulting to the route's title and subtitle, with a [page-actions] slot on the right, the only home for destructive controls), then [page-scope], [page-kpis], [page-primary] and [page-secondary] (two columns from 1440px). An empty slot takes no space; anything without a slot (dialogs, drawers) is projected last. route-focus.ts finds the h1 inside .workspace, so focus lands on it after navigation once a route is on the template (Phase 5)." -m "<Co-Authored-By trailer from the session's attribution reminder>"
 ```
