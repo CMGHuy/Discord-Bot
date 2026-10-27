@@ -74,3 +74,12 @@ def test_v139_stop_ceiling_pct_rides_in_the_doc(repo, db_conn):
     record = _plan("P1", source="confluence", stop_ceiling_pct=4.0)
     repo.insert(record, conn=db_conn)
     assert diff_records(record, repo.get("P1", conn=db_conn)) == []
+
+
+def test_v191_stop_moved_by_rides_in_the_doc(repo, db_conn):
+    """v191 used schema-evolution's ADD path: no column, no revision -- the band
+    plan's stop_moved_by and its stored ceiling live in plans.doc."""
+    from tests.db_diff import diff_records
+    record = _plan("P1", source="confluence", stop_ceiling_pct=6.1, stop_moved_by="floor")
+    repo.insert(record, conn=db_conn)
+    assert diff_records(record, repo.get("P1", conn=db_conn)) == []

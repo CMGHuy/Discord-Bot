@@ -1,4 +1,7 @@
 import dataclasses
+import json
+
+import pytest
 
 from swingbot.core.planning.plan_engine import plan_to_dict, plan_from_dict
 from tests.planning.test_plan_engine_model import _plan
@@ -120,3 +123,29 @@ def test_pre_v139_record_without_stop_ceiling_pct_loads_as_none():
     d = plan_to_dict(_plan())
     d.pop("stop_ceiling_pct")
     assert plan_from_dict(d).stop_ceiling_pct is None
+
+
+def test_stop_moved_by_defaults_to_none_and_is_omitted_while_none():
+    """v191: only a band plan carries the key; every other plan doc is unchanged."""
+    assert _plan().stop_moved_by is None
+    assert "stop_moved_by" not in plan_to_dict(_plan())
+
+
+@pytest.mark.parametrize("moved_by", ["floor", "ceiling", "untouched"])
+def test_stop_moved_by_round_trips(moved_by):
+    d = plan_to_dict(_plan(stop_moved_by=moved_by, stop_ceiling_pct=7.25))
+    assert d["stop_moved_by"] == moved_by
+    assert list(d)[-1] == "stop_moved_by"                # appended, no existing key moves
+    q = plan_from_dict(json.loads(json.dumps(d)))
+    assert (q.stop_moved_by, q.stop_ceiling_pct) == (moved_by, 7.25)
+
+
+def test_pre_v191_record_without_stop_moved_by_loads_as_none():
+    d = plan_to_dict(_plan(stop_ceiling_pct=4.0))
+    assert "stop_moved_by" not in d
+    assert plan_from_dict(d).stop_moved_by is None
+
+
+def test_omit_when_none_lists_the_v191_key():
+    from swingbot.core.planning.plan_types import _OMIT_WHEN_NONE
+    assert _OMIT_WHEN_NONE == ("gap_sizing", "risk_notice", "stop_moved_by")
