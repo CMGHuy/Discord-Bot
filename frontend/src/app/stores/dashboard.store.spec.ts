@@ -769,5 +769,86 @@ describe('DashboardStore', () => {
       expect(requests()).toHaveLength(0);
       expect(store.selection()).toEqual({ kind: 'preset', preset: '1D' });
     });
+
+    /* -- v194 B1: today's figures never go missing for good ----------- */
+
+    const fail = (req: { flush(body: unknown, opts: { status: number; statusText: string }): void }) =>
+      req.flush('boom', { status: 500, statusText: 'Server Error' });
+
+    it("lands a 1D answer as today's figures even after a wider pick superseded it", () => {
+      tick();
+      const [first] = requests();
+      // Picked before the 1D load answered: the 1D request is no longer
+      // current for the scoped figures, but its answer is still today's.
+      store.setPreset('1M');
+      first.flush({ ...RESPONSE, realized: TODAY });
+      const closed = store.todayLifecycle().find((row) => row.status === 'CLOSED')?.count;
+      expect(closed).toBe(3);
+      expect(store.todayRealized()).toEqual(TODAY);
+      expect(store.data()).toBeNull();
+    });
+
+    it('keeps the newest today answer when an older one lands after it', () => {
+      const reqs = widenThenPush();
+      flushScoped(reqs);
+      flushToday(reqs, { amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
+      // A second push issues a newer today fetch; the older one already landed.
+      events.raise('trades');
+      tick();
+      vi.advanceTimersByTime(300);
+      const again = requests();
+      flushScoped(again);
+      flushToday(again, { amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 });
+      expect(store.todayRealized()).toEqual({ amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 });
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('reports a failed today fetch instead of loading forever', () => {
+      tick();
+      const [first] = requests();
+      store.setPreset('1M');
+      fail(first);
+      const reqs = requests();
+      reqs.filter((r) => modeOf(r) === 'today').forEach(fail);
+      flushScoped(reqs);
+      expect(store.todayLoading()).toBe(false);
+      expect(store.todayError()).not.toBeNull();
+      expect(store.todayLifecycle()).toEqual([]);
+      expect(store.realized()).toEqual(SCOPED);
+    });
+
+    it('clears the today error once a today answer lands', () => {
+      const reqs = widenThenPush();
+      flushScoped(reqs);
+      reqs.filter((r) => modeOf(r) === 'today').forEach(fail);
+      expect(store.todayError()).not.toBeNull();
+      events.raise('trades');
+      tick();
+      vi.advanceTimersByTime(300);
+      const again = requests();
+      flushScoped(again);
+      flushToday(again);
+      expect(store.todayError()).toBeNull();
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('ends a request cancelled before it answered with an error, never an endless skeleton', () => {
+      // No tick(): the onInit effect has not issued its own load, so this
+      // subscription is the only, and current, request.
+      const subscription = store.resolve().subscribe();
+      expect(store.loading()).toBe(true);
+      subscription.unsubscribe();
+      expect(store.loading()).toBe(false);
+      expect(store.error()).toBe('The dashboard request did not finish.');
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('lets a superseded request go quietly: the newer one owns loading', () => {
+      const older = store.resolve().subscribe();
+      store.resolve().subscribe();
+      older.unsubscribe();
+      expect(store.loading()).toBe(true);
+      expect(store.error()).toBeNull();
+    });
   });
 });
