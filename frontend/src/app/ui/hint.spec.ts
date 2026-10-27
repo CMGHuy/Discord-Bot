@@ -157,6 +157,19 @@ describe('popover polyfill (test environment, v194 A1)', () => {
     element.remove();
   });
 
+  it('rejects a closed disconnected popover even when toggling it closed', () => {
+    const element = make();
+    element.remove();
+    expect(errorName(() => element.togglePopover(false))).toBe('InvalidStateError');
+  });
+
+  it('rejects a non-popover even when toggling it closed', () => {
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    expect(errorName(() => element.togglePopover(false))).toBe('NotSupportedError');
+    element.remove();
+  });
+
   it('is idempotent: a second install keeps the installed methods', () => {
     const before = HTMLElement.prototype.showPopover;
     installPopoverPolyfill();

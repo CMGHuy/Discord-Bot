@@ -54,6 +54,7 @@ export function installPopoverPolyfill(): void {
   };
 
   proto.togglePopover = function togglePopover(this: HTMLElement, force?: boolean): boolean {
+    checkPopover(this);
     const open = this.hasAttribute(POPOVER_OPEN_ATTR);
     const want = force ?? !open;
     const methods = this as unknown as PopoverMethods;
