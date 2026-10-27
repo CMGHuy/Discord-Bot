@@ -5,6 +5,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Hint } from './hint';
+import { POPOVER_OPEN_ATTR, installPopoverPolyfill } from '../testing/popover-polyfill';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/hint.ts'), 'utf8');
 
@@ -99,3 +100,67 @@ describe('Hint (v80 D4)', () => {
     expect(block![1]).toContain('min-height: var(--control-h)');
   });
 });
+
+describe('popover polyfill (test environment, v194 A1)', () => {
+  const make = () => {
+    const element = document.createElement('div');
+    element.setAttribute('popover', 'manual');
+    document.body.appendChild(element);
+    return element;
+  };
+  const errorName = (fn: () => unknown): string => {
+    try {
+      fn();
+    } catch (error) {
+      return (error as DOMException).name;
+    }
+    return 'no error';
+  };
+
+  it('is installed for every spec from test-setup.ts', () => {
+    expect(typeof HTMLElement.prototype.showPopover).toBe('function');
+  });
+
+  it('reflects the open state as data-popover-open', () => {
+    const element = make();
+    element.showPopover();
+    expect(element.hasAttribute(POPOVER_OPEN_ATTR)).toBe(true);
+    element.hidePopover();
+    expect(element.hasAttribute(POPOVER_OPEN_ATTR)).toBe(false);
+    element.remove();
+  });
+
+  it('throws InvalidStateError on a double show, a double hide and a disconnected element', () => {
+    const element = make();
+    element.showPopover();
+    expect(errorName(() => element.showPopover())).toBe('InvalidStateError');
+    element.hidePopover();
+    expect(errorName(() => element.hidePopover())).toBe('InvalidStateError');
+    element.remove();
+    expect(errorName(() => element.showPopover())).toBe('InvalidStateError');
+  });
+
+  it('throws NotSupportedError on an element without a popover attribute', () => {
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    expect(errorName(() => element.showPopover())).toBe('NotSupportedError');
+    element.remove();
+  });
+
+  it('togglePopover flips the state, honours force, and returns the new state', () => {
+    const element = make();
+    expect(element.togglePopover()).toBe(true);
+    expect(element.togglePopover(true)).toBe(true);
+    expect(element.hasAttribute(POPOVER_OPEN_ATTR)).toBe(true);
+    expect(element.togglePopover()).toBe(false);
+    expect(element.hasAttribute(POPOVER_OPEN_ATTR)).toBe(false);
+    element.remove();
+  });
+
+  it('is idempotent: a second install keeps the installed methods', () => {
+    const before = HTMLElement.prototype.showPopover;
+    installPopoverPolyfill();
+    expect(HTMLElement.prototype.showPopover).toBe(before);
+  });
+});
+
