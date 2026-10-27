@@ -6,17 +6,8 @@ import { PreferencesStore } from '../../stores/preferences.store';
 import { TradesStore } from '../../stores/trades.store';
 import { TradeQuery } from '../../api/models';
 import { ViewportService } from '../../ui/breakpoints';
-import { PER_PAGE_OPTIONS, perPageForApi, readTablePerPage } from '../../ui/table-prefs';
+import { perPageForApi, readPerPageParam, readTablePerPage } from '../../ui/table-prefs';
 import { TRADES_TABLE_ID } from './trades.columns';
-
-/** An offered per-page choice spelled in the URL, else null. Digits only:
- *  `Number('')` is 0, which is "All", and an empty `?per_page=` must not ask
- *  for 200 rows. */
-function urlPerPage(raw: string | null): number | null {
-  if (raw === null || !/^\d+$/.test(raw)) return null;
-  const value = Number(raw);
-  return (PER_PAGE_OPTIONS as readonly number[]).includes(value) ? value : null;
-}
 
 /**
  * The request the resolver sends. `per_page` is the value the component
@@ -30,7 +21,7 @@ function urlPerPage(raw: string | null): number | null {
  */
 export const queryFor = (route: ActivatedRouteSnapshot, savedPerPage: number): TradeQuery => ({
   page: Number(route.queryParamMap.get('page') ?? 1) || 1,
-  per_page: perPageForApi(urlPerPage(route.queryParamMap.get('per_page')) ?? savedPerPage),
+  per_page: perPageForApi(readPerPageParam(route.queryParamMap.get('per_page')) ?? savedPerPage),
   sort: route.queryParamMap.get('sort') ?? undefined,
   status: route.queryParamMap.get('status') ?? undefined,
   ticker: route.queryParamMap.get('ticker') ?? undefined,

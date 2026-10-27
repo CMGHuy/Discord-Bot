@@ -5,7 +5,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter, Router } from '@angular/router';
 import { patchState } from '@ngrx/signals';
 import { unprotected } from '@ngrx/signals/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
@@ -450,4 +450,30 @@ describe('Trades on a phone (v179 §3.1)', () => {
     expect(link.getAttribute('href')).toBe('/trades/t9');
     expect(navigate).not.toHaveBeenCalled();
   });
+});
+
+
+describe('Trades page-size URL precedence (v194 B2)', () => {
+  afterEach(() => preferencesStub.values.set({}));
+
+  const cases = [
+    { name: 'URL All over the default', raw: '0', saved: 10, api: 200, choice: '0', range: '1–200 of 1272 (capped)' },
+    { name: 'URL 50 over saved All', raw: '50', saved: 0, api: 50, choice: '50', range: '1–50 of 1272' },
+    { name: 'saved choice for an invalid URL', raw: '7', saved: 20, api: 20, choice: '20', range: '1–20 of 1272' },
+    { name: 'saved All when the URL is absent', raw: undefined, saved: 0, api: 200, choice: '0', range: '1–200 of 1272 (capped)' },
+  ];
+
+  for (const testCase of cases) {
+    it(`shows and queries ${testCase.name}`, () => {
+      preferencesStub.values.set({ 'tables.trades.desktop.per_page': testCase.saved });
+      const fixture = render({ total: 1272, page: 1, perPage: testCase.api });
+      if (testCase.raw !== undefined) fixture.componentRef.setInput('per_page', testCase.raw);
+      fixture.detectChanges();
+      const root = fixture.nativeElement as HTMLElement;
+      const rows = root.querySelector<HTMLSelectElement>('sb-pagination select[aria-label="Rows per page"]')!;
+      expect(rows.value).toBe(testCase.choice);
+      expect(root.querySelector('sb-pagination .range')!.textContent).toBe(testCase.range);
+      expect(TestBed.inject(TradesStore).query().per_page).toBe(testCase.api);
+    });
+  }
 });

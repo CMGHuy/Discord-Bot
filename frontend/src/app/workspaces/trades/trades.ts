@@ -23,6 +23,7 @@ import { Density } from '../../ui/data-table/data-table.types';
 import { tablePerPage } from '../../ui/table-per-page';
 import {
   perPageForApi,
+  readPerPageParam,
   readTableColumns,
   readTableDensity,
   writeTableColumns,
@@ -607,6 +608,7 @@ export class Trades {
   /* Query parameters, arriving as inputs through withComponentInputBinding.
    * All strings, because that is what a URL carries. */
   readonly page = input<string>();
+  readonly per_page = input<string>();
   readonly sort = input<string>();
   readonly status = input<string>();
   readonly outcome = input<string>();
@@ -716,7 +718,9 @@ export class Trades {
 
   /** Rows per page. 0 means "All", translated at the API boundary. */
   private readonly perPageState = tablePerPage(TRADES_TABLE_ID);
-  protected readonly perPage = this.perPageState.value;
+  protected readonly perPage = computed(() =>
+    readPerPageParam(this.per_page()) ?? this.perPageState.value(),
+  );
 
   /**
    * Apply the saved layout once the server's preferences arrive.
