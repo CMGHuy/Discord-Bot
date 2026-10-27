@@ -12,6 +12,8 @@ Checks the whole plan (a split plan's index and every part):
   * plans above v145: **Model:** <tier> is the first line under every task
   * plans above v196: no task over 20 KB (UTF-8 bytes from its ### Task line to
     the next task, a `# `/`## ` heading outside a code fence, or end of its file)
+  * plans above v196: at most 20 tasks (ledger rows, or ### Task headings when
+    the plan has no ledger)
   * every `Modify:` path exists (tracked or on disk) or is created by an earlier task
   * no leftover heredoc delimiter, no TBD / "similar to Task" placeholders
 
@@ -26,6 +28,7 @@ from pathlib import Path
 
 MAX_LINES = 1500
 MAX_TASK_BYTES = 20_000  # decimal KB; about the p90 of v186-v194 (v196 spec)
+MAX_TASKS = 20           # ledger rows per plan, `b` split rows included
 CAPS_FROM = 196          # task-size and task-count caps apply to plans above this
 EDGES = ("expectancy", "harvest", "volume", "none (integrity)")
 MODEL_TIERS = ("haiku", "sonnet", "opus")
@@ -189,6 +192,14 @@ def check_ledger(ledger: list[str], tasks: list[str]) -> list[str]:
     return problems
 
 
+def check_task_count(ledger: list[str], tasks: list[str]) -> list[str]:
+    """Backstop for the plan-writer index check: no plan above v196 has more than 20 tasks."""
+    count = len(ledger) or len(tasks)
+    if count > MAX_TASKS:
+        return [f"ledger: {count} tasks (cap {MAX_TASKS}) -- split the spec"]
+    return []
+
+
 def lint(any_file: Path) -> list[str]:
     files = plan_files(any_file)
     head = files[0].read_text(encoding="utf-8")
@@ -198,7 +209,10 @@ def lint(any_file: Path) -> list[str]:
     problems = check_header(head)
     for path in files:
         problems += scan_file(path, ctx)
-    problems += check_ledger(ledger_ids(head), ctx["tasks"])
+    ledger = ledger_ids(head)
+    problems += check_ledger(ledger, ctx["tasks"])
+    if ctx["caps"]:
+        problems += check_task_count(ledger, ctx["tasks"])
     return problems
 
 
