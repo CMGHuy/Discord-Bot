@@ -8,6 +8,7 @@ from datetime import date, datetime
 import pandas as pd
 import pytest
 
+from swingbot import config
 from swingbot.core.marketdata import fx
 
 
@@ -21,6 +22,7 @@ def _frame(closes: dict[str, float]) -> pd.DataFrame:
 @pytest.fixture(autouse=True)
 def _isolated(monkeypatch):
     monkeypatch.setattr(fx, "_frames", {})
+    monkeypatch.setattr(fx, "_quote_codes", {})
 
 
 @pytest.fixture
@@ -132,3 +134,59 @@ def test_a_loaded_pair_is_reused_within_the_ttl(cache, monkeypatch):
     for _ in range(3):
         fx.fx_rate("USD", "EUR", date(2026, 10, 20))
     assert len(refreshed) == 2
+
+
+# -- account_currency_code ----------------------------------------------------
+
+@pytest.mark.parametrize("symbol,code", [
+    ("€", "EUR"), ("$", "USD"), ("£", "GBP"), ("¥", "JPY"), ("CHF", "CHF"),
+    ("USD", "USD"), (" € ", "EUR"), ("?", "EUR"), ("", "EUR"), ("GBp", "EUR"),
+])
+def test_account_currency_code_inverts_the_symbol_table(monkeypatch, symbol, code):
+    monkeypatch.setattr(config, "CURRENCY_SYMBOL", symbol)
+    assert fx.account_currency_code() == code
+
+
+# -- quote_currency_code ------------------------------------------------------
+
+def test_quote_currency_code_is_the_tickers_own_and_memoised(monkeypatch):
+    calls = []
+
+    def lookup(key):
+        calls.append(key)
+        return {"AAPL": ("USD", True), "ASML.AS": ("EUR", True), "VOD.L": ("GBp", True)}[key]
+
+    monkeypatch.setattr(fx.data, "_provider_currency_code", lookup)
+    assert fx.quote_currency_code(" aapl ") == "USD"
+    assert fx.quote_currency_code("ASML.AS") == "EUR"
+    assert fx.quote_currency_code("VOD.L") == "GBp"
+    assert fx.quote_currency_code("AAPL") == "USD"
+    assert calls == ["AAPL", "ASML.AS", "VOD.L"]
+
+
+@pytest.mark.parametrize("reply", [(None, True), ("", True), ("USD", False), (None, False)])
+def test_quote_currency_code_is_none_when_unknown_and_not_remembered(monkeypatch, reply):
+    calls = []
+    monkeypatch.setattr(fx.data, "_provider_currency_code", lambda key: calls.append(key) or reply)
+    assert fx.quote_currency_code("XYZ") is None
+    assert fx.quote_currency_code("XYZ") is None
+    assert calls == ["XYZ", "XYZ"]
+
+
+def test_quote_currency_code_survives_a_failed_lookup(monkeypatch):
+    def boom(key):
+        raise RuntimeError("metadata down")
+
+    monkeypatch.setattr(fx.data, "_provider_currency_code", boom)
+    assert fx.quote_currency_code("AAPL") is None
+    assert fx.quote_currency_code("") is None
+    assert fx.quote_currency_code(None) is None
+
+
+def test_a_pence_quoted_ticker_converts_at_one_hundredth_of_the_pound(cache, monkeypatch):
+    frames, _ = cache
+    frames["GBPEUR=X"] = _frame({"2026-10-20": 1.15})
+    monkeypatch.setattr(fx.data, "_provider_currency_code", lambda key: ("GBp", True))
+    code = fx.quote_currency_code("VOD.L")
+    assert code == "GBp"
+    assert fx.fx_rate(code, "EUR", date(2026, 10, 20)) == pytest.approx(0.0115)

@@ -25,8 +25,9 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 
+from swingbot import config
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.marketdata import data_refresh, data_store
+from swingbot.core.marketdata import data, data_refresh, data_store
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.shared import kinds
 from swingbot.core.marketdata.shared.kinds import Asker
@@ -47,7 +48,49 @@ MINOR_UNITS: dict[str, tuple[str, float]] = {
     "GBp": ("GBP", 0.01), "ZAc": ("ZAR", 0.01), "ILA": ("ILS", 0.01),
 }
 
+#: `CURRENCY_SYMBOL`'s default (swingbot/config.py) and the answer for an
+#: unrecognised symbol.
+DEFAULT_ACCOUNT_CODE = "EUR"
+
 _frames: dict[str, tuple[float, pd.DataFrame | None]] = {}
+_quote_codes: dict[str, str] = {}
+
+
+def account_currency_code() -> str:
+    """The account currency's ISO code, from `CURRENCY_SYMBOL`.
+
+    The inverse of `data.CURRENCY_SYMBOLS`, first upper-case code in its
+    order: '$' is USD (not MXN), '£' is GBP (not pence), '¥' is JPY. A symbol
+    that is itself a listed code ('USD') is that code; anything else is EUR.
+    """
+    symbol = str(getattr(config, "CURRENCY_SYMBOL", "") or "").strip()
+    if symbol.isupper() and symbol in data.CURRENCY_SYMBOLS:
+        return symbol
+    for code, sign in data.CURRENCY_SYMBOLS.items():
+        if code.isupper() and symbol and sign.strip() == symbol:
+            return code
+    return DEFAULT_ACCOUNT_CODE
+
+
+def quote_currency_code(ticker: str) -> str | None:
+    """The currency `ticker` is quoted in, as Yahoo reports it ('USD', 'EUR',
+    'GBp'), or None. A known answer is remembered for the process; an
+    unknown one is not, so a later lookup can still succeed."""
+    key = str(ticker or "").upper().strip()
+    if not key:
+        return None
+    if key in _quote_codes:
+        return _quote_codes[key]
+    try:
+        with router.asker_scope(kinds.resolve_asker(Asker.ADMIN_PAGE)):
+            code, answered = data._provider_currency_code(key)
+    except Exception as exc:
+        swallowed(log, "marketdata.fx.quote_code", exc, level=logging.DEBUG)
+        return None
+    if not answered or not code:
+        return None
+    _quote_codes[key] = str(code)
+    return _quote_codes[key]
 
 
 def fx_rate(from_code: str, to_code: str, on: date) -> float | None:
