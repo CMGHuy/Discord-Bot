@@ -21,6 +21,41 @@ export function supportsPopover(): boolean {
   return typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.showPopover === 'function';
 }
 
+
+/** Space between the trigger and the popover, either side. */
+const POP_GAP = 4;
+
+const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(value, max));
+
+/**
+ * Where an open popover goes (spec v194 A1): 4px under its trigger, flipped
+ * above when it would cross the bottom margin and there is room above (or
+ * more room above than below), and shifted sideways rather than run off
+ * either edge -- `margin` px from every viewport edge, the top and left
+ * margins winning for a popover larger than the viewport. `left` is the
+ * popover's own left edge. Pure: jsdom has no layout, so this is the part of
+ * the geometry a unit test can prove; the layout audit's `hint` check proves
+ * the rest in a browser.
+ */
+export function clampPopover(
+  trigger: { top: number; bottom: number; left: number; right: number; width: number },
+  pop: { width: number; height: number },
+  viewport: { width: number; height: number },
+  align: 'center' | 'left',
+  margin = 8,
+): { top: number; left: number; above: boolean } {
+  const fitsBelow = trigger.bottom + POP_GAP + pop.height <= viewport.height - margin;
+  const fitsAbove = trigger.top - POP_GAP - pop.height >= margin;
+  const above = !fitsBelow && (fitsAbove || trigger.top > viewport.height - trigger.bottom);
+  const rawTop = above ? trigger.top - POP_GAP - pop.height : trigger.bottom + POP_GAP;
+  const rawLeft = align === 'left' ? trigger.right - pop.width : trigger.left + trigger.width / 2 - pop.width / 2;
+  return {
+    top: clamp(rawTop, margin, viewport.height - margin - pop.height),
+    left: clamp(rawLeft, margin, viewport.width - margin - pop.width),
+    above,
+  };
+}
+
 /**
  * An info popover -- spec v80 D4.
  *
@@ -76,7 +111,6 @@ export function supportsPopover(): boolean {
       class="pop elev-overlay"
       [class.wide]="wide()"
       [class.xl]="xl()"
-      [class.align-left]="align() === 'left'"
       [class.fallback-closed]="!native && !open()"
       [attr.popover]="native ? 'manual' : null"
       role="tooltip"
@@ -131,7 +165,6 @@ export function supportsPopover(): boolean {
       width: max-content;
       max-width: min(280px, 90vw);
       padding: var(--space-8) var(--space-10);
-      transform: translateX(-50%);
       color: var(--text);
       font-size: var(--text-chip);
       line-height: 1.5;
@@ -143,11 +176,9 @@ export function supportsPopover(): boolean {
     /* 50% past .wide, on request (2026-09-14) -- for a hint whose content
        (a diagram, not a sentence) reads as cramped even at .wide's 420px. */
     .pop.xl { max-width: min(630px, 90vw); font-size: var(--text-table); }
-    /* Anchors the popover's RIGHT edge to the trigger instead of centring
-       under it, so it opens leftward. "left" (popLeft, above) is set to
-       the trigger's own right edge when this is active -- see the
-       reposition() method below. */
-    .pop.align-left { transform: translateX(-100%); }
+    /* No transform: popLeft is the popover's own left edge, already
+       centred (or right-aligned for align="left") and clamped inside the
+       viewport by clampPopover() -- see reposition() below. */
     /* A fingertip needs 44px around a 14px glyph (v80 D4; phone and tablet
        since v179). */
     @media (pointer: coarse), (max-width: 1023px) {
@@ -168,9 +199,10 @@ export class Hint {
    *  there. Takes precedence over `wide` when both are set. */
   readonly xl = input(false);
   /** 'center' (default) sits the popover under the trigger's midpoint;
-   *  'left' opens it leftward from the trigger's right edge instead, for a
-   *  trigger sitting close enough to the panel's own right edge that a
-   *  centred popover would run off it. */
+   *  'left' ends it at the trigger's right edge instead. Since v194 the
+   *  viewport clamp keeps either inside the screen, so 'left' is no longer
+   *  needed to stop a popover running off an edge; the input stays for the
+   *  callers that set it. */
   readonly align = input<'center' | 'left'>('center');
 
   protected readonly id = `sb-hint-${nextId++}`;
@@ -194,13 +226,16 @@ export class Hint {
   private readonly reposition = (): void => {
     const trigger = this.host.querySelector('.trigger');
     if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    this.popTop.set(rect.bottom + 4);
-    // Left-aligned anchors to the trigger's right edge (the .align-left
-    // CSS rule pulls the popover fully leftward from there via
-    // translateX(-100%)); centred anchors to the trigger's midpoint, as
-    // before.
-    this.popLeft.set(this.align() === 'left' ? rect.right : rect.left + rect.width / 2);
+    const pop = this.pop().nativeElement;
+    const root = document.documentElement;
+    const place = clampPopover(
+      trigger.getBoundingClientRect(),
+      { width: pop.offsetWidth, height: pop.offsetHeight },
+      { width: root.clientWidth, height: root.clientHeight },
+      this.align(),
+    );
+    this.popTop.set(place.top);
+    this.popLeft.set(place.left);
   };
 
   constructor() {
@@ -215,9 +250,11 @@ export class Hint {
       const pop = this.pop().nativeElement;
       this.show(pop);
       this.reposition();
+      const frame = requestAnimationFrame(this.reposition);
       window.addEventListener('scroll', this.reposition, { capture: true, passive: true });
       window.addEventListener('resize', this.reposition, { passive: true });
       onCleanup(() => {
+        cancelAnimationFrame(frame);
         window.removeEventListener('scroll', this.reposition, true);
         window.removeEventListener('resize', this.reposition);
         this.hide(pop);

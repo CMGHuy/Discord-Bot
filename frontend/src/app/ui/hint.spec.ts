@@ -4,7 +4,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Hint, supportsPopover } from './hint';
+import { Hint, clampPopover, supportsPopover } from './hint';
 import { POPOVER_OPEN_ATTR, installPopoverPolyfill } from '../testing/popover-polyfill';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/hint.ts'), 'utf8');
@@ -262,6 +262,52 @@ describe('popover polyfill (test environment, v194 A1)', () => {
     const before = HTMLElement.prototype.showPopover;
     installPopoverPolyfill();
     expect(HTMLElement.prototype.showPopover).toBe(before);
+  });
+});
+
+describe('clampPopover (v194 A1)', () => {
+  const DESKTOP = { width: 1440, height: 900 };
+  const PHONE = { width: 390, height: 844 };
+  const POP = { width: 200, height: 50 };
+  /** A 14px trigger whose top-left corner is at (left, top). */
+  const trig = (left: number, top: number) => ({ top, bottom: top + 14, left, right: left + 14, width: 14 });
+
+  it('sits 4px under the trigger, centred, when there is room', () => {
+    expect(clampPopover(trig(200, 100), POP, DESKTOP, 'center')).toEqual({ top: 118, left: 107, above: false });
+  });
+
+  it("align 'left' ends the popover at the trigger's right edge", () => {
+    expect(clampPopover(trig(400, 100), POP, DESKTOP, 'left')).toEqual({ top: 118, left: 214, above: false });
+  });
+
+  it('flips above the trigger when there is no room below', () => {
+    expect(clampPopover(trig(200, 860), POP, DESKTOP, 'center')).toEqual({ top: 806, left: 107, above: true });
+  });
+
+  it('shifts left instead of running off the right edge, keeping 8px', () => {
+    expect(clampPopover(trig(1420, 100), POP, DESKTOP, 'center').left).toBe(1440 - 8 - 200);
+  });
+
+  it('shifts right instead of running off the left edge, keeping 8px', () => {
+    expect(clampPopover(trig(4, 100), POP, PHONE, 'center').left).toBe(8);
+    expect(clampPopover(trig(20, 100), POP, PHONE, 'left').left).toBe(8);
+  });
+
+  it('pins a popover wider than the viewport to the left margin', () => {
+    expect(clampPopover(trig(180, 100), { width: 500, height: 50 }, PHONE, 'center').left).toBe(8);
+  });
+
+  it('with no room either way, takes the larger side and keeps its top inside the margin', () => {
+    const tall = { width: 200, height: 700 };
+    const short = { width: 1440, height: 600 };
+    // 300px above the trigger, 286px below it: above wins, then the top clamps to 8.
+    expect(clampPopover(trig(200, 300), tall, short, 'center')).toEqual({ top: 8, left: 107, above: true });
+    // 100px above, 486px below: stays below, clamped to 8 because it is taller than the viewport.
+    expect(clampPopover(trig(200, 100), tall, short, 'center')).toEqual({ top: 8, left: 107, above: false });
+  });
+
+  it('takes the margin as a parameter', () => {
+    expect(clampPopover(trig(1420, 100), POP, DESKTOP, 'center', 0).left).toBe(1240);
   });
 });
 
