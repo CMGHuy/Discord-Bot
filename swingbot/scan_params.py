@@ -92,6 +92,8 @@ class ScanParams:
     fvg_displacement_atr_k: float = 1.5     # v128: read only in displacement mode
     confluence_structural_stop_pct: float = 0.0   # v139 arm S ceiling c; 0 = today's clamp
     confluence_stop_drop_pct: float = 0.0         # v139 arm D ceiling c; 0 = no drop
+    confluence_atr_stop_floor: float = 0.0        # v191 k; 0 = today's percent band
+    confluence_atr_target_mode: str = "rechoose"  # v191: rechoose (arm R) | keep (arm K)
     headroom_scope: str = "off"             # v135: off | strategy | confluence
     headroom_min_r: float = 0.0             # v135: 0 disables the gate
 
@@ -162,6 +164,8 @@ class ScanParams:
             fvg_displacement_atr_k=config.FVG_DISPLACEMENT_ATR_K,
             confluence_structural_stop_pct=config.CONFLUENCE_STRUCTURAL_STOP_PCT,
             confluence_stop_drop_pct=config.CONFLUENCE_STOP_DROP_PCT,
+            confluence_atr_stop_floor=config.CONFLUENCE_ATR_STOP_FLOOR,
+            confluence_atr_target_mode=config.CONFLUENCE_ATR_TARGET_MODE,
             headroom_scope=config.HEADROOM_SCOPE,
             headroom_min_r=config.HEADROOM_MIN_R,
         )
