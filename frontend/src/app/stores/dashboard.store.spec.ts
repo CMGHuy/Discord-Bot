@@ -789,17 +789,20 @@ describe('DashboardStore', () => {
     });
 
     it('keeps the newest today answer when an older one lands after it', () => {
-      const reqs = widenThenPush();
-      flushScoped(reqs);
-      flushToday(reqs, { amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
-      // A second push issues a newer today fetch; the older one already landed.
+      const older = widenThenPush();
+      // A second push issues a newer today fetch while the older is in flight.
       events.raise('trades');
       tick();
       vi.advanceTimersByTime(300);
-      const again = requests();
-      flushScoped(again);
-      flushToday(again, { amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 });
-      expect(store.todayRealized()).toEqual({ amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 });
+      const newer = requests();
+      expect(older.filter((r) => modeOf(r) === 'today')).toHaveLength(1);
+      expect(newer.filter((r) => modeOf(r) === 'today')).toHaveLength(1);
+      const newerFigures = { amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 };
+      flushToday(newer, newerFigures);
+      flushToday(older, { amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
+      flushScoped(older);
+      flushScoped(newer);
+      expect(store.todayRealized()).toEqual(newerFigures);
       expect(store.todayLoading()).toBe(false);
     });
 
