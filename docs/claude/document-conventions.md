@@ -270,6 +270,8 @@ whole context window for a single file.
 |---|---|---|
 | Spec | ~350 lines / 20 KB | 500 lines — a spec is read **whole** |
 | Plan **file** | 1000–1500 lines | **1500 lines**, no exceptions |
+| Plan **task** (above v196) | ≤ 14 KB | **20 KB** (UTF-8 bytes, `### Task` to the next task or `# `/`## ` heading) — split into `<id>` + `<id>b` |
+| **Plan** (above v196) | — | **20 tasks** (ledger rows, `b` rows included) — split the spec |
 
 Over the limit, **split — do not compress.**
 
@@ -317,25 +319,38 @@ git either.
 
 ### Why splitting, and not writing less
 
-The measurement that decides it, across every plan the repo has:
+The first measurement here (v2–v24, 2.7–5.7 KB per task) concluded that cost per
+task is near-constant, so trimming tasks buys nothing. **That premise is false from
+at least v186 on.** Bytes per task, from each `### Task` heading to the next
+`### Task` or `# Phase` (v196 spec):
 
-| Plan | Size | Tasks | Per task |
-|---|---|---|---|
-| `v24-control-alignment` | 48 KB | 14 | 3.4 KB |
-| `v21-spa-refresh` | 136 KB | 51 | 2.7 KB |
-| `v2-unified-plan-engine` | 300 KB | 110 | 2.7 KB |
-| `v3-cockpit` | 652 KB | 115 | 5.7 KB |
+| Plan | Tasks | Median KB/task | p90 KB/task | Max | Tasks > 14 KB | Plan size |
+|---|---|---|---|---|---|---|
+| v186 | 12 | 11.9 | 17.9 | 20.4 | 5 | 179 KB |
+| v187 | 13 | 11.1 | 14.9 | 21.2 | 3 | 193 KB |
+| v190 | 25 | 10.6 | 20.9 | 32.2 | 7 | 351 KB |
+| v192 | 26 | 17.9 | 26.7 | 34.8 | 17 | 552 KB |
+| v194 | 28 | 12.8 | 18.4 | 23.9 | 11 | 407 KB |
+| v195 | 37 | 27.2 | 38.4 | 45.7 | 34 | 1146 KB |
 
-Cost per task is near-constant at 2.7–5.7 KB, in the tight plans and the
-landmines alike. **The landmines are not verbose, they are long** — 652 KB is 115
-tasks in one file. Trimming prose inside tasks buys almost nothing, and buys it at
-the worst price: `superpowers:writing-plans` requires real test code, real
-implementation code and exact file paths in every task, and a task thinned to hit
-a byte target becomes the "add appropriate error handling" placeholder that skill
-exists to forbid. A vague task costs the *executing* session far more than the
-bytes saved.
+About half of every plan is fenced code. Two things drive the cost. **Tasks got
+fat**: a task that rewrites a whole component pastes the whole component.
+**Plans got long**: writer output, part-writer re-reads and the controller's
+bookkeeping all scale with the task count, and the 1500-line file cap only moves
+tasks into more files (v195 has 22 parts).
 
-The lever is the number of tasks in one file, never the completeness of one task.
+So plans above v196 carry two caps, both checked by `plan_lint.py` in its one
+pass: **a task is at most 20 KB** (aim 14 KB), and **a plan is at most 20 tasks**.
+Splitting is the lever. An over-cap task becomes two tasks, `<id>` and `<id>b`,
+and an over-cap plan becomes two specs. **Compression stays forbidden.**
+`superpowers:writing-plans` requires real test code, real implementation code and
+exact file paths in every task, and a task thinned to hit a byte target becomes
+the "add appropriate error handling" placeholder that skill exists to forbid.
+A vague task costs the *executing* session far more than the bytes it saves.
+
+A limit that a script checks in one pass costs less than a process that tries to
+steer the writer. v193's slice/stat tooling was reverted for that reason, so the
+caps add no new tool, flag or agent step.
 
 ### Splitting
 
@@ -352,6 +367,20 @@ A spec over budget usually is not one spec. Check whether it is really two
 subjects sharing a document — `v22` and `v23` were separated during their own
 brainstorm for exactly this reason. Decompose first; split only what genuinely
 cannot be decomposed.
+
+**A plan over 20 tasks is the same case.** When `plan-writer` `mode=index` returns
+`SCOPE: <N> tasks > 20 -- split the spec`, the controller asks the partner where
+to cut (`AskUserQuestion`). Then:
+
+- The committed spec keeps its `vN` and is revised in place to hold the first
+  half, with a `**Split:** second half in vM` line under `Status:`.
+- The second half becomes a new spec, numbered through `/new-doc` (`vM`), with its
+  own `Panel:` run. The first half's panel trail stands, and it is not
+  re-panelled unless its scope changed beyond the cut.
+- The uncommitted index for `vN` is deleted and rewritten from the revised spec.
+
+A task split under the 20 KB cap that pushes the ledger past 20 follows the same
+rule. The cap is never raised.
 
 ### Being greppable is the other half
 

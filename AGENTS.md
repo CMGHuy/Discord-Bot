@@ -487,7 +487,11 @@ after bumping.
 
 No plan file may exceed 1500 lines. Split it into more `_N` parts (lettered
 `_2a`/`_2b`), never compress a task or split one across files, and afterwards
-confirm the `^### Task` sequence has no gap. A plan runs the full suite ONCE, as
+confirm the `^### Task` sequence has no gap. Plans above v196 also cap a task
+at 20 KB (aim 14 KB; split an over-cap task into `<id>` and `<id>b`, the
+controller adds the `b` ledger row) and a plan at 20 tasks (`plan-writer`
+returns `SCOPE`: ask the partner where to cut and split the spec into two
+numbered specs); `plan_lint.py` checks both. A plan runs the full suite ONCE, as
 its own final verification task, never per task and never again after a clean
 merge; the per-task check is the one narrow test file (or `npm test --include`
 one spec). Full cadence: `document-conventions.md`.
