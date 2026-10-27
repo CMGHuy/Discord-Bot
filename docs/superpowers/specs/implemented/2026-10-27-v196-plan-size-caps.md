@@ -201,3 +201,15 @@ plans' sizes are the check, recorded in their close-out.
 - staff-engineer: a single-file plan is only caught at the final lint -- rejected: linting after every task append is the per-write overhead v193 added; the writer's 14 KB aim and the existing post-part lint stay the checkpoints.
 - staff-engineer: CLAUDE.md may pass 200 lines -- applied: the fallback is named and `wc -l` checked.
 - staff-engineer: no per-file reset test -- applied: an acceptance case.
+
+## Close-out panel (diff 8f091f62^1...8f091f62)
+
+staff-engineer and senior-engineer: no BLOCKING.
+
+- staff: skill said `make up` (starts bot and tunnel) and called `swing-db-test` a stray -- applied (38201c46: `docker start swing-db`, `swing-db-test` named as the one exception).
+- staff: skill rewrite has no spec of its own -- accepted: done at the partner's request mid-run (2026-10-27), recorded here.
+- staff: AGENTS.md 10 bytes under the 32768 cap, CLAUDE.md 1 line under 200 -- carried: the next setup change must move content to docs/claude first.
+- senior: `update_fence` branches untested (`~~~`, short closer, trailing text, mixed chars) and an unclosed fence swallows later headings with no hint in the message -- carried, no test yet.
+- senior: byte count assumes LF endings (CRLF plans undercount ~1 byte per line) -- carried, error is small and in the permissive direction.
+- senior: the v195 regression test depends on that committed plan and shells out to git via `tracked_paths()` -- carried; the synthetic `test_caps_apply_only_above_v196` already pins the gate.
+- senior: uncited p90 comment on `MAX_TASK_BYTES`, untyped state dict -- carried, style only.
