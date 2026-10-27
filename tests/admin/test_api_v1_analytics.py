@@ -93,6 +93,8 @@ def test_performance_top_level_shape(seed, logged_in):
         "weak": dict,
         # v94 T1 -- the Overview tab's Streaks row.
         "streaks": dict,
+        # v194 B7 -- rows left out of the money figures for want of an FX rate.
+        "fx_missing_count": int,
     })
 
 

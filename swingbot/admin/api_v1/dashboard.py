@@ -31,6 +31,8 @@ taken that decision away from it.
 """
 from __future__ import annotations
 
+from datetime import date
+
 from flask import jsonify, request
 
 from swingbot import config
@@ -41,6 +43,7 @@ from swingbot.core.tracking.performance import TradeLog, expand_realized_legs
 from . import ApiError, api_v1, iso
 from .auth import require_auth
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
+from .money import convert_amount, missing_count, to_account_currency
 
 
 def _equity_30d() -> dict:
@@ -234,8 +237,11 @@ def _realized(closed: list[dict]) -> dict:
     Amounts are `None` rather than `0.0` when nothing closed: "nothing closed
     today" and "closed exactly flat" are different facts and a card must not
     render them identically.
+
+    Amounts are in the account currency (v194 B7); `pct` reads the stored rows.
     """
-    amounts = [a for a in (t.get("realized_pnl_amount") for t in closed)
+    money = to_account_currency(closed)
+    amounts = [a for a in (t.get("realized_pnl_amount") for t in money)
                if isinstance(a, (int, float))]
     pcts = [p for p in (dash.closed_pnl(t) for t in closed) if p is not None]
 
@@ -245,6 +251,7 @@ def _realized(closed: list[dict]) -> dict:
         "n": len(closed),
         "wins": sum(1 for t in closed if t.get("status") == "win"),
         "losses": sum(1 for t in closed if t.get("status") == "loss"),
+        "fx_missing_count": missing_count(money),
     }
 
 
@@ -280,6 +287,23 @@ def _live_positions(open_trades: list[dict]) -> list[dict]:
     return held_now(open_trades, load_plans_by_id())
 
 
+def _open_amounts(open_trades: list[dict], prices: dict) -> tuple[list[float], int]:
+    """Each held position's live money P&L in the account currency (v194 B7),
+    over the same positions `build_open_trade_views` prices; plus how many
+    were left out for want of today's rate."""
+    amounts, missing = [], 0
+    for t in open_trades:
+        price = prices.get(t["id"])
+        if not price or not t.get("entry"):
+            continue
+        raw = dash.unrealized_pnl_amount(t.get("entry"), t.get("direction"), t.get("shares"), price)
+        value, flagged = convert_amount(raw, t.get("ticker"), date.today())
+        missing += flagged
+        if value is not None:
+            amounts.append(value)
+    return amounts, missing
+
+
 def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
     """Current main-ledger positions and P&L, independent of date scope."""
     from swingbot.core.tracking.ledger import is_main
@@ -292,7 +316,7 @@ def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
 
     views = dash.build_open_trade_views(open_trades, account_cfg)
     pcts = views["unrealized_pcts"]
-    amounts = views["unrealized_amounts"]
+    amounts, fx_missing = _open_amounts(open_trades, views["price"])
 
     confidences = [
         t["confidence_level"] for t in open_trades
@@ -305,6 +329,7 @@ def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
         "avg_confidence": (
             round(sum(confidences) / len(confidences), 2) if confidences else None
         ),
+        "_fx_missing": fx_missing,
     }
 
 
@@ -329,11 +354,14 @@ def dashboard():
 
     account_cfg = dash.load_account_config()
     heat, cap = _risk_used(all_raw)
+    open_figures = _open_figures(all_raw, account_cfg)
+    open_missing = open_figures.pop("_fx_missing")
+    realized = _realized(closed_scoped)
 
     return jsonify({
         # primary
         "account_balance": account_cfg.get("balance"),
-        **_open_figures(all_raw, account_cfg),
+        **open_figures,
         "risk_used_pct": heat,
         "risk_cap_pct": cap,
         # chips
@@ -359,7 +387,8 @@ def dashboard():
         # SR58 -- the date scope, echoed back so the workspace can label the
         # figures it is showing rather than assume the request applied.
         "scope": _scope_echo(mode, window),
-        "realized": _realized(closed_scoped),
+        "realized": realized,
+        "fx_missing_count": open_missing + realized["fx_missing_count"],
         "realized_weak": _realized(
             _realized_parts([t for t in all_raw if is_weak(t)], mode, window)),
     })

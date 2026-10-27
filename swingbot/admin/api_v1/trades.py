@@ -52,6 +52,7 @@ from swingbot.core.presentation.short_notice import risk_notice_lines
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
+from .money import convert_amount, to_account_currency
 
 # Legacy v1 trades carry their own status vocabulary. They have no PENDING,
 # PARTIAL or CANCELLED equivalent and none is synthesised for them.
@@ -949,7 +950,7 @@ def get_trade(trade_id: str):
              if t.get("plan_id") == trade_id),
             None,
         )
-        row = _row_from_plan(plan, trade, noted)
+        row = to_account_currency([_row_from_plan(plan, trade, noted)])[0]
         row["detail"] = _plan_detail(plan, trade)
         # SR53. Ranked against the whole plan population, exactly as the list
         # does -- follow_score is a composite, so scoring this plan alone would
@@ -960,7 +961,7 @@ def get_trade(trade_id: str):
         trade = log.get_trade_by_id(trade_id)
         if trade is None:
             return error("not_found", f"No trade with id {trade_id!r}", 404)
-        row = _row_from_trade(trade, noted)
+        row = to_account_currency([_row_from_trade(trade, noted)])[0]
         row["detail"] = _legacy_detail(trade)
 
     _attach_current_prices([row])
@@ -1033,7 +1034,7 @@ def list_trades():
         request.args, allowed_filters=FILTERS, sortable=SORTABLE
     )
 
-    rows = build_rows()
+    rows = to_account_currency(build_rows())
 
     # Filter -> sort -> slice, in that order, so `total` is the post-filter
     # pre-slice count the collection convention requires.
@@ -1247,8 +1248,9 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
         if price is not None and entry is not None:
             row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
             row["r_multiple"] = dash.unrealized_r(entry, row.get("risk_stop"), direction, price)
-            row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
-                entry, direction, row.get("open_shares"), price)
+            row["realized_pnl_amount"], row["fx_missing"] = convert_amount(
+                dash.unrealized_pnl_amount(entry, direction, row.get("open_shares"), price),
+                row.get("ticker"), date.today())
         # Store the display value in a transient field; apply it exactly once
         # in _strip_internal_fields after all passes are complete.
         if row.get("open_shares") is not None:

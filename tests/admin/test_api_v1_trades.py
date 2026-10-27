@@ -113,6 +113,7 @@ TRADE_ROW = {
     "price_as_of": NULLABLE_STR,
     "exit_price": NULLABLE_NUMBER,
     "realized_pnl_amount": NULLABLE_NUMBER,
+    "fx_missing": bool,  # v194 B7 -- no rate for the exit date; the amount is then null
     "pnl_pct": NULLABLE_NUMBER,
     "r_multiple": NULLABLE_NUMBER,
     "held_hours": NULLABLE_NUMBER,

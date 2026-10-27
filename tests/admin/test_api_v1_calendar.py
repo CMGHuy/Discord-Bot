@@ -72,7 +72,7 @@ def test_response_shape(seed, logged_in):
     assert_shape(body, {
         "as_of": str, "month": str, "days": list, "totals": dict, "longest_hold": (dict, type(None)), "day_of_week": list,
         "best_day": (dict, type(None)), "worst_day": (dict, type(None)),
-        "streak": dict, "filters": dict,
+        "streak": dict, "filters": dict, "fx_missing_count": int,
     })
     assert_shape(body["days"][0], {
         "date": str, "net_pnl_amount": NULLABLE_NUMBER,
@@ -180,7 +180,7 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
         "total_ccy": NULLABLE_NUMBER, "win_rate": NULLABLE_NUMBER,
         "avg_trade_r": NULLABLE_NUMBER,
         "worst_drawdown_r": NULLABLE_NUMBER, "contributors": list,
-        "detractors": list,
+        "detractors": list, "fx_missing_count": int,
         # v165 D2 / D3.
         "context": dict, "breakdown": dict,
     })
@@ -202,7 +202,7 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
         "plan_id": NULLABLE_STR, "opened_at": NULLABLE_STR,
         "horizon": NULLABLE_STR, "direction": NULLABLE_STR, "day": str,
         "closed_at": NULLABLE_STR, "outcome": NULLABLE_STR,
-        "pnl_amount": NULLABLE_NUMBER, "r_multiple": NULLABLE_NUMBER,
+        "pnl_amount": NULLABLE_NUMBER, "fx_missing": bool, "r_multiple": NULLABLE_NUMBER,
         "mfe_r": NULLABLE_NUMBER, "mae_r": NULLABLE_NUMBER,
         "exit_efficiency": NULLABLE_NUMBER, "tags": list,
         "auto_lesson": NULLABLE_STR, "leg_index": int, "leg_total": int,

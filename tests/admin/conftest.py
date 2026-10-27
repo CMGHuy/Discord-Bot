@@ -121,6 +121,13 @@ def admin_app(tmp_path, monkeypatch):
     for name in _RELOAD_MODULES:
         mod = importlib.reload(importlib.import_module(name))
 
+    # v194 B7: admin money converts to the account currency through
+    # swingbot.core.marketdata.fx. Pinned to "every ticker quotes in the
+    # account currency" -- identity, no rate, no network -- so each route's
+    # existing figures stand. tests/admin/test_api_v1_money.py fakes real rates.
+    from swingbot.core.marketdata import fx
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: fx.account_currency_code())
+
     app = mod.app if hasattr(mod, "app") else importlib.import_module("swingbot.admin.app").app
     app.config.update(TESTING=True)
     yield app
