@@ -439,6 +439,7 @@ export const SystemStore = signalStore(
       () => risk()?.scan_health?.data_sources ?? null,
     ),
   })),
+
   withComputed(({ logs, logLevels }) => {
     /** Filtered once; `visibleLog` and `hiddenLogLines` both read it, so the
      *  tail is never scanned twice per render. */
@@ -538,10 +539,6 @@ export const SystemStore = signalStore(
       }),
     });
 
-    /** v148: the Scan tab is the status AND the two health panels. One
-     *  resolver for both means the route's existing `scan`/`bot` refresh
-     *  updates all three; `routeRequest` turns a non-auth failure into a
-     *  completed `undefined`, so a health failure never blocks the status. */
     /** v195 correction 3: the scan-health and data-source figures come from
      *  GET /risk. Same error wording as the other reads. */
     const resolveRisk = (): Observable<void> => routeRequest(api.risk(), {
@@ -560,6 +557,10 @@ export const SystemStore = signalStore(
     const resolveProviders = (): Observable<void> =>
       forkJoin([resolveHealth(), resolveRisk()]).pipe(map(() => undefined));
 
+    /** v148: the Scan tab is the status AND the two health panels. One
+     *  resolver for both means the route's existing `scan`/`bot` refresh
+     *  updates all three; `routeRequest` turns a non-auth failure into a
+     *  completed `undefined`, so a health failure never blocks the status. */
     const resolveScan = (): Observable<void> =>
       forkJoin([resolveScanStatus(), resolveHealth()]).pipe(map(() => undefined));
 
