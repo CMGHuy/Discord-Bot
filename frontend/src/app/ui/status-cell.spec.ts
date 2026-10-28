@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { PERFORMANCE_CAVEAT } from './stat-tile';
 import { STATUS_ENDS_HINT, STATUS_STALE_HINT, StatusCell, partialOpenTitle } from './status-cell';
 
 const live = {
@@ -147,6 +148,13 @@ describe('status cell on one baseline (v179 layout audit)', () => {
   it('sets the percentage and the hint on the text baseline, the textless bar centred', () => {
     expect(src.match(/\.cell \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
     expect(src).toMatch(/\.track \{[^}]*align-self:\s*center/);
+  });
+});
+
+describe('STATUS_ENDS_HINT copy (A4 audit)', () => {
+  it('says the two ends are percent of the entry price, on the paper, gross, pre-tax basis', () => {
+    expect(STATUS_ENDS_HINT).toContain('per share from the original entry');
+    expect(STATUS_ENDS_HINT).toContain(PERFORMANCE_CAVEAT);
   });
 });
 

@@ -2,6 +2,7 @@ import type { CandlestickData, Time, UTCTimestamp } from 'lightweight-charts';
 
 import { EquityBasis, EquityCandle, EquityTimeframe } from '../../../api/models';
 import { money, num, pct } from '../../../ui/format';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 import { LogicalWindow, PnlTone, RangeStats, drawdownTone, signTone } from './equity-range.model';
 
 /**
@@ -20,7 +21,7 @@ const CHANGE_PART_SUFFIX = 'vs prev close';
 /** True for the readout part that carries the % change (it gets the tooltip). */
 export const isChangePart = (part: string): boolean => part.endsWith(CHANGE_PART_SUFFIX);
 
-export const CHANGE_PCT_TOOLTIP = "Change from the previous candle's close, not a return on capital";
+export const CHANGE_PCT_TOOLTIP = `Change from the previous candle's close, not a return on capital. ${PERFORMANCE_CAVEAT}`;
 
 const NY = 'America/New_York';
 const DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });

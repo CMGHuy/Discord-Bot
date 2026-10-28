@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { share } from './format';
 import { Hint } from './hint';
+import { PERFORMANCE_CAVEAT } from './stat-tile';
 import { StatusIndicator } from './status-indicator';
 
 /**
@@ -70,7 +71,8 @@ export interface StatusCellRow {
  * request, 2026-10-17), not here.
  */
 /** v194 A3: what the two ends of a trailing runner's bar are. */
-export const STATUS_ENDS_HINT = 'Left figure: P&L if the trailing stop is hit. Right figure: P&L at the best price since TP1.';
+export const STATUS_ENDS_HINT = 'Left figure: P&L if the trailing stop is hit. Right figure: P&L at the best price since TP1. '
+  + `Both per share from the original entry, in percent. ${PERFORMANCE_CAVEAT}`;
 /** v194 A3: why "delayed" shows. */
 export const STATUS_STALE_HINT = "This position's price could not be freshly fetched; the number shown may be delayed.";
 
