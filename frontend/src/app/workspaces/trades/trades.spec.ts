@@ -22,8 +22,9 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 import { LEG_HINT_TEXT } from './leg-label';
 import { numText } from './trades.columns';
+import { partialOpenTitle } from '../../ui/status-cell';
 import { fxMissingText } from '../analytics/scope-bar';
-import { ROW_COUNT_NOTE, Trades, TRADES_CONTROLS } from './trades';
+import { ROW_COUNT_NOTE, EXPORT_HINT, Trades, TRADES_CONTROLS } from './trades';
 
 function row(overrides: Partial<TradeRow>): TradeRow {
   return {
@@ -576,5 +577,21 @@ describe('Trades — missing FX rate caveat (v194 B7)', () => {
   it('is absent when every row converted', () => {
     const el = renderLegRows([row({ fx_missing: false }), row({ id: 'b' })]);
     expect(el.querySelector('.fx-caveat')).toBeNull();
+  });
+});
+
+describe('Trades — explanations are hints, not titles (v194 A3)', () => {
+  it('says the export ignores the filters, in a hint beside the link', () => {
+    const el = render().nativeElement as HTMLElement;
+    expect(el.querySelector('a.export')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.export-wrap sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(EXPORT_HINT);
+  });
+
+  it('explains a partly closed position in a hint outside the row link', () => {
+    const r = row({ status: 'PARTIAL', status_label: 'PARTIAL', banked_fraction: 0.25, exit_price: null });
+    const el = renderRows([r]);
+    expect(el.querySelector('sb-row-link sb-hint')).toBeNull();
+    const texts = [...el.querySelectorAll('sb-hint [role="tooltip"]')].map((n) => n.textContent!.trim());
+    expect(texts).toContain(partialOpenTitle(r)!);
   });
 });

@@ -28,6 +28,7 @@ import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard
 import { LEG_HINT_TEXT } from '../trades/leg-label';
 import { fxMissingText } from '../analytics/scope-bar';
 import { tradeDrawerFields } from './trade-drawer';
+import { partialOpenTitle } from '../../ui/status-cell';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { ToastService } from '../../shell/toast.service';
 import { EquityCandlesStore } from '../../stores/equity-candles.store';
@@ -1012,5 +1013,25 @@ describe('Dashboard — leg rows and missing FX rates (v194 B3, B7)', () => {
     expect(leg.find((f) => f.key === 'leg')?.value).toBe('Leg 2 of 3');
     const single = tradeDrawerFields(tradeRow({ leg_index: 0, leg_total: 1 }), '$', 0);
     expect(single.some((f) => f.key === 'leg')).toBe(false);
+  });
+});
+
+describe('Dashboard — explanations are hints, not titles (v194 A3)', () => {
+  it('explains a partly closed position in a hint outside the row link', async () => {
+    const row = tradeRow({ id: 'p9', status: 'PARTIAL', status_label: 'PARTIAL', banked_fraction: 0.5 });
+    const el = await loadedWithRows([row]);
+    expect(el.querySelector('sb-row-link sb-hint')).toBeNull();
+    const texts = [...el.querySelectorAll('sb-positions-table sb-hint [role="tooltip"]')].map((n) => n.textContent!.trim());
+    expect(texts).toContain(partialOpenTitle(row)!);
+    // The icon keeps its own generic label; only the share-still-open sentence moved.
+    expect(el.querySelector('.leg-icon')!.getAttribute('title')).not.toBe(partialOpenTitle(row));
+  });
+
+  it('defines the P&L and expected-R cells in the positions help, not on each cell', async () => {
+    const el = await loadedWithRows([tradeRow({ status: 'ACTIVE', status_label: 'ACTIVE', exit_price: null, pnl_pct: null })]);
+    expect(el.querySelector('.pnl-plan[title], .expected[title]')).toBeNull();
+    const help = el.querySelector('.lifecycle-hint')!.textContent!;
+    expect(help).toContain('live P&L, then projected P&L at target and at stop');
+    expect(help).toContain('projected R if price reaches target');
   });
 });

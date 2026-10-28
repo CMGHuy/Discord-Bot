@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { Chip } from '../../ui/chip';
+import { Hint } from '../../ui/hint';
 import { date, num, share, shareCount, text } from '../../ui/format';
 import { Panel } from '../../ui/layout';
+import { GAP_FRAGILE_HINT } from './why/sizing-panel';
 
 export interface PositionFigures {
   status: string; shares: number | null; positionValue: number | null;
@@ -38,7 +40,7 @@ export function positionRows(f: PositionFigures): PositionRow[] {
 }
 
 @Component({
-  selector: 'sb-trade-position-card', imports: [Panel, Chip], changeDetection: ChangeDetectionStrategy.OnPush,
+  selector: 'sb-trade-position-card', imports: [Panel, Chip, Hint], changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <sb-panel heading="Position">
       @if (figures().sizingMode === null) { <p class="section-help">{{ snapshotSentence }}</p> }
@@ -49,8 +51,7 @@ export function positionRows(f: PositionFigures): PositionRow[] {
             <dd>
               <span class="num">{{ row.value }}</span>
               @if (row.fragile) {
-                <sb-chip label="fragile" tone="warn" [caps]="false"
-                  title="The stop sits inside 90th-percentile gap noise: an overnight gap can jump it." />
+                <sb-chip label="fragile" tone="warn" [caps]="false" /><sb-hint [text]="fragileHint" label="About fragile stops" align="left" />
               }
               @if (row.sub) { <span class="row-sub muted">{{ row.sub }}</span> }
             </dd>
@@ -77,4 +78,5 @@ export class PositionCard {
   readonly figures = input.required<PositionFigures>();
   protected readonly rows = computed(() => positionRows(this.figures()));
   protected readonly snapshotSentence = SNAPSHOT_SENTENCE;
+  protected readonly fragileHint = GAP_FRAGILE_HINT;
 }

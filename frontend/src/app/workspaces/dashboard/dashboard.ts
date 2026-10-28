@@ -254,6 +254,11 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
           its first and final exits.
         </span>
         <sb-plan-lifecycle-diagram />
+        <span class="hint-heading">Columns</span>
+        <span class="hint-copy">
+          <strong>P&amp;L:</strong> live P&L, then projected P&L at target and at stop.
+          <strong>Expected R:</strong> projected R if price reaches target.
+        </span>
         <span class="hint-heading">Sizing</span>
         @if (premiumExplanation(); as explanation) {
           <span class="hint-copy">{{ explanation }}</span>
@@ -400,13 +405,16 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     <ng-template #numCell let-row>
       <sb-row-link [link]="['/trades', row.id]">
         {{ shortId(row) }}
-        @if (partialOpenTitle(row); as openTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="openTitle" />
+        @if (partialOpenTitle(row)) {
+          <sb-icon name="partial" class="leg-icon" />
         }
         @if (row.bar_kind === 'trailing') {
           <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
         }
       </sb-row-link>
+      @if (partialOpenTitle(row); as openTitle) {
+        <sb-hint [text]="openTitle" label="About this partial position" align="left" />
+      }
       <!-- v194 B3: every leg says which part of the plan it is; the hint
            sits outside the link (a button cannot nest in an anchor). -->
       @if (legLabel(row); as leg) {
@@ -445,10 +453,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
              the else branch; price_age_s is null on a closed row. -->
         <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />
       } @else {
-        <span
-          class="pnl-plan"
-          title="Live P&L, then projected P&L at target and at stop"
-        >
+        <span class="pnl-plan">
           <span [sbFlash]="livePnlPct(row)" [class]="pnlClass(livePnlPct(row))">
             {{ fmtPct(livePnlPct(row)) }}
             <!-- Only once shares exist to have a dollar value at all -- a
@@ -491,7 +496,6 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
           class="expected"
           [sbFlash]="expectedR(row)"
           [class]="pnlClass(expectedR(row))"
-          title="Projected R if price reaches target"
         >{{ fmtSigned(expectedR(row)) }}</span>
         <sb-magnitude [value]="expectedR(row)" [max]="R_MAGNITUDE_MAX" />
       }

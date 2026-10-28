@@ -116,6 +116,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
  *  into one row per realised leg plus its open remainder
  *  (`swingbot/admin/api_v1/trades.py` `_expand_plan_row`) before it
  *  counts, so the pager's "1–50 of 120" is rows. */
+export const EXPORT_HINT = 'Downloads the entire trade log. The filters above do not narrow it.';
 export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts lists one row per leg.';
 
 /**
@@ -222,17 +223,13 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
       </div>
       <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
            the server's filename, both of which an XHR throws away.
-           The title names what comes out, because it is NOT what is on
+           The hint names what comes out, because it is NOT what is on
            screen: the export is the whole trade log, unfiltered. Saying so
            here is the same courtesy the two Clear dialogs already pay. -->
-      <a
-        slot="export"
-        class="export"
-        [href]="store.exportUrl()"
-        title="Downloads the entire trade log. The filters above do not narrow it."
-        download
-        >Export CSV</a
-      >
+      <span slot="export" class="export-wrap">
+        <a class="export" [href]="store.exportUrl()" download>Export CSV</a>
+        <sb-hint [text]="exportHint" label="About the CSV export" align="left" />
+      </span>
       <!-- v85 D32: the opened-at range narrows WHEN, not WHAT -- a scope
            control rather than a field filter, same distinction that used to
            separate the control bar from the filter bar. -->
@@ -399,13 +396,16 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     <ng-template #numCell let-row>
       <sb-row-link [link]="['/trades', row.id]">
         {{ shortId(row) }}
-        @if (partialOpenTitle(row); as openTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="openTitle" />
+        @if (partialOpenTitle(row)) {
+          <sb-icon name="partial" class="leg-icon" />
         }
         @if (row.bar_kind === 'trailing') {
           <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
         }
       </sb-row-link>
+      @if (partialOpenTitle(row); as openTitle) {
+        <sb-hint [text]="openTitle" label="About this partial position" align="left" />
+      }
       <!-- v79 split a scaled-out position into one row per leg, all
            carrying the same id. v194 B3: every leg says which part it
            is, and the hint (outside the link: a button cannot sit in an
@@ -563,6 +563,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
        table) sat flush against each other instead of --section-gap apart.
        Same pattern as every other workspace host. */
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    .export-wrap { display: inline-flex; align-items: center; gap: var(--space-4); }
 
     /* v95 C1: sb-toolbar lays out its slotted children; this is just the
        group's own internal gap, which sb-control-row used to supply. */
@@ -1002,6 +1003,7 @@ export class Trades {
   /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
   protected readonly legLabel = legLabel;
   protected readonly legHint = LEG_HINT_TEXT;
+  protected readonly exportHint = EXPORT_HINT;
 
   /**
    * Every control routes through here. `resetPage` is the default because a

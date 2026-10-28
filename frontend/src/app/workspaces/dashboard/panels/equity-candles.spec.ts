@@ -431,7 +431,8 @@ describe('sb-equity-candles', () => {
     fixture.detectChanges();
     const pctPart = [...el.querySelectorAll('.readout .part')]
       .find((p) => p.textContent!.includes('vs prev close'))!;
-    expect(pctPart.getAttribute('title'))
+    expect(pctPart.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.readout sb-hint [role="tooltip"]')!.textContent!.trim())
       .toBe("Change from the previous candle's close, not a return on capital");
   });
 

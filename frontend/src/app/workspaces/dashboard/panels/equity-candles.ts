@@ -30,6 +30,7 @@ import { ChartTarget, TimeWindow, bucketEndInstant, bucketStartInstant, windowBo
 import { chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
 import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
+import { Hint } from '../../../ui/hint';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
 import {
   WallSpan,
@@ -110,7 +111,7 @@ export function targetNeedsOlder(
 @Component({
   selector: 'sb-equity-candles',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Segmented, Button],
+  imports: [Async, Segmented, Button, Hint],
   template: `
     <div class="controls">
       <sb-segmented
@@ -131,8 +132,10 @@ export function targetNeedsOlder(
     @if (readout().length) {
       <p class="readout">
         @for (part of readout(); track $index) {
-          <span class="part" [attr.data-tone]="part.tone"
-                [attr.title]="isChangePart(part.text) ? changeTooltip : null">{{ part.text }}</span>
+          <span class="part" [attr.data-tone]="part.tone">{{ part.text }}</span>
+        }
+        @if (hasChange()) {
+          <sb-hint [text]="changeTooltip" label="About the change figure" align="left" />
         }
       </p>
     }
@@ -203,7 +206,6 @@ export function targetNeedsOlder(
       overflow-wrap: anywhere;
     }
     .part + .part::before { content: '·'; margin: 0 var(--space-4); color: var(--text-faint); }
-    .part[title] { text-decoration: underline dotted; cursor: help; }
     .states { grid-area: states; }
     .part[data-tone='pos'] { color: var(--pos); }
     .part[data-tone='neg'] { color: var(--neg); }
@@ -274,6 +276,8 @@ export class EquityCandles {
   protected readonly store = inject(EquityCandlesStore);
   protected readonly changeTooltip = CHANGE_PCT_TOOLTIP;
   protected readonly isChangePart = isChangePart;
+  /** v194 A3: the change figure's definition, once, when the readout has one. */
+  protected readonly hasChange = computed(() => this.readout().some((p) => isChangePart(p.text)));
   protected readonly timeframeOptions: SegmentOption[] =
     EQUITY_TIMEFRAMES.map((tf) => ({ value: tf, label: tf }));
   protected readonly basisOptions: SegmentOption[] =

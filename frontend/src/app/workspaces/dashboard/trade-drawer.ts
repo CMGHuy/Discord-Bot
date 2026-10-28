@@ -14,6 +14,8 @@ import { RowActions } from './row-actions';
 
 /** The header marker. The bot only paper-trades (CLAUDE.md, eToro roadmap
  *  stage 0); a drawer that looks like a position ticket must say so. */
+/** v194 A3: what the marker means, in a hint (a native title never shows on a phone). */
+export const PAPER_HINT = 'The bot places no orders: every trade on this page is a paper trade.';
 export const PAPER_MARKER = 'Paper trade';
 
 export interface TradeDrawerField {
@@ -117,8 +119,10 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
   imports: [Drawer, Hint, RowActions, RouterLink],
   template: `
     <sb-drawer [open]="true" [heading]="row().ticker" (closed)="closed.emit()">
-      <span drawer-header class="paper-marker"
-            title="The bot places no orders: every trade on this page is a paper trade.">{{ paperMarker }}</span>
+      <span drawer-header class="paper-marker-row">
+        <span class="paper-marker">{{ paperMarker }}</span>
+        <sb-hint [text]="paperHint" label="About paper trades" align="left" />
+      </span>
       <dl class="fields">
         @for (item of fields(); track item.key) {
           <div class="field" [attr.data-field]="item.key">
@@ -137,6 +141,7 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
   `,
   styles: `
     :host { display: contents; }
+    .paper-marker-row { display: inline-flex; align-items: center; gap: var(--space-4); }
     .paper-marker {
       padding: 0 var(--space-6);
       border: 1px solid var(--border-strong);
@@ -199,6 +204,7 @@ export class TradeDrawer {
   private readonly now = inject(CLOCK);
 
   protected readonly paperMarker = PAPER_MARKER;
+  protected readonly paperHint = PAPER_HINT;
   protected readonly legHint = LEG_HINT_TEXT;
   protected readonly fields = computed(() =>
     tradeDrawerFields(this.row(), this.connection.currency(), this.now()));

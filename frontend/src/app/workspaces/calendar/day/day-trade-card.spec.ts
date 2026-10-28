@@ -110,7 +110,8 @@ describe('DayTradeCard', () => {
     expect(el.querySelector('.pnl')?.classList.contains('neg')).toBe(true);
     expect(el.querySelector('.r')?.classList.contains('neg')).toBe(true);
     expect(el.querySelector('.return')?.classList.contains('neg')).toBe(false);
-    expect(el.querySelector('.r')?.getAttribute('title')).toBe(R_TOOLTIP);
+    expect(el.querySelector('.r')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.r + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(R_TOOLTIP);
   });
 
   it('lists the recorded prices, calling the stop the final stop', async () => {

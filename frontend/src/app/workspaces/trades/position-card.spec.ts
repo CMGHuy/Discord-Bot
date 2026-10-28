@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PositionCard, PositionFigures, positionRows } from './position-card';
+import { GAP_FRAGILE_HINT } from './why/sizing-panel';
 
 const base: PositionFigures = { status: 'PARTIAL', shares: 3, positionValue: 300, dollarAtRisk: 7.47,
   sizingMode: 'risk', gapP90Pct: 1.25, gapFragile: true, tp1Pct: 50, breakevenTriggerPct: 60,
@@ -39,6 +40,8 @@ describe('PositionCard', () => {
     expect(el.querySelector('h2')?.textContent).toBe('Position');
     expect(el.querySelector('[data-row="$ at risk"]')?.textContent).toContain('open shares, at original stop');
     expect(el.querySelector('sb-chip')?.textContent).toContain('fragile');
+    expect(el.querySelector('sb-chip')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('sb-chip + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(GAP_FRAGILE_HINT);
     expect(el.querySelector('.section-help')).toBeNull();
     f.componentRef.setInput('figures', { ...base, sizingMode: null, gapFragile: false }); f.detectChanges();
     expect(el.querySelector('.section-help')?.textContent).toContain('Position size is snapshotted when the trade opens. A trade with no sizing snapshot was logged before that feature existed.');

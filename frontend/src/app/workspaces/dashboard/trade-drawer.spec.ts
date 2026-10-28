@@ -15,7 +15,7 @@ import { CLOCK } from '../../ui/clock';
 import { RowActions } from './row-actions';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
-import { PAPER_MARKER, TradeDrawer, drawerPnl, tradeDrawerFields } from './trade-drawer';
+import { PAPER_HINT, PAPER_MARKER, TradeDrawer, drawerPnl, tradeDrawerFields } from './trade-drawer';
 
 const NOW = Date.parse('2026-10-20T12:00:00Z');
 
@@ -137,6 +137,12 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     const marker = el.querySelector('sb-drawer header .paper-marker')!;
     expect(marker.textContent!.trim()).toBe(PAPER_MARKER);
     expect(PAPER_MARKER).toBe('Paper trade');
+  });
+
+  it('explains the paper marker in a hint, not a native title (v194 A3)', () => {
+    const el = mount();
+    expect(el.querySelector('.paper-marker')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.paper-marker-row sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(PAPER_HINT);
   });
 
   it('renders each field as a label/value pair, numbers in the numeric face', () => {

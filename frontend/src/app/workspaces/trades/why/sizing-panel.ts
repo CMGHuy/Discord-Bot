@@ -1,12 +1,16 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { Chip } from '../../../ui/chip';
+import { Hint } from '../../../ui/hint';
 import { num, share, shareCount, text } from '../../../ui/format';
 import { Panel } from '../../../ui/layout';
+
+/** v194 A3: what the fragile chip means, in a hint (a native title never shows on a phone). */
+export const GAP_FRAGILE_HINT = 'The stop sits inside 90th-percentile gap noise: an overnight gap can jump it.';
 
 @Component({
   selector: 'sb-sizing-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Chip],
+  imports: [Panel, Chip, Hint],
   template: `
     <sb-panel heading="Sizing">
       <p class="section-help">
@@ -23,8 +27,7 @@ import { Panel } from '../../../ui/layout';
           <dd class="gap-risk">
             <span class="num">{{ fmtShare(gapP90Pct(), 2) }}</span>
             @if (gapFragile() === true) {
-              <sb-chip label="fragile" tone="warn" [caps]="false"
-                title="The stop sits inside 90th-percentile gap noise: an overnight gap can jump it." />
+              <sb-chip label="fragile" tone="warn" [caps]="false" /><sb-hint [text]="fragileHint" label="About fragile stops" align="left" />
             }
           </dd>
         </div>
@@ -42,6 +45,7 @@ import { Panel } from '../../../ui/layout';
   `,
 })
 export class SizingPanel {
+  protected readonly fragileHint = GAP_FRAGILE_HINT;
   readonly shares = input<number | null>(null);
   readonly positionValue = input<number | null>(null);
   readonly sizingMode = input<string | null>(null);

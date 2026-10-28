@@ -48,7 +48,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
         <sb-chip [label]="t.exit_reason" [tone]="exitTone()" [caps]="false" />
         <span class="figures">
           <span class="pnl" [class.pos]="pnlSign() === 'pos'" [class.neg]="pnlSign() === 'neg'">{{ pnl() }}</span>
-          <span class="r" [title]="rTooltip" [class.pos]="rSign() === 'pos'" [class.neg]="rSign() === 'neg'">{{ r(t.r_multiple) }}</span>
+          <span class="r" [class.pos]="rSign() === 'pos'" [class.neg]="rSign() === 'neg'">{{ r(t.r_multiple) }}</span><sb-hint [text]="rTooltip" label="About R" align="left" />
           <span class="return">{{ returnPct() }}</span>
         </span>
       </header>

@@ -42,7 +42,8 @@ describe('SizingPanel', () => {
     const chip: HTMLElement = f.nativeElement.querySelector('dl > div:last-child sb-chip');
     expect(chip?.textContent?.trim()).toBe('fragile');
     expect(chip?.querySelector('.warn')).not.toBeNull();
-    expect(chip?.getAttribute('title'))
+    expect(chip!.hasAttribute('title')).toBe(false);
+    expect(f.nativeElement.querySelector('dl > div:last-child sb-hint [role="tooltip"]')!.textContent!.trim())
       .toBe('The stop sits inside 90th-percentile gap noise: an overnight gap can jump it.');
   });
 

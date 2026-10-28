@@ -18,6 +18,7 @@ import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, ChipTone, QualityChip } from '../../ui/chip';
+import { Hint } from '../../ui/hint';
 import { MetricChip } from '../../ui/metric-chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Tab, TabBar } from '../../ui/layout';
@@ -113,6 +114,7 @@ function cameFromPlan(): boolean {
     ConfirmDialog,
     MetricChip,
     Chip,
+    Hint,
     Async,
     WhyPanel,
     PlanChart,
@@ -171,7 +173,7 @@ function cameFromPlan(): boolean {
                  chip for it would just be visual noise on every ordinary
                  trade. -->
             @if (cohortTone(); as tone) {
-              <sb-chip [label]="cohortChipLabel()" [tone]="tone" [title]="cohortTooltip()" />
+              <sb-chip [label]="cohortChipLabel()" [tone]="tone" /><sb-hint [text]="cohortTooltip()" label="About the cohort chip" align="left" />
             }
             @if (earningsChip(); as label) {
               <span class="earnings"><sb-chip [label]="label" tone="warn" [caps]="false" /></span>
