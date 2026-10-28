@@ -15,44 +15,40 @@ import { ConnectionStore } from '../stores/connection.store';
 import { MarketIndexStore } from '../stores/market-index.store';
 import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
-import { ViewportService } from '../ui/breakpoints';
 import { MotionMode, MotionService } from '../ui/motion/motion.service';
-import { Button } from '../ui/button';
 import { CLOCK } from '../ui/clock';
-import { Icon, IconName } from '../ui/icon';
+import { Hint } from '../ui/hint';
+import { Icon } from '../ui/icon';
 import { NavIndicator } from './nav-indicator';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
-import { RouteTitleService } from '../routing/route-title.service';
 import { SessionStore } from '../stores/session.store';
+import { Breadcrumb } from './breadcrumb';
 import { ConnectionStatus } from './connection-status';
+import { NAV_GROUPS } from './nav';
 import { ScanProgressStrip } from './scan-progress';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
 
-interface NavEntry {
-  path: string;
-  label: string;
-  icon: IconName;
-}
-
-interface NavGroup {
-  id: string;
-  label: string;
-  entries: NavEntry[];
-}
-
 /**
- * Sidebar, workspace header, connection status, toast host, outlet.
+ * Icon rail, top bar, connection status, toast host, outlet -- v195 Phase 3.
  *
  * Rendered by App instead of the login form -- it is not itself routed, so
  * there is no state in which the shell exists without a session.
+ *
+ * **One rail state.** The rail is always 48px and always icons: there is no
+ * expanded sidebar, no overlay and no stored collapse choice. The server's
+ * pre-v195 sidebar preference is left in place (an older image reads it
+ * again on rollback) and is never read or written here.
  *
  * **Scan and bot status live here and nowhere else.** They were on the old
  * Dashboard as well as the header, which meant two renderings of one fact
  * that could disagree; the design system moves them to the shell precisely
  * so a workspace cannot own a second copy. Do not add them to Dashboard.
+ *
+ * **No heading.** The top bar leads with `sb-breadcrumb`, a labelled list;
+ * the page's one `<h1>` is `sb-page`'s (correction 9).
  */
 /** The zoom steps the control offers, as root-font percentages. A closed
  *  set so a stored value can be validated against it. */
@@ -63,8 +59,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
-    ScanProgressStrip,
-    Button, Icon, ProfileMenu, NavIndicator, Tape,
+    ScanProgressStrip, Icon, Hint, Breadcrumb, ProfileMenu, NavIndicator, Tape,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -76,10 +71,8 @@ export class Shell {
   protected readonly session = inject(SessionStore);
   protected readonly connection = inject(ConnectionStore);
   private readonly preferences = inject(PreferencesStore);
-  private readonly viewport = inject(ViewportService);
   protected readonly routeLoading = inject(RouteLoadingService);
   private readonly routeRefresh = inject(RouteRefreshService);
-  protected readonly titles = inject(RouteTitleService);
   private readonly tape = inject(TapeStore);
   private readonly marketIndex = inject(MarketIndexStore);
   private readonly clock = inject(CLOCK);
@@ -103,88 +96,21 @@ export class Shell {
   });
 
   /**
-   * Three groups, because eight flat entries stopped communicating.
-   *
-   * The split is by QUESTION, not by data type:
-   *   MONITOR  what is happening right now
-   *   REVIEW   what already happened
-   *   SYSTEM   what the bot itself is doing
-   *
-   * The /ui gallery is deliberately absent — it is a developer surface,
-   * reachable by URL.
+   * The four rail groups (v195 §5.1), from the one nav model the phone bar,
+   * the More sheet, the palette and the breadcrumb also read. The /ui
+   * gallery is deliberately absent: a developer surface, reachable by URL.
    */
-  protected readonly navGroups: NavGroup[] = [
-    {
-      id: 'nav-monitor',
-      label: 'MONITOR',
-      entries: [
-        { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-        { path: '/watchlist', label: 'Watchlist', icon: 'watchlist' },
-        { path: '/risk', label: 'Risk', icon: 'risk' },
-      ],
-    },
-    {
-      id: 'nav-review',
-      label: 'REVIEW',
-      entries: [
-        { path: '/trades', label: 'Trades', icon: 'trades' },
-        { path: '/calendar', label: 'Calendar', icon: 'calendar' },
-        { path: '/analytics', label: 'Analytics', icon: 'analytics' },
-        { path: '/research', label: 'Research', icon: 'research' },
-        { path: '/reports', label: 'Reports', icon: 'reports' },
-        { path: '/cancels', label: 'Cancels', icon: 'cancelled' },
-      ],
-    },
-    {
-      id: 'nav-system',
-      label: 'SYSTEM',
-      entries: [
-        { path: '/system', label: 'System', icon: 'system' },
-        { path: '/versions', label: 'Versions', icon: 'versions' },
-      ],
-    },
-  ];
+  protected readonly navGroups = NAV_GROUPS;
 
-  /**
-   * Whether the sidebar is collapsed to its icon rail — spec v18 Decision 8.
-   *
-   * Two things decide this and they compose rather than compete: the viewport
-   * forces the rail below `md`, and the user's toggle wins WITHIN a
-   * breakpoint. Crossing a boundary re-applies the automatic state, which is
-   * why the stored value is a preference and not the answer.
-   */
-  private readonly userCollapsed = signal<boolean | null>(null);
-
-  protected readonly railed = computed(
-    () => this.viewport.isNarrow() || (this.userCollapsed() ?? false),
-  );
-
-  /** Below `sm` the rail becomes an overlay that a navigation dismisses. */
-  protected readonly overlay = computed(() => this.viewport.isPhone());
-  protected readonly overlayOpen = signal(false);
-
-  protected toggleSidebar(): void {
-    // The new state is the opposite of what is on screen now. Written even
-    // when the viewport is currently forcing the rail: the choice is about
-    // how the user wants it, and it should be waiting for them when they
-    // widen the window again.
-    const collapsed = !this.railed();
-    this.userCollapsed.set(collapsed);
-    this.preferences.update((prefs) => ({
-      ...prefs,
-      'shell.sidebar': collapsed ? 'rail' : 'expanded',
-    }));
-  }
-
-  protected openOverlay(): void {
-    this.overlayOpen.set(true);
-  }
-
-  /** Any navigation closes the overlay — leaving it over the page someone
-   *  just chose is the classic mobile-nav bug. */
-  protected closeOverlay(): void {
-    this.overlayOpen.set(false);
-  }
+  /** The rail foot's version hint: the words the old footer block showed,
+   *  on one line. Empty until the first /health answer; the template
+   *  renders no hint until then. */
+  protected readonly versionText = computed(() => {
+    const versions = this.connection.versions();
+    if (!versions) return '';
+    const updated = this.connection.lastUpdated();
+    return `ui ${versions.ui} · bot ${versions.bot}${updated ? ` · updated ${updated}` : ''}`;
+  });
 
   /* -- SR58: font zoom ------------------------------------------------ */
 
@@ -242,15 +168,6 @@ export class Shell {
       if (typeof stored === 'number' && ZOOM_CHOICES.includes(stored as never)) {
         this.zoom.set(stored);
       }
-    });
-  });
-
-  private readonly applyStoredSidebar = effect(() => {
-    if (!this.preferences.isLoaded()) return;
-    const stored = this.preferences.values()['shell.sidebar'];
-    untracked(() => {
-      if (stored === 'rail') this.userCollapsed.set(true);
-      else if (stored === 'expanded') this.userCollapsed.set(false);
     });
   });
 

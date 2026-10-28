@@ -14,8 +14,8 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 const TOKENS = read('src/styles/tokens.css');
 const GLOBAL = read('src/styles.css');
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** The first rule whose selector STARTS a line, so `.nav a` does not match
- *  `.shell.railed:not(.overlay) .nav a`. '' when absent. */
+/** The first rule whose selector STARTS a line, so `.rail-link` does not match
+ *  a nested rule. '' when absent. */
 const rule = (source: string, selector: string) =>
   source.match(new RegExp(`^\\s*${esc(selector)}\\s*\\{[^}]*\\}`, 'm'))?.[0] ?? '';
 
@@ -60,7 +60,7 @@ describe('v179: the .sb-hit utility', () => {
 
 describe('v179: controls that grow to the hit size', () => {
   const GROWN: [file: string, selector: string, declaration: string][] = [
-    ['src/app/shell/shell.css', '.nav a', 'min-height: var(--control-h)'],
+    ['src/app/shell/shell.css', '.rail-link', 'min-height: var(--control-h)'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-height: var(--control-h)'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-width: var(--hit-min)'],
     ['src/app/ui/column-picker.ts', '.trigger', 'min-height: var(--control-h)'],
@@ -90,7 +90,7 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/workspaces/system/logs-tab.ts', /<a slot="raw" class="raw sb-hit"/],
     ['src/app/workspaces/system/settings-tab.ts', /<a class="export sb-hit"/],
     ['src/app/workspaces/system/settings-tab.ts', /<summary class="sb-hit">/],
-    // The collapsed rail is 52px wide: a 32px link cannot grow, so it pads with .sb-hit.
+    // The rail is 48px wide: its brand link pads with .sb-hit rather than grow.
     ['src/app/shell/shell.html', /<a class="brand sb-hit" routerLink="\/dashboard"/],
     // Tooltip-only chart marks and the Versions timeline (v179 audit): thin by data, padded by .sb-hit.
     ['src/app/ui/bar-list.ts', /<li class="sb-hit" tabindex="0"/],
@@ -101,7 +101,7 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     // SVG shapes draw no ::after: the waterfall's transparent 44px row rect and the dot plot's r=22 circle are the hit area.
     ['src/app/ui/waterfall.ts', /<rect class="hit"[^>]*height="44" tabindex="0"/],
     ['src/app/ui/dot-plot.ts', /<circle class="hit"[^>]*r="26" tabindex="0"/],
-    ['src/app/shell/shell.html', /<a\s+class="sb-hit"\s+\[routerLink\]="entry\.path"/],
+    ['src/app/shell/shell.html', /<a\s+#link\s+class="rail-link sb-hit"\s+\[routerLink\]="entry\.path"/],
   ];
 
   it.each(PADDED)('%s pads its control with .sb-hit', (file, markup) => {

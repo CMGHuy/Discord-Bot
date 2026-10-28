@@ -14,14 +14,6 @@
       "count": 1
     }
   },
-  "src/app/shell/shell.html": {
-    "@angular-eslint/template/click-events-have-key-events": {
-      "count": 1
-    },
-    "@angular-eslint/template/interactive-supports-focus": {
-      "count": 1
-    }
-  },
   "src/app/stores/analytics.store.ts": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
