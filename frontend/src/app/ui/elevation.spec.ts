@@ -120,3 +120,61 @@ describe('v195 §1.2: panels are flat', () => {
     expect(resolveToken('--btn-fill-hover')).not.toMatch(/gradient/);
   });
 });
+
+/* v195 Phase 2: dialogs, the drawer and toasts sit on the one overlay
+ * surface (.elev-overlay: --surface-overlay, the strong hairline, the
+ * panel radius) and cast the one --shadow-overlay through it; none paints
+ * a surface or shadow of its own, and a modal dims with the --scrim token. */
+describe('v195 Phase 2: one overlay surface', () => {
+  const src = (path: string) => stripComments(readFileSync(join(process.cwd(), path), 'utf8'));
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const ruleOf = (source: string, selector: string) =>
+    source.match(new RegExp(`\\n\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+  const DIALOG = src('src/app/ui/confirm-dialog.ts');
+  const LAYOUT = src('src/app/ui/layout.ts');
+  const DRAWER = LAYOUT.slice(LAYOUT.indexOf("selector: 'sb-drawer'"), LAYOUT.indexOf('export class Drawer'));
+  const TOAST = src('src/app/shell/toast-host.ts');
+
+  it('puts the confirm dialog, the drawer and every toast on .elev-overlay', () => {
+    expect(DIALOG).toContain('<dialog #dialog class="elev-overlay"');
+    expect(DRAWER).toContain('<dialog #dialog class="drawer elev-overlay"');
+    expect(TOAST).toContain('<button class="toast elev-overlay"');
+  });
+
+  it('paints no surface and casts no shadow of their own', () => {
+    const own: [string, string][] = [
+      ['dialog', ruleOf(DIALOG, 'dialog')],
+      ['.drawer', ruleOf(DRAWER, '.drawer')],
+      ['.drawer.elev-overlay', ruleOf(DRAWER, '.drawer.elev-overlay')],
+      ['.toast', ruleOf(TOAST, '.toast')],
+    ];
+    for (const [name, rule] of own) {
+      expect(rule, name).not.toBe('');
+      expect(rule, name).not.toMatch(/background|box-shadow/);
+    }
+    for (const source of [DIALOG, DRAWER, TOAST]) expect(source).not.toMatch(/box-shadow\s*:/);
+  });
+
+  it('dims behind a modal with the scrim token', () => {
+    expect(ruleOf(DIALOG, 'dialog::backdrop')).toContain('background: var(--scrim)');
+    expect(ruleOf(DRAWER, '.drawer::backdrop')).toContain('background: var(--scrim)');
+  });
+
+  it('titles a dialog and a drawer alike, sentence case in the UI face', () => {
+    for (const [name, source] of [['confirm-dialog', DIALOG], ['drawer', DRAWER]] as const) {
+      const h2 = ruleOf(source, 'h2');
+      for (const declaration of [
+        'font-family: var(--font-sans);',
+        'font-size: var(--text-subhead);',
+        'font-weight: 600;',
+        'letter-spacing: normal;',
+      ]) expect(h2, `${name} ${declaration}`).toContain(declaration);
+      expect(h2, name).not.toContain('text-transform');
+    }
+  });
+
+  it('pads the drawer like a panel, following row density', () => {
+    expect(ruleOf(DRAWER, 'header')).toContain('padding: var(--space-10) var(--panel-pad);');
+    expect(ruleOf(DRAWER, '.body')).toContain('padding: var(--panel-pad);');
+  });
+});

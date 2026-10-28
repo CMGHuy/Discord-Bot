@@ -135,7 +135,7 @@ import { DrawIn } from './motion/draw-in';
       width: 18px;
       height: 18px;
       border: 2px solid var(--border-strong);
-      border-top-color: var(--accent);
+      border-top-color: var(--text-secondary);
       border-radius: 50%;
       animation: sb-spin 700ms linear infinite;
     }

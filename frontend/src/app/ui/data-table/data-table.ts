@@ -313,8 +313,8 @@ const PIN_KEYS = ['ticker', 'symbol'];
       pointer-events: none;
     }
     /* See showSpinner's own comment for the delay this only appears after.
-       Same visual language as ChartContainer's spinner (border-top accent
-       colour, 700ms linear spin) -- one loading affordance across the app
+       Same visual language as ChartContainer's spinner (grey border-top,
+       700ms linear spin) -- one loading affordance across the app
        rather than two that look slightly different. */
     .loading-spinner {
       position: absolute;
@@ -323,7 +323,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
       width: 14px;
       height: 14px;
       border: 2px solid var(--border-strong);
-      border-top-color: var(--accent);
+      border-top-color: var(--text-secondary);
       border-radius: 50%;
       animation: sb-spin 700ms linear infinite;
       z-index: 1;

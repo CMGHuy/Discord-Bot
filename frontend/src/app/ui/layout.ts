@@ -510,15 +510,17 @@ const SWIPE_CLOSE_PX = 80;
       border-width: 0 0 0 1px;
     }
 
+    /* v195 Phase 2: the drawer pads like a panel (--panel-pad follows row
+       density); its surface and shadow are .elev-overlay's alone. */
     header {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
       gap: var(--space-10);
-      padding: var(--space-14);
+      padding: var(--space-10) var(--panel-pad);
       border-bottom: 1px solid var(--border);
     }
-    h2 { font-size: var(--text-subhead); font-weight: 600; }
+    h2 { font-family: var(--font-sans); font-size: var(--text-subhead); font-weight: 600; letter-spacing: normal; }
     .close {
       margin-left: auto;
       min-width: var(--control-h);
@@ -532,7 +534,7 @@ const SWIPE_CLOSE_PX = 80;
       cursor: pointer;
     }
     .close:hover { color: var(--text); }
-    .body { padding: var(--space-14); overflow-y: auto; }
+    .body { padding: var(--panel-pad); overflow-y: auto; }
     /* v168 §3a: below 640px the drawer is a bottom sheet rising from the
        foot of the screen, with a drag handle and rounded top corners (its
        other edges sit flush, as on desktop); 640-1023px it is 85vw from the

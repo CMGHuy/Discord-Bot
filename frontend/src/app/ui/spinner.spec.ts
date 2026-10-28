@@ -37,3 +37,23 @@ describe('sb-spinner', () => {
     expect(MOTION).not.toMatch(/sb-spinner[^{]*\{[^}]*animation:\s*none/);
   });
 });
+
+/* v195 Phase 2: one loading ring wherever a ring is drawn, and it is status,
+ * not interaction, so it turns in the secondary grey, never the accent. */
+describe('one loading ring, off the accent (v195 Phase 2)', () => {
+  const RINGS: [string, string][] = [
+    ['src/app/ui/spinner.ts', '.ring'],
+    ['src/app/ui/data-table/data-table.ts', '.loading-spinner'],
+    ['src/app/ui/chart-container.ts', '.spinner'],
+  ];
+
+  it.each(RINGS)('%s draws %s as the one grey ring', (path, selector) => {
+    const source = readFileSync(join(process.cwd(), path), 'utf8');
+    const ring = source.match(new RegExp(`\\n\\s*${selector.replace('.', '\\.')}\\s*\\{[^}]*\\}`))![0];
+    expect(ring).toContain('border: 2px solid var(--border-strong);');
+    expect(ring).toContain('border-top-color: var(--text-secondary);');
+    expect(ring).toContain('border-radius: 50%;');
+    expect(ring).toContain('animation: sb-spin 700ms linear infinite;');
+    expect(ring).not.toContain('accent');
+  });
+});

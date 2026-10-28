@@ -84,7 +84,9 @@ import { MotionService } from './motion/motion.service';
        a direct child of dialog. */
     [sbFocusTrap] { display: contents; }
 
-    h2 { font-size: var(--text-subhead); font-weight: 600; }
+    /* v195 Phase 2: sentence case as given, in the UI face -- the drawer's
+       title is the same rule. */
+    h2 { font-family: var(--font-sans); font-size: var(--text-subhead); font-weight: 600; letter-spacing: normal; }
     .consequence {
       margin-top: var(--space-8);
       color: var(--text-secondary);
