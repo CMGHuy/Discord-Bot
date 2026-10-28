@@ -490,6 +490,26 @@ describe('Hint anchor (label) mode (v195 correction 10)', () => {
     expect(isOpen()).toBe(true);
   });
 
+  it('closes on a press of the anchor and stays closed past the focus that press causes', async () => {
+    // A rail click: hover opened the label, the press must close it, and the
+    // focus the browser then gives the link must not reopen it (it would stay
+    // beside the link after navigation until blur).
+    await fire(link(), new MouseEvent('mouseenter'));
+    expect(isOpen()).toBe(true);
+    await fire(link(), new Event('pointerdown', { bubbles: true }));
+    expect(isOpen()).toBe(false);
+    await fire(link(), new FocusEvent('focus'));
+    expect(isOpen()).toBe(false);
+  });
+
+  it('opens on keyboard focus again after a press has come and gone', async () => {
+    await fire(link(), new Event('pointerdown', { bubbles: true }));
+    await fire(link(), new FocusEvent('focus'));
+    await fire(link(), new FocusEvent('blur'));
+    await fire(link(), new FocusEvent('focus'));
+    expect(isOpen()).toBe(true);
+  });
+
   it('unbinds when the anchor goes away and falls back to the glyph trigger', async () => {
     await fire(link(), new MouseEvent('mouseenter'));
     expect(isOpen()).toBe(true);

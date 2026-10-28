@@ -382,14 +382,22 @@ export class Hint {
    *  -- not a trigger of ours -- is described by the popover. Returns the
    *  remover, which also closes the label. */
   private bindAnchor(anchor: HTMLElement): () => void {
+    // A press closes the label (the click is about to act on the link), and
+    // the focus the browser then gives the link must not reopen it: it would
+    // stay beside the link, after navigation, until blur. Only that one
+    // focus is swallowed; blur or a key press clears the flag, so a later
+    // keyboard focus still labels the link.
+    let pressed = false;
     const onKey = (event: Event): void => {
+      pressed = false;
       if ((event as KeyboardEvent).key === 'Escape') this.close();
     };
     const listeners: [string, EventListener][] = [
       ['mouseenter', () => this.hovered.set(true)],
       ['mouseleave', () => this.hovered.set(false)],
-      ['focus', () => this.focused.set(true)],
-      ['blur', () => this.focused.set(false)],
+      ['pointerdown', () => { pressed = true; this.close(); }],
+      ['focus', () => { if (!pressed) this.focused.set(true); pressed = false; }],
+      ['blur', () => { pressed = false; this.focused.set(false); }],
       ['keydown', onKey],
     ];
     for (const [type, listener] of listeners) anchor.addEventListener(type, listener);
