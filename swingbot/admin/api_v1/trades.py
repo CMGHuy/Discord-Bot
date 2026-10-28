@@ -362,6 +362,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         # `_expand_plan_row`. 0/1 for a row that hasn't been split.
         "leg_index": 0,
         "leg_total": 1,
+        # v194 B3 -- set only on a realised leg row (`_row_from_leg`).
+        "leg_exit_reason": None,
     }
     # v177 -- the Plan cell's runner fields. One call and no branch here:
     # this function is pinned at complexity 15, every condition lives in the
@@ -550,6 +552,9 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
         "held_hours": _held_hours(row.get("opened_at"), closed_at),
         "today": _in_today_scope("CLOSED", closed_at),
         "leg_index": leg_index,
+        # v194 B3 -- what closed THIS leg (legs realise in close order, so
+        # leg 1 may be a stop); `giveback` for a v176 give-back stop.
+        "leg_exit_reason": _runner_exit_reason(leg),
         # v177 -- a leg row is always CLOSED: the two-line runner cell never
         # applies to it, even on the TP1 leg of a still-PARTIAL plan. Keep
         # `bar_kind` (the Trades page's leg icon) and the runner-exit fields
@@ -665,6 +670,8 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         # v79 -- a legacy trade never scales out, so it is never split.
         "leg_index": 0,
         "leg_total": 1,
+        # v194 B3 -- set only on a realised leg row (`_row_from_leg`).
+        "leg_exit_reason": None,
     }
 
 

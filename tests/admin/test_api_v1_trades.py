@@ -93,6 +93,8 @@ TRADE_ROW = {
     # has been split into one row per leg. 0/1 for every row that isn't.
     "leg_index": int,
     "leg_total": int,
+    # v194 B3 -- what closed this leg; None on a row that is not a leg.
+    "leg_exit_reason": NULLABLE_STR,
     "risk_reward": NULLABLE_NUMBER,
     "shares": NULLABLE_NUMBER,
     # The share count still exposed to price movement -- `shares` is the
@@ -259,6 +261,70 @@ def test_status_filter_returns_the_closed_leg_and_the_open_remainder_separately(
     assert closed["total"] == 1 and closed["items"][0]["id"] == pid
     assert partial["total"] == 1 and partial["items"][0]["id"] == pid
     assert closed["items"][0]["shares"] == 5.0
+
+
+def _two_leg_plan(pid, *, second_leg):
+    plan = _plan(pid, status="CLOSED")
+    plan["legs_realized"] = [
+        {"fraction": 0.5, "exit_price": 110.0, "r": 1.0, "reason": "tp1",
+         "closed_at": "2026-08-02T10:00:00+00:00"},
+        {"fraction": 0.5, "exit_price": 101.0, "r": 0.0,
+         "closed_at": "2026-08-04T15:00:00+00:00", **second_leg},
+    ]
+    return plan
+
+
+def _leg_rows(client, pid):
+    items = client.get("/api/v1/trades").get_json()["items"]
+    return sorted((r for r in items if r["id"] == pid), key=lambda r: r["leg_index"])
+
+
+def test_each_leg_row_carries_its_own_recorded_exit_reason(seed, logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    pid = "66666666-6666-4666-8666-666666666666"
+    seed(plans=[_two_leg_plan(pid, second_leg={"reason": "runner_be"})],
+         trades=[_trade("hhhhhhhhhhhhhhhh", plan_id=pid, status="win")])
+
+    legs = _leg_rows(logged_in, pid)
+    assert [(r["leg_index"], r["leg_total"]) for r in legs] == [(0, 2), (1, 2)]
+    assert [r["leg_exit_reason"] for r in legs] == ["tp1", "runner_be"]
+
+
+def test_a_give_back_stop_leg_reads_giveback(seed, logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    pid = "77777777-7777-4777-8777-777777777777"
+    seed(plans=[_two_leg_plan(pid, second_leg={"reason": "runner_trail", "stop_source": "giveback"})],
+         trades=[_trade("iiiiiiiiiiiiiiii", plan_id=pid, status="win")])
+
+    assert [r["leg_exit_reason"] for r in _leg_rows(logged_in, pid)] == ["tp1", "giveback"]
+
+
+def test_a_leg_with_no_recorded_reason_reads_none(seed, logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    pid = "88888888-8888-4888-8888-888888888888"
+    seed(plans=[_two_leg_plan(pid, second_leg={})],
+         trades=[_trade("jjjjjjjjjjjjjjjj", plan_id=pid, status="win")])
+
+    assert [r["leg_exit_reason"] for r in _leg_rows(logged_in, pid)] == ["tp1", None]
+
+
+def test_rows_that_are_not_legs_carry_no_leg_exit_reason(seed, logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    partial = "99999999-9999-4999-8999-999999999999"
+    plan = _plan(partial, status="PARTIAL")
+    plan["legs_realized"] = [{"fraction": 0.5, "exit_price": 110.0, "r": 1.0,
+                              "reason": "tp1", "closed_at": "2026-08-02T10:00:00+00:00"}]
+    seed(plans=[plan, _plan("12121212-1212-4121-8121-121212121212", status="PENDING")],
+         trades=[_trade("kkkkkkkkkkkkkkkk", plan_id=partial),
+                 _trade("llllllllllllllll", status="win")])
+
+    rows = logged_in.get("/api/v1/trades").get_json()["items"]
+    remainder = next(r for r in rows if r["id"] == partial and r["status"] == "PARTIAL")
+    assert remainder["leg_exit_reason"] is None          # the still-open runner
+    pending = next(r for r in rows if r["status"] == "PENDING")
+    assert pending["leg_exit_reason"] is None            # a plan that never scaled out
+    legacy = next(r for r in rows if r["id"] == "llllllllllllllll")
+    assert legacy["leg_exit_reason"] is None             # a legacy trade
 
 
 def test_a_filled_plan_is_enriched_by_its_trade_row(seed, logged_in):
