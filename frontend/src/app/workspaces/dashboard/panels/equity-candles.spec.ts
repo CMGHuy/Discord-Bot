@@ -410,7 +410,7 @@ describe('sb-equity-candles', () => {
     at(fixture, 0, 2);
     expect(readout(el)).toEqual([
       'Equity change +12.00 € (+12.00%)', 'High 120.00', 'Low 90.00',
-      'Max drawdown within range -4.55%',
+      'Max drawdown within range −4.55%',
     ]);
     expect(tones(el)).toEqual(['pos', 'neutral', 'neutral', 'neg']);
   });

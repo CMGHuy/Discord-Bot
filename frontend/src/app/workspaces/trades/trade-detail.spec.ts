@@ -427,7 +427,7 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
     expect(el.querySelector('.tags > sb-chip')!.hasAttribute('title')).toBe(false);
     const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
     expect(hint).toContain('41.2% WR');
-    expect(hint).toContain('-0.38R');
+    expect(hint).toContain('−0.38R');
   });
 
   it('renders a positive-toned chip for COHORT_STRONG', () => {

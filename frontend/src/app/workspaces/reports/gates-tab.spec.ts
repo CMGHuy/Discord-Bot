@@ -76,7 +76,7 @@ describe('GatesTab', () => {
     expect(waiting.querySelector('progress')).not.toBeNull();
     // No badge, and none of the latest reading the wire still carries.
     expect(waiting.querySelector('sb-chip')).toBeNull();
-    expect(text(waiting)).not.toContain('-0.30R');
+    expect(text(waiting)).not.toContain('−0.30R');
     expect(text(waiting)).not.toContain('[');
     expect(text(waiting)).not.toContain('0.40');
   });
@@ -86,8 +86,8 @@ describe('GatesTab', () => {
     const riskCap = rowFor(fixture, 'risk_cap', 'Live');
     expect(text(riskCap.querySelector('sb-chip'))).toBe('GATE EARNS');
     expect(text(riskCap)).toContain('fixed 2026-10-14 · N 31');
-    expect(text(riskCap)).toContain('-0.08R');
-    expect(text(riskCap)).toContain('[-0.31R, +0.12R]');
+    expect(text(riskCap)).toContain('−0.08R');
+    expect(text(riskCap)).toContain('[−0.31R, +0.12R]');
     expect(text(riskCap)).toContain('0.44');
     // The latest reading's own verdict word is never printed.
     expect(text(riskCap)).not.toContain('INCONCLUSIVE');

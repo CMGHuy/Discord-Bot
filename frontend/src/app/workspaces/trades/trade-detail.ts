@@ -18,6 +18,7 @@ import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, ChipTone, QualityChip } from '../../ui/chip';
+import { MINUS } from '../../ui/format';
 import { Hint } from '../../ui/hint';
 import { MetricChip } from '../../ui/metric-chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -734,7 +735,7 @@ export class TradeDetail {
     const runDate = stats['run_date'] ?? '';
     return (
       `${regime} regime: ${winRate.toFixed(1)}% WR / ` +
-      `${expectancyR >= 0 ? '+' : ''}${expectancyR.toFixed(2)}R (n=${n}, frozen ${runDate})`
+      `${expectancyR >= 0 ? '+' : MINUS}${Math.abs(expectancyR).toFixed(2)}R (n=${n}, frozen ${runDate})`
     );
   });
 

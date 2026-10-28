@@ -134,7 +134,7 @@ describe('trading performance panel', () => {
     expect(text).toContain('Win rate');
     expect(text).toContain('49.1%');
     expect(text).toContain('Expectancy');
-    expect(text).toContain('-0.16R');
+    expect(text).toContain('−0.16R');
     expect(text).toContain('Payoff');
     expect(text).toContain('2.34');
     expect(text).toContain('Realised today');

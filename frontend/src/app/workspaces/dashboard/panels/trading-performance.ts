@@ -9,7 +9,7 @@ import { MetricCard } from '../../../ui/metric-card';
 import { Spinner } from '../../../ui/spinner';
 import { StatStrip } from '../../../ui/stat-strip';
 import { PortfolioValue } from './portfolio-value';
-import { amount, pct } from '../../../ui/format';
+import { MINUS, amount, pct } from '../../../ui/format';
 import { Realized } from '../../../stores/dashboard.store';
 import {
   ChartTarget,
@@ -287,7 +287,9 @@ export class TradingPerformance {
   protected fmtPct = pct;
   /** Same rule as MetricCard: no value is an em dash, never a zero. */
   protected fmtFigure(value: number | null, unit: string, decimals: number): string {
-    return value === null ? '—' : `${value.toFixed(decimals)}${unit}`;
+    if (value === null) return '—';
+    // v195 §1.1: a negative ExpR carries a true minus; positives unchanged.
+    return `${value < 0 ? MINUS : ''}${Math.abs(value).toFixed(decimals)}${unit}`;
   }
   /** An em dash alone reads as broken: say why, in the scope's own words.
    *  All has no hint: nothing closed at all is its own answer. */
