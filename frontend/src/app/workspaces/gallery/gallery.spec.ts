@@ -135,7 +135,7 @@ describe('the gallery renders', () => {
 
 describe('the gallery is the v80 D6 reference', () => {
   it("shows every button variant, including v77's danger-icon", () => {
-    for (const variant of ['primary', 'secondary', 'danger', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment']) {
+    for (const variant of ['primary', 'secondary', 'danger', 'danger-quiet', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment']) {
       expect(GALLERY).toContain(`'${variant}'`);
     }
   });

@@ -360,7 +360,7 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
     const { el } = mount(status as string, {}, 3, 'live');
     const buttons = [...el.querySelectorAll<HTMLButtonElement>('.identity > .actions > button[sb-button]')];
     expect(buttons.map(button => button.textContent?.trim())).toEqual(labels);
-    expect(buttons.at(-1)?.classList).toContain('danger');
+    expect(buttons.at(-1)?.classList).toContain('danger-quiet');
     expect([...el.querySelectorAll('sb-panel')].some(panel => panel.getAttribute('heading') === 'Actions')).toBe(false);
   });
 

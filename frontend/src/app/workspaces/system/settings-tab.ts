@@ -229,7 +229,7 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
       <sb-control-row class="bar-actions">
         <button
           sb-button
-          variant="ghost"
+          variant="danger-quiet"
           type="button"
           [disabled]="!store.dirty() || store.saving()"
           (click)="confirmDiscard.set(true)"

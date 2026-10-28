@@ -83,7 +83,7 @@ export const LOG_CONTROLS: ToolbarControl[] = [
         <!-- A real link: the raw endpoint is text/plain and the browser
              renders it better than any viewer built here would. -->
         <a slot="raw" class="raw sb-hit" [href]="rawUrl()" target="_blank" rel="noopener">Raw</a>
-        <button slot="clear" sb-button variant="danger" type="button" (click)="asking.set(true)">
+        <button slot="clear" sb-button variant="danger-quiet" type="button" (click)="asking.set(true)">
           Clear
         </button>
       </sb-toolbar>

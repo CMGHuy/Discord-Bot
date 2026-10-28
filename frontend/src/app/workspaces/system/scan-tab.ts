@@ -138,7 +138,7 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
         </p>
         <button
           sb-button
-          variant="danger"
+          variant="danger-quiet"
           type="button"
           [loading]="store.restarting()"
           (click)="asking.set(true)"

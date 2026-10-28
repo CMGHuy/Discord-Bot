@@ -216,6 +216,7 @@ interface MetricTile {
       [consequence]="dialogConsequence()"
       [confirmLabel]="dialogConfirm()"
       [working]="store.toggling()"
+      dangerVariant="danger"
       (confirmed)="confirm()"
       (cancelled)="asking.set(false)"
     />
@@ -569,7 +570,7 @@ interface MetricTile {
       letter-spacing: 0.04em;
     }
     /* The one place on this screen where red is not P&L, matching the
-       danger button: a stop that does not look like a stop is worse than a
+       solid danger button (v195: the killswitch's alone): a stop that does not look like a stop is worse than a
        colour rule kept perfectly. */
     .kill-value.engaged { color: var(--neg); }
     .kill-explain {

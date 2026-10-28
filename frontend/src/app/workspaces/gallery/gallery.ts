@@ -183,7 +183,7 @@ interface ContractRow {
       </sb-control-row>
       <p class="sb-help">
         Hover any button above to see its hover state. <code>chip</code> and
-        <code>segment</code> are deprecated (v80 D4): use sb-segmented.
+        <code>segment</code> are deprecated (v80 D4): use sb-segmented. <code>danger</code> (solid) is the killswitch's alone; every other destructive control is <code>danger-quiet</code>.
       </p>
       <sb-control-row>
         <button sb-button variant="icon" type="button" aria-label="Menu"><sb-icon name="menu" /></button>
@@ -298,7 +298,7 @@ interface ContractRow {
       </sb-drawer>
     </sb-panel>
     <sb-panel heading="sb-confirm-dialog">
-      <button sb-button variant="danger" type="button" (click)="confirmOpen.set(true)">
+      <button sb-button variant="danger-quiet" type="button" (click)="confirmOpen.set(true)">
         Open confirm dialog
       </button>
       <sb-confirm-dialog
@@ -826,7 +826,7 @@ interface ContractRow {
 })
 export class Gallery {
   protected readonly buttonVariants: ButtonVariant[] = [
-    'primary', 'secondary', 'danger', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment',
+    'primary', 'secondary', 'danger', 'danger-quiet', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment',
   ];
 
   protected readonly textInputTypes: ('text' | 'search' | 'number' | 'password' | 'date')[] = [

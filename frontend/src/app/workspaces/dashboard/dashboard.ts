@@ -297,7 +297,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
              entry) that closing only one of them is a real, distinct
              action, not a convenience shortcut for the combined one. -->
         <div class="close-all-menu" table-actions #closeAllMenu>
-          <button sb-button variant="danger" type="button"
+          <button sb-button variant="danger-quiet" type="button"
                   data-action="close-all"
                   [attr.aria-expanded]="closeAllMenuOpen()"
                   aria-haspopup="menu"

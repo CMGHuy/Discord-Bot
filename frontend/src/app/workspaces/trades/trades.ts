@@ -309,7 +309,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
       <button
         slot="clear-open"
         sb-button
-        variant="danger"
+        variant="danger-quiet"
         type="button"
         (click)="bulk.set('open')"
       >
@@ -318,7 +318,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
       <button
         slot="clear-history"
         sb-button
-        variant="danger"
+        variant="danger-quiet"
         type="button"
         (click)="bulk.set('history')"
       >

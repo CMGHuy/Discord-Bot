@@ -188,7 +188,7 @@ function cameFromPlan(): boolean {
             @for (kind of actionsFor(trade.status); track kind) {
               <button
                 sb-button
-                [variant]="kind === 'delete' ? 'danger' : 'secondary'"
+                [variant]="kind === 'delete' ? 'danger-quiet' : 'secondary'"
                 type="button"
                 (click)="ask(kind)"
               >
