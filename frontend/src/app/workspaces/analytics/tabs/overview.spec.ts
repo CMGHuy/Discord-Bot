@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { AnalyticsStore, RELOCATED_METRICS } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
-import { OverviewTab } from './overview';
+import { ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_SHARPE_LABEL, OverviewTab } from './overview';
 import { BAND_OK } from './variance-band.fixture';
 
 /* The store is stubbed down to the signals this tab reads: a tab component
@@ -188,5 +188,42 @@ describe('overview.ts breakpoints', () => {
     const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
     expect(widths.length).toBeGreaterThan(0);
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+
+  it('names the basis of Sharpe and max drawdown in their labels (v194 B8)', () => {
+    const { el } = render();
+    const labels = [...el.querySelectorAll('sb-stat-tile .label')].map((n) => n.textContent!.trim());
+    expect(labels).toContain('Sharpe · annualised, selected range');
+    expect(labels).toContain('Max drawdown · cumulative R, selected range');
+    expect(labels).not.toContain('Sharpe');
+    expect(labels).not.toContain('Max drawdown');
+  });
+
+  it('gives both tiles a hint with definition, population, N and the paper caveat', () => {
+    const { el } = render();
+    for (const label of [ANALYTICS_SHARPE_LABEL, ANALYTICS_DRAWDOWN_LABEL]) {
+      const tile = [...el.querySelectorAll('sb-stat-tile')]
+        .find((t) => t.querySelector('.label')?.textContent?.trim() === label)!;
+      const hint = tile.querySelector('sb-hint')!;
+      expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe(`About ${label}`);
+      const text = hint.querySelector('[role="tooltip"]')!.textContent!;
+      expect(text).toContain('selected range and filters');
+      expect(text).toContain('N is the');
+      expect(text).toContain('Paper trades (simulated fills)');
+      expect(text).toContain('gross of commissions and slippage');
+      expect(text).toContain('pre-tax');
+      // The definition moved into the hint: no plain hint line repeats it.
+      expect(tile.querySelector('div.hint')).toBeNull();
+    }
+  });
+
+  it('keeps the money equivalent under the max drawdown tile', () => {
+    const { el } = render();
+    const tile = [...el.querySelectorAll('sb-stat-tile')]
+      .find((t) => t.querySelector('.label')?.textContent?.trim() === ANALYTICS_DRAWDOWN_LABEL)!;
+    // cum_pnl 70 -> 40: a 30 fall, in the stubbed '$'.
+    const secondary = tile.querySelector('.secondary')!.textContent!;
+    expect(secondary).toContain('30');
+    expect(secondary).toContain('$');
   });
 });

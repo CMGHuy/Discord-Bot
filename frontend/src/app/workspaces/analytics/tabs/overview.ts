@@ -15,9 +15,24 @@ import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelHeader } from '../../../ui/panel-header';
 import { PanelError } from '../../../ui/panel-error';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
-import { StatTile } from '../../../ui/stat-tile';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
 import { alwaysMoney, inUnit, unitLabel } from '../../../ui/unit-format';
 import { VarianceBandPanel } from './variance-band-panel';
+
+/* v194 B8 -- the Risk page shows a Sharpe and a max drawdown over every
+ * closed trade; these follow the selected range. The label names the basis,
+ * the hint the definition. */
+export const ANALYTICS_SHARPE_LABEL = 'Sharpe · annualised, selected range';
+export const ANALYTICS_DRAWDOWN_LABEL = 'Max drawdown · cumulative R, selected range';
+export const ANALYTICS_SHARPE_ABOUT =
+  'Annualised, from the realised returns of closed trades in the selected range and filters. '
+  + "Not the Risk page's Sharpe, which is per-trade R over every closed trade and not annualised. "
+  + 'N is the sample it was computed from. ' + PERFORMANCE_CAVEAT;
+export const ANALYTICS_DRAWDOWN_ABOUT =
+  'Largest peak-to-trough fall of the cumulative R curve in the selected range and filters; '
+  + 'the amount under it is the largest fall of cumulative realised P&L in the account currency. '
+  + 'Risk shows the same measure over every closed trade. N is the number of equity-curve points '
+  + 'it was computed from. ' + PERFORMANCE_CAVEAT;
 
 /** One KPI tile's resolved, pre-formatted content -- `StatTile` never formats. */
 interface KpiTile {
@@ -27,6 +42,7 @@ interface KpiTile {
   sample: number | null;
   trend: readonly number[] | null;
   hint?: string;
+  about?: string;
 }
 
 /** One relocated metric, resolved against the payload for the Outcome
@@ -77,7 +93,7 @@ function maxDrawdown(values: readonly number[]): number | null {
   template: `
     <div class="kpis">@for (tile of kpiTiles(); track tile.label) {
       <sb-stat-tile [label]="tile.label" [value]="tile.value" [secondary]="tile.money"
-        [sample]="tile.sample" [trend]="tile.trend" [hint]="tile.hint" />
+        [sample]="tile.sample" [trend]="tile.trend" [hint]="tile.hint" [about]="tile.about" />
     }</div>
 
     <div class="panels">
@@ -273,11 +289,12 @@ export class OverviewTab {
         'Gross realised win ÷ gross realised loss.'),
       // Negated: a drawdown is a loss, and an unsigned magnitude rendered
       // "+120.66R" -- the same sign as a gain, in the same row as Total R.
-      tile('Max drawdown', drawdownR === null ? null : -drawdownR, null,
-        drawdownMoney === null ? null : -drawdownMoney, equityCurve?.points_n ?? null, null,
-        'Largest peak-to-trough decline in the selected range (Risk shows all closed trades).'),
-      fixedTile('Sharpe', signed(sharpe, 2), this.store.scopeN(), null,
-        'Annualised, from realised returns in the selected range (Risk shows per-trade R, all-time).'),
+      {
+        ...tile(ANALYTICS_DRAWDOWN_LABEL, drawdownR === null ? null : -drawdownR, null,
+          drawdownMoney === null ? null : -drawdownMoney, equityCurve?.points_n ?? null),
+        about: ANALYTICS_DRAWDOWN_ABOUT,
+      },
+      { ...fixedTile(ANALYTICS_SHARPE_LABEL, signed(sharpe, 2), this.store.scopeN()), about: ANALYTICS_SHARPE_ABOUT },
     ];
   });
 
