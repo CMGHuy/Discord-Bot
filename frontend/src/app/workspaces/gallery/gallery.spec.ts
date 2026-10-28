@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { ConnectionStore } from '../../stores/connection.store';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -10,6 +11,18 @@ import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer } from '../../ui/data-table/testing/reachability';
 import { Gallery } from './gallery';
+import { Hint } from '../../ui/hint';
+import { PERFORMANCE_CAVEAT } from '../../ui/stat-tile';
+
+/** The text of the sb-hint whose aria label is `label` (A4 audit). */
+function hintText(fixture: ComponentFixture<unknown>, label: string): string {
+  const hint = fixture.debugElement
+    .queryAll(By.directive(Hint))
+    .map((debug) => debug.componentInstance as Hint)
+    .find((h) => h.label() === label);
+  if (!hint) throw new Error(`no sb-hint labelled "${label}"`);
+  return hint.text();
+}
 
 // The gallery renders a real sb-trade-chart, and lightweight-charts asks for
 // matchMedia the moment a chart exists. See the polyfill for why.
@@ -69,6 +82,14 @@ describe('the gallery renders', () => {
       providers: [provideZonelessChangeDetection(), provideRouter([]),
         { provide: ConnectionStore, useValue: { marketActive: () => true } }],
     });
+  });
+
+  it('Expectancy demo hint matches the basis the book is computed on (A4 audit)', () => {
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    const text = hintText(fixture, 'About expectancy');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
+    expect(text).not.toContain('after costs');
   });
 
   it('mounts without throwing', () => {
