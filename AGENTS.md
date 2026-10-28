@@ -217,7 +217,9 @@ Read the `docs/claude/` file before acting:
   on one baseline, table cells and icons vertically centred, 44px hit areas on phone/tablet (`.sb-hit`), phone tables
   declare `compact` rows. Before merging a UI change,
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
-  exit 0 (allow-list entries carry a reason and a date).
+  exit 0 (allow-list entries carry a reason and a date); its `hint` check
+  opens every `sb-hint` and fails a popover that is off-screen or covered,
+  and a `hint` finding is fixed, never allowed.
 
 ## Skills: the same ones Claude uses
 

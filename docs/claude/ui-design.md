@@ -52,8 +52,13 @@ each width (Playwright, never claude-in-chrome — `skills-tools.md`).
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234`
   must exit 0 at 390, 768 and 1440. It checks page overflow, off-screen and
   clipped text, sub-44px targets (phone/tablet), sub-11px text, baseline
-  offsets over 2px, and (`vcenter`) table-cell content or an icon more than
-  2px off centre, on every route and tab. A finding is fixed, not allowed;
+  offsets over 2px, (`vcenter`) table-cell content or an icon more than
+  2px off centre, and (`hint`) every visible `sb-hint`: it opens each one
+  (hover at 1440, tap at 390 and 768) and fails a popover that is
+  zero-size, outside the viewport, or not the topmost element at its centre
+  and at its top-left + 8px; the finding names the trigger's `aria-label`.
+  The `hint` check is the only tooltip probe: never an ad-hoc script. It
+  runs on every route and tab. A finding is fixed, not allowed;
   only canvas/third-party chart internals and browser-native parts go in
   `frontend/scripts/layout-audit.allow.json`, each entry with a reason and the
   date it was added. Entries nothing matches any more print as `STALE`; a run
