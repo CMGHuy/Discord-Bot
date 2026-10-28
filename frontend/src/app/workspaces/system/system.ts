@@ -184,13 +184,9 @@ export function clearLogConsequence(path: string | null | undefined, source: Log
        gaps; this host only carries the register.
        No backticks in here: these styles live in a TS template literal. */
     :host { display: block; }
-    .page-actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: flex-end;
-      gap: var(--space-8);
-    }
+    /* sb-page's own .actions wrapper is the row; this hook only lets the
+       status and the button join it as direct flex items. */
+    .page-actions { display: contents; }
     .dirty { color: var(--warn); font-size: var(--text-table); }
     /* minmax(0, 1fr), not the implicit auto track: one un-shrinkable panel in
        a tab must not stretch the workspace past the viewport. */

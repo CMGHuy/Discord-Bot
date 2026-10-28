@@ -265,10 +265,6 @@ const NOT_CONTROL_ROWS = new Set([
   // 720px rather than the primitive's 640. Bottom-aligning the button against
   // a variable-height paragraph is a regression, not the fix.
   'kill',
-  // v195 Phase 4: System's page-header actions lane -- an "Unsaved settings"
-  // status beside one danger-quiet command, right-aligned and wrapping under
-  // the title. A status and a button are not a bottom-aligned control lane.
-  'page-actions',
 ]);
 
 describe('no workspace hand-rolls a control row', () => {
