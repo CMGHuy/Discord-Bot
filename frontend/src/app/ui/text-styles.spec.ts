@@ -55,3 +55,42 @@ describe('v195: no literal text size below 12px', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('v195 Phase 2: the one quiet-meta style', () => {
+  it('.sb-meta is muted micro text with tabular figures, never the faint rule colour', () => {
+    const r = rule('sb-meta');
+    expect(r).toContain('color: var(--text-muted)');
+    expect(r).toContain('font-size: var(--text-micro)');
+    expect(r).toContain('font-variant-numeric: tabular-nums');
+    expect(r).not.toContain('--text-faint');
+  });
+});
+
+describe('v195 Phase 2: one panel title, sentence case', () => {
+  const read = (path: string) => stripComments(readFileSync(join(process.cwd(), path), 'utf8'));
+  const titles = (source: string) => [...source.matchAll(/[\s`]h[12]\s*\{[^}]*\}/g)].map(([m]) => m);
+  const TITLE = [
+    'font-family: var(--font-sans);',
+    'font-weight: 600;',
+    'font-size: var(--text-table);',
+    'color: var(--text);',
+    'letter-spacing: normal;',
+  ];
+
+  it('sets sb-panel and sb-panel-header titles identically, at the 13px table step', () => {
+    const panel = titles(read('src/app/ui/layout.ts'))[0];
+    const header = titles(read('src/app/ui/panel-header.ts'))[0];
+    for (const declaration of TITLE) {
+      expect(panel, `layout.ts ${declaration}`).toContain(declaration);
+      expect(header, `panel-header.ts ${declaration}`).toContain(declaration);
+    }
+  });
+
+  it('uppercases no title in the panel, panel-header or section-head primitive', () => {
+    for (const path of ['src/app/ui/layout.ts', 'src/app/ui/panel-header.ts', 'src/app/ui/section-head.ts']) {
+      const found = titles(read(path));
+      expect(found.length, path).toBeGreaterThan(0);
+      for (const title of found) expect(title, path).not.toContain('text-transform');
+    }
+  });
+});

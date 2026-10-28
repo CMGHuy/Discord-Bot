@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PanelHeader } from './panel-header';
@@ -33,18 +33,26 @@ describe('PanelHeader alignment (v179 §3.4)', () => {
     expect(block![1]).toMatch(/sb-hint \{[^}]*margin-block:\s*calc\(\(14px - var\(--control-h\)\) \/ 2\)/);
   });
 
-  it('keeps N=, total and the hint inside the heading line', () => {
+  /* v195 Phase 2: the hint sits right beside the title; the quiet meta
+   * (N=, all-time, total) and the Table toggle sit together on the right. */
+  it('keeps the hint beside the title and the meta on the right', () => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
     const fixture = TestBed.createComponent(PanelHeader);
     fixture.componentRef.setInput('title', 'Equity');
     fixture.componentRef.setInput('n', 972);
     fixture.componentRef.setInput('total', '−2,150.95 €');
     fixture.componentRef.setInput('hint', 'Pre-tax, paper trades.');
+    fixture.componentRef.setInput('tableable', true);
     fixture.detectChanges();
-    const heading = (fixture.nativeElement as HTMLElement).querySelector('.heading')!;
-    for (const selector of ['h2', '.n', '.total', 'sb-hint']) {
-      expect(heading.querySelector(selector), selector).not.toBeNull();
+    const el = fixture.nativeElement as HTMLElement;
+    const heading = el.querySelector('.heading')!;
+    expect([...heading.children].map((child) => child.tagName.toLowerCase())).toEqual(['h2', 'sb-hint']);
+    const meta = el.querySelector('header > .meta')!;
+    for (const selector of ['.n', '.total', 'button.table']) {
+      expect(meta.querySelector(selector), selector).not.toBeNull();
+      expect(heading.querySelector(selector), selector).toBeNull();
     }
+    expect(meta.classList).toContain('sb-meta');
   });
 });
 
@@ -57,15 +65,16 @@ describe('PanelHeader: the one panel title (v186 D1)', () => {
   const TITLE = [
     'font-family: var(--font-sans);',
     'font-weight: 600;',
-    'font-size: var(--text-body);',
+    'font-size: var(--text-table);',
     'color: var(--text);',
     'letter-spacing: normal;',
   ];
 
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
 
-  it('sets the title exactly like sb-panel: UI face, 600, body size, no transform', () => {
+  it('sets the title exactly like sb-panel: UI face, 600, the 13px table step, no transform', () => {
     const h2 = rule('h2');
+    expect(h2).not.toContain('--text-body');
     for (const declaration of TITLE) expect(h2, declaration).toContain(declaration);
     expect(h2).not.toContain('text-transform');
     expect(h2).not.toContain('--text-subhead');
@@ -111,5 +120,48 @@ describe('PanelHeader total (v186 D4)', () => {
     const total = (fixture.nativeElement as HTMLElement).querySelector('.total')!;
     expect(total.textContent).toBe('+$1,240');
     expect(total.classList).not.toContain('num');
+  });
+});
+
+@Component({
+  imports: [PanelHeader],
+  template: `
+    <sb-panel-header [title]="'Equity'" [n]="12">
+      <button header-actions type="button">Export</button>
+    </sb-panel-header>
+  `,
+})
+class ActionsHost {}
+
+describe('PanelHeader header-actions slot (v195 Phase 2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/panel-header.ts'), 'utf8');
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+
+  it('projects [header-actions] into the right-hand meta group, after the meta', () => {
+    const fixture = TestBed.createComponent(ActionsHost);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const action = el.querySelector('button[header-actions]')!;
+    expect(action.closest('.meta')).not.toBeNull();
+    expect(action.closest('.heading')).toBeNull();
+    const n = el.querySelector('.meta .n')!;
+    expect(n.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('right-aligns the meta group on the shared baseline and hides it when empty', () => {
+    const meta = SOURCE.match(/[\s`]\.meta \{[^}]*\}/)?.[0] ?? '';
+    expect(meta).toContain('justify-content: flex-end');
+    expect(meta).toContain('margin-left: auto');
+    expect(meta).toContain('align-items: baseline');
+    expect(SOURCE).toMatch(/\.meta:empty \{\s*display: none;\s*\}/);
+  });
+
+  it('renders no meta group content and no hint for a bare title', () => {
+    const fixture = TestBed.createComponent(PanelHeader);
+    fixture.componentRef.setInput('title', 'Calibration');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-hint')).toBeNull();
+    expect(el.querySelector('.meta')!.children.length).toBe(0);
   });
 });

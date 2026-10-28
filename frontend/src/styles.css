@@ -99,6 +99,17 @@ a:hover {
   line-height: 1.5;
 }
 
+/* v195 Phase 2 -- the one quiet-meta style: the count, as-of or total that
+ * sits beside a title (sb-panel-header's meta group, sb-section-head's
+ * status slot). Muted, never --text-faint: that is a rule colour, not text
+ * (correction 13). A child may set its own face or size (a panel total
+ * keeps its figure face); this is the quiet default under it. */
+.sb-meta {
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+}
+
 /* v80 D3 -- the one label style. Eleven files hand-built uppercase labels
  * with four different letter-spacings; this is the single definition every
  * component uses now and every workspace moves to in Migration. Mono 500:
@@ -165,7 +176,11 @@ a:hover {
  * (L3: dropdown, popover, tooltip, toast, drawer, dialog) takes .elev-overlay
  * and casts --shadow-overlay. No component writes a non-inset box-shadow of
  * its own; primitives.spec.ts G3 holds this file to exactly these two, panel
- * first, so an element carrying both classes reads as the overlay. */
+ * first, so an element carrying both classes reads as the overlay.
+ *
+ * v195 §1.2: --panel-shadow is `none`, so an in-flow panel is flat: a
+ * surface step and sb-panel's own 1px hairline. The rule stays so G3 still
+ * sees exactly one panel cast and one overlay shadow. */
 .sb-panel {
   box-shadow: var(--panel-shadow);
 }
