@@ -41,6 +41,7 @@ import { Matrix } from '../../ui/matrix';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
+import { Page } from '../../ui/page';
 import { PanelError } from '../../ui/panel-error';
 import { PanelGrid } from '../../ui/panel-grid';
 import { PanelHeader } from '../../ui/panel-header';
@@ -142,6 +143,7 @@ interface ContractRow {
     Spinner,
     Panel,
     PaginationComponent,
+    Page,
     PanelError,
     PanelGrid,
     PanelHeader,
@@ -171,7 +173,8 @@ interface ContractRow {
     Waterfall,
   ],
   template: `
-    <h1>UI gallery</h1>
+    <sb-page>
+      <div page-primary>
 
     <!-- -- buttons ------------------------------------------------------ -->
     <sb-section-head [heading]="'Buttons'" [level]="2" />
@@ -770,6 +773,8 @@ interface ContractRow {
         </sb-control-row>
       </sb-drawer>
     </sb-panel>
+      </div>
+    </sb-page>
   `,
   styles: `
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); padding: var(--space-20); }
