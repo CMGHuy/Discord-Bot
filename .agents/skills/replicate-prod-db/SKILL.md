@@ -9,8 +9,7 @@ description: "Copy the production Postgres data into a local database (read-only
 ## Step 1 — Read the authority
 
 `docs/deploy/DB_RESTORE.md` (the dump/restore pair this reuses) and
-`docs/deploy/DEPLOY_HETZNER.md` "PostgreSQL (the only store)". This skill is
-the checklist; it does not restate them.
+`docs/deploy/DEPLOY_HETZNER.md` "PostgreSQL (the only store)"; not restated here.
 
 ## Step 2 — Pick the target
 
@@ -21,26 +20,20 @@ asked for it by name: that drops and recreates it, and the script requires
 `--i-mean-it` to allow it.
 
 **Exactly one database container for this project, always** (`swing-db`).
-A plan that touches the database does one thing: refresh that container with
-the latest production data (Step 3). It never creates a container, a second
-database, a per-plan or per-worktree copy, or a new port. Every plan and
-worktree shares the one replica by pointing `DATABASE_URL` at it. Because it is
-shared, a re-run drops and recreates the replica: skip it when a sibling task
-synced it recently and is still testing.
+A plan that touches the database only refreshes it from production (Step 3):
+never a new container, database, per-plan or per-worktree copy, or port. Every
+plan and worktree points `DATABASE_URL` at the one replica. A re-run drops and
+recreates it: skip it when a sibling task synced it recently and still tests.
 
-Before Step 3, list what exists: `docker ps -a --format '{{.Names}}' | grep swing`.
-Start the existing `swing-db` with `docker start swing-db` (never `make up`: it
-also starts the bot, admin and tunnel containers) if it is stopped; if it will not
-start (a port the OS refuses), fix that one container, do not stand up another.
-`swing-db` also serves the test suite: it is published on `127.0.0.1:55432` by
-the git-ignored `docker-compose.override.yml` (`ports: 127.0.0.1:55432:5432` on
-service `db`), its `swingbot` role password is the test default and
-`swingbot_test` exists, so tests and replicas share the one server. Recreate
-it with `docker compose up -d db` from the main checkout, never from a
-worktree. `swing-db-test` (compose profile `test`, CI only) must not run
-locally. Any other `swing-*` Postgres container is a stray:
-report it to the partner, never point a plan at it, and never delete one without
-asking.
+List what exists first: `docker ps -a --format '{{.Names}}' | grep swing`.
+If `swing-db` is stopped, `docker start swing-db` (never `make up`: it also
+starts the bot, admin and tunnel); if it will not start, fix that one container.
+It also serves the test suite on `127.0.0.1:55432` (git-ignored
+`docker-compose.override.yml`, service `db`; `swingbot` role on the test default
+password, `swingbot_test` exists). Recreate it with `docker compose up -d db`
+from the main checkout, never a worktree. `swing-db-test` (profile `test`) is CI
+only and must not run locally. Any other `swing-*` Postgres container is a
+stray: report it, never point a plan at it, never delete one without asking.
 
 ## Step 3 — Replicate
 
@@ -50,11 +43,10 @@ bash scripts/ops/replicate_prod_db.sh <name>               # -> another replica 
 bash scripts/ops/replicate_prod_db.sh --dry-run            # show source/target/dump, touch nothing
 ```
 
-Production is only read (one `pg_dump`, one count query) and only through
-`scripts/ops/ssh-hetzner.sh`; never run a raw `ssh`/`scp` instead. The local
-`swing-db` container must be up (`make up`). The dump is kept in
-`backups/prod-replica/` (gitignored, newest 3 kept): it holds the whole trading
-history, so it never leaves this machine.
+Production is only read (one `pg_dump`, one count query), only through
+`scripts/ops/ssh-hetzner.sh`, never a raw `ssh`/`scp`. `swing-db` must be up
+(Step 2). The dump stays in `backups/prod-replica/` (gitignored, newest 3 kept):
+it is the whole trading history and never leaves this machine.
 
 ## Step 4 — Report
 
@@ -62,19 +54,17 @@ Read the final `replicate_prod_db: <VERDICT> target=… tables=… alembic=…` 
 and report the verdict, target, table count and `alembic` revision:
 
 - **MATCH** — every table's replica count equals production's.
-- **DRIFT** — production gained rows after the snapshot (the dump is one
-  moment, the count a few seconds later). Expected on a busy table; name the
-  tables printed under the line.
+- **DRIFT** — production gained rows between dump and count. Expected on a
+  busy table; name the tables printed under the line.
 - **MISMATCH** (exit 1) — the replica has more rows than production or lacks a
   table. Show the printed lines in full and stop; do not trust the copy.
 
 A `FAIL …; local db untouched` line means the dump was empty or invalid before
-the restore ran: nothing local changed. Report it as printed.
+the restore: nothing local changed. Report it as printed.
 
-Then compare `alembic=` with this checkout's head (`python -m alembic heads`).
-If the replica is behind, migrate **the replica only**, by pointing
-`DATABASE_URL` at `swingbot_prod_replica`; never `upgrade head` against the
-working `swingbot` database as a side effect of this skill.
+Then compare `alembic=` with this checkout's head (`python -m alembic heads`). If
+the replica is behind, migrate **the replica only** (`DATABASE_URL` at
+`swingbot_prod_replica`); never `upgrade head` against `swingbot` from here.
 
 ## The gate
 
