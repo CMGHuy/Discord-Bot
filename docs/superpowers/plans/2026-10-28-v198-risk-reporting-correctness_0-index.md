@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - Partner approved the written specs on 2026-10-28. Quant-engineer findings on invalid balances and uncomputable outcomes are applied in the spec. All tasks implement that spec; do not invent new trading policies.
-- Execute only after v194 merges, or explicitly rebase onto its merged result. Re-brief its FX, money drawdown, sector state and fixtures before executing. Preserve account/quote currency semantics. Follow v195's final Risk/shell layout if merged; this plan does not recreate page architecture.
+- v194 prerequisite is satisfied on main by merge/close-out 65de3bc7 (2026-10-28). Recheck current main before execution. Execute v197 before v198 by default, following the agreed delivery-first priority; preserve its additive API/model fields when editing shared files. Execute only after v194 merges, or explicitly rebase onto its merged result. Re-brief its FX, money drawdown, sector state and fixtures before executing. Preserve account/quote currency semantics. Follow v195's final Risk/shell layout if merged; this plan does not recreate page architecture.
 - Version numbers resolve from then-current VERSION.json at close-out. No version number is predicted here. Bot patch covers Discord portfolio reporting; UI patch covers API/read-model and page behavior.
 - Authoring runs no tests, database commands or production operations. Implement in the plan worktree when separately requested; do not use main for implementation.
 - No live trading gate, account P&L write, sizing, stop, target, fill, expiry or validation-registry change. No backtest or closed pre-registration rerun is licensed.
