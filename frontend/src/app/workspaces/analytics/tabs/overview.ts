@@ -98,8 +98,7 @@ function maxDrawdown(values: readonly number[]): number | null {
 
     <div class="panels">
       <sb-panel>
-        <sb-panel-header title="Equity" [n]="store.scopeN()" [total]="equityMoney()"
-          hint="Cumulative {{ unitLabelText() }} per closed trade, ordered by close date. A day with no closes is not a flat day: the x-axis is the sequence of trades, dated." />
+        <sb-panel-header title="Equity" [n]="store.scopeN()" [total]="equityMoney()" [hint]="equityHint()" />
         @if (store.equityCurveError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('equityCurve')" />
         } @else if (!points().length) {
@@ -140,7 +139,7 @@ function maxDrawdown(values: readonly number[]): number | null {
 
       <sb-panel>
         <sb-panel-header title="R distribution" [n]="store.scopeN()" [tableable]="true" [(tableOpen)]="rTableOpen"
-          hint="Every closed trade's realised R. The shape is the finding: a cluster of small losses with a tail of larger wins is a different book from a symmetric one." />
+          [hint]="rDistributionHint" />
         <sb-histogram [bins]="rBins()" [isNegative]="negativeBin" />
         @if (rTableOpen()) {
           <sb-data-table [rows]="rRows()" [columns]="rColumns" [visible]="rVisible" [rowKey]="rRowKey" clientPaging="analytics-r-buckets" />
@@ -149,8 +148,8 @@ function maxDrawdown(values: readonly number[]): number | null {
 
       <sb-panel>
         <sb-panel-header title="By month" [n]="store.scopeN()" [tableable]="true" [(tableOpen)]="monthTableOpen"
-          hint="Realised result per calendar month of the scoped book. The day grid lives on the Calendar workspace." />
-        <sb-bar-list [rows]="monthBars()" mode="signed" [format]="format" />
+          [hint]="monthHint" />
+        <sb-bar-list [rows]="monthBars()" mode="signed" [format]="monthFormat" />
         @if (monthTableOpen()) {
           <sb-data-table [rows]="monthRows()" [columns]="monthColumns" [visible]="monthVisible" [rowKey]="monthRowKey" clientPaging="analytics-months" />
         }
@@ -187,6 +186,20 @@ export class OverviewTab {
     inUnit({ r: value, pct: value, money: value }, this.store.unit(), this.connection.currency());
 
   protected readonly unitLabelText = computed(() => unitLabel(this.store.unit(), this.connection.currency()));
+
+  /* v194 A4: each hint states the basis of the figure it explains. */
+  protected readonly equityHint = computed(() =>
+    `Cumulative ${this.unitLabelText()} per closed trade, ordered by close date. A day with no closes is `
+    + `not a flat day: the x-axis is the sequence of trades, dated. ${PERFORMANCE_CAVEAT}`);
+  protected readonly rDistributionHint =
+    "Every closed trade's realised R. The shape is the finding: a cluster of small losses with a tail of "
+    + `larger wins is a different book from a symmetric one. ${PERFORMANCE_CAVEAT}`;
+  /** The month rows are a compounded % return (`calendar_returns`), so they
+   *  read in percent whatever the R/%/money toggle says. */
+  protected readonly monthHint =
+    "Realised return per calendar month of close, as a percent of the balance at the month's start, "
+    + `over the scoped book. The day grid lives on the Calendar workspace. ${PERFORMANCE_CAVEAT}`;
+  protected readonly monthFormat = (value: number) => pctText(value);
 
   readonly points = computed(() => this.store.equityCurve()?.points ?? []);
 

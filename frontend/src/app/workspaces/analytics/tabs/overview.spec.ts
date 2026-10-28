@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -11,6 +12,29 @@ import { ConnectionStore } from '../../../stores/connection.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import { ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_SHARPE_LABEL, OverviewTab } from './overview';
 import { BAND_OK } from './variance-band.fixture';
+import { Hint } from '../../../ui/hint';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
+
+/** The text of the sb-hint whose aria label is `label` (A4 audit). */
+function hintText(fixture: ComponentFixture<unknown>, label: string): string {
+  const hint = fixture.debugElement
+    .queryAll(By.directive(Hint))
+    .map((debug) => debug.componentInstance as Hint)
+    .find((h) => h.label() === label);
+  if (!hint) throw new Error(`no sb-hint labelled "${label}"`);
+  return hint.text();
+}
+
+/** Focus the first hit matching `hitSelector` and return the chart tooltip's text (A4 audit). */
+async function tooltipText(fixture: ComponentFixture<unknown>, hitSelector: string): Promise<string> {
+  const hit = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(hitSelector);
+  if (!hit) throw new Error(`no chart hit "${hitSelector}"`);
+  hit.dispatchEvent(new FocusEvent('focus'));
+  fixture.detectChanges();
+  await fixture.whenStable();
+  const tip = (fixture.nativeElement as HTMLElement).querySelector('sb-chart-tooltip .tooltip');
+  return tip?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
 
 /* The store is stubbed down to the signals this tab reads: a tab component
  * owns no HTTP (spec v94 D12), so its spec asserts rendering, not fetching. */
@@ -173,6 +197,32 @@ describe('OverviewTab', () => {
     expect(avgRealised).toBeDefined();
     expect(avgRealised?.classList.contains('missing')).toBe(false);
     expect(avgRealised?.textContent?.toLowerCase()).not.toContain('missing');
+  });
+});
+
+describe('OverviewTab hint and tooltip copy (A4 audit)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('Equity and R distribution hints state the paper, gross, pre-tax basis', () => {
+    const { fixture } = render();
+    expect(hintText(fixture, 'Equity definition')).toContain('per closed trade, ordered by close date');
+    expect(hintText(fixture, 'Equity definition')).toContain(PERFORMANCE_CAVEAT);
+    expect(hintText(fixture, 'R distribution definition')).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('By month hint names a percent return, not a unit-toggled result', () => {
+    const { fixture } = render();
+    const text = hintText(fixture, 'By month definition');
+    expect(text).toContain("percent of the balance at the month's start");
+    expect(text).not.toContain('Realised result');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('By month tooltip reads the return in percent whatever the unit toggle says', async () => {
+    const { fixture } = render();   // unit 'r'
+    const text = await tooltipText(fixture, 'sb-bar-list li.sb-hit');
+    expect(text).toContain('+1.20%');
+    expect(text).not.toContain('1.20R');
   });
 });
 
