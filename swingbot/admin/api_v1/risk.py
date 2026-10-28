@@ -246,7 +246,8 @@ def _max_drawdown_amount(closed: list) -> dict:
         converted = money.to_account_currency(closed)
         amounts = _pnl_amounts(converted)
         value = rm.max_drawdown_r(amounts)   # unit-agnostic: a cumulative walk
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "ops.risk.max_drawdown_amount", exc, level=logging.DEBUG)
         return {"value": None, "n": 0, "fx_missing_count": 0}
     return {
         "value": None if value is None else round(value, 2),

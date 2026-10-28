@@ -10,6 +10,7 @@ admin process reads it without importing a Discord command module.
 import logging
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.edge.growth import growth_path
 from swingbot.core.planning import account as account_module
 from swingbot.core.tracking.performance import TradeLog
@@ -31,8 +32,9 @@ def _load_sector_map() -> dict:
     try:
         return universe.sector_map(name)
     except Exception as exc:
-        log.warning("sector map for SCAN_UNIVERSE=%r unavailable: %s", name, exc,
-                    exc_info=True)
+        swallowed(log, "ops.portfolio_state.sector_map", exc,
+                  "sector map for SCAN_UNIVERSE=%r unavailable: %s", name, exc,
+                  exc_info=True)
         return {}
 
 
@@ -76,7 +78,8 @@ def collect_portfolio_state() -> dict:
     try:
         state["sector_heat"] = heat.sector_heat(open_trades, balance, sectors)
     except Exception as exc:
-        log.warning("sector heat unavailable: %s", exc, exc_info=True)
+        swallowed(log, "ops.portfolio_state.sector_heat", exc,
+                  "sector heat unavailable: %s", exc, exc_info=True)
         state["sector_heat"] = {}
     # v194 B6: with this, `sector_heat == {}` over open positions reads as
     # "no sector data", never as "no exposure".
