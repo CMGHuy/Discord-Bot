@@ -342,4 +342,10 @@ describe('RiskStore', () => {
       .expectOne('/api/v1/risk/killswitch')
       .flush({ killswitch: { on: true, reason: null, at: null } });
   });
+
+  it('keeps only risk: scan health and the data source moved to SystemStore (v195 §5.1)', () => {
+    for (const key of ['scanDurations', 'scanLatestS', 'scanSlowdown', 'dataSources']) {
+      expect(key in store).toBe(false);
+    }
+  });
 });

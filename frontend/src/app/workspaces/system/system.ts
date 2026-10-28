@@ -7,26 +7,27 @@ import {
 } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { SYSTEM_TABS, SystemStore, SystemTab } from '../../stores/system.store';
+import { SystemStore, SystemTab, systemTabFrom } from '../../stores/system.store';
 import { Tab, TabBar } from '../../ui/layout';
 import { SectionHead } from '../../ui/section-head';
 import { LogsTab } from './logs-tab';
+import { ProvidersTab } from './providers-tab';
 import { ScanTab } from './scan-tab';
 import { SettingsTab } from './settings-tab';
 
-/** Settings · Logs · Scan — spec v14 Decision 8, in its order. */
+/** Scan · Providers · Settings · Logs — v195 §5.1, the order of
+ *  `SYSTEM_TABS`. Settings stays the landing tab (correction 4). */
 const TABS: Tab[] = [
+  { id: 'scan', label: 'Scan' },
+  { id: 'providers', label: 'Providers' },
   { id: 'settings', label: 'Settings' },
   { id: 'logs', label: 'Logs' },
-  { id: 'scan', label: 'Scan' },
 ];
 
-const TAB_IDS = new Set<string>(SYSTEM_TABS);
-
 /**
- * System — the administrative workspace: configuration, logs, scan control.
+ * System — the administrative workspace: configuration, logs, scan control, provider health.
  *
- * A shell over three tab components that each read `SystemStore`. Split by
+ * A shell over four tab components that each read `SystemStore`. Split by
  * file rather than by store because they share one refetch story and one
  * `settings`/`scan`/`bot` event wiring; splitting the store as well would
  * mean three subscriptions to the same events.
@@ -43,7 +44,7 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
 @Component({
   selector: 'sb-system',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TabBar, SettingsTab, LogsTab, ScanTab, SectionHead],
+  imports: [TabBar, SettingsTab, LogsTab, ScanTab, ProvidersTab, SectionHead],
   // v54 D1: the three tabs behind this shell (Settings, Logs, Scan) are all
   // dense operational surfaces -- tight rows, more per screen -- so it
   // defaults to the instrument register. On the host (a static class, not a
@@ -68,6 +69,9 @@ const TAB_IDS = new Set<string>(SYSTEM_TABS);
       }
       @case ('scan') {
         <sb-scan-tab />
+      }
+      @case ('providers') {
+        <sb-providers-tab />
       }
       @default {
         <sb-settings-tab />
@@ -100,10 +104,7 @@ export class System {
 
   /** An unknown or absent `?tab=` falls back to Settings rather than
    *  rendering nothing, so a hand-edited URL still shows something. */
-  protected readonly activeTab = computed<SystemTab>(() => {
-    const requested = this.tab();
-    return requested && TAB_IDS.has(requested) ? (requested as SystemTab) : 'settings';
-  });
+  protected readonly activeTab = computed<SystemTab>(() => systemTabFrom(this.tab()));
 
   protected goToTab(tab: string): void {
     // Matching Analytics: `replaceUrl` so flipping tabs does not fill the

@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { DataSourcesHealth, RiskPosition } from '../../api/models';
+import { RiskPosition } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { RiskStore } from '../../stores/risk.store';
@@ -26,7 +26,6 @@ import { Panel } from '../../ui/layout';
 import { Matrix } from '../../ui/matrix';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
-import { Sparkline } from '../../ui/sparkline';
 import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { tablePerPage } from '../../ui/table-per-page';
@@ -129,16 +128,17 @@ interface MetricTile {
  * boolean of its own for that; this is not a second copy of the workspace's
  * state.
  *
- * Four panels below the fold -- sector heat, correlated clusters, the
- * drawdown throttle, scan health -- carry over from the Jinja page. The specs
- * are silent on all four, and silence is not a decision to drop them.
+ * Three panels below the fold -- sector heat, correlated clusters, the
+ * drawdown throttle -- carry over from the Jinja page. The specs are silent on
+ * all three, and silence is not a decision to drop them. Scan health and the
+ * data source moved to System → Providers (v195 §5.1).
  */
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Panel, RowLink, SectionHead, Sparkline, StatStrip, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Panel, RowLink, SectionHead, StatStrip, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
-  // (heat, sectors, clusters, scan health) is the same operational reading
+  // (heat, sectors, clusters) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
   // it defaults to the instrument register. On the host (a static class, not
   // a template wrapper) because :host is the ancestor the register's three
@@ -149,10 +149,10 @@ interface MetricTile {
   template: `
     <sb-section-head>
       @if (store.error(); as message) {
-        <!-- Kept unconditional, unlike Dashboard/Trades: the killswitch and
-             scan-health panels below stay outside the sb-async wrap (see
-             its comment) and have no error surface of their own -- this is
-             the only place their staleness shows. It does duplicate the
+        <!-- Kept unconditional, unlike Dashboard/Trades: the killswitch panel
+             below stays outside the sb-async wrap (see its comment) and has
+             no error surface of its own -- this is the only place its
+             staleness shows. It does duplicate the
              wrapped panel's own error/stale display on a first-load
              failure, which is an acceptable trade for not losing the
              killswitch's error visibility. -->
@@ -264,13 +264,11 @@ interface MetricTile {
 
     <!-- heat, exposure, sector/cluster breakdown --------------------------
          One sb-async around the panels that need a currently open position
-         to mean anything. The killswitch panel above and the scan-health
-         panel below stay outside it deliberately: the killswitch is an
+         to mean anything. The killswitch panel above stays outside it
+         deliberately: it is an
          operational control that must stay usable at zero open risk (an
          operator may want to engage it exactly when flat, to stop the bot
-         opening anything new), and scan health answers "is the scanner
-         healthy", a question that has nothing to do with whether risk
-         exposure happens to be zero right now. Both already degrade
+         opening anything new). It already degrades
          gracefully via the store's own null-safe defaults while the first
          fetch is in flight. -->
     <sb-async
@@ -482,51 +480,6 @@ interface MetricTile {
     </div>
     </sb-async>
 
-    <sb-panel heading="Scan health">
-      <div class="scan">
-        <div class="scan-figures">
-          <span class="scan-latest num">{{ fmt(store.scanLatestS(), 1) }}s</span>
-          <span class="scan-label">last scan</span>
-        </div>
-        @if (store.scanDurations().length) {
-          <sb-sparkline
-            [points]="store.scanDurations()"
-            label="Recent scan durations, in seconds"
-          />
-        }
-      </div>
-      @if (store.scanSlowdown()) {
-        <!-- Amber, not red: a slow scan is a caution about freshness, not a
-             loss. It matters here because stale scans mean the exposure
-             above is older than it looks. -->
-        <p class="heat-note warn">
-          Scans are running slower than usual — setups and prices may be stale.
-        </p>
-      }
-    </sb-panel>
-
-    <!-- v106: where live bars and prices come from, and how often Alpaca
-         misses. A fallback price is still a real price, so the rate is
-         information; an open breaker is the caution -- every eligible
-         symbol is on yfinance until it closes. -->
-    <sb-panel heading="Data source">
-      @if (store.dataSources(); as ds) {
-        <div class="sources" [class.warn]="ds.breaker_open">
-          <span class="source-name">{{ sourceName(ds) }}</span>
-          @if (ds.enabled) {
-            <span class="source-rate num">{{ fallbackText(ds) }}</span>
-          }
-        </div>
-        @if (ds.enabled && ds.breaker_open) {
-          <p class="heat-note warn">
-            Alpaca breaker open — live prices are coming from yfinance until it closes.
-          </p>
-        }
-      } @else {
-        <p class="none">No data-source reading yet.</p>
-      }
-    </sb-panel>
-
     <!-- cells ----------------------------------------------------------- -->
 
     <ng-template #tickerCell let-row>
@@ -699,20 +652,6 @@ interface MetricTile {
 
     .none { color: var(--text-faint); font-size: var(--text-table); }
 
-    /* -- scan health -- */
-    .scan { display: flex; align-items: center; gap: var(--register-pad); }
-    .scan-figures { display: flex; align-items: baseline; gap: var(--space-6); }
-    .scan-latest { font-size: var(--text-subhead); font-weight: 600; }
-    /* --text-micro, not --register-label -- an eyebrow tag, see .state above. */
-    .scan-label { color: var(--text-secondary); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.1em; }
-    .scan sb-sparkline { flex: 1 1 auto; min-width: 80px; max-width: 320px; }
-
-    /* -- data source (v106) -- */
-    .sources { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
-    .source-name { font-weight: 600; }
-    .source-rate { color: var(--text-secondary); font-size: var(--text-table); }
-    .sources.warn .source-name { color: var(--warn); }
-
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
     @media (max-width: 639px) {
@@ -777,17 +716,6 @@ export class Risk {
   protected readonly asking = signal(false);
 
   protected readonly rowKey = (row: RiskPosition) => row.trade_id;
-
-  /** v106: "Alpaca · IEX" when Alpaca serves the live path, else the plain
-   *  pre-v106 source. */
-  protected sourceName(ds: DataSourcesHealth): string {
-    return ds.enabled ? `Alpaca · ${ds.feed.toUpperCase()}` : 'yfinance only';
-  }
-
-  protected fallbackText(ds: DataSourcesHealth): string {
-    if (ds.fallback_rate === null) return `no Alpaca traffic yet (${ds.scans} scans)`;
-    return `${(ds.fallback_rate * 100).toFixed(1)}% fallback (${ds.scans} scans)`;
-  }
 
   protected readonly emptyState = {
     title: 'No open positions',

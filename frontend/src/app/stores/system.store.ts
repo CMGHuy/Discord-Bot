@@ -114,8 +114,8 @@ interface SystemSlice {
   /** Which command is in flight, so one button locks rather than all four. */
   scanPending: ScanCommand | null;
   scanMessage: string | null;
-  /** v148 — provider rows and swallowed-error counts for the Scan tab's two
-   *  health panels. Null until the first answer. A failed refresh keeps the
+  /** v148 — provider rows and swallowed-error counts for the Providers tab's
+   *  two health panels (on the Scan tab until v195). Null until the first answer. A failed refresh keeps the
    *  last good payload and says so in `healthError`: a stale table that is
    *  labelled stale beats an empty one. */
   health: SystemHealth | null;
@@ -557,12 +557,10 @@ export const SystemStore = signalStore(
     const resolveProviders = (): Observable<void> =>
       forkJoin([resolveHealth(), resolveRisk()]).pipe(map(() => undefined));
 
-    /** v148: the Scan tab is the status AND the two health panels. One
-     *  resolver for both means the route's existing `scan`/`bot` refresh
-     *  updates all three; `routeRequest` turns a non-auth failure into a
-     *  completed `undefined`, so a health failure never blocks the status. */
-    const resolveScan = (): Observable<void> =>
-      forkJoin([resolveScanStatus(), resolveHealth()]).pipe(map(() => undefined));
+    /** The Scan tab is the scan status and the bot process. v148's two
+     *  health panels moved to the Providers tab (v195 §5.1), which reads
+     *  them through `resolveProviders` on the same `scan`/`bot` refresh. */
+    const resolveScan = (): Observable<void> => resolveScanStatus();
 
     const resolveTab = (tab: SystemTab): Observable<void> =>
       ({

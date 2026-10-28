@@ -379,7 +379,7 @@ describe('Risk freshness and chrome', () => {
     expect(marker.textContent).not.toContain('00:00:00');
   });
 
-  it('does not claim the scan-health panel is as fresh as the metrics', async () => {
+  it('dates each metrics panel by its own bar, not one stamp for the page', async () => {
     const el = (await render()).nativeElement as HTMLElement;
     expect(el.querySelectorAll('sb-freshness').length).toBeGreaterThan(1);
   });
@@ -402,45 +402,26 @@ describe('Risk grid floors', () => {
   });
 });
 
-/* -- v106 -- the data-source panel -- */
+/* -- v195 §5.1 -- scan health and the data source moved to System → Providers.
+ * Their v106 cases moved with them, to system/providers-tab.spec.ts. -- */
 
-async function renderDataSources(
-  dataSources: Record<string, unknown> | null,
-): Promise<HTMLElement> {
-  const { fixture, backend } = seed();
-  fixture.detectChanges();
-  backend.expectOne('/api/v1/risk').flush(payload({
-    scan_health: { durations_s: [], latest_s: 1.2, slowdown: false, data_sources: dataSources },
-  } as Partial<RiskData>));
-  await fixture.whenStable();
-  fixture.detectChanges();
-  return fixture.nativeElement as HTMLElement;
-}
+describe('Risk keeps only risk (v195 §5.1)', () => {
+  it('shows no Scan health or Data source panel, whatever the payload carries', async () => {
+    const el = (await render({
+      scan_health: {
+        durations_s: [12, 14], latest_s: 14, slowdown: true,
+        data_sources: {
+          enabled: true, feed: 'iex', breaker_open: true, fallback_rate: 0.4, scans: 20,
+        },
+      },
+    } as Partial<RiskData>)).nativeElement as HTMLElement;
+    const headings = [...el.querySelectorAll('sb-panel h2')].map((h) => h.textContent!.trim());
 
-describe('Risk data-source panel', () => {
-  it('names the Alpaca feed and the fallback rate over its sample', async () => {
-    const el = await renderDataSources({
-      enabled: true, feed: 'iex', breaker_open: false, fallback_rate: 0.05, scans: 20,
-    });
-    expect(el.textContent).toContain('Alpaca · IEX');
-    expect(el.textContent).toContain('5.0% fallback (20 scans)');
-    expect(el.querySelector('.sources.warn')).toBeNull();
-  });
-
-  it('flags an open breaker as a warning', async () => {
-    const el = await renderDataSources({
-      enabled: true, feed: 'iex', breaker_open: true, fallback_rate: 0.4, scans: 20,
-    });
-    expect(el.querySelector('.sources.warn')).toBeTruthy();
-    expect(el.textContent).toContain('Alpaca breaker open');
-  });
-
-  it('says yfinance only when Alpaca is off', async () => {
-    const el = await renderDataSources({
-      enabled: false, feed: 'iex', breaker_open: false, fallback_rate: null, scans: 0,
-    });
-    expect(el.textContent).toContain('yfinance only');
-    expect(el.textContent).not.toContain('fallback (');
+    expect(headings).not.toContain('Scan health');
+    expect(headings).not.toContain('Data source');
+    expect(el.querySelector('sb-sparkline')).toBeNull();
+    expect(el.textContent).not.toContain('Alpaca');
+    expect(el.textContent).not.toContain('Scans are running slower');
   });
 });
 

@@ -13,7 +13,7 @@ import { Observable } from 'rxjs';
 
 import { routeRequest } from '../routing/route-request';
 import {
-  Correlation, DataSourcesHealth, Killswitch, Risk, RiskMetrics, RiskPosition, SectorHeat,
+  Correlation, Killswitch, Risk, RiskMetrics, RiskPosition, SectorHeat,
 } from '../api/models';
 
 interface RiskSlice {
@@ -65,7 +65,9 @@ function tickerList(value: unknown): string[] | null {
  *
  * Everything the Jinja Risk page renders is projected by `GET /risk`, and
  * everything projected is surfaced here: sector heat, correlated clusters,
- * the drawdown throttle and scan health included. Dropping a panel is a
+ * and the drawdown throttle included. Scan health and the data source, which
+ * the same payload carries, are shown on System → Providers and read there by
+ * SystemStore (v195 §5.1). Dropping a panel is a
  * decision someone makes on purpose in the SPA, not something that happens
  * because a store forgot to expose a field.
  */
@@ -149,17 +151,6 @@ export const RiskStore = signalStore(
 
     killswitch: computed<Killswitch | null>(() => data()?.killswitch ?? null),
     killswitchOn: computed(() => data()?.killswitch?.on ?? false),
-
-    /* -- scan health ----------------------------------------------------- */
-
-    scanDurations: computed<readonly number[]>(
-      () => data()?.scan_health?.durations_s ?? [],
-    ),
-    scanLatestS: computed(() => data()?.scan_health?.latest_s ?? null),
-    scanSlowdown: computed(() => data()?.scan_health?.slowdown ?? false),
-    dataSources: computed<DataSourcesHealth | null>(
-      () => data()?.scan_health?.data_sources ?? null,
-    ),
 
     /* -- institutional risk metrics and correlation (v85 D37/D38) -------- */
 
