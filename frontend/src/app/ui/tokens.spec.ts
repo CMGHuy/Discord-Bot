@@ -81,6 +81,10 @@ const REQUIRED = [
 
   '--control-h',
   '--section-gap',
+  // v195 §1.4: the tokens row density moves
+  '--cell-pad-y',
+  '--cell-pad-x',
+  '--panel-pad',
 
   // v167 §3, tier 3
   '--panel-radius',
@@ -376,8 +380,10 @@ describe('v80 D3: type, shape and touch', () => {
     expect(CSS).not.toMatch(/^\s*--radius(?:-chip)?:/m);
   });
 
+  /* v195 §1.4: the one row height is the dense 28px on desktop; the touch
+   * block and the comfortable density raise it to 44px. */
   it('defines one row height and one form-control text size', () => {
-    expect(CSS).toMatch(/^\s*--row-h:\s*32px;/m);
+    expect(CSS).toMatch(/^\s*--row-h:\s*28px;/m);
     expect(CSS).toMatch(/^\s*--text-control:\s*calc\(14px \* var\(--text-scale\)\);/m);
   });
 
@@ -649,5 +655,76 @@ describe('v195 §1.2: decoration tokens deleted, 120ms transitions', () => {
     expect(CSS).toMatch(/^\s*--dur-ui:\s*calc\(120ms \* var\(--motion-scale\)\);/m);
     expect(CSS).toMatch(/^\s*--transition:\s*var\(--dur-ui\) var\(--ease-out\);/m);
     expect(resolveToken('--dur-ui')).toBe('calc(120ms * 1)');
+  });
+});
+
+/**
+ * v195 §1.4 (corrections 11, 15): row density. Dense is the :root default,
+ * so the fixture and a cold load are dense. Comfortable lives in one block,
+ * gated to a desktop-width window with a fine pointer, outside every :root
+ * (the resolver reads only top-level :root) and before tier 3 (no @media
+ * there). The touch block wins below 1024px and under a coarse pointer at
+ * any width. The body step never moves, so order figures stay >= 14px.
+ */
+describe('v195 §1.4: row density', () => {
+  const declared = (source: string, name: string) =>
+    source.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
+  const DENSITY_MEDIA = '@media (min-width: 1024px) and (pointer: fine)';
+  const comfortable = () =>
+    CSS.match(/@media \(min-width: 1024px\) and \(pointer: fine\)\s*\{\s*html\[data-density=comfortable\]\s*\{([^}]*)\}\s*\}/)?.[1] ?? '';
+  const touch = () => CSS.match(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+
+  it('defaults to dense in :root: 28px rows, 4x8px cells, 14px panel padding', () => {
+    expect(declared(CSS, '--row-h')).toBe('28px');
+    expect(declared(CSS, '--cell-pad-y')).toBe('var(--space-4)');
+    expect(declared(CSS, '--cell-pad-x')).toBe('var(--space-8)');
+    expect(declared(CSS, '--panel-pad')).toBe('var(--space-14)');
+    expect(resolveToken('--row-h')).toBe('28px');
+    expect(resolveToken('--cell-pad-y')).toBe('4px');
+    expect(resolveToken('--cell-pad-x')).toBe('8px');
+    expect(resolveToken('--panel-pad')).toBe('14px');
+  });
+
+  it('switches to comfortable only on a desktop-width window with a fine pointer', () => {
+    const body = comfortable();
+    expect(body).not.toBe('');
+    const EXPECTED: Record<string, string> = {
+      '--row-h': '44px',
+      '--cell-pad-y': 'var(--space-10)',
+      '--cell-pad-x': 'var(--space-14)',
+      '--panel-pad': 'var(--space-20)',
+      '--text-table': 'calc(14px * var(--text-scale))',
+    };
+    for (const [name, value] of Object.entries(EXPECTED)) expect(declared(body, name), name).toBe(value);
+  });
+
+  it('names data-density in that one block only', () => {
+    const code = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code.match(/data-density/g)).toHaveLength(1);
+    expect(code.split(DENSITY_MEDIA)).toHaveLength(2);
+  });
+
+  it('keeps the override outside every :root and before tier 3, so the fixture holds dense', () => {
+    const at = CSS.indexOf(DENSITY_MEDIA);
+    expect(at).toBeGreaterThan(-1);
+    expect(at).toBeLessThan(CSS.indexOf(TIER3_BANNER));
+    expect(comfortable()).not.toContain(':root');
+  });
+
+  it('lets the touch block win below 1024px and under a coarse pointer at any width', () => {
+    const body = touch();
+    expect(declared(body, '--row-h')).toBe('44px');
+    expect(declared(body, '--control-h')).toBe('44px');
+    expect(declared(body, '--hit-min')).toBe('44px');
+    expect(declared(body, '--cell-pad-y')).toBe('var(--space-10)');
+    expect(declared(body, '--cell-pad-x')).toBe('var(--space-10)');
+    expect(declared(body, '--panel-pad')).toBe('var(--space-14)');
+  });
+
+  it('never moves the body step, so order figures stay at 14px or larger in both densities', () => {
+    expect(declared(CSS, '--text-body')).toBe('calc(14px * var(--text-scale))');
+    expect(comfortable()).not.toContain('--text-body');
+    expect(touch()).not.toContain('--text-body');
+    expect(declared(CSS, '--text-table')).toBe('calc(13px * var(--text-scale))');
   });
 });

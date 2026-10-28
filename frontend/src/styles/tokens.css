@@ -283,8 +283,16 @@
   --control-h: 28px;
 
   /* v80 D3: one row height for every table row, so a table beside a list
-   * lines up. Grows with --control-h in the touch block below. */
-  --row-h: 32px;
+   * lines up. v195 §1.4: 28px is the dense default (was 32px); the touch
+   * block below and the comfortable density raise it to 44px. */
+  --row-h: 28px;
+
+  /* v195 §1.4: the padding that moves with the row height -- a table
+   * cell's vertical and horizontal padding and a panel body's padding.
+   * Dense values here; comfortable and touch values below. */
+  --cell-pad-y: var(--space-4);
+  --cell-pad-x: var(--space-8);
+  --panel-pad: var(--space-14);
 
   /* v179 §3.4 -- the smallest hit area an interactive control may have.
      24px is WCAG 2.2's minimum target for a mouse; the touch block below
@@ -364,13 +372,39 @@
  * move: gutters stay put, so this is a hit-target change, not a zoom. 16px
  * control text is also the size below which mobile browsers zoom into a
  * focused field. Every component's own touch block uses this exact
- * condition (ui/hit-area.spec.ts). */
+ * condition (ui/hit-area.spec.ts). v195 §1.4 (correction 15): because the
+ * condition includes (pointer: coarse) at any width, a touch device wider
+ * than 1023px also gets these, so row density can never shrink a touch
+ * target. */
 @media (pointer: coarse), (max-width: 1023px) {
   :root {
     --control-h: 44px;
     --row-h: 44px;
     --text-control: calc(16px * var(--text-scale));
     --hit-min: 44px;
+    --cell-pad-y: var(--space-10);
+    --cell-pad-x: var(--space-10);
+    --panel-pad: var(--space-14);
+  }
+}
+
+/* v195 §1.4 -- row density, a per-device choice: ui/density.service.ts
+ * writes <html data-density="dense|comfortable"> from localStorage
+ * ui.density (default dense). Dense is the :root default above; this is
+ * the only place comfortable lives, and only a desktop-width window driven
+ * by a fine pointer reaches it. Below 1024px, or under a coarse pointer at
+ * any width, the touch block above wins whatever the setting: density
+ * never lowers that gate. Outside :root on purpose -- dump_tokens.py and
+ * resolve-token.ts read only top-level :root, so the fixture holds the
+ * dense default. --text-body is never set here: order figures read it (or
+ * larger) and stay >= 14px in both densities. */
+@media (min-width: 1024px) and (pointer: fine) {
+  html[data-density=comfortable] {
+    --row-h: 44px;
+    --cell-pad-y: var(--space-10);
+    --cell-pad-x: var(--space-14);
+    --panel-pad: var(--space-20);
+    --text-table: calc(14px * var(--text-scale));
   }
 }
 

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { allSources } from './testing/all-sources';
+import { allSources, stripComments } from './testing/all-sources';
 import { resolveToken } from './testing/resolve-token';
 
 /**
@@ -106,5 +106,33 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
 
   it.each(PADDED)('%s pads its control with .sb-hit', (file, markup) => {
     expect(read(file)).toMatch(markup);
+  });
+});
+
+/* v195 §1.4: row density is a desktop-only setting. It can never lower the
+ * 44px touch targets: its one block needs >= 1024px AND a fine pointer, and
+ * no component restyles by density on its own. */
+describe('v195 §1.4: density never reaches touch', () => {
+  it('gates the comfortable override to a desktop width and a fine pointer', () => {
+    expect(TOKENS).toMatch(/@media \(min-width: 1024px\) and \(pointer: fine\)\s*\{\s*html\[data-density=comfortable\]/);
+  });
+
+  it('keeps every data-density selector in tokens.css', () => {
+    const offenders = allSources()
+      .filter(({ source }) => /\[data-density/.test(stripComments(source)))
+      .map(({ name }) => name);
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps 44px rows beside the 44px hit area in the touch block', () => {
+    const block = TOKENS.match(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{([\s\S]*?)\n\}/);
+    expect(block).not.toBeNull();
+    expect(block![1]).toMatch(/--row-h:\s*44px;/);
+    expect(block![1]).toMatch(/--hit-min:\s*44px;/);
+  });
+
+  it('holds the dense desktop default at a 28px row over the 24px minimum target', () => {
+    expect(resolveToken('--row-h')).toBe('28px');
+    expect(resolveToken('--hit-min')).toBe('24px');
   });
 });

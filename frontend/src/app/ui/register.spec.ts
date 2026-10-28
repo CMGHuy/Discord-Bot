@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { callSites } from './testing/call-sites';
+import { resolveToken } from './testing/resolve-token';
 
 const GLOBAL = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
 
@@ -55,4 +56,19 @@ describe('both registers are actually used', () => {
   // If everything ended up in one register, D1 was applied mechanically.
   it('uses presentation somewhere', () => expect(all).toContain('register-presentation'));
   it('uses instrument somewhere', () => expect(all).toContain('register-instrument'));
+});
+
+/* v195 §1.4 (correction 11): the instrument register's figure was the 13px
+ * table step, which put entry/stop/target/size/risk figures on Trades, Risk
+ * and System under the 14px order-figure floor. It is the body step now. */
+describe('v195 §1.4: order figures never shrink', () => {
+  it('sets the instrument figure on the 14px body step', () => {
+    expect(rule('register-instrument')).toContain('--register-figure: var(--text-body);');
+    expect(rule('register-instrument')).not.toContain('--register-figure: var(--text-table);');
+    expect(resolveToken('--text-body')).toBe('calc(14px * 1)');
+  });
+
+  it('keeps the presentation figure on the 28px metric step', () => {
+    expect(rule('register-presentation')).toContain('--register-figure: var(--text-metric);');
+  });
 });

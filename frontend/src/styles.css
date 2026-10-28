@@ -39,9 +39,7 @@ body {
 
 body {
   margin: 0;
-  /* The ambient glow is the shell's one fixed .ambient layer (v168 §3 #10),
-   * not this background: a layer can drift without repainting the page, and
-   * there is never a second glow. */
+  /* The flat page ground (v195 §1.2: no ambient glow, no gradient). */
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
@@ -231,7 +229,10 @@ a:hover {
 
 .register-instrument {
   --register-pad: var(--space-10);
-  --register-figure: var(--text-table);
+  /* v195 §1.4 (correction 11): the body step, 14px, not the 13px table
+   * step -- entry, stop, target, size and risk figures on instrument
+   * panels must not shrink below 14px in either density. */
+  --register-figure: var(--text-body);
   --register-label: var(--text-micro);
 }
 
