@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-26 09:34:17 UTC",
+  "generated_at": "2026-10-28 14:34:19 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.36.1",
-    "bot": "2.15.4"
+    "ui": "1.36.2",
+    "bot": "2.15.5"
   },
   "releases": [
     {
@@ -2146,6 +2146,32 @@
       "versions": {
         "ui": "1.36.1",
         "bot": "2.15.4"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-28",
+      "last_seen": "2026-10-28",
+      "commit": "cdca28e1",
+      "subject": "release(ui): 1.36.2 -- tooltips that open, figures that are true: sb-hint top layer, money in the account currency, leg labels, honest hint copy (v194)",
+      "versions": {
+        "ui": "1.36.2",
+        "bot": "2.15.4"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-28",
+      "last_seen": "2026-10-28",
+      "commit": "81186be1",
+      "subject": "release(bot): 2.15.5 -- FX rates for admin money, sector-heat unmapped count and failure logging, leg_exit_reason, money drawdown on /risk (v194)",
+      "versions": {
+        "ui": "1.36.2",
+        "bot": "2.15.5"
       },
       "changed": [
         "bot"
