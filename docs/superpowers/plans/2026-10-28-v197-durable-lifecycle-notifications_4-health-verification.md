@@ -386,15 +386,7 @@ def instant(event):
     return datetime.fromisoformat(event["queued_at"])
 
 
-@pytest.mark.parametrize("kind,title", [("cancel", "Plan cancelled"),
-                                        ("plan_close", "Plan closed"), ("legacy_close", None)])
-def test_committed_action_reaches_discord_once_and_keeps_receipt(book, kind, title):
-    produce(kind)
-    original = deepcopy(row(book))
-    now = instant(original)
-    channel = Channel()
-    counts = tick(book, channel, now)
-    assert counts == dict(attempted=1, acknowledged=1, retried=0, blocked=0)
+def assert_notification_snapshot(channel, original, kind, title):
     assert len(channel.sent) == 1
     embed = channel.sent[0]["embed"]
     assert channel.sent[0]["content"] == embed.push_text
@@ -405,12 +397,28 @@ def test_committed_action_reaches_discord_once_and_keeps_receipt(book, kind, tit
         assert "Result" not in {field.name for field in embed.fields}
         assert "unfilled" in embed.description.lower()
         assert AccountRepository().load()["balance"] == 1000.0
+
+
+def assert_delivery_receipt(book, original):
     receipt = row(book)
     assert receipt["payload"] == original["payload"]
     assert receipt["delivered_message_id"] == "1001"
     assert receipt["delivered_at"] is not None
     assert book.pending() == 0
     assert book.count() == 1
+
+
+@pytest.mark.parametrize("kind,title", [("cancel", "Plan cancelled"),
+                                        ("plan_close", "Plan closed"), ("legacy_close", None)])
+def test_committed_action_reaches_discord_once_and_keeps_receipt(book, kind, title):
+    produce(kind)
+    original = deepcopy(row(book))
+    now = instant(original)
+    channel = Channel()
+    counts = tick(book, channel, now)
+    assert counts == dict(attempted=1, acknowledged=1, retried=0, blocked=0)
+    assert_notification_snapshot(channel, original, kind, title)
+    assert_delivery_receipt(book, original)
     assert tick(book, channel, now + timedelta(seconds=1))["attempted"] == 0
     assert len(channel.sent) == 1
 
