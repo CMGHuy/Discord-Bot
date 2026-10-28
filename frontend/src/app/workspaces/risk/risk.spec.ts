@@ -9,7 +9,7 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Provider, provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   authInterceptor,
@@ -19,8 +19,14 @@ import {
 import { Risk as RiskData, RiskMetrics } from '../../api/models';
 import {
   EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, drawdownFxNote, exactRiskText, reconciles, unmappedNote,
-  RISK_DRAWDOWN_LABEL, RISK_SHARPE_LABEL,
+  RISK_DRAWDOWN_LABEL, RISK_SHARPE_LABEL, RISK_KPI_ABOUT, largestCluster, topSectorOf,
 } from './risk';
+import { By } from '@angular/platform-browser';
+
+import { RouteTitleService } from '../../routing/route-title.service';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { StatTile } from '../../ui/stat-tile';
+
 import { ConnectionStore } from '../../stores/connection.store';
 import { RiskStore } from '../../stores/risk.store';
 import { ViewportService } from '../../ui/breakpoints';
@@ -146,7 +152,7 @@ async function renderWithMetrics(
 }
 
 function tileHost(fixture: ComponentFixture<Risk>, label: string): HTMLElement {
-  const hosts = [...(fixture.nativeElement as HTMLElement).querySelectorAll('sb-stat-tile')] as HTMLElement[];
+  const hosts = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.metrics sb-stat-tile')] as HTMLElement[];
   const found = hosts.find((h) => h.querySelector('.label')?.textContent?.trim() === label);
   if (!found) throw new Error(`no tile labelled "${label}"`);
   // sb-stat-tile puts .thin/.value/.sample on its own inner .tile div, not
@@ -155,7 +161,7 @@ function tileHost(fixture: ComponentFixture<Risk>, label: string): HTMLElement {
 }
 
 function tileLabels(fixture: ComponentFixture<Risk>): string[] {
-  return [...(fixture.nativeElement as HTMLElement).querySelectorAll('sb-stat-tile .label')]
+  return [...(fixture.nativeElement as HTMLElement).querySelectorAll('.metrics sb-stat-tile .label')]
     .map((el) => el.textContent!.trim());
 }
 
@@ -236,7 +242,7 @@ describe('Risk metric tiles in a stat strip (v186 D3)', () => {
     const strip = el.querySelector<HTMLElement>('sb-stat-strip.metric-grid');
     expect(strip).not.toBeNull();
     expect(strip!.querySelectorAll('sb-stat-tile')).toHaveLength(6);
-    expect(el.querySelectorAll('sb-stat-tile')).toHaveLength(6);
+    expect(el.querySelectorAll('.metrics sb-stat-tile')).toHaveLength(6);
     // No cols: the default auto-fit column rule, not the fixed-count one.
     expect(strip!.style.getPropertyValue('--strip-cols')).toBe('');
     expect(strip!.querySelector('.sb-strip-grid')!.classList).not.toContain('sb-strip-fixed');
@@ -384,8 +390,14 @@ describe('Risk freshness and chrome', () => {
     expect(el.querySelectorAll('sb-freshness').length).toBeGreaterThan(1);
   });
 
-  it('renders no in-page heading', async () => {
-    expect((await render()).nativeElement.querySelector('h1')).toBeNull();
+  it('renders the route title as the one h1, from sb-page, and no section head', async () => {
+    const fixture = await render();
+    TestBed.inject(RouteTitleService).set('Risk', 'Exposure, heat and the killswitch');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Risk');
+    expect(el.querySelector('sb-section-head')).toBeNull();
   });
 });
 
@@ -720,5 +732,221 @@ describe('Risk metric basis and money drawdown (v194 B8)', () => {
   it('words the FX gap note in the singular and is silent at zero', () => {
     expect(drawdownFxNote(0)).toBeUndefined();
     expect(drawdownFxNote(1)).toBe('1 closed trade without an FX rate for the exit day left out of the amount.');
+  });
+});
+
+/* -- v195 Phase 4 and §5.2 -- Risk on sb-page ---------------------------- */
+
+const OPEN_POSITION = {
+  trade_id: 't1', ticker: 'AAPL', strategy: 'VWAP',
+  shares: 10, entry: 100, stop_loss: 95, risk_pct: 3,
+};
+const DOWN = { error: { code: 'unavailable', message: 'down' } };
+const UNAVAILABLE = { status: 503, statusText: 'Service Unavailable' };
+
+/** Flushes /risk and then the balance read the store makes beside it.
+ *  `balance: 'fail'` answers the dashboard read with a 503. */
+async function renderPage(
+  overrides: Partial<RiskData> = {},
+  balance: number | null | 'fail' = 10000,
+): Promise<ComponentFixture<Risk>> {
+  const { fixture, backend } = seed();
+  TestBed.inject(RouteTitleService).set('Risk', 'Exposure, heat and the killswitch');
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/risk').flush(payload({
+    heat: { open_pct: 3, cap_pct: 20, utilisation_pct: 15 },
+    positions: [OPEN_POSITION],
+    ...overrides,
+  }));
+  const read = backend.expectOne('/api/v1/dashboard');
+  if (balance === 'fail') read.flush(DOWN, UNAVAILABLE);
+  else read.flush({ account_balance: balance });
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture;
+}
+
+/** The KPI tiles' own inputs, read from the components: the rendered value
+ *  counts up, the input is the figure. */
+function kpis(fixture: ComponentFixture<Risk>): Map<string, StatTile> {
+  return new Map(fixture.debugElement.queryAll(By.css('[page-kpis] sb-stat-tile'))
+    .map((d) => d.componentInstance as StatTile)
+    .map((tile) => [tile.label(), tile] as const));
+}
+
+const headerActions = (el: HTMLElement) => el.querySelector('sb-page header.bar .actions')!;
+const killButton = (el: HTMLElement) =>
+  headerActions(el).querySelector<HTMLButtonElement>('button[data-action="killswitch"]')!;
+const panelHeadings = (scope: Element | null) =>
+  [...(scope?.querySelectorAll('sb-panel') ?? [])].map((p) => p.getAttribute('heading'));
+const BREAKDOWN = ['Exposure by position', 'Sector heat', 'Correlation matrix', 'Correlated clusters'];
+
+describe('Risk on sb-page (v195 Phase 4)', () => {
+  beforeAll(() => installDialogPolyfill());
+
+  it('puts Portfolio heat in the primary slot and the rest in the secondary grid, in order', async () => {
+    const el = (await renderPage()).nativeElement as HTMLElement;
+    expect(panelHeadings(el.querySelector('sb-page div.primary.slot'))).toEqual(['Portfolio heat']);
+    expect(panelHeadings(el.querySelector('sb-page div.secondary.slot'))).toEqual(
+      ['Killswitch', 'Risk metrics', ...BREAKDOWN]);
+  });
+
+  it('puts the killswitch button in the header actions, solid danger while clear', async () => {
+    const el = (await renderPage()).nativeElement as HTMLElement;
+    const button = killButton(el);
+    expect(button.textContent!.trim()).toBe('Engage killswitch');
+    expect(button.classList).toContain('danger');
+    // The Killswitch panel keeps the state and its explanation, not the control.
+    const panel = el.querySelector('sb-panel[heading="Killswitch"]')!;
+    expect(panel.textContent).toContain('Clear');
+    expect([...panel.querySelectorAll('button')].some((b) => /killswitch/i.test(b.textContent ?? ''))).toBe(false);
+  });
+
+  it('offers Release, not danger, once the killswitch is engaged', async () => {
+    const el = (await renderPage({ killswitch: { on: true, reason: 'drawdown', at: null } }))
+      .nativeElement as HTMLElement;
+    expect(killButton(el).textContent!.trim()).toBe('Release killswitch');
+    expect(killButton(el).classList).not.toContain('danger');
+    expect(el.querySelector('sb-panel[heading="Killswitch"]')!.textContent).toContain('ENGAGED');
+  });
+
+  it('asks through the solid danger dialog before anything is sent', async () => {
+    const fixture = await renderPage();
+    const el = fixture.nativeElement as HTMLElement;
+    killButton(el).click();
+    fixture.detectChanges();
+
+    expect(el.querySelector<HTMLDialogElement>('sb-confirm-dialog dialog')!.open).toBe(true);
+    const dialog = fixture.debugElement.query(By.directive(ConfirmDialog)).componentInstance as ConfirmDialog;
+    expect(dialog.dangerVariant()).toBe('danger');
+    TestBed.inject(HttpTestingController).expectNone('/api/v1/risk/killswitch');
+  });
+
+  it('reports a failed toggle beside the button that sent it', async () => {
+    const fixture = await renderPage();
+    const el = fixture.nativeElement as HTMLElement;
+    const backend = TestBed.inject(HttpTestingController);
+    killButton(el).click();
+    fixture.detectChanges();
+    [...el.querySelectorAll<HTMLButtonElement>('sb-confirm-dialog button')].at(-1)!.click();
+    backend.expectOne('/api/v1/risk/killswitch').error(new ProgressEvent('error'), { status: 0 });
+    fixture.detectChanges();
+
+    expect(headerActions(el).querySelector('[role="alert"]')!.textContent).toContain('NOT engaged');
+  });
+
+  it('keeps the stale notice in the header when a refetch fails', async () => {
+    const fixture = await renderPage();
+    const backend = TestBed.inject(HttpTestingController);
+    TestBed.inject(RiskStore).load();
+    backend.expectOne('/api/v1/risk').flush(DOWN, UNAVAILABLE);
+    fixture.detectChanges();
+    expect(headerActions(fixture.nativeElement).querySelector('.stale[role="status"]')!.textContent)
+      .toContain('may be stale');
+  });
+
+  it('hides the four breakdown panels at zero open risk, keeping the killswitch and the metrics', async () => {
+    const el = (await renderPage({ positions: [] })).nativeElement as HTMLElement;
+    const display = (heading: string) =>
+      el.querySelector<HTMLElement>(`sb-panel[heading="${heading}"]`)!.style.display;
+    for (const heading of BREAKDOWN) expect(display(heading)).toBe('none');
+    expect(display('Killswitch')).toBe('');
+    expect(el.querySelector('.metrics')).not.toBeNull();
+    expect(el.textContent).toContain('No open risk');
+  });
+
+  it('shows the breakdown panels once a position is open', async () => {
+    const el = (await renderPage()).nativeElement as HTMLElement;
+    for (const heading of BREAKDOWN) {
+      expect(el.querySelector<HTMLElement>(`sb-panel[heading="${heading}"]`)!.style.display).toBe('');
+    }
+  });
+});
+
+describe('Risk KPI strip (v195 §5.2)', () => {
+  it('holds open risk, cap headroom, top sector and max cluster, in that order', async () => {
+    expect([...kpis(await renderPage()).keys()])
+      .toEqual(['Open risk', 'Cap headroom', 'Top sector', 'Max cluster']);
+  });
+
+  it('shows open risk and cap headroom as money and % of account side by side', async () => {
+    const tiles = kpis(await renderPage());
+    expect(tiles.get('Open risk')!.value()).toBe('300 € · 3.00%');
+    expect(tiles.get('Open risk')!.secondary()).toBe('cap 2,000 € · 20.00%');
+    expect(tiles.get('Cap headroom')!.value()).toBe('1,700 € · 17.00%');
+    expect(tiles.get('Cap headroom')!.tone()).toBe('neutral');
+  });
+
+  it('reads headroom over the cap as negative, with a true minus, never clamped', async () => {
+    const tiles = kpis(await renderPage({ heat: { open_pct: 7.5, cap_pct: 6, utilisation_pct: 125 } }));
+    expect(tiles.get('Cap headroom')!.value()).toBe('−150 € · −1.50%');
+    expect(tiles.get('Cap headroom')!.tone()).toBe('neg');
+  });
+
+  it('never invents money when the balance read fails', async () => {
+    const tiles = kpis(await renderPage({}, 'fail'));
+    expect(tiles.get('Open risk')!.value()).toBe('— · 3.00%');
+    expect(tiles.get('Cap headroom')!.value()).toBe('— · 17.00%');
+  });
+
+  it('names the top sector with its risk in both units, and the largest cluster with its tickers', async () => {
+    const tiles = kpis(await renderPage({
+      sector_heat: [{ sector: 'Energy', heat_pct: 1 }, { sector: 'Technology', heat_pct: 2 }],
+      clusters: [['XOM', 'CVX'], ['AAPL', 'MSFT', 'NVDA']],
+    }));
+    expect(tiles.get('Top sector')!.value()).toBe('Technology');
+    expect(tiles.get('Top sector')!.secondary()).toBe('200 € · 2.00%');
+    expect(tiles.get('Max cluster')!.value()).toBe('3 positions');
+    expect(tiles.get('Max cluster')!.secondary()).toBe('AAPL · MSFT · NVDA');
+  });
+
+  it('says None for no cluster and leaves the sector absent when nothing is mapped', async () => {
+    const tiles = kpis(await renderPage({ sector_heat: [], clusters: [] }));
+    expect(tiles.get('Max cluster')!.value()).toBe('None');
+    expect(tiles.get('Top sector')!.value()).toBeNull();
+    expect(tiles.get('Top sector')!.secondary()).toBeNull();
+  });
+
+  it('explains every KPI in an About hint', async () => {
+    const tiles = kpis(await renderPage());
+    expect(tiles.get('Open risk')!.about()).toBe(RISK_KPI_ABOUT.openRisk);
+    expect(tiles.get('Cap headroom')!.about()).toBe(RISK_KPI_ABOUT.headroom);
+    expect(tiles.get('Top sector')!.about()).toBe(RISK_KPI_ABOUT.topSector);
+    expect(tiles.get('Max cluster')!.about()).toBe(RISK_KPI_ABOUT.maxCluster);
+  });
+});
+
+describe('Risk KPI helpers (v195 §5.2)', () => {
+  it('picks the sector with the most heat, skipping unknown heat, first on a tie', () => {
+    expect(topSectorOf([
+      { sector: 'Energy', heat_pct: 1 }, { sector: 'Unknown', heat_pct: null },
+      { sector: 'Technology', heat_pct: 2.5 }, { sector: 'Health', heat_pct: 2.5 },
+    ])).toEqual({ sector: 'Technology', heat_pct: 2.5 });
+    expect(topSectorOf([])).toBeNull();
+    expect(topSectorOf([{ sector: 'Unknown', heat_pct: null }])).toBeNull();
+  });
+
+  it('picks the largest cluster, the first one on a tie', () => {
+    const a = { index: 1, tickers: ['A', 'B'] };
+    const b = { index: 2, tickers: ['C', 'D', 'E'] };
+    const c = { index: 3, tickers: ['F', 'G', 'H'] };
+    expect(largestCluster([a, b, c])).toBe(b);
+    expect(largestCluster([])).toBeNull();
+  });
+});
+
+describe('Risk on sb-page, source (v195 Phase 4)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/risk/risk.ts'), 'utf8');
+
+  it('renders sb-page with the killswitch confirm on solid danger, and no section head', () => {
+    expect(src).toContain('<sb-page>');
+    expect(src).toContain('dangerVariant="danger"');
+    expect(src).not.toContain('<sb-section-head');
+    expect(src).not.toMatch(/import \{ SectionHead \}/);
+  });
+
+  it('never puts a slot attribute on an element inside a conditional', () => {
+    // Each slot is one stable element; a conditional sits inside it.
+    expect(src).not.toMatch(/@if \([^)]*\) \{\s*<[^>]*\bpage-(actions|scope|kpis|primary|secondary)\b/);
   });
 });
