@@ -218,6 +218,43 @@ def _metric(value: float | None, n: int) -> dict:
     return {"value": value, "n": n}
 
 
+def _pnl_amounts(closed: list) -> list[float]:
+    """Realised amounts of `closed`, oldest close first (no stamp sorts last),
+    rows without an amount skipped -- the money walk behind
+    `max_drawdown_amount`. `closed` is already in the account currency
+    (`to_account_currency`), so a skipped row is either unsettled or had no
+    FX rate; the caller counts the second kind."""
+    ordered = sorted(closed, key=lambda trade: str(trade.get("closed_at") or "￿"))
+    return [
+        float(trade["realized_pnl_amount"])
+        for trade in ordered
+        if trade.get("realized_pnl_amount") is not None
+    ]
+
+
+def _max_drawdown_amount(closed: list) -> dict:
+    """v194 B8: the money twin of `max_drawdown_r` -- the largest
+    peak-to-trough fall of cumulative realised P&L over every closed trade,
+    in the account currency, a positive magnitude. Converted read-side per
+    trade at its exit date's rate (`money.to_account_currency`); a trade
+    with no rate is left out and counted, never read at 1.0. Its own guard:
+    a conversion failure blanks this figure, not the R metrics beside it."""
+    from swingbot.core.analytics import risk_metrics as rm
+
+    from . import money
+    try:
+        converted = money.to_account_currency(closed)
+        amounts = _pnl_amounts(converted)
+        value = rm.max_drawdown_r(amounts)   # unit-agnostic: a cumulative walk
+    except Exception:
+        return {"value": None, "n": 0, "fx_missing_count": 0}
+    return {
+        "value": None if value is None else round(value, 2),
+        "n": len(amounts),
+        "fx_missing_count": money.missing_count(converted),
+    }
+
+
 def _risk_bars(symbols: list[str]) -> dict:
     """Daily bars for the risk view: the shared layer's files when on, else today's batch."""
     from swingbot.admin import freshness
@@ -279,10 +316,12 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
         r_series = []
     sharpe_r = _metric(rm.sharpe_of(r_series), len(r_series))
     max_drawdown_r = _metric(rm.max_drawdown_r(r_series), len(r_series))
+    max_drawdown_amount = _max_drawdown_amount(closed)
 
     null_metrics = {key: _metric(None, 0) for key in metric_keys}
     null_metrics["sharpe_r"] = sharpe_r
     null_metrics["max_drawdown_r"] = max_drawdown_r
+    null_metrics["max_drawdown_amount"] = max_drawdown_amount
     null_metrics["as_of"] = None
     null_metrics["benchmark_symbol"] = benchmark
 
@@ -342,6 +381,8 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
             ),
             "sharpe_r": sharpe_r,
             "max_drawdown_r": max_drawdown_r,
+            # v194 B8: {value, n, fx_missing_count} -- money, account currency.
+            "max_drawdown_amount": max_drawdown_amount,
             "as_of": (returns.index[-1].strftime("%Y-%m-%d") if not returns.empty else None),
             # v85 R8 fix (I4): the tile label must name the ACTUAL configured
             # benchmark, not a hardcoded "SPY" -- `beta_spy` keeps its key

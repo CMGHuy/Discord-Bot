@@ -150,6 +150,8 @@ def test_risk_shape(logged_in):
                    "beta_spy", "sharpe_r", "max_drawdown_r")
     assert_shape(body["metrics"], {
         **{key: dict for key in metric_keys},
+        # v194 B8 -- the money twin of max_drawdown_r; carries its FX gap count.
+        "max_drawdown_amount": dict,
         "as_of": NULLABLE_STR,
         # I4: the tile label must name the ACTUAL configured benchmark, not
         # a hardcoded "SPY" -- carried on the payload so the frontend can
@@ -160,6 +162,9 @@ def test_risk_shape(logged_in):
         assert_shape(body["metrics"][key], {
             "value": NULLABLE_NUMBER, "n": int,
         }, where=f"metrics.{key}")
+    assert_shape(body["metrics"]["max_drawdown_amount"], {
+        "value": NULLABLE_NUMBER, "n": int, "fx_missing_count": int,
+    }, where="metrics.max_drawdown_amount")
     # v85 D38.
     assert_shape(body["correlation"], {
         "labels": list, "values": list,
@@ -667,3 +672,117 @@ def test_data_sources_fallback_rate_is_null_without_alpaca_traffic(
         "alpaca": 0, "yfinance": 12, "yfinance-fallback": 0, "cache": 3}})
     ds = logged_in.get("/api/v1/risk").get_json()["scan_health"]["data_sources"]
     assert ds["fallback_rate"] is None and ds["scans"] == 1
+
+
+# -- v194 B8 -- max drawdown in money, beside the R figure. --
+
+def _settled(trade_id, *, ticker="AAPL", pnl, closed_at, status="closed"):
+    """A closed main-ledger trade with a settled amount in its quote currency."""
+    return {
+        "id": trade_id, "ticker": ticker, "status": status,
+        "strategy": "VWAP", "horizon_key": "1m", "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0, "exit_price": 105.0, "shares": 10,
+        "opened_at": "2026-07-01T00:00:00+00:00", "closed_at": closed_at,
+        "realized_pnl_amount": pnl,
+    }
+
+
+@pytest.fixture
+def eur_account(logged_in, monkeypatch):
+    """A EUR account: USD quotes convert at 0.5 on every day; `NOFX` has no
+    quote currency, so its rate is missing. Depends on `logged_in` so it is
+    applied after the admin app's own FX pin. Returns the lookups made."""
+    from swingbot.core.marketdata import fx
+    asked = []
+
+    def fake_rate(from_code, to_code, on):
+        asked.append((from_code, to_code, on))
+        return 0.5 if from_code == "USD" else None
+
+    quotes = {"AAPL": "USD", "MSFT": "USD", "ASML.AS": "EUR"}
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: quotes.get(ticker))
+    monkeypatch.setattr(fx, "fx_rate", fake_rate)
+    return asked
+
+
+def test_money_drawdown_walks_converted_pnl_in_close_order(logged_in, eur_account):
+    # Seeded out of order on purpose: the walk sorts by closed_at.
+    # In close order: +100, -300, +50, -200 USD -> x0.5 -> +50, -150, +25, -100 EUR.
+    # Cumulative 50, -100, -75, -175; peak 50 -> largest fall 225.
+    seed_store("trades", [
+        _settled("c3", pnl=50.0, closed_at="2026-08-05T20:00:00+00:00"),
+        _settled("c1", pnl=100.0, closed_at="2026-08-03T20:00:00+00:00"),
+        _settled("c4", pnl=-200.0, closed_at="2026-08-06T20:00:00+00:00", status="loss"),
+        _settled("c2", pnl=-300.0, closed_at="2026-08-04T20:00:00+00:00", status="loss"),
+    ])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    assert metric == {"value": 225.0, "n": 4, "fx_missing_count": 0}
+
+
+def test_a_trade_without_a_rate_is_left_out_and_counted(logged_in, eur_account):
+    seed_store("trades", [
+        _settled("c1", pnl=100.0, closed_at="2026-08-03T20:00:00+00:00"),
+        _settled("c2", ticker="NOFX", pnl=-900.0, closed_at="2026-08-04T20:00:00+00:00"),
+        _settled("c3", pnl=-300.0, closed_at="2026-08-05T20:00:00+00:00"),
+    ])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    # +50, -150 in EUR (cumulative 50, -100): the -900 with no rate is never read as 1.0.
+    assert metric == {"value": 150.0, "n": 2, "fx_missing_count": 1}
+
+
+def test_an_unsettled_close_is_left_out_but_not_counted_as_missing(logged_in, eur_account):
+    seed_store("trades", [
+        _settled("c1", pnl=100.0, closed_at="2026-08-03T20:00:00+00:00"),
+        _settled("c2", pnl=None, closed_at="2026-08-04T20:00:00+00:00"),
+        _settled("c3", pnl=-100.0, closed_at="2026-08-05T20:00:00+00:00"),
+    ])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    assert metric == {"value": 50.0, "n": 2, "fx_missing_count": 0}   # +50, -50 EUR
+
+
+def test_an_account_in_the_quote_currency_converts_nothing(logged_in, eur_account, monkeypatch):
+    from swingbot.core.marketdata import fx
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "USD")
+    seed_store("trades", [
+        _settled("c1", pnl=100.0, closed_at="2026-08-03T20:00:00+00:00"),
+        _settled("c2", pnl=-300.0, closed_at="2026-08-04T20:00:00+00:00"),
+    ])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    assert metric == {"value": 300.0, "n": 2, "fx_missing_count": 0}
+    assert eur_account == []          # identity: no rate was asked for
+
+
+def test_no_closed_trade_gives_a_null_money_drawdown_not_zero(logged_in, eur_account):
+    seed_store("trades", [_open_trade("o1")])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    assert metric == {"value": None, "n": 0, "fx_missing_count": 0}
+
+
+def test_a_conversion_failure_degrades_only_the_money_drawdown(logged_in, eur_account, monkeypatch):
+    def boom(rows, **kwargs):
+        raise RuntimeError("rate store down")
+
+    monkeypatch.setattr("swingbot.admin.api_v1.money.to_account_currency", boom)
+    seed_store("trades", [
+        _closed_trade("c1", win=True), _closed_trade("c2", win=False),
+        _settled("c3", pnl=-100.0, closed_at="2026-08-05T20:00:00+00:00"),
+    ])
+    response = logged_in.get("/api/v1/risk")
+    assert response.status_code == 200
+    metrics = response.get_json()["metrics"]
+    assert metrics["max_drawdown_amount"] == {"value": None, "n": 0, "fx_missing_count": 0}
+    assert metrics["max_drawdown_r"]["value"] is not None
+
+
+def test_pnl_amounts_sorts_by_close_and_skips_unpriced_rows():
+    import swingbot.admin.app  # noqa: F401 -- api_v1 imports resolve through the app
+    from swingbot.admin.api_v1.risk import _pnl_amounts
+    rows = [
+        {"closed_at": "2026-08-05T00:00:00+00:00", "realized_pnl_amount": 3.0},
+        {"closed_at": "2026-08-03T00:00:00+00:00", "realized_pnl_amount": 1.0},
+        {"closed_at": "2026-08-04T00:00:00+00:00", "realized_pnl_amount": None},
+        {"closed_at": None, "realized_pnl_amount": 9.0},
+    ]
+    assert _pnl_amounts(rows) == [1.0, 3.0, 9.0]   # no close stamp sorts last
+    assert _pnl_amounts([]) == []
