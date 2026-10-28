@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveToken } from './testing/resolve-token';
+import { allSources, stripComments } from './testing/all-sources';
 
 /**
  * The token file is asserted as TEXT, not through a mounted component.
@@ -94,18 +95,16 @@ const REQUIRED = [
   '--shadow-overlay',
   '--btn-fill',
   '--btn-fill-hover',
-  '--glow-accent',
-  '--glow-ambient',
   '--scrim-soft',
 
-  // v168 §1, motion (tier 3)
+  // v168 §1, motion (tier 3); v195 §1.2 deleted --dur-enter and --panel-shadow-lift
   '--motion-scale',
-  '--dur-enter',
   '--dur-count',
   '--dur-draw',
   '--flash-up-text',
   '--flash-down-text',
-  '--panel-shadow-lift',
+  // v195 §1.2: the one UI transition duration (tier 2)
+  '--dur-ui',
 ];
 
 describe('design tokens', () => {
@@ -414,9 +413,6 @@ describe('v167 §3: the tier-3 component tokens', () => {
     '--shadow-overlay': '0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4)',
     '--btn-fill': 'var(--accent-fill)',
     '--btn-fill-hover': 'var(--accent-fill-hi)',
-    '--glow-accent': '0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent)',
-    '--glow-ambient':
-      'radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%)',
     '--scrim-soft': 'rgb(0 0 0 / 0.5)',
   };
 
@@ -441,7 +437,7 @@ describe('v167 §3: the tier-3 component tokens', () => {
   /* A gradient is an image: as background-color it is invalid and the
    * declaration is dropped silently, leaving the element transparent. */
   it('never paints a gradient token as background-color (styles.css and ui/)', () => {
-    const GRADIENT_AS_COLOUR = /background-color:\s*var\(--(?:panel-bg|btn-fill|btn-fill-hover|glow-ambient)\)/;
+    const GRADIENT_AS_COLOUR = /background-color:\s*var\(--(?:panel-bg|btn-fill|btn-fill-hover)\)/;
     const files = [
       join(process.cwd(), 'src/styles.css'),
       ...readdirSync(UI)
@@ -468,9 +464,9 @@ describe('v168 §1: motion tokens', () => {
 
   const DURATIONS: Record<string, string> = {
     '--dur-instant': '90ms',
+    '--dur-ui': '120ms',
     '--dur-base': '160ms',
     '--dur-slow': '260ms',
-    '--dur-enter': '420ms',
     '--dur-count': '900ms',
     '--dur-draw': '1200ms',
   };
@@ -487,7 +483,7 @@ describe('v168 §1: motion tokens', () => {
   });
 
   it('puts every new v168 token inside the tier-3 block', () => {
-    const NEW = ['--dur-enter', '--dur-count', '--dur-draw', '--flash-up-text', '--flash-down-text', '--panel-shadow-lift'];
+    const NEW = ['--dur-count', '--dur-draw', '--flash-up-text', '--flash-down-text'];
     for (const name of NEW) {
       expect(TIER3, name).toMatch(new RegExp(`^\\s*${name}:`, 'm'));
       expect([...CSS.matchAll(new RegExp(`^\\s*${name}:`, 'gm'))], name).toHaveLength(1);
@@ -499,10 +495,9 @@ describe('v168 §1: motion tokens', () => {
     expect(declared(CSS, '--ease-spring')).toBe('cubic-bezier(0.34, 1.4, 0.64, 1)');
   });
 
-  it('gives the flash text and the hover-lift shadow their spec values', () => {
+  it('gives the flash text its spec values', () => {
     expect(declared(TIER3, '--flash-up-text')).toBe('var(--pos)');
     expect(declared(TIER3, '--flash-down-text')).toBe('var(--neg)');
-    expect(declared(TIER3, '--panel-shadow-lift')).toBe('0 10px 28px rgba(0, 0, 0, .35)');
   });
 
   it('reaches jsdom with the scale already resolved', () => {
@@ -622,5 +617,37 @@ describe('v186: the display-figure tokens', () => {
     expect(resolveToken('--font-figure')).toBe(resolveToken('--font-sans'));
     expect(resolveToken('--figure-weight')).toBe('600');
     expect(resolveToken('--figure-tracking')).toBe('-0.02em');
+  });
+});
+
+/**
+ * v195 §1.2: decoration removed. The four tokens only decoration read are
+ * gone from tokens.css and from every reader (components, styles.css,
+ * motion.css), and a UI transition is one 120ms step, read through the
+ * --transition alias every existing call site already uses.
+ */
+describe('v195 §1.2: decoration tokens deleted, 120ms transitions', () => {
+  const MOTION_CSS = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8');
+  const DELETED = ['--glow-ambient', '--glow-accent', '--panel-shadow-lift', '--dur-enter'];
+
+  it.each(DELETED)('declares no %s', (name) => {
+    expect(CSS).not.toMatch(new RegExp(`^\\s*${name}:`, 'm'));
+  });
+
+  it.each(DELETED)('leaves no reader or setter of %s', (name) => {
+    const holders = [
+      ...allSources(),
+      { name: 'styles/motion.css', source: MOTION_CSS },
+      { name: 'styles/tokens.css', source: CSS },
+    ]
+      .filter(({ source }) => stripComments(source).includes(name))
+      .map(({ name: file }) => file);
+    expect(holders).toEqual([]);
+  });
+
+  it('times every UI transition at 120ms through --transition', () => {
+    expect(CSS).toMatch(/^\s*--dur-ui:\s*calc\(120ms \* var\(--motion-scale\)\);/m);
+    expect(CSS).toMatch(/^\s*--transition:\s*var\(--dur-ui\) var\(--ease-out\);/m);
+    expect(resolveToken('--dur-ui')).toBe('calc(120ms * 1)');
   });
 });

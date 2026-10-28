@@ -117,7 +117,6 @@ describe('sb-stat-strip (v186 D3)', () => {
       '--tile-border: 0;',
       '--tile-radius: 0;',
       '--tile-tint-off: none;',
-      '--panel-shadow-lift: none;',
       'display: block;',
       'overflow: hidden;',
       'min-width: 0;',
@@ -203,10 +202,11 @@ describe('the strip grid (styles.css, v186 D3)', () => {
   });
 });
 
-describe('no hover lift inside a strip (motion.css, v186 D3)', () => {
-  it('cancels the translate straight after the lift, inside the hover-only block', () => {
-    expect(MOTION).toMatch(
-      /@media \(hover: hover\) \{[^@]*\[data-motion=on\] \.sb-lift:hover \{ transform: translateY\(-2px\); \}\s*\[data-motion=on\] sb-stat-strip \.sb-lift:hover \{ transform: none; \}/,
-    );
+/* v186 D3 cancelled the hover lift inside a strip; v195 §1.2 deleted the
+ * lift, so there is nothing left to cancel. */
+describe('nothing in a strip lifts (v195 §1.2)', () => {
+  it('has no lift rule in motion.css and no lift token on the strip', () => {
+    expect(MOTION).not.toContain('sb-lift');
+    expect(STRIP).not.toContain('--panel-shadow-lift');
   });
 });

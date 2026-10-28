@@ -48,7 +48,7 @@ function toneClass(tone: MetricTone, value: number): string {
   },
 
   template: `
-    <div class="card sb-lift">
+    <div class="card">
       <span class="label-row">
         <span class="label sb-label">{{ label() }}</span>
         @if (description(); as about) {

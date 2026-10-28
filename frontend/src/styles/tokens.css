@@ -312,9 +312,11 @@
    * changed: the cell flash and the count-up on a change.
    *
    *   --dur-instant  hover, press, focus ring
+   *   --dur-ui       v195 §1.2: the one UI transition (colour, opacity,
+   *                  border), read through the --transition alias
    *   --dur-base     state change, value flash, bar easing, Reduced fades
    *   --dur-slow     layout: sidebar, panel reflow
-   *   --dur-enter, --dur-count, --dur-draw (tier 3): entrance, count-up, draw-in
+   *   --dur-count, --dur-draw (tier 3): count-up, draw-in
    *
    * Every duration is multiplied by --motion-scale (tier 3): 1 normally, 0
    * under the shell's Motion = Off, which styles/motion.css sets.
@@ -335,14 +337,16 @@
   /* v168 §1: scaled by --motion-scale (tier 3, below), which is 1 and
    * becomes 0 only under [data-motion=off] in styles/motion.css. */
   --dur-instant: calc(90ms * var(--motion-scale));
+  --dur-ui: calc(120ms * var(--motion-scale));
   --dur-base: calc(160ms * var(--motion-scale));
   --dur-slow: calc(260ms * var(--motion-scale));
   --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* Alias, so existing `transition: var(--transition)` call sites keep
-   * working. New code names the duration it wants. */
-  --transition: var(--dur-base) var(--ease-out);
+   * working. v195 §1.2: every one of them is a colour, opacity or border
+   * change, and Graphite times those at 120ms (--dur-ui), down from 160. */
+  --transition: var(--dur-ui) var(--ease-out);
 }
 
 /* v89 -- width only, not pointer: a touch laptop at 1440 keeps desktop
@@ -381,18 +385,18 @@
 /* ===== Tier 3: component tokens (spec v167 §3) ===== */
 /* What a panel, a control, a chip and a button LOOK like, named once, so a
  * component reads these instead of re-spelling background + border +
- * radius + shadow. Every colour here derives from tier 2 by var() or
- * color-mix(): a palette change reaches it. The only rgb()/rgba() literals
- * are black or white at an alpha, inside --shadow-overlay,
- * --panel-shadow-lift and --scrim-soft (the colour gate, primitives.spec.ts).
+ * radius + shadow. Every colour here derives from tier 2 by var(): a
+ * palette change reaches it. The only rgb()/rgba() literals here are black
+ * or white at an alpha, inside --shadow-overlay and --scrim-soft (the
+ * colour gate, primitives.spec.ts).
  *
  * v195 §1.2 / §1.5 (Graphite): flat. A panel is the --surface step and a
  * 1px --border, with no gradient and no shadow (--panel-shadow is none);
  * the primary button is one flat fill. Depth comes only from the surface
  * steps; the one shadow left is --shadow-overlay, for out-of-flow
- * elements. --glow-ambient is still a gradient, i.e. an image
- * (`background` / `background-image` only, never `background-color`;
- * tokens.spec.ts checks styles.css and ui/), until V195-5 deletes it.
+ * elements. The ambient glow, the button glow, the hover-lift shadow and
+ * the route-entrance duration are deleted (tokens.spec.ts checks no
+ * reader is left).
  *
  * Last block in the file on purpose: scripts/dev/dump_tokens.py and
  * resolve-token.ts read every top-level :root, and tokens.spec.ts slices
@@ -422,14 +426,9 @@
 
   /* The primary button: one flat fill, --accent-fill (white 5.74:1), and
    * --accent-fill-hi on hover (white 5.00:1); contrast.spec.ts checks
-   * both. Colours now, not images, so they could transition. */
+   * both. Colours, not images, so they transition. */
   --btn-fill: var(--accent-fill);
   --btn-fill-hover: var(--accent-fill-hi);
-
-  /* Glows are hued, so they derive from the fill blue, never an rgba.
-   * Deleted by V195-5, after V195-4 removes the ambient shell layer. */
-  --glow-accent: 0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent);
-  --glow-ambient: radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%);
 
   /* The mobile-nav scrim (shell.css), given a name. Softer than --scrim,
    * which dims behind a modal. */
@@ -443,16 +442,10 @@
    * The default must live in this file: motion.css is outside the token
    * resolver's STYLE_FILES, so the fixture would not see it. */
   --motion-scale: 1;
-  --dur-enter: calc(420ms * var(--motion-scale));   /* route entrance, stagger */
   --dur-count: calc(900ms * var(--motion-scale));   /* first count-up */
   --dur-draw: calc(1200ms * var(--motion-scale));   /* chart draw-in */
 
   /* The text colour a changed cell takes while its tint fades (#8). */
   --flash-up-text: var(--pos);
   --flash-down-text: var(--neg);
-
-  /* The hover lift's deeper shadow (#5), cast only from styles/motion.css;
-   * primitives.spec.ts G3 holds that file to it and --glow-accent. */
-  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 -- shadow values have no natural expression via the closed --space-* scale. */
-  --panel-shadow-lift: 0 10px 28px rgba(0, 0, 0, .35);
 }

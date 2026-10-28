@@ -115,7 +115,7 @@ describe('button touch floor', () => {
 });
 
 /* Spec v168 §3 #5. The primary gradient cannot transition (v167 §3), so
- * hover brightens it with a filter and motion.css adds the accent glow; every
+ * hover brightens it with a filter (v195 §1.2 deleted motion.css's glow); every
  * enabled button presses to .97; on touch the press also tints. */
 describe('v168 #5: hover and press', () => {
   const MOTION = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8')
@@ -144,14 +144,13 @@ describe('v168 #5: hover and press', () => {
     expect(block![1]).toContain(':host(:not([disabled]):active) { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }');
   });
 
-  it('casts no elevation shadow itself: the glow lives in motion.css', () => {
+  it('casts no elevation shadow itself, and nothing glows on hover (v195 §1.2)', () => {
     const own = [...SOURCE.matchAll(/box-shadow:\s*([^;]+);/g)]
       .map(([, value]) => value.trim())
       .filter((value) => !value.startsWith('inset'));
     expect(own).toEqual([]);
-    expect(MOTION).toContain(
-      '@media (hover: hover) { button[sb-button].primary:not([disabled]):hover { box-shadow: var(--glow-accent); } }',
-    );
+    expect(MOTION).not.toContain('--glow-accent');
+    expect(MOTION).not.toContain('button[sb-button].primary:not([disabled]):hover');
   });
 
   it('does not scale the press under Motion = Reduced', () => {

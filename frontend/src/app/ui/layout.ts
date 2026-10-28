@@ -37,7 +37,7 @@ import { edgeFades, revealActive } from './scroll-rail';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Hint],
   template: `
-    <section class="panel sb-panel sb-lift">
+    <section class="panel sb-panel">
       @if (heading(); as text) {
         <header [class.ruled]="flush() || divided()">
           <h2>{{ text }}</h2>

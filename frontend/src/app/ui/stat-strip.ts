@@ -17,8 +17,6 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * - `--tile-bg`, `--tile-border`, `--tile-radius`: no surface, frame or corner.
  * - `--tile-tint-off: none`: sb-metric-card drops its pos/neg fill; the
  *   value's colour and sign carry the valence.
- * - `--panel-shadow-lift: none`: the hover lift casts no shadow for
- *   overflow: hidden to clip; motion.css cancels the translate.
  *
  * Columns: the global .sb-strip-grid (styles.css), shared with sb-async's
  * 'tiles' skeleton. With no `cols`, auto-fit at 140px. With `cols`, that many
@@ -41,7 +39,6 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       --tile-border: 0;
       --tile-radius: 0;
       --tile-tint-off: none;
-      --panel-shadow-lift: none;
       display: block;
       overflow: hidden;
       min-width: 0;

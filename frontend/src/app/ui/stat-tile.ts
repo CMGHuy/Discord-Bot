@@ -45,7 +45,7 @@ export const PERFORMANCE_CAVEAT =
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Hint, Sparkline, CountUp],
   template: `
-    <div class="tile sb-lift" [class.thin]="thin()" [class]="tone()">
+    <div class="tile" [class.thin]="thin()" [class]="tone()">
       <div class="label-row">
         <div class="label sb-label">{{ label() }}</div>
         @if (about(); as text) { <sb-hint [text]="text" [label]="'About ' + label()" /> }

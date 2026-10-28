@@ -41,7 +41,7 @@ import { DrawIn } from './motion/draw-in';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [EmptyStateComponent, DrawIn],
   template: `
-    <figure class="frame sb-panel sb-lift" [style.height.px]="height()">
+    <figure class="frame sb-panel" [style.height.px]="height()">
       @if (caption(); as text) {
         <figcaption>{{ text }}</figcaption>
       }
