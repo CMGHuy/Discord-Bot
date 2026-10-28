@@ -182,3 +182,24 @@ describe('Settings category rail (v179 §6b.5)', () => {
     expect(src).toMatch(/\.rail-strip \{[^}]*min-width: 0;/);
   });
 });
+
+describe('SettingsTab after System moved onto sb-page (v195 Phase 4)', () => {
+  it('leaves Discard to the page header and keeps the count, Preview and Save in the save bar', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/system/settings').flush(payload({ sections: RAIL_SECTIONS }));
+    await fixture.whenStable();
+    const store = TestBed.inject(SystemStore);
+    store.edit(store.fields()[0], 'changed');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const bar = el.querySelector('.bar.unsaved')!;
+    expect(bar.textContent).toContain('1 unsaved change');
+    expect([...bar.querySelectorAll('button')].map((b) => b.textContent!.trim()))
+      .toEqual(['Preview changes', 'Save']);
+    expect(el.querySelector('sb-confirm-dialog')).toBeNull();
+  });
+});

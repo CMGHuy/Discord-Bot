@@ -8,7 +8,6 @@ import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Hint } from '../../ui/hint';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
-import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { edgeFades, revealActive } from '../../ui/scroll-rail';
@@ -34,7 +33,7 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
   selector: 'sb-settings-tab',
   host: { '(window:resize)': 'measureRail()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, ConfirmDialog, Async, Hint],
+  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, Async, Hint],
   template: `
     @if (store.settingsStale()) {
       <!-- Spec v14 Decision 8: warn, do not silently reload. Another
@@ -218,6 +217,7 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
     </div>
     </div>
 
+    <!-- v195 Phase 4: Discard is the page header's; the bar keeps Preview and Save. -->
     <!-- the save bar --------------------------------------------------- -->
 
     @if (store.dirty()) {
@@ -227,15 +227,6 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
       </span>
 
       <sb-control-row class="bar-actions">
-        <button
-          sb-button
-          variant="danger-quiet"
-          type="button"
-          [disabled]="!store.dirty() || store.saving()"
-          (click)="confirmDiscard.set(true)"
-        >
-          Discard
-        </button>
         <button
           sb-button
           variant="secondary"
@@ -317,15 +308,6 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
       </p>
     }
     </sb-async>
-
-    <sb-confirm-dialog
-      [open]="confirmDiscard()"
-      title="Discard unsaved settings?"
-      consequence="Every unsaved setting change in this form will be lost."
-      confirmLabel="Discard changes"
-      (confirmed)="discardDraft()"
-      (cancelled)="confirmDiscard.set(false)"
-    />
 
     <!-- audit, export, import ------------------------------------------ -->
 
@@ -655,7 +637,6 @@ export class SettingsTab {
   protected readonly exportUrl = this.store.exportUrl();
 
   protected readonly importText = signal('');
-  protected readonly confirmDiscard = signal(false);
   protected readonly activeCategory = signal<string | null>(null);
   private readonly rail = viewChild<ElementRef<HTMLElement>>('rail');
   protected readonly railFades = signal({ start: false, end: false });
@@ -703,11 +684,6 @@ export class SettingsTab {
    *  their own tests rather than methods on a 585-line component. */
   protected readonly groupsOf = groupByControl;
   protected readonly controlOf = controlOf;
-
-  protected discardDraft(): void {
-    this.store.resetDraft();
-    this.confirmDiscard.set(false);
-  }
 
   protected inputTypeOf(field: SettingField): 'text' | 'number' | 'password' {
     if (field.sensitive || field.type === 'password') return 'password';

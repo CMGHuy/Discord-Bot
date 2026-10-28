@@ -1,8 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
 import { SystemStore } from '../../stores/system.store';
 import { Button } from '../../ui/button';
-import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { Freshness } from '../../ui/freshness';
@@ -33,13 +32,13 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
  *
  * **Restart degrades honestly.** The Docker socket mount is optional, so a
  * deployment can be unable to restart the bot at all. `restart_available`
- * says so ahead of time and hides the button; a 503 says so after the fact
+ * says so ahead of time and hides the page header's Restart bot; a 503 says so after the fact
  * and is shown verbatim. Neither is reported as "the restart failed".
  */
 @Component({
   selector: 'sb-scan-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, ConfirmDialog, Toolbar, Freshness],
+  imports: [Panel, Button, Toolbar, Freshness],
   template: `
     <sb-panel heading="Scan">
       <div class="states">
@@ -129,18 +128,10 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
     <sb-panel heading="Bot process">
       @if (store.restartAvailable()) {
         <p class="explain">
-          Restarts the bot container. Open positions are unaffected — they
-          live in the data files, not in the process.
+          Restart bot, in the page header, restarts the bot container. Open
+          positions are unaffected — they live in the data files, not in the
+          process.
         </p>
-        <button
-          sb-button
-          variant="danger-quiet"
-          type="button"
-          [loading]="store.restarting()"
-          (click)="asking.set(true)"
-        >
-          Restart bot
-        </button>
       } @else {
         <!-- Not a failure and not a disabled button with no explanation:
              this deployment has no Docker socket mounted, so restarting is
@@ -158,17 +149,6 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
         </p>
       }
     </sb-panel>
-
-
-    <sb-confirm-dialog
-      [open]="asking()"
-      title="Restart the bot"
-      consequence="The bot container will stop and start again. Any scan in progress is abandoned, and alerts are not delivered until it is back."
-      confirmLabel="Restart"
-      [working]="store.restarting()"
-      (confirmed)="restart()"
-      (cancelled)="asking.set(false)"
-    />
   `,
   styles: `
     /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
@@ -210,15 +190,9 @@ export class ScanTab {
   protected readonly store = inject(SystemStore);
   protected readonly controls = SCAN_CONTROLS;
 
-  protected readonly asking = signal(false);
-
   protected readonly lastSeen = computed(() => {
     const seen = this.store.scan()?.bot_last_seen;
     return seen ? dateTime(seen) : null;
   });
 
-  protected restart(): void {
-    this.store.restartBot();
-    this.asking.set(false);
-  }
 }

@@ -22,3 +22,14 @@ describe('Scan tab after the Providers split (v195 §5.1)', () => {
     expect(src).not.toContain('store.health');
   });
 });
+
+describe('Scan tab after System moved onto sb-page (v195 Phase 4)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/system/scan-tab.ts'), 'utf8');
+
+  it('leaves Restart bot to the page header and keeps the explanation and the unavailable text', () => {
+    expect(src).not.toContain('asking');
+    expect(src).not.toContain('<sb-confirm-dialog');
+    expect(src).toContain('Restart bot, in the page header,');
+    expect(src).toContain('Restarting is unavailable in this deployment');
+  });
+});
