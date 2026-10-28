@@ -61,7 +61,7 @@ describe('StatTile (v85 D23)', () => {
 
   it('says how many more trades a thin figure needs', () => {
     const el = render({ sample: 7 });
-    expect(el.querySelector('.sample')!.getAttribute('title'))
+    expect(el.querySelector('.sample')!.textContent)
       .toContain(`${MIN_SAMPLE_N - 7} more`);
   });
 
@@ -81,7 +81,7 @@ describe('StatTile (v85 D23)', () => {
   it('uses the saved minimum sample when one is configured', () => {
     preferenceValues = { minSampleN: 100 };
     expect(render({ sample: 50 }).classList).toContain('thin');
-    expect(render({ sample: 60 }).querySelector('.sample')!.getAttribute('title')).toContain('40 more');
+    expect(render({ sample: 60 }).querySelector('.sample')!.textContent).toContain('40 more');
   });
 });
 
@@ -228,5 +228,16 @@ describe('StatTile in and out of a strip (v186 D3)', () => {
   it('states the performance caveat as paper, gross and pre-tax', () => {
     expect(PERFORMANCE_CAVEAT).toBe(
       'Paper trades (simulated fills), gross of commissions and slippage, pre-tax.');
+  });
+
+  it('says inline how many more trades a thin sample needs, with no native title (v194 A3)', () => {
+    const el = render({ label: 'Win rate', value: '50%', sample: 12 });
+    expect(el.querySelector('.sample')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.flag')!.textContent).toContain(`thin sample, ${MIN_SAMPLE_N - 12} more needed`);
+  });
+
+  it('prints no shortfall once the sample is large enough', () => {
+    const el = render({ label: 'Win rate', value: '50%', sample: MIN_SAMPLE_N });
+    expect(el.querySelector('.flag')).toBeNull();
   });
 });

@@ -54,8 +54,8 @@ export const PERFORMANCE_CAVEAT =
            [countKey]="'stat:' + label()" [countAbsent]="value() ?? '—'"></div>
       @if (secondary()) { <div class="secondary num">{{ secondary() }}</div> }
       @if (sample() !== null) {
-        <div class="sample" [title]="sampleTitle()">
-          N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample</span>}
+        <div class="sample">
+          N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample, {{ shortfall() }} more needed</span>}
         </div>
       }
       @if (hint()) {
@@ -174,11 +174,11 @@ export class StatTile {
       : MIN_SAMPLE_N;
   });
 
-  protected readonly sampleTitle = computed(() => {
+  /** v194 A3: how many more closed trades before the figure is worth
+   *  reading -- printed inline beside "thin sample" (it used to hide in a
+   *  native title a phone never shows). */
+  protected readonly shortfall = computed(() => {
     const n = this.sample();
-    if (n === null) return '';
-    const minimum = this.minimumSample();
-    if (n >= minimum) return `${n} closed trades`;
-    return `${n} closed trades — ${minimum - n} more before this figure is worth reading`;
+    return n === null ? 0 : Math.max(0, this.minimumSample() - n);
   });
 }

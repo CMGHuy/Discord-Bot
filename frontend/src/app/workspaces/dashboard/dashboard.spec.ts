@@ -368,24 +368,25 @@ describe('Dashboard v85 layout', () => {
     expect(panels.length).toBeGreaterThanOrEqual(4);
     for (const section of panels) {
       const heading = section.querySelector('h2')?.textContent?.trim();
-      expect(section.getAttribute('title'), heading).toBeTruthy();
+      expect(section.hasAttribute('title'), heading).toBe(false);
       // Its own hint or the shared one: always something a tap or a keyboard focus can open.
       expect(section.querySelector('header sb-hint'), heading).not.toBeNull();
     }
-    const titles = panels.map((p) => p.getAttribute('title'));
-    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance, PANEL_HELP.openPositions]));
+    const titles = panels.map((p) => p.querySelector('header [role="tooltip"]')?.textContent?.trim());
+    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance]));
   });
 
-  it('explains each KPI card on hover, payoff ratio included', async () => {
+  it('explains each KPI card through a hint beside its label, payoff ratio included', async () => {
     const fixture = await loaded();
     const cards = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-metric-card')];
     expect(cards.length).toBe(7);
     for (const card of cards) {
       const label = card.querySelector('.label')!.textContent!.trim();
-      expect(card.getAttribute('title'), label).toBeTruthy();
+      expect(card.hasAttribute('title'), label).toBe(false);
+      expect(card.querySelector('.label-row sb-hint [role="tooltip"]')?.textContent?.trim(), label).toBeTruthy();
     }
     const payoff = cards.find((c) => c.querySelector('.label')!.textContent!.trim() === 'Payoff ratio')!;
-    expect(payoff.getAttribute('title')).toContain('average winning trade divided by the average losing trade');
+    expect(payoff.querySelector('.label-row sb-hint [role="tooltip"]')!.textContent).toContain('average winning trade divided by the average losing trade');
   });
 
   it('routes the panel presets back into the store (v181 §1)', async () => {

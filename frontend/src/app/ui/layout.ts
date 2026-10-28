@@ -36,18 +36,15 @@ import { edgeFades, revealActive } from './scroll-rail';
   selector: 'sb-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Hint],
-  // The tooltip sits on the host, so any hover inside the panel shows it; a
-  // child with a title of its own (an icon, a cell) still wins over it.
-  host: { '[attr.title]': 'description()' },
   template: `
     <section class="panel sb-panel sb-lift">
       @if (heading(); as text) {
         <header [class.ruled]="flush() || divided()">
           <h2>{{ text }}</h2>
           @if (description(); as about) {
-            <!-- The host's native title answers a hover; the hint answers a
-                 tap or a keyboard focus, which a title never does. A panel
-                 with a richer hint of its own turns this one off. -->
+            <!-- v194 A3: the hint answers hover, tap and keyboard focus alike;
+                 the host carries no native title. A panel with a richer hint
+                 of its own turns this one off. -->
             @if (descriptionHint()) {
               <sb-hint [text]="about" [label]="'About ' + text" align="left" />
             }

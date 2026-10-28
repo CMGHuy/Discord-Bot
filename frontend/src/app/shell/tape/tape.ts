@@ -8,6 +8,7 @@ import { TapeRow } from '../../api/models';
 import { MarketIndexStore } from '../../stores/market-index.store';
 import { TapeStore } from '../../stores/tape.store';
 import { AgeHint, TAPE_WINDOW_S } from '../../ui/age-hint';
+import { Hint } from '../../ui/hint';
 import { Flash } from '../../ui/flash';
 import { ABSENT, num, pct } from '../../ui/format';
 import { TAPE_MIN_DURATION_S, tapeDurationSeconds } from './tape-speed';
@@ -55,16 +56,25 @@ interface Tile {
  * `tape-slide` keyframes) so the loop has no snap-back — same convention
  * the two lanes this replaces already used.
  */
+/** v194 A3: what a proxy tile's figure is. One hint for the lane: the tiles
+ *  are links, and a hint button cannot sit inside a link. */
+export const TAPE_PROXY_HINT = "Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.";
+
 @Component({
   selector: 'sb-tape',
   standalone: true,
-  imports: [RouterLink, Flash, AgeHint],
+  imports: [RouterLink, Flash, AgeHint, Hint],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
   template: `
     <div class="lane" role="region" aria-label="Market tape"
          [attr.title]="asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()">
-      <div class="cap">mkt</div>
+      <div class="cap-row">
+        <div class="cap">mkt</div>
+        @if (hasProxy()) {
+          <sb-hint [text]="proxyHint" label="About proxy figures" align="left" />
+        }
+      </div>
       <div class="viewport">
         <div class="track" #track [style.animation-duration.s]="duration()">
           @for (pass of [0, 1]; track pass) {
@@ -77,7 +87,7 @@ interface Tile {
                   @if (tile.change_pct !== null) {
                     <span [class.up]="up(tile)" [class.down]="down(tile)">{{ pct(tile.change_pct) }}</span>
                   }
-                  <span class="ctx proxy" title="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.">{{ tile.proxyLabel }}</span>
+                  <span class="ctx proxy">{{ tile.proxyLabel }}</span>
                 } @else if (tile.price !== null) {
                   <span class="px" [class.up]="up(tile)" [class.down]="down(tile)">{{ num(tile.price) }}</span>
                   @if (tile.change_pct !== null) {
@@ -114,6 +124,8 @@ export class Tape {
    *  tape-speed.ts. */
   protected readonly duration = signal(TAPE_MIN_DURATION_S);
 
+  protected readonly proxyHint = TAPE_PROXY_HINT;
+
   protected readonly tiles = computed<Tile[]>(() => {
     const indices: Tile[] = this.market.rows().map((r) => ({
       key: `idx:${r.symbol}`,
@@ -139,6 +151,8 @@ export class Tape {
     }));
     return [...indices, ...stocks];
   });
+
+  protected readonly hasProxy = computed(() => this.tiles().some((t) => t.proxyLabel !== null));
 
   /** Whichever source has answered — the two stores refetch on the same
    *  `scan` event, so they age together in practice. */

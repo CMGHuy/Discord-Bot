@@ -185,12 +185,18 @@ describe('sb-metric-card loading and tooltip', () => {
     expect(host.getAttribute('aria-busy')).toBeNull();
   });
 
-  it('explains itself as a tooltip over the whole card when given a description', () => {
+  it('explains itself through a hint beside its label when given a description', () => {
     const { host } = mount({ description: 'The share of closed trades that won.' });
-    expect(host.getAttribute('title')).toBe('The share of closed trades that won.');
+    expect(host.hasAttribute('title')).toBe(false);
+    const hint = host.querySelector('.label-row sb-hint')!;
+    expect(hint.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe('The share of closed trades that won.');
+    expect(hint.querySelector('button')!.getAttribute('aria-label')).toMatch(/^About /);
+    expect(host.querySelector('.label')!.textContent).not.toContain('The share of closed trades');
   });
 
-  it('has no tooltip without a description', () => {
-    expect(mount({}).host.hasAttribute('title')).toBe(false);
+  it('has no tooltip and no hint without a description', () => {
+    const { host } = mount({});
+    expect(host.hasAttribute('title')).toBe(false);
+    expect(host.querySelector('sb-hint')).toBeNull();
   });
 });

@@ -343,9 +343,12 @@ describe('trading performance panel', () => {
   describe('tooltips', () => {
     it('describe the panel and every KPI card', () => {
       const el = render({ currency: '€' });
-      expect(el.querySelector('sb-panel')!.getAttribute('title')).toBe(PANEL_HELP.tradingPerformance);
+      const panel = el.querySelector('sb-panel')!;
+      expect(panel.hasAttribute('title')).toBe(false);
+      expect(panel.querySelector('header [role="tooltip"]')!.textContent!.trim()).toBe(PANEL_HELP.tradingPerformance);
       const titles = new Map([...el.querySelectorAll('sb-metric-card')].map((c) => [
-        c.querySelector('.label')!.textContent!.trim(), c.getAttribute('title')]));
+        c.querySelector('.label')!.textContent!.trim(),
+        c.querySelector('.label-row [role="tooltip"]')?.textContent?.trim()]));
       expect(titles.get('Open P&L')).toBe(KPI_HELP.openPnl);
       expect(titles.get('Win rate')).toBe(KPI_HELP.winRate);
       expect(titles.get('Expectancy')).toBe(KPI_HELP.expectancy);

@@ -5,7 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { StatusCell, partialOpenTitle } from './status-cell';
+import { STATUS_ENDS_HINT, STATUS_STALE_HINT, StatusCell, partialOpenTitle } from './status-cell';
 
 const live = {
   status: 'ACTIVE',
@@ -57,9 +57,11 @@ describe('StatusCell', () => {
     expect(el.textContent).not.toContain('no price');
   });
 
+  const TRAILING = { ...live, status: 'PARTIAL', bar_kind: 'trailing', banked_fraction: 0.5,
+    stop_pnl_pct: 1.25, best_pnl_pct: 6 };
+
   it('draws the bar with P&L at both ends and no icon (the icon lives in the ID cell)', () => {
-    const el = render({ ...live, status: 'PARTIAL', bar_kind: 'trailing', banked_fraction: 0.5,
-      stop_pnl_pct: 1.25, best_pnl_pct: 6 });
+    const el = render(TRAILING);
     expect(el.querySelector('.fill')).not.toBeNull();
     expect(el.querySelectorAll('sb-icon').length).toBe(0);
     expect(el.querySelector('.end.neg')!.textContent).toBe('+1.3%');
@@ -123,6 +125,19 @@ describe('StatusCell', () => {
   it('shows no delayed flag on a live bar built from a fresh price', () => {
     const el = render({ ...live, current_price_stale: false });
     expect(el.querySelector('.stale')).toBeNull();
+  });
+
+  it('explains the two trailing P&L ends in one hint, not two titles (v194 A3)', () => {
+    const el = render(TRAILING);
+    expect(el.querySelector('.end[title]')).toBeNull();
+    expect(el.querySelector('sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(STATUS_ENDS_HINT);
+  });
+
+  it('explains a delayed price in a hint beside the word', () => {
+    const el = render({ ...live, current_price_stale: true });
+    expect(el.querySelector('.stale')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.stale')!.textContent!.trim()).toBe('delayed');
+    expect(el.querySelector('.stale + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(STATUS_STALE_HINT);
   });
 });
 

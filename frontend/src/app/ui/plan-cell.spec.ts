@@ -273,6 +273,9 @@ function renderWith(inputs: Record<string, unknown>): HTMLElement {
 
 const text = (el: Element | null): string => el!.textContent!.replace(/\s+/g, ' ').trim();
 
+const hintText = (el: Element): string =>
+  el.querySelector('.plan.runner sb-hint [role="tooltip"]')!.textContent!.replace(/\s+/g, ' ').trim();
+
 /** The live RKLB short: TP1 banked at 58.33, the stop trailing at 52.437
  *  behind a best price of 49.94. Today's inputs plus the v177 ones. */
 const RKLB_RUNNER = {
@@ -310,21 +313,22 @@ describe('PlanCell runner (two lines)', () => {
     expect(text(renderWith(RKLB_RUNNER).querySelector('.l2 .trail'))).toBe('Trail');
   });
 
-  it('puts the tooltips on the lines, not on the root', () => {
+  it('explains both runner lines in one hint, with no native titles', () => {
     const el = renderWith(RKLB_RUNNER);
+    expect(el.querySelector('.plan.runner [title]')).toBeNull();
     expect(el.querySelector('.plan.runner')!.hasAttribute('title')).toBe(false);
-    expect(el.querySelector('[title]')).toBe(el.querySelector('.line.l1'));
+    expect(el.querySelectorAll('.plan.runner sb-hint')).toHaveLength(1);
   });
 
   it('explains line 1 as the original plan', () => {
-    expect(renderWith(RKLB_RUNNER).querySelector('.l1')!.getAttribute('title')).toBe(
+    expect(hintText(renderWith(RKLB_RUNNER)).startsWith(
       'Original plan (TP1 already filled): entry → TP1 / original stop. '
       + 'Percentages are the distance from the entry to each level. '
-      + 'The stop shown is the original; the live exit is on the next line.');
+      + 'The stop shown is the original; the live exit is on the next line.')).toBe(true);
   });
 
   it('explains line 2: unrealised peak, per share, before costs, paper level', () => {
-    expect(renderWith(RKLB_RUNNER).querySelector('.l2')!.getAttribute('title')).toBe(
+    expect(hintText(renderWith(RKLB_RUNNER))).toContain(
       'Trailing stop. Best price so far → price the trailing stop would exit at. '
       + '+17.7% is the peak since TP1 (unrealised); +13.6% is the result if the stop '
       + 'fills at 52.44, per share from the original entry, before costs and tax. '
@@ -335,15 +339,13 @@ describe('PlanCell runner (two lines)', () => {
     const el = renderWith(LONG_RUNNER);
     expect(text(el.querySelector('.l1'))).toBe('100.00 → 120.00 / 90.00 (20.0% - 10.0%)');
     expect(text(el.querySelector('.l2'))).toBe('Trail 130.00 → 113.33 (+30.0% / +13.3%)');
-    expect(el.querySelector('.l2')!.getAttribute('title')).toContain('A long gains when price rises.');
+    expect(hintText(el)).toContain('A long gains when price rises.');
   });
 
-  it('names a derived floor "Locked-in floor" in the line 2 tooltip', () => {
-    const title = renderWith({ ...RKLB_RUNNER, stopKind: 'derived_floor' })
-      .querySelector('.l2')!.getAttribute('title')!;
-    expect(title.startsWith(
-      'Locked-in floor. Best price so far → price the locked-in floor would exit at. ')).toBe(true);
-    expect(title).toContain('is the result if the stop fills at 52.44');
+  it('names a derived floor "Locked-in floor" in the hint', () => {
+    const hint = hintText(renderWith({ ...RKLB_RUNNER, stopKind: 'derived_floor' }));
+    expect(hint).toContain('Locked-in floor. Best price so far → price the locked-in floor would exit at. ');
+    expect(hint).toContain('is the result if the stop fills at 52.44');
   });
 
   it('keeps an explicit minus on the loss side of line 2', () => {
