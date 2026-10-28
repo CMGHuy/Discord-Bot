@@ -197,6 +197,10 @@ export interface TradeRow {
    *  isn't split. */
   leg_index: number;
   leg_total: number;
+  /** v194 B3: what closed this leg (the stored leg's `reason`, `giveback`
+   *  for a v176 give-back stop); null on a row that is not a leg, or a leg
+   *  with no recorded reason. Optional: older payloads omit it. */
+  leg_exit_reason?: string | null;
 }
 
 export type GateKey = 'rs' | 'regime' | 'earnings';

@@ -6,6 +6,7 @@ import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
+import { Hint } from '../../ui/hint';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
 import { ABSENT, dateTime, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
@@ -17,6 +18,7 @@ import { StatStrip } from '../../ui/stat-strip';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
 import { fxMissingText } from '../analytics/scope-bar';
 import { PAPER_CAPTION, legsSampleNote } from './day/day-copy';
+import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -27,7 +29,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, Panel, RouterLink, SectionHead, Select, StatStrip, StatTile, Async],
+  imports: [Button, ControlRow, Drawer, Hint, Panel, RouterLink, SectionHead, Select, StatStrip, StatTile, Async],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -295,7 +297,9 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
             </header>
             <p class="meta">Opened {{ dateTime(trade.opened_at) }} · Closed {{ dateTime(trade.closed_at) }}</p>
             <p class="meta">
-              @if (trade.leg_total > 1) { <span class="leg">Leg {{ trade.leg_index + 1 }} of {{ trade.leg_total }}</span> · }
+              @if (legLabel(trade); as leg) {
+                <span class="leg">{{ leg }}</span> <sb-hint [text]="legHint" label="About leg rows" /> ·
+              }
               {{ trade.outcome }} · {{ rLabel(trade.r_multiple) }}
               @if (trade.mfe_r !== null) { · MFE {{ rLabel(trade.mfe_r) }} }
               @if (trade.mae_r !== null) { · MAE {{ rLabel(trade.mae_r) }} }
@@ -486,6 +490,9 @@ export class Calendar {
 
   protected readonly weekdayHeads = WEEKDAY_HEADS;
   protected readonly today = localIsoDate(new Date());
+  /** v194 B3 -- the one leg name (shared with Trades and the Dashboard). */
+  protected readonly legLabel = legLabel;
+  protected readonly legHint = LEG_HINT_TEXT;
 
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.totals.trade_count === 0 }),
