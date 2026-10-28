@@ -10,6 +10,7 @@ import { Histogram, HistogramBin } from '../../../ui/histogram';
 import { Panel } from '../../../ui/layout';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelError } from '../../../ui/panel-error';
+import { MINUS } from '../../../ui/format';
 import { PanelHeader } from '../../../ui/panel-header';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
@@ -48,7 +49,7 @@ const GIVEBACK_BIN = 0.5;
 
 export const pctText = (v: number | null): string => (v === null ? '—' : `${v.toFixed(1)}%`);
 export const rText = (v: number | null): string =>
-  (v === null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}R`);
+  (v === null ? '—' : `${v < 0 ? MINUS : '+'}${Math.abs(v).toFixed(2)}R`);
 const signTone = (v: number | null, pivot: number): StatTone =>
   (v === null || v === pivot ? 'neutral' : v > pivot ? 'pos' : 'neg');
 

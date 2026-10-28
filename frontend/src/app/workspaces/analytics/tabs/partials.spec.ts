@@ -11,7 +11,7 @@ import { AnalyticsStore } from '../../../stores/analytics.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import {
   PartialsTab, funnelRows, givebackBins, kpiTiles, ladderRows, monthTrend, outcomeSegments,
-  runnerWaterfall, splitRows, touchRows,
+  rText, runnerWaterfall, splitRows, touchRows,
 } from './partials';
 import { PARTIALS_FIXTURE } from './partials.fixture';
 import { Hint } from '../../../ui/hint';
@@ -172,5 +172,15 @@ describe('partials.ts never widens the page (v179 §2.1, §6b.7)', () => {
   it('keeps every breakdown column when scrolling', () => {
     const { el } = render(PARTIALS_FIXTURE);
     expect([...el.querySelectorAll('.breakdown thead th')]).toHaveLength(7);
+  });
+});
+
+describe('rText', () => {
+  it('signs a loss with the true minus, keeps zero and a gain', () => {
+    expect(rText(-0.3)).toBe('−0.30R');
+    expect(rText(-0.3)).not.toContain('-');
+    expect(rText(0)).toBe('+0.00R');
+    expect(rText(0.32)).toBe('+0.32R');
+    expect(rText(null)).toBe('—');
   });
 });
