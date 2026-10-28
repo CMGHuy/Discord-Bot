@@ -507,7 +507,12 @@ OPEN (recorded, not changed): row 6, Exposure by horizon sums risk in each instr
 
 #### Verification record
 
-(Filled by Step 5.)
+2026-10-28 (Berlin 15:26 CET, from `date -u` 14:26 UTC).
+
+- Full suite on the branch after merging `main` in: 14676 passed, 6 failed, 4 skipped. Triage: 3 were v194's (portfolio_state `exc_info`, swallowed ratchet 244 vs 243, AGENTS.md 32900 B over the 32768 cap) -- fixed, each re-run alone green (38c1a2b2, 4bedf955, c21739c8; ratchet baseline lowered 243 -> 241, never raised). 2 scan tests (`test_scan_rebuild_wiring`, `test_scan_telemetry_sources`) failed under a 19-minute contended run and pass alone on `main` and the branch. 1 (`test_skill_shape` replicate-prod-db 90 > 80 lines) fails on `main` too, from the v196 skill commits -- not v194's, left open.
+- Frontend: 237 files, 5536 passed, 4 skipped, 0 failed; lint clean; `layout-audit-lib.test.mjs` 35 pass; complexity gate PASS.
+- Layout audit 390/768/1440 on the replica: exit 1, unallowed 292, **hint 0**. 291 are shell-wide (topbar baseline on every route, ticker-tape clipping, 200x19px tape-tile taps at 768; the topbar and tape clipping at 1440 were already seen in the v188 audit) and none are in the v194 surfaces; the 768 tape and tap findings were not compared against `main`. 1 was v194's (`/trades` 768 vcenter, the leg-label hint's 44px tap area) -- fixed in 759226af, verified by replaying the audit geometry (max offset 0.2px at 768 and 1440), full audit not rerun.
+- A4 audit: row 65 (Calibration deciles "observations") reported, not fixed; rows 6 and 59 (two money figures never converted to the account currency) open.
 
 #### Post-deploy record
 
