@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { allSources } from './testing/all-sources';
+import { allSources, stripComments } from './testing/all-sources';
 
 /**
  * v80 D3: one label style and one help-text style, defined once in the
@@ -15,7 +15,7 @@ const rule = (name: string) =>
   GLOBAL.match(new RegExp(`\\.${name}\\s*\\{[^}]*\\}`, 's'))?.[0] ?? '';
 
 describe('v80 D3: the shared text styles', () => {
-  it('.sb-label is 11px monospace capitals at 0.08em in muted text', () => {
+  it('.sb-label is 12px monospace capitals at 0.08em in muted text', () => {
     const r = rule('sb-label');
     expect(r).toContain('font-family: var(--font-mono)');
     expect(r).toContain('font-size: var(--text-micro)');
@@ -43,11 +43,14 @@ describe('v179: numbers in one face', () => {
   });
 });
 
-describe('v179: no literal text size below 11px', () => {
-  it('sets no px font-size under 11px anywhere in the app', () => {
+describe('v195: no literal text size below 12px', () => {
+  /* Comments are stripped: chart/chart-width.ts explains the old 11px
+   * floor in prose ("font-size: 11px is 11px at every width"), which is
+   * documentation, not a declaration. */
+  it('sets no px font-size under 12px anywhere in the app', () => {
     const offenders = allSources().flatMap(({ name, source }) =>
-      [...source.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)]
-        .filter((m) => Number(m[1]) < 11)
+      [...stripComments(source).matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)]
+        .filter((m) => Number(m[1]) < 12)
         .map((m) => `${name}: ${m[0]}`));
     expect(offenders).toEqual([]);
   });

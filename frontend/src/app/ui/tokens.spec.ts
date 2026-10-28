@@ -155,7 +155,7 @@ describe('design tokens', () => {
 
   /* v167 §3 supersedes v54 D2's one-shadow law: two levels, both in tier 3. */
   it('defines the two elevation shadows', () => {
-    expect(TIER3).toMatch(/^\s*--panel-shadow:\s*inset 0 1px 0 rgba\(255, 255, 255, \.03\), 0 6px 18px rgba\(0, 0, 0, \.25\);/m);
+    expect(TIER3).toMatch(/^\s*--panel-shadow:\s*none;/m);
     expect(TIER3).toMatch(/^\s*--shadow-overlay:\s*0 16px 40px rgba\(0, 0, 0, \.55\), 0 2px 8px rgba\(0, 0, 0, \.4\);/m);
     // declared once, in tier 3 -- not left behind in tier 2 as well
     expect([...CSS.matchAll(/^\s*--shadow-overlay:/gm)]).toHaveLength(1);
@@ -367,11 +367,12 @@ describe('v80 D3: type, shape and touch', () => {
   });
 
   /* v167 §3 supersedes v80 D3's single 2px: four targets, all in tier 3,
-   * and the two old tokens are gone so no unclassified corner survives. */
+   * and the two old tokens are gone so no unclassified corner survives.
+   * v195 §1.5: 6px panels, 4px controls and chips, 2px cells. */
   it('defines the four radius targets', () => {
-    expect(TIER3).toMatch(/^\s*--panel-radius:\s*8px;/m);
-    expect(TIER3).toMatch(/^\s*--control-radius:\s*6px;/m);
-    expect(TIER3).toMatch(/^\s*--chip-radius:\s*999px;/m);
+    expect(TIER3).toMatch(/^\s*--panel-radius:\s*6px;/m);
+    expect(TIER3).toMatch(/^\s*--control-radius:\s*4px;/m);
+    expect(TIER3).toMatch(/^\s*--chip-radius:\s*4px;/m);
     expect(TIER3).toMatch(/^\s*--radius-sm:\s*2px;/m);
     expect(CSS).not.toMatch(/^\s*--radius(?:-chip)?:/m);
   });
@@ -401,19 +402,18 @@ describe('v167 §3: the tier-3 component tokens', () => {
     TIER3.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
 
   const VALUES: Record<string, string> = {
-    '--panel-radius': '8px',
-    '--control-radius': '6px',
-    '--chip-radius': '999px',
+    '--panel-radius': '6px',
+    '--control-radius': '4px',
+    '--chip-radius': '4px',
     '--radius-sm': '2px',
-    '--panel-bg': 'linear-gradient(180deg, var(--surface-raised), var(--surface))',
+    '--panel-bg': 'var(--surface)',
     '--panel-border': '1px solid var(--border)',
-    '--panel-shadow': 'inset 0 1px 0 rgba(255, 255, 255, .03), 0 6px 18px rgba(0, 0, 0, .25)',
+    '--panel-shadow': 'none',
     '--panel-inner-bg': 'var(--surface-raised)',
     '--panel-inner-radius': 'var(--control-radius)',
     '--shadow-overlay': '0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4)',
-    '--btn-fill': 'linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill))',
-    '--btn-fill-hover':
-      'linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white), color-mix(in srgb, var(--accent-fill) 88%, white))',
+    '--btn-fill': 'var(--accent-fill)',
+    '--btn-fill-hover': 'var(--accent-fill-hi)',
     '--glow-accent': '0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent)',
     '--glow-ambient':
       'radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%)',
@@ -432,8 +432,10 @@ describe('v167 §3: the tier-3 component tokens', () => {
     });
   }
 
-  it('resolves the button gradient to the two Graphite fill blues', () => {
-    expect(resolveToken('--btn-fill')).toBe('linear-gradient(180deg, #2d6cd3, #2563c4)');
+  /* v195 §1.2: the primary button is one flat fill, no gradient. */
+  it('resolves the flat button fill to the two Graphite fill blues', () => {
+    expect(resolveToken('--btn-fill')).toBe('#2563c4');
+    expect(resolveToken('--btn-fill-hover')).toBe('#2d6cd3');
   });
 
   /* A gradient is an image: as background-color it is invalid and the
@@ -510,12 +512,14 @@ describe('v168 §1: motion tokens', () => {
 });
 
 /**
- * v179 §3.4 / §6b.6: no text-size token falls below 11px, even at the 90%
- * zoom preference (shell.ts ZOOM_CHOICES), while every size above the floor
- * still scales with --text-scale. The 9.9px labels the audit found were
- * --text-micro at 90%; the floor lives inside the token, as max(11px, ...).
+ * v179 §3.4 / §6b.6, raised by v195 §1.3 (correction 12): the smallest two
+ * size tokens, micro and chip, are 12px and floored there inside the token,
+ * as max(12px, ...), so the 90% zoom preference (shell.ts ZOOM_CHOICES)
+ * cannot push them below it. Every other size token scales freely: at 90%
+ * --text-table is 11.7px, which stays above the 11px rendered floor the
+ * layout audit measures (MIN_TEXT_PX).
  */
-describe('v179: the 11px text floor', () => {
+describe('v195: the 12px micro and chip floor', () => {
   /** Every size token: a --text-* declaration whose value reads --text-scale
    *  (the colour tokens --text-muted/--text-secondary/... never do). */
   const SIZE = /^\s*(--text-[a-z]+):\s*(.*var\(--text-scale\).*);/gm;
@@ -529,30 +533,40 @@ describe('v179: the 11px text floor', () => {
     return floor ? Math.max(Number(floor[1]), base) : base;
   }
 
+  const sizeOf = (name: string, scale: number) => px(sizes.find((s) => s.name === name)!.value, scale);
+
   it('finds the size tokens', () => {
     expect(sizes.map((s) => s.name)).toEqual(expect.arrayContaining(['--text-micro', '--text-chip', '--text-table']));
   });
 
-  it.each([0.9, 1, 1.1, 1.25])('keeps every size token at or above 11px at scale %s', (scale) => {
+  it.each([1, 1.1, 1.25])('keeps every size token at or above 12px at scale %s', (scale) => {
     const below = sizes
-      .filter((s) => px(s.value, scale) < 11)
+      .filter((s) => px(s.value, scale) < 12)
       .map((s) => `${s.name}=${px(s.value, scale)}px`);
     expect(below).toEqual([]);
   });
 
-  it('floors the two tokens that could fall below it, inside the token', () => {
-    expect(CSS).toMatch(/^\s*--text-micro:\s*max\(11px, calc\(11px \* var\(--text-scale\)\)\);/m);
-    expect(CSS).toMatch(/^\s*--text-chip:\s*max\(11px, calc\(12px \* var\(--text-scale\)\)\);/m);
+  it('keeps micro and chip at 12px and every other token at or above 11px at the 90% step', () => {
+    expect(sizeOf('--text-micro', 0.9)).toBe(12);
+    expect(sizeOf('--text-chip', 0.9)).toBe(12);
+    const below = sizes
+      .filter((s) => px(s.value, 0.9) < 11)
+      .map((s) => `${s.name}=${px(s.value, 0.9)}px`);
+    expect(below).toEqual([]);
+  });
+
+  it('floors the two smallest tokens at 12px, inside the token', () => {
+    expect(CSS).toMatch(/^\s*--text-micro:\s*max\(12px, calc\(12px \* var\(--text-scale\)\)\);/m);
+    expect(CSS).toMatch(/^\s*--text-chip:\s*max\(12px, calc\(12px \* var\(--text-scale\)\)\);/m);
   });
 
   it('still grows a floored token above 100%', () => {
-    const micro = sizes.find((s) => s.name === '--text-micro')!;
-    expect(px(micro.value, 1.25)).toBeCloseTo(13.75);
+    expect(sizeOf('--text-micro', 1.25)).toBeCloseTo(15);
   });
 
   it('reaches jsdom through the regenerated fixture', () => {
-    expect(resolveToken('--text-micro')).toBe('max(11px, calc(11px * 1))');
-    expect(resolveToken('--text-chip')).toBe('max(11px, calc(12px * 1))');
+    expect(resolveToken('--text-micro')).toBe('max(12px, calc(12px * 1))');
+    expect(resolveToken('--text-chip')).toBe('max(12px, calc(12px * 1))');
   });
 });
 

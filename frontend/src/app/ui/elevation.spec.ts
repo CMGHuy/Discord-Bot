@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { allSources, stripComments } from './testing/all-sources';
+import { resolveToken } from './testing/resolve-token';
 
 const GLOBAL = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
 const ui = (file: string) => readFileSync(join(process.cwd(), 'src/app/ui', file), 'utf8');
@@ -87,5 +88,35 @@ describe('the panel primitives paint the panel tokens (v167 §3)', () => {
     const source = ui('chart-container.ts');
     expect(source).toContain('<figure class="frame sb-panel sb-lift" [style.height.px]="height()">');
     expectPanelRule(source.match(/\.frame\s*\{[^}]*\}/)![0]);
+  });
+});
+
+/**
+ * v195 §1.2: depth comes only from the surface steps and 1px borders. The
+ * panel is the --surface step with no gradient and no shadow; the overlay
+ * shadow is the one shadow token left. .sb-panel still casts
+ * var(--panel-shadow) (the rule above), and the token being `none` is what
+ * makes it flat, so a later spec can restore depth in one place.
+ */
+describe('v195 §1.2: panels are flat', () => {
+  const TOKENS = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
+
+  it('paints the panel on the surface step, not a gradient', () => {
+    expect(TOKENS).toMatch(/^\s*--panel-bg:\s*var\(--surface\);/m);
+    expect(resolveToken('--panel-bg')).toBe(resolveToken('--surface'));
+  });
+
+  it('casts no panel shadow', () => {
+    expect(TOKENS).toMatch(/^\s*--panel-shadow:\s*none;/m);
+  });
+
+  it('keeps one shadow, on the overlay', () => {
+    expect(resolveToken('--shadow-overlay')).not.toBe('none');
+    expect(resolveToken('--shadow-overlay')).toMatch(/rgba\(0, 0, 0,/);
+  });
+
+  it('paints the primary button flat, with no gradient in either state', () => {
+    expect(resolveToken('--btn-fill')).not.toMatch(/gradient/);
+    expect(resolveToken('--btn-fill-hover')).not.toMatch(/gradient/);
   });
 });

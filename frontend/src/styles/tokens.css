@@ -191,7 +191,7 @@
   --chart-6: #7076e8;
 
   /* -- type ------------------------------------------------------------
-   * Named by role, not by size: the scale is closed (11/12/13/14/16/20/28)
+   * Named by role, not by size: the scale is closed (12/13/14/16/20/28, plus the hero; v195 §1.3)
    * and a component should be choosing "this is a chip" rather than
    * "this is 10px". A size not on this list is a review defect.
    */
@@ -229,13 +229,14 @@
      end, and this is the anchor every step multiplies from -- raising it
      here moves 100% (and, proportionally, 90/110/125%) together rather than
      special-casing one step. */
-  /* v179 §6b.6 -- an 11px floor inside the two tokens the 90% zoom step
-     would push below it (9.9px and 10.8px). Zoom still scales every size
-     above the floor; a zoomed-out view fits more, but never drops its
-     smallest labels below legibility. tokens.spec.ts checks every size
-     token at 90/100/110/125%. */
-  --text-micro: max(11px, calc(11px * var(--text-scale)));  /* micro-label */
-  --text-chip: max(11px, calc(12px * var(--text-scale)));   /* chip */
+  /* v179 §6b.6, raised by v195 §1.3 -- a 12px floor inside the two
+     smallest tokens. Micro and chip are both 12px at 100% (v195's scale is
+     12/13/14/16/20/28), and the floor keeps the 90% zoom step from pushing
+     them to 10.8px. Zoom still scales every size above the floor: a
+     zoomed-out view fits more, but never drops its smallest labels below
+     12px. tokens.spec.ts checks every size token at 90/100/110/125%. */
+  --text-micro: max(12px, calc(12px * var(--text-scale)));  /* micro-label */
+  --text-chip: max(12px, calc(12px * var(--text-scale)));   /* chip */
   --text-table: calc(13px * var(--text-scale));     /* table body */
   --text-body: calc(14px * var(--text-scale));      /* body */
   --text-control: calc(14px * var(--text-scale));   /* form-control text; 16px on touch, below */
@@ -301,7 +302,7 @@
    * Tight radii: terminal, not consumer app.
    * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
    * the corners are the four targets in the tier-3 block at the end of this
-   * file (--panel-radius 8px, --control-radius 6px, --chip-radius 999px,
+   * file (v195 §1.5: --panel-radius 6px, --control-radius 4px, --chip-radius 4px,
    * --radius-sm 2px); --radius and --radius-chip are deleted.
    *
    * Motion (spec v168). Entrances run once per route activation and never on
@@ -382,47 +383,51 @@
  * component reads these instead of re-spelling background + border +
  * radius + shadow. Every colour here derives from tier 2 by var() or
  * color-mix(): a palette change reaches it. The only rgb()/rgba() literals
- * are black or white at an alpha, inside --panel-shadow, --shadow-overlay,
+ * are black or white at an alpha, inside --shadow-overlay,
  * --panel-shadow-lift and --scrim-soft (the colour gate, primitives.spec.ts).
  *
- * --panel-bg, --btn-fill, --btn-fill-hover and --glow-ambient are
- * GRADIENTS, i.e. images: `background` / `background-image` only, never
- * `background-color` (tokens.spec.ts checks styles.css and ui/). A
- * background between two gradients does not transition; v168 animates
- * button hover with filter and glow instead.
+ * v195 §1.2 / §1.5 (Graphite): flat. A panel is the --surface step and a
+ * 1px --border, with no gradient and no shadow (--panel-shadow is none);
+ * the primary button is one flat fill. Depth comes only from the surface
+ * steps; the one shadow left is --shadow-overlay, for out-of-flow
+ * elements. --glow-ambient is still a gradient, i.e. an image
+ * (`background` / `background-image` only, never `background-color`;
+ * tokens.spec.ts checks styles.css and ui/), until V195-5 deletes it.
  *
  * Last block in the file on purpose: scripts/dev/dump_tokens.py and
  * resolve-token.ts read every top-level :root, and tokens.spec.ts slices
  * tier 3 from this banner to the end. */
 :root {
-  /* The four radius targets. Every border-radius in the app is one of
-   * these, or 50% (dots), 0 (flush edges) or inherit. */
-  --panel-radius: 8px;     /* panels, cards, drawers' inner sections, dialogs */
-  --control-radius: 6px;   /* buttons, inputs, selects, segmented controls */
-  --chip-radius: 999px;    /* pills */
-  --radius-sm: 2px;        /* thin bars, cells, swatches, tracks: under ~12px tall */
+  /* The four radius targets (v195 §1.5). Every border-radius in the app is
+   * one of these, or 50% (status dots), 0 (flush edges) or inherit. */
+  --panel-radius: 6px;     /* panels, cards, drawers' inner sections, dialogs */
+  --control-radius: 4px;   /* buttons, inputs, selects, segmented controls */
+  --chip-radius: 4px;      /* chips and tags: squared like a control, not a pill */
+  --radius-sm: 2px;        /* cells, thin bars, swatches, tracks: under ~12px tall */
 
   /* The panel (L1/L2), painted by sb-panel, sb-figure-strip and
-   * sb-chart-container; the shadow comes from the global .sb-panel class. */
-  --panel-bg: linear-gradient(180deg, var(--surface-raised), var(--surface));
+   * sb-chart-container. The global .sb-panel class still casts
+   * var(--panel-shadow), which is none under v195. */
+  --panel-bg: var(--surface);
   --panel-border: 1px solid var(--border);
-  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 -- shadow values have no natural expression via the closed --space-* scale. */
-  --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 6px 18px rgba(0, 0, 0, .25);
-  /* A panel nested in a panel: flat, no gradient, and no shadow -- one
-   * level of elevation per stack. */
+  --panel-shadow: none;
+  /* A panel nested in a panel: one surface step up, no shadow. */
   --panel-inner-bg: var(--surface-raised);
   --panel-inner-radius: var(--control-radius);
 
   /* Out of flow (L3): dropdown, popover, tooltip, toast, drawer, dialog,
-   * through the global .elev-overlay class. */
+   * through the global .elev-overlay class -- the one shadow v195 keeps. */
+  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 -- shadow values have no natural expression via the closed --space-* scale. */
   --shadow-overlay: 0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4);
 
-  /* The primary button. Top stop --accent-fill-hi (white 4.66:1), bottom
-   * --accent-fill (white 5.06:1); contrast.spec.ts checks both. */
-  --btn-fill: linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill));
-  --btn-fill-hover: linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white), color-mix(in srgb, var(--accent-fill) 88%, white));
+  /* The primary button: one flat fill, --accent-fill (white 5.74:1), and
+   * --accent-fill-hi on hover (white 5.00:1); contrast.spec.ts checks
+   * both. Colours now, not images, so they could transition. */
+  --btn-fill: var(--accent-fill);
+  --btn-fill-hover: var(--accent-fill-hi);
 
-  /* Glows are hued, so they derive from the fill blue, never an rgba. */
+  /* Glows are hued, so they derive from the fill blue, never an rgba.
+   * Deleted by V195-5, after V195-4 removes the ambient shell layer. */
   --glow-accent: 0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent);
   --glow-ambient: radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%);
 
