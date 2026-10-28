@@ -5,6 +5,8 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter, Router } from '@angular/router';
 import { patchState } from '@ngrx/signals';
 import { unprotected } from '@ngrx/signals/testing';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -530,6 +532,17 @@ describe('Trades — leg rows (v194 B3)', () => {
     expect(hints[0].textContent).toContain('count plans on Analytics');   // A4 audit
     expect(hints[0].textContent).not.toContain('plans, not legs');
     expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
+  });
+
+  it('keeps the 44px hint tap area out of the leg line height (layout audit vcenter at 768)', () => {
+    // jsdom lays nothing out, so the contract is source text: on coarse /
+    // tablet widths sb-hint's trigger grows to --control-h, and unless the
+    // .leg rule pulls that padding back with a negative block margin the
+    // cell's box is ~14px taller than the ink it shows (content sits high).
+    const css = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trades.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).toMatch(/\.leg sb-hint\s*\{[^}]*margin-block:\s*calc\(\(var\(--control-h\) - 14px\) \/ -2\)/);
+    expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{\s*\.leg sb-hint/);
   });
 
   it('carries the label into the expansion the phone drawer reuses', () => {

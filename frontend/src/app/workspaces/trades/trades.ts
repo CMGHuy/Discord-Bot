@@ -582,6 +582,15 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
     .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
     .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
+    /* sb-hint's trigger grows to --control-h (44px) on coarse / tablet
+       widths while its glyph stays 14px. In this stacked cell that padding
+       is empty box under the label, so the cell's ink sat ~7px above its
+       middle (layout audit vcenter, /trades at 768). Pull it back with a
+       negative block margin: the tap area still overlaps the row, it just
+       stops adding height. */
+    @media (pointer: coarse), (max-width: 1023px) {
+      .leg sb-hint { margin-block: calc((var(--control-h) - 14px) / -2); }
+    }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
