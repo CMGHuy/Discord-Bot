@@ -5,6 +5,7 @@
 **Edge:** harvest
 **Screen:** harvest-headroom docs/superpowers/results/2026-10-28-notification-delivery-evidence.md
 **Panel:** staff-engineer
+**Plan:** [Implementation plan](../plans/2026-10-28-v197-durable-lifecycle-notifications_0-index.md)
 
 ## Goal
 
@@ -67,7 +68,7 @@ Sequential: transaction/event contract and migration precede renderers and the l
 
 ## Handoff
 
-Partner approved this written design for implementation planning on 2026-10-28, after resolving panel findings. Next: plan-briefer, then plan-writer mode=index. Plans must name exact existing paths and signatures from the brief, contain test-first tasks and end in one full verification task. No implementation is authorized by this document alone.
+Partner approved this written design for implementation planning on 2026-10-28, after resolving panel findings. The associated 13-task plan has all four parts written; full plan lint passes and 36 Python examples parse (one dictionary fragment in its mapping context). Implementation is unstarted. The sole final runtime verification is V197-8b; these authoring checks do not claim runtime correctness.
 
 ## Panel review
 

@@ -5,6 +5,7 @@
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** quant-engineer
+**Plan:** [Implementation plan](../plans/2026-10-28-v198-risk-reporting-correctness_0-index.md)
 
 ## Goal
 
