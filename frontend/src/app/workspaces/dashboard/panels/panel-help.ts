@@ -33,11 +33,12 @@ export const KPI_HELP = {
     + 'positions, and the total in the account currency. Not locked in until they close. '
     + PERFORMANCE_CAVEAT,
   winRate:
-    'The share of closed trades that finished in profit in the selected period. N is how many closed '
-    + 'trades it counts. A high win rate alone is not enough: read it with the expectancy (ExpR) and the '
+    'The share of closed trades that finished in profit in the selected period. Each realised leg of a '
+    + 'plan that scaled out counts as its own trade; N is how many closed trades it counts. A high win rate alone is not enough: read it with the expectancy (ExpR) and the '
     + 'payoff ratio. ' + PERFORMANCE_CAVEAT,
   expectancy:
-    'The average result per closed trade, in R (one R is the amount risked on that trade). Above 0 '
+    'The average result per closed trade, in R (one R is the amount risked on that trade); each '
+    + 'realised leg of a plan that scaled out counts as its own trade. Above 0 '
     + 'the approach earns on average; below 0 it loses. ' + PERFORMANCE_CAVEAT,
   payoffRatio:
     'The average winning trade divided by the average losing trade, both in R. 2.0 means a typical '

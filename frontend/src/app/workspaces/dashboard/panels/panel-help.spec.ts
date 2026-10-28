@@ -42,6 +42,11 @@ describe('dashboard tooltip copy (A4 audit)', () => {
     }
   });
 
+  it('says the Dashboard counts each realised leg as a trade', () => {
+    expect(KPI_HELP.winRate).toContain('counts as its own trade');
+    expect(KPI_HELP.expectancy).toContain('counts as its own trade');
+  });
+
   it('names ExpR and N beside the win rate', () => {
     expect(KPI_HELP.winRate).toContain('N is');
     expect(KPI_HELP.winRate).toContain('expectancy (ExpR)');

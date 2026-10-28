@@ -139,6 +139,12 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     expect(PAPER_MARKER).toBe('Paper trade');
   });
 
+  it('explains the leg field with how the Dashboard counts legs (A4 audit)', () => {
+    const el = mount(tradeRow({ leg_index: 0, leg_total: 2 }));
+    const tip = el.querySelector('.field[data-field="leg"] sb-hint [role="tooltip"]')!.textContent!;
+    expect(tip).toContain('count each realised leg as its own trade');
+  });
+
   it('explains the paper marker in a hint, not a native title (v194 A3)', () => {
     const el = mount();
     expect(el.querySelector('.paper-marker')!.hasAttribute('title')).toBe(false);

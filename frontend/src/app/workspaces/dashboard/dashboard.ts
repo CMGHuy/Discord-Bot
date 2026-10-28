@@ -1006,7 +1006,8 @@ export class Dashboard {
 
   /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
   protected readonly legLabel = legLabel;
-  protected readonly legHint = LEG_HINT_TEXT;
+  /** v194 A4: the chips count each realised leg (`dashboard.py` `_realized_parts`). */
+  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
 
   /** v194 B7: the main ledger's rows left out of the money figures. */
   protected readonly fxMissing = computed(() => this.store.data()?.fx_missing_count ?? 0);

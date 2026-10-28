@@ -987,6 +987,7 @@ describe('Dashboard — leg rows and missing FX rates (v194 B3, B7)', () => {
       'Leg 2 of 2',
     ]);
     expect(legs[0].querySelector('sb-hint')!.textContent).toContain(LEG_HINT_TEXT);
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain('count each realised leg as its own trade');   // A4 audit
     expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
   });
 

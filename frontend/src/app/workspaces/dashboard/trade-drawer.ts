@@ -205,7 +205,8 @@ export class TradeDrawer {
 
   protected readonly paperMarker = PAPER_MARKER;
   protected readonly paperHint = PAPER_HINT;
-  protected readonly legHint = LEG_HINT_TEXT;
+  /** v194 A4: the Dashboard chips count each realised leg. */
+  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
   protected readonly fields = computed(() =>
     tradeDrawerFields(this.row(), this.connection.currency(), this.now()));
 }
