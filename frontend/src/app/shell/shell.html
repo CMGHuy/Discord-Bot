@@ -58,6 +58,18 @@
       <!-- A labelled list, never a heading: the page's one <h1> belongs to
            sb-page (correction 9), which route-focus.ts finds inside .workspace. -->
       <sb-breadcrumb class="topbar-lead" />
+      <!-- v195 §3.1: the command palette's trigger, centred between the
+           breadcrumb and the cluster (both carry an auto left margin, which
+           splits the free space). Phones use the search icon instead. -->
+      @if (!isPhone()) {
+        <button sb-button variant="ghost" type="button" class="palette-trigger"
+                aria-haspopup="dialog" [attr.aria-expanded]="paletteOpen()"
+                aria-keyshortcuts="Control+K Meta+K /" (click)="openPalette()">
+          <span class="glyph" aria-hidden="true"><sb-icon name="search" /></span>
+          <span class="trigger-text">Search or jump…</span>
+          <kbd class="shortcut" aria-hidden="true">{{ paletteShortcut }}</kbd>
+        </button>
+      }
       <!-- v195 Phase 3: the right cluster. The killswitch and freshness chips
            show on every device, phone included: the halt control is on Risk,
            one tap from the chip, and Scan health has left the Risk page
@@ -126,6 +138,11 @@
     <sb-phone-tab-bar [moreOpen]="moreOpen()" (moreRequested)="toggleMore()" />
     <sb-more-sheet [open]="moreOpen()" (closed)="closeMore()" (searchRequested)="onSearchRequested()" />
   }
+
+  <!-- v195 §3.1: the command palette. After the More sheet on purpose: when
+       the sheet's search field opens it, the sheet's focus trap returns focus
+       first and the palette's records that as the place to go back to. -->
+  <sb-command-palette [open]="paletteOpen()" (closed)="closePalette()" />
 
   <sb-toast-host />
 </div>

@@ -31,6 +31,7 @@ import { Breadcrumb } from './breadcrumb';
 import { FreshnessChip } from './freshness-chip';
 import { KillswitchChip } from './killswitch-chip';
 import { MoreSheet } from './more-sheet';
+import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/command-palette';
 import { PhoneTabBar } from './phone-tab-bar';
 import { ConnectionStatus } from './connection-status';
 import { NAV_GROUPS } from './nav';
@@ -67,11 +68,12 @@ const ZOOM_DEFAULT = 100;
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
     ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, NavIndicator, Tape,
-    Button, PhoneTabBar, MoreSheet,
+    Button, PhoneTabBar, MoreSheet, CommandPalette,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
   styleUrl: './shell.css',
+  host: { '(document:keydown)': 'onGlobalKeydown($event)' },
 })
 export class Shell {
   private readonly api = inject(ApiClient);
@@ -145,11 +147,45 @@ export class Shell {
 
   /**
    * The phone's search icon and the More sheet's search field both land
-   * here. The sheet closes first so the palette never opens under it;
-   * V195-20 adds the palette open to this method.
+   * here (V195-18); both open the command palette, which closes the sheet
+   * first.
    */
   protected onSearchRequested(): void {
+    this.openPalette();
+  }
+
+  /* -- v195 §3.1: the command palette --------------------------------- */
+
+  /** The palette's open state; the shell owns it, like the More sheet's. */
+  protected readonly paletteOpen = signal(false);
+
+  /** The trigger's shortcut hint for this platform. */
+  protected readonly paletteShortcut = shortcutLabel(typeof navigator === 'undefined' ? '' : navigator.platform);
+
+  /**
+   * Every entry point lands here: the top-bar trigger, Ctrl/⌘K, `/`, and
+   * through onSearchRequested() the phone's search icon and the More
+   * sheet's field. The sheet closes first, so the palette never opens under
+   * it; shell.html mounts the palette after the sheet, so the sheet hands
+   * focus back before the palette records where to return it.
+   */
+  protected openPalette(): void {
     this.closeMore();
+    this.paletteOpen.set(true);
+  }
+
+  protected closePalette(): void {
+    this.paletteOpen.set(false);
+  }
+
+  /** Ctrl/⌘K and `/` (spec §3.1). Ignored while the palette is already
+   *  open, and while a native dialog owns the top layer (a confirm dialog or
+   *  drawer makes the page behind it inert). */
+  protected onGlobalKeydown(event: KeyboardEvent): void {
+    if (this.paletteOpen() || !isPaletteShortcut(event)) return;
+    if (document.querySelector('dialog[open]')) return;
+    event.preventDefault();
+    this.openPalette();
   }
 
   /* -- SR58: font zoom ------------------------------------------------ */

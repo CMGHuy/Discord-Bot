@@ -822,3 +822,125 @@ describe('shell above phone width (v195 Phase 3)', () => {
     expect(el.querySelector('nav.rail')).not.toBeNull();
   });
 });
+
+describe('shell command palette (v195 §3.1)', () => {
+  let phone: WritableSignal<boolean>;
+
+  beforeEach(() => {
+    phone = signal(false);
+    TestBed.configureTestingModule({ providers: shellProviders() });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: phone, isNarrow: signal(false), viewport: signal('md') },
+    });
+  });
+
+  afterEach(() => {
+    document.querySelectorAll('.palette-probe').forEach((node) => node.remove());
+  });
+
+  async function mount() {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  const palette = (el: HTMLElement) => el.querySelector('sb-command-palette [role=dialog]');
+  const keydown = (init: KeyboardEventInit, target: EventTarget = document.body) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+  const escape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const probe = <T extends HTMLElement>(tag: string): T => {
+    const node = document.createElement(tag) as T;
+    node.classList.add('palette-probe');
+    document.body.appendChild(node);
+    return node;
+  };
+
+  it('puts the trigger between the breadcrumb and the cluster, and opens the palette from it', async () => {
+    const { fixture, el } = await mount();
+    const trigger = el.querySelector<HTMLButtonElement>('header.topbar > button.palette-trigger')!;
+    expect(trigger.previousElementSibling!.matches('sb-breadcrumb.topbar-lead')).toBe(true);
+    expect(trigger.nextElementSibling!.matches('div.status-cluster')).toBe(true);
+    expect(trigger.textContent).toContain('Search or jump…');
+    expect(trigger.getAttribute('aria-keyshortcuts')).toBe('Control+K Meta+K /');
+    expect(trigger.querySelector('kbd.shortcut')!.getAttribute('aria-hidden')).toBe('true');
+    expect(palette(el)).toBeNull();
+
+    trigger.focus();
+    trigger.click();
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+    // Closing hands focus back to the trigger (FocusTrap's restore).
+    escape();
+    await settle(fixture);
+    expect(palette(el)).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('opens on Ctrl+K and on ⌘K', async () => {
+    const { fixture, el } = await mount();
+    expect(keydown({ key: 'k', ctrlKey: true })).toBe(false); // default prevented
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+    escape();
+    await settle(fixture);
+    keydown({ key: 'k', metaKey: true });
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+  });
+
+  it('opens on / outside a text field, and leaves / to the field inside one', async () => {
+    const { fixture, el } = await mount();
+    const field = probe<HTMLInputElement>('input');
+    expect(keydown({ key: '/' }, field)).toBe(true); // not prevented: the slash is typed
+    await settle(fixture);
+    expect(palette(el)).toBeNull();
+    keydown({ key: '/' });
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+  });
+
+  it('never opens over an open dialog', async () => {
+    const { fixture, el } = await mount();
+    probe<HTMLDialogElement>('dialog').setAttribute('open', '');
+    keydown({ key: 'k', ctrlKey: true });
+    await settle(fixture);
+    expect(palette(el)).toBeNull();
+  });
+
+  it('opens from the phone search icon and from the More sheet, focus landing in its field', async () => {
+    phone.set(true);
+    const { fixture, el } = await mount();
+    expect(el.querySelector('button.palette-trigger')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('header.topbar button.search-trigger')!.click();
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+    escape();
+    await settle(fixture);
+
+    el.querySelector<HTMLButtonElement>('sb-phone-tab-bar button.more')!.click();
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('sb-more-sheet button.search')!.click();
+    await settle(fixture);
+    // The sheet closes first, then the palette opens: never one under the other.
+    expect(el.querySelector('sb-more-sheet [role=dialog]')).toBeNull();
+    expect(palette(el)).not.toBeNull();
+    expect(document.activeElement).toBe(el.querySelector('sb-command-palette input[role=combobox]'));
+  });
+
+  it('mounts the palette after the More sheet, so a hand-over restores focus in that order', () => {
+    const html = readSource('src/app/shell/shell.html');
+    expect(html.indexOf('<sb-command-palette')).toBeGreaterThan(html.indexOf('<sb-more-sheet'));
+    expect(html.indexOf('<sb-command-palette')).toBeLessThan(html.indexOf('<sb-toast-host'));
+  });
+});

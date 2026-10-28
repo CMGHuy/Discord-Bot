@@ -143,6 +143,28 @@ sb-nav-indicator {
 
 .topbar-lead { flex: 0 1 auto; min-width: 0; }
 
+/* v195 §3.1: the palette trigger, a field-shaped quiet button. Its auto left
+   margin and the cluster's split the free space, so it sits mid-bar. */
+.palette-trigger {
+  flex: 0 1 260px;
+  min-width: 0;
+  margin-left: auto;
+  justify-content: flex-start;
+  gap: var(--space-8);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.palette-trigger .glyph { display: inline-flex; line-height: 0; }
+.palette-trigger .trigger-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.palette-trigger .shortcut { font-family: var(--font-mono); font-size: var(--text-micro); color: var(--text-muted); }
+
 /* The ticker tape, a strip under the bar (v195 Phase 3). Its lane draws its
    own hairline and surface, so an empty strip takes no space. Not sticky:
    it scrolls away with the page, the chips above it do not. */
@@ -225,6 +247,7 @@ sb-nav-indicator {
    the bar's controls are 44px, so the bar grows to hold them. */
 @media (pointer: coarse), (max-width: 1023px) {
   .shell { --topbar-h: 48px; }
+  .palette-trigger .shortcut { display: none; }
 }
 
 /* Everything here is a removal: the bar never wraps to a second row, which

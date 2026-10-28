@@ -26,7 +26,8 @@ export function morePageGroups(
  * returned to the More tab on close (FocusTrap restores what had focus).
  * Escape, the scrim, Close and choosing a page all close it; the shell owns
  * the open state. The search field is first, so it takes focus; it only
- * asks (`searchRequested`) and the shell decides what opens.
+ * asks (`searchRequested`), and the shell closes the sheet and opens the
+ * command palette (V195-20).
  *
  * `display: contents` on the host: the shell's grid must not give this
  * element a cell of its own.

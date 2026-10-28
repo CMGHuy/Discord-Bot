@@ -57,6 +57,12 @@ const RAW_CONTROL_ALLOWLIST = new Map<string, string>([
   // on the real element, and re-dispatching one loses the user-activation
   // that browsers require.
   ['workspaces/system/settings-tab.ts', 'type="file"'],
+  // The command palette's field is an ARIA combobox (v195 §3.1): it carries
+  // role="combobox", aria-activedescendant and aria-controls and owns the
+  // arrow and Enter keys for the listbox under it. sb-text-input wraps a
+  // plain field and exposes none of that; growing it a combobox mode for one
+  // call site would be the worse trade.
+  ['shell/palette/command-palette.ts', 'role="combobox"'],
 ]);
 
 describe('no call site hand-rolls a form control', () => {
