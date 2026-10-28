@@ -333,7 +333,9 @@ in parts, two at a time, to disk as it goes:
 1. Dispatch `plan-writer` with `mode=index`, the spec path and the brief path. It writes the
    index first (header, constraints, parallelisation, a task ledger fixing
    every cross-task file and contract). A single-file plan (≤ ~1300 lines)
-   comes back `DONE` from this one run.
+   comes back `DONE` from this one run. **On `SCOPE`** (ledger over 20 tasks),
+   stop: ask the partner where to cut (`AskUserQuestion`) and split the spec
+   (`document-conventions.md` § Splitting) before any part is written.
 2. On `PARTS`, dispatch one `plan-writer` per part with `mode=part <N>`, the
    spec, index and brief paths — **at most 2 part writers at once**: two in
    one message, the next pair only when both have returned (a part that
@@ -344,8 +346,12 @@ in parts, two at a time, to disk as it goes:
    **Commit the index as soon as phase 1 returns**
    (`docs(vN): plan index -- parts pending`), and each part as it returns, so
    a session that runs out of tokens leaves committed, resumable work.
+   **On `SPLIT: <id> -> <id>b`**, add the `b` row to the index ledger directly
+   below `<id>` before linting. Part writers own their file and the
+   controller owns the index.
 3. When all return, run `python scripts/dev/plan_lint.py <index>` — header,
-   ledger vs tasks, `Model:` lines, the 1500-line cap, `Modify:` paths,
+   ledger vs tasks, `Model:` lines, the 1500-line cap, the 20 KB task cap
+   and the 20-task plan cap (plans above v196), `Modify:` paths,
    placeholders, in one call. It must print `PASS`; then review and commit.
    Writers run it on their own files before returning, so it replaces the
    validation scripts they used to improvise.

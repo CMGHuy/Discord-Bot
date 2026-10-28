@@ -487,7 +487,8 @@ after bumping.
 
 No plan file may exceed 1500 lines. Split it into more `_N` parts (lettered
 `_2a`/`_2b`), never compress a task or split one across files, and afterwards
-confirm the `^### Task` sequence has no gap. A plan runs the full suite ONCE, as
+confirm the `^### Task` sequence has no gap. From v197 a task is ≤ 20 KB
+(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan runs the full suite ONCE, as
 its own final verification task, never per task and never again after a clean
 merge; the per-task check is the one narrow test file (or `npm test --include`
 one spec). Full cadence: `document-conventions.md`.

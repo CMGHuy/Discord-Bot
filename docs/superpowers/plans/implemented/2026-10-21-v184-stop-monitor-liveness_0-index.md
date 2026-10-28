@@ -5,7 +5,7 @@
 **Bump:** bot patch
 **Edge:** none (integrity) — protects the R the book already books: in August a stalled monitor turned four −1R stops into −3.3R to −6.0R fills. No stop, fill or close logic changes, so ExpR is predicted unchanged; the value is the count of hours with stops unchecked and nobody told, which today goes uncounted.
 **Screen:** exempt (integrity)
-**Spec:** [2026-10-21-v184-stop-monitor-liveness-design.md](../specs/2026-10-21-v184-stop-monitor-liveness-design.md)
+**Spec:** [2026-10-21-v184-stop-monitor-liveness-design.md](../../specs/implemented/2026-10-21-v184-stop-monitor-liveness-design.md)
 **Brief:** `.superpowers/briefs/2026-10-21-v184-stop-monitor-liveness.md`
 **Worktree:** implement every task in `.claude/worktrees/2026-10-21-v184-stop-monitor-liveness` (branch of the same name, created in V184-1's first step; `docs/claude/document-lifecycle.md`). The merge to `main` is V184-11's last step. V184-12 runs on production after the normal deploy.
 

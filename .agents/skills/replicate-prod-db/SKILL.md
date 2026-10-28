@@ -20,11 +20,27 @@ Default is the separate local database `swingbot_prod_replica` in the local
 asked for it by name: that drops and recreates it, and the script requires
 `--i-mean-it` to allow it.
 
-**One container per project.** Always replicate into this project's single
-`swing-db` container; never start another Postgres container or a per-task
-database. Parallel tasks and worktrees share the one replica by pointing
-`DATABASE_URL` at it. Because it is shared, a re-run drops and recreates the
-replica: skip it when a sibling task synced it recently and is still testing.
+**Exactly one database container for this project, always** (`swing-db`).
+A plan that touches the database does one thing: refresh that container with
+the latest production data (Step 3). It never creates a container, a second
+database, a per-plan or per-worktree copy, or a new port. Every plan and
+worktree shares the one replica by pointing `DATABASE_URL` at it. Because it is
+shared, a re-run drops and recreates the replica: skip it when a sibling task
+synced it recently and is still testing.
+
+Before Step 3, list what exists: `docker ps -a --format '{{.Names}}' | grep swing`.
+Start the existing `swing-db` with `docker start swing-db` (never `make up`: it
+also starts the bot, admin and tunnel containers) if it is stopped; if it will not
+start (a port the OS refuses), fix that one container, do not stand up another.
+`swing-db` also serves the test suite: it is published on `127.0.0.1:55432` by
+the git-ignored `docker-compose.override.yml` (`ports: 127.0.0.1:55432:5432` on
+service `db`), its `swingbot` role password is the test default and
+`swingbot_test` exists, so tests and replicas share the one server. Recreate
+it with `docker compose up -d db` from the main checkout, never from a
+worktree. `swing-db-test` (compose profile `test`, CI only) must not run
+locally. Any other `swing-*` Postgres container is a stray:
+report it to the partner, never point a plan at it, and never delete one without
+asking.
 
 ## Step 3 — Replicate
 
