@@ -6,6 +6,7 @@ import { SettingField } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
+import { Hint } from '../../ui/hint';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
@@ -26,11 +27,14 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
  * diff comes from the same `settings_diff` the save runs, over the same
  * overlay, so what is approved is what is written.
  */
+/** v194 A3: what the "restart" mark means. */
+export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
+
 @Component({
   selector: 'sb-settings-tab',
   host: { '(window:resize)': 'measureRail()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, ConfirmDialog, Async],
+  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, ConfirmDialog, Async, Hint],
   template: `
     @if (store.settingsStale()) {
       <!-- Spec v14 Decision 8: warn, do not silently reload. Another
@@ -178,7 +182,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
                     <!-- Named per field rather than only in the diff: it is
                          the difference between a change that takes effect and
                          one that waits for a restart nobody knew to do. -->
-                    <span class="restart" title="Restart required to take effect">restart</span>
+                    <span class="restart">restart</span><sb-hint [text]="restartHint" label="About restart" align="left" />
                   }
                   @if (field.sensitive) {
                     <span class="secret">stored value hidden — type to replace</span>
@@ -633,6 +637,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
   `,
 })
 export class SettingsTab {
+  protected readonly restartHint = SETTINGS_RESTART_HINT;
   protected readonly store = inject(SystemStore);
 
   /** Settings is a fixed schema -- once loaded it is never meaningfully

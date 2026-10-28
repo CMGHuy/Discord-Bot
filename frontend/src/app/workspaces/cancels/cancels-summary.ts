@@ -4,6 +4,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { CancelFigure, CancelOutcome, CancelPrecision } from '../../api/models';
 import { CancelCardKey, CancelFilter, CancelSplit } from '../../stores/cancels.store';
 import { Button } from '../../ui/button';
+import { Hint } from '../../ui/hint';
 import { Panel } from '../../ui/layout';
 import { ciText, figureText, rText } from './cancels.helpers';
 
@@ -31,11 +32,12 @@ interface SplitGroup { dim: CancelSplit['dim']; title: string; rows: SplitRow[] 
 @Component({
   selector: 'sb-cancels-summary',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, NgTemplateOutlet],
+  imports: [Panel, Button, NgTemplateOutlet, Hint],
   template: `
     <ng-template #mark let-f>
       @if (f.small_n) {
-        <span class="small-n" title="Fewer than {{ data().small_n_threshold }} resolved plans: an anecdote, not a rate">N &lt; {{ data().small_n_threshold }}</span>
+        <span class="small-n">N &lt; {{ data().small_n_threshold }}</span>
+        <sb-hint [text]="smallNHint()" label="About small samples" align="left" />
       }
     </ng-template>
 
@@ -197,6 +199,10 @@ export class CancelsSummary {
   protected readonly ciText = ciText;
   protected readonly rText = rText;
 
+  /** v194 A3: why a small-N figure is marked -- in a hint, not a native title. */
+  protected readonly smallNHint = computed(
+    () => `Fewer than ${this.data().small_n_threshold} resolved plans: an anecdote, not a rate.`,
+  );
   protected readonly active = computed<CancelFigure>(() => {
     const c = this.filter().card;
     return c ? this.data().cards[c] : this.data().headline.all;

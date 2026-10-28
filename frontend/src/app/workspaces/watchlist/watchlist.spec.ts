@@ -21,7 +21,7 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 import { SortSpec } from '../../ui/data-table/data-table.types';
 import { isInline } from '../../ui/priority';
-import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS } from './watchlist';
+import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS, WATCHLIST_FALLBACK_HINT } from './watchlist';
 import { WatchlistStore } from '../../stores/watchlist.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TapeStore } from '../../stores/tape.store';
@@ -66,6 +66,21 @@ function rows(list: Partial<Ticker>[]): Element[] {
 function firstRow(overrides: Partial<Ticker>): Element {
   return rows([overrides])[0];
 }
+
+describe('fallback price badge (v194 A3)', () => {
+  it('explains a yfinance fallback price in a hint beside the badge', () => {
+    const r = firstRow({ price_source: 'yfinance-fallback' });
+    const badge = r.querySelector('.source-badge')!;
+    expect(badge.textContent!.trim()).toBe('fallback');
+    expect(badge.hasAttribute('title')).toBe(false);
+    expect(badge.nextElementSibling!.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe(WATCHLIST_FALLBACK_HINT);
+  });
+
+  it('shows neither badge nor hint for a plain Alpaca price', () => {
+    const r = firstRow({ price_source: 'alpaca' });
+    expect(r.querySelector('.source-badge')).toBeNull();
+  });
+});
 
 describe('compareTickers', () => {
   const asc: SortSpec = { key: 'next_earnings_date', direction: 'asc' };

@@ -17,7 +17,7 @@ import {
 } from '../../api/interceptors';
 import { SettingField, Settings } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
-import { SettingsTab } from './settings-tab';
+import { SettingsTab, SETTINGS_RESTART_HINT } from './settings-tab';
 
 function payload(overrides: Partial<Settings> = {}): Settings {
   return { sections: [], audit: [], restart_available: false, ...overrides };
@@ -96,6 +96,26 @@ describe('System settings touch targets', () => {
 
   it('field grid collapses rather than overflowing a narrow panel', () => {
     expect(src).toMatch(/minmax\(\s*min\(100%,\s*260px\)/);
+  });
+});
+
+describe('SettingsTab restart mark (v194 A3)', () => {
+  it('explains the restart mark in a hint beside it, not a native title', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    const sections = [{
+      name: 'Discord', icon: 'settings', description: '',
+      fields: [{
+        key: 'tok', label: 'tok', type: 'str', value: 'x', default: 'x', help: '',
+        min: null, max: null, step: null, options: [], sensitive: false, hot_reloadable: false,
+      }],
+    }];
+    backend.expectOne('/api/v1/system/settings').flush(payload({ sections }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const restart = (fixture.nativeElement as HTMLElement).querySelector('.restart')!;
+    expect(restart.hasAttribute('title')).toBe(false);
+    expect(restart.nextElementSibling!.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe(SETTINGS_RESTART_HINT);
   });
 });
 

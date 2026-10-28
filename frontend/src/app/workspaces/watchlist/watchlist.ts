@@ -18,6 +18,7 @@ import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { AgeHint, PAGE_PRICE_WINDOW_S } from '../../ui/age-hint';
 import { Chip } from '../../ui/chip';
+import { Hint } from '../../ui/hint';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
@@ -168,10 +169,13 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
   { id: 'freshness', label: 'Updated', inlineFrom: 'sm' },
 ];
 
+/** v194 A3: what the "fallback" badge means. */
+export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answered instead.';
+
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline, AgeHint],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline, AgeHint, Hint],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -413,7 +417,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
       <!-- v106: only the exception is flagged -- Alpaca missed and yfinance
            answered. An Alpaca or plain-yfinance price stays quiet. -->
       @if (row.price_source === 'yfinance-fallback') {
-        <span class="source-badge" title="Alpaca missed this quote; yfinance answered instead">fallback</span>
+        <span class="source-badge">fallback</span><sb-hint [text]="fallbackHint" label="About fallback prices" align="left" />
       }
     </ng-template>
 
@@ -569,6 +573,7 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
   `,
 })
 export class Watchlist {
+  protected readonly fallbackHint = WATCHLIST_FALLBACK_HINT;
   private readonly router = inject(Router);
   protected readonly pageWindowS = PAGE_PRICE_WINDOW_S;
   protected readonly store = inject(WatchlistStore);

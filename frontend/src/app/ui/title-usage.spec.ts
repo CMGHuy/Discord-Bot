@@ -101,4 +101,9 @@ describe('native title usage (v194 A3)', () => {
     expect(TITLE_PENDING).toEqual(TITLE_ALLOW.filter((s) => s.kind === 'explanation-pending'));
     expect(TITLE_PENDING.some((s) => s.file.startsWith('workspaces/analytics/'))).toBe(false);
   });
+
+  it('has converted every explanation site: only echoes and control names keep a title', () => {
+    expect(TITLE_PENDING.map((s) => `${s.file} :: ${s.binding}`)).toEqual([]);
+    expect(TITLE_ALLOW.every((s) => s.kind === 'echo' || s.kind === 'control-name')).toBe(true);
+  });
 });

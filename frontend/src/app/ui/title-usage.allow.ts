@@ -40,14 +40,12 @@ export const TITLE_ALLOW: readonly TitleSite[] = [
   { file: 'ui/status-cell.ts', binding: '[title]="row().status_label"', kind: 'echo', note: 'the status label the cell prints' },
   // -- calendar --------------------------------------------------------------
   // -- cancels / dashboard ---------------------------------------------------
-  { file: 'workspaces/cancels/cancels-summary.ts', binding: 'title="Fewer than {{ data().small_n_threshold }} resolved plans: an anecdote, not a rate"', kind: 'explanation-pending', note: 'V194-15b: small-N caveat' },
   { file: 'workspaces/dashboard/dashboard.ts', binding: 'title="Trailing stop"', kind: 'control-name', note: 'names the trailing-stop icon' },
   { file: 'workspaces/dashboard/panels/equity-candles.ts', binding: 'title="Back to today: chart and figures"', kind: 'control-name', note: 'reset button, beside its aria-label' },
   { file: 'workspaces/dashboard/panels/recent-activity.ts', binding: '[title]="statusLabel(event)"', kind: 'control-name', note: 'status icon, beside its aria-label' },
   // -- research / system -----------------------------------------------------
   { file: 'workspaces/research/research.ts', binding: '[attr.title]="row.hypothesis"', kind: 'echo', note: 'full text of a truncated hypothesis' },
   { file: 'workspaces/system/settings-tab.ts', binding: 'title="Default value"', kind: 'echo', note: 'names the default badge the row prints' },
-  { file: 'workspaces/system/settings-tab.ts', binding: 'title="Restart required to take effect"', kind: 'explanation-pending', note: 'V194-15b: restart caveat' },
   { file: 'workspaces/system/settings-tab.ts', binding: "[title]=\"'Reset to ' + field.default\"", kind: 'echo', note: 'the default the badge beside it shows' },
   { file: 'workspaces/system/swallowed-errors-panel.ts', binding: '[attr.title]="line.lastSeenAt"', kind: 'echo', note: 'exact timestamp of the relative time shown' },
   // -- trades ----------------------------------------------------------------
@@ -55,9 +53,6 @@ export const TITLE_ALLOW: readonly TitleSite[] = [
   { file: 'workspaces/trades/trades.ts', binding: 'title="Trailing stop"', kind: 'control-name', note: 'names the trailing-stop icon' },
   // -- versions / watchlist --------------------------------------------------
   { file: 'workspaces/versions/versions.ts', binding: "[attr.title]=\"component + ' ' + version + ' — click to filter'\"", kind: 'control-name', note: 'filter chip button: names what a click does' },
-  { file: 'workspaces/versions/versions.ts', binding: 'title="This component did not exist yet"', kind: 'explanation-pending', note: 'V194-15b: hatched lane segment' },
-  { file: 'workspaces/versions/versions.ts', binding: 'title="The releases listed below"', kind: 'explanation-pending', note: 'V194-15b: bracket under the lanes' },
-  { file: 'workspaces/watchlist/watchlist.ts', binding: 'title="Alpaca missed this quote; yfinance answered instead"', kind: 'explanation-pending', note: 'V194-15b: fallback badge' },
 ];
 
 /** Sites a later v194 task converts. Empty once V194-15b lands. */
