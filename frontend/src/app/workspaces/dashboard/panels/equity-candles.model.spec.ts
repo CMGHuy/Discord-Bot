@@ -81,7 +81,7 @@ describe('equity candles model', () => {
     expect(parts).toContain('Closed trades only');
     expect(parts).toContain('approx');
     expect(parts).toContain('2 positions not counted');
-    expect(parts).toContain('-5.00 $');
+    expect(parts).toContain('−5.00 $');
     expect(readoutParts(candle({ skipped: 1 }), 'mtm', '€', '1D')).toContain('1 position not counted');
   });
 
@@ -118,14 +118,14 @@ describe('v181 readout parts', () => {
   it('colours only the change parts of a hovered candle, by its sign', () => {
     const parts = candleReadout(candle({ change: -12.5, change_pct: -0.12 }), 'mtm', '€', '1D');
     const toned = parts.filter((p) => p.tone !== 'neutral').map((p) => p.text);
-    expect(toned).toEqual(['-12.50 €', '-0.12% vs prev close']);
+    expect(toned).toEqual(['−12.50 €', '−0.12% vs prev close']);
     expect(parts.find((p) => p.text.startsWith('O '))?.tone).toBe('neutral');
   });
 
   it('leaves an unavailable hovered percentage uncoloured', () => {
     const parts = candleReadout(candle({ change: -12.5, change_pct: null }), 'mtm', '€', '1D');
     expect(parts.find((p) => p.text === '— vs prev close')?.tone).toBe('neutral');
-    expect(parts.find((p) => p.text === '-12.50 €')?.tone).toBe('neg');
+    expect(parts.find((p) => p.text === '−12.50 €')?.tone).toBe('neg');
   });
 
   it('leaves a flat candle uncoloured', () => {

@@ -72,7 +72,7 @@ describe('tradeDrawerFields (v179 §3.2)', () => {
   it('shows the realised P&L of a closed leg, signed and toned by its sign', () => {
     const row = tradeRow({ status: 'CLOSED', pnl_pct: -4, realized_pnl_amount: -40, current_price: null });
     const pnl = tradeDrawerFields(row, '€', NOW).find((f) => f.key === 'pnl')!;
-    expect(pnl.value).toBe('-4.00% (-40.00 €)');
+    expect(pnl.value).toBe('−4.00% (−40.00 €)');
     expect(pnl.tone).toBe('neg');
   });
 

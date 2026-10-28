@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { amount, held, money, quantity, riskPct, shareCount, signed, timeInZone } from './format';
+import { MINUS, amount, held, money, pct, quantity, rMultiple, riskPct, shareCount, signed, timeInZone } from './format';
 
 /* No prior spec file existed for format.ts; timeInZone is new (Watchlist
  * Earnings calendar) and carries real cross-timezone/DST behaviour worth
@@ -109,8 +109,8 @@ describe('money', () => {
     expect(money(12345.6, '€')).toBe('+12,345.60 €');
   });
 
-  it('signs a loss with its native minus, not a doubled one', () => {
-    expect(money(-1234.5, '€')).toBe('-1,234.50 €');
+  it('signs a loss with one true minus, not a hyphen and not a doubled sign (v195 correction 5)', () => {
+    expect(money(-1234.5, '€')).toBe('−1,234.50 €');
   });
 
   it('renders absence as the em dash, not as zero', () => {
@@ -180,5 +180,58 @@ describe('riskPct (v194 B5: a tiny risk never reads as zero)', () => {
   it('renders absence as the em dash', () => {
     expect(riskPct(null)).toBe('—');
     expect(riskPct(undefined)).toBe('—');
+  });
+});
+
+/* v195 section 1.1, correction 5: colour is never the only cue. Every P&L, R and
+ * return figure carries an explicit sign, and a loss carries U+2212, the
+ * same glyph signed() has always used: a hyphen is narrower than a digit
+ * even in a mono face, so a column of hyphen-negatives does not align. */
+describe('v195: a true minus on every signed figure', () => {
+  const HYPHEN = '-';
+
+  it('exports the minus sign once, as U+2212', () => {
+    expect(MINUS).toBe('−');
+    expect(MINUS).not.toBe(HYPHEN);
+  });
+
+  it('signs pct both ways and keeps its decimals', () => {
+    expect(pct(1.5)).toBe('+1.50%');
+    expect(pct(-1.5)).toBe('−1.50%');
+    expect(pct(-12.34, 1)).toBe('−12.3%');
+    expect(pct(0)).toBe('0.00%');
+    expect(pct(-0)).toBe('0.00%');
+    expect(pct(null)).toBe('—');
+    expect(pct(undefined)).toBe('—');
+  });
+
+  it('signs money both ways, groups the magnitude and keeps the unit suffix', () => {
+    expect(money(12345.6, '€')).toBe('+12,345.60 €');
+    expect(money(-212, '$', 0)).toBe('−212 $');
+    expect(money(-1234567.891, '$')).toBe('−1,234,567.89 $');
+    expect(money(0, '€')).toBe('0.00 €');
+    expect(money(-0, '€')).toBe('0.00 €');
+    expect(money(null, '€')).toBe('—');
+  });
+
+  it('signs an R multiple both ways', () => {
+    expect(rMultiple(1.84)).toBe('+1.84R');
+    expect(rMultiple(-0.3)).toBe('−0.30R');
+    expect(rMultiple(0)).toBe('0.00R');
+    expect(rMultiple(null)).toBe('—');
+  });
+
+  it('prints no hyphen-minus from any signed helper', () => {
+    for (const value of [-0.004, -1, -2.5, -1234.567]) {
+      for (const text of [pct(value), pct(value, 0), money(value, '$'), money(value, '€', 0), rMultiple(value), signed(value)]) {
+        expect(text, `${value} -> ${text}`).not.toContain(HYPHEN);
+        expect(text.startsWith(MINUS), `${value} -> ${text}`).toBe(true);
+      }
+    }
+  });
+
+  it('leaves the unsigned level formatter unsigned and zero unsigned', () => {
+    expect(amount(1420, '$', 0)).toBe('1,420 $');
+    expect(signed(0)).toBe('0.00');
   });
 });

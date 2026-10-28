@@ -47,7 +47,7 @@ describe('PlanCard', () => {
       expect(cells[1].classList.contains('from')).toBe(true);
       expect([...cells].every(cell => cell.classList.contains('num'))).toBe(true);
     }
-    expect(el.querySelector('[data-level="Stop"] td.from')?.textContent?.trim()).toBe('-5.00%');
+    expect(el.querySelector('[data-level="Stop"] td.from')?.textContent?.trim()).toBe('−5.00%');
   });
   it('renders one panel with actionable notes and table-local scrolling', () => {
     const f = TestBed.createComponent(PlanCard);

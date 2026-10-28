@@ -67,7 +67,7 @@ describe('OutcomePath', () => {
     expect(root.textContent).toContain('TP1');
     expect(root.textContent).toContain('still open');
     render([LEGS[0], { fraction: null, exitPrice: 95, r: -1, reason: 'Stop' }]);
-    expect(root.querySelector('.neg')?.textContent).toBe('-1.00R');
+    expect(root.querySelector('.neg')?.textContent).toBe('−1.00R');
     expect(root.textContent).toContain('Stop');
   });
 

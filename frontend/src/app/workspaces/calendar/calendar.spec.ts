@@ -559,7 +559,7 @@ describe('Calendar stat digest', () => {
     const component = fixture.componentInstance as unknown as {
       calendarDigest: () => string;
     };
-    expect(component.calendarDigest()).toBe('-60.00 € · 3 trades · 33.3% win');
+    expect(component.calendarDigest()).toBe('−60.00 € · 3 trades · 33.3% win');
   });
 
   it('carries the thin-sample warning into the digest rather than losing it', async () => {
@@ -835,8 +835,8 @@ describe('Calendar totals in a stat strip (v186 D3)', () => {
 
 describe('Calendar totals metric formatting and tone (v179)', () => {
   it.each([
-    ['currency', '-60.00 €', 'neg'],
-    ['r', '-0.60R', 'neg'],
+    ['currency', '−60.00 €', 'neg'],
+    ['r', '−0.60R', 'neg'],
     ['trades', '3', 'neutral'],
     ['win_rate', '33.3%', 'neutral'],
   ] as const)('keeps the %s unit and uses only meaningful sign colours', async (metric, value, tone) => {

@@ -235,7 +235,7 @@ describe('CalendarDayPage', () => {
     expect(text(root, '.compare .rank')).toBe('3rd best of 3 days in August 2026');
     expect(text(root, '.vs-day')).toBe('+12.50 € · +0.25R');
     expect(text(root, '.vs-weekday-label')).toBe('vs average Wednesday');
-    expect(text(root, '.vs-weekday')).toBe('-3.00 € · —');
+    expect(text(root, '.vs-weekday')).toBe('−3.00 € · —');
     expect(root.querySelectorAll('.compare .pos, .compare .neg')).toHaveLength(0);
     expect(text(root, '.caveat')).toBe(ONE_DAY_CAVEAT);
   });
@@ -267,8 +267,8 @@ describe('CalendarDayPage', () => {
   it('draws the month so far with this day marked and month-to-date figures', async () => {
     const root = el(await open('2026-08-05'));
     expect(root.querySelector('svg.month-line circle.marker')).not.toBeNull();
-    expect(text(root, '.mtd-pnl')).toBe('-60.00 €');
-    expect(text(root, '.mtd-r')).toBe('-1.20R');
+    expect(text(root, '.mtd-pnl')).toBe('−60.00 €');
+    expect(text(root, '.mtd-r')).toBe('−1.20R');
     expect(root.querySelector('.mtd-r')?.hasAttribute('title')).toBe(false);
     expect(root.querySelector('.mtd-r + sb-hint [role="tooltip"]')?.textContent?.trim()).toBe(R_TOOLTIP);
     expect(text(root, '.month-panel .rank')).toBe('3rd best of 3 days in August 2026');
