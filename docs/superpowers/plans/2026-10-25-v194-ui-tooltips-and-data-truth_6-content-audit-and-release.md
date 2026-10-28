@@ -516,4 +516,4 @@ OPEN (recorded, not changed): row 6, Exposure by horizon sums risk in each instr
 
 #### Post-deploy record
 
-(Filled by Step 7.)
+post-deploy: pending deploy (2026-10-28) -- production `hint` check not yet run; OPEN.
