@@ -192,11 +192,12 @@ describe('DayTradeCard leg label (v194 B3)', () => {
     expect(el.querySelector('.leg')!.textContent!.trim()).toBe('Leg 2 of 2');
   });
 
-  it('explains leg rows with a hint that says win rate and N count plans', () => {
+  it('explains leg rows with a hint that says how this page counts them (A4 audit)', () => {
     const el = card({ ...TRADE, leg_index: 0, leg_total: 2 });
     const hint = el.querySelector('.leg + sb-hint')!;
     expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('About leg rows');
     expect(hint.querySelector('[role="tooltip"]')!.textContent).toContain(LEG_HINT_TEXT);
+    expect(hint.querySelector('[role="tooltip"]')!.textContent).toContain('count each realised leg as its own trade');
   });
 
   it('shows neither label nor leg hint for a trade that never scaled out', () => {

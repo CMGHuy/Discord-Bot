@@ -492,7 +492,8 @@ export class Calendar {
   protected readonly today = localIsoDate(new Date());
   /** v194 B3 -- the one leg name (shared with Trades and the Dashboard). */
   protected readonly legLabel = legLabel;
-  protected readonly legHint = LEG_HINT_TEXT;
+  /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
+  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
 
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.totals.trade_count === 0 }),

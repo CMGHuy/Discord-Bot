@@ -130,7 +130,8 @@ export class DayTradeCard {
    *  reason, so the shared label is built without one. */
   protected readonly leg = computed(() =>
     legLabel({ leg_index: this.trade().leg_index, leg_total: this.trade().leg_total }));
-  protected readonly legHint = LEG_HINT_TEXT;
+  /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
+  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
   protected readonly direction = computed(() => DIRECTIONS[this.trade().direction ?? ''] ?? ABSENT);
   protected readonly exitTone = computed<ChipTone>(() =>
     this.trade().exit_reason === 'other' ? 'muted' : 'neutral',

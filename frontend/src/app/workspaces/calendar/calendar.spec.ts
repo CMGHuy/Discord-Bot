@@ -392,6 +392,8 @@ describe('Calendar day drawer', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].querySelector('.leg')?.textContent).toContain('Leg 1 of 2');
     expect(rows[1].querySelector('.leg')?.textContent).toContain('Leg 2 of 2');
+    // A4 audit: the Calendar counts each realised leg as a trade, and says so.
+    expect(rows[0].querySelector('sb-hint [role="tooltip"]')?.textContent).toContain('count each realised leg as its own trade');
   });
 
   it('does not label an unsplit trade as a leg', async () => {
