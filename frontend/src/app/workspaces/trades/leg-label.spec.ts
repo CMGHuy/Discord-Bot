@@ -42,10 +42,11 @@ describe('legLabel (v194 B3)', () => {
 });
 
 describe('LEG_HINT_TEXT (v194 B3)', () => {
-  it('says the rows are one plan, each its share, and that win rate and N count plans', () => {
+  it('says the rows are one plan, each its share, and leaves counting to each surface (A4 audit)', () => {
     expect(LEG_HINT_TEXT).toContain('one plan');
     expect(LEG_HINT_TEXT).toContain("that part's share");
-    expect(LEG_HINT_TEXT).toContain('Win rate and N count plans, not legs.');
+    // Dashboard and Calendar count legs, Analytics counts plans: no one claim fits all.
+    expect(LEG_HINT_TEXT).not.toContain('Win rate and N count plans, not legs.');
   });
 
   it('does not name legs TP1 or Runner, since legs are numbered in close order', () => {

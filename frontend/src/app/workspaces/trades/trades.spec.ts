@@ -527,6 +527,8 @@ describe('Trades — leg rows (v194 B3)', () => {
     const hints = [...el.querySelectorAll('.leg sb-hint')];
     expect(hints).toHaveLength(2);
     expect(hints[0].textContent).toContain(LEG_HINT_TEXT);
+    expect(hints[0].textContent).toContain('count plans on Analytics');   // A4 audit
+    expect(hints[0].textContent).not.toContain('plans, not legs');
     expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
   });
 

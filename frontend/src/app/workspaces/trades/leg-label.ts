@@ -21,10 +21,12 @@ export interface LegLike {
 /** Calendar's catch-all: not a recorded reason, so the label stands alone. */
 const UNRECORDED_REASONS: ReadonlySet<string> = new Set(['other']);
 
+/** v194 A4: what the leg rows are. How win rate and N count them differs by
+ *  surface (the Dashboard and the Calendar count each realised leg as a
+ *  trade, Analytics counts plans), so each surface appends its own sentence. */
 export const LEG_HINT_TEXT =
   'These rows are parts of one plan that scaled out, numbered in the order they closed. '
-  + "Each row's P&L is that part's share of the plan's result. "
-  + 'Win rate and N count plans, not legs.';
+  + "Each row's P&L is that part's share of the plan's result.";
 
 function recordedReason(row: LegLike): string | null {
   const raw = (row.leg_exit_reason ?? row.exit_reason ?? '').trim();

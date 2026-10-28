@@ -1002,7 +1002,10 @@ export class Trades {
 
   /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
   protected readonly legLabel = legLabel;
-  protected readonly legHint = LEG_HINT_TEXT;
+  /** v194 A4: this page has no win rate; say how the pages that do count. */
+  protected readonly legHint = LEG_HINT_TEXT
+    + ' Win rate and N count plans on Analytics; the Dashboard and the Calendar count each realised '
+    + 'leg as its own trade.';
   protected readonly exportHint = EXPORT_HINT;
 
   /**
