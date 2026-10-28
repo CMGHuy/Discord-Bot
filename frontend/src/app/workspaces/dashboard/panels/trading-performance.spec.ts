@@ -13,7 +13,11 @@ import { ViewportService } from '../../../ui/breakpoints';
 import { SCOPE_PRESETS, ScopePreset, ScopeSelection, TimeWindow, rangeChipLabel } from './equity-range.model';
 import { KPI_HELP, PANEL_HELP } from './panel-help';
 import { PortfolioValue } from './portfolio-value';
-import { TradingPerformance, presetLabel } from './trading-performance';
+import {
+  PERF_BASIS, TradingPerformance, joinSub, performanceSample, presetLabel, withBasis,
+} from './trading-performance';
+import { MetricCard } from '../../../ui/metric-card';
+import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 
 installMatchMediaPolyfill();
 
@@ -257,7 +261,7 @@ describe('trading performance panel', () => {
     it('ring the five window-scoped cards while a refetch is in flight, and not the "now" cards', () => {
       const el = render({ loading: true, currency: '€' });
       expect(busyLabels(el)).toEqual(
-        ['Win rate', 'Expectancy', 'Payoff ratio', 'Realised today', 'Avg confidence']);
+        ['Expectancy', 'Win rate', 'Payoff ratio', 'Realised today', 'Avg confidence']);
       expect(card(el, 'Win rate').querySelector('sb-spinner')).not.toBeNull();
       expect(card(el, 'Open P&L').querySelector('sb-spinner')).toBeNull();
       expect(card(el, 'Open trades').querySelector('sb-spinner')).toBeNull();
@@ -273,7 +277,7 @@ describe('trading performance panel', () => {
       const el = render({ loading: true, currency: '€' });
       const busyRows = [...el.querySelectorAll('.mobile-summary > div.busy > span')]
         .map((s) => s.textContent!.replace(/\s+/g, ' ').trim());
-      expect(busyRows).toEqual(['Win rate', 'Expectancy', 'Payoff', 'Realised today']);
+      expect(busyRows).toEqual(['Expectancy', 'Win rate', 'Payoff', 'Realised today']);
       expect(el.querySelectorAll('.mobile-summary sb-spinner')).toHaveLength(4);
       expect(row(el, 'Open').classList.contains('busy')).toBe(false);
       expect(row(el, 'Portfolio').classList.contains('busy')).toBe(false);
@@ -345,15 +349,15 @@ describe('trading performance panel', () => {
       const el = render({ currency: '€' });
       const panel = el.querySelector('sb-panel')!;
       expect(panel.hasAttribute('title')).toBe(false);
-      expect(panel.querySelector('header [role="tooltip"]')!.textContent!.trim()).toBe(PANEL_HELP.tradingPerformance);
+      expect(panel.querySelector('header [role="tooltip"]')!.textContent!.trim()).toBe(withBasis(PANEL_HELP.tradingPerformance));
       const titles = new Map([...el.querySelectorAll('sb-metric-card')].map((c) => [
         c.querySelector('.label')!.textContent!.trim(),
         c.querySelector('.label-row [role="tooltip"]')?.textContent?.trim()]));
-      expect(titles.get('Open P&L')).toBe(KPI_HELP.openPnl);
-      expect(titles.get('Win rate')).toBe(KPI_HELP.winRate);
-      expect(titles.get('Expectancy')).toBe(KPI_HELP.expectancy);
-      expect(titles.get('Payoff ratio')).toBe(KPI_HELP.payoffRatio);
-      expect(titles.get('Realised today')).toBe(KPI_HELP.realizedToday);
+      expect(titles.get('Open P&L')).toBe(PERF_BASIS.openPnl);
+      expect(titles.get('Win rate')).toBe(PERF_BASIS.winRate);
+      expect(titles.get('Expectancy')).toBe(PERF_BASIS.expectancy);
+      expect(titles.get('Payoff ratio')).toBe(PERF_BASIS.payoffRatio);
+      expect(titles.get('Realised today')).toBe(PERF_BASIS.realizedToday);
       expect(titles.get('Open trades')).toBe(KPI_HELP.openTrades);
       expect(titles.get('Avg confidence')).toBe(KPI_HELP.avgConfidence);
     });
@@ -528,5 +532,118 @@ describe('trading performance KPI strip (v186 D3)', () => {
     if (/nth-child\(4n \+ 3\)/.test(src)) {
       expect(src).toMatch(/\.grid sb-metric-card:last-child:nth-child\(4n \+ 3\) \{ grid-column: span 2; \}/);
     }
+  });
+});
+
+/* -- v195 §5.2 -- the performance strip leads with expectancy ------------ */
+
+describe('trading performance leads with expectancy (v195 §5.2)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
+        { provide: ViewportService, useValue: { isPhone: signal(false) } },
+      ],
+    });
+  });
+
+  function mount(inputs: Record<string, unknown>) {
+    const f = TestBed.createComponent(TradingPerformance);
+    for (const [key, value] of Object.entries(inputs)) f.componentRef.setInput(key, value);
+    f.detectChanges();
+    return f;
+  }
+  /** The cards' own inputs, in DOM order. */
+  const cards = (f: ReturnType<typeof mount>) =>
+    f.debugElement.queryAll(By.directive(MetricCard)).map((d) => d.componentInstance as MetricCard);
+  const labels = (f: ReturnType<typeof mount>) => cards(f).map((c) => c.label());
+  const cardSub = (f: ReturnType<typeof mount>, label: string) =>
+    cards(f).find((c) => c.label() === label)!.sub();
+  const cardHint = (f: ReturnType<typeof mount>, label: string) =>
+    cards(f).find((c) => c.label() === label)!.description();
+  const summaryLabels = (el: HTMLElement) =>
+    [...el.querySelectorAll('.mobile-summary > div > span')].map((s) => s.textContent!.replace(/\s+/g, ' ').trim());
+  const summaryRow = (el: HTMLElement, label: string) =>
+    [...el.querySelectorAll<HTMLElement>('.mobile-summary > div')]
+      .find((d) => d.querySelector('span')?.textContent?.trim() === label)!;
+
+  it('opens the strip with Expectancy, then Win rate, then Payoff ratio', () => {
+    expect(labels(mount({ currency: '€' }))).toEqual([
+      'Expectancy', 'Win rate', 'Payoff ratio', 'Open P&L', 'Realised today', 'Open trades', 'Avg confidence',
+    ]);
+  });
+
+  it('keeps that lead in Period mode, the period card after Realised today', () => {
+    expect(labels(mount({ selection: { kind: 'preset', preset: '1M' }, currency: '€' }))).toEqual([
+      'Expectancy', 'Win rate', 'Payoff ratio', 'Open P&L', 'Realised today', 'Realised in period',
+      'Open trades', 'Avg confidence',
+    ]);
+  });
+
+  it('shows N= on every rate card, payoff from the expectancy sample', () => {
+    const f = mount({ expectancyR: 0.2, expectancyN: 42, winRate: 55, winRateN: 40, payoffRatio: 1.5, currency: '€' });
+    expect(cardSub(f, 'Expectancy')).toBe('N=42');
+    expect(cardSub(f, 'Win rate')).toBe('N=40');
+    expect(cardSub(f, 'Payoff ratio')).toBe('N=42');
+  });
+
+  it('flags a thin sample in the stat tile\'s own words, and not from the threshold up', () => {
+    const f = mount({ expectancyR: 0.2, expectancyN: 12, winRate: 55, winRateN: MIN_SAMPLE_N, payoffRatio: 1.5, currency: '€' });
+    expect(cardSub(f, 'Expectancy')).toBe('N=12 · thin sample');
+    expect(cardSub(f, 'Payoff ratio')).toBe('N=12 · thin sample');
+    expect(cardSub(f, 'Win rate')).toBe(`N=${MIN_SAMPLE_N}`);
+  });
+
+  it('keeps the payoff no-close hint after its N', () => {
+    const f = mount({ payoffRatio: null, expectancyN: 0, currency: '€' });
+    expect(cardSub(f, 'Payoff ratio')).toBe('N=0 · thin sample · none closed today');
+  });
+
+  it('states the basis once in every performance hint, and not on the counts', () => {
+    const f = mount({ selection: { kind: 'preset', preset: '1M' }, currency: '€' });
+    for (const label of ['Expectancy', 'Win rate', 'Payoff ratio', 'Open P&L', 'Realised today', 'Realised in period']) {
+      const hint = cardHint(f, label)!;
+      expect(hint.split(PERFORMANCE_CAVEAT)).toHaveLength(2);
+    }
+    expect(cardHint(f, 'Expectancy')).toContain(KPI_HELP.expectancy);
+    expect(cardHint(f, 'Realised in period')).toBe(PERF_BASIS.realized);
+    expect(cardHint(f, 'Open trades')).toBe(KPI_HELP.openTrades);
+    expect(cardHint(f, 'Avg confidence')).toBe(KPI_HELP.avgConfidence);
+  });
+
+  it('puts Expectancy before Win rate in the phone summary, each with its N', () => {
+    const el = mount({ expectancyR: -0.16, expectancyN: 12, winRate: 49.1, winRateN: 40, payoffRatio: 2.34, currency: '€' })
+      .nativeElement as HTMLElement;
+    expect(summaryLabels(el)).toEqual(['Portfolio', 'Today', 'Open', 'Expectancy', 'Win rate', 'Payoff', 'Realised today']);
+    expect(summaryRow(el, 'Expectancy').querySelector('strong')!.textContent).toContain('−0.16R');
+    expect(summaryRow(el, 'Expectancy').querySelector('.n')!.textContent!.trim()).toBe('N=12 · thin sample');
+    expect(summaryRow(el, 'Win rate').querySelector('.n')!.textContent!.trim()).toBe('N=40');
+    expect(summaryRow(el, 'Payoff').querySelector('.n')!.textContent!.trim()).toBe('N=12 · thin sample');
+  });
+
+  it('shows no N line in the summary before a sample is known', () => {
+    const el = mount({ currency: '€' }).nativeElement as HTMLElement;
+    expect(el.querySelectorAll('.mobile-summary .n')).toHaveLength(0);
+  });
+});
+
+describe('trading performance helpers (v195 §5.2)', () => {
+  it('adds the caveat once', () => {
+    expect(withBasis('Average R per trade.')).toBe(`Average R per trade. ${PERFORMANCE_CAVEAT}`);
+    expect(withBasis(`Average R per trade. ${PERFORMANCE_CAVEAT}`)).toBe(`Average R per trade. ${PERFORMANCE_CAVEAT}`);
+  });
+
+  it('writes N, with the thin cue below the minimum', () => {
+    expect(performanceSample(null)).toBeNull();
+    expect(performanceSample(0)).toBe('N=0 · thin sample');
+    expect(performanceSample(MIN_SAMPLE_N - 1)).toBe(`N=${MIN_SAMPLE_N - 1} · thin sample`);
+    expect(performanceSample(MIN_SAMPLE_N)).toBe(`N=${MIN_SAMPLE_N}`);
+    expect(performanceSample(10, 5)).toBe('N=10');
+  });
+
+  it('joins only the parts that exist', () => {
+    expect(joinSub('N=4', null, 'none closed today')).toBe('N=4 · none closed today');
+    expect(joinSub(null, null)).toBeNull();
   });
 });

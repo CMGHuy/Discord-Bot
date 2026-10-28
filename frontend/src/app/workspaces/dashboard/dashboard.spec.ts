@@ -37,7 +37,7 @@ import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
 import { dashboardRoutes } from './dashboard.routes';
 import { PANEL_HELP } from './panels/panel-help';
-import { TradingPerformance } from './panels/trading-performance';
+import { TradingPerformance, withBasis } from './panels/trading-performance';
 import { EquityCandles } from './panels/equity-candles';
 import { PositionsTable } from './positions-table';
 import { isInline } from '../../ui/priority';
@@ -376,7 +376,7 @@ describe('Dashboard v85 layout', () => {
       expect(section.querySelector('header sb-hint'), heading).not.toBeNull();
     }
     const titles = panels.map((p) => p.querySelector('header [role="tooltip"]')?.textContent?.trim());
-    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance]));
+    expect(titles).toEqual(expect.arrayContaining([withBasis(PANEL_HELP.tradingPerformance)]));
   });
 
   it('explains each KPI card through a hint beside its label, payoff ratio included', async () => {
