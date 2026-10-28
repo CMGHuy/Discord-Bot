@@ -40,6 +40,8 @@ import { PANEL_HELP } from './panels/panel-help';
 import { TradingPerformance } from './panels/trading-performance';
 import { EquityCandles } from './panels/equity-candles';
 import { PositionsTable } from './positions-table';
+import { isInline } from '../../ui/priority';
+import { NEVER_COLLAPSED_COLUMNS } from '../trades/trades.columns';
 
 installMatchMediaPolyfill();
 
@@ -669,6 +671,16 @@ describe('DASHBOARD_COLUMNS', () => {
     // this is literally that same function's return value.
     expect(DASHBOARD_COLUMNS.length).toBeGreaterThan(0);
     expect(DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined)).toEqual([]);
+  });
+
+  it('keeps the never-collapsed columns, the badge among them, inline on a tablet (v195 correction 8)', () => {
+    // Open positions is where a stop is checked before acting: it must not sit
+    // one tap away in the row expansion at 640-1023px.
+    for (const key of NEVER_COLLAPSED_COLUMNS) {
+      const column = DASHBOARD_COLUMNS.find((c) => c.key === key);
+      expect(column, `missing column: ${key}`).toBeDefined();
+      expect(isInline(column!.inlineFrom, 'sm'), `${key} collapses at sm`).toBe(true);
+    }
   });
 });
 

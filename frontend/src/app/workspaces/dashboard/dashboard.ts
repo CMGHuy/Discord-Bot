@@ -140,7 +140,12 @@ export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
  * first time either changed — two names for one fact is exactly what this
  * plan's global constraints exist to prevent. `now: signal(Date.now())`
  * default: the gate reads `inlineFrom`, never a cell's rendered value, so
- * which instant it is does not matter here. */
+ * which instant it is does not matter here.
+ *
+ * v195 correction 8: the same function carries NEVER_COLLAPSED_COLUMNS
+ * (trades.columns.ts), so Open positions keeps ticker, side, plan, stop,
+ * P&L, R, tier and the strategy badge inline on a tablet with no list of
+ * its own. */
 export const DASHBOARD_COLUMNS = tradeColumns();
 
 /** The trade drawer's query parameter (v179 §3.2). dashboard.routes.ts's
