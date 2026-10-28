@@ -60,6 +60,7 @@ THEME = {
     "text": "#e8eef8",
     "text-muted": "#8f9db5",
     "text-faint": "#3a4a66",
+    "accent": "#7cc4ff",
     "pos": "#00e5a0",
     "neg": "#ff4d5e",
     "warn": "#ffc266",
@@ -74,7 +75,7 @@ THEME = {
 # so a THEME change, or a rollback across one, never serves a PNG drawn in the
 # other palette from ./exports/chart_cache (spec v167 § 4). Bump it in the same
 # commit as THEME; tests/charts/test_chart_theme.py pins the pair (STYLE_PINS).
-STYLE_VERSION = "v181"
+STYLE_VERSION = "v195a"
 
 CHART_BG = THEME["surface"]             # figure + every panel's background: TradingView's chart pane
 GRID_COLOR = THEME["border"]            # gridlines -- subtle, never competes with data
@@ -93,7 +94,12 @@ CHIP_EDGE = THEME["border-strong"]      # neutral chip border when no accent col
 # against #26a69a candles was two greens that meant the same thing. Line
 # weight, dashing and the labelled chip are what separate a level from a
 # candle body, not a third hue.
-ENTRY_COLOR = THEME["chart-1"]
+#
+# v195 Phase 6: entry is the interactive accent, the colour the admin app
+# draws its entry line in (frontend/src/app/ui/chart/plan-lines.ts), so a
+# plan reads the same in the Discord image and on bomeo-capital.com. It read
+# chart-1, a series identifier, before.
+ENTRY_COLOR = THEME["accent"]
 STOP_COLOR = THEME["neg"]
 TARGET_COLOR = THEME["pos"]
 TARGET2_COLOR = THEME["chart-3"]
