@@ -20,6 +20,7 @@ import { RouteLoadingService } from '../routing/route-loading.service';
 import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { CLOCK } from '../ui/clock';
+import { DENSITY_STORAGE } from '../ui/density.service';
 import { provideMotion } from '../ui/motion/motion.service';
 import { POPOVER_OPEN_ATTR } from '../testing/popover-polyfill';
 import { NAV_GROUPS } from './nav';
@@ -110,17 +111,17 @@ describe('shell navigation', () => {
     });
   });
 
-  it('carries the tape inside the top bar row, not beneath it', () => {
+  it('runs the tape as a strip under the top bar, not inside it (v195 Phase 3)', () => {
     const fixture = TestBed.createComponent(Shell);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
     const main = el.querySelector('.main') as HTMLElement;
     expect(Array.from(main.children).map((c) => c.tagName.toLowerCase()))
-      .toEqual(['header', 'main']);
-
-    const header = el.querySelector('header.topbar') as HTMLElement;
-    expect(header.querySelector('sb-tape')).not.toBeNull();
+      .toEqual(['header', 'div', 'main']);
+    expect(main.children[1].classList).toContain('tape-strip');
+    expect(main.querySelector(':scope > .tape-strip > sb-tape')).not.toBeNull();
+    expect(el.querySelector('header.topbar sb-tape')).toBeNull();
   });
 
   it('shows the date and time from the ambient clock', () => {
@@ -150,23 +151,25 @@ describe('shell navigation', () => {
     expect(strip.getAttribute('role')).toBe('alert');
     expect(strip.textContent).toContain('KILLSWITCH ENGAGED');
     expect(strip.parentElement?.classList.contains('main')).toBe(true);
-    expect(strip.previousElementSibling?.tagName.toLowerCase()).toBe('header');
+    expect(strip.previousElementSibling?.classList.contains('tape-strip')).toBe(true);
   });
 
-  it('overlays the scan progress strip on the workspace rather than reflowing it', () => {
+  it('hangs the scan progress from the top bar, out of the flow (v195 Phase 3)', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
 
-    const strip = el.querySelector('sb-scan-progress');
-    expect(strip).not.toBeNull();
-
-    // Deliberately NOT a sibling of the header the way `.killswitch-strip`
-    // is. That one is in the flow because it must never be missed; this one
-    // appears every SCAN_INTERVAL_MINUTES all session, and in the flow it
-    // would shunt the page down and back several times an hour.
-    expect(strip!.parentElement?.classList.contains('workspace')).toBe(true);
-    expect(strip!.previousElementSibling).toBeNull();
+    const strip = el.querySelector('sb-scan-progress')!;
+    expect(el.querySelectorAll('sb-scan-progress')).toHaveLength(1);
+    // In the sticky bar, so it shows on every route; the bar's last child,
+    // so it paints over its own siblings' edge rather than between them.
+    expect(strip.parentElement?.matches('header.topbar')).toBe(true);
+    expect(strip.nextElementSibling).toBeNull();
+    expect(el.querySelector('.workspace sb-scan-progress')).toBeNull();
+    // Absolute (its own :host), re-anchored under the bar's bottom edge: it
+    // never takes layout, so a scan every few minutes never shunts the page.
+    const css = readSource('src/app/shell/shell.css');
+    expect(css.match(/^\.topbar > sb-scan-progress \{[^}]*\}/m)?.[0]).toContain('inset: 100% 0 auto 0;');
   });
 
   /* v195 §1.2: depth comes from surface steps and borders only. The ambient
@@ -297,7 +300,7 @@ describe('shell navigation', () => {
     // v95 A2's declared breakpoint. The subtitle it used to drop at 1023px
     // has left the bar (v195: the breadcrumb leads, sb-page carries the title).
     expect(css).toMatch(/max-width:\s*639px[\s\S]*\.clock[\s\S]*display:\s*none/);
-    expect(css).toMatch(/max-width:\s*639px[\s\S]*\.topbar-tape[\s\S]*display:\s*none/);
+    expect(css).toMatch(/max-width:\s*639px[\s\S]*\.tape-strip[\s\S]*display:\s*none/);
     expect(css).not.toContain('.page-subtitle');
   });
 
@@ -598,5 +601,104 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
     expect(shell).not.toContain('transition');
     // The touch rules win (spec §1.4): the bar grows to hold 44px controls.
     expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{\s*\.shell \{ --topbar-h: 48px; \}/);
+  });
+});
+
+describe('shell top-bar cluster (v195 Phase 3)', () => {
+  const NOW = Date.parse('2026-10-27T12:00:00Z');
+  const html = document.documentElement;
+  let stored: Map<string, string>;
+
+  beforeEach(() => {
+    stored = new Map();
+    TestBed.configureTestingModule({
+      providers: [
+        ...shellProviders(),
+        { provide: DENSITY_STORAGE, useValue: { get: (key: string) => stored.get(key) ?? null, set: (key: string, value: string) => stored.set(key, value) } },
+      ],
+    });
+    TestBed.overrideProvider(CLOCK, { useValue: signal(NOW) });
+  });
+
+  afterEach(() => {
+    delete html.dataset['density'];
+  });
+
+  async function mount() {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return { fixture, el: fixture.nativeElement as HTMLElement, backend: TestBed.inject(HttpTestingController) };
+  }
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  const scanStatus = (overrides: Record<string, unknown>) => ({
+    pending: false, triggered_at: null, paused: false, paused_at: null, running: false,
+    bot_alive: true, bot_last_seen: '2026-10-27T11:57:00Z', bot_healthy: true,
+    bot_last_success: '2026-10-27T11:48:00Z', bot_consecutive_failures: 0,
+    bot_session_active: true, bot_scan_paused: false, progress: null, ...overrides,
+  });
+
+  it('puts the killswitch and freshness chips in the cluster, hidden at no width', async () => {
+    const { el } = await mount();
+    const cluster = el.querySelector('header.topbar > .status-cluster')!;
+    expect(cluster.querySelector('sb-killswitch-chip')).not.toBeNull();
+    expect(cluster.querySelector('sb-freshness-chip')).not.toBeNull();
+    expect(cluster.querySelector('sb-connection-status')).not.toBeNull();
+    const css = readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).not.toMatch(/(sb-killswitch-chip|sb-freshness-chip|\.status-cluster)[^{}]*\{[^}]*display:\s*none/);
+  });
+
+  it('shows no killswitch state until the risk endpoint answers, then the answer', async () => {
+    const { fixture, el, backend } = await mount();
+    const chip = () => el.querySelector('sb-killswitch-chip a');
+    expect(chip()).toBeNull();
+    for (const request of backend.match((r) => r.url.endsWith('/risk/killswitch'))) {
+      request.flush({ killswitch: { on: true } });
+    }
+    await settle(fixture);
+    expect(chip()!.textContent!.trim()).toBe('Halted');
+    expect(el.querySelector('.killswitch-strip')).not.toBeNull();
+  });
+
+  it('ages the freshness chip from the last successful tick, else the last heartbeat', async () => {
+    const { fixture, el, backend } = await mount();
+    const text = () => el.querySelector('sb-freshness-chip')!.textContent!.replace(/\s+/g, ' ').trim();
+    expect(text()).toBe('No scan yet');
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) {
+      request.flush(scanStatus({}));
+    }
+    await settle(fixture);
+    expect(text()).toBe('Scan 12m ago');
+
+    // A bot that has never completed a tick still has a heartbeat age.
+    (TestBed.inject(EventStream) as unknown as FakeEventStream).emit('bot');
+    await settle(fixture);
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) {
+      request.flush(scanStatus({ bot_last_success: null }));
+    }
+    await settle(fixture);
+    expect(text()).toBe('Scan 3m ago');
+  });
+
+  it('writes ui.density and data-density from the profile menu', async () => {
+    const { fixture, el } = await mount();
+    expect(html.dataset['density']).toBe('dense');
+    el.querySelector<HTMLButtonElement>('sb-profile-menu .avatar')!.click();
+    fixture.detectChanges();
+    const comfortable = Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .density-control .segment'))
+      .find((button) => button.textContent!.trim() === 'Comfortable')!;
+    comfortable.click();
+    await settle(fixture);
+    expect(html.dataset['density']).toBe('comfortable');
+    expect(stored.get('ui.density')).toBe('comfortable');
+    const pressed = Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .density-control .segment'))
+      .find((button) => button.getAttribute('aria-pressed') === 'true')!;
+    expect(pressed.textContent!.trim()).toBe('Comfortable');
   });
 });

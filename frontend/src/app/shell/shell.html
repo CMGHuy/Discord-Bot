@@ -58,14 +58,13 @@
       <!-- A labelled list, never a heading: the page's one <h1> belongs to
            sb-page (correction 9), which route-focus.ts finds inside .workspace. -->
       <sb-breadcrumb class="topbar-lead" />
-      <div class="topbar-tape">
-        <sb-tape />
-      </div>
-      <!-- Sheet 2's form: dot, word, clock, read together as one group.
-           The dot answers only "is the event stream connected" (D30) -- it
-           must never be read as "these numbers are current"; that claim
-           belongs to each panel's own sb-freshness. -->
+      <!-- v195 Phase 3: the right cluster. The killswitch and freshness chips
+           show on every device, phone included: the halt control is on Risk,
+           one tap from the chip, and Scan health has left the Risk page
+           (§5.1). The dot answers only "is the event stream connected" (D30). -->
       <div class="status-cluster">
+        <sb-killswitch-chip [on]="killswitchOn()" />
+        <sb-freshness-chip [at]="connection.botLastSuccess() ?? connection.botLastSeen()" [now]="clock()" />
         <sb-connection-status
           [state]="connection.state()"
           [botAlive]="connection.botAlive()"
@@ -80,27 +79,31 @@
       <sb-profile-menu [zoom]="zoom()" [state]="connection.state()"
                        [botAlive]="connection.botAlive()" [marketActive]="connection.marketActive()" (zoomCycled)="cycleZoom()"
                        [motion]="motionMode()" (motionChanged)="setMotion($event)"
+                       [density]="density.density()" (densityChanged)="density.set($event)"
                        (signedOut)="logout()" />
+      <!-- Hung from the bar's bottom edge (shell.css), never in the flow: an
+           automatic scan runs every SCAN_INTERVAL_MINUTES all session, and a
+           strip that took layout would shunt the page down and back. In the
+           sticky bar it shows on every route. -->
+      <sb-scan-progress
+        [running]="connection.scanRunning()"
+        [progress]="connection.scanProgress()"
+      />
     </header>
 
-    <!-- Engaged killswitch is shell-level and unmissable: it means the bot
-         has stopped taking positions, which is true no matter which
-         workspace happens to be open. Its own strip, not squeezed into the
-         bar, because this is the one message on the page that must never
-         be truncated. -->
+    <!-- The ticker tape, a strip under the bar (spec Phase 3); what it shows
+         is still tape-prefs' call. -->
+    <div class="tape-strip">
+      <sb-tape />
+    </div>
+
+    <!-- Engaged killswitch: the chip above is the state on every page; this
+         strip is the alarm, full width and never truncated. -->
     @if (killswitchOn()) {
       <div class="killswitch-strip" role="alert">KILLSWITCH ENGAGED</div>
     }
 
     <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
-      <!-- Over the content, never in the flow. An automatic scan runs every
-           SCAN_INTERVAL_MINUTES for the whole session, so a strip that took
-           up layout would push whatever is being read down and back,
-           several times an hour. -->
-      <sb-scan-progress
-        [running]="connection.scanRunning()"
-        [progress]="connection.scanProgress()"
-      />
       <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
       @if (routeLoading.visible()) {
         <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>

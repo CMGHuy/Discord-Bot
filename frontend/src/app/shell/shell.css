@@ -143,18 +143,24 @@ sb-nav-indicator {
 
 .topbar-lead { flex: 0 1 auto; min-width: 0; }
 
-/* Grows to fill the gap between the breadcrumb and the status cluster, and
-   scrolls within it when more symbols arrive than fit. */
-.topbar-tape {
-  flex: 1 1 0%;
-  min-width: 0;
+/* The ticker tape, a strip under the bar (v195 Phase 3). Its lane draws its
+   own hairline and surface, so an empty strip takes no space. Not sticky:
+   it scrolls away with the page, the chips above it do not. */
+.tape-strip {
   display: flex;
-  align-items: center;
-  gap: var(--space-20);
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.topbar-tape::-webkit-scrollbar { display: none; }
+.tape-strip::-webkit-scrollbar { display: none; }
+
+/* scan-progress.css's :host is absolute at the top of its container; here
+   it hangs from the sticky bar's bottom edge instead, over the tape and the
+   page and never in the flow. Out-ranks the :host rule (two classes and two
+   attributes against one). */
+.topbar > sb-scan-progress {
+  inset: 100% 0 auto 0;
+}
 
 .killswitch-strip {
   padding: var(--space-6) var(--space-14);
@@ -185,11 +191,12 @@ sb-nav-indicator {
   .workspace { max-width: 1760px; margin-inline: auto; }
 }
 
-/* Dot, word and clock read as one cluster, tighter than the bar's own gap. */
+/* The right cluster: chips, dot and clock as one group, pushed to the bar's right edge and tighter than the bar's own gap. */
 .status-cluster {
   display: flex;
   align-items: center;
   gap: var(--space-6);
+  margin-left: auto;
 }
 
 .clock {
@@ -227,6 +234,6 @@ sb-nav-indicator {
 @media (max-width: 639px) {
   .clock { display: none; }
   .topbar { gap: var(--space-10); padding: 0 var(--space-10); }
-  .topbar-tape { display: none; }
+  .tape-strip { display: none; }
   .topbar-lead { flex: 1 1 auto; }
 }

@@ -17,6 +17,7 @@ import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { MotionMode, MotionService } from '../ui/motion/motion.service';
 import { CLOCK } from '../ui/clock';
+import { DensityService } from '../ui/density.service';
 import { Hint } from '../ui/hint';
 import { Icon } from '../ui/icon';
 import { NavIndicator } from './nav-indicator';
@@ -25,6 +26,8 @@ import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
 import { SessionStore } from '../stores/session.store';
 import { Breadcrumb } from './breadcrumb';
+import { FreshnessChip } from './freshness-chip';
+import { KillswitchChip } from './killswitch-chip';
 import { ConnectionStatus } from './connection-status';
 import { NAV_GROUPS } from './nav';
 import { ScanProgressStrip } from './scan-progress';
@@ -59,7 +62,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
-    ScanProgressStrip, Icon, Hint, Breadcrumb, ProfileMenu, NavIndicator, Tape,
+    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, NavIndicator, Tape,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -75,7 +78,7 @@ export class Shell {
   private readonly routeRefresh = inject(RouteRefreshService);
   private readonly tape = inject(TapeStore);
   private readonly marketIndex = inject(MarketIndexStore);
-  private readonly clock = inject(CLOCK);
+  protected readonly clock = inject(CLOCK);
 
   /** `Thu, Sep 11, 2026 16:58` -- one string, so the bar cannot render a date
    *  and a time from two different reads of the clock. Locale pinned to
@@ -197,6 +200,11 @@ export class Shell {
     document.documentElement.dataset['motion'] = this.motion.mode();
   });
 
+  /** Row density for this device (v195 §1.4): read by the profile menu,
+   *  written through DensityService, which owns `ui.density` and the
+   *  `data-density` attribute on <html>. */
+  protected readonly density = inject(DensityService);
+
   protected setMotion(mode: MotionMode): void {
     this.motion.set(mode);
   }
@@ -208,8 +216,11 @@ export class Shell {
    * is provided on the /risk route -- it does not exist while you are
    * looking at Trades. This is one boolean re-read on a `risk` event, not a
    * second copy of the risk workspace's state.
+   *
+   * Three-valued (v195): `null` until the first answer, so the top bar's
+   * killswitch chip says nothing rather than a guessed "Armed".
    */
-  protected readonly killswitchOn = signal(false);
+  protected readonly killswitchOn = signal<boolean | null>(null);
 
   constructor() {
     // Read once, here rather than in an app initializer: preferences are
