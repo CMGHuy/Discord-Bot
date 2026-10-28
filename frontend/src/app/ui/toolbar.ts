@@ -103,15 +103,20 @@ export interface ToolbarControl {
     }
     .toolbar-sheet-button:hover { border-color: var(--border-strong); }
     .toolbar-sheet-button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+    /* v195 Phase 2: the sheet is open -- the button's one state, so its one accent. */
+    .toolbar-sheet-button[aria-expanded='true'] { border-color: var(--accent); }
+    /* v195 Phase 2: a count is not a state, so it takes no accent: an
+       outlined badge in the secondary text. sb-column-picker's .count is
+       this rule character for character (column-picker.spec.ts). */
     .count {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       min-width: 1.5em;
       padding: 0 var(--space-4);
+      border: 1px solid var(--border-strong);
       border-radius: var(--chip-radius);
-      background: var(--accent-soft);
-      color: var(--text);
+      color: var(--text-secondary);
       font-size: var(--text-chip);
     }
     /* Selects in the sheet share one width rule: equal columns, two on a
