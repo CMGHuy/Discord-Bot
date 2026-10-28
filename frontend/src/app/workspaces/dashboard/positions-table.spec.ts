@@ -245,3 +245,17 @@ describe('positions table', () => {
   });
 
 });
+
+/* -- v195 Phase 4 and §1.4 -------------------------------------------------- */
+
+describe('positions table after the Dashboard moved onto sb-page', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/positions-table.ts'), 'utf8');
+
+  it('no longer projects table actions: Close all is the page header\'s', () => {
+    expect(src).not.toContain('table-actions');
+  });
+
+  it('sets its order figures on the 14px body step, in both densities', () => {
+    expect(src).toMatch(/:host \{[^}]*--text-table: var\(--text-body\);/);
+  });
+});
