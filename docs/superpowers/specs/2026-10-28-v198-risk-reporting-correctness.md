@@ -28,7 +28,7 @@ No production access, backtest, validation-budget use or live-book performance c
 
 Represent each independently collected Risk domain with an availability state: ok, unavailable or partial; include checked_at UTC and a sanitized reason code. Cache status with the value, never cache a fallback as a successful observation. Domains cover open positions/heat, sector mapping, clusters, throttle and killswitch. Successful empty reads remain ok with zero exposure. A failed read is unavailable, never a successfully empty book.
 
-On failed open-position reads, positions and heat are unknown and render an unavailable state. On failed heat calculation, retain valid position identities but mark heat unavailable. Sector-map gaps remain partial with v194 unmapped_count; a failed sector calculation is unavailable. Correlation data failure remains independent of trade-derived performance metrics. Explicitly represent incomplete coverage in the API, not only in logs.
+On failed open-position reads, positions and heat are unknown and render an unavailable state. A failed account-configuration read or a nonfinite/nonpositive balance denominator also makes heat unavailable, even if the heat helper would return zero. On failed heat calculation, retain valid position identities but mark heat unavailable. Sector-map gaps remain partial with v194 unmapped_count; a failed sector calculation is unavailable. Correlation data failure remains independent of trade-derived performance metrics. Explicitly represent incomplete coverage in the API, not only in logs.
 
 Risk-owned projection fields become nullable where required: heat.open_pct/utilisation_pct, throttle.multiplier/paused, killswitch.on and unavailable positions. Add domain availability metadata. Update TypeScript models, stores, templates and fixtures together. UI displays unavailable rather than zero/off; it must not claim the account has no exposure. Preserve known positions when only analytics fails.
 
@@ -46,7 +46,7 @@ Correlation matrix remains the underlying-assets correlation, explicitly labelle
 
 For finite ordered outcomes x, calculate cumulative outcomes starting with an explicit zero point; drawdown is the greatest running peak minus cumulative outcome, a nonnegative magnitude. Empty input remains None. All winners return zero; an initial loss is fully counted. Reject nonfinite outcomes to unavailable at the read-model boundary rather than generating NaN JSON or dropping individual bad rows silently.
 
-For Risk's all-closed R walk, order valid closed records by parsed closed_at ascending with trade ID as a stable tie-breaker, then compute outcomes. Records without a valid close timestamp are excluded and counted in a dedicated excluded_count field. Money drawdown retains v194's per-exit-date conversion and fx_missing_count, sorts by the same close chronology, and separately counts invalid dates. Do not reinterpret R as currency, percent of account or annualized performance. Preserve each metric's population label. Do not reorder the general-purpose r_multiples helper for unrelated consumers.
+For Risk's all-closed R walk, order valid closed records by parsed closed_at ascending with trade ID as a stable tie-breaker, then compute outcomes. Records without a valid close timestamp or computable finite R outcome are excluded and counted in a dedicated excluded_count field, with separate invalid_date_count and invalid_outcome_count reason counts. Apply non-overlapping reasons in date-then-outcome order so totals reconcile; missing fields and zero-risk outcomes are invalid_outcome, never zero-filled. Money drawdown retains v194's per-exit-date conversion and fx_missing_count, sorts by the same close chronology, and separately counts invalid dates. Do not reinterpret R as currency, percent of account or annualized performance. Preserve each metric's population label. Do not reorder the general-purpose r_multiples helper for unrelated consumers.
 
 Keep the metric module pure. Introduce a small Risk read-model helper for chronological selection, weights/coverage and status projection when necessary; do not add more branches to the large existing endpoint. Every changed/new function stays below cyclomatic complexity 15.
 
@@ -66,4 +66,10 @@ Unknown-state projection and signed-weight corrections share risk.py and must be
 
 ## Handoff
 
-Design proposal awaiting written-spec review. Required next steps: panel review, partner approval, plan-briefer, then plan-writer mode=index. The brief must verify exact current symbols, frontend store paths, existing failure-state consumers, FX interfaces and all shared-helper callers. No new numbered plan starts from guessed signatures.
+Partner approved this written design for implementation planning on 2026-10-28, after resolving panel findings. Next: plan-briefer, then plan-writer mode=index. The brief must verify exact current symbols, frontend store paths, existing failure-state consumers, FX interfaces and all shared-helper callers. No new numbered plan starts from guessed signatures.
+
+## Panel review
+
+- quant-engineer: failed account reads and invalid balance can yield false zero heat without a heat exception — applied: mark the heat domain unavailable for these dependencies.
+- quant-engineer: uncomputable R outcomes need explicit population exclusions — applied: excluded_count and mutually exclusive date/outcome reason counts.
+- No BLOCKING findings.
