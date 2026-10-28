@@ -67,7 +67,7 @@ Unknown-state projection and signed-weight corrections share risk.py and must be
 
 ## Handoff
 
-Partner approved this written design for implementation planning on 2026-10-28, after resolving panel findings. Next: plan-briefer, then plan-writer mode=index. The brief must verify exact current symbols, frontend store paths, existing failure-state consumers, FX interfaces and all shared-helper callers. No new numbered plan starts from guessed signatures.
+Partner approved this written design for implementation planning on 2026-10-28, after panel findings were resolved. The associated 10-task plan now has all three parts written and full plan lint passes. The final independent authoring check covered both backend packages: 64 Python examples and 18 TypeScript examples parse in their intended contexts; all checked proposed Python functions/methods/closures have complexity below 15. Implementation is unstarted. V198-6 owns the sole full backend/frontend verification and three-width layout audit after implementation. No runtime test or production result is claimed by these document checks.
 
 ## Panel review
 
