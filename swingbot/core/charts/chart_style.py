@@ -52,21 +52,21 @@ if os.path.exists(_INTER_TTF):
 # test_chart_theme.py pins the (THEME digest, STYLE_VERSION) pair.
 # ---------------------------------------------------------------------------
 THEME = {
-    "bg": "#070b14",
-    "surface": "#0c1320",
-    "surface-raised": "#121b2d",
-    "border": "#1d2940",
-    "border-strong": "#2a3a58",
-    "text": "#e8eef8",
-    "text-muted": "#8f9db5",
-    "text-faint": "#3a4a66",
-    "accent": "#7cc4ff",
-    "pos": "#00e5a0",
-    "neg": "#ff4d5e",
-    "warn": "#ffc266",
-    "info": "#c3a6ff",
+    "bg": "#0d0f12",
+    "surface": "#15181d",
+    "surface-raised": "#1c2128",
+    "border": "#23272e",
+    "border-strong": "#2d333b",
+    "text": "#e6e8eb",
+    "text-muted": "#9aa4b2",
+    "text-faint": "#6b7280",
+    "accent": "#6ea8fe",
+    "pos": "#3fb68b",
+    "neg": "#f06e66",
+    "warn": "#d29922",
+    "info": "#c193ed",
     "chart-1": "#4c8dff",
-    "chart-2": "#c97a22",
+    "chart-2": "#bd6c18",
     "chart-3": "#a868e0",
     "chart-5": "#1a9db3",
 }
@@ -75,13 +75,13 @@ THEME = {
 # so a THEME change, or a rollback across one, never serves a PNG drawn in the
 # other palette from ./exports/chart_cache (spec v167 § 4). Bump it in the same
 # commit as THEME; tests/charts/test_chart_theme.py pins the pair (STYLE_PINS).
-STYLE_VERSION = "v195a"
+STYLE_VERSION = "v195"
 
 CHART_BG = THEME["surface"]             # figure + every panel's background: TradingView's chart pane
 GRID_COLOR = THEME["border"]            # gridlines -- subtle, never competes with data
 SPINE_COLOR = THEME["border-strong"]    # axis borders
 TEXT_COLOR = THEME["text"]              # primary text (titles, axis labels)
-MUTED_TEXT_COLOR = THEME["text-muted"]  # tick labels, fine print: 6.78:1 on CHART_BG (#666666 was 3.6:1)
+MUTED_TEXT_COLOR = THEME["text-muted"]  # tick labels, fine print: 7.06:1 on CHART_BG (#666666 was 3.6:1)
 UP_COLOR = THEME["pos"]                 # bullish candle body/wick
 DOWN_COLOR = THEME["neg"]               # bearish candle body/wick
 CHIP_BG = THEME["surface-raised"]       # background for the small rounded "chip" labels every overlay uses

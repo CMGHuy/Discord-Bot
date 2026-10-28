@@ -282,39 +282,42 @@ describe('no workspace hand-rolls a control row', () => {
 });
 
 /**
- * v167 §2: the Arctic Navy palette. Supersedes the v80 D1 block that pinned
- * literal hexes here: tier 2 no longer holds a colour, it references a
- * tier-1 palette entry in styles/palette.css. Two assertions per token --
- * the reference as written (the tier contract) and the value it resolves to
- * (the spec's table) -- so a palette edit that keeps the names but drifts a
- * value fails here as well as in contrast.spec.ts.
+ * v195 §1.1: the Graphite palette (supersedes v167 §2's Arctic Navy). Tier 2
+ * holds no colour, it references a tier-1 palette entry in styles/palette.css.
+ * Two assertions per token -- the reference as written (the tier contract) and
+ * the value it resolves to (the spec's table) -- so a palette edit that keeps
+ * the names but drifts a value fails here as well as in contrast.spec.ts.
  */
-describe('v167 §2: the Arctic Navy palette', () => {
+describe('v195 §1.1: the Graphite palette', () => {
   const EXPECTED: [token: string, palette: string, value: string][] = [
-    ['--bg', '--navy-950', '#070b14'],
-    ['--surface', '--navy-900', '#0c1320'],
-    ['--surface-raised', '--navy-850', '#121b2d'],
-    ['--surface-overlay', '--navy-800', '#1a2540'],
-    ['--overlay-dim', '--navy-950-a72', 'rgba(7, 11, 20, 0.72)'],
-    ['--border', '--navy-750', '#1d2940'],
-    ['--border-strong', '--navy-700', '#2a3a58'],
-    ['--text', '--slate-100', '#e8eef8'],
-    ['--text-secondary', '--slate-300', '#b3bfd3'],
-    ['--text-muted', '--slate-400', '#8f9db5'],
-    ['--text-faint', '--navy-600', '#3a4a66'],
-    ['--accent', '--sky-300', '#7cc4ff'],
-    ['--accent-fill', '--sky-600', '#1c6dd0'],
-    ['--accent-fill-hi', '--sky-550', '#2474d2'],
+    ['--bg', '--graphite-950', '#0d0f12'],
+    ['--surface', '--graphite-900', '#15181d'],
+    ['--surface-raised', '--graphite-850', '#1c2128'],
+    ['--surface-overlay', '--graphite-800', '#1f242b'],
+    ['--overlay-dim', '--graphite-950-a72', 'rgba(13, 15, 18, 0.72)'],
+    ['--border', '--graphite-750', '#23272e'],
+    ['--border-strong', '--graphite-700', '#2d333b'],
+    ['--text', '--grey-100', '#e6e8eb'],
+    ['--text-secondary', '--grey-300', '#c9d1d9'],
+    ['--text-muted', '--grey-400', '#9aa4b2'],
+    ['--text-faint', '--graphite-500', '#6b7280'],
+    ['--accent', '--steel-400', '#6ea8fe'],
+    ['--accent-fill', '--steel-600', '#2563c4'],
+    ['--accent-fill-hi', '--steel-500', '#2d6cd3'],
     ['--on-accent', '--white', '#ffffff'],
-    ['--pos', '--teal-400', '#00e5a0'],
-    ['--neg', '--red-400', '#ff4d5e'],
-    ['--warn', '--amber-300', '#ffc266'],
-    ['--info', '--violet-300', '#c3a6ff'],
-    ['--pos-soft', '--teal-400-a12', 'rgba(0, 229, 160, 0.12)'],
-    ['--neg-soft', '--red-400-a12', 'rgba(255, 77, 94, 0.12)'],
-    ['--warn-soft', '--amber-300-a12', 'rgba(255, 194, 102, 0.12)'],
-    ['--accent-soft', '--sky-600-a18', 'rgba(28, 109, 208, 0.18)'],
-    ['--info-soft', '--violet-300-a14', 'rgba(195, 166, 255, 0.14)'],
+    ['--pos', '--green-500', '#3fb68b'],
+    // Spec table said #e5534b; amended to #f06e66 for WCAG AA on the raised
+    // and overlay surfaces and on its own tint (V195-2).
+    ['--neg', '--red-500', '#f06e66'],
+    ['--warn', '--amber-500', '#d29922'],
+    // Spec table said #b392f0; amended to #c193ed to clear OKLab dE 10 from
+    // the accent entry line in the Discord image (V195-2).
+    ['--info', '--violet-400', '#c193ed'],
+    ['--pos-soft', '--green-500-a12', 'rgba(63, 182, 139, 0.12)'],
+    ['--neg-soft', '--red-500-a12', 'rgba(240, 110, 102, 0.12)'],
+    ['--warn-soft', '--amber-500-a12', 'rgba(210, 153, 34, 0.12)'],
+    ['--accent-soft', '--steel-400-a18', 'rgba(110, 168, 254, 0.18)'],
+    ['--info-soft', '--violet-400-a14', 'rgba(193, 147, 237, 0.14)'],
   ];
 
   for (const [name, palette, value] of EXPECTED) {
@@ -331,6 +334,19 @@ describe('v167 §2: the Arctic Navy palette', () => {
     expect(CSS).toMatch(/^\s*--quality-4:\s*#9acd32;/m);
     for (let i = 1; i <= 6; i++) {
       expect(CSS).toMatch(new RegExp(`^\\s*--chart-${i}:\\s*#[0-9a-f]{6};`, 'mi'));
+    }
+  });
+
+  /* #c97a22 sat OKLab dE 8.0 from the new --warn, and the Discord price pane
+   * draws current price (warn) beside the strategy target line (chart-2). */
+  it('re-derives --chart-2 off the amber warn for the Graphite ground', () => {
+    expect(resolveToken('--chart-2')).toBe('#bd6c18');
+  });
+
+  it('keeps no Arctic Navy palette name in either token file', () => {
+    const PALETTE = readFileSync(join(process.cwd(), 'src/styles/palette.css'), 'utf8');
+    for (const source of [CSS, PALETTE]) {
+      expect(source).not.toMatch(/--(?:navy|slate|sky|teal)-\d/);
     }
   });
 });
@@ -378,7 +394,7 @@ describe('v80 D3: type, shape and touch', () => {
 /**
  * v167 §3: the component tokens. Values are asserted as DECLARED (whitespace
  * collapsed), because tier 3 is the contract components read; one resolved
- * case proves the gradient reaches the Arctic Navy fill blues through tier 2.
+ * case proves the gradient reaches the Graphite fill blues through tier 2.
  */
 describe('v167 §3: the tier-3 component tokens', () => {
   const declared = (name: string) =>
@@ -416,8 +432,8 @@ describe('v167 §3: the tier-3 component tokens', () => {
     });
   }
 
-  it('resolves the button gradient to the two Arctic Navy fill blues', () => {
-    expect(resolveToken('--btn-fill')).toBe('linear-gradient(180deg, #2474d2, #1c6dd0)');
+  it('resolves the button gradient to the two Graphite fill blues', () => {
+    expect(resolveToken('--btn-fill')).toBe('linear-gradient(180deg, #2d6cd3, #2563c4)');
   });
 
   /* A gradient is an image: as background-color it is invalid and the

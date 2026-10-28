@@ -92,8 +92,8 @@ function ratio(fg: string, bg: string): number {
  * Spec v167 § 2 and Amendment 6 (new in v167). A series is a 1px line on the
  * chart ground, `--surface` (chart-container.ts; the PNG's CHART_BG), and
  * WCAG 1.4.11 asks 3:1 of a graphical object. The floor is checked on
- * `--surface` only, deliberately: on `--surface-overlay` chart-6 measures
- * 3.94:1, and a series colour there (a tooltip swatch) carries no text.
+ * `--surface` only, deliberately: on `--surface-overlay` (v195 Graphite) chart-2 measures
+ * 3.96:1 and chart-6 4.05:1, and a series colour there (a tooltip swatch) carries no text.
  * A failure reopens the spec's palette table; it never lowers this number.
  */
 describe('the chart series on the chart ground', () => {

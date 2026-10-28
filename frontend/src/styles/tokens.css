@@ -45,17 +45,19 @@
    * enough apart (0c0f16 -> 131722 -> 1c212d -> 242936) that panels read as
    * separate objects without a shadow; --surface is TradingView's own chart
    * pane, so the admin and the Discord charts sit on one ground. */
-  /* v167 §2, Arctic Navy. The ground steps 070b14 -> 0c1320 -> 121b2d ->
-   * 1a2540. Every colour in this tier is a var() into styles/palette.css
-   * (tier 1): a tier-2 token names a MEANING and never holds a hue.
-   * --surface is still the Discord chart ground (chart_style.CHART_BG). */
-  --bg: var(--navy-950);
-  --surface: var(--navy-900);
-  --surface-raised: var(--navy-850);
-  --surface-overlay: var(--navy-800);
-  --overlay-dim: var(--navy-950-a72);
-  --border: var(--navy-750);
-  --border-strong: var(--navy-700);
+  /* v195 §1.1, Graphite (supersedes v167 §2's Arctic Navy). A neutral
+   * near-black ground stepping 0d0f12 -> 15181d -> 1c2128 -> 1f242b; depth
+   * comes from these steps and 1px borders only (v195 §1.2). Every colour
+   * in this tier is a var() into styles/palette.css (tier 1): a tier-2
+   * token names a MEANING and never holds a hue. --surface is still the
+   * Discord chart ground (chart_style.CHART_BG). */
+  --bg: var(--graphite-950);
+  --surface: var(--graphite-900);
+  --surface-raised: var(--graphite-850);
+  --surface-overlay: var(--graphite-800);
+  --overlay-dim: var(--graphite-950-a72);
+  --border: var(--graphite-750);
+  --border-strong: var(--graphite-700);
 
   /* -- elevation --------------------------------------------------------
    * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
@@ -85,54 +87,52 @@
    * (versions.ts faked one with a 9999px spread). */
   --scrim: var(--overlay-dim);
 
-  --text: var(--slate-100);
-  --text-secondary: var(--slate-300);
-  /* v80 D1: direction C's first muted grey (#888c97) measured 4.32:1 on
-   * --surface-overlay -- under the 4.5:1 gate contrast.spec.ts enforces on
-   * all four surfaces, for real readable labels at --text-micro (nav group
-   * headers, chip captions, .sb-label). #9195a0 is the smallest lift that
-   * clears it with v54's safety margin: worst case 4.85:1 on
-   * --surface-overlay. v54 Task 42 made the same kind of measured,
-   * single-token change for the previous palette.
-   * v167 §2: now --slate-400, worst case 5.54:1 (on --surface-overlay). */
-  --text-muted: var(--slate-400);
-  /* --text-faint is a RULE AND DIVIDER colour (~2:1 on --surface) -- never
+  --text: var(--grey-100);
+  --text-secondary: var(--grey-300);
+  /* v80 D1 / v167 §2 measured this token against the 4.5:1 gate that
+   * contrast.spec.ts enforces on all four surfaces, for readable labels at
+   * --text-micro (KPI captions, table headers, .sb-label).
+   * v195 §1.1: --grey-400, worst case 6.19:1 (on --surface-overlay). Micro
+   * labels and captions use this, never --text-faint (correction 13). */
+  --text-muted: var(--grey-400);
+  /* --text-faint is a RULE AND DIVIDER colour (~3.7:1 on --surface) -- never
    * text that must be read. contrast.spec.ts's `no-text-uses-text-faint`
-   * assumes this and this comment is what it checks for. */
-  --text-faint: var(--navy-600);
+   * assumes this and this comment is what it checks for. v195: it is also
+   * the disabled-glyph colour, and nothing else. */
+  --text-faint: var(--graphite-500);
 
-  --pos: var(--teal-400);
-  --neg: var(--red-400);
-  --warn: var(--amber-300);
+  --pos: var(--green-500);
+  --neg: var(--red-500);
+  --warn: var(--amber-500);
   /* v80 D1: the accent is two tokens. --accent is the colour of interactive
    * TEXT and state -- links, the active tab, the sort arrow, focus -- and
-   * #5593ff clears 4.85:1 on every surface. --accent-fill is the deeper
-   * TradingView blue a filled button paints, with --on-accent on top at
-   * 4.90:1; the text-safe blue is too light to carry white ink.
-   * v167 §2: --accent is --sky-300 (8.10:1 worst case); --accent-fill is
-   * --sky-600 (white 5.06:1); --accent-fill-hi (new) is --sky-550, the top
-   * stop of the primary button's gradient (tier 3 --btn-fill), white 4.66:1.
-   * That margin is thin, so contrast.spec.ts checks it by name. */
-  --accent: var(--sky-300);
-  --accent-fill: var(--sky-600);
-  --accent-fill-hi: var(--sky-550);
+   * must read on every surface. --accent-fill is the deeper blue a filled
+   * button paints, with --on-accent on top; the text-safe blue is too light
+   * to carry white ink.
+   * v195 §1.1: --accent is --steel-400 (6.46:1 worst case) and is used for
+   * interactive state only; --accent-fill is --steel-600 (white 5.74:1);
+   * --accent-fill-hi is --steel-500 (white 5.00:1), the hover fill.
+   * contrast.spec.ts checks both fills by name. */
+  --accent: var(--steel-400);
+  --accent-fill: var(--steel-600);
+  --accent-fill-hi: var(--steel-500);
   --on-accent: var(--white);
-  /* v80 D1: info moved off sky blue. Under direction C the accent took the
-   * blue, and two blues would make "neutral" read as "interactive".
-   * v167 §2: still violet (--violet-300), 7.39:1 worst case. */
-  --info: var(--violet-300);
+  /* v80 D1: info is off the blue, so "neutral" never reads as
+   * "interactive". v195 §1.1: --violet-400, 6.44:1 worst case, moved from
+   * the spec's #b392f0 to clear OKLab dE 10 from the accent entry line. */
+  --info: var(--violet-400);
 
   /* 12% tints, for cell and chip backgrounds, hover states and the chart's
-   * risk/reward bands; --info-soft is 14%. --accent-soft is 18% of the FILL
-   * blue: the selected-segment ground needs to separate from
-   * --surface-raised. v167 amendment 2: each is a tier-1 alpha entry in
-   * palette.css (literal rgba of the hue), so jsdom and lightweight-charts
-   * still receive a plain colour string and this file holds no hued rgba. */
-  --pos-soft: var(--teal-400-a12);
-  --neg-soft: var(--red-400-a12);
-  --warn-soft: var(--amber-300-a12);
-  --accent-soft: var(--sky-600-a18);
-  --info-soft: var(--violet-300-a14);
+   * risk/reward bands; --info-soft is 14%; --accent-soft (the selected-
+   * segment ground) is 18% of the accent. v167 amendment 2: each is a
+   * tier-1 alpha entry in palette.css (literal rgba of the hue), so jsdom
+   * and lightweight-charts still receive a plain colour string and this
+   * file holds no hued rgba. */
+  --pos-soft: var(--green-500-a12);
+  --neg-soft: var(--red-500-a12);
+  --warn-soft: var(--amber-500-a12);
+  --accent-soft: var(--steel-400-a18);
+  --info-soft: var(--violet-400-a14);
 
   /* Quality ramp — confidence Lv1-5 and tier A/B/C.
    *
@@ -179,8 +179,12 @@
    * getComputedStyle under vitest, and jsdom does not substitute a nested
    * var() inside a custom property; chart-palette.spec.ts also parses this
    * file as text. That spec is the gate. */
+  /* v195 §1.1: re-checked on the Graphite ground (#15181d) against the new
+   * --pos/--neg/--warn. Five series keep their v80 values; --chart-2 moves
+   * from #c97a22 (OKLab dE 8.0 from --warn) to #bd6c18 (12.0 from --warn,
+   * 12.3 from --neg, L 0.610, C 0.136, 4.51:1 on --surface). */
   --chart-1: #4c8dff;
-  --chart-2: #c97a22;
+  --chart-2: #bd6c18;
   --chart-3: #a868e0;
   --chart-4: #b08c14;
   --chart-5: #1a9db3;

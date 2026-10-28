@@ -46,6 +46,7 @@ STYLE_PINS: tuple[tuple[str, str], ...] = (
     ("96d64692ba7c2abf", "v167"),  # v167 §4: Arctic Navy
     ("4f15a0f1fb8a6d1e", "v181"),  # v181 §5: saturated teal/red valence pair
     ("05dcbfb119a03e02", "v195a"),  # v195 Phase 6: THEME gains accent, entry reads it
+    ("f04168edd2b2e287", "v195"),  # v195 §1.1: Graphite
 )
 
 # constant -> the THEME key it must equal (the plan's D5 role table)

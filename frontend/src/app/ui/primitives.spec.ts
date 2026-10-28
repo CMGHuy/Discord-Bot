@@ -123,7 +123,7 @@ const HEX_ALLOWLIST = new Map<string, string[]>([
   // html/body background paint before any stylesheet has loaded, so they
   // cannot read var(--bg). 'the cold-load copies equal the resolved --bg'
   // below fails the moment they drift from palette.css.
-  ['index.html', ['#070b14', '#070b14']],
+  ['index.html', ['#0d0f12', '#0d0f12']],
 ]);
 
 describe('no colour is declared outside the token files', () => {
