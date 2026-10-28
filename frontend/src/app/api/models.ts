@@ -1431,6 +1431,12 @@ export interface RiskMetrics {
   beta_spy: RiskMetric;
   sharpe_r: RiskMetric;
   max_drawdown_r: RiskMetric;
+  /** v194 B8: the largest peak-to-trough fall of cumulative realised P&L
+   *  over every closed main-ledger trade, oldest close first, in the account
+   *  currency (a positive magnitude). `fx_missing_count` trades had no FX
+   *  rate for their exit day and are left out of it. Optional: older
+   *  payloads and spec fixtures omit it. */
+  max_drawdown_amount?: RiskMetric & { fx_missing_count: number };
   as_of: string | null;
   /** The ticker `beta_spy` was actually computed against --
    *  `config.MARKET_REGIME_TICKER`, which an operator can change away from

@@ -17,7 +17,11 @@ import {
   loadingInterceptor,
 } from '../../api/interceptors';
 import { Risk as RiskData, RiskMetrics } from '../../api/models';
-import { EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, exactRiskText, reconciles, unmappedNote } from './risk';
+import {
+  EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, drawdownFxNote, exactRiskText, reconciles, unmappedNote,
+  RISK_DRAWDOWN_LABEL, RISK_SHARPE_LABEL,
+} from './risk';
+import { ConnectionStore } from '../../stores/connection.store';
 import { RiskStore } from '../../stores/risk.store';
 import { ViewportService } from '../../ui/breakpoints';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
@@ -160,7 +164,7 @@ describe('Risk metric tiles', () => {
     const fixture = await renderWithMetrics();
     expect(tileLabels(fixture)).toEqual([
       'VaR 95%', 'Expected shortfall', 'Annualised vol', 'Beta vs SPY',
-      'Sharpe (R)', 'Max drawdown (R)',
+      RISK_SHARPE_LABEL, RISK_DRAWDOWN_LABEL,
     ]);
   });
 
@@ -171,7 +175,7 @@ describe('Risk metric tiles', () => {
 
   it('de-emphasises a metric computed from a thin sample', async () => {
     const fixture = await renderWithMetrics({ sharpe_r: { value: 0.96, n: 7 } });
-    expect(tileHost(fixture, 'Sharpe (R)').classList).toContain('thin');
+    expect(tileHost(fixture, RISK_SHARPE_LABEL).classList).toContain('thin');
   });
 
   it('renders an uncomputable metric as no-value, never as zero', async () => {
@@ -179,9 +183,13 @@ describe('Risk metric tiles', () => {
     expect(tileHost(fixture, 'VaR 95%').querySelector('.value')!.textContent!.trim()).toBe('—');
   });
 
-  it('labels Sharpe as an R measure so it is not read as annualised', async () => {
+  it('names the basis of Sharpe and max drawdown so neither reads as the Analytics figure', async () => {
     const fixture = await renderWithMetrics();
-    expect(tileLabels(fixture)).toContain('Sharpe (R)');
+    const labels = tileLabels(fixture);
+    expect(labels).toContain('Sharpe · per-trade R, all closed');
+    expect(labels).toContain('Max drawdown · cumulative R, all closed');
+    expect(labels).not.toContain('Sharpe (R)');
+    expect(labels).not.toContain('Max drawdown (R)');
   });
 
   it('labels the beta tile with the actual configured benchmark, not a hardcoded SPY', async () => {
@@ -195,7 +203,7 @@ describe('Risk metric tiles', () => {
       var_95: { value: 0.03, n: 118 }, sharpe_r: { value: 0.9, n: 782 },
     });
     expect(tileHost(fixture, 'VaR 95%').querySelector('.sample')!.textContent).toContain('118');
-    expect(tileHost(fixture, 'Sharpe (R)').querySelector('.sample')!.textContent).toContain('782');
+    expect(tileHost(fixture, RISK_SHARPE_LABEL).querySelector('.sample')!.textContent).toContain('782');
   });
 
   it('still shows the six metrics when the book is flat', async () => {
@@ -214,7 +222,7 @@ describe('Risk metric tiles', () => {
     fixture.detectChanges();
     expect(tileLabels(fixture)).toEqual([
       'VaR 95%', 'Expected shortfall', 'Annualised vol', 'Beta vs SPY',
-      'Sharpe (R)', 'Max drawdown (R)',
+      RISK_SHARPE_LABEL, RISK_DRAWDOWN_LABEL,
     ]);
   });
 });
@@ -236,7 +244,7 @@ describe('Risk metric tiles in a stat strip (v186 D3)', () => {
 
   it('keeps the thin-sample cues inside the strip', async () => {
     const fixture = await renderWithMetrics({ sharpe_r: { value: 0.96, n: 7 } });
-    const tile = tileHost(fixture, 'Sharpe (R)');
+    const tile = tileHost(fixture, RISK_SHARPE_LABEL);
     expect(tile.closest('sb-stat-strip')).not.toBeNull();
     expect(tile.classList).toContain('thin');
     expect(tile.querySelector('.flag')!.textContent).toContain('thin sample');
@@ -665,5 +673,71 @@ describe('unmappedNote (v194 B6)', () => {
     // positions and the collector read the book separately; a failed read on
     // one side must not print "3 of 0".
     expect(unmappedNote(3, 0)).toBe('Sector concentration cannot be assessed: no sector data for 3 of 3 open positions.');
+  });
+});
+
+describe('Risk metric basis and money drawdown (v194 B8)', () => {
+  it('gives the Sharpe and drawdown tiles a hint with definition, population, N and caveat', async () => {
+    const fixture = await renderWithMetrics();
+    for (const label of [RISK_SHARPE_LABEL, RISK_DRAWDOWN_LABEL]) {
+      const hint = tileHost(fixture, label).querySelector('sb-hint')!;
+      expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe(`About ${label}`);
+      const text = hint.querySelector('[role="tooltip"]')!.textContent!;
+      expect(text).toContain('every closed main-ledger trade, all time');
+      expect(text).toContain('N is the closed-trade count');
+      expect(text).toContain('Paper trades (simulated fills)');
+      expect(text).toContain('gross of commissions and slippage');
+      expect(text).toContain('pre-tax');
+    }
+  });
+
+  it('says the Risk Sharpe is not annualised', async () => {
+    const fixture = await renderWithMetrics();
+    const text = tileHost(fixture, RISK_SHARPE_LABEL).querySelector('[role="tooltip"]')!.textContent!;
+    expect(text).toContain('Not annualised');
+  });
+
+  it('shows the money drawdown under the R figure, negative, in the account currency', async () => {
+    const fixture = await renderWithMetrics({
+      max_drawdown_amount: { value: 412.5, n: 782, fx_missing_count: 0 },
+    });
+    const tile = tileHost(fixture, RISK_DRAWDOWN_LABEL);
+    const secondary = tile.querySelector('.secondary')!.textContent!.trim();
+    expect(secondary).toContain('412.50');
+    expect(secondary).toMatch(/^[-−]/);
+    expect(secondary).toContain(TestBed.inject(ConnectionStore).currency());
+    expect(tile.querySelector('div.hint')).toBeNull();
+  });
+
+  it('shows no money line when the payload carries none', async () => {
+    const fixture = await renderWithMetrics();
+    expect(tileHost(fixture, RISK_DRAWDOWN_LABEL).querySelector('.secondary')).toBeNull();
+  });
+
+  it('shows no money line for an uncomputable money drawdown', async () => {
+    const fixture = await renderWithMetrics({
+      max_drawdown_amount: { value: null, n: 0, fx_missing_count: 0 },
+    });
+    expect(tileHost(fixture, RISK_DRAWDOWN_LABEL).querySelector('.secondary')).toBeNull();
+  });
+
+  it('says how many trades the money figure left out for want of an FX rate', async () => {
+    const fixture = await renderWithMetrics({
+      max_drawdown_amount: { value: 100, n: 779, fx_missing_count: 3 },
+    });
+    expect(tileHost(fixture, RISK_DRAWDOWN_LABEL).querySelector('div.hint')!.textContent)
+      .toContain('3 closed trades without an FX rate for the exit day left out of the amount.');
+  });
+
+  it('drops the scope footnote now the labels carry the basis', async () => {
+    const fixture = await renderWithMetrics();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.metrics-scope')).toBeNull();
+    expect(el.textContent).not.toContain('Sharpe and max drawdown are per-trade R over all closed trades');
+  });
+
+  it('words the FX gap note in the singular and is silent at zero', () => {
+    expect(drawdownFxNote(0)).toBeUndefined();
+    expect(drawdownFxNote(1)).toBe('1 closed trade without an FX rate for the exit day left out of the amount.');
   });
 });

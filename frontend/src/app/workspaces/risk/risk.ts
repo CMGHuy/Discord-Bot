@@ -19,7 +19,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
-import { amount, dateTime, num, riskPct, share, shareCount, text } from '../../ui/format';
+import { amount, dateTime, money, num, riskPct, share, shareCount, text } from '../../ui/format';
 import { Hint } from '../../ui/hint';
 import { Freshness } from '../../ui/freshness';
 import { Panel } from '../../ui/layout';
@@ -27,7 +27,7 @@ import { Matrix } from '../../ui/matrix';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
-import { StatTile } from '../../ui/stat-tile';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { tablePerPage } from '../../ui/table-per-page';
 
@@ -75,6 +75,39 @@ export function unmappedNote(unmapped: number, open: number): string | null {
   if (unmapped <= 0) return null;
   const total = Math.max(open, unmapped);
   return `Sector concentration cannot be assessed: no sector data for ${unmapped} of ${total} open position${total === 1 ? '' : 's'}.`;
+}
+
+
+/* v194 B8 -- Risk and Analytics both show a Sharpe and a max drawdown over
+ * different populations. Each label names its basis, so the two never read
+ * as one quantity, and the definition sits in the tile's hint. */
+export const RISK_SHARPE_LABEL = 'Sharpe · per-trade R, all closed';
+export const RISK_DRAWDOWN_LABEL = 'Max drawdown · cumulative R, all closed';
+export const RISK_SHARPE_ABOUT =
+  'Mean R ÷ standard deviation of R over every closed main-ledger trade, all time. '
+  + 'Not annualised: trades have no fixed cadence. Analytics shows an annualised Sharpe '
+  + 'for its selected range instead. N is the closed-trade count. ' + PERFORMANCE_CAVEAT;
+export const RISK_DRAWDOWN_ABOUT =
+  'Largest peak-to-trough fall of cumulative R over every closed main-ledger trade, all time. '
+  + 'The amount under it is the largest fall of cumulative realised P&L, oldest close first, '
+  + "converted to the account currency at each exit day's FX rate. Analytics shows the fall "
+  + 'within its selected range instead. N is the closed-trade count. ' + PERFORMANCE_CAVEAT;
+
+/** The tile's visible note when the money drawdown left trades out for want
+ *  of an FX rate; nothing when none were (a missing rate is never read as 1). */
+export function drawdownFxNote(missing: number): string | undefined {
+  if (!(missing > 0)) return undefined;
+  return `${missing} closed trade${missing === 1 ? '' : 's'} without an FX rate for the exit day left out of the amount.`;
+}
+
+/** One Risk metric tile, pre-formatted -- `StatTile` never formats. */
+interface MetricTile {
+  label: string;
+  value: string;
+  sample: number;
+  about?: string;
+  secondary?: string | null;
+  hint?: string;
 }
 
 /**
@@ -220,17 +253,10 @@ export function unmappedNote(unmapped: number, open: number): string | null {
              strip's default auto-fit at 140px keeps today's column count. -->
         <sb-stat-strip class="metric-grid">
           @for (tile of metricTiles(); track tile.label) {
-            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
+            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample"
+              [about]="tile.about" [secondary]="tile.secondary ?? null" [hint]="tile.hint" />
           }
         </sb-stat-strip>
-        <!-- Sharpe and drawdown here are over every closed trade, in R; the
-             Analytics tiles of the same name cover the selected date range
-             and annualise returns. Both are right, so say which is which. -->
-        <p class="metrics-scope">
-          Sharpe and max drawdown are per-trade R over all closed trades. The other four use
-          daily returns of the open book, so they differ from the Analytics tiles of the same name,
-          which follow that page's date range.
-        </p>
       </div>
     </sb-panel>
     </sb-async>
@@ -635,7 +661,6 @@ export function unmappedNote(unmapped: number, open: number): string | null {
     .risk-budget .remaining { font-weight: 600; }
     .budget-note { margin-top: var(--space-6); font-size: var(--text-micro); }
 
-    .metrics-scope { margin: var(--space-10) 0 0; font-size: var(--text-micro); color: var(--text-faint); }
     /* -- risk metrics -- */
     .metrics { display: grid; gap: var(--space-8); }
 
@@ -817,13 +842,20 @@ export class Risk {
     return value === null ? '—' : `${value === 0 ? '' : '−'}${num(Math.abs(value), 2)}R`;
   }
 
+  /** The money drawdown under the R figure, negative like it; null (no
+   *  line) when the payload has no money figure. */
+  private fmtDrawdownMoney(value: number | null): string | null {
+    return value === null ? null : money(value === 0 ? 0 : -value, this.connection.currency(), 2);
+  }
+
   /** Six tiles over R8-01's metrics, each carrying the sample it was
    *  actually computed from (spec D23/D37) -- `sample` is the metric's own
    *  `n`, not a page-wide count, which is what lets the distributional and
    *  trade-sample families disagree honestly. */
-  protected readonly metricTiles = computed(() => {
+  protected readonly metricTiles = computed<MetricTile[]>(() => {
     const m = this.store.metrics();
     if (!m) return [];
+    const ddAmount = m.max_drawdown_amount;
     return [
       { label: 'VaR 95%', value: this.fmtRiskPct(m.var_95.value), sample: m.var_95.n },
       { label: 'Expected shortfall', value: this.fmtRiskPct(m.expected_shortfall_95.value), sample: m.expected_shortfall_95.n },
@@ -831,8 +863,16 @@ export class Risk {
       // I4: label the ACTUAL configured benchmark, not a hardcoded "SPY" --
       // an operator can point config.MARKET_REGIME_TICKER elsewhere.
       { label: `Beta vs ${m.benchmark_symbol}`, value: this.fmtRatio(m.beta_spy.value), sample: m.beta_spy.n },
-      { label: 'Sharpe (R)', value: this.fmtRatio(m.sharpe_r.value), sample: m.sharpe_r.n },
-      { label: 'Max drawdown (R)', value: this.fmtDrawdownR(m.max_drawdown_r.value), sample: m.max_drawdown_r.n },
+      {
+        label: RISK_SHARPE_LABEL, value: this.fmtRatio(m.sharpe_r.value), sample: m.sharpe_r.n,
+        about: RISK_SHARPE_ABOUT,
+      },
+      {
+        label: RISK_DRAWDOWN_LABEL, value: this.fmtDrawdownR(m.max_drawdown_r.value),
+        sample: m.max_drawdown_r.n, about: RISK_DRAWDOWN_ABOUT,
+        secondary: this.fmtDrawdownMoney(ddAmount?.value ?? null),
+        hint: drawdownFxNote(ddAmount?.fx_missing_count ?? 0),
+      },
     ];
   });
 
