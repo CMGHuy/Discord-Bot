@@ -13,6 +13,7 @@ import { Panel } from '../../../ui/layout';
 import { PanelError } from '../../../ui/panel-error';
 import { PanelHeader } from '../../../ui/panel-header';
 import { Segmented, SegmentOption } from '../../../ui/segmented';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 import { Waterfall, WaterfallStep } from '../../../ui/waterfall';
 import { dimensionColumns } from '../analytics.columns';
 
@@ -63,18 +64,16 @@ export const TAKEN_CAPTION =
 
     <div class="panels">
       <sb-panel>
-        <sb-panel-header title="Contribution" [n]="store.scopeN()"
-          hint="Total R contributed by each strategy across the scope, largest magnitude first. The eight biggest name their strategy; the rest fold into Other rather than adding a ninth colour nothing else uses." />
+        <sb-panel-header title="Contribution" [n]="store.scopeN()" [hint]="contributionHint" />
         @if (store.strategiesError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('strategies')" />
         } @else {
-          <sb-waterfall [steps]="waterfallSteps()" />
+          <sb-waterfall [steps]="waterfallSteps()" [format]="rFormat" />
         }
       </sb-panel>
 
       <sb-panel>
-        <sb-panel-header [title]="measureLabel() + ' vs sample size'" [n]="store.scopeN()"
-          hint="Each point is one strategy. A hollow point sits below the reliability floor -- its value is withheld, never computed from too few trades." />
+        <sb-panel-header [title]="measureLabel() + ' vs sample size'" [n]="store.scopeN()" [hint]="dotHint" />
         @if (store.byDimensionError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('byDimension')" />
         } @else {
@@ -83,13 +82,13 @@ export const TAKEN_CAPTION =
       </sb-panel>
 
       <sb-panel>
-        <sb-panel-header title="Strategy x horizon" [n]="store.scopeN()"
-          hint="Cell colour ramps from worst to best across the grid; a dotted cell sits below the reliability floor and shows only its trade count." />
+        <sb-panel-header title="Strategy x horizon" [n]="store.scopeN()" [hint]="heatHint" />
         @if (store.heatGridError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('heatGrid')" />
         } @else {
           <sb-heat-grid [rows]="store.heatGrid()?.rows ?? []" [cols]="store.heatGrid()?.cols ?? []"
-                        [cells]="heatCells()" [ramp]="heatRamp()" [floor]="heatFloor()" [foldedRow]="foldedRow()" />
+                        [cells]="heatCells()" [ramp]="heatRamp()" [floor]="heatFloor()" [foldedRow]="foldedRow()"
+                        [format]="heatFormat()" />
         }
       </sb-panel>
 
@@ -170,6 +169,28 @@ export class AttributionTab {
   ];
   protected readonly breakdownOptions = BREAKDOWN_DIMENSIONS.map((d) => ({ value: d.value, label: d.label }));
   protected readonly takenCaption = TAKEN_CAPTION;
+
+  /* v194 A4: each hint states the basis of the figure it explains. */
+  protected readonly contributionHint =
+    'Total R contributed by each strategy across the scope, largest magnitude first. The eight biggest '
+    + 'name their strategy; the rest fold into Other rather than adding a ninth colour nothing else uses. '
+    + PERFORMANCE_CAVEAT;
+  /** The points are `byDimension` rows: grouped by the breakdown's Group by
+   *  control, which defaults to strategy but is not always it. */
+  protected readonly dotHint =
+    'Each point is one group of the breakdown below (Group by; strategy unless changed). A hollow point '
+    + 'sits below the reliability floor -- its value is withheld, never computed from too few trades. '
+    + PERFORMANCE_CAVEAT;
+  protected readonly heatHint =
+    'Cell colour ramps from worst to best across the grid; a dotted cell sits below the reliability floor '
+    + `and shows only its trade count. ${PERFORMANCE_CAVEAT}`;
+  protected readonly rFormat = (v: number) => `${v.toFixed(2)}R`;
+  /** The cell figure with its unit, so the tooltip's "value" says what it is. */
+  protected readonly heatFormat = computed<(v: number) => string>(() => {
+    const which: HeatMeasure = this.store.heatCell();
+    if (which === 'exp_r') return this.rFormat;
+    return which === 'win_rate' ? (v: number) => `${v.toFixed(1)}%` : (v: number) => String(Math.round(v));
+  });
 
   protected readonly measureLabel = computed(
     () => this.measureOptions.find((o) => o.value === this.store.measure())?.label ?? 'ExpR');
