@@ -19,6 +19,7 @@ import { EventStream } from '../api/event-stream';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
+import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
 import { DENSITY_STORAGE } from '../ui/density.service';
 import { provideMotion } from '../ui/motion/motion.service';
@@ -700,5 +701,124 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
     const pressed = Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .density-control .segment'))
       .find((button) => button.getAttribute('aria-pressed') === 'true')!;
     expect(pressed.textContent!.trim()).toBe('Comfortable');
+  });
+});
+
+describe('shell on a phone (v195 Phase 3)', () => {
+  let phone: WritableSignal<boolean>;
+
+  beforeEach(() => {
+    phone = signal(true);
+    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'calendar', component: Blank }]) });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: phone, isNarrow: signal(true), viewport: signal('xs') },
+    });
+  });
+
+  async function mount() {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  const sheet = (el: HTMLElement) => el.querySelector('sb-more-sheet [role=dialog]');
+  const moreTab = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('sb-phone-tab-bar button.more')!;
+
+  it('swaps the rail for the bottom tab bar, with the More sheet closed', async () => {
+    const { el } = await mount();
+    expect(el.querySelector('sb-phone-tab-bar')).not.toBeNull();
+    expect(sheet(el)).toBeNull();
+    const css = readSource('src/app/shell/shell.css');
+    const phoneBlock = css.slice(css.indexOf('@media (max-width: 639px)'));
+    expect(phoneBlock).toMatch(/\.rail \{ display: none; \}/);
+    expect(phoneBlock).toMatch(/\.shell \{ grid-template-columns: 1fr; \}/);
+    expect(phoneBlock).toContain('.main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }');
+  });
+
+  it('collapses the bar to the title, the two chips, a search icon and the avatar', async () => {
+    const { el } = await mount();
+    const bar = el.querySelector('header.topbar')!;
+    const order = ['sb-breadcrumb.topbar-lead', 'div.status-cluster', 'button.search-trigger', 'sb-profile-menu', 'sb-scan-progress'];
+    expect(bar.children).toHaveLength(order.length);
+    order.forEach((selector, index) => expect(bar.children[index].matches(selector), selector).toBe(true));
+    const search = bar.querySelector('button.search-trigger')!;
+    expect(search.getAttribute('aria-label')).toBe('Search or jump to a page');
+    // The magnifier: sb-icon's default label for 'search' (V195-14).
+    expect(search.querySelector('sb-icon')!.getAttribute('title')).toBe('Search');
+    expect(bar.querySelector('.status-cluster sb-killswitch-chip')).not.toBeNull();
+    expect(bar.querySelector('.status-cluster sb-freshness-chip')).not.toBeNull();
+  });
+
+  it('opens the More sheet from the More tab, and the tab closes it again', async () => {
+    const { fixture, el } = await mount();
+    moreTab(el).click();
+    await settle(fixture);
+    expect(sheet(el)).not.toBeNull();
+    expect(moreTab(el).getAttribute('aria-expanded')).toBe('true');
+    moreTab(el).click();
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+  });
+
+  it('closes the More sheet on Escape and when a page is chosen', async () => {
+    const { fixture, el } = await mount();
+    moreTab(el).click();
+    await settle(fixture);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+    moreTab(el).click();
+    await settle(fixture);
+    el.querySelector<HTMLAnchorElement>('sb-more-sheet a.page[href="/calendar"]')!.click();
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+  });
+
+  it('closes the More sheet when its search field is used', async () => {
+    const { fixture, el } = await mount();
+    moreTab(el).click();
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('sb-more-sheet button.search')!.click();
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+  });
+
+  it('forgets an open sheet when the window grows past phone width', async () => {
+    const { fixture, el } = await mount();
+    moreTab(el).click();
+    await settle(fixture);
+    phone.set(false);
+    await settle(fixture);
+    expect(el.querySelector('sb-phone-tab-bar')).toBeNull();
+    phone.set(true);
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+  });
+});
+
+describe('shell above phone width (v195 Phase 3)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: shellProviders() });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: signal(false), isNarrow: signal(false), viewport: signal('md') },
+    });
+  });
+
+  it('renders no tab bar, no More sheet and no phone search icon', () => {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-phone-tab-bar')).toBeNull();
+    expect(el.querySelector('sb-more-sheet')).toBeNull();
+    expect(el.querySelector('button.search-trigger')).toBeNull();
+    expect(el.querySelector('nav.rail')).not.toBeNull();
   });
 });

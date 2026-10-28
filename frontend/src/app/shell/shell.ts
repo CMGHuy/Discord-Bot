@@ -17,6 +17,8 @@ import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
 import { MotionMode, MotionService } from '../ui/motion/motion.service';
 import { CLOCK } from '../ui/clock';
+import { ViewportService } from '../ui/breakpoints';
+import { Button } from '../ui/button';
 import { DensityService } from '../ui/density.service';
 import { Hint } from '../ui/hint';
 import { Icon } from '../ui/icon';
@@ -28,6 +30,8 @@ import { SessionStore } from '../stores/session.store';
 import { Breadcrumb } from './breadcrumb';
 import { FreshnessChip } from './freshness-chip';
 import { KillswitchChip } from './killswitch-chip';
+import { MoreSheet } from './more-sheet';
+import { PhoneTabBar } from './phone-tab-bar';
 import { ConnectionStatus } from './connection-status';
 import { NAV_GROUPS } from './nav';
 import { ScanProgressStrip } from './scan-progress';
@@ -63,6 +67,7 @@ const ZOOM_DEFAULT = 100;
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
     ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, NavIndicator, Tape,
+    Button, PhoneTabBar, MoreSheet,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -114,6 +119,38 @@ export class Shell {
     const updated = this.connection.lastUpdated();
     return `ui ${versions.ui} · bot ${versions.bot}${updated ? ` · updated ${updated}` : ''}`;
   });
+
+  /* -- v195 Phase 3: the phone shell ---------------------------------- */
+
+  /** Below 640px the rail gives way to the bottom tab bar and More sheet. */
+  protected readonly isPhone = inject(ViewportService).isPhone;
+
+  /** The More sheet's open state. The shell owns it: the tab bar asks, the
+   *  sheet reports a close, and a wider window forgets it. */
+  protected readonly moreOpen = signal(false);
+
+  /** A sheet left open on a phone must not reappear when the window is
+   *  narrowed again later: leaving phone width closes it. */
+  private readonly closeMoreOffPhone = effect(() => {
+    if (!this.isPhone()) untracked(() => this.moreOpen.set(false));
+  });
+
+  protected toggleMore(): void {
+    this.moreOpen.update((open) => !open);
+  }
+
+  protected closeMore(): void {
+    this.moreOpen.set(false);
+  }
+
+  /**
+   * The phone's search icon and the More sheet's search field both land
+   * here. The sheet closes first so the palette never opens under it;
+   * V195-20 adds the palette open to this method.
+   */
+  protected onSearchRequested(): void {
+    this.closeMore();
+  }
 
   /* -- SR58: font zoom ------------------------------------------------ */
 

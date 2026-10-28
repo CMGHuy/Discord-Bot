@@ -230,9 +230,14 @@ sb-nav-indicator {
 /* Everything here is a removal: the bar never wraps to a second row, which
    would change the height of every page's content area. The breadcrumb
    already shows only the current crumb below 640px and truncates it with
-   an ellipsis. */
+   an ellipsis; the rail gives way to the bottom tab bar. */
 @media (max-width: 639px) {
   .clock { display: none; }
+  /* The phone frame: no rail and no rail column; the page leaves room under
+     its last row for the fixed tab bar (phone-tab-bar.ts). */
+  .shell { grid-template-columns: 1fr; }
+  .rail { display: none; }
+  .main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
   .topbar { gap: var(--space-10); padding: 0 var(--space-10); }
   .tape-strip { display: none; }
   .topbar-lead { flex: 1 1 auto; }

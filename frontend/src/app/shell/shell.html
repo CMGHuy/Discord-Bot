@@ -76,6 +76,14 @@
           {{ now() }}
         </span>
       </div>
+      <!-- Phone only: the bar collapses to the title, the two chips, this
+           search icon and the avatar (the one place to sign out there). -->
+      @if (isPhone()) {
+        <button sb-button variant="icon" type="button" class="search-trigger"
+                aria-label="Search or jump to a page" (click)="onSearchRequested()">
+          <sb-icon name="search" />
+        </button>
+      }
       <sb-profile-menu [zoom]="zoom()" [state]="connection.state()"
                        [botAlive]="connection.botAlive()" [marketActive]="connection.marketActive()" (zoomCycled)="cycleZoom()"
                        [motion]="motionMode()" (motionChanged)="setMotion($event)"
@@ -110,6 +118,14 @@
       }
     </main>
   </div>
+
+  <!-- v195 Phase 3, phone: the bottom tab bar and its More sheet. Both hosts
+       stay out of the grid: the bar is fixed, the sheet's host is
+       display: contents. -->
+  @if (isPhone()) {
+    <sb-phone-tab-bar [moreOpen]="moreOpen()" (moreRequested)="toggleMore()" />
+    <sb-more-sheet [open]="moreOpen()" (closed)="closeMore()" (searchRequested)="onSearchRequested()" />
+  }
 
   <sb-toast-host />
 </div>

@@ -9,7 +9,7 @@ import { resolveToken } from './testing/resolve-token';
 /**
  * Raw buttons that stay raw, each with the reason.
  *
- * Two entries, both whole-surface hit areas, and it should stay that way. A
+ * Four entries, all whole-surface hit areas, and it should stay that way. A
  * gate that starts life with a fistful of exceptions teaches everyone that
  * exceptions are normal.
  */
@@ -25,6 +25,14 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   // labelled control, not a row of mixed content; a row variant would be used
   // exactly once.
   ['workspaces/dashboard/panels/recent-activity.ts', 'class="event-hit"'],
+  // The More tab IS a tab-bar cell -- glyph over label, laid out exactly like
+  // its sibling <a class="tab"> cells so the five read as one bar. A button
+  // variant would style a labelled control, not a bar cell (v195 V195-18).
+  ['shell/phone-tab-bar.ts', 'class="tab more"'],
+  // The More sheet's search row IS a field-shaped trigger for the palette --
+  // glyph and placeholder text across the sheet's full width. It opens the
+  // palette rather than taking input, so it is not a text input (v195 V195-18).
+  ['shell/more-sheet.ts', 'class="search"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {
