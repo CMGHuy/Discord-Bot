@@ -42,17 +42,17 @@ describe('the elevation ladder', () => {
     expect(rule).not.toMatch(/rgba?\(/);
   });
 
-  /* v168 §3 #10 (amendment 9): the glow moved off body onto one fixed shell
-   * layer, so there is exactly one per page and it can drift. */
-  it('the ambient glow is one shell layer, not the body', () => {
+  /* v195 §1.2 retires v168 §3 #10: no ambient glow, on body or on a shell
+   * layer. The page ground is the flat --bg. */
+  it('paints no ambient glow anywhere', () => {
     expect(GLOBAL).toMatch(/body\s*\{[^}]*background:\s*var\(--bg\);/s);
     expect(stripComments(GLOBAL)).not.toContain('--glow-ambient');
     const painters = allSources()
       .filter(({ source }) => stripComments(source).includes('var(--glow-ambient)'))
       .map(({ name }) => name);
-    expect(painters).toEqual(['app/shell/shell.css']);
+    expect(painters).toEqual([]);
     const shellHtml = readFileSync(join(process.cwd(), 'src/app/shell/shell.html'), 'utf8');
-    expect(shellHtml.match(/class="ambient"/g)).toHaveLength(1);
+    expect(shellHtml).not.toMatch(/class="ambient"/);
   });
 });
 

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideHttpClient } from '@angular/common/http';
@@ -149,16 +149,26 @@ describe('shell navigation', () => {
     expect(strip!.previousElementSibling).toBeNull();
   });
 
-  it("paints the ambient glow as the shell's first child, hidden from assistive tech (v168 §3 #10)", () => {
+  /* v195 §1.2: depth comes from surface steps and borders only. The ambient
+   * glow layer (v168 §3 #10) is gone, and the routed host is a plain div:
+   * the route-entrance directive and its .sb-entering class are retired. */
+  it('paints no ambient layer and routes into a plain host (v195 §1.2)', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const shell = (f.nativeElement as HTMLElement).querySelector('.shell') as HTMLElement;
 
-    const first = shell.firstElementChild as HTMLElement;
-    expect(first.classList).toContain('ambient');
-    expect(first.getAttribute('aria-hidden')).toBe('true');
-    expect(first.children).toHaveLength(0);
-    expect(shell.querySelectorAll('.ambient')).toHaveLength(1);
+    expect(shell.querySelectorAll('.ambient')).toHaveLength(0);
+    const host = shell.querySelector('.workspace-content') as HTMLElement;
+    expect(host).not.toBeNull();
+    expect(host.classList.contains('sb-entering')).toBe(false);
+    expect(host.hasAttribute('sbrouteentrance')).toBe(false);
+  });
+
+  it('no longer ships the route-entrance directive (v195 §1.2)', () => {
+    const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+    expect(read('src/app/shell/shell.html')).not.toContain('sbRouteEntrance');
+    expect(read('src/app/shell/shell.ts')).not.toContain('RouteEntrance');
+    expect(existsSync(join(process.cwd(), 'src/app/ui/motion/route-entrance.ts'))).toBe(false);
   });
 
   it('loads the tape once on construction', () => {
@@ -444,7 +454,7 @@ describe('shell motion preference (v168 §1)', () => {
   });
 });
 
-describe('ambient live cues (v168 §3 #10)', () => {
+describe('live cues (v168 §3 #10)', () => {
   const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
   /** The first `<selector> { ... }` rule, verbatim. */
@@ -454,21 +464,13 @@ describe('ambient live cues (v168 §3 #10)', () => {
     return css.slice(at, css.indexOf('}', at) + 1);
   }
 
-  it('isolates the shell, so the fixed glow layer sits above --bg and under every pane', () => {
+  /* v195 §1.2: the glow layer and the stacking context it needed are gone. */
+  it('declares no ambient layer and no stacking context for one', () => {
     const css = read('src/app/shell/shell.css');
-    expect(ruleOf(css, '.shell')).toContain('isolation: isolate;');
-    const ambient = ruleOf(css, '.ambient');
-    for (const declaration of [
-      'position: fixed;',
-      'inset: -10%;',
-      'z-index: -1;',
-      'pointer-events: none;',
-      'background: var(--glow-ambient);',
-    ]) {
-      expect(ambient).toContain(declaration);
-    }
-    // The drift lives in styles/motion.css, per mode (On only, static on a phone).
-    expect(ambient).not.toContain('animation');
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(ruleOf(css, '.shell')).not.toContain('isolation');
+    expect(code).not.toMatch(/\.ambient\s*\{/);
+    expect(code).not.toContain('--glow-ambient');
   });
 
   it('blinks a halo behind the avatar, green when the bot is live and red when offline', () => {

@@ -1,7 +1,5 @@
 <div class="shell" [class.railed]="railed()" [class.overlay]="overlay()"
      [class.overlay-open]="overlayOpen()">
-  <!-- v168 §3 #10: the page's one ambient glow, under everything (shell.css). -->
-  <div class="ambient" aria-hidden="true"></div>
   <!-- Below sm the sidebar is an overlay, so something has to summon it. -->
   @if (overlay()) {
     <button sb-button variant="icon" class="menu-button" type="button"
@@ -166,7 +164,7 @@
         [running]="connection.scanRunning()"
         [progress]="connection.scanProgress()"
       />
-      <div class="workspace-content" sbRouteEntrance [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
+      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
       @if (routeLoading.visible()) {
         <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
       }
