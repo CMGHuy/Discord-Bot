@@ -52,6 +52,26 @@ export function quantity(value: number | null | undefined, maxDecimals = 2): str
   return value.toLocaleString('en-US', { maximumFractionDigits: maxDecimals });
 }
 
+/** v194 B4: the one share-count formatter for Risk, trade detail and the
+ *  row drawer. The paper book sizes positions unrounded under the 2%
+ *  dollar-risk cap, so 2.72 shares is a real figure and "3" overstated it.
+ *  `quantity` at its two-decimal ceiling, named for what it formats. */
+export function shareCount(value: number | null | undefined): string {
+  return quantity(value, 2);
+}
+
+/** v194 B5: the one percentage formatter for portfolio heat, per-position
+ *  risk and their totals. Unsigned like `share` (a budget is a level, not a
+ *  movement), sign kept on a negative. A non-zero value under 0.01 renders
+ *  "<0.01%": at two decimals it printed "0.00%", claiming no risk where
+ *  there is some. An exact zero (or -0) is "0.00%". */
+export function riskPct(value: number | null | undefined): string {
+  if (value === null || value === undefined) return ABSENT;
+  if (value === 0) return '0.00%';
+  if (Math.abs(value) < 0.01) return `${value < 0 ? '-' : ''}<0.01%`;
+  return `${grouped(value, 2)}%`;
+}
+
 /** A realised P&L amount, signed like `pct` -- it is the same gain/loss the
  *  percentage names, just in currency rather than relative terms, so the two
  *  read the same way at a glance. `unit` comes from

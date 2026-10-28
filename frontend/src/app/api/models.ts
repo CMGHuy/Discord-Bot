@@ -142,6 +142,8 @@ export interface TradeRow {
   price_as_of?: string | null;
   exit_price: number | null;
   realized_pnl_amount: number | null;
+  /** v194 B7: no exchange rate for the exit date; `realized_pnl_amount` is then null. */
+  fx_missing?: boolean;
   pnl_pct: number | null;
   r_multiple: number | null;
   held_hours: number | null;
@@ -195,6 +197,10 @@ export interface TradeRow {
    *  isn't split. */
   leg_index: number;
   leg_total: number;
+  /** v194 B3: what closed this leg (the stored leg's `reason`, `giveback`
+   *  for a v176 give-back stop); null on a row that is not a leg, or a leg
+   *  with no recorded reason. Optional: older payloads omit it. */
+  leg_exit_reason?: string | null;
 }
 
 export type GateKey = 'rs' | 'regime' | 'earnings';
@@ -404,6 +410,8 @@ export interface Dashboard {
   open_pnl_pct: number | null;
   /** Sum of shares x (price - entry) over open positions; null when none has a share count. */
   open_pnl_amount: number | null;
+  /** v194 B7: closes and positions left out of the money figures for want of a rate (main ledger). */
+  fx_missing_count?: number;
   risk_used_pct: number | null;
   risk_cap_pct: number | null;
   open_trades: number;
@@ -430,6 +438,7 @@ export interface Dashboard {
     n: number;
     wins: number;
     losses: number;
+    fx_missing_count?: number;
   };
   /** The plan-lifecycle diagram's "Expires" definition names this number --
    *  projected from the server's own DEFAULT_EXPIRY_BARS constant rather
@@ -556,6 +565,8 @@ export interface AnalyticsEquityCurve extends Scoped {
   points_n: number;
   as_of: string | null;
   benchmark: { spy_indexed: { date: string; pct: number }[] };
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /** One strategy or horizon's aggregate (v85 D40, R9-02). `total_r` is a
@@ -579,6 +590,8 @@ export interface AnalyticsByDimension extends Scoped {
   rows: AnalyticsByDimensionRow[];
   as_of: string | null;
   min_cell_n: number;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 export interface AnalyticsPerformance extends Scoped {
@@ -615,6 +628,8 @@ export interface AnalyticsPerformance extends Scoped {
     best_win_streak: number;
     worst_loss_streak: number;
   };
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /**
@@ -1420,6 +1435,12 @@ export interface RiskMetrics {
   beta_spy: RiskMetric;
   sharpe_r: RiskMetric;
   max_drawdown_r: RiskMetric;
+  /** v194 B8: the largest peak-to-trough fall of cumulative realised P&L
+   *  over every closed main-ledger trade, oldest close first, in the account
+   *  currency (a positive magnitude). `fx_missing_count` trades had no FX
+   *  rate for their exit day and are left out of it. Optional: older
+   *  payloads and spec fixtures omit it. */
+  max_drawdown_amount?: RiskMetric & { fx_missing_count: number };
   as_of: string | null;
   /** The ticker `beta_spy` was actually computed against --
    *  `config.MARKET_REGIME_TICKER`, which an operator can change away from
@@ -1441,6 +1462,11 @@ export interface Risk {
   heat: RiskHeat;
   positions: RiskPosition[];
   sector_heat: SectorHeat[];
+  /** v194 B6: open positions with no sector in the scan universe's map, so
+   *  absent from `sector_heat`. Above zero, an empty `sector_heat` means "no
+   *  sector data", not "no exposure". Optional: specs build full `Risk`
+   *  literals, and an older server omits it. */
+  unmapped_count?: number;
   clusters: unknown[];
   throttle: Throttle;
   killswitch: Killswitch;
@@ -2052,6 +2078,8 @@ export interface PnlCalendar {
   worst_day: CalendarDay | null;
   streak: CalendarStreak;
   filters: CalendarFilters;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 export interface CalendarDayTrades {
@@ -2075,6 +2103,8 @@ export interface CalendarDayTrades {
   context: DayContext;
   /** v165 D3 -- exactly the rows in `trades`, grouped four ways. */
   breakdown: DayBreakdown;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /** A difference from a reference day. Null when either side has no figure. */

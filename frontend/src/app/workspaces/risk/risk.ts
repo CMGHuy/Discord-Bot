@@ -19,16 +19,96 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
-import { amount, dateTime, num, share, text } from '../../ui/format';
+import { amount, dateTime, money, num, riskPct, share, shareCount, text } from '../../ui/format';
+import { Hint } from '../../ui/hint';
 import { Freshness } from '../../ui/freshness';
 import { Panel } from '../../ui/layout';
 import { Matrix } from '../../ui/matrix';
 import { RowLink } from '../../ui/row-link';
 import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
-import { StatTile } from '../../ui/stat-tile';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { tablePerPage } from '../../ui/table-per-page';
+
+/** v194 B4/B5: what the Exposure table's figures are, shown as the panel's
+ *  hint. Copy rules (index Global Constraints): paper, no recommendation. */
+export const EXPOSURE_HINT =
+  "Shares are the paper book's size, computed unrounded under the 2% dollar-risk cap; " +
+  "a broker may fill whole shares or another fraction. Risk % is each position's risk " +
+  'to its stop as a share of the account balance; a figure under 0.01% shows as "<0.01%", ' +
+  'its exact value in the hint beside it.';
+
+export const UNROUNDED_TOTALS_NOTE =
+  'Totals add the unrounded values, so they can differ from the sum of the rounded rows.';
+
+/** True when the rows, each rounded to `decimals`, add up to the rounded
+ *  total of the unrounded values: the footer visibly reconciles. Integer
+ *  units of the last decimal, so float noise cannot flip it. */
+export function reconciles(values: readonly (number | null | undefined)[], decimals: number): boolean {
+  const factor = 10 ** decimals;
+  // Use the same en-US rounding as the displayed share/risk formatters;
+  // Math.round(value * factor) disagrees at decimal midpoints such as 1.005.
+  const units = (value: number): number => Math.round(Number(num(value, decimals).replaceAll(',', '')) * factor);
+  const roundedRows = values.reduce<number>((sum, value) => sum + units(value ?? 0), 0);
+  const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  return roundedRows === units(total);
+}
+
+/** The Exposure panel's hint for the rows on screen: the base text, plus the
+ *  unrounded-totals note only when shares or Risk % visibly fail to add up. */
+export function exposureHint(rows: readonly RiskPosition[]): string {
+  const ok = reconciles(rows.map((row) => row.shares), 2) && reconciles(rows.map((row) => row.risk_pct), 2);
+  return ok ? EXPOSURE_HINT : `${EXPOSURE_HINT} ${UNROUNDED_TOTALS_NOTE}`;
+}
+
+/** The exact value behind a "<0.01%" cell; null when the cell already shows it. */
+export function exactRiskText(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || value === 0 || Math.abs(value) >= 0.01) return null;
+  return `Exact risk: ${value}% of the account balance.`;
+}
+
+/** v194 B6: the Sector heat panel's warning, or null when every open
+ *  position has sector data. M is never below N: the positions table and
+ *  the collector read the book separately. */
+export function unmappedNote(unmapped: number, open: number): string | null {
+  if (unmapped <= 0) return null;
+  const total = Math.max(open, unmapped);
+  return `Sector concentration cannot be assessed: no sector data for ${unmapped} of ${total} open position${total === 1 ? '' : 's'}.`;
+}
+
+
+/* v194 B8 -- Risk and Analytics both show a Sharpe and a max drawdown over
+ * different populations. Each label names its basis, so the two never read
+ * as one quantity, and the definition sits in the tile's hint. */
+export const RISK_SHARPE_LABEL = 'Sharpe · per-trade R, all closed';
+export const RISK_DRAWDOWN_LABEL = 'Max drawdown · cumulative R, all closed';
+export const RISK_SHARPE_ABOUT =
+  'Mean R ÷ standard deviation of R over every closed main-ledger trade, all time. '
+  + 'Not annualised: trades have no fixed cadence. Analytics shows an annualised Sharpe '
+  + 'for its selected range instead. N is the closed-trade count. ' + PERFORMANCE_CAVEAT;
+export const RISK_DRAWDOWN_ABOUT =
+  'Largest peak-to-trough fall of cumulative R over every closed main-ledger trade, all time. '
+  + 'The amount under it is the largest fall of cumulative realised P&L, oldest close first, '
+  + "converted to the account currency at each exit day's FX rate. Analytics shows the fall "
+  + 'within its selected range instead. N is the closed-trade count. ' + PERFORMANCE_CAVEAT;
+
+/** The tile's visible note when the money drawdown left trades out for want
+ *  of an FX rate; nothing when none were (a missing rate is never read as 1). */
+export function drawdownFxNote(missing: number): string | undefined {
+  if (!(missing > 0)) return undefined;
+  return `${missing} closed trade${missing === 1 ? '' : 's'} without an FX rate for the exit day left out of the amount.`;
+}
+
+/** One Risk metric tile, pre-formatted -- `StatTile` never formats. */
+interface MetricTile {
+  label: string;
+  value: string;
+  sample: number;
+  about?: string;
+  secondary?: string | null;
+  hint?: string;
+}
 
 /**
  * Risk — exposure, heat against `PORTFOLIO_HEAT_CAP_PCT`, and the killswitch.
@@ -56,7 +136,7 @@ import { tablePerPage } from '../../ui/table-per-page';
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Matrix, Panel, RowLink, SectionHead, Sparkline, StatStrip, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Panel, RowLink, SectionHead, Sparkline, StatStrip, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters, scan health) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -173,17 +253,10 @@ import { tablePerPage } from '../../ui/table-per-page';
              strip's default auto-fit at 140px keeps today's column count. -->
         <sb-stat-strip class="metric-grid">
           @for (tile of metricTiles(); track tile.label) {
-            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample" />
+            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample"
+              [about]="tile.about" [secondary]="tile.secondary ?? null" [hint]="tile.hint" />
           }
         </sb-stat-strip>
-        <!-- Sharpe and drawdown here are over every closed trade, in R; the
-             Analytics tiles of the same name cover the selected date range
-             and annualise returns. Both are right, so say which is which. -->
-        <p class="metrics-scope">
-          Sharpe and max drawdown are per-trade R over all closed trades. The other four use
-          daily returns of the open book, so they differ from the Analytics tiles of the same name,
-          which follow that page's date range.
-        </p>
       </div>
     </sb-panel>
     </sb-async>
@@ -215,9 +288,12 @@ import { tablePerPage } from '../../ui/table-per-page';
     <sb-panel heading="Portfolio heat">
       <div class="heat">
         <span class="heat-figure num" [class]="heatClass()">
-          {{ fmt(store.openHeatPct()) }}%
+          {{ fmtRisk(store.openHeatPct()) }}
         </span>
-        <span class="heat-cap num">of {{ fmt(store.heatCapPct(), 1) }}% cap</span>
+        @if (exactRisk(store.openHeatPct()); as exact) {
+          <sb-hint [text]="exact" label="Exact portfolio heat" />
+        }
+        <span class="heat-cap num">of {{ fmtRisk(store.heatCapPct()) }} cap</span>
       </div>
 
       <!-- An explicit null check, not a truthiness one: zero heat is a real
@@ -285,12 +361,18 @@ import { tablePerPage } from '../../ui/table-per-page';
       <div class="gauge-budget">
         @if (riskBudget(); as budget) {
           <div class="risk-budget">
-            <!-- Same precision as the heat figure above (fmt()'s default 2
-                 places) -- 1 place was rounding 0.03% used to a flat "0.0%"
-                 that visually contradicted the figure right above it. -->
-            <div><span class="label">Cap</span><span class="num">{{ fmt(budget.cap) }}%</span></div>
-            <div><span class="label">Used</span><span class="num">{{ fmt(budget.used) }}%</span></div>
-            <div><span class="label">Remaining</span><span class="num remaining">{{ fmt(budget.remaining) }}%</span></div>
+            <!-- riskPct, like the heat figure above (v194 B5): two places,
+                 and "<0.01%" for a used budget too small to print -- 1 place
+                 once rounded 0.03% used to a flat "0.0%". -->
+            <div><span class="label">Cap</span><span class="num">{{ fmtRisk(budget.cap) }}
+              @if (exactRisk(budget.cap); as exact) { <sb-hint [text]="exact" label="Exact budget cap" /> }
+            </span></div>
+            <div><span class="label">Used</span><span class="num">{{ fmtRisk(budget.used) }}
+              @if (exactRisk(budget.used); as exact) { <sb-hint [text]="exact" label="Exact budget used" /> }
+            </span></div>
+            <div><span class="label">Remaining</span><span class="num remaining">{{ fmtRisk(budget.remaining) }}
+              @if (exactRisk(budget.remaining); as exact) { <sb-hint [text]="exact" label="Exact budget remaining" /> }
+            </span></div>
             @if (budget.over) {
               <p class="budget-note warn">
                 Usage is over the cap — remaining shown as 0.
@@ -303,7 +385,7 @@ import { tablePerPage } from '../../ui/table-per-page';
 
     <!-- exposure -------------------------------------------------------- -->
 
-    <sb-panel heading="Exposure by position" [flush]="true">
+    <sb-panel heading="Exposure by position" [flush]="true" [description]="exposureAbout()">
       <sb-data-table
         [rows]="exposurePage.visible()"
         [columns]="columns()"
@@ -322,17 +404,23 @@ import { tablePerPage } from '../../ui/table-per-page';
       />
     </sb-panel>
 
-    <sb-panel heading="Sector heat">
+    <sb-panel heading="Sector heat" [problem]="sectorProblem()">
       @if (store.sectorHeat().length) {
         <dl class="sectors">
           @for (row of store.sectorHeat(); track row.sector) {
             <div>
               <dt>{{ fmtText(row.sector) }}</dt>
-              <dd class="num">{{ fmt(row.heat_pct) }}%</dd>
+              <dd class="num"><span>{{ fmtRisk(row.heat_pct) }}</span>
+                @if (exactRisk(row.heat_pct); as exact) {
+                  <sb-hint [text]="exact" [label]="'Exact sector heat for ' + row.sector" />
+                }
+              </dd>
             </div>
           }
         </dl>
-      } @else {
+      } @else if (!sectorProblem()) {
+        <!-- A true zero only: with unmapped positions an empty list means
+             no sector data, and the panel's problem line says so. -->
         <p class="none">No sector exposure.</p>
       }
     </sb-panel>
@@ -446,8 +534,13 @@ import { tablePerPage } from '../../ui/table-per-page';
 
     <ng-template #riskCell let-row>
       <!-- Plain, not red. This is risk budget, not a loss -- painting it red
-           would claim money that has not been lost. -->
-      <span class="num" [sbFlash]="row.risk_pct">{{ fmt(row.risk_pct) }}%</span>
+           would claim money that has not been lost. v194 B5: a tiny risk
+           reads "<0.01%" with its exact value in a hint; the row drawer
+           renders this same template, hint included. -->
+      <span class="num" [sbFlash]="row.risk_pct">{{ fmtRisk(row.risk_pct) }}</span>
+      @if (exactRisk(row.risk_pct); as exact) {
+        <sb-hint [text]="exact" [label]="'Exact risk for ' + row.ticker" />
+      }
     </ng-template>
   `,
   styles: `
@@ -568,7 +661,6 @@ import { tablePerPage } from '../../ui/table-per-page';
     .risk-budget .remaining { font-weight: 600; }
     .budget-note { margin-top: var(--space-6); font-size: var(--text-micro); }
 
-    .metrics-scope { margin: var(--space-10) 0 0; font-size: var(--text-micro); color: var(--text-faint); }
     /* -- risk metrics -- */
     .metrics { display: grid; gap: var(--space-8); }
 
@@ -660,6 +752,15 @@ export class Risk {
     () => this.perPage(),
   );
 
+  /** v194 B4/B5: the hint reads the rows the footer sums (the visible page). */
+  protected readonly exposureAbout = computed(() => exposureHint(this.exposurePage.visible()));
+
+  /** v194 B6: shown through the panel's `problem` slot, which renders it as a
+   *  visible status line and never lets the panel fold it away. */
+  protected readonly sectorProblem = computed(() =>
+    unmappedNote(this.store.unmappedCount(), this.store.positions().length),
+  );
+
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.positions.length === 0 }),
   );
@@ -705,10 +806,13 @@ export class Risk {
   protected readonly columns = computed<ColumnDef<RiskPosition>[]>(() => [
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, cell: this.tickerCell(), sortable: true, compact: { line: 1, order: 1 } },
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), sortable: true },
-    { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.shares ?? 0), 0), 0) },
+    { key: 'shares', header: 'Shares', value: (row) => shareCount(row.shares), numeric: true, sortable: true, footer: (rows) => shareCount(rows.reduce((sum, row) => sum + (row.shares ?? 0), 0)) },
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true, compact: { line: 2, order: 2 } },
     { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, sortable: true, compact: { line: 2, order: 1 } },
-    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => num(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)), compact: { line: 1, order: 2 } },
+    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => riskPct(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)), footerHint: (rows) => {
+      const text = exactRiskText(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0));
+      return text ? { text, label: 'Exact Risk % total' } : null;
+    }, compact: { line: 1, order: 2, drawer: true } },
   ]);
 
   /** v179: the money floor keeps Risk % and the stop on the phone row. The
@@ -738,13 +842,20 @@ export class Risk {
     return value === null ? '—' : `${value === 0 ? '' : '−'}${num(Math.abs(value), 2)}R`;
   }
 
+  /** The money drawdown under the R figure, negative like it; null (no
+   *  line) when the payload has no money figure. */
+  private fmtDrawdownMoney(value: number | null): string | null {
+    return value === null ? null : money(value === 0 ? 0 : -value, this.connection.currency(), 2);
+  }
+
   /** Six tiles over R8-01's metrics, each carrying the sample it was
    *  actually computed from (spec D23/D37) -- `sample` is the metric's own
    *  `n`, not a page-wide count, which is what lets the distributional and
    *  trade-sample families disagree honestly. */
-  protected readonly metricTiles = computed(() => {
+  protected readonly metricTiles = computed<MetricTile[]>(() => {
     const m = this.store.metrics();
     if (!m) return [];
+    const ddAmount = m.max_drawdown_amount;
     return [
       { label: 'VaR 95%', value: this.fmtRiskPct(m.var_95.value), sample: m.var_95.n },
       { label: 'Expected shortfall', value: this.fmtRiskPct(m.expected_shortfall_95.value), sample: m.expected_shortfall_95.n },
@@ -752,8 +863,16 @@ export class Risk {
       // I4: label the ACTUAL configured benchmark, not a hardcoded "SPY" --
       // an operator can point config.MARKET_REGIME_TICKER elsewhere.
       { label: `Beta vs ${m.benchmark_symbol}`, value: this.fmtRatio(m.beta_spy.value), sample: m.beta_spy.n },
-      { label: 'Sharpe (R)', value: this.fmtRatio(m.sharpe_r.value), sample: m.sharpe_r.n },
-      { label: 'Max drawdown (R)', value: this.fmtDrawdownR(m.max_drawdown_r.value), sample: m.max_drawdown_r.n },
+      {
+        label: RISK_SHARPE_LABEL, value: this.fmtRatio(m.sharpe_r.value), sample: m.sharpe_r.n,
+        about: RISK_SHARPE_ABOUT,
+      },
+      {
+        label: RISK_DRAWDOWN_LABEL, value: this.fmtDrawdownR(m.max_drawdown_r.value),
+        sample: m.max_drawdown_r.n, about: RISK_DRAWDOWN_ABOUT,
+        secondary: this.fmtDrawdownMoney(ddAmount?.value ?? null),
+        hint: drawdownFxNote(ddAmount?.fx_missing_count ?? 0),
+      },
     ];
   });
 
@@ -805,7 +924,7 @@ export class Risk {
     // says which one it is and what the heat figure is measured against.
     return cap === null
       ? `${used}% of the risk budget is used.`
-      : `${used}% of the risk budget is used (heat is measured against a ${num(cap, 1)}% cap).`;
+      : `${used}% of the risk budget is used (heat is measured against a ${riskPct(cap)} cap).`;
   });
 
   /** Who engaged it and when, when the server recorded it. */
@@ -848,5 +967,7 @@ export class Risk {
   }
 
   protected fmt = num;
+  protected fmtRisk = riskPct;
+  protected exactRisk = exactRiskText;
   protected fmtText = text;
 }

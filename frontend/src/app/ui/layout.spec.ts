@@ -119,9 +119,9 @@ describe('sb-panel (v80 D4, v186 D1)', () => {
       return f.nativeElement as HTMLElement;
     }
 
-    it('shows its description when the panel is hovered, and as an info hint for touch and keyboard', () => {
+    it('explains itself through the header hint, not a native title', () => {
       const el = mount('Profit already locked in.');
-      expect(el.getAttribute('title')).toBe('Profit already locked in.');
+      expect(el.hasAttribute('title')).toBe(false);
       const hint = el.querySelector('header sb-hint')!;
       expect(hint.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe('Profit already locked in.');
       expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('About Realised P&L');
@@ -133,14 +133,14 @@ describe('sb-panel (v80 D4, v186 D1)', () => {
       expect(el.querySelector('sb-hint')).toBeNull();
     });
 
-    it('keeps the tooltip but drops the second glyph when the panel has a hint of its own', () => {
+    it('adds no title and no hint when the panel has a hint of its own', () => {
       const f = TestBed.createComponent(Panel);
       f.componentRef.setInput('heading', 'Open positions');
       f.componentRef.setInput('description', 'Every plan by stage.');
       f.componentRef.setInput('descriptionHint', false);
       f.detectChanges();
       const el = f.nativeElement as HTMLElement;
-      expect(el.getAttribute('title')).toBe('Every plan by stage.');
+      expect(el.hasAttribute('title')).toBe(false);
       expect(el.querySelector('sb-hint')).toBeNull();
     });
   });

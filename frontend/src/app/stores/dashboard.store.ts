@@ -11,7 +11,7 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { EventStream } from '../api/event-stream';
-import { Observable, Subject, debounceTime, defer } from 'rxjs';
+import { Observable, Subject, debounceTime, defer, finalize } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { routeRequest } from '../routing/route-request';
@@ -46,6 +46,10 @@ interface DashboardSlice {
   todayData: Dashboard | null;
   /** A today-only fetch is in flight (the scoped fetch is `loading`). */
   todayLoading: boolean;
+  /** The last today fetch failed and no newer one has answered. Kept beside
+   *  `todayData` (which keeps the previous figures) so the panel can say
+   *  "couldn't load" instead of showing an em dash or a zero as if measured. */
+  todayError: string | null;
 }
 
 /** The server's realised block (`Dashboard.realized`). */
@@ -55,6 +59,7 @@ export type Realized = Dashboard['realized'];
 export const RANGE_DEBOUNCE_MS = 300;
 
 const NOT_RESPONDING = 'The admin is not responding.';
+const NOT_FINISHED = 'The dashboard request did not finish.';
 
 function sameWindow(selection: ScopeSelection, window: TimeWindow): boolean {
   return selection.kind === 'range'
@@ -97,12 +102,21 @@ function lifecycleOf(data: Dashboard | null): { status: string; count: number }[
   }));
 }
 
+function messageOf(error: ApiError): string {
+  return error.code === 'unavailable' ? NOT_RESPONDING : error.message;
+}
+
 function failure(hadData: boolean, error: ApiError): Partial<DashboardSlice> {
-  return {
-    loading: false,
-    stale: hadData,
-    error: error.code === 'unavailable' ? NOT_RESPONDING : error.message,
-  };
+  return { loading: false, stale: hadData, error: messageOf(error) };
+}
+
+/** A current request unsubscribed before it answered -- the router cancels
+ *  a resolver's request when a newer navigation supersedes it. Neither
+ *  handler of `routeRequest` runs then, so without this the store keeps
+ *  `loading: true` over no data and `sb-async` shows its skeleton for good.
+ *  It ends like a failure instead: an error with Retry, or a stale mark. */
+function unfinished(hadData: boolean): Partial<DashboardSlice> {
+  return { loading: false, stale: hadData, error: NOT_FINISHED };
 }
 
 /**
@@ -164,7 +178,7 @@ export const DashboardStore = signalStore(
     data: null, loading: false, error: null,
     selection: { kind: 'preset', preset: '1D' },
     stale: false, targetSeq: 0,
-    todayData: null, todayLoading: false,
+    todayData: null, todayLoading: false, todayError: null,
   }),
   withComputed(({ data, selection, targetSeq, todayData }) => ({
     /** True until the first response, and never again. Distinguishes "no
@@ -295,7 +309,25 @@ export const DashboardStore = signalStore(
   })),
   withMethods((store, api = inject(ApiClient)) => {
     let latestRequest = 0;
-    let latestToday = 0;
+    // Today's figures arrive by two roads -- a 1D scoped fetch and the
+    // today-only fetch -- stamped on one counter. Any today answer is
+    // today's, whatever the scope became meanwhile, so it lands unless a
+    // newer today answer already has; `todayLoading` clears only once the
+    // newest stamp has settled.
+    let todayIssued = 0;
+    let todayLanded = 0;
+    const landToday = (stamp: number, data: Dashboard): void => {
+      if (stamp < todayLanded) return;
+      todayLanded = stamp;
+      patchState(store, {
+        todayData: data,
+        todayError: null,
+        ...(stamp === todayIssued ? { todayLoading: false } : {}),
+      });
+    };
+    const failToday = (stamp: number, error: ApiError): void => {
+      if (stamp === todayIssued) patchState(store, { todayLoading: false, todayError: messageOf(error) });
+    };
     // Bumped by a preset click, so a Range still inside its debounce never
     // lands on top of the preset the partner chose after it.
     let rangeGeneration = 0;
@@ -309,36 +341,38 @@ export const DashboardStore = signalStore(
       const request = ++latestRequest;
       const current = (): boolean => request === latestRequest;
       const { mode, window } = scopeToRequest(untracked(() => store.selection()), new Date());
+      // Under 1D the scoped response is today's: stamped like a today fetch.
+      const todayStamp = mode === 'today' ? ++todayIssued : 0;
+      let settled = false;
       return routeRequest(api.dashboard(mode, window), {
         start: () => patchState(store, { loading: true }),
         next: (data) => {
-          if (!current()) return;
-          // Under 1D the scoped response is today's, so the today figures follow it.
-          patchState(store, {
-            data, loading: false, error: null, stale: false,
-            ...(mode === 'today' ? { todayData: data, todayLoading: false } : {}),
-          });
+          settled = true;
+          if (todayStamp) landToday(todayStamp, data);
+          if (current()) patchState(store, { data, loading: false, error: null, stale: false });
         },
         error: (error) => {
+          settled = true;
+          if (todayStamp) failToday(todayStamp, error);
           if (current()) patchState(store, failure(untracked(() => store.data()) !== null, error));
         },
-      });
+      }).pipe(finalize(() => {
+        if (settled || !current()) return;
+        patchState(store, unfinished(untracked(() => store.data()) !== null));
+        if (todayStamp === todayIssued) patchState(store, { todayLoading: false });
+      }));
     });
 
     const refetch = (): void => { resolve().subscribe({ error: () => undefined }); };
 
     /** Today's response alone, for the today-only figures when the scope is
-     *  wider. A failure keeps the previous figures. */
+     *  wider. A failure keeps the previous figures and says so. */
     const loadToday = (): void => {
-      const request = ++latestToday;
+      const stamp = ++todayIssued;
       patchState(store, { todayLoading: true });
       api.dashboard('today').subscribe({
-        next: (data) => {
-          if (request === latestToday) patchState(store, { todayData: data, todayLoading: false });
-        },
-        error: () => {
-          if (request === latestToday) patchState(store, { todayLoading: false });
-        },
+        next: (data) => landToday(stamp, data),
+        error: (error: ApiError) => failToday(stamp, error),
       });
     };
 

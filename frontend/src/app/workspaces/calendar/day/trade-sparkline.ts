@@ -119,7 +119,7 @@ export function sparkGeometry(series: SparkSeries, width = 120, height = 32): Sp
         <span class="stale-note">cache ends {{ end }}</span>
       }
     } @else {
-      <span class="spark-empty" title="No cached daily bars for this row">—</span>
+      <span class="spark-empty">no cached bars</span>
     }
   `,
   styles: `

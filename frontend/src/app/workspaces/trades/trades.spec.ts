@@ -5,7 +5,9 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter, Router } from '@angular/router';
 import { patchState } from '@ngrx/signals';
 import { unprotected } from '@ngrx/signals/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
@@ -20,7 +22,11 @@ import { isInline } from '../../ui/priority';
 import { ToolbarControl } from '../../ui/toolbar';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
-import { Trades, TRADES_CONTROLS } from './trades';
+import { LEG_HINT_TEXT } from './leg-label';
+import { numText } from './trades.columns';
+import { partialOpenTitle } from '../../ui/status-cell';
+import { fxMissingText } from '../analytics/scope-bar';
+import { ROW_COUNT_NOTE, EXPORT_HINT, Trades, TRADES_CONTROLS } from './trades';
 
 function row(overrides: Partial<TradeRow>): TradeRow {
   return {
@@ -260,7 +266,7 @@ describe('Trades — the opened-at range', () => {
 describe('Trades — the count footer', () => {
   it('leaves the non-empty range to the pager, printed once', () => {
     const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
-    expect(el.querySelector('p.count')).toBeNull();
+    expect(el.querySelector('p.count')!.textContent).not.toMatch(/\d+–\d+/);
     expect(el.querySelectorAll('.bar .range')).toHaveLength(1);
     expect(el.querySelector('.bar .range')!.textContent).toContain('1–12 of 142');
   });
@@ -449,5 +455,158 @@ describe('Trades on a phone (v179 §3.1)', () => {
     expect(link.textContent!.trim()).toBe('Open full trade →');
     expect(link.getAttribute('href')).toBe('/trades/t9');
     expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('Trades page-size URL precedence (v194 B2)', () => {
+  afterEach(() => preferencesStub.values.set({}));
+
+  const cases = [
+    { name: 'URL All over the default', raw: '0', saved: 10, api: 200, choice: '0', range: '1–200 of 1272 (capped)' },
+    { name: 'URL 50 over saved All', raw: '50', saved: 0, api: 50, choice: '50', range: '1–50 of 1272' },
+    { name: 'saved choice for an invalid URL', raw: '7', saved: 20, api: 20, choice: '20', range: '1–20 of 1272' },
+    { name: 'saved All when the URL is absent', raw: undefined, saved: 0, api: 200, choice: '0', range: '1–200 of 1272 (capped)' },
+  ];
+
+  for (const testCase of cases) {
+    it(`shows and queries ${testCase.name}`, () => {
+      preferencesStub.values.set({ 'tables.trades.desktop.per_page': testCase.saved });
+      const fixture = render({ total: 1272, page: 1, perPage: testCase.api });
+      if (testCase.raw !== undefined) fixture.componentRef.setInput('per_page', testCase.raw);
+      fixture.detectChanges();
+      const root = fixture.nativeElement as HTMLElement;
+      const rows = root.querySelector<HTMLSelectElement>('sb-pagination select[aria-label="Rows per page"]')!;
+      expect(rows.value).toBe(testCase.choice);
+      expect(root.querySelector('sb-pagination .range')!.textContent).toBe(testCase.range);
+      expect(TestBed.inject(TradesStore).query().per_page).toBe(testCase.api);
+    });
+  }
+});
+
+/* -- v194 B3 -- leg rows say which part of the plan they are ------------- */
+
+/** Mount Trades with `items` as the loaded page, in full density so the
+ *  `#` column (and its `#numCell` template) is inline at jsdom's width. */
+function renderLegRows(items: TradeRow[]): HTMLElement {
+  const fixture = render();
+  (fixture.componentInstance as unknown as { setDensity(d: 'full' | 'compact'): void }).setDensity('full');
+  patchState(unprotected(TestBed.inject(TradesStore)), {
+    data: { items, total: items.length, page: 1, per_page: 50 },
+    query: { page: 1, per_page: 50 },
+  });
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
+
+describe('Trades — leg rows (v194 B3)', () => {
+  it('labels both legs of a two-leg plan with their exit reason', () => {
+    const el = renderLegRows([
+      row({ id: 'plan-aaaaaa', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      row({ id: 'plan-aaaaaa', leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' }),
+    ]);
+    const labels = [...el.querySelectorAll('.leg')].map((n) => n.firstChild!.textContent!.trim());
+    expect(labels[0]).toMatch(/^Leg 1 of 2 · /);
+    expect(labels[1]).toMatch(/^Leg 2 of 2 · /);
+  });
+
+  it('labels a leg with no recorded reason by its position alone', () => {
+    const el = renderLegRows([row({ leg_index: 2, leg_total: 3, leg_exit_reason: null })]);
+    expect(el.querySelector('.leg')!.firstChild!.textContent!.trim()).toBe('Leg 3 of 3');
+  });
+
+  it('shows no label and no leg hint on a single-leg trade', () => {
+    const el = renderLegRows([row({ leg_index: 0, leg_total: 1 })]);
+    expect(el.querySelector('.leg')).toBeNull();
+    expect(el.querySelector('.leg sb-hint')).toBeNull();
+  });
+
+  it('puts an sb-hint naming plans-not-legs on every leg row, in place of the old icon', () => {
+    const el = renderLegRows([
+      row({ leg_index: 0, leg_total: 2 }),
+      row({ leg_index: 1, leg_total: 2 }),
+    ]);
+    const hints = [...el.querySelectorAll('.leg sb-hint')];
+    expect(hints).toHaveLength(2);
+    expect(hints[0].textContent).toContain(LEG_HINT_TEXT);
+    expect(hints[0].textContent).toContain('count plans on Analytics');   // A4 audit
+    expect(hints[0].textContent).not.toContain('plans, not legs');
+    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
+  });
+
+  it('keeps the 44px hint tap area out of the leg line height (layout audit vcenter at 768)', () => {
+    // jsdom lays nothing out, so the contract is source text: on coarse /
+    // tablet widths sb-hint's trigger grows to --control-h, and unless the
+    // .leg rule pulls that padding back with a negative block margin the
+    // cell's box is ~14px taller than the ink it shows (content sits high).
+    const css = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trades.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).toMatch(/\.leg sb-hint\s*\{[^}]*margin-block:\s*calc\(\(var\(--control-h\) - 14px\) \/ -2\)/);
+    expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{\s*\.leg sb-hint/);
+  });
+
+  it('carries the label into the expansion the phone drawer reuses', () => {
+    const el = renderLegRows([row({ leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' })]);
+    // numText is what the drawer's "Hidden in this view" list prints for the
+    // `#` column whenever that column is not inline.
+    expect(numText(row({ id: 'plan-123456', leg_index: 1, leg_total: 2, leg_exit_reason: null })))
+      .toBe('123456 · Leg 2 of 2');
+    expect(el.querySelector('.leg')).not.toBeNull();
+  });
+});
+
+describe('numText', () => {
+  it('is the short id alone for a single-leg trade', () => {
+    expect(numText(row({ id: 'abcdefghij', leg_total: 1 }))).toBe('efghij');
+  });
+
+  it('keeps a short id whole', () => {
+    expect(numText(row({ id: 't1', leg_total: 1 }))).toBe('t1');
+  });
+});
+
+describe('Trades — the total counts rows, not plans (v194 B3)', () => {
+  it('says so under a non-empty table, and the pager still prints the range once', () => {
+    const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')!.textContent!.trim()).toBe(ROW_COUNT_NOTE);
+    expect(el.querySelectorAll('.bar .range')).toHaveLength(1);
+  });
+
+  it('announces rows, not trades', () => {
+    const fixture = render({ total: 3, page: 1, perPage: 12 });
+    const announce = (fixture.componentInstance as unknown as { announce: () => string | null }).announce;
+    expect(announce()).toBe('3 rows');
+  });
+});
+
+describe('Trades — missing FX rate caveat (v194 B7)', () => {
+  it('names how many rows on the page have no rate', () => {
+    const el = renderLegRows([
+      row({ id: 'a', fx_missing: true, realized_pnl_amount: null }),
+      row({ id: 'b', fx_missing: true, realized_pnl_amount: null }),
+      row({ id: 'c', fx_missing: false }),
+    ]);
+    expect(el.querySelector('.fx-caveat')!.textContent!.trim()).toBe(fxMissingText(2));
+  });
+
+  it('is absent when every row converted', () => {
+    const el = renderLegRows([row({ fx_missing: false }), row({ id: 'b' })]);
+    expect(el.querySelector('.fx-caveat')).toBeNull();
+  });
+});
+
+describe('Trades — explanations are hints, not titles (v194 A3)', () => {
+  it('says the export ignores the filters, in a hint beside the link', () => {
+    const el = render().nativeElement as HTMLElement;
+    expect(el.querySelector('a.export')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.export-wrap sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(EXPORT_HINT);
+  });
+
+  it('explains a partly closed position in a hint outside the row link', () => {
+    const r = row({ status: 'PARTIAL', status_label: 'PARTIAL', banked_fraction: 0.25, exit_price: null });
+    const el = renderRows([r]);
+    expect(el.querySelector('sb-row-link sb-hint')).toBeNull();
+    const texts = [...el.querySelectorAll('sb-hint [role="tooltip"]')].map((n) => n.textContent!.trim());
+    expect(texts).toContain(partialOpenTitle(r)!);
   });
 });

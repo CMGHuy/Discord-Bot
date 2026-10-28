@@ -431,8 +431,10 @@ describe('sb-equity-candles', () => {
     fixture.detectChanges();
     const pctPart = [...el.querySelectorAll('.readout .part')]
       .find((p) => p.textContent!.includes('vs prev close'))!;
-    expect(pctPart.getAttribute('title'))
-      .toBe("Change from the previous candle's close, not a return on capital");
+    expect(pctPart.hasAttribute('title')).toBe(false);
+    const tip = el.querySelector('.readout sb-hint [role="tooltip"]')!.textContent!.trim();
+    expect(tip).toContain("Change from the previous candle's close, not a return on capital.");
+    expect(tip).toContain('gross of commissions and slippage, pre-tax');   // A4 audit
   });
 
   it('follows the crosshair, and returns to the range summary when it leaves', () => {

@@ -2,15 +2,39 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AnalyticsStore, RELOCATED_METRICS } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
-import { OverviewTab } from './overview';
+import { ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_SHARPE_LABEL, OverviewTab } from './overview';
 import { BAND_OK } from './variance-band.fixture';
+import { Hint } from '../../../ui/hint';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
+
+/** The text of the sb-hint whose aria label is `label` (A4 audit). */
+function hintText(fixture: ComponentFixture<unknown>, label: string): string {
+  const hint = fixture.debugElement
+    .queryAll(By.directive(Hint))
+    .map((debug) => debug.componentInstance as Hint)
+    .find((h) => h.label() === label);
+  if (!hint) throw new Error(`no sb-hint labelled "${label}"`);
+  return hint.text();
+}
+
+/** Focus the first hit matching `hitSelector` and return the chart tooltip's text (A4 audit). */
+async function tooltipText(fixture: ComponentFixture<unknown>, hitSelector: string): Promise<string> {
+  const hit = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(hitSelector);
+  if (!hit) throw new Error(`no chart hit "${hitSelector}"`);
+  hit.dispatchEvent(new FocusEvent('focus'));
+  fixture.detectChanges();
+  await fixture.whenStable();
+  const tip = (fixture.nativeElement as HTMLElement).querySelector('sb-chart-tooltip .tooltip');
+  return tip?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
 
 /* The store is stubbed down to the signals this tab reads: a tab component
  * owns no HTTP (spec v94 D12), so its spec asserts rendering, not fetching. */
@@ -85,7 +109,8 @@ describe('OverviewTab', () => {
     }
     // Win rate is a rate, not an R-multiple -- it always reads as a percentage.
     expect(tileFor('Win rate')?.textContent).toContain('53.50%');
-    expect(tileFor('Win rate')?.textContent).not.toContain('R');
+    // The figure itself, not the A4 hint beside it (which names ExpR).
+    expect(tileFor('Win rate')?.querySelector('.value')?.textContent).not.toContain('R');
   });
 
   it('draws equity and drawdown as two panes, not a toggle', () => {
@@ -176,6 +201,49 @@ describe('OverviewTab', () => {
   });
 });
 
+describe('OverviewTab hint and tooltip copy (A4 audit)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('Equity and R distribution hints state the paper, gross, pre-tax basis', () => {
+    const { fixture } = render();
+    expect(hintText(fixture, 'Equity definition')).toContain('per closed trade, ordered by close date');
+    expect(hintText(fixture, 'Equity definition')).toContain(PERFORMANCE_CAVEAT);
+    expect(hintText(fixture, 'R distribution definition')).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('Outcome hint says its bar covers the whole book, counts legs and ignores the scope', () => {
+    const { fixture } = render();
+    const text = hintText(fixture, 'Outcome definition');
+    expect(text).toContain('whole book');
+    expect(text).toContain('each realised leg');
+    expect(text).toContain('ignores the scope');
+  });
+
+  it('Win rate tile says Analytics counts plans, beside ExpR and N', () => {
+    const { fixture } = render();
+    const text = hintText(fixture, 'About Win rate');
+    expect(text).toContain('counts plans');
+    expect(text).toContain('ExpR');
+    expect(text).toContain('N is');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('By month hint names a percent return, not a unit-toggled result', () => {
+    const { fixture } = render();
+    const text = hintText(fixture, 'By month definition');
+    expect(text).toContain("percent of the balance at the month's start");
+    expect(text).not.toContain('Realised result');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('By month tooltip reads the return in percent whatever the unit toggle says', async () => {
+    const { fixture } = render();   // unit 'r'
+    const text = await tooltipText(fixture, 'sb-bar-list li.sb-hit');
+    expect(text).toContain('+1.20%');
+    expect(text).not.toContain('1.20R');
+  });
+});
+
 describe('overview.ts breakpoints', () => {
   it('uses only declared breakpoint values in width queries', () => {
     // A media query at 800px puts this file and ViewportService on
@@ -188,5 +256,42 @@ describe('overview.ts breakpoints', () => {
     const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
     expect(widths.length).toBeGreaterThan(0);
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+
+  it('names the basis of Sharpe and max drawdown in their labels (v194 B8)', () => {
+    const { el } = render();
+    const labels = [...el.querySelectorAll('sb-stat-tile .label')].map((n) => n.textContent!.trim());
+    expect(labels).toContain('Sharpe · annualised, selected range');
+    expect(labels).toContain('Max drawdown · cumulative R, selected range');
+    expect(labels).not.toContain('Sharpe');
+    expect(labels).not.toContain('Max drawdown');
+  });
+
+  it('gives both tiles a hint with definition, population, N and the paper caveat', () => {
+    const { el } = render();
+    for (const label of [ANALYTICS_SHARPE_LABEL, ANALYTICS_DRAWDOWN_LABEL]) {
+      const tile = [...el.querySelectorAll('sb-stat-tile')]
+        .find((t) => t.querySelector('.label')?.textContent?.trim() === label)!;
+      const hint = tile.querySelector('sb-hint')!;
+      expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe(`About ${label}`);
+      const text = hint.querySelector('[role="tooltip"]')!.textContent!;
+      expect(text).toContain('selected range and filters');
+      expect(text).toContain('N is the');
+      expect(text).toContain('Paper trades (simulated fills)');
+      expect(text).toContain('gross of commissions and slippage');
+      expect(text).toContain('pre-tax');
+      // The definition moved into the hint: no plain hint line repeats it.
+      expect(tile.querySelector('div.hint')).toBeNull();
+    }
+  });
+
+  it('keeps the money equivalent under the max drawdown tile', () => {
+    const { el } = render();
+    const tile = [...el.querySelectorAll('sb-stat-tile')]
+      .find((t) => t.querySelector('.label')?.textContent?.trim() === ANALYTICS_DRAWDOWN_LABEL)!;
+    // cum_pnl 70 -> 40: a 30 fall, in the stubbed '$'.
+    const secondary = tile.querySelector('.secondary')!.textContent!;
+    expect(secondary).toContain('30');
+    expect(secondary).toContain('$');
   });
 });

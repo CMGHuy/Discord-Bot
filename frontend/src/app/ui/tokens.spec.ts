@@ -213,6 +213,7 @@ const NOT_CONTROL_ROWS = new Set([
   // Text and figures. Baseline or centre on running text is correct.
   'head', 'meta', 'cell', 'count', 'figures', 'tags',
   'jobhead', // a chip beside a timestamp
+  'leg', // v194 B3: a "Leg N of M" label beside its info glyph -- text, not controls
   // The calendar's month stepper: two buttons with the month LABEL
   // between them. The row sits inside an sb-control-row already; its
   // middle child is running text, and bottom-aligning that text

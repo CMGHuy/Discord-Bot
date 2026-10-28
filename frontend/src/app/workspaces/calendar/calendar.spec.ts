@@ -26,6 +26,7 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Calendar } from './calendar';
 import { calendarRoutes } from './calendar.routes';
 import { CalendarStore } from '../../stores/calendar.store';
+import { fxMissingText } from '../analytics/scope-bar';
 import { PAPER_CAPTION } from './day/day-copy';
 
 const RESPONSE: PnlCalendar = {
@@ -391,6 +392,8 @@ describe('Calendar day drawer', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].querySelector('.leg')?.textContent).toContain('Leg 1 of 2');
     expect(rows[1].querySelector('.leg')?.textContent).toContain('Leg 2 of 2');
+    // A4 audit: the Calendar counts each realised leg as a trade, and says so.
+    expect(rows[0].querySelector('sb-hint [role="tooltip"]')?.textContent).toContain('count each realised leg as its own trade');
   });
 
   it('does not label an unsplit trade as a leg', async () => {
@@ -864,5 +867,47 @@ describe('Calendar totals metric formatting and tone (v179)', () => {
     fixture.detectChanges();
     expect(tiles[0]?.querySelector('.value')?.textContent?.trim()).toBe('—');
     expect(tiles[0]?.querySelector('.tile')?.classList).toContain('neutral');
+  });
+});
+
+/* -- v194 B7 -- money left out for want of an exchange rate ----------------- */
+
+describe('Calendar missing-rate caveat', () => {
+  it("names the month's left-out closes beside the totals, and only then", async () => {
+    const plain = seed();
+    await plain.whenStable();
+    plain.detectChanges();
+    expect(el(plain).querySelector('.fx-caveat')).toBeNull();
+
+    const fixture = seed({ ...RESPONSE, fx_missing_count: 2 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const caveat = el(fixture).querySelector('.fx-caveat')!;
+    expect(caveat.getAttribute('role')).toBe('note');
+    expect(caveat.textContent!.trim()).toBe(fxMissingText(2));
+    // Outside the collapsible panel, so the phone digest cannot hide it.
+    expect(caveat.closest('sb-panel')).toBeNull();
+  });
+
+  it("names the day's left-out closes in the drawer", async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    fixture.componentInstance.store.selectDay('2026-08-03');
+    TestBed.inject(HttpTestingController)
+      .expectOne((r) => r.url === '/api/v1/calendar/pnl/day')
+      .flush({ as_of: '2026-08-10T12:00:00Z', date: '2026-08-03', trades: [TRADE], trade_count: 1,
+        winners: 0, losers: 0, total_r: null, total_ccy: null,
+        win_rate: null, avg_trade_r: null, worst_drawdown_r: null,
+        contributors: [], detractors: [],
+        context: { percentile: null, history_days: 0,
+          vs_avg_day: { pnl_amount: null, r: null },
+          vs_weekday_avg: { pnl_amount: null, r: null } },
+        breakdown: { strategy: [], horizon: [], direction: [], exit_reason: [] },
+        fx_missing_count: 1 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const caveats = [...el(fixture).querySelectorAll('.fx-caveat')].map((c) => c.textContent!.trim());
+    expect(caveats).toEqual([fxMissingText(1)]);
   });
 });

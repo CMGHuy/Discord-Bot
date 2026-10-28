@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PositionCard, PositionFigures, positionRows } from './position-card';
+import { GAP_FRAGILE_HINT } from './why/sizing-panel';
 
 const base: PositionFigures = { status: 'PARTIAL', shares: 3, positionValue: 300, dollarAtRisk: 7.47,
   sizingMode: 'risk', gapP90Pct: 1.25, gapFragile: true, tp1Pct: 50, breakevenTriggerPct: 60,
@@ -27,6 +28,11 @@ describe('PositionCard', () => {
     expect(positionRows(absent)).toEqual([]);
     expect(positionRows({ ...absent, shares: 0, dollarAtRisk: 0, tp1Pct: 0, holdCapBars: 0 }).map(row => row.value)).toEqual(['0', '0.00', '0%', '0 bars']);
   });
+  it('renders a fractional share count with its decimals (v194 B4)', () => {
+    expect(positionRows({ ...base, shares: 2.72 })[0].value).toBe('2.72');
+    expect(positionRows({ ...base, status: 'ACTIVE', shares: 0.5 })[0]).toMatchObject({ label: 'Shares', value: '0.5' });
+  });
+
   it('shows the fragile chip with gap risk and explains only absent snapshots', () => {
     const f = TestBed.createComponent(PositionCard);
     f.componentRef.setInput('figures', base); f.detectChanges();
@@ -34,6 +40,8 @@ describe('PositionCard', () => {
     expect(el.querySelector('h2')?.textContent).toBe('Position');
     expect(el.querySelector('[data-row="$ at risk"]')?.textContent).toContain('open shares, at original stop');
     expect(el.querySelector('sb-chip')?.textContent).toContain('fragile');
+    expect(el.querySelector('sb-chip')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('sb-chip + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(GAP_FRAGILE_HINT);
     expect(el.querySelector('.section-help')).toBeNull();
     f.componentRef.setInput('figures', { ...base, sizingMode: null, gapFragile: false }); f.detectChanges();
     expect(el.querySelector('.section-help')?.textContent).toContain('Position size is snapshotted when the trade opens. A trade with no sizing snapshot was logged before that feature existed.');

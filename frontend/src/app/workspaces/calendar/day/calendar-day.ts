@@ -15,6 +15,7 @@ import { EmptyStateComponent } from '../../../ui/empty-state';
 import { ABSENT, money, rMultiple } from '../../../ui/format';
 import { Panel, Tab, TabBar } from '../../../ui/layout';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
+import { Hint } from '../../../ui/hint';
 import { StatTile } from '../../../ui/stat-tile';
 import { monthLabel } from '../calendar.helpers';
 import { ONE_DAY_CAVEAT, PAPER_CAPTION, R_TOOLTIP, legsSampleNote } from './day-copy';
@@ -102,7 +103,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
 @Component({
   selector: 'sb-calendar-day',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DayTradeCard, EmptyStateComponent, Panel, RouterLink, Segmented, StatTile, TabBar],
+  imports: [DayTradeCard, EmptyStateComponent, Hint, Panel, RouterLink, Segmented, StatTile, TabBar],
   host: { class: 'register-presentation' },
   template: `
     <header class="day-head">
@@ -128,13 +129,13 @@ function sign(value: number | null): 'pos' | 'neg' | null {
 
     @if (store.day(); as day) {
       <div class="tiles">
-        <sb-stat-tile label="Total" [value]="r(day.total_r)" [sample]="day.trade_count" [attr.title]="rTooltip" />
+        <sb-stat-tile label="Total" [value]="r(day.total_r)" [sample]="day.trade_count" [about]="rTooltip" />
         <sb-stat-tile label="Total P&L" [value]="ccy(day.total_ccy)" [sample]="day.trade_count" />
         <sb-stat-tile label="Win rate" [value]="winRate(day.win_rate)" [sample]="day.trade_count" />
         <sb-stat-tile label="Winners" [value]="day.winners.toString()" [sample]="day.trade_count" tone="pos" />
         <sb-stat-tile label="Losers" [value]="day.losers.toString()" [sample]="day.trade_count" tone="neg" />
-        <sb-stat-tile label="Average trade" [value]="r(day.avg_trade_r)" [sample]="day.trade_count" [attr.title]="rTooltip" />
-        <sb-stat-tile label="Worst drawdown" [value]="r(day.worst_drawdown_r)" [sample]="day.trade_count" tone="neg" [attr.title]="rTooltip" />
+        <sb-stat-tile label="Average trade" [value]="r(day.avg_trade_r)" [sample]="day.trade_count" [about]="rTooltip" />
+        <sb-stat-tile label="Worst drawdown" [value]="r(day.worst_drawdown_r)" [sample]="day.trade_count" tone="neg" [about]="rTooltip" />
       </div>
       <p class="r-note">{{ rTooltip }}</p>
       @if (store.hasLegs()) {
@@ -167,13 +168,13 @@ function sign(value: number | null): 'pos' | 'neg' | null {
             Month to date
             <span class="mtd-pnl" [class.pos]="mtdSign() === 'pos'" [class.neg]="mtdSign() === 'neg'">{{ ccy(store.monthCtx()?.mtdPnl ?? null) }}</span>
             ·
-            <span class="mtd-r" [title]="rTooltip">{{ r(store.monthCtx()?.mtdR ?? null) }}</span>
+            <span class="mtd-r">{{ r(store.monthCtx()?.mtdR ?? null) }}</span><sb-hint [text]="rTooltip" label="About R" align="left" />
           </p>
           <p class="rank">{{ rankText() }}</p>
         </sb-panel>
       </div>
 
-      <sb-panel heading="What drove it" [divided]="true">
+      <sb-panel heading="What drove it" [divided]="true" [description]="rTooltip">
         <sb-tab-bar [tabs]="tabs" [active]="dimension()" (activeChange)="setDimension($event)" />
         <div class="table-wrap"><table class="breakdown">
           <thead>
@@ -181,7 +182,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
               <th>{{ dimensionLabel() }}</th>
               <th class="num">n</th>
               <th class="num">P&amp;L</th>
-              <th class="num r-head" [title]="rTooltip">R</th>
+              <th class="num r-head">R</th>
               <th class="num">Win %</th>
               <th aria-hidden="true"></th>
             </tr>
@@ -193,7 +194,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
                 <td class="num">{{ row.n }}</td>
                 <td class="num" [class.pos]="signOf(row.pnl_amount) === 'pos'" [class.neg]="signOf(row.pnl_amount) === 'neg'">{{ ccy(row.pnl_amount) }}</td>
                 <td class="num" [class.pos]="signOf(row.r) === 'pos'" [class.neg]="signOf(row.r) === 'neg'">{{ r(row.r) }}</td>
-                <td class="num win" [class.withheld]="breakdownWinRate(row) === absent" [attr.title]="breakdownWinRate(row) === absent ? winNote : null">{{ breakdownWinRate(row) }}</td>
+                <td class="num win" [class.withheld]="breakdownWinRate(row) === absent">{{ breakdownWinRate(row) }}</td>
                 <td class="bar" aria-hidden="true"><span class="fill" [class.pos]="signOf(row.pnl_amount) === 'pos'" [class.neg]="signOf(row.pnl_amount) === 'neg'" [style.width.%]="barWidth(row)"></span></td>
               </tr>
             }

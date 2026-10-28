@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AnalyticsPartials } from '../../../api/models';
@@ -13,6 +14,8 @@ import {
   runnerWaterfall, splitRows, touchRows,
 } from './partials';
 import { PARTIALS_FIXTURE } from './partials.fixture';
+import { Hint } from '../../../ui/hint';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 
 function render(payload: AnalyticsPartials | null, error: string | null = null) {
   TestBed.configureTestingModule({
@@ -26,6 +29,27 @@ function render(payload: AnalyticsPartials | null, error: string | null = null) 
   fixture.detectChanges();
   return { fixture, el: fixture.nativeElement as HTMLElement };
 }
+
+/** The text of the sb-hint whose aria label is `label` (A4 audit). */
+function hintText(fixture: ComponentFixture<unknown>, label: string): string {
+  const hint = fixture.debugElement
+    .queryAll(By.directive(Hint))
+    .map((debug) => debug.componentInstance as Hint)
+    .find((h) => h.label() === label);
+  if (!hint) throw new Error(`no sb-hint labelled "${label}"`);
+  return hint.text();
+}
+
+describe('PartialsTab hint copy (A4 audit)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('the three ExpR panels state the paper, gross, pre-tax basis', () => {
+    const { fixture } = render(PARTIALS_FIXTURE);
+    for (const title of ['Does the runner pay?', 'TP2 ladder', 'Split what-if']) {
+      expect(hintText(fixture, `${title} definition`), title).toContain(PERFORMANCE_CAVEAT);
+    }
+  });
+});
 
 describe('partials helpers', () => {
   it('leads the KPI row with the five figures, the hero marked', () => {

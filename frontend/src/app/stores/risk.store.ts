@@ -122,6 +122,10 @@ export const RiskStore = signalStore(
 
     sectorHeat: computed<SectorHeat[]>(() => data()?.sector_heat ?? []),
 
+    /** v194 B6: how many open positions `sectorHeat` leaves out for want of
+     *  sector data. 0 when the server sends none. */
+    unmappedCount: computed<number>(() => data()?.unmapped_count ?? 0),
+
     /** Numbered for display here rather than server-side: 1..n is
      *  presentation, and the API ships the lists unlabelled. */
     clusters: computed<{ index: number; tickers: string[] }[]>(() =>

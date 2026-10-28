@@ -5,17 +5,13 @@ import { CalendarTrade, SparkSeries } from '../../../api/models';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { Chip, ChipTone } from '../../../ui/chip';
 import { ABSENT, held, money, num, pct, rMultiple } from '../../../ui/format';
+import { Hint } from '../../../ui/hint';
+import { LEG_HINT_TEXT, legLabel } from '../../trades/leg-label';
 import { R_TOOLTIP } from './day-copy';
 import { TradeSparkline } from './trade-sparkline';
 
 /* v165 D5 item 5 -- one row of the day page's Trades list. Every figure is
  * read from the calendar row as served (D1); nothing is re-derived here. */
-
-/** "Leg 2 of 3" for a scale-out leg, null for a whole trade. 1-based, like
- *  the drawer. */
-export function legLabel(trade: CalendarTrade): string | null {
-  return trade.leg_total > 1 ? `Leg ${trade.leg_index + 1} of ${trade.leg_total}` : null;
-}
 
 export function heldLabel(hours: number | null): string {
   return held(hours);
@@ -37,7 +33,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
 @Component({
   selector: 'sb-day-trade-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Chip, RouterLink, TradeSparkline],
+  imports: [Chip, Hint, RouterLink, TradeSparkline],
   template: `
     @let t = trade();
     <article class="card">
@@ -47,11 +43,12 @@ function sign(value: number | null): 'pos' | 'neg' | null {
         <span class="setup">{{ t.strategy }} · {{ t.horizon ?? absent }}</span>
         @if (leg(); as label) {
           <span class="leg">{{ label }}</span>
+          <sb-hint [text]="legHint" label="About leg rows" />
         }
         <sb-chip [label]="t.exit_reason" [tone]="exitTone()" [caps]="false" />
         <span class="figures">
           <span class="pnl" [class.pos]="pnlSign() === 'pos'" [class.neg]="pnlSign() === 'neg'">{{ pnl() }}</span>
-          <span class="r" [title]="rTooltip" [class.pos]="rSign() === 'pos'" [class.neg]="rSign() === 'neg'">{{ r(t.r_multiple) }}</span>
+          <span class="r" [class.pos]="rSign() === 'pos'" [class.neg]="rSign() === 'neg'">{{ r(t.r_multiple) }}</span><sb-hint [text]="rTooltip" label="About R" align="left" />
           <span class="return">{{ returnPct() }}</span>
         </span>
       </header>
@@ -129,7 +126,12 @@ export class DayTradeCard {
   protected readonly rTooltip = R_TOOLTIP;
 
   protected readonly linkId = computed(() => tradeLinkId(this.trade()));
-  protected readonly leg = computed(() => legLabel(this.trade()));
+  /** Bare "Leg N of M": the exit-reason chip beside it already names the
+   *  reason, so the shared label is built without one. */
+  protected readonly leg = computed(() =>
+    legLabel({ leg_index: this.trade().leg_index, leg_total: this.trade().leg_total }));
+  /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
+  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
   protected readonly direction = computed(() => DIRECTIONS[this.trade().direction ?? ''] ?? ABSENT);
   protected readonly exitTone = computed<ChipTone>(() =>
     this.trade().exit_reason === 'other' ? 'muted' : 'neutral',

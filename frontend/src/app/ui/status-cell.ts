@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { share } from './format';
+import { Hint } from './hint';
+import { PERFORMANCE_CAVEAT } from './stat-tile';
 import { StatusIndicator } from './status-indicator';
 
 /**
@@ -68,10 +70,16 @@ export interface StatusCellRow {
  * trailing-stop icon sits in the ID cell beside the partial-leg icon (on
  * request, 2026-10-17), not here.
  */
+/** v194 A3: what the two ends of a trailing runner's bar are. */
+export const STATUS_ENDS_HINT = 'Left figure: P&L if the trailing stop is hit. Right figure: P&L at the best price since TP1. '
+  + `Both per share from the original entry, in percent. ${PERFORMANCE_CAVEAT}`;
+/** v194 A3: why "delayed" shows. */
+export const STATUS_STALE_HINT = "This position's price could not be freshly fetched; the number shown may be delayed.";
+
 @Component({
   selector: 'sb-status-cell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusIndicator],
+  imports: [StatusIndicator, Hint],
   template: `
     @if (bar(); as b) {
       <span class="cell">
@@ -83,7 +91,7 @@ export interface StatusCellRow {
           aria-hidden="true"
         ></span>
         @if (ends(); as e) {
-          <span class="end neg" title="P&L if the trailing stop is hit">{{ e.stop }}</span>
+          <span class="end neg">{{ e.stop }}</span>
         }
         <span
           class="track"
@@ -100,15 +108,14 @@ export interface StatusCellRow {
           <span class="tick" [style.left.%]="b.entry" aria-hidden="true"></span>
         </span>
         @if (ends(); as e) {
-          <span class="end pos" title="P&L at the best price since TP1">{{ e.best }}</span>
+          <span class="end pos">{{ e.best }}</span>
+          <sb-hint [text]="endsHint" label="About the two P&L figures" align="left" />
         } @else {
           <span class="pct">{{ b.pct }}%</span>
         }
         @if (row().current_price_stale) {
-          <span
-            class="hint stale"
-            title="This position's price could not be freshly fetched -- the number shown may be delayed."
-          >delayed</span>
+          <span class="hint stale">delayed</span>
+          <sb-hint [text]="staleHint" label="About delayed prices" align="left" />
         }
       </span>
     } @else {
@@ -184,6 +191,8 @@ export interface StatusCellRow {
 })
 export class StatusCell {
   readonly row = input.required<StatusCellRow>();
+  protected readonly endsHint = STATUS_ENDS_HINT;
+  protected readonly staleHint = STATUS_STALE_HINT;
 
   /** Null whenever there is no position to draw — which selects the chip. */
   protected readonly bar = computed(() => {
@@ -231,18 +240,4 @@ export function partialOpenTitle(row: { status: string; banked_fraction?: number
   if (row.status !== 'PARTIAL') return null;
   if (row.banked_fraction == null) return 'Partially closed';
   return `Partially closed -- ${share((1 - row.banked_fraction) * 100)} still open`;
-}
-
-/** The ONE tooltip for the ID cell's partial icon, or null for no icon.
- *  A live PARTIAL row can also be a later leg of a scale-out split
- *  (`leg_index > 0`); it must not draw the icon twice, so the "still open"
- *  reading wins over the "closed after an earlier partial" one. */
-export function partialIconTitle(
-  row: { status: string; banked_fraction?: number | null; leg_index: number; leg_total: number },
-): string | null {
-  const open = partialOpenTitle(row);
-  if (open) return open;
-  return row.leg_total > 1 && row.leg_index > 0
-    ? 'Closed after an earlier partial exit of the same position'
-    : null;
 }

@@ -2,12 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { OverrideFidelity } from '../../../api/models';
 import { AnalyticsStore } from '../../../stores/analytics.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
+import { Hint } from '../../../ui/hint';
 import { OverrideFidelityPanel } from './override-fidelity-panel';
 import { APPROX_LABEL, CAPTION } from './override-fidelity.model';
 import {
@@ -27,8 +29,30 @@ function render(payload: OverrideFidelity | null, error: string | null = null) {
   });
   const fixture = TestBed.createComponent(OverrideFidelityPanel);
   fixture.detectChanges();
-  return { el: fixture.nativeElement as HTMLElement, reloads };
+  return { el: fixture.nativeElement as HTMLElement, reloads, fixture };
 }
+
+/** The text of the sb-hint whose aria label is `label` (A4 audit). */
+function hintText(fixture: ComponentFixture<unknown>, label: string): string {
+  const hint = fixture.debugElement
+    .queryAll(By.directive(Hint))
+    .map((debug) => debug.componentInstance as Hint)
+    .find((h) => h.label() === label);
+  if (!hint) throw new Error(`no sb-hint labelled "${label}"`);
+  return hint.text();
+}
+
+describe('OverrideFidelityPanel hint copy (A4 audit)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('Overrides vs engine hint matches what the figure counts', () => {
+    const { fixture } = render(OVERRIDE_FIDELITY_FIXTURE);
+    const text = hintText(fixture, 'Overrides vs engine definition');
+    expect(text).toContain("the instrument's quote currency, not converted to the account currency");
+    expect(text).toContain('Net of modelled commissions and slippage, pre-tax');
+    expect(text).not.toContain('in dollars');
+  });
+});
 
 const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 const tone = (el: HTMLElement, selector: string): string | null =>

@@ -13,7 +13,7 @@ import { PanelError } from '../../../ui/panel-error';
 import { PanelHeader } from '../../../ui/panel-header';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
-import { StatTile, StatTone } from '../../../ui/stat-tile';
+import { PERFORMANCE_CAVEAT, StatTile, StatTone } from '../../../ui/stat-tile';
 import { StripGroup, StripPlot } from '../../../ui/strip-plot';
 import { Waterfall, WaterfallStep } from '../../../ui/waterfall';
 
@@ -164,12 +164,12 @@ export function monthTrend(rows: readonly PartialsBreakdownRow[]): LineChartSeri
             <sb-bar-list [rows]="funnel()" mode="rate" [format]="pctFmt" /></sb-panel>
           <sb-panel><sb-panel-header title="Runner outcome mix" [n]="p.population.partial" hint="How each runner ended, with its average runner R." />
             <sb-share-bar label="Runner outcomes" [segments]="outcomes()" /></sb-panel>
-          <sb-panel><sb-panel-header title="Does the runner pay?" [n]="p.kpis.beat_all_out_n" hint="ExpR had 100% closed at TP1, plus what holding the runner added." />
+          <sb-panel><sb-panel-header title="Does the runner pay?" [n]="p.kpis.beat_all_out_n" [hint]="runnerPayHint" />
             <sb-waterfall [steps]="waterfall()" [format]="rFmt" totalLabel="Actual ExpR" /></sb-panel>
-          <sb-panel><sb-panel-header title="TP2 ladder" [n]="ladderN()" hint="Counterfactual ExpR with TP2 at each R level; the last row is the actual ExpR. Below: share of runners that touched each level." />
+          <sb-panel><sb-panel-header title="TP2 ladder" [n]="ladderN()" [hint]="ladderHint" />
             <sb-bar-list [rows]="ladder()" [format]="rFmt" />
             <sb-bar-list [rows]="touches()" mode="rate" [format]="pctFmt" /></sb-panel>
-          <sb-panel><sb-panel-header title="Split what-if" [n]="p.kpis.beat_all_out_n" hint="ExpR had a different share been taken at TP1, from each trade's own two legs." />
+          <sb-panel><sb-panel-header title="Split what-if" [n]="p.kpis.beat_all_out_n" [hint]="splitHint" />
             <sb-bar-list [rows]="split()" [format]="rFmt" /></sb-panel>
           <sb-panel><sb-panel-header title="Giveback" [n]="p.counterfactuals.giveback.length" hint="Best R the runner saw minus the R it banked." />
             <sb-histogram [bins]="giveback()" /></sb-panel>
@@ -215,6 +215,12 @@ export class PartialsTab {
   readonly holds = computed(() => this.shape(holdGroups, []));
   readonly rows = computed(() => this.data()?.breakdowns[this.dimension()] ?? []);
   readonly trend = computed(() => monthTrend(this.data()?.breakdowns.month ?? []));
+  /* v194 A4: the ExpR panels state the basis of the R they average. */
+  readonly runnerPayHint = `ExpR had 100% closed at TP1, plus what holding the runner added. ${PERFORMANCE_CAVEAT}`;
+  readonly ladderHint = 'Counterfactual ExpR with TP2 at each R level; the last row is the actual ExpR. '
+    + `Below: share of runners that touched each level. ${PERFORMANCE_CAVEAT}`;
+  readonly splitHint = "ExpR had a different share been taken at TP1, from each trade's own two legs. "
+    + PERFORMANCE_CAVEAT;
   readonly thinHint = computed(() => `Rows under N=${this.data()?.thin_n ?? 10} are dimmed: shown, not trusted.`);
   readonly dimensionLabel = computed(() => DIMENSIONS.find((d) => d.value === this.dimension())?.label ?? '');
   readonly footer = computed(() => {

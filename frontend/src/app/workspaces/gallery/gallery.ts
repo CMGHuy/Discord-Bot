@@ -55,7 +55,7 @@ import { MultiplePane, SmallMultiples } from '../../ui/small-multiples';
 import { Sparkline } from '../../ui/sparkline';
 import { ScatterComponent } from '../../ui/scatter';
 import { Spinner } from '../../ui/spinner';
-import { StatTile } from '../../ui/stat-tile';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { Status } from '../../ui/status';
 import { StatusCell, StatusCellRow } from '../../ui/status-cell';
@@ -283,7 +283,7 @@ interface ContractRow {
     <sb-panel heading="sb-hint -- hover, focus or tap; Escape or a tap elsewhere closes">
       <p class="sb-help">
         Expectancy
-        <sb-hint text="Average R per closed trade, after costs, pooled across strategies." label="About expectancy" />
+        <sb-hint [text]="expectancyHint" label="About expectancy" />
       </p>
     </sb-panel>
     <sb-panel heading="sb-inline-md -- **bold** only, added by UA13, never demoed here">
@@ -899,6 +899,9 @@ export class Gallery {
   protected fmtR = rMultiple;
   protected fmtSigned = signed;
   protected fmtMoney = (value: number | null) => money(value, 'USD');
+  /** v194 A4: the demo hint follows the copy rule it demonstrates -- the
+   *  book is gross of costs, so "after costs" was a false basis. */
+  protected readonly expectancyHint = `Average R per closed trade, pooled across strategies. ${PERFORMANCE_CAVEAT}`;
   protected readonly numericCases: { label: string; value: number | null }[] = [
     { label: 'Positive', value: 2.15 },
     { label: 'Negative', value: -2.15 },

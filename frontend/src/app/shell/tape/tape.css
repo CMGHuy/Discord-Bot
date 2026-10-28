@@ -22,10 +22,12 @@
 .lane { display: flex; align-items: stretch; min-width: 0; max-width: 100%;
         height: 32px; overflow: hidden;
         border-bottom: 1px solid var(--border); background: var(--surface); }
+.cap-row { flex: none; display: flex; align-items: center; gap: var(--space-4);
+           padding: 0 var(--space-8); border-right: 1px solid var(--border); }
 .cap { flex: none; display: flex; align-items: center; gap: var(--space-4);
-       padding: 0 var(--space-8); font-size: var(--text-micro);
+       font-size: var(--text-micro);
        letter-spacing: .06em; text-transform: uppercase;
-       color: var(--text-muted); border-right: 1px solid var(--border); }
+       color: var(--text-muted); }
 .cap.end { border-right: none; border-left: 1px solid var(--border); }
 /* `.lane`'s own `align-items: stretch` (above) stretches this to the full
    32px lane height; without its own `display: flex; align-items: center`

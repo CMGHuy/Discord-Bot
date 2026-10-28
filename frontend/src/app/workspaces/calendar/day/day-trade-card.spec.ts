@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CalendarTrade, SparkSeries } from '../../../api/models';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { R_TOOLTIP } from './day-copy';
-import { DayTradeCard, heldLabel, legLabel, tradeLinkId } from './day-trade-card';
+import { DayTradeCard, heldLabel, tradeLinkId } from './day-trade-card';
+import { LEG_HINT_TEXT, legLabel } from '../../trades/leg-label';
 
 const TRADE: CalendarTrade = {
   trade_id: 'a'.repeat(16),
@@ -48,7 +49,8 @@ const SERIES: SparkSeries = {
 describe('day-trade-card helpers', () => {
   it('labels a leg 1-based and a whole trade not at all', () => {
     expect(legLabel(TRADE)).toBeNull();
-    expect(legLabel({ ...TRADE, leg_index: 1, leg_total: 3 })).toBe('Leg 2 of 3');
+    // The shared helper appends a calendar row's exit reason (v194 B3).
+    expect(legLabel({ ...TRADE, leg_index: 1, leg_total: 3 })).toBe('Leg 2 of 3 · TP1');
   });
 
   it('formats held time, with a dash for none', () => {
@@ -108,7 +110,8 @@ describe('DayTradeCard', () => {
     expect(el.querySelector('.pnl')?.classList.contains('neg')).toBe(true);
     expect(el.querySelector('.r')?.classList.contains('neg')).toBe(true);
     expect(el.querySelector('.return')?.classList.contains('neg')).toBe(false);
-    expect(el.querySelector('.r')?.getAttribute('title')).toBe(R_TOOLTIP);
+    expect(el.querySelector('.r')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.r + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(R_TOOLTIP);
   });
 
   it('lists the recorded prices, calling the stop the final stop', async () => {
@@ -165,5 +168,41 @@ describe('DayTradeCard', () => {
     const el = await render(TRADE);
     expect(text(el, '.lesson')).toBe('Held to target.');
     expect(text(el, '.tags')).toBe('clean-exit');
+  });
+});
+
+describe('DayTradeCard leg label (v194 B3)', () => {
+  function card(trade: CalendarTrade): HTMLElement {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        { provide: ConnectionStore, useValue: { currency: () => '€' } },
+      ],
+    });
+    const fixture = TestBed.createComponent(DayTradeCard);
+    fixture.componentRef.setInput('trade', trade);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('names the leg once, leaving the reason to the chip beside it', () => {
+    const el = card({ ...TRADE, leg_index: 1, leg_total: 2 });
+    expect(el.querySelector('.leg')!.textContent!.trim()).toBe('Leg 2 of 2');
+  });
+
+  it('explains leg rows with a hint that says how this page counts them (A4 audit)', () => {
+    const el = card({ ...TRADE, leg_index: 0, leg_total: 2 });
+    const hint = el.querySelector('.leg + sb-hint')!;
+    expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('About leg rows');
+    expect(hint.querySelector('[role="tooltip"]')!.textContent).toContain(LEG_HINT_TEXT);
+    expect(hint.querySelector('[role="tooltip"]')!.textContent).toContain('count each realised leg as its own trade');
+  });
+
+  it('shows neither label nor leg hint for a trade that never scaled out', () => {
+    const el = card(TRADE);
+    expect(el.querySelector('.leg')).toBeNull();
+    expect(el.querySelector('.leg + sb-hint')).toBeNull();
   });
 });

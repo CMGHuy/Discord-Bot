@@ -25,6 +25,10 @@ import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard';
+import { LEG_HINT_TEXT } from '../trades/leg-label';
+import { fxMissingText } from '../analytics/scope-bar';
+import { tradeDrawerFields } from './trade-drawer';
+import { partialOpenTitle } from '../../ui/status-cell';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { ToastService } from '../../shell/toast.service';
 import { EquityCandlesStore } from '../../stores/equity-candles.store';
@@ -365,24 +369,25 @@ describe('Dashboard v85 layout', () => {
     expect(panels.length).toBeGreaterThanOrEqual(4);
     for (const section of panels) {
       const heading = section.querySelector('h2')?.textContent?.trim();
-      expect(section.getAttribute('title'), heading).toBeTruthy();
+      expect(section.hasAttribute('title'), heading).toBe(false);
       // Its own hint or the shared one: always something a tap or a keyboard focus can open.
       expect(section.querySelector('header sb-hint'), heading).not.toBeNull();
     }
-    const titles = panels.map((p) => p.getAttribute('title'));
-    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance, PANEL_HELP.openPositions]));
+    const titles = panels.map((p) => p.querySelector('header [role="tooltip"]')?.textContent?.trim());
+    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance]));
   });
 
-  it('explains each KPI card on hover, payoff ratio included', async () => {
+  it('explains each KPI card through a hint beside its label, payoff ratio included', async () => {
     const fixture = await loaded();
     const cards = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-metric-card')];
     expect(cards.length).toBe(7);
     for (const card of cards) {
       const label = card.querySelector('.label')!.textContent!.trim();
-      expect(card.getAttribute('title'), label).toBeTruthy();
+      expect(card.hasAttribute('title'), label).toBe(false);
+      expect(card.querySelector('.label-row sb-hint [role="tooltip"]')?.textContent?.trim(), label).toBeTruthy();
     }
     const payoff = cards.find((c) => c.querySelector('.label')!.textContent!.trim() === 'Payoff ratio')!;
-    expect(payoff.getAttribute('title')).toContain('average winning trade divided by the average losing trade');
+    expect(payoff.querySelector('.label-row sb-hint [role="tooltip"]')!.textContent).toContain('average winning trade divided by the average losing trade');
   });
 
   it('routes the panel presets back into the store (v181 §1)', async () => {
@@ -469,7 +474,7 @@ describe('Dashboard explanatory help', () => {
     expect(hint).not.toBeNull();
     hint.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
-    expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hidden).toBe(false);
+    expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hasAttribute('data-popover-open')).toBe(true);
     expect(el.textContent).toContain('Only trades that meet');
     expect(el.querySelector('sb-hint.lifecycle-hint sb-plan-lifecycle-diagram')).not.toBeNull();
     expect(el.textContent).toContain('Share counts are snapshotted');
@@ -901,5 +906,133 @@ describe('Dashboard v181 scope link', () => {
     // The loop guard: a hand-picked range never comes back to the chart as a target.
     expect(store.chartTarget().seq).toBe(seq);
     expect((fixture.nativeElement as HTMLElement).querySelector('.range-chip')).not.toBeNull();
+  });
+});
+
+describe('Dashboard lifecycle tab counts (v194 B1)', () => {
+  const LIFECYCLE = { PENDING: 2, ACTIVE: 8, PARTIAL: 1, CLOSED: 4, CANCELLED: 0 };
+  const OPEN_COUNTS = { PENDING: 2, ACTIVE: 8, PARTIAL: 1 };
+  const counts = (fixture: ComponentFixture<Dashboard>) =>
+    (fixture.debugElement.query(By.directive(PositionsTable)).componentInstance as PositionsTable).counts();
+  const tabLabels = (el: HTMLElement) => [...el.querySelectorAll('[role="tab"] .label')]
+    .map((node) => node.textContent?.replace(/\s+/g, ' ').trim());
+  const fail = (req: { flush(body: unknown, opts: { status: number; statusText: string }): void }) =>
+    req.flush('boom', { status: 500, statusText: 'Server Error' });
+
+  for (const width of [1440, 768, 390]) {
+    it(`feeds the API's counts to the tabs at ${width}px`, async () => {
+      // ViewportService reads innerWidth when created; seed() resets the module first.
+      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(width);
+      const fixture = await loaded({ lifecycle: LIFECYCLE as never });
+      expect(counts(fixture)).toEqual(LIFECYCLE);
+    });
+  }
+
+  it('labels the tabs with those counts on desktop', async () => {
+    const fixture = await loaded({ lifecycle: LIFECYCLE as never });
+    expect(tabLabels(fixture.nativeElement as HTMLElement).slice(0, 3)).toEqual(['Pending 2', 'Open 8', 'Partial 1']);
+  });
+
+  /** 1D load superseded by 1M, then every today request fails; the 1M answer carries the counts. */
+  async function todayFailedInPeriod(): Promise<ComponentFixture<Dashboard>> {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    flushTradeGroups(backend);
+    const store = TestBed.inject(DashboardStore);
+    const first = backend.expectOne('/api/v1/dashboard?mode=today');
+    store.setPreset('1M');
+    fail(first);
+    for (const req of backend.match((r) => r.url === '/api/v1/dashboard')) {
+      if (req.request.params.get('mode') === 'today') fail(req);
+      else req.flush(payload({ scope: { mode: 'range' }, lifecycle: { ...LIFECYCLE, CLOSED: 40 } as never }));
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it("falls back to the scoped answer's open counts when today's fetch failed", async () => {
+    const fixture = await todayFailedInPeriod();
+    // PENDING/ACTIVE/PARTIAL are all-time in every scope (dashboard.py
+    // _lifecycle_counts); CLOSED/CANCELLED are today's only, so they stay unknown.
+    expect(counts(fixture)).toEqual(OPEN_COUNTS);
+  });
+
+  it("says today's figures could not load instead of ringing forever", async () => {
+    const fixture = await todayFailedInPeriod();
+    const card = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-metric-card')]
+      .find((c) => c.querySelector('.label')!.textContent!.trim() === 'Realised today')!;
+    expect(card.classList.contains('loading')).toBe(false);
+    expect(card.textContent).toContain("couldn't load today's figures");
+  });
+
+  it("says today's figures could not load in the 390px phone summary too", async () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390);
+    const fixture = await todayFailedInPeriod();
+    const row = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.mobile-summary > div')]
+      .find((d) => d.querySelector('span')!.textContent!.includes('Realised today'))!;
+    expect(row.querySelector('strong')!.textContent).toContain("couldn't load today's figures");
+  });
+});
+
+describe('Dashboard — leg rows and missing FX rates (v194 B3, B7)', () => {
+  it('labels each leg of a split plan in the positions table, with the plans-not-legs hint', async () => {
+    const el = await loadedWithRows([
+      tradeRow({ id: 'p1', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      tradeRow({ id: 'p1', leg_index: 1, leg_total: 2, leg_exit_reason: null }),
+    ]);
+    const legs = [...el.querySelectorAll('sb-positions-table .leg')];
+    expect(legs.map((n) => n.firstChild!.textContent!.trim())).toEqual([
+      expect.stringMatching(/^Leg 1 of 2 · /),
+      'Leg 2 of 2',
+    ]);
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain(LEG_HINT_TEXT);
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain('count each realised leg as its own trade');   // A4 audit
+    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
+  });
+
+  it('shows no leg label for a single-leg row', async () => {
+    const el = await loadedWithRows([tradeRow({ leg_index: 0, leg_total: 1 })]);
+    expect(el.querySelector('sb-positions-table .leg')).toBeNull();
+  });
+
+  it('names the trades left out of the money figures', async () => {
+    const fixture = await loaded({ fx_missing_count: 2 } as Partial<DashboardData>);
+    const caveat = (fixture.nativeElement as HTMLElement).querySelector('.performance-stack .fx-caveat');
+    expect(caveat!.textContent!.trim()).toBe(fxMissingText(2));
+  });
+
+  it('shows no caveat when every rate was found or the field is absent', async () => {
+    for (const overrides of [{ fx_missing_count: 0 }, {}] as Partial<DashboardData>[]) {
+      const fixture = await loaded(overrides);
+      expect((fixture.nativeElement as HTMLElement).querySelector('.fx-caveat')).toBeNull();
+    }
+  });
+
+  it('lists the leg in the trade drawer for a leg row only', () => {
+    const leg = tradeDrawerFields(tradeRow({ leg_index: 1, leg_total: 3, leg_exit_reason: null }), '$', 0);
+    expect(leg.find((f) => f.key === 'leg')?.value).toBe('Leg 2 of 3');
+    const single = tradeDrawerFields(tradeRow({ leg_index: 0, leg_total: 1 }), '$', 0);
+    expect(single.some((f) => f.key === 'leg')).toBe(false);
+  });
+});
+
+describe('Dashboard — explanations are hints, not titles (v194 A3)', () => {
+  it('explains a partly closed position in a hint outside the row link', async () => {
+    const row = tradeRow({ id: 'p9', status: 'PARTIAL', status_label: 'PARTIAL', banked_fraction: 0.5 });
+    const el = await loadedWithRows([row]);
+    expect(el.querySelector('sb-row-link sb-hint')).toBeNull();
+    const texts = [...el.querySelectorAll('sb-positions-table sb-hint [role="tooltip"]')].map((n) => n.textContent!.trim());
+    expect(texts).toContain(partialOpenTitle(row)!);
+    // The icon keeps its own generic label; only the share-still-open sentence moved.
+    expect(el.querySelector('.leg-icon')!.getAttribute('title')).not.toBe(partialOpenTitle(row));
+  });
+
+  it('defines the P&L and expected-R cells in the positions help, not on each cell', async () => {
+    const el = await loadedWithRows([tradeRow({ status: 'ACTIVE', status_label: 'ACTIVE', exit_price: null, pnl_pct: null })]);
+    expect(el.querySelector('.pnl-plan[title], .expected[title]')).toBeNull();
+    const help = el.querySelector('.lifecycle-hint')!.textContent!;
+    expect(help).toContain('live P&L, then projected P&L at target and at stop');
+    expect(help).toContain('projected R if price reaches target');
   });
 });

@@ -5,7 +5,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { StatusCell, partialIconTitle, partialOpenTitle } from './status-cell';
+import { PERFORMANCE_CAVEAT } from './stat-tile';
+import { STATUS_ENDS_HINT, STATUS_STALE_HINT, StatusCell, partialOpenTitle } from './status-cell';
 
 const live = {
   status: 'ACTIVE',
@@ -57,9 +58,11 @@ describe('StatusCell', () => {
     expect(el.textContent).not.toContain('no price');
   });
 
+  const TRAILING = { ...live, status: 'PARTIAL', bar_kind: 'trailing', banked_fraction: 0.5,
+    stop_pnl_pct: 1.25, best_pnl_pct: 6 };
+
   it('draws the bar with P&L at both ends and no icon (the icon lives in the ID cell)', () => {
-    const el = render({ ...live, status: 'PARTIAL', bar_kind: 'trailing', banked_fraction: 0.5,
-      stop_pnl_pct: 1.25, best_pnl_pct: 6 });
+    const el = render(TRAILING);
     expect(el.querySelector('.fill')).not.toBeNull();
     expect(el.querySelectorAll('sb-icon').length).toBe(0);
     expect(el.querySelector('.end.neg')!.textContent).toBe('+1.3%');
@@ -124,6 +127,19 @@ describe('StatusCell', () => {
     const el = render({ ...live, current_price_stale: false });
     expect(el.querySelector('.stale')).toBeNull();
   });
+
+  it('explains the two trailing P&L ends in one hint, not two titles (v194 A3)', () => {
+    const el = render(TRAILING);
+    expect(el.querySelector('.end[title]')).toBeNull();
+    expect(el.querySelector('sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(STATUS_ENDS_HINT);
+  });
+
+  it('explains a delayed price in a hint beside the word', () => {
+    const el = render({ ...live, current_price_stale: true });
+    expect(el.querySelector('.stale')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.stale')!.textContent!.trim()).toBe('delayed');
+    expect(el.querySelector('.stale + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(STATUS_STALE_HINT);
+  });
 });
 
 describe('status cell on one baseline (v179 layout audit)', () => {
@@ -135,21 +151,15 @@ describe('status cell on one baseline (v179 layout audit)', () => {
   });
 });
 
-describe('partialIconTitle', () => {
-  const base = { status: 'CLOSED', banked_fraction: null, leg_index: 0, leg_total: 1 };
-
-  it('is null for an ordinary single-leg row', () => {
-    expect(partialIconTitle(base)).toBeNull();
-    expect(partialIconTitle({ ...base, status: 'ACTIVE' })).toBeNull();
+describe('STATUS_ENDS_HINT copy (A4 audit)', () => {
+  it('says the two ends are percent of the entry price, on the paper, gross, pre-tax basis', () => {
+    expect(STATUS_ENDS_HINT).toContain('per share from the original entry');
+    expect(STATUS_ENDS_HINT).toContain(PERFORMANCE_CAVEAT);
   });
+});
 
-  it('marks a later closed leg of a scale-out split', () => {
-    expect(partialIconTitle({ ...base, leg_index: 1, leg_total: 2 })).toMatch(/earlier partial exit/);
-    expect(partialIconTitle({ ...base, leg_index: 0, leg_total: 2 })).toBeNull();
-  });
-
-  it('gives a live PARTIAL row one title, even when it is also a later leg', () => {
-    const row = { status: 'PARTIAL', banked_fraction: 0.5, leg_index: 1, leg_total: 2 };
-    expect(partialIconTitle(row)).toBe('Partially closed -- 50% still open');
+describe('partialOpenTitle on a closed later leg', () => {
+  it('has no title: the leg label, not an icon, marks a closed leg (v194 B3)', () => {
+    expect(partialOpenTitle({ status: 'CLOSED', banked_fraction: null })).toBeNull();
   });
 });

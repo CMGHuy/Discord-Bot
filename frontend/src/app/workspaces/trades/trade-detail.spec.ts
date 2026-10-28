@@ -424,11 +424,10 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
     expect(chip).toBeTruthy();
     expect(chip!.classList).toContain('bad');
     expect(chip!.textContent).toContain('Poor cohort');
-    // [title] binds to the sb-chip HOST element (Chip has no `title` input
-    // to forward it onto the inner span), not the .chip span itself.
-    const host = el.querySelector('.tags > sb-chip')!;
-    expect(host.getAttribute('title')).toContain('41.2% WR');
-    expect(host.getAttribute('title')).toContain('-0.38R');
+    expect(el.querySelector('.tags > sb-chip')!.hasAttribute('title')).toBe(false);
+    const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
+    expect(hint).toContain('41.2% WR');
+    expect(hint).toContain('-0.38R');
   });
 
   it('renders a positive-toned chip for COHORT_STRONG', () => {
@@ -460,8 +459,7 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
       regime2_state: 'bear_volatile', win_rate: 0.0, expectancy_r: 0.0,
       n_live: 3, n_backtest: 0, run_date: '2026-09-14',
     });
-    const host = el.querySelector('.tags > sb-chip')!;
-    const title = host.getAttribute('title') ?? '';
+    const title = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')?.textContent ?? '';
     expect(title).toContain('Not enough closed trades');
     expect(title).toContain('n=3');
     expect(title).not.toContain('0.0% WR');

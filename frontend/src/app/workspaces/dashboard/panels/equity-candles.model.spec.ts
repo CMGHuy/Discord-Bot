@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { EquityCandle } from '../../../api/models';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 import {
+  CHANGE_PCT_TOOLTIP,
   chartRangeFor,
   stepDownBlocked,
   wallSpan,
@@ -194,5 +196,12 @@ describe('v181 timeframe step helpers', () => {
     expect(stepDownBlocked('1D', undefined, since)).toBe(true);
     expect(stepDownBlocked('4H', candle({ t: '2026-01-02T09:00:00-05:00' }), since)).toBe(false);
     expect(stepDownBlocked('1W', candle({ t: '2025-01-06' }), since)).toBe(false);
+  });
+});
+
+describe('CHANGE_PCT_TOOLTIP copy (A4 audit)', () => {
+  it('keeps its definition and states the paper, gross, pre-tax basis', () => {
+    expect(CHANGE_PCT_TOOLTIP).toContain("Change from the previous candle's close, not a return on capital.");
+    expect(CHANGE_PCT_TOOLTIP).toContain(PERFORMANCE_CAVEAT);
   });
 });

@@ -7,7 +7,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Provider, provideZonelessChangeDetection } from '@angular/core';
+import { Provider, provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 
@@ -17,8 +17,13 @@ import {
   loadingInterceptor,
 } from '../../api/interceptors';
 import { Risk as RiskData, RiskMetrics } from '../../api/models';
-import { Risk } from './risk';
+import {
+  EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, drawdownFxNote, exactRiskText, reconciles, unmappedNote,
+  RISK_DRAWDOWN_LABEL, RISK_SHARPE_LABEL,
+} from './risk';
+import { ConnectionStore } from '../../stores/connection.store';
 import { RiskStore } from '../../stores/risk.store';
+import { ViewportService } from '../../ui/breakpoints';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 
@@ -159,7 +164,7 @@ describe('Risk metric tiles', () => {
     const fixture = await renderWithMetrics();
     expect(tileLabels(fixture)).toEqual([
       'VaR 95%', 'Expected shortfall', 'Annualised vol', 'Beta vs SPY',
-      'Sharpe (R)', 'Max drawdown (R)',
+      RISK_SHARPE_LABEL, RISK_DRAWDOWN_LABEL,
     ]);
   });
 
@@ -170,7 +175,7 @@ describe('Risk metric tiles', () => {
 
   it('de-emphasises a metric computed from a thin sample', async () => {
     const fixture = await renderWithMetrics({ sharpe_r: { value: 0.96, n: 7 } });
-    expect(tileHost(fixture, 'Sharpe (R)').classList).toContain('thin');
+    expect(tileHost(fixture, RISK_SHARPE_LABEL).classList).toContain('thin');
   });
 
   it('renders an uncomputable metric as no-value, never as zero', async () => {
@@ -178,9 +183,13 @@ describe('Risk metric tiles', () => {
     expect(tileHost(fixture, 'VaR 95%').querySelector('.value')!.textContent!.trim()).toBe('—');
   });
 
-  it('labels Sharpe as an R measure so it is not read as annualised', async () => {
+  it('names the basis of Sharpe and max drawdown so neither reads as the Analytics figure', async () => {
     const fixture = await renderWithMetrics();
-    expect(tileLabels(fixture)).toContain('Sharpe (R)');
+    const labels = tileLabels(fixture);
+    expect(labels).toContain('Sharpe · per-trade R, all closed');
+    expect(labels).toContain('Max drawdown · cumulative R, all closed');
+    expect(labels).not.toContain('Sharpe (R)');
+    expect(labels).not.toContain('Max drawdown (R)');
   });
 
   it('labels the beta tile with the actual configured benchmark, not a hardcoded SPY', async () => {
@@ -194,7 +203,7 @@ describe('Risk metric tiles', () => {
       var_95: { value: 0.03, n: 118 }, sharpe_r: { value: 0.9, n: 782 },
     });
     expect(tileHost(fixture, 'VaR 95%').querySelector('.sample')!.textContent).toContain('118');
-    expect(tileHost(fixture, 'Sharpe (R)').querySelector('.sample')!.textContent).toContain('782');
+    expect(tileHost(fixture, RISK_SHARPE_LABEL).querySelector('.sample')!.textContent).toContain('782');
   });
 
   it('still shows the six metrics when the book is flat', async () => {
@@ -213,7 +222,7 @@ describe('Risk metric tiles', () => {
     fixture.detectChanges();
     expect(tileLabels(fixture)).toEqual([
       'VaR 95%', 'Expected shortfall', 'Annualised vol', 'Beta vs SPY',
-      'Sharpe (R)', 'Max drawdown (R)',
+      RISK_SHARPE_LABEL, RISK_DRAWDOWN_LABEL,
     ]);
   });
 });
@@ -235,7 +244,7 @@ describe('Risk metric tiles in a stat strip (v186 D3)', () => {
 
   it('keeps the thin-sample cues inside the strip', async () => {
     const fixture = await renderWithMetrics({ sharpe_r: { value: 0.96, n: 7 } });
-    const tile = tileHost(fixture, 'Sharpe (R)');
+    const tile = tileHost(fixture, RISK_SHARPE_LABEL);
     expect(tile.closest('sb-stat-strip')).not.toBeNull();
     expect(tile.classList).toContain('thin');
     expect(tile.querySelector('.flag')!.textContent).toContain('thin sample');
@@ -457,8 +466,278 @@ describe('Risk exposure on a phone (v179 §3.1)', () => {
     const { fixture, table } = await phoneTable();
     openRowDrawer(table);
     fixture.detectChanges();
-    expect([...compactKeys(table), ...drawerKeys(table)].sort())
+    expect([...new Set([...compactKeys(table), ...drawerKeys(table)])].sort())
       .toEqual(['entry', 'risk_pct', 'shares', 'stop_loss', 'strategy', 'ticker']);
     expect(table.querySelector('a.drawer-detail-link')!.getAttribute('href')).toBe('/trades/t1');
+  });
+});
+
+/* -- v194 B4/B5 -- shares and risk percentages that are true -- */
+
+const FRACTIONAL_BOOK = [
+  { trade_id: 'a', ticker: 'AAA', strategy: 'VWAP', shares: 2.72, entry: 100, stop_loss: 95, risk_pct: 0.004 },
+  { trade_id: 'b', ticker: 'BBB', strategy: 'VWAP', shares: 3, entry: 50, stop_loss: 49, risk_pct: 0.004 },
+  { trade_id: 'c', ticker: 'CCC', strategy: 'VWAP', shares: 0.5, entry: 10, stop_loss: 9, risk_pct: 0.004 },
+];
+
+describe('Risk exposure figures (v194 B4/B5)', () => {
+  async function phone(): Promise<{ fixture: ComponentFixture<Risk>; table: HTMLElement }> {
+    installDialogPolyfill();
+    const fixture = await render({ positions: FRACTIONAL_BOOK }, [phoneViewport()]);
+    return { fixture, table: (fixture.nativeElement as HTMLElement).querySelector('sb-data-table') as HTMLElement };
+  }
+  const drawerField = (table: HTMLElement, key: string) =>
+    table.querySelector(`sb-drawer.row-drawer dl.drawer-fields > [data-col="${key}"]`)!;
+  const exposureTip = (fixture: ComponentFixture<Risk>) =>
+    (fixture.nativeElement as HTMLElement)
+      .querySelector('sb-panel[heading="Exposure by position"] header sb-hint [role="tooltip"]')!.textContent ?? '';
+
+  it('renders fractional shares in the drawer and totals the unrounded values', async () => {
+    const { fixture, table } = await phone();
+    // 2.72 + 3 + 0.5 = 6.22 -- not 3 + 3 + 1 = 7.
+    expect(table.querySelector('.compact-footer [data-col="shares"]')!.textContent).toContain('6.22');
+    openRowDrawer(table);
+    fixture.detectChanges();
+    expect(drawerField(table, 'shares').textContent).toContain('2.72');
+  });
+
+  it('renders a tiny non-zero risk as <0.01%, never 0.00%, and the total with its unit', async () => {
+    const { table } = await phone();
+    const cell = table.querySelector('.compact-cell[data-col="risk_pct"]')!;
+    expect(cell.textContent).toContain('<0.01%');
+    expect(cell.textContent).not.toContain('0.00%');
+    // 3 x 0.004 = 0.012 -> "0.01%", with the "%" the old footer dropped.
+    expect(table.querySelector('.compact-footer [data-col="risk_pct"]')!.textContent).toContain('0.01%');
+  });
+
+  it('puts the exact tiny value in an sb-hint, reachable in the row drawer', async () => {
+    const { fixture, table } = await phone();
+    openRowDrawer(table);
+    fixture.detectChanges();
+    const hint = drawerField(table, 'risk_pct').querySelector('sb-hint')!;
+    expect(hint.querySelector('[role="tooltip"]')!.textContent).toContain('0.004%');
+    expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('Exact risk for AAA');
+    hint.querySelector('button')!.click();
+    fixture.detectChanges();
+    expect(hint.querySelector('[role="tooltip"]')!.hasAttribute('data-popover-open')).toBe(true);
+  });
+
+  it('says totals use unrounded values only when the rounded rows do not add up', async () => {
+    const mismatch = exposureTip(await render({ positions: FRACTIONAL_BOOK }));
+    expect(mismatch).toContain('paper book');
+    expect(mismatch).toContain('2% dollar-risk cap');
+    expect(mismatch).toContain(UNROUNDED_TOTALS_NOTE);
+    const reconciled = exposureTip(await render());
+    expect(reconciled.trim()).toBe(EXPOSURE_HINT);
+  });
+
+  it('formats the heat figure, the budget and sector heat through the same formatter', async () => {
+    const el = (await render({
+      heat: { open_pct: 0.003, cap_pct: 6, utilisation_pct: 0.1 },
+      sector_heat: [{ sector: 'Technology', heat_pct: 0.003 }],
+    })).nativeElement as HTMLElement;
+    expect(el.querySelector('.heat-figure')!.textContent).toContain('<0.01%');
+    expect(el.querySelector('.risk-budget')!.textContent).toContain('<0.01%');
+    expect(el.querySelector('.sectors dd > span')!.textContent!.trim()).toBe('<0.01%');
+  });
+});
+
+describe('Risk exposure helpers (v194 B4/B5)', () => {
+  it('reconciles when the rounded rows add up to the rounded total', () => {
+    expect(reconciles([2.72, 3.5], 2)).toBe(true);
+    expect(reconciles([], 2)).toBe(true);
+    expect(reconciles([null, 1], 2)).toBe(true);
+    expect(reconciles([0.004, 0.004, 0.004], 2)).toBe(false);
+    // The Intl display is 1.01 + 0.01, while the unrounded total displays 1.01.
+    expect(reconciles([1.005, 0.005], 2)).toBe(false);
+    expect(reconciles([1.005, 0.004], 2)).toBe(true);
+  });
+
+  it('gives an exact value only for a tiny non-zero risk', () => {
+    expect(exactRiskText(0.002)).toContain('0.002%');
+    expect(exactRiskText(-0.002)).toContain('-0.002%');
+    for (const shown of [0, 0.01, 3, null]) expect(exactRiskText(shown)).toBeNull();
+  });
+});
+describe('Risk exact tiny figures across device classes (v194 B5)', () => {
+  const devices = ['lg', 'sm', 'xs'] as const;
+
+  for (const device of devices) {
+    it(`opens exact heat, budget, sector and total hints at ${device}`, async () => {
+      const fixture = await render({
+        heat: { open_pct: 0.002, cap_pct: 0.006, utilisation_pct: 33.3333333333 },
+        sector_heat: [{ sector: 'Technology', heat_pct: 0.003 }],
+        positions: [{ ...FRACTIONAL_BOOK[0], risk_pct: 0.002 }],
+      }, [{
+        provide: ViewportService,
+        useValue: { viewport: signal(device), isPhone: signal(device === 'xs'), isNarrow: signal(device !== 'lg') },
+      }]);
+      const root = fixture.nativeElement as HTMLElement;
+      const cases = [
+        ['Exact portfolio heat', '0.002%'],
+        ['Exact budget cap', '0.006%'],
+        ['Exact budget used', '0.002%'],
+        ['Exact budget remaining', '0.004%'],
+        ['Exact sector heat for Technology', '0.003%'],
+        ['Exact Risk % total', '0.002%'],
+      ];
+      for (const [label, value] of cases) {
+        const trigger = root.querySelector<HTMLButtonElement>(`sb-hint > button[aria-label="${label}"]`);
+        expect(trigger, label).not.toBeNull();
+        expect(trigger!.closest('[inert]'), label).toBeNull();
+        const tip = root.querySelector<HTMLElement>(`[id="${trigger!.getAttribute('aria-describedby')}"]`)!;
+        expect(tip.textContent, label).toContain(value);
+        trigger!.click();
+        fixture.detectChanges();
+        expect(tip.hasAttribute('data-popover-open'), label).toBe(true);
+        trigger!.click();
+        fixture.detectChanges();
+      }
+      const footer = root.querySelector(device === 'xs' ? '.compact-footer [data-col="risk_pct"]' : 'tfoot td:last-child')!;
+      expect(footer.textContent).toContain('<0.01%');
+      expect(footer.querySelector('sb-hint button')!.getAttribute('aria-label')).toBe('Exact Risk % total');
+    });
+  }
+
+  it('does not add exact-value controls to zero or fully displayed figures', async () => {
+    const root = (await render({
+      heat: { open_pct: 0, cap_pct: 6, utilisation_pct: 0 },
+      sector_heat: [{ sector: 'Technology', heat_pct: 0.01 }],
+      positions: [{ ...FRACTIONAL_BOOK[0], risk_pct: 0 }],
+    })).nativeElement as HTMLElement;
+    expect(root.querySelector('sb-hint button[aria-label^="Exact"]')).toBeNull();
+  });
+});
+
+/* -- v194 B6 -- no sector data is not no exposure -- */
+
+const openPositions = (count: number) => Array.from({ length: count }, (_, i) => ({
+  trade_id: `t${i}`, ticker: `T${i}`, strategy: 'VWAP', shares: 1, entry: 10, stop_loss: 9, risk_pct: 0.1,
+}));
+
+describe('Risk sector heat: no data vs no exposure (v194 B6)', () => {
+  const sectorPanel = (fixture: ComponentFixture<Risk>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('sb-panel[heading="Sector heat"]') as HTMLElement;
+  const squash = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
+
+  it('shows the cannot-be-assessed banner, never "No sector exposure", when no position has sector data', async () => {
+    const panel = sectorPanel(await render({ positions: openPositions(8), sector_heat: [], unmapped_count: 8 }));
+    const banner = panel.querySelector('.panel-problem[role="status"]');
+    expect(squash(banner?.textContent))
+      .toBe('Sector concentration cannot be assessed: no sector data for 8 of 8 open positions.');
+    expect(panel.textContent).not.toContain('No sector exposure');
+    expect(panel.querySelector('.sectors')).toBeNull();
+  });
+
+  it('keeps the mapped sectors beside the banner when only some positions lack data', async () => {
+    const panel = sectorPanel(await render({
+      positions: openPositions(2),
+      sector_heat: [{ sector: 'Technology', heat_pct: 0.1 }],
+      unmapped_count: 1,
+    }));
+    expect(squash(panel.querySelector('.panel-problem')?.textContent))
+      .toBe('Sector concentration cannot be assessed: no sector data for 1 of 2 open positions.');
+    expect(panel.querySelector('.sectors dt')!.textContent).toContain('Technology');
+  });
+
+  it('shows the true-zero state, and no banner, when every position is mapped', async () => {
+    const panel = sectorPanel(await render({ sector_heat: [], unmapped_count: 0 }));
+    expect(panel.querySelector('.panel-problem')).toBeNull();
+    expect(squash(panel.querySelector('.none')?.textContent)).toBe('No sector exposure.');
+  });
+
+  it('reads a response without the field as fully mapped', async () => {
+    const panel = sectorPanel(await render({ sector_heat: [] }));
+    expect(panel.querySelector('.panel-problem')).toBeNull();
+    expect(squash(panel.querySelector('.none')?.textContent)).toBe('No sector exposure.');
+  });
+
+  it('exposes the count through the store', async () => {
+    await render({ positions: openPositions(3), unmapped_count: 3 });
+    expect(TestBed.inject(RiskStore).unmappedCount()).toBe(3);
+  });
+});
+
+describe('unmappedNote (v194 B6)', () => {
+  it('says nothing when every position is mapped', () => {
+    expect(unmappedNote(0, 5)).toBeNull();
+    expect(unmappedNote(0, 0)).toBeNull();
+  });
+
+  it('names N of M, singular for one position', () => {
+    expect(unmappedNote(8, 8)).toBe('Sector concentration cannot be assessed: no sector data for 8 of 8 open positions.');
+    expect(unmappedNote(1, 1)).toBe('Sector concentration cannot be assessed: no sector data for 1 of 1 open position.');
+  });
+
+  it('never claims fewer open positions than unmapped ones', () => {
+    // positions and the collector read the book separately; a failed read on
+    // one side must not print "3 of 0".
+    expect(unmappedNote(3, 0)).toBe('Sector concentration cannot be assessed: no sector data for 3 of 3 open positions.');
+  });
+});
+
+describe('Risk metric basis and money drawdown (v194 B8)', () => {
+  it('gives the Sharpe and drawdown tiles a hint with definition, population, N and caveat', async () => {
+    const fixture = await renderWithMetrics();
+    for (const label of [RISK_SHARPE_LABEL, RISK_DRAWDOWN_LABEL]) {
+      const hint = tileHost(fixture, label).querySelector('sb-hint')!;
+      expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe(`About ${label}`);
+      const text = hint.querySelector('[role="tooltip"]')!.textContent!;
+      expect(text).toContain('every closed main-ledger trade, all time');
+      expect(text).toContain('N is the closed-trade count');
+      expect(text).toContain('Paper trades (simulated fills)');
+      expect(text).toContain('gross of commissions and slippage');
+      expect(text).toContain('pre-tax');
+    }
+  });
+
+  it('says the Risk Sharpe is not annualised', async () => {
+    const fixture = await renderWithMetrics();
+    const text = tileHost(fixture, RISK_SHARPE_LABEL).querySelector('[role="tooltip"]')!.textContent!;
+    expect(text).toContain('Not annualised');
+  });
+
+  it('shows the money drawdown under the R figure, negative, in the account currency', async () => {
+    const fixture = await renderWithMetrics({
+      max_drawdown_amount: { value: 412.5, n: 782, fx_missing_count: 0 },
+    });
+    const tile = tileHost(fixture, RISK_DRAWDOWN_LABEL);
+    const secondary = tile.querySelector('.secondary')!.textContent!.trim();
+    expect(secondary).toContain('412.50');
+    expect(secondary).toMatch(/^[-−]/);
+    expect(secondary).toContain(TestBed.inject(ConnectionStore).currency());
+    expect(tile.querySelector('div.hint')).toBeNull();
+  });
+
+  it('shows no money line when the payload carries none', async () => {
+    const fixture = await renderWithMetrics();
+    expect(tileHost(fixture, RISK_DRAWDOWN_LABEL).querySelector('.secondary')).toBeNull();
+  });
+
+  it('shows no money line for an uncomputable money drawdown', async () => {
+    const fixture = await renderWithMetrics({
+      max_drawdown_amount: { value: null, n: 0, fx_missing_count: 0 },
+    });
+    expect(tileHost(fixture, RISK_DRAWDOWN_LABEL).querySelector('.secondary')).toBeNull();
+  });
+
+  it('says how many trades the money figure left out for want of an FX rate', async () => {
+    const fixture = await renderWithMetrics({
+      max_drawdown_amount: { value: 100, n: 779, fx_missing_count: 3 },
+    });
+    expect(tileHost(fixture, RISK_DRAWDOWN_LABEL).querySelector('div.hint')!.textContent)
+      .toContain('3 closed trades without an FX rate for the exit day left out of the amount.');
+  });
+
+  it('drops the scope footnote now the labels carry the basis', async () => {
+    const fixture = await renderWithMetrics();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.metrics-scope')).toBeNull();
+    expect(el.textContent).not.toContain('Sharpe and max drawdown are per-trade R over all closed trades');
+  });
+
+  it('words the FX gap note in the singular and is silent at zero', () => {
+    expect(drawdownFxNote(0)).toBeUndefined();
+    expect(drawdownFxNote(1)).toBe('1 closed trade without an FX rate for the exit day left out of the amount.');
   });
 });

@@ -15,7 +15,7 @@ import {
 
 import { Viewport, ViewportService } from './breakpoints';
 import { FocusTrap } from './focus-trap';
-import { Hint } from './hint';
+import { DIALOG_CLOSING_EVENT, Hint } from './hint';
 import { Icon, IconName } from './icon';
 import { playExit } from './motion/exit';
 import { MotionService } from './motion/motion.service';
@@ -36,18 +36,15 @@ import { edgeFades, revealActive } from './scroll-rail';
   selector: 'sb-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Hint],
-  // The tooltip sits on the host, so any hover inside the panel shows it; a
-  // child with a title of its own (an icon, a cell) still wins over it.
-  host: { '[attr.title]': 'description()' },
   template: `
     <section class="panel sb-panel sb-lift">
       @if (heading(); as text) {
         <header [class.ruled]="flush() || divided()">
           <h2>{{ text }}</h2>
           @if (description(); as about) {
-            <!-- The host's native title answers a hover; the hint answers a
-                 tap or a keyboard focus, which a title never does. A panel
-                 with a richer hint of its own turns this one off. -->
+            <!-- v194 A3: the hint answers hover, tap and keyboard focus alike;
+                 the host carries no native title. A panel with a richer hint
+                 of its own turns this one off. -->
             @if (descriptionHint()) {
               <sb-hint [text]="about" [label]="'About ' + text" align="left" />
             }
@@ -640,6 +637,8 @@ export class Drawer {
     const element = this.dialog().nativeElement;
     if (this.closing() || !element.open) return;
     this.closing.set(true);
+    // Hints inside close now, not after the exit (v194 A1; hint.ts).
+    element.dispatchEvent(new Event(DIALOG_CLOSING_EVENT));
     this.cancelExit = playExit(element, 'sb-drawer-out', this.motion.active(), () => element.close());
   }
 

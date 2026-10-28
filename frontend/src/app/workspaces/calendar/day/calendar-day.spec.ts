@@ -217,7 +217,7 @@ describe('CalendarDayPage', () => {
     expect(text(el(fixture), '.long-date')).toBe('Wednesday, August 5, 2026');
     expect(el(fixture).querySelectorAll('.tiles sb-stat-tile')).toHaveLength(7);
     const explained = [...el(fixture).querySelectorAll('.tiles sb-stat-tile')]
-      .filter((tile) => tile.getAttribute('title') === R_TOOLTIP);
+      .filter((tile) => tile.querySelector('sb-hint [role="tooltip"]')?.textContent?.trim() === R_TOOLTIP);
     expect(explained).toHaveLength(3);
     expect(text(el(fixture), '.r-note')).toBe(R_TOOLTIP);   // touch has no hover
   });
@@ -269,7 +269,8 @@ describe('CalendarDayPage', () => {
     expect(root.querySelector('svg.month-line circle.marker')).not.toBeNull();
     expect(text(root, '.mtd-pnl')).toBe('-60.00 €');
     expect(text(root, '.mtd-r')).toBe('-1.20R');
-    expect(root.querySelector('.mtd-r')?.getAttribute('title')).toBe(R_TOOLTIP);
+    expect(root.querySelector('.mtd-r')?.hasAttribute('title')).toBe(false);
+    expect(root.querySelector('.mtd-r + sb-hint [role="tooltip"]')?.textContent?.trim()).toBe(R_TOOLTIP);
     expect(text(root, '.month-panel .rank')).toBe('3rd best of 3 days in August 2026');
   });
 
@@ -277,7 +278,12 @@ describe('CalendarDayPage', () => {
     const fixture = await open('2026-08-05');
     const heads = [...el(fixture).querySelectorAll('.breakdown thead th')].map((th) => th.textContent?.trim());
     expect(heads).toEqual(['Strategy', 'n', 'P&L', 'R', 'Win %', '']);
-    expect(el(fixture).querySelector('.breakdown thead th.r-head')?.getAttribute('title')).toBe(R_TOOLTIP);
+    expect(el(fixture).querySelector('.breakdown thead th.r-head')?.hasAttribute('title')).toBe(false);
+    const drove = [...el(fixture).querySelectorAll('sb-panel')].find((p) => p.querySelector('h2')?.textContent?.trim() === 'What drove it')!;
+    expect(drove.querySelector('header sb-hint [role="tooltip"]')?.textContent?.trim()).toBe(R_TOOLTIP);
+    const tileHints = el(fixture).querySelectorAll('.tiles sb-stat-tile sb-hint');
+    expect(tileHints).toHaveLength(3);
+    expect(el(fixture).querySelector('.tiles [title]')).toBeNull();
     const keys = () => [...el(fixture).querySelectorAll('.breakdown-row .key')].map((k) => k.textContent?.trim());
     expect(keys()).toEqual(['EMA20', 'VWAP']);
     await click(fixture, 'sb-tab-bar button', 'Horizon');
@@ -290,6 +296,7 @@ describe('CalendarDayPage', () => {
     const cellOf = (root: HTMLElement) => root.querySelector('.breakdown-row .win');
     expect(cellOf(thin)?.textContent?.trim()).toBe('—');
     expect(cellOf(thin)?.classList.contains('withheld')).toBe(true);
+    expect(cellOf(thin)?.hasAttribute('title')).toBe(false);
     expect(text(thin, '.win-note')).toBe('— : win % withheld, fewer than 5 rows');
     expect(thin.querySelector('.breakdown thead th:last-child')?.getAttribute('aria-hidden')).toBe('true');
     const wide = el(await open('2026-08-05', dayBody({

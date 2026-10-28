@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { MIN_SAMPLE_N, StatTile } from './stat-tile';
+import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT, StatTile } from './stat-tile';
 import { PreferencesStore } from '../stores/preferences.store';
 
 let preferenceValues: Record<string, unknown> = {};
@@ -61,7 +61,7 @@ describe('StatTile (v85 D23)', () => {
 
   it('says how many more trades a thin figure needs', () => {
     const el = render({ sample: 7 });
-    expect(el.querySelector('.sample')!.getAttribute('title'))
+    expect(el.querySelector('.sample')!.textContent)
       .toContain(`${MIN_SAMPLE_N - 7} more`);
   });
 
@@ -81,7 +81,7 @@ describe('StatTile (v85 D23)', () => {
   it('uses the saved minimum sample when one is configured', () => {
     preferenceValues = { minSampleN: 100 };
     expect(render({ sample: 50 }).classList).toContain('thin');
-    expect(render({ sample: 60 }).querySelector('.sample')!.getAttribute('title')).toContain('40 more');
+    expect(render({ sample: 60 }).querySelector('.sample')!.textContent).toContain('40 more');
   });
 });
 
@@ -144,7 +144,7 @@ describe('StatTile: one variant everywhere (v179 §3.3)', () => {
   it('renders label, value, secondary, N= and hint in that order, captions kept', () => {
     const el = render({ secondary: '+1,240.00 €', sample: 412, hint: 'Pre-tax, paper trades.' });
     expect([...el.children].map((child) => child.className.split(' ')[0]))
-      .toEqual(['label', 'value', 'secondary', 'sample', 'hint']);
+      .toEqual(['label-row', 'value', 'secondary', 'sample', 'hint']);
     expect(el.querySelector('.hint')!.textContent).toContain('Pre-tax, paper trades.');
   });
 });
@@ -199,5 +199,45 @@ describe('StatTile in and out of a strip (v186 D3)', () => {
     const el = render({ sample: 7 });
     expect(el.classList).toContain('thin');
     expect(el.querySelector('.flag')!.textContent).toContain('thin sample');
+  });
+
+  it('renders an about hint beside the label, named for the tile (v194 B8)', () => {
+    const el = render({ about: 'Mean R over every closed trade.' });
+    const hint = el.querySelector('.label-row sb-hint');
+    expect(hint).not.toBeNull();
+    expect(hint!.querySelector('button')!.getAttribute('aria-label')).toBe('About Win rate');
+    expect(hint!.querySelector('[role="tooltip"]')!.textContent).toContain('Mean R over every closed trade.');
+  });
+
+  it('keeps the label text to the label alone when an about hint is present', () => {
+    const el = render({ about: 'Definition.' });
+    expect(el.querySelector('.label')!.textContent!.trim()).toBe('Win rate');
+  });
+
+  it('renders no hint trigger without an about text', () => {
+    expect(render({}).querySelector('sb-hint')).toBeNull();
+    expect(render({ about: '' }).querySelector('sb-hint')).toBeNull();
+  });
+
+  it('keeps the plain hint line as plain text, separate from the about hint', () => {
+    const el = render({ hint: '3 trades left out.', about: 'Definition.' });
+    expect(el.querySelector('div.hint')!.textContent).toContain('3 trades left out.');
+    expect(el.querySelector('div.hint sb-hint')).toBeNull();
+  });
+
+  it('states the performance caveat as paper, gross and pre-tax', () => {
+    expect(PERFORMANCE_CAVEAT).toBe(
+      'Paper trades (simulated fills), gross of commissions and slippage, pre-tax.');
+  });
+
+  it('says inline how many more trades a thin sample needs, with no native title (v194 A3)', () => {
+    const el = render({ label: 'Win rate', value: '50%', sample: 12 });
+    expect(el.querySelector('.sample')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.flag')!.textContent).toContain(`thin sample, ${MIN_SAMPLE_N - 12} more needed`);
+  });
+
+  it('prints no shortfall once the sample is large enough', () => {
+    const el = render({ label: 'Win rate', value: '50%', sample: MIN_SAMPLE_N });
+    expect(el.querySelector('.flag')).toBeNull();
   });
 });

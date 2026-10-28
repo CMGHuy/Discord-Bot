@@ -62,6 +62,8 @@ describe('CancelsSummary', () => {
   it('marks every figure under N 10, and only those', () => {
     const f = create();
     expect(text(q(f, '[data-card="expired"] .small-n'))).toBe('N < 10');
+    expect(q(f, '[data-card="expired"] .small-n')!.hasAttribute('title')).toBe(false);
+    expect(text(q(f, '[data-card="expired"] .small-n + sb-hint [role="tooltip"]'))).toMatch(/^Fewer than \d+ resolved plans: an anecdote, not a rate\.$/);
     expect(q(f, '[data-card="invalidated"] .small-n')).not.toBeNull();
     expect(q(f, '[data-card="other"] .small-n')).not.toBeNull();
     expect(q(f, '.without-risk-cap .small-n')).not.toBeNull();

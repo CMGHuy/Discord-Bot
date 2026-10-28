@@ -5,7 +5,7 @@ import { provideRouter } from '@angular/router';
 import { MarketIndexStore } from '../../stores/market-index.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { TapeStore } from '../../stores/tape.store';
-import { Tape } from './tape';
+import { TAPE_PROXY_HINT, Tape } from './tape';
 
 describe('Tape', () => {
   function setup(
@@ -80,6 +80,18 @@ describe('Tape', () => {
     expect(tile.textContent).toContain('+0.42%');
     expect(tile.querySelector('.px')).toBeNull();
     expect(tile.textContent).not.toContain('no price');
+  });
+
+  it('explains proxy figures once, beside the lane caption, never inside a tile link (v194 A3)', () => {
+    const el = setup([proxy], []).nativeElement as HTMLElement;
+    expect(el.querySelector('.proxy')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('a sb-hint')).toBeNull();
+    expect(el.querySelector('.cap-row sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(TAPE_PROXY_HINT);
+  });
+
+  it('shows no proxy hint when no tile is a proxy', () => {
+    const el = setup([index], [stock]).nativeElement as HTMLElement;
+    expect(el.querySelector('.cap-row sb-hint')).toBeNull();
   });
 
   it('shows the age of a value older than the tape window', () => {

@@ -5,13 +5,17 @@ import { TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { CLOCK } from '../../ui/clock';
 import { ABSENT, dateTime, elapsedHours, held, money, num, pct, text } from '../../ui/format';
+import { Hint } from '../../ui/hint';
 import { Drawer } from '../../ui/layout';
+import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
 import { sideLabel } from '../trades/trade-figures';
 import { livePnlPct, liveUnrealizedAmount } from './dashboard.helpers';
 import { RowActions } from './row-actions';
 
 /** The header marker. The bot only paper-trades (CLAUDE.md, eToro roadmap
  *  stage 0); a drawer that looks like a position ticket must say so. */
+/** v194 A3: what the marker means, in a hint (a native title never shows on a phone). */
+export const PAPER_HINT = 'The bot places no orders: every trade on this page is a paper trade.';
 export const PAPER_MARKER = 'Paper trade';
 
 export interface TradeDrawerField {
@@ -70,12 +74,20 @@ function stopFields(row: TradeRow): TradeDrawerField[] {
   return fields;
 }
 
+/** v194 B3: a leg row says which part of the plan it is; a single-leg
+ *  trade gets no field at all. */
+function legFields(row: TradeRow): TradeDrawerField[] {
+  const leg = legLabel(row);
+  return leg ? [field('leg', 'Leg', leg)] : [];
+}
+
 /** Everything the drawer shows, from the loaded row alone (spec §3.2: no
  *  fetch). Absent values are the em dash, never NaN or an empty cell. */
 export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number): TradeDrawerField[] {
   return [
     field('direction', 'Direction', sideLabel(row.direction) ?? ABSENT),
     field('status', 'Status', text(row.status_label || row.status)),
+    ...legFields(row),
     field('pnl', 'P&L', pnlText(row, currency), true, toneOf(drawerPnl(row).pct)),
     entryField(row),
     ...stopFields(row),
@@ -104,15 +116,17 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
 @Component({
   selector: 'sb-trade-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Drawer, RowActions, RouterLink],
+  imports: [Drawer, Hint, RowActions, RouterLink],
   template: `
     <sb-drawer [open]="true" [heading]="row().ticker" (closed)="closed.emit()">
-      <span drawer-header class="paper-marker"
-            title="The bot places no orders: every trade on this page is a paper trade.">{{ paperMarker }}</span>
+      <span drawer-header class="paper-marker-row">
+        <span class="paper-marker">{{ paperMarker }}</span>
+        <sb-hint [text]="paperHint" label="About paper trades" align="left" />
+      </span>
       <dl class="fields">
         @for (item of fields(); track item.key) {
           <div class="field" [attr.data-field]="item.key">
-            <dt>{{ item.label }}</dt>
+            <dt>{{ item.label }}@if (item.key === 'leg') { <sb-hint [text]="legHint" label="About leg rows" align="left" /> }</dt>
             <dd [class.num]="item.numeric" [class.pos]="item.tone === 'pos'" [class.neg]="item.tone === 'neg'"
                 [class.long]="item.key === 'direction' && item.value.toLowerCase() === 'long'"
                 [class.short]="item.key === 'direction' && item.value.toLowerCase() === 'short'">{{ item.value }}</dd>
@@ -127,6 +141,7 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
   `,
   styles: `
     :host { display: contents; }
+    .paper-marker-row { display: inline-flex; align-items: center; gap: var(--space-4); }
     .paper-marker {
       padding: 0 var(--space-6);
       border: 1px solid var(--border-strong);
@@ -189,6 +204,9 @@ export class TradeDrawer {
   private readonly now = inject(CLOCK);
 
   protected readonly paperMarker = PAPER_MARKER;
+  protected readonly paperHint = PAPER_HINT;
+  /** v194 A4: the Dashboard chips count each realised leg. */
+  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
   protected readonly fields = computed(() =>
     tradeDrawerFields(this.row(), this.connection.currency(), this.now()));
 }

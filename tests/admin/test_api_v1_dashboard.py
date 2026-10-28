@@ -58,6 +58,8 @@ DASHBOARD = {
     # number rather than hardcoding a copy of DEFAULT_EXPIRY_BARS that
     # could drift from it silently.
     "default_expiry_bars": int,
+    # v194 B7 -- positions/closes left out of the money cards for want of an FX rate.
+    "fx_missing_count": int,
 }
 
 RELOCATED = [
@@ -476,7 +478,7 @@ def test_realized_block_is_shaped_even_with_no_trades(seed, logged_in):
     realized = logged_in.get("/api/v1/dashboard").get_json()["realized"]
     assert_shape(realized, {
         "amount": NULLABLE_NUMBER, "pct": NULLABLE_NUMBER,
-        "n": int, "wins": int, "losses": int,
+        "n": int, "wins": int, "losses": int, "fx_missing_count": int,
     }, where="realized")
     # None, not 0.0: "nothing closed" and "closed flat" are different facts.
     assert realized["amount"] is None

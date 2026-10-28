@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { Hint } from './hint';
 import { CountUp } from './motion/count-up';
 import { Spinner } from './spinner';
 
@@ -38,18 +39,22 @@ function toneClass(tone: MetricTone, value: number): string {
 @Component({
   selector: 'sb-metric-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CountUp, Spinner],
+  imports: [CountUp, Spinner, Hint],
   host: {
     '[class.tint-pos]': "cardTint() === 'pos'",
     '[class.tint-neg]': "cardTint() === 'neg'",
     '[class.loading]': 'loading()',
     '[attr.aria-busy]': 'loading() || null',
-    '[attr.title]': 'description()',
   },
 
   template: `
     <div class="card sb-lift">
-      <span class="label sb-label">{{ label() }}</span>
+      <span class="label-row">
+        <span class="label sb-label">{{ label() }}</span>
+        @if (description(); as about) {
+          <sb-hint [text]="about" [label]="'About ' + label()" align="left" />
+        }
+      </span>
       @if (loading()) {
         <sb-spinner class="busy" label="Updating" />
       }
@@ -61,6 +66,7 @@ function toneClass(tone: MetricTone, value: number): string {
     </div>
   `,
   styles: `
+    .label-row { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
     /* A custom element has no display of its own by default (the browser
        treats it as inline), so a row that stretches this host to match its
        tallest sibling (flex/grid's own align-items: stretch) would stretch

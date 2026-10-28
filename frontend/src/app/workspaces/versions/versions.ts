@@ -102,8 +102,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
             <div class="track">
               @if (lane.absentWidth > 0) {
                 <div class="absent" [style.left.%]="(1 - lane.absentWidth) * 100"
-                     [style.width.%]="lane.absentWidth * 100"
-                     title="This component did not exist yet"></div>
+                     [style.width.%]="lane.absentWidth * 100"></div>
               }
               @for (segment of lane.segments; track segment.start) {
                 <button sb-button variant="segment" type="button" class="segment sb-hit" [class.current]="segment.current"
@@ -119,9 +118,14 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
         }
         <div class="bracket-row">
           <div class="bracket" [style.left.%]="store.bracket().start * 100"
-               [style.width.%]="store.bracket().width * 100"
-               title="The releases listed below"></div>
+               [style.width.%]="store.bracket().width * 100"></div>
         </div>
+        <!-- v194 A3: these two marks used to explain themselves in titles on
+             non-focusable divs, which no phone or keyboard reaches. -->
+        <p class="lane-legend">
+          <span class="key"><span class="swatch absent-swatch" aria-hidden="true"></span>did not exist yet</span>
+          <span class="key"><span class="swatch bracket-swatch" aria-hidden="true"></span>the releases listed below</span>
+        </p>
         @if (hovered(); as h) {
           <div class="overlay-row">
             <div class="dim" [style.left.%]="0" [style.width.%]="h.segment.start * 100"></div>
@@ -287,6 +291,12 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .segment.current { background: var(--accent); }
     .absent { position: absolute; top: 0; height: 100%;
               border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
+    .lane-legend { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-14); margin: var(--space-4) 0 0 calc(var(--lane-w) + var(--space-8)); color: var(--text-secondary); font-size: var(--text-table); }
+    .lane-legend .key { display: inline-flex; align-items: center; gap: var(--space-4); }
+    .swatch { display: inline-block; width: 14px; height: 8px; }
+    .absent-swatch { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
+    .bracket-swatch { border: 1px solid var(--text-faint); border-top: none; }
+    @media (max-width: 639px) { .lane-legend { margin-left: 0; } }
     .bracket-row { position: relative; height: 12px; margin-left: calc(var(--lane-w) + var(--space-8)); }
     .bracket { position: absolute; top: 0; height: 100%; border: 1px solid var(--text-faint);
                border-radius: var(--radius-sm); background: var(--surface-raised); }

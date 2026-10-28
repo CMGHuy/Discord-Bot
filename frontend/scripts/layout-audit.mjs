@@ -5,7 +5,7 @@
  * docs/superpowers/specs/2026-10-19-v179-mobile-layout-consistency-design.md §3.5, §6a.6).
  *
  * Visits every route and tab (layout-audit-lib.mjs ROUTES) at each width,
- * headless, on browse.mjs's persistent profile, and reports seven checks:
+ * headless, on browse.mjs's persistent profile, and reports eight checks:
  *   overflow   the page (document, body or the shell's <main> pane) is wider than the viewport
  *   offscreen  text past the right edge of the viewport, outside any scroll box
  *   clipped    text cut by its own overflow/ellipsis or by an overflow:hidden ancestor (never sr-only)
@@ -15,6 +15,9 @@
  *   baseline   side-by-side text in one flex/grid row whose baselines differ by more than 2px
  *   vcenter    a table cell's content more than 2px off the middle of its row, or an icon
  *              (svg, img, checkbox/radio) more than 2px off the centre line of the text beside it
+ *   hint       an sb-hint popover that, opened the way the device opens it (hover at 1440, tap at
+ *              <= 1023), is zero-size, past a viewport edge, or not topmost at its centre and at
+ *              its top-left + 8px (spec v194 A2; the trigger's aria-label names it). Never allowed.
  * A finding the allow-list names (with a reason and a date) passes; anything
  * else makes the exit code 1. Entries nothing matches any more print as STALE;
  * --prune removes them (only on a run at 390, 768 and 1440).
@@ -40,7 +43,8 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
   CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug, validateAllow, vcenterGeometry,
+  classify, countByCheck, dedupe, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug,
+  validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -250,6 +254,72 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc, 
   return findings;
 }
 
+/** How long an opened hint gets to show and be placed (one frame plus the reposition) before it is measured. */
+const HINT_SETTLE_MS = 150;
+
+/** Runs inside the page (page.evaluate): the opened popover's geometry for hintVerdict. Self-contained. */
+function measureHint(id) {
+  const root = document.documentElement;
+  const viewport = { width: root.clientWidth, height: root.clientHeight };
+  const pop = id ? document.getElementById(id) : null;
+  if (!pop) return { rect: { left: 0, top: 0, width: 0, height: 0 }, viewport, hits: { center: false, corner: false } };
+  const r = pop.getBoundingClientRect();
+  const on = (x, y) => {
+    const hit = document.elementFromPoint(x, y);
+    return Boolean(hit && pop.contains(hit));
+  };
+  return {
+    rect: { left: r.left, top: r.top, width: r.width, height: r.height },
+    viewport,
+    hits: { center: on(r.left + r.width / 2, r.top + r.height / 2), corner: on(r.left + 8, r.top + 8) },
+  };
+}
+
+const hintFinding = (label, reason, rect) => ({
+  check: 'hint',
+  selector: `sb-hint > button[aria-label="${label}"]`,
+  text: label,
+  detail: `"${label}" popover ${reason} at ${Math.round(rect.left)},${Math.round(rect.top)} `
+    + `${Math.round(rect.width)}x${Math.round(rect.height)}`,
+});
+
+/** Escape closes a hint however it opened (hover, focus or a tap's pin); the mouse then leaves it. */
+async function closeHint(page, trigger, touch) {
+  await trigger.press('Escape', { timeout: 2000 }).catch(() => undefined);
+  if (!touch) await page.mouse.move(0, 0);
+}
+
+/**
+ * The hint check (spec v194 A2): open every visible sb-hint the way the device would -- hover at
+ * desktop widths, tap at or below TOUCH_MAX_WIDTH -- and judge its popover with hintVerdict.
+ * Playwright-side, not in auditPage, because hover and tap must be real input events. A trigger
+ * Playwright cannot hover or tap (detached by a re-render, or covered) is logged, not reported:
+ * the tap check owns hit areas.
+ */
+async function auditHints(page, width) {
+  const touch = width <= TOUCH_MAX_WIDTH;
+  const triggers = page.locator('sb-hint > button.trigger');
+  const findings = [];
+  for (let i = 0, n = await triggers.count(); i < n; i += 1) {
+    const trigger = triggers.nth(i);
+    if (!(await trigger.isVisible())) continue;
+    const label = (await trigger.getAttribute('aria-label')) ?? '';
+    try {
+      await (touch ? trigger.tap({ timeout: 2000 }) : trigger.hover({ timeout: 2000 }));
+    } catch (error) {
+      console.error(`  hint "${label}" @${width}: cannot ${touch ? 'tap' : 'hover'} (${String(error).split('\n')[0]})`);
+      continue;
+    }
+    await page.waitForTimeout(HINT_SETTLE_MS);
+    const geometry = await page.evaluate(measureHint, await trigger.getAttribute('aria-describedby'));
+    const verdict = hintVerdict(geometry.rect, geometry.viewport, geometry.hits);
+    if (!verdict.ok) findings.push(hintFinding(label, verdict.reason, geometry.rect));
+    await closeHint(page, trigger, touch);
+  }
+  return findings;
+}
+
+
 /** Same page-ready rule as browse.mjs: never 'networkidle' (the SPA holds an event stream open). */
 function ready() {
   const main = document.querySelector('main') ?? document.body;
@@ -349,7 +419,9 @@ async function auditWidth(width, opts) {
       const raw = await page.evaluate(auditPage, { ...limits, hiddenSrc: isVisuallyHidden.toString(), geometrySrc: vcenterGeometry.toString() });
       findings.push(...raw.map((f) => ({ route, width, ...f })));
       await screenshot(page, join(opts.out, `${slug(route)}@${width}.png`), width);
-      console.error(`${route} @${width}: ${raw.length} raw finding(s)`);
+      const hints = await auditHints(page, width);
+      findings.push(...hints.map((f) => ({ route, width, ...f })));
+      console.error(`${route} @${width}: ${raw.length + hints.length} raw finding(s)`);
     }
     return findings;
   });

@@ -4,7 +4,7 @@ import { Params, Router } from '@angular/router';
 import { AnalyticsUnit, BookScope } from '../../api/models';
 import { AnalyticsStore } from '../../stores/analytics.store';
 import { Tab, TabBar } from '../../ui/layout';
-import { ScopeBar } from './scope-bar';
+import { ScopeBar, fxMissingOf } from './scope-bar';
 import { scopeToQueryParams } from './scope-url';
 import { AttributionTab } from './tabs/attribution';
 import { EdgeTab } from './tabs/edge';
@@ -45,7 +45,7 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
     <sb-scope-bar
       [scope]="store.scope()" [unit]="store.unit()" [n]="store.scopeN()"
       [allTimePanels]="store.allTimePanelCount()" [strategies]="strategyNames()"
-      [horizons]="horizons()" [asOf]="store.asOf()" [tuning]="store.tab() === 'tuning'"
+      [horizons]="horizons()" [asOf]="store.asOf()" [fxMissing]="fxMissing()" [tuning]="store.tab() === 'tuning'"
       (scopeChange)="onScope($event)" (unitChange)="onUnit($event)" (cleared)="store.clearScope()" />
 
     @switch (store.tab()) {
@@ -62,6 +62,9 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
 })
 export class Analytics {
   protected readonly store = inject(AnalyticsStore);
+  /** v194 B7: how many scoped closes the tab's money figures left out. */
+  protected readonly fxMissing = computed(() =>
+    fxMissingOf(this.store.performance(), this.store.equityCurve(), this.store.byDimension()));
   private readonly router = inject(Router);
   protected readonly tabs: Tab[] = [
     { id: 'overview', label: 'Overview' }, { id: 'attribution', label: 'Attribution' },

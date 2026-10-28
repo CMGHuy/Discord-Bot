@@ -34,7 +34,7 @@ CLOSED_STATUSES = frozenset({"win", "loss", "closed"})
 # exists to catch.
 ROW_KEYS = (
     "trade_id", "plan_id", "ticker", "strategy", "horizon", "direction", "day",
-    "opened_at", "closed_at", "outcome", "pnl_amount", "r_multiple", "mfe_r", "mae_r",
+    "opened_at", "closed_at", "outcome", "pnl_amount", "fx_missing", "r_multiple", "mfe_r", "mae_r",
     "exit_efficiency", "tags", "auto_lesson", "leg_index", "leg_total",
     # v165 D1 -- read from the part, never re-derived (see `_detail_fields`).
     "entry_price", "exit_price", "stop_price", "tp1", "tp2", "shares",
@@ -204,6 +204,7 @@ def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
         "closed_at": part.get("closed_at"),
         "outcome": (entry.get("outcome") if whole else None) or part.get("status"),
         "pnl_amount": _float_or_none(part.get("realized_pnl_amount")),
+        "fx_missing": bool(part.get("fx_missing")),
         "r_multiple": r,
         "mfe_r": _float_or_none(entry.get("mfe_r")),
         "mae_r": _float_or_none(entry.get("mae_r")),
@@ -216,7 +217,7 @@ def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
     }
 
 
-def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
+def joined_rows(trades: list[dict], entries: list[dict], *, convert=None) -> list[dict]:
     """One row per closed trade -- or per realized leg of a scaled-out
     one -- with its journal entry merged in.
 
@@ -230,6 +231,9 @@ def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
     counts on the day it banked -- even while its runner is still open --
     rather than vanishing into the runner's close. Its legs' dollars sum to
     the trade's own realized total.
+
+    `convert` maps a trade's realized parts to display money (the admin passes
+    `to_account_currency`); it runs after the leg split, never before it.
     """
     by_trade_id = {
         e["trade_id"]: e for e in entries if e.get("trade_id")
@@ -238,7 +242,8 @@ def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
     rows: list[dict] = []
     for t in trades:
         entry = by_trade_id.get(t.get("id")) or {}
-        for part in expand_realized_legs(t):
+        parts = expand_realized_legs(t)
+        for part in (convert(parts) if convert else parts):
             if (row := _row_for(part, entry, t)) is not None:
                 rows.append(row)
     return rows
@@ -267,7 +272,7 @@ def available_filters(rows: list[dict]) -> dict:
     }
 
 
-def load_rows(*, trade_log=None, journal=None) -> list[dict]:
+def load_rows(*, trade_log=None, journal=None, convert=None) -> list[dict]:
     """The module's one I/O boundary: read both stores and join them.
 
     Stores are constructed here rather than at import time (Global
@@ -289,7 +294,7 @@ def load_rows(*, trade_log=None, journal=None) -> list[dict]:
         # journal degrades to "no lessons" rather than failing a page whose
         # dollar figures came from trades.json and are fine.
         entries = []
-    return joined_rows(trades, entries)
+    return joined_rows(trades, entries, convert=convert)
 
 
 def _sum_or_none(values: list[float | None]) -> float | None:

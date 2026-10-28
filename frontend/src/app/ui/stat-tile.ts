@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 
 import { PreferencesStore } from '../stores/preferences.store';
+import { Hint } from './hint';
 import { Sparkline } from './sparkline';
 import { CountUp } from './motion/count-up';
 import { formatFigureText, parseFigureText } from './motion/figure-text';
@@ -16,6 +17,14 @@ import { formatFigureText, parseFigureText } from './motion/figure-text';
 export const MIN_SAMPLE_N = 30;
 
 export type StatTone = 'neutral' | 'pos' | 'neg';
+
+/**
+ * v194 B8 -- how every performance figure states its basis (spec hint copy
+ * rule): paper fills, no costs modelled, before tax. One string, so the Risk
+ * and Analytics tiles cannot drift apart.
+ */
+export const PERFORMANCE_CAVEAT =
+  'Paper trades (simulated fills), gross of commissions and slippage, pre-tax.';
 
 /**
  * One metric, its label, and its sample size — spec v85 D23.
@@ -34,16 +43,19 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
 @Component({
   selector: 'sb-stat-tile',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Sparkline, CountUp],
+  imports: [Hint, Sparkline, CountUp],
   template: `
     <div class="tile sb-lift" [class.thin]="thin()" [class]="tone()">
-      <div class="label sb-label">{{ label() }}</div>
+      <div class="label-row">
+        <div class="label sb-label">{{ label() }}</div>
+        @if (about(); as text) { <sb-hint [text]="text" [label]="'About ' + label()" /> }
+      </div>
       <div class="value" [sbCountUp]="countValue()" [countFormat]="countFormat()"
            [countKey]="'stat:' + label()" [countAbsent]="value() ?? '—'"></div>
       @if (secondary()) { <div class="secondary num">{{ secondary() }}</div> }
       @if (sample() !== null) {
-        <div class="sample" [title]="sampleTitle()">
-          N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample</span>}
+        <div class="sample">
+          N={{ sample() }}@if (thin()) {<span class="flag"> · thin sample, {{ shortfall() }} more needed</span>}
         </div>
       }
       @if (hint()) {
@@ -91,7 +103,11 @@ export type StatTone = 'neutral' | 'pos' | 'neg';
     }
     /* v186 D3 -- typography is the global .sb-label on the element (mono
        caps, --text-muted): the one field-label style. Only wrapping is ours. */
-    .label { overflow-wrap: anywhere; }
+    .label { overflow-wrap: anywhere; min-width: 0; }
+    /* v194 B8 -- the definition hint sits on the label's line, never under
+       the value: the label wraps first, the trigger keeps its size. */
+    .label-row { display: flex; align-items: center; gap: var(--space-6, 6px); min-width: 0; }
+    .label-row sb-hint { flex: none; }
     .value {
       font-family: var(--font-figure);
       font-weight: var(--figure-weight);
@@ -127,6 +143,9 @@ export class StatTile {
   readonly sample = input<number | null>(null);
   readonly tone = input<StatTone>('neutral');
   readonly hint = input<string | undefined>(undefined);
+  /** v194 B8 -- the tile's definition, population and caveat, behind an
+   *  `sb-hint` beside the label. `hint` stays the always-visible line. */
+  readonly about = input<string | undefined>(undefined);
   readonly secondary = input<string | null>(null);
   readonly trend = input<readonly number[] | null>(null);
 
@@ -155,11 +174,11 @@ export class StatTile {
       : MIN_SAMPLE_N;
   });
 
-  protected readonly sampleTitle = computed(() => {
+  /** v194 A3: how many more closed trades before the figure is worth
+   *  reading -- printed inline beside "thin sample" (it used to hide in a
+   *  native title a phone never shows). */
+  protected readonly shortfall = computed(() => {
     const n = this.sample();
-    if (n === null) return '';
-    const minimum = this.minimumSample();
-    if (n >= minimum) return `${n} closed trades`;
-    return `${n} closed trades — ${minimum - n} more before this figure is worth reading`;
+    return n === null ? 0 : Math.max(0, this.minimumSample() - n);
   });
 }

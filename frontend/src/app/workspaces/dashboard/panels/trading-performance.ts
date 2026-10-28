@@ -23,6 +23,10 @@ import {
   signTone,
 } from './equity-range.model';
 
+/** The Realised today sub-line when today's fetch failed and nothing
+ *  earlier landed: an em dash alone would read as "nothing closed". */
+const TODAY_UNAVAILABLE = "couldn't load today's figures";
+
 /** The dropdown's value for a hand-picked range: never a preset, never persisted. */
 const RANGE_OPTION = 'Range';
 
@@ -128,7 +132,7 @@ export function presetLabel(preset: ScopePreset): string {
         <div [attr.data-tone]="tinted(winPairTone())" [class.busy]="loading()"><span>Win rate @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
         <div [attr.data-tone]="tinted(expectancyTone())" [class.busy]="loading()"><span>Expectancy @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
         <div [attr.data-tone]="tinted(payoffTone())" [class.busy]="loading()"><span>Payoff @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
-        <div [attr.data-tone]="tinted(todayTone())" [class.busy]="todayBusy()"><span>Realised today @if (todayBusy()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(todayAmount(), currencyUnit(), 2) }}</strong></div>
+        <div [attr.data-tone]="tinted(todayTone())" [class.busy]="todayBusy()"><span>Realised today @if (todayBusy()) { <sb-spinner label="Updating" /> }</span><strong>{{ todayUnavailable() ? todayUnavailableText : fmtFigure(todayAmount(), currencyUnit(), 2) }}</strong></div>
         @if (inPeriod()) {
           <div [attr.data-tone]="tinted(realizedTone())" [class.busy]="loading()"><span>Realised in period @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
         }
@@ -223,6 +227,8 @@ export class TradingPerformance {
   /** The today-only fetch is in flight (Period mode; under 1D the scoped
    *  fetch is today's, so `loading` covers it). */
   readonly todayLoading = input(false);
+  /** Today's fetch failed (`DashboardStore.todayError`); the card says so. */
+  readonly todayError = input<string | null>(null);
   readonly openTrades = input<number>(0);
   /** Mean winning R over the magnitude of mean losing R. Null, never 0, when
    *  either side has no outcomes yet — see payoff_ratio_from_rs. */
@@ -295,9 +301,13 @@ export class TradingPerformance {
   protected readonly todayTone = computed(() => signTone(this.todayAmount()));
   protected readonly todayBusy = computed(() => (this.inPeriod() ? this.todayLoading() : this.loading()));
   /** "+0.40% · 3 closed · 2W 1L"; the % is left out when the server has none. */
+  /** The phone summary has no sub-line: it swaps the dash for the failure text. */
+  protected readonly todayUnavailableText = TODAY_UNAVAILABLE;
+  protected readonly todayUnavailable = computed(() => this.todayAmount() === null && this.todayError() !== null);
+
   protected readonly todaySub = computed(() => {
     const today = this.todayRealized();
-    if (today === null) return null;
+    if (today === null) return this.todayError() === null ? null : TODAY_UNAVAILABLE;
     if (today.n === 0) return 'none closed today';
     const counts = `${today.n} closed · ${today.wins}W ${today.losses}L`;
     return today.pct === null ? counts : `${pct(today.pct)} · ${counts}`;

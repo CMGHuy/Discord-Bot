@@ -97,6 +97,17 @@ function seedUnflushed(): { fixture: ComponentFixture<Versions>; backend: HttpTe
 }
 
 describe('Versions', () => {
+  it('names the hatched lane and the bracket in a visible legend, not in titles (v194 A3)', async () => {
+    const fixture = seed(PAIRED);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.absent[title], .bracket[title]')).toBeNull();
+    const legend = el.querySelector('.lane-legend')!.textContent!.replace(/\s+/g, ' ');
+    expect(legend).toContain('did not exist yet');
+    expect(legend).toContain('the releases listed below');
+  });
+
   it('uses the shared timeline and gives unknown provenance a truthful label', async () => {
     const fixture = seed(PAIRED);
     await fixture.whenStable();

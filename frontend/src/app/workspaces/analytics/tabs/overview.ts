@@ -15,9 +15,30 @@ import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelHeader } from '../../../ui/panel-header';
 import { PanelError } from '../../../ui/panel-error';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
-import { StatTile } from '../../../ui/stat-tile';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
 import { alwaysMoney, inUnit, unitLabel } from '../../../ui/unit-format';
 import { VarianceBandPanel } from './variance-band-panel';
+
+/* v194 B8 -- the Risk page shows a Sharpe and a max drawdown over every
+ * closed trade; these follow the selected range. The label names the basis,
+ * the hint the definition. */
+export const ANALYTICS_SHARPE_LABEL = 'Sharpe · annualised, selected range';
+export const ANALYTICS_DRAWDOWN_LABEL = 'Max drawdown · cumulative R, selected range';
+export const ANALYTICS_SHARPE_ABOUT =
+  'Annualised, from the realised returns of closed trades in the selected range and filters. '
+  + "Not the Risk page's Sharpe, which is per-trade R over every closed trade and not annualised. "
+  + 'N is the sample it was computed from. ' + PERFORMANCE_CAVEAT;
+export const ANALYTICS_DRAWDOWN_ABOUT =
+  'Largest peak-to-trough fall of the cumulative R curve in the selected range and filters; '
+  + 'the amount under it is the largest fall of cumulative realised P&L in the account currency. '
+  + 'Risk shows the same measure over every closed trade. N is the number of equity-curve points '
+  + 'it was computed from. ' + PERFORMANCE_CAVEAT;
+
+/** v194 A4: Analytics counts plans (`closed_only`), unlike the Dashboard. */
+const ANALYTICS_WIN_RATE_ABOUT =
+  'Wins ÷ (wins + losses) over closed plans in the selected range and filters: Analytics counts plans, '
+  + 'so a plan that scaled out counts once. N is the number of decided plans. Read it with ExpR beside '
+  + `it. ${PERFORMANCE_CAVEAT}`;
 
 /** One KPI tile's resolved, pre-formatted content -- `StatTile` never formats. */
 interface KpiTile {
@@ -27,6 +48,7 @@ interface KpiTile {
   sample: number | null;
   trend: readonly number[] | null;
   hint?: string;
+  about?: string;
 }
 
 /** One relocated metric, resolved against the payload for the Outcome
@@ -77,13 +99,12 @@ function maxDrawdown(values: readonly number[]): number | null {
   template: `
     <div class="kpis">@for (tile of kpiTiles(); track tile.label) {
       <sb-stat-tile [label]="tile.label" [value]="tile.value" [secondary]="tile.money"
-        [sample]="tile.sample" [trend]="tile.trend" [hint]="tile.hint" />
+        [sample]="tile.sample" [trend]="tile.trend" [hint]="tile.hint" [about]="tile.about" />
     }</div>
 
     <div class="panels">
       <sb-panel>
-        <sb-panel-header title="Equity" [n]="store.scopeN()" [total]="equityMoney()"
-          hint="Cumulative {{ unitLabelText() }} per closed trade, ordered by close date. A day with no closes is not a flat day: the x-axis is the sequence of trades, dated." />
+        <sb-panel-header title="Equity" [n]="store.scopeN()" [total]="equityMoney()" [hint]="equityHint()" />
         @if (store.equityCurveError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('equityCurve')" />
         } @else if (!points().length) {
@@ -102,7 +123,7 @@ function maxDrawdown(values: readonly number[]): number | null {
 
       <sb-panel>
         <sb-panel-header title="Outcome" [n]="store.scopeN()" [tableable]="true" [(tableOpen)]="outcomeTableOpen"
-          hint="Win = TP1 touched. Average win and loss are means of the R-multiples on each side." />
+          [hint]="outcomeHint" />
         @if (store.performanceError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('performance')" />
         } @else {
@@ -124,7 +145,7 @@ function maxDrawdown(values: readonly number[]): number | null {
 
       <sb-panel>
         <sb-panel-header title="R distribution" [n]="store.scopeN()" [tableable]="true" [(tableOpen)]="rTableOpen"
-          hint="Every closed trade's realised R. The shape is the finding: a cluster of small losses with a tail of larger wins is a different book from a symmetric one." />
+          [hint]="rDistributionHint" />
         <sb-histogram [bins]="rBins()" [isNegative]="negativeBin" />
         @if (rTableOpen()) {
           <sb-data-table [rows]="rRows()" [columns]="rColumns" [visible]="rVisible" [rowKey]="rRowKey" clientPaging="analytics-r-buckets" />
@@ -133,8 +154,8 @@ function maxDrawdown(values: readonly number[]): number | null {
 
       <sb-panel>
         <sb-panel-header title="By month" [n]="store.scopeN()" [tableable]="true" [(tableOpen)]="monthTableOpen"
-          hint="Realised result per calendar month of the scoped book. The day grid lives on the Calendar workspace." />
-        <sb-bar-list [rows]="monthBars()" mode="signed" [format]="format" />
+          [hint]="monthHint" />
+        <sb-bar-list [rows]="monthBars()" mode="signed" [format]="monthFormat" />
         @if (monthTableOpen()) {
           <sb-data-table [rows]="monthRows()" [columns]="monthColumns" [visible]="monthVisible" [rowKey]="monthRowKey" clientPaging="analytics-months" />
         }
@@ -171,6 +192,28 @@ export class OverviewTab {
     inUnit({ r: value, pct: value, money: value }, this.store.unit(), this.connection.currency());
 
   protected readonly unitLabelText = computed(() => unitLabel(this.store.unit(), this.connection.currency()));
+
+  /* v194 A4: each hint states the basis of the figure it explains. */
+  protected readonly equityHint = computed(() =>
+    `Cumulative ${this.unitLabelText()} per closed trade, ordered by close date. A day with no closes is `
+    + `not a flat day: the x-axis is the sequence of trades, dated. ${PERFORMANCE_CAVEAT}`);
+  /** The bar reads `relocated.wins/losses` = `get_stats(all_raw)`: the whole
+   *  main-ledger book, legs expanded, scope ignored (A4 audit, partner call:
+   *  say so rather than change the figure). */
+  protected readonly outcomeHint =
+    'Win = TP1 touched. Average win and loss are means of the R-multiples on each side. '
+    + 'The wins/losses bar covers the whole book (main ledger), counts each realised leg as a trade '
+    + 'and ignores the scope and filters; the N beside the title and the Win rate tile count scoped '
+    + `plans. ${PERFORMANCE_CAVEAT}`;
+  protected readonly rDistributionHint =
+    "Every closed trade's realised R. The shape is the finding: a cluster of small losses with a tail of "
+    + `larger wins is a different book from a symmetric one. ${PERFORMANCE_CAVEAT}`;
+  /** The month rows are a compounded % return (`calendar_returns`), so they
+   *  read in percent whatever the R/%/money toggle says. */
+  protected readonly monthHint =
+    "Realised return per calendar month of close, as a percent of the balance at the month's start, "
+    + `over the scoped book. The day grid lives on the Calendar workspace. ${PERFORMANCE_CAVEAT}`;
+  protected readonly monthFormat = (value: number) => pctText(value);
 
   readonly points = computed(() => this.store.equityCurve()?.points ?? []);
 
@@ -268,16 +311,18 @@ export class OverviewTab {
       tile('Total R', last?.cum_r ?? null, derived?.total_return_pct ?? null, last?.cum_pnl ?? null,
         equityCurve?.points_n ?? null, this.totalRTrend()),
       tile('ExpR', performance?.expectancy_r ?? null, null, expectancyMoney, expectancyN),
-      fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
+      { ...fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
+        about: ANALYTICS_WIN_RATE_ABOUT },
       fixedTile('Profit factor', num(profitFactor, 2), this.store.scopeN(), null,
         'Gross realised win ÷ gross realised loss.'),
       // Negated: a drawdown is a loss, and an unsigned magnitude rendered
       // "+120.66R" -- the same sign as a gain, in the same row as Total R.
-      tile('Max drawdown', drawdownR === null ? null : -drawdownR, null,
-        drawdownMoney === null ? null : -drawdownMoney, equityCurve?.points_n ?? null, null,
-        'Largest peak-to-trough decline in the selected range (Risk shows all closed trades).'),
-      fixedTile('Sharpe', signed(sharpe, 2), this.store.scopeN(), null,
-        'Annualised, from realised returns in the selected range (Risk shows per-trade R, all-time).'),
+      {
+        ...tile(ANALYTICS_DRAWDOWN_LABEL, drawdownR === null ? null : -drawdownR, null,
+          drawdownMoney === null ? null : -drawdownMoney, equityCurve?.points_n ?? null),
+        about: ANALYTICS_DRAWDOWN_ABOUT,
+      },
+      { ...fixedTile(ANALYTICS_SHARPE_LABEL, signed(sharpe, 2), this.store.scopeN()), about: ANALYTICS_SHARPE_ABOUT },
     ];
   });
 

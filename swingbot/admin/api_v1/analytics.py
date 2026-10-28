@@ -137,6 +137,29 @@ def analytics_soak():
                     "verdict": verdict})
 
 
+def _weak_in_account_currency(weak: dict, money_closed: list[dict]) -> tuple[dict, set]:
+    """`weak_summary()` with `total_pnl` re-summed from converted rows (v194 B7).
+
+    The store sums stored quote-currency amounts; the weak ledger's rows are
+    the same closes, so the overlay reads them from `money_closed`. Returns
+    the block and the ids of weak rows lacking a rate (left out of the sum);
+    ids, not a count, so a row also in the scoped list is counted once."""
+    from swingbot.core.tracking import ledger
+
+    rows = [t for t in money_closed
+            if ledger.is_weak(t) and t.get("status") in ("win", "loss", "closed")]
+    total = sum(float(t["realized_pnl_amount"]) for t in rows
+                if t.get("realized_pnl_amount") is not None)
+    return ({**weak, "total_pnl": round(total, 2)},
+            {t.get("id") for t in rows if t.get("fx_missing")})
+
+
+def _fx_missing_total(money_scoped: list[dict], weak_missing_ids: set) -> int:
+    """Rows left out of a money figure for want of a rate: the scoped rows
+    plus the book-wide weak block's, a row in both counted once."""
+    return len({t.get("id") for t in money_scoped if t.get("fx_missing")} | weak_missing_ids)
+
+
 @api_v1.route("/analytics/performance", methods=["GET"])
 @require_auth
 def analytics_performance():
@@ -167,12 +190,19 @@ def analytics_performance():
     from swingbot.core.analytics import metrics as m
     from swingbot.core.analytics.scope import closed_only, echo, select
 
+    from .money import missing_count, to_account_currency
+
     scope = _scope()
     tl = TradeLog()
     all_raw = _all_trades(tl)
     all_closed = closed_only(all_raw)                # the real, unscoped book -- balance_at reads THIS
     closed = select(all_closed, scope)                # every other block below reads THIS list
     scoped = closed
+    # v194 B7: money figures read converted copies; win rate, R and every
+    # percent below keep reading the stored rows (see api_v1/money.py).
+    money_closed = to_account_currency(all_closed)
+    money_scoped = select(money_closed, scope)
+    weak, weak_missing_ids = _weak_in_account_currency(tl.weak_summary(), money_closed)
     start, end = scope.start, scope.end
     stats = tl.get_stats(trades=all_raw)             # totals.total/open stay book-wide
     stats.update(tl.get_extended_stats(trades=all_raw))
@@ -184,7 +214,7 @@ def analytics_performance():
     # per-strategy/per-ledger/per-horizon meaning, so this reads the
     # unscoped `all_closed`, filtered only by date via balance_at's own
     # `before` cutoff, matching /analytics/equity-curve's window_balance.
-    window_balance = m.balance_at(all_closed, start, base_balance)
+    window_balance = m.balance_at(money_closed, start, base_balance)
     returns = [r for r in (m.trade_return_pct(t) for t in scoped) if r is not None]
     factor = m.annualisation_factor(scoped)
     raw_sharpe, raw_sortino = m.sharpe(returns), m.sortino(returns)
@@ -209,7 +239,7 @@ def analytics_performance():
         "expectancy_r": m.expectancy_r(closed),
         "expectancy_n": len(m.r_multiples(closed)),
         "by_confidence": tl.get_stats_by_confidence(),
-        "weak": tl.weak_summary(),
+        "weak": weak,
 
         "range": {
             "from": start, "to": end,
@@ -219,9 +249,9 @@ def analytics_performance():
         "derived": {
             "avg_win_pct": m.avg_win_pct(scoped),
             "avg_loss_pct": m.avg_loss_pct(scoped),
-            "total_return_pct": m.total_return_pct(scoped, window_balance),
-            "annualised_return_pct": m.annualised_return_pct(scoped, window_balance),
-            "calmar": m.calmar(scoped, window_balance),
+            "total_return_pct": m.total_return_pct(money_scoped, window_balance),
+            "annualised_return_pct": m.annualised_return_pct(money_scoped, window_balance),
+            "calmar": m.calmar(money_scoped, window_balance),
             "volatility_ann_pct": m.volatility_ann_pct(scoped),
             "trades_per_month": m.trades_per_month(scoped),
             "pct_in_market": m.pct_in_market(scoped),
@@ -238,7 +268,7 @@ def analytics_performance():
             # this way (m.profit_factor), so this keeps "one definition per
             # stat" rather than the workspace re-deriving it from bucketed
             # histogram data it cannot do exactly.
-            "profit_factor": m.profit_factor(scoped),
+            "profit_factor": m.profit_factor(money_scoped),
             # v94 T1 -- the Outcome panel's Avg win/Avg loss/Payoff rows.
             # The panel's own hint text ("means of the R-multiples on each
             # side") is R-based, not the P&L-percent avg_win_pct/avg_loss_pct
@@ -259,7 +289,7 @@ def analytics_performance():
         "rolling_returns": m.rolling_return_pct(scoped),
         "holding_period_split": m.holding_period_split(scoped),
         "risk_reward_split": m.risk_reward_split(scoped),
-        "calendar": m.calendar_returns(scoped, window_balance),
+        "calendar": m.calendar_returns(money_scoped, window_balance),
         "cumulative_by_strategy": m.cumulative_pnl_by_strategy(scoped),
         # Best-effort: get_extended_stats swallows a failed yfinance fetch and
         # returns {}. The key is always present so the workspace never has to
@@ -272,6 +302,7 @@ def analytics_performance():
         # route (never the unscoped book): a streak that crossed a scope
         # boundary the user drew is not a streak the user asked to see.
         "streaks": m.streaks(closed),
+        "fx_missing_count": _fx_missing_total(money_scoped, weak_missing_ids),
         **echo(scope, len(scoped)),
     })
 
@@ -326,10 +357,14 @@ def analytics_equity_curve():
     from swingbot.core.analytics.scope import closed_only, echo, select
     from swingbot.core.planning import account as account_module
 
+    from .money import missing_count, to_account_currency
+
     scope = _scope()
     tl = TradeLog()
     all_raw = _all_trades(tl)
-    closed = closed_only(all_raw)
+    # v194 B7: every figure here is money or R, and m.r_multiple never reads
+    # the amount, so the whole route reads the converted copies.
+    closed = to_account_currency(closed_only(all_raw))
     scoped = select(closed, scope)
     base_balance = float(account_module.load_account_config().get("base_balance") or 0.0)
     window_balance = m.balance_at(closed, scope.start, base_balance)
@@ -359,6 +394,7 @@ def analytics_equity_curve():
         "points_n": len(points),
         "as_of": points[-1]["date"] if points else None,
         "benchmark": {"spy_indexed": _index_benchmark(spy_cum, scope.start)},
+        "fx_missing_count": missing_count(scoped),
         **echo(scope, len(scoped)),
     })
 
@@ -408,12 +444,14 @@ def analytics_by_dimension():
     from swingbot.core.market.strategy_types import HORIZONS
     from swingbot.core.tracking.performance import primary_strategy_label
 
+    from .money import missing_count, to_account_currency
+
     scope = _scope(extra=("dim",))
     dim = (request.args.get("dim") or "").strip()
     if dim not in DIMENSIONS:
         raise ApiError("invalid", f"dim must be one of {list(DIMENSIONS)}, got {dim!r}", 400)
 
-    scoped = select(closed_only(_all_trades(TradeLog())), scope)
+    scoped = select(to_account_currency(closed_only(_all_trades(TradeLog()))), scope)
 
     if dim == "strategy":            # the real per-trade label, as before
         groups: dict[str, list[dict]] = {}
@@ -460,7 +498,8 @@ def analytics_by_dimension():
 
     dated = [t["closed_at"][:10] for trades in groups.values() for t in trades if t.get("closed_at")]
     return jsonify({"rows": rows, "as_of": max(dated) if dated else None,
-                    "min_cell_n": MIN_CELL_N, **echo(scope, len(scoped))})
+                    "min_cell_n": MIN_CELL_N, "fx_missing_count": missing_count(scoped),
+                    **echo(scope, len(scoped))})
 
 
 @api_v1.route("/analytics/heat-grid", methods=["GET"])

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { Hint } from './hint';
 import { money, num, pct, rMultiple, share } from './format';
 
 /**
@@ -24,10 +25,11 @@ import { money, num, pct, rMultiple, share } from './format';
 @Component({
   selector: 'sb-plan-cell',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Hint],
   template: `
     @if (runnerMode()) {
       <span class="plan runner">
-        <span class="line l1" [title]="planTooltip">
+        <span class="line l1">
           <span class="entry">{{ fmt(first()) }}</span>
           <span class="sep">{{ ' → ' }}</span>
           <span class="target">{{ fmt(planTp1()) }}</span>
@@ -36,7 +38,7 @@ import { money, num, pct, rMultiple, share } from './format';
           <span class="sep">{{ ' (' }}</span><span class="rise">{{ fmtPct(planRisePct()) }}</span><span class="sep">{{ ' - ' }}</span><span class="drop">{{ fmtPct(planDropPct()) }}</span><span class="sep">{{ ')' }}</span>
         </span>
         @if (trail(); as t) {
-          <span class="line l2" [title]="trailTooltip()">
+          <span class="line l2">
             <span class="trail">Trail</span><span class="sep">{{ ' ' }}</span>
             <span class="best">{{ fmt(t.best) }}</span>
             <span class="sep">{{ ' → ' }}</span>
@@ -44,6 +46,7 @@ import { money, num, pct, rMultiple, share } from './format';
             <span class="sep">{{ ' (' }}</span><span class="peak" [class.loss]="t.bestPct < 0">{{ signedPct(t.bestPct) }}</span><span class="sep">{{ ' / ' }}</span><span class="lock" [class.loss]="t.exitPct < 0">{{ signedPct(t.exitPct) }}</span><span class="sep">{{ ')' }}</span>
           </span>
         }
+        <sb-hint [text]="runnerHint()" label="About this runner's plan" align="left" />
       </span>
     } @else {
       <span class="plan" [title]="tooltip()">
@@ -198,6 +201,13 @@ export class PlanCell {
       + `${pct(t.exitPct, 1)} is the result if the stop fills at ${this.fmt(t.exit)}, `
       + 'per share from the original entry, before costs and tax. '
       + `${this.isShortRunner() ? SHORT_GAINS : LONG_GAINS} ${PAPER_LEVEL}`;
+  });
+
+  /** v194 A3: one hint for both runner lines -- what line 1 is and, when
+   *  line 2 shows, what its trail figures mean. */
+  protected readonly runnerHint = computed(() => {
+    const trail = this.trailTooltip();
+    return trail ? `${this.planTooltip} ${trail}` : this.planTooltip;
   });
 
   /** Direction is not an input: a short's TP1 sits below its entry. */

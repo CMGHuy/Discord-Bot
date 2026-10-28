@@ -1,7 +1,19 @@
 import { Signal, signal } from '@angular/core';
 import { TradeRow } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { age, elapsedHours, held, num, signed, text } from '../../ui/format';
+import { age, elapsedHours, held, num, shareCount, signed, text } from '../../ui/format';
+import { legLabel } from './leg-label';
+
+/** What the `#` cell says as text -- the short plan id, then "Leg N of M"
+ *  for a leg row (v194 B3). The table renders `#numCell`; this is what the
+ *  phone drawer's "Hidden in this view" list and the compact card print
+ *  when the column is not inline. Same 6-character trim as `shortId` in
+ *  trades.ts and dashboard.ts. */
+export function numText(row: TradeRow): string {
+  const id = row.id.length > 6 ? row.id.slice(-6) : row.id;
+  const leg = legLabel(row);
+  return leg ? `${id} · ${leg}` : id;
+}
 
 /**
  * The columns the Trades list shows by default — spec 3 Decision 2.
@@ -140,7 +152,9 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
   return [
     // Rendered by the workspace as a link to the detail view — the keyboard
     // route into a row, since row clicks are mouse-only by design.
-    { key: 'num', header: '#', width: '3rem', inlineFrom: 'sm' },
+    // No fixed width: a leg row's "Leg 2 of 2 · stop" sits under the id
+    // (v194 B3); a page with no leg rows still sizes to the 6-char id.
+    { key: 'num', header: '#', value: (row) => numText(row), inlineFrom: 'sm' },
     { key: 'status', header: 'Status', sortable: true, inlineFrom: 'md', compact: { line: 2, order: 2 } },
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, inlineFrom: 'xs', compact: { line: 1, order: 1 } },
     { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true, inlineFrom: 'sm' },
@@ -167,7 +181,7 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     { key: 'plan', header: 'Plan', width: '12rem', inlineFrom: 'xs', compact: { line: 2, order: 1 } },
     { key: 'tier', header: 'Tier', inlineFrom: 'lg' },
     { key: 'confidence_level', header: 'Confidence', inlineFrom: 'md' },
-    { key: 'shares', header: 'Shares', value: (row) => num(row.shares, 0), numeric: true, inlineFrom: 'lg' },
+    { key: 'shares', header: 'Shares', value: (row) => shareCount(row.shares), numeric: true, inlineFrom: 'lg' },
     { key: 'position_value', header: 'Deployed', value: (row) => num(row.position_value), numeric: true, inlineFrom: 'lg' },
     {
       key: 'realized_pnl_amount',

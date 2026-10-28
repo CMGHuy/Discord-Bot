@@ -26,7 +26,7 @@ export const ROUTES = Object.freeze([
   '/ui',
 ]);
 
-export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter']);
+export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint']);
 
 /** Phone, tablet and desktop (docs/claude/ui-design.md § Device classes). */
 export const FULL_WIDTHS = Object.freeze([390, 768, 1440]);
@@ -123,6 +123,31 @@ export function vcenterGeometry() {
       .filter((t) => t.height > 0 && Math.min(t.bottom, icon.bottom) - Math.max(t.top, icon.top) > 0 && gap(icon, t) < maxGap)
       .sort((a, b) => gap(icon, a) - gap(icon, b))[0] ?? null,
   };
+}
+
+
+/** Sub-pixel slack for the hint check's viewport test: a rect at -0.4px is a rounding artefact, not off-screen. */
+const HINT_EDGE_SLACK_PX = 0.5;
+
+/**
+ * The hint check's verdict (spec v194 A2) on one opened sb-hint popover: its
+ * viewport rect, the viewport size, and whether the topmost element at its
+ * centre and at its top-left + 8px is inside it (layout-audit.mjs
+ * measureHint). The first failing rule is the reason: zero-size (never
+ * opened), off-screen (any edge past the viewport), covered-center (an
+ * ancestor clips it or something paints over it), covered-corner. Runs in
+ * Node on the measured numbers, so unlike vcenterGeometry it is never
+ * shipped into the page.
+ */
+export function hintVerdict(rect, viewport, hits) {
+  if (!(rect.width > 0 && rect.height > 0)) return { ok: false, reason: 'zero-size' };
+  const inside = rect.left >= -HINT_EDGE_SLACK_PX && rect.top >= -HINT_EDGE_SLACK_PX
+    && rect.left + rect.width <= viewport.width + HINT_EDGE_SLACK_PX
+    && rect.top + rect.height <= viewport.height + HINT_EDGE_SLACK_PX;
+  if (!inside) return { ok: false, reason: 'off-screen' };
+  if (!hits.center) return { ok: false, reason: 'covered-center' };
+  if (!hits.corner) return { ok: false, reason: 'covered-corner' };
+  return { ok: true, reason: null };
 }
 
 const findingKey = (f) =>`${f.route} @${f.width} ${f.check} ${f.selector}`;

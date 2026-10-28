@@ -30,7 +30,9 @@ import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
-import { StatusCell, partialIconTitle } from '../../ui/status-cell';
+import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
+import { fxMissingText } from '../analytics/scope-bar';
+import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
 import {
   readTableColumns,
   readTableDensity,
@@ -72,6 +74,11 @@ import { PANEL_HELP } from './panels/panel-help';
 import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { MarketMovers } from './panels/market-movers';
+
+/** Lifecycle statuses the server counts all-time in every scope
+ *  (`_lifecycle_counts`): the scoped answer's numbers for these are as true
+ *  as today's, so they stand in when today's fetch has failed. */
+const ALL_TIME_STATUSES = new Set(['PENDING', 'ACTIVE', 'PARTIAL']);
 
 /**
  * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
@@ -212,6 +219,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       [realizedAmount]="store.realizedAmount()"
       [todayRealized]="store.todayRealized()"
       [todayLoading]="store.todayLoading()"
+      [todayError]="store.todayError()"
       [openTrades]="store.openTrades()"
       [payoffRatio]="store.payoffRatio()"
       [currency]="connection.currency()"
@@ -223,6 +231,11 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       (chartRangeChange)="store.setRange($event)"
       (viewReset)="store.resetView()"
     />
+    <!-- v194 B7: closes and positions with no exchange rate are left out
+         of the money figures above; say how many. -->
+    @if (fxMissing() > 0) {
+      <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
+    }
     </div>
     </sb-async>
 
@@ -241,6 +254,11 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
           its first and final exits.
         </span>
         <sb-plan-lifecycle-diagram />
+        <span class="hint-heading">Columns</span>
+        <span class="hint-copy">
+          <strong>P&amp;L:</strong> live P&L, then projected P&L at target and at stop.
+          <strong>Expected R:</strong> projected R if price reaches target.
+        </span>
         <span class="hint-heading">Sizing</span>
         @if (premiumExplanation(); as explanation) {
           <span class="hint-copy">{{ explanation }}</span>
@@ -387,17 +405,21 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     <ng-template #numCell let-row>
       <sb-row-link [link]="['/trades', row.id]">
         {{ shortId(row) }}
-        <!-- v79 split a scaled-out position into one row per leg, both
-             carrying the same id -- on the Closed tab that reads as a
-             duplicate row unless the later-closing leg is marked apart
-             from the earlier partial exit it shares an id with. -->
-        @if (partialIconTitle(row); as partialTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="partialTitle" />
+        @if (partialOpenTitle(row)) {
+          <sb-icon name="partial" class="leg-icon" />
         }
         @if (row.bar_kind === 'trailing') {
           <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
         }
       </sb-row-link>
+      @if (partialOpenTitle(row); as openTitle) {
+        <sb-hint [text]="openTitle" label="About this partial position" align="left" />
+      }
+      <!-- v194 B3: every leg says which part of the plan it is; the hint
+           sits outside the link (a button cannot nest in an anchor). -->
+      @if (legLabel(row); as leg) {
+        <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+      }
     </ng-template>
 
     <!-- A real anchor, not a click handler: row activation is mouse-only by
@@ -431,10 +453,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
              the else branch; price_age_s is null on a closed row. -->
         <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />
       } @else {
-        <span
-          class="pnl-plan"
-          title="Live P&L, then projected P&L at target and at stop"
-        >
+        <span class="pnl-plan">
           <span [sbFlash]="livePnlPct(row)" [class]="pnlClass(livePnlPct(row))">
             {{ fmtPct(livePnlPct(row)) }}
             <!-- Only once shares exist to have a dollar value at all -- a
@@ -477,7 +496,6 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
           class="expected"
           [sbFlash]="expectedR(row)"
           [class]="pnlClass(expectedR(row))"
-          title="Projected R if price reaches target"
         >{{ fmtSigned(expectedR(row)) }}</span>
         <sb-magnitude [value]="expectedR(row)" [max]="R_MAGNITUDE_MAX" />
       }
@@ -574,6 +592,8 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
 
     /* Muted, not accent: the glyph flags the leg, it isn't part of the id. */
     sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
+    .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
 
     /* No size or weight of its own -- it used to render smaller than the %
        it rides beside, which read as a footnote rather than the dollar side
@@ -709,9 +729,14 @@ export class Dashboard {
    *  in every mode: the Closed and Cancelled tabs always list today's
    *  closes (`[today]="true"`), whatever period the KPI cards show, so the
    *  counts come from the today response, never the scoped one. */
-  protected readonly lifecycleCounts = computed(() =>
-    Object.fromEntries(this.store.todayLifecycle().map((e) => [e.status, e.count])),
-  );
+  /** An empty today list (fetch failed or not landed yet) falls back to the all-time open counts. */
+  protected readonly lifecycleCounts = computed(() => {
+    const today = this.store.todayLifecycle();
+    const rows = today.length > 0
+      ? today
+      : this.store.lifecycle().filter((e) => ALL_TIME_STATUSES.has(e.status));
+    return Object.fromEntries(rows.map((e) => [e.status, e.count]));
+  });
 
   /** Bound as a value, not called in the template: the table takes the
    *  function and applies it per tab.
@@ -977,10 +1002,16 @@ export class Dashboard {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
   }
 
-  /** The ID cell's single partial icon tooltip: "still open" for a live PARTIAL
-   *  row, "closed after an earlier partial exit" for a later closed leg of a v79
-   *  scale-out split (`leg_index > 0`), else null. One icon, never two. */
-  protected readonly partialIconTitle = partialIconTitle;
+  protected readonly partialOpenTitle = partialOpenTitle;
+
+  /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
+  protected readonly legLabel = legLabel;
+  /** v194 A4: the chips count each realised leg (`dashboard.py` `_realized_parts`). */
+  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
+
+  /** v194 B7: the main ledger's rows left out of the money figures. */
+  protected readonly fxMissing = computed(() => this.store.data()?.fx_missing_count ?? 0);
+  protected readonly fxText = fxMissingText;
 
   /** sb-magnitude's max for the R column. Not an observed max from the
    *  store: sb-positions-table shows one lifecycle tab's rows at a time, and

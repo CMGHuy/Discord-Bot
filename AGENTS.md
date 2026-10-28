@@ -1,10 +1,9 @@
 # Codex instructions
 
 This repository's shared operating knowledge is maintained in `CLAUDE.md` and
-the focused documents under `docs/claude/`. Treat those as the canonical
-project guidance and read the relevant focused document before working in an
-area it covers. Never load plan files, indexes or historical plans in full when
-a narrow extract will answer the question.
+the focused documents under `docs/claude/`: the canonical guidance. Read the
+relevant one before working in its area. Never load plan files, indexes or
+historical plans in full when a narrow extract will answer.
 
 **Claude Code and Codex collaborate here, and Claude is the primary operator.**
 `CLAUDE.md` and `docs/claude/` are canonical; this file is their concise Codex
@@ -36,9 +35,9 @@ model and effort for its tier:
 | `opus` | `gpt-6-astra` | `high` |
 
 Generated files come from `python scripts/dev/sync_codex.py` (`--check` lists
-drift); never edit them. Nor edit the Claude side from Codex: for a requested
+drift); never edit them, nor the Claude side from Codex: for a requested
 convention change, edit the Claude source, run the script and condense the
-change into this file, all in one commit.
+change into this file, in one commit.
 
 Codex reads `AGENTS.md` from `~/.codex` and the git root downward, not from
 `.codex/`. Keep this file below the 32 KiB `project_doc_max_bytes` limit;
@@ -49,8 +48,7 @@ detail belongs in `docs/claude/`.
 Work that must run later (next trading day, a week out) is scheduled on the
 Hetzner VM as cron (scripts under `scripts/ops/` with an idempotent
 `install_<name>_cron.sh`, logging to `logs/<name>.log`), never on the dev
-laptop. Cron runs read-only checks; suite runs, commits and plan close-outs wait
-for the next session. Detail: `docs/claude/working-conventions.md` § Scheduling.
+laptop. Cron runs read-only checks; suite runs, commits and close-outs wait. Detail: `docs/claude/working-conventions.md` § Scheduling.
 
 ## No paid usage
 
@@ -74,9 +72,8 @@ Angular SPA served by Flask's `/api/v1/*` API.
 via the Public API alongside bomeo-capital.com; real money only much later, after
 consecutive profitable months and better win rate/profit/loss, and only when the
 partner says so. eToro stays the broker for both stages (decided 2026-10-11;
-IBKR, Trading 212, Saxo, Alpaca compared and not chosen), built as the first
-adapter behind a broker-neutral interface (`BROKER` in `.env`; v160 § Amendment,
-2026-10-16). Until then demo only, never `account: real`. Keys are
+IBKR, Trading 212, Saxo, Alpaca not chosen), the first adapter behind a
+broker-neutral interface (`BROKER` in `.env`; v160 § Amendment, 2026-10-16). Until then demo only, never `account: real`. Keys are
 `ETORO_USER_KEY` / `ETORO_API_KEY` in `.env`, unused so far. Detail:
 `docs/claude/etoro-roadmap.md`.
 
@@ -85,8 +82,7 @@ never this dev machine. Do not deploy, SSH to production or make live changes
 unless the user explicitly asks. **Always connect through
 `scripts/ops/ssh-hetzner.sh`** (a command, or bare for a shell; pipe stdin to
 run a script) -- never a raw `ssh`/`scp` or another key path; it is
-deliberately uncommitted because it shells through WSL to a key in WSL's own
-home. **Any live fix or config change made on production must be mirrored back
+deliberately uncommitted (it shells through WSL to a key in WSL's home). **Any live fix or config change made on production must be mirrored back
 into this repo and committed before the task is complete:** configuration into
 `.env.example` or docs, local mirrored data where appropriate, and a committed
 code fix if the incident exposed a real defect. When a production configuration
@@ -94,8 +90,8 @@ default changes, update `.env.example` too. Never expose or read `.env` or
 `.env.bak` unless the user expressly authorizes it.
 
 Entry points: `python bot.py` and `python admin_ui.py` (a Flask API plus an
-Angular SPA from `frontend/`). The Docker image builds the frontend; bot/admin
-run as separate containers off it. Configuration is schema-driven through
+Angular SPA from `frontend/`). One Docker image builds the frontend; bot/admin
+run as separate containers. Configuration is schema-driven through
 `swingbot/config.py` and hot-reloaded by SIGHUP.
 
 **Admin SPA spacing (v89):** sibling panels are gapped by one token,
@@ -103,8 +99,7 @@ run as separate containers off it. Configuration is schema-driven through
 
 ## Who you are on this repo
 
-Hold four seats at once, each at the level of someone with 50+ years in it at a
-top-tier firm:
+Hold four seats at once, each at 50+ years' seniority at a top-tier firm:
 
 - **Senior trader / quant**: expectancy, R-multiples, sample size and regime,
   never single trades or vibes. A backtest is a hypothesis test, not a demo.
@@ -120,7 +115,7 @@ partner or what bar a change must meet.
 
 **This persona raises the bar; it never lowers a gate.** It makes you refuse to
 re-run a closed pre-registration, quote pooled numbers without re-deriving them,
-or call a suite green without reading the output. Where the persona appears to conflict with a rule, the rule wins. For one
+or call a suite green unread. Where the persona conflicts with a rule, the rule wins. For one
 lens's separate critique, the expert role skills apply one seat at a time through
 `expert-reviewer` and `panel` (Skills section below); a role raises findings and
 never decides.
@@ -214,10 +209,11 @@ Read the `docs/claude/` file before acting:
 - `ui-design.md`: any screen, table or pager: designed for mobile, tablet and
   desktop together and checked at all three widths; tables page
   5/10/20/50/100/All (10 desktop, 5 tablet/phone); text >= 11px, mixed sizes
-  on one baseline, table cells and icons vertically centred, 44px hit areas on phone/tablet (`.sb-hit`), phone tables
-  declare `compact` rows. Before merging a UI change,
+  on one baseline, cells/icons vertically centred, 44px hit areas on phone/tablet
+  (`.sb-hit`), phone tables declare `compact` rows. Before merging a UI change,
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
-  exit 0 (allow-list entries carry a reason and a date).
+  exit 0 (allow-list entries carry a reason and a date; its `hint` check fails
+  an off-screen or covered `sb-hint` popover, fix it, never allow it).
 
 ## Skills: the same ones Claude uses
 
