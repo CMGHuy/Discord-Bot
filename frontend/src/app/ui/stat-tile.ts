@@ -86,14 +86,17 @@ export const PERFORMANCE_CAVEAT =
       border-left: var(--figure-rule, 0px) solid var(--border);
       border-top: var(--figure-rule, 0px) solid var(--border);
     }
+    /* v195 Phase 2 -- one KPI cell, the same box as sb-metric-card's .card:
+       a 4px stack, 10px top and bottom, --panel-pad at the sides so the
+       cell lines up with the panel text beside it in either row density. */
     .tile {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: var(--space-4);
       height: 100%;
       box-sizing: border-box;
       min-width: 0;
-      padding: var(--space-14);
+      padding: var(--space-10) var(--panel-pad);
       text-align: start;
       /* v186 D3 -- a strip sets these to transparent / 0 / 0; the fallbacks
          are the tile's own surface, so a tile outside a strip is unchanged. */

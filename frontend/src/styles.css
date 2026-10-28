@@ -317,3 +317,23 @@ a:hover {
 @media (min-width: 1024px) {
   .sb-strip-grid.sb-strip-fixed { grid-template-columns: repeat(var(--strip-cols, 4), minmax(0, 1fr)); }
 }
+
+/* v195 Phase 2 -- one KPI-strip look: hairline-split cells (sb-stat-strip
+ * and its tiles, above) inside one bordered surface. A strip standing alone
+ * on the page, as in sb-page's [page-kpis] slot, is that surface, in the
+ * panel's own tokens; inside a panel the panel already is, so the frame
+ * drops and a strip is never box-in-box. The strip's host keeps
+ * overflow: hidden, so its grid's -1px pull still clips the first row's
+ * and first column's rules inside the frame. Element selectors, global,
+ * because the strip's scoped styles draw nothing (stat-strip.spec.ts). */
+sb-stat-strip {
+  background: var(--panel-bg);
+  border: var(--panel-border);
+  border-radius: var(--panel-radius);
+}
+
+.sb-panel sb-stat-strip {
+  background: none;
+  border: 0;
+  border-radius: 0;
+}

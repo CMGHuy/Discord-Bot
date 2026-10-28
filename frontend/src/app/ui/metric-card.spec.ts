@@ -20,7 +20,7 @@ describe('sb-metric-card tint (v181 §5)', () => {
     return { host, value: host.querySelector('.value')! };
   }
 
-  it('tints the card and colours the figure for a good or bad figure', () => {
+  it('marks a good or bad figure on its host and colours the figure', () => {
     const good = render({ value: 1.2, tint: 'pos' });
     expect(good.host.classList.contains('tint-pos')).toBe(true);
     expect(good.value.classList.contains('pos')).toBe(true);
@@ -89,17 +89,24 @@ describe('sb-metric-card in and out of a strip (v186 D3)', () => {
     expect(card).toContain('border-radius: var(--tile-radius, var(--panel-radius));');
   });
 
-  it('drops its tint where a strip switches it off, keeps it everywhere else', () => {
-    expect(rule(':host(.tint-pos) .card')).toContain(
-      'background: var(--tile-tint-off, linear-gradient(var(--pos-soft), var(--pos-soft)), var(--surface));',
-    );
-    expect(rule(':host(.tint-neg) .card')).toContain(
-      'background: var(--tile-tint-off, linear-gradient(var(--neg-soft), var(--neg-soft)), var(--surface));',
-    );
-    // The judgement itself stays on the host and the value: only the fill is switchable.
-    const host = render({ value: 1.2, tint: 'pos' });
-    expect(host.classList).toContain('tint-pos');
-    expect(host.querySelector('.value')!.classList).toContain('pos');
+  it('keeps the judgement on the host and the value, and never fills the card (v195 Phase 2)', () => {
+    expect(SOURCE).not.toMatch(/:host\(\.tint-(pos|neg)\) \.card/);
+    expect(SOURCE).not.toContain('--tile-tint-off');
+    expect(SOURCE).not.toContain('linear-gradient');
+    const good = render({ value: 1.2, tint: 'pos' });
+    expect(good.classList).toContain('tint-pos');
+    expect(good.querySelector('.value')!.classList).toContain('pos');
+    const bad = render({ value: -0.4, tint: 'neg' });
+    expect(bad.classList).toContain('tint-neg');
+    expect(bad.querySelector('.value')!.classList).toContain('neg');
+  });
+
+  it('pads and spaces like a stat tile, following row density (v195 Phase 2)', () => {
+    const card = rule('.card');
+    expect(card).toContain('gap: var(--space-4);');
+    expect(card).toContain('padding: var(--space-10) var(--panel-pad);');
+    expect(card).not.toContain('var(--space-20)');
+    expect(rule('.busy')).toContain('right: var(--panel-pad);');
   });
 
   it('labels in the shared field-label style, with no typography of its own', () => {

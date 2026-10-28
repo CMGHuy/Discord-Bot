@@ -109,6 +109,13 @@ describe('StatTile: one variant everywhere (v179 §3.3)', () => {
     expect(rule('.tile')).toContain('min-width: 0');
   });
 
+  it('pads and spaces like every KPI cell, following row density (v195 Phase 2)', () => {
+    const tile = rule('.tile');
+    expect(tile).toContain('gap: var(--space-4);');
+    expect(tile).toContain('padding: var(--space-10) var(--panel-pad);');
+    expect(tile).not.toContain('var(--space-14)');
+  });
+
   it('stacks its parts left-aligned and has no inline or centred variant', () => {
     expect(rule('.tile')).toContain('flex-direction: column');
     expect(rule('.tile')).toContain('text-align: start');

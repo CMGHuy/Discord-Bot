@@ -35,6 +35,11 @@ function toneClass(tone: MetricTone, value: number): string {
  * Decision 2): nine equal cards is what made the old dashboard unreadable,
  * so three of these carry the daily numbers and six compact chips carry the
  * rest.
+ *
+ * v195 Phase 2: the same KPI cell as sb-stat-tile (one gap, one padding),
+ * and no fill. A good or bad figure is still marked on the host
+ * (tint-pos / tint-neg) and coloured on the value; the colour and the sign
+ * carry the valence, never a tinted block.
  */
 @Component({
   selector: 'sb-metric-card',
@@ -87,8 +92,8 @@ function toneClass(tone: MetricTone, value: number): string {
       position: relative;
       display: flex;
       flex-direction: column;
-      gap: var(--space-6);
-      padding: var(--space-14) var(--space-20);
+      gap: var(--space-4);
+      padding: var(--space-10) var(--panel-pad);
       background: var(--tile-bg, var(--surface));
       border: var(--tile-border, 1px solid var(--border));
       border-radius: var(--tile-radius, var(--panel-radius));
@@ -119,19 +124,12 @@ function toneClass(tone: MetricTone, value: number): string {
     }
     /* A refetch in flight: the last figure stays, dimmed, with the ring in the
        card's top-right corner (it has no layout of its own, so nothing moves). */
-    .busy { position: absolute; top: var(--space-10); right: var(--space-14); }
+    .busy { position: absolute; top: var(--space-10); right: var(--panel-pad); }
     :host(.loading) .value, :host(.loading) .sub { opacity: 0.45; }
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
     .warn { color: var(--warn); }
     .absent { color: var(--text-muted); }
-    /* v186 D3 -- inside an sb-stat-strip the strip sets --tile-tint-off: none
-       and the card drops its fill: a tinted block in a ruled strip is box in
-       box again, and the value's colour and sign still carry the valence.
-       Unset everywhere else, so the fallback is today's tint. */
-    :host(.tint-pos) .card { background: var(--tile-tint-off, linear-gradient(var(--pos-soft), var(--pos-soft)), var(--surface)); }
-    :host(.tint-neg) .card { background: var(--tile-tint-off, linear-gradient(var(--neg-soft), var(--neg-soft)), var(--surface)); }
-
   `,
 })
 export class MetricCard {

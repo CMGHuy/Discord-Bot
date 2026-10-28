@@ -15,8 +15,12 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  *   row's top rule and the first column's left rule fall outside: one tile
  *   shows no rule, and an incomplete last row leaves none beside its gap.
  * - `--tile-bg`, `--tile-border`, `--tile-radius`: no surface, frame or corner.
- * - `--tile-tint-off: none`: sb-metric-card drops its pos/neg fill; the
- *   value's colour and sign carry the valence.
+ *
+ * v195 Phase 2: one KPI-strip look. Standing alone (sb-page's
+ * [page-kpis] slot) the strip is its own bordered surface, the panel's
+ * tokens; inside a .sb-panel the panel is that surface and the frame
+ * drops. Both rules are global (styles.css, after the strip grid), so this
+ * component's own styles still paint no rule or surface.
  *
  * Columns: the global .sb-strip-grid (styles.css), shared with sb-async's
  * 'tiles' skeleton. With no `cols`, auto-fit at 140px. With `cols`, that many
@@ -38,7 +42,6 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       --tile-bg: transparent;
       --tile-border: 0;
       --tile-radius: 0;
-      --tile-tint-off: none;
       display: block;
       overflow: hidden;
       min-width: 0;
