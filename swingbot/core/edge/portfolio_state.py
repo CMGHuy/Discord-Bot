@@ -31,7 +31,8 @@ def _load_sector_map() -> dict:
     try:
         return universe.sector_map(name)
     except Exception as exc:
-        log.warning("sector map for SCAN_UNIVERSE=%r unavailable: %s", name, exc)
+        log.warning("sector map for SCAN_UNIVERSE=%r unavailable: %s", name, exc,
+                    exc_info=True)
         return {}
 
 
@@ -75,7 +76,7 @@ def collect_portfolio_state() -> dict:
     try:
         state["sector_heat"] = heat.sector_heat(open_trades, balance, sectors)
     except Exception as exc:
-        log.warning("sector heat unavailable: %s", exc)
+        log.warning("sector heat unavailable: %s", exc, exc_info=True)
         state["sector_heat"] = {}
     # v194 B6: with this, `sector_heat == {}` over open positions reads as
     # "no sector data", never as "no exposure".
