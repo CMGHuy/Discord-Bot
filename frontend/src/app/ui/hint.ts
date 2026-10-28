@@ -64,6 +64,26 @@ export function clampPopover(
 export const DIALOG_CLOSING_EVENT = 'sb-dialog-closing';
 
 /**
+ * Where an anchor-mode label goes (v195 correction 10): to the right of its
+ * anchor, two gaps off it, vertically centred on it, and kept `margin` px
+ * inside the viewport -- shifted up off the bottom edge, down off the top,
+ * left off the right. A rail label under its 48px icon would cover the next
+ * entry, so it goes beside. Pure, like clampPopover.
+ */
+export function placeBeside(
+  anchor: { top: number; bottom: number; left: number; right: number; width: number },
+  pop: { width: number; height: number },
+  viewport: { width: number; height: number },
+  margin = 8,
+): { top: number; left: number } {
+  const centre = (anchor.top + anchor.bottom) / 2;
+  return {
+    top: clamp(centre - pop.height / 2, margin, viewport.height - margin - pop.height),
+    left: clamp(anchor.right + 2 * POP_GAP, margin, viewport.width - margin - pop.width),
+  };
+}
+
+/**
  * An info popover -- spec v80 D4.
  *
  * Thirty-five `title` tooltips carry real explanation today, and a `title`
@@ -90,6 +110,13 @@ export const DIALOG_CLOSING_EVENT = 'sb-dialog-closing';
  * stays the single source of truth; the effect below maps it onto the API,
  * guarded, because engines throw `InvalidStateError` on a double show or
  * hide.
+ *
+ * Anchor (label) mode, v195 correction 10: with `anchor` set, no trigger is
+ * rendered and the popover labels that element instead -- a rail link, which
+ * cannot contain a button. The anchor's own hover and focus open it, Escape
+ * on the anchor closes it, the anchor is described by it, and it sits beside
+ * the anchor (placeBeside) as a one-line label. Everything else -- the top
+ * layer, the guards, the dialog-close rule -- is the same machinery.
  */
 @Component({
   selector: 'sb-hint',
@@ -101,8 +128,10 @@ export const DIALOG_CLOSING_EVENT = 'sb-dialog-closing';
     '(focusout)': 'onFocusOut($event)',
     '(keydown.escape)': 'close()',
     '(document:pointerdown)': 'onDocumentPointer($event)',
+    '[class.anchored]': 'anchor() !== null',
   },
   template: `
+    @if (!anchor()) {
     <button
       type="button"
       class="trigger"
@@ -113,11 +142,13 @@ export const DIALOG_CLOSING_EVENT = 'sb-dialog-closing';
     >
       <span class="glyph" aria-hidden="true">{{ glyph() }}</span>
     </button>
+    }
     <span
       #pop
       class="pop elev-overlay"
       [class.wide]="wide()"
       [class.xl]="xl()"
+      [class.label]="anchor() !== null"
       [class.fallback-closed]="!native && !open()"
       [attr.popover]="native ? 'manual' : null"
       role="tooltip"
@@ -179,6 +210,11 @@ export const DIALOG_CLOSING_EVENT = 'sb-dialog-closing';
       white-space: normal;
     }
     .pop.fallback-closed { display: none; }
+    /* Anchor mode (v195 correction 10): the host has no box of its own -- the
+       label lives in the top layer beside its anchor -- and the popover is a
+       one-line name, not an explanation. */
+    :host(.anchored) { display: contents; }
+    .pop.label { padding: var(--space-4) var(--space-8); font-size: var(--text-table); white-space: nowrap; }
     .pop.wide { max-width: min(420px, 90vw); }
     /* 50% past .wide, on request (2026-09-14) -- for a hint whose content
        (a diagram, not a sentence) reads as cramped even at .wide's 420px. */
@@ -211,6 +247,10 @@ export class Hint {
    *  needed to stop a popover running off an edge; the input stays for the
    *  callers that set it. */
   readonly align = input<'center' | 'left'>('center');
+  /** Anchor (label) mode, v195 correction 10: the element this hint labels.
+   *  Non-null renders no trigger; the anchor's hover and focus open the
+   *  popover, which sits beside it. Null (default) is the glyph trigger. */
+  readonly anchor = input<HTMLElement | null>(null);
 
   protected readonly id = `sb-hint-${nextId++}`;
   protected readonly pinned = signal(false);
@@ -231,16 +271,16 @@ export class Hint {
 
   private readonly host = inject(ElementRef<HTMLElement>).nativeElement as HTMLElement;
   private readonly reposition = (): void => {
-    const trigger = this.host.querySelector('.trigger');
-    if (!trigger) return;
+    const anchor = this.anchor();
+    const target = anchor ?? this.host.querySelector('.trigger');
+    if (!target) return;
     const pop = this.pop().nativeElement;
     const root = document.documentElement;
-    const place = clampPopover(
-      trigger.getBoundingClientRect(),
-      { width: pop.offsetWidth, height: pop.offsetHeight },
-      { width: root.clientWidth, height: root.clientHeight },
-      this.align(),
-    );
+    const rect = target.getBoundingClientRect();
+    const size = { width: pop.offsetWidth, height: pop.offsetHeight };
+    const viewport = { width: root.clientWidth, height: root.clientHeight };
+    // Anchor mode labels beside its anchor; the glyph trigger opens below.
+    const place = anchor ? placeBeside(rect, size, viewport) : clampPopover(rect, size, viewport, this.align());
     this.popTop.set(place.top);
     this.popLeft.set(place.left);
   };
@@ -268,6 +308,13 @@ export class Hint {
         window.removeEventListener('resize', this.reposition);
         this.hide(pop);
       });
+    });
+
+    /** Anchor mode: bind the anchor's events for as long as it is set, and
+     *  unbind (closing the label) when it changes or goes away. */
+    effect((onCleanup) => {
+      const anchor = this.anchor();
+      if (anchor) onCleanup(this.bindAnchor(anchor));
     });
   }
 
@@ -329,4 +376,28 @@ export class Hint {
     };
   }
 
+  /** Anchor mode (v195 correction 10): the anchor's hover and focus feed the
+   *  same hovered/focused signals the glyph trigger does, Escape on it
+   *  dismisses the label without moving focus (WCAG 1.4.13), and the anchor
+   *  -- not a trigger of ours -- is described by the popover. Returns the
+   *  remover, which also closes the label. */
+  private bindAnchor(anchor: HTMLElement): () => void {
+    const onKey = (event: Event): void => {
+      if ((event as KeyboardEvent).key === 'Escape') this.close();
+    };
+    const listeners: [string, EventListener][] = [
+      ['mouseenter', () => this.hovered.set(true)],
+      ['mouseleave', () => this.hovered.set(false)],
+      ['focus', () => this.focused.set(true)],
+      ['blur', () => this.focused.set(false)],
+      ['keydown', onKey],
+    ];
+    for (const [type, listener] of listeners) anchor.addEventListener(type, listener);
+    anchor.setAttribute('aria-describedby', this.id);
+    return () => {
+      for (const [type, listener] of listeners) anchor.removeEventListener(type, listener);
+      if (anchor.getAttribute('aria-describedby') === this.id) anchor.removeAttribute('aria-describedby');
+      this.close();
+    };
+  }
 }

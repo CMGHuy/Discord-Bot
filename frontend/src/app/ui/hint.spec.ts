@@ -4,7 +4,7 @@ import { Component, provideZonelessChangeDetection, signal } from '@angular/core
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DIALOG_CLOSING_EVENT, Hint, clampPopover, supportsPopover } from './hint';
+import { DIALOG_CLOSING_EVENT, Hint, clampPopover, placeBeside, supportsPopover } from './hint';
 import { ConfirmDialog } from './confirm-dialog';
 import { Drawer } from './layout';
 import { provideMotion } from './motion/motion.service';
@@ -23,6 +23,19 @@ const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/hint.ts'), 'utf8');
   `,
 })
 class Host {}
+
+/** v195 correction 10: a rail-style link with its label hint beside it. */
+@Component({
+  imports: [Hint],
+  template: `
+    <a #link href="/dashboard" class="rail-link" aria-label="Dashboard">D</a>
+    <sb-hint [anchor]="anchored() ? link : null" text="Dashboard" />
+    <span class="outside">Elsewhere</span>
+  `,
+})
+class AnchorHost {
+  readonly anchored = signal(true);
+}
 
 describe('Hint (v80 D4)', () => {
   let fixture: ComponentFixture<Host>;
@@ -416,3 +429,101 @@ describe('ConfirmDialog announces its close (v194 A1)', () => {
   });
 });
 
+describe('Hint anchor (label) mode (v195 correction 10)', () => {
+  let fixture: ComponentFixture<AnchorHost>;
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(AnchorHost);
+    fixture.detectChanges();
+    await fixture.whenStable();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const link = () => el().querySelector('a.rail-link') as HTMLAnchorElement;
+  const pop = () => el().querySelector('sb-hint [role=tooltip]') as HTMLElement;
+  const fire = async (target: Element, event: Event) => {
+    target.dispatchEvent(event);
+    fixture.detectChanges();
+    await fixture.whenStable();
+  };
+  const isOpen = () => pop().hasAttribute(POPOVER_OPEN_ATTR);
+
+  it('renders no trigger button, so the rail link stays the only tab stop', () => {
+    expect(el().querySelectorAll('sb-hint button')).toHaveLength(0);
+    expect(pop().hasAttribute('tabindex')).toBe(false);
+    expect(el().querySelector('sb-hint')!.classList).toContain('anchored');
+  });
+
+  it('describes the anchor with the label popover, closed at rest', () => {
+    expect(link().getAttribute('aria-describedby')).toBe(pop().id);
+    expect(pop().textContent!.trim()).toBe('Dashboard');
+    expect(pop().classList).toContain('label');
+    expect(isOpen()).toBe(false);
+  });
+
+  it('opens on the anchor hover and closes when the pointer leaves it', async () => {
+    await fire(link(), new MouseEvent('mouseenter'));
+    expect(isOpen()).toBe(true);
+    await fire(link(), new MouseEvent('mouseleave'));
+    expect(isOpen()).toBe(false);
+  });
+
+  it('opens on the anchor keyboard focus and closes on blur', async () => {
+    await fire(link(), new FocusEvent('focus'));
+    expect(isOpen()).toBe(true);
+    await fire(link(), new FocusEvent('blur'));
+    expect(isOpen()).toBe(false);
+  });
+
+  it('closes on Escape on the anchor without moving focus away', async () => {
+    await fire(link(), new FocusEvent('focus'));
+    await fire(link(), new MouseEvent('mouseenter'));
+    expect(isOpen()).toBe(true);
+    await fire(link(), new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(isOpen()).toBe(false);
+  });
+
+  it('ignores other keys on the anchor', async () => {
+    await fire(link(), new FocusEvent('focus'));
+    await fire(link(), new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(isOpen()).toBe(true);
+  });
+
+  it('unbinds when the anchor goes away and falls back to the glyph trigger', async () => {
+    await fire(link(), new MouseEvent('mouseenter'));
+    expect(isOpen()).toBe(true);
+    fixture.componentInstance.anchored.set(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(isOpen()).toBe(false);
+    expect(link().hasAttribute('aria-describedby')).toBe(false);
+    await fire(link(), new MouseEvent('mouseenter'));
+    expect(isOpen()).toBe(false);
+    expect(el().querySelector('sb-hint button.trigger')).not.toBeNull();
+    expect(el().querySelector('sb-hint')!.classList).not.toContain('anchored');
+  });
+});
+
+describe('placeBeside (v195 correction 10)', () => {
+  const rail = { top: 100, bottom: 140, left: 0, right: 48, width: 48 };
+  const label = { width: 80, height: 24 };
+
+  it('sits right of the anchor, 8px off it, vertically centred on it', () => {
+    expect(placeBeside(rail, label, { width: 1440, height: 900 })).toEqual({ top: 108, left: 56 });
+  });
+
+  it('stays 8px above the bottom edge for an anchor at the foot of the screen', () => {
+    const foot = { ...rail, top: 880, bottom: 900 };
+    expect(placeBeside(foot, label, { width: 1440, height: 900 }).top).toBe(868);
+  });
+
+  it('stays 8px inside the top edge', () => {
+    const head = { ...rail, top: 0, bottom: 10 };
+    expect(placeBeside(head, label, { width: 1440, height: 900 }).top).toBe(8);
+  });
+
+  it('shifts left rather than run off a narrow viewport', () => {
+    expect(placeBeside(rail, label, { width: 100, height: 900 }).left).toBe(12);
+  });
+});
