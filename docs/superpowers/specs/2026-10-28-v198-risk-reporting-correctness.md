@@ -1,7 +1,7 @@
 # Risk reporting correctness
 
 **Version:** ui 1.36.1 · bot 2.15.4
-**Bump:** ui patch
+**Bump:** ui patch, bot patch
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** quant-engineer
@@ -69,6 +69,8 @@ Unknown-state projection and signed-weight corrections share risk.py and must be
 Partner approved this written design for implementation planning on 2026-10-28, after resolving panel findings. Next: plan-briefer, then plan-writer mode=index. The brief must verify exact current symbols, frontend store paths, existing failure-state consumers, FX interfaces and all shared-helper callers. No new numbered plan starts from guessed signatures.
 
 ## Panel review
+
+- Controller review: the Discord portfolio consumer also gains truthful unknown states, so include bot patch alongside ui patch.
 
 - quant-engineer: failed account reads and invalid balance can yield false zero heat without a heat exception — applied: mark the heat domain unavailable for these dependencies.
 - quant-engineer: uncomputable R outcomes need explicit population exclusions — applied: excluded_count and mutually exclusive date/outcome reason counts.
