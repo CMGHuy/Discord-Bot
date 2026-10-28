@@ -7,7 +7,7 @@ import {
 } from '@angular/router';
 
 /**
- * The active route's title and subtitle, as signals — v85 D4.
+ * The active route's title and subtitle, as signals â€” v85 D4.
  *
  * The shell's top bar renders these; workspaces no longer render a heading of
  * their own. One page, one title, and it lives where the design puts it.
