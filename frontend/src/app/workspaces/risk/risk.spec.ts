@@ -17,7 +17,7 @@ import {
   loadingInterceptor,
 } from '../../api/interceptors';
 import { Risk as RiskData, RiskMetrics } from '../../api/models';
-import { EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, exactRiskText, reconciles } from './risk';
+import { EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, exactRiskText, reconciles, unmappedNote } from './risk';
 import { RiskStore } from '../../stores/risk.store';
 import { ViewportService } from '../../ui/breakpoints';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
@@ -598,5 +598,72 @@ describe('Risk exact tiny figures across device classes (v194 B5)', () => {
       positions: [{ ...FRACTIONAL_BOOK[0], risk_pct: 0 }],
     })).nativeElement as HTMLElement;
     expect(root.querySelector('sb-hint button[aria-label^="Exact"]')).toBeNull();
+  });
+});
+
+/* -- v194 B6 -- no sector data is not no exposure -- */
+
+const openPositions = (count: number) => Array.from({ length: count }, (_, i) => ({
+  trade_id: `t${i}`, ticker: `T${i}`, strategy: 'VWAP', shares: 1, entry: 10, stop_loss: 9, risk_pct: 0.1,
+}));
+
+describe('Risk sector heat: no data vs no exposure (v194 B6)', () => {
+  const sectorPanel = (fixture: ComponentFixture<Risk>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('sb-panel[heading="Sector heat"]') as HTMLElement;
+  const squash = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
+
+  it('shows the cannot-be-assessed banner, never "No sector exposure", when no position has sector data', async () => {
+    const panel = sectorPanel(await render({ positions: openPositions(8), sector_heat: [], unmapped_count: 8 }));
+    const banner = panel.querySelector('.panel-problem[role="status"]');
+    expect(squash(banner?.textContent))
+      .toBe('Sector concentration cannot be assessed: no sector data for 8 of 8 open positions.');
+    expect(panel.textContent).not.toContain('No sector exposure');
+    expect(panel.querySelector('.sectors')).toBeNull();
+  });
+
+  it('keeps the mapped sectors beside the banner when only some positions lack data', async () => {
+    const panel = sectorPanel(await render({
+      positions: openPositions(2),
+      sector_heat: [{ sector: 'Technology', heat_pct: 0.1 }],
+      unmapped_count: 1,
+    }));
+    expect(squash(panel.querySelector('.panel-problem')?.textContent))
+      .toBe('Sector concentration cannot be assessed: no sector data for 1 of 2 open positions.');
+    expect(panel.querySelector('.sectors dt')!.textContent).toContain('Technology');
+  });
+
+  it('shows the true-zero state, and no banner, when every position is mapped', async () => {
+    const panel = sectorPanel(await render({ sector_heat: [], unmapped_count: 0 }));
+    expect(panel.querySelector('.panel-problem')).toBeNull();
+    expect(squash(panel.querySelector('.none')?.textContent)).toBe('No sector exposure.');
+  });
+
+  it('reads a response without the field as fully mapped', async () => {
+    const panel = sectorPanel(await render({ sector_heat: [] }));
+    expect(panel.querySelector('.panel-problem')).toBeNull();
+    expect(squash(panel.querySelector('.none')?.textContent)).toBe('No sector exposure.');
+  });
+
+  it('exposes the count through the store', async () => {
+    await render({ positions: openPositions(3), unmapped_count: 3 });
+    expect(TestBed.inject(RiskStore).unmappedCount()).toBe(3);
+  });
+});
+
+describe('unmappedNote (v194 B6)', () => {
+  it('says nothing when every position is mapped', () => {
+    expect(unmappedNote(0, 5)).toBeNull();
+    expect(unmappedNote(0, 0)).toBeNull();
+  });
+
+  it('names N of M, singular for one position', () => {
+    expect(unmappedNote(8, 8)).toBe('Sector concentration cannot be assessed: no sector data for 8 of 8 open positions.');
+    expect(unmappedNote(1, 1)).toBe('Sector concentration cannot be assessed: no sector data for 1 of 1 open position.');
+  });
+
+  it('never claims fewer open positions than unmapped ones', () => {
+    // positions and the collector read the book separately; a failed read on
+    // one side must not print "3 of 0".
+    expect(unmappedNote(3, 0)).toBe('Sector concentration cannot be assessed: no sector data for 3 of 3 open positions.');
   });
 });

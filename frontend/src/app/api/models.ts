@@ -1452,6 +1452,11 @@ export interface Risk {
   heat: RiskHeat;
   positions: RiskPosition[];
   sector_heat: SectorHeat[];
+  /** v194 B6: open positions with no sector in the scan universe's map, so
+   *  absent from `sector_heat`. Above zero, an empty `sector_heat` means "no
+   *  sector data", not "no exposure". Optional: specs build full `Risk`
+   *  literals, and an older server omits it. */
+  unmapped_count?: number;
   clusters: unknown[];
   throttle: Throttle;
   killswitch: Killswitch;

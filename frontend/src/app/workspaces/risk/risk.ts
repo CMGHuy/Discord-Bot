@@ -68,6 +68,15 @@ export function exactRiskText(value: number | null | undefined): string | null {
   return `Exact risk: ${value}% of the account balance.`;
 }
 
+/** v194 B6: the Sector heat panel's warning, or null when every open
+ *  position has sector data. M is never below N: the positions table and
+ *  the collector read the book separately. */
+export function unmappedNote(unmapped: number, open: number): string | null {
+  if (unmapped <= 0) return null;
+  const total = Math.max(open, unmapped);
+  return `Sector concentration cannot be assessed: no sector data for ${unmapped} of ${total} open position${total === 1 ? '' : 's'}.`;
+}
+
 /**
  * Risk — exposure, heat against `PORTFOLIO_HEAT_CAP_PCT`, and the killswitch.
  *
@@ -369,7 +378,7 @@ export function exactRiskText(value: number | null | undefined): string | null {
       />
     </sb-panel>
 
-    <sb-panel heading="Sector heat">
+    <sb-panel heading="Sector heat" [problem]="sectorProblem()">
       @if (store.sectorHeat().length) {
         <dl class="sectors">
           @for (row of store.sectorHeat(); track row.sector) {
@@ -383,7 +392,9 @@ export function exactRiskText(value: number | null | undefined): string | null {
             </div>
           }
         </dl>
-      } @else {
+      } @else if (!sectorProblem()) {
+        <!-- A true zero only: with unmapped positions an empty list means
+             no sector data, and the panel's problem line says so. -->
         <p class="none">No sector exposure.</p>
       }
     </sb-panel>
@@ -718,6 +729,12 @@ export class Risk {
 
   /** v194 B4/B5: the hint reads the rows the footer sums (the visible page). */
   protected readonly exposureAbout = computed(() => exposureHint(this.exposurePage.visible()));
+
+  /** v194 B6: shown through the panel's `problem` slot, which renders it as a
+   *  visible status line and never lets the panel fold it away. */
+  protected readonly sectorProblem = computed(() =>
+    unmappedNote(this.store.unmappedCount(), this.store.positions().length),
+  );
 
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.positions.length === 0 }),
