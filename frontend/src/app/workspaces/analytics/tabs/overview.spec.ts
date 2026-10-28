@@ -109,7 +109,8 @@ describe('OverviewTab', () => {
     }
     // Win rate is a rate, not an R-multiple -- it always reads as a percentage.
     expect(tileFor('Win rate')?.textContent).toContain('53.50%');
-    expect(tileFor('Win rate')?.textContent).not.toContain('R');
+    // The figure itself, not the A4 hint beside it (which names ExpR).
+    expect(tileFor('Win rate')?.querySelector('.value')?.textContent).not.toContain('R');
   });
 
   it('draws equity and drawdown as two panes, not a toggle', () => {
@@ -208,6 +209,23 @@ describe('OverviewTab hint and tooltip copy (A4 audit)', () => {
     expect(hintText(fixture, 'Equity definition')).toContain('per closed trade, ordered by close date');
     expect(hintText(fixture, 'Equity definition')).toContain(PERFORMANCE_CAVEAT);
     expect(hintText(fixture, 'R distribution definition')).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('Outcome hint says its bar covers the whole book, counts legs and ignores the scope', () => {
+    const { fixture } = render();
+    const text = hintText(fixture, 'Outcome definition');
+    expect(text).toContain('whole book');
+    expect(text).toContain('each realised leg');
+    expect(text).toContain('ignores the scope');
+  });
+
+  it('Win rate tile says Analytics counts plans, beside ExpR and N', () => {
+    const { fixture } = render();
+    const text = hintText(fixture, 'About Win rate');
+    expect(text).toContain('counts plans');
+    expect(text).toContain('ExpR');
+    expect(text).toContain('N is');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
   });
 
   it('By month hint names a percent return, not a unit-toggled result', () => {

@@ -34,6 +34,12 @@ export const ANALYTICS_DRAWDOWN_ABOUT =
   + 'Risk shows the same measure over every closed trade. N is the number of equity-curve points '
   + 'it was computed from. ' + PERFORMANCE_CAVEAT;
 
+/** v194 A4: Analytics counts plans (`closed_only`), unlike the Dashboard. */
+const ANALYTICS_WIN_RATE_ABOUT =
+  'Wins ÷ (wins + losses) over closed plans in the selected range and filters: Analytics counts plans, '
+  + 'so a plan that scaled out counts once. N is the number of decided plans. Read it with ExpR beside '
+  + `it. ${PERFORMANCE_CAVEAT}`;
+
 /** One KPI tile's resolved, pre-formatted content -- `StatTile` never formats. */
 interface KpiTile {
   label: string;
@@ -117,7 +123,7 @@ function maxDrawdown(values: readonly number[]): number | null {
 
       <sb-panel>
         <sb-panel-header title="Outcome" [n]="store.scopeN()" [tableable]="true" [(tableOpen)]="outcomeTableOpen"
-          hint="Win = TP1 touched. Average win and loss are means of the R-multiples on each side." />
+          [hint]="outcomeHint" />
         @if (store.performanceError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('performance')" />
         } @else {
@@ -191,6 +197,14 @@ export class OverviewTab {
   protected readonly equityHint = computed(() =>
     `Cumulative ${this.unitLabelText()} per closed trade, ordered by close date. A day with no closes is `
     + `not a flat day: the x-axis is the sequence of trades, dated. ${PERFORMANCE_CAVEAT}`);
+  /** The bar reads `relocated.wins/losses` = `get_stats(all_raw)`: the whole
+   *  main-ledger book, legs expanded, scope ignored (A4 audit, partner call:
+   *  say so rather than change the figure). */
+  protected readonly outcomeHint =
+    'Win = TP1 touched. Average win and loss are means of the R-multiples on each side. '
+    + 'The wins/losses bar covers the whole book (main ledger), counts each realised leg as a trade '
+    + 'and ignores the scope and filters; the N beside the title and the Win rate tile count scoped '
+    + `plans. ${PERFORMANCE_CAVEAT}`;
   protected readonly rDistributionHint =
     "Every closed trade's realised R. The shape is the finding: a cluster of small losses with a tail of "
     + `larger wins is a different book from a symmetric one. ${PERFORMANCE_CAVEAT}`;
@@ -297,7 +311,8 @@ export class OverviewTab {
       tile('Total R', last?.cum_r ?? null, derived?.total_return_pct ?? null, last?.cum_pnl ?? null,
         equityCurve?.points_n ?? null, this.totalRTrend()),
       tile('ExpR', performance?.expectancy_r ?? null, null, expectancyMoney, expectancyN),
-      fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
+      { ...fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
+        about: ANALYTICS_WIN_RATE_ABOUT },
       fixedTile('Profit factor', num(profitFactor, 2), this.store.scopeN(), null,
         'Gross realised win ÷ gross realised loss.'),
       // Negated: a drawdown is a loss, and an unsigned magnitude rendered
