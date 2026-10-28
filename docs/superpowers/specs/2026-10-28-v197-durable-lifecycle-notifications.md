@@ -1,7 +1,7 @@
 # Durable lifecycle notifications
 
 **Version:** ui 1.36.1 · bot 2.15.4
-**Bump:** bot patch
+**Bump:** bot patch, ui patch
 **Edge:** harvest
 **Screen:** harvest-headroom docs/superpowers/results/2026-10-28-notification-delivery-evidence.md
 **Panel:** staff-engineer
@@ -36,7 +36,7 @@ An Alembic revision upgrades existing queued rows. Legacy trade snapshots become
 
 ## Delivery state machine
 
-A short Postgres transaction atomically claims due events using row locking and a lease. Release the transaction before network I/O. Use a 120-second lease and a bounded 30-second send operation; reclaim an expired lease after a crash. Claim at most 20 events per monitor tick; isolate each event so one bad destination does not block another. Verify owner/token on success and failure updates so an expired worker cannot overwrite a newer claimant.
+A short Postgres transaction atomically claims due events using row locking and a lease. Release the transaction before network I/O. Use a 120-second lease and a bounded 30-second send operation; reclaim an expired lease after a crash. Claim each event immediately before its send (never pre-lease a batch waiting on sequential I/O). Process at most 20 events per monitor tick; isolate each event so one bad destination does not block another. Verify owner/token on success and failure updates so an expired worker cannot overwrite a newer claimant.
 
 On a successful send, persist Discord message ID and delivery time before removing the event from pending work. Retain delivered records for seven days, then prune only acknowledged rows. A failed acknowledgement leaves the event eligible for retry. Never delete before acknowledgement.
 
@@ -67,4 +67,10 @@ Sequential: transaction/event contract and migration precede renderers and the l
 
 ## Handoff
 
-Design proposal awaiting written-spec review. Required next steps: panel review, partner approval, plan-briefer, then plan-writer mode=index. Plans must name exact existing paths and signatures from the brief, contain test-first tasks and end in one full verification task. No implementation is authorized by this document alone.
+Partner approved this written design for implementation planning on 2026-10-28, after resolving panel findings. Next: plan-briefer, then plan-writer mode=index. Plans must name exact existing paths and signatures from the brief, contain test-first tasks and end in one full verification task. No implementation is authorized by this document alone.
+
+## Panel review
+
+- staff-engineer: batch leases could expire while earlier sends run — applied: claim just before each send; the per-tick limit is not a preclaimed batch.
+- staff-engineer: visible admin backlog warning also needs a UI version bump — applied: bot patch and ui patch.
+- No BLOCKING findings. Operational harvest evidence accepted without a trading-performance claim.
