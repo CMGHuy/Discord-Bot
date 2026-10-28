@@ -49,7 +49,10 @@ import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
-import { StatusCell, partialIconTitle } from '../../ui/status-cell';
+import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
+import { Hint } from '../../ui/hint';
+import { fxMissingText } from '../analytics/scope-bar';
+import { LEG_HINT_TEXT, legLabel } from './leg-label';
 import {
   ACTION_LABELS,
   ACTION_TITLES,
@@ -109,6 +112,12 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
   { id: 'clear-history', label: 'Clear history', inlineFrom: 'lg' },
 ];
 
+/** v194 B3: what the Trades total counts. The API expands every plan
+ *  into one row per realised leg plus its open remainder
+ *  (`swingbot/admin/api_v1/trades.py` `_expand_plan_row`) before it
+ *  counts, so the pager's "1–50 of 120" is rows. */
+export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts lists one row per leg.';
+
 /**
  * The Trades workspace — the entity that Plans, Journal and the dashboard's
  * two tables collapse into.
@@ -145,6 +154,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
     ConfirmDialog,
     Flash,
     StatusCell,
+    Hint,
     DirectionArrow,
     PlanCell,
     ConfidenceCell,
@@ -377,23 +387,32 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
     @if (countText(); as count) {
       <p class="count">{{ count }}</p>
     }
+    <!-- v194 B7: a row with no exchange rate for its exit date shows no
+         amount; say how many on this page rather than let a dash pass
+         for a zero. -->
+    @if (fxMissing() > 0) {
+      <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
+    }
 
     <!-- cells ---------------------------------------------------------- -->
 
     <ng-template #numCell let-row>
       <sb-row-link [link]="['/trades', row.id]">
         {{ shortId(row) }}
-        <!-- v79 split a scaled-out position into one row per leg, both
-             carrying the same id -- unmarked, the later-closing leg reads
-             as a duplicate of the earlier partial exit it shares an id
-             with. -->
-        @if (partialIconTitle(row); as partialTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="partialTitle" />
+        @if (partialOpenTitle(row); as openTitle) {
+          <sb-icon name="partial" class="leg-icon" [title]="openTitle" />
         }
         @if (row.bar_kind === 'trailing') {
           <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
         }
       </sb-row-link>
+      <!-- v79 split a scaled-out position into one row per leg, all
+           carrying the same id. v194 B3: every leg says which part it
+           is, and the hint (outside the link: a button cannot sit in an
+           anchor) says what a leg row's P&L and the page's N mean. -->
+      @if (legLabel(row); as leg) {
+        <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+      }
     </ng-template>
 
     <ng-template #statusCell let-row>
@@ -504,6 +523,12 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
           <div><dt>Badge</dt><dd>{{ fmtText(row.badge) }}</dd></div>
           <div><dt>Quality</dt><dd class="num">{{ fmtNum(row.quality_score, 0) }}</dd></div>
           <div><dt>Note</dt><dd>{{ row.has_note ? 'Yes' : 'No' }}</dd></div>
+          @if (legLabel(row); as leg) {
+            <div class="leg-detail">
+              <dt>Leg</dt>
+              <dd>{{ leg }} <sb-hint [text]="legHint" label="About leg rows" align="left" /></dd>
+            </div>
+          }
         </dl>
       </div>
     </ng-template>
@@ -554,6 +579,8 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
     /* R6-05. Same voice as sb-pagination's own .range (muted, --text-table)
        so the two read as one family, not a mismatched addition. */
     .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
@@ -851,8 +878,14 @@ export class Trades {
    *  first page has loaded. */
   protected readonly announce = computed(() => {
     const page = this.store.pagination();
-    return page ? `${page.total} trades` : null;
+    return page ? `${page.total} rows` : null;
   });
+
+  /** v194 B7: rows on this page whose amount has no exchange rate. */
+  protected readonly fxMissing = computed(
+    () => (this.store.data()?.items ?? []).filter((r) => r.fx_missing === true).length,
+  );
+  protected readonly fxText = fxMissingText;
 
   /**
    * R6-05: "Showing 1–12 of 142" — a measured answer, not a decoration. Null
@@ -865,6 +898,9 @@ export class Trades {
    * clamped to `total` so the last page never claims rows past the end of
    * the log (page 12 of 12 at 142 total, 12/page reads "133–142", not
    * "133–144").
+   *
+   * A non-zero total is rows, not plans (v194 B3): the note says so; the
+   * range itself stays the pager's.
    */
   protected readonly countText = computed(() => {
     const page = this.store.pagination();
@@ -875,7 +911,7 @@ export class Trades {
         ? 'No trades match this filter'
         : 'No trades yet';
     }
-    return null;
+    return ROW_COUNT_NOTE;
   });
 
   constructor() {
@@ -961,10 +997,11 @@ export class Trades {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
   }
 
-  /** The ID cell's single partial icon tooltip: "still open" for a live PARTIAL
-   *  row, "closed after an earlier partial exit" for a later closed leg of a v79
-   *  scale-out split (`leg_index > 0`), else null. One icon, never two. */
-  protected readonly partialIconTitle = partialIconTitle;
+  protected readonly partialOpenTitle = partialOpenTitle;
+
+  /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
+  protected readonly legLabel = legLabel;
+  protected readonly legHint = LEG_HINT_TEXT;
 
   /**
    * Every control routes through here. `resetPage` is the default because a

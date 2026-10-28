@@ -25,6 +25,9 @@ import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard';
+import { LEG_HINT_TEXT } from '../trades/leg-label';
+import { fxMissingText } from '../analytics/scope-bar';
+import { tradeDrawerFields } from './trade-drawer';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { ToastService } from '../../shell/toast.service';
 import { EquityCandlesStore } from '../../stores/equity-candles.store';
@@ -967,5 +970,46 @@ describe('Dashboard lifecycle tab counts (v194 B1)', () => {
     const row = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.mobile-summary > div')]
       .find((d) => d.querySelector('span')!.textContent!.includes('Realised today'))!;
     expect(row.querySelector('strong')!.textContent).toContain("couldn't load today's figures");
+  });
+});
+
+describe('Dashboard — leg rows and missing FX rates (v194 B3, B7)', () => {
+  it('labels each leg of a split plan in the positions table, with the plans-not-legs hint', async () => {
+    const el = await loadedWithRows([
+      tradeRow({ id: 'p1', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      tradeRow({ id: 'p1', leg_index: 1, leg_total: 2, leg_exit_reason: null }),
+    ]);
+    const legs = [...el.querySelectorAll('sb-positions-table .leg')];
+    expect(legs.map((n) => n.firstChild!.textContent!.trim())).toEqual([
+      expect.stringMatching(/^Leg 1 of 2 · /),
+      'Leg 2 of 2',
+    ]);
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain(LEG_HINT_TEXT);
+    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
+  });
+
+  it('shows no leg label for a single-leg row', async () => {
+    const el = await loadedWithRows([tradeRow({ leg_index: 0, leg_total: 1 })]);
+    expect(el.querySelector('sb-positions-table .leg')).toBeNull();
+  });
+
+  it('names the trades left out of the money figures', async () => {
+    const fixture = await loaded({ fx_missing_count: 2 } as Partial<DashboardData>);
+    const caveat = (fixture.nativeElement as HTMLElement).querySelector('.performance-stack .fx-caveat');
+    expect(caveat!.textContent!.trim()).toBe(fxMissingText(2));
+  });
+
+  it('shows no caveat when every rate was found or the field is absent', async () => {
+    for (const overrides of [{ fx_missing_count: 0 }, {}] as Partial<DashboardData>[]) {
+      const fixture = await loaded(overrides);
+      expect((fixture.nativeElement as HTMLElement).querySelector('.fx-caveat')).toBeNull();
+    }
+  });
+
+  it('lists the leg in the trade drawer for a leg row only', () => {
+    const leg = tradeDrawerFields(tradeRow({ leg_index: 1, leg_total: 3, leg_exit_reason: null }), '$', 0);
+    expect(leg.find((f) => f.key === 'leg')?.value).toBe('Leg 2 of 3');
+    const single = tradeDrawerFields(tradeRow({ leg_index: 0, leg_total: 1 }), '$', 0);
+    expect(single.some((f) => f.key === 'leg')).toBe(false);
   });
 });

@@ -20,7 +20,10 @@ import { isInline } from '../../ui/priority';
 import { ToolbarControl } from '../../ui/toolbar';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
-import { Trades, TRADES_CONTROLS } from './trades';
+import { LEG_HINT_TEXT } from './leg-label';
+import { numText } from './trades.columns';
+import { fxMissingText } from '../analytics/scope-bar';
+import { ROW_COUNT_NOTE, Trades, TRADES_CONTROLS } from './trades';
 
 function row(overrides: Partial<TradeRow>): TradeRow {
   return {
@@ -260,7 +263,7 @@ describe('Trades — the opened-at range', () => {
 describe('Trades — the count footer', () => {
   it('leaves the non-empty range to the pager, printed once', () => {
     const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
-    expect(el.querySelector('p.count')).toBeNull();
+    expect(el.querySelector('p.count')!.textContent).not.toMatch(/\d+–\d+/);
     expect(el.querySelectorAll('.bar .range')).toHaveLength(1);
     expect(el.querySelector('.bar .range')!.textContent).toContain('1–12 of 142');
   });
@@ -476,4 +479,102 @@ describe('Trades page-size URL precedence (v194 B2)', () => {
       expect(TestBed.inject(TradesStore).query().per_page).toBe(testCase.api);
     });
   }
+});
+
+/* -- v194 B3 -- leg rows say which part of the plan they are ------------- */
+
+/** Mount Trades with `items` as the loaded page, in full density so the
+ *  `#` column (and its `#numCell` template) is inline at jsdom's width. */
+function renderLegRows(items: TradeRow[]): HTMLElement {
+  const fixture = render();
+  (fixture.componentInstance as unknown as { setDensity(d: 'full' | 'compact'): void }).setDensity('full');
+  patchState(unprotected(TestBed.inject(TradesStore)), {
+    data: { items, total: items.length, page: 1, per_page: 50 },
+    query: { page: 1, per_page: 50 },
+  });
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
+
+describe('Trades — leg rows (v194 B3)', () => {
+  it('labels both legs of a two-leg plan with their exit reason', () => {
+    const el = renderLegRows([
+      row({ id: 'plan-aaaaaa', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      row({ id: 'plan-aaaaaa', leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' }),
+    ]);
+    const labels = [...el.querySelectorAll('.leg')].map((n) => n.firstChild!.textContent!.trim());
+    expect(labels[0]).toMatch(/^Leg 1 of 2 · /);
+    expect(labels[1]).toMatch(/^Leg 2 of 2 · /);
+  });
+
+  it('labels a leg with no recorded reason by its position alone', () => {
+    const el = renderLegRows([row({ leg_index: 2, leg_total: 3, leg_exit_reason: null })]);
+    expect(el.querySelector('.leg')!.firstChild!.textContent!.trim()).toBe('Leg 3 of 3');
+  });
+
+  it('shows no label and no leg hint on a single-leg trade', () => {
+    const el = renderLegRows([row({ leg_index: 0, leg_total: 1 })]);
+    expect(el.querySelector('.leg')).toBeNull();
+    expect(el.querySelector('.leg sb-hint')).toBeNull();
+  });
+
+  it('puts an sb-hint naming plans-not-legs on every leg row, in place of the old icon', () => {
+    const el = renderLegRows([
+      row({ leg_index: 0, leg_total: 2 }),
+      row({ leg_index: 1, leg_total: 2 }),
+    ]);
+    const hints = [...el.querySelectorAll('.leg sb-hint')];
+    expect(hints).toHaveLength(2);
+    expect(hints[0].textContent).toContain(LEG_HINT_TEXT);
+    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
+  });
+
+  it('carries the label into the expansion the phone drawer reuses', () => {
+    const el = renderLegRows([row({ leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' })]);
+    // numText is what the drawer's "Hidden in this view" list prints for the
+    // `#` column whenever that column is not inline.
+    expect(numText(row({ id: 'plan-123456', leg_index: 1, leg_total: 2, leg_exit_reason: null })))
+      .toBe('123456 · Leg 2 of 2');
+    expect(el.querySelector('.leg')).not.toBeNull();
+  });
+});
+
+describe('numText', () => {
+  it('is the short id alone for a single-leg trade', () => {
+    expect(numText(row({ id: 'abcdefghij', leg_total: 1 }))).toBe('efghij');
+  });
+
+  it('keeps a short id whole', () => {
+    expect(numText(row({ id: 't1', leg_total: 1 }))).toBe('t1');
+  });
+});
+
+describe('Trades — the total counts rows, not plans (v194 B3)', () => {
+  it('says so under a non-empty table, and the pager still prints the range once', () => {
+    const el = render({ total: 142, page: 1, perPage: 12 }).nativeElement as HTMLElement;
+    expect(el.querySelector('p.count')!.textContent!.trim()).toBe(ROW_COUNT_NOTE);
+    expect(el.querySelectorAll('.bar .range')).toHaveLength(1);
+  });
+
+  it('announces rows, not trades', () => {
+    const fixture = render({ total: 3, page: 1, perPage: 12 });
+    const announce = (fixture.componentInstance as unknown as { announce: () => string | null }).announce;
+    expect(announce()).toBe('3 rows');
+  });
+});
+
+describe('Trades — missing FX rate caveat (v194 B7)', () => {
+  it('names how many rows on the page have no rate', () => {
+    const el = renderLegRows([
+      row({ id: 'a', fx_missing: true, realized_pnl_amount: null }),
+      row({ id: 'b', fx_missing: true, realized_pnl_amount: null }),
+      row({ id: 'c', fx_missing: false }),
+    ]);
+    expect(el.querySelector('.fx-caveat')!.textContent!.trim()).toBe(fxMissingText(2));
+  });
+
+  it('is absent when every row converted', () => {
+    const el = renderLegRows([row({ fx_missing: false }), row({ id: 'b' })]);
+    expect(el.querySelector('.fx-caveat')).toBeNull();
+  });
 });

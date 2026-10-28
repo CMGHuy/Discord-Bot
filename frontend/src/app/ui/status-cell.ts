@@ -232,17 +232,3 @@ export function partialOpenTitle(row: { status: string; banked_fraction?: number
   if (row.banked_fraction == null) return 'Partially closed';
   return `Partially closed -- ${share((1 - row.banked_fraction) * 100)} still open`;
 }
-
-/** The ONE tooltip for the ID cell's partial icon, or null for no icon.
- *  A live PARTIAL row can also be a later leg of a scale-out split
- *  (`leg_index > 0`); it must not draw the icon twice, so the "still open"
- *  reading wins over the "closed after an earlier partial" one. */
-export function partialIconTitle(
-  row: { status: string; banked_fraction?: number | null; leg_index: number; leg_total: number },
-): string | null {
-  const open = partialOpenTitle(row);
-  if (open) return open;
-  return row.leg_total > 1 && row.leg_index > 0
-    ? 'Closed after an earlier partial exit of the same position'
-    : null;
-}

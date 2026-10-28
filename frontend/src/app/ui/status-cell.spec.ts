@@ -5,7 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { StatusCell, partialIconTitle, partialOpenTitle } from './status-cell';
+import { StatusCell, partialOpenTitle } from './status-cell';
 
 const live = {
   status: 'ACTIVE',
@@ -135,21 +135,8 @@ describe('status cell on one baseline (v179 layout audit)', () => {
   });
 });
 
-describe('partialIconTitle', () => {
-  const base = { status: 'CLOSED', banked_fraction: null, leg_index: 0, leg_total: 1 };
-
-  it('is null for an ordinary single-leg row', () => {
-    expect(partialIconTitle(base)).toBeNull();
-    expect(partialIconTitle({ ...base, status: 'ACTIVE' })).toBeNull();
-  });
-
-  it('marks a later closed leg of a scale-out split', () => {
-    expect(partialIconTitle({ ...base, leg_index: 1, leg_total: 2 })).toMatch(/earlier partial exit/);
-    expect(partialIconTitle({ ...base, leg_index: 0, leg_total: 2 })).toBeNull();
-  });
-
-  it('gives a live PARTIAL row one title, even when it is also a later leg', () => {
-    const row = { status: 'PARTIAL', banked_fraction: 0.5, leg_index: 1, leg_total: 2 };
-    expect(partialIconTitle(row)).toBe('Partially closed -- 50% still open');
+describe('partialOpenTitle on a closed later leg', () => {
+  it('has no title: the leg label, not an icon, marks a closed leg (v194 B3)', () => {
+    expect(partialOpenTitle({ status: 'CLOSED', banked_fraction: null })).toBeNull();
   });
 });

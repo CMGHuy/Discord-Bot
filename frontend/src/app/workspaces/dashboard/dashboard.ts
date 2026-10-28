@@ -30,7 +30,9 @@ import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
-import { StatusCell, partialIconTitle } from '../../ui/status-cell';
+import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
+import { fxMissingText } from '../analytics/scope-bar';
+import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
 import {
   readTableColumns,
   readTableDensity,
@@ -229,6 +231,11 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       (chartRangeChange)="store.setRange($event)"
       (viewReset)="store.resetView()"
     />
+    <!-- v194 B7: closes and positions with no exchange rate are left out
+         of the money figures above; say how many. -->
+    @if (fxMissing() > 0) {
+      <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
+    }
     </div>
     </sb-async>
 
@@ -393,17 +400,18 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     <ng-template #numCell let-row>
       <sb-row-link [link]="['/trades', row.id]">
         {{ shortId(row) }}
-        <!-- v79 split a scaled-out position into one row per leg, both
-             carrying the same id -- on the Closed tab that reads as a
-             duplicate row unless the later-closing leg is marked apart
-             from the earlier partial exit it shares an id with. -->
-        @if (partialIconTitle(row); as partialTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="partialTitle" />
+        @if (partialOpenTitle(row); as openTitle) {
+          <sb-icon name="partial" class="leg-icon" [title]="openTitle" />
         }
         @if (row.bar_kind === 'trailing') {
           <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
         }
       </sb-row-link>
+      <!-- v194 B3: every leg says which part of the plan it is; the hint
+           sits outside the link (a button cannot nest in an anchor). -->
+      @if (legLabel(row); as leg) {
+        <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+      }
     </ng-template>
 
     <!-- A real anchor, not a click handler: row activation is mouse-only by
@@ -580,6 +588,8 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
 
     /* Muted, not accent: the glyph flags the leg, it isn't part of the id. */
     sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
+    .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
 
     /* No size or weight of its own -- it used to render smaller than the %
        it rides beside, which read as a footnote rather than the dollar side
@@ -988,10 +998,15 @@ export class Dashboard {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
   }
 
-  /** The ID cell's single partial icon tooltip: "still open" for a live PARTIAL
-   *  row, "closed after an earlier partial exit" for a later closed leg of a v79
-   *  scale-out split (`leg_index > 0`), else null. One icon, never two. */
-  protected readonly partialIconTitle = partialIconTitle;
+  protected readonly partialOpenTitle = partialOpenTitle;
+
+  /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
+  protected readonly legLabel = legLabel;
+  protected readonly legHint = LEG_HINT_TEXT;
+
+  /** v194 B7: the main ledger's rows left out of the money figures. */
+  protected readonly fxMissing = computed(() => this.store.data()?.fx_missing_count ?? 0);
+  protected readonly fxText = fxMissingText;
 
   /** sb-magnitude's max for the R column. Not an observed max from the
    *  store: sb-positions-table shows one lifecycle tab's rows at a time, and
