@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { share } from './format';
+import { pct, share } from './format';
 import { Hint } from './hint';
 import { PERFORMANCE_CAVEAT } from './stat-tile';
 import { StatusIndicator } from './status-indicator';
@@ -229,7 +229,7 @@ export class StatusCell {
   protected readonly ends = computed(() => {
     const r = this.row();
     if (r.bar_kind !== 'trailing' || r.stop_pnl_pct == null || r.best_pnl_pct == null) return null;
-    const f = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
+    const f = (v: number) => pct(v, 1);
     return { stop: f(r.stop_pnl_pct), best: f(r.best_pnl_pct) };
   });
 }

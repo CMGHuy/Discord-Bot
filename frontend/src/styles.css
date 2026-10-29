@@ -39,9 +39,7 @@ body {
 
 body {
   margin: 0;
-  /* The ambient glow is the shell's one fixed .ambient layer (v168 §3 #10),
-   * not this background: a layer can drift without repainting the page, and
-   * there is never a second glow. */
+  /* The flat page ground (v195 §1.2: no ambient glow, no gradient). */
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
@@ -99,6 +97,17 @@ a:hover {
   color: var(--text-secondary);
   font-size: var(--text-chip);
   line-height: 1.5;
+}
+
+/* v195 Phase 2 -- the one quiet-meta style: the count, as-of or total that
+ * sits beside a title (sb-panel-header's meta group, sb-section-head's
+ * status slot). Muted, never --text-faint: that is a rule colour, not text
+ * (correction 13). A child may set its own face or size (a panel total
+ * keeps its figure face); this is the quiet default under it. */
+.sb-meta {
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
 }
 
 /* v80 D3 -- the one label style. Eleven files hand-built uppercase labels
@@ -167,7 +176,11 @@ a:hover {
  * (L3: dropdown, popover, tooltip, toast, drawer, dialog) takes .elev-overlay
  * and casts --shadow-overlay. No component writes a non-inset box-shadow of
  * its own; primitives.spec.ts G3 holds this file to exactly these two, panel
- * first, so an element carrying both classes reads as the overlay. */
+ * first, so an element carrying both classes reads as the overlay.
+ *
+ * v195 §1.2: --panel-shadow is `none`, so an in-flow panel is flat: a
+ * surface step and sb-panel's own 1px hairline. The rule stays so G3 still
+ * sees exactly one panel cast and one overlay shadow. */
 .sb-panel {
   box-shadow: var(--panel-shadow);
 }
@@ -231,7 +244,10 @@ a:hover {
 
 .register-instrument {
   --register-pad: var(--space-10);
-  --register-figure: var(--text-table);
+  /* v195 §1.4 (correction 11): the body step, 14px, not the 13px table
+   * step -- entry, stop, target, size and risk figures on instrument
+   * panels must not shrink below 14px in either density. */
+  --register-figure: var(--text-body);
   --register-label: var(--text-micro);
 }
 
@@ -300,4 +316,24 @@ a:hover {
 
 @media (min-width: 1024px) {
   .sb-strip-grid.sb-strip-fixed { grid-template-columns: repeat(var(--strip-cols, 4), minmax(0, 1fr)); }
+}
+
+/* v195 Phase 2 -- one KPI-strip look: hairline-split cells (sb-stat-strip
+ * and its tiles, above) inside one bordered surface. A strip standing alone
+ * on the page, as in sb-page's [page-kpis] slot, is that surface, in the
+ * panel's own tokens; inside a panel the panel already is, so the frame
+ * drops and a strip is never box-in-box. The strip's host keeps
+ * overflow: hidden, so its grid's -1px pull still clips the first row's
+ * and first column's rules inside the frame. Element selectors, global,
+ * because the strip's scoped styles draw nothing (stat-strip.spec.ts). */
+sb-stat-strip {
+  background: var(--panel-bg);
+  border: var(--panel-border);
+  border-radius: var(--panel-radius);
+}
+
+.sb-panel sb-stat-strip {
+  background: none;
+  border: 0;
+  border-radius: 0;
 }

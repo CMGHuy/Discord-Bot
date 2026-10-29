@@ -7,11 +7,14 @@ import {
   inject,
   signal,
   input,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { TradeRow } from '../../api/models';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { detailCrumb } from '../../shell/nav';
 import { ChartStore } from '../../stores/chart.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TradesStore } from '../../stores/trades.store';
@@ -24,8 +27,8 @@ import { elapsedHours, held, num, pct } from '../../ui/format';
 import { CLOCK } from '../../ui/clock';
 import { tablePerPage } from '../../ui/table-per-page';
 import { Panel } from '../../ui/layout';
+import { Page } from '../../ui/page';
 import { RowLink } from '../../ui/row-link';
-import { SectionHead } from '../../ui/section-head';
 
 /** How many of this ticker's trades the table shows.
  *
@@ -51,94 +54,91 @@ export const TICKER_TRADES_CAP = 25;
  *
  * There is no ticker-level summary endpoint and this view does not invent
  * one: the counts come from the rows it already has.
+ *
+ * On sb-page since v195: the symbol is the h1 and the breadcrumb's detail
+ * segment, the chart the primary panel, the trades panel the secondary one,
+ * and every figure on the page reads the 14px body step (spec §1.4).
  */
 @Component({
   selector: 'sb-ticker-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Panel, DataTable, ChartContainer, RowLink, SectionHead, TradeChart],
+  imports: [RouterLink, Page, Panel, DataTable, ChartContainer, RowLink, TradeChart],
   template: `
-    <!-- The breadcrumb sits above the header rather than inside it: it
-         reads first, before the title, and sb-section-head has no slot
-         that lands content on that side of the heading -- only
-         heading:string and a right-aligned [actions]. -->
-    <!-- v85 D4/R7-06: no in-page heading -- the route title/subtitle
-         mechanism (R1-04) already names this page "Ticker detail"; the
-         symbol itself stays visible in the chart caption, the trades panel
-         heading and the table's own ticker column, so nothing is lost by
-         dropping the h1 sb-section-head used to render here. -->
-    <a class="back sb-hit" routerLink="/watchlist">← Watchlist</a>
-    <sb-section-head>
-      <span actions class="counts">
+    <!-- v195 Phase 4: the symbol is the page's one h1 (the route title,
+         "Ticker detail", names nothing). The breadcrumb's detail segment is
+         the symbol too, and its Watchlist crumb is the way back, so there is
+         no in-page back link and no scope bar (spec §5.2). -->
+    <sb-page [heading]="symbol()">
+      <span page-actions class="counts">
         {{ openCount() }} open · {{ closedCount() }} closed
       </span>
-    </sb-section-head>
 
-    <sb-chart-container
-      [loading]="chart.loading()"
-      [error]="chart.error()"
-      [hasData]="!chart.isEmpty()"
-      [height]="380"
-      [caption]="symbol() + ' — daily'"
-    >
-      <sb-trade-chart [data]="chart.data()" />
-    </sb-chart-container>
+      <sb-chart-container
+        page-primary
+        [loading]="chart.loading()"
+        [error]="chart.error()"
+        [hasData]="!chart.isEmpty()"
+        [height]="380"
+        [caption]="symbol() + ' — daily'"
+      >
+        <sb-trade-chart [data]="chart.data()" />
+      </sb-chart-container>
 
-    <sb-panel [heading]="'Trades on ' + symbol()" [flush]="true">
-      <a panel-actions class="all-link sb-hit" routerLink="/trades" [queryParams]="{ ticker: symbol() }">
-        Open in Trades →
-      </a>
+      <sb-panel page-secondary class="trades-panel" [heading]="'Trades on ' + symbol()" [flush]="true">
+        <a panel-actions class="all-link sb-hit" routerLink="/trades" [queryParams]="{ ticker: symbol() }">
+          Open in Trades →
+        </a>
 
-      @if (trades.error(); as message) {
-        <!-- Without this a failed load renders as the table's empty state,
-             and "No trades" would be a claim about this ticker rather than
-             about the network. -->
-        <p class="table-error" role="status">{{ message }}</p>
-      }
+        @if (trades.error(); as message) {
+          <!-- Without this a failed load renders as the table's empty state,
+               and "No trades" would be a claim about this ticker rather than
+               about the network. -->
+          <p class="table-error" role="status">{{ message }}</p>
+        }
 
-      <sb-data-table
-        [rows]="tradesPage.visible()"
-        [columns]="columns()"
-        [visible]="visible"
-        [rowKey]="rowKey"
-        [loading]="trades.loading() && trades.empty()"
-        [emptyState]="emptyState"
-        [sort]="sort()"
-        [pagination]="tradesPage.pageSpec()"
-        [showPerPage]="true"
-        phoneTap="drawer"
-        [detailLink]="tradeLink"
-        (sortChange)="setSort($event)"
-        (pageChange)="tradesPage.setPage($event)"
-        (perPageChange)="onPerPage($event)"
-      />
-    </sb-panel>
+        <sb-data-table
+          [rows]="tradesPage.visible()"
+          [columns]="columns()"
+          [visible]="visible"
+          [rowKey]="rowKey"
+          [loading]="trades.loading() && trades.empty()"
+          [emptyState]="emptyState"
+          [sort]="sort()"
+          [pagination]="tradesPage.pageSpec()"
+          [showPerPage]="true"
+          phoneTap="drawer"
+          [detailLink]="tradeLink"
+          (sortChange)="setSort($event)"
+          (pageChange)="tradesPage.setPage($event)"
+          (perPageChange)="onPerPage($event)"
+        />
+      </sb-panel>
 
-    <!-- cells ----------------------------------------------------------- -->
+      <!-- cells ----------------------------------------------------------- -->
 
-    <ng-template #tickerCell let-row>
-      <sb-row-link [link]="['/trades', row.id]">{{ row.ticker }}</sb-row-link>
-    </ng-template>
+      <ng-template #tickerCell let-row>
+        <sb-row-link [link]="['/trades', row.id]">{{ row.ticker }}</sb-row-link>
+      </ng-template>
 
-    <!-- pct(), not signed(): every P&L% cell in the app units its own
-         figure, for the reason trades.ts's fmtPct note gives (in card mode
-         the header is a label beside the value, not a column head above a
-         run of them). This one is a single number, but reading the same as
-         the other three matters more than the two characters saved. -->
-    <ng-template #pnlCell let-row>
-      <span [class]="pnlClass(row.pnl_pct)">{{ fmtPct(row.pnl_pct) }}</span>
-    </ng-template>
+      <!-- pct(), not signed(): every P&L% cell in the app units its own
+           figure, for the reason trades.ts's fmtPct note gives (in card mode
+           the header is a label beside the value, not a column head above a
+           run of them). This one is a single number, but reading the same as
+           the other three matters more than the two characters saved. -->
+      <ng-template #pnlCell let-row>
+        <span [class]="pnlClass(row.pnl_pct)">{{ fmtPct(row.pnl_pct) }}</span>
+      </ng-template>
+    </sb-page>
   `,
   styles: `
-    /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
-       at its widest child's min-content, so one un-shrinkable panel stretched
-       the workspace past the viewport and took the page sideways with it.
-       Clamping the track is what makes the children's own overflow-x
-       containers the thing that scrolls instead.
-       No backticks in here: these styles live in a TS template literal. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    /* v195 Phase 4: sb-page owns the page rhythm. §1.4: entry and the live
+       price are order figures and never shrink below the 14px body step, in
+       either density; every figure here reads --text-table, so the page
+       re-points it on its own host. */
+    :host { display: block; min-width: 0; --text-table: var(--text-body); }
+    /* A table: it takes both columns of the secondary grid from 1440px. */
+    .trades-panel { grid-column: 1 / -1; }
 
-    .back { color: var(--text-secondary); font-size: var(--text-table); text-decoration: none; }
-    .back:hover { color: var(--text); }
     .counts { color: var(--text-secondary); font-size: var(--text-table); }
 
     .all-link { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
@@ -161,6 +161,7 @@ export class TickerDetail {
   protected readonly trades = inject(TradesStore);
   private readonly preferences = inject(PreferencesStore);
   private readonly now = inject(CLOCK);
+  private readonly titles = inject(RouteTitleService);
   static readonly TABLE_ID = 'ticker-trades';
   protected readonly sort = signal<SortSpec | null>(null);
   protected setSort(next: SortSpec): void { this.sort.set(next); }
@@ -234,6 +235,16 @@ export class TickerDetail {
     // No trade id: this is the symbol's own chart, and picking one trade's
     // levels to draw would be a claim that plan is the interesting one.
     effect(() => this.chart.setTarget(this.symbol()));
+
+    // v195: the breadcrumb's detail segment (Monitor / Watchlist / NVDA).
+    // From an effect, never the constructor body: the router writes the
+    // title after it activates the route. Reading detail() as well puts the
+    // symbol back if a title update cleared it while this page is open.
+    effect(() => {
+      const crumb = detailCrumb(this.symbol(), null);
+      this.titles.detail();
+      untracked(() => this.titles.setDetail(crumb));
+    });
   }
 
   // The P&L cell units its own percentage -- see trades.ts's fmtPct note.

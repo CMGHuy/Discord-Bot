@@ -9,7 +9,7 @@ import { resolveToken } from './testing/resolve-token';
 /**
  * Raw buttons that stay raw, each with the reason.
  *
- * Two entries, both whole-surface hit areas, and it should stay that way. A
+ * Four entries, all whole-surface hit areas, and it should stay that way. A
  * gate that starts life with a fistful of exceptions teaches everyone that
  * exceptions are normal.
  */
@@ -25,6 +25,14 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   // labelled control, not a row of mixed content; a row variant would be used
   // exactly once.
   ['workspaces/dashboard/panels/recent-activity.ts', 'class="event-hit"'],
+  // The More tab IS a tab-bar cell -- glyph over label, laid out exactly like
+  // its sibling <a class="tab"> cells so the five read as one bar. A button
+  // variant would style a labelled control, not a bar cell (v195 V195-18).
+  ['shell/phone-tab-bar.ts', 'class="tab more"'],
+  // The More sheet's search row IS a field-shaped trigger for the palette --
+  // glyph and placeholder text across the sheet's full width. It opens the
+  // palette rather than taking input, so it is not a text input (v195 V195-18).
+  ['shell/more-sheet.ts', 'class="search"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {
@@ -49,6 +57,12 @@ const RAW_CONTROL_ALLOWLIST = new Map<string, string>([
   // on the real element, and re-dispatching one loses the user-activation
   // that browsers require.
   ['workspaces/system/settings-tab.ts', 'type="file"'],
+  // The command palette's field is an ARIA combobox (v195 §3.1): it carries
+  // role="combobox", aria-activedescendant and aria-controls and owns the
+  // arrow and Enter keys for the listbox under it. sb-text-input wraps a
+  // plain field and exposes none of that; growing it a combobox mode for one
+  // call site would be the worse trade.
+  ['shell/palette/command-palette.ts', 'role="combobox"'],
 ]);
 
 describe('no call site hand-rolls a form control', () => {
@@ -123,7 +137,7 @@ const HEX_ALLOWLIST = new Map<string, string[]>([
   // html/body background paint before any stylesheet has loaded, so they
   // cannot read var(--bg). 'the cold-load copies equal the resolved --bg'
   // below fails the moment they drift from palette.css.
-  ['index.html', ['#070b14', '#070b14']],
+  ['index.html', ['#0d0f12', '#0d0f12']],
 ]);
 
 describe('no colour is declared outside the token files', () => {
@@ -146,8 +160,9 @@ describe('no colour is declared outside the token files', () => {
 const TOKENS_HEX_ALLOWED = new Set([
   '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6', '--quality-4',
 ]);
-/* v168 amendment 8: the hover lift's deeper shadow is black at an alpha too. */
-const TIER3_RGB = new Set(['--panel-shadow', '--shadow-overlay', '--scrim-soft', '--panel-shadow-lift']);
+/* v168 amendment 8 added the hover-lift shadow; v195 §1.2 deleted it. The
+ * panel shadow is `none` under v195 and stays allowed, not required. */
+const TIER3_RGB = new Set(['--panel-shadow', '--shadow-overlay', '--scrim-soft']);
 
 describe('tokens.css holds no hued literal (v167 §5)', () => {
   const styles = (file: string) =>
@@ -167,7 +182,7 @@ describe('tokens.css holds no hued literal (v167 §5)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps rgb()/rgba() inside the four tier-3 shadow and scrim tokens only', () => {
+  it('keeps rgb()/rgba() inside the tier-3 shadow and scrim tokens only', () => {
     const offenders = declarations
       .filter(({ name, value }) => rgbIn(value).length > 0 && !TIER3_RGB.has(name))
       .map(({ name }) => name);
@@ -242,10 +257,9 @@ describe('every allowlist entry is justified', () => {
 /**
  * G3 -- a non-inset box-shadow appears in exactly two rules of styles.css,
  * .sb-panel (in flow, --panel-shadow) and .elev-overlay (out of flow,
- * --shadow-overlay), in that order, plus exactly two interaction shadows in
- * styles/motion.css (spec v168 §3 #5): the hover lift (--panel-shadow-lift)
- * and the primary button's hover glow (--glow-accent), in that order. No
- * component casts one itself.
+ * --shadow-overlay), in that order. v168 §3 #5 added a hover lift and a
+ * button glow in styles/motion.css; v195 §1.2 deleted both, so motion.css
+ * casts none. No component casts one itself.
  *
  * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
  * this gate used to allow exactly one shadow, the L3 rule (spec v54 D2's
@@ -273,10 +287,10 @@ describe('G3: only the two elevation rules cast a shadow', () => {
     expect(shadows(global)).toEqual(['var(--panel-shadow)', 'var(--shadow-overlay)']);
   });
 
-  it('motion.css casts exactly the hover lift and the primary-button glow (v168 #5)', () => {
+  it('motion.css casts no shadow: no lift, no glow (v195 §1.2)', () => {
     const motion = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(shadows(motion)).toEqual(['var(--panel-shadow-lift)', 'var(--glow-accent)']);
+    expect(shadows(motion)).toEqual([]);
   });
 });
 
@@ -315,20 +329,25 @@ describe('no raw or retired radius (v167 §3)', () => {
   });
 });
 
-/* Spec v168 §3 #5: the shared panels and cards lift on hover. The class only
- * marks them; styles/motion.css owns the motion (hover devices only, the
- * translate under Motion = On only). Asserted as source text: the class is
- * static markup, and jsdom has no hover. */
-describe('v168 #5: panels and cards carry .sb-lift', () => {
+/* v195 §1.2 retires v168 §3 #5: no panel or card lifts on hover, so no
+ * surface carries the marker class and no source names it. */
+describe('v195 §1.2: no surface carries .sb-lift', () => {
   const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
-  const CASES: [string, RegExp][] = [
-    ['src/app/ui/layout.ts', /<section class="[^"]*\bpanel\b[^"]*\bsb-lift\b[^"]*">/],
-    ['src/app/ui/figure.ts', /host: \{[^}]*class: '[^']*\bsb-panel sb-lift\b[^']*'/],
-    ['src/app/ui/chart-container.ts', /<figure class="[^"]*\bframe\b[^"]*\bsb-lift\b[^"]*"/],
-    ['src/app/ui/stat-tile.ts', /<div class="tile sb-lift"/],
-    ['src/app/ui/metric-card.ts', /<div class="card sb-lift">/],
+  const SURFACES = [
+    'src/app/ui/layout.ts',
+    'src/app/ui/figure.ts',
+    'src/app/ui/chart-container.ts',
+    'src/app/ui/stat-tile.ts',
+    'src/app/ui/metric-card.ts',
   ];
-  for (const [path, marker] of CASES) {
-    it(`${path} marks its surface`, () => expect(source(path)).toMatch(marker));
+  for (const path of SURFACES) {
+    it(`${path} marks no lift`, () => expect(source(path)).not.toMatch(/\bsb-lift\b/));
   }
+
+  it('no source anywhere names .sb-lift', () => {
+    const offenders = allSources()
+      .filter(({ source: text }) => /\bsb-lift\b/.test(stripComments(text)))
+      .map(({ name }) => name);
+    expect(offenders).toEqual([]);
+  });
 });

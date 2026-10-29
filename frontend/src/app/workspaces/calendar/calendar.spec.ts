@@ -28,6 +28,9 @@ import { calendarRoutes } from './calendar.routes';
 import { CalendarStore } from '../../stores/calendar.store';
 import { fxMissingText } from '../analytics/scope-bar';
 import { PAPER_CAPTION } from './day/day-copy';
+import { By } from '@angular/platform-browser';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
 
 const RESPONSE: PnlCalendar = {
   as_of: '2026-08-10T12:00:00Z',
@@ -559,7 +562,7 @@ describe('Calendar stat digest', () => {
     const component = fixture.componentInstance as unknown as {
       calendarDigest: () => string;
     };
-    expect(component.calendarDigest()).toBe('-60.00 € · 3 trades · 33.3% win');
+    expect(component.calendarDigest()).toBe('−60.00 € · 3 trades · 33.3% win');
   });
 
   it('carries the thin-sample warning into the digest rather than losing it', async () => {
@@ -835,8 +838,8 @@ describe('Calendar totals in a stat strip (v186 D3)', () => {
 
 describe('Calendar totals metric formatting and tone (v179)', () => {
   it.each([
-    ['currency', '-60.00 €', 'neg'],
-    ['r', '-0.60R', 'neg'],
+    ['currency', '−60.00 €', 'neg'],
+    ['r', '−0.60R', 'neg'],
     ['trades', '3', 'neutral'],
     ['win_rate', '33.3%', 'neutral'],
   ] as const)('keeps the %s unit and uses only meaningful sign colours', async (metric, value, tone) => {
@@ -909,5 +912,95 @@ describe('Calendar missing-rate caveat', () => {
     fixture.detectChanges();
     const caveats = [...el(fixture).querySelectorAll('.fx-caveat')].map((c) => c.textContent!.trim());
     expect(caveats).toEqual([fxMissingText(1)]);
+  });
+});
+
+/* -- v195 Phase 4 and §5.2 -- Calendar on sb-page --------------------------- */
+
+describe('Calendar on sb-page (v195 Phase 4, §5.2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/calendar/calendar.ts'), 'utf8');
+
+  /** The KPI tiles by label, read through their inputs, not their text. */
+  function kpis(fixture: ComponentFixture<Calendar>): Map<string, StatTile> {
+    return new Map(fixture.debugElement.queryAll(By.css('[page-kpis] sb-stat-tile'))
+      .map((d) => d.componentInstance as StatTile)
+      .map((tile) => [tile.label(), tile] as const));
+  }
+
+  it('renders the route title as the one h1, from sb-page', async () => {
+    const fixture = seed();
+    TestBed.inject(RouteTitleService).set('Calendar', 'P&L by day');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(el(fixture).querySelectorAll('h1')).toHaveLength(1);
+    expect(el(fixture).querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Calendar');
+    expect(el(fixture).querySelector('sb-section-head')).toBeNull();
+  });
+
+  it('puts the month filters in the scope bar, and nothing destructive', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const scope = el(fixture).querySelector('sb-page [page-scope]')!;
+    expect(scope.tagName.toLowerCase()).toBe('sb-control-row');
+    expect(scope.querySelector('.months')).not.toBeNull();
+    expect(scope.querySelector('.metric')).not.toBeNull();
+    expect(scope.querySelectorAll('sb-select')).toHaveLength(2);
+    expect(scope.querySelector('.danger, .danger-quiet')).toBeNull();
+  });
+
+  it('puts the month totals in the KPI strip and the grid in the primary slot', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const strip = el(fixture).querySelector('sb-page [page-kpis] sb-stat-strip.totals')!;
+    expect(strip.querySelectorAll('sb-stat-tile')).toHaveLength(8);
+    const primary = el(fixture).querySelector('sb-page [page-primary]')!;
+    expect(primary.tagName.toLowerCase()).toBe('sb-async');
+    expect(primary.querySelector('sb-panel.calendar-panel')).not.toBeNull();
+    expect(primary.querySelector('.totals')).toBeNull();
+  });
+
+  it('shows N and the paper basis on the two performance tiles, and on no count', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const tiles = kpis(fixture);
+    // RESPONSE.totals.trade_count is 3: below MIN_SAMPLE_N, so the thin cue shows.
+    for (const label of ['Net this month', 'Win rate']) {
+      expect(tiles.get(label)!.sample(), label).toBe(3);
+      expect(tiles.get(label)!.about(), label).toContain(PERFORMANCE_CAVEAT);
+    }
+    expect(tiles.get('Trades')!.about()).toBeUndefined();
+    expect(el(fixture).querySelector('[page-kpis] .totals sb-stat-tile .thin')).not.toBeNull();
+  });
+
+  it('keeps the KPI slot but no totals while the month loads, then fills it', async () => {
+    const { fixture, backend } = seedUnflushed();
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('sb-page [page-kpis]')).not.toBeNull();
+    expect(el(fixture).querySelector('.totals')).toBeNull();
+    backend.expectOne((r) => r.url === '/api/v1/calendar/pnl').flush(RESPONSE);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[page-kpis] .totals')).not.toBeNull();
+  });
+
+  it('keeps the all-history weekday table as the one secondary panel, the drawer in the default slot', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const secondary = el(fixture).querySelectorAll('sb-page [page-secondary]');
+    expect(secondary).toHaveLength(1);
+    expect(secondary[0].textContent).toContain('By weekday (all history)');
+    expect(secondary[0].querySelectorAll('.dow-row')).toHaveLength(RESPONSE.day_of_week.length);
+    expect(el(fixture).querySelector('sb-page > sb-drawer')).not.toBeNull();
+  });
+
+  it('imports Page and no SectionHead', () => {
+    expect(SOURCE).toContain('<sb-page');
+    expect(SOURCE).toMatch(/import \{ Page \} from '\.\.\/\.\.\/ui\/page';/);
+    expect(SOURCE).not.toContain('<sb-section-head');
+    expect(SOURCE).not.toMatch(/import \{ SectionHead \}/);
   });
 });

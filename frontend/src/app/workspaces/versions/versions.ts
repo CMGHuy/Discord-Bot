@@ -14,8 +14,8 @@ import { tablePerPage } from '../../ui/table-per-page';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ControlRow } from '../../ui/layout';
+import { Page } from '../../ui/page';
 import { PaginationComponent } from '../../ui/pagination';
-import { SectionHead } from '../../ui/section-head';
 import { num, share } from '../../ui/format';
 import { Timeline, TimelineItem } from '../../ui/timeline';
 import { LaneSegment, VersionsStore } from '../../stores/versions.store';
@@ -44,7 +44,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 @Component({
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, PaginationComponent, SectionHead, Async, Timeline],
+  imports: [Button, ControlRow, Page, PaginationComponent, Async, Timeline],
   // v54 D1: this workspace is a lane strip plus a change stream -- both
   // dense, repeating rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -52,18 +52,20 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   // need to reach.
   host: { class: 'register-instrument' },
   template: `
-    <sb-section-head>
-      @if (store.stale()) {
-        <!-- The frozen file is behind VERSION.json. Saying so is the whole
-             point: a timeline silently missing the newest release looks
-             complete, which is the one way this page could mislead. -->
-        <span actions class="stale" role="status">
-          History not regenerated — run <code>scripts/dev/build_version_matrix.py</code>
-        </span>
-      }
-    </sb-section-head>
+    <!-- v195 Phase 4: the route title is the page's one h1. -->
+    <sb-page>
+      <div page-actions class="head-status">
+        @if (store.stale()) {
+          <!-- The frozen file is behind VERSION.json. Saying so is the whole
+               point: a timeline silently missing the newest release looks
+               complete, which is the one way this page could mislead. -->
+          <span class="stale" role="status">
+            History not regenerated — run <code>scripts/dev/build_version_matrix.py</code>
+          </span>
+        }
+      </div>
 
-    <sb-async
+    <sb-async page-primary
       [loading]="async().loading"
       [error]="async().error"
       [empty]="async().empty"
@@ -221,15 +223,13 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
       <sb-pagination [pagination]="store.pageSpec()" [showPerPage]="true" [announce]="true" (pageChange)="store.setPage($event)" (perPageChange)="onPerPage($event)" />
     </sb-async>
+    </sb-page>
   `,
   styles: `
-    /* minmax(0, 1fr): an auto track is floored at its widest child, which is
-       how one panel takes the page sideways.
-       No backticks in here: these styles live in a TS template literal. */
-    /* v54 D1: --space-20 was this rule's own literal before the registers
-       existed; --register-pad's instrument rung is --space-10, so the gap
-       between the headline/strip/legend/stream sections below shrinks. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    /* v195 Phase 4: sb-page owns the page rhythm. No backticks in here: these styles live in a TS template literal. */
+    :host { display: block; min-width: 0; }
+    /* contents: sb-page's actions slot lays the status out. */
+    .head-status { display: contents; }
 
     /* v95 D5: the rail width was 4.5rem written into five rules, inside a
        strip with overflow: hidden -- so at 390px the timeline was cut off

@@ -5,7 +5,6 @@ import {
   computed,
   effect,
   inject,
-  signal,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -18,29 +17,26 @@ import {
 } from '../../stores/system.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
-import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Checkbox, Select, SelectOption } from '../../ui/form-controls';
 import { Panel } from '../../ui/layout';
 import { Freshness } from '../../ui/freshness';
 import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 
 /**
- * v95 D4 — `sb-control-row` force-stacks below 640px, turning five short
- * controls into five screen-wide blocks above the log. `source` and
- * `refresh` are how you pick and load what you're reading, so they stay put;
- * `raw` is a convenience link and `clear` is destructive, so both step back
- * first -- the same reasoning Trades applied to its two destructive controls
- * (TRADES_CONTROLS).
+ * v95 D4 — `sb-control-row` force-stacks below 640px, turning short
+ * controls into screen-wide blocks above the log. `source` and `refresh` are
+ * how you pick and load what you're reading, so they stay put; `raw` is a
+ * convenience link and steps back first. Clearing the log is destructive
+ * and lives in the page header since v195 (Phase 4).
  */
 export const LOG_CONTROLS: ToolbarControl[] = [
   { id: 'source', label: 'Log source', inlineFrom: 'xs' },
   { id: 'refresh', label: 'Refresh', inlineFrom: 'xs' },
   { id: 'raw', label: 'Raw log', inlineFrom: 'sm' },
-  { id: 'clear', label: 'Clear log', inlineFrom: 'lg' },
 ];
 
 /**
- * The log tail — bot or admin, with a raw view and a clear action.
+ * The log tail — bot or admin, with a raw view. Clearing it is the page header's (v195 Phase 4).
  *
  * **No auto-refresh timer.** The Jinja page reloaded itself; here the
  * refresh is a button, because a log that updates on a timer looks live
@@ -50,7 +46,7 @@ export const LOG_CONTROLS: ToolbarControl[] = [
 @Component({
   selector: 'sb-logs-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, Checkbox, ConfirmDialog, Select, Toolbar, Freshness, Async],
+  imports: [Panel, Button, Checkbox, Select, Toolbar, Freshness, Async],
   template: `
     <sb-panel [heading]="store.logs()?.path ?? 'Log'">
       <sb-toolbar panel-actions [controls]="controls">
@@ -83,9 +79,6 @@ export const LOG_CONTROLS: ToolbarControl[] = [
         <!-- A real link: the raw endpoint is text/plain and the browser
              renders it better than any viewer built here would. -->
         <a slot="raw" class="raw sb-hit" [href]="rawUrl()" target="_blank" rel="noopener">Raw</a>
-        <button slot="clear" sb-button variant="danger" type="button" (click)="asking.set(true)">
-          Clear
-        </button>
       </sb-toolbar>
       <!-- Logs have no producer timestamp. “age unknown” is the honest
            per-panel answer until the API grows one; it is not a false Live. -->
@@ -155,15 +148,6 @@ export const LOG_CONTROLS: ToolbarControl[] = [
         }
       </sb-async>
     </sb-panel>
-
-    <sb-confirm-dialog
-      [open]="asking()"
-      title="Clear the log"
-      [consequence]="consequence()"
-      confirmLabel="Clear"
-      (confirmed)="clear()"
-      (cancelled)="asking.set(false)"
-    />
   `,
   styles: `
     /* v95 D4: the source/refresh/raw/clear row moved from sb-control-row to
@@ -284,21 +268,7 @@ export class LogsTab {
     this.wasAtBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 60;
   }
 
-  protected readonly asking = signal(false);
-
   protected rawUrl(): string {
     return this.store.rawLogUrl(this.store.logSource());
-  }
-
-  /** Names the file, because "are you sure?" is answered yes reflexively
-   *  and these two logs are the only record of what the bot did. */
-  protected consequence(): string {
-    const path = this.store.logs()?.path ?? `the ${this.store.logSource()} log`;
-    return `${path} will be emptied. Its contents are not backed up and cannot be recovered.`;
-  }
-
-  protected clear(): void {
-    this.store.clearLogs();
-    this.asking.set(false);
   }
 }

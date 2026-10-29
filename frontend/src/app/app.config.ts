@@ -28,6 +28,7 @@ import { PwaUpdateService } from './pwa/pwa-update.service';
 import { SubtitleTitleStrategy } from './routing/route-title.service';
 import { provideRouteFocus } from './shell/route-focus';
 import { SessionStore } from './stores/session.store';
+import { DensityService } from './ui/density.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -110,5 +111,10 @@ export const appConfig: ApplicationConfig = {
     // PwaUpdateService's own doc comment for why "the SW downloads it
     // eventually" is not the same as "the app updates".
     provideAppInitializer(() => inject(PwaUpdateService).init()),
+    // v195 §1.4: writes <html data-density> from the per-device ui.density
+    // preference before the shell renders. Synchronous and local, so it
+    // never delays bootstrap; tokens.css's :root default is already dense,
+    // so the frame before this runs is dense too.
+    provideAppInitializer(() => { inject(DensityService); }),
   ],
 };

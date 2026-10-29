@@ -44,6 +44,7 @@ export const ICON_NAMES = [
   'brand',
   'reports',
   'research',
+  'search',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -108,11 +109,14 @@ const PATHS: Record<IconName, string> = {
   // chart -- distinct from `analytics`'s bars so Reports and Analytics
   // don't share a glyph in the nav.
   reports: 'M4 1.5h6l2 2v11H4z M10 1.5v2h2 M6 7h4 M6 9.5h4 M6 12h2.5',
-  // A magnifying glass: looking something up, not watching a live list --
-  // distinct from `watchlist`'s eye, which Research wrongly reused before
-  // (2026-09-14; nav duplicated a glyph across two different sidebar
-  // entries).
-  research: 'M7.2 12A4.8 4.8 0 1 0 7.2 2.4a4.8 4.8 0 0 0 0 9.6z M10.7 10.7l3.3 3.3',
+  // A flask: experiments and their verdicts -- the strategy registry and the
+  // pre-registration ledger. Research had the magnifier until v195, which
+  // gave it to `search` (below): on an always-collapsed rail, a magnifier
+  // entry beside a magnifier search trigger would read as one control.
+  research: 'M6 1.5h4 M6.5 1.5v4.2L2.6 12.6a1.2 1.2 0 0 0 1 1.9h8.8a1.2 1.2 0 0 0 1-1.9L9.5 5.7V1.5 M4.3 10h7.4',
+  // A magnifying glass: the command palette's trigger in the top bar and the
+  // phone bar's search icon (v195 correction 1).
+  search: 'M7.2 12A4.8 4.8 0 1 0 7.2 2.4a4.8 4.8 0 0 0 0 9.6z M10.7 10.7l3.3 3.3',
 };
 
 /** The tooltip an icon shows when its caller gives none, so no icon is mute. */
@@ -123,7 +127,7 @@ const LABELS: Record<IconName, string> = {
   menu: 'Menu', trash: 'Delete', clock: 'Clock', more: 'More actions',
   opened: 'Opened', closed: 'Closed', pending: 'Pending', partial: 'Partially closed',
   cancelled: 'Cancelled', trailing: 'Trailing stop', brand: 'Swingbot',
-  reports: 'Reports', research: 'Research',
+  reports: 'Reports', research: 'Research', search: 'Search',
 };
 
 @Component({

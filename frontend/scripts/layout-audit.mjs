@@ -5,7 +5,7 @@
  * docs/superpowers/specs/2026-10-19-v179-mobile-layout-consistency-design.md §3.5, §6a.6).
  *
  * Visits every route and tab (layout-audit-lib.mjs ROUTES) at each width,
- * headless, on browse.mjs's persistent profile, and reports eight checks:
+ * headless, on browse.mjs's persistent profile, and reports nine checks:
  *   overflow   the page (document, body or the shell's <main> pane) is wider than the viewport
  *   offscreen  text past the right edge of the viewport, outside any scroll box
  *   clipped    text cut by its own overflow/ellipsis or by an overflow:hidden ancestor (never sr-only)
@@ -18,6 +18,9 @@
  *   hint       an sb-hint popover that, opened the way the device opens it (hover at 1440, tap at
  *              <= 1023), is zero-size, past a viewport edge, or not topmost at its centre and at
  *              its top-left + 8px (spec v194 A2; the trigger's aria-label names it). Never allowed.
+ *   rail-label an icon-rail entry (nav.rail a.rail-link; widths >= 640 only, the phone navigates by
+ *              its tab bar) with no accessible name, or whose anchored label does not pass the hint
+ *              geometry while the entry has keyboard focus (spec v195 Phase 7). Never allowed.
  * A finding the allow-list names (with a reason and a date) passes; anything
  * else makes the exit code 1. Entries nothing matches any more print as STALE;
  * --prune removes them (only on a run at 390, 768 and 1440).
@@ -42,9 +45,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
-  CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug,
-  validateAllow, vcenterGeometry,
+  CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, RAIL_MIN_WIDTH, ROUTES, TOUCH_MAX_WIDTH,
+  classify, countByCheck, dedupe, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, railLabelVerdict,
+  resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -320,6 +323,51 @@ async function auditHints(page, width) {
 }
 
 
+/** Runs inside the page (locator.evaluate): a rail link's accessible name, href and the id of the
+ *  label describing it. Name precedence as the accessibility tree has it: aria-labelledby, aria-label, text. */
+function railEntry(link) {
+  const labelledBy = (link.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean)
+    .map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim();
+  const name = labelledBy || (link.getAttribute('aria-label') ?? '').trim() || (link.textContent ?? '').trim();
+  return { name, href: link.getAttribute('href') ?? '', describedBy: link.getAttribute('aria-describedby') };
+}
+
+const railFinding = (entry, reason, extra) => ({
+  check: 'rail-label',
+  selector: entry.href ? `nav.rail a.rail-link[href="${entry.href}"]` : 'nav.rail a.rail-link',
+  text: entry.name,
+  detail: `rail entry ${entry.href || '(none)'}: ${reason}${extra ? ` (${extra})` : ''}`,
+});
+
+/**
+ * The rail-label check (spec v195 Phase 7): focus every icon-rail entry and require an accessible name
+ * and a visible anchored label, judged by the hint check's own geometry (measureHint + hintVerdict) on
+ * the popover the link's aria-describedby names, so a clipped or covered label fails here as a hint does
+ * there. Skipped below RAIL_MIN_WIDTH (the phone's tab bar navigates). The mouse is parked over the page
+ * first: a hovered entry would hold its own label open and mask a focus failure.
+ */
+async function auditRailLabels(page, width) {
+  if (width < RAIL_MIN_WIDTH) return [];
+  const links = page.locator('nav.rail a.rail-link');
+  const count = await links.count();
+  if (count === 0) return [railFinding({ href: '', name: '' }, 'no rail entries found', `width ${width}`)];
+  await page.mouse.move(Math.floor(width / 2), 890);
+  const findings = [];
+  for (let i = 0; i < count; i += 1) {
+    const link = links.nth(i);
+    const entry = await link.evaluate(railEntry);
+    await link.focus();
+    await page.waitForTimeout(HINT_SETTLE_MS);
+    const geometry = await page.evaluate(measureHint, entry.describedBy);
+    const hint = hintVerdict(geometry.rect, geometry.viewport, geometry.hits);
+    const verdict = railLabelVerdict({ name: entry.name, hintVisible: hint.ok });
+    if (!verdict.ok) findings.push(railFinding(entry, verdict.reason, hint.reason));
+    await link.press('Escape').catch(() => undefined);
+    await link.evaluate((el) => el.blur());
+  }
+  return findings;
+}
+
 /** Same page-ready rule as browse.mjs: never 'networkidle' (the SPA holds an event stream open). */
 function ready() {
   const main = document.querySelector('main') ?? document.body;
@@ -420,8 +468,9 @@ async function auditWidth(width, opts) {
       findings.push(...raw.map((f) => ({ route, width, ...f })));
       await screenshot(page, join(opts.out, `${slug(route)}@${width}.png`), width);
       const hints = await auditHints(page, width);
-      findings.push(...hints.map((f) => ({ route, width, ...f })));
-      console.error(`${route} @${width}: ${raw.length + hints.length} raw finding(s)`);
+      const rails = await auditRailLabels(page, width);
+      findings.push(...[...hints, ...rails].map((f) => ({ route, width, ...f })));
+      console.error(`${route} @${width}: ${raw.length + hints.length + rails.length} raw finding(s)`);
     }
     return findings;
   });

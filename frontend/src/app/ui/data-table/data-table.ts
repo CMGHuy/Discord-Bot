@@ -78,9 +78,6 @@ const PIN_KEYS = ['ticker', 'symbol'];
       @if (showSpinner()) {
         <span class="loading-spinner" aria-hidden="true"></span>
       }
-      @if (showHeaderPager() && activePagination(); as page) {
-        <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: false }" />
-      }
       @if (sortOptions().length) {
         <label class="phone-sort">
           <span class="sb-label">Sort</span>
@@ -238,8 +235,11 @@ const PIN_KEYS = ['ticker', 'symbol'];
         <sb-empty-state [title]="state.title" [hint]="state.hint" />
       }
 
+      <!-- v195 correction 7: one pager per table, at the bottom only. -->
       @if (activePagination(); as page) {
-        <ng-container [ngTemplateOutlet]="pagerTemplate" [ngTemplateOutletContext]="{ $implicit: page, announce: true }" />
+        <sb-pagination [pagination]="page" [showPerPage]="activeShowPerPage()" [announce]="true"
+          [perPageChoice]="perPageChoice()"
+          (pageChange)="onPage($event)" (perPageChange)="onPerPage($event)" />
       }
     </div>
 
@@ -281,12 +281,6 @@ const PIN_KEYS = ['ticker', 'symbol'];
       }
     </ng-template>
 
-    <ng-template #pagerTemplate let-page let-announce="announce">
-      <sb-pagination [pagination]="page" [showPerPage]="activeShowPerPage()" [announce]="announce" [navOnly]="!announce"
-        [perPageChoice]="perPageChoice()"
-        (pageChange)="onPage($event)" (perPageChange)="onPerPage($event)" />
-    </ng-template>
-
     <!-- One renderer per column (v179 §6a.2): the column's own cell template,
          else its text with the em-dash rule. Compact rows and the row drawer
          both render through this. -->
@@ -313,8 +307,8 @@ const PIN_KEYS = ['ticker', 'symbol'];
       pointer-events: none;
     }
     /* See showSpinner's own comment for the delay this only appears after.
-       Same visual language as ChartContainer's spinner (border-top accent
-       colour, 700ms linear spin) -- one loading affordance across the app
+       Same visual language as ChartContainer's spinner (grey border-top,
+       700ms linear spin) -- one loading affordance across the app
        rather than two that look slightly different. */
     .loading-spinner {
       position: absolute;
@@ -323,7 +317,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
       width: 14px;
       height: 14px;
       border: 2px solid var(--border-strong);
-      border-top-color: var(--accent);
+      border-top-color: var(--text-secondary);
       border-radius: 50%;
       animation: sb-spin 700ms linear infinite;
       z-index: 1;
@@ -366,8 +360,10 @@ const PIN_KEYS = ['ticker', 'symbol'];
      * stuff -- status phrases, plan names, strategy labels -- which is width
      * the table did not need. The scroller stays as the backstop for the
      * genuinely un-shrinkable case. */
+    /* v195 §1.4: cell padding follows row density (tokens.css: 4px/8px dense,
+       10px/14px comfortable, 10px/10px on touch), as --row-h does the height. */
     th, td {
-      padding: var(--space-6) var(--space-10);
+      padding: var(--cell-pad-y) var(--cell-pad-x);
       text-align: left;
       border-bottom: 1px solid var(--border);
       overflow-wrap: break-word;
@@ -786,13 +782,6 @@ export class DataTable<T> {
 
 
 
-  /** One pager below md — v95 C4. Two pagers cost ~250px on a phone, more
-   *  than the five rows between them; the footer one (which also carries
-   *  per-page) stays, so the reader's eye is already there after scanning
-   *  the rows. */
-  protected readonly showHeaderPager = computed(
-    () => isInline('md', this.viewport()),
-  );
 
   protected readonly pinKey = computed(() => {
     const shown = this.renderedColumns();

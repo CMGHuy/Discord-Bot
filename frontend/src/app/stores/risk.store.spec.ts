@@ -342,4 +342,111 @@ describe('RiskStore', () => {
       .expectOne('/api/v1/risk/killswitch')
       .flush({ killswitch: { on: true, reason: null, at: null } });
   });
+
+  it('keeps only risk: scan health and the data source moved to SystemStore (v195 §5.1)', () => {
+    for (const key of ['scanDurations', 'scanLatestS', 'scanSlowdown', 'dataSources']) {
+      expect(key in store).toBe(false);
+    }
+  });
+});
+
+/* -- v195 §5.2 -- the account balance, so risk can be shown in money -- */
+
+describe('RiskStore balance and cap headroom (v195 §5.2)', () => {
+  let store: InstanceType<typeof RiskStore>;
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        RiskStore,
+      ],
+    });
+    store = TestBed.inject(RiskStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  const respond = (body: Partial<Risk> = {}) =>
+    backend.expectOne('/api/v1/risk').flush({ ...RESPONSE, ...body });
+  const unavailable = { status: 503, statusText: 'Service Unavailable' };
+  const DOWN = { error: { code: 'unavailable', message: 'down' } };
+
+  it('reads the balance from the existing dashboard endpoint, beside /risk', () => {
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush({ account_balance: 10000 });
+
+    expect(store.balance()).toBe(10000);
+    expect(store.openHeatPct()).toBe(3);
+  });
+
+  it('leaves the balance null and the risk loaded when the dashboard read fails', () => {
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush(DOWN, unavailable);
+
+    expect(store.balance()).toBeNull();
+    expect(store.error()).toBeNull();
+    expect(store.positions()).toHaveLength(2);
+  });
+
+  it('keeps the last balance when a later dashboard read fails', () => {
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush({ account_balance: 10000 });
+
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush(DOWN, unavailable);
+    expect(store.balance()).toBe(10000);
+  });
+
+  it('never takes a balance that is not a finite number', () => {
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush({ account_balance: null });
+    expect(store.balance()).toBeNull();
+  });
+
+  it('finishes the route on the /risk read alone, before the balance answers', () => {
+    let finished = 0;
+    store.resolve().subscribe({ complete: () => { finished += 1; } });
+    respond();
+
+    expect(finished).toBe(1);
+    // Still in flight, and that holds nothing up.
+    expect(backend.match('/api/v1/dashboard')).toHaveLength(1);
+  });
+
+  it('reads nothing until the resolver is subscribed', () => {
+    store.resolve();
+    backend.expectNone('/api/v1/risk');
+    backend.expectNone('/api/v1/dashboard');
+  });
+
+  it('measures cap headroom as the cap less the open heat, unclamped', () => {
+    store.load();
+    respond({ heat: { open_pct: 3, cap_pct: 6, utilisation_pct: 50 } });
+    expect(store.headroomPct()).toBe(3);
+
+    store.load();
+    respond({ heat: { open_pct: 7.5, cap_pct: 6, utilisation_pct: 125 } });
+    expect(store.headroomPct()).toBe(-1.5);
+  });
+
+  it('has no headroom when either side is unknown, and before the first answer', () => {
+    expect(store.headroomPct()).toBeNull();
+    store.load();
+    respond({ heat: { open_pct: null, cap_pct: 6, utilisation_pct: null } });
+    expect(store.headroomPct()).toBeNull();
+    store.load();
+    respond({ heat: { open_pct: 3, cap_pct: null, utilisation_pct: null } });
+    expect(store.headroomPct()).toBeNull();
+  });
 });

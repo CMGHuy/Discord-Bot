@@ -38,7 +38,7 @@ describe('CancelsTable', () => {
     expect(bodyRows(f).length).toBe(6);
     expect(text(bodyRows(f)[0])).toContain('risk_cap · trigger');
     expect(text(bodyRows(f)[0])).toContain('Setup lost (tie)');
-    expect(text(bodyRows(f)[0])).toContain('-1.00R');
+    expect(text(bodyRows(f)[0])).toContain('−1.00R');
     expect(text(bodyRows(f)[1])).toContain('risk_cap · crossing (estimated)');
     expect(text(bodyRows(f)[1])).toContain('Setup reached TP1');
     expect(text(bodyRows(f)[1])).toContain('+1.00R');

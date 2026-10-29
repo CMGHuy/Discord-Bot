@@ -3,11 +3,14 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { authInterceptor, errorInterceptor, loadingInterceptor } from '../../api/interceptors';
 import { ReportTab, ReportsStore } from '../../stores/reports.store';
 import { ATTRIBUTION, GATES, NOT_RUN, ok } from '../../testing/report-fixtures';
+import { RouteTitleService } from '../../routing/route-title.service';
 import { DISCLAIMER as RESEARCH_DISCLAIMER } from '../research/research';
 import { DISCLAIMER, Reports } from './reports';
 
@@ -128,5 +131,46 @@ describe('Reports', () => {
     fixture.detectChanges();
     expect(text(fixture)).toContain(DISCLAIMER);
     expect(DISCLAIMER).toBe(RESEARCH_DISCLAIMER);
+  });
+});
+
+/* -- v195 Phase 4 -- Reports on sb-page ------------------------------------- */
+
+describe('Reports on sb-page (v195 Phase 4)', () => {
+  function loaded() {
+    const created = create();
+    created.store.resolveTab('attribution').subscribe();
+    created.http.expectOne(URLS.attribution).flush(ok(ATTRIBUTION));
+    TestBed.inject(RouteTitleService).set('Reports', 'What the measurements say about entries and gates');
+    created.fixture.detectChanges();
+    return created;
+  }
+
+  it('renders the route title as the one h1, from sb-page', () => {
+    const { fixture } = loaded();
+    expect(host(fixture).querySelectorAll('h1')).toHaveLength(1);
+    expect(host(fixture).querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Reports');
+    expect(host(fixture).querySelector('sb-section-head')).toBeNull();
+  });
+
+  it('puts the generated-at marker at the header right and the tabs in the scope bar', () => {
+    const { fixture } = loaded();
+    const actions = host(fixture).querySelector('sb-page [page-actions]')!;
+    expect(actions.tagName.toLowerCase()).toBe('sb-freshness');
+    expect(host(fixture).querySelector('sb-page [page-scope]')!.tagName.toLowerCase()).toBe('sb-tab-bar');
+    expect(host(fixture).querySelector('sb-page .danger, sb-page .danger-quiet')).toBeNull();
+  });
+
+  it('keeps the report and the footer in one primary element', () => {
+    const { fixture } = loaded();
+    const primary = host(fixture).querySelector('sb-page [page-primary]')!;
+    expect(primary.querySelector('sb-expectancy-attribution-tab')).not.toBeNull();
+    expect(primary.lastElementChild!.classList).toContain('disclaimer');
+  });
+
+  it('imports Page and no SectionHead', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/reports/reports.ts'), 'utf8');
+    expect(src).toMatch(/import \{ Page \} from '\.\.\/\.\.\/ui\/page';/);
+    expect(src).not.toMatch(/import \{ SectionHead \}/);
   });
 });

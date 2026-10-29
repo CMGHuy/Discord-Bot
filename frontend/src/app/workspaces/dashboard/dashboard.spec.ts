@@ -24,7 +24,9 @@ import { Dashboard as DashboardData, EquityCandlesResponse, TradeRow } from '../
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
-import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard';
+import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER, scopeLabel, statTone } from './dashboard';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { StatTile } from '../../ui/stat-tile';
 import { LEG_HINT_TEXT } from '../trades/leg-label';
 import { fxMissingText } from '../analytics/scope-bar';
 import { tradeDrawerFields } from './trade-drawer';
@@ -37,9 +39,11 @@ import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
 import { dashboardRoutes } from './dashboard.routes';
 import { PANEL_HELP } from './panels/panel-help';
-import { TradingPerformance } from './panels/trading-performance';
+import { PERF_BASIS, TradingPerformance, withBasis } from './panels/trading-performance';
 import { EquityCandles } from './panels/equity-candles';
 import { PositionsTable } from './positions-table';
+import { isInline } from '../../ui/priority';
+import { NEVER_COLLAPSED_COLUMNS } from '../trades/trades.columns';
 
 installMatchMediaPolyfill();
 
@@ -213,11 +217,13 @@ describe('Dashboard states', () => {
     expect(el.querySelector('sb-market-movers')).not.toBeNull();
   });
 
-  it('renders no in-page heading, because the top bar owns the title', () => {
+  it('renders the route title as the one h1, from sb-page', () => {
     const { fixture } = seed();
+    TestBed.inject(RouteTitleService).set('Dashboard', "What's happening right now");
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).not.toContain('Dashboard');
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Dashboard');
   });
 });
 
@@ -265,7 +271,7 @@ describe('Dashboard v85 layout', () => {
   it('drops the old metric rows the panels replaced', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.primary')).toBeNull();
+    expect(el.querySelector('.primary:not(.slot)')).toBeNull();
     expect(el.querySelector('sb-chip-row.chips')).toBeNull();
     expect(el.querySelector('.lifecycle')).toBeNull();
   });
@@ -374,7 +380,7 @@ describe('Dashboard v85 layout', () => {
       expect(section.querySelector('header sb-hint'), heading).not.toBeNull();
     }
     const titles = panels.map((p) => p.querySelector('header [role="tooltip"]')?.textContent?.trim());
-    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance]));
+    expect(titles).toEqual(expect.arrayContaining([withBasis(PANEL_HELP.tradingPerformance)]));
   });
 
   it('explains each KPI card through a hint beside its label, payoff ratio included', async () => {
@@ -644,12 +650,13 @@ describe('dead card-mode contract', () => {
 /* -- v95 C3 -- panel order ------------------------------------------------- */
 
 describe('Dashboard panel order', () => {
-  it('leads with performance at every band', () => {
-    // Observed: at 390px positions came first and the portfolio figure was
-    // below a 900px table. At 768px performance came first. The phone case
-    // was the odd one out, and it was the wrong way round.
+  it('leads with the KPI strip, then open positions, at every band (v195 §5.2)', () => {
+    // v95 C3 put performance first because a phone buried the portfolio
+    // figure, win rate and expectancy under a ~900px table. The KPI strip now
+    // carries expectancy, win rate and open risk above the table everywhere,
+    // and the spec makes open positions the primary panel.
     for (const band of ['xs', 'sm', 'md', 'lg', 'xl'] as const) {
-      expect(DASHBOARD_PANEL_ORDER[band]?.[0] ?? 'performance').toBe('performance');
+      expect(DASHBOARD_PANEL_ORDER[band]).toEqual(['kpis', 'positions', 'performance', 'activity', 'movers']);
     }
   });
 
@@ -669,6 +676,16 @@ describe('DASHBOARD_COLUMNS', () => {
     // this is literally that same function's return value.
     expect(DASHBOARD_COLUMNS.length).toBeGreaterThan(0);
     expect(DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined)).toEqual([]);
+  });
+
+  it('keeps the never-collapsed columns, the badge among them, inline on a tablet (v195 correction 8)', () => {
+    // Open positions is where a stop is checked before acting: it must not sit
+    // one tap away in the row expansion at 640-1023px.
+    for (const key of NEVER_COLLAPSED_COLUMNS) {
+      const column = DASHBOARD_COLUMNS.find((c) => c.key === key);
+      expect(column, `missing column: ${key}`).toBeDefined();
+      expect(isInline(column!.inlineFrom, 'sm'), `${key} collapses at sm`).toBe(true);
+    }
   });
 });
 
@@ -1034,5 +1051,124 @@ describe('Dashboard — explanations are hints, not titles (v194 A3)', () => {
     const help = el.querySelector('.lifecycle-hint')!.textContent!;
     expect(help).toContain('live P&L, then projected P&L at target and at stop');
     expect(help).toContain('projected R if price reaches target');
+  });
+});
+
+/* -- v195 Phase 4, §5.2 -- the Dashboard on sb-page ------------------------- */
+
+/** The KPI tiles' own inputs, read from the components: the rendered value
+ *  counts up, the input is the figure. */
+function kpis(fixture: ComponentFixture<Dashboard>): Map<string, StatTile> {
+  return new Map(fixture.debugElement.queryAll(By.css('[page-kpis] sb-stat-tile'))
+    .map((d) => d.componentInstance as StatTile)
+    .map((tile) => [tile.label(), tile] as const));
+}
+
+describe('Dashboard on sb-page (v195 Phase 4)', () => {
+  it('puts open positions in the primary slot, then performance, activity and movers', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-page div.primary.slot > sb-panel.positions-panel')).not.toBeNull();
+    const secondary = [...el.querySelectorAll('sb-page div.secondary.slot > [page-secondary]')];
+    const names = ['performance-async', 'activity-async', 'movers-async'];
+    expect(secondary.map((s) => names.find((name) => s.classList.contains(name))))
+      .toEqual(names);
+    expect(secondary[0].querySelector('sb-trading-performance')).not.toBeNull();
+  });
+
+  it('puts Close all in the header actions as danger-quiet, and nowhere in the table', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const el = fixture.nativeElement as HTMLElement;
+    const button = el.querySelector<HTMLButtonElement>('sb-page header.bar .actions [data-action="close-all"]');
+    expect(button).not.toBeNull();
+    expect(button!.classList).toContain('danger-quiet');
+    expect(button!.classList).not.toContain('danger');
+    expect(el.querySelector('sb-positions-table [data-action="close-all"]')).toBeNull();
+  });
+
+  it('opens the close-all menu from the header and closes it on an outside click', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('sb-page header.bar .actions [role="menuitem"]')).toHaveLength(3);
+
+    el.querySelector<HTMLElement>('sb-page h1.title')!.click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
+  });
+
+  it('projects the close-all dialog and nothing destructive into a scope bar', async () => {
+    const el = (await loaded()).nativeElement as HTMLElement;
+    expect(el.querySelector('sb-page sb-confirm-dialog')).not.toBeNull();
+    expect(el.querySelector('sb-page div.scope.slot')!.children).toHaveLength(0);
+  });
+});
+
+describe('Dashboard KPI strip (v195 §5.2)', () => {
+  it('holds expectancy first, win rate after, then open risk, realised and open positions', async () => {
+    expect([...kpis(await loaded()).keys()])
+      .toEqual(['Expectancy', 'Win rate', 'Open risk', 'Realised in period', 'Open positions']);
+  });
+
+  it('gives expectancy and win rate their N, signed figures and the scope they cover', async () => {
+    const tiles = kpis(await loaded({ expectancy_r: -0.16, expectancy_n: 12, win_rate: 55, win_rate_n: 40 }));
+    expect(tiles.get('Expectancy')!.value()).toBe('−0.16R');
+    expect(tiles.get('Expectancy')!.sample()).toBe(12);
+    expect(tiles.get('Expectancy')!.tone()).toBe('neg');
+    expect(tiles.get('Expectancy')!.secondary()).toBe('Today');
+    expect(tiles.get('Win rate')!.value()).toBe('55.0%');
+    expect(tiles.get('Win rate')!.sample()).toBe(40);
+  });
+
+  it('states the paper / pre-cost / pre-tax basis in every performance hint', async () => {
+    const tiles = kpis(await loaded());
+    expect(tiles.get('Expectancy')!.about()).toBe(PERF_BASIS.expectancy);
+    expect(tiles.get('Win rate')!.about()).toBe(PERF_BASIS.winRate);
+    expect(tiles.get('Realised in period')!.about()).toBe(PERF_BASIS.realized);
+  });
+
+  it('shows open risk as money and % of account, the cap beneath, linking to Risk', async () => {
+    const fixture = await loaded({ account_balance: 10000, risk_used_pct: 3, risk_cap_pct: 20 });
+    const tiles = kpis(fixture);
+    expect(tiles.get('Open risk')!.value()).toBe('300 $ · 3.00%');
+    expect(tiles.get('Open risk')!.secondary()).toBe('cap 2,000 $ · 20.00%');
+    expect(tiles.get('Open risk')!.hint()).toBe('Breakdown on Risk →');
+
+    const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('[page-kpis] a.kpi-link')!;
+    expect(link.getAttribute('href')).toBe('/risk');
+    expect(link.querySelector('sb-stat-tile .label')!.textContent!.trim()).toBe('Open risk');
+    // A hint is a button, and a button cannot sit inside a link.
+    expect(link.querySelector('button, sb-hint')).toBeNull();
+  });
+
+  it('never invents money without a balance', async () => {
+    const tiles = kpis(await loaded({ account_balance: null, risk_used_pct: 3 }));
+    expect(tiles.get('Open risk')!.value()).toBe('— · 3.00%');
+  });
+
+  it('shows realised money signed, with the closes behind it as N, and the open count', async () => {
+    const tiles = kpis(await loaded({
+      realized: { amount: -40, pct: -0.4, n: 3, wins: 1, losses: 2 } as never, open_trades: 2,
+    }));
+    expect(tiles.get('Realised in period')!.value()).toBe('−40.00 $');
+    expect(tiles.get('Realised in period')!.sample()).toBe(3);
+    expect(tiles.get('Realised in period')!.tone()).toBe('neg');
+    expect(tiles.get('Open positions')!.value()).toBe('2');
+  });
+});
+
+describe('Dashboard KPI helpers (v195 §5.2)', () => {
+  it('names the scope in the strip\'s words', () => {
+    expect(scopeLabel({ kind: 'preset', preset: '1D' })).toBe('Today');
+    expect(scopeLabel({ kind: 'preset', preset: '1M' })).toBe('1M');
+    expect(scopeLabel({ kind: 'preset', preset: 'All' })).toBe('All days');
+  });
+
+  it('maps a P&L tone onto a stat tone, warn to neutral', () => {
+    expect(statTone('pos')).toBe('pos');
+    expect(statTone('neg')).toBe('neg');
+    expect(statTone('warn')).toBe('neutral');
+    expect(statTone('neutral')).toBe('neutral');
   });
 });

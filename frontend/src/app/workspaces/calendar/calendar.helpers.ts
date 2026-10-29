@@ -11,7 +11,7 @@
  */
 
 import { CalendarDay } from '../../api/models';
-import { num } from '../../ui/format';
+import { MINUS, num } from '../../ui/format';
 
 export type CalendarCellMetric = 'r' | 'currency' | 'trades' | 'win_rate';
 export type CalendarCellTone = 'pos' | 'neg' | 'neutral' | 'empty';
@@ -20,6 +20,9 @@ export function localIsoDate(date: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
 }
+
+/** A cell's sign: the true minus for a loss, '+' otherwise (zero keeps its plus). */
+const plusOrMinus = (value: number): string => (value < 0 ? MINUS : '+');
 
 /** The value and presentation intent for one populated calendar cell.
  * Keeping the four-way branch here lets the template stay a simple display
@@ -40,11 +43,11 @@ export function cellValue(day: CalendarDay, metric: CalendarCellMetric): {
   const value = metric === 'r' ? day.net_r : day.net_pnl_amount;
   if (value === null) return { value: null, text: '', tone: 'empty' };
   if (metric === 'r') return {
-    value, text: `${value >= 0 ? '+' : ''}${value.toFixed(2)}R`,
+    value, text: `${plusOrMinus(value)}${Math.abs(value).toFixed(2)}R`,
     tone: value > 0 ? 'pos' : value < 0 ? 'neg' : 'neutral',
   };
   return {
-    value, text: `${value >= 0 ? '+' : ''}${num(value, 0)}`,
+    value, text: `${plusOrMinus(value)}${num(Math.abs(value), 0)}`,
     tone: value > 0 ? 'pos' : value < 0 ? 'neg' : 'neutral',
   };
 }

@@ -12,6 +12,7 @@ import {
 import { ConnectionState } from '../stores/connection.store';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
+import { RowDensity } from '../ui/density.service';
 import { MotionMode, parseMotion } from '../ui/motion/motion.service';
 import { SegmentOption, Segmented } from '../ui/segmented';
 
@@ -20,6 +21,12 @@ const MOTION_OPTIONS: SegmentOption[] = [
   { value: 'on', label: 'On' },
   { value: 'reduced', label: 'Reduced' },
   { value: 'off', label: 'Off' },
+];
+
+/** The two row densities, in the order the control shows them (v195 §1.4). */
+const DENSITY_OPTIONS: SegmentOption[] = [
+  { value: 'dense', label: 'Dense' },
+  { value: 'comfortable', label: 'Comfortable' },
 ];
 
 /**
@@ -33,6 +40,11 @@ const MOTION_OPTIONS: SegmentOption[] = [
  * Closes on Escape and on a click anywhere outside, and returns focus to the
  * trigger when it does — a menu that closes while leaving focus on a
  * now-hidden item strands a keyboard user at the top of the document.
+ *
+ * Density (v195 §1.4) sits beside Motion: a per-device choice the shell
+ * writes through `DensityService`. It changes rows only on a desktop with a
+ * fine pointer; the note under it says so, because on a phone or tablet the
+ * 44px touch rules win and the control would otherwise seem broken.
  */
 @Component({
   selector: 'sb-profile-menu',
@@ -84,6 +96,17 @@ const MOTION_OPTIONS: SegmentOption[] = [
             [value]="motion()"
             (valueChange)="onMotion($event)"
           />
+        </div>
+        <div class="density-row" role="none">
+          <span class="menu-label" aria-hidden="true">Density</span>
+          <sb-segmented
+            class="density-control"
+            label="Density"
+            [options]="densityOptions"
+            [value]="density()"
+            (valueChange)="onDensity($event)"
+          />
+          <span class="menu-note">Desktop only: touch screens keep 44px rows.</span>
         </div>
         <button sb-button variant="ghost" type="button" role="menuitem" (click)="signOut()">
           <sb-icon name="signout" />
@@ -144,7 +167,8 @@ const MOTION_OPTIONS: SegmentOption[] = [
        own centred segments. The ".menu button" rule above does not reach
        them (emulated encapsulation scopes it to this template's own
        buttons), so nothing has to be undone here. */
-    .motion-row {
+    .motion-row,
+    .density-row {
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
@@ -154,11 +178,17 @@ const MOTION_OPTIONS: SegmentOption[] = [
       font-size: var(--text-chip);
       color: var(--text-secondary);
     }
+    .menu-note {
+      font-size: var(--text-micro);
+      color: var(--text-muted);
+      max-width: 22ch;
+    }
     /* Spec v168 §1 and §5: 44px targets on touch -- phone and tablet since
        v179, the tokens.css touch condition. --control-h already gives the
        height there; this gives a short label like "On" the same width. */
     @media (pointer: coarse), (max-width: 1023px) {
-      :host ::ng-deep .motion-control .segment { min-width: 44px; justify-content: center; }
+      :host ::ng-deep .motion-control .segment,
+      :host ::ng-deep .density-control .segment { min-width: 44px; justify-content: center; }
     }
   `,
 })
@@ -196,6 +226,17 @@ export class ProfileMenu {
   /** Validated, not trusted: the segmented control hands back a string. */
   protected onMotion(value: string): void {
     this.motionChanged.emit(parseMotion(value));
+  }
+
+  /** The current row density, owned by the shell's DensityService. */
+  readonly density = input<RowDensity>('dense');
+  readonly densityChanged = output<RowDensity>();
+
+  protected readonly densityOptions = DENSITY_OPTIONS;
+
+  /** Validated, not trusted: anything but 'comfortable' is the default. */
+  protected onDensity(value: string): void {
+    this.densityChanged.emit(value === 'comfortable' ? 'comfortable' : 'dense');
   }
 
   protected readonly open = signal(false);

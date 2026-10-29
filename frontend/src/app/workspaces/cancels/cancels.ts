@@ -4,6 +4,7 @@ import { CancelsStore } from '../../stores/cancels.store';
 import { Async, asyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Panel } from '../../ui/layout';
+import { Page } from '../../ui/page';
 import { CancelsSummary } from './cancels-summary';
 import { CancelsTable } from './cancels-table';
 
@@ -15,33 +16,41 @@ import { CancelsTable } from './cancels-table';
 @Component({
   selector: 'sb-cancels',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, Panel, CancelsSummary, CancelsTable],
+  imports: [Page, Async, Button, Panel, CancelsSummary, CancelsTable],
   host: { class: 'register-instrument' },
   styles: `
-    :host { display: grid; gap: var(--space-14); }
+    /* v195 Phase 4: sb-page owns the page rhythm; the summary and the table
+       keep the 14px gap the host used to give them. */
+    :host { display: block; min-width: 0; }
+    sb-async[page-primary] { display: grid; gap: var(--space-14); }
     .filter-line {
       display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8);
       margin: 0 0 var(--space-8); font-size: var(--text-body);
     }
   `,
   template: `
-    <sb-async [loading]="async().loading" [error]="async().error" [empty]="async().empty"
-      [staleAsOf]="async().staleAsOf" emptyReason="measured-zero" emptyTitle="Nothing to replay"
-      shape="panel" (retry)="reload()">
-      @if (store.data(); as data) {
-        <sb-cancels-summary [data]="data" [filter]="store.filter()"
-          (card)="store.pickCard($event)" (outcome)="store.pickOutcome($event)" (split)="store.pickSplit($event)" />
-        <sb-panel heading="Cancelled plans">
-          @if (filterText(); as label) {
-            <p class="filter-line" role="status">
-              Showing {{ label }} · {{ store.rows().length }} of {{ data.rows.length }} rows
-              <button sb-button type="button" variant="ghost" (click)="store.clearFilter()">Clear filter</button>
-            </p>
-          }
-          <sb-cancels-table [rows]="store.rows()" />
-        </sb-panel>
-      }
-    </sb-async>
+    <sb-page>
+      <!-- v195 Phase 4: the route title is the page's one h1. One primary
+           element: the summary's cards filter the table below them, so the
+           two stay together. Read-only, so the header carries no action. -->
+      <sb-async page-primary [loading]="async().loading" [error]="async().error" [empty]="async().empty"
+        [staleAsOf]="async().staleAsOf" emptyReason="measured-zero" emptyTitle="Nothing to replay"
+        shape="panel" (retry)="reload()">
+        @if (store.data(); as data) {
+          <sb-cancels-summary [data]="data" [filter]="store.filter()"
+            (card)="store.pickCard($event)" (outcome)="store.pickOutcome($event)" (split)="store.pickSplit($event)" />
+          <sb-panel heading="Cancelled plans">
+            @if (filterText(); as label) {
+              <p class="filter-line" role="status">
+                Showing {{ label }} · {{ store.rows().length }} of {{ data.rows.length }} rows
+                <button sb-button type="button" variant="ghost" (click)="store.clearFilter()">Clear filter</button>
+              </p>
+            }
+            <sb-cancels-table [rows]="store.rows()" />
+          </sb-panel>
+        }
+      </sb-async>
+    </sb-page>
   `,
 })
 export class Cancels {

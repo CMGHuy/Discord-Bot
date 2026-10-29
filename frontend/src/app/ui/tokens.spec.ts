@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveToken } from './testing/resolve-token';
+import { allSources, stripComments } from './testing/all-sources';
 
 /**
  * The token file is asserted as TEXT, not through a mounted component.
@@ -80,6 +81,10 @@ const REQUIRED = [
 
   '--control-h',
   '--section-gap',
+  // v195 §1.4: the tokens row density moves
+  '--cell-pad-y',
+  '--cell-pad-x',
+  '--panel-pad',
 
   // v167 §3, tier 3
   '--panel-radius',
@@ -94,18 +99,16 @@ const REQUIRED = [
   '--shadow-overlay',
   '--btn-fill',
   '--btn-fill-hover',
-  '--glow-accent',
-  '--glow-ambient',
   '--scrim-soft',
 
-  // v168 §1, motion (tier 3)
+  // v168 §1, motion (tier 3); v195 §1.2 deleted --dur-enter and --panel-shadow-lift
   '--motion-scale',
-  '--dur-enter',
   '--dur-count',
   '--dur-draw',
   '--flash-up-text',
   '--flash-down-text',
-  '--panel-shadow-lift',
+  // v195 §1.2: the one UI transition duration (tier 2)
+  '--dur-ui',
 ];
 
 describe('design tokens', () => {
@@ -155,7 +158,7 @@ describe('design tokens', () => {
 
   /* v167 §3 supersedes v54 D2's one-shadow law: two levels, both in tier 3. */
   it('defines the two elevation shadows', () => {
-    expect(TIER3).toMatch(/^\s*--panel-shadow:\s*inset 0 1px 0 rgba\(255, 255, 255, \.03\), 0 6px 18px rgba\(0, 0, 0, \.25\);/m);
+    expect(TIER3).toMatch(/^\s*--panel-shadow:\s*none;/m);
     expect(TIER3).toMatch(/^\s*--shadow-overlay:\s*0 16px 40px rgba\(0, 0, 0, \.55\), 0 2px 8px rgba\(0, 0, 0, \.4\);/m);
     // declared once, in tier 3 -- not left behind in tier 2 as well
     expect([...CSS.matchAll(/^\s*--shadow-overlay:/gm)]).toHaveLength(1);
@@ -282,39 +285,42 @@ describe('no workspace hand-rolls a control row', () => {
 });
 
 /**
- * v167 §2: the Arctic Navy palette. Supersedes the v80 D1 block that pinned
- * literal hexes here: tier 2 no longer holds a colour, it references a
- * tier-1 palette entry in styles/palette.css. Two assertions per token --
- * the reference as written (the tier contract) and the value it resolves to
- * (the spec's table) -- so a palette edit that keeps the names but drifts a
- * value fails here as well as in contrast.spec.ts.
+ * v195 §1.1: the Graphite palette (supersedes v167 §2's Arctic Navy). Tier 2
+ * holds no colour, it references a tier-1 palette entry in styles/palette.css.
+ * Two assertions per token -- the reference as written (the tier contract) and
+ * the value it resolves to (the spec's table) -- so a palette edit that keeps
+ * the names but drifts a value fails here as well as in contrast.spec.ts.
  */
-describe('v167 §2: the Arctic Navy palette', () => {
+describe('v195 §1.1: the Graphite palette', () => {
   const EXPECTED: [token: string, palette: string, value: string][] = [
-    ['--bg', '--navy-950', '#070b14'],
-    ['--surface', '--navy-900', '#0c1320'],
-    ['--surface-raised', '--navy-850', '#121b2d'],
-    ['--surface-overlay', '--navy-800', '#1a2540'],
-    ['--overlay-dim', '--navy-950-a72', 'rgba(7, 11, 20, 0.72)'],
-    ['--border', '--navy-750', '#1d2940'],
-    ['--border-strong', '--navy-700', '#2a3a58'],
-    ['--text', '--slate-100', '#e8eef8'],
-    ['--text-secondary', '--slate-300', '#b3bfd3'],
-    ['--text-muted', '--slate-400', '#8f9db5'],
-    ['--text-faint', '--navy-600', '#3a4a66'],
-    ['--accent', '--sky-300', '#7cc4ff'],
-    ['--accent-fill', '--sky-600', '#1c6dd0'],
-    ['--accent-fill-hi', '--sky-550', '#2474d2'],
+    ['--bg', '--graphite-950', '#0d0f12'],
+    ['--surface', '--graphite-900', '#15181d'],
+    ['--surface-raised', '--graphite-850', '#1c2128'],
+    ['--surface-overlay', '--graphite-800', '#1f242b'],
+    ['--overlay-dim', '--graphite-950-a72', 'rgba(13, 15, 18, 0.72)'],
+    ['--border', '--graphite-750', '#23272e'],
+    ['--border-strong', '--graphite-700', '#2d333b'],
+    ['--text', '--grey-100', '#e6e8eb'],
+    ['--text-secondary', '--grey-300', '#c9d1d9'],
+    ['--text-muted', '--grey-400', '#9aa4b2'],
+    ['--text-faint', '--graphite-500', '#6b7280'],
+    ['--accent', '--steel-400', '#6ea8fe'],
+    ['--accent-fill', '--steel-600', '#2563c4'],
+    ['--accent-fill-hi', '--steel-500', '#2d6cd3'],
     ['--on-accent', '--white', '#ffffff'],
-    ['--pos', '--teal-400', '#00e5a0'],
-    ['--neg', '--red-400', '#ff4d5e'],
-    ['--warn', '--amber-300', '#ffc266'],
-    ['--info', '--violet-300', '#c3a6ff'],
-    ['--pos-soft', '--teal-400-a12', 'rgba(0, 229, 160, 0.12)'],
-    ['--neg-soft', '--red-400-a12', 'rgba(255, 77, 94, 0.12)'],
-    ['--warn-soft', '--amber-300-a12', 'rgba(255, 194, 102, 0.12)'],
-    ['--accent-soft', '--sky-600-a18', 'rgba(28, 109, 208, 0.18)'],
-    ['--info-soft', '--violet-300-a14', 'rgba(195, 166, 255, 0.14)'],
+    ['--pos', '--green-500', '#3fb68b'],
+    // Spec table said #e5534b; amended to #f06e66 for WCAG AA on the raised
+    // and overlay surfaces and on its own tint (V195-2).
+    ['--neg', '--red-500', '#f06e66'],
+    ['--warn', '--amber-500', '#d29922'],
+    // Spec table said #b392f0; amended to #c193ed to clear OKLab dE 10 from
+    // the accent entry line in the Discord image (V195-2).
+    ['--info', '--violet-400', '#c193ed'],
+    ['--pos-soft', '--green-500-a12', 'rgba(63, 182, 139, 0.12)'],
+    ['--neg-soft', '--red-500-a12', 'rgba(240, 110, 102, 0.12)'],
+    ['--warn-soft', '--amber-500-a12', 'rgba(210, 153, 34, 0.12)'],
+    ['--accent-soft', '--steel-400-a18', 'rgba(110, 168, 254, 0.18)'],
+    ['--info-soft', '--violet-400-a14', 'rgba(193, 147, 237, 0.14)'],
   ];
 
   for (const [name, palette, value] of EXPECTED) {
@@ -331,6 +337,19 @@ describe('v167 §2: the Arctic Navy palette', () => {
     expect(CSS).toMatch(/^\s*--quality-4:\s*#9acd32;/m);
     for (let i = 1; i <= 6; i++) {
       expect(CSS).toMatch(new RegExp(`^\\s*--chart-${i}:\\s*#[0-9a-f]{6};`, 'mi'));
+    }
+  });
+
+  /* #c97a22 sat OKLab dE 8.0 from the new --warn, and the Discord price pane
+   * draws current price (warn) beside the strategy target line (chart-2). */
+  it('re-derives --chart-2 off the amber warn for the Graphite ground', () => {
+    expect(resolveToken('--chart-2')).toBe('#bd6c18');
+  });
+
+  it('keeps no Arctic Navy palette name in either token file', () => {
+    const PALETTE = readFileSync(join(process.cwd(), 'src/styles/palette.css'), 'utf8');
+    for (const source of [CSS, PALETTE]) {
+      expect(source).not.toMatch(/--(?:navy|slate|sky|teal)-\d/);
     }
   });
 });
@@ -351,17 +370,20 @@ describe('v80 D3: type, shape and touch', () => {
   });
 
   /* v167 §3 supersedes v80 D3's single 2px: four targets, all in tier 3,
-   * and the two old tokens are gone so no unclassified corner survives. */
+   * and the two old tokens are gone so no unclassified corner survives.
+   * v195 §1.5: 6px panels, 4px controls and chips, 2px cells. */
   it('defines the four radius targets', () => {
-    expect(TIER3).toMatch(/^\s*--panel-radius:\s*8px;/m);
-    expect(TIER3).toMatch(/^\s*--control-radius:\s*6px;/m);
-    expect(TIER3).toMatch(/^\s*--chip-radius:\s*999px;/m);
+    expect(TIER3).toMatch(/^\s*--panel-radius:\s*6px;/m);
+    expect(TIER3).toMatch(/^\s*--control-radius:\s*4px;/m);
+    expect(TIER3).toMatch(/^\s*--chip-radius:\s*4px;/m);
     expect(TIER3).toMatch(/^\s*--radius-sm:\s*2px;/m);
     expect(CSS).not.toMatch(/^\s*--radius(?:-chip)?:/m);
   });
 
+  /* v195 §1.4: the one row height is the dense 28px on desktop; the touch
+   * block and the comfortable density raise it to 44px. */
   it('defines one row height and one form-control text size', () => {
-    expect(CSS).toMatch(/^\s*--row-h:\s*32px;/m);
+    expect(CSS).toMatch(/^\s*--row-h:\s*28px;/m);
     expect(CSS).toMatch(/^\s*--text-control:\s*calc\(14px \* var\(--text-scale\)\);/m);
   });
 
@@ -378,29 +400,25 @@ describe('v80 D3: type, shape and touch', () => {
 /**
  * v167 §3: the component tokens. Values are asserted as DECLARED (whitespace
  * collapsed), because tier 3 is the contract components read; one resolved
- * case proves the gradient reaches the Arctic Navy fill blues through tier 2.
+ * case proves the gradient reaches the Graphite fill blues through tier 2.
  */
 describe('v167 §3: the tier-3 component tokens', () => {
   const declared = (name: string) =>
     TIER3.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
 
   const VALUES: Record<string, string> = {
-    '--panel-radius': '8px',
-    '--control-radius': '6px',
-    '--chip-radius': '999px',
+    '--panel-radius': '6px',
+    '--control-radius': '4px',
+    '--chip-radius': '4px',
     '--radius-sm': '2px',
-    '--panel-bg': 'linear-gradient(180deg, var(--surface-raised), var(--surface))',
+    '--panel-bg': 'var(--surface)',
     '--panel-border': '1px solid var(--border)',
-    '--panel-shadow': 'inset 0 1px 0 rgba(255, 255, 255, .03), 0 6px 18px rgba(0, 0, 0, .25)',
+    '--panel-shadow': 'none',
     '--panel-inner-bg': 'var(--surface-raised)',
     '--panel-inner-radius': 'var(--control-radius)',
     '--shadow-overlay': '0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4)',
-    '--btn-fill': 'linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill))',
-    '--btn-fill-hover':
-      'linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white), color-mix(in srgb, var(--accent-fill) 88%, white))',
-    '--glow-accent': '0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent)',
-    '--glow-ambient':
-      'radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%)',
+    '--btn-fill': 'var(--accent-fill)',
+    '--btn-fill-hover': 'var(--accent-fill-hi)',
     '--scrim-soft': 'rgb(0 0 0 / 0.5)',
   };
 
@@ -416,14 +434,16 @@ describe('v167 §3: the tier-3 component tokens', () => {
     });
   }
 
-  it('resolves the button gradient to the two Arctic Navy fill blues', () => {
-    expect(resolveToken('--btn-fill')).toBe('linear-gradient(180deg, #2474d2, #1c6dd0)');
+  /* v195 §1.2: the primary button is one flat fill, no gradient. */
+  it('resolves the flat button fill to the two Graphite fill blues', () => {
+    expect(resolveToken('--btn-fill')).toBe('#2563c4');
+    expect(resolveToken('--btn-fill-hover')).toBe('#2d6cd3');
   });
 
   /* A gradient is an image: as background-color it is invalid and the
    * declaration is dropped silently, leaving the element transparent. */
   it('never paints a gradient token as background-color (styles.css and ui/)', () => {
-    const GRADIENT_AS_COLOUR = /background-color:\s*var\(--(?:panel-bg|btn-fill|btn-fill-hover|glow-ambient)\)/;
+    const GRADIENT_AS_COLOUR = /background-color:\s*var\(--(?:panel-bg|btn-fill|btn-fill-hover)\)/;
     const files = [
       join(process.cwd(), 'src/styles.css'),
       ...readdirSync(UI)
@@ -450,9 +470,9 @@ describe('v168 §1: motion tokens', () => {
 
   const DURATIONS: Record<string, string> = {
     '--dur-instant': '90ms',
+    '--dur-ui': '120ms',
     '--dur-base': '160ms',
     '--dur-slow': '260ms',
-    '--dur-enter': '420ms',
     '--dur-count': '900ms',
     '--dur-draw': '1200ms',
   };
@@ -469,7 +489,7 @@ describe('v168 §1: motion tokens', () => {
   });
 
   it('puts every new v168 token inside the tier-3 block', () => {
-    const NEW = ['--dur-enter', '--dur-count', '--dur-draw', '--flash-up-text', '--flash-down-text', '--panel-shadow-lift'];
+    const NEW = ['--dur-count', '--dur-draw', '--flash-up-text', '--flash-down-text'];
     for (const name of NEW) {
       expect(TIER3, name).toMatch(new RegExp(`^\\s*${name}:`, 'm'));
       expect([...CSS.matchAll(new RegExp(`^\\s*${name}:`, 'gm'))], name).toHaveLength(1);
@@ -481,10 +501,9 @@ describe('v168 §1: motion tokens', () => {
     expect(declared(CSS, '--ease-spring')).toBe('cubic-bezier(0.34, 1.4, 0.64, 1)');
   });
 
-  it('gives the flash text and the hover-lift shadow their spec values', () => {
+  it('gives the flash text its spec values', () => {
     expect(declared(TIER3, '--flash-up-text')).toBe('var(--pos)');
     expect(declared(TIER3, '--flash-down-text')).toBe('var(--neg)');
-    expect(declared(TIER3, '--panel-shadow-lift')).toBe('0 10px 28px rgba(0, 0, 0, .35)');
   });
 
   it('reaches jsdom with the scale already resolved', () => {
@@ -494,12 +513,14 @@ describe('v168 §1: motion tokens', () => {
 });
 
 /**
- * v179 §3.4 / §6b.6: no text-size token falls below 11px, even at the 90%
- * zoom preference (shell.ts ZOOM_CHOICES), while every size above the floor
- * still scales with --text-scale. The 9.9px labels the audit found were
- * --text-micro at 90%; the floor lives inside the token, as max(11px, ...).
+ * v179 §3.4 / §6b.6, raised by v195 §1.3 (correction 12): the smallest two
+ * size tokens, micro and chip, are 12px and floored there inside the token,
+ * as max(12px, ...), so the 90% zoom preference (shell.ts ZOOM_CHOICES)
+ * cannot push them below it. Every other size token scales freely: at 90%
+ * --text-table is 11.7px, which stays above the 11px rendered floor the
+ * layout audit measures (MIN_TEXT_PX).
  */
-describe('v179: the 11px text floor', () => {
+describe('v195: the 12px micro and chip floor', () => {
   /** Every size token: a --text-* declaration whose value reads --text-scale
    *  (the colour tokens --text-muted/--text-secondary/... never do). */
   const SIZE = /^\s*(--text-[a-z]+):\s*(.*var\(--text-scale\).*);/gm;
@@ -513,30 +534,40 @@ describe('v179: the 11px text floor', () => {
     return floor ? Math.max(Number(floor[1]), base) : base;
   }
 
+  const sizeOf = (name: string, scale: number) => px(sizes.find((s) => s.name === name)!.value, scale);
+
   it('finds the size tokens', () => {
     expect(sizes.map((s) => s.name)).toEqual(expect.arrayContaining(['--text-micro', '--text-chip', '--text-table']));
   });
 
-  it.each([0.9, 1, 1.1, 1.25])('keeps every size token at or above 11px at scale %s', (scale) => {
+  it.each([1, 1.1, 1.25])('keeps every size token at or above 12px at scale %s', (scale) => {
     const below = sizes
-      .filter((s) => px(s.value, scale) < 11)
+      .filter((s) => px(s.value, scale) < 12)
       .map((s) => `${s.name}=${px(s.value, scale)}px`);
     expect(below).toEqual([]);
   });
 
-  it('floors the two tokens that could fall below it, inside the token', () => {
-    expect(CSS).toMatch(/^\s*--text-micro:\s*max\(11px, calc\(11px \* var\(--text-scale\)\)\);/m);
-    expect(CSS).toMatch(/^\s*--text-chip:\s*max\(11px, calc\(12px \* var\(--text-scale\)\)\);/m);
+  it('keeps micro and chip at 12px and every other token at or above 11px at the 90% step', () => {
+    expect(sizeOf('--text-micro', 0.9)).toBe(12);
+    expect(sizeOf('--text-chip', 0.9)).toBe(12);
+    const below = sizes
+      .filter((s) => px(s.value, 0.9) < 11)
+      .map((s) => `${s.name}=${px(s.value, 0.9)}px`);
+    expect(below).toEqual([]);
+  });
+
+  it('floors the two smallest tokens at 12px, inside the token', () => {
+    expect(CSS).toMatch(/^\s*--text-micro:\s*max\(12px, calc\(12px \* var\(--text-scale\)\)\);/m);
+    expect(CSS).toMatch(/^\s*--text-chip:\s*max\(12px, calc\(12px \* var\(--text-scale\)\)\);/m);
   });
 
   it('still grows a floored token above 100%', () => {
-    const micro = sizes.find((s) => s.name === '--text-micro')!;
-    expect(px(micro.value, 1.25)).toBeCloseTo(13.75);
+    expect(sizeOf('--text-micro', 1.25)).toBeCloseTo(15);
   });
 
   it('reaches jsdom through the regenerated fixture', () => {
-    expect(resolveToken('--text-micro')).toBe('max(11px, calc(11px * 1))');
-    expect(resolveToken('--text-chip')).toBe('max(11px, calc(12px * 1))');
+    expect(resolveToken('--text-micro')).toBe('max(12px, calc(12px * 1))');
+    expect(resolveToken('--text-chip')).toBe('max(12px, calc(12px * 1))');
   });
 });
 
@@ -592,5 +623,108 @@ describe('v186: the display-figure tokens', () => {
     expect(resolveToken('--font-figure')).toBe(resolveToken('--font-sans'));
     expect(resolveToken('--figure-weight')).toBe('600');
     expect(resolveToken('--figure-tracking')).toBe('-0.02em');
+  });
+});
+
+/**
+ * v195 §1.2: decoration removed. The four tokens only decoration read are
+ * gone from tokens.css and from every reader (components, styles.css,
+ * motion.css), and a UI transition is one 120ms step, read through the
+ * --transition alias every existing call site already uses.
+ */
+describe('v195 §1.2: decoration tokens deleted, 120ms transitions', () => {
+  const MOTION_CSS = readFileSync(join(process.cwd(), 'src/styles/motion.css'), 'utf8');
+  const DELETED = ['--glow-ambient', '--glow-accent', '--panel-shadow-lift', '--dur-enter'];
+
+  it.each(DELETED)('declares no %s', (name) => {
+    expect(CSS).not.toMatch(new RegExp(`^\\s*${name}:`, 'm'));
+  });
+
+  it.each(DELETED)('leaves no reader or setter of %s', (name) => {
+    const holders = [
+      ...allSources(),
+      { name: 'styles/motion.css', source: MOTION_CSS },
+      { name: 'styles/tokens.css', source: CSS },
+    ]
+      .filter(({ source }) => stripComments(source).includes(name))
+      .map(({ name: file }) => file);
+    expect(holders).toEqual([]);
+  });
+
+  it('times every UI transition at 120ms through --transition', () => {
+    expect(CSS).toMatch(/^\s*--dur-ui:\s*calc\(120ms \* var\(--motion-scale\)\);/m);
+    expect(CSS).toMatch(/^\s*--transition:\s*var\(--dur-ui\) var\(--ease-out\);/m);
+    expect(resolveToken('--dur-ui')).toBe('calc(120ms * 1)');
+  });
+});
+
+/**
+ * v195 §1.4 (corrections 11, 15): row density. Dense is the :root default,
+ * so the fixture and a cold load are dense. Comfortable lives in one block,
+ * gated to a desktop-width window with a fine pointer, outside every :root
+ * (the resolver reads only top-level :root) and before tier 3 (no @media
+ * there). The touch block wins below 1024px and under a coarse pointer at
+ * any width. The body step never moves, so order figures stay >= 14px.
+ */
+describe('v195 §1.4: row density', () => {
+  const declared = (source: string, name: string) =>
+    source.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
+  const DENSITY_MEDIA = '@media (min-width: 1024px) and (pointer: fine)';
+  const comfortable = () =>
+    CSS.match(/@media \(min-width: 1024px\) and \(pointer: fine\)\s*\{\s*html\[data-density=comfortable\]\s*\{([^}]*)\}\s*\}/)?.[1] ?? '';
+  const touch = () => CSS.match(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+
+  it('defaults to dense in :root: 28px rows, 4x8px cells, 14px panel padding', () => {
+    expect(declared(CSS, '--row-h')).toBe('28px');
+    expect(declared(CSS, '--cell-pad-y')).toBe('var(--space-4)');
+    expect(declared(CSS, '--cell-pad-x')).toBe('var(--space-8)');
+    expect(declared(CSS, '--panel-pad')).toBe('var(--space-14)');
+    expect(resolveToken('--row-h')).toBe('28px');
+    expect(resolveToken('--cell-pad-y')).toBe('4px');
+    expect(resolveToken('--cell-pad-x')).toBe('8px');
+    expect(resolveToken('--panel-pad')).toBe('14px');
+  });
+
+  it('switches to comfortable only on a desktop-width window with a fine pointer', () => {
+    const body = comfortable();
+    expect(body).not.toBe('');
+    const EXPECTED: Record<string, string> = {
+      '--row-h': '44px',
+      '--cell-pad-y': 'var(--space-10)',
+      '--cell-pad-x': 'var(--space-14)',
+      '--panel-pad': 'var(--space-20)',
+      '--text-table': 'calc(14px * var(--text-scale))',
+    };
+    for (const [name, value] of Object.entries(EXPECTED)) expect(declared(body, name), name).toBe(value);
+  });
+
+  it('names data-density in that one block only', () => {
+    const code = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code.match(/data-density/g)).toHaveLength(1);
+    expect(code.split(DENSITY_MEDIA)).toHaveLength(2);
+  });
+
+  it('keeps the override outside every :root and before tier 3, so the fixture holds dense', () => {
+    const at = CSS.indexOf(DENSITY_MEDIA);
+    expect(at).toBeGreaterThan(-1);
+    expect(at).toBeLessThan(CSS.indexOf(TIER3_BANNER));
+    expect(comfortable()).not.toContain(':root');
+  });
+
+  it('lets the touch block win below 1024px and under a coarse pointer at any width', () => {
+    const body = touch();
+    expect(declared(body, '--row-h')).toBe('44px');
+    expect(declared(body, '--control-h')).toBe('44px');
+    expect(declared(body, '--hit-min')).toBe('44px');
+    expect(declared(body, '--cell-pad-y')).toBe('var(--space-10)');
+    expect(declared(body, '--cell-pad-x')).toBe('var(--space-10)');
+    expect(declared(body, '--panel-pad')).toBe('var(--space-14)');
+  });
+
+  it('never moves the body step, so order figures stay at 14px or larger in both densities', () => {
+    expect(declared(CSS, '--text-body')).toBe('calc(14px * var(--text-scale))');
+    expect(comfortable()).not.toContain('--text-body');
+    expect(touch()).not.toContain('--text-body');
+    expect(declared(CSS, '--text-table')).toBe('calc(13px * var(--text-scale))');
   });
 });

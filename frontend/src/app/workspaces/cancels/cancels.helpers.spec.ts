@@ -32,7 +32,7 @@ describe('ciText', () => {
 describe('rText', () => {
   it('signs and fixes R to two places', () => {
     expect(rText(1.85)).toBe('+1.85R');
-    expect(rText(-3.4)).toBe('-3.40R');
+    expect(rText(-3.4)).toBe('−3.40R');
     expect(rText(0)).toBe('0.00R');
   });
   it('prints a dash for a missing R', () => {
@@ -92,5 +92,11 @@ describe('filterRows', () => {
   });
   it('handles an empty book', () => {
     expect(filterRows([], only({ outcome: 'right' }))).toEqual([]);
+  });
+});
+
+describe('rText signs (v195 §1.1)', () => {
+  it('matches rMultiple: true minus on a loss, + on a gain, unsigned zero, dash for none', () => {
+    expect([rText(-0.3), rText(1.85), rText(0), rText(null)]).toEqual(['−0.30R', '+1.85R', '0.00R', '—']);
   });
 });

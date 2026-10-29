@@ -1,133 +1,82 @@
-<div class="shell" [class.railed]="railed()" [class.overlay]="overlay()"
-     [class.overlay-open]="overlayOpen()">
-  <!-- v168 §3 #10: the page's one ambient glow, under everything (shell.css). -->
-  <div class="ambient" aria-hidden="true"></div>
-  <!-- Below sm the sidebar is an overlay, so something has to summon it. -->
-  @if (overlay()) {
-    <button sb-button variant="icon" class="menu-button" type="button"
-            aria-label="Open navigation" (click)="openOverlay()">
-      <sb-icon name="menu" />
-    </button>
-  }
-
-  <nav class="sidebar" [attr.aria-hidden]="overlay() && !overlayOpen() ? 'true' : null">
-    <!-- v168 §3 #6: one rail that slides to the active entry. Absolutely
-         placed (shell.css), so it takes no part in the sidebar's flex gap. -->
+<div class="shell">
+  <!-- v195 Phase 3: one always-collapsed 48px icon rail. No expanded state,
+       no overlay, no hamburger: each entry is a glyph whose name is its
+       aria-label and whose label is an anchored hint, shown on hover and on
+       keyboard focus (correction 10). -->
+  <nav class="rail" aria-label="Primary">
+    <!-- v168 §3 #6: one 2px accent bar that slides to the active entry.
+         Absolutely placed (shell.css), so it takes no part in the flex gap. -->
     <sb-nav-indicator />
     <div class="mark">
-      <!-- Collapsed, the mark is the icon alone: a name clipped to three
-           letters reads as a rendering fault rather than as a choice. D3 --
-           an inline path, not images/logo.png (finding 16): the raster mark
-           cannot take the accent colour, does not read at 24px on --bg, and
-           has no collapsed-rail form. -->
-      <a class="brand sb-hit" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
-        <sb-icon name="brand" />
-        @if (!railed() || overlay()) {
-          <span class="word"><span>Bomeo</span><span>Capital</span></span>
-        }
+      <a class="brand sb-hit" routerLink="/dashboard" #brand aria-label="Bomeo Capital — go to the Dashboard">
+        <sb-icon name="brand" title="" />
       </a>
+      <sb-hint [anchor]="brand" text="Bomeo Capital · Dashboard" />
     </div>
 
-    @for (group of navGroups; track group.id) {
-      <p class="nav-group-label" [id]="group.id">{{ group.label }}</p>
-      <ul class="nav" [attr.aria-labelledby]="group.id">
+    @for (group of navGroups; track group.id; let first = $first) {
+      <!-- Groups are told apart by a thin rule, never by text (spec §1.3);
+           each list still carries its group's name for assistive tech. -->
+      @if (!first) {
+        <div class="rail-divider" aria-hidden="true"></div>
+      }
+      <ul class="nav" [attr.aria-label]="group.label">
         @for (entry of group.entries; track entry.path) {
           <li>
+            <!-- title="" on the icon: its default native tooltip would sit on
+                 top of the label hint. The hint is the link's sibling, never
+                 its child: a button cannot nest in a link, and in anchor mode
+                 the hint renders none. -->
             <a
-              class="sb-hit"
+              #link
+              class="rail-link sb-hit"
               [routerLink]="entry.path"
               routerLinkActive="active"
               [routerLinkActiveOptions]="{ exact: false }"
               [attr.aria-label]="entry.label"
-              [attr.title]="railed() ? entry.label : null"
-              (click)="closeOverlay()"
             >
-              <sb-icon [name]="entry.icon" />
-              <!-- The label stays in the DOM on the rail and is hidden
-                   visually, so the accessible name survives the collapse. -->
-              <span class="label">{{ entry.label }}</span>
+              <sb-icon [name]="entry.icon" title="" />
             </a>
+            <sb-hint [anchor]="link" [text]="entry.label" />
           </li>
         }
       </ul>
     }
 
-    <!-- Both feet in one box that owns the `margin-top: auto`. Putting that
-         on each child instead splits the free space between them when both
-         render, and loses the bottom anchor entirely when whichever child
-         carries it is the one that does not. -->
-    <div class="sidebar-foot">
-      <!-- Not shown on the phone overlay: there it would sit under a sheet
-           that a navigation is about to dismiss. -->
-      <div class="tagline-row">
-        <p class="rail-tagline">Trade smarter. Build further.</p>
-        @if (!overlay()) {
-          <button
-            sb-button
-            variant="icon"
-            class="collapse"
-            type="button"
-            [attr.aria-label]="railed() ? 'Expand sidebar' : 'Collapse sidebar'"
-            [attr.aria-pressed]="railed()"
-            (click)="toggleSidebar()"
-          >
-            <sb-icon [name]="railed() ? 'expand' : 'collapse'" />
-          </button>
-        }
-      </div>
-
-      <!-- The install's version, where the Jinja sidebar had it. Nothing
-           renders until the first answer: a version block that reads 0.0.0
-           while it waits is worse than one that is not there yet.
-
-           The `label` class on the words is doing real work -- it is the same
-           hook the nav labels use, so on the rail they clip away under the
-           existing rule and only the numbers survive, which is all that fits
-           in 52px. `title` carries the full text for that state. -->
-      @if (connection.versions(); as versions) {
-        <div
-          class="version"
-          [attr.title]="'ui ' + versions.ui + ' · bot ' + versions.bot
-            + (connection.lastUpdated() ? ' · updated ' + connection.lastUpdated() : '')"
-        >
-          <span class="version-row">
-            <span class="label">ui</span><span class="num">{{ versions.ui }}</span>
-          </span>
-          <span class="version-row">
-            <span class="label">bot</span><span class="num">{{ versions.bot }}</span>
-          </span>
-          @if (connection.lastUpdated(); as updated) {
-            <!-- VERSION.json's own mtime: it is bumped on every real change, so
-                 it doubles as "when did this image last actually change". -->
-            <span class="label updated">updated {{ updated }}</span>
-          }
-        </div>
+    <!-- The install's version, as a hint: 48px holds no "ui 1.36.1" line.
+         Nothing renders until the first /health answer -- a version that
+         reads 0.0.0 while it waits looks real. -->
+    <div class="rail-foot">
+      @if (connection.versions()) {
+        <sb-hint class="version" glyph="v" label="Version" align="left" [text]="versionText()" />
       }
     </div>
   </nav>
 
-  <!-- Tapping away from the overlay dismisses it, which is what every phone
-       user already expects a scrim to do. -->
-  @if (overlay() && overlayOpen()) {
-    <div class="scrim" (click)="closeOverlay()"></div>
-  }
-
   <div class="main">
     <header class="topbar">
-      <div class="topbar-lead">
-        <h1 class="page-title">{{ titles.title() }}</h1>
-        @if (titles.subtitle(); as subtitle) {
-          <p class="page-subtitle">{{ subtitle }}</p>
-        }
-      </div>
-      <div class="topbar-tape">
-        <sb-tape />
-      </div>
-      <!-- Sheet 2's form: dot, word, clock, read together as one group.
-           The dot answers only "is the event stream connected" (D30) -- it
-           must never be read as "these numbers are current"; that claim
-           belongs to each panel's own sb-freshness. -->
+      <!-- A labelled list, never a heading: the page's one <h1> belongs to
+           sb-page (correction 9), which route-focus.ts finds inside .workspace. -->
+      <sb-breadcrumb class="topbar-lead" />
+      <!-- v195 §3.1: the command palette's trigger, centred between the
+           breadcrumb and the cluster (both carry an auto left margin, which
+           splits the free space). Phones use the search icon instead. -->
+      @if (!isPhone()) {
+        <button sb-button variant="ghost" type="button" class="palette-trigger"
+                aria-haspopup="dialog" [attr.aria-expanded]="paletteOpen()"
+                aria-keyshortcuts="Control+K Meta+K /" (click)="openPalette()">
+          <span class="glyph" aria-hidden="true"><sb-icon name="search" /></span>
+          <span class="trigger-text">Search or jump…</span>
+          <kbd class="shortcut" aria-hidden="true">{{ paletteShortcut }}</kbd>
+        </button>
+      }
+      <!-- v195 Phase 3: the right cluster. The killswitch and freshness chips
+           show on every device, phone included: the halt control is on Risk,
+           one tap from the chip, and Scan health has left the Risk page
+           (§5.1). The dot answers only "is the event stream connected" (D30). -->
       <div class="status-cluster">
+        <sb-killswitch-chip [on]="killswitchOn()" />
+        <sb-freshness-chip [at]="connection.botLastSuccess() ?? connection.botLastSeen()" [now]="clock()" />
         <sb-connection-status
           [state]="connection.state()"
           [botAlive]="connection.botAlive()"
@@ -139,39 +88,61 @@
           {{ now() }}
         </span>
       </div>
+      <!-- Phone only: the bar collapses to the title, the two chips, this
+           search icon and the avatar (the one place to sign out there). -->
+      @if (isPhone()) {
+        <button sb-button variant="icon" type="button" class="search-trigger"
+                aria-label="Search or jump to a page" (click)="onSearchRequested()">
+          <sb-icon name="search" />
+        </button>
+      }
       <sb-profile-menu [zoom]="zoom()" [state]="connection.state()"
                        [botAlive]="connection.botAlive()" [marketActive]="connection.marketActive()" (zoomCycled)="cycleZoom()"
                        [motion]="motionMode()" (motionChanged)="setMotion($event)"
+                       [density]="density.density()" (densityChanged)="density.set($event)"
                        (signedOut)="logout()" />
+      <!-- Hung from the bar's bottom edge (shell.css), never in the flow: an
+           automatic scan runs every SCAN_INTERVAL_MINUTES all session, and a
+           strip that took layout would shunt the page down and back. In the
+           sticky bar it shows on every route. -->
+      <sb-scan-progress
+        [running]="connection.scanRunning()"
+        [progress]="connection.scanProgress()"
+      />
     </header>
 
-    <!-- Engaged killswitch is shell-level and unmissable: it means the bot
-         has stopped taking positions, which is true no matter which
-         workspace happens to be open. Its own strip, not squeezed into the
-         bar, because the bar is now full: competing for width with the tape
-         is how an alert ends up truncated, and this is the one message on
-         the page that must never be. -->
+    <!-- The ticker tape, a strip under the bar (spec Phase 3); what it shows
+         is still tape-prefs' call. -->
+    <div class="tape-strip">
+      <sb-tape />
+    </div>
+
+    <!-- Engaged killswitch: the chip above is the state on every page; this
+         strip is the alarm, full width and never truncated. -->
     @if (killswitchOn()) {
       <div class="killswitch-strip" role="alert">KILLSWITCH ENGAGED</div>
     }
 
     <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
-      <!-- Over the content, never in the flow. An automatic scan runs every
-           SCAN_INTERVAL_MINUTES for the whole session, so a strip that took
-           up layout would push whatever is being read down 40px and back,
-           several times an hour. The killswitch above makes the opposite
-           trade on purpose: it must never be missed, this must never
-           interrupt. -->
-      <sb-scan-progress
-        [running]="connection.scanRunning()"
-        [progress]="connection.scanProgress()"
-      />
-      <div class="workspace-content" sbRouteEntrance [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
+      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
       @if (routeLoading.visible()) {
         <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
       }
     </main>
   </div>
+
+  <!-- v195 Phase 3, phone: the bottom tab bar and its More sheet. Both hosts
+       stay out of the grid: the bar is fixed, the sheet's host is
+       display: contents. -->
+  @if (isPhone()) {
+    <sb-phone-tab-bar [moreOpen]="moreOpen()" (moreRequested)="toggleMore()" />
+    <sb-more-sheet [open]="moreOpen()" (closed)="closeMore()" (searchRequested)="onSearchRequested()" />
+  }
+
+  <!-- v195 §3.1: the command palette. After the More sheet on purpose: when
+       the sheet's search field opens it, the sheet's focus trap returns focus
+       first and the palette's records that as the place to go back to. -->
+  <sb-command-palette [open]="paletteOpen()" (closed)="closePalette()" />
 
   <sb-toast-host />
 </div>

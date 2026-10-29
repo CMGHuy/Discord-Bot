@@ -18,6 +18,7 @@ import {
 import { VersionHistory } from '../../api/models';
 import { Versions } from './versions';
 import { VersionsStore } from '../../stores/versions.store';
+import { RouteTitleService } from '../../routing/route-title.service';
 
 /* The Versions page's one structural guarantee: an open-ended component
  * count costs vertical space, never horizontal. Chips wrap and lanes stack
@@ -293,5 +294,46 @@ describe('Versions telemetry line on one baseline (v179 layout audit)', () => {
 
   it('sets the 13px figures and the 11px N= count on the text baseline', () => {
     expect(src.match(/\.telemetry-cards \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+  });
+});
+
+/* -- v195 Phase 4 -- Versions on sb-page ------------------------------------ */
+
+describe('Versions on sb-page (v195 Phase 4)', () => {
+  it('renders the route title as the one h1, from sb-page', async () => {
+    const fixture = seed(SIX);
+    TestBed.inject(RouteTitleService).set('Versions', "What's deployed, and when it changed");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Versions');
+    expect(el.querySelector('sb-section-head')).toBeNull();
+  });
+
+  it('puts the stale-history notice at the header right, and only when stale', async () => {
+    const stale = seed({ ...SIX, stale: true });
+    stale.detectChanges();
+    await stale.whenStable();
+    const actions = (stale.nativeElement as HTMLElement).querySelector('sb-page [page-actions]')!;
+    expect(actions.textContent).toContain('History not regenerated');
+    expect(actions.querySelector('code')!.textContent).toContain('build_version_matrix.py');
+
+    const fresh = seed(SIX);
+    fresh.detectChanges();
+    await fresh.whenStable();
+    expect((fresh.nativeElement as HTMLElement).querySelector('sb-page [page-actions] .stale')).toBeNull();
+  });
+
+  it('keeps the timeline and its pager in one primary element, with no scope bar', async () => {
+    const fixture = seed(SIX);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const primary = el.querySelector('sb-page [page-primary]')!;
+    expect(primary.tagName.toLowerCase()).toBe('sb-async');
+    expect(primary.querySelector('sb-timeline')).not.toBeNull();
+    expect(primary.querySelector('sb-pagination')).not.toBeNull();
+    expect(el.querySelector('[page-scope]')).toBeNull();
   });
 });

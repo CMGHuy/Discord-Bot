@@ -204,7 +204,7 @@ interface ProposalView extends ProposalRow {
           <button
             sb-button
             type="button"
-            variant="danger"
+            variant="danger-quiet"
             (click)="pendingDelete.set(proposal)"
           >
             Delete

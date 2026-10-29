@@ -1,6 +1,9 @@
+import { Component, provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import { TRADE_SORTABLE, TradeRow } from '../../api/models';
+import { DataTable } from '../../ui/data-table/data-table';
 import { isInline } from '../../ui/priority';
 import { compactLines, drawerColumns } from '../../ui/data-table/compact';
 import { deriveOpenVisible } from '../dashboard/dashboard.helpers';
@@ -8,6 +11,7 @@ import { deriveOpenVisible } from '../dashboard/dashboard.helpers';
 import {
   COMPACT_COLUMNS,
   FULL_COLUMNS,
+  NEVER_COLLAPSED_COLUMNS,
   PHONE_COMPACT_COLUMNS,
   baselineColumns,
   PINNED_COLUMNS,
@@ -105,14 +109,14 @@ describe('chipQuery', () => {
 describe('trade column sets', () => {
   it('compact is exactly the spec list', () => {
     expect(COMPACT_COLUMNS).toEqual([
-      'num', 'status', 'ticker', 'confidence_level', 'direction',
+      'num', 'status', 'ticker', 'confidence_level', 'direction', 'badge',
       'now', 'plan', 'pnl_pct', 'r_multiple', 'held', 'opened_at', 'closed_at',
     ]);
   });
 
   it('full is exactly the spec list', () => {
     expect(FULL_COLUMNS).toEqual([
-      'num', 'status', 'ticker', 'confidence_level', 'direction',
+      'num', 'status', 'ticker', 'confidence_level', 'direction', 'badge',
       'now', 'plan', 'risk_reward', 'r_multiple', 'strategy', 'horizon',
       'pnl_pct', 'realized_pnl_amount', 'held', 'opened_at', 'closed_at',
     ]);
@@ -201,11 +205,74 @@ describe('Trades column floors', () => {
       .toBe(false);
   });
 
-  it('inlines exactly ticker, plan and P&L % at xs -- the rest is the row accordion', () => {
+  it('inlines exactly ticker, plan, P&L % and the badge at xs -- the rest is the row accordion', () => {
     // Amended 2026-09-28: the 8-column phone row behind a horizontal scroller
     // is gone; everything else is one tap on the row's expand arrow.
     const xs = tradeColumns().filter((c) => isInline(c.inlineFrom, 'xs')).map((c) => c.key);
-    expect(xs.sort()).toEqual(['plan', 'pnl_pct', 'ticker']);
+    expect(xs.sort()).toEqual(['badge', 'plan', 'pnl_pct', 'ticker']);
+  });
+});
+
+/* -- v195 correction 8 -- what never collapses on a tablet ------------------- */
+
+describe('never-collapsed trade columns (v195 correction 8)', () => {
+  const columns = tradeColumns();
+  const floor = (key: string) => columns.find((column) => column.key === key)?.inlineFrom;
+
+  it('names ticker, side, plan, stop, P&L, R, tier and the strategy badge', () => {
+    expect([...NEVER_COLLAPSED_COLUMNS]).toEqual(['ticker', 'direction', 'plan', 'stop_loss', 'pnl_pct', 'r_multiple', 'tier', 'badge']);
+  });
+
+  it('declares every never-collapsed key in tradeColumns()', () => {
+    const known = new Set(columns.map((column) => column.key));
+    for (const key of NEVER_COLLAPSED_COLUMNS) expect(known, `missing column def: ${key}`).toContain(key);
+  });
+
+  it.each(['sm', 'md', 'lg', 'xl'] as const)('keeps every one inline at %s -- never in the row expansion', (viewport) => {
+    for (const key of NEVER_COLLAPSED_COLUMNS) {
+      expect(isInline(floor(key), viewport), `${key} collapses at ${viewport}`).toBe(true);
+    }
+  });
+
+  it('lifts the stop and the tier off the picker-only lg floor', () => {
+    expect(floor('stop_loss')).toBe('sm');
+    expect(floor('tier')).toBe('sm');
+  });
+
+  it('shows the strategy badge by default and on every device, phone card included', () => {
+    expect(COMPACT_COLUMNS).toContain('badge');
+    expect(FULL_COLUMNS).toContain('badge');
+    expect(floor('badge')).toBe('xs');
+    expect(columns.find((column) => column.key === 'badge')!.compact).toEqual({ line: 2, order: 3 });
+  });
+
+  it('reads the badge as its word, so colour is never the only cue', () => {
+    const badge = columns.find((column) => column.key === 'badge')!;
+    expect(badge.value!({ badge: 'WEAK' } as TradeRow)).toBe('WEAK');
+    expect(badge.value!({ badge: 'VALIDATED' } as TradeRow)).toBe('VALIDATED');
+    expect(badge.value!({ badge: null } as TradeRow)).toBe('\u2014');
+  });
+});
+
+@Component({
+  imports: [DataTable],
+  template: `<sb-data-table [rows]="rows" [columns]="columns" [visible]="visible" [rowKey]="key" viewportAt="xs" [cardsAt]="true" />`,
+})
+class PhoneTradesHost {
+  readonly rows = [{ id: '1', leg_index: 0, ticker: 'NVDA', badge: 'WEAK' } as unknown as TradeRow];
+  readonly columns = tradeColumns().filter((column) => column.key === 'ticker' || column.key === 'badge');
+  readonly visible = ['ticker', 'badge'];
+  readonly key = (row: TradeRow) => row.id;
+}
+
+describe('the strategy badge on a phone (v195 correction 8)', () => {
+  it('renders a WEAK row as WEAK on the 390px card, not behind a tap', () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const fixture = TestBed.createComponent(PhoneTradesHost);
+    fixture.detectChanges();
+    const cell = (fixture.nativeElement as HTMLElement).querySelector('.compact-row [data-col="badge"]');
+    expect(cell).not.toBeNull();
+    expect(cell!.textContent!.trim()).toBe('WEAK');
   });
 });
 
@@ -232,14 +299,14 @@ describe('Trades compact row -- v179 §3.1', () => {
     ['Dashboard open positions', deriveOpenVisible([...PHONE_COMPACT_COLUMNS, ...PINNED_COLUMNS])],
   ];
 
-  it('leads line 1 with identity, direction and P&L; line 2 with the plan and status', () => {
+  it('leads line 1 with identity, direction and P&L; line 2 with the plan, status and badge', () => {
     const { line1, line2 } = compactLines(columns, FULL_COLUMNS);
     expect(keys(line1)).toEqual(['ticker', 'direction', 'pnl_pct']);
-    expect(keys(line2)).toEqual(['plan', 'status']);
+    expect(keys(line2)).toEqual(['plan', 'status', 'badge']);
   });
 
-  it('declares a slot on those five columns only -- the rest is one tap away', () => {
-    expect(keys(columns.filter((column) => column.compact)).sort()).toEqual(['direction', 'plan', 'pnl_pct', 'status', 'ticker']);
+  it('declares a slot on those six columns only -- the rest is one tap away', () => {
+    expect(keys(columns.filter((column) => column.compact)).sort()).toEqual(['badge', 'direction', 'plan', 'pnl_pct', 'status', 'ticker']);
   });
 
   it.each(SETS)('%s: P&L (with its amount) and the plan (with its stop) stay on the row', (_, shown) => {

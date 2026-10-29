@@ -31,7 +31,7 @@ const SURFACES = ['--bg', '--surface', '--surface-raised', '--surface-overlay'];
 /**
  * Tokens that are NOT text and are exempt.
  *
- * `--text-faint` measures ~2.3:1 on --surface. It is a RULE AND DIVIDER
+ * `--text-faint` measures ~3.7:1 on --surface (v195 Graphite). It is a RULE AND DIVIDER
  * colour, never text that must be read — that is decision D6's binding rule
  * (`no-text-uses-text-faint`). The scoped source scan at the end of this
  * file enforces it for the primitives v186 touched.
@@ -70,10 +70,10 @@ describe('accent legibility (v80 D1)', () => {
     expect(ratio(resolveToken('--on-accent'), resolveToken('--accent-fill'))).toBeGreaterThanOrEqual(4.5);
   });
 
-  /* v167 §2: --accent-fill-hi is the TOP stop of the primary button's
-   * gradient (tier 3 --btn-fill), so white ink sits on it too. It clears
-   * with the thinnest margin in the palette (4.66:1), which is why it is
-   * checked by name rather than assumed from --accent-fill. */
+  /* v167 §2 / v195 §1.1: --accent-fill-hi is the hover fill of the primary
+   * button, so white ink sits on it too. Under Graphite it measures 5.00:1
+   * against --accent-fill's 5.74:1; the thinner margin is why it is checked
+   * by name rather than assumed from --accent-fill. */
   it('--on-accent on --accent-fill-hi clears 4.5:1', () => {
     expect(ratio(resolveToken('--on-accent'), resolveToken('--accent-fill-hi'))).toBeGreaterThanOrEqual(4.5);
   });

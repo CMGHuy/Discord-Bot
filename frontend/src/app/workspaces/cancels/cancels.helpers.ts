@@ -1,5 +1,6 @@
 import type { CancelFigure, CancelOutcome, CancelPlanRow } from '../../api/models';
 import type { CancelFilter } from '../../stores/cancels.store';
+import { rMultiple } from '../../ui/format';
 
 const EXCLUDED: Record<string, string> = {
   no_bars: 'no bars', split_guard: 'split in window', bad_levels: 'bad levels',
@@ -28,10 +29,10 @@ export function ciText(ci: [number, number] | null): string {
   return `95% CI ${Math.round(ci[0] * 100)}–${Math.round(ci[1] * 100)}%`;
 }
 
-/** Signed R to two places: `+1.85R`, `-3.40R`, `0.00R`; a dash for none. */
+/** Signed R to two places: `+1.85R`, `−3.40R`, `0.00R`; a dash for none.
+ *  v195 §1.1: one implementation, the shared `rMultiple`. */
 export function rText(r: number | null): string {
-  if (r === null) return '—';
-  return `${r > 0 ? '+' : ''}${r.toFixed(2)}R`;
+  return rMultiple(r);
 }
 
 /** The verdict wording of a replayed row. */

@@ -31,8 +31,8 @@ import { Select, TextInput } from '../../ui/form-controls';
 import { Icon } from '../../ui/icon';
 import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { ControlRow, Panel, Tab, TabBar } from '../../ui/layout';
+import { Page } from '../../ui/page';
 import { RowLink } from '../../ui/row-link';
-import { SectionHead } from '../../ui/section-head';
 import { Sparkline } from '../../ui/sparkline';
 import { readWatchlistTags, writeWatchlistTags } from '../../ui/watchlist-prefs';
 import { EarningsCalendar } from './earnings-calendar';
@@ -111,6 +111,10 @@ function sortValue(row: Ticker, key: string, flagged: readonly string[]): string
  * — the box splits on commas and whitespace either way, and the result names
  * what was added, what was already there and what was rejected.
  *
+ * **On sb-page since v195.** Tabs and filters are the scope bar, the table
+ * (or the earnings calendar) the primary panel, Add tickers the one
+ * secondary panel; the count sits in the header.
+ *
  * `DataTableComponent` is the fourth and last of its call sites (spec v14's
  * definition of done, property 3). A second table implementation anywhere is
  * a defect, and this screen is small enough to have been tempting.
@@ -175,7 +179,7 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, SectionHead, Async, Icon, Sparkline, AgeHint, Hint],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, Page, Async, Icon, Sparkline, AgeHint, Hint],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -183,11 +187,12 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
   // need to reach.
   host: { class: 'register-instrument' },
   template: `
-    <sb-section-head>
-      <!-- One wrapper, not two separate actions projections -- otherwise
-           .count and .stale land at opposite ends of the space-between
-           row instead of clustered beside each other. -->
-      <div actions class="head-status">
+    <sb-page>
+      <!-- v195 Phase 4: the count and the Earnings error sit at the header's
+           right. No destructive control lives here: removing a ticker is a
+           per-row command on a named symbol with its own confirm (V195-8
+           kept its danger-icon). -->
+      <div page-actions class="head-status">
         <span class="count">{{ store.count() }} watched</span>
         <!-- Only for Earnings: the Watchlist tab's own sb-async already
              turns this same store.error() into a scoped error panel or
@@ -200,308 +205,318 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
           <span class="stale" role="status">{{ message }}</span>
         }
       </div>
-    </sb-section-head>
 
-    <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
-
-    @if (activeTab() === 'watchlist') {
-    <sb-panel heading="Add tickers">
-      <!-- SR62. watchlist.html:85-92. The gap table calls this the one
-           cosmetic row with a functional consequence: an add that fails
-           because the symbol format is wrong gives no hint what the right
-           format was, and the format is not guessable. -->
-      <p class="section-help">
-        Ticker symbols must match Yahoo Finance format — e.g.
-        <code>ASML.AS</code> for Euronext, <code>BTC-USD</code> for crypto,
-        <code>^GSPC</code> for the S&amp;P 500 index. After adding or removing
-        a ticker, the change takes effect on the next <code>!check</code> or
-        scheduled background scan.
-      </p>
-      <sb-control-row class="add">
-        <div class="box">
-          <!-- (focusout), not (blur): blur does not bubble, so a listener on
-               this host element would never see the inner input element lose
-               focus. focusout is blur's bubbling equivalent. -->
-          <sb-text-input
-            class="input"
-            [value]="entry()"
-            (valueChange)="onEntry($event)"
-            (keydown.enter)="add()"
-            (focusout)="closeSuggestions()"
-            placeholder="AAPL, or paste a list"
-            ariaLabel="Ticker symbols to add"
-          />
-
-          @if (store.suggestions().length) {
-            <!-- mousedown, not click: blur fires first on a click and would
-                 close the list before the handler ran. -->
-            <ul class="suggestions">
-              @for (hit of store.suggestions(); track hit.symbol) {
-                <li>
-                  <button sb-button variant="ghost" type="button" (mousedown)="pick(hit.symbol)">
-                    <span class="hit-symbol">{{ hit.symbol }}</span>
-                    <span class="hit-name">{{ hit.name }}</span>
-                    @if (store.symbols().has(hit.symbol)) {
-                      <!-- Said before the round trip, because being told
-                           "already watched" by the server is a request the
-                           screen already had the answer to. -->
-                      <span class="hit-have">watched</span>
-                    }
-                  </button>
-                </li>
-              }
-            </ul>
-          }
-        </div>
-
-        <button
-          sb-button
-          variant="primary"
-          type="button"
-          [loading]="store.adding()"
-          [disabled]="!entry().trim()"
-          (click)="add()"
-        >
-          Add
-        </button>
-      </sb-control-row>
-
-      @if (store.addResult(); as message) {
-        <p class="result" role="status">{{ message }}</p>
-      }
-      @if (store.addError(); as message) {
-        <p class="error" role="alert">{{ message }}</p>
-      }
-    </sb-panel>
-
-    @if (store.removeError(); as message) {
-      <p class="error" role="alert">{{ message }}</p>
-    }
-
-    <!-- v85 D35/R7-05: tag chips filter the view (never the scanner -- no
-         request changes, symbols and their scan cadence are untouched);
-         search narrows by symbol; add-tag and the table's own freshness
-         marker are scope, not filters, same slot split trades.ts uses. -->
-    <sb-toolbar [controls]="toolbarControls()">
-      <sb-filter-chips
-        slot="tag"
-        [chips]="tagChips()"
-        [selected]="tagFilter()"
-        label="Tag"
-        (selectedChange)="onTagChip($event)"
-      />
-      <sb-text-input
-        slot="search"
-        type="search"
-        ariaLabel="Filter the watchlist by symbol"
-        placeholder="Filter by symbol"
-        [value]="symbolQuery()"
-        (valueChange)="symbolQuery.set($event)"
-      />
-      <button
-        slot="add-tag"
-        type="button"
-        class="add-tag"
-        sb-button
-        variant="ghost"
-        (click)="addingTag.set(!addingTag())"
-      >
-        + Tag
-      </button>
-      <sb-freshness slot="freshness" [at]="maxAsOf()" />
-    </sb-toolbar>
-
-    @if (addingTag()) {
-      <sb-control-row class="tag-form">
-        <sb-select
-          label="Symbol"
-          placeholder="Choose a symbol"
-          [value]="newTagSymbol()"
-          (valueChange)="newTagSymbol.set($event)"
-          [options]="symbolOptions()"
-        />
-        <sb-text-input
-          label="Tag"
-          placeholder="e.g. Tech"
-          [value]="newTagValue()"
-          (valueChange)="newTagValue.set($event)"
-          (keydown.enter)="addTag()"
-        />
-        <button sb-button variant="primary" type="button" [disabled]="!canAddTag()" (click)="addTag()">
-          Add
-        </button>
-      </sb-control-row>
-    }
-
-    <sb-async
-      [loading]="async().loading"
-      [error]="async().error"
-      [empty]="async().empty"
-      [staleAsOf]="async().staleAsOf"
-      emptyReason="no-data-yet"
-      emptyTitle="No tickers on the watchlist"
-      emptyHint="Add a ticker to start scanning."
-      [skeletonRows]="10"
-      [skeletonCols]="4"
-      [announce]="announce()"
-      (retry)="store.load()"
-    >
-      <sb-panel heading="Watchlist" [flush]="true">
-        <!-- A row blinks when its earnings date falls within the current
-             week (Monday-Sunday, same boundary the Earnings tab's calendar
-             uses) -- a gentle pulse, not a hard flash; see data-table.ts's
-             .blink rule and its Motion = Off fallback in styles/motion.css. -->
-        <p class="section-help panel-note">
-          A row pulses when that ticker reports earnings this week.
-        </p>
-        <sb-data-table
-          [rows]="watchlistPage.visible()"
-          [columns]="columns()"
-          [visible]="visible"
-          [rowKey]="rowKey"
-          [rowClass]="rowClassFn"
-          [sort]="sort()"
-          [emptyState]="emptyState"
-          [pagination]="watchlistPage.pageSpec()"
-          [showPerPage]="true"
-          (sortChange)="setSort($event)"
-          (pageChange)="watchlistPage.setPage($event)"
-          (perPageChange)="onPerPage($event)"
-          phoneTap="drawer"
-          [detailLink]="tickerLink"
-          (rowActivate)="open($event)"
-        />
-      </sb-panel>
-    </sb-async>
-
-    <sb-confirm-dialog
-      [open]="pending() !== null"
-      title="Remove from the watchlist"
-      [consequence]="consequence()"
-      confirmLabel="Remove"
-      [working]="store.removing() !== null"
-      (confirmed)="remove()"
-      (cancelled)="pending.set(null)"
-    />
-
-    <!-- cells ----------------------------------------------------------- -->
-
-    <ng-template #tapeCell let-row>
-      <!-- A button, so \`data-table.ts:758\` exempts it from row activation and
-           clicking the flag never navigates to the ticker. -->
-      <button
-        type="button"
-        class="tape-toggle"
-        sb-button
-        variant="ghost"
-        [attr.aria-pressed]="tape.symbols().includes(row.symbol)"
-        [attr.aria-label]="'Show ' + row.symbol + ' in the live tape'"
-        (click)="tape.toggle(row.symbol)"
-      >{{ tape.symbols().includes(row.symbol) ? '◉' : '○' }}</button>
-    </ng-template>
-
-    <ng-template #symbolCell let-row>
-      <sb-row-link [link]="['/watchlist', row.symbol]">{{ row.symbol }}</sb-row-link>
-    </ng-template>
-
-    <!-- v85 D33/R7-04: the price and the bar date it was computed from, in
-         one cell -- the two travel together (the docstring on Ticker.as_of
-         is what a lagging cache actually threatens: the PRICE, not some
-         separate figure), so pairing them here is what lets the row's
-         .lagging tint read as "this price is stale" rather than an
-         unexplained row colour. -->
-    <ng-template #priceCell let-row>
-      <span class="price">{{ num(row.price) }}</span>
-      <span class="as-of">{{ text(row.as_of) }}</span>
-      <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="pageWindowS" />
-      <!-- v106: only the exception is flagged -- Alpaca missed and yfinance
-           answered. An Alpaca or plain-yfinance price stays quiet. -->
-      @if (row.price_source === 'yfinance-fallback') {
-        <span class="source-badge">fallback</span><sb-hint [text]="fallbackHint" label="About fallback prices" align="left" />
-      }
-    </ng-template>
-
-    <ng-template #sparkCell let-row>
-      @if (row.spark?.length) {
-        <sb-sparkline [points]="row.spark" [label]="row.symbol + ' price, last 30 bars'" />
-      }
-    </ng-template>
-
-    <!-- The bot's own verdict (v85 D34). Every state carries a WORD, not
-         just a tone, per the repo-wide "never colour alone" rule --
-         "No setup"/"In position" read the same on a screenshot with the
-         colour desaturated. -->
-    <ng-template #signalCell let-row>
-      <span class="signal">
-        @switch (row.signal.state) {
-          @case ('active') {
-            <span class="signal-state">In position</span>
-            @if (row.signal.strategy) { <sb-chip [label]="row.signal.strategy" tone="good" /> }
-          }
-          @case ('pending') {
-            <span class="signal-score">{{ row.signal.score }}</span>
-            @if (row.signal.horizon) { <sb-chip [label]="row.signal.horizon" /> }
-            @if (row.signal.strategy) { <sb-chip [label]="row.signal.strategy" tone="info" /> }
-          }
-          @default {
-            No setup
+      <!-- Scope only (spec Phase 4): the tabs, then on the Watchlist tab the
+           tag/search toolbar and the + Tag form. -->
+      <div page-scope class="scope">
+        <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
+        @if (activeTab() === 'watchlist') {
+          <!-- v85 D35/R7-05: tag chips filter the view (never the scanner -- no
+               request changes, symbols and their scan cadence are untouched);
+               search narrows by symbol; add-tag and the table's own freshness
+               marker are scope, not filters, same slot split trades.ts uses. -->
+          <sb-toolbar [controls]="toolbarControls()">
+            <sb-filter-chips
+              slot="tag"
+              [chips]="tagChips()"
+              [selected]="tagFilter()"
+              label="Tag"
+              (selectedChange)="onTagChip($event)"
+            />
+            <sb-text-input
+              slot="search"
+              type="search"
+              ariaLabel="Filter the watchlist by symbol"
+              placeholder="Filter by symbol"
+              [value]="symbolQuery()"
+              (valueChange)="symbolQuery.set($event)"
+            />
+            <button
+              slot="add-tag"
+              type="button"
+              class="add-tag"
+              sb-button
+              variant="ghost"
+              (click)="addingTag.set(!addingTag())"
+            >
+              + Tag
+            </button>
+            <sb-freshness slot="freshness" [at]="maxAsOf()" />
+          </sb-toolbar>
+          @if (addingTag()) {
+            <sb-control-row class="tag-form">
+              <sb-select
+                label="Symbol"
+                placeholder="Choose a symbol"
+                [value]="newTagSymbol()"
+                (valueChange)="newTagSymbol.set($event)"
+                [options]="symbolOptions()"
+              />
+              <sb-text-input
+                label="Tag"
+                placeholder="e.g. Tech"
+                [value]="newTagValue()"
+                (valueChange)="newTagValue.set($event)"
+                (keydown.enter)="addTag()"
+              />
+              <button sb-button variant="primary" type="button" [disabled]="!canAddTag()" (click)="addTag()">
+                Add
+              </button>
+            </sb-control-row>
           }
         }
-      </span>
-    </ng-template>
+      </div>
 
-    <ng-template #actionsCell let-row>
-      <button
-        sb-button
-        variant="danger-icon"
-        type="button"
-        [attr.aria-label]="'Remove ' + row.symbol"
-        (click)="ask(row)"
-      >
-        <sb-icon name="trash" />
-      </button>
-    </ng-template>
-    }
+      <!-- v195 §5.2: the page's main table (or, on Earnings, its calendar)
+           is the primary panel. One element; the tab switch is inside it. -->
+      <div page-primary class="tab-body">
+        @if (activeTab() === 'watchlist') {
+          @if (store.removeError(); as message) {
+            <p class="error" role="alert">{{ message }}</p>
+          }
+          <sb-async
+            [loading]="async().loading"
+            [error]="async().error"
+            [empty]="async().empty"
+            [staleAsOf]="async().staleAsOf"
+            emptyReason="no-data-yet"
+            emptyTitle="No tickers on the watchlist"
+            emptyHint="Add a ticker to start scanning."
+            [skeletonRows]="10"
+            [skeletonCols]="4"
+            [announce]="announce()"
+            (retry)="store.load()"
+          >
+            <sb-panel heading="Watchlist" [flush]="true">
+              <!-- A row blinks when its earnings date falls within the current
+                   week (Monday-Sunday, same boundary the Earnings tab's calendar
+                   uses) -- a gentle pulse, not a hard flash; see data-table.ts's
+                   .blink rule and its Motion = Off fallback in styles/motion.css. -->
+              <p class="section-help panel-note">
+                A row pulses when that ticker reports earnings this week.
+              </p>
+              <sb-data-table
+                [rows]="watchlistPage.visible()"
+                [columns]="columns()"
+                [visible]="visible"
+                [rowKey]="rowKey"
+                [rowClass]="rowClassFn"
+                [sort]="sort()"
+                [emptyState]="emptyState"
+                [pagination]="watchlistPage.pageSpec()"
+                [showPerPage]="true"
+                (sortChange)="setSort($event)"
+                (pageChange)="watchlistPage.setPage($event)"
+                (perPageChange)="onPerPage($event)"
+                phoneTap="drawer"
+                [detailLink]="tickerLink"
+                (rowActivate)="open($event)"
+              />
+            </sb-panel>
+          </sb-async>
+        }
+        @if (activeTab() === 'earnings') {
+          <sb-async
+            [loading]="async().loading"
+            [error]="async().error"
+            [empty]="async().empty"
+            emptyReason="no-data-yet"
+            emptyTitle="No earnings to display"
+            emptyHint="Add a ticker to start tracking earnings dates."
+            [skeletonRows]="5"
+            [skeletonCols]="7"
+            (retry)="store.load()"
+          >
+            <sb-panel heading="Earnings">
+              <p class="section-help">
+                Every watchlist ticker's next known earnings date, one cell per
+                day. Only tickers currently on the watchlist appear here, and a
+                newly-added one shows up the next time this page loads — same
+                data as the Watchlist tab's "Next earnings" column, just grouped
+                by date instead of by ticker.
+              </p>
+              <sb-earnings-calendar [tickers]="store.tickers()" />
+            </sb-panel>
+          </sb-async>
+        }
+      </div>
 
-    @if (activeTab() === 'earnings') {
-      <sb-async
-        [loading]="async().loading"
-        [error]="async().error"
-        [empty]="async().empty"
-        emptyReason="no-data-yet"
-        emptyTitle="No earnings to display"
-        emptyHint="Add a ticker to start tracking earnings dates."
-        [skeletonRows]="5"
-        [skeletonCols]="7"
-        (retry)="store.load()"
+      <!-- Adding is the secondary panel, after the table it feeds. Hidden,
+           not removed, on Earnings: the slot stays one stable element
+           (sb-page contract). -->
+      <sb-panel
+        page-secondary
+        class="add-panel"
+        heading="Add tickers"
+        [style.display]="activeTab() === 'watchlist' ? null : 'none'"
       >
-        <sb-panel heading="Earnings">
-          <p class="section-help">
-            Every watchlist ticker's next known earnings date, one cell per
-            day. Only tickers currently on the watchlist appear here, and a
-            newly-added one shows up the next time this page loads — same
-            data as the Watchlist tab's "Next earnings" column, just grouped
-            by date instead of by ticker.
-          </p>
-          <sb-earnings-calendar [tickers]="store.tickers()" />
-        </sb-panel>
-      </sb-async>
-    }
+        <!-- SR62. watchlist.html:85-92. The gap table calls this the one
+             cosmetic row with a functional consequence: an add that fails
+             because the symbol format is wrong gives no hint what the right
+             format was, and the format is not guessable. -->
+        <p class="section-help">
+          Ticker symbols must match Yahoo Finance format — e.g.
+          <code>ASML.AS</code> for Euronext, <code>BTC-USD</code> for crypto,
+          <code>^GSPC</code> for the S&amp;P 500 index. After adding or removing
+          a ticker, the change takes effect on the next <code>!check</code> or
+          scheduled background scan.
+        </p>
+        <sb-control-row class="add">
+          <div class="box">
+            <!-- (focusout), not (blur): blur does not bubble, so a listener on
+                 this host element would never see the inner input element lose
+                 focus. focusout is blur's bubbling equivalent. -->
+            <sb-text-input
+              class="input"
+              [value]="entry()"
+              (valueChange)="onEntry($event)"
+              (keydown.enter)="add()"
+              (focusout)="closeSuggestions()"
+              placeholder="AAPL, or paste a list"
+              ariaLabel="Ticker symbols to add"
+            />
+
+            @if (store.suggestions().length) {
+              <!-- mousedown, not click: blur fires first on a click and would
+                   close the list before the handler ran. -->
+              <ul class="suggestions">
+                @for (hit of store.suggestions(); track hit.symbol) {
+                  <li>
+                    <button sb-button variant="ghost" type="button" (mousedown)="pick(hit.symbol)">
+                      <span class="hit-symbol">{{ hit.symbol }}</span>
+                      <span class="hit-name">{{ hit.name }}</span>
+                      @if (store.symbols().has(hit.symbol)) {
+                        <!-- Said before the round trip, because being told
+                             "already watched" by the server is a request the
+                             screen already had the answer to. -->
+                        <span class="hit-have">watched</span>
+                      }
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+
+          <button
+            sb-button
+            variant="primary"
+            type="button"
+            [loading]="store.adding()"
+            [disabled]="!entry().trim()"
+            (click)="add()"
+          >
+            Add
+          </button>
+        </sb-control-row>
+
+        @if (store.addResult(); as message) {
+          <p class="result" role="status">{{ message }}</p>
+        }
+        @if (store.addError(); as message) {
+          <p class="error" role="alert">{{ message }}</p>
+        }
+      </sb-panel>
+
+      <sb-confirm-dialog
+        [open]="pending() !== null"
+        title="Remove from the watchlist"
+        [consequence]="consequence()"
+        confirmLabel="Remove"
+        [working]="store.removing() !== null"
+        (confirmed)="remove()"
+        (cancelled)="pending.set(null)"
+      />
+
+      <!-- cells ----------------------------------------------------------- -->
+      <!-- Outside any @if since v195: an ng-template renders nothing, and
+           columns() reads these only when the table renders. -->
+      <ng-template #tapeCell let-row>
+        <!-- A button, so \`data-table.ts:758\` exempts it from row activation and
+             clicking the flag never navigates to the ticker. -->
+        <button
+          type="button"
+          class="tape-toggle"
+          sb-button
+          variant="ghost"
+          [attr.aria-pressed]="tape.symbols().includes(row.symbol)"
+          [attr.aria-label]="'Show ' + row.symbol + ' in the live tape'"
+          (click)="tape.toggle(row.symbol)"
+        >{{ tape.symbols().includes(row.symbol) ? '◉' : '○' }}</button>
+      </ng-template>
+
+      <ng-template #symbolCell let-row>
+        <sb-row-link [link]="['/watchlist', row.symbol]">{{ row.symbol }}</sb-row-link>
+      </ng-template>
+
+      <!-- v85 D33/R7-04: the price and the bar date it was computed from, in
+           one cell -- the two travel together (the docstring on Ticker.as_of
+           is what a lagging cache actually threatens: the PRICE, not some
+           separate figure), so pairing them here is what lets the row's
+           .lagging tint read as "this price is stale" rather than an
+           unexplained row colour. -->
+      <ng-template #priceCell let-row>
+        <span class="price">{{ num(row.price) }}</span>
+        <span class="as-of">{{ text(row.as_of) }}</span>
+        <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="pageWindowS" />
+        <!-- v106: only the exception is flagged -- Alpaca missed and yfinance
+             answered. An Alpaca or plain-yfinance price stays quiet. -->
+        @if (row.price_source === 'yfinance-fallback') {
+          <span class="source-badge">fallback</span><sb-hint [text]="fallbackHint" label="About fallback prices" align="left" />
+        }
+      </ng-template>
+
+      <ng-template #sparkCell let-row>
+        @if (row.spark?.length) {
+          <sb-sparkline [points]="row.spark" [label]="row.symbol + ' price, last 30 bars'" />
+        }
+      </ng-template>
+
+      <!-- The bot's own verdict (v85 D34). Every state carries a WORD, not
+           just a tone, per the repo-wide "never colour alone" rule --
+           "No setup"/"In position" read the same on a screenshot with the
+           colour desaturated. -->
+      <ng-template #signalCell let-row>
+        <span class="signal">
+          @switch (row.signal.state) {
+            @case ('active') {
+              <span class="signal-state">In position</span>
+              @if (row.signal.strategy) { <sb-chip [label]="row.signal.strategy" tone="good" /> }
+            }
+            @case ('pending') {
+              <span class="signal-score">{{ row.signal.score }}</span>
+              @if (row.signal.horizon) { <sb-chip [label]="row.signal.horizon" /> }
+              @if (row.signal.strategy) { <sb-chip [label]="row.signal.strategy" tone="info" /> }
+            }
+            @default {
+              No setup
+            }
+          }
+        </span>
+      </ng-template>
+
+      <ng-template #actionsCell let-row>
+        <button
+          sb-button
+          variant="danger-icon"
+          type="button"
+          [attr.aria-label]="'Remove ' + row.symbol"
+          (click)="ask(row)"
+        >
+          <sb-icon name="trash" />
+        </button>
+      </ng-template>
+    </sb-page>
   `,
   styles: `
-    /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
-       at its widest child's min-content, so one un-shrinkable panel stretched
-       the workspace past the viewport and took the page sideways with it.
-       Clamping the track is what makes the children's own overflow-x
-       containers the thing that scrolls instead.
-       No backticks in here: these styles live in a TS template literal. */
-    /* v54 D1: --space-20 was this rule's own literal before the registers
-       existed; --register-pad's instrument rung is --space-10, so both
-       gaps below shrink. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    /* v195 Phase 4: sb-page owns the page rhythm (header, scope, primary,
+       secondary). min-width: 0 keeps a wide table scrolling inside its own
+       container instead of taking the page sideways. */
+    :host { display: block; min-width: 0; }
+    .scope, .tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
 
     .head-status { display: flex; align-items: baseline; gap: var(--register-pad); }
-    /* The count caption beside the section head -- --text-table (13px)
+    /* The count caption at the page header's right -- --text-table (13px)
        shrinks to the instrument rung (11px); never grows. */
     .count { color: var(--text-secondary); font-size: var(--register-label); }
 

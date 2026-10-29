@@ -20,7 +20,7 @@ import { MotionService } from './motion/motion.service';
 
 /**
  * The gate in front of every destructive action — close, cancel, delete,
- * clear-open, the killswitch.
+ * clear-open, the killswitch (the only caller that sets dangerVariant="danger").
  *
  * **`consequence` is required, and it is the point of the component.** Spec
  * v14: the dialog must name what is being destroyed, not ask "are you sure?".
@@ -56,7 +56,7 @@ import { MotionService } from './motion/motion.service';
             </button>
             <button
               sb-button
-              [variant]="destructive() ? 'danger' : 'primary'"
+              [variant]="destructive() ? dangerVariant() : 'primary'"
               type="button"
               [loading]="working()"
               (click)="confirmed.emit()"
@@ -84,7 +84,9 @@ import { MotionService } from './motion/motion.service';
        a direct child of dialog. */
     [sbFocusTrap] { display: contents; }
 
-    h2 { font-size: var(--text-subhead); font-weight: 600; }
+    /* v195 Phase 2: sentence case as given, in the UI face -- the drawer's
+       title is the same rule. */
+    h2 { font-family: var(--font-sans); font-size: var(--text-subhead); font-weight: 600; letter-spacing: normal; }
     .consequence {
       margin-top: var(--space-8);
       color: var(--text-secondary);
@@ -110,10 +112,16 @@ export class ConfirmDialog {
   readonly consequence = input.required<string>();
   readonly confirmLabel = input('Confirm');
   readonly cancelLabel = input('Cancel');
-  /** Paints the confirm button `danger`. Default true: everything routed
-   *  through this dialog is destructive, and a caller that wants the softer
-   *  variant should have to say so. */
+  /** Paints the confirm button in `dangerVariant`. Default true: everything
+   *  routed through this dialog is destructive, and a caller that wants the
+   *  primary variant should have to say so. */
   readonly destructive = input(true);
+  /** Which danger paint a destructive confirm takes (v195 Phase 2,
+   *  correction 6). `danger-quiet`, the default, is housekeeping: close,
+   *  clear, restart, discard, delete. `danger`, the solid fill, is the
+   *  killswitch's alone, so a halt never looks like housekeeping. Ignored
+   *  when `destructive` is false. */
+  readonly dangerVariant = input<'danger' | 'danger-quiet'>('danger-quiet');
   /** The command is in flight — the confirm button locks so it cannot be
    *  sent twice. */
   readonly working = input(false);

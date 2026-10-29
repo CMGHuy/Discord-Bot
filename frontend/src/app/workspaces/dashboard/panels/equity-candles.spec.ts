@@ -410,7 +410,7 @@ describe('sb-equity-candles', () => {
     at(fixture, 0, 2);
     expect(readout(el)).toEqual([
       'Equity change +12.00 € (+12.00%)', 'High 120.00', 'Low 90.00',
-      'Max drawdown within range -4.55%',
+      'Max drawdown within range −4.55%',
     ]);
     expect(tones(el)).toEqual(['pos', 'neutral', 'neutral', 'neg']);
   });
@@ -444,7 +444,7 @@ describe('sb-equity-candles', () => {
     fixture.detectChanges();
     expect(readout(el)[0]).toBe('Oct 19, 2026');
     expect(readout(el)).toContain('approx');
-    expect(tones(el)[readout(el).indexOf('-5.00 €')]).toBe('neg');
+    expect(tones(el)[readout(el).indexOf('−5.00 €')]).toBe('neg');
 
     fixture.componentInstance['onCrosshair']({ logical: undefined });
     fixture.detectChanges();

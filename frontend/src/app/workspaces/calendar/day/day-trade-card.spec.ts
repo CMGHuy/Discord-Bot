@@ -123,7 +123,7 @@ describe('DayTradeCard', () => {
 
   it('shows held time, shares and MFE/MAE', async () => {
     const el = await render(TRADE);
-    expect(text(el, '.stats')).toBe('Held 2d 5h 30m · Shares 10 · MFE +2.40R · MAE -0.30R');
+    expect(text(el, '.stats')).toBe('Held 2d 5h 30m · Shares 10 · MFE +2.40R · MAE −0.30R');
     const leg = await render({ ...TRADE, shares: 3.3333, leg_index: 1, leg_total: 3 });
     expect(text(leg, '.stats')).toContain('Shares 3.33');
     expect(text(leg, '.leg')).toBe('Leg 2 of 3');

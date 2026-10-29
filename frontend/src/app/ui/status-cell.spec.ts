@@ -69,6 +69,15 @@ describe('StatusCell', () => {
     expect(el.querySelector('.end.pos')!.textContent).toBe('+6.0%');
   });
 
+  it('signs a negative trailing stop and best P&L with the true minus; zero and positive unchanged', () => {
+    const neg = render({ ...TRAILING, stop_pnl_pct: -2.34, best_pnl_pct: -0.04 });
+    expect(neg.querySelector('.end.neg')!.textContent).toBe('−2.3%');
+    expect(neg.querySelector('.end.pos')!.textContent).toBe('−0.0%');
+    expect(neg.querySelector('.end.neg')!.textContent).not.toContain('-');
+    const zero = render({ ...TRAILING, stop_pnl_pct: 0, best_pnl_pct: 6 });
+    expect(zero.querySelector('.end.neg')!.textContent).toBe('0.0%');
+  });
+
   it('adds no icons to an ordinary PARTIAL row with a TP2 bar', () => {
     const el = render({ ...live, status: 'PARTIAL', bar_kind: 'progress', banked_fraction: 0.5 });
     expect(el.querySelectorAll('sb-icon').length).toBe(0);

@@ -1,26 +1,30 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import {
+  Component,
   Signal,
   WritableSignal,
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, Routes, provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import { RouteLoadingService } from '../routing/route-loading.service';
-import { RouteTitleService } from '../routing/route-title.service';
 import { PreferencesStore } from '../stores/preferences.store';
 import { TapeStore } from '../stores/tape.store';
+import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
+import { DENSITY_STORAGE } from '../ui/density.service';
 import { provideMotion } from '../ui/motion/motion.service';
+import { POPOVER_OPEN_ATTR } from '../testing/popover-polyfill';
+import { NAV_GROUPS } from './nav';
 import { Shell } from './shell';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
@@ -61,6 +65,24 @@ class FakeEventStream {
   }
 }
 
+@Component({ template: '' })
+class Blank {}
+
+/** The providers every v195 shell describe uses: the same fakes as the
+ *  `shell navigation` block, with a route table the breadcrumb can read. */
+function shellProviders(routes: Routes = []) {
+  return [
+    provideZonelessChangeDetection(),
+    provideRouter(routes),
+    provideHttpClient(),
+    provideHttpClientTesting(),
+    { provide: EventStream, useValue: new FakeEventStream() },
+    { provide: TapeStore, useValue: { load: vi.fn(), visible: signal(false), rows: signal([]), asOf: signal(null) } },
+  ];
+}
+
+const readSource = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+
 describe('shell navigation', () => {
   let events: FakeEventStream;
   let tapeStub: {
@@ -90,17 +112,17 @@ describe('shell navigation', () => {
     });
   });
 
-  it('carries the tape inside the top bar row, not beneath it', () => {
+  it('runs the tape as a strip under the top bar, not inside it (v195 Phase 3)', () => {
     const fixture = TestBed.createComponent(Shell);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
     const main = el.querySelector('.main') as HTMLElement;
     expect(Array.from(main.children).map((c) => c.tagName.toLowerCase()))
-      .toEqual(['header', 'main']);
-
-    const header = el.querySelector('header.topbar') as HTMLElement;
-    expect(header.querySelector('sb-tape')).not.toBeNull();
+      .toEqual(['header', 'div', 'main']);
+    expect(main.children[1].classList).toContain('tape-strip');
+    expect(main.querySelector(':scope > .tape-strip > sb-tape')).not.toBeNull();
+    expect(el.querySelector('header.topbar sb-tape')).toBeNull();
   });
 
   it('shows the date and time from the ambient clock', () => {
@@ -130,35 +152,47 @@ describe('shell navigation', () => {
     expect(strip.getAttribute('role')).toBe('alert');
     expect(strip.textContent).toContain('KILLSWITCH ENGAGED');
     expect(strip.parentElement?.classList.contains('main')).toBe(true);
-    expect(strip.previousElementSibling?.tagName.toLowerCase()).toBe('header');
+    expect(strip.previousElementSibling?.classList.contains('tape-strip')).toBe(true);
   });
 
-  it('overlays the scan progress strip on the workspace rather than reflowing it', () => {
+  it('hangs the scan progress from the top bar, out of the flow (v195 Phase 3)', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
 
-    const strip = el.querySelector('sb-scan-progress');
-    expect(strip).not.toBeNull();
-
-    // Deliberately NOT a sibling of the header the way `.killswitch-strip`
-    // is. That one is in the flow because it must never be missed; this one
-    // appears every SCAN_INTERVAL_MINUTES all session, and in the flow it
-    // would shunt the page down and back several times an hour.
-    expect(strip!.parentElement?.classList.contains('workspace')).toBe(true);
-    expect(strip!.previousElementSibling).toBeNull();
+    const strip = el.querySelector('sb-scan-progress')!;
+    expect(el.querySelectorAll('sb-scan-progress')).toHaveLength(1);
+    // In the sticky bar, so it shows on every route; the bar's last child,
+    // so it paints over its own siblings' edge rather than between them.
+    expect(strip.parentElement?.matches('header.topbar')).toBe(true);
+    expect(strip.nextElementSibling).toBeNull();
+    expect(el.querySelector('.workspace sb-scan-progress')).toBeNull();
+    // Absolute (its own :host), re-anchored under the bar's bottom edge: it
+    // never takes layout, so a scan every few minutes never shunts the page.
+    const css = readSource('src/app/shell/shell.css');
+    expect(css.match(/^\.topbar > sb-scan-progress \{[^}]*\}/m)?.[0]).toContain('inset: 100% 0 auto 0;');
   });
 
-  it("paints the ambient glow as the shell's first child, hidden from assistive tech (v168 §3 #10)", () => {
+  /* v195 §1.2: depth comes from surface steps and borders only. The ambient
+   * glow layer (v168 §3 #10) is gone, and the routed host is a plain div:
+   * the route-entrance directive and its .sb-entering class are retired. */
+  it('paints no ambient layer and routes into a plain host (v195 §1.2)', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const shell = (f.nativeElement as HTMLElement).querySelector('.shell') as HTMLElement;
 
-    const first = shell.firstElementChild as HTMLElement;
-    expect(first.classList).toContain('ambient');
-    expect(first.getAttribute('aria-hidden')).toBe('true');
-    expect(first.children).toHaveLength(0);
-    expect(shell.querySelectorAll('.ambient')).toHaveLength(1);
+    expect(shell.querySelectorAll('.ambient')).toHaveLength(0);
+    const host = shell.querySelector('.workspace-content') as HTMLElement;
+    expect(host).not.toBeNull();
+    expect(host.classList.contains('sb-entering')).toBe(false);
+    expect(host.hasAttribute('sbrouteentrance')).toBe(false);
+  });
+
+  it('no longer ships the route-entrance directive (v195 §1.2)', () => {
+    const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+    expect(read('src/app/shell/shell.html')).not.toContain('sbRouteEntrance');
+    expect(read('src/app/shell/shell.ts')).not.toContain('RouteEntrance');
+    expect(existsSync(join(process.cwd(), 'src/app/ui/motion/route-entrance.ts'))).toBe(false);
   });
 
   it('loads the tape once on construction', () => {
@@ -188,20 +222,11 @@ describe('shell navigation', () => {
     expect(workspace.querySelector('[role="status"]')?.textContent).toContain('Loading Trades');
     expect(workspace.querySelector('.route-loading-overlay')).not.toBeNull();
   });
-  it('groups the eleven workspaces into three named groups', () => {
+  it('keeps each of the four groups a real, named list for assistive tech', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-    const labels = [...el.querySelectorAll('.nav-group-label')].map((n) => n.textContent?.trim());
-    expect(labels).toEqual(['MONITOR', 'REVIEW', 'SYSTEM']);
-    expect(el.querySelectorAll('.nav a').length).toBe(11);
-  });
-
-  it('keeps each group a real list so the grouping reaches assistive tech', () => {
-    const f = TestBed.createComponent(Shell);
-    f.detectChanges();
-    const groups = (f.nativeElement as HTMLElement).querySelectorAll('ul[aria-labelledby]');
-    expect(groups.length).toBe(3);
+    const groups = (f.nativeElement as HTMLElement).querySelectorAll('nav.rail ul.nav[aria-label]');
+    expect(groups.length).toBe(4);
   });
 
   it('cycles the text-size control in the profile menu through 90/100/110/125 and wraps back to 90', () => {
@@ -229,71 +254,66 @@ describe('shell navigation', () => {
     expect(button.textContent?.trim()).toBe('Aa 90%');
   });
 
-  it('renders the route title and subtitle in the top bar', () => {
-    const titles = TestBed.inject(RouteTitleService);
-    titles.set('Dashboard', "What's happening right now");
+  it('marks the active entry with the bar, a tint and a brighter glyph, not colour alone', () => {
+    // v168 §3 #6 kept: one sliding sb-nav-indicator in the rail. On an
+    // icon-only rail weight means nothing, so the third cue is the glyph's
+    // colour stepping from muted to full text.
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
-    expect(el.querySelector('.topbar .page-title')?.textContent?.trim()).toBe('Dashboard');
-    expect(el.querySelector('.topbar .page-subtitle')?.textContent?.trim())
-      .toBe("What's happening right now");
+    expect(el.querySelectorAll('nav.rail > sb-nav-indicator').length).toBe(1);
+    const css = readSource('src/app/shell/shell.css');
+    const active = css.match(/^\.rail-link\.active \{[^}]*\}/m)?.[0] ?? '';
+    expect(active).toContain('background: var(--accent-soft);');
+    expect(active).toContain('color: var(--text);');
+    expect(css.match(/^\.rail-link \{[^}]*\}/m)?.[0]).toContain('color: var(--text-muted);');
+    expect(css).not.toMatch(/border-left-color/);
   });
 
-  it('renders no subtitle element at all when the route has none', () => {
-    TestBed.inject(RouteTitleService).set('Bare', null);
+  it('keeps the ui and bot versions in a hint at the foot of the rail', async () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
-    expect((f.nativeElement as HTMLElement).querySelector('.page-subtitle')).toBeNull();
+    await f.whenStable();
+    const el = f.nativeElement as HTMLElement;
+    // Nothing until the first /health answer: a version that reads 0.0.0
+    // while it waits looks real.
+    expect(el.querySelector('sb-hint.version')).toBeNull();
+    const backend = TestBed.inject(HttpTestingController);
+    for (const request of backend.match((r) => r.url.endsWith('/health'))) {
+      request.flush({
+        ok: true,
+        versions: { ui: '1.36.1', bot: '2.15.3', last_updated: '2026-10-25T06:00:00Z' },
+        market_active: true,
+        currency: '€',
+      });
+    }
+    f.detectChanges();
+    await f.whenStable();
+    const foot = el.querySelector('nav.rail > .rail-foot')!;
+    const hint = foot.querySelector('sb-hint.version')!;
+    expect(hint.querySelector('[role=tooltip]')!.textContent!.trim())
+      .toBe('ui 1.36.1 · bot 2.15.3 · updated 2026-10-25T06:00:00Z');
+    expect(el.querySelector('.version-row')).toBeNull();
   });
 
-  it('marks the active entry with a rail plus tint and weight, not colour alone', () => {
-    // v168 §3 #6: the rail is one sliding sb-nav-indicator in the sidebar,
-    // no longer a per-link border; the active link keeps the tint and the
-    // weight, so the state still has three cues.
+  it('drops the clock and the tape on a phone before it lets the bar overflow', () => {
+    const css = readSource('src/app/shell/shell.css');
+    // v95 A2's declared breakpoint. The subtitle it used to drop at 1023px
+    // has left the bar (v195: the breadcrumb leads, sb-page carries the title).
+    expect(css).toMatch(/max-width:\s*639px[\s\S]*\.clock[\s\S]*display:\s*none/);
+    expect(css).toMatch(/max-width:\s*639px[\s\S]*\.tape-strip[\s\S]*display:\s*none/);
+    expect(css).not.toContain('.page-subtitle');
+  });
+
+  it('renders the brand as the mark alone, named for assistive tech and labelled on focus', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
-    expect(el.querySelectorAll('.sidebar > sb-nav-indicator').length).toBe(1);
-    const styles = [...document.styleSheets]
-      .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
-      .map((rule) => rule.cssText);
-    // Not a single `.includes('.nav a.active')` -- emulated encapsulation
-    // inserts an `[_ngcontent-*]` attribute between `.nav` and `a.active`.
-    const active = styles.filter((text) => text.includes('.nav') && text.includes('a.active'));
-    expect(active.some((text) => text.includes('background') && text.includes('font-weight'))).toBe(true);
-    expect(active.some((text) => text.includes('border-left-color'))).toBe(false);
-  });
-
-  it('keeps the version block pinned to the foot of the rail', () => {
-    const f = TestBed.createComponent(Shell);
-    f.detectChanges();
-    const foot = (f.nativeElement as HTMLElement).querySelector('.sidebar-foot');
-    expect(foot).not.toBeNull();
-    expect(foot?.parentElement?.classList.contains('sidebar')).toBe(true);
-  });
-
-  it('drops the subtitle and the clock before it lets the bar overflow', () => {
-    const f = TestBed.createComponent(Shell);
-    f.detectChanges();
-    const rules = [...document.styleSheets]
-      .flatMap((sheet) => { try { return [...sheet.cssRules]; } catch { return []; } })
-      .map((rule) => rule.cssText)
-      .join('\n');
-    // Both must be hidden under a max-width query -- the order in the spec is
-    // subtitle first, then clock, so the subtitle's breakpoint is the wider one.
-    // v95 A2 retriggered these onto the declared breakpoints: the subtitle
-    // goes below md (1023), the clock below sm (639).
-    expect(rules).toMatch(/max-width:\s*1023px[\s\S]*\.page-subtitle[\s\S]*display:\s*none/);
-    expect(rules).toMatch(/max-width:\s*639px[\s\S]*\.clock[\s\S]*display:\s*none/);
-  });
-
-  it('renders the brand mark beside the wordmark', () => {
-    const f = TestBed.createComponent(Shell);
-    f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-    expect(el.querySelector('.brand sb-icon')).not.toBeNull();
-    expect(el.querySelector('.brand')!.textContent).toContain('Bomeo');
+    const brand = el.querySelector('nav.rail .mark a.brand') as HTMLAnchorElement;
+    expect(brand.querySelector('sb-icon')).not.toBeNull();
+    expect(brand.textContent!.trim()).toBe('');
+    expect(brand.getAttribute('aria-label')).toContain('Bomeo Capital');
+    expect(brand.nextElementSibling!.tagName.toLowerCase()).toBe('sb-hint');
   });
 
   it('the brand mark links back to the Dashboard', () => {
@@ -307,41 +327,6 @@ describe('shell navigation', () => {
     expect(brand.getAttribute('href')).toBe('/dashboard');
   });
 
-  it('renders the two-tone wordmark as two spans, not one coloured string', () => {
-    const f = TestBed.createComponent(Shell);
-    f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-    expect(el.querySelectorAll('.brand .word span').length).toBe(2);
-  });
-
-  it('renders the rail tagline', () => {
-    const f = TestBed.createComponent(Shell);
-    f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-    expect(el.querySelector('.rail-tagline')!.textContent)
-      .toContain('Trade smarter. Build further.');
-  });
-
-  it('keeps the mark and drops the words when the rail is collapsed', () => {
-    const f = TestBed.createComponent(Shell);
-    f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-    // Drives the real toggle rather than reaching into the instance --
-    // the same mechanism a user actually has.
-    el.querySelector<HTMLButtonElement>('.collapse')!.click();
-    f.detectChanges();
-    expect(el.querySelector('.brand sb-icon')).not.toBeNull();
-    expect(el.querySelector('.brand .word')).toBeNull();
-  });
-});
-
-describe('shell wordmark on a phone', () => {
-  it('shows the wordmark in the phone overlay, which is railed by width but is not a rail', () => {
-    // jsdom has no layout: the template rule is what carries it. The overlay
-    // is a full sheet, so only the desktop/tablet rail drops the words.
-    const html = readFileSync(join(process.cwd(), 'src/app/shell/shell.html'), 'utf8');
-    expect(html).toMatch(/@if \(!railed\(\) \|\| overlay\(\)\) \{\s*<span class="word">/);
-  });
 });
 
 describe('shell.css breakpoints', () => {
@@ -444,7 +429,7 @@ describe('shell motion preference (v168 §1)', () => {
   });
 });
 
-describe('ambient live cues (v168 §3 #10)', () => {
+describe('live cues (v168 §3 #10)', () => {
   const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
   /** The first `<selector> { ... }` rule, verbatim. */
@@ -454,21 +439,13 @@ describe('ambient live cues (v168 §3 #10)', () => {
     return css.slice(at, css.indexOf('}', at) + 1);
   }
 
-  it('isolates the shell, so the fixed glow layer sits above --bg and under every pane', () => {
+  /* v195 §1.2: the glow layer and the stacking context it needed are gone. */
+  it('declares no ambient layer and no stacking context for one', () => {
     const css = read('src/app/shell/shell.css');
-    expect(ruleOf(css, '.shell')).toContain('isolation: isolate;');
-    const ambient = ruleOf(css, '.ambient');
-    for (const declaration of [
-      'position: fixed;',
-      'inset: -10%;',
-      'z-index: -1;',
-      'pointer-events: none;',
-      'background: var(--glow-ambient);',
-    ]) {
-      expect(ambient).toContain(declaration);
-    }
-    // The drift lives in styles/motion.css, per mode (On only, static on a phone).
-    expect(ambient).not.toContain('animation');
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(ruleOf(css, '.shell')).not.toContain('isolation');
+    expect(code).not.toMatch(/\.ambient\s*\{/);
+    expect(code).not.toContain('--glow-ambient');
   });
 
   it('blinks a halo behind the avatar, green when the bot is live and red when offline', () => {
@@ -495,9 +472,475 @@ describe('shell topbar centred on one axis (v179 layout audit)', () => {
     expect(rule('.topbar')).toMatch(/align-items:\s*center/);
   });
 
-  it('gives the topbar and the sidebar wordmark row the same height, so the two centres meet', () => {
+  it('gives the topbar and the rail mark the same height, so the two centres meet', () => {
     expect(rule('.topbar')).toContain('height: var(--topbar-h)');
     expect(rule('.mark')).toContain('height: var(--topbar-h)');
-    expect(rule('.sidebar')).toMatch(/padding:\s*0 var\(--space-14\) var\(--space-20\);/);
+    expect(rule('.topbar')).toContain('position: sticky;');
+  });
+});
+
+describe('shell icon rail (v195 Phase 3, correction 10)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'trades', component: Blank }]) });
+  });
+
+  async function mount() {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('is one rail of four unlabelled groups split by thin rules', async () => {
+    const { el } = await mount();
+    const rail = el.querySelector('nav.rail')!;
+    expect(rail.getAttribute('aria-label')).toBe('Primary');
+    expect([...rail.querySelectorAll('ul.nav')].map((ul) => ul.getAttribute('aria-label')))
+      .toEqual(['Monitor', 'Review', 'Insights', 'System']);
+    const dividers = [...rail.querySelectorAll('.rail-divider')];
+    expect(dividers).toHaveLength(3);
+    for (const divider of dividers) {
+      expect(divider.getAttribute('aria-hidden')).toBe('true');
+      expect(divider.textContent!.trim()).toBe('');
+      // Between groups, never before the first or after the last.
+      expect(divider.previousElementSibling!.matches('ul.nav')).toBe(true);
+      expect(divider.nextElementSibling!.matches('ul.nav')).toBe(true);
+    }
+    expect(el.querySelector('.nav-group-label')).toBeNull();
+  });
+
+  it('names every entry and labels it with an anchored hint, never a title', async () => {
+    const { el } = await mount();
+    const links = [...el.querySelectorAll<HTMLAnchorElement>('nav.rail a.rail-link')];
+    expect(links.map((a) => a.getAttribute('aria-label')))
+      .toEqual(NAV_GROUPS.flatMap((group) => group.entries.map((entry) => entry.label)));
+    for (const link of links) {
+      const name = link.getAttribute('aria-label')!;
+      expect(link.hasAttribute('title'), name).toBe(false);
+      expect(link.querySelector('sb-icon')!.getAttribute('title'), name).toBe('');
+      expect(link.textContent!.trim(), name).toBe('');
+      const hint = link.nextElementSibling as HTMLElement;
+      expect(hint.tagName.toLowerCase(), name).toBe('sb-hint');
+      expect(hint.classList, name).toContain('anchored');
+      const pop = hint.querySelector('[role=tooltip]')!;
+      expect(pop.textContent!.trim(), name).toBe(name);
+      expect(link.getAttribute('aria-describedby'), name).toBe(pop.id);
+    }
+  });
+
+  it('shows an entry label on keyboard focus without adding a tab stop', async () => {
+    const { fixture, el } = await mount();
+    const trades = el.querySelector<HTMLAnchorElement>('a.rail-link[aria-label="Trades"]')!;
+    const pop = trades.nextElementSibling!.querySelector('[role=tooltip]')!;
+    expect(pop.hasAttribute(POPOVER_OPEN_ATTR)).toBe(false);
+    trades.dispatchEvent(new FocusEvent('focus'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(pop.hasAttribute(POPOVER_OPEN_ATTR)).toBe(true);
+    expect(el.querySelectorAll('nav.rail ul.nav button')).toHaveLength(0);
+  });
+
+  it('marks the routed entry active', async () => {
+    const { fixture, el } = await mount();
+    await TestBed.inject(Router).navigateByUrl('/trades');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect([...el.querySelectorAll('a.rail-link.active')].map((a) => a.getAttribute('aria-label')))
+      .toEqual(['Trades']);
+  });
+
+  it('has no expanded, collapsed or overlay state, and ignores a stored shell.sidebar', async () => {
+    const { fixture, el } = await mount();
+    const backend = TestBed.inject(HttpTestingController);
+    for (const request of backend.match((r) => r.url.endsWith('/system/preferences'))) {
+      request.flush({ preferences: { 'shell.sidebar': 'expanded' } });
+    }
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(el.querySelector('.shell')!.className).toBe('shell');
+    for (const gone of ['.collapse', '.menu-button', '.scrim', '.sidebar', '.rail-tagline', '.brand .word']) {
+      expect(el.querySelector(gone), gone).toBeNull();
+    }
+    // Read nowhere and written nowhere: no preference write left the page.
+    expect(backend.match((r) => r.method !== 'GET')).toEqual([]);
+    const code = readSource('src/app/shell/shell.ts').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+    for (const word of ['shell.sidebar', 'toggleSidebar', 'userCollapsed', 'overlayOpen', 'railed', 'applyStoredSidebar']) {
+      expect(code, word).not.toContain(word);
+    }
+  });
+});
+
+describe('shell top bar (v195 Phase 3, correction 9)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'trades', component: Blank }]) });
+  });
+
+  it('leads the bar with the breadcrumb and renders no heading of its own', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await TestBed.inject(Router).navigateByUrl('/trades');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const bar = el.querySelector('header.topbar')!;
+    expect(bar.firstElementChild!.tagName.toLowerCase()).toBe('sb-breadcrumb');
+    const crumbs = [...bar.querySelectorAll('nav[aria-label="Breadcrumb"] li')]
+      .map((li) => li.textContent!.replace('/', '').trim());
+    expect(crumbs).toEqual(['Review', 'Trades']);
+    expect(el.querySelectorAll('h1')).toHaveLength(0);
+    expect(el.querySelector('.page-title, .page-subtitle')).toBeNull();
+  });
+
+  it('sizes the rail and the bar from two shell tokens, with no animated width', () => {
+    const css = readSource('src/app/shell/shell.css');
+    const shell = css.match(/^\.shell \{[^}]*\}/m)?.[0] ?? '';
+    expect(shell).toContain('--rail-w: 48px;');
+    expect(shell).toContain('--topbar-h: 40px;');
+    expect(shell).toContain('grid-template-columns: var(--rail-w) 1fr;');
+    expect(shell).not.toContain('transition');
+    // The touch rules win (spec §1.4): the bar grows to hold 44px controls.
+    expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{\s*\.shell \{ --topbar-h: 48px; \}/);
+  });
+});
+
+describe('shell top-bar cluster (v195 Phase 3)', () => {
+  const NOW = Date.parse('2026-10-27T12:00:00Z');
+  const html = document.documentElement;
+  let stored: Map<string, string>;
+
+  beforeEach(() => {
+    stored = new Map();
+    TestBed.configureTestingModule({
+      providers: [
+        ...shellProviders(),
+        { provide: DENSITY_STORAGE, useValue: { get: (key: string) => stored.get(key) ?? null, set: (key: string, value: string) => stored.set(key, value) } },
+      ],
+    });
+    TestBed.overrideProvider(CLOCK, { useValue: signal(NOW) });
+  });
+
+  afterEach(() => {
+    delete html.dataset['density'];
+  });
+
+  async function mount() {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return { fixture, el: fixture.nativeElement as HTMLElement, backend: TestBed.inject(HttpTestingController) };
+  }
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  const scanStatus = (overrides: Record<string, unknown>) => ({
+    pending: false, triggered_at: null, paused: false, paused_at: null, running: false,
+    bot_alive: true, bot_last_seen: '2026-10-27T11:57:00Z', bot_healthy: true,
+    bot_last_success: '2026-10-27T11:48:00Z', bot_consecutive_failures: 0,
+    bot_session_active: true, bot_scan_paused: false, progress: null, ...overrides,
+  });
+
+  it('puts the killswitch and freshness chips in the cluster, hidden at no width', async () => {
+    const { el } = await mount();
+    const cluster = el.querySelector('header.topbar > .status-cluster')!;
+    expect(cluster.querySelector('sb-killswitch-chip')).not.toBeNull();
+    expect(cluster.querySelector('sb-freshness-chip')).not.toBeNull();
+    expect(cluster.querySelector('sb-connection-status')).not.toBeNull();
+    const css = readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).not.toMatch(/(sb-killswitch-chip|sb-freshness-chip|\.status-cluster)[^{}]*\{[^}]*display:\s*none/);
+  });
+
+  it('shows no killswitch state until the risk endpoint answers, then the answer', async () => {
+    const { fixture, el, backend } = await mount();
+    const chip = () => el.querySelector('sb-killswitch-chip a');
+    expect(chip()).toBeNull();
+    for (const request of backend.match((r) => r.url.endsWith('/risk/killswitch'))) {
+      request.flush({ killswitch: { on: true } });
+    }
+    await settle(fixture);
+    expect(chip()!.textContent!.trim()).toBe('Halted');
+    expect(el.querySelector('.killswitch-strip')).not.toBeNull();
+  });
+
+  it('ages the freshness chip from the last successful tick, else the last heartbeat', async () => {
+    const { fixture, el, backend } = await mount();
+    const text = () => el.querySelector('sb-freshness-chip')!.textContent!.replace(/\s+/g, ' ').trim();
+    expect(text()).toBe('No scan yet');
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) {
+      request.flush(scanStatus({}));
+    }
+    await settle(fixture);
+    expect(text()).toBe('Scan 12m ago');
+
+    // A bot that has never completed a tick still has a heartbeat age.
+    (TestBed.inject(EventStream) as unknown as FakeEventStream).emit('bot');
+    await settle(fixture);
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) {
+      request.flush(scanStatus({ bot_last_success: null }));
+    }
+    await settle(fixture);
+    expect(text()).toBe('Scan 3m ago');
+  });
+
+  it('writes ui.density and data-density from the profile menu', async () => {
+    const { fixture, el } = await mount();
+    expect(html.dataset['density']).toBe('dense');
+    el.querySelector<HTMLButtonElement>('sb-profile-menu .avatar')!.click();
+    fixture.detectChanges();
+    const comfortable = Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .density-control .segment'))
+      .find((button) => button.textContent!.trim() === 'Comfortable')!;
+    comfortable.click();
+    await settle(fixture);
+    expect(html.dataset['density']).toBe('comfortable');
+    expect(stored.get('ui.density')).toBe('comfortable');
+    const pressed = Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .density-control .segment'))
+      .find((button) => button.getAttribute('aria-pressed') === 'true')!;
+    expect(pressed.textContent!.trim()).toBe('Comfortable');
+  });
+});
+
+describe('shell on a phone (v195 Phase 3)', () => {
+  let phone: WritableSignal<boolean>;
+
+  beforeEach(() => {
+    phone = signal(true);
+    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'calendar', component: Blank }]) });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: phone, isNarrow: signal(true), viewport: signal('xs') },
+    });
+  });
+
+  async function mount() {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  const sheet = (el: HTMLElement) => el.querySelector('sb-more-sheet [role=dialog]');
+  const moreTab = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('sb-phone-tab-bar button.more')!;
+
+  it('swaps the rail for the bottom tab bar, with the More sheet closed', async () => {
+    const { el } = await mount();
+    expect(el.querySelector('sb-phone-tab-bar')).not.toBeNull();
+    expect(sheet(el)).toBeNull();
+    const css = readSource('src/app/shell/shell.css');
+    const phoneBlock = css.slice(css.indexOf('@media (max-width: 639px)'));
+    expect(phoneBlock).toMatch(/\.rail \{ display: none; \}/);
+    expect(phoneBlock).toMatch(/\.shell \{ grid-template-columns: 1fr; \}/);
+    expect(phoneBlock).toContain('.main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }');
+  });
+
+  it('collapses the bar to the title, the two chips, a search icon and the avatar', async () => {
+    const { el } = await mount();
+    const bar = el.querySelector('header.topbar')!;
+    const order = ['sb-breadcrumb.topbar-lead', 'div.status-cluster', 'button.search-trigger', 'sb-profile-menu', 'sb-scan-progress'];
+    expect(bar.children).toHaveLength(order.length);
+    order.forEach((selector, index) => expect(bar.children[index].matches(selector), selector).toBe(true));
+    const search = bar.querySelector('button.search-trigger')!;
+    expect(search.getAttribute('aria-label')).toBe('Search or jump to a page');
+    // The magnifier: sb-icon's default label for 'search' (V195-14).
+    expect(search.querySelector('sb-icon')!.getAttribute('title')).toBe('Search');
+    expect(bar.querySelector('.status-cluster sb-killswitch-chip')).not.toBeNull();
+    expect(bar.querySelector('.status-cluster sb-freshness-chip')).not.toBeNull();
+  });
+
+  it('opens the More sheet from the More tab, and the tab closes it again', async () => {
+    const { fixture, el } = await mount();
+    moreTab(el).click();
+    await settle(fixture);
+    expect(sheet(el)).not.toBeNull();
+    expect(moreTab(el).getAttribute('aria-expanded')).toBe('true');
+    moreTab(el).click();
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+  });
+
+  it('closes the More sheet on Escape and when a page is chosen', async () => {
+    const { fixture, el } = await mount();
+    moreTab(el).click();
+    await settle(fixture);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+    moreTab(el).click();
+    await settle(fixture);
+    el.querySelector<HTMLAnchorElement>('sb-more-sheet a.page[href="/calendar"]')!.click();
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+  });
+
+  it('closes the More sheet when its search field is used', async () => {
+    const { fixture, el } = await mount();
+    moreTab(el).click();
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('sb-more-sheet button.search')!.click();
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+  });
+
+  it('forgets an open sheet when the window grows past phone width', async () => {
+    const { fixture, el } = await mount();
+    moreTab(el).click();
+    await settle(fixture);
+    phone.set(false);
+    await settle(fixture);
+    expect(el.querySelector('sb-phone-tab-bar')).toBeNull();
+    phone.set(true);
+    await settle(fixture);
+    expect(sheet(el)).toBeNull();
+  });
+});
+
+describe('shell above phone width (v195 Phase 3)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: shellProviders() });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: signal(false), isNarrow: signal(false), viewport: signal('md') },
+    });
+  });
+
+  it('renders no tab bar, no More sheet and no phone search icon', () => {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-phone-tab-bar')).toBeNull();
+    expect(el.querySelector('sb-more-sheet')).toBeNull();
+    expect(el.querySelector('button.search-trigger')).toBeNull();
+    expect(el.querySelector('nav.rail')).not.toBeNull();
+  });
+});
+
+describe('shell command palette (v195 §3.1)', () => {
+  let phone: WritableSignal<boolean>;
+
+  beforeEach(() => {
+    phone = signal(false);
+    TestBed.configureTestingModule({ providers: shellProviders() });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: phone, isNarrow: signal(false), viewport: signal('md') },
+    });
+  });
+
+  afterEach(() => {
+    document.querySelectorAll('.palette-probe').forEach((node) => node.remove());
+  });
+
+  async function mount() {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  const palette = (el: HTMLElement) => el.querySelector('sb-command-palette [role=dialog]');
+  const keydown = (init: KeyboardEventInit, target: EventTarget = document.body) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+  const escape = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const probe = <T extends HTMLElement>(tag: string): T => {
+    const node = document.createElement(tag) as T;
+    node.classList.add('palette-probe');
+    document.body.appendChild(node);
+    return node;
+  };
+
+  it('puts the trigger between the breadcrumb and the cluster, and opens the palette from it', async () => {
+    const { fixture, el } = await mount();
+    const trigger = el.querySelector<HTMLButtonElement>('header.topbar > button.palette-trigger')!;
+    expect(trigger.previousElementSibling!.matches('sb-breadcrumb.topbar-lead')).toBe(true);
+    expect(trigger.nextElementSibling!.matches('div.status-cluster')).toBe(true);
+    expect(trigger.textContent).toContain('Search or jump…');
+    expect(trigger.getAttribute('aria-keyshortcuts')).toBe('Control+K Meta+K /');
+    expect(trigger.querySelector('kbd.shortcut')!.getAttribute('aria-hidden')).toBe('true');
+    expect(palette(el)).toBeNull();
+
+    trigger.focus();
+    trigger.click();
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+    // Closing hands focus back to the trigger (FocusTrap's restore).
+    escape();
+    await settle(fixture);
+    expect(palette(el)).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('opens on Ctrl+K and on ⌘K', async () => {
+    const { fixture, el } = await mount();
+    expect(keydown({ key: 'k', ctrlKey: true })).toBe(false); // default prevented
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+    escape();
+    await settle(fixture);
+    keydown({ key: 'k', metaKey: true });
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+  });
+
+  it('opens on / outside a text field, and leaves / to the field inside one', async () => {
+    const { fixture, el } = await mount();
+    const field = probe<HTMLInputElement>('input');
+    expect(keydown({ key: '/' }, field)).toBe(true); // not prevented: the slash is typed
+    await settle(fixture);
+    expect(palette(el)).toBeNull();
+    keydown({ key: '/' });
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+  });
+
+  it('never opens over an open dialog', async () => {
+    const { fixture, el } = await mount();
+    probe<HTMLDialogElement>('dialog').setAttribute('open', '');
+    keydown({ key: 'k', ctrlKey: true });
+    await settle(fixture);
+    expect(palette(el)).toBeNull();
+  });
+
+  it('opens from the phone search icon and from the More sheet, focus landing in its field', async () => {
+    phone.set(true);
+    const { fixture, el } = await mount();
+    expect(el.querySelector('button.palette-trigger')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('header.topbar button.search-trigger')!.click();
+    await settle(fixture);
+    expect(palette(el)).not.toBeNull();
+    escape();
+    await settle(fixture);
+
+    el.querySelector<HTMLButtonElement>('sb-phone-tab-bar button.more')!.click();
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('sb-more-sheet button.search')!.click();
+    await settle(fixture);
+    // The sheet closes first, then the palette opens: never one under the other.
+    expect(el.querySelector('sb-more-sheet [role=dialog]')).toBeNull();
+    expect(palette(el)).not.toBeNull();
+    expect(document.activeElement).toBe(el.querySelector('sb-command-palette input[role=combobox]'));
+  });
+
+  it('mounts the palette after the More sheet, so a hand-over restores focus in that order', () => {
+    const html = readSource('src/app/shell/shell.html');
+    expect(html.indexOf('<sb-command-palette')).toBeGreaterThan(html.indexOf('<sb-more-sheet'));
+    expect(html.indexOf('<sb-command-palette')).toBeLessThan(html.indexOf('<sb-toast-host'));
   });
 });

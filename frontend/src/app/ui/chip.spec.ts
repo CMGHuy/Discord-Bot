@@ -72,3 +72,22 @@ describe('Chip (v80 D4)', () => {
     expect(SOURCE).not.toMatch(/\.q4 \{[^}]*--info/);
   });
 });
+
+/* v195 Phase 2: a chip is flat. Its 4px corner is the --chip-radius token
+ * (V195-3); a quality band is told by its text colour and its label, never
+ * by a border mixed from a valence hue. */
+describe('Chip is flat (v195 Phase 2)', () => {
+  it('mixes no colour and gives each quality band its text colour only', () => {
+    expect(SOURCE).not.toContain('color-mix(');
+    for (const band of [1, 2, 3, 4, 5]) {
+      const rule = SOURCE.match(new RegExp(`\\.q${band} \\{[^}]*\\}`))![0];
+      expect(rule, `q${band}`).toBe(`.q${band} { color: var(--quality-${band}); }`);
+    }
+  });
+
+  it('draws every chip on one hairline frame with the chip radius', () => {
+    const chip = SOURCE.match(/\.chip \{[^}]*\}/)![0];
+    expect(chip).toContain('border: 1px solid var(--border-strong);');
+    expect(chip).toContain('border-radius: var(--chip-radius);');
+  });
+});

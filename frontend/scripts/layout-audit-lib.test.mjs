@@ -7,8 +7,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  CHECKS, FULL_WIDTHS, ROUTES, classify, countByCheck, dedupe, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs,
-  pickIds, resolveRoute, slug, validateAllow, vcenterGeometry,
+  CHECKS, FULL_WIDTHS, RAIL_MIN_WIDTH, ROUTES, classify, countByCheck, dedupe, formatFinding, hintVerdict, inScope, isVisuallyHidden,
+  parseArgs, pickIds, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -23,9 +23,10 @@ const entry = (over = {}) => ({
   reason: 'canvas internals of a third-party chart', date: '2026-10-19', ...over,
 });
 
-test('ROUTES visits every route and tab once (spec §2 plus v188 /cancels: 28)', () => {
-  assert.equal(ROUTES.length, 28);
+test('ROUTES visits every route and tab once (spec §2, v188 /cancels and v195 ?tab=providers: 29)', () => {
+  assert.equal(ROUTES.length, 29);
   assert.ok(ROUTES.includes('/cancels'));
+  assert.ok(ROUTES.includes('/system?tab=providers'));
   assert.equal(new Set(ROUTES).size, ROUTES.length);
   assert.ok(ROUTES.every((route) => route.startsWith('/')));
   for (const tab of ['attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials']) {
@@ -37,8 +38,8 @@ test('ROUTES visits every route and tab once (spec §2 plus v188 /cancels: 28)',
   }
 });
 
-test('CHECKS are the spec six plus vcenter and hint (v194 A2), in order', () => {
-  assert.deepEqual([...CHECKS], ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint']);
+test('CHECKS are the spec six plus vcenter, hint (v194 A2) and rail-label (v195 Phase 7), in order', () => {
+  assert.deepEqual([...CHECKS], ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label']);
 });
 
 test('parseArgs: defaults are the local replica at the three widths', () => {
@@ -169,7 +170,7 @@ test('formatFinding names route, width, check, selector, text, detail and repeat
 
 test('countByCheck counts every check, zero included', () => {
   assert.deepEqual(countByCheck([finding(), finding({ check: 'tap' }), finding({ check: 'tap' })]),
-    { overflow: 0, offscreen: 1, clipped: 0, tap: 2, text: 0, baseline: 0, vcenter: 0, hint: 0 });
+    { overflow: 0, offscreen: 1, clipped: 0, tap: 2, text: 0, baseline: 0, vcenter: 0, hint: 0, 'rail-label': 0 });
 });
 
 test('slug matches browse.mjs file names', () => {
@@ -281,4 +282,30 @@ test('hintVerdict: a popover with no area fails zero-size, whatever else is true
   assert.deepEqual(hintVerdict(box(0, 0, 0, 0), VIEW, { center: false, corner: false }), { ok: false, reason: 'zero-size' });
   assert.deepEqual(hintVerdict(box(100, 100, 200, 0), VIEW, BOTH), { ok: false, reason: 'zero-size' });
   assert.deepEqual(hintVerdict(box(-500, 100, 0, 60), VIEW, BOTH), { ok: false, reason: 'zero-size' });
+});
+
+// railLabelVerdict (v195 Phase 7): one icon-rail entry's accessible name, and whether its anchored
+// label passed the hint check's own verdict while the entry had keyboard focus.
+test('railLabelVerdict: a named entry whose label shows passes', () => {
+  assert.deepEqual(railLabelVerdict({ name: 'Dashboard', hintVisible: true }), { ok: true, reason: null });
+});
+
+test('railLabelVerdict: an entry with no accessible name fails no-name, whatever its label does', () => {
+  for (const name of ['', '   ', null, undefined]) {
+    assert.deepEqual(railLabelVerdict({ name, hintVisible: true }), { ok: false, reason: 'no-name' }, String(name));
+    assert.deepEqual(railLabelVerdict({ name, hintVisible: false }), { ok: false, reason: 'no-name' }, String(name));
+  }
+});
+
+test('railLabelVerdict: a named entry whose label stays hidden on focus fails hint-hidden', () => {
+  assert.deepEqual(railLabelVerdict({ name: 'Risk', hintVisible: false }), { ok: false, reason: 'hint-hidden' });
+});
+
+test('RAIL_MIN_WIDTH: the rail check runs at the tablet and desktop widths, never the phone', () => {
+  assert.equal(RAIL_MIN_WIDTH, 640);
+  assert.deepEqual(FULL_WIDTHS.filter((width) => width >= RAIL_MIN_WIDTH), [768, 1440]);
+});
+
+test('ROUTES: the providers tab sits with the other System tabs', () => {
+  assert.equal(ROUTES[ROUTES.indexOf('/system?tab=providers') - 1], '/system?tab=scan');
 });

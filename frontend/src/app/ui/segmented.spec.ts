@@ -17,3 +17,19 @@ describe('Segmented (v80 D4)', () => {
   it('moves focus with selection', () => { buttons()[0].focus(); key('ArrowRight'); expect(document.activeElement).toBe(buttons()[1]); });
   it('has scrolling, nonwrapping touch-sized options', () => { expect(SOURCE).toMatch(/\.track \{[^}]*overflow-x: auto/); expect(SOURCE).toMatch(/\.segment \{[^}]*flex: 0 0 auto/); expect(SOURCE).toMatch(/\.segment \{[^}]*min-height: var\(--control-h\)/); });
 });
+
+/* v195 Phase 2: hover is the raised surface, and the accent tint marks the
+ * selected segment only, so a hovered option never looks chosen. */
+describe('Segmented is flat (v195 Phase 2)', () => {
+  const rule = (selector: string) =>
+    SOURCE.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{[^}]*\\}`))?.[0] ?? '';
+
+  it('raises an unselected segment on hover and keeps the accent for the selected one', () => {
+    const hover = rule('.segment:not(.current):hover');
+    expect(hover).toContain('color: var(--text);');
+    expect(hover).toContain('background: var(--surface-raised);');
+    expect(hover).not.toContain('accent');
+    expect(rule('.current')).toContain('background: var(--accent-soft);');
+    expect(SOURCE).not.toMatch(/\.segment:hover \{/);
+  });
+});
