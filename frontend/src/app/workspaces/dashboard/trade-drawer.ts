@@ -140,7 +140,10 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
     </sb-drawer>
   `,
   styles: `
-    :host { display: contents; }
+    /* v195 §1.4: entry, stop, targets and size are order figures and never
+       shrink below the 14px body step, in either density. Every field reads
+       --text-table; display: contents still passes custom properties down. */
+    :host { display: contents; --text-table: var(--text-body); }
     .paper-marker-row { display: inline-flex; align-items: center; gap: var(--space-4); }
     .paper-marker {
       padding: 0 var(--space-6);

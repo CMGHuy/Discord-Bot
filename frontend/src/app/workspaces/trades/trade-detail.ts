@@ -10,9 +10,11 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 
 import { ApiClient } from '../../api/api-client';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { detailCrumb } from '../../shell/nav';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { asyncInputs, Async } from '../../ui/async';
@@ -21,6 +23,7 @@ import { Chip, ChipTone, QualityChip } from '../../ui/chip';
 import { MINUS } from '../../ui/format';
 import { Hint } from '../../ui/hint';
 import { MetricChip } from '../../ui/metric-chip';
+import { Page } from '../../ui/page';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Tab, TabBar } from '../../ui/layout';
 import { StatusIndicator } from '../../ui/status-indicator';
@@ -93,6 +96,17 @@ function cameFromPlan(): boolean {
 }
 
 /**
+ * The breadcrumb's detail segment for one trade or plan (v195 §3:
+ * `Review / Trades / NVDA #a1b2c3`): the ticker and the same six-character
+ * id the Trades table's ID column shows (`trades.ts` `shortId`), so the
+ * crumb names what the list named. `plan-detail.ts` uses it too.
+ */
+export function tradeCrumb(ticker: string | null, id: string | null): string {
+  if (id === null) return detailCrumb(ticker, null);
+  return detailCrumb(ticker, id.length > 6 ? id.slice(-6) : id);
+}
+
+/**
  * One trade — Overview, Why, Chart and Journal within a shared shell.
  *
  * **The active tab is a query parameter**, for the same reason the Trades
@@ -102,12 +116,16 @@ function cameFromPlan(): boolean {
  *
  * `id` arrives as an input rather than through `ActivatedRoute`, so this
  * component is testable without standing up a router.
+ *
+ * On sb-page since v195: the commands sit in the header's actions, the
+ * identity line and outcome strip are the summary, the tabs the primary
+ * panel; every figure reads the 14px body step (spec §1.4).
  */
 @Component({
   selector: 'sb-trade-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    RouterLink,
+    Page,
     TabBar,
     StatusIndicator,
     QualityChip,
@@ -128,292 +146,304 @@ function cameFromPlan(): boolean {
     StrategyRecordCard,
   ],
   template: `
-    <header class="head">
-      <a class="back" routerLink="/trades">← Trades</a>
-      @if (arrival(); as message) {
-        <p class="arrival" role="status">{{ message }}</p>
-      }
-
-      @if (store.trade(); as trade) {
-        <div class="identity">
-          <div class="trade-title" role="heading" aria-level="2">
-            <span class="ticker">{{ trade.ticker }}</span>
-            @if (side(); as label) {
-              <span class="side">{{ label }}</span>
-            }
-            <sb-status-indicator
-              [status]="trade.status"
-              [current]="trade.current_price"
-              [entry]="trade.entry"
-              [stop]="trade.stop_loss"
-              [target]="trade.target"
-            />
-          </div>
-          <div class="tags">
-            @if (trade.horizon) {
-              <span class="tag">{{ trade.horizon }}</span>
-            }
-            @if (trade.strategy) {
-              <span class="tag">{{ trade.strategy }}</span>
-            }
-            @if (trade.tier) {
-              <sb-quality-chip [value]="trade.tier" [label]="'Tier ' + trade.tier" />
-            }
-            @if (trade.confidence_level !== null) {
-              <sb-quality-chip
-                [value]="trade.confidence_level"
-                [label]="'Lv' + trade.confidence_level"
-              />
-            }
-            @if (trade.badge) {
-              <sb-quality-chip [value]="trade.badge" [label]="trade.badge" />
-            }
-            <!-- v86 -- the cohort risk verdict. COHORT_TYPICAL renders no
-                 chip at all (the brief's own token guidance): "typical" is
-                 the silent default every other label is judged against, and a
-                 chip for it would just be visual noise on every ordinary
-                 trade. -->
-            @if (cohortTone(); as tone) {
-              <sb-chip [label]="cohortChipLabel()" [tone]="tone" /><sb-hint [text]="cohortTooltip()" label="About the cohort chip" align="left" />
-            }
-            @if (earningsChip(); as label) {
-              <span class="earnings"><sb-chip [label]="label" tone="warn" [caps]="false" /></span>
-            }
-            @if (trade.origin !== 'plan') {
-              <span class="origin">{{ trade.origin }}</span>
-            }
-            <span class="trade-id" [title]="'Trade ID: ' + trade.id">{{ trade.id }}</span>
-          </div>
-          <div class="actions">
-            @for (kind of actionsFor(trade.status); track kind) {
-              <button
-                sb-button
-                [variant]="kind === 'delete' ? 'danger-quiet' : 'secondary'"
-                type="button"
-                (click)="ask(kind)"
-              >
-                {{ actionLabels[kind] }}
-              </button>
-            }
-          </div>
-        </div>
-      } @else if (store.error(); as message) {
-        <p class="trade-title" role="status">{{ message }}</p>
-      } @else {
-        <!-- Not "skeleton": G1's coverage gate (async-coverage.spec.ts)
-             bans that literal class name anywhere in a file that uses
-             sb-async, once one is added below for the tab content. This
-             title-only loading word is not the sb-async skeleton itself. -->
-        <p class="trade-title loading-title" role="status">Loading…</p>
-      }
-    </header>
-
-    @if (store.trade()) {
-      <sb-outcome-strip [tiles]="stripTiles()" />
-    }
-
-    <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
-
-    <!-- Not in the plan's own file list for this wave (the task named only
-         trades.ts) -- added because G1's FETCHING list names this file too.
-         The header above keeps its own hand-rolled trade/error/loading
-         branches (title-only, and now gate-safe -- see the comment there);
-         this sb-async covers the tab body, which was previously blank
-         while store.trade() was null with no visible indication at all. One
-         trade is never "measured zero" once loaded (a missing trade is a
-         fetch error, not an empty result), so isEmpty is always false. -->
-    <sb-async
-      [loading]="async().loading"
-      [error]="async().error"
-      [empty]="async().empty"
-      [staleAsOf]="async().staleAsOf"
-      emptyReason="measured-zero"
-      emptyTitle="Trade not found"
-      [skeletonRows]="3"
-      [skeletonCols]="4"
-      (retry)="store.load()"
-    >
-    @switch (activeTab()) {
-      @case ('overview') {
+    <!-- v195 Phase 4: the route title is the page's one h1; the
+         breadcrumb's detail segment names the trade (tradeCrumb), and its
+         Trades crumb is the way back, so there is no back link and no scope
+         bar (spec §5.2). -->
+    <sb-page>
+      <!-- The trade's commands, at the header's right: Delete last, as
+           danger-quiet, each behind the confirm below (Global Constraints:
+           any delete lives here). None until the trade has loaded. -->
+      <div page-actions class="page-actions">
         @if (store.trade(); as trade) {
-          <div class="grid-host">
-            <div class="card-grid overview-grid" [style.--areas-1]="overviewAreas.one"
-              [style.--areas-2]="overviewAreas.two" [style.--areas-3]="overviewAreas.three">
-              <div class="cell" data-area="plan" style="grid-area: plan">
-                @if (planFigures(); as figures) { <sb-trade-plan-card [figures]="figures" /> }
-              </div>
-              <div class="cell" data-area="position" style="grid-area: position">
-                @if (positionFigures(); as figures) { <sb-trade-position-card [figures]="figures" /> }
-              </div>
-              <div class="cell" data-area="outcome" style="grid-area: outcome">
-                <sb-trade-outcome-card [group]="outcomeGroup()" [direction]="trade.direction"
-                  [target2]="trade.target2" [stopLoss]="trade.stop_loss"
-                  [legs]="store.legs()" [timeline]="store.timeline()" />
-              </div>
-            </div>
-          </div>
+          @for (kind of actionsFor(trade.status); track kind) {
+            <button
+              sb-button
+              [variant]="kind === 'delete' ? 'danger-quiet' : 'secondary'"
+              type="button"
+              (click)="ask(kind)"
+            >
+              {{ actionLabels[kind] }}
+            </button>
+          }
         }
-      }
-      @case ('chart') {
-        <div class="chart">
-          <sb-plan-chart [ticker]="store.trade()?.ticker ?? null" [tradeId]="store.trade()?.id ?? null" />
-        </div>
-      }
-      @case ('journal') {
-        <div class="notes">
-          <!-- SR55. The excursions sit ABOVE the note and beside it, not on
-               Analytics: they are the evidence the note is about. "Went 1.4R
-               in favour before stopping out" is the reason someone writes
-               "exit management" in the box below. -->
-          @if (store.journalError(); as message) {
-            <p class="stale" role="status">Journal unavailable — {{ message }}</p>
-          } @else if (store.excursions().length) {
-            <div class="excursions">
-              @for (figure of store.excursions(); track figure.label) {
-                <sb-metric-chip
-                  [label]="figure.label"
-                  [value]="figure.value"
-                  [unit]="figure.unit"
-                  [decimals]="figure.decimals"
-                  tone="plain"
-                />
-              }
-            </div>
+      </div>
 
-            @if (store.journalTags().length) {
-              <div class="journal-tags">
-                @for (tag of store.journalTags(); track tag) {
-                  <sb-chip [label]="tag" />
+      <!-- The summary: who the trade is, then how it stands. One element,
+           so the identity line and the outcome strip stay adjacent. -->
+      <div page-kpis class="summary">
+        <header class="head">
+            @if (arrival(); as message) {
+              <p class="arrival" role="status">{{ message }}</p>
+            }
+
+            @if (store.trade(); as trade) {
+              <div class="identity">
+                <div class="trade-title" role="heading" aria-level="2">
+                  <span class="ticker">{{ trade.ticker }}</span>
+                  @if (side(); as label) {
+                    <span class="side">{{ label }}</span>
+                  }
+                  <sb-status-indicator
+                    [status]="trade.status"
+                    [current]="trade.current_price"
+                    [entry]="trade.entry"
+                    [stop]="trade.stop_loss"
+                    [target]="trade.target"
+                  />
+                </div>
+                <div class="tags">
+                  @if (trade.horizon) {
+                    <span class="tag">{{ trade.horizon }}</span>
+                  }
+                  @if (trade.strategy) {
+                    <span class="tag">{{ trade.strategy }}</span>
+                  }
+                  @if (trade.tier) {
+                    <sb-quality-chip [value]="trade.tier" [label]="'Tier ' + trade.tier" />
+                  }
+                  @if (trade.confidence_level !== null) {
+                    <sb-quality-chip
+                      [value]="trade.confidence_level"
+                      [label]="'Lv' + trade.confidence_level"
+                    />
+                  }
+                  @if (trade.badge) {
+                    <sb-quality-chip [value]="trade.badge" [label]="trade.badge" />
+                  }
+                  <!-- v86 -- the cohort risk verdict. COHORT_TYPICAL renders no
+                       chip at all (the brief's own token guidance): "typical" is
+                       the silent default every other label is judged against, and a
+                       chip for it would just be visual noise on every ordinary
+                       trade. -->
+                  @if (cohortTone(); as tone) {
+                    <sb-chip [label]="cohortChipLabel()" [tone]="tone" /><sb-hint [text]="cohortTooltip()" label="About the cohort chip" align="left" />
+                  }
+                  @if (earningsChip(); as label) {
+                    <span class="earnings"><sb-chip [label]="label" tone="warn" [caps]="false" /></span>
+                  }
+                  @if (trade.origin !== 'plan') {
+                    <span class="origin">{{ trade.origin }}</span>
+                  }
+                  <span class="trade-id" [title]="'Trade ID: ' + trade.id">{{ trade.id }}</span>
+                </div>
+              </div>
+            } @else if (store.error(); as message) {
+              <p class="trade-title" role="status">{{ message }}</p>
+            } @else {
+              <!-- Not "skeleton": G1's coverage gate (async-coverage.spec.ts)
+                   bans that literal class name anywhere in a file that uses
+                   sb-async, once one is added below for the tab content. This
+                   title-only loading word is not the sb-async skeleton itself. -->
+              <p class="trade-title loading-title" role="status">Loading…</p>
+            }
+        </header>
+
+        @if (store.trade()) {
+          <sb-outcome-strip [tiles]="stripTiles()" />
+        }
+      </div>
+
+      <!-- v195 §5.2: the tabs and their body are the primary panel. -->
+      <div page-primary class="tab-body">
+        <sb-tab-bar [tabs]="tabs" [active]="activeTab()" (activeChange)="goToTab($event)" />
+
+        <!-- Not in the plan's own file list for this wave (the task named only
+             trades.ts) -- added because G1's FETCHING list names this file too.
+             The header above keeps its own hand-rolled trade/error/loading
+             branches (title-only, and now gate-safe -- see the comment there);
+             this sb-async covers the tab body, which was previously blank
+             while store.trade() was null with no visible indication at all. One
+             trade is never "measured zero" once loaded (a missing trade is a
+             fetch error, not an empty result), so isEmpty is always false. -->
+        <sb-async
+          [loading]="async().loading"
+          [error]="async().error"
+          [empty]="async().empty"
+          [staleAsOf]="async().staleAsOf"
+          emptyReason="measured-zero"
+          emptyTitle="Trade not found"
+          [skeletonRows]="3"
+          [skeletonCols]="4"
+          (retry)="store.load()"
+        >
+        @switch (activeTab()) {
+          @case ('overview') {
+            @if (store.trade(); as trade) {
+              <div class="grid-host">
+                <div class="card-grid overview-grid" [style.--areas-1]="overviewAreas.one"
+                  [style.--areas-2]="overviewAreas.two" [style.--areas-3]="overviewAreas.three">
+                  <div class="cell" data-area="plan" style="grid-area: plan">
+                    @if (planFigures(); as figures) { <sb-trade-plan-card [figures]="figures" /> }
+                  </div>
+                  <div class="cell" data-area="position" style="grid-area: position">
+                    @if (positionFigures(); as figures) { <sb-trade-position-card [figures]="figures" /> }
+                  </div>
+                  <div class="cell" data-area="outcome" style="grid-area: outcome">
+                    <sb-trade-outcome-card [group]="outcomeGroup()" [direction]="trade.direction"
+                      [target2]="trade.target2" [stopLoss]="trade.stop_loss"
+                      [legs]="store.legs()" [timeline]="store.timeline()" />
+                  </div>
+                </div>
+              </div>
+            }
+          }
+          @case ('chart') {
+            <div class="chart">
+              <sb-plan-chart [ticker]="store.trade()?.ticker ?? null" [tradeId]="store.trade()?.id ?? null" />
+            </div>
+          }
+          @case ('journal') {
+            <div class="notes">
+              <!-- SR55. The excursions sit ABOVE the note and beside it, not on
+                   Analytics: they are the evidence the note is about. "Went 1.4R
+                   in favour before stopping out" is the reason someone writes
+                   "exit management" in the box below. -->
+              @if (store.journalError(); as message) {
+                <p class="stale" role="status">Journal unavailable — {{ message }}</p>
+              } @else if (store.excursions().length) {
+                <div class="excursions">
+                  @for (figure of store.excursions(); track figure.label) {
+                    <sb-metric-chip
+                      [label]="figure.label"
+                      [value]="figure.value"
+                      [unit]="figure.unit"
+                      [decimals]="figure.decimals"
+                      tone="plain"
+                    />
+                  }
+                </div>
+
+                @if (store.journalTags().length) {
+                  <div class="journal-tags">
+                    @for (tag of store.journalTags(); track tag) {
+                      <sb-chip [label]="tag" />
+                    }
+                  </div>
                 }
-              </div>
-            }
 
-            @if (store.autoLesson(); as lesson) {
-              <!-- Generated, and labelled as such: a reader must be able to
-                   tell it from the note they wrote themselves. -->
-              <p class="auto-lesson"><strong>Auto-lesson</strong> — {{ lesson }}</p>
-            }
-          }
+                @if (store.autoLesson(); as lesson) {
+                  <!-- Generated, and labelled as such: a reader must be able to
+                       tell it from the note they wrote themselves. -->
+                  <p class="auto-lesson"><strong>Auto-lesson</strong> — {{ lesson }}</p>
+                }
+              }
 
-          @if (store.noteStatus() === 'unjournaled') {
-            <!-- Not an error. Journal entries are written at close, so an
-                 open position has none and cannot take a note yet. Saying so
-                 plainly beats a textarea that silently discards what is
-                 typed into it. -->
-            <p class="not-journaled">
-              This position has no journal entry yet. Notes attach when a trade closes.
-            </p>
-          }
+              @if (store.noteStatus() === 'unjournaled') {
+                <!-- Not an error. Journal entries are written at close, so an
+                     open position has none and cannot take a note yet. Saying so
+                     plainly beats a textarea that silently discards what is
+                     typed into it. -->
+                <p class="not-journaled">
+                  This position has no journal entry yet. Notes attach when a trade closes.
+                </p>
+              }
 
-          <label class="note-label" for="trade-note">Note</label>
-          <textarea
-            id="trade-note"
-            class="note-field"
-            rows="10"
-            [value]="store.noteText()"
-            [disabled]="store.noteStatus() === 'unjournaled'"
-            (input)="onNoteInput($event)"
-            (blur)="flushNote()"
-            placeholder="Why this trade, what happened, what to do differently."
-          ></textarea>
+              <label class="note-label" for="trade-note">Note</label>
+              <textarea
+                id="trade-note"
+                class="note-field"
+                rows="10"
+                [value]="store.noteText()"
+                [disabled]="store.noteStatus() === 'unjournaled'"
+                (input)="onNoteInput($event)"
+                (blur)="flushNote()"
+                placeholder="Why this trade, what happened, what to do differently."
+              ></textarea>
 
-          <p class="note-state" [class.note-state-bad]="store.noteStatus() === 'error'">
-            @switch (store.noteStatus()) {
-              @case ('saving') {
-                Saving…
-              }
-              @case ('unsaved') {
-                Unsaved changes
-              }
-              @case ('error') {
-                {{ store.noteError() }}
-              }
-              @case ('unjournaled') {
-                Not journaled yet
-              }
-              @default {
-                Saved
-              }
-            }
-          </p>
-        </div>
-      }
-      @case ('why') {
-        @if (store.trade(); as trade) {
-          @if (store.detailAbsent()) {
-            <p class="no-detail">This trade was logged before the admin UI captured the full alert detail — only its gate rows and calendar are available here; its levels are on Overview.</p>
-          }
-          <div class="grid-host">
-            <div class="card-grid why-grid" [style.--areas-1]="whyGrid().one"
-              [style.--areas-2]="whyGrid().two" [style.--areas-3]="whyGrid().three">
-              @if (whyPresent().has('why')) {
-                <div class="cell" data-area="why" style="grid-area: why">
-                  <sb-why-panel [sections]="cellSections.why" [explanation]="store.explanation()" />
-                </div>
-              }
-              @if (whyPresent().has('scores')) {
-                <div class="cell" data-area="scores" style="grid-area: scores">
-                  <sb-trade-scores-card [confidence]="trade.confidence_score" [level]="trade.confidence_level"
-                    [quality]="trade.quality_score" [badge]="trade.badge" />
-                </div>
-              }
-              @if (whyPresent().has('sources')) {
-                <div class="cell" data-area="sources" style="grid-area: sources">
-                  <sb-trade-level-sources [target]="store.targetSources()" [stop]="store.stopSources()"
-                    [target2]="store.target2Sources()" [confirmedBy]="store.confirmedBy()" />
-                </div>
-              }
-              @if (whyPresent().has('breakdown')) {
-                <div class="cell" data-area="breakdown" style="grid-area: breakdown">
-                  <sb-why-panel [sections]="cellSections.breakdown" [confidencePoints]="store.confidencePoints()"
-                    [confidenceUnevaluated]="store.confidenceUnevaluated()"
-                    [confidenceFactors]="store.confidenceFactors()" [qualityFactors]="store.qualityFactors()" />
-                </div>
-              }
-              @if (whyPresent().has('gates')) {
-                <div class="cell" data-area="gates" style="grid-area: gates">
-                  <sb-why-panel [sections]="cellSections.gates" [gates]="store.gates()" [status]="trade.status"
-                    [barsToExpiry]="trade.bars_to_expiry" [sessionsSinceCreated]="store.sessionsSinceCreated()" />
-                </div>
-              }
-              <div class="cell" data-area="context" style="grid-area: context">
-                <sb-why-panel [sections]="cellSections.calendar" [calendar]="store.calendar()" />
-                <sb-trade-strategy-record [strategy]="trade.strategy" [row]="store.strategyRow()"
-                  [error]="store.strategiesError()" />
-              </div>
+              <p class="note-state" [class.note-state-bad]="store.noteStatus() === 'error'">
+                @switch (store.noteStatus()) {
+                  @case ('saving') {
+                    Saving…
+                  }
+                  @case ('unsaved') {
+                    Unsaved changes
+                  }
+                  @case ('error') {
+                    {{ store.noteError() }}
+                  }
+                  @case ('unjournaled') {
+                    Not journaled yet
+                  }
+                  @default {
+                    Saved
+                  }
+                }
+              </p>
             </div>
-          </div>
+          }
+          @case ('why') {
+            @if (store.trade(); as trade) {
+              @if (store.detailAbsent()) {
+                <p class="no-detail">This trade was logged before the admin UI captured the full alert detail — only its gate rows and calendar are available here; its levels are on Overview.</p>
+              }
+              <div class="grid-host">
+                <div class="card-grid why-grid" [style.--areas-1]="whyGrid().one"
+                  [style.--areas-2]="whyGrid().two" [style.--areas-3]="whyGrid().three">
+                  @if (whyPresent().has('why')) {
+                    <div class="cell" data-area="why" style="grid-area: why">
+                      <sb-why-panel [sections]="cellSections.why" [explanation]="store.explanation()" />
+                    </div>
+                  }
+                  @if (whyPresent().has('scores')) {
+                    <div class="cell" data-area="scores" style="grid-area: scores">
+                      <sb-trade-scores-card [confidence]="trade.confidence_score" [level]="trade.confidence_level"
+                        [quality]="trade.quality_score" [badge]="trade.badge" />
+                    </div>
+                  }
+                  @if (whyPresent().has('sources')) {
+                    <div class="cell" data-area="sources" style="grid-area: sources">
+                      <sb-trade-level-sources [target]="store.targetSources()" [stop]="store.stopSources()"
+                        [target2]="store.target2Sources()" [confirmedBy]="store.confirmedBy()" />
+                    </div>
+                  }
+                  @if (whyPresent().has('breakdown')) {
+                    <div class="cell" data-area="breakdown" style="grid-area: breakdown">
+                      <sb-why-panel [sections]="cellSections.breakdown" [confidencePoints]="store.confidencePoints()"
+                        [confidenceUnevaluated]="store.confidenceUnevaluated()"
+                        [confidenceFactors]="store.confidenceFactors()" [qualityFactors]="store.qualityFactors()" />
+                    </div>
+                  }
+                  @if (whyPresent().has('gates')) {
+                    <div class="cell" data-area="gates" style="grid-area: gates">
+                      <sb-why-panel [sections]="cellSections.gates" [gates]="store.gates()" [status]="trade.status"
+                        [barsToExpiry]="trade.bars_to_expiry" [sessionsSinceCreated]="store.sessionsSinceCreated()" />
+                    </div>
+                  }
+                  <div class="cell" data-area="context" style="grid-area: context">
+                    <sb-why-panel [sections]="cellSections.calendar" [calendar]="store.calendar()" />
+                    <sb-trade-strategy-record [strategy]="trade.strategy" [row]="store.strategyRow()"
+                      [error]="store.strategiesError()" />
+                  </div>
+                </div>
+              </div>
+            }
+          }
         }
-      }
-    }
-    </sb-async>
+        </sb-async>
+      </div>
 
-    <sb-confirm-dialog
-      [open]="pending() !== null"
-      [title]="confirmTitle()"
-      [consequence]="confirmConsequence()"
-      [confirmLabel]="confirmLabel()"
-      [working]="working()"
-      (confirmed)="runPending()"
-      (cancelled)="pending.set(null)"
-    />
+      <sb-confirm-dialog
+        [open]="pending() !== null"
+        [title]="confirmTitle()"
+        [consequence]="confirmConsequence()"
+        [confirmLabel]="confirmLabel()"
+        [working]="working()"
+        (confirmed)="runPending()"
+        (cancelled)="pending.set(null)"
+      />
+    </sb-page>
   `,
   styles: `
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--section-gap); }
+    /* v195 Phase 4: sb-page owns the page rhythm. §1.4: entry, stop,
+       targets, size and risk are order figures and never shrink below the
+       14px body step, in either density; the plan, position and outcome
+       cards read --text-table, so this page re-points it on its own host. */
+    :host { display: block; min-width: 0; --text-table: var(--text-body); }
+    .summary, .tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
     .head {
       display: grid;
       gap: var(--space-8);
-    }
-    .back {
-      display: flex;
-      align-items: center;
-      min-height: var(--control-h);
-      color: var(--accent);
-      font-size: var(--text-table);
-      text-decoration: none;
-    }
-    .back:hover {
-      text-decoration: underline;
     }
 
     /* Why the plan page sent the reader here (v151). Informational, not a
@@ -433,11 +463,11 @@ function cameFromPlan(): boolean {
       gap: var(--space-10);
       min-width: 0;
     }
-    .actions {
+    .page-actions {
       display: flex;
       flex-wrap: wrap;
+      justify-content: flex-end;
       gap: var(--space-8);
-      margin-left: auto;
     }
     .side, .origin {
       color: var(--text-secondary);
@@ -585,6 +615,7 @@ export class TradeDetail {
   private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
   protected readonly chart = inject(ChartStore);
+  private readonly titles = inject(RouteTitleService);
 
   protected readonly side: Signal<'Long' | 'Short' | null> = computed(() =>
     sideLabel(this.store.trade()?.direction ?? null),
@@ -832,6 +863,17 @@ export class TradeDetail {
     effect(() => {
       const trade = this.store.trade();
       this.chart.setTarget(trade?.ticker ?? null, trade?.id ?? null);
+    });
+
+    // v195: the breadcrumb's detail segment (Review / Trades / NVDA #a1b2c3),
+    // once the trade has loaded. From an effect, never the constructor body:
+    // the router writes the title after it activates the route. Reading
+    // detail() as well puts the crumb back if a title update cleared it.
+    effect(() => {
+      const trade = this.store.trade();
+      const crumb = trade ? tradeCrumb(trade.ticker, trade.id) : '';
+      this.titles.detail();
+      untracked(() => this.titles.setDetail(crumb));
     });
   }
 

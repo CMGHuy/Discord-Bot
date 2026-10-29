@@ -250,3 +250,15 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     expect(css).not.toMatch(/@media/);
   });
 });
+
+/* -- v195 §1.4 -- the drawer's order figures never shrink ------------------ */
+
+describe('sb-trade-drawer order figures (v195 §1.4)', () => {
+  it('sets entry, stop, targets and size on the 14px body step, in both densities', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/trade-drawer.ts'), 'utf8');
+    expect(src).toMatch(/:host \{[^}]*display: contents;[^}]*--text-table: var\(--text-body\);/);
+    // The fields read --text-table, so re-pointing it on the host is what
+    // lifts them; a field on its own fixed size would escape the floor.
+    expect(src).toMatch(/dd \{[^}]*font-size: var\(--text-table\)/);
+  });
+});
