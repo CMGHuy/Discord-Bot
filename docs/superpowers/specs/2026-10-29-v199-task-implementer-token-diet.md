@@ -15,7 +15,8 @@ a requirement rather than a trade-off.
 
 Cost here is almost entirely context re-read per turn, not output. Over the
 185 recorded implementer runs (session transcripts under
-`~/.claude/projects/<repo>/*/subagents/`, deduplicated by message id), the
+`$CLAUDE_CONFIG_DIR/projects/<repo slug>/*/subagents/`, deduplicated by
+message id), the
 input side was 206M tokens against 1.4M output. A median run was 11 turns
 and 517k input tokens (p90 32 turns). So the levers are fewer turns and
 less carried per turn.
@@ -77,9 +78,8 @@ existing `task-*-brief.md` files there). Sections, in order:
   plan part holds it, including its `**Model:**` line. Located by the
   existing `^### Task` grep convention; a split plan is searched across its
   parts via the index.
-- **Deliverables** — a numbered list, one per plan step / `Create:` /
-  `Modify:` / `Test:` line of the task, `D1`…`Dn`. Derived mechanically;
-  where the task has no such lines, each top-level step is one item.
+- **Deliverables** — a numbered list `D1`…`Dn`, derived mechanically by
+  the grammar in § Deliverable grammar below.
 - **Environment** — worktree path and branch; "use `git -C <wt>` and
   absolute paths, never `cd`"; the exact `testrun.py file` command form;
   the test database URL and how to create/drop it when the task's files
@@ -87,6 +87,45 @@ existing `task-*-brief.md` files there). Sections, in order:
   frontend test wrapper when the task touches `frontend/`; the radon
   command; the commit attribution line passed by the controller.
 - **Preflight** and **Code** — left as marked slots for `/task-brief`.
+
+The task heading is matched with an exact regex, `^### Task <id>:`, so
+`E5` never matches `E53`. A split plan is searched across every part file
+the index names. An id found in two parts, or in none, exits non-zero and
+names the files.
+
+The handoff directory is always under the **main** checkout's
+`.superpowers/sdd/`, resolved through `git rev-parse --git-common-dir`,
+whichever checkout runs the script. The script prints the handoff's
+absolute path as its last line.
+
+#### Deliverable grammar
+
+Real tasks have a `**Files:**` prose line plus `- [ ]` checkbox steps
+(e.g. V198-1). Deliverables are derived as follows:
+
+- **From `**Files:**`:** one `Dn` per backticked path that directly follows
+  one of the verbs `Modify`, `Create`, `Update`, `Test` or `Delete`
+  (case-insensitive). A verb's paths run until the next `;`, the next
+  verb or the end of the sentence. Clauses starting `Existing` or
+  containing `remain` or `unchanged` contribute nothing, because they
+  name files the task must *not* change.
+- **From steps:** one `Dn` per `- [ ]` line outside fenced code blocks.
+  A `- [ ]` inside a fence is code, not a step.
+- **Inside a step:** every `def test_<name>` in that step's fenced Python
+  becomes its own sub-item `Dn.k`, so a step that bundles a test file is
+  checked test by test.
+- **No fallback.** A task that yields no deliverables exits non-zero with
+  `no deliverables derivable for <id>`; the controller fixes the plan
+  task or dispatches without a handoff.
+
+Fixtures are copied from real plan tasks, including V198-1's `**Files:**`
+sentence with its `Existing … remain` clause, a fenced `- [ ]`, a duplicate
+id across parts and an `E5`/`E53` prefix pair.
+
+The environment triggers are two prefix tables held as module constants
+(`DB_PREFIXES`, `FRONTEND_PREFIXES`) and read by `needs_db(files)` and
+`needs_frontend(files)`. A test asserts the tables themselves, not only
+the outputs.
 
 `/task-brief` is changed to take the handoff path, fill **Preflight** (its
 existing 3a–3h checks, unchanged) and **Code**: bounded excerpts (signature
@@ -100,6 +139,15 @@ The controller's dispatch prompt becomes fixed: task id, handoff path,
 model tier, and "return the report shape in your agent file". It is
 documented once in `skills-tools.md` § Which agent for what; ad-hoc prompts
 that restate environment or point at plan files are no longer the pattern.
+The plan-read guard hook under `.claude/hooks/`, which today steers to
+`/task-brief <id>` or a `^### Task` grep, is updated to name the handoff
+path as the implementer's route.
+
+**Plans already in flight** (v197, v198 and any open worktree) switch at
+their next undispatched task; there is no cut-over date. When a task is
+dispatched without a handoff file, `task-reviewer` falls back to the
+pasted brief and reports `DELIVERABLES: n/a (no handoff)`. `agent_cost.py`
+counts those runs separately.
 
 ### 2. The agent file
 
@@ -119,7 +167,11 @@ that restate environment or point at plan files are no longer the pattern.
 - `frontend/scripts/browse.mjs shots` gains `--clip <css selector>`:
   captures only the first match's bounding box (plus a small margin)
   instead of the full page. Full-page stays the default for callers that
-  do not pass it.
+  do not pass it. The clip-box computation (margin, clamp to page bounds)
+  is a pure exported function in a `browse-lib.mjs`, tested beside it in
+  the style of `layout-audit-lib.test.mjs`.
+- "The audit" means `frontend/scripts/layout-audit.mjs`, not
+  `scripts/dev/ui_spacing_audit.js`.
 - Implementer rule for UI tasks: run `frontend/scripts/layout-audit.mjs`
   first and work from its findings; read a screenshot only for a named
   element, clipped; **at most 4 image reads per task**. Needing more is a
@@ -149,12 +201,37 @@ reviewer gets the handoff path rather than a pasted brief.
 ### 5. Measurement
 
 The transcript analysis used for the baseline becomes
-`scripts/dev/agent_cost.py [--agent task-implementer] [--since DATE]`:
-runs, turns, input tokens (dedup by message id), lookups before first
-edit, image reads, plan-file touches; for `task-reviewer`, share of reports
-in the required shape and `missing`/`different` counts. Read-only over
-local transcripts; prints a table. It is the before/after instrument for
-this spec.
+`scripts/dev/agent_cost.py [--agent task-implementer] [--since DATE]
+[--until DATE]`. It reports runs, turns, input tokens (deduplicated by
+message id), lookups before first edit, image reads and plan-file
+touches. For `task-reviewer`, it reports the share of reports in the
+required shape and the `missing`/`different` counts. It reads local
+transcripts without changing them, prints a table, and is the before/after
+instrument for this spec.
+
+- **Transcript root:** `$CLAUDE_CONFIG_DIR/projects/<repo slug>/`, falling
+  back to `~/.claude/projects/`. If it finds no transcripts, it exits
+  non-zero rather than printing zeros.
+- **Fixed definitions**, so the baseline and later runs measure the same
+  thing:
+  - **Lookup:** a Read, Grep or Glob call, or a Bash call matching
+    `\b(grep|rg|cat|sed -n|head|tail|ls|find)\b`.
+  - **First edit:** the first Edit or Write tool call.
+  - **Turn:** a distinct assistant `message.id`.
+  - **Input tokens:** `input` + `cache_read` + `cache_creation`.
+- **Shape:** pure functions `iter_events`, `dedup`, `run_metrics`,
+  `is_lookup` and `render_table`, each tested at its own seam.
+- **Format changes:** a transcript line that lacks the expected fields is
+  counted under `unparsed` and shown in the table, never silently dropped.
+  The format is Claude Code's internal one, so a CLI update can break it;
+  a non-zero `unparsed` share is the signal.
+- **Baseline check:** the plan's first measurement task runs `--until
+  2026-10-29` and must reproduce the baseline table above (within
+  rounding). If it differs, the definitions are fixed first, so "down
+  30%" compares like with like.
+- **Ownership:** the controller docs (`skills-tools.md`) name it as the
+  standing cost check for any agent change; it is not removed after this
+  spec.
 
 ## Success
 
@@ -191,30 +268,41 @@ fidelity and plan-touch targets are met.
 
 ## Constraints
 
-- Codex mirror ships in the same commits: `.claude/agents/*` via
-  `python scripts/dev/sync_codex.py`, doc changes into `AGENTS.md`;
-  `tests/hooks/test_codex_mirror.py` must stay green.
-- New scripts ship unit tests (handoff extraction on a single-file plan, a
-  split plan, a task with no `Create:/Modify:` lines, a missing task id;
-  `agent_cost.py` on fixture transcripts including a duplicated-message-id
-  case; `browse.mjs --clip` argument parsing) and join an existing suite.
+- Codex mirror ships in the same commits: `.claude/agents/*` and
+  `.claude/skills/task-brief/` via `python scripts/dev/sync_codex.py`;
+  the `skills-tools.md` and `ui-design.md` changes as condensed
+  `AGENTS.md` lines. `tests/hooks/test_codex_mirror.py` must stay green.
+- New scripts ship unit tests that join an existing suite:
+  - **`task_handoff.py`:** a single-file plan; a split plan; a duplicate
+    id across parts; an `E5`/`E53` prefix pair; a missing id; a task with
+    no derivable deliverables; the deliverable-grammar fixtures above; and
+    the prefix tables.
+  - **`agent_cost.py`:** fixture transcripts, including a repeated message
+    id and an unparseable line, tested at each pure-function seam.
+  - **`browse-lib.mjs`:** clip-box computation.
+- **Node tests get a runner.** A pytest wrapper in the `tooling` suite runs
+  `node --test frontend/scripts/*.test.mjs`. That wrapper also brings the
+  existing `layout-audit-lib.test.mjs`, which today runs nowhere, under CI.
+  It skips with a reason when `node` is absent.
+- **A wiring test** asserts that the implementer and reviewer agent files
+  name the handoff section headings and the `DELIVERABLES:`/`Dn` shapes
+  that `task_handoff.py` exports as constants. Renaming one side without
+  the other then fails.
 - Every function under complexity 15.
 
 ## Author's calls (settled from the builder check, not partner decisions)
 
-- **Deliverable derivation.** Plan tasks are written as a `**Files:**`
-  line plus `- [ ]` checkbox steps (e.g. V198-1). One `Dn` per `- [ ]`
-  step, plus one per file named in `**Files:**`. A task with neither
-  falls back to one item per top-level paragraph, flagged in the
-  handoff as `derivation: fallback`.
+- **Deliverable derivation:** as in § Deliverable grammar. There is no
+  fallback; a task with nothing derivable fails loudly.
 - **Ticks live in the report only.** The handoff file is never edited
   after `/task-brief` fills it. The reviewer reads the untouched handoff
   and the diff, never the implementer's ticks, so it is not anchored on
   the implementer's claims.
-- **Environment block trigger.** Path prefixes in `**Files:**`: any
-  `swingbot/core/db/`, `alembic/`, store/repository path or `tests/db/`
-  adds the database block; any `frontend/` adds the frontend block.
-  The task's text is not keyword-scanned.
+- **Environment block trigger.** Path prefixes of the `**Files:**`
+  paths, from the `DB_PREFIXES` / `FRONTEND_PREFIXES` tables. The
+  database table starts as `swingbot/core/db/`, `alembic/` and `tests/db/`,
+  plus store modules the plan writer confirms. `frontend/` triggers the
+  frontend block. The task's text is not keyword-scanned.
 - **Database rule.** The root `CLAUDE.md` is authoritative: tests run
   against the one shared `swing-db` container after `/replicate-prod-db`.
   Its rule wins over the older per-implementer database note in session
@@ -241,3 +329,26 @@ fidelity and plan-touch targets are met.
 - Whether `/task-brief` stays a forked Sonnet skill or becomes a step the
   handoff script prompts for; either is acceptable if the controller still
   passes one path.
+
+## Panel review
+
+Run 2026-10-29 over cdf7ed88; both roles returned FINDINGS, all ADVISORY,
+no BLOCKING.
+
+- staff-engineer: transcript path ignores `CLAUDE_CONFIG_DIR` -- applied (§ 5, Evidence)
+- staff-engineer: Codex mirror misses the task-brief skill and `ui-design.md` -- applied (Constraints)
+- staff-engineer: `browse.mjs` test would have no runner -- applied (pytest wrapper over `node --test`, Constraints)
+- staff-engineer: no transition for in-flight plans; reviewer needs a no-handoff fallback -- applied (§ 1)
+- staff-engineer: handoff directory ambiguous across checkouts -- applied (main checkout via `--git-common-dir`, § 1)
+- staff-engineer: transcript format is internal; owner and failure mode unnamed -- applied (`unparsed` count, ownership, § 5)
+- staff-engineer: plan-read guard hook would contradict the new rule -- applied (§ 1)
+- senior-engineer: `**Files:**` prose would yield false deliverables -- applied (§ Deliverable grammar)
+- senior-engineer: Design and Author's calls contradicted each other on derivation -- applied (one grammar)
+- senior-engineer: one step bundles many tests; fenced `- [ ]` -- applied (`Dn.k` per `def test_`, fences ignored)
+- senior-engineer: undefined fallback -- applied (removed; fails loudly)
+- senior-engineer: duplicate and prefix task ids untested -- applied (exact regex, error, fixtures)
+- senior-engineer: environment trigger should be table-driven -- applied (`DB_PREFIXES`/`FRONTEND_PREFIXES`)
+- senior-engineer: `agent_cost.py` needs pure seams and fixed metric definitions -- applied (§ 5)
+- senior-engineer: baseline not reproducible -- applied (`--until` and a baseline-reproduction task)
+- senior-engineer: `--clip` box logic untested; which audit is meant -- applied (`browse-lib.mjs`; `layout-audit.mjs`)
+- senior-engineer: agent files and handoff headings could drift -- applied (wiring test)
