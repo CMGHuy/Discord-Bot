@@ -22,6 +22,7 @@ import {
   PnlCalendar,
 } from '../../../api/models';
 import { CalendarDayStore } from '../../../stores/calendar-day.store';
+import { RouteTitleService } from '../../../routing/route-title.service';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import { calendarRoutes } from '../calendar.routes';
@@ -213,8 +214,8 @@ describe('calendar-day helpers', () => {
 describe('CalendarDayPage', () => {
   it('shows the paper caption, the long date and the seven tiles, R explained', async () => {
     const fixture = await open('2026-08-05');
-    expect(text(el(fixture), '.caption')).toBe(PAPER_CAPTION);
-    expect(text(el(fixture), '.long-date')).toBe('Wednesday, August 5, 2026');
+    expect(text(el(fixture), 'sb-page p.description')).toBe(PAPER_CAPTION);
+    expect(text(el(fixture), 'sb-page h1.title')).toBe('Wednesday, August 5, 2026');
     expect(el(fixture).querySelectorAll('.tiles sb-stat-tile')).toHaveLength(7);
     const explained = [...el(fixture).querySelectorAll('.tiles sb-stat-tile')]
       .filter((tile) => tile.querySelector('sb-hint [role="tooltip"]')?.textContent?.trim() === R_TOOLTIP);
@@ -331,7 +332,7 @@ describe('CalendarDayPage', () => {
     expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/calendar/2026-08-03?strategy=EMA20');
     expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/calendar/2026-08-05?strategy=EMA20');
     expect(root.querySelector('.tiles')).toBeNull();
-    expect(text(root, '.caption')).toBe(PAPER_CAPTION);
+    expect(text(root, 'sb-page p.description')).toBe(PAPER_CAPTION);
   });
 
   it('steps to the next month at the month edge, skipping its empty days', async () => {
@@ -348,10 +349,11 @@ describe('CalendarDayPage', () => {
     expect(text(root, '.next.off')).toBe('next day ›');
   });
 
-  it('goes back to the same filtered month', async () => {
+  it('links back to the same filtered month from the day stepper, with no ← link', async () => {
     const root = el(await open('2026-08-05'));
-    expect(text(root, 'a.back')).toBe('← Calendar · August 2026');
-    expect(root.querySelector('a.back')?.getAttribute('href')).toBe('/calendar?month=2026-08&strategy=EMA20');
+    expect(text(root, 'nav.steps a.month')).toBe('August 2026');
+    expect(root.querySelector('nav.steps a.month')?.getAttribute('href')).toBe('/calendar?month=2026-08&strategy=EMA20');
+    expect(root.querySelector('a.back')).toBeNull();
   });
 });
 
@@ -387,7 +389,7 @@ describe('calendar/:date route', () => {
     (await take((r) => r.url === SPARK_URL)).flush(SPARKS);
     harness.detectChanges();
     expect(harness.routeDebugElement?.componentInstance).toBeInstanceOf(CalendarDayPage);
-    expect(text(harness.routeNativeElement!, '.long-date')).toBe('Wednesday, August 5, 2026');
+    expect(text(harness.routeNativeElement!, 'sb-page h1.title')).toBe('Wednesday, August 5, 2026');
   });
 
   it('shows the empty state for an impossible date without a single request', async () => {
@@ -435,6 +437,69 @@ describe('calendar/:date route', () => {
     (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
     await second;
     harness.detectChanges();
-    expect(text(harness.routeNativeElement!, '.long-date')).toBe('Monday, August 10, 2026');
+    expect(text(harness.routeNativeElement!, 'sb-page h1.title')).toBe('Monday, August 10, 2026');
+  });
+});
+
+/* -- v195 Phase 4 and §5.2 -- the day page on sb-page ----------------------- */
+
+describe('CalendarDayPage on sb-page (v195 Phase 4, §5.2)', () => {
+  it('renders the long date as the one h1', async () => {
+    const root = el(await open('2026-08-05'));
+    expect(root.querySelectorAll('h1')).toHaveLength(1);
+    expect(root.querySelector('h2.long-date')).toBeNull();
+    expect(root.querySelector('p.caption')).toBeNull();
+  });
+
+  it('names the day as the breadcrumb detail segment', async () => {
+    await open('2026-08-05');
+    expect(TestBed.inject(RouteTitleService).detail()).toBe('Wednesday, August 5, 2026');
+  });
+
+  it('puts the crumb back after a title update clears it while the page is open', async () => {
+    const fixture = await open('2026-08-05');
+    const titles = TestBed.inject(RouteTitleService);
+    titles.set('Calendar', null, '/somewhere-else');
+    expect(titles.detail()).toBeNull();
+    fixture.detectChanges();
+    expect(titles.detail()).toBe('Wednesday, August 5, 2026');
+  });
+
+  it('steps days from the header, with no scope bar', async () => {
+    const root = el(await open('2026-08-05'));
+    const actions = root.querySelector('sb-page [page-actions]')!;
+    expect(actions.querySelector('nav.steps a.prev')).not.toBeNull();
+    expect(actions.querySelector('nav.steps a.month')).not.toBeNull();
+    expect(root.querySelector('[page-scope]')).toBeNull();
+    expect(actions.querySelector('.danger, .danger-quiet')).toBeNull();
+  });
+
+  it('rules the seven tiles as one strip in the KPI slot, R explained beneath', async () => {
+    const root = el(await open('2026-08-05'));
+    const summary = root.querySelector<HTMLElement>('sb-page [page-kpis]')!;
+    expect(summary.querySelectorAll('sb-stat-strip.tiles sb-stat-tile')).toHaveLength(7);
+    expect(text(summary, '.r-note')).toBe(R_TOOLTIP);
+  });
+
+  it('makes the trades the primary panel and the comparisons the secondary grid', async () => {
+    const root = el(await open('2026-08-05'));
+    const primary = root.querySelector('sb-page [page-primary]')!;
+    expect(primary.querySelectorAll('sb-day-trade-card').length).toBeGreaterThan(0);
+    const secondary = [...root.querySelectorAll<HTMLElement>('sb-page [page-secondary]')];
+    expect(secondary).toHaveLength(3);
+    expect(secondary[0].textContent).toContain('How this day compares');
+    expect(secondary[1].textContent).toContain('Month so far');
+    expect(secondary[2].textContent).toContain('What drove it');
+    expect(secondary.every((panel) => panel.style.display !== 'none')).toBe(true);
+  });
+
+  it('keeps every slot node on a 404 day, the empty state primary and the comparisons hidden', async () => {
+    const root = el(await open('2026-08-04', 404));
+    expect(root.querySelector('sb-page [page-kpis]')).not.toBeNull();
+    expect(root.querySelector('[page-kpis] .tiles')).toBeNull();
+    expect(root.querySelector('sb-page [page-primary] sb-empty-state')).not.toBeNull();
+    const secondary = [...root.querySelectorAll<HTMLElement>('sb-page [page-secondary]')];
+    expect(secondary).toHaveLength(3);
+    expect(secondary.every((panel) => panel.style.display === 'none')).toBe(true);
   });
 });
