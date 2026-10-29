@@ -98,3 +98,11 @@ Authoring verification: Python snippets are parsed in their documented fragment 
 ## Independent authoring verification
 
 Controller verification on 2026-10-28: full plan_lint PASS for both v197 (5 files, 13 tasks) and v198 (4 files, 10 tasks), with no missing or duplicate task bodies. Spec headers, review records and spec-to-plan links pass. Across both plans, 64 Python and 18 TypeScript examples parse, including mapping/member fragments validated in their intended context. Radon checked 344 function/class/method/closure blocks; each is below complexity 15. These are static document checks; no application test suite, database action, release or deployment was run. Execution order remains v197 then v198; v194 is merged. Implementation remains unstarted.
+
+## Implementation verification in progress — 2026-10-29
+
+The authoring statements above are historical. Tasks V198-1 through V198-5b were implemented in separate commits on `codex/v198-risk-reporting` and each received a clean task review. Tests use synthetic fixtures; no live-book performance is claimed. The user requested v198 directly and chose to continue without production access or database tests. The v197 predecessor remains in progress independently.
+
+The final frontend `npm test` exited 0: 237 test files passed, 5,559 tests passed and 4 skipped. The quant-engineer panel identified an overflow case in distribution metrics; commit `1f2a546d` addressed it, with 19 isolated distribution tests and the complexity gate passing. The same panel reviewer confirmed the finding addressed and reported no new breakage.
+
+Outstanding gates: the full backend suite and store-backed API tests require the production replica and were not run; the layout audit requires a running authenticated local application and was not run under the current no-database restriction. The branch has not been merged or released, and the release/history commits and document close-out remain pending. Do not infer a final pass from the focused checks or the frontend result.
