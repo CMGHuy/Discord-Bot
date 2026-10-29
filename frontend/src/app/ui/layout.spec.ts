@@ -669,7 +669,7 @@ describe('panels whose body opens with a tab strip or a table are divided (v186 
   for (const [path, heading] of DIVIDED) {
     it(`${path}: "${heading}"`, () => {
       const source = readFileSync(join(process.cwd(), path), 'utf8');
-      const tag = source.match(new RegExp(`<sb-panel heading="${esc(heading)}"[^>]*>`))?.[0] ?? '';
+      const tag = source.match(new RegExp(`<sb-panel[^>]*? heading="${esc(heading)}"[^>]*>`))?.[0] ?? '';
       expect(tag, `no <sb-panel heading="${heading}"> in ${path}`).not.toBe('');
       expect(tag).toContain('[divided]="true"');
     });
