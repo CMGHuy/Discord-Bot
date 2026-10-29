@@ -107,6 +107,18 @@ class TestSharpeOfR:
 
 
 class TestMaxDrawdownR:
+    @pytest.mark.parametrize("outcomes,expected", [
+        ([-100.0], 100.0), ([-100.0, -50.0], 150.0),
+        ([1.0, 2.0], 0.0), ([-2.0, 3.0, -1.0], 2.0),
+        ([0.0], 0.0), ([], None),
+        ([1.0, float("nan")], None), ([float("inf")], None),
+        ([float("-inf")], None), ([1e308, 1e308], None),
+        ([None], None), (["bad"], None),
+        ([1e308, -1e308, -1e308], None),
+    ])
+    def test_zero_baseline_and_finite_domain(self, outcomes, expected):
+        assert rm.max_drawdown_r(outcomes) == expected
+
     def test_measures_the_largest_peak_to_trough_fall(self):
         assert rm.max_drawdown_r([1.0, 1.0, -3.0, 1.0]) == pytest.approx(3.0)
 

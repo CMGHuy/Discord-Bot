@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date
+from datetime import date, datetime, timezone
+from typing import Callable
 
 import numpy as np
 
@@ -90,4 +91,52 @@ def _valid_frame(frame) -> bool:
 
 def complete_bars(symbols: list[str], bars: dict) -> bool:
     return all(_valid_frame(bars.get(symbol)) for symbol in symbols)
+
+
+def _close_stamp(row) -> datetime | None:
+    if not isinstance(row, dict):
+        return None
+    value = row.get("closed_at")
+    try:
+        stamp = value if isinstance(value, datetime) else datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        return stamp.astimezone(timezone.utc)
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return None
+
+
+def _finite_outcome(outcome: Callable, row: dict) -> float | None:
+    try:
+        raw = outcome(row)
+        if raw is None or isinstance(raw, bool):
+            return None
+        value = float(raw)
+        return value if math.isfinite(value) else None
+    except Exception as exc:
+        swallowed(log, "ops.risk_read_model.outcome", exc, level=logging.DEBUG)
+        return None
+
+
+def chronological_records(closed: list[dict], *,
+                          outcome: Callable[[dict], float | None] | None = None
+                          ) -> tuple[list[dict], dict[str, int]]:
+    """Select usable records in UTC close order, counting exclusions once."""
+    selected = []
+    invalid_date = invalid_outcome = 0
+    for row in closed:
+        stamp = _close_stamp(row)
+        if stamp is None:
+            invalid_date += 1
+            continue
+        if outcome is not None and _finite_outcome(outcome, row) is None:
+            invalid_outcome += 1
+            continue
+        selected.append((stamp, str(row.get("id", "")), row))
+    selected.sort(key=lambda item: (item[0], item[1]))
+    return [item[2] for item in selected], {
+        "excluded_count": invalid_date + invalid_outcome,
+        "invalid_date_count": invalid_date,
+        "invalid_outcome_count": invalid_outcome,
+    }
 

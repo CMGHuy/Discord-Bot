@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -126,4 +126,88 @@ def test_invalid_bars_never_count_as_complete(frame):
 
 def test_empty_population_needs_no_bars():
     assert model.complete_bars([], {}) is True
+
+
+def closed_row(trade_id, closed_at, value, opened_at="2026-01-01"):
+    return {"id": trade_id, "closed_at": closed_at, "value": value,
+            "opened_at": opened_at}
+
+
+def test_close_order_ignores_input_and_opening_order():
+    rows = [closed_row("late", "2026-03-03T10:00:00Z", 1, "2026-01-01"),
+            closed_row("first", "2026-03-01T11:00:00+01:00", -1, "2026-02-20"),
+            closed_row("middle", "2026-03-02T10:00:00", -1, "2026-02-10")]
+    ordered, counts = model.chronological_records(rows, outcome=lambda row: row["value"])
+    reversed_order, _ = model.chronological_records(list(reversed(rows)), outcome=lambda row: row["value"])
+    assert [row["id"] for row in ordered] == ["first", "middle", "late"]
+    assert ordered == reversed_order
+    assert counts == {"excluded_count": 0, "invalid_date_count": 0, "invalid_outcome_count": 0}
+    from swingbot.core.analytics.risk_metrics import max_drawdown_r
+    assert max_drawdown_r([row["value"] for row in ordered]) == 2
+
+
+def test_equal_instants_use_stable_trade_id():
+    rows = [closed_row("b", "2026-03-01T11:00:00+01:00", -1),
+            closed_row("a", "2026-03-01T10:00:00Z", 1)]
+    ordered, _ = model.chronological_records(rows, outcome=lambda row: row["value"])
+    assert [row["id"] for row in ordered] == ["a", "b"]
+
+
+def test_exclusion_reasons_are_nonoverlapping_and_date_first():
+    seen = []
+    rows = [closed_row("both_bad", "not-a-date", float("nan")),
+            closed_row("missing_date", None, 1),
+            closed_row("bad_value", "2026-03-01", float("inf")),
+            closed_row("missing_value", "2026-03-02", None),
+            closed_row("good", "2026-03-03", -1)]
+    def outcome(row):
+        seen.append(row["id"])
+        return row["value"]
+    ordered, counts = model.chronological_records(rows, outcome=outcome)
+    assert [row["id"] for row in ordered] == ["good"]
+    assert counts == {"excluded_count": 4, "invalid_date_count": 2, "invalid_outcome_count": 2}
+    assert seen == ["bad_value", "missing_value", "good"]
+
+
+def test_outcome_exception_is_counted_without_blanking_other_records():
+    rows = [closed_row("bad", "2026-03-01", None), closed_row("good", "2026-03-02", 1)]
+    ordered, counts = model.chronological_records(rows, outcome=lambda row: 1 / row["value"])
+    assert [row["id"] for row in ordered] == ["good"]
+    assert counts["invalid_outcome_count"] == 1
+
+
+def test_money_selection_filters_dates_before_outcome_or_fx_work():
+    rows = [closed_row("unknown_amount", "2026-03-01", None), closed_row("bad_date", None, 1)]
+    ordered, counts = model.chronological_records(rows)
+    assert [row["id"] for row in ordered] == ["unknown_amount"]
+    assert counts == {"excluded_count": 1, "invalid_date_count": 1, "invalid_outcome_count": 0}
+    assert model.chronological_records([]) == ([], {"excluded_count": 0, "invalid_date_count": 0,
+                                                  "invalid_outcome_count": 0})
+
+
+def test_datetime_values_keep_original_records_unchanged():
+    first = closed_row(2, datetime(2026, 3, 1), 1)
+    last = closed_row(10, datetime(2026, 3, 1, tzinfo=timezone.utc), 1)
+    rows = [first, last]
+    snapshots = [dict(row) for row in rows]
+    ordered, counts = model.chronological_records(rows)
+    assert ordered[0] is last
+    assert ordered[1] is first
+    assert rows == snapshots
+    assert counts["excluded_count"] == 0
+
+
+@pytest.mark.parametrize("value", [True, False, float("nan"), float("-inf"), "bad"])
+def test_invalid_outcome_values_are_excluded(value):
+    ordered, counts = model.chronological_records(
+        [closed_row("bad", "2026-03-01", value)], outcome=lambda row: row["value"])
+    assert ordered == []
+    assert counts == {"excluded_count": 1, "invalid_date_count": 0, "invalid_outcome_count": 1}
+
+
+@pytest.mark.parametrize("row", [None, [], {}, {"closed_at": 42}, {"closed_at": "9999-12-31T23:00:00-02:00"}])
+def test_invalid_date_records_are_excluded(row):
+    ordered, counts = model.chronological_records([row])
+    assert ordered == []
+    assert counts == {"excluded_count": 1, "invalid_date_count": 1, "invalid_outcome_count": 0}
 

@@ -172,11 +172,22 @@ def correlation_matrix(
 
 
 def max_drawdown_r(r_multiples: list[float]) -> float | None:
-    """The largest peak-to-trough fall of the cumulative R curve, as a
-    positive number."""
+    """Largest cumulative peak-to-trough loss, including the initial zero."""
     if not r_multiples:
         return None
-    cumulative = pd.Series(r_multiples, dtype=float).cumsum()
-    running_peak = cumulative.cummax()
-    drawdown = running_peak - cumulative
-    return float(drawdown.max())
+    cumulative = peak = largest = 0.0
+    for raw in r_multiples:
+        try:
+            value = float(raw)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(value):
+            return None
+        cumulative += value
+        if not math.isfinite(cumulative):
+            return None
+        peak = max(peak, cumulative)
+        largest = max(largest, peak - cumulative)
+        if not math.isfinite(largest):
+            return None
+    return largest
