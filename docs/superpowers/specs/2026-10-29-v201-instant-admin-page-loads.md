@@ -5,6 +5,7 @@
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, quant-engineer, financial-advisor
+**Split:** second half (Risk/Analytics/Calendar/sparkline snapshots) in v204
 
 ## Why
 
@@ -14,6 +15,17 @@ wants data the database already holds on screen almost at once on every page.
 Only values that need the market API (live prices and the P&L, FX and
 risk/analytics figures built from them) may arrive later, and those show a
 loading indicator.
+
+**Scope after the split (2026-10-29).** The plan for the whole design came out
+at 21 tasks, over the 20-task cap, and the partner chose where to cut: this
+spec (v201) ships **prices first** -- the refresher, quote and FX persistence,
+the never-fetch request path for Dashboard KPIs, Trades, Trade detail,
+Watchlist and the tape, the `market` event, the Refresh control and the
+value/age/spinner cells. The heavy computed pages (Risk, Analytics, Calendar
+and the dashboard equity sparkline) and their snapshots are **v204**
+(`2026-10-29-v204-admin-snapshot-pages.md`), which depends on v201 being
+merged. The measurements and root causes below cover both and stay here; v204
+cites them.
 
 ### Measured on production, 2026-10-29
 
@@ -112,19 +124,20 @@ per-request threads to one scheduled refresher.
 - **A background job keeps prices fresh every ~30 s while the US market is
   open**, slower outside regular hours.
 - **Heavy computed pages (Risk, Analytics, the dashboard equity sparkline,
-  Calendar P&L) follow the same pattern.** The background job recomputes and
-  stores a snapshot. The page shows the last snapshot instantly, with its age
-  and the same spinner while a recompute runs.
+  Calendar P&L) follow the same pattern** with stored snapshots: delivered by
+  v204, not here.
 - **Success target: data visible in under 2 s** on every main page.
 
 ## Goals
 
-1. Every API endpoint the admin SPA calls on page load answers from Postgres
-   and stored caches/snapshots only. **No request thread makes a market-data
+1. Every API endpoint the admin SPA calls on page load for the in-scope pages
+   (Dashboard KPIs and positions, Trades, Trade detail, Watchlist, the tape)
+   answers from Postgres and stored caches only. **No request thread makes a market-data
    or FX network call**, apart from the one explicit exception below.
 2. One **background market refresher** owns all market fetching the admin site
    needs: quotes for open trades, pending/active plans, the watchlist and the
-   tape symbols; FX pairs and quote-currency codes; and the heavy snapshots.
+   tape symbols; and FX pairs and quote-currency codes. (v204 adds the
+   heavy snapshots to it.)
 3. Every market-derived value the API returns carries **when it was observed**
    and **whether a refresh of it is in flight**, so the UI can draw the age and
    the spinner.
@@ -132,10 +145,10 @@ per-request threads to one scheduled refresher.
    already in each page cover first-ever-empty data.
 5. The SPA learns about new values **without refetching whole endpoints**.
 6. Production, measured with the same Playwright timing script: on Dashboard,
-   Trades, Trade detail, Watchlist, Risk, Analytics and Calendar, **first data
-   visible ≤ 2 s** after the click, cold and warm, **including while a scan
-   is running**. Every page-load API call ≤ 2 s. `/system/scan` stays ≤ 0.5 s
-   throughout.
+   Trades, Trade detail and Watchlist, **first data visible ≤ 2 s** after the
+   click, cold and warm, **including while a scan is running**. Every
+   page-load API call of those pages ≤ 2 s. `/system/scan` stays ≤ 0.5 s
+   throughout. (Risk, Analytics and Calendar are v204's goal.)
 
 ## Non-goals
 
@@ -159,6 +172,10 @@ per-request threads to one scheduled refresher.
   - a refresher cycle at full symbol count leaves `STOP_MONITOR` and `SCAN`
     able to take budget tokens.
 - No new market data provider and no paid tier.
+- Risk, Analytics, Calendar and the dashboard equity sparkline: no snapshot
+  table, snapshot job, read-only bars mode or risk code move here. Those
+  pages keep today's request path until v204, and the sparkline keeps its
+  current `_equity_30d` source.
 - No redesign of any page's layout. Only loading states, age labels and
   spinners change.
 - Not a WebSocket/SSE push channel unless the builder finds polling cannot meet
@@ -187,8 +204,8 @@ per-request threads to one scheduled refresher.
 
 A single long-running loop in **its own process: a new `refresher` compose
 service** off the same image. It is **never the admin worker and never the
-bot container**, so a slow batch or a 52 s `collect_portfolio_state` can
-neither stall request threads nor share `_DOWNLOAD_LOCK`
+bot container**, so a slow batch (and, from v204, a 52 s
+`collect_portfolio_state`) can neither stall request threads nor share `_DOWNLOAD_LOCK`
 (`swingbot/core/marketdata/yf_safe.py:32`) with the scan loop and stop
 monitor. Only one instance runs (Postgres advisory lock).
 
@@ -215,11 +232,9 @@ monitor. Only one instance runs (Postgres advisory lock).
   the stalled style. A dead refresher can never look like a quiet market.
   `/system` health lists it beside bot and admin.
 
-**Code placement:** the risk metrics, correlation and `_risk_bars` move out of
-the Flask blueprint (`swingbot/admin/api_v1/risk.py:239-400`) into
-`swingbot/core` (the analytics/portfolio package the builder picks per
-`architecture.md` § Module map). The refresher and the request path call the
-**same** functions; nothing is forked into a refresher copy.
+**Code placement:** the refresher and the request path call the **same**
+quote/FX functions; nothing is forked into a refresher copy. (The risk code
+move into `swingbot/core` is v204.)
 
 Each cycle:
 
@@ -236,53 +251,18 @@ Each cycle:
   the set and persisted, **including "unknown"** answers with a retry backoff,
   so a request never resolves a code over the network. FX pair frames are
   refreshed here, not in `_pair_frame` on a request.
-- **Snapshots:** after each quote cycle, and after each scan completes, it
-  recomputes and stores:
-  - the risk payload (`collect_portfolio_state` and its metrics/correlation);
-  - analytics performance and the equity curve per ledger;
-  - the dashboard equity sparkline;
-  - calendar P&L for the current and previous month.
-
-  My call: heavy snapshots at most every 5 min during market hours unless a
-  trade opened or closed.
-- **In-flight marks:** before fetching a symbol batch or recomputing a
-  snapshot, it marks those keys "refreshing" (with a started-at time, expiring
+- **Snapshots:** none in v201; v204 adds the snapshot job to this cycle.
+- **In-flight marks:** before fetching a symbol batch, it marks those keys "refreshing" (with a started-at time, expiring
   automatically after a timeout so a crash never leaves a permanent spinner).
   It clears the marks when done.
 
-**Daily bars for snapshots are read-only.** The risk snapshot reads bars with
-`freshness.page_daily` (`swingbot/admin/freshness.py:179-189`), in a
-read-only mode that never reaches the network-fetching
-`data.get_daily_data_batch` branch (today taken for spot metals,
-`freshness.py:184`). A symbol with no cached bars is listed as missing; it is
-never fetched or written. The scan keeps the files warm, as today.
-
-**Every snapshot records its inputs** (reproducibility, `known-traps.md`
-§ The market_data cache never self-heals):
-- `computed_at`;
-- the oldest quote `as_of` used;
-- `bars_as_of`: the newest bar date per symbol and the oldest across them;
-- `missing`: symbols with no quote, no bars or no FX code;
-- the ledger and trade ids it covered.
-
-A snapshot built on bars older than the last completed session is flagged
-`stale_inputs`, and the UI shows it as stale whatever its `computed_at` age.
-
-Snapshots live in Postgres, so they survive restarts and are readable by every
-worker. A new table follows `schema-evolution.md` (Alembic revision). The
-file-backed `analytics_snapshot.json` (`swingbot/core/analytics/snapshots.py`)
-**stays as it is**, because the Discord side reads it: the scan loop
-`commands/scanning/loops.py:179-239`, `commands/stats.py`,
-`commands/growth.py` and `scripts/reports/export_analytics.py`. The admin
-request path stops calling `refresh_snapshot` and reads the new table
-instead. Retiring the file is a later Discord-side spec, not this one
-(amended after the plan brief, 2026-10-29).
+Read-only daily bars, the snapshot table and its recorded inputs
+(`bars_as_of`, `stale_inputs`, `missing`) are v204 (its Design 1).
 
 **Owners and removal:** the new stores and what retires each one.
 
 | Store | Owner | Removed when |
 |---|---|---|
-| snapshot table | refresher | never; it is the admin page source (`analytics_snapshot.json` stays for Discord) |
 | quote-currency table | refresher (FX job) | never |
 | refresh queue | request path enqueues, refresher drains | rows older than 1 h are pruned each cycle |
 | in-flight marks | refresher | expire after their timeout |
@@ -291,12 +271,12 @@ instead. Retiring the file is a later Discord-side spec, not this one
 ### 2. Request path (server)
 
 - All page-load endpoints read quotes with the never-fetch read
-  (`cached_quotes`-style). Snapshots come from the snapshot store, and
-  FX/quote-currency codes from the persisted table. The "fetch if older than
-  window" paths (`page_quotes`, `prefetch_prices` +
-  `get_current_price` loops, `fx.quote_currency_code` network path,
-  `refresh_snapshot` on request, `collect_portfolio_state` on request) are no
-  longer called from request handlers.
+  (`cached_quotes`-style), and FX/quote-currency codes from the persisted
+  table. The "fetch if older than window" paths (`page_quotes`,
+  `prefetch_prices` + `get_current_price` loops, `fx.quote_currency_code`
+  network path) are no longer called from the in-scope request handlers.
+  (`refresh_snapshot` and `collect_portfolio_state` on request are removed by
+  v204.)
 - **Every market-derived field gets two siblings:** an `as_of` timestamp and a
   `refreshing` boolean.
 - **A total also gets these:**
@@ -309,9 +289,8 @@ instead. Retiring the file is a later Discord-side spec, not this one
   A missing input is **never** treated as zero and never silently dropped. A
   total with `missing_count > 0` is marked incomplete, and the UI shows
   "incomplete: N positions unpriced" beside it.
-- **Filtered views computed on request** (Analytics filters, older Calendar
-  months) carry the same `as_of` and counts for their price/FX inputs, even
-  though they have no snapshot.
+- Filtered-view as-of labels (Analytics filters, older Calendar months) are
+  v204.
 - **Never-seen symbols** (e.g. a ticker added a moment ago): the value is
   `null`, `refreshing: true`, and the request **asks the refresher** for an
   out-of-cycle fetch of that symbol (a queue row or notify). It does not fetch
@@ -320,8 +299,8 @@ instead. Retiring the file is a later Discord-side spec, not this one
   longer prices every row on request.
 - **The only exception to "no fetch on request"** is an explicit user action
   that asks for a refresh. A **Refresh** control is visible on the Dashboard
-  open positions, the Trades list and Trade detail, and on Risk. It enqueues a
-  priority refresh for that page's symbols and snapshots and returns
+  open positions, the Trades list and Trade detail (on Risk from v204). It
+  enqueues a priority refresh for that page's symbols and returns
   immediately, never blocking. The spinner then shows until the fresh values
   land. This replaces the "reload gives me a live price" habit before a
   decision.
@@ -336,10 +315,10 @@ instead. Retiring the file is a later Discord-side spec, not this one
   shape:
   - one new channel name, `market` (added to `notify.CHANNELS`,
     `EventName`/`EVENT_NAMES` in the SPA, and `stream.py`), NOTIFYed once per
-    refresher cycle or snapshot write that changed something;
+    refresher cycle that changed something (v204 adds snapshot writes);
   - on that event, the SPA calls a small **updates endpoint**
-    (`GET /market/updates?since=<cursor>`). It returns only the quote and
-    snapshot keys whose value or refreshing state changed since the cursor,
+    (`GET /market/updates?since=<cursor>`). It returns only the quote keys
+    (snapshot keys from v204) whose value or refreshing state changed since the cursor,
     is indexed by updated-at, never fetches, and also serves reconnects.
 
   No payload plumbing is added to the event bus, and no second push
@@ -357,8 +336,9 @@ instead. Retiring the file is a later Discord-side spec, not this one
 ### 3. SPA
 
 - Remove `resolveRoute` blocking from the dashboard, trades, watchlist and
-  risk routes (and any other route using it). Each page component renders at
-  once. Its store kicks off its own load, and the existing `sb-async` shaped
+  risk routes (and any other route using it). Risk renders at once but its
+  data comes from today's request path until v204. Each page component renders
+  at once. Its store kicks off its own load, and the existing `sb-async` shaped
   skeletons cover first-load emptiness. The `RouteLoadingService` veil no
   longer appears for these routes.
 - Fix duplicate loads: the dashboard store loads once per navigation, and
@@ -377,12 +357,10 @@ instead. Retiring the file is a later Discord-side spec, not this one
   | | Regular hours | Pre/after hours | Market closed |
   |---|---|---|---|
   | Price is stale after | 2 min | 15 min | — |
-  | Risk/analytics snapshot is stale after | 10 min | 30 min | — |
   | Feed counts as stalled | heartbeat older than 3× cadence | same | same |
 
-  Stale values take a warning style. Risk figures (heat vs account,
-  drawdown, correlation) are warned at the same level as prices, never only
-  prices.
+  Stale values take a warning style. (The snapshot staleness row, and risk
+  figures warned at the same level as prices, are v204.)
 - **Market closed is labelled as closed, not as stale.** A Saturday price
   reads "last close · Fri 16:00 ET", not "2 days ago" in the warning style.
   Only a stalled feed (heartbeat) or a stale value during open hours gets the
@@ -390,9 +368,7 @@ instead. Retiring the file is a later Discord-side spec, not this one
   for a weekend.
 - When the refresher reports an error for a value, the existing `sb-async`
   error style applies.
-- **The Risk page labels its two clocks**: quote-based figures ("prices as of
-  14:32") and bar-based ones such as beta and volatility ("daily bars through
-  Oct 28 close"), so the two are never read as one timestamp.
+- Risk's two-clocks labelling (quotes vs daily bars) is v204.
 - Stop/target proximity figures on positions carry the age of the price they
   use.
 - Mobile, tablet and desktop: the age label and spinner wrap under the value
@@ -400,9 +376,10 @@ instead. Retiring the file is a later Discord-side spec, not this one
 
 ### Pages in scope
 
-Dashboard (KPIs, open positions, recent trades, equity sparkline), Trades list
-and Trade detail, Watchlist, Risk, Analytics, Calendar, and the shell tape and
-index strip. The builder must also sweep every other route and endpoint the
+Dashboard (KPIs, open positions, recent trades), Trades list and Trade
+detail, Watchlist, and the shell tape and index strip. Risk, Analytics,
+Calendar and the equity sparkline are v204; v201 only stops their routes
+blocking. The builder must also sweep every other route and endpoint the
 SPA calls for request-time market calls (e.g. charts, research) and either
 bring it into this pattern or list it in the plan as out of scope with a
 reason.
@@ -429,13 +406,7 @@ reason.
 
 These are author's calls, not partner decisions. Flag any you disagree with.
 
-- **Filtered and parameterised views** (Analytics filters, older Calendar
-  months, the ~14 other Analytics routes): **not snapshotted.** They compute
-  on request, but only from Postgres plus persisted FX/quote-currency codes,
-  and never fetch. Only the **default** view of each page is snapshotted. The
-  plan's first step on Analytics/Calendar **measures** whether persisted FX
-  alone brings them under 2 s before building snapshot machinery for them.
-  Snapshotting every filter combination is out of scope.
+- Analytics/Calendar measure-first and default-view snapshots: v204.
 - **Provider rate limits:** while a scan is running, the refresher keeps its
   one batched Alpaca call per cycle and **skips the yfinance fallback**. Misses
   keep their last value, and their age grows. Outside scans the fallback is
@@ -454,14 +425,11 @@ These are author's calls, not partner decisions. Flag any you disagree with.
 
 ## Left to the builder
 
-- The snapshot table's exact shape and keys (it must hold the recorded
-  inputs above).
-- Which `swingbot/core` package receives the moved risk code.
 - Whether `follow_score` per plan on `/trades` needs caching to meet the 2 s
   target. Measure first.
-- The order of work. Suggested: (1) refresher + quote/FX reads + delta
-  endpoint + non-blocking routes for Dashboard/Trades/Watchlist/tape; then
-  (2) heavy snapshots for Risk/Analytics/Calendar/sparkline.
+- The order of work inside v201 (refresher + quote/FX reads + delta endpoint
+  + non-blocking routes for Dashboard/Trades/Watchlist/tape). The heavy
+  snapshots are v204.
 
 ## Verification
 
@@ -469,18 +437,16 @@ Re-run the Playwright timing script against production after deploy:
 
 - per page, cold and warm;
 - once during a scan;
-- the same seven pages as the table above.
+- Dashboard, Trades, Trade detail and Watchlist (Risk, Analytics and
+  Calendar are verified by v204).
 
-Pass means goal 6's numbers **and** a label check on the seven pages: every
-displayed price, total, P&L and risk figure carries an as-of (or "last
-close") label, and no total is shown without one. Record the before/after
+Pass means goal 6's numbers (including `/system/scan` ≤ 0.5 s) **and** a
+label check on those four pages: every displayed price, total and P&L
+carries an as-of (or "last close") label, and no total is shown without
+one. Record the before/after
 table and the label check in `docs/superpowers/results/`.
 
-Tests also pin:
-- snapshot payload == the pre-v201 on-request payload for the same inputs
-  (parity);
-- a missing cache volume or an unreadable bar file fails the snapshot
-  loudly, never as empty metrics;
+Tests also pin (snapshot parity and loud-failure tests are v204):
 - an incomplete total never sums a missing input as zero;
 - `ADMIN_REFRESHER=off` restores the request-time fetch path.
 
@@ -516,3 +482,5 @@ Run 2026-10-29 on `808aa15b`, serially: staff-engineer (opus), quant-engineer
 - financial-advisor: filtered views need as-of labels too. -- applied.
 - financial-advisor: thresholds counted in cycles mean different things per session. -- applied (absolute per session state).
 - financial-advisor: verification only checks load time. -- applied (label check added).
+
+**Split (2026-10-29):** the plan ran to 21 tasks, so the spec was split. The findings above stay as the record, but the text of the snapshot findings (quant-engineer blocking 1-2, financial-advisor blocking 2 and the snapshot-related advisories) moved to v204.
