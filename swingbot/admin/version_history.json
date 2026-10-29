@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-29 13:56:26 UTC",
+  "generated_at": "2026-10-29 13:57:11 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.37.0",
-    "bot": "2.15.5"
+    "bot": "2.15.6"
   },
   "releases": [
     {
@@ -2188,6 +2188,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "d810b07b",
+      "subject": "release(bot): 2.15.6 -- Discord chart images follow the Graphite palette, STYLE_VERSION v195 (v195)",
+      "versions": {
+        "ui": "1.37.0",
+        "bot": "2.15.6"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
