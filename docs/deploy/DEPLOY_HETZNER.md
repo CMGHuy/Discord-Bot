@@ -426,7 +426,7 @@ The CI pipeline above is for *code* changes.
 
 | Flag | Production value | Set |
 |---|---|---|
-| `MARKETDATA_LAYER` | `count` | 2026-10-20 (V171-36) |
+| `MARKETDATA_LAYER` | `on` | 2026-10-29 (V171-38 day A; was `count` from 2026-10-20) |
 | `DAILY_DELTA_FETCH` | `false` | code default |
 | `PLAN_REBUILD_ENABLED` | `false` | code default |
 | `TAPE_SHARED_ENABLED` | `false` | code default |
