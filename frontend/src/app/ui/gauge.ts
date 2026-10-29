@@ -69,9 +69,9 @@ import { DrawIn } from './motion/draw-in';
       font-size: var(--text-micro);
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      color: var(--text-faint);
+      color: var(--text-muted);
     }
-    .caption { font-size: var(--text-micro); color: var(--text-faint); text-align: center; }
+    .caption { font-size: var(--text-micro); color: var(--text-muted); text-align: center; }
   `,
 })
 export class Gauge {

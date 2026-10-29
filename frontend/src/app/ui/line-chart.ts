@@ -145,7 +145,7 @@ function seriesColour(index: number): string {
               font-size: var(--text-chip); color: var(--text-secondary); }
     .entry { display: inline-flex; align-items: center; gap: var(--space-4); }
     .entry i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-    .empty { color: var(--text-faint); font-size: var(--text-table); }
+    .empty { color: var(--text-muted); font-size: var(--text-table); }
     .tooltip {
       position: absolute;
       padding: var(--space-6) var(--space-8);
