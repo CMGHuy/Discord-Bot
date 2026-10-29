@@ -147,12 +147,17 @@ per-request threads to one scheduled refresher.
   `BACKGROUND`, admin), each within its own freshness window
   (`swingbot/core/marketdata/shared/kinds.py:37-73`). Today the admin pages'
   request-time fetches already land there and can satisfy a stop-monitor read.
-  The refresher writes as the existing `BACKGROUND` asker. The stop monitor
-  and scan keep their own windows and fetch themselves whenever the cached
-  quote is older than that window. Their behaviour is unchanged, so no
-  separate admin namespace is needed. A regression test pins that a
-  stop-monitor read still fetches when the cached quote is older than its
-  window.
+  The refresher writes as a new dedicated asker, `ADMIN_REFRESH`, at **tier 5
+  with the admin askers' 50 % budget reserve** (`kinds.py:58-64`,
+  `budget.py:3-4`), not as tier-4 `BACKGROUND`. Admin fetching therefore
+  drains the shared token bucket no deeper than it does today. The stop
+  monitor and scan keep their own windows and fetch themselves whenever the
+  cached quote is older than that window. Their behaviour is unchanged, so no
+  separate admin namespace is needed. Regression tests pin two things:
+  - a stop-monitor read still fetches when the cached quote is older than its
+    window;
+  - a refresher cycle at full symbol count leaves `STOP_MONITOR` and `SCAN`
+    able to take budget tokens.
 - No new market data provider and no paid tier.
 - No redesign of any page's layout. Only loading states, age labels and
   spinners change.
@@ -180,11 +185,41 @@ per-request threads to one scheduled refresher.
 
 ### 1. Background market refresher (server)
 
-A single long-running loop, **outside the gunicorn worker**. My call: a third
-process in the existing image, either a small `refresher` compose service or
-the bot container's scheduler. The builder picks after checking memory and
-compose constraints, but it is never the admin worker. Only one instance runs
-(Postgres advisory lock or equivalent).
+A single long-running loop in **its own process: a new `refresher` compose
+service** off the same image. It is **never the admin worker and never the
+bot container**, so a slow batch or a 52 s `collect_portfolio_state` can
+neither stall request threads nor share `_DOWNLOAD_LOCK`
+(`swingbot/core/marketdata/yf_safe.py:32`) with the scan loop and stop
+monitor. Only one instance runs (Postgres advisory lock).
+
+**Operations (the plan carries each as a task):**
+- `docker-compose.yml` gives the service `cpus`/memory limits like the
+  existing services, the **same daily-cache volume mounts as bot and admin**,
+  and `.env` via the existing config path (SIGHUP hot reload).
+- A normal deploy (`docs/deploy/DEPLOY_HETZNER.md`) starts it with no manual
+  step, and that doc names it. If a manual server step turns out to be
+  unavoidable, the plan re-grades `Bump:` per `working-conventions.md`
+  § The three levels.
+- `scripts/ops/rollback_to.sh` (`:63,87` today stops/starts only `bot admin`)
+  stops the refresher before a PITR restore and starts it afterwards. New
+  tables are covered by the same Alembic downgrade path.
+- **Kill switch:** `ADMIN_REFRESHER=on|off` in `swingbot/config.py`. With
+  `off`, request handlers fall back to today's request-time fetch paths,
+  exactly as before v201, so a dead or misbehaving refresher is fixed by a
+  config flip, not an image revert. The flag (and the fallback code) is
+  removed by a follow-up once the refresher has run 30 days in production
+  without a fallback being needed.
+- **Liveness:** the refresher writes a heartbeat row each cycle. When the
+  heartbeat is older than 3× the current cadence, the shell shows a
+  "prices paused, refresher not running" banner and every age label takes
+  the stalled style. A dead refresher can never look like a quiet market.
+  `/system` health lists it beside bot and admin.
+
+**Code placement:** the risk metrics, correlation and `_risk_bars` move out of
+the Flask blueprint (`swingbot/admin/api_v1/risk.py:239-400`) into
+`swingbot/core` (the analytics/portfolio package the builder picks per
+`architecture.md` § Module map). The refresher and the request path call the
+**same** functions; nothing is forked into a refresher copy.
 
 Each cycle:
 
@@ -215,8 +250,39 @@ Each cycle:
   automatically after a timeout so a crash never leaves a permanent spinner).
   It clears the marks when done.
 
+**Daily bars for snapshots are read-only.** The risk snapshot reads bars with
+`freshness.page_daily` (`swingbot/admin/freshness.py:179-189`), in a
+read-only mode that never reaches the network-fetching
+`data.get_daily_data_batch` branch (today taken for spot metals,
+`freshness.py:184`). A symbol with no cached bars is listed as missing; it is
+never fetched or written. The scan keeps the files warm, as today.
+
+**Every snapshot records its inputs** (reproducibility, `known-traps.md`
+§ The market_data cache never self-heals):
+- `computed_at`;
+- the oldest quote `as_of` used;
+- `bars_as_of`: the newest bar date per symbol and the oldest across them;
+- `missing`: symbols with no quote, no bars or no FX code;
+- the ledger and trade ids it covered.
+
+A snapshot built on bars older than the last completed session is flagged
+`stale_inputs`, and the UI shows it as stale whatever its `computed_at` age.
+
 Snapshots live in Postgres, so they survive restarts and are readable by every
-worker. A new table follows `schema-evolution.md` (Alembic revision).
+worker. A new table follows `schema-evolution.md` (Alembic revision). It
+**replaces** the file-backed `analytics_snapshot.json`
+(`swingbot/core/analytics/snapshots.py`, `FILE_PUBLISHERS` in `architecture.md`),
+which is retired in the same plan.
+
+**Owners and removal:** the new stores and what retires each one.
+
+| Store | Owner | Removed when |
+|---|---|---|
+| snapshot table | refresher | never; it is the page source |
+| quote-currency table | refresher (FX job) | never |
+| refresh queue | request path enqueues, refresher drains | rows older than 1 h are pruned each cycle |
+| in-flight marks | refresher | expire after their timeout |
+| `ADMIN_REFRESHER` flag + fallback path | partner | after 30 clean days |
 
 ### 2. Request path (server)
 
@@ -228,8 +294,20 @@ worker. A new table follows `schema-evolution.md` (Alembic revision).
   `refresh_snapshot` on request, `collect_portfolio_state` on request) are no
   longer called from request handlers.
 - **Every market-derived field gets two siblings:** an `as_of` timestamp and a
-  `refreshing` boolean. Totals get the oldest `as_of` of their inputs and
-  `refreshing` if any input is refreshing.
+  `refreshing` boolean.
+- **A total also gets these:**
+  - the oldest `as_of` of its inputs;
+  - `refreshing` if any input is refreshing;
+  - `stale_count`: inputs past the staleness threshold;
+  - `missing_count`: positions with no price, no FX code or an "unknown"
+    currency.
+
+  A missing input is **never** treated as zero and never silently dropped. A
+  total with `missing_count > 0` is marked incomplete, and the UI shows
+  "incomplete: N positions unpriced" beside it.
+- **Filtered views computed on request** (Analytics filters, older Calendar
+  months) carry the same `as_of` and counts for their price/FX inputs, even
+  though they have no snapshot.
 - **Never-seen symbols** (e.g. a ticker added a moment ago): the value is
   `null`, `refreshing: true`, and the request **asks the refresher** for an
   out-of-cycle fetch of that symbol (a queue row or notify). It does not fetch
@@ -237,15 +315,23 @@ worker. A new table follows `schema-evolution.md` (Alembic revision).
 - **Trades sorting by pnl/progress/R** sorts on the cached prices, so it no
   longer prices every row on request.
 - **The only exception to "no fetch on request"** is an explicit user action
-  that asks for a refresh (e.g. a Refresh button, if one exists or is added).
-  It enqueues a priority refresh and returns immediately; it never blocks.
+  that asks for a refresh. A **Refresh** control is visible on the Dashboard
+  open positions, the Trades list and Trade detail, and on Risk. It enqueues a
+  priority refresh for that page's symbols and snapshots and returns
+  immediately, never blocking. The spinner then shows until the fresh values
+  land. This replaces the "reload gives me a live price" habit before a
+  decision.
 - `X-Swingbot-Fresh` / `ADMIN_FRESH` no longer forces a request-time fetch. A
   reload shows cached values and the spinner covers the refresh. My call: the
   header becomes a hint that bumps the page's symbols to the front of the
   refresher's queue.
-- A small **delta endpoint** (e.g. `GET /market/updates?since=<cursor>`)
-  returns the quotes and snapshot keys whose value or refreshing state changed
-  since the cursor. It is cheap (indexed by updated-at) and never fetches.
+- **Live updates reuse the existing LISTEN/NOTIFY channel** that already
+  pushes events to the SPA (`notify.py`, `events.py`; `architecture.md`).
+  The refresher NOTIFYs which quote and snapshot keys changed value or
+  refreshing state. A small **catch-up endpoint** (e.g.
+  `GET /market/updates?since=<cursor>`) serves only reconnects and missed
+  events. It is cheap (indexed by updated-at) and never fetches. No second
+  push mechanism is added.
 
 ### 3. SPA
 
@@ -257,15 +343,35 @@ worker. A new table follows `schema-evolution.md` (Alembic revision).
 - Fix duplicate loads: the dashboard store loads once per navigation, and
   `/market/tape` is fetched once per poll and shared between the tape and
   market-index stores.
-- A shared **live-values service** polls the delta endpoint while a page is
-  visible. My call: every 5 s while the market is open, every 60 s otherwise,
-  and paused when the tab is hidden. It patches values in the existing stores.
+- A shared **live-values service** subscribes to those events (and calls the
+  catch-up endpoint on reconnect) and patches values in the existing stores.
   Market-derived cells render through one small component: value, age label,
   and an `sb-spinner` beside it while `refreshing` is true. Ages tick
   client-side.
-- When a value's age passes a staleness threshold (my call: 3 refresh cycles),
-  the age label shows a warning style. When the refresher reports an error
-  for it, the existing `sb-async` error style applies.
+- **Staleness thresholds are absolute times per session state**, not a count
+  of cycles. These are my calls, set as config fields:
+
+  | | Regular hours | Pre/after hours | Market closed |
+  |---|---|---|---|
+  | Price is stale after | 2 min | 15 min | — |
+  | Risk/analytics snapshot is stale after | 10 min | 30 min | — |
+  | Feed counts as stalled | heartbeat older than 3× cadence | same | same |
+
+  Stale values take a warning style. Risk figures (heat vs account,
+  drawdown, correlation) are warned at the same level as prices, never only
+  prices.
+- **Market closed is labelled as closed, not as stale.** A Saturday price
+  reads "last close · Fri 16:00 ET", not "2 days ago" in the warning style.
+  Only a stalled feed (heartbeat) or a stale value during open hours gets the
+  warning. A trader can never mistake a quiet weekend for a fault, or a fault
+  for a weekend.
+- When the refresher reports an error for a value, the existing `sb-async`
+  error style applies.
+- **The Risk page labels its two clocks**: quote-based figures ("prices as of
+  14:32") and bar-based ones such as beta and volatility ("daily bars through
+  Oct 28 close"), so the two are never read as one timestamp.
+- Stop/target proximity figures on positions carry the age of the price they
+  use.
 - Mobile, tablet and desktop: the age label and spinner wrap under the value
   on narrow widths and never widen table columns (per `ui-design.md`).
 
@@ -325,11 +431,9 @@ These are author's calls, not partner decisions. Flag any you disagree with.
 
 ## Left to the builder
 
-- Where the refresher process lives (separate compose service vs bot
-  container), within the "never the admin worker" rule.
-- Polling the delta endpoint vs SSE, as long as goal 5 holds and the poll is
-  cheap.
-- The snapshot table's exact shape and keys.
+- The snapshot table's exact shape and keys (it must hold the recorded
+  inputs above).
+- Which `swingbot/core` package receives the moved risk code.
 - Whether `follow_score` per plan on `/trades` needs caching to meet the 2 s
   target. Measure first.
 - The order of work. Suggested: (1) refresher + quote/FX reads + delta
@@ -344,5 +448,48 @@ Re-run the Playwright timing script against production after deploy:
 - once during a scan;
 - the same seven pages as the table above.
 
-Pass means goal 6's numbers. Record the before/after table in
-`docs/superpowers/results/`.
+Pass means goal 6's numbers **and** a label check on the seven pages: every
+displayed price, total, P&L and risk figure carries an as-of (or "last
+close") label, and no total is shown without one. Record the before/after
+table and the label check in `docs/superpowers/results/`.
+
+Tests also pin:
+- snapshot payload == the pre-v201 on-request payload for the same inputs
+  (parity);
+- a missing cache volume or an unreadable bar file fails the snapshot
+  loudly, never as empty metrics;
+- an incomplete total never sums a missing input as zero;
+- `ADMIN_REFRESHER=off` restores the request-time fetch path.
+
+## Panel review
+
+Run 2026-10-29 on `808aa15b`, serially: staff-engineer (opus), quant-engineer
+(sonnet), financial-advisor (sonnet). Every finding was applied.
+
+**BLOCKING**
+- staff-engineer: `rollback_to.sh:63,87` stops and starts only `bot admin`, so a new service would keep running through a PITR restore. -- applied (Design 1, Operations).
+- staff-engineer: allowing the refresher in the bot container shares `_DOWNLOAD_LOCK` with the scan and stop monitor. -- applied (it is its own compose service only).
+- quant-engineer: no source named for the risk snapshot's daily bars. -- applied (read-only `page_daily`, no network branch).
+- quant-engineer: no staleness check on the bars behind snapshots. -- applied (`bars_as_of`, `stale_inputs` flag).
+- financial-advisor: no "unavailable" state, so totals could silently drop unpriced or unconverted positions. -- applied (`missing_count`, incomplete label, never zero).
+- financial-advisor: stale risk snapshots were not visibly different from fresh ones. -- applied (absolute snapshot thresholds, risk warned like prices).
+
+**ADVISORY**
+- staff-engineer: no kill-switch back to request-time fetches. -- applied (`ADMIN_REFRESHER` flag + heartbeat banner).
+- staff-engineer: tier-4 `BACKGROUND` asker drains the shared budget deeper. -- applied (dedicated tier-5 `ADMIN_REFRESH` asker + budget test).
+- staff-engineer: risk code lives in a Flask blueprint. -- applied (moves to `swingbot/core`, shared by both paths).
+- staff-engineer: the delta poller duplicates the existing LISTEN/NOTIFY channel. -- applied (reuse NOTIFY; catch-up endpoint only).
+- staff-engineer: the snapshot table overlaps `analytics_snapshot.json`, and new stores have no owners. -- applied (file retired; owners table).
+- staff-engineer: compose limits, deploy doc, deploy auto-start. -- applied (Operations).
+- staff-engineer: a manual deploy step would change the bump. -- applied (plan re-grades if so).
+- quant-engineer: the refresher must mount the same daily-cache volume. -- applied (Operations + loud-failure test).
+- quant-engineer: snapshot must reuse the request-path functions. -- applied (no fork; parity test).
+- quant-engineer: record snapshot inputs. -- applied.
+- quant-engineer: null prices in totals. -- applied (merged with financial-advisor blocking 1).
+- quant-engineer: label quote vs daily-bar clocks on Risk. -- applied.
+- financial-advisor: show the count of stale inputs, not only the oldest age. -- applied (`stale_count`).
+- financial-advisor: distinguish market closed from a stalled feed. -- applied.
+- financial-advisor: a reload no longer forces a live price. -- applied (visible Refresh control, ages on stop/target proximity).
+- financial-advisor: filtered views need as-of labels too. -- applied.
+- financial-advisor: thresholds counted in cycles mean different things per session. -- applied (absolute per session state).
+- financial-advisor: verification only checks load time. -- applied (label check added).
