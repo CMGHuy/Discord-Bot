@@ -24,8 +24,9 @@ import { Dashboard as DashboardData, EquityCandlesResponse, TradeRow } from '../
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
-import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER, scopeLabel, statTone } from './dashboard';
+import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard';
 import { RouteTitleService } from '../../routing/route-title.service';
+import { MetricCard } from '../../ui/metric-card';
 import { StatTile } from '../../ui/stat-tile';
 import { LEG_HINT_TEXT } from '../trades/leg-label';
 import { fxMissingText } from '../analytics/scope-bar';
@@ -650,13 +651,13 @@ describe('dead card-mode contract', () => {
 /* -- v95 C3 -- panel order ------------------------------------------------- */
 
 describe('Dashboard panel order', () => {
-  it('leads with the KPI strip, then open positions, at every band (v195 §5.2)', () => {
+  it('leads with Trading performance, then open positions, at every band', () => {
     // v95 C3 put performance first because a phone buried the portfolio
-    // figure, win rate and expectancy under a ~900px table. The KPI strip now
-    // carries expectancy, win rate and open risk above the table everywhere,
-    // and the spec makes open positions the primary panel.
+    // figure, win rate and expectancy under a ~900px table; v195 split them
+    // into a KPI strip that repeated the panel's own cards. The strip is
+    // merged into the panel, which leads again.
     for (const band of ['xs', 'sm', 'md', 'lg', 'xl'] as const) {
-      expect(DASHBOARD_PANEL_ORDER[band]).toEqual(['kpis', 'positions', 'performance', 'activity', 'movers']);
+      expect(DASHBOARD_PANEL_ORDER[band]).toEqual(['performance', 'positions', 'activity', 'movers']);
     }
   });
 
@@ -1056,24 +1057,27 @@ describe('Dashboard — explanations are hints, not titles (v194 A3)', () => {
 
 /* -- v195 Phase 4, §5.2 -- the Dashboard on sb-page ------------------------- */
 
-/** The KPI tiles' own inputs, read from the components: the rendered value
- *  counts up, the input is the figure. */
-function kpis(fixture: ComponentFixture<Dashboard>): Map<string, StatTile> {
-  return new Map(fixture.debugElement.queryAll(By.css('[page-kpis] sb-stat-tile'))
-    .map((d) => d.componentInstance as StatTile)
-    .map((tile) => [tile.label(), tile] as const));
+/** The Open risk tile's own inputs, read from the component: the rendered
+ *  value counts up, the input is the figure. */
+function openRiskTile(fixture: ComponentFixture<Dashboard>): StatTile {
+  return fixture.debugElement.query(By.css('sb-trading-performance sb-stat-tile')).componentInstance as StatTile;
 }
 
 describe('Dashboard on sb-page (v195 Phase 4)', () => {
-  it('puts open positions in the primary slot, then performance, activity and movers', async () => {
+  it('puts Trading performance above open positions, then activity and movers', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
+    const lead = el.querySelector('sb-page div.kpis.slot > [page-kpis]')!;
+    expect(lead.classList).toContain('performance-async');
+    expect(lead.querySelector('sb-trading-performance')).not.toBeNull();
     expect(el.querySelector('sb-page div.primary.slot > sb-panel.positions-panel')).not.toBeNull();
+    // Document order is the visual order: the slots render kpis, then primary.
+    expect(lead.compareDocumentPosition(el.querySelector('sb-panel.positions-panel')!)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const secondary = [...el.querySelectorAll('sb-page div.secondary.slot > [page-secondary]')];
-    const names = ['performance-async', 'activity-async', 'movers-async'];
+    const names = ['activity-async', 'movers-async'];
     expect(secondary.map((s) => names.find((name) => s.classList.contains(name))))
       .toEqual(names);
-    expect(secondary[0].querySelector('sb-trading-performance')).not.toBeNull();
   });
 
   it('puts Close all in the header actions as danger-quiet, and nowhere in the table', async () => {
@@ -1105,70 +1109,63 @@ describe('Dashboard on sb-page (v195 Phase 4)', () => {
   });
 });
 
-describe('Dashboard KPI strip (v195 §5.2)', () => {
-  it('holds expectancy first, win rate after, then open risk, realised and open positions', async () => {
-    expect([...kpis(await loaded()).keys()])
-      .toEqual(['Expectancy', 'Win rate', 'Open risk', 'Realised in period', 'Open positions']);
+describe('Dashboard headline figures, merged into Trading performance', () => {
+  const cardsOf = (fixture: ComponentFixture<Dashboard>) =>
+    fixture.debugElement.queryAll(By.css('sb-trading-performance sb-metric-card'))
+      .map((d) => d.componentInstance as MetricCard);
+
+  it('has no stat strip of its own: every strip on the page lives inside Trading performance', async () => {
+    const el = (await loaded()).nativeElement as HTMLElement;
+    const strips = [...el.querySelectorAll('sb-stat-strip')];
+    expect(strips.length).toBeGreaterThan(0);
+    expect(strips.every((strip) => strip.closest('sb-trading-performance') !== null)).toBe(true);
   });
 
-  it('gives expectancy and win rate their N, signed figures and the scope they cover', async () => {
-    const tiles = kpis(await loaded({ expectancy_r: -0.16, expectancy_n: 12, win_rate: 55, win_rate_n: 40 }));
-    expect(tiles.get('Expectancy')!.value()).toBe('−0.16R');
-    expect(tiles.get('Expectancy')!.sample()).toBe(12);
-    expect(tiles.get('Expectancy')!.tone()).toBe('neg');
-    expect(tiles.get('Expectancy')!.secondary()).toBe('Today');
-    expect(tiles.get('Win rate')!.value()).toBe('55.0%');
-    expect(tiles.get('Win rate')!.sample()).toBe(40);
+  it('shows each figure once: no label repeats across the panel cards and the risk tile', async () => {
+    const fixture = await loaded();
+    const labels = [...cardsOf(fixture).map((c) => c.label()), openRiskTile(fixture).label()];
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels).toEqual(expect.arrayContaining(
+      ['Expectancy', 'Win rate', 'Realised today', 'Open trades', 'Open risk']));
+    // The strip's tiles that duplicated these cards are gone.
+    expect(labels).not.toContain('Open positions');
   });
 
-  it('states the paper / pre-cost / pre-tax basis in every performance hint', async () => {
-    const tiles = kpis(await loaded());
-    expect(tiles.get('Expectancy')!.about()).toBe(PERF_BASIS.expectancy);
-    expect(tiles.get('Win rate')!.about()).toBe(PERF_BASIS.winRate);
-    expect(tiles.get('Realised in period')!.about()).toBe(PERF_BASIS.realized);
+  it('gives expectancy and win rate their N and the paper / pre-cost / pre-tax basis', async () => {
+    const cards = cardsOf(await loaded({ expectancy_r: -0.16, expectancy_n: 12, win_rate: 55, win_rate_n: 40 }));
+    const byLabel = new Map(cards.map((c) => [c.label(), c] as const));
+    expect(byLabel.get('Expectancy')!.value()).toBeCloseTo(-0.16);
+    expect(byLabel.get('Expectancy')!.sub()).toBe('N=12 · thin sample');
+    expect(byLabel.get('Expectancy')!.description()).toBe(PERF_BASIS.expectancy);
+    expect(byLabel.get('Win rate')!.value()).toBeCloseTo(55);
+    expect(byLabel.get('Win rate')!.sub()).toBe('N=40');
+    expect(byLabel.get('Win rate')!.description()).toBe(PERF_BASIS.winRate);
   });
 
   it('shows open risk as money and % of account, the cap beneath, linking to Risk', async () => {
     const fixture = await loaded({ account_balance: 10000, risk_used_pct: 3, risk_cap_pct: 20 });
-    const tiles = kpis(fixture);
-    expect(tiles.get('Open risk')!.value()).toBe('300 $ · 3.00%');
-    expect(tiles.get('Open risk')!.secondary()).toBe('cap 2,000 $ · 20.00%');
-    expect(tiles.get('Open risk')!.hint()).toBe('Breakdown on Risk →');
+    const tile = openRiskTile(fixture);
+    expect(tile.value()).toBe('300 $ · 3.00%');
+    expect(tile.secondary()).toBe('cap 2,000 $ · 20.00%');
+    expect(tile.hint()).toBe('Breakdown on Risk →');
 
-    const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('[page-kpis] a.kpi-link')!;
+    const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a.risk-link')!;
     expect(link.getAttribute('href')).toBe('/risk');
     expect(link.querySelector('sb-stat-tile .label')!.textContent!.trim()).toBe('Open risk');
-    // A hint is a button, and a button cannot sit inside a link.
-    expect(link.querySelector('button, sb-hint')).toBeNull();
   });
 
   it('never invents money without a balance', async () => {
-    const tiles = kpis(await loaded({ account_balance: null, risk_used_pct: 3 }));
-    expect(tiles.get('Open risk')!.value()).toBe('— · 3.00%');
+    expect(openRiskTile(await loaded({ account_balance: null, risk_used_pct: 3 })).value())
+      .toBe('— · 3.00%');
   });
 
-  it('shows realised money signed, with the closes behind it as N, and the open count', async () => {
-    const tiles = kpis(await loaded({
+  it('shows realised money signed, with the closes behind it, and the open count', async () => {
+    const cards = cardsOf(await loaded({
       realized: { amount: -40, pct: -0.4, n: 3, wins: 1, losses: 2 } as never, open_trades: 2,
     }));
-    expect(tiles.get('Realised in period')!.value()).toBe('−40.00 $');
-    expect(tiles.get('Realised in period')!.sample()).toBe(3);
-    expect(tiles.get('Realised in period')!.tone()).toBe('neg');
-    expect(tiles.get('Open positions')!.value()).toBe('2');
-  });
-});
-
-describe('Dashboard KPI helpers (v195 §5.2)', () => {
-  it('names the scope in the strip\'s words', () => {
-    expect(scopeLabel({ kind: 'preset', preset: '1D' })).toBe('Today');
-    expect(scopeLabel({ kind: 'preset', preset: '1M' })).toBe('1M');
-    expect(scopeLabel({ kind: 'preset', preset: 'All' })).toBe('All days');
-  });
-
-  it('maps a P&L tone onto a stat tone, warn to neutral', () => {
-    expect(statTone('pos')).toBe('pos');
-    expect(statTone('neg')).toBe('neg');
-    expect(statTone('warn')).toBe('neutral');
-    expect(statTone('neutral')).toBe('neutral');
+    const byLabel = new Map(cards.map((c) => [c.label(), c] as const));
+    expect(byLabel.get('Realised today')!.value()).toBe(-40);
+    expect(byLabel.get('Realised today')!.sub()).toContain('3 closed · 1W 2L');
+    expect(byLabel.get('Open trades')!.value()).toBe(2);
   });
 });

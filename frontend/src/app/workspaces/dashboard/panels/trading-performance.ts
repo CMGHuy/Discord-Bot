@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { KPI_HELP, PANEL_HELP } from './panel-help';
 
 import { ViewportService } from '../../../ui/breakpoints';
@@ -6,7 +7,7 @@ import { Button } from '../../../ui/button';
 import { Select, SelectOption } from '../../../ui/form-controls';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
-import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
+import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
 import { Spinner } from '../../../ui/spinner';
 import { StatStrip } from '../../../ui/stat-strip';
 import { PortfolioValue } from './portfolio-value';
@@ -71,10 +72,16 @@ export const PERF_BASIS = {
  * The KPI cards — v85 D9 (the Risk used card was dropped 2026-10-23).
  *
  * Two modes. **Today** (1D, the default on every visit) shows today's
- * figures: seven cards. **Period** (any wider preset, or a Range the chart
+ * figures: eight cards. **Period** (any wider preset, or a Range the chart
  * was dragged to) re-scopes win rate, expectancy, payoff and confidence to
- * that window and adds a Realised in period card: eight. Realised today is
+ * that window and adds a Realised in period card: nine. Realised today is
  * today's in both modes -- it replaced the separate Realised P&L panel.
+ *
+ * This panel is the dashboard's one home for the headline figures: the KPI
+ * strip that used to sit above Open positions is gone, and its only figure
+ * not already here, Open risk, is a card of its own (money and % of account,
+ * the cap beneath, linking to the breakdown on Risk). Cards read realised
+ * first, then the open book (Open P&L, Open risk, Open trades).
  *
  * Expectancy, win rate and payoff ratio travel together on purpose, in that
  * order (v195 §5.2): expectancy is the figure that says whether the book
@@ -96,7 +103,7 @@ export const PERF_BASIS = {
 @Component({
   selector: 'sb-trading-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner, StatStrip],
+  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner, StatStrip, StatTile, RouterLink],
   template: `
     <sb-panel heading="Trading performance" [description]="about">
       <div panel-actions class="scope">
@@ -143,13 +150,19 @@ export const PERF_BASIS = {
           <sb-metric-card label="Expectancy" [description]="basis.expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" [loading]="loading()" />
           <sb-metric-card label="Win rate" [description]="basis.winRate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" [loading]="loading()" />
           <sb-metric-card label="Payoff ratio" [description]="basis.payoffRatio" [value]="payoffRatio()" [tint]="payoffTone()" [decimals]="2" [sub]="payoffSub()" [loading]="loading()" />
-          <sb-metric-card label="Open P&L" [description]="basis.openPnl" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
           <sb-metric-card label="Realised today" [description]="basis.realizedToday" [value]="todayAmount()" [tint]="todayTone()"
                           [unit]="currencyUnit()" [sub]="todaySub()" [loading]="todayBusy()" />
           @if (inPeriod()) {
             <sb-metric-card label="Realised in period" [description]="basis.realized" [value]="realizedAmount()" [tint]="realizedTone()"
                             [unit]="currencyUnit()" [sub]="periodSub()" [loading]="loading()" />
           }
+          <sb-metric-card label="Open P&L" [description]="basis.openPnl" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
+          <!-- A link, so no About hint: an sb-hint is a button, and a button
+               cannot sit inside a link. The visible line says where it goes. -->
+          <a class="risk-link" routerLink="/risk">
+            <sb-stat-tile label="Open risk" [value]="openRisk()" [secondary]="riskCap()"
+                          hint="Breakdown on Risk →" />
+          </a>
           <sb-metric-card label="Open trades" [description]="help.openTrades" [value]="openTrades()" [decimals]="0" [sub]="openTradesSub()" />
           <sb-metric-card label="Avg confidence" [description]="help.avgConfidence" [value]="avgConfidence()" [decimals]="1" [loading]="loading()" />
         </sb-stat-strip>
@@ -164,6 +177,7 @@ export const PERF_BASIS = {
         <div><span>Portfolio</span><strong>{{ fmtAmount(balance()) }}</strong></div>
         <div [attr.data-tone]="tinted(changeTone())"><span>Today</span><strong>{{ fmtPct(changePct()) }}</strong></div>
         <div><span>Open{{ nowSuffix() }}</span><strong>{{ openTrades() }}</strong></div>
+        <div class="risk-row"><span><a class="sb-hit" routerLink="/risk">Open risk</a></span><strong>{{ openRisk() }}</strong></div>
         <div [attr.data-tone]="tinted(expectancyTone())" [class.busy]="loading()"><span>Expectancy @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}@if (sample(expectancyN()); as n) {<small class="n">{{ n }}</small>}</strong></div>
         <div [attr.data-tone]="tinted(winPairTone())" [class.busy]="loading()"><span>Win rate @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(winRate(), '%', 1) }}@if (sample(winRateN()); as n) {<small class="n">{{ n }}</small>}</strong></div>
         <div [attr.data-tone]="tinted(payoffTone())" [class.busy]="loading()"><span>Payoff @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}@if (sample(expectancyN()); as n) {<small class="n">{{ n }}</small>}</strong></div>
@@ -210,6 +224,12 @@ export const PERF_BASIS = {
     .grid.stale, .mobile-summary.stale { opacity: 0.55; }
     .stale-hint { margin: 0 0 var(--space-10); font-size: var(--text-chip); color: var(--warn); }
     .mobile-summary { display: none; }
+    /* The open-risk tile is a link to Risk: the tile fills the cell, the link
+       adds only the hover and the focus ring. */
+    .risk-link { display: block; min-width: 0; color: inherit; text-decoration: none; }
+    .risk-link:hover { background: var(--surface-raised); }
+    .risk-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .risk-row a { color: var(--accent); text-decoration: none; }
     /* A refetch in flight: the last figure stays, dimmed, beside its ring. */
     .mobile-summary .busy strong { opacity: 0.45; }
     .mobile-summary span { display: inline-flex; align-items: center; gap: var(--space-6); }
@@ -270,6 +290,11 @@ export class TradingPerformance {
   /** Today's fetch failed (`DashboardStore.todayError`); the card says so. */
   readonly todayError = input<string | null>(null);
   readonly openTrades = input<number>(0);
+  /** Open risk as money and % of account, already formatted (`riskUnits`);
+   *  the card links to the breakdown on Risk. */
+  readonly openRisk = input<string>('—');
+  /** The line beneath it, already worded ("cap 2,000 $ · 20.00%"); null hides it. */
+  readonly riskCap = input<string | null>(null);
   /** Mean winning R over the magnitude of mean losing R. Null, never 0, when
    *  either side has no outcomes yet — see payoff_ratio_from_rs. */
   readonly payoffRatio = input<number | null>(null);

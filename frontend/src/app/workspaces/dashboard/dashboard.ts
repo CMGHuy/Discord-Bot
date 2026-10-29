@@ -10,7 +10,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CLOCK } from '../../ui/clock';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
 
@@ -46,14 +46,9 @@ import {
   openedAt,
   tradeColumns,
 } from '../trades/trades.columns';
-import { amount, dateTime, money, num, pct, rMultiple, share, signed } from '../../ui/format';
+import { amount, dateTime, money, pct, signed } from '../../ui/format';
 import { Page } from '../../ui/page';
 import { riskUnits } from '../../ui/risk-units';
-import { StatStrip } from '../../ui/stat-strip';
-import { StatTile, StatTone } from '../../ui/stat-tile';
-import {
-  PnlTone, ScopeSelection, breakevenPairTone, rangeChipLabel, signTone,
-} from './panels/equity-range.model';
 import { Magnitude } from '../../ui/magnitude';
 import { Panel } from '../../ui/layout';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -77,8 +72,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { ActivityEvent, deriveActivity } from './panels/activity';
 import { TradeDrawer } from './trade-drawer';
-import { KPI_HELP, PANEL_HELP } from './panels/panel-help';
-import { PERF_BASIS, TradingPerformance, presetLabel } from './panels/trading-performance';
+import { PANEL_HELP } from './panels/panel-help';
+import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { MarketMovers } from './panels/market-movers';
 
@@ -100,7 +95,9 @@ const ALL_TIME_STATUSES = new Set(['PENDING', 'ACTIVE', 'PARTIAL']);
  *
  * Two things live in the shell rather than here: scan status and bot status.
  * They are global facts, and duplicating them into a workspace is how the
- * "one thing in four places" problem started.
+ * "one thing in four places" problem started. The same rule retired the
+ * separate KPI strip: Trading performance already carried expectancy, win
+ * rate, realised and the open count, so the strip showed each twice.
  *
  * **No card-flash on refresh, and no transition on any number.** Spec 3
  * removed it: with push, "something changed" is continuous rather than a
@@ -109,11 +106,9 @@ const ALL_TIME_STATUSES = new Set(['PENDING', 'ACTIVE', 'PARTIAL']);
  * serve.
  *
  * **On `sb-page` (v195 Phase 4, §5.2).** The route title is the page's one
- * `h1`; Close all is the header's action. The KPI strip leads with
- * expectancy, then win rate, open risk (money and % of account, linking to
- * Risk), realised in the period and the open count. Open positions is the
- * primary panel; Trading performance, Recent activity and Market movers
- * are secondary.
+ * `h1`; Close all is the header's action. Trading performance leads (the
+ * headline figures, open risk included, linking to Risk), Open positions is
+ * the primary panel, and Recent activity and Market movers are secondary.
  *
  * The data path is NG36's tracer bullet, unchanged: the stores are provided on
  * the component, this component reads signals and never fetches, and there is
@@ -122,20 +117,19 @@ const ALL_TIME_STATUSES = new Set(['PENDING', 'ACTIVE', 'PARTIAL']);
  */
 
 /** The page's order, top to bottom. */
-const PAGE_ORDER = ['kpis', 'positions', 'performance', 'activity', 'movers'];
+const PAGE_ORDER = ['performance', 'positions', 'activity', 'movers'];
 
 /**
- * Panel order per band — v95 C3, re-decided in v195 §5.2.
+ * Panel order per band — v95 C3, re-decided in v195 §5.2, then again when the
+ * KPI strip was merged into Trading performance.
  *
- * v95 moved performance above the positions table because on a phone the
- * portfolio figure, win rate and expectancy sat below ~900px of rows. v195
- * answers that with the KPI strip: expectancy, win rate and open risk sit
- * above the table at every width, and the spec makes open positions the
- * primary panel, with Trading performance (portfolio value, candles, the
- * full card set) first in the secondary grid.
+ * Trading performance (portfolio value, candles, the full card set including
+ * expectancy, win rate and open risk) leads at every width, above Open
+ * positions: on a phone the figures are no longer buried under the table, and
+ * there is no second strip repeating them.
  *
  * A declaration, not a live reorder: sb-page's slots already render in this
- * order (KPIs, primary, secondary) at every band, and the secondary
+ * order (KPIs slot, primary, secondary) at every band, and the secondary
  * elements sit in the template in this order.
  */
 export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
@@ -145,18 +139,6 @@ export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
   lg: PAGE_ORDER,
   xl: PAGE_ORDER,
 };
-
-/** The scope a KPI covers, in the panel's own words: "Today" for 1D,
- *  "All days" for All, the preset code otherwise, the dates for a range. */
-export function scopeLabel(selection: ScopeSelection): string {
-  if (selection.kind === 'range') return rangeChipLabel(selection.window);
-  return selection.preset === 'All' ? 'All days' : presetLabel(selection.preset);
-}
-
-/** A stat tile has no amber: the P&L helpers' `warn` reads as neutral. */
-export function statTone(tone: PnlTone): StatTone {
-  return tone === 'pos' || tone === 'neg' ? tone : 'neutral';
-}
 
 /**
  * Open Positions' columns — v95 C4, exported for E1's parity gate.
@@ -192,7 +174,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
     Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
-    RecentActivity, MarketMovers, TradeDrawer, Page, RouterLink, StatStrip, StatTile,
+    RecentActivity, MarketMovers, TradeDrawer, Page,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
   // level (dashboard.routes.ts). This instance is this page's own, for the
@@ -258,26 +240,63 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
             }
       </div>
 
-      <!-- v195 §5.2: the figures acted on, from what the store already has.
-           Expectancy leads and win rate follows, each with its N and basis;
-           open risk in money and % of account, linking to the breakdown on
-           Risk (concentration lives there, §5.1). -->
-      <sb-stat-strip page-kpis class="kpis">
-        <sb-stat-tile label="Expectancy" [value]="expectancyText()" [sample]="store.expectancyN()"
-                      [tone]="expectancyTone()" [secondary]="scope()" [about]="basis.expectancy" />
-        <sb-stat-tile label="Win rate" [value]="winRateText()" [sample]="store.winRateN()"
-                      [tone]="winRateTone()" [secondary]="scope()" [about]="basis.winRate" />
-        <!-- A link, so no About hint: an sb-hint is a button, and a button
-             cannot sit inside a link (correction 10). The visible line says
-             where it goes. -->
-        <a class="kpi-link" routerLink="/risk">
-          <sb-stat-tile label="Open risk" [value]="openRiskText()" [secondary]="riskCapText()"
-                        hint="Breakdown on Risk →" />
-        </a>
-        <sb-stat-tile label="Realised in period" [value]="realizedText()" [sample]="store.realizedCount()"
-                      [tone]="realizedTone()" [secondary]="scope()" [about]="basis.realized" />
-        <sb-stat-tile label="Open positions" [value]="openPositionsText()" [about]="help.openTrades" />
-      </sb-stat-strip>
+    <!-- Trading performance leads the page, above Open positions: the one
+         panel for the headline figures (it absorbed the old KPI strip, whose
+         expectancy, win rate, realised and open-count tiles it already
+         carried; open risk moved in as its own card). Each panel owns its
+         first-load state, so a slow summary never hides the positions table. -->
+    <sb-async page-kpis class="performance-async"
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="false"
+      [staleAsOf]="async().staleAsOf"
+      emptyReason="measured-zero"
+      emptyTitle="No open positions"
+      [skeletonRows]="3"
+      [skeletonCols]="5"
+      (retry)="store.load()"
+    >
+    <!-- v85: the five metric cards, the chip row, the realised-count line
+         and the lifecycle nav strip are replaced by the panel below (D9).
+         Portfolio Value merged into this one panel rather than sitting
+         beside it as its own card -- both describe "how am I doing", and
+         they never disagree, so one heading now covers both. -->
+    <div class="performance-stack">
+    <sb-trading-performance
+      [balance]="store.balance()"
+      [changePct]="store.equityChangePct()"
+      [points]="store.equityPoints()"
+      [openPnlPct]="store.openPnlPct()"
+      [openPnlAmount]="store.openPnlAmount()"
+      [winRate]="store.winRate()"
+      [expectancyR]="store.expectancyR()"
+      [winRateN]="store.winRateN()"
+      [expectancyN]="store.expectancyN()"
+      [avgConfidence]="store.avgConfidence()"
+      [realizedAmount]="store.realizedAmount()"
+      [todayRealized]="store.todayRealized()"
+      [todayLoading]="store.todayLoading()"
+      [todayError]="store.todayError()"
+      [openTrades]="store.openTrades()"
+      [openRisk]="openRiskText()"
+      [riskCap]="riskCapText()"
+      [payoffRatio]="store.payoffRatio()"
+      [currency]="connection.currency()"
+      [selection]="store.selection()"
+      [stale]="store.stale()"
+      [loading]="store.loading()"
+      (presetChange)="store.setPreset($event)"
+      [chartTarget]="store.chartTarget()"
+      (chartRangeChange)="store.setRange($event)"
+      (viewReset)="store.resetView()"
+    />
+    <!-- v194 B7: closes and positions with no exchange rate are left out
+         of the money figures above; say how many. -->
+    @if (fxMissing() > 0) {
+      <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
+    }
+    </div>
+    </sb-async>
 
     <sb-panel page-primary class="positions-panel" heading="Open positions" [flush]="true" [description]="positionsAbout" [descriptionHint]="false">
       <!-- The lifecycle and sizing context share one help trigger. The
@@ -328,59 +347,6 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       >
       </sb-positions-table>
     </sb-panel>
-
-    <!-- Each panel owns its first-load state. A slow dashboard summary must
-         never hide the independently fetched positions table or activity. -->
-    <sb-async page-secondary class="performance-async"
-      [loading]="async().loading"
-      [error]="async().error"
-      [empty]="false"
-      [staleAsOf]="async().staleAsOf"
-      emptyReason="measured-zero"
-      emptyTitle="No open positions"
-      [skeletonRows]="3"
-      [skeletonCols]="5"
-      (retry)="store.load()"
-    >
-    <!-- v85: the five metric cards, the chip row, the realised-count line
-         and the lifecycle nav strip are replaced by the panel below (D9).
-         Portfolio Value merged into this one panel rather than sitting
-         beside it as its own card -- both describe "how am I doing", and
-         they never disagree, so one heading now covers both. -->
-    <div class="performance-stack">
-    <sb-trading-performance
-      [balance]="store.balance()"
-      [changePct]="store.equityChangePct()"
-      [points]="store.equityPoints()"
-      [openPnlPct]="store.openPnlPct()"
-      [openPnlAmount]="store.openPnlAmount()"
-      [winRate]="store.winRate()"
-      [expectancyR]="store.expectancyR()"
-      [winRateN]="store.winRateN()"
-      [expectancyN]="store.expectancyN()"
-      [avgConfidence]="store.avgConfidence()"
-      [realizedAmount]="store.realizedAmount()"
-      [todayRealized]="store.todayRealized()"
-      [todayLoading]="store.todayLoading()"
-      [todayError]="store.todayError()"
-      [openTrades]="store.openTrades()"
-      [payoffRatio]="store.payoffRatio()"
-      [currency]="connection.currency()"
-      [selection]="store.selection()"
-      [stale]="store.stale()"
-      [loading]="store.loading()"
-      (presetChange)="store.setPreset($event)"
-      [chartTarget]="store.chartTarget()"
-      (chartRangeChange)="store.setRange($event)"
-      (viewReset)="store.resetView()"
-    />
-    <!-- v194 B7: closes and positions with no exchange rate are left out
-         of the money figures above; say how many. -->
-    @if (fxMissing() > 0) {
-      <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
-    }
-    </div>
-    </sb-async>
 
     <sb-async page-secondary class="activity-async" [loading]="activityAsync().loading" [error]="activityAsync().error" [empty]="false"
               emptyReason="measured-zero" emptyTitle="Recent activity"
@@ -578,15 +544,6 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     :host { display: block; }
     .performance-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
 
-    /* Trading performance keeps the full width: its candles need it (v172). */
-    .performance-async { grid-column: 1 / -1; }
-
-    /* The open-risk tile is a link to Risk: the tile fills the cell, the link
-       adds only the hover and the focus ring. */
-    .kpi-link { display: block; min-width: 0; color: inherit; text-decoration: none; }
-    .kpi-link:hover { background: var(--surface-raised); }
-    .kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-
     /* Same overlay pattern as sb-profile-menu's own dropdown: relative
        wrapper, absolutely-positioned menu, elev-overlay for the shared
        surface/shadow treatment. Right-aligned under the trigger rather than
@@ -671,7 +628,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     .pnl-plan .tp { color: var(--pos); }
     .pnl-plan .sl { color: var(--neg); }
 
-    /* v195 §5.2: the order is sb-page's slots, the same at every band -- see DASHBOARD_PANEL_ORDER. Nothing here reorders. */
+    /* The order is sb-page's slots, the same at every band -- see DASHBOARD_PANEL_ORDER. Nothing here reorders. */
     @media (max-width: 639px) {
       .lifecycle-hint sb-plan-lifecycle-diagram { min-width: 0; }
     }
@@ -689,21 +646,8 @@ export class Dashboard {
    *  the shell already keeps it fresh, so reading it here costs no request. */
   protected readonly connection = inject(ConnectionStore);
 
-  /* -- v195 §5.2: the KPI strip ----------------------------------------- */
-
-  protected readonly basis = PERF_BASIS;
-  protected readonly help = KPI_HELP;
-  /** Which window the scoped figures cover: Today, 1M, All days, a range. */
-  protected readonly scope = computed(() => scopeLabel(this.store.selection()));
-
-  protected readonly expectancyText = computed(() => rMultiple(this.store.expectancyR()));
-  protected readonly expectancyTone = computed(() => statTone(signTone(this.store.expectancyR())));
-  protected readonly winRateText = computed(() => share(this.store.winRate(), 1));
-  /** Judged against break-even with the payoff, as the panel judges it. */
-  protected readonly winRateTone = computed(() => statTone(
-    breakevenPairTone(this.store.winRate(), this.store.payoffRatio(), this.store.winRateN())));
-
-  /** Money and % of account together (§5.2), against the dollar-risk cap. */
+  /** Open risk for Trading performance's card: money and % of account
+   *  together (§5.2), against the dollar-risk cap. */
   protected readonly openRiskText = computed(() =>
     riskUnits(this.store.riskUsedPct(), this.store.balance(), this.connection.currency()));
   protected readonly riskCapText = computed(() => {
@@ -711,9 +655,6 @@ export class Dashboard {
     return cap === null ? null : `cap ${riskUnits(cap, this.store.balance(), this.connection.currency())}`;
   });
 
-  protected readonly realizedText = computed(() => money(this.store.realizedAmount(), this.connection.currency()));
-  protected readonly realizedTone = computed(() => statTone(signTone(this.store.realizedAmount())));
-  protected readonly openPositionsText = computed(() => num(this.store.openTrades(), 0));
   /** Root-provided and already loaded by the shell (the top bar's own tape
    *  lanes) -- this page only reads `rows()`, it never calls `load()`. */
   protected readonly tape = inject(TapeStore);

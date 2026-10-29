@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { provideRouter } from '@angular/router';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
@@ -17,7 +18,7 @@ import {
   PERF_BASIS, TradingPerformance, joinSub, performanceSample, presetLabel, withBasis,
 } from './trading-performance';
 import { MetricCard } from '../../../ui/metric-card';
-import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
+import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
 
 installMatchMediaPolyfill();
 
@@ -32,6 +33,7 @@ describe('trading performance panel', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
         { provide: ViewportService, useValue: { isPhone: signal(false) } },
       ],
@@ -122,7 +124,7 @@ describe('trading performance panel', () => {
     });
     const labels = [...el.querySelectorAll('sb-metric-card')]
       .map((c) => c.textContent ?? '');
-    expect(labels.length).toBe(7);
+    expect(labels.length).toBe(7);  // the Open risk tile is not a metric card
     expect(el.textContent).toContain('Payoff ratio');
     expect(el.textContent).toContain('2.34');
   });
@@ -422,6 +424,7 @@ describe('trading performance scope on a phone (v181 §1)', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
         { provide: ViewportService, useValue: { isPhone: signal(true) } },
       ],
@@ -487,6 +490,7 @@ describe('trading performance KPI strip (v186 D3)', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
         { provide: ViewportService, useValue: { isPhone: signal(false) } },
       ],
@@ -542,6 +546,7 @@ describe('trading performance leads with expectancy (v195 §5.2)', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
         { provide: ViewportService, useValue: { isPhone: signal(false) } },
       ],
@@ -570,14 +575,14 @@ describe('trading performance leads with expectancy (v195 §5.2)', () => {
 
   it('opens the strip with Expectancy, then Win rate, then Payoff ratio', () => {
     expect(labels(mount({ currency: '€' }))).toEqual([
-      'Expectancy', 'Win rate', 'Payoff ratio', 'Open P&L', 'Realised today', 'Open trades', 'Avg confidence',
+      'Expectancy', 'Win rate', 'Payoff ratio', 'Realised today', 'Open P&L', 'Open trades', 'Avg confidence',
     ]);
   });
 
   it('keeps that lead in Period mode, the period card after Realised today', () => {
     expect(labels(mount({ selection: { kind: 'preset', preset: '1M' }, currency: '€' }))).toEqual([
-      'Expectancy', 'Win rate', 'Payoff ratio', 'Open P&L', 'Realised today', 'Realised in period',
-      'Open trades', 'Avg confidence',
+      'Expectancy', 'Win rate', 'Payoff ratio', 'Realised today', 'Realised in period',
+      'Open P&L', 'Open trades', 'Avg confidence',
     ]);
   });
 
@@ -615,7 +620,7 @@ describe('trading performance leads with expectancy (v195 §5.2)', () => {
   it('puts Expectancy before Win rate in the phone summary, each with its N', () => {
     const el = mount({ expectancyR: -0.16, expectancyN: 12, winRate: 49.1, winRateN: 40, payoffRatio: 2.34, currency: '€' })
       .nativeElement as HTMLElement;
-    expect(summaryLabels(el)).toEqual(['Portfolio', 'Today', 'Open', 'Expectancy', 'Win rate', 'Payoff', 'Realised today']);
+    expect(summaryLabels(el)).toEqual(['Portfolio', 'Today', 'Open', 'Open risk', 'Expectancy', 'Win rate', 'Payoff', 'Realised today']);
     expect(summaryRow(el, 'Expectancy').querySelector('strong')!.textContent).toContain('−0.16R');
     expect(summaryRow(el, 'Expectancy').querySelector('.n')!.textContent!.trim()).toBe('N=12 · thin sample');
     expect(summaryRow(el, 'Win rate').querySelector('.n')!.textContent!.trim()).toBe('N=40');
@@ -625,6 +630,70 @@ describe('trading performance leads with expectancy (v195 §5.2)', () => {
   it('shows no N line in the summary before a sample is known', () => {
     const el = mount({ currency: '€' }).nativeElement as HTMLElement;
     expect(el.querySelectorAll('.mobile-summary .n')).toHaveLength(0);
+  });
+});
+
+/* -- the KPI strip merged in: Open risk is a card of this panel ------------ */
+
+describe('trading performance Open risk card', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
+        { provide: ViewportService, useValue: { isPhone: signal(false) } },
+      ],
+    });
+  });
+
+  function mount(inputs: Record<string, unknown>) {
+    const f = TestBed.createComponent(TradingPerformance);
+    for (const [key, value] of Object.entries(inputs)) f.componentRef.setInput(key, value);
+    f.detectChanges();
+    return f;
+  }
+  const tile = (f: ReturnType<typeof mount>) =>
+    f.debugElement.query(By.directive(StatTile)).componentInstance as StatTile;
+
+  it('shows money and % of account, the cap beneath, linking to Risk', () => {
+    const f = mount({ openRisk: '300 $ · 3.00%', riskCap: 'cap 2,000 $ · 20.00%', currency: '$' });
+    expect(tile(f).label()).toBe('Open risk');
+    expect(tile(f).value()).toBe('300 $ · 3.00%');
+    expect(tile(f).secondary()).toBe('cap 2,000 $ · 20.00%');
+    expect(tile(f).hint()).toBe('Breakdown on Risk →');
+    const link = (f.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a.risk-link')!;
+    expect(link.getAttribute('href')).toBe('/risk');
+    // A hint is a button, and a button cannot sit inside a link.
+    expect(link.querySelector('button, sb-hint')).toBeNull();
+  });
+
+  it('shows no cap line without a cap, and a dash without a figure', () => {
+    const f = mount({ currency: '$' });
+    expect(tile(f).value()).toBe('—');
+    expect(tile(f).secondary()).toBeNull();
+  });
+
+  it('sits in the same strip as the metric cards, after Open P&L and before Open trades', () => {
+    const el = mount({ currency: '$' }).nativeElement as HTMLElement;
+    const order = [...el.querySelectorAll('sb-stat-strip.grid > .sb-strip-grid > *')]
+      .map((c) => c.querySelector('.label')!.textContent!.trim());
+    expect(order.slice(order.indexOf('Open P&L'), order.indexOf('Open trades') + 1))
+      .toEqual(['Open P&L', 'Open risk', 'Open trades']);
+  });
+
+  it('carries the figure and a link to Risk in the phone summary', () => {
+    const f = mount({ openRisk: '94 € · <0.01%', currency: '€' });
+    const row = (f.nativeElement as HTMLElement).querySelector('.mobile-summary > .risk-row')!;
+    expect(row.querySelector('strong')!.textContent).toBe('94 € · <0.01%');
+    expect(row.querySelector('a.sb-hit')!.getAttribute('href')).toBe('/risk');
+  });
+
+  it('lets a lone ninth card (Period mode) take its whole row', () => {
+    const globalCss = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
+    expect(globalCss).toMatch(
+      /\.sb-strip-grid\.sb-strip-fill > :last-child:nth-child\(4n \+ 1\)\s*\{\s*grid-column:\s*1 \/ -1;\s*\}/,
+    );
   });
 });
 

@@ -309,6 +309,8 @@ a:hover {
 /* sb-stat-strip [fillLast]: seven cards at four per row (or two) leave the
    last one alone in its row; it takes the rest of it. */
 .sb-strip-grid.sb-strip-fill > :last-child:nth-child(4n + 3) { grid-column: span 2; }
+/* A ninth of nine (Period mode) sits alone in its row at any column count. */
+.sb-strip-grid.sb-strip-fill > :last-child:nth-child(4n + 1) { grid-column: 1 / -1; }
 
 @media (min-width: 640px) {
   .sb-strip-grid.sb-strip-fixed { grid-template-columns: repeat(var(--strip-cols-md, 2), minmax(0, 1fr)); }
