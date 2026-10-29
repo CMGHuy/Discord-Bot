@@ -16,17 +16,19 @@ risk comes from `heat.trade_risk_pct` -- the exact function `open_heat` sums.
 A second definition of either would let this endpoint and the Jinja page
 disagree about how exposed the account is for the whole migration.
 
-That collector try/excepts every sub-collector to a safe default, so any
-value may legitimately be missing. The projections below keep that property
-rather than assuming a key is present.
+The collector preserves independently observed domains and their availability.
+The projections keep unknown values nullable and obtain fresh control state
+on every request.
 
 `heat` also carries the open shorts' summed p99 gap risk (v183, display only).
 """
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from flask import jsonify, request
@@ -39,49 +41,27 @@ from .auth import require_auth
 
 log = logging.getLogger(__name__)
 
-def _kill_block(state: dict) -> dict:
-    """Normalised to exactly three keys.
 
-    `kill_state()` reads a JSON file, so it can carry whatever an older
-    build wrote. The contract tests assert an exact key set, and a stray key
-    reaching the SPA is an undeclared field it can grow a dependency on.
-    """
-    return {
-        "on": bool(state.get("on")),
-        "reason": state.get("reason"),
-        "at": state.get("at"),
-    }
-
-
-def _positions(balance: float) -> list[dict]:
-    """The exposure breakdown, one row per open position.
-
-    `trade_risk_pct` is what `open_heat` sums, so these rows always add up to
-    the `heat.open_pct` figure beside them. Recomputing risk from entry and
-    stop here would be a second definition, and the two would drift the
-    moment either changed.
-    """
+def _position_risk(trade: dict, balance: float | None) -> float | None:
     from swingbot.core.edge.heat import trade_risk_pct
-    from swingbot.core.tracking.performance import TradeLog
-
+    if balance is None:
+        return None
     try:
-        open_trades = TradeLog().get_trades(status="open", limit=None) or []
+        value = float(trade_risk_pct(trade, balance))
+        return round(value, 3) if math.isfinite(value) else None
     except Exception:
-        return []
+        return None
 
-    rows = [
-        {
-            "trade_id": t.get("id"),
-            "ticker": t.get("ticker"),
-            "strategy": t.get("strategy"),
-            "shares": t.get("shares"),
-            "entry": t.get("entry"),
-            "stop_loss": t.get("stop_loss"),
-            "risk_pct": round(trade_risk_pct(t, balance), 3),
-        }
-        for t in open_trades
-    ]
-    rows.sort(key=lambda r: r["risk_pct"], reverse=True)
+
+def _positions(open_trades: list[dict] | None, balance: float | None) -> list[dict] | None:
+    if open_trades is None:
+        return None
+    rows = [{"trade_id": t.get("id"), "ticker": t.get("ticker"),
+             "strategy": t.get("strategy"), "shares": t.get("shares"),
+             "entry": t.get("entry"), "stop_loss": t.get("stop_loss"),
+             "risk_pct": _position_risk(t, balance)} for t in open_trades]
+    rows.sort(key=lambda row: row["risk_pct"] if row["risk_pct"] is not None else -math.inf,
+              reverse=True)
     return rows
 
 
@@ -104,15 +84,21 @@ def _open_short_gap_risk(open_trades: list) -> dict:
     return {"gap_risk_amount": round(total, 2) if known else None, "gap_risk_unknown": unknown}
 
 
-def _heat_gap_block() -> dict:
-    """The two gap keys for `heat`; a failed trade read degrades to null, like `_positions`."""
-    from swingbot.core.tracking.performance import TradeLog
-
+def _heat_gap_block(open_trades: list[dict] | None) -> dict:
+    if open_trades is None:
+        return {"gap_risk_amount": None, "gap_risk_unknown": 0}
     try:
-        return _open_short_gap_risk(TradeLog().get_trades(status="open", limit=None) or [])
+        return _open_short_gap_risk(open_trades)
     except Exception as exc:
         swallowed(log, "ops.risk.heat_gap_block", exc, level=logging.DEBUG)
         return {"gap_risk_amount": None, "gap_risk_unknown": 0}
+
+
+def _sector_rows(values: dict | None) -> list[dict] | None:
+    if values is None:
+        return None
+    return [{"sector": sector, "heat_pct": pct} for sector, pct in
+            sorted(values.items(), key=lambda item: item[1] or 0.0, reverse=True)]
 
 
 _DATA_SOURCE_WINDOW = 20
@@ -191,6 +177,40 @@ _cache_lock = threading.Lock()
 _cache: dict[str, tuple[float, Any]] = {}
 _key_locks: dict[str, threading.Lock] = {}
 
+_kill_observation_lock = threading.Lock()
+_last_known_kill: dict = {}
+
+
+def _kill_block(state: dict) -> dict:
+    on = state.get("on")
+    return {"on": on if isinstance(on, bool) else None,
+            "reason": state.get("reason"), "at": state.get("at")}
+
+
+def _kill_status(state: str, checked: str) -> dict:
+    return {"state": state, "checked_at": checked,
+            "reason": None if state == "ok" else "killswitch_unavailable"}
+
+
+def _fresh_kill(throttle, state: dict) -> dict:
+    # Retain the call signature while deliberately ignoring cached state.
+    with _kill_observation_lock:
+        checked = datetime.now(timezone.utc).isoformat()
+        try:
+            observed = _kill_block(throttle.kill_state())
+            if observed["on"] is None:
+                raise ValueError("invalid killswitch response")
+        except Exception as exc:
+            swallowed(log, "ops.risk.killswitch_unavailable", exc, level=logging.WARNING)
+            block = {"on": None, "reason": None, "at": None,
+                     "availability": _kill_status("unavailable", checked)}
+            if _last_known_kill:
+                block["last_known"] = dict(_last_known_kill)
+            return block
+        _last_known_kill.clear()
+        _last_known_kill.update(observed, checked_at=checked)
+        return {**observed, "availability": _kill_status("ok", checked)}
+
 
 def _cached(key: str, compute: Callable[[], Any]) -> Any:
     """Reuse `compute()` for `_RISK_TTL_S`; concurrent callers share one run.
@@ -212,6 +232,8 @@ def _cached(key: str, compute: Callable[[], Any]) -> Any:
 def _invalidate_cache() -> None:
     with _cache_lock:
         _cache.clear()
+    with _kill_observation_lock:
+        _last_known_kill.clear()
 
 
 def _metric(value: float | None, n: int) -> dict:
@@ -416,18 +438,13 @@ def get_risk():
     stored record; cached with the rest of `collect_portfolio_state`
     (`_cached`, `_RISK_TTL_S`); 0 when the collector produced none.
     """
-    from swingbot.admin import dashboard as dash
     from swingbot.core.edge.portfolio_state import collect_portfolio_state
 
     from swingbot.core.edge import throttle
 
     state = _cached("portfolio_state", collect_portfolio_state)
 
-    try:
-        account_cfg = dash.load_account_config()
-        balance = float(account_cfg.get("balance", account_cfg.get("base_balance", 0.0)) or 0.0)
-    except Exception:
-        balance = 0.0
+    balance = state.get("balance")
 
     open_pct = state.get("open_heat")
     cap_pct = float(state.get("heat_cap") or getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0))
@@ -439,44 +456,26 @@ def get_risk():
         if open_pct is not None and cap_pct else None
     )
 
-    throttle_mult = state.get("throttle_mult")
     metrics, correlation = _cached("metrics", _risk_metrics_and_correlation)
+    kill = _fresh_kill(throttle, state)
     return jsonify({
         "heat": {
             "open_pct": open_pct,
             "cap_pct": cap_pct,
             "utilisation_pct": utilisation,
-            **_heat_gap_block(),
+            **_heat_gap_block(state.get("open_trades")),
         },
-        "positions": _positions(balance),
-        "sector_heat": [
-            {"sector": sector, "heat_pct": pct}
-            for sector, pct in sorted(
-                (state.get("sector_heat") or {}).items(),
-                key=lambda kv: kv[1] or 0.0, reverse=True,
-            )
-        ],
+        "availability": {**state.get("availability", {}), "killswitch": kill["availability"]},
+        "positions": _positions(state.get("open_trades"), balance),
+        "sector_heat": _sector_rows(state.get("sector_heat")),
         "unmapped_count": int(state.get("unmapped_count") or 0),
-        # A list of ticker lists, as the collector produces them. The page
-        # numbers them 1..n for display; that numbering is presentation.
-        "clusters": state.get("clusters") or [],
-        "throttle": {
-            "multiplier": 1.0 if throttle_mult is None else throttle_mult,
-            "paused": bool(state.get("paused")),
-        },
-        # Fresh, never from the cache: an engaged killswitch must show at once.
-        "killswitch": _kill_block(_fresh_kill(throttle, state)),
+        "clusters": state.get("clusters"),
+        "throttle": {"multiplier": state.get("throttle_mult"), "paused": state.get("paused")},
+        "killswitch": kill,
         "scan_health": _scan_health(),
         "metrics": metrics,
         "correlation": correlation,
     })
-
-
-def _fresh_kill(throttle, state: dict) -> dict:
-    try:
-        return throttle.kill_state()
-    except Exception:
-        return state.get("kill") or {}
 
 
 @api_v1.route("/risk/killswitch", methods=["GET"])
@@ -489,7 +488,7 @@ def get_killswitch():
     """
     from swingbot.core.edge import throttle
 
-    return jsonify({"killswitch": _kill_block(throttle.kill_state())})
+    return jsonify({"killswitch": _fresh_kill(throttle, {})})
 
 
 @api_v1.route("/risk/killswitch", methods=["POST"])
@@ -511,11 +510,16 @@ def set_killswitch():
     """
     from swingbot.core.edge import throttle
 
-    payload = request.get_json(silent=True) or {}
-    on = payload.get("on")
-    if not isinstance(on, bool):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("on"), bool):
         return error("invalid", "Body must contain 'on' as a boolean.", 400)
-
     reason = str(payload.get("reason") or "admin panel")
-    _invalidate_cache()
-    return jsonify({"killswitch": _kill_block(throttle.set_kill(on, reason=reason))})
+    try:
+        throttle.set_kill(payload["on"], reason=reason)
+    except Exception as exc:
+        swallowed(log, "ops.risk.killswitch_write", exc, level=logging.WARNING)
+        return error("unavailable", "Could not update the killswitch.", 503)
+    # Clear portfolio data without discarding the last confirmed observation.
+    with _cache_lock:
+        _cache.clear()
+    return jsonify({"killswitch": _fresh_kill(throttle, {})})

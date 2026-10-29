@@ -126,8 +126,10 @@ def test_requires_auth(client):
 def test_risk_shape(logged_in):
     body = logged_in.get("/api/v1/risk").get_json()
     assert_shape(body, {
-        "heat": dict, "positions": list, "sector_heat": list, "unmapped_count": int,
-        "clusters": list, "throttle": dict, "killswitch": dict,
+        "heat": dict, "positions": (list, type(None)),
+        "sector_heat": (list, type(None)), "unmapped_count": int,
+        "clusters": (list, type(None)), "throttle": dict, "killswitch": dict,
+        "availability": dict,
         "scan_health": dict, "metrics": dict, "correlation": dict,
     })
     assert_shape(body["heat"], {
@@ -136,10 +138,11 @@ def test_risk_shape(logged_in):
         "gap_risk_amount": NULLABLE_NUMBER, "gap_risk_unknown": int,
     }, where="heat")
     assert_shape(body["throttle"], {
-        "multiplier": NULLABLE_NUMBER, "paused": bool,
+        "multiplier": NULLABLE_NUMBER, "paused": (bool, type(None)),
     }, where="throttle")
     assert_shape(body["killswitch"], {
-        "on": bool, "reason": NULLABLE_STR, "at": NULLABLE_STR,
+        "on": (bool, type(None)), "reason": NULLABLE_STR, "at": NULLABLE_STR,
+        "availability": dict,
     }, where="killswitch")
     assert_shape(body["scan_health"], {
         "durations_s": list, "latest_s": NULLABLE_NUMBER, "slowdown": bool,
@@ -513,7 +516,7 @@ def test_engaging_without_a_reason_still_records_where_it_came_from(
 
 
 @pytest.mark.parametrize("payload", [{}, {"on": "false"}, {"on": 0},
-                                     {"on": None}, {"action": "off"}])
+                                     {"on": None}, {"action": "off"}, [], [True], "off"])
 def test_an_unclear_toggle_is_rejected(logged_in, payload):
     """`on` is required and required to BE a bool.
 
@@ -786,3 +789,155 @@ def test_pnl_amounts_sorts_by_close_and_skips_unpriced_rows():
     ]
     assert _pnl_amounts(rows) == [1.0, 3.0, 9.0]   # no close stamp sorts last
     assert _pnl_amounts([]) == []
+
+
+@pytest.fixture
+def projection_client(monkeypatch):
+    """Exercise the decorated API routes without the store-backed app fixture."""
+    from flask import Flask
+    from swingbot.admin import app as app_module
+    from swingbot.admin.api_v1 import risk
+
+    from swingbot.core.tracking.performance import TradeLog
+
+    monkeypatch.setattr(TradeLog, "get_trades", lambda *a, **kw: [])
+    app = Flask(__name__)
+    monkeypatch.setattr(app_module, "_session_authenticated", lambda: True)
+    app.add_url_rule("/api/v1/risk", view_func=risk.get_risk)
+    app.add_url_rule("/api/v1/risk/killswitch", view_func=risk.get_killswitch)
+    app.add_url_rule("/api/v1/risk/killswitch", view_func=risk.set_killswitch,
+                     methods=["POST"])
+    return app.test_client()
+
+
+@pytest.fixture
+def projection_state(monkeypatch):
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.edge import portfolio_state, throttle
+    stamp = "2026-10-28T00:00:00+00:00"
+    ok = {"state": "ok", "checked_at": stamp, "reason": None}
+    state = {"open_trades": [], "balance": 1000.0, "open_heat": 0.0,
+             "heat_cap": 6.0, "sector_heat": {}, "unmapped_count": 0,
+             "clusters": [], "throttle_mult": 1.0, "paused": False,
+             "kill": {"on": False}, "growth": {},
+             "availability": {key: dict(ok) for key in
+                              ("positions", "heat", "sector_heat", "clusters", "throttle", "killswitch")}}
+    monkeypatch.setattr(portfolio_state, "collect_portfolio_state", lambda: state)
+    monkeypatch.setattr(risk, "_risk_metrics_and_correlation", lambda: ({}, {"labels": [], "values": []}))
+    monkeypatch.setattr(risk, "_scan_health", lambda: {})
+    monkeypatch.setattr(throttle, "kill_state", lambda: {"on": False, "reason": None, "at": None})
+    return state
+
+
+def unavailable_read(*args, **kwargs):
+    raise OSError("private diagnostic must not reach JSON")
+
+
+def test_unknown_book_remains_null_in_api(projection_client, projection_state):
+    state = projection_state
+    state.update(open_trades=None, open_heat=None, sector_heat=None, clusters=None)
+    for key in ("positions", "heat", "sector_heat", "clusters"):
+        state["availability"][key].update(state="unavailable", reason="positions_unavailable")
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["positions"] is None
+    assert body["heat"]["open_pct"] is None
+    assert body["sector_heat"] is None
+    assert body["clusters"] is None
+    assert body["availability"]["positions"]["state"] == "unavailable"
+    assert body["killswitch"]["on"] is False
+
+
+def test_invalid_balance_keeps_positions_without_percentage(projection_client, projection_state):
+    projection_state.update(balance=None, open_heat=None,
+                            open_trades=[_open_trade("visible")])
+    projection_state["availability"]["heat"].update(state="unavailable", reason="invalid_balance")
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["positions"][0]["trade_id"] == "visible"
+    assert body["positions"][0]["risk_pct"] is None
+    assert body["heat"]["utilisation_pct"] is None
+
+
+def test_positions_do_not_read_trade_log_again(projection_client, projection_state, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    projection_state["open_trades"] = [_open_trade("snapshot")]
+    monkeypatch.setattr(TradeLog, "get_trades", unavailable_read)
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["positions"][0]["trade_id"] == "snapshot"
+
+
+@pytest.mark.parametrize("path", ["/api/v1/risk", "/api/v1/risk/killswitch"])
+def test_fresh_kill_failure_never_reuses_current_state(projection_client, projection_state, monkeypatch, path):
+    from swingbot.core.edge import throttle
+    first = projection_client.get(path).get_json()["killswitch"]
+    monkeypatch.setattr(throttle, "kill_state", unavailable_read)
+    body = projection_client.get(path).get_json()
+    current = body["killswitch"]
+    assert current["on"] is None
+    assert current["availability"]["state"] == "unavailable"
+    assert current["last_known"]["on"] is False
+    assert current["last_known"]["checked_at"] == first["availability"]["checked_at"]
+    assert "private diagnostic" not in str(body)
+    if path == "/api/v1/risk":
+        assert body["availability"]["killswitch"] == current["availability"]
+        assert body["availability"]["positions"]["checked_at"] == projection_state["availability"]["positions"]["checked_at"]
+
+
+def test_unknown_read_allows_explicit_engage_without_implicit_release(projection_client, projection_state, monkeypatch):
+    from swingbot.core.edge import throttle
+    calls = []
+    monkeypatch.setattr(throttle, "kill_state", unavailable_read)
+    monkeypatch.setattr(throttle, "set_kill", lambda on, **kw: calls.append(on))
+    assert projection_client.get("/api/v1/risk/killswitch").get_json()["killswitch"]["on"] is None
+    assert calls == []
+    response = projection_client.post("/api/v1/risk/killswitch", json={"on": True})
+    assert response.status_code == 200
+    assert calls == [True]
+    assert response.get_json()["killswitch"]["on"] is None
+    assert response.get_json()["killswitch"]["availability"]["state"] == "unavailable"
+    assert projection_client.post("/api/v1/risk/killswitch", json={"on": None}).status_code == 400
+    assert calls == [True]
+
+
+@pytest.mark.parametrize("payload", [[], [True], "off", {"on": None}, {"on": 0}])
+def test_projection_rejects_non_boolean_commands(projection_client, projection_state,
+                                                monkeypatch, payload):
+    from swingbot.core.edge import throttle
+    calls = []
+    monkeypatch.setattr(throttle, "set_kill", lambda *a, **kw: calls.append(a))
+    response = projection_client.post("/api/v1/risk/killswitch", json=payload)
+    assert response.status_code == 400
+    assert calls == []
+
+
+def test_projection_write_failure_reports_unavailable(projection_client, projection_state, monkeypatch):
+    from swingbot.core.edge import throttle
+    monkeypatch.setattr(throttle, "set_kill", unavailable_read)
+    response = projection_client.post("/api/v1/risk/killswitch", json={"on": True})
+    assert response.status_code == 503
+    assert response.get_json()["error"]["code"] == "unavailable"
+    assert "private diagnostic" not in response.get_data(as_text=True)
+
+
+def test_projection_failed_readback_retains_original_observation(projection_client, projection_state,
+                                                               monkeypatch):
+    from swingbot.core.edge import throttle
+    first = projection_client.get("/api/v1/risk/killswitch").get_json()["killswitch"]
+    calls = []
+    monkeypatch.setattr(throttle, "set_kill", lambda on, **kw: calls.append(on))
+    monkeypatch.setattr(throttle, "kill_state", unavailable_read)
+    current = projection_client.post("/api/v1/risk/killswitch", json={"on": True}).get_json()["killswitch"]
+    assert calls == [True]
+    assert current["on"] is None
+    assert current["last_known"]["on"] is False
+    assert current["last_known"]["checked_at"] == first["availability"]["checked_at"]
+
+
+def test_projection_empty_book_and_controls_keep_observed_values(projection_client, projection_state):
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["positions"] == []
+    assert body["sector_heat"] == []
+    assert body["clusters"] == []
+    assert body["heat"]["open_pct"] == 0.0
+    assert body["throttle"] == {"multiplier": 1.0, "paused": False}
+    assert body["killswitch"]["availability"]["state"] == "ok"
+    assert "last_known" not in body["killswitch"]
