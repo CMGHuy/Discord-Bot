@@ -241,41 +241,108 @@ def _metric(value: float | None, n: int) -> dict:
 
 
 def _pnl_amounts(closed: list) -> list[float]:
-    """Realised amounts of `closed`, oldest close first (no stamp sorts last),
-    rows without an amount skipped -- the money walk behind
-    `max_drawdown_amount`. `closed` is already in the account currency
-    (`to_account_currency`), so a skipped row is either unsettled or had no
-    FX rate; the caller counts the second kind."""
-    ordered = sorted(closed, key=lambda trade: str(trade.get("closed_at") or "￿"))
-    return [
-        float(trade["realized_pnl_amount"])
-        for trade in ordered
-        if trade.get("realized_pnl_amount") is not None
-    ]
+    """Finite account-currency amounts in valid close order."""
+    from .risk_read_model import chronological_records
+    ordered, _ = chronological_records(closed)
+    amounts = []
+    for row in ordered:
+        raw = row.get("realized_pnl_amount")
+        if raw is None:
+            continue
+        value = float(raw)
+        if not math.isfinite(value):
+            raise ValueError("nonfinite realized amount")
+        amounts.append(value)
+    return amounts
+
+
+def _money_metric(closed: list) -> tuple[dict, str | None]:
+    """Money drawdown and coverage, converting only date-valid records."""
+    from swingbot.core.analytics import risk_metrics as rm
+    from . import money
+    from .risk_read_model import chronological_records
+    ordered, counts = chronological_records(closed)
+    metric = {"value": None, "n": 0, "fx_missing_count": 0,
+              "invalid_date_count": counts["invalid_date_count"]}
+    try:
+        converted = money.to_account_currency(ordered)
+        metric["fx_missing_count"] = money.missing_count(converted)
+        amounts = _pnl_amounts(converted)
+        value = rm.max_drawdown_r(amounts)
+        if amounts and value is None:
+            raise ValueError("nonfinite cumulative amount")
+        metric.update(value=None if value is None else round(value, 2), n=len(amounts))
+    except Exception as exc:
+        swallowed(log, "ops.risk.max_drawdown_amount", exc, level=logging.DEBUG)
+        return metric, "money_conversion_unavailable"
+    return metric, None
 
 
 def _max_drawdown_amount(closed: list) -> dict:
-    """v194 B8: the money twin of `max_drawdown_r` -- the largest
-    peak-to-trough fall of cumulative realised P&L over every closed trade,
-    in the account currency, a positive magnitude. Converted read-side per
-    trade at its exit date's rate (`money.to_account_currency`); a trade
-    with no rate is left out and counted, never read at 1.0. Its own guard:
-    a conversion failure blanks this figure, not the R metrics beside it."""
-    from swingbot.core.analytics import risk_metrics as rm
+    return _money_metric(closed)[0]
 
-    from . import money
+
+def _closed_history() -> list | None:
+    from swingbot.core.tracking.performance import TradeLog
     try:
-        converted = money.to_account_currency(closed)
-        amounts = _pnl_amounts(converted)
-        value = rm.max_drawdown_r(amounts)   # unit-agnostic: a cumulative walk
+        rows = TradeLog().get_trades(status=None, limit=None, ledger="main")
+        if not isinstance(rows, list):
+            raise ValueError("invalid closed-history response")
+        return [row for row in rows if not isinstance(row, dict)
+                or row.get("status") in ("win", "loss", "closed")]
     except Exception as exc:
-        swallowed(log, "ops.risk.max_drawdown_amount", exc, level=logging.DEBUG)
-        return {"value": None, "n": 0, "fx_missing_count": 0}
+        swallowed(log, "ops.risk.closed_trades_unavailable", exc, level=logging.WARNING)
+        return None
+
+
+def _population_status(checked: str, count: int, total: int, excluded: int, reason: str) -> dict:
+    state = "ok"
+    if total and count == 0:
+        state = "unavailable"
+    elif excluded:
+        state = "partial"
+    return {"state": state, "checked_at": checked, "reason": None if state == "ok" else reason}
+
+
+def _finite_metric(value) -> float | None:
+    return float(value) if value is not None and math.isfinite(value) else None
+
+
+def _r_metrics(closed: list, checked: str) -> tuple[dict, dict]:
+    from swingbot.core.analytics import metrics as trade_metrics
+    from swingbot.core.analytics import risk_metrics as rm
+    from .risk_read_model import chronological_records
+    ordered, counts = chronological_records(closed, outcome=trade_metrics.r_multiple)
+    values = [float(trade_metrics.r_multiple(row)) for row in ordered]
+    drawdown = rm.max_drawdown_r(values)
+    status = _population_status(checked, len(values), len(closed), counts["excluded_count"],
+                                "invalid_closed_records")
+    if values and drawdown is None:
+        status = {"state": "unavailable", "checked_at": checked, "reason": "invalid_closed_records"}
     return {
-        "value": None if value is None else round(value, 2),
-        "n": len(amounts),
-        "fx_missing_count": money.missing_count(converted),
-    }
+        "sharpe_r": {**_metric(_finite_metric(rm.sharpe_of(values)), len(values)), **counts},
+        "max_drawdown_r": {**_metric(drawdown, len(values)), **counts},
+    }, {"drawdown_r": status}
+
+
+def _closed_metrics(closed: list | None, checked: str) -> tuple[dict, dict]:
+    if closed is None:
+        counts = {"excluded_count": 0, "invalid_date_count": 0, "invalid_outcome_count": 0}
+        unavailable = {"state": "unavailable", "checked_at": checked, "reason": "closed_trades_unavailable"}
+        return {
+            "sharpe_r": {**_metric(None, 0), **counts},
+            "max_drawdown_r": {**_metric(None, 0), **counts},
+            "max_drawdown_amount": {"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0},
+        }, {"drawdown_r": dict(unavailable), "drawdown_amount": dict(unavailable)}
+    metrics, availability = _r_metrics(closed, checked)
+    money, failure = _money_metric(closed)
+    reason = "missing_fx" if money["fx_missing_count"] else "incomplete_money_outcomes"
+    if money["invalid_date_count"]:
+        reason = "invalid_closed_records"
+    money_status = _population_status(checked, money["n"], len(closed), len(closed) - money["n"], reason)
+    if failure:
+        money_status = {"state": "unavailable", "checked_at": checked, "reason": failure}
+    return {**metrics, "max_drawdown_amount": money}, {**availability, "drawdown_amount": money_status}
 
 
 def _risk_bars(symbols: list[str]) -> dict:
@@ -365,67 +432,19 @@ def _distribution_metrics(open_trades: list | None, benchmark: str, checked: str
 
 
 def _risk_metrics_and_correlation() -> tuple[dict, dict, dict]:
-    """Independent trade metrics, signed market metrics and their availability.
-
-    Open entry notionals are valued in account currency on one UTC date,
-    signed by direction, and normalized by gross exposure before netting.
-    Daily quote returns omit historical FX effects; correlation remains
-    between underlying assets. These reads are cached independently of the
-    collector snapshot used by the positions projection.
-    """
-    from swingbot.core.analytics import metrics as trade_metrics
-    from swingbot.core.analytics import risk_metrics as rm
+    """Independently project closed-trade and signed market observations."""
     from swingbot.core.tracking.performance import TradeLog
-
     try:
         open_trades = TradeLog().get_trades(status="open", limit=None)
     except Exception:
         open_trades = None
-
-    try:
-        closed = [
-            t for t in TradeLog().get_trades(status=None, limit=None, ledger="main") or []
-            if t.get("status") in ("win", "loss", "closed")
-        ]
-    except Exception:
-        closed = []
-
-    benchmark = getattr(config, "MARKET_REGIME_TICKER", "SPY") or "SPY"
-    metric_keys = ("var_95", "expected_shortfall_95", "annualised_vol",
-                   "beta_spy", "sharpe_r", "max_drawdown_r")
-
-    # Trade-log-derived, with NO dependency on market/price data at all --
-    # `closed` is already fetched above via its own guard, independent of
-    # anything below. These must survive a market-data outage: an R-multiple
-    # Sharpe/drawdown is real information the trade log already has, and
-    # blanking it because a price fetch failed would discard data that was
-    # never actually at risk from that failure.
-    #
-    # This is its OWN guard, independent of the market-data try/except below
-    # -- a malformed closed-trade record (e.g. a string-typed `entry`, or a
-    # non-dict/malformed leg) can raise from deep inside `r_multiple()`
-    # (metrics.py), and that must degrade only these two trade-derived
-    # metrics, not 500 the whole endpoint (including the killswitch block,
-    # which has nothing to do with the trade log).
-    try:
-        r_series = trade_metrics.r_multiples(closed)
-    except Exception:
-        r_series = []
-    sharpe_r = _metric(rm.sharpe_of(r_series), len(r_series))
-    max_drawdown_r = _metric(rm.max_drawdown_r(r_series), len(r_series))
-    max_drawdown_amount = _max_drawdown_amount(closed)
-
-    null_metrics = {key: _metric(None, 0) for key in metric_keys}
-    null_metrics["sharpe_r"] = sharpe_r
-    null_metrics["max_drawdown_r"] = max_drawdown_r
-    null_metrics["max_drawdown_amount"] = max_drawdown_amount
-    null_metrics["as_of"] = None
-    null_metrics["benchmark_symbol"] = benchmark
-
     checked = datetime.now(timezone.utc).isoformat()
-    market, correlation, availability = _distribution_metrics(open_trades, benchmark, checked)
-    return {**null_metrics, **market}, correlation, availability
-
+    benchmark = getattr(config, "MARKET_REGIME_TICKER", "SPY") or "SPY"
+    closed_metrics, closed_availability = _closed_metrics(_closed_history(), checked)
+    market_metrics, correlation, market_availability = _distribution_metrics(open_trades, benchmark, checked)
+    return {**market_metrics, **closed_metrics, "benchmark_symbol": benchmark}, correlation, {
+        **market_availability, **closed_availability,
+    }
 
 
 @api_v1.route("/risk", methods=["GET"])

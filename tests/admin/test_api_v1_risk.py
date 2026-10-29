@@ -162,11 +162,13 @@ def test_risk_shape(logged_in):
         "benchmark_symbol": str,
     }, where="metrics")
     for key in metric_keys:
+        counts = {"excluded_count": int, "invalid_date_count": int,
+                  "invalid_outcome_count": int} if key in ("sharpe_r", "max_drawdown_r") else {}
         assert_shape(body["metrics"][key], {
-            "value": NULLABLE_NUMBER, "n": int,
+            "value": NULLABLE_NUMBER, "n": int, **counts,
         }, where=f"metrics.{key}")
     assert_shape(body["metrics"]["max_drawdown_amount"], {
-        "value": NULLABLE_NUMBER, "n": int, "fx_missing_count": int,
+        "value": NULLABLE_NUMBER, "n": int, "fx_missing_count": int, "invalid_date_count": int,
     }, where="metrics.max_drawdown_amount")
     # v85 D38.
     assert_shape(body["correlation"], {
@@ -427,21 +429,9 @@ def test_a_market_data_failure_degrades_the_metrics_not_the_page(
     assert body["heat"] is not None
 
 
-def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
+def test_a_malformed_closed_trade_preserves_valid_trade_derived_metrics(
         client, open_book, monkeypatch):
-    """Round 3: `r_series = trade_metrics.r_multiples(closed)` and the
-    `sharpe_r`/`max_drawdown_r` computation run entirely OUTSIDE the
-    market-data try/except (that separation was round 2's fix, for the
-    opposite failure domain) -- and were therefore, until this fix,
-    completely unguarded. A malformed closed-trade record (here, a
-    string-typed `entry`) raises a `TypeError` deep inside
-    `metrics.r_multiple()`'s `abs(entry - stop)`, which must degrade only
-    `sharpe_r`/`max_drawdown_r` to null, not 500 the whole endpoint --
-    including the killswitch control block, which has nothing to do with
-    the trade log. This is the structural mirror of
-    `test_a_market_data_failure_degrades_the_metrics_not_the_page` above,
-    for the trade-log failure domain instead of the market-data one.
-    """
+    """A malformed outcome is excluded and counted beside valid closed trades."""
     open_book(["AAPL"], closed_trades=5)
 
     # A numeric column cannot hold a string `entry`, so the malformed record is
@@ -462,11 +452,10 @@ def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
     body = response.get_json()
     metrics = body["metrics"]
 
-    # Trade-log-derived metrics: degraded to null by the malformed record.
-    assert metrics["sharpe_r"]["value"] is None
-    assert metrics["sharpe_r"]["n"] == 0
-    assert metrics["max_drawdown_r"]["value"] is None
-    assert metrics["max_drawdown_r"]["n"] == 0
+    sharpe = metrics["sharpe_r"]
+    drawdown = metrics["max_drawdown_r"]
+    assert (sharpe["value"] is not None, sharpe["n"], sharpe["invalid_outcome_count"]) == (True, 5, 1)
+    assert (drawdown["value"] is not None, drawdown["n"], drawdown["excluded_count"]) == (True, 5, 1)
 
     # Market-data-derived metrics: unaffected -- this is a trade-log
     # failure, not a market-data one, and the two guards are independent.
@@ -720,7 +709,7 @@ def test_money_drawdown_walks_converted_pnl_in_close_order(logged_in, eur_accoun
         _settled("c2", pnl=-300.0, closed_at="2026-08-04T20:00:00+00:00", status="loss"),
     ])
     metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
-    assert metric == {"value": 225.0, "n": 4, "fx_missing_count": 0}
+    assert metric == {"value": 225.0, "n": 4, "fx_missing_count": 0, "invalid_date_count": 0}
 
 
 def test_a_trade_without_a_rate_is_left_out_and_counted(logged_in, eur_account):
@@ -731,7 +720,7 @@ def test_a_trade_without_a_rate_is_left_out_and_counted(logged_in, eur_account):
     ])
     metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
     # +50, -150 in EUR (cumulative 50, -100): the -900 with no rate is never read as 1.0.
-    assert metric == {"value": 150.0, "n": 2, "fx_missing_count": 1}
+    assert metric == {"value": 150.0, "n": 2, "fx_missing_count": 1, "invalid_date_count": 0}
 
 
 def test_an_unsettled_close_is_left_out_but_not_counted_as_missing(logged_in, eur_account):
@@ -741,7 +730,7 @@ def test_an_unsettled_close_is_left_out_but_not_counted_as_missing(logged_in, eu
         _settled("c3", pnl=-100.0, closed_at="2026-08-05T20:00:00+00:00"),
     ])
     metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
-    assert metric == {"value": 50.0, "n": 2, "fx_missing_count": 0}   # +50, -50 EUR
+    assert metric == {"value": 50.0, "n": 2, "fx_missing_count": 0, "invalid_date_count": 0}   # +50, -50 EUR
 
 
 def test_an_account_in_the_quote_currency_converts_nothing(logged_in, eur_account, monkeypatch):
@@ -752,14 +741,14 @@ def test_an_account_in_the_quote_currency_converts_nothing(logged_in, eur_accoun
         _settled("c2", pnl=-300.0, closed_at="2026-08-04T20:00:00+00:00"),
     ])
     metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
-    assert metric == {"value": 300.0, "n": 2, "fx_missing_count": 0}
+    assert metric == {"value": 300.0, "n": 2, "fx_missing_count": 0, "invalid_date_count": 0}
     assert eur_account == []          # identity: no rate was asked for
 
 
 def test_no_closed_trade_gives_a_null_money_drawdown_not_zero(logged_in, eur_account):
     seed_store("trades", [_open_trade("o1")])
     metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
-    assert metric == {"value": None, "n": 0, "fx_missing_count": 0}
+    assert metric == {"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0}
 
 
 def test_a_conversion_failure_degrades_only_the_money_drawdown(logged_in, eur_account, monkeypatch):
@@ -774,7 +763,7 @@ def test_a_conversion_failure_degrades_only_the_money_drawdown(logged_in, eur_ac
     response = logged_in.get("/api/v1/risk")
     assert response.status_code == 200
     metrics = response.get_json()["metrics"]
-    assert metrics["max_drawdown_amount"] == {"value": None, "n": 0, "fx_missing_count": 0}
+    assert metrics["max_drawdown_amount"] == {"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0}
     assert metrics["max_drawdown_r"]["value"] is not None
 
 
@@ -787,7 +776,7 @@ def test_pnl_amounts_sorts_by_close_and_skips_unpriced_rows():
         {"closed_at": "2026-08-04T00:00:00+00:00", "realized_pnl_amount": None},
         {"closed_at": None, "realized_pnl_amount": 9.0},
     ]
-    assert _pnl_amounts(rows) == [1.0, 3.0, 9.0]   # no close stamp sorts last
+    assert _pnl_amounts(rows) == [1.0, 3.0]   # undated amounts are excluded before the walk
     assert _pnl_amounts([]) == []
 
 
@@ -1003,7 +992,7 @@ def test_distribution_market_failure_preserves_trade_metrics(distribution_inputs
     risk, _ = distribution_inputs
     monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
                         [_open_trade("open")] if status == "open" else [_closed_trade("closed")])
-    monkeypatch.setattr(risk, "_max_drawdown_amount", lambda closed: {"value": 0, "n": 1, "fx_missing_count": 0})
+    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": 0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}, None))
     monkeypatch.setattr(risk, "_risk_bars", unavailable_read)
     metrics, _, availability = risk._risk_metrics_and_correlation()
     assert metrics["max_drawdown_r"]["n"] == 1
@@ -1039,7 +1028,7 @@ def test_distribution_unavailable_open_read_and_configured_benchmark(distributio
     risk, _ = distribution_inputs
     monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "QQQ")
     monkeypatch.setattr(TradeLog, "get_trades", lambda *args, **kwargs: None)
-    monkeypatch.setattr(risk, "_max_drawdown_amount", lambda closed: {"value": None, "n": 0, "fx_missing_count": 0})
+    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0}, None))
     metrics, _, availability = risk._risk_metrics_and_correlation()
     assert metrics["benchmark_symbol"] == "QQQ"
     assert availability["distribution_metrics"]["reason"] == "positions_unavailable"
@@ -1086,7 +1075,7 @@ def test_distribution_failed_open_read_preserves_closed_metrics(distribution_inp
         return [_closed_trade("closed")]
 
     monkeypatch.setattr(TradeLog, "get_trades", trades)
-    monkeypatch.setattr(risk, "_max_drawdown_amount", lambda closed: {"value": 0, "n": 1, "fx_missing_count": 0})
+    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": 0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}, None))
     metrics, _, availability = risk._risk_metrics_and_correlation()
     assert metrics["max_drawdown_r"]["n"] == 1
     assert metrics["max_drawdown_amount"]["n"] == 1
@@ -1112,4 +1101,183 @@ def test_distribution_computation_failure_is_sanitized(distribution_inputs, monk
     assert metrics["var_95"]["value"] is None
     assert corr["labels"] == ["AAPL"]
     assert availability["distribution_metrics"]["reason"] == "market_data_unavailable"
+
+
+def _r_trade(trade_id, stamp, outcome):
+    return {"id": trade_id, "ticker": "AAPL", "status": "closed", "direction": "bullish",
+            "entry": 100.0, "stop_loss": 90.0, "exit_price": 100.0 + outcome * 10,
+            "shares": 10, "opened_at": "2026-01-01T00:00:00Z", "closed_at": stamp}
+
+
+@pytest.fixture
+def isolated_eur_account(monkeypatch):
+    from swingbot.core.marketdata import fx
+    asked = []
+
+    def rate(quote, account, on):
+        asked.append((quote, account, on))
+        return 0.5
+
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: None if ticker == "NOFX" else "USD")
+    monkeypatch.setattr(fx, "fx_rate", rate)
+    return asked
+
+
+def test_closed_projection_r_order_and_reconciled_exclusions(isolated_eur_account):
+    from swingbot.admin.api_v1 import risk
+    rows = [_r_trade("late", "2026-03-03T10:00:00Z", 1),
+            _r_trade("first", "2026-03-01T10:00:00Z", -1),
+            _r_trade("middle", "2026-03-02T10:00:00Z", -1),
+            _r_trade("both_bad", None, float("nan")),
+            _r_trade("bad_outcome", "2026-03-04", float("nan")),
+            {**_r_trade("zero_risk", "2026-03-05", 1), "stop_loss": 100.0}]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_r"] == {
+        "value": 2.0, "n": 3, "excluded_count": 3,
+        "invalid_date_count": 1, "invalid_outcome_count": 2}
+    assert metrics["sharpe_r"]["n"] == 3
+    assert metrics["sharpe_r"]["excluded_count"] == 3
+    assert availability["drawdown_r"]["state"] == "partial"
+    assert json.dumps(metrics, allow_nan=False)
+
+
+@pytest.mark.parametrize("invalid", [{"exit_price": None}, {"legs": ["malformed"]}, {"direction": None}])
+def test_closed_projection_missing_r_is_excluded(invalid, isolated_eur_account):
+    from swingbot.admin.api_v1 import risk
+    metrics, availability = risk._closed_metrics(
+        [{**_r_trade("bad", "2026-03-01", 1), **invalid}], _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_r"] == {
+        "value": None, "n": 0, "excluded_count": 1,
+        "invalid_date_count": 0, "invalid_outcome_count": 1}
+    assert availability["drawdown_r"]["state"] == "unavailable"
+
+
+def test_closed_projection_money_date_filter_precedes_fx(isolated_eur_account):
+    from datetime import date
+    from swingbot.admin.api_v1 import risk
+    rows = [_settled("bad_date", ticker="NOFX", pnl=-900, closed_at=None),
+            _settled("loss", pnl=-100, closed_at="2026-08-04T20:00:00Z")]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_amount"] == {
+        "value": 50.0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 1}
+    assert availability["drawdown_amount"]["state"] == "partial"
+    assert isolated_eur_account == [("USD", "EUR", date(2026, 8, 4))]
+
+
+@pytest.mark.parametrize("amount", [float("nan"), float("inf"), float("-inf")])
+def test_closed_projection_nonfinite_money_blanks_only_money(isolated_eur_account, amount):
+    from swingbot.admin.api_v1 import risk
+    rows = [_settled("nonfinite", pnl=amount, closed_at="2026-08-04T20:00:00Z")]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_amount"]["value"] is None
+    assert availability["drawdown_amount"]["reason"] == "money_conversion_unavailable"
+    assert metrics["max_drawdown_r"]["n"] == 1
+    assert availability["drawdown_r"]["state"] == "ok"
+    assert json.dumps(metrics, allow_nan=False)
+
+
+def test_closed_projection_empty_and_failed_read_differ(isolated_eur_account):
+    from swingbot.admin.api_v1 import risk
+    empty, empty_status = risk._closed_metrics([], _DISTRIBUTION_CHECKED)
+    failed, failed_status = risk._closed_metrics(None, _DISTRIBUTION_CHECKED)
+    assert empty["max_drawdown_r"]["value"] is None
+    assert failed["max_drawdown_r"]["value"] is None
+    assert empty_status["drawdown_r"]["state"] == "ok"
+    assert empty_status["drawdown_amount"]["state"] == "ok"
+    assert failed_status["drawdown_r"]["reason"] == "closed_trades_unavailable"
+    assert failed_status["drawdown_amount"]["state"] == "unavailable"
+
+
+def test_closed_projection_failed_closed_read_preserves_market(distribution_inputs, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+
+    def trades(self, status=None, **kwargs):
+        if status == "open":
+            return [_open_trade("open")]
+        raise OSError("private closed ledger diagnostic")
+
+    monkeypatch.setattr(TradeLog, "get_trades", trades)
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["beta_spy"]["value"] == pytest.approx(1.0)
+    assert availability["distribution_metrics"]["state"] == "ok"
+    assert availability["drawdown_r"]["reason"] == "closed_trades_unavailable"
+
+
+@pytest.mark.parametrize("missing,reason,fx_count", [
+    ({"ticker": "NOFX", "realized_pnl_amount": -900.0}, "missing_fx", 1),
+    ({"realized_pnl_amount": None}, "incomplete_money_outcomes", 0),
+])
+def test_closed_projection_money_partial_reasons(isolated_eur_account, missing, reason, fx_count):
+    from swingbot.admin.api_v1 import risk
+    rows = [_settled("known", pnl=-100, closed_at="2026-08-01"),
+            {**_settled("missing", pnl=-100, closed_at="2026-08-02"), **missing}]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_amount"] == {
+        "value": 50.0, "n": 1, "fx_missing_count": fx_count, "invalid_date_count": 0}
+    assert availability["drawdown_amount"]["state"] == "partial"
+    assert availability["drawdown_amount"]["reason"] == reason
+    assert availability["drawdown_r"]["state"] == "ok"
+
+
+def test_closed_projection_conversion_failure_preserves_r_and_market(distribution_inputs, monkeypatch):
+    from swingbot.admin.api_v1 import money
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
+                        [_open_trade("open")] if status == "open" else [_closed_trade("closed")])
+    monkeypatch.setattr(money, "to_account_currency", unavailable_read)
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["max_drawdown_r"]["n"] == 1
+    assert availability["drawdown_r"]["state"] == "ok"
+    assert availability["drawdown_amount"]["reason"] == "money_conversion_unavailable"
+    assert availability["distribution_metrics"]["state"] == "ok"
+    assert metrics["beta_spy"]["value"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("closed", [None, {}, "malformed"])
+def test_closed_projection_invalid_history_is_unavailable(distribution_inputs, monkeypatch, closed):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
+                        [_open_trade("open")] if status == "open" else closed)
+    _, _, availability = risk._risk_metrics_and_correlation()
+    assert availability["drawdown_r"]["reason"] == "closed_trades_unavailable"
+    assert availability["distribution_metrics"]["state"] == "ok"
+
+
+def test_closed_projection_wrapper_preserves_same_currency_amounts(isolated_eur_account, monkeypatch):
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.marketdata import fx
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "USD")
+    rows = [_settled("loss", pnl=-100, closed_at="2026-08-01")]
+    assert risk._max_drawdown_amount(rows) == {
+        "value": 100.0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}
+    assert isolated_eur_account == []
+
+
+def test_closed_projection_nonfinite_cumulative_money_is_unavailable(isolated_eur_account, monkeypatch):
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.marketdata import fx
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "USD")
+    rows = [_settled("a", pnl=-1e308, closed_at="2026-08-01"),
+            _settled("b", pnl=-1e308, closed_at="2026-08-02")]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_amount"]["value"] is None
+    assert availability["drawdown_amount"]["reason"] == "money_conversion_unavailable"
+    assert availability["drawdown_r"]["state"] == "ok"
+    assert json.dumps(metrics, allow_nan=False)
+
+
+def test_closed_projection_history_retains_invalid_records_for_counting(distribution_inputs, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    rows = [_closed_trade("valid"), _open_trade("open"), "malformed"]
+    monkeypatch.setattr(TradeLog, "get_trades", lambda *args, **kwargs: rows)
+    selected = risk._closed_history()
+    metrics, availability = risk._closed_metrics(selected, _DISTRIBUTION_CHECKED)
+    assert selected == [rows[0], "malformed"]
+    assert metrics["max_drawdown_r"]["invalid_date_count"] == 1
+    assert availability["drawdown_r"]["state"] == "partial"
     assert "private diagnostic" not in str(availability)

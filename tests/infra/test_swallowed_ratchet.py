@@ -40,7 +40,7 @@ EXCLUDED: dict[str, str] = {}
 ROOT_FILES: tuple[str, ...] = ("bot.py", "admin_ui.py", "admin_wsgi.py")
 
 #: Repo-wide untagged handlers, measured after the v148 conversion (OH15).
-BASELINE: int = 230
+BASELINE: int = 228
 
 TAG_RE = re.compile(r"^(scan|marketdata|earnings|runstate|ops)\.[a-z0-9_]+(\.[a-z0-9_]+)*$")
 
