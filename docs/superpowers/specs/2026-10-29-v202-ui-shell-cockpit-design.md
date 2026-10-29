@@ -188,9 +188,14 @@ invented.
   dock being open. When nothing is wrong it renders nothing, so the top bar
   stays clean. It names the problem ("Data stale 12 min", "Disconnected",
   "Bot down") and opens the dock.
-- **More sheet (phone).** It lists Insights (with its three sections),
-  System (Health, Versions) and the profile actions. These are the entries
-  that do not fit the four tabs.
+- **More sheet (phone).** It lists Insights (with its three sections) and
+  System (Health, Versions), the entries that do not fit the four tabs. The
+  profile actions stay in the phone top bar's `sb-profile-menu` and are not
+  repeated in the sheet.
+- **Plan split.** The implementation runs as two plans: v202 (the `/live`
+  endpoint, routes and nav model) and v203 (the rail, Live dock, strip,
+  sheet, top bar and layout audit). The split keeps each plan within
+  `plan_lint`'s 20-task cap.
 - **Unchanged.** The engaged-killswitch alarm strip, the "killswitch state
   unavailable" strip, the scan-progress bar hung from the top bar, the
   route-loading overlay, focus management (`route-focus.ts`) and the command

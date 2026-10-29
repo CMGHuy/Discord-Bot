@@ -356,7 +356,7 @@ Expected: PASS each. `test_every_angular_route_is_served_on_reload` now sees `in
 
 Lint: `npm --prefix <wt>/frontend run lint`. Expected: clean (the `_lazy`/`_component` destructuring names are unused on purpose; if the lint config flags them, use `void _lazy; void _component;` rather than adding a suppression).
 
-Layout: no shell markup changes in this task, and pages move under new URLs unchanged. V202-18 audits the new paths at all three widths.
+Layout: no shell markup changes in this task, and pages move under new URLs unchanged. V203-10 audits the new paths at all three widths.
 
 - [ ] **Step 7: Commit**
 
