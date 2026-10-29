@@ -241,7 +241,8 @@ threshold or live alert.
 5. **Ranking.**
    - **Display:** each row shows its projected pooled change. For exploit,
      keeping only the cell gives cell ExpR minus pooled ExpR. For avoid,
-     dropping the cell gives about (1 − share) · Δ. Both come from the JSON.
+     dropping the cell gives complement ExpR minus pooled ExpR, which is
+     −share · Δ. Both come from the JSON.
    - **Sort:** the key stays the bound. The exploit key is `-lower`
      ascending, as today, and the avoid key is `+upper` ascending.
 6. **Schema 1 (legacy).** An older autopsy re-merges under the old one-sided
