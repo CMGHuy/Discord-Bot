@@ -38,6 +38,10 @@ def _stub_portfolio(monkeypatch):
         "kill": {"on": False, "reason": None},
         "growth": {"current_multiple": 1.32, "pct_to_target": 12.1},
     }
+    state["availability"] = {
+        key: {"state": "ok", "checked_at": "2026-10-28T00:00:00+00:00", "reason": None}
+        for key in ("positions", "heat", "sector_heat", "clusters", "throttle", "killswitch")
+    }
     # SP2 binds collect_portfolio_state under this local name in growth.py.
     monkeypatch.setattr(growth_mod, "_collect_portfolio_state", lambda: dict(state))
 

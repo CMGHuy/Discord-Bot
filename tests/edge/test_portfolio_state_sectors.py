@@ -71,8 +71,9 @@ def test_a_failing_sector_map_logs_a_warning_with_the_exception_text(book, monke
     monkeypatch.setattr(universe, "sector_map", _boom)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         state = portfolio_state.collect_portfolio_state()
-    assert state["sector_heat"] == {}
+    assert state["sector_heat"] is None
     assert state["unmapped_count"] == 3
+    assert state["availability"]["sector_heat"]["reason"] == "sector_map_unavailable"
     assert any(r.levelno == logging.WARNING and "universe file is corrupt" in r.getMessage()
                for r in caplog.records if r.name == LOGGER)
 
@@ -84,7 +85,8 @@ def test_a_failing_sector_heat_logs_a_warning_with_the_exception_text(book, monk
     monkeypatch.setattr(heat, "sector_heat", _boom)
     with caplog.at_level(logging.WARNING, logger=LOGGER):
         state = book(FULL_MAP)
-    assert state["sector_heat"] == {}
+    assert state["sector_heat"] is None
+    assert state["availability"]["sector_heat"]["reason"] == "sector_heat_unavailable"
     assert any(r.levelno == logging.WARNING and "heat blew up" in r.getMessage()
                for r in caplog.records if r.name == LOGGER)
 
