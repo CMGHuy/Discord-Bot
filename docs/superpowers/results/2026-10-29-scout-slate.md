@@ -84,3 +84,7 @@ Run 2026-10-29 over `bf8e6b37` (quant-researcher on opus). No BLOCKING findings.
 - quant-researcher [ADVISORY]: Rank 3 (atr-reentry-after-stop) borders the closed v108 E re-arm and the v114/v139 stop-geometry work (`docs/claude/backtest-methodology.md:260-261,288`). A /screen must freeze a distinct trigger with unchanged stop width, and the edge is probably `volume` as well -- recorded as a condition on that route.
 - quant-researcher [ADVISORY]: Rank 4 (tight-base-breakout) borders `range_breakdown_close` SCREEN-FAIL, `high52w` SCREEN-FAIL and v105 NO-LIFT (`backtest-methodology.md:266,309,323`). Controller note: Support/Resistance already carries a tight-base breakout (`docs/strategy-types/support-resistance.md:21`, WEAK). It was picked for /screen on 2026-10-16 and never screened -- recorded as a condition on that route.
 - quant-researcher [ADVISORY]: uncertainty comes from 14 week-clusters with lopsided complements, and thin complements should be reported as thin -- recorded.
+
+## Partner pick
+
+On 2026-10-29 the partner sent no ranked row onward and chose to fix the autopsy and scout tooling first: alert timestamps, the August stall exclusion, an exit-era split, the gap-bucket sign note, and the merge's one-sided rule. That is an integrity spec, not a /screen or /prereg route. Two consecutive slates (10-21, 10-29) have now sent no row onward. The removal condition (three in a row) is not yet met, and the next slate should be read against it.
