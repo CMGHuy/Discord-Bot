@@ -45,13 +45,48 @@ def _unmapped_count(open_trades: list, sectors: dict) -> int:
     return sum(1 for trade in open_trades if not sectors.get(trade.get("ticker")))
 
 
+def _cluster_groups(open_trades: list, balance, sectors: dict, dfs: dict) -> list:
+    from swingbot.core.edge import correlation
+
+    clusters = []
+    seen = set()
+    tickers = sorted({t.get("ticker") for t in open_trades if t.get("ticker")})
+    for ticker in tickers:
+        result = correlation.cluster_exposure(
+            open_trades, ticker, dfs, balance, sectors=sectors)
+        cluster = result.get("cluster") or []
+        if not cluster:
+            continue
+        group = frozenset({ticker}) | frozenset(cluster)
+        if len(group) < 2 or group in seen:
+            continue
+        seen.add(group)
+        clusters.append(sorted(group))
+    return clusters
+
+
+def _cluster_state(open_trades: list, balance, sectors: dict) -> list:
+    from swingbot.core.marketdata.data import get_daily_data
+
+    try:
+        tickers = sorted({t.get("ticker") for t in open_trades if t.get("ticker")})
+        dfs = {}
+        for ticker in tickers:
+            try:
+                dfs[ticker] = get_daily_data(ticker)
+            except Exception:
+                continue
+        return _cluster_groups(open_trades, balance, sectors, dfs)
+    except Exception:
+        return []
+
+
 def collect_portfolio_state() -> dict:
     """Assemble the !portfolio survival-dashboard state from the E7/E8/E45/
     E47/E9 accessors over the open-trade list. Mirrors _collect_stats's
     soft-import style: every sub-collector try/excepted to a safe default
     so a missing/broken piece never kills the whole command."""
-    from swingbot.core.edge import correlation, heat, throttle
-    from swingbot.core.marketdata.data import get_daily_data
+    from swingbot.core.edge import heat, throttle
     state: dict = {}
 
     try:
@@ -109,29 +144,6 @@ def collect_portfolio_state() -> dict:
     except Exception:
         state["growth"] = {}
 
-    try:
-        clusters: list = []
-        tickers = sorted({t.get("ticker") for t in open_trades if t.get("ticker")})
-        dfs: dict = {}
-        for ticker in tickers:
-            try:
-                dfs[ticker] = get_daily_data(ticker)
-            except Exception:
-                continue
-        seen: set = set()
-        for ticker in tickers:
-            result = correlation.cluster_exposure(
-                open_trades, ticker, dfs, balance, sectors=sectors)
-            cluster = result.get("cluster") or []
-            if not cluster:
-                continue
-            group = frozenset({ticker}) | frozenset(cluster)
-            if len(group) < 2 or group in seen:
-                continue
-            seen.add(group)
-            clusters.append(sorted(group))
-        state["clusters"] = clusters
-    except Exception:
-        state["clusters"] = []
+    state["clusters"] = _cluster_state(open_trades, balance, sectors)
 
     return state
