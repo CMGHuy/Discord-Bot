@@ -228,7 +228,8 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
   styles: `
     /* v195 Phase 4: sb-page owns the page rhythm. No backticks in here: these styles live in a TS template literal. */
     :host { display: block; min-width: 0; }
-    .head-status { display: flex; align-items: center; }
+    /* contents: sb-page's actions slot lays the status out. */
+    .head-status { display: contents; }
 
     /* v95 D5: the rail width was 4.5rem written into five rules, inside a
        strip with overflow: hidden -- so at 390px the timeline was cut off

@@ -339,7 +339,8 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     /* No backticks in here: these styles live in a TS template literal. */
     /* v195 Phase 4: sb-page owns the page rhythm. */
     :host { display: block; min-width: 0; }
-    .head-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); }
+    /* contents: sb-page's actions slot lays the status out. */
+    .head-status { display: contents; }
     /* All-time, so it reads across the whole width beside nothing. */
     .weekday-panel { grid-column: 1 / -1; }
 

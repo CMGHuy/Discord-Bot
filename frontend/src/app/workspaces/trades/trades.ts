@@ -586,7 +586,8 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     .scope, .table-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
     /* Wraps under the title on a phone; the result and error lines take
        their own row above the buttons. */
-    .page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-8); }
+    /* contents: sb-page's actions slot is already the right-aligned wrapping row. */
+    .page-actions { display: contents; }
     .page-actions p { flex: 1 0 100%; margin: 0; text-align: right; }
     .export-wrap { display: inline-flex; align-items: center; gap: var(--space-4); }
 
