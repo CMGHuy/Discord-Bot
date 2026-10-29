@@ -4,6 +4,7 @@ import { Params, Router } from '@angular/router';
 import { AnalyticsUnit, BookScope } from '../../api/models';
 import { AnalyticsStore } from '../../stores/analytics.store';
 import { Tab, TabBar } from '../../ui/layout';
+import { Page } from '../../ui/page';
 import { ScopeBar, fxMissingOf } from './scope-bar';
 import { scopeToQueryParams } from './scope-url';
 import { AttributionTab } from './tabs/attribution';
@@ -24,7 +25,7 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
 /**
  * Analytics — seven tabs in the order a trader asks (spec v94 D1; v142 adds
  * Partials last), one scope
- * bar above them (D2). This file is a shell: the tab strip, the bar, and a
+ * bar above them (D2). This file is a shell: the tab strip and the bar (the page's scope bar since v195), and a
  * switch. Every panel lives in `tabs/`, so no file here grows back into the
  * 2,233-line component v94 replaced.
  */
@@ -39,26 +40,37 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
   // the tabs are projected into this host, and a register declared six times
   // is six chances for two tabs to disagree about their own density.
   host: { class: 'register-instrument' },
-  imports: [TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab],
+  imports: [Page, TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab],
   template: `
-    <sb-tab-bar [tabs]="tabs" [active]="store.tab()" (activeChange)="goToTab($event)" />
-    <sb-scope-bar
-      [scope]="store.scope()" [unit]="store.unit()" [n]="store.scopeN()"
-      [allTimePanels]="store.allTimePanelCount()" [strategies]="strategyNames()"
-      [horizons]="horizons()" [asOf]="store.asOf()" [fxMissing]="fxMissing()" [tuning]="store.tab() === 'tuning'"
-      (scopeChange)="onScope($event)" (unitChange)="onUnit($event)" (cleared)="store.clearScope()" />
-
-    @switch (store.tab()) {
-      @case ('overview') { <sb-overview-tab /> }
-      @case ('attribution') { <sb-attribution-tab /> }
-      @case ('execution') { <sb-execution-tab /> }
-      @case ('edge') { <sb-edge-tab /> }
-      @case ('pipeline') { <sb-pipeline-tab /> }
-      @case ('tuning') { <sb-tuning-tab /> }
-      @case ('partials') { <sb-partials-tab /> }
-    }
+    <!-- v195 Phase 4: the route title is the page's one h1. The tab strip
+         and the one scope bar are the page's scope (filters and tabs only);
+         the open tab is the primary panel and owns its own panels. -->
+    <sb-page>
+      <div page-scope class="scope">
+        <sb-tab-bar [tabs]="tabs" [active]="store.tab()" (activeChange)="goToTab($event)" />
+        <sb-scope-bar
+          [scope]="store.scope()" [unit]="store.unit()" [n]="store.scopeN()"
+          [allTimePanels]="store.allTimePanelCount()" [strategies]="strategyNames()"
+          [horizons]="horizons()" [asOf]="store.asOf()" [fxMissing]="fxMissing()" [tuning]="store.tab() === 'tuning'"
+          (scopeChange)="onScope($event)" (unitChange)="onUnit($event)" (cleared)="store.clearScope()" />
+      </div>
+      <div page-primary class="tab-body">
+        @switch (store.tab()) {
+          @case ('overview') { <sb-overview-tab /> }
+          @case ('attribution') { <sb-attribution-tab /> }
+          @case ('execution') { <sb-execution-tab /> }
+          @case ('edge') { <sb-edge-tab /> }
+          @case ('pipeline') { <sb-pipeline-tab /> }
+          @case ('tuning') { <sb-tuning-tab /> }
+          @case ('partials') { <sb-partials-tab /> }
+        }
+      </div>
+    </sb-page>
   `,
-  styles: `:host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); }`,
+  styles: `
+    :host { display: block; min-width: 0; }
+    .scope, .tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); min-width: 0; }
+  `,
 })
 export class Analytics {
   protected readonly store = inject(AnalyticsStore);

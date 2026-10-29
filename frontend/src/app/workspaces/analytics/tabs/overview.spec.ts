@@ -10,10 +10,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { AnalyticsStore, RELOCATED_METRICS } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
-import { ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_SHARPE_LABEL, OverviewTab } from './overview';
+import { ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_EXPR_ABOUT, ANALYTICS_SHARPE_LABEL, OverviewTab } from './overview';
 import { BAND_OK } from './variance-band.fixture';
 import { Hint } from '../../../ui/hint';
-import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
 
 /** The text of the sb-hint whose aria label is `label` (A4 audit). */
 function hintText(fixture: ComponentFixture<unknown>, label: string): string {
@@ -293,5 +293,50 @@ describe('overview.ts breakpoints', () => {
     const secondary = tile.querySelector('.secondary')!.textContent!;
     expect(secondary).toContain('30');
     expect(secondary).toContain('$');
+  });
+});
+
+/* -- v195 §5.2 -- the performance strip leads with expectancy --------------- */
+
+describe('OverviewTab performance strip (v195 §5.2)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  const tiles = (fixture: ReturnType<typeof render>['fixture']): StatTile[] =>
+    fixture.debugElement.queryAll(By.css('sb-stat-tile')).map((d) => d.componentInstance as StatTile);
+
+  it('leads with ExpR, win rate after it, never in the lead slot', () => {
+    const { fixture } = render();
+    expect(tiles(fixture).map((tile) => tile.label())).toEqual([
+      'ExpR', 'Win rate', 'Total R', 'Profit factor', ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_SHARPE_LABEL,
+    ]);
+  });
+
+  it('shows N on every tile and states the paper, pre-cost, pre-tax basis in each About hint', () => {
+    const { fixture } = render();
+    for (const tile of tiles(fixture)) {
+      expect(tile.sample(), tile.label()).not.toBeNull();
+      expect(tile.about(), tile.label()).toContain(PERFORMANCE_CAVEAT);
+      expect(tile.about()!.split(PERFORMANCE_CAVEAT), tile.label()).toHaveLength(2);
+    }
+    expect(tiles(fixture)[0].about()).toBe(ANALYTICS_EXPR_ABOUT);
+  });
+
+  it('marks a thin ExpR sample with the small-N cue', () => {
+    const { el } = render();
+    // The stub's expectancy_n is 34 (adequate); the equity points_n is 2 (thin).
+    const total = Array.from(el.querySelectorAll('sb-stat-tile'))
+      .find((tile) => tile.querySelector('.label')?.textContent?.trim() === 'Total R')!;
+    expect(total.querySelector('.thin')).not.toBeNull();
+    const expr = el.querySelector('sb-stat-tile')!;
+    expect(expr.querySelector('.thin')).toBeNull();
+  });
+
+  it('rules the tiles as one auto-fit stat strip and declares no grid of its own', () => {
+    const { el } = render();
+    const strip = el.querySelector('sb-stat-strip.kpis')!;
+    expect(strip.querySelectorAll('sb-stat-tile')).toHaveLength(6);
+    expect(strip.querySelector('.sb-strip-grid')!.classList).not.toContain('sb-strip-fixed');
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/tabs/overview.ts'), 'utf8');
+    expect(src).not.toMatch(/\.kpis\s*\{/);
   });
 });

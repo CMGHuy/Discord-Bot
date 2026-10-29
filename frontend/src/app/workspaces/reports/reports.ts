@@ -5,7 +5,7 @@ import { ReportTab, ReportsStore } from '../../stores/reports.store';
 import { Async, asyncInputs } from '../../ui/async';
 import { Freshness } from '../../ui/freshness';
 import { Tab, TabBar } from '../../ui/layout';
-import { SectionHead } from '../../ui/section-head';
+import { Page } from '../../ui/page';
 import { AttributionTab } from './attribution-tab';
 import { GatesTab } from './gates-tab';
 
@@ -22,7 +22,7 @@ const RUN_COMMAND: Record<ReportTab, string> = {
 /**
  * Reports — what the measurements say about entries and gates.
  *
- * A shell: the tab strip, the freshness marker, the not-yet-run state and
+ * A shell on sb-page: the freshness marker in the header, the tab strip as the scope bar, the not-yet-run state and
  * the fixed footer. Each tab is its own component and fetches only its own
  * report (the route resolver calls `ReportsStore.resolveTab`).
  *
@@ -33,39 +33,43 @@ const RUN_COMMAND: Record<ReportTab, string> = {
 @Component({
   selector: 'sb-reports',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, AttributionTab, Freshness, GatesTab, SectionHead, TabBar],
+  imports: [Async, AttributionTab, Freshness, GatesTab, Page, TabBar],
   host: { class: 'register-instrument' },
   template: `
-    <sb-section-head>
+    <!-- v195 Phase 4: the route title is the page's one h1. -->
+    <sb-page>
       <!-- A report has no cadence, so it is never flagged stale: the
-           timestamp itself is the information. -->
-      <sb-freshness actions [at]="store.generatedAt()" [staleAfterSec]="neverStale" />
-    </sb-section-head>
+           timestamp itself is the information. A status at the header's
+           right, not a command. -->
+      <sb-freshness page-actions [at]="store.generatedAt()" [staleAfterSec]="neverStale" />
 
-    <sb-tab-bar [tabs]="tabs" [active]="store.tab()" (activeChange)="goToTab($event)" />
+      <sb-tab-bar page-scope [tabs]="tabs" [active]="store.tab()" (activeChange)="goToTab($event)" />
 
-    <sb-async
-      [loading]="async().loading"
-      [error]="async().error"
-      [empty]="async().empty"
-      [staleAsOf]="async().staleAsOf"
-      emptyReason="no-data-yet"
-      emptyTitle="Not yet run"
-      [emptyHint]="runHint()"
-      [skeletonRows]="8"
-      [skeletonCols]="5"
-      (retry)="store.load()"
-    >
-      @switch (store.tab()) {
-        @case ('gates') { <sb-gates-tab /> }
-        @default { <sb-expectancy-attribution-tab /> }
-      }
-    </sb-async>
-
-    <p class="disclaimer">{{ disclaimer }}</p>
+      <div page-primary class="report-body">
+        <sb-async
+          [loading]="async().loading"
+          [error]="async().error"
+          [empty]="async().empty"
+          [staleAsOf]="async().staleAsOf"
+          emptyReason="no-data-yet"
+          emptyTitle="Not yet run"
+          [emptyHint]="runHint()"
+          [skeletonRows]="8"
+          [skeletonCols]="5"
+          (retry)="store.load()"
+        >
+          @switch (store.tab()) {
+            @case ('gates') { <sb-gates-tab /> }
+            @default { <sb-expectancy-attribution-tab /> }
+          }
+        </sb-async>
+        <p class="disclaimer">{{ disclaimer }}</p>
+      </div>
+    </sb-page>
   `,
   styles: `
-    :host { display: grid; gap: var(--space-14); }
+    :host { display: block; min-width: 0; }
+    .report-body { display: grid; gap: var(--space-14); min-width: 0; }
     .disclaimer { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
   `,
 })
