@@ -108,7 +108,12 @@ threshold or live alert.
        `DISCORD_CHANNEL_TRADES_SIMPLE_ID` mirror (`swingbot/config.py:111-114`).
        History from 2026-07-01 to 2026-09-16 inclusive, bot-authored
        messages only.
-     - **Match key:** ticker, direction, strategy, `horizon_key`, and an
+     - **Exact match first:** a message whose embed footer or url carries a
+       `plan_id` (`apply_chrome`) matches that plan directly. The key match
+       below only applies to messages without one. The dry-run reports how
+       many matches were made each way.
+     - **Match key:** ticker, direction, strategy, `horizon_key` (mapped
+       from the embed's horizon label), and an
        Eastern date equal to the plan's `created_at` date or the next trading
        day.
      - **One-to-one:** a plan matches when it has exactly one candidate
