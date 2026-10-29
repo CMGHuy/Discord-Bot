@@ -4,7 +4,7 @@
 
 **Bump:** ui patch, bot patch
 **Edge:** none (integrity)
-**Spec:** [Approved risk spec](../specs/2026-10-28-v198-risk-reporting-correctness.md)
+**Spec:** [Approved risk spec](../../specs/implemented/2026-10-28-v198-risk-reporting-correctness.md)
 
 **Goal:** Correct three demonstrated reporting failures: unavailable sources appearing safe, short positions contributing long returns, and drawdown omitting initial losses or walking the wrong chronology. Preserve useful independent data when one source fails. Add explicit coverage and unknown states throughout the API, Risk page, shell killswitch display and Discord portfolio command. Keep scan gates, sizing, stops, account accounting and entry/exit behavior unchanged. Synthetic numerical cases and injected dependency failures establish success; this plan makes no live-book performance claim.
 
@@ -106,3 +106,7 @@ The authoring statements above are historical. Tasks V198-1 through V198-5b were
 The final frontend `npm test` exited 0: 237 test files passed, 5,559 tests passed and 4 skipped. The quant-engineer panel identified an overflow case in distribution metrics; commit `1f2a546d` addressed it, with 19 isolated distribution tests and the complexity gate passing. The same panel reviewer confirmed the finding addressed and reported no new breakage.
 
 Outstanding gates: the full backend suite and store-backed API tests require the production replica and were not run; the layout audit requires a running authenticated local application and was not run under the current no-database restriction. The branch has not been merged or released, and the release/history commits and document close-out remain pending. Do not infer a final pass from the focused checks or the frontend result.
+
+## Close-out direction — 2026-10-29
+
+After being informed of those outstanding gates, the partner directed the branch to be merged and the plan closed. The full backend suite, store-backed API tests and authenticated layout audit were not run; no full-verification pass is claimed. Main's v195 layout was integrated in `f8928f72`, with focused shell and store tests passing and the Risk workspace spec passing 90 tests. A final quant-engineer panel reviewed the integrated branch and returned CLEAN. The release-history regression passed 13 tests after the UI and bot patch releases.

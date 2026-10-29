@@ -1,6 +1,6 @@
 # Risk reporting correctness — drawdown and final verification
 
-**Spec:** [Approved risk spec](../specs/2026-10-28-v198-risk-reporting-correctness.md)
+**Spec:** [Approved risk spec](../../specs/implemented/2026-10-28-v198-risk-reporting-correctness.md)
 **Index:** [Contracts, constraints and task ledger](2026-10-28-v198-risk-reporting-correctness_0-index.md)
 
 This part follows V198-4b's three-result metric contract and preserves its independent market block. Commands are implementation instructions only. No source change, test, database operation or production work was performed while authoring. The partner approved the written design for planning on 2026-10-28; implementation remains unstarted.

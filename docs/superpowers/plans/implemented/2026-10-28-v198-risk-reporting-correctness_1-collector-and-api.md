@@ -1,6 +1,6 @@
 # Risk reporting correctness — collector and API
 
-**Spec:** [Approved risk spec](../specs/2026-10-28-v198-risk-reporting-correctness.md)
+**Spec:** [Approved risk spec](../../specs/implemented/2026-10-28-v198-risk-reporting-correctness.md)
 **Index:** [Contracts, constraints and task ledger](2026-10-28-v198-risk-reporting-correctness_0-index.md)
 
 Follow the index contracts, sequencing, scope and verification cadence. This part is authored only; the commands below run during separately requested implementation. Preserve current-main v194/v197 fields. No database test precedes `replicate-prod-db`; isolated monkeypatch tests below do not need database access. Read `code-complexity.md`, `architecture.md`, and applicable `no-lookahead`/`edge-module` guidance before changing the collector. These are reporting changes, never execution-policy changes.

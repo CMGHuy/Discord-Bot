@@ -1,6 +1,6 @@
 # Risk reporting correctness — UI and signed weights
 
-**Spec:** [Approved risk spec](../specs/2026-10-28-v198-risk-reporting-correctness.md)
+**Spec:** [Approved risk spec](../../specs/implemented/2026-10-28-v198-risk-reporting-correctness.md)
 **Index:** [Contracts, constraints and task ledger](2026-10-28-v198-risk-reporting-correctness_0-index.md)
 
 Follow the index and part 1 response contracts. Commands below belong to implementation, not authoring. Preserve v194 hints/money/sector coverage and any merged v195 layout. Keep changes at existing component seams. Final full-suite and three-width browser layout audit belong to V198-6.
