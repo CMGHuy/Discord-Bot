@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { DataSourcesHealth, RiskPosition } from '../../api/models';
+import { DataSourcesHealth, RiskAvailability, RiskPosition } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { RiskStore } from '../../stores/risk.store';
@@ -66,6 +66,11 @@ export function exposureHint(rows: readonly RiskPosition[]): string {
 export function exactRiskText(value: number | null | undefined): string | null {
   if (value === null || value === undefined || value === 0 || Math.abs(value) >= 0.01) return null;
   return `Exact risk: ${value}% of the account balance.`;
+}
+
+export function knownRiskTotal(rows: RiskPosition[]): number | null {
+  return rows.some((row) => row.risk_pct === null)
+    ? null : rows.reduce((sum, row) => sum + row.risk_pct!, 0);
 }
 
 /** v194 B6: the Sector heat panel's warning, or null when every open
@@ -165,15 +170,16 @@ interface MetricTile {
     <sb-panel heading="Killswitch">
       <div class="kill">
         <div class="kill-state">
-          <span class="kill-value" [class.engaged]="store.killswitchOn()">
-            {{ store.killswitchOn() ? 'ENGAGED' : 'Clear' }}
+          <span class="kill-value" [class.engaged]="store.killswitchOn() === true" role="status">
+            {{ store.killswitchOn() === null ? 'Unavailable' : store.killswitchOn() ? 'ENGAGED' : 'Clear' }}
           </span>
           <p class="kill-explain">
-            @if (store.killswitchOn()) {
-              The bot is not opening new positions. Open trades are still
-              monitored and can still close.
+            @if (store.killswitchOn() === null) {
+              Current killswitch state is unavailable. Choose an explicit action if needed.
+            } @else if (store.killswitchOn() === true) {
+              The bot is not opening new positions. Open trades remain monitored.
             } @else {
-              The bot is free to open new positions as setups appear.
+              This killswitch is clear. Other risk controls may still prevent new positions.
             }
           </p>
           @if (killswitchDetail(); as detail) {
@@ -185,16 +191,20 @@ interface MetricTile {
              consequential as engaging -- it puts money back at risk -- and a
              one-click release beside a guarded engage is an invitation to
              undo a deliberate stop by accident. -->
-        <button
-          sb-button
-          [variant]="store.killswitchOn() ? 'secondary' : 'danger'"
-          type="button"
-          [loading]="store.toggling()"
-          [disabled]="store.empty()"
-          (click)="ask()"
-        >
-          {{ store.killswitchOn() ? 'Release killswitch' : 'Engage killswitch' }}
-        </button>
+        <div class="kill-actions">
+          @if (store.killswitchOn() !== true) {
+            <button sb-button variant="danger" type="button" class="sb-hit"
+              [loading]="store.toggling()" [disabled]="store.toggling()" (click)="ask(true)">
+              Engage killswitch
+            </button>
+          }
+          @if (store.killswitchOn() !== false) {
+            <button sb-button variant="secondary" type="button" class="sb-hit"
+              [loading]="store.toggling()" [disabled]="store.toggling()" (click)="ask(false)">
+              Release killswitch
+            </button>
+          }
+        </div>
       </div>
 
       @if (store.commandError(); as message) {
@@ -251,6 +261,16 @@ interface MetricTile {
         <sb-freshness [at]="store.metrics()?.as_of ?? null" />
         <!-- v186 D3: one strip, tiles split by hairlines; no cols, so the
              strip's default auto-fit at 140px keeps today's column count. -->
+        <p class="section-help">Quote returns; entry notionals valued in account currency; historical FX returns excluded</p>
+        @for (key of metricDomains; track key) {
+          @if (store.availability()?.[key]) {
+            @if (domainProblem(key, metricDomainLabels[key]); as problem) {
+              <p class="section-help" role="status">{{ problem }}</p>
+            }
+          }
+        }
+        @if (rCoverage(); as coverage) { <p class="section-help" role="status">{{ coverage }}</p> }
+        @if (moneyDateCoverage(); as coverage) { <p class="section-help" role="status">{{ coverage }}</p> }
         <sb-stat-strip class="metric-grid">
           @for (tile of metricTiles(); track tile.label) {
             <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample"
@@ -286,6 +306,9 @@ interface MetricTile {
       (retry)="store.load()"
     >
     <sb-panel heading="Portfolio heat">
+      @if (domainProblem('heat', 'Heat'); as problem) {
+        <p role="status" class="section-help">{{ problem }}</p>
+      }
       <div class="heat">
         <span class="heat-figure num" [class]="heatClass()">
           {{ fmtRisk(store.openHeatPct()) }}
@@ -330,6 +353,9 @@ interface MetricTile {
         <span class="num">{{ gapRiskNote() }}</span>
       </p>
 
+      @if (domainProblem('throttle', 'Throttle'); as problem) {
+        <p role="status" class="section-help">{{ problem }}</p>
+      }
       <div class="states">
         @if (store.paused()) {
           <span class="state warn">Scanning paused</span>
@@ -348,7 +374,7 @@ interface MetricTile {
             Drawdown throttle at ×{{ fmt(store.throttleMultiplier()) }}
           </span>
         }
-        @if (!store.paused() && !store.throttled() && !store.empty()) {
+        @if (store.paused() === false && store.throttled() === false && !domainProblem('throttle', 'Throttle')) {
           <span class="state">Sizing unthrottled</span>
         }
       </div>
@@ -386,6 +412,7 @@ interface MetricTile {
     <!-- exposure -------------------------------------------------------- -->
 
     <sb-panel heading="Exposure by position" [flush]="true" [description]="exposureAbout()">
+      @if (positionsKnown()) {
       <sb-data-table
         [rows]="exposurePage.visible()"
         [columns]="columns()"
@@ -402,9 +429,15 @@ interface MetricTile {
         (pageChange)="exposurePage.setPage($event)"
         (perPageChange)="onPerPage($event)"
       />
+      } @else {
+        <p role="status" class="section-help">Positions: unavailable</p>
+      }
     </sb-panel>
 
     <sb-panel heading="Sector heat" [problem]="sectorProblem()">
+      @if (store.availability()?.sector_heat?.state === 'partial') {
+        @if (unmappedProblem(); as problem) { <p class="section-help" role="status">{{ problem }}</p> }
+      }
       @if (store.sectorHeat().length) {
         <dl class="sectors">
           @for (row of store.sectorHeat(); track row.sector) {
@@ -430,14 +463,14 @@ interface MetricTile {
          what actually throttle position size and still deserve a plain,
          readable list of their own. -->
     <div class="split">
-      <sb-panel heading="Correlation matrix">
+      <sb-panel heading="Underlying-asset correlation">
         <!-- Same reasoning as the metrics panel's own marker: the matrix
              is computed from the same daily-bar fetch, and shares its date --
              not the whole page's freshness, which the Killswitch/Exposure
              panels have no equivalent for. -->
         <sb-freshness [at]="store.metrics()?.as_of ?? null" />
         <p class="section-help">
-          Pairwise correlation of daily returns across open positions.
+          Pairwise correlation of daily quote returns across open positions.
           Pairs outlined together sit in the same cluster listed beside it.
         </p>
         @if (store.correlation(); as corr) {
@@ -447,9 +480,13 @@ interface MetricTile {
               [values]="corr.values"
               [clusters]="clusterTickerLists()"
             />
-          } @else {
+          } @else if (positionsKnown() && store.availability()?.distribution_metrics?.state !== 'unavailable') {
             <p class="none">Not enough open positions to correlate.</p>
+          } @else {
+            <p class="section-help" role="status">Correlation data unavailable.</p>
           }
+        } @else {
+          <p class="section-help" role="status">Correlation data unavailable.</p>
         }
       </sb-panel>
 
@@ -460,6 +497,9 @@ interface MetricTile {
           Positions in one cluster tend to lose together, so their combined
           risk is larger than the per-trade numbers suggest.
         </p>
+        @if (domainProblem('clusters', 'Clusters'); as problem) {
+          <p class="section-help" role="status">{{ problem }}</p>
+        }
         @if (store.clusters(); as clusters) {
           @if (clusters.length) {
             <!-- Correlated positions are one bet wearing several tickers:
@@ -473,7 +513,7 @@ interface MetricTile {
                 </li>
               }
             </ul>
-          } @else {
+          } @else if (!domainProblem('clusters', 'Clusters')) {
             <p class="none">No correlated clusters among open positions.</p>
           }
         }
@@ -563,6 +603,7 @@ interface MetricTile {
       justify-content: space-between;
       gap: var(--register-pad);
     }
+    .kill-actions { display: flex; flex-wrap: wrap; gap: var(--space-8); }
     .kill-value {
       font-size: var(--text-subhead);
       font-weight: 700;
@@ -757,23 +798,36 @@ export class Risk {
 
   /** v194 B6: shown through the panel's `problem` slot, which renders it as a
    *  visible status line and never lets the panel fold it away. */
-  protected readonly sectorProblem = computed(() =>
+  protected domainProblem(key: keyof RiskAvailability, label: string): string | null {
+    if (this.store.error()) return `${label}: last observation is stale.`;
+    const status = this.store.availability()?.[key];
+    if (!status) return `${label}: unavailable`;
+    if (status.state === 'ok') return null;
+    return `${label}: ${status.state === 'partial' ? 'coverage incomplete' : 'unavailable'}`;
+  }
+
+  protected readonly positionsKnown = computed(() =>
+    this.store.data()?.positions != null && this.store.availability()?.positions.state === 'ok',
+  );
+  protected readonly unmappedProblem = computed(() =>
     unmappedNote(this.store.unmappedCount(), this.store.positions().length),
   );
-
-  protected readonly async = computed(() =>
-    asyncInputs(this.store, { isEmpty: (data) => data.positions?.length === 0 }),
+  protected readonly sectorProblem = computed(() =>
+    this.domainProblem('sector_heat', 'Sector heat') ?? this.unmappedProblem(),
   );
-
-  /** A polite summary for the workspace's one live region — null until the
-   *  first read of the portfolio has loaded. */
-  protected readonly announce = computed(() =>
-    this.store.empty() ? null : `${this.store.positions().length} open positions`,
-  );
+  protected readonly async = computed(() => asyncInputs(this.store, {
+    isEmpty: (data) => data.positions?.length === 0
+      && (['positions', 'heat', 'sector_heat', 'clusters'] as const)
+        .every((key) => data.availability?.[key]?.state === 'ok'),
+  }));
+  protected readonly announce = computed(() => this.positionsKnown()
+    ? `${this.store.positions().length} open positions`
+    : this.store.empty() ? null : 'Positions: unavailable');
 
   /** The dialog is open. Only ever set from the button, so there is no state
    *  where a confirmation is showing for a toggle nobody asked for. */
   protected readonly asking = signal(false);
+  protected readonly requestedOn = signal<boolean | null>(null);
 
   protected readonly rowKey = (row: RiskPosition) => row.trade_id;
 
@@ -809,8 +863,8 @@ export class Risk {
     { key: 'shares', header: 'Shares', value: (row) => shareCount(row.shares), numeric: true, sortable: true, footer: (rows) => shareCount(rows.reduce((sum, row) => sum + (row.shares ?? 0), 0)) },
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true, compact: { line: 2, order: 2 } },
     { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, sortable: true, compact: { line: 2, order: 1 } },
-    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => riskPct(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0)), footerHint: (rows) => {
-      const text = exactRiskText(rows.reduce((sum, row) => sum + (row.risk_pct ?? 0), 0));
+    { key: 'risk_pct', header: 'Risk %', numeric: true, cell: this.riskCell(), sortable: true, footer: (rows) => riskPct(knownRiskTotal(rows)), footerHint: (rows) => {
+      const text = exactRiskText(knownRiskTotal(rows));
       return text ? { text, label: 'Exact Risk % total' } : null;
     }, compact: { line: 1, order: 2, drawer: true } },
   ]);
@@ -876,6 +930,22 @@ export class Risk {
     ];
   });
 
+  protected readonly metricDomains = ['distribution_metrics', 'drawdown_r', 'drawdown_amount'] as const;
+  protected readonly metricDomainLabels = {
+    distribution_metrics: 'Distribution metrics', drawdown_r: 'R drawdown', drawdown_amount: 'Money drawdown',
+  };
+
+  protected readonly rCoverage = computed(() => {
+    const metric = this.store.metrics()?.max_drawdown_r;
+    if (!metric?.excluded_count) return null;
+    return `Closed R sample excludes ${metric.excluded_count}: ${metric.invalid_date_count ?? 0} invalid close dates, ${metric.invalid_outcome_count ?? 0} invalid outcomes.`;
+  });
+  protected readonly moneyDateCoverage = computed(() => {
+    const count = this.store.metrics()?.max_drawdown_amount?.invalid_date_count ?? 0;
+    return count ? `Money drawdown excludes ${count} invalid close dates.` : null;
+  });
+
+
   /** cap/used/remaining, broken out of the one heat-utilisation number so
    *  "how much room is left" reads without mental subtraction (v85 D36).
    *  `remaining` floors at 0 rather than going negative -- a negative
@@ -927,44 +997,43 @@ export class Risk {
       : `${used}% of the risk budget is used (heat is measured against a ${riskPct(cap)} cap).`;
   });
 
-  /** Who engaged it and when, when the server recorded it. */
   protected readonly killswitchDetail = computed(() => {
     const kill = this.store.killswitch();
-    if (!kill?.on) return null;
-    const reason = kill.reason ? `Reason: ${kill.reason}` : null;
-    const at = kill.at ? `Engaged ${dateTime(kill.at)}` : null;
-    return [at, reason].filter(Boolean).join(' · ') || null;
+    if (kill?.on === null && kill.last_known) {
+      const last = kill.last_known;
+      return `Last observed ${last.on ? 'engaged' : 'clear'} at ${dateTime(last.checked_at)} — stale`;
+    }
+    if (kill?.on !== true) return null;
+    return [kill.at ? `Engaged ${dateTime(kill.at)}` : null,
+      kill.reason ? `Reason: ${kill.reason}` : null].filter(Boolean).join(' · ') || null;
   });
 
-  protected readonly dialogTitle = computed(() =>
-    this.store.killswitchOn() ? 'Release the killswitch' : 'Engage the killswitch',
-  );
-
-  /** Names what changes, per spec v14 — not "are you sure?". Both sentences
-   *  are about the bot's behaviour, because that is the thing being changed;
-   *  neither of them is reversible without coming back here. */
+  protected readonly dialogTitle = computed(() => this.requestedOn() === false
+    ? 'Release the killswitch' : 'Engage the killswitch');
+  protected readonly dialogConfirm = computed(() => this.requestedOn() === false ? 'Release' : 'Engage');
   protected readonly dialogConsequence = computed(() => {
-    const count = this.store.positions().length;
-    const open = count === 1 ? '1 open position' : `${count} open positions`;
-    return this.store.killswitchOn()
-      ? `The bot will resume opening new positions immediately, on top of the ${open} it already holds.`
-      : `The bot will stop opening new positions. The ${open} it holds stay open and keep being monitored — this does not close anything.`;
+    const action = this.requestedOn() === false
+      ? 'Release this killswitch. Other controls may still prevent new positions.'
+      : 'Engage this killswitch to stop new positions. This does not close existing trades.';
+    const coverage = this.positionsKnown()
+      ? `${this.store.positions().length} open positions are reported.`
+      : 'Open-position coverage is unavailable.';
+    return `${action} ${coverage} Check the returned state before relying on the change.`;
   });
 
-  protected readonly dialogConfirm = computed(() =>
-    this.store.killswitchOn() ? 'Release' : 'Engage',
-  );
-
-  protected ask(): void {
+  protected ask(on: boolean): void {
+    this.requestedOn.set(on);
     this.asking.set(true);
   }
 
   protected confirm(): void {
-    // Read before the request: the store's own state flips as soon as the
-    // response lands, and reading it inside the callback would toggle back.
-    this.store.toggleKillswitch(!this.store.killswitchOn());
+    const on = this.requestedOn();
+    if (on === null) return;
+    this.store.toggleKillswitch(on);
     this.asking.set(false);
+    this.requestedOn.set(null);
   }
+
 
   protected fmt = num;
   protected fmtRisk = riskPct;

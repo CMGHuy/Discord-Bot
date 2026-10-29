@@ -16,9 +16,9 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../../api/interceptors';
-import { Risk as RiskData, RiskMetrics } from '../../api/models';
+import { DomainAvailability, RiskAvailability, Risk as RiskData, RiskMetrics } from '../../api/models';
 import {
-  EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, drawdownFxNote, exactRiskText, reconciles, unmappedNote,
+  EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, drawdownFxNote, exactRiskText, knownRiskTotal, reconciles, unmappedNote,
   RISK_DRAWDOWN_LABEL, RISK_SHARPE_LABEL,
 } from './risk';
 import { ConnectionStore } from '../../stores/connection.store';
@@ -41,6 +41,11 @@ const DEFAULT_METRICS: RiskMetrics = {
   benchmark_symbol: 'SPY',
 };
 
+const OK: DomainAvailability = { state: 'ok', checked_at: '2026-10-28T12:00:00Z', reason: null };
+const AVAILABILITY: RiskAvailability = {
+  positions: OK, heat: OK, sector_heat: OK, clusters: OK, throttle: OK, killswitch: OK,
+};
+
 function payload(overrides: Partial<RiskData> = {}): RiskData {
   return {
     heat: { open_pct: 3, cap_pct: 20 },
@@ -48,7 +53,8 @@ function payload(overrides: Partial<RiskData> = {}): RiskData {
     sector_heat: [],
     clusters: [],
     throttle: { multiplier: 1, paused: false },
-    killswitch: { on: false },
+    killswitch: { on: false, reason: null, at: null, availability: OK },
+    availability: AVAILABILITY,
     scan_health: { latest_s: 1.2, slowdown: false },
     metrics: DEFAULT_METRICS,
     correlation: { labels: [], values: [] },
@@ -543,6 +549,11 @@ describe('Risk exposure figures (v194 B4/B5)', () => {
 });
 
 describe('Risk exposure helpers (v194 B4/B5)', () => {
+  it('keeps an unknown risk total unknown', () => {
+    expect(knownRiskTotal([{ ...FRACTIONAL_BOOK[0], risk_pct: null }])).toBeNull();
+    expect(knownRiskTotal(FRACTIONAL_BOOK)).toBeCloseTo(0.012);
+    expect(knownRiskTotal([])).toBe(0);
+  });
   it('reconciles when the rounded rows add up to the rounded total', () => {
     expect(reconciles([2.72, 3.5], 2)).toBe(true);
     expect(reconciles([], 2)).toBe(true);
@@ -740,4 +751,121 @@ describe('Risk metric basis and money drawdown (v194 B8)', () => {
     expect(drawdownFxNote(0)).toBeUndefined();
     expect(drawdownFxNote(1)).toBe('1 closed trade without an FX rate for the exit day left out of the amount.');
   });
+});
+
+for (const device of ['lg', 'sm', 'xs'] as const) {
+  it(`renders unavailable domains without a false empty-book claim at ${device}`, async () => {
+    const { fixture, backend } = seed([{ provide: ViewportService,
+      useValue: { viewport: signal(device), isPhone: signal(device === 'xs'),
+        isNarrow: signal(device !== 'lg') } }]);
+    fixture.detectChanges();
+    const unavailable: DomainAvailability = { ...OK, state: 'unavailable', reason: 'positions_unavailable' };
+    backend.expectOne('/api/v1/risk').flush(payload({
+      positions: null, sector_heat: null, clusters: null,
+      heat: { open_pct: null, cap_pct: 6, utilisation_pct: null },
+      throttle: { multiplier: null, paused: null },
+      killswitch: { on: null, reason: null, at: null, availability: unavailable },
+      availability: { positions: unavailable, heat: unavailable, sector_heat: unavailable,
+        clusters: unavailable, throttle: unavailable, killswitch: unavailable },
+    }));
+    await fixture.whenStable(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain('Positions: unavailable');
+    expect(root.textContent).toContain('Heat: unavailable');
+    expect(root.textContent).toContain('Throttle: unavailable');
+    expect(root.textContent).not.toContain('No open risk');
+    expect(root.textContent).not.toContain('Sizing unthrottled');
+    expect(root.textContent).not.toContain('free to open new positions');
+    expect(root.querySelector('[role="status"]')).not.toBeNull();
+  });
+}
+
+for (const on of [true, false]) {
+  it(`requests explicit ${on ? 'engage' : 'release'} from unknown state`, async () => {
+    installDialogPolyfill();
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/risk').flush(payload({ killswitch: {
+      on: null, reason: null, at: null,
+      availability: { ...OK, state: 'unavailable', reason: 'killswitch_unavailable' },
+      last_known: { on: !on, reason: null, at: null, checked_at: OK.checked_at },
+    } }));
+    await fixture.whenStable(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const label = on ? 'Engage killswitch' : 'Release killswitch';
+    const button = Array.from(root.querySelectorAll<HTMLButtonElement>('button'))
+      .find((candidate) => candidate.textContent?.trim() === label)!;
+    expect(button.disabled).toBe(false);
+    expect(root.querySelector('.kill-detail')?.textContent).toContain(`Last observed ${!on ? 'engaged' : 'clear'}`);
+    expect(root.querySelector('.kill-detail')?.textContent).toContain('stale');
+    button.click(); fixture.detectChanges();
+    backend.expectNone('/api/v1/risk/killswitch');
+    expect(root.querySelector('sb-confirm-dialog')).not.toBeNull();
+    (fixture.componentInstance as unknown as { confirm(): void }).confirm();
+    const request = backend.expectOne('/api/v1/risk/killswitch');
+    expect(request.request.body.on).toBe(on);
+    request.flush({ killswitch: { on, reason: null, at: null, availability: OK } });
+    await fixture.whenStable(); fixture.detectChanges();
+    backend.expectNone('/api/v1/risk/killswitch');
+  });
+}
+
+it('keeps position identities while explaining incomplete R and sector coverage', async () => {
+  const fixture = await render({
+    positions: [{ ...FRACTIONAL_BOOK[0], risk_pct: null }],
+    heat: { open_pct: null, cap_pct: 6, utilisation_pct: null },
+    sector_heat: [], unmapped_count: 1,
+    availability: { ...AVAILABILITY,
+      heat: { ...OK, state: 'unavailable', reason: 'invalid_balance' },
+      sector_heat: { ...OK, state: 'partial', reason: 'sector_mapping_incomplete' },
+      drawdown_r: { ...OK, state: 'partial', reason: 'invalid_closed_records' } },
+    metrics: { ...DEFAULT_METRICS, max_drawdown_r: {
+      value: 2, n: 3, excluded_count: 2, invalid_date_count: 1, invalid_outcome_count: 1,
+    } },
+  });
+  const root = fixture.nativeElement as HTMLElement;
+  expect(root.textContent).toContain(FRACTIONAL_BOOK[0].ticker);
+  expect(root.textContent).toContain('1 invalid close dates');
+  expect(root.textContent).toContain('1 invalid outcomes');
+  expect(root.textContent).toContain('Quote returns');
+  expect(root.textContent).toContain('historical FX returns excluded');
+  expect(root.querySelector('tfoot td:last-child')?.textContent?.trim()).toBe('—');
+});
+
+it('keeps the confirmed action when a fresh observation arrives while the dialog is open', async () => {
+  installDialogPolyfill();
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/risk').flush(payload());
+  await fixture.whenStable(); fixture.detectChanges();
+  const root = fixture.nativeElement as HTMLElement;
+  Array.from(root.querySelectorAll<HTMLButtonElement>('button'))
+    .find((button) => button.textContent?.trim() === 'Engage killswitch')!.click();
+  fixture.detectChanges();
+  TestBed.inject(RiskStore).load();
+  backend.expectOne('/api/v1/risk').flush(payload({ killswitch: {
+    on: true, reason: null, at: null, availability: OK,
+  } }));
+  await fixture.whenStable(); fixture.detectChanges();
+  expect(root.querySelector('sb-confirm-dialog')?.textContent).toContain('Engage the killswitch');
+  (fixture.componentInstance as unknown as { confirm(): void }).confirm();
+  const request = backend.expectOne('/api/v1/risk/killswitch');
+  expect(request.request.body.on).toBe(true);
+  request.flush({ killswitch: { on: true, reason: null, at: null, availability: OK } });
+  await fixture.whenStable(); fixture.detectChanges();
+});
+
+it('labels retained domain observations stale after a failed refresh', async () => {
+  const { fixture, backend } = seed();
+  fixture.detectChanges();
+  backend.expectOne('/api/v1/risk').flush(payload({ positions: FRACTIONAL_BOOK }));
+  await fixture.whenStable(); fixture.detectChanges();
+  TestBed.inject(RiskStore).load();
+  backend.expectOne('/api/v1/risk').flush({}, { status: 503, statusText: 'unavailable' });
+  await fixture.whenStable(); fixture.detectChanges();
+  const root = fixture.nativeElement as HTMLElement;
+  expect(root.textContent).toContain(FRACTIONAL_BOOK[0].ticker);
+  expect(root.textContent).toContain('Heat: last observation is stale.');
+  expect(root.textContent).toContain('Throttle: last observation is stale.');
+  expect(root.textContent).toContain('Current killswitch state is unavailable.');
 });
