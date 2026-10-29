@@ -1006,6 +1006,7 @@ git -C <wt> commit -m "feat(v201): market updates and refresh endpoints, refresh
 - Modify: `docs/deploy/DEPLOY_HETZNER.md` (line 7 service list; new section; the rollback-order line at :434)
 - Modify: `tests/db/test_compose.py`
 - Modify: `tests/scripts/test_rollback_to_shape.py` (its markers name the `bot admin` lines this task changes; it is not in the ledger row, but the edit is forced and no other task touches the file)
+- Modify: `CLAUDE.md`, `AGENTS.md` (the "two Docker containers" line becomes three; the Codex mirror ships in the same commit)
 
 **Interfaces:**
 - Consumes: V201-5 entry point `python -m swingbot.refresher` (`swingbot/refresher/__main__.py:main`); V201-1 `ADMIN_REFRESHER`.
@@ -1145,6 +1146,7 @@ Copy the bot's `volumes` list verbatim from the file as it stands in the worktre
   - kill switch: `python3 scripts/ops/env_set.py ADMIN_REFRESHER off` then `docker compose restart admin refresher`, which puts the admin pages back on request-time fetching exactly as before v201;
   - `rollback_to.sh` stops it with the other writers and starts it only when the target image has it.
 - Line 434 (rollback order): add `refresher` to `docker compose restart bot admin`.
+- Root `CLAUDE.md` § What this is says "two Docker containers off one image". Change it to "three Docker containers off one image (`bot`, `admin`, `refresher`)", and make the same edit to the matching line in root `AGENTS.md` (the Codex mirror ships in the same commit). Check that `CLAUDE.md` stays under 200 lines.
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
@@ -1160,7 +1162,7 @@ Expected: exit 0.
 - [ ] **Step 8: Commit**
 
 ```bash
-git -C <wt> add docker-compose.yml deploy/deploy.sh scripts/ops/rollback_to.sh docs/deploy/DEPLOY_HETZNER.md tests/db/test_compose.py tests/scripts/test_rollback_to_shape.py
+git -C <wt> add docker-compose.yml deploy/deploy.sh scripts/ops/rollback_to.sh docs/deploy/DEPLOY_HETZNER.md tests/db/test_compose.py tests/scripts/test_rollback_to_shape.py CLAUDE.md AGENTS.md
 git -C <wt> commit -m "ops(v201): refresher compose service, deploy verification and PITR rollback"
 ```
 
