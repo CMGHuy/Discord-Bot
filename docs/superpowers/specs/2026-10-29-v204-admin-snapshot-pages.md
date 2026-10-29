@@ -282,3 +282,29 @@ and financial-advisor still to run.
 - staff-engineer [ADVISORY]: no retention rule for the snapshot table. -- applied (upsert by key).
 - staff-engineer [ADVISORY]: `queries.py:209` missing from the guard list. -- applied.
 - staff-engineer [ADVISORY]: downgrade and rollback coverage not restated. -- applied.
+
+## Handoff
+
+Paused 2026-10-29 because the account's weekly usage limit was nearly spent.
+Resume in this order:
+
+1. Run `/panel quant-engineer,financial-advisor` on this spec. staff-engineer
+   is done (above). Apply the findings and complete `## Panel review`.
+2. Write the v204 plan: `plan-briefer`, then `plan-writer` `mode=index`, then
+   the parts. Reuse the drafts already written for the pre-split v201 plan,
+   kept in the shared tree at `.superpowers/drafts/v204/` (gitignored):
+   - `old-V201-12-risk-move.md`: risk move to core, read-only bars;
+   - `old-V201-13-snapshot-job.md`: snapshot job and routes, 28.6 KB, so
+     split it in two;
+   - `old-part4-with-V201-18.md` § V201-18: SPA Risk/Analytics/Calendar
+     labels;
+   - `prod-timing-probe.js`: the bounded Playwright timing probe.
+
+   The panel amendments above override those drafts: snapshot worker thread,
+   bars reader in core, kill-switch fallback, parity test, upsert.
+3. Also add what v201 left for v204 (see v201 plan index, contracts):
+   - the snapshot config fields and `stale_after_s("snapshot")`;
+   - the snapshot key patterns;
+   - the `snapshots` field on `/market/updates` and on refresh;
+   - the snapshot table with its repository;
+   - the sparkline label (V201-17 dropped it).
