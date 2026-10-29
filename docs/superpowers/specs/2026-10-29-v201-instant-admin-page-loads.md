@@ -269,16 +269,20 @@ A snapshot built on bars older than the last completed session is flagged
 `stale_inputs`, and the UI shows it as stale whatever its `computed_at` age.
 
 Snapshots live in Postgres, so they survive restarts and are readable by every
-worker. A new table follows `schema-evolution.md` (Alembic revision). It
-**replaces** the file-backed `analytics_snapshot.json`
-(`swingbot/core/analytics/snapshots.py`, `FILE_PUBLISHERS` in `architecture.md`),
-which is retired in the same plan.
+worker. A new table follows `schema-evolution.md` (Alembic revision). The
+file-backed `analytics_snapshot.json` (`swingbot/core/analytics/snapshots.py`)
+**stays as it is**, because the Discord side reads it: the scan loop
+`commands/scanning/loops.py:179-239`, `commands/stats.py`,
+`commands/growth.py` and `scripts/reports/export_analytics.py`. The admin
+request path stops calling `refresh_snapshot` and reads the new table
+instead. Retiring the file is a later Discord-side spec, not this one
+(amended after the plan brief, 2026-10-29).
 
 **Owners and removal:** the new stores and what retires each one.
 
 | Store | Owner | Removed when |
 |---|---|---|
-| snapshot table | refresher | never; it is the page source |
+| snapshot table | refresher | never; it is the admin page source (`analytics_snapshot.json` stays for Discord) |
 | quote-currency table | refresher (FX job) | never |
 | refresh queue | request path enqueues, refresher drains | rows older than 1 h are pruned each cycle |
 | in-flight marks | refresher | expire after their timeout |
@@ -325,13 +329,30 @@ which is retired in the same plan.
   reload shows cached values and the spinner covers the refresh. My call: the
   header becomes a hint that bumps the page's symbols to the front of the
   refresher's queue.
-- **Live updates reuse the existing LISTEN/NOTIFY channel** that already
-  pushes events to the SPA (`notify.py`, `events.py`; `architecture.md`).
-  The refresher NOTIFYs which quote and snapshot keys changed value or
-  refreshing state. A small **catch-up endpoint** (e.g.
-  `GET /market/updates?since=<cursor>`) serves only reconnects and missed
-  events. It is cheap (indexed by updated-at) and never fetches. No second
-  push mechanism is added.
+- **Live updates reuse the existing LISTEN/NOTIFY → SSE channel**
+  (`notify.py`, `events.py`, `stream.py`; `architecture.md`). That channel
+  carries **names only**: frames are `{seq, at}`, and `notify.CHANNELS` is a
+  closed tuple. So the design follows its existing "event means refetch"
+  shape:
+  - one new channel name, `market` (added to `notify.CHANNELS`,
+    `EventName`/`EVENT_NAMES` in the SPA, and `stream.py`), NOTIFYed once per
+    refresher cycle or snapshot write that changed something;
+  - on that event, the SPA calls a small **updates endpoint**
+    (`GET /market/updates?since=<cursor>`). It returns only the quote and
+    snapshot keys whose value or refreshing state changed since the cursor,
+    is indexed by updated-at, never fetches, and also serves reconnects.
+
+  No payload plumbing is added to the event bus, and no second push
+  mechanism (amended after the plan brief, 2026-10-29).
+- The refresher's heartbeat lives in its own row or table, **not**
+  `bot_heartbeat`, which would raise the `bot` SSE event every cycle.
+- Cadence uses `core/market/session.py` `is_regular_session` /
+  `is_nyse_regular_session`, not `is_us_market_active()` (true in pre- and
+  after-hours). The refresher process never sets the admin's yfinance lock
+  timeout (`app.py:416`).
+- `list_trades`'s existing `prices_as_of` (stamped with `datetime.now()`,
+  `trades.py:1103-1107`) is replaced by the real oldest `price_as_of` of its
+  rows. Rows already carry `price_age_s` and `price_as_of`.
 
 ### 3. SPA
 
@@ -343,11 +364,13 @@ which is retired in the same plan.
 - Fix duplicate loads: the dashboard store loads once per navigation, and
   `/market/tape` is fetched once per poll and shared between the tape and
   market-index stores.
-- A shared **live-values service** subscribes to those events (and calls the
-  catch-up endpoint on reconnect) and patches values in the existing stores.
-  Market-derived cells render through one small component: value, age label,
+- A shared **live-values service** listens for the `market` event (and
+  reconnects), calls the updates endpoint, and patches the returned values
+  into the existing stores. Market-derived cells render through one small
+  component, **extending the existing `ui/age-hint.ts`**: value, age label,
   and an `sb-spinner` beside it while `refreshing` is true. Ages tick
   client-side.
+- `resolveRoute` is used by **17 routes**. All of them stop blocking.
 - **Staleness thresholds are absolute times per session state**, not a count
   of cycles. These are my calls, set as config fields:
 
