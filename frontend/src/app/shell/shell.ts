@@ -294,6 +294,8 @@ export class Shell {
    * killswitch chip says nothing rather than a guessed "Armed".
    */
   protected readonly killswitchOn = signal<boolean | null>(null);
+  /** The latest killswitch read failed, so `killswitchOn` is the last good answer. */
+  protected readonly killswitchStale = signal(false);
 
   constructor() {
     // Read once, here rather than in an app initializer: preferences are
@@ -324,11 +326,13 @@ export class Shell {
 
   protected refreshKillswitch(): void {
     this.api.killswitch().subscribe({
-      next: (result) => this.killswitchOn.set(result.killswitch.on),
-      // Silent: a failure here means the risk endpoint is unhappy, which
-      // the Risk workspace will report properly. A toast on every shell
-      // load would be noise on top of an error that is already visible.
-      error: () => undefined,
+      next: (result) => {
+        this.killswitchOn.set(result.killswitch.on);
+        this.killswitchStale.set(false);
+      },
+      // No toast (it would be noise on every shell load), but the chip must
+      // not keep claiming the last answer: it reads "Killswitch ?" instead.
+      error: () => this.killswitchStale.set(true),
     });
   }
 

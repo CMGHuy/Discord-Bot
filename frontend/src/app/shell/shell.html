@@ -75,7 +75,7 @@
            one tap from the chip, and Scan health has left the Risk page
            (§5.1). The dot answers only "is the event stream connected" (D30). -->
       <div class="status-cluster">
-        <sb-killswitch-chip [on]="killswitchOn()" />
+        <sb-killswitch-chip [on]="killswitchOn()" [stale]="killswitchStale()" />
         <sb-freshness-chip [at]="connection.botLastSuccess() ?? connection.botLastSeen()" [now]="clock()" />
         <sb-connection-status
           [state]="connection.state()"

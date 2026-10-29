@@ -12,14 +12,20 @@ import { RouterLink } from '@angular/router';
  *
  * Renders nothing while the state is unknown (`null`): a chip that said
  * "Armed" before the first answer would be the one claim on the page that
- * must never be guessed.
+ * must never be guessed. A later failed read is the same claim gone stale, so
+ * `stale` swaps the last answer for a neutral "Killswitch ?" that still links
+ * to Risk.
  */
 @Component({
   selector: 'sb-killswitch-chip',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
   template: `
-    @if (on() !== null) {
+    @if (stale()) {
+      <a class="chip sb-hit" routerLink="/risk" aria-label="Killswitch state unknown. Open Risk">
+        <span class="dot unknown" aria-hidden="true"></span>Killswitch ?
+      </a>
+    } @else if (on() !== null) {
       <a class="chip sb-hit" routerLink="/risk" [class.halted]="on()" [attr.aria-label]="label()">
         <span class="dot" aria-hidden="true"></span>{{ on() ? 'Halted' : 'Armed' }}
       </a>
@@ -51,11 +57,14 @@ import { RouterLink } from '@angular/router';
       font-weight: 600;
     }
     .chip.halted .dot { background: var(--neg); }
+    .dot.unknown { background: var(--text-muted); }
   `,
 })
 export class KillswitchChip {
   /** `null` until the shell's first `/risk/killswitch` answer. */
   readonly on = input<boolean | null>(null);
+  /** True when the latest `/risk/killswitch` read failed: `on` is then old. */
+  readonly stale = input(false);
 
   protected readonly label = computed(() =>
     this.on() ? 'Killswitch on, trading halted. Open Risk' : 'Killswitch off, trading armed. Open Risk',

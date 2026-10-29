@@ -10,15 +10,24 @@ describe('KillswitchChip (v195 Phase 3)', () => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
   });
 
-  function render(on: boolean | null): HTMLElement {
+  function render(on: boolean | null, stale = false): HTMLElement {
     const fixture = TestBed.createComponent(KillswitchChip);
     fixture.componentRef.setInput('on', on);
+    fixture.componentRef.setInput('stale', stale);
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
 
   it('renders nothing until the state is known, never a guessed "Armed"', () => {
     expect(render(null).innerHTML.replace(/<!--[\s\S]*?-->/g, '').trim()).toBe('');
+  });
+
+  it('reads "Killswitch ?" when the latest read failed, never the old Armed', () => {
+    const chip = render(false, true).querySelector('a')!;
+    expect(chip.textContent!.trim()).toBe('Killswitch ?');
+    expect(chip.classList).not.toContain('halted');
+    expect(chip.getAttribute('href')).toBe('/risk');
+    expect(chip.getAttribute('aria-label')).toBe('Killswitch state unknown. Open Risk');
   });
 
   it('reads Armed while trading runs, and links to Risk', () => {
