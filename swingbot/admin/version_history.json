@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-29 15:44:33 UTC",
+  "generated_at": "2026-10-29 15:45:17 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.37.2",
-    "bot": "2.15.6"
+    "bot": "2.15.7"
   },
   "releases": [
     {
@@ -2227,6 +2227,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "3de23143",
+      "subject": "release(bot): 2.15.7 -- report unavailable portfolio data",
+      "versions": {
+        "ui": "1.37.2",
+        "bot": "2.15.7"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
