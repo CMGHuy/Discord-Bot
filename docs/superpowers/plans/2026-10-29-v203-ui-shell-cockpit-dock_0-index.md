@@ -101,21 +101,26 @@ desktop grid gains `.workspace-row` = `main.workspace` + `aside.live-column`.
 At most 2 implementers at once (`CLAUDE.md`). Sequential edges and why:
 
 - **V203-1 ∥ V203-2.** The rail rewrite owns `shell.html`/`shell.css`/`shell.ts`/`shell.spec.ts`, `nav.ts`/`nav.spec.ts` and the audit lib's `railLabelVerdict`. V203-2 owns only `api/models.ts`, `api/api-client.ts` (+spec) and `stores/live.store.ts` (+spec).
+- **V203-1 → V203-1b:** the indicator and `NAV_GROUPS` go once the new rail no longer uses them; both edit `shell.spec.ts` consumers' expectations.
+- **V203-3 → V203-3b:** `DockState` reads `dockDefaultOpen`/`readDockOpen`/`writeDockOpen` from `live-state.ts`.
+- **V203-3b → V203-7:** the dock reads `DockState`.
 - **V203-2 → V203-3:** the warning rules read `LiveHeat`/`LiveKillswitch` types. `DockState` resolves the destination with `destinationFor` from v202 (merged).
 - **V203-3 → V203-4, V203-5, V203-6.** These three section components have disjoint files and may run in parallel, two at a time. V203-4 ∥ V203-1 is also allowed (disjoint files) once V203-3 is in.
 - **V203-1, V203-4, V203-5, V203-6 → V203-7:** the dock composes the sections, and the shell's desktop grid is the rail task's markup.
 - **V203-7 → V203-8 → V203-9:** each edits `shell.html`, `shell.css`, `shell.ts` and `shell.spec.ts`.
-- **V203-9 → V203-10:** the audit checks the final top bar, the dock and the rail together; V203-1 and V203-10 both edit `layout-audit-lib.mjs` and its test.
+- **V203-9 → V203-10:** the audit checks the final top bar, the dock and the rail together; V203-1b and V203-10 both edit `layout-audit-lib.mjs` and its test.
 - **V203-10 → V203-11.**
 
 ## Task ledger
 
 | ID | Title | Part | Model | Files | Cross-task contract |
 |---|---|---|---|---|---|
-| V203-1 | Labelled 80 px rail, System at the foot; retire `sb-nav-indicator`, per-link hints and `NAV_GROUPS` | 1 | sonnet | Modify `shell/shell.html`, `shell/shell.css`, `shell/shell.ts`, `shell/shell.spec.ts`, `shell/nav.ts` (delete `NAV_GROUPS`, `NavGroup`), `shell/nav.spec.ts`, `frontend/scripts/layout-audit-lib.mjs` (`railLabelVerdict`), `frontend/scripts/layout-audit-lib.test.mjs`; delete `shell/nav-indicator.ts`, `shell/nav-indicator.spec.ts` | Rail markup: `nav.rail > a.rail-brand` then `ul.nav.rail-work > li > a.rail-link` ×5 then `ul.nav.rail-foot > li > a.rail-link` (System) then the version hint; each `a.rail-link` holds `sb-icon` + `span.rail-label`, active pill = `.rail-link.active .rail-pill`. CSS token `--rail-width: 80px`. Reads `NAV_ENTRIES` and `Shell.navHere` from v202 (merged) |
+| V203-1 | Labelled 80 px rail, System at the foot; per-link hints retired | 1 | sonnet | Modify `shell/shell.html`, `shell/shell.css`, `shell/shell.ts`, `shell/shell.spec.ts`, `ui/hit-area.spec.ts` | Rail markup: `nav.rail > a.rail-brand` then `ul.nav.rail-work > li > a.rail-link` ×5 then `ul.nav.rail-foot > li > a.rail-link` (System) then the version hint; each `a.rail-link` holds `sb-icon` + `span.rail-label` (`--text-micro`), active pill = `.rail-link.active .rail-pill`. CSS token `--rail-width: 80px`. Reads `NAV_ENTRIES` and `Shell.navHere` from v202 (merged) |
+| V203-1b | Retire `sb-nav-indicator` and `NAV_GROUPS`; rail-label audit on the visible label | 1 | sonnet | Modify `shell/nav.ts` (delete `NAV_GROUPS`, `NavGroup`), `shell/nav.spec.ts`, `styles/motion.css`, `ui/motion-css.spec.ts`, `frontend/scripts/layout-audit-lib.mjs` (`railLabelVerdict`), `frontend/scripts/layout-audit-lib.test.mjs`, `frontend/scripts/layout-audit.mjs` (`auditRailLabels`); delete `shell/nav-indicator.ts`, `shell/nav-indicator.spec.ts` | Audit `rail-label` measures `.rail-label`, not hints; three-width audit run covers V203-1 and V203-1b |
 | V203-2 | `/live` client types, `ApiClient.live`, root `LiveStore` (debounced refresh) | 1 | sonnet | Modify `api/models.ts`, `api/api-client.ts`, `api/api-client.spec.ts`; create `stores/live.store.ts`, `stores/live.store.spec.ts` | Types in "SPA types". `ApiClient.live(limit?: number): Observable<LiveSnapshot>`. `LiveStore` (root): `snapshot()`, `loading()`, `failed()`, `heat()`, `awaiting()`, `killswitch()`, `events()`, `eventsMeta()`, `load(): void`, `retry(): void`; `LIVE_REFRESH_DEBOUNCE_MS = 2000`, `LIVE_REFRESH_EVENTS = ['trades','scan','bot','risk'] as const` |
-| V203-3 | Live-state rules (warnings, alarm, heat tone, times) and `DockState` | 1 | sonnet | Create `shell/live/live-state.ts`, `shell/live/live-state.spec.ts`, `shell/live/dock-state.ts`, `shell/live/dock-state.spec.ts`; modify `ui/freshness.ts` (export `STALE_AFTER_SEC`) | See "Live-state rules" and "DockState" |
-| V203-4 | Dock Bot section (scanner, last scan, freshness, stream, market, killswitch wording) | 1 | sonnet | Create `shell/live/live-bot-section.ts`, `shell/live/live-bot-section.spec.ts` | `LiveBotSection` (`sb-live-bot`), inputs: `botAlive: boolean \| null`, `botHealthy: boolean \| null`, `scanRunning: boolean`, `lastSuccess: string \| null`, `lastSeen: string \| null`, `streamState: ConnectionState`, `marketActive: boolean \| null`, `killswitch: LiveKillswitch \| null`, `now: Date` |
+| V203-3 | Live-state rules (warnings, alarm, heat tone, times) | 1 | sonnet | Create `shell/live/live-state.ts`, `shell/live/live-state.spec.ts`; modify `ui/freshness.ts` (export `STALE_AFTER_SEC`) | See "Live-state rules" |
+| V203-3b | `DockState` | 1b | sonnet | Create `shell/live/dock-state.ts`, `shell/live/dock-state.spec.ts` | See "DockState" |
+| V203-4 | Dock Bot section (scanner, last scan, freshness, stream, market, killswitch wording) | 1b | sonnet | Create `shell/live/live-bot-section.ts`, `shell/live/live-bot-section.spec.ts` | `LiveBotSection` (`sb-live-bot`), inputs: `botAlive: boolean \| null`, `botHealthy: boolean \| null`, `scanRunning: boolean`, `lastSuccess: string \| null`, `lastSeen: string \| null`, `streamState: ConnectionState`, `marketActive: boolean \| null`, `killswitch: LiveKillswitch \| null`, `now: Date` |
 | V203-5 | Dock Plans-awaiting and Portfolio-heat sections | 2 | sonnet | Create `shell/live/live-awaiting-section.ts` (+spec), `shell/live/live-heat-section.ts` (+spec) | `LiveAwaitingSection` (`sb-live-awaiting`), inputs `awaiting: LiveAwaiting \| null`, `loading: boolean`, `now: Date`. `LiveHeatSection` (`sb-live-heat`), inputs `heat: LiveHeat \| null`, `loading: boolean`, `currency: string`, `now: Date`; output `retry: void` |
 | V203-6 | Dock Activity section | 2 | sonnet | Create `shell/live/live-activity-section.ts` (+spec) | `LiveActivitySection` (`sb-live-activity`), inputs `events: readonly LiveEvent[]`, `meta: LiveEventsMeta \| null`, `loading: boolean`, `lastSuccess: string \| null`, `now: Date`; output `retry: void`; `activityLine(e: LiveEvent): string` exported |
 | V203-7 | `sb-live-dock`, `sb-live-edge-tab`, desktop docking with persisted per-page toggle | 2 | sonnet | Create `shell/live/live-dock.ts` (+spec), `shell/live/live-edge-tab.ts` (+spec); modify `shell/shell.html`, `shell/shell.css`, `shell/shell.ts`, `shell/shell.spec.ts` | `LiveDock` (`sb-live-dock`), input `variant: 'docked' \| 'sheet'`, output `close: void`; `LiveEdgeTab` (`sb-live-edge-tab`), inputs `warnings: readonly LiveWarning[]`, `heatText: string`, `awaitingCount: number \| null`; output `expand: void`. Shell grid: `.workspace-row` = `main.workspace` + `aside.live-column` (320 px open / 40 px collapsed, only when `dock.docked()`) |
@@ -128,7 +133,8 @@ At most 2 implementers at once (`CLAUDE.md`). Sequential edges and why:
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
-| 1 | [`2026-10-29-v203-ui-shell-cockpit-dock_1-rail-and-live-state.md`](2026-10-29-v203-ui-shell-cockpit-dock_1-rail-and-live-state.md) | V203-1..V203-4 | Labelled rail, `LiveStore`, live-state rules and `DockState`, Bot section |
+| 1 | [`2026-10-29-v203-ui-shell-cockpit-dock_1-rail-and-live-state.md`](2026-10-29-v203-ui-shell-cockpit-dock_1-rail-and-live-state.md) | V203-1..V203-3 | Labelled rail, `LiveStore`, live-state rules |
+| 1b | [`2026-10-29-v203-ui-shell-cockpit-dock_1b-dock-state-and-bot.md`](2026-10-29-v203-ui-shell-cockpit-dock_1b-dock-state-and-bot.md) | V203-3b..V203-4 | `DockState`, Bot section |
 | 2 | [`2026-10-29-v203-ui-shell-cockpit-dock_2-dock.md`](2026-10-29-v203-ui-shell-cockpit-dock_2-dock.md) | V203-5..V203-8 | Awaiting, heat and activity sections; dock, edge tab, strip, sheet |
 | 3 | [`2026-10-29-v203-ui-shell-cockpit-dock_3-topbar-audit-and-close.md`](2026-10-29-v203-ui-shell-cockpit-dock_3-topbar-audit-and-close.md) | V203-9..V203-11 | Top bar and alarm chip, layout audit, full suite |
 
@@ -195,7 +201,7 @@ export function alarmFor(input: Omit<LiveWarningInput, 'utilisationPct' | 'kills
 export function isStale(lastSuccess: string | null, now: Date, staleAfterSec?: number): boolean;  // null → true; default STALE_AFTER_SEC
 export type HeatTone = 'unknown' | 'ok' | 'near' | 'over';
 export function heatTone(utilisationPct: number | null): HeatTone;         // near >= 80, over > 100
-export function heatStripText(heat: LiveHeat | null, currency: string): string;   // 'Heat $2,010 · 4.2% / 6%' | 'Heat $3,100 · 7.8% / 6% · Over cap' | 'Heat —'
+export function heatStripText(heat: LiveHeat | null, currency: string): string;   // 'Heat 2,010 € · 4.2% / 6%' | 'Heat 3,100 € · 7.8% / 6% · Over cap' | 'Heat —' (money via ui/format.ts amount())
 export function liveTime(iso: string | null, now: Date): string;           // '14:32 · 6 min ago' (Berlin) | '—'
 export const DOCK_PREF_KEY = 'shell.dock';
 export const DOCK_DEFAULT_OPEN: ReadonlySet<string>;                       // '/dashboard', '/risk'
