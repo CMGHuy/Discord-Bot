@@ -762,7 +762,7 @@ export class Risk {
   );
 
   protected readonly async = computed(() =>
-    asyncInputs(this.store, { isEmpty: (data) => data.positions.length === 0 }),
+    asyncInputs(this.store, { isEmpty: (data) => data.positions?.length === 0 }),
   );
 
   /** A polite summary for the workspace's one live region — null until the

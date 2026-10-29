@@ -120,10 +120,10 @@ describe('shell navigation', () => {
     const el = f.nativeElement as HTMLElement;
     expect(el.querySelector('.killswitch-strip')).toBeNull();
 
-    // killswitchOn is a protected signal set from the risk endpoint; drive it
-    // the way the component does rather than reaching into the instance.
-    (f.componentInstance as unknown as { killswitchOn: WritableSignal<boolean> })
-      .killswitchOn.set(true);
+    TestBed.inject(HttpTestingController).expectOne('/api/v1/risk/killswitch').flush({
+      killswitch: { on: true, reason: null, at: null,
+        availability: { state: 'ok', checked_at: '2026-10-28T00:00:00+00:00', reason: null } },
+    });
     f.detectChanges();
 
     const strip = el.querySelector('.killswitch-strip')!;
@@ -131,6 +131,27 @@ describe('shell navigation', () => {
     expect(strip.textContent).toContain('KILLSWITCH ENGAGED');
     expect(strip.parentElement?.classList.contains('main')).toBe(true);
     expect(strip.previousElementSibling?.tagName.toLowerCase()).toBe('header');
+  });
+
+  it('shows unknown shell state after a fresh failed read, with a stale observation', () => {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    const ok = { state: 'ok', checked_at: '2026-10-28T00:00:00+00:00', reason: null };
+    http.expectOne('/api/v1/risk/killswitch').flush({ killswitch: {
+      on: false, reason: null, at: null, availability: ok,
+    } });
+    f.detectChanges();
+    expect(f.nativeElement.querySelector('.killswitch-strip')).toBeNull();
+    (f.componentInstance as unknown as { refreshKillswitch(): void }).refreshKillswitch();
+    http.expectOne('/api/v1/risk/killswitch').flush({}, { status: 503, statusText: 'unavailable' });
+    f.detectChanges();
+    const strip = f.nativeElement.querySelector('.killswitch-strip') as HTMLElement;
+    expect(strip.getAttribute('role')).toBe('status');
+    expect(strip.textContent).toContain('STATE UNAVAILABLE');
+    expect(strip.textContent).toContain('Last observed clear');
+    expect(strip.textContent).toContain('stale');
+    http.expectNone('/api/v1/risk/killswitch');
   });
 
   it('overlays the scan progress strip on the workspace rather than reflowing it', () => {

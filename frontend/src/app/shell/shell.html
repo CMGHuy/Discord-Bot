@@ -151,8 +151,15 @@
          bar, because the bar is now full: competing for width with the tape
          is how an alert ends up truncated, and this is the one message on
          the page that must never be. -->
-    @if (killswitchOn()) {
+    @if (killswitchOn() === true) {
       <div class="killswitch-strip" role="alert">KILLSWITCH ENGAGED</div>
+    } @else if (killObservation()?.availability?.state === 'unavailable') {
+      <div class="killswitch-strip" role="status">
+        KILLSWITCH STATE UNAVAILABLE
+        @if (killObservation()?.last_known; as last) {
+          <span>Last observed {{ last.on ? 'engaged' : 'clear' }} at {{ last.checked_at }} — stale</span>
+        }
+      </div>
     }
 
     <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">

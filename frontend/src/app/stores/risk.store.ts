@@ -9,15 +9,17 @@ import {
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
+import { unavailableKillswitch } from '../api/risk-state';
 import { Observable } from 'rxjs';
 
 import { routeRequest } from '../routing/route-request';
 import {
-  Correlation, DataSourcesHealth, Killswitch, Risk, RiskMetrics, RiskPosition, SectorHeat,
+  Correlation, DataSourcesHealth, Killswitch, Risk, RiskAvailability, RiskMetrics, RiskPosition, SectorHeat,
 } from '../api/models';
 
 interface RiskSlice {
   data: Risk | null;
+  control: Killswitch | null;
   loading: boolean;
   error: string | null;
 
@@ -72,12 +74,13 @@ function tickerList(value: unknown): string[] | null {
 export const RiskStore = signalStore(
   withState<RiskSlice>({
     data: null,
+    control: null,
     loading: false,
     error: null,
     toggling: false,
     commandError: null,
   }),
-  withComputed(({ data }) => ({
+  withComputed(({ data, control }) => ({
     /** True until the first response and never again -- a skeleton once,
      *  and nothing at all on refetches. */
     empty: computed(() => data() === null),
@@ -137,18 +140,20 @@ export const RiskStore = signalStore(
 
     /* -- throttle and killswitch ----------------------------------------- */
 
-    /** 1.0 means unthrottled. The server already substitutes 1.0 for a
-     *  missing value, so a null here would be a contract change rather than
-     *  a normal state. */
+    /** Null means the current throttle could not be observed. */
     throttleMultiplier: computed(() => data()?.throttle?.multiplier ?? null),
     /** The drawdown throttle has cut size, or scanning is paused outright.
      *  Either one changes what the bot will do next, which is why they sit
      *  beside the killswitch rather than in a footnote. */
-    throttled: computed(() => (data()?.throttle?.multiplier ?? 1) < 1),
-    paused: computed(() => data()?.throttle?.paused ?? false),
+    availability: computed<RiskAvailability | null>(() => data()?.availability ?? null),
+    throttled: computed<boolean | null>(() => {
+      const value = data()?.throttle.multiplier;
+      return value === null || value === undefined ? null : value < 1;
+    }),
+    paused: computed<boolean | null>(() => data()?.throttle.paused ?? null),
 
-    killswitch: computed<Killswitch | null>(() => data()?.killswitch ?? null),
-    killswitchOn: computed(() => data()?.killswitch?.on ?? false),
+    killswitch: computed<Killswitch | null>(() => control()),
+    killswitchOn: computed<boolean | null>(() => control()?.on ?? null),
 
     /* -- scan health ----------------------------------------------------- */
 
@@ -169,8 +174,9 @@ export const RiskStore = signalStore(
   withMethods((store, api = inject(ApiClient)) => {
     const resolve = (): Observable<void> => routeRequest(api.risk(), {
       start: () => patchState(store, { loading: true }),
-      next: (data) => patchState(store, { data, loading: false, error: null }),
+      next: (data) => patchState(store, { data, control: data.killswitch, loading: false, error: null }),
       error: (error) => patchState(store, {
+        control: unavailableKillswitch(store.control()),
         loading: false,
         error: error.code === 'unavailable' ? 'The admin is not responding — these figures may be stale.' : error.message,
       }),
@@ -181,8 +187,22 @@ export const RiskStore = signalStore(
       toggleKillswitch(on: boolean): void {
         patchState(store, { toggling: true, commandError: null });
         api.setKillswitch(on).subscribe({
-          next: ({ killswitch }) => { const data = store.data(); patchState(store, { toggling: false, data: data ? { ...data, killswitch } : data }); },
-          error: (error: ApiError) => patchState(store, { toggling: false, commandError: error.code === 'unavailable' ? `The admin is not responding — the killswitch is NOT ${on ? 'engaged' : 'released'}.` : error.message }),
+          next: ({ killswitch }) => {
+            const data = store.data();
+            patchState(store, {
+              toggling: false, control: killswitch,
+              commandError: killswitch.on === null
+                ? 'Command sent; current state is unavailable. Verify before relying on it.' : null,
+              data: data ? { ...data, killswitch,
+                availability: { ...data.availability, killswitch: killswitch.availability } } : data,
+            });
+          },
+          error: (error: ApiError) => patchState(store, {
+            toggling: false, control: unavailableKillswitch(store.control()),
+            commandError: error.code === 'unavailable'
+              ? 'Could not confirm the requested killswitch state. Current state is unavailable.'
+              : error.message,
+          }),
         });
       },
       dismissCommandError(): void { patchState(store, { commandError: null }); },

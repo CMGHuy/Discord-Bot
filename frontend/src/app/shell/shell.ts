@@ -10,6 +10,8 @@ import {
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ApiClient } from '../api/api-client';
+import { Killswitch } from '../api/models';
+import { unavailableKillswitch } from '../api/risk-state';
 import { EventStream } from '../api/event-stream';
 import { ConnectionStore } from '../stores/connection.store';
 import { MarketIndexStore } from '../stores/market-index.store';
@@ -290,10 +292,11 @@ export class Shell {
    *
    * The spec requires it to be visible from every workspace, and RiskStore
    * is provided on the /risk route -- it does not exist while you are
-   * looking at Trades. This is one boolean re-read on a `risk` event, not a
+   * looking at Trades. This is one observation re-read on a `risk` event, not a
    * second copy of the risk workspace's state.
    */
-  protected readonly killswitchOn = signal(false);
+  protected readonly killObservation = signal<Killswitch | null>(null);
+  protected readonly killswitchOn = computed(() => this.killObservation()?.on ?? null);
 
   constructor() {
     // Read once, here rather than in an app initializer: preferences are
@@ -324,11 +327,8 @@ export class Shell {
 
   protected refreshKillswitch(): void {
     this.api.killswitch().subscribe({
-      next: (result) => this.killswitchOn.set(result.killswitch.on),
-      // Silent: a failure here means the risk endpoint is unhappy, which
-      // the Risk workspace will report properly. A toast on every shell
-      // load would be noise on top of an error that is already visible.
-      error: () => undefined,
+      next: ({ killswitch }) => this.killObservation.set(killswitch),
+      error: () => this.killObservation.set(unavailableKillswitch(this.killObservation())),
     });
   }
 

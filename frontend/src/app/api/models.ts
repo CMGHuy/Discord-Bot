@@ -1384,15 +1384,42 @@ export interface SectorHeat {
   heat_pct: number | null;
 }
 
-export interface Throttle {
-  multiplier: number | null;
-  paused: boolean;
+export interface DomainAvailability {
+  state: 'ok' | 'partial' | 'unavailable';
+  checked_at: string;
+  reason: string | null;
 }
 
-export interface Killswitch {
+export interface RiskAvailability {
+  positions: DomainAvailability;
+  heat: DomainAvailability;
+  sector_heat: DomainAvailability;
+  clusters: DomainAvailability;
+  throttle: DomainAvailability;
+  killswitch: DomainAvailability;
+  distribution_metrics?: DomainAvailability;
+  drawdown_r?: DomainAvailability;
+  drawdown_amount?: DomainAvailability;
+}
+
+export interface LastKnownKillswitch {
   on: boolean;
   reason: string | null;
   at: string | null;
+  checked_at: string;
+}
+
+export interface Throttle {
+  multiplier: number | null;
+  paused: boolean | null;
+}
+
+export interface Killswitch {
+  on: boolean | null;
+  reason: string | null;
+  at: string | null;
+  availability: DomainAvailability;
+  last_known?: LastKnownKillswitch;
 }
 
 /** v106 -- the live data provider and how often Alpaca misses.
@@ -1426,6 +1453,9 @@ export interface KillswitchResult {
 export interface RiskMetric {
   value: number | null;
   n: number;
+  excluded_count?: number;
+  invalid_date_count?: number;
+  invalid_outcome_count?: number;
 }
 
 export interface RiskMetrics {
@@ -1459,15 +1489,16 @@ export interface Correlation {
 }
 
 export interface Risk {
+  availability: RiskAvailability;
   heat: RiskHeat;
-  positions: RiskPosition[];
-  sector_heat: SectorHeat[];
+  positions: RiskPosition[] | null;
+  sector_heat: SectorHeat[] | null;
   /** v194 B6: open positions with no sector in the scan universe's map, so
    *  absent from `sector_heat`. Above zero, an empty `sector_heat` means "no
    *  sector data", not "no exposure". Optional: specs build full `Risk`
    *  literals, and an older server omits it. */
   unmapped_count?: number;
-  clusters: unknown[];
+  clusters: unknown[] | null;
   throttle: Throttle;
   killswitch: Killswitch;
   scan_health: ScanHealth;
