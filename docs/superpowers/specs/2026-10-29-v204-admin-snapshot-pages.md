@@ -237,3 +237,48 @@ findings are applied above: read-only bars source, `bars_as_of` /
 no forked risk code (parity test), loud failure on a missing volume, recorded
 inputs, Risk's two clocks, filtered-view as-of labels. This spec gets its own
 `/panel` run.
+
+## Panel amendments
+
+These resolve the staff-engineer findings below. Where they conflict with
+earlier text in this spec, they win.
+
+- **Kill switch for these pages.** `ADMIN_REFRESHER=off` keeps today's
+  request-time compute path for Risk, Analytics, Calendar and the sparkline
+  (`collect_portfolio_state`, `refresh_snapshot`) behind the flag, pinned by a
+  test, exactly as v201 does for prices. A dead refresher is therefore fixed
+  by a config flip, not an image revert. The fallback is removed together
+  with v201's after 30 clean days.
+- **Snapshots never stall prices.** The snapshot job runs on its own worker
+  thread inside the refresher process, on its own cadence. It never runs
+  inline in the quote cycle. The cycle hands it work and moves on. Each
+  snapshot build has a time budget (config field). A build that overruns is
+  abandoned, its mark is cleared with an error, and it retries next cadence.
+- **The read-only bars reader lives in `swingbot/core`**, next to the moved
+  risk code, not in `swingbot/admin/freshness.py`. No new core→admin import is
+  added. `freshness.page_daily` delegates to it.
+- **`analytics_snapshot.json` stays, which reverses v201's "file retired"
+  outcome** because the Discord side reads it (see v201 § Panel review). A
+  parity test pins that the figures both producers compute (performance
+  totals and the equity curve per ledger) agree for the same trades.
+- **Retention:** the snapshot table holds one row per key, upserted, so it
+  never grows with time. Keys for months older than the previous month are
+  not snapshotted.
+- **Guard test coverage** names every request-time `refresh_snapshot` caller:
+  `swingbot/admin/api_v1/analytics.py:41-43`, `swingbot/admin/dashboard.py:57`
+  **and** `swingbot/admin/queries.py:209`.
+- **Rollback:** the Alembic downgrade drops the snapshot table. v201's
+  `rollback_to.sh` refresher stop/start already covers the process.
+
+## Panel review
+
+Serial run on `21a89358`. **In progress:** staff-engineer done; quant-engineer
+and financial-advisor still to run.
+
+- staff-engineer [BLOCKING]: `ADMIN_REFRESHER=off` left four pages with no fallback. -- applied (Panel amendments, kill switch).
+- staff-engineer [ADVISORY]: a 52 s snapshot inside the single loop stalls quotes. -- applied (own worker thread + time budget).
+- staff-engineer [ADVISORY]: `page_daily` adds a core→admin import. -- applied (reader moves to core).
+- staff-engineer [ADVISORY]: two producers of the same analytics with no agreement check; reverses v201's outcome. -- applied (parity test; reversal recorded).
+- staff-engineer [ADVISORY]: no retention rule for the snapshot table. -- applied (upsert by key).
+- staff-engineer [ADVISORY]: `queries.py:209` missing from the guard list. -- applied.
+- staff-engineer [ADVISORY]: downgrade and rollback coverage not restated. -- applied.
