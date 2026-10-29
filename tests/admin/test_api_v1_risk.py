@@ -1103,6 +1103,22 @@ def test_distribution_computation_failure_is_sanitized(distribution_inputs, monk
     assert availability["distribution_metrics"]["reason"] == "market_data_unavailable"
 
 
+def test_distribution_overflow_is_unavailable_and_json_safe(distribution_inputs, monkeypatch):
+    import json
+
+    risk, frame = distribution_inputs
+    extreme = pd.DataFrame({"Close": [1.0, 1e200] * 50}, index=frame.index)
+    monkeypatch.setattr(risk, "_risk_bars", lambda symbols: {"AAPL": extreme, "SPY": frame})
+    metrics, corr, availability = risk._distribution_metrics(
+        [_open_trade("overflow")], "SPY", _DISTRIBUTION_CHECKED)
+
+    assert availability["distribution_metrics"]["state"] == "unavailable"
+    assert availability["distribution_metrics"]["reason"] == "market_data_unavailable"
+    assert all(metrics[name]["value"] is None for name in risk._DISTRIBUTION_KEYS)
+    assert corr["labels"] == ["AAPL"]
+    json.dumps({"metrics": metrics, "correlation": corr, "availability": availability}, allow_nan=False)
+
+
 def _r_trade(trade_id, stamp, outcome):
     return {"id": trade_id, "ticker": "AAPL", "status": "closed", "direction": "bullish",
             "entry": 100.0, "stop_loss": 90.0, "exit_price": 100.0 + outcome * 10,

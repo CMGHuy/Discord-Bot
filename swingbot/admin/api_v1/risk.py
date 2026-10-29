@@ -407,6 +407,9 @@ def _covered_distribution(weights: dict, symbols: list, bars: dict,
     except Exception as exc:
         swallowed(log, "ops.risk.distribution_values", exc, level=logging.DEBUG)
         return _empty_distribution(), _distribution_status(checked, "market_data_unavailable")
+    if any(values[key]["value"] is not None and not math.isfinite(values[key]["value"])
+           for key in _DISTRIBUTION_KEYS):
+        return _empty_distribution(), _distribution_status(checked, "market_data_unavailable")
     reason = None if values["as_of"] is not None else "incomplete_bars"
     return values, _distribution_status(checked, reason)
 
