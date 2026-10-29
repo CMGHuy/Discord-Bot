@@ -12,7 +12,8 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer } from '../../ui/data-table/testing/reachability';
 import { Gallery } from './gallery';
 import { Hint } from '../../ui/hint';
-import { PERFORMANCE_CAVEAT } from '../../ui/stat-tile';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
 
 /** The text of the sb-hint whose aria label is `label` (A4 audit). */
 function hintText(fixture: ComponentFixture<unknown>, label: string): string {
@@ -222,5 +223,86 @@ describe('the gallery shows compact rows (v179 §3.1)', () => {
     openRowDrawer(table);
     fixture.detectChanges();
     expect([...compactKeys(table), ...drawerKeys(table)].sort()).toEqual(['note', 'outcome', 'pnl', 'ticker']);
+  });
+});
+
+/* -- v195 §5.1 -- the gallery is the reference page for sb-page ------------- */
+
+describe('the gallery is the sb-page reference (v195 §5.1, Phase 4)', () => {
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideRouter([]),
+        { provide: ConnectionStore, useValue: { marketActive: () => true } }],
+    });
+    TestBed.inject(RouteTitleService).set('UI gallery', 'Every primitive, in one place');
+  });
+
+  function mount() {
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('renders the route title as its one h1, and writes none itself', () => {
+    const { el } = mount();
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('UI gallery');
+    expect(GALLERY).not.toMatch(/<h1[\s>]/);
+  });
+
+  it('fills every slot: actions, scope, KPIs, the primary reference and two secondary panels', () => {
+    const { el } = mount();
+    for (const slot of ['[page-actions]', '[page-scope]', '[page-kpis]', '[page-primary]']) {
+      expect(el.querySelectorAll(`sb-page ${slot}`), slot).toHaveLength(1);
+    }
+    expect(el.querySelectorAll('sb-page [page-secondary]')).toHaveLength(2);
+    expect(el.querySelector('sb-page [page-primary] sb-stat-tile .thin')).not.toBeNull();
+  });
+
+  it('demos the header action as danger-quiet, behind its confirm', () => {
+    const { fixture, el } = mount();
+    const button = el.querySelector<HTMLButtonElement>('sb-page [page-actions] [data-action="demo-clear"]')!;
+    expect(button.classList).toContain('danger-quiet');
+    expect(button.classList).not.toContain('danger');
+    button.click();
+    fixture.detectChanges();
+    expect(el.querySelector('dialog[open]')!.textContent).toContain('Clear the demo log?');
+  });
+
+  it('shows danger for the killswitch alone and danger-quiet for housekeeping, each confirming', () => {
+    const { fixture, el } = mount();
+    const halt = el.querySelector<HTMLButtonElement>('[data-demo="killswitch"]')!;
+    const quiet = el.querySelector<HTMLButtonElement>('[data-demo="housekeeping"]')!;
+    expect(halt.classList).toContain('danger');
+    expect(halt.classList).not.toContain('danger-quiet');
+    expect(quiet.classList).toContain('danger-quiet');
+    halt.click();
+    fixture.detectChanges();
+    const dialog = el.querySelector('dialog[open]')!;
+    expect(dialog.textContent).toContain('Halt trading?');
+    expect(dialog.querySelector('button.danger')).not.toBeNull();
+  });
+
+  it('leads the demo KPI strip with ExpR, with N and the basis, and risk in two units', () => {
+    const { fixture } = mount();
+    const tiles = fixture.debugElement.queryAll(By.css('[page-kpis] sb-stat-tile'))
+      .map((d) => d.componentInstance as StatTile);
+    expect(tiles.map((t) => t.label())).toEqual(['ExpR', 'Win rate', 'Open risk', 'Payoff ratio']);
+    for (const tile of [tiles[0], tiles[1], tiles[3]]) {
+      expect(tile.sample(), tile.label()).not.toBeNull();
+      expect(tile.about(), tile.label()).toContain(PERFORMANCE_CAVEAT);
+    }
+    expect(tiles[2].value()).toMatch(/ · \d+\.\d{2}%$/);
+  });
+
+  it('demos the rail label: an anchored hint beside a link, with no trigger button', () => {
+    const { el } = mount();
+    const link = el.querySelector<HTMLAnchorElement>('a.rail-demo')!;
+    expect(link.getAttribute('aria-label')).toBe('Dashboard');
+    const hint = link.nextElementSibling!;
+    expect(hint.tagName.toLowerCase()).toBe('sb-hint');
+    expect(hint.querySelector('button')).toBeNull();
   });
 });
