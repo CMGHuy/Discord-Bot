@@ -143,7 +143,19 @@ describe('sb-toolbar one row pattern (v179 §3.3)', () => {
     expect(badge.classList).toContain('num');
     expect(badge.textContent!.trim()).toBe('2');
     expect(toolbarRule('.count')).toContain('border-radius: var(--chip-radius)');
-    expect(toolbarRule('.count')).toContain('background: var(--accent-soft)');
+    // v195 Phase 2: a count is not a state, so it takes no accent.
+    expect(toolbarRule('.count')).toContain('border: 1px solid var(--border-strong)');
+    expect(toolbarRule('.count')).toContain('color: var(--text-secondary)');
+    expect(toolbarRule('.count')).not.toContain('accent');
+    expect(toolbarRule('.count')).not.toContain('background');
+  });
+
+  it('edges the Filters button in the accent while its sheet is open, its one state (v195 Phase 2)', () => {
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.toolbar-sheet-button')!;
+    button.click();
+    fixture.detectChanges();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(toolbarRule(".toolbar-sheet-button[aria-expanded='true']")).toContain('border-color: var(--accent)');
   });
 
   it('lays the open sheet out in equal columns, two on a phone-width bar', () => {
@@ -168,5 +180,46 @@ describe('sb-toolbar phone flex ownership (v179 review)', () => {
     // outer line, leaving Filters below Columns instead of beside it.
     const phone = TOOLBAR_SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/)?.[1] ?? '';
     expect(phone).toMatch(/\.toolbar-inline \{[^}]*display: contents;/);
+  });
+});
+
+/* v195 Phase 2: buttons, chips, segmented, form controls, filter bar,
+ * control bar and toolbar are flat, 4px, and spend the accent only on a
+ * keyboard focus ring and on selected or engaged state. button.ts is gated
+ * by its own spec (V195-8); these are the other six. Source text: jsdom
+ * computes no component style. */
+const FAMILY = ['chip.ts', 'segmented.ts', 'form-controls.ts', 'filter-bar.ts', 'control-bar.ts', 'toolbar.ts'];
+const stylesOf = (file: string) =>
+  [...readFileSync(join(process.cwd(), 'src/app/ui', file), 'utf8').matchAll(/styles:\s*`([\s\S]*?)`/g)]
+    .map(([, css]) => css)
+    .join('\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+const rulesOf = (css: string) =>
+  [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selector, body]) => ({ selector: selector.trim(), body }));
+/** Where the accent may appear: a focus ring, a selected option, an open or engaged filter. */
+const ACCENT_STATE = /:focus-visible|\.current\b|\.active\b|\[aria-expanded='true'\]|\[aria-pressed='true'\]/;
+
+describe('the control family is flat (v195 Phase 2)', () => {
+  it.each(FAMILY)('%s casts no shadow, paints no gradient, mixes no colour and moves nothing', (file) => {
+    const css = stylesOf(file);
+    expect(css.length).toBeGreaterThan(0);
+    expect(css).not.toMatch(/box-shadow\s*:/);
+    expect(css).not.toContain('gradient(');
+    expect(css).not.toContain('color-mix(');
+    expect(css).not.toMatch(/(?<![-\w])transform\s*:/);
+  });
+
+  it.each(FAMILY)('%s rounds every corner with the 4px control or chip radius', (file) => {
+    const radii = [...stylesOf(file).matchAll(/border(?:-[a-z]+)*-radius:\s*([^;}]+)/g)].map(([, value]) => value.trim());
+    for (const value of radii) expect(['var(--control-radius)', 'var(--chip-radius)'], `${file}: ${value}`).toContain(value);
+  });
+
+  it.each(FAMILY)('%s spends the accent only on focus, selected or engaged state', (file) => {
+    for (const { selector, body } of rulesOf(stylesOf(file))) {
+      for (const declaration of body.split(';').filter((d) => d.includes('var(--accent'))) {
+        const allowed = ACCENT_STATE.test(selector) || declaration.trim().startsWith('accent-color:');
+        expect(allowed, `${file}: ${selector} { ${declaration.trim()} }`).toBe(true);
+      }
+    }
   });
 });

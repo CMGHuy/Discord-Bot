@@ -141,6 +141,42 @@ describe('ProfileMenu', () => {
       expect(chosen).toEqual(['reduced']);
     });
   });
+
+  describe('Density control (v195 §1.4)', () => {
+    const control = () => el.querySelector('sb-segmented.density-control');
+    const segments = () =>
+      Array.from(el.querySelectorAll<HTMLButtonElement>('sb-segmented.density-control .segment'));
+
+    it('offers Dense and Comfortable under the label "Density"', () => {
+      openMenu();
+      expect(control()!.querySelector('[role=group]')!.getAttribute('aria-label')).toBe('Density');
+      expect(segments().map((b) => b.textContent!.trim())).toEqual(['Dense', 'Comfortable']);
+    });
+
+    it('defaults to Dense and marks the density it is given', () => {
+      openMenu();
+      expect(segments().find((b) => b.getAttribute('aria-pressed') === 'true')!.textContent!.trim()).toBe('Dense');
+      fixture.componentRef.setInput('density', 'comfortable');
+      fixture.detectChanges();
+      expect(segments().find((b) => b.getAttribute('aria-pressed') === 'true')!.textContent!.trim()).toBe('Comfortable');
+    });
+
+    it('emits the chosen density and keeps the menu open', () => {
+      const chosen: string[] = [];
+      fixture.componentInstance.densityChanged.subscribe((density) => chosen.push(density));
+      openMenu();
+      segments()[1].click();
+      fixture.detectChanges();
+      expect(chosen).toEqual(['comfortable']);
+      expect(menu()).not.toBeNull();
+    });
+
+    it('says the touch rules win, so a phone or tablet user is not left guessing', () => {
+      openMenu();
+      expect(el.querySelector('.density-row .menu-note')!.textContent!.trim())
+        .toBe('Desktop only: touch screens keep 44px rows.');
+    });
+  });
 });
 
 describe('ProfileMenu bot-status halo', () => {

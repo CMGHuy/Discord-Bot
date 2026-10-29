@@ -16,6 +16,7 @@ import {
 } from '../../api/interceptors';
 import { TradeRow } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
+import { RouteTitleService } from '../../routing/route-title.service';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TradesStore } from '../../stores/trades.store';
 import { isInline } from '../../ui/priority';
@@ -323,7 +324,7 @@ describe('Trades toolbar priorities', () => {
       toolbarControls: () => ToolbarControl[];
     }).toolbarControls();
     expect(controls.find((c) => c.id === 'ticker')!.active).toBe(false);
-    // columns/density/export/clear-* are not filters and report no state.
+    // columns/density/export are not filters and report no state.
     expect(controls.find((c) => c.id === 'columns')!.active).toBe(false);
   });
 });
@@ -608,5 +609,89 @@ describe('Trades — explanations are hints, not titles (v194 A3)', () => {
     expect(el.querySelector('sb-row-link sb-hint')).toBeNull();
     const texts = [...el.querySelectorAll('sb-hint [role="tooltip"]')].map((n) => n.textContent!.trim());
     expect(texts).toContain(partialOpenTitle(r)!);
+  });
+});
+
+/* -- v195 Phase 4 and §5.2 -- Trades on sb-page ----------------------------- */
+
+describe('Trades on sb-page (v195 Phase 4, §5.2)', () => {
+  function mountPage(): ComponentFixture<Trades> {
+    installDialogPolyfill();
+    const fixture = render({ total: 0, page: 1, perPage: 12 });
+    TestBed.inject(RouteTitleService).set('Trades', 'Every plan, filled or not');
+    fixture.detectChanges();
+    return fixture;
+  }
+  const el = (fixture: ComponentFixture<Trades>) => fixture.nativeElement as HTMLElement;
+
+  it('renders the route title as the one h1, from sb-page', () => {
+    const page = el(mountPage());
+    expect(page.querySelectorAll('h1')).toHaveLength(1);
+    expect(page.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Trades');
+  });
+
+  it('puts Clear open and Clear history in the header actions, quiet, never solid', () => {
+    const actions = el(mountPage()).querySelector('sb-page [page-actions]')!;
+    const buttons = [...actions.querySelectorAll<HTMLButtonElement>('button[sb-button]')];
+    expect(buttons.map((b) => b.getAttribute('data-action'))).toEqual(['clear-open', 'clear-history']);
+    expect(buttons.map((b) => b.textContent!.trim())).toEqual(['Clear open', 'Clear history']);
+    for (const button of buttons) {
+      expect(button.classList).toContain('danger-quiet');
+      expect(button.classList).not.toContain('danger');
+    }
+  });
+
+  it('confirms a bulk clear from the header before anything is deleted', () => {
+    const fixture = mountPage();
+    el(fixture).querySelector<HTMLButtonElement>('[page-actions] [data-action="clear-history"]')!.click();
+    fixture.detectChanges();
+    const dialog = el(fixture).querySelector('sb-page sb-confirm-dialog:last-of-type')!;
+    expect(dialog.textContent).toContain('Clear trade history');
+    expect(TestBed.inject(TradesStore).clearing()).toBeNull();
+  });
+
+  it('reports a clear result and a clear error beside the buttons that sent it', () => {
+    const fixture = mountPage();
+    patchState(unprotected(TestBed.inject(TradesStore)), {
+      clearResult: 'Cleared 3 open positions.',
+      clearError: 'Clear failed: unavailable',
+    });
+    fixture.detectChanges();
+    const actions = el(fixture).querySelector('sb-page [page-actions]')!;
+    expect(actions.querySelector('p.cleared[role="status"]')!.textContent).toContain('Cleared 3 open positions.');
+    expect(actions.querySelector('p.command-error[role="alert"]')!.textContent).toContain('Clear failed: unavailable');
+  });
+
+  it('keeps the scope bar to filters and scope: no destructive control in it', () => {
+    const scope = el(mountPage()).querySelector('sb-page [page-scope]')!;
+    expect(scope.querySelector('sb-toolbar [slot="status"]')).toBeTruthy();
+    expect(scope.querySelector('sb-toolbar [slot="columns"]')).toBeTruthy();
+    expect(scope.querySelector('sb-filter-bar')).toBeTruthy();
+    expect(scope.querySelector('[slot^="clear"]')).toBeNull();
+    expect(scope.querySelector('.danger, .danger-quiet')).toBeNull();
+  });
+
+  it('drops the two clear controls from the toolbar priorities', () => {
+    expect(TRADES_CONTROLS.map((c) => c.id)).toEqual([
+      'status', 'columns', 'density', 'export', 'dates', 'ticker', 'origin',
+      'strategy', 'horizon', 'confidence', 'tier', 'badge', 'note',
+    ]);
+  });
+
+  it('makes the trade table, with its count footer, the primary panel', () => {
+    const primary = el(mountPage()).querySelector('sb-page [page-primary]')!;
+    expect(primary.querySelector('sb-async')).toBeTruthy();
+    expect(primary.querySelector('p.count')!.textContent).toContain('No trades yet');
+  });
+
+  it('renders the table rows through the cell templates in the default slot', () => {
+    const page = renderRows([row({ id: 'abcdef123456' })]);
+    expect(page.querySelector('sb-page [page-primary] tbody tr.row sb-row-link')).toBeTruthy();
+  });
+
+  it('carries no hand-laid page grid of its own any more', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trades.ts'), 'utf8');
+    expect(src).toContain('<sb-page');
+    expect(src).not.toMatch(/:host \{[^}]*grid-template-columns/);
   });
 });

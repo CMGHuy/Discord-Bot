@@ -57,9 +57,11 @@ The partner asked for "a better, more professional and clean design" of the whol
 | faint (`--text-faint`, rules and dividers only, never text: see correction 13) | `#6b7280` |
 | accent (interactive only) | `#6ea8fe` |
 | pos | `#3fb68b` |
-| neg | `#e5534b` |
+| neg | `#f06e66` (amended by V195-2 from `#e5534b`, which measured 4.37:1 on raised, 4.21:1 on overlay and 3.85:1 on its own tint) |
 | warn | `#d29922` |
-| category / violet | `#b392f0` |
+| category / violet | `#c193ed` (amended by V195-2 from `#b392f0`, OKLab ΔE 9.7 from the accent entry line in the Discord image) |
+
+**Amended in V195-2 (plan v195, 2026-10-25).** Two table values failed a gate and were moved to the nearest passing value, per the rule below: `neg` (WCAG AA) and `category / violet` (`test_chart_theme.py`'s ΔE ≥ 10 between roles drawn together). `--chart-2` was re-derived to `#bd6c18` (it sat ΔE 8.0 from `warn`). The accent fills, not given above, are `#2563c4` (`--accent-fill`, white 5.74:1) and `#2d6cd3` (`--accent-fill-hi`, white 5.00:1).
 
 The alpha tints (`-aNN`) are re-derived from the new hues, as plain `rgba()` literals in `palette.css` (v167 amendment 2 still holds: no `color-mix()`, so jsdom and lightweight-charts get plain strings). `--chart-1..6` and `--quality-4`, the named literal exceptions in `tokens.css`, are re-derived for the graphite ground. `frontend/src/index.html` and `frontend/public/manifest.webmanifest` carry the new `--bg` for the cold load.
 

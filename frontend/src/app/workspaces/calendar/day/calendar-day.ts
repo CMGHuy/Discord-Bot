@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import {
@@ -9,13 +9,16 @@ import {
   DayDelta,
   SparkSeries,
 } from '../../../api/models';
+import { RouteTitleService } from '../../../routing/route-title.service';
 import { CalendarDayStore, DaySort } from '../../../stores/calendar-day.store';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { EmptyStateComponent } from '../../../ui/empty-state';
 import { ABSENT, money, rMultiple } from '../../../ui/format';
 import { Panel, Tab, TabBar } from '../../../ui/layout';
+import { Page } from '../../../ui/page';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
 import { Hint } from '../../../ui/hint';
+import { StatStrip } from '../../../ui/stat-strip';
 import { StatTile } from '../../../ui/stat-tile';
 import { monthLabel } from '../calendar.helpers';
 import { ONE_DAY_CAVEAT, PAPER_CAPTION, R_TOOLTIP, legsSampleNote } from './day-copy';
@@ -26,7 +29,8 @@ import { WIN_RATE_MIN_N, monthOf, ordinal, percentileView } from './month-contex
  * compares (D2), what drove it (D3), and every row as a card with its
  * sparkline (D1/D4). The drawer stays the quick preview. D7 governs every
  * word and colour here: paper caption always, N beside every comparison,
- * comparison figures in neutral text. */
+ * comparison figures in neutral text.
+ * v195: on sb-page; the long date is the h1 and the breadcrumb's detail segment. */
 
 const UTC_DAY = (date: string): Date => {
   const [year, month, day] = date.split('-').map(Number);
@@ -103,47 +107,75 @@ function sign(value: number | null): 'pos' | 'neg' | null {
 @Component({
   selector: 'sb-calendar-day',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DayTradeCard, EmptyStateComponent, Hint, Panel, RouterLink, Segmented, StatTile, TabBar],
+  imports: [DayTradeCard, EmptyStateComponent, Hint, Page, Panel, RouterLink, Segmented, StatStrip, StatTile, TabBar],
   host: { class: 'register-presentation' },
   template: `
-    <header class="day-head">
-      <a class="back" [routerLink]="['/calendar']" [queryParams]="backParams()">← Calendar{{ backMonth() }}</a>
-      <h2 class="long-date">{{ title() }}</h2>
-      <nav class="steps" aria-label="Trading days">
-        @if (store.prevDay(); as prev) {
-          <a class="prev" [routerLink]="['/calendar', prev]" [queryParams]="store.filterParams()">‹ prev day</a>
-        } @else {
-          <span class="prev off">‹ prev day</span>
+    <!-- v195 Phase 4, §5.2: the long date is the page's one h1 and the paper
+         caption its description, so both show on a day with no trades too.
+         The breadcrumb's detail segment is the long date; its Calendar crumb
+         links back. No scope bar on a detail route. -->
+    <sb-page [heading]="title()" [description]="caption">
+      <!-- The header's right: the stale notice, then the day stepper. The
+           month link keeps the filtered-month return the old "← Calendar"
+           link carried (v165 D6); the breadcrumb crumb opens /calendar bare. -->
+      <div page-actions class="page-actions">
+        @if (store.error(); as message) {
+          <p class="stale" role="status">{{ message }}</p>
         }
-        @if (store.nextDay(); as next) {
-          <a class="next" [routerLink]="['/calendar', next]" [queryParams]="store.filterParams()">next day ›</a>
-        } @else {
-          <span class="next off">next day ›</span>
-        }
-      </nav>
-    </header>
-    <p class="caption">{{ caption }}</p>
-    @if (store.error(); as message) {
-      <p class="stale" role="status">{{ message }}</p>
-    }
-
-    @if (store.day(); as day) {
-      <div class="tiles">
-        <sb-stat-tile label="Total" [value]="r(day.total_r)" [sample]="day.trade_count" [about]="rTooltip" />
-        <sb-stat-tile label="Total P&L" [value]="ccy(day.total_ccy)" [sample]="day.trade_count" />
-        <sb-stat-tile label="Win rate" [value]="winRate(day.win_rate)" [sample]="day.trade_count" />
-        <sb-stat-tile label="Winners" [value]="day.winners.toString()" [sample]="day.trade_count" tone="pos" />
-        <sb-stat-tile label="Losers" [value]="day.losers.toString()" [sample]="day.trade_count" tone="neg" />
-        <sb-stat-tile label="Average trade" [value]="r(day.avg_trade_r)" [sample]="day.trade_count" [about]="rTooltip" />
-        <sb-stat-tile label="Worst drawdown" [value]="r(day.worst_drawdown_r)" [sample]="day.trade_count" tone="neg" [about]="rTooltip" />
+        <nav class="steps" aria-label="Trading days">
+          @if (store.prevDay(); as prev) {
+            <a class="prev" [routerLink]="['/calendar', prev]" [queryParams]="store.filterParams()">‹ prev day</a>
+          } @else {
+            <span class="prev off">‹ prev day</span>
+          }
+          <a class="month" [routerLink]="['/calendar']" [queryParams]="backParams()">{{ monthName() ?? 'Calendar' }}</a>
+          @if (store.nextDay(); as next) {
+            <a class="next" [routerLink]="['/calendar', next]" [queryParams]="store.filterParams()">next day ›</a>
+          } @else {
+            <span class="next off">next day ›</span>
+          }
+        </nav>
       </div>
-      <p class="r-note">{{ rTooltip }}</p>
-      @if (store.hasLegs()) {
-        <p class="sample-note">{{ legsNote(day.trade_count) }}</p>
-      }
 
-      <div class="panels">
-        <sb-panel heading="How this day compares">
+      <!-- Spec Phase 2: the seven tiles are one KPI strip. -->
+      <div page-kpis class="summary">
+        @if (store.day(); as day) {
+          <sb-stat-strip class="tiles">
+            <sb-stat-tile label="Total" [value]="r(day.total_r)" [sample]="day.trade_count" [about]="rTooltip" />
+            <sb-stat-tile label="Total P&L" [value]="ccy(day.total_ccy)" [sample]="day.trade_count" />
+            <sb-stat-tile label="Win rate" [value]="winRate(day.win_rate)" [sample]="day.trade_count" />
+            <sb-stat-tile label="Winners" [value]="day.winners.toString()" [sample]="day.trade_count" tone="pos" />
+            <sb-stat-tile label="Losers" [value]="day.losers.toString()" [sample]="day.trade_count" tone="neg" />
+            <sb-stat-tile label="Average trade" [value]="r(day.avg_trade_r)" [sample]="day.trade_count" [about]="rTooltip" />
+            <sb-stat-tile label="Worst drawdown" [value]="r(day.worst_drawdown_r)" [sample]="day.trade_count" tone="neg" [about]="rTooltip" />
+          </sb-stat-strip>
+          <p class="r-note">{{ rTooltip }}</p>
+          @if (store.hasLegs()) {
+            <p class="sample-note">{{ legsNote(day.trade_count) }}</p>
+          }
+        }
+      </div>
+
+      <!-- v195 §5.2: the day's trades are the primary panel. -->
+      <div page-primary class="day-body">
+        @if (store.day(); as day) {
+          <sb-panel [heading]="'Trades (' + day.trade_count + ')'" class="trades-panel">
+            <sb-segmented panel-actions label="Sort trades" [options]="sorts" [value]="store.sort()" (valueChange)="setSort($event)" />
+            @for (trade of store.trades(); track trade.trade_id + ':' + trade.leg_index) {
+              <sb-day-trade-card [trade]="trade" [series]="seriesFor(trade)" />
+            }
+          </sb-panel>
+        } @else if (store.empty()) {
+          <sb-empty-state [title]="emptyTitle()" hint="Step to a neighbouring trading day, or widen the filters." />
+        } @else if (store.loading()) {
+          <p class="day-loading">Loading...</p>
+        }
+      </div>
+
+      <!-- The comparisons: one node each, hidden until a day has loaded, so
+           every slot stays a stable element across loaded, empty and loading. -->
+      <sb-panel page-secondary heading="How this day compares" [style.display]="store.day() ? null : 'none'">
+        @if (store.day(); as day) {
           <dl class="compare">
             <div><dt>Among trading days</dt><dd class="percentile">{{ percentile(day.context) }}</dd></div>
             <div><dt>In the month</dt><dd class="rank">{{ rankText() }}</dd></div>
@@ -151,30 +183,29 @@ function sign(value: number | null): 'pos' | 'neg' | null {
             <div><dt class="vs-weekday-label">vs average {{ weekday() }}</dt><dd class="vs-weekday">{{ delta(day.context.vs_weekday_avg) }}</dd></div>
           </dl>
           <p class="caveat">{{ caveat }}</p>
-        </sb-panel>
-        <sb-panel heading="Month so far" class="month-panel">
-          @if (monthLine(); as line) {
-            <svg class="month-line" viewBox="0 0 240 56" width="100%" height="56" preserveAspectRatio="none" aria-hidden="true">
-              @if (line.zeroY !== null) {
-                <line class="zero" x1="0" x2="240" [attr.y1]="line.zeroY" [attr.y2]="line.zeroY" />
-              }
-              <path class="curve" [attr.d]="line.path" />
-              @if (line.marker; as m) {
-                <circle class="marker" r="3" [attr.cx]="m.x" [attr.cy]="m.y" />
-              }
-            </svg>
-          }
-          <p class="mtd">
-            Month to date
-            <span class="mtd-pnl" [class.pos]="mtdSign() === 'pos'" [class.neg]="mtdSign() === 'neg'">{{ ccy(store.monthCtx()?.mtdPnl ?? null) }}</span>
-            ·
-            <span class="mtd-r">{{ r(store.monthCtx()?.mtdR ?? null) }}</span><sb-hint [text]="rTooltip" label="About R" align="left" />
-          </p>
-          <p class="rank">{{ rankText() }}</p>
-        </sb-panel>
-      </div>
-
-      <sb-panel heading="What drove it" [divided]="true" [description]="rTooltip">
+        }
+      </sb-panel>
+      <sb-panel page-secondary heading="Month so far" class="month-panel" [style.display]="store.day() ? null : 'none'">
+        @if (monthLine(); as line) {
+          <svg class="month-line" viewBox="0 0 240 56" width="100%" height="56" preserveAspectRatio="none" aria-hidden="true">
+            @if (line.zeroY !== null) {
+              <line class="zero" x1="0" x2="240" [attr.y1]="line.zeroY" [attr.y2]="line.zeroY" />
+            }
+            <path class="curve" [attr.d]="line.path" />
+            @if (line.marker; as m) {
+              <circle class="marker" r="3" [attr.cx]="m.x" [attr.cy]="m.y" />
+            }
+          </svg>
+        }
+        <p class="mtd">
+          Month to date
+          <span class="mtd-pnl" [class.pos]="mtdSign() === 'pos'" [class.neg]="mtdSign() === 'neg'">{{ ccy(store.monthCtx()?.mtdPnl ?? null) }}</span>
+          ·
+          <span class="mtd-r">{{ r(store.monthCtx()?.mtdR ?? null) }}</span><sb-hint [text]="rTooltip" label="About R" align="left" />
+        </p>
+        <p class="rank">{{ rankText() }}</p>
+      </sb-panel>
+      <sb-panel page-secondary heading="What drove it" class="drove-panel" [divided]="true" [description]="rTooltip" [style.display]="store.day() ? null : 'none'">
         <sb-tab-bar [tabs]="tabs" [active]="dimension()" (activeChange)="setDimension($event)" />
         <div class="table-wrap"><table class="breakdown">
           <thead>
@@ -202,34 +233,20 @@ function sign(value: number | null): 'pos' | 'neg' | null {
         </table></div>
         <p class="win-note">{{ winNote }}</p>
       </sb-panel>
-
-      <sb-panel [heading]="'Trades (' + day.trade_count + ')'" class="trades-panel">
-        <sb-segmented panel-actions label="Sort trades" [options]="sorts" [value]="store.sort()" (valueChange)="setSort($event)" />
-        @for (trade of store.trades(); track trade.trade_id + ':' + trade.leg_index) {
-          <sb-day-trade-card [trade]="trade" [series]="seriesFor(trade)" />
-        }
-      </sb-panel>
-    } @else if (store.empty()) {
-      <sb-empty-state [title]="emptyTitle()" hint="Step to a neighbouring trading day, or widen the filters." />
-    } @else if (store.loading()) {
-      <p class="day-loading">Loading...</p>
-    }
+    </sb-page>
   `,
   styles: `
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
-    .day-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-14); }
-    .back, .steps a, .steps .off { display: inline-flex; align-items: center; min-height: 44px; padding-inline: var(--space-4); }
-    .back { color: var(--text-secondary); text-decoration: none; }
-    .back:hover, .back:focus-visible { color: var(--text); text-decoration: underline; }
-    .long-date { margin: 0; font-size: var(--text-h2, 1.25rem); font-weight: 600; }
-    .steps { display: inline-flex; gap: var(--space-10); margin-left: auto; }
+    /* v195 Phase 4: sb-page owns the page rhythm. */
+    :host { display: block; min-width: 0; }
+    .page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-10); }
+    .summary, .day-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-10); min-width: 0; }
+    .drove-panel { grid-column: 1 / -1; }
+    .steps a, .steps .off { display: inline-flex; align-items: center; min-height: 44px; padding-inline: var(--space-4); }
+    .steps { display: inline-flex; gap: var(--space-10); }
     .steps a { color: var(--accent); text-decoration: none; }
     .steps .off { color: var(--text-secondary); text-decoration: line-through; }
-    .caption, .sample-note, .caveat, .r-note, .win-note { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
+    .sample-note, .caveat, .r-note, .win-note { margin: 0; color: var(--text-secondary); font-size: var(--text-table); }
     .stale { margin: 0; color: var(--warn); font-size: var(--text-table); }
-    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-8); }
-    .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-14); }
-    @media (max-width: 639px) { .panels { grid-template-columns: minmax(0, 1fr); } }
     /* D7: comparison figures stay in the neutral text colour. */
     .compare { display: grid; gap: var(--space-8); margin: 0 0 var(--space-10); }
     .compare div { display: flex; justify-content: space-between; gap: var(--space-10); }
@@ -258,9 +275,22 @@ function sign(value: number | null): 'pos' | 'neg' | null {
 export class CalendarDayPage {
   readonly store = inject(CalendarDayStore);
   private readonly connection = inject(ConnectionStore);
+  private readonly titles = inject(RouteTitleService);
 
   /** The raw `:date` param, kept for the empty-state wording. */
   readonly date = input<string>();
+
+  constructor() {
+    // v195: the breadcrumb's detail segment (Review / Calendar / Wednesday,
+    // August 5, 2026). From an effect, never the constructor body: the
+    // router writes the title after it activates the route. Reading
+    // detail() as well puts the crumb back if a title update cleared it.
+    effect(() => {
+      const crumb = this.title();
+      this.titles.detail();
+      untracked(() => this.titles.setDetail(crumb));
+    });
+  }
 
   protected readonly caption = PAPER_CAPTION;
   protected readonly caveat = ONE_DAY_CAVEAT;
@@ -287,7 +317,6 @@ export class CalendarDayPage {
     const date = this.store.date();
     return date ? monthLabel(monthOf(date)) : null;
   });
-  protected readonly backMonth = computed(() => (this.monthName() ? ` · ${this.monthName()}` : ''));
   protected readonly backParams = computed(() => {
     const date = this.store.date();
     return { ...(date ? { month: monthOf(date) } : {}), ...this.store.filterParams() };

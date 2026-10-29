@@ -350,7 +350,7 @@ describe('PlanCell runner (two lines)', () => {
 
   it('keeps an explicit minus on the loss side of line 2', () => {
     const el = renderWith({ ...RKLB_RUNNER, trailExitPct: -2.5 });
-    expect(text(el.querySelector('.l2'))).toBe('Trail 49.94 → 52.44 (+17.7% / -2.5%)');
+    expect(text(el.querySelector('.l2'))).toBe('Trail 49.94 → 52.44 (+17.7% / −2.5%)');
     expect(el.querySelector('.l2 .lock')!.classList).toContain('loss');
     expect(el.querySelector('.l2 .peak')!.classList).not.toContain('loss');
   });
@@ -406,7 +406,7 @@ describe('PlanCell closed runner', () => {
   it('signs and colours a runner exit on the loss side of the entry', () => {
     const el = renderWith({ entry: 100, target: 120, stop: 90,
       runnerExit: 97, runnerExitPct: -3, runnerExitReason: 'tp1_runner_be' });
-    expect(text(el)).toBe('100.00 → 97.00 / 90.00 (-3.0% - 10.0%)');
+    expect(text(el)).toBe('100.00 → 97.00 / 90.00 (−3.0% - 10.0%)');
     expect(el.querySelector('.rise')!.classList).toContain('loss');
     expect(el.querySelector('.target')!.classList).toContain('loss');
   });

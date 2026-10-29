@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-28 14:34:19 UTC",
+  "generated_at": "2026-10-29 15:09:11 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.36.2",
-    "bot": "2.15.5"
+    "ui": "1.37.1",
+    "bot": "2.15.6"
   },
   "releases": [
     {
@@ -2175,6 +2175,45 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "e84dc206",
+      "subject": "release(ui): 1.37.0 -- Graphite: the whole admin UI redesigned -- icon rail, command palette, one page template, dense rows, true-minus signs, ExpR-first figures (v195)",
+      "versions": {
+        "ui": "1.37.0",
+        "bot": "2.15.5"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "d810b07b",
+      "subject": "release(bot): 2.15.6 -- Discord chart images follow the Graphite palette, STYLE_VERSION v195 (v195)",
+      "versions": {
+        "ui": "1.37.0",
+        "bot": "2.15.6"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "7c32848d",
+      "subject": "release(ui): 1.37.1 -- Trading performance leads the dashboard; the duplicate KPI strip is merged into it",
+      "versions": {
+        "ui": "1.37.1",
+        "bot": "2.15.6"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]

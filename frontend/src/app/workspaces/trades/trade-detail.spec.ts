@@ -25,7 +25,8 @@ import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
-import { TradeDetail, arrivalBanner } from './trade-detail';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { TradeDetail, arrivalBanner, tradeCrumb } from './trade-detail';
 
 // The Chart tab now mounts the shared chart, which asks for matchMedia the
 // moment a chart exists. See the polyfill for why.
@@ -358,15 +359,15 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
     ['PENDING', ['Cancel plan', 'Delete']], ['CLOSED', ['Delete']],
   ])('offers the %s commands in the header', (status, labels) => {
     const { el } = mount(status as string, {}, 3, 'live');
-    const buttons = [...el.querySelectorAll<HTMLButtonElement>('.identity > .actions > button[sb-button]')];
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('sb-page [page-actions] button[sb-button]')];
     expect(buttons.map(button => button.textContent?.trim())).toEqual(labels);
-    expect(buttons.at(-1)?.classList).toContain('danger');
+    expect(buttons.at(-1)?.classList).toContain('danger-quiet');
     expect([...el.querySelectorAll('sb-panel')].some(panel => panel.getAttribute('heading') === 'Actions')).toBe(false);
   });
 
   it('offers Close on a live position (SR48, through the real component)', () => {
     const { fixture, el } = mount();
-    const close = el.querySelector<HTMLButtonElement>('.identity .actions button');
+    const close = el.querySelector<HTMLButtonElement>('sb-page [page-actions] button');
     expect(close?.textContent).toContain('Close');
     close!.click();
     fixture.detectChanges();
@@ -427,7 +428,7 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
     expect(el.querySelector('.tags > sb-chip')!.hasAttribute('title')).toBe(false);
     const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
     expect(hint).toContain('41.2% WR');
-    expect(hint).toContain('-0.38R');
+    expect(hint).toContain('−0.38R');
   });
 
   it('renders a positive-toned chip for COHORT_STRONG', () => {
@@ -974,11 +975,6 @@ describe('TradeDetail — responsive card layout (v166 TD11)', () => {
   const source = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trade-detail.ts'), 'utf8');
   const styles = source.split('styles: `')[1].split('`,')[0];
 
-  it('gives back navigation the shared control height for phone touch targets', () => {
-    const backStyles = styles.match(/\.back\s*\{([^}]+)\}/)?.[1] ?? '';
-    expect(backStyles).toMatch(/min-height:\s*var\(--control-h\)/);
-  });
-
   it('sizes the cards container independently of the viewport', () => {
     expect(styles).toMatch(/\.grid-host\s*\{[^}]*container:\s*cards\s*\/\s*inline-size/);
     expect(styles).toMatch(/\.card-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*align-items:\s*stretch[^}]*grid-template-areas:\s*var\(--areas-1\)/);
@@ -1071,5 +1067,121 @@ describe('TradeDetail — one numeric face, one baseline (v179 §3.3, §3.4)', (
     const src = read('workspaces/trades/trade-detail.ts');
     expect(src.match(/\.identity \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
     expect(src.match(/\.tags \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+  });
+});
+
+/* -- v195 Phase 4, §5.2, §1.4 -- trade detail on sb-page -------------------- */
+
+describe('tradeCrumb (v195 §3)', () => {
+  it('names the ticker and the short id the Trades list shows', () => {
+    expect(tradeCrumb('NVDA', 'ffffffffff000812')).toBe('NVDA #000812');
+    expect(tradeCrumb('NVDA', 'abc812')).toBe('NVDA #abc812');
+    expect(tradeCrumb('NVDA', '812')).toBe('NVDA #812');
+  });
+
+  it('drops a missing part and is empty with neither', () => {
+    expect(tradeCrumb('NVDA', null)).toBe('NVDA');
+    expect(tradeCrumb(null, '44444444-4444-4444-8444-444444444444')).toBe('#444444');
+    expect(tradeCrumb(null, null)).toBe('');
+  });
+});
+
+describe('TradeDetail on sb-page (v195 Phase 4, §5.2, §1.4)', () => {
+  let backend: HttpTestingController;
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    backend = TestBed.inject(HttpTestingController);
+    TestBed.inject(RouteTitleService).set('Trade detail', 'One position, end to end');
+  });
+
+  function mount(status = 'ACTIVE', flush = true) {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', 'overview');
+    fixture.detectChanges();
+    if (flush) {
+      backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, status));
+      fixture.detectChanges();
+    }
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('renders the route title as the one h1, from sb-page', () => {
+    const { el } = mount();
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Trade detail');
+  });
+
+  it('names the trade as the breadcrumb detail segment once it loads', () => {
+    const { fixture } = mount('ACTIVE', false);
+    const titles = TestBed.inject(RouteTitleService);
+    expect(titles.detail()).toBeNull();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, 'ACTIVE'));
+    fixture.detectChanges();
+    expect(titles.detail()).toBe('AAPL #ffffff');
+  });
+
+  it('puts the crumb back after a title update clears it while the page is open', () => {
+    const { fixture } = mount();
+    const titles = TestBed.inject(RouteTitleService);
+    titles.set('Trade detail', null, '/somewhere-else');
+    expect(titles.detail()).toBeNull();
+    fixture.detectChanges();
+    expect(titles.detail()).toBe('AAPL #ffffff');
+  });
+
+  it('renders no command before the trade has loaded', () => {
+    const { fixture, el } = mount('ACTIVE', false);
+    expect(el.querySelectorAll('sb-page [page-actions] button')).toHaveLength(0);
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, 'ACTIVE'));
+    fixture.detectChanges();
+    expect(el.querySelectorAll('sb-page [page-actions] button')).toHaveLength(2);
+  });
+
+  it('opens the delete confirm from the header', () => {
+    const { fixture, el } = mount('CLOSED');
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('sb-page [page-actions] button[sb-button]')];
+    const del = buttons.at(-1)!;
+    expect(del.textContent!.trim()).toBe('Delete');
+    expect(del.classList).toContain('danger-quiet');
+    expect(del.classList).not.toContain('danger');
+    del.click();
+    fixture.detectChanges();
+    expect(el.querySelector('sb-page sb-confirm-dialog')!.textContent).toContain('AAPL');
+  });
+
+  it('has no scope bar and no in-page back link: the breadcrumb is the way back', () => {
+    const { el } = mount();
+    expect(el.querySelector('[page-scope]')).toBeNull();
+    expect(el.querySelector('a.back')).toBeNull();
+  });
+
+  it('keeps identity then the outcome strip as the summary, and the tabs as the primary panel', () => {
+    const { el } = mount();
+    const summary = el.querySelector('sb-page [page-kpis]')!;
+    expect(summary.querySelector('header.head > .identity > .trade-title .ticker')!.textContent).toBe('AAPL');
+    expect(summary.querySelector('header.head + sb-outcome-strip')).toBeTruthy();
+    expect(summary.querySelector('.actions')).toBeNull();
+    const primary = el.querySelector('sb-page [page-primary]')!;
+    expect(primary.querySelector('sb-tab-bar')).toBeTruthy();
+    expect(primary.querySelector('sb-async')).toBeTruthy();
+  });
+
+  it('sets its order figures on the 14px body step, in both densities', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trade-detail.ts'), 'utf8');
+    expect(src).toMatch(/:host \{[^}]*--text-table: var\(--text-body\);/);
   });
 });

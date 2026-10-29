@@ -78,17 +78,17 @@ const KEYFRAMES = [
   // moved (v168 §2, amendment 7)
   'sb-pulse-dim', 'sb-pulse-blink', 'sb-spin', 'sb-route-spin', 'sb-scan-sweep',
   'sb-scan-strip-in', 'sb-flash-up', 'sb-flash-down', 'sb-row-blink', 'sb-tape-slide',
-  // new (v168 §3)
-  'sb-enter', 'sb-fade-in', 'sb-pop-in', 'sb-drawer-in', 'sb-drawer-out', 'sb-sheet-in', 'sb-sheet-out',
-  'sb-fade-out', 'sb-ping', 'sb-draw-inset', 'sb-draw-circle', 'sb-ambient-drift', 'sb-halo-blink',
+  // new (v168 §3), less the route entrance and the ambient drift (v195 §1.2)
+  'sb-fade-in', 'sb-pop-in', 'sb-drawer-in', 'sb-drawer-out', 'sb-sheet-in', 'sb-sheet-out',
+  'sb-fade-out', 'sb-ping', 'sb-draw-inset', 'sb-draw-circle', 'sb-halo-blink',
   // new (v186 D5): the skeleton's quiet pulse replaced sb-shimmer
   'sb-skeleton-pulse',
 ];
-const NEW_KEYFRAMES = KEYFRAMES.slice(KEYFRAMES.indexOf('sb-enter'));
+const NEW_KEYFRAMES = KEYFRAMES.slice(KEYFRAMES.indexOf('sb-fade-in'));
 const COMPOSITOR = new Set(['transform', 'opacity', 'filter', 'clip-path', 'background-position']);
-const STAGGER = '.sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > ';
-const ENTRANCES = ['.sb-enter', '.sb-entering', '.sb-pop-in', '.sb-drawer-in', '.sb-sheet-in', '.sb-draw-in', '.sb-draw-in-radial'];
-const NEW_CLASSES = [...ENTRANCES, '.sb-drawer-out', '.sb-fade-out', `${STAGGER}*`];
+/** The dialog, sheet and chart reveals: the only entrances v195 keeps. */
+const ENTRANCES = ['.sb-pop-in', '.sb-drawer-in', '.sb-sheet-in', '.sb-draw-in', '.sb-draw-in-radial'];
+const NEW_CLASSES = [...ENTRANCES, '.sb-drawer-out', '.sb-fade-out'];
 
 describe('styles/motion.css: the one motion home (v168 §2)', () => {
   it('is imported by styles.css right after tokens.css', () => {
@@ -142,7 +142,7 @@ describe('styles/motion.css: the one motion home (v168 §2)', () => {
 
 describe('the motion classes (v168 §3)', () => {
   it('holds every entrance at its first frame with fill-mode backwards', () => {
-    for (const cls of [...ENTRANCES, `${STAGGER}*`]) {
+    for (const cls of ENTRANCES) {
       const animations = bodiesFor(MOTION, cls).filter((body) => body.includes('animation:'));
       expect(animations.length, cls).toBeGreaterThan(0);
       for (const body of animations) expect(body, cls).toMatch(/animation: [^;]*\bbackwards;/);
@@ -154,44 +154,22 @@ describe('the motion classes (v168 §3)', () => {
     expect(bodiesFor(MOTION, '.sb-fade-out')[0]).toMatch(/animation: sb-fade-out [^;]*\bforwards;/);
   });
 
-  it('staggers 60ms apart from 640px, capped at the eighth child', () => {
-    const delays = Object.fromEntries(
-      rules(blocksOf(MOTION, '@media (min-width: 640px)'))
-        .filter(({ selector }) => selector.startsWith(STAGGER))
-        .map(({ selector, body }) => [selector.slice(STAGGER.length), body]),
-    );
-    const step = (ms: number) => `animation-delay: calc(${ms}ms * var(--motion-scale));`;
-    expect(delays).toEqual({
-      ':nth-child(2)': step(60),
-      ':nth-child(3)': step(120),
-      ':nth-child(4)': step(180),
-      ':nth-child(5)': step(240),
-      ':nth-child(6)': step(300),
-      ':nth-child(7)': step(360),
-      ':nth-child(n + 8)': step(420),
-    });
+  /* v195 §1.2: the route entrance and the panel stagger are retired. */
+  it('has no route entrance and no stagger', () => {
+    expect(MOTION).not.toMatch(/\.sb-enter(ing)?\b/);
+    expect(MOTION).not.toContain(':nth-child');
+    expect(keyframeList(MOTION).map(([name]) => name)).not.toContain('sb-enter');
   });
 
-  it('staggers 40ms apart below 640px, capped at the fourth child', () => {
-    const delays = Object.fromEntries(
-      rules(blocksOf(MOTION, '@media (max-width: 639px)'))
-        .filter(({ selector }) => selector.startsWith(STAGGER))
-        .map(({ selector, body }) => [selector.slice(STAGGER.length), body]),
-    );
-    const step = (ms: number) => `animation-delay: calc(${ms}ms * var(--motion-scale));`;
-    expect(delays).toEqual({ ':nth-child(2)': step(40), ':nth-child(3)': step(80), ':nth-child(n + 4)': step(120) });
-  });
-
-  it('lifts on hover only where hover exists, and moves only under On (#5)', () => {
-    const hover = blocksOf(MOTION, '@media (hover: hover)');
-    expect(bodiesFor(hover, '[data-motion] .sb-lift:hover')).toEqual([
-      'border-color: var(--border-strong); box-shadow: var(--panel-shadow-lift);',
-    ]);
-    expect(bodiesFor(hover, '[data-motion=on] .sb-lift:hover')).toEqual(['transform: translateY(-2px);']);
-    expect(MOTION.match(/translateY\(-2px\)/g)).toHaveLength(1);
-    expect(bodiesFor(blocksOf(MOTION, '@media (hover: none)'), '[data-motion] .sb-lift:active')).toEqual([
-      'box-shadow: inset 0 0 0 100vmax var(--accent-soft);',
-    ]);
+  /* v195 §1.2: no hover lift, no panel press tint, no button glow. Hover
+   * feedback is each control's own colour transition (var(--transition)). */
+  it('lifts nothing and glows nothing', () => {
+    expect(MOTION).not.toContain('sb-lift');
+    expect(MOTION).not.toContain('translateY(-2px)');
+    expect(MOTION).not.toContain('--panel-shadow-lift');
+    expect(MOTION).not.toContain('--glow-accent');
+    expect(MOTION).not.toContain('@media (hover: hover)');
+    expect(MOTION).not.toContain('@media (hover: none)');
   });
 
   it('turns the drawer into a rising sheet below 640px (#7)', () => {
@@ -209,7 +187,7 @@ describe('the motion classes (v168 §3)', () => {
   });
 
   it('sets will-change only on classes that come off when their animation ends (§6)', () => {
-    const TRANSIENT = new Set(['.sb-entering', '.sb-drawer-in', '.sb-sheet-in', '.sb-drawer-out', '.sb-draw-in', '.sb-draw-in-radial']);
+    const TRANSIENT = new Set(['.sb-drawer-in', '.sb-sheet-in', '.sb-drawer-out', '.sb-draw-in', '.sb-draw-in-radial']);
     const holders = rules(MOTION)
       .filter(({ body }) => body.includes('will-change'))
       .flatMap(({ selector }) => splitList(selector));
@@ -230,8 +208,8 @@ describe('the mode rules for the new classes (v168 §1)', () => {
     }
   });
 
-  it('turns entrances and the dialogs into a plain fade under Reduced', () => {
-    for (const cls of ['.sb-enter', '.sb-entering', `${STAGGER}*`, '.sb-pop-in', '.sb-drawer-in', '.sb-sheet-in']) {
+  it('turns the dialogs and sheets into a plain fade under Reduced', () => {
+    for (const cls of ['.sb-pop-in', '.sb-drawer-in', '.sb-sheet-in']) {
       expect(bodiesFor(MOTION, `[data-motion=reduced] ${cls}`), cls).toContain(
         'animation-name: sb-fade-in; animation-duration: var(--dur-base);',
       );
@@ -245,11 +223,10 @@ describe('the mode rules for the new classes (v168 §1)', () => {
     }
   });
 
-  it('drifts the ambient glow under On only, and never on a phone (#10)', () => {
-    expect(bodiesFor(MOTION, '[data-motion=on] .ambient')).toContain('animation: sb-ambient-drift 12s ease-in-out infinite alternate;');
-    expect(bodiesFor(blocksOf(MOTION, '@media (max-width: 639px)'), '[data-motion=on] .ambient')).toEqual(['animation: none;']);
-    const unscoped = rules(MOTION).filter(({ selector }) => selector.includes('.ambient') && !selector.includes('[data-motion=on]'));
-    expect(unscoped).toEqual([]);
+  /* v195 §1.2: the ambient layer is gone (V195-4), and so is its drift. */
+  it('has no ambient drift', () => {
+    expect(rules(MOTION).filter(({ selector }) => selector.includes('.ambient'))).toEqual([]);
+    expect(keyframeList(MOTION).map(([name]) => name)).not.toContain('sb-ambient-drift');
   });
 
   it('stills the bot-status halo outside On (#10)', () => {

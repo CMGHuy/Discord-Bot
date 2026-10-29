@@ -11,6 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { ActivatedRouteSnapshot, convertToParamMap } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
@@ -19,8 +20,10 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { SettingField, Settings } from '../api/models';
-import { SystemStore } from './system.store';
+import { Risk, SettingField, Settings } from '../api/models';
+import { TAB_PAGES } from '../shell/palette/palette-items';
+import { refreshOnSystem } from '../workspaces/system/system.routes';
+import { SYSTEM_TABS, SystemStore, systemTabFrom } from './system.store';
 
 /* NG50 — settings, logs and scan.
  *
@@ -177,7 +180,6 @@ describe('SystemStore', () => {
       content: 'started',
     });
     backend.expectOne('/api/v1/system/scan').flush(SCAN);
-    backend.expectOne('/api/v1/system/health').flush(HEALTH);
   };
 
   /* -- the schema-driven form -------------------------------------------- */
@@ -228,7 +230,6 @@ describe('SystemStore', () => {
         source: 'bot', lines, path: '/app/logs/bot.log', content,
       });
       backend.expectOne('/api/v1/system/scan').flush(SCAN);
-      backend.expectOne('/api/v1/system/health').flush(HEALTH);
     };
 
     it('reloads at the chosen line count', () => {
@@ -760,34 +761,38 @@ describe('SystemStore', () => {
 
   /* -- v148: system health ------------------------------------------------ */
 
-  it('resolves health together with the scan status', () => {
-    store.resolveScan().subscribe();
-    backend.expectOne('/api/v1/system/scan').flush(SCAN);
+  it('resolves health with the Providers tab, and the Scan tab no longer reads it (v195 §5.1)', () => {
+    store.resolveProviders().subscribe();
     backend.expectOne('/api/v1/system/health').flush(HEALTH);
+    backend.expectOne('/api/v1/risk').flush({});
 
     expect(store.health()).toEqual(HEALTH);
     expect(store.healthError()).toBeNull();
+
+    store.resolveScan().subscribe();
+    backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    backend.expectNone('/api/v1/system/health');
   });
 
-  it('refreshes health with the scan tab, so scan and bot events update both panels', () => {
-    store.resolveTab('scan').subscribe();
-    backend.expectOne('/api/v1/system/scan').flush(SCAN);
+  it('refreshes health with the Providers tab, so scan and bot events update both panels', () => {
+    store.resolveTab('providers').subscribe();
     backend.expectOne('/api/v1/system/health').flush({ ...HEALTH, swallowed: [] });
+    backend.expectOne('/api/v1/risk').flush({});
 
     expect(store.health()?.swallowed).toEqual([]);
     backend.expectNone('/api/v1/system/settings');
   });
 
-  it('keeps the scan status and finishes the route when health fails', () => {
+  it('keeps the scan-health reading and finishes the route when health fails', () => {
     let finished = 0;
-    store.resolveScan().subscribe({ complete: () => { finished += 1; } });
-    backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    store.resolveProviders().subscribe({ complete: () => { finished += 1; } });
+    backend.expectOne('/api/v1/risk').flush({ scan_health: { durations_s: [], latest_s: 9, slowdown: false } });
     backend.expectOne('/api/v1/system/health').flush(
       { error: { code: 'unavailable', message: 'down' } },
       { status: 503, statusText: 'Service Unavailable' },
     );
 
-    expect(store.botAlive()).toBe(true);
+    expect(store.scanLatestS()).toBe(9);
     expect(store.health()).toBeNull();
     expect(store.healthError()).toBe('The admin is not responding.');
     expect(finished).toBe(1);
@@ -801,5 +806,162 @@ describe('SystemStore', () => {
     );
 
     expect(store.healthError()).toBe('bad telemetry row');
+  });
+});
+
+/* -- v195 §5.1: scan health and the data source move to System → Providers -- */
+
+const RISK = {
+  heat: { open_pct: 3, cap_pct: 6, utilisation_pct: 50 },
+  positions: [],
+  sector_heat: [],
+  clusters: [],
+  throttle: { multiplier: 1, paused: false },
+  killswitch: { on: false, reason: null, at: null },
+  scan_health: {
+    durations_s: [12, 14, 31],
+    latest_s: 31,
+    slowdown: true,
+    data_sources: {
+      enabled: true, feed: 'iex', breaker_open: false, fallback_rate: 0.05, scans: 20,
+    },
+  },
+  metrics: null,
+  correlation: null,
+} as unknown as Risk;
+
+const routeFor = (tab: string | null) =>
+  ({ queryParamMap: convertToParamMap(tab === null ? {} : { tab }) }) as ActivatedRouteSnapshot;
+
+describe('System tabs (v195 §5.1, correction 4)', () => {
+  it('orders the bar Scan, Providers, Settings, Logs', () => {
+    expect([...SYSTEM_TABS]).toEqual(['scan', 'providers', 'settings', 'logs']);
+  });
+
+  it('opens every known tab by its query value', () => {
+    for (const tab of SYSTEM_TABS) {
+      expect(systemTabFrom(tab)).toBe(tab);
+    }
+  });
+
+  it('lands on Settings when the value is absent, empty or unknown, not on the first tab', () => {
+    expect(systemTabFrom(null)).toBe('settings');
+    expect(systemTabFrom(undefined)).toBe('settings');
+    expect(systemTabFrom('')).toBe('settings');
+    expect(systemTabFrom('health')).toBe('settings');
+  });
+
+  it('resolves every System tab the command palette links to (V195-19 TAB_PAGES)', () => {
+    const linked = TAB_PAGES
+      .filter((item) => item.route === '/system')
+      .map((item) => item.queryParams?.['tab'] ?? '');
+    expect(linked).toContain('providers');
+    for (const tab of linked) {
+      expect(systemTabFrom(tab)).toBe(tab);
+    }
+  });
+
+  it('refreshes the Providers tab on scan and bot events, as the Scan tab does', () => {
+    for (const tab of ['providers', 'scan']) {
+      expect(refreshOnSystem('scan', routeFor(tab))).toBe(true);
+      expect(refreshOnSystem('bot', routeFor(tab))).toBe(true);
+      expect(refreshOnSystem('settings', routeFor(tab))).toBe(false);
+    }
+    expect(refreshOnSystem('settings', routeFor(null))).toBe(true);
+    expect(refreshOnSystem('scan', routeFor('logs'))).toBe(false);
+  });
+});
+
+describe('SystemStore scan health and data source (v195 §5.1, correction 3)', () => {
+  let store: InstanceType<typeof SystemStore>;
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        SystemStore,
+      ],
+    });
+    store = TestBed.inject(SystemStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  it('reads nothing until a tab asks, and starts from empty, not zero', () => {
+    backend.expectNone('/api/v1/risk');
+    expect(store.risk()).toBeNull();
+    expect(store.scanDurations()).toEqual([]);
+    expect(store.scanLatestS()).toBeNull();
+    expect(store.scanSlowdown()).toBe(false);
+    expect(store.dataSources()).toBeNull();
+  });
+
+  it('resolves the Providers tab from the health and risk reads, and nothing else', () => {
+    store.resolveTab('providers').subscribe();
+    backend.expectOne('/api/v1/system/health').flush(HEALTH);
+    backend.expectOne('/api/v1/risk').flush(RISK);
+    backend.expectNone('/api/v1/system/settings');
+    backend.expectNone('/api/v1/system/scan');
+
+    expect(store.health()).toEqual(HEALTH);
+    expect(store.scanDurations()).toEqual([12, 14, 31]);
+    expect(store.scanLatestS()).toBe(31);
+    expect(store.scanSlowdown()).toBe(true);
+    expect(store.dataSources()).toEqual({
+      enabled: true, feed: 'iex', breaker_open: false, fallback_rate: 0.05, scans: 20,
+    });
+    expect(store.riskError()).toBeNull();
+  });
+
+  it('reads a payload from before v106 as no data-source reading, not as a broken one', () => {
+    store.resolveProviders().subscribe();
+    backend.expectOne('/api/v1/system/health').flush(HEALTH);
+    backend.expectOne('/api/v1/risk').flush({
+      ...RISK, scan_health: { durations_s: [], latest_s: null, slowdown: false },
+    });
+
+    expect(store.dataSources()).toBeNull();
+    expect(store.scanLatestS()).toBeNull();
+  });
+
+  it('keeps the last good reading, says so, and still finishes the route when /risk fails', () => {
+    store.resolveProviders().subscribe();
+    backend.expectOne('/api/v1/system/health').flush(HEALTH);
+    backend.expectOne('/api/v1/risk').flush(RISK);
+
+    let finished = 0;
+    store.resolveProviders().subscribe({ complete: () => { finished += 1; } });
+    backend.expectOne('/api/v1/system/health').flush(HEALTH);
+    backend.expectOne('/api/v1/risk').flush(
+      { error: { code: 'unavailable', message: 'down' } },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+
+    expect(store.scanLatestS()).toBe(31);
+    expect(store.riskError()).toBe('The admin is not responding.');
+    expect(store.health()).toEqual(HEALTH);
+    expect(finished).toBe(1);
+  });
+
+  it('shows the server message for a risk error that is not unavailability', () => {
+    store.resolveRisk().subscribe();
+    backend.expectOne('/api/v1/risk').flush(
+      { error: { code: 'invalid', message: 'bad scan_health row' } },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    expect(store.riskError()).toBe('bad scan_health row');
+  });
+
+  it('reads only the scan status for the Scan tab', () => {
+    store.resolveTab('scan').subscribe();
+    backend.expectOne('/api/v1/system/scan').flush(SCAN);
+    backend.expectNone('/api/v1/system/health');
+    backend.expectNone('/api/v1/risk');
   });
 });

@@ -3,7 +3,7 @@
    That includes the custom element host itself: `sb-market-lane` and
    `sb-names-lane` are unstyled block elements by default, so without this
    EACH ONE claims its own full (doubled-track) content width as a flex
-   child of .topbar-tape and shoves the other one out past the visible
+   child of the shell's .tape-strip and shoves the other one out past the visible
    edge rather than the two sharing the tape's actual width.
    `:host`, not a `sb-market-lane`/`sb-names-lane` tag selector: this file
    is each component's own `styleUrl`, and under emulated encapsulation a

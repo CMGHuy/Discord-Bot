@@ -79,9 +79,9 @@ describe('Async', () => {
 
   it('distinguishes a measured zero from missing data', () => {
     expect(render({ empty: true, reason: 'no-data-yet' }).el.textContent)
-      .toContain('awaiting data');
+      .toContain('Awaiting data');
     expect(render({ empty: true, reason: 'measured-zero' }).el.textContent)
-      .toContain('result: 0');
+      .toContain('Result: 0');
   });
 
   it('dims the content and names the time when the data is stale', () => {
@@ -273,5 +273,54 @@ describe('asyncInputs', () => {
     expect(f.componentInstance.retried).toBe(1);
     expect(markingDuringRetry).toBe(true);
     expect(fresh.isMarking()).toBe(false);
+  });
+});
+
+/* v195 Phase 2: empty, loading and error each have one style, rendered in
+ * the panel body. sb-async keeps the classes the workspace specs query
+ * (.failed, .retry) and draws them exactly as sb-panel-error does; its
+ * empty branch is sb-empty-state, reason included. */
+describe('one empty, loading and error style (v195 Phase 2)', () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+  const ASYNC = read('src/app/ui/async.ts');
+  const ASYNC_STYLES = ASYNC.slice(ASYNC.indexOf('styles:')).replace(/\/\*[\s\S]*?\*\//g, '');
+  const PANEL_ERROR = read('src/app/ui/panel-error.ts');
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const ruleIn = (source: string, selector: string) =>
+    source.match(new RegExp(`\\n\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+  const declarations = (rule: string) =>
+    rule.slice(rule.indexOf('{') + 1, rule.lastIndexOf('}')).split(';').map((d) => d.trim()).filter(Boolean).sort();
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it("draws sb-async's error and Retry exactly like sb-panel-error's", () => {
+    const error = ruleIn(PANEL_ERROR, '.error');
+    expect(error).toContain('border-left: 2px solid var(--neg);');
+    expect(error).toContain('background: var(--neg-soft);');
+    expect(error).not.toContain('dashed');
+    expect(declarations(ruleIn(ASYNC, '.failed'))).toEqual(declarations(error));
+    expect(declarations(ruleIn(ASYNC, '.retry'))).toEqual(declarations(ruleIn(PANEL_ERROR, '.retry')));
+    expect(declarations(ruleIn(ASYNC, '.retry:hover'))).toEqual(declarations(ruleIn(PANEL_ERROR, '.retry:hover')));
+  });
+
+  it('renders its empty state through sb-empty-state, reason included, and styles no second one', () => {
+    const { el } = render({ empty: true, reason: 'measured-zero' });
+    const reasons = [...el.querySelectorAll('.reason')];
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0].closest('sb-empty-state')).not.toBeNull();
+    expect(reasons[0].textContent!.trim()).toBe('Result: 0');
+    expect(ASYNC_STYLES).not.toMatch(/\.empty-wrap|\.reason\b/);
+  });
+
+  it('paints skeleton bars in the strong rule colour and mixes none', () => {
+    const bar = ASYNC.match(/\.skeleton-cell::before,\s*\.skeleton-bar\s*\{[^}]*\}/)![0];
+    expect(bar).toContain('background: var(--border-strong);');
+    expect(ASYNC).not.toContain('color-mix(');
+  });
+
+  it('pads a tiles skeleton like the KPI cell it stands in for (V195-11)', () => {
+    expect(ruleIn(ASYNC, '.skeleton-tile')).toContain('padding: var(--space-10) var(--panel-pad);');
   });
 });

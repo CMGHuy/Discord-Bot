@@ -34,16 +34,16 @@ describe('CancelsSummary', () => {
     const net = q(f, '[data-figure="net-r"]')!;
     expect(text(precision)).toContain('62% of 37');
     expect(text(precision)).toContain('N 37');
-    expect(text(net)).toContain('-3.40R');
+    expect(text(net)).toContain('−3.40R');
     expect(text(net)).toContain('N 37');
     expect(precision.querySelector('.value')!.className).toBe(net.querySelector('.value')!.className);
   });
 
   it('shows R avoided, R missed and both intervals', () => {
     const f = create();
-    expect(text(q(f, '[data-figure="net-r"]'))).toContain('R avoided +23.00R · R missed -26.40R');
+    expect(text(q(f, '[data-figure="net-r"]'))).toContain('R avoided +23.00R · R missed −26.40R');
     expect(text(q(f, '[data-figure="precision"]'))).toContain('95% CI 45–78%');
-    expect(text(q(f, '[data-figure="net-r"]'))).toContain('95% CI [-9.10R, +2.30R]');
+    expect(text(q(f, '[data-figure="net-r"]'))).toContain('95% CI [−9.10R, +2.30R]');
   });
 
   it('carries the hypothetical-replay caption on the headline and on the cards', () => {
@@ -123,7 +123,7 @@ describe('CancelsSummary', () => {
     const f = create();
     expect(text(q(f, '.counts-head'))).toBe('All three reasons, trigger entry');
     expect(text(q(f, '[data-outcome="right"]'))).toBe('Right cancels 23 +23.00R avoided');
-    expect(text(q(f, '[data-outcome="wrong"]'))).toBe('Wrong cancels 14 -26.40R missed');
+    expect(text(q(f, '[data-outcome="wrong"]'))).toBe('Wrong cancels 14 −26.40R missed');
     expect(text(q(f, '[data-outcome="unresolved"]'))).toBe('Unresolved 9 MTM +1.35R');
     expect(text(q(f, '[data-outcome="untriggered_after_cancel"]'))).toBe('Untriggered after cancel 4 no R');
   });
@@ -132,7 +132,7 @@ describe('CancelsSummary', () => {
     const f = create(CANCEL_PAYLOAD, { ...NO_FILTER, card: 'risk_cap', outcome: 'right' });
     expect(text(q(f, '.counts-head'))).toBe('risk_cap · from the trigger');
     expect(text(q(f, '[data-outcome="right"]'))).toBe('Setup lost 17 +17.00R avoided');
-    expect(text(q(f, '[data-outcome="wrong"]'))).toBe('Setup reached TP1 12 -22.20R missed');
+    expect(text(q(f, '[data-outcome="wrong"]'))).toBe('Setup reached TP1 12 −22.20R missed');
     expect(q(f, '[data-card="risk_cap"]')!.getAttribute('aria-pressed')).toBe('true');
     expect(q(f, '[data-card="invalidated"]')!.getAttribute('aria-pressed')).toBe('false');
     expect(q(f, '[data-outcome="right"]')!.getAttribute('aria-pressed')).toBe('true');

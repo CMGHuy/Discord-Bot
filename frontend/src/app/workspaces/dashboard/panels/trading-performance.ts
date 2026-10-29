@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { KPI_HELP, PANEL_HELP } from './panel-help';
 
 import { ViewportService } from '../../../ui/breakpoints';
@@ -6,10 +7,11 @@ import { Button } from '../../../ui/button';
 import { Select, SelectOption } from '../../../ui/form-controls';
 import { ControlRow, Panel } from '../../../ui/layout';
 import { MetricCard } from '../../../ui/metric-card';
+import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
 import { Spinner } from '../../../ui/spinner';
 import { StatStrip } from '../../../ui/stat-strip';
 import { PortfolioValue } from './portfolio-value';
-import { amount, pct } from '../../../ui/format';
+import { MINUS, amount, pct } from '../../../ui/format';
 import { Realized } from '../../../stores/dashboard.store';
 import {
   ChartTarget,
@@ -35,18 +37,58 @@ export function presetLabel(preset: ScopePreset): string {
   return preset === '1D' ? 'Today' : preset;
 }
 
+/** v195 §5.2: every performance figure states its basis, in v194's one
+ *  wording. Added once: a hint v194's content audit already extended is left
+ *  as it is. */
+export function withBasis(text: string): string {
+  return text.includes(PERFORMANCE_CAVEAT) ? text : `${text} ${PERFORMANCE_CAVEAT}`;
+}
+
+/** "N=42", or "N=12 · thin sample" below the minimum: the stat tile's own
+ *  small-N cue, in its own words, for the cards that are not stat tiles. */
+export function performanceSample(n: number | null, minimum = MIN_SAMPLE_N): string | null {
+  if (n === null) return null;
+  return n < minimum ? `N=${n} · thin sample` : `N=${n}`;
+}
+
+/** A card's sub-line from its parts, " · " between the ones that exist. */
+export function joinSub(...parts: (string | null)[]): string | null {
+  const present = parts.filter((part): part is string => part !== null);
+  return present.length ? present.join(' · ') : null;
+}
+
+/** The hints of the six performance cards, with the basis. Open trades and
+ *  Avg confidence are counts, not performance, and keep theirs. */
+export const PERF_BASIS = {
+  openPnl: withBasis(KPI_HELP.openPnl),
+  expectancy: withBasis(KPI_HELP.expectancy),
+  winRate: withBasis(KPI_HELP.winRate),
+  payoffRatio: withBasis(KPI_HELP.payoffRatio),
+  realizedToday: withBasis(KPI_HELP.realizedToday),
+  realized: withBasis(KPI_HELP.realized),
+} as const;
+
 /**
  * The KPI cards — v85 D9 (the Risk used card was dropped 2026-10-23).
  *
  * Two modes. **Today** (1D, the default on every visit) shows today's
- * figures: seven cards. **Period** (any wider preset, or a Range the chart
+ * figures: eight cards. **Period** (any wider preset, or a Range the chart
  * was dragged to) re-scopes win rate, expectancy, payoff and confidence to
- * that window and adds a Realised in period card: eight. Realised today is
+ * that window and adds a Realised in period card: nine. Realised today is
  * today's in both modes -- it replaced the separate Realised P&L panel.
  *
- * Win rate, expectancy and payoff ratio travel together on purpose: win rate
- * and payoff ratio decompose expectancy, so read as a triple they say why the
- * expectancy is what it is rather than only what it is.
+ * This panel is the dashboard's one home for the headline figures: the KPI
+ * strip that used to sit above Open positions is gone, and its only figure
+ * not already here, Open risk, is a card of its own (money and % of account,
+ * the cap beneath, linking to the breakdown on Risk). Cards read realised
+ * first, then the open book (Open P&L, Open risk, Open trades).
+ *
+ * Expectancy, win rate and payoff ratio travel together on purpose, in that
+ * order (v195 §5.2): expectancy is the figure that says whether the book
+ * pays, and win rate and payoff ratio decompose it, so read as a triple they
+ * say why the expectancy is what it is. Win rate never leads. Each carries
+ * its sample (`N=`, with the thin-sample cue below `MIN_SAMPLE_N`), and every
+ * performance hint states the basis: paper fills, before costs and tax.
  *
  * The scope control sits in this panel's header (D10) and is page-wide: it
  * also re-scopes the Closed tab below. v181 §1 widens it from Today / All
@@ -61,7 +103,7 @@ export function presetLabel(preset: ScopePreset): string {
 @Component({
   selector: 'sb-trading-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner, StatStrip],
+  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner, StatStrip, StatTile, RouterLink],
   template: `
     <sb-panel heading="Trading performance" [description]="about">
       <div panel-actions class="scope">
@@ -105,16 +147,22 @@ export function presetLabel(preset: ScopePreset): string {
         />
 
         <sb-stat-strip class="grid" [class.stale]="stale()" [cols]="4" [colsMd]="2" [fillLast]="true">
-          <sb-metric-card label="Open P&L" [description]="help.openPnl" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
-          <sb-metric-card label="Win rate" [description]="help.winRate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" [loading]="loading()" />
-          <sb-metric-card label="Expectancy" [description]="help.expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" [loading]="loading()" />
-          <sb-metric-card label="Payoff ratio" [description]="help.payoffRatio" [value]="payoffRatio()" [tint]="payoffTone()" [decimals]="2" [sub]="noCloseHint(payoffRatio())" [loading]="loading()" />
-          <sb-metric-card label="Realised today" [description]="help.realizedToday" [value]="todayAmount()" [tint]="todayTone()"
+          <sb-metric-card label="Expectancy" [description]="basis.expectancy" [value]="expectancyR()" [tint]="expectancyTone()" unit="R" [sub]="sample(expectancyN())" [loading]="loading()" />
+          <sb-metric-card label="Win rate" [description]="basis.winRate" [value]="winRate()" [tint]="winPairTone()" unit="%" [decimals]="1" [sub]="sample(winRateN())" [loading]="loading()" />
+          <sb-metric-card label="Payoff ratio" [description]="basis.payoffRatio" [value]="payoffRatio()" [tint]="payoffTone()" [decimals]="2" [sub]="payoffSub()" [loading]="loading()" />
+          <sb-metric-card label="Realised today" [description]="basis.realizedToday" [value]="todayAmount()" [tint]="todayTone()"
                           [unit]="currencyUnit()" [sub]="todaySub()" [loading]="todayBusy()" />
           @if (inPeriod()) {
-            <sb-metric-card label="Realised in period" [description]="help.realized" [value]="realizedAmount()" [tint]="realizedTone()"
+            <sb-metric-card label="Realised in period" [description]="basis.realized" [value]="realizedAmount()" [tint]="realizedTone()"
                             [unit]="currencyUnit()" [sub]="periodSub()" [loading]="loading()" />
           }
+          <sb-metric-card label="Open P&L" [description]="basis.openPnl" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
+          <!-- A link, so no About hint: an sb-hint is a button, and a button
+               cannot sit inside a link. The visible line says where it goes. -->
+          <a class="risk-link" routerLink="/risk">
+            <sb-stat-tile label="Open risk" [value]="openRisk()" [secondary]="riskCap()"
+                          hint="Breakdown on Risk →" />
+          </a>
           <sb-metric-card label="Open trades" [description]="help.openTrades" [value]="openTrades()" [decimals]="0" [sub]="openTradesSub()" />
           <sb-metric-card label="Avg confidence" [description]="help.avgConfidence" [value]="avgConfidence()" [decimals]="1" [loading]="loading()" />
         </sb-stat-strip>
@@ -129,9 +177,10 @@ export function presetLabel(preset: ScopePreset): string {
         <div><span>Portfolio</span><strong>{{ fmtAmount(balance()) }}</strong></div>
         <div [attr.data-tone]="tinted(changeTone())"><span>Today</span><strong>{{ fmtPct(changePct()) }}</strong></div>
         <div><span>Open{{ nowSuffix() }}</span><strong>{{ openTrades() }}</strong></div>
-        <div [attr.data-tone]="tinted(winPairTone())" [class.busy]="loading()"><span>Win rate @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(winRate(), '%', 1) }}</strong></div>
-        <div [attr.data-tone]="tinted(expectancyTone())" [class.busy]="loading()"><span>Expectancy @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}</strong></div>
-        <div [attr.data-tone]="tinted(payoffTone())" [class.busy]="loading()"><span>Payoff @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}</strong></div>
+        <div class="risk-row"><span><a class="sb-hit" routerLink="/risk">Open risk</a></span><strong>{{ openRisk() }}</strong></div>
+        <div [attr.data-tone]="tinted(expectancyTone())" [class.busy]="loading()"><span>Expectancy @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(expectancyR(), 'R', 2) }}@if (sample(expectancyN()); as n) {<small class="n">{{ n }}</small>}</strong></div>
+        <div [attr.data-tone]="tinted(winPairTone())" [class.busy]="loading()"><span>Win rate @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(winRate(), '%', 1) }}@if (sample(winRateN()); as n) {<small class="n">{{ n }}</small>}</strong></div>
+        <div [attr.data-tone]="tinted(payoffTone())" [class.busy]="loading()"><span>Payoff @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(payoffRatio(), '', 2) }}@if (sample(expectancyN()); as n) {<small class="n">{{ n }}</small>}</strong></div>
         <div [attr.data-tone]="tinted(todayTone())" [class.busy]="todayBusy()"><span>Realised today @if (todayBusy()) { <sb-spinner label="Updating" /> }</span><strong>{{ todayUnavailable() ? todayUnavailableText : fmtFigure(todayAmount(), currencyUnit(), 2) }}</strong></div>
         @if (inPeriod()) {
           <div [attr.data-tone]="tinted(realizedTone())" [class.busy]="loading()"><span>Realised in period @if (loading()) { <sb-spinner label="Updating" /> }</span><strong>{{ fmtFigure(realizedAmount(), currencyUnit(), 2) }}</strong></div>
@@ -175,6 +224,12 @@ export function presetLabel(preset: ScopePreset): string {
     .grid.stale, .mobile-summary.stale { opacity: 0.55; }
     .stale-hint { margin: 0 0 var(--space-10); font-size: var(--text-chip); color: var(--warn); }
     .mobile-summary { display: none; }
+    /* The open-risk tile is a link to Risk: the tile fills the cell, the link
+       adds only the hover and the focus ring. */
+    .risk-link { display: block; min-width: 0; color: inherit; text-decoration: none; }
+    .risk-link:hover { background: var(--surface-raised); }
+    .risk-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .risk-row a { color: var(--accent); text-decoration: none; }
     /* A refetch in flight: the last figure stays, dimmed, beside its ring. */
     .mobile-summary .busy strong { opacity: 0.45; }
     .mobile-summary span { display: inline-flex; align-items: center; gap: var(--space-6); }
@@ -197,6 +252,9 @@ export function presetLabel(preset: ScopePreset): string {
       .mobile-summary div { display: flex; justify-content: space-between; gap: var(--space-8); padding: var(--space-6); border-bottom: 1px solid var(--border); font-size: var(--text-table); }
       .mobile-summary span { color: var(--text-secondary); }
       .mobile-summary strong { font-family: var(--font-mono); }
+      /* v195 §5.2: the sample under each rate figure, quiet and never toned:
+         it says how far to trust the figure, not whether it is good. */
+      .mobile-summary strong .n { display: block; color: var(--text-secondary); font-size: var(--text-chip); font-weight: 400; text-align: right; }
       .mobile-summary [data-tone='pos'] { background: var(--pos-soft); }
       .mobile-summary [data-tone='neg'] { background: var(--neg-soft); }
       .mobile-summary [data-tone='pos'] strong { color: var(--pos); }
@@ -207,7 +265,8 @@ export function presetLabel(preset: ScopePreset): string {
 })
 export class TradingPerformance {
   protected readonly help = KPI_HELP;
-  protected readonly about = PANEL_HELP.tradingPerformance;
+  protected readonly about = withBasis(PANEL_HELP.tradingPerformance);
+  protected readonly basis = PERF_BASIS;
   readonly balance = input<number | null>(null);
   readonly changePct = input<number | null>(null);
   readonly points = input<readonly number[]>([]);
@@ -218,7 +277,8 @@ export class TradingPerformance {
   readonly expectancyR = input<number | null>(null);
   readonly winRateN = input<number | null>(null);
   readonly expectancyN = input<number | null>(null);
-  protected sample(n: number | null): string | null { return n === null ? null : `N=${n}`; }
+  /** v195 §5.2: N on every rate card, with the thin-sample cue. */
+  protected sample(n: number | null): string | null { return performanceSample(n); }
   readonly avgConfidence = input<number | null>(null);
   /** The period's realised amount; shown only in Period mode. */
   readonly realizedAmount = input<number | null>(null);
@@ -230,6 +290,11 @@ export class TradingPerformance {
   /** Today's fetch failed (`DashboardStore.todayError`); the card says so. */
   readonly todayError = input<string | null>(null);
   readonly openTrades = input<number>(0);
+  /** Open risk as money and % of account, already formatted (`riskUnits`);
+   *  the card links to the breakdown on Risk. */
+  readonly openRisk = input<string>('—');
+  /** The line beneath it, already worded ("cap 2,000 $ · 20.00%"); null hides it. */
+  readonly riskCap = input<string | null>(null);
   /** Mean winning R over the magnitude of mean losing R. Null, never 0, when
    *  either side has no outcomes yet — see payoff_ratio_from_rs. */
   readonly payoffRatio = input<number | null>(null);
@@ -287,7 +352,9 @@ export class TradingPerformance {
   protected fmtPct = pct;
   /** Same rule as MetricCard: no value is an em dash, never a zero. */
   protected fmtFigure(value: number | null, unit: string, decimals: number): string {
-    return value === null ? '—' : `${value.toFixed(decimals)}${unit}`;
+    if (value === null) return '—';
+    // v195 §1.1: a negative ExpR carries a true minus; positives unchanged.
+    return `${value < 0 ? MINUS : ''}${Math.abs(value).toFixed(decimals)}${unit}`;
   }
   /** An em dash alone reads as broken: say why, in the scope's own words.
    *  All has no hint: nothing closed at all is its own answer. */
@@ -297,6 +364,11 @@ export class TradingPerformance {
     if (active === '1D') return 'none closed today';
     return active === 'All' ? null : 'none closed in range';
   }
+  /** Payoff is computed from the same scoped R list as expectancy
+   *  (payoff_ratio_from_rs over scoped_rs), so it carries expectancy's N,
+   *  then the no-close hint when there is no figure. */
+  protected readonly payoffSub = computed(() =>
+    joinSub(this.sample(this.expectancyN()), this.noCloseHint(this.payoffRatio())));
   protected readonly todayAmount = computed(() => this.todayRealized()?.amount ?? null);
   protected readonly todayTone = computed(() => signTone(this.todayAmount()));
   protected readonly todayBusy = computed(() => (this.inPeriod() ? this.todayLoading() : this.loading()));

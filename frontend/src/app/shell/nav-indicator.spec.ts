@@ -18,9 +18,10 @@ class Blank {}
 @Component({
   imports: [NavIndicator],
   template: `
-    <nav class="sidebar">
+    <nav class="rail">
       <sb-nav-indicator />
       <ul class="nav"><li><a class="first">One</a></li><li><a class="second">Two</a></li></ul>
+      <div class="rail-divider" aria-hidden="true"></div>
       <ul class="nav"><li><a class="third">Three</a></li></ul>
     </nav>
   `,
@@ -30,7 +31,7 @@ class Host {}
 describe('indicatorBox (v168 §3 #6)', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  function sidebar(): HTMLElement {
+  function rail(): HTMLElement {
     const nav = document.createElement('nav');
     nav.innerHTML = '<ul class="nav"><li><a>One</a></li><li><a class="active">Two</a></li></ul>';
     document.body.append(nav);
@@ -38,7 +39,7 @@ describe('indicatorBox (v168 §3 #6)', () => {
   }
 
   it('measures the active link against the sidebar, scroll included', () => {
-    const nav = sidebar();
+    const nav = rail();
     rect(nav, 100, 800);
     rect(nav.querySelector('a.active')!, 260, 36);
     Object.defineProperty(nav, 'scrollTop', { value: 40, configurable: true });
@@ -47,7 +48,7 @@ describe('indicatorBox (v168 §3 #6)', () => {
   });
 
   it('is null when no link is active', () => {
-    const nav = sidebar();
+    const nav = rail();
     nav.querySelector('a.active')!.classList.remove('active');
     expect(indicatorBox(nav)).toBeNull();
     nav.remove();
@@ -79,7 +80,7 @@ describe('NavIndicator (v168 §3 #6)', () => {
   async function mount() {
     const fixture = TestBed.createComponent(Host);
     const el = fixture.nativeElement as HTMLElement;
-    const nav = el.querySelector<HTMLElement>('nav.sidebar')!;
+    const nav = el.querySelector<HTMLElement>('nav.rail')!;
     rect(nav, 0, 800);
     rect(el.querySelector('a.first')!, 80, 32);
     rect(el.querySelector('a.second')!, 114, 32);
@@ -138,7 +139,7 @@ describe('NavIndicator (v168 §3 #6)', () => {
     vi.stubGlobal('ResizeObserver', FakeObserver);
     const { fixture, el, bar } = await mount();
     expect(observed).toEqual([
-      el.querySelector('nav.sidebar'),
+      el.querySelector('nav.rail'),
       ...el.querySelectorAll('.nav'),
       ...el.querySelectorAll('.nav a'),
     ]);

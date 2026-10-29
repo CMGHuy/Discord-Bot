@@ -30,7 +30,8 @@ import { ToastService } from './toast.service';
     }
     .toast {
       padding: var(--space-8) var(--space-14);
-      /* Depth (background/border/box-shadow) comes from .elev-overlay; only
+      max-width: min(360px, calc(100vw - 2 * var(--space-20)));
+      /* Depth (surface, border and shadow) comes from .elev-overlay; only
          the left edge's width is this component's own, since that edge is
          also the valence stripe the .warn/.error/.info rules colour below. */
       border-left-width: 2px;
@@ -40,6 +41,8 @@ import { ToastService } from './toast.service';
       text-align: left;
       cursor: pointer;
     }
+    /* v195 Phase 2: a toast is a real button, so it shows the focus ring. */
+    .toast:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
     .warn { border-left-color: var(--warn); }
     .error { border-left-color: var(--neg); }
     .info { border-left-color: var(--border-strong); }

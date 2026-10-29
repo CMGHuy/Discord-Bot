@@ -13,8 +13,8 @@
  * MotionService (ui/motion/motion.service.ts); index.html starts it at
  * `pending`. TS reads the mode from MotionService, never from the attribute.
  *   on       everything (the default)
- *   reduced  no transform-based motion: entrances and dialogs fade, no
- *            count-up, no draw-in, no lift, no ping, no drift, tape frozen
+ *   reduced  no transform-based motion: dialogs and sheets fade, no
+ *            count-up, no draw-in, no ping, tape frozen
  *   off      no decorative motion: --motion-scale is 0, so every
  *            calc(<ms> * var(--motion-scale)) duration is 0, and every site
  *            keeps its non-motion fallback. Spinners still turn.
@@ -23,6 +23,14 @@
  *            burst
  * The OS reduced-motion setting is not read, by design (spec D2): the
  * Motion control in the profile menu is the switch, default On.
+ *
+ * v195 §1.2 (Graphite) shrank this file to what carries information or
+ * marks a state change: the price flash, dialog/sheet open and close, the
+ * chart draw-in, the status pulses and spinners, the tape and the nav
+ * indicator, each with its Off and Reduced guard. The route entrance and
+ * panel stagger, the hover lift, the primary-button glow and the ambient
+ * drift are gone. Colour, opacity and border transitions live in each
+ * component as var(--transition), 120ms (tokens.css --dur-ui).
  *
  * Specificity: a mode rule that overrides a component's own rule has to
  * beat the component's emulated `.x[_ngcontent-…]` (0,2,0), so those rules
@@ -74,7 +82,6 @@
 .flash-down { animation: sb-flash-down calc(1100ms * var(--motion-scale)) var(--ease-out); }
 
 /* -- new keyframes (spec v168 §3) ------------------------------------------- */
-@keyframes sb-enter { from { opacity: 0; transform: translateY(8px); filter: blur(3px); } }
 @keyframes sb-fade-in { from { opacity: 0; } }
 @keyframes sb-pop-in { from { opacity: 0; transform: scale(0.96); } }
 @keyframes sb-drawer-in { from { transform: translateX(100%); } }
@@ -87,70 +94,11 @@
 @keyframes sb-skeleton-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 0.9; } }  /* sb-async skeleton bars (v186 D5) */
 @keyframes sb-draw-inset { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
 @keyframes sb-draw-circle { from { clip-path: circle(0); } to { clip-path: circle(75%); } }
-@keyframes sb-ambient-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(4%, 3%, 0); } }
 
-/* -- #1 route entrance, #2 staggered panels ---------------------------------
- * Claimed once per route activation (RouteEntryService, MO7): the routed
- * host div.workspace-content gets .sb-entering, and the direct children of
- * the workspace's top-level .sb-stack / .sb-row / sb-panel-grid (or any
- * container marked .sb-stagger) follow it in, one step apart. Fill mode
- * `backwards`: nothing lingers after the animation, so no transform or
- * filter is left to become a containing block for position: fixed/sticky
- * descendants.
- * The last staggered child ends at 420 + 420 = 840ms (phone 540ms), after
- * the host's own animationend; the route host keeps .sb-entering for
- * ENTRANCE_FALLBACK_MS (1000ms) so no child is cut off. */
-.sb-enter { animation: sb-enter var(--dur-enter) var(--ease-out) backwards; }
-.sb-entering {
-  animation: sb-enter var(--dur-enter) var(--ease-out) backwards;
-  will-change: transform, opacity, filter;
-}
-.sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > * {
-  animation: sb-enter var(--dur-enter) var(--ease-out) backwards;
-}
-@media (min-width: 640px) {
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(2) { animation-delay: calc(60ms * var(--motion-scale)); }
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(3) { animation-delay: calc(120ms * var(--motion-scale)); }
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(4) { animation-delay: calc(180ms * var(--motion-scale)); }
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(5) { animation-delay: calc(240ms * var(--motion-scale)); }
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(6) { animation-delay: calc(300ms * var(--motion-scale)); }
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(7) { animation-delay: calc(360ms * var(--motion-scale)); }
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(n + 8) { animation-delay: calc(420ms * var(--motion-scale)); }
-}
-@media (max-width: 639px) {
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(2) { animation-delay: calc(40ms * var(--motion-scale)); }
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(3) { animation-delay: calc(80ms * var(--motion-scale)); }
-  .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > :nth-child(n + 4) { animation-delay: calc(120ms * var(--motion-scale)); }
-}
-
-/* -- #5 hover and press ------------------------------------------------------
- * Panels and cards (.sb-lift beside .sb-panel, MO10). The deeper shadow is
- * the tier-3 --panel-shadow-lift, cast only here (primitives.spec.ts G3).
- * `[data-motion]` lifts the specificity over .sb-panel's own shadow and a
- * component's border. Lift only where a pointer can hover; on touch a press
- * tints instead (an inset shadow is a border, not elevation, so G3 skips it). */
-.sb-lift {
-  transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
-}
-@media (hover: hover) {
-  [data-motion] .sb-lift:hover { border-color: var(--border-strong); box-shadow: var(--panel-shadow-lift); }
-  [data-motion=on] .sb-lift:hover { transform: translateY(-2px); }
-  /* v186 D3 -- a tile in an sb-stat-strip does not move: the strip's
-     overflow: hidden would clip the translate (its --panel-shadow-lift: none
-     already removes the shadow). (0,3,1) beats the line above (0,3,0). */
-  [data-motion=on] sb-stat-strip .sb-lift:hover { transform: none; }
-}
-@media (hover: none) {
-  [data-motion] .sb-lift:active { box-shadow: inset 0 0 0 100vmax var(--accent-soft); }
-}
-
-/* The primary button's hover glow (#5). Cast here, after the lift, because
-   no component casts an elevation shadow (primitives.spec.ts G3: this file's
-   two are the lift and this glow, in that order). Mode-agnostic: a glow is
-   colour, not motion. Under Reduced the press does not scale. */
-@media (hover: hover) {
-  button[sb-button].primary:not([disabled]):hover { box-shadow: var(--glow-accent); }
-}
+/* -- press ------------------------------------------------------------------
+ * v195 §1.2 deleted the panel hover lift (.sb-lift, --panel-shadow-lift)
+ * and the primary button's hover glow (--glow-accent). The button's own
+ * press scale stays (button.ts); under Reduced it does not scale. */
 [data-motion=reduced] button[sb-button]:not([disabled]):active { transform: none; }
 
 /* -- #7 drawer, dialog, toast ------------------------------------------------
@@ -194,13 +142,6 @@ sb-confirm-dialog dialog[open]::backdrop {
   will-change: clip-path;
 }
 
-/* -- #10 ambient glow drift (the layer itself is MO16's) --------------------
- * On only, and static on a phone (battery). */
-[data-motion=on] .ambient { animation: sb-ambient-drift 12s ease-in-out infinite alternate; }
-@media (max-width: 639px) {
-  [data-motion=on] .ambient { animation: none; }
-}
-
 /* -- #6 nav indicator (sb-nav-indicator, MO11) -------------------------------
  * The component declares no transition of its own; it lives here, per mode.
  * Off and pending: no rule, so the indicator jumps. */
@@ -210,9 +151,6 @@ sb-confirm-dialog dialog[open]::backdrop {
 [data-motion=reduced] sb-nav-indicator .nav-indicator { transition: opacity var(--dur-base) var(--ease-out); }
 
 /* -- Reduced: no transform-based motion (spec §1) --------------------------- */
-[data-motion=reduced] .sb-enter,
-[data-motion=reduced] .sb-entering,
-[data-motion=reduced] .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > *,
 [data-motion=reduced] .sb-pop-in,
 [data-motion=reduced] .sb-drawer-in,
 [data-motion=reduced] .sb-sheet-in {
@@ -229,9 +167,6 @@ sb-confirm-dialog dialog[open]::backdrop {
 /* -- Off and pending: no decorative motion ----------------------------------
  * Off's fallbacks for the nine pre-v168 sites (spinners slowed, never
  * stopped) follow below this block (MO6). */
-[data-motion=off] .sb-enter,
-[data-motion=off] .sb-entering,
-[data-motion=off] .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > *,
 [data-motion=off] .sb-pop-in,
 [data-motion=off] .sb-drawer-in,
 [data-motion=off] .sb-sheet-in,
@@ -241,9 +176,6 @@ sb-confirm-dialog dialog[open]::backdrop {
 [data-motion=off] .sb-draw-in-radial,
 [data-motion=off] sb-drawer dialog[open]::backdrop,
 [data-motion=off] sb-confirm-dialog dialog[open]::backdrop,
-[data-motion=pending] .sb-enter,
-[data-motion=pending] .sb-entering,
-[data-motion=pending] .sb-entering > * > :is(.sb-stack, .sb-row, sb-panel-grid, .sb-stagger) > *,
 [data-motion=pending] .sb-pop-in,
 [data-motion=pending] .sb-drawer-in,
 [data-motion=pending] .sb-sheet-in,

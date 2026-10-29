@@ -15,6 +15,7 @@ import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelHeader } from '../../../ui/panel-header';
 import { PanelError } from '../../../ui/panel-error';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
+import { StatStrip } from '../../../ui/stat-strip';
 import { PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
 import { alwaysMoney, inUnit, unitLabel } from '../../../ui/unit-format';
 import { VarianceBandPanel } from './variance-band-panel';
@@ -35,10 +36,22 @@ export const ANALYTICS_DRAWDOWN_ABOUT =
   + 'it was computed from. ' + PERFORMANCE_CAVEAT;
 
 /** v194 A4: Analytics counts plans (`closed_only`), unlike the Dashboard. */
-const ANALYTICS_WIN_RATE_ABOUT =
+export const ANALYTICS_WIN_RATE_ABOUT =
   'Wins ÷ (wins + losses) over closed plans in the selected range and filters: Analytics counts plans, '
   + 'so a plan that scaled out counts once. N is the number of decided plans. Read it with ExpR beside '
   + `it. ${PERFORMANCE_CAVEAT}`;
+
+/** v195 §5.2: every performance KPI states its basis in its About hint
+ *  (v194's caveat sentence), beside a one-line definition. The drawdown and
+ *  Sharpe tiles already carry theirs (V194-11b). */
+export const ANALYTICS_EXPR_ABOUT =
+  'Mean R per closed trade in the selected range; N is the closed trades it averages. ' + PERFORMANCE_CAVEAT;
+export const ANALYTICS_TOTAL_R_ABOUT =
+  'Cumulative R over every closed trade in the selected range, in close order; N is the trades on the curve. '
+  + PERFORMANCE_CAVEAT;
+export const ANALYTICS_PROFIT_FACTOR_ABOUT =
+  'Gross realised win ÷ gross realised loss over the selected range; N is the scoped closed trades. '
+  + PERFORMANCE_CAVEAT;
 
 /** One KPI tile's resolved, pre-formatted content -- `StatTile` never formats. */
 interface KpiTile {
@@ -93,14 +106,14 @@ function maxDrawdown(values: readonly number[]): number | null {
   selector: 'sb-overview-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Panel, PanelHeader, PanelError, EmptyStateComponent, StatTile, LineChart,
+    Panel, PanelHeader, PanelError, EmptyStateComponent, StatTile, StatStrip, LineChart,
     ShareBar, Histogram, BarList, DataTable, RouterLink, VarianceBandPanel,
   ],
   template: `
-    <div class="kpis">@for (tile of kpiTiles(); track tile.label) {
+    <sb-stat-strip class="kpis">@for (tile of kpiTiles(); track tile.label) {
       <sb-stat-tile [label]="tile.label" [value]="tile.value" [secondary]="tile.money"
         [sample]="tile.sample" [trend]="tile.trend" [hint]="tile.hint" [about]="tile.about" />
-    }</div>
+    }</sb-stat-strip>
 
     <div class="panels">
       <sb-panel>
@@ -166,7 +179,6 @@ function maxDrawdown(values: readonly number[]): number | null {
   `,
   styles: `
     :host { display: grid; gap: var(--space-20); }
-    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-10); }
     .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-14); }
     /* v175: the Normal bad luck panel spans both columns; its own two bars
        take the columns from 640px up and stack below. */
@@ -308,13 +320,16 @@ export class OverviewTab {
     const winRate = performance?.win_rate ?? null;
 
     return [
-      tile('Total R', last?.cum_r ?? null, derived?.total_return_pct ?? null, last?.cum_pnl ?? null,
-        equityCurve?.points_n ?? null, this.totalRTrend()),
-      tile('ExpR', performance?.expectancy_r ?? null, null, expectancyMoney, expectancyN),
+      // v195 §5.2: a performance strip leads with expectancy, win rate after
+      // it, never in the lead slot. Each carries its N and its basis.
+      { ...tile('ExpR', performance?.expectancy_r ?? null, null, expectancyMoney, expectancyN),
+        about: ANALYTICS_EXPR_ABOUT },
       { ...fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
         about: ANALYTICS_WIN_RATE_ABOUT },
-      fixedTile('Profit factor', num(profitFactor, 2), this.store.scopeN(), null,
-        'Gross realised win ÷ gross realised loss.'),
+      { ...tile('Total R', last?.cum_r ?? null, derived?.total_return_pct ?? null, last?.cum_pnl ?? null,
+        equityCurve?.points_n ?? null, this.totalRTrend()), about: ANALYTICS_TOTAL_R_ABOUT },
+      { ...fixedTile('Profit factor', num(profitFactor, 2), this.store.scopeN(), null,
+        'Gross realised win ÷ gross realised loss.'), about: ANALYTICS_PROFIT_FACTOR_ABOUT },
       // Negated: a drawdown is a loss, and an unsigned magnitude rendered
       // "+120.66R" -- the same sign as a gain, in the same row as Total R.
       {

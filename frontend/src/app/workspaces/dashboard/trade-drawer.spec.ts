@@ -72,7 +72,7 @@ describe('tradeDrawerFields (v179 §3.2)', () => {
   it('shows the realised P&L of a closed leg, signed and toned by its sign', () => {
     const row = tradeRow({ status: 'CLOSED', pnl_pct: -4, realized_pnl_amount: -40, current_price: null });
     const pnl = tradeDrawerFields(row, '€', NOW).find((f) => f.key === 'pnl')!;
-    expect(pnl.value).toBe('-4.00% (-40.00 €)');
+    expect(pnl.value).toBe('−4.00% (−40.00 €)');
     expect(pnl.tone).toBe('neg');
   });
 
@@ -248,5 +248,17 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     // No workspace media query (spec §4 anti-goal): the drawer's phone,
     // tablet and desktop geometry is sb-drawer's own.
     expect(css).not.toMatch(/@media/);
+  });
+});
+
+/* -- v195 §1.4 -- the drawer's order figures never shrink ------------------ */
+
+describe('sb-trade-drawer order figures (v195 §1.4)', () => {
+  it('sets entry, stop, targets and size on the 14px body step, in both densities', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/trade-drawer.ts'), 'utf8');
+    expect(src).toMatch(/:host \{[^}]*display: contents;[^}]*--text-table: var\(--text-body\);/);
+    // The fields read --text-table, so re-pointing it on the host is what
+    // lifts them; a field on its own fixed size would escape the floor.
+    expect(src).toMatch(/dd \{[^}]*font-size: var\(--text-table\)/);
   });
 });

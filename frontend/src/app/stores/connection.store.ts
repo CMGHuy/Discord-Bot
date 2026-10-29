@@ -20,6 +20,14 @@ export type ConnectionState = 'connecting' | 'live' | 'degraded' | 'dead';
 interface ConnectionStateSlice {
   botAlive: boolean | null;
   botLastSeen: string | null;
+  /**
+   * When the bot last completed a tick successfully -- v195's top-bar
+   * freshness chip. Already in the `/system/scan` payload this store reads;
+   * kept now because Scan health leaves the Risk page (spec §5.1) and the
+   * chip is what keeps it in view everywhere. Null until the bot has ever
+   * completed one, distinct from an old time.
+   */
+  botLastSuccess: string | null;
   /** Null when the bot has never completed a tick -- distinct from false. */
   botHealthy: boolean | null;
   /** True when the most recent poll for bot liveness failed. */
@@ -66,6 +74,7 @@ export const ConnectionStore = signalStore(
   withState<ConnectionStateSlice>({
     botAlive: null,
     botLastSeen: null,
+    botLastSuccess: null,
     botHealthy: null,
     unreachable: false,
     health: null,
@@ -126,6 +135,7 @@ export const ConnectionStore = signalStore(
             botAlive: scan.bot_alive,
             botHealthy: scan.bot_healthy,
             botLastSeen: scan.bot_last_seen,
+            botLastSuccess: scan.bot_last_success,
             scanRunning: scan.running,
             scanProgress: scan.progress,
             unreachable: false,

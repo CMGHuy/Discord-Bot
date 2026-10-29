@@ -12,8 +12,8 @@ import { ABSENT, dateTime, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
 import { isInline } from '../../ui/priority';
 import { Select } from '../../ui/form-controls';
-import { SectionHead } from '../../ui/section-head';
-import { MIN_SAMPLE_N, StatTile, StatTone } from '../../ui/stat-tile';
+import { Page } from '../../ui/page';
+import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT, StatTile, StatTone } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
 import { fxMissingText } from '../analytics/scope-bar';
@@ -29,7 +29,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, Hint, Panel, RouterLink, SectionHead, Select, StatStrip, StatTile, Async],
+  imports: [Button, ControlRow, Drawer, Hint, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -38,96 +38,111 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold a stale month while you are looking elsewhere.
   template: `
-    <sb-section-head>
-      <!-- Kept unconditional (unlike Dashboard/Trades): "By weekday (all
-           history)" below stays outside the sb-async wrap -- it answers a
-           different, all-time question that a THIS MONTH empty state must
-           not gate -- and has no error surface of its own, so this remains
-           its only one. Duplicates the wrapped panels' own error/stale
-           display on a first-load failure; accepted the same way Risk does. -->
-      @if (store.error(); as message) {
-        <span actions class="stale" role="status">{{ message }}</span>
-      }
-    </sb-section-head>
-
-    <sb-control-row>
-      <div class="months">
-        <button sb-button type="button" variant="ghost"
-                (click)="store.stepMonth(-1)" aria-label="Previous month">‹</button>
-        <span class="month">{{ label() }}</span>
-        <button sb-button type="button" variant="ghost"
-                (click)="store.stepMonth(1)" aria-label="Next month">›</button>
-      </div>
-
-      <div class="metric" role="group" aria-label="Metric">
-        @for (option of metrics(); track option.value) {
-          <button
-            sb-button
-            variant="segment"
-            type="button"
-            [class.active]="store.metric() === option.value"
-            (click)="store.setMetric(option.value)"
-          >
-            {{ option.label }}
-          </button>
+    <!-- v195 Phase 4: the route title is the page's one h1. -->
+    <sb-page>
+      <!-- The store's error, at the header's right. Kept unconditional:
+           "By weekday (all history)" below stays outside the sb-async wrap --
+           it answers a different, all-time question that a THIS MONTH empty
+           state must not gate -- and has no error surface of its own, so
+           this remains its only one. Duplicates the wrapped panel's own
+           error/stale display on a first-load failure; accepted the same way
+           Risk does. -->
+      <div page-actions class="head-status">
+        @if (store.error(); as message) {
+          <span class="stale" role="status">{{ message }}</span>
         }
       </div>
 
-      <sb-select
-        label="Strategy"
-        placeholder="Any strategy"
-        [options]="store.strategyOptions()"
-        [value]="store.strategy()"
-        (valueChange)="store.setStrategy($event)"
-      />
-      <sb-select
-        label="Horizon"
-        placeholder="Any horizon"
-        [options]="store.horizonOptions()"
-        [value]="store.horizon()"
-        (valueChange)="store.setHorizon($event)"
-      />
-    </sb-control-row>
+      <!-- v195 §5.2: the scope bar holds the month and the filters only. -->
+      <sb-control-row page-scope>
+        <div class="months">
+          <button sb-button type="button" variant="ghost"
+                  (click)="store.stepMonth(-1)" aria-label="Previous month">‹</button>
+          <span class="month">{{ label() }}</span>
+          <button sb-button type="button" variant="ghost"
+                  (click)="store.stepMonth(1)" aria-label="Next month">›</button>
+        </div>
 
-    <sb-async
-      [loading]="async().loading"
-      [error]="async().error"
-      [empty]="async().empty"
-      [staleAsOf]="async().staleAsOf"
-      emptyReason="measured-zero"
-      emptyTitle="No closed trades this month"
-      emptyHint="Pick another month, or widen the filters."
-      [skeletonRows]="6"
-      [skeletonCols]="7"
-      (retry)="store.load()"
-    >
-      <!-- v95 C5: filters plus these eight tiles pushed the month grid --
-           the reason this page exists -- past 1,400px at 390px, four of
-           them dimmed "thin sample" and repeating "N=<n> thin sample" four
-           times over. Below md the panel collapses to calendarDigest(), one
-           line standing in for all eight; a thin sample force-expands it
-           instead (Guard 2) rather than hiding the warning behind a
-           settled-looking digest. -->
-      <sb-panel inlineFrom="md" [digest]="calendarDigest()" [problem]="calendarProblem()">
-        <!-- Eight summary figures in reading order; four columns on desktop
-             and tablet, two on phone, with content-sized rows. -->
-        <sb-stat-strip class="totals" [cols]="4" [colsMd]="4">
-          <sb-stat-tile label="Net this month" [value]="totalLabel()" [tone]="totalsTone()" />
-          <sb-stat-tile label="Trades" [value]="tradesLabel()" />
-          <sb-stat-tile label="Win rate" [value]="monthWinRate()" />
-          <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
-          <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
-          <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
-          <sb-stat-tile label="Worst day" [value]="monthExtreme('worst')" [sample]="monthDays().length" tone="neg" />
-          <!-- The trade held longest among this month's closes: the duration,
-               its ticker beneath. A plain tile like its neighbours. -->
-          <sb-stat-tile class="longest-hold" label="Longest holding time"
-                        [value]="longestHoldValue()" [hint]="store.longestHold()?.ticker ?? undefined" />
-        </sb-stat-strip>
-      </sb-panel>
-      @if (monthFxMissing() > 0) {
-        <p class="fx-caveat" role="note">{{ fxText(monthFxMissing()) }}</p>
-      }
+        <div class="metric" role="group" aria-label="Metric">
+          @for (option of metrics(); track option.value) {
+            <button
+              sb-button
+              variant="segment"
+              type="button"
+              [class.active]="store.metric() === option.value"
+              (click)="store.setMetric(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          }
+        </div>
+
+        <sb-select
+          label="Strategy"
+          placeholder="Any strategy"
+          [options]="store.strategyOptions()"
+          [value]="store.strategy()"
+          (valueChange)="store.setStrategy($event)"
+        />
+        <sb-select
+          label="Horizon"
+          placeholder="Any horizon"
+          [options]="store.horizonOptions()"
+          [value]="store.horizon()"
+          (valueChange)="store.setHorizon($event)"
+        />
+      </sb-control-row>
+
+      <!-- v195 §5.2: the month's totals are the KPI strip. Shown exactly when
+           the sb-async below shows its content (showTotals): not while the
+           first load runs, not on a first-load error, not on a measured-zero
+           month, so no invented totals ever sit beside the empty state. -->
+      <div page-kpis class="month-kpis">
+        @if (showTotals()) {
+        <!-- v95 C5: filters plus these eight tiles pushed the month grid --
+             the reason this page exists -- past 1,400px at 390px, four of
+             them dimmed "thin sample" and repeating "N=<n> thin sample" four
+             times over. Below md the panel collapses to calendarDigest(), one
+             line standing in for all eight; a thin sample force-expands it
+             instead (Guard 2) rather than hiding the warning behind a
+             settled-looking digest. -->
+        <sb-panel inlineFrom="md" [digest]="calendarDigest()" [problem]="calendarProblem()">
+          <!-- Eight summary figures in reading order; four columns on desktop
+               and tablet, two on phone, with content-sized rows. -->
+          <sb-stat-strip class="totals" [cols]="4" [colsMd]="4">
+            <sb-stat-tile label="Net this month" [value]="totalLabel()" [tone]="totalsTone()"
+                          [sample]="monthTrades()" [about]="netAbout" />
+            <sb-stat-tile label="Trades" [value]="tradesLabel()" />
+            <sb-stat-tile label="Win rate" [value]="monthWinRate()" [sample]="monthTrades()" [about]="winRateAbout" />
+            <sb-stat-tile label="Winning days" [value]="winningDaysLabel()" [sample]="monthDays().length" tone="pos" />
+            <sb-stat-tile label="Average day" [value]="averageDay()" [sample]="monthDays().length" />
+            <sb-stat-tile label="Best day" [value]="monthExtreme('best')" [sample]="monthDays().length" tone="pos" />
+            <sb-stat-tile label="Worst day" [value]="monthExtreme('worst')" [sample]="monthDays().length" tone="neg" />
+            <!-- The trade held longest among this month's closes: the duration,
+                 its ticker beneath. A plain tile like its neighbours. -->
+            <sb-stat-tile class="longest-hold" label="Longest holding time"
+                          [value]="longestHoldValue()" [hint]="store.longestHold()?.ticker ?? undefined" />
+          </sb-stat-strip>
+        </sb-panel>
+        @if (monthFxMissing() > 0) {
+          <p class="fx-caveat" role="note">{{ fxText(monthFxMissing()) }}</p>
+        }
+        }
+      </div>
+
+      <sb-async
+        page-primary
+        [loading]="async().loading"
+        [error]="async().error"
+        [empty]="async().empty"
+        [staleAsOf]="async().staleAsOf"
+        emptyReason="measured-zero"
+        emptyTitle="No closed trades this month"
+        emptyHint="Pick another month, or widen the filters."
+        [skeletonRows]="6"
+        [skeletonCols]="7"
+        (retry)="store.load()"
+      >
 
       <!-- The day-detail pane that used to sit beside this grid duplicated
            the drawer below word for word (same store signals, same fields)
@@ -209,13 +224,13 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
           </ul>
         }
       </sb-panel>
-    </sb-async>
+      </sb-async>
 
     <!-- All-time, not this-month: deliberately outside the sb-async above
-         so a THIS MONTH empty state cannot hide it (see the section-head
+         so a THIS MONTH empty state cannot hide it (see the head-status
          comment). Degrades safely via weekdays()'s own [] default before
          the first load. -->
-    <sb-panel heading="By weekday (all history)" [divided]="true">
+      <sb-panel page-secondary class="weekday-panel" heading="By weekday (all history)" [divided]="true">
       <table class="dow">
         <thead>
           <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
@@ -318,15 +333,16 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
         }
       }
     </sb-drawer>
+    </sb-page>
   `,
   styles: `
-    /* No backticks in here: these styles live in a TS template literal.
-       v54: gap reads --register-pad, set by the register-presentation class
-       on this same host element (above) -- --space-20 was this rule's own
-       literal before, and register-presentation's rung is the same value,
-       so this changes nothing visually while making the rhythm follow the
-       register instead of a hardcoded token. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    /* No backticks in here: these styles live in a TS template literal. */
+    /* v195 Phase 4: sb-page owns the page rhythm. */
+    :host { display: block; min-width: 0; }
+    /* contents: sb-page's actions slot lays the status out. */
+    .head-status { display: contents; }
+    /* All-time, so it reads across the whole width beside nothing. */
+    .weekday-panel { grid-column: 1 / -1; }
 
     /* The month stepper: two buttons with the month between them. Centred
        rather than bottom-aligned like the controls around it, because the
@@ -353,8 +369,9 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
 
     /* The calendar table's own panel, not .totals -- on request. A plain
        class selector on the host tag works regardless of whatever sb-async
-       wraps its projected content in, unlike a sibling combinator would. */
-    sb-panel.calendar-panel { display: block; margin-top: 20px; }
+       wraps its projected content in, unlike a sibling combinator would.
+       sb-page's slot gap now separates it from the strip above. */
+    sb-panel.calendar-panel { display: block; }
 
     .grid { display: grid; }
     .week, .weekhead { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
@@ -498,6 +515,22 @@ export class Calendar {
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.totals.trade_count === 0 }),
   );
+
+  /** v195 §5.2: the KPI strip sits outside the sb-async, so it carries the
+   *  same gate the sb-async applies to its content: no totals while the
+   *  first load runs, on a first-load error or for a measured-zero month. A
+   *  refetch failure over loaded data keeps them (asyncInputs: error null). */
+  protected readonly showTotals = computed(() => {
+    const state = this.async();
+    return !state.loading && state.error === null && !state.empty;
+  });
+
+  /** The month's closed trades: the N behind Net this month and Win rate. */
+  protected readonly monthTrades = computed(() => this.store.totals()?.trade_count ?? null);
+
+  /** v195 §5.2: every performance KPI states its basis (v194's caveat). */
+  protected readonly netAbout = `The month's closed trades, summed in the metric on show. ${PERFORMANCE_CAVEAT}`;
+  protected readonly winRateAbout = `Share of the month's closed trades that won. ${PERFORMANCE_CAVEAT}`;
 
   /** The account's own symbol, never a literal `$` -- see `MetricCard`'s
    *  note. An admin running a euro account must not read euro figures

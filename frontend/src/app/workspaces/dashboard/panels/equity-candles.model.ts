@@ -1,7 +1,7 @@
 import type { CandlestickData, Time, UTCTimestamp } from 'lightweight-charts';
 
 import { EquityBasis, EquityCandle, EquityTimeframe } from '../../../api/models';
-import { money, num, pct } from '../../../ui/format';
+import { MINUS, money, num, pct } from '../../../ui/format';
 import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 import { LogicalWindow, PnlTone, RangeStats, drawdownTone, signTone } from './equity-range.model';
 
@@ -169,7 +169,8 @@ function drawdownPart(pctValue: number | null): ReadoutPart {
   if (pctValue === null) return { text: `${RANGE_LABELS.drawdown} —`, tone: 'neutral' };
   // Intl's decimal rounding matches the money/high/low readout at halfway values.
   const loss = pctValue === 0 ? 0 : -Math.abs(pctValue);
-  return { text: `${RANGE_LABELS.drawdown} ${num(loss)}%`, tone: drawdownTone(pctValue) };
+  // v195 §1.1: a true minus; the magnitude keeps num's Intl rounding.
+  return { text: `${RANGE_LABELS.drawdown} ${loss < 0 ? MINUS : ''}${num(Math.abs(loss))}%`, tone: drawdownTone(pctValue) };
 }
 
 /** The visible range in one line — spec v181 §4. */

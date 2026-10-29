@@ -24,6 +24,16 @@ describe('activity derivation', () => {
     });
   });
 
+  it('words a close with the true minus for a loss, plain for zero, plus for a gain', () => {
+    const detail = (r: number) => deriveActivity([
+      row({ status: 'CLOSED', closed_at: '2026-09-11T16:20:00Z', r_multiple: r }),
+    ]).find((e) => e.kind === 'closed')!.detail;
+    expect(detail(-0.3)).toBe('Closed at −0.30R');
+    expect(detail(-0.3)).not.toContain('-');
+    expect(detail(0)).toBe('Closed at 0.00R');
+    expect(detail(1.5)).toBe('Closed at +1.50R');
+  });
+
   it('carries status through a closed event too, not just opened', () => {
     const events = deriveActivity([
       row({ status: 'CLOSED', closed_at: '2026-09-11T16:20:00Z' }),

@@ -11,14 +11,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 
-/** Where the bar sits, in the sidebar's scrolled coordinate space. */
+/** Where the bar sits, in the rail's scrolled coordinate space. */
 export interface IndicatorBox {
   top: number;
   height: number;
 }
 
 /**
- * The active link's box relative to `container` (the scrolling `.sidebar`):
+ * The active link's box relative to `container` (the scrolling `.rail`):
  * rect difference, minus the container's top border, plus its scroll, so the
  * bar scrolls with the links. `null` when no link is active.
  */
@@ -32,12 +32,12 @@ export function indicatorBox(container: HTMLElement): IndicatorBox | null {
 
 /**
  * One sliding rail for the active nav entry (spec v168 §3 #6), replacing the
- * per-link left border. It lives in `.sidebar`, not in a `.nav` list, because
- * the nav is three lists with group labels between them; the shell places
+ * per-link left border. It lives in `.rail`, not in a `.nav` list, because
+ * the nav is four lists with dividers between them (v195); the shell places
  * the host (shell.css) and this component only moves the bar.
  *
  * It remeasures after first render, after every navigation, and whenever the
- * sidebar, a list or a link changes size: a sidebar collapse, a text-size
+ * rail, a list or a link changes size: a text-size
  * change (--text-scale) and a list growing all move the active link without
  * a navigation. The bar declares no transition here; styles/motion.css gives
  * it a spring under Motion = On and a fade under Reduced, and under Off it

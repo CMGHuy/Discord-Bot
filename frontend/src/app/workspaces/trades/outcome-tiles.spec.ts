@@ -61,7 +61,7 @@ describe('outcomeTiles', () => {
   it('uses pending status before an exit price', () => {
     const tiles = outcomeTiles(context('PENDING'));
     expect(tiles.map(t => t.id)).toEqual(['trigger', 'distance', 'expires', 'created']);
-    expect(tiles[0]).toMatchObject({ value: '101.00', sub: 'now 105.00 · -3.81% to trigger' });
+    expect(tiles[0]).toMatchObject({ value: '101.00', sub: 'now 105.00 · −3.81% to trigger' });
     expect(tiles[1].value).toBe('0.20R');
     expect(tiles[2].sub).toBe('3 bars left');
   });

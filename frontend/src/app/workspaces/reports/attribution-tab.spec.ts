@@ -42,7 +42,7 @@ const panel = (fixture: ComponentFixture<AttributionTab>, heading: string): HTML
 
 describe('formatR / formatInterval', () => {
   it('signs positive values and writes an em dash for a missing one', () => {
-    expect([formatR(0.224), formatR(-0.05), formatR(0), formatR(null)]).toEqual(['+0.22R', '-0.05R', '0.00R', '—']);
+    expect([formatR(0.224), formatR(-0.05), formatR(0), formatR(null)]).toEqual(['+0.22R', '−0.05R', '0.00R', '—']);
     expect(formatInterval(0.03, 0.41)).toBe('[+0.03R, +0.41R]');
     expect(formatInterval(null, 0.41)).toBe('—');
   });
@@ -63,7 +63,7 @@ describe('AttributionTab', () => {
     const latest = panel(fixture, LATEST_HEADING);
     expect(latest.querySelector('sb-chip')).toBeNull();
     expect(text(latest.querySelector('[data-population="Live"]'))).toContain('+0.22R [+0.03R, +0.41R]');
-    expect(text(latest.querySelector('[data-population="TRAIN"]'))).toContain('+0.04R [-0.02R, +0.10R]');
+    expect(text(latest.querySelector('[data-population="TRAIN"]'))).toContain('+0.04R [−0.02R, +0.10R]');
   });
 
   it('shows each factor as delta and interval, with the candidate marker only below q 0.10', () => {
@@ -71,7 +71,7 @@ describe('AttributionTab', () => {
     const row = (key: string) => text(host(fixture).querySelector(`[data-factor="${key}"]`));
     expect(row('RSI trend alignment')).toContain('+0.19R [+0.04R, +0.35R]');
     expect(row('RSI trend alignment')).toContain('screen candidate');
-    expect(row('MACD momentum')).toContain('+0.03R [-0.12R, +0.18R]');
+    expect(row('MACD momentum')).toContain('+0.03R [−0.12R, +0.18R]');
     expect(row('MACD momentum')).not.toContain('screen candidate');
     expect(panel(fixture, 'Factors').querySelector('sb-chip')).toBeNull();
   });
@@ -95,7 +95,7 @@ describe('AttributionTab', () => {
   it('repeats the reading per direction and per horizon', () => {
     const fixture = create();
     const bearish = text(host(fixture).querySelector('[data-split="Direction:bearish"]'));
-    expect(bearish).toContain('-0.05R [-0.30R, +0.20R]');
+    expect(bearish).toContain('−0.05R [−0.30R, +0.20R]');
     expect(bearish).toContain('44');
     expect(host(fixture).querySelectorAll('[data-split]').length).toBe(4);
   });
@@ -121,5 +121,13 @@ describe('AttributionTab', () => {
     const fixture = create(NOT_RUN);
     expect(host(fixture).querySelector('sb-panel')).toBeNull();
     expect(host(fixture).querySelector('sb-chip')).toBeNull();
+  });
+});
+
+describe('formatR signs (v195 §1.1)', () => {
+  it('prints no hyphen-minus, alone or in an interval', () => {
+    expect(formatR(-1)).toBe('−1.00R');
+    expect(formatInterval(-0.3, -0.1)).toBe('[−0.30R, −0.10R]');
+    expect(formatInterval(-0.3, -0.1)).not.toContain('-');
   });
 });

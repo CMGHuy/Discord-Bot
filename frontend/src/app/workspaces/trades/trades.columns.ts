@@ -35,6 +35,7 @@ export const COMPACT_COLUMNS = [
   'ticker',
   'confidence_level',
   'direction',
+  'badge',
   'now',
   'plan',
   'pnl_pct',
@@ -82,6 +83,7 @@ export const FULL_COLUMNS = [
   'ticker',
   'confidence_level',
   'direction',
+  'badge',
   'now',
   'plan',
   'risk_reward',
@@ -123,6 +125,20 @@ export const DASHBOARD_TABLE_ID = 'dashboard';
  * (strategy, horizon, tier) are not clickable: the server does not sort by
  * them, and offering a control that 400s would be worse than not offering it.
  */
+/**
+ * The columns that never collapse into the row expansion on a tablet or
+ * desktop -- v195 Phase 2, spec correction 8. Ticker, side, the plan (entry,
+ * target and stop in one cell), the stop on its own, P&L, R, the tier and
+ * the strategy badge stay in the priority columns wherever they are shown,
+ * so a stop is never one tap away and a WEAK strategy never reads as
+ * validated. `stop_loss` and `tier` are picker columns (in neither default
+ * set): this fixes where they sit once picked. `badge` is a default column
+ * and the one that also holds on a phone (`xs` floor, card line 2). TradeRow
+ * has no risk amount, so no risk-$ column exists to protect here (Risk's own
+ * table declares no floors at all).
+ */
+export const NEVER_COLLAPSED_COLUMNS = ['ticker', 'direction', 'plan', 'stop_loss', 'pnl_pct', 'r_multiple', 'tier', 'badge'] as const;
+
 /* Column floors — v95 C2, amended 2026-09-28.
  *
  * Measured at 390px before v95: the visible four were #, STATUS, TICKER and
@@ -147,6 +163,10 @@ export const DASHBOARD_TABLE_ID = 'dashboard';
  * stop on the row (§3.1 money floor). Every other rendered column, the row
  * actions and the expansion are in the row drawer. `inlineFrom` above keeps
  * governing tablet and desktop.
+ *
+ * v195 (correction 8): Stop and Tier take the `sm` floor, not `lg`, so on a
+ * tablet a picked Stop or Tier column stays in the row; the new Badge
+ * column is inline at every width. See NEVER_COLLAPSED_COLUMNS above.
  */
 export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDef<TradeRow>[] {
   return [
@@ -164,7 +184,8 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
 
     /* -- individually re-addable through the column picker ---------------- */
     { key: 'entry', header: 'Entry', value: (row) => num(row.entry), numeric: true, sortable: true, inlineFrom: 'lg' },
-    { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, inlineFrom: 'lg' },
+    // v195 correction 8: never collapsed on a tablet (NEVER_COLLAPSED_COLUMNS).
+    { key: 'stop_loss', header: 'Stop', value: (row) => num(row.stop_loss), numeric: true, inlineFrom: 'sm' },
     { key: 'target', header: 'Target', value: (row) => num(row.target1 ?? row.target), numeric: true, inlineFrom: 'lg' },
     { key: 'risk_reward', header: 'R:R', value: (row) => num(row.risk_reward), numeric: true, inlineFrom: 'lg' },
     // Rich cell (trades.ts's rMultipleCell) adds sb-magnitude beneath; value
@@ -175,11 +196,15 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), inlineFrom: 'lg' },
     { key: 'horizon', header: 'Horizon', value: (row) => text(row.horizon), inlineFrom: 'lg' },
     { key: 'direction', header: 'Direction', width: '3.5rem', inlineFrom: 'sm', compact: { line: 1, order: 2 } },
+    // v195 correction 8: the strategy badge (VALIDATED / WEAK) is a default
+    // column that never collapses, phone card included -- a WEAK strategy
+    // must never read as validated. The word is the cue; no colour needed.
+    { key: 'badge', header: 'Badge', value: (row) => text(row.badge), inlineFrom: 'xs', compact: { line: 2, order: 3 } },
     // Entry, target and stop in one cell (SR8). Not sortable: there is no
     // single field behind it, and `sort=plan` is a 400 from the collection
     // endpoint. The three keys remain as separate columns for the picker.
     { key: 'plan', header: 'Plan', width: '12rem', inlineFrom: 'xs', compact: { line: 2, order: 1 } },
-    { key: 'tier', header: 'Tier', inlineFrom: 'lg' },
+    { key: 'tier', header: 'Tier', inlineFrom: 'sm' },
     { key: 'confidence_level', header: 'Confidence', inlineFrom: 'md' },
     { key: 'shares', header: 'Shares', value: (row) => shareCount(row.shares), numeric: true, inlineFrom: 'lg' },
     { key: 'position_value', header: 'Deployed', value: (row) => num(row.position_value), numeric: true, inlineFrom: 'lg' },

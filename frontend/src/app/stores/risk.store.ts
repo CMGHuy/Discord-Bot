@@ -10,7 +10,7 @@ import {
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { unavailableKillswitch } from '../api/risk-state';
-import { Observable } from 'rxjs';
+import { Observable, defer } from 'rxjs';
 
 import { routeRequest } from '../routing/route-request';
 import {
@@ -31,6 +31,19 @@ interface RiskSlice {
    *  the screen the reader must act on -- believing the bot stopped taking
    *  positions when it did not is the worst outcome this workspace has. */
   commandError: string | null;
+
+  /** v195 §5.2: the account balance, read from the existing `GET /dashboard`
+   *  beside `GET /risk`, so risk can be shown in money as well as % of
+   *  account (`pct / 100 × balance`, the server's own relation in
+   *  `trade_risk_pct`). Null until a read lands; a failed read leaves the
+   *  last value, never a guess. */
+  balance: number | null;
+}
+
+/** A balance is money only when it is a finite number; anything else from
+ *  the wire (null, a string, NaN) leaves the money figures blank. */
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /** A cluster is a list of correlated tickers. The server ships
@@ -67,9 +80,17 @@ function tickerList(value: unknown): string[] | null {
  *
  * Everything the Jinja Risk page renders is projected by `GET /risk`, and
  * everything projected is surfaced here: sector heat, correlated clusters,
- * the drawdown throttle and scan health included. Dropping a panel is a
+ * and the drawdown throttle included. Scan health and the data source, which
+ * the same payload carries, are shown on System → Providers and read there by
+ * SystemStore (v195 §5.1). Dropping a panel is a
  * decision someone makes on purpose in the SPA, not something that happens
  * because a store forgot to expose a field.
+ *
+ * **One read beside it (v195 §5.2).** `GET /risk` carries risk as % of
+ * account only, and the KPI strip shows money and % together. The balance
+ * comes from the existing `GET /dashboard` (`account_balance`), read each
+ * time the resolver runs and never waited on: a slow or failed read leaves
+ * the money half of each figure blank, it does not hold or fail the route.
  */
 export const RiskStore = signalStore(
   withState<RiskSlice>({
@@ -79,6 +100,7 @@ export const RiskStore = signalStore(
     error: null,
     toggling: false,
     commandError: null,
+    balance: null,
   }),
   withComputed(({ data, control }) => ({
     /** True until the first response and never again -- a skeleton once,
@@ -89,6 +111,16 @@ export const RiskStore = signalStore(
 
     openHeatPct: computed(() => data()?.heat?.open_pct ?? null),
     heatCapPct: computed(() => data()?.heat?.cap_pct ?? null),
+
+    /** v195 §5.2: room left under the cap, in % of account. **Not
+     *  clamped**: over the cap it is negative, which is the state the KPI
+     *  must show. The budget panel keeps its own floor-at-zero rule. */
+    headroomPct: computed(() => {
+      const cap = data()?.heat?.cap_pct;
+      const open = data()?.heat?.open_pct;
+      if (cap === null || cap === undefined || open === null || open === undefined) return null;
+      return cap - open;
+    }),
 
     /** **Not clamped.** 130% of the cap is precisely the situation the
      *  reader must see, and a number that stops at 100 would hide it. Only
@@ -155,31 +187,37 @@ export const RiskStore = signalStore(
     killswitch: computed<Killswitch | null>(() => control()),
     killswitchOn: computed<boolean | null>(() => control()?.on ?? null),
 
-    /* -- scan health ----------------------------------------------------- */
-
-    scanDurations: computed<readonly number[]>(
-      () => data()?.scan_health?.durations_s ?? [],
-    ),
-    scanLatestS: computed(() => data()?.scan_health?.latest_s ?? null),
-    scanSlowdown: computed(() => data()?.scan_health?.slowdown ?? false),
-    dataSources: computed<DataSourcesHealth | null>(
-      () => data()?.scan_health?.data_sources ?? null,
-    ),
-
     /* -- institutional risk metrics and correlation (v85 D37/D38) -------- */
 
     metrics: computed<RiskMetrics | null>(() => data()?.metrics ?? null),
     correlation: computed<Correlation | null>(() => data()?.correlation ?? null),
   })),
   withMethods((store, api = inject(ApiClient)) => {
-    const resolve = (): Observable<void> => routeRequest(api.risk(), {
-      start: () => patchState(store, { loading: true }),
-      next: (data) => patchState(store, { data, control: data.killswitch, loading: false, error: null }),
-      error: (error) => patchState(store, {
-        control: unavailableKillswitch(store.control()),
-        loading: false,
-        error: error.code === 'unavailable' ? 'The admin is not responding — these figures may be stale.' : error.message,
-      }),
+    /** Fire and forget: the route never waits for it, and a failure keeps the
+     *  last balance (null before the first), so the KPIs fall back to
+     *  "— · 3.00%" instead of failing the page. */
+    const readBalance = (): void => {
+      api.dashboard().subscribe({
+        next: (dashboard) => {
+          const balance = finiteOrNull(dashboard.account_balance);
+          if (balance !== null || store.balance() === null) patchState(store, { balance });
+        },
+        error: () => undefined,
+      });
+    };
+    /** `defer`: both reads start when the resolver is subscribed, not when it
+     *  is built, so a resolver that is never subscribed reads nothing. */
+    const resolve = (): Observable<void> => defer(() => {
+      readBalance();
+      return routeRequest(api.risk(), {
+        start: () => patchState(store, { loading: true }),
+        next: (data) => patchState(store, { data, control: data.killswitch, loading: false, error: null }),
+        error: (error) => patchState(store, {
+          control: unavailableKillswitch(store.control()),
+          loading: false,
+          error: error.code === 'unavailable' ? 'The admin is not responding — these figures may be stale.' : error.message,
+        }),
+      });
     });
     return {
       resolve,

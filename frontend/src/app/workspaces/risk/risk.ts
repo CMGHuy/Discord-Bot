@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { DataSourcesHealth, RiskAvailability, RiskPosition } from '../../api/models';
+import { DataSourcesHealth, RiskAvailability, RiskPosition, SectorHeat } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { RiskStore } from '../../stores/risk.store';
@@ -25,11 +25,11 @@ import { Freshness } from '../../ui/freshness';
 import { Panel } from '../../ui/layout';
 import { Matrix } from '../../ui/matrix';
 import { RowLink } from '../../ui/row-link';
-import { SectionHead } from '../../ui/section-head';
-import { Sparkline } from '../../ui/sparkline';
-import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
+import { PERFORMANCE_CAVEAT, StatTile, StatTone } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { tablePerPage } from '../../ui/table-per-page';
+import { Page } from '../../ui/page';
+import { riskUnits } from '../../ui/risk-units';
 
 /** v194 B4/B5: what the Exposure table's figures are, shown as the panel's
  *  hint. Copy rules (index Global Constraints): paper, no recommendation. */
@@ -115,6 +115,43 @@ interface MetricTile {
   hint?: string;
 }
 
+/** v195 §5.2: the About hints of the four KPI tiles. New explanation lives in
+ *  a hint, never a `title`. */
+export const RISK_KPI_ABOUT = {
+  openRisk:
+    'What the open positions lose together if every stop fills, in money and as a share of the '
+    + 'account. The cap beneath is the most open risk the bot allows before it blocks new entries.',
+  headroom:
+    'How much more risk the bot may take on before new entries are blocked: the cap less the open '
+    + 'risk, in money and as a share of the account. Below zero, the book is over the cap.',
+  topSector:
+    'The sector carrying the most open risk, with that risk in money and as a share of the account. '
+    + 'Sector heat below lists every sector.',
+  maxCluster:
+    'The largest group of open positions whose daily returns move together. They tend to lose '
+    + 'together, so their risk adds up. Correlated clusters below lists every group.',
+} as const;
+
+/** The sector with the most heat; unknown heat never wins. First on a tie,
+ *  which is the server's order. */
+export function topSectorOf(rows: readonly SectorHeat[]): SectorHeat | null {
+  let top: SectorHeat | null = null;
+  for (const row of rows) {
+    if (row.heat_pct === null) continue;
+    if (top === null || row.heat_pct > (top.heat_pct as number)) top = row;
+  }
+  return top;
+}
+
+/** The cluster with the most tickers; first on a tie. */
+export function largestCluster<T extends { tickers: readonly string[] }>(clusters: readonly T[]): T | null {
+  let best: T | null = null;
+  for (const cluster of clusters) {
+    if (best === null || cluster.tickers.length > best.tickers.length) best = cluster;
+  }
+  return best;
+}
+
 /**
  * Risk — exposure, heat against `PORTFOLIO_HEAT_CAP_PCT`, and the killswitch.
  *
@@ -134,16 +171,25 @@ interface MetricTile {
  * boolean of its own for that; this is not a second copy of the workspace's
  * state.
  *
- * Four panels below the fold -- sector heat, correlated clusters, the
- * drawdown throttle, scan health -- carry over from the Jinja page. The specs
- * are silent on all four, and silence is not a decision to drop them.
+ * Three panels below the fold -- sector heat, correlated clusters, the
+ * drawdown throttle -- carry over from the Jinja page. The specs are silent on
+ * all three, and silence is not a decision to drop them. Scan health and the
+ * data source moved to System → Providers (v195 §5.1).
+ *
+ * **On `sb-page` (v195 Phase 4, §5.2).** The route title is the page's one
+ * `h1`. The killswitch button is the header's action, the only solid
+ * `danger` control in the app; the stale notice and a failed toggle's error
+ * sit beside it. The KPI strip holds the four figures acted on (open risk
+ * and cap headroom in money and % of account, top sector, max cluster),
+ * Portfolio heat is the primary panel, and everything else is secondary,
+ * each panel its own slot element.
  */
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Panel, RowLink, SectionHead, Sparkline, StatStrip, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Page, Panel, RowLink, StatStrip, StatTile],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
-  // (heat, sectors, clusters, scan health) is the same operational reading
+  // (heat, sectors, clusters) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
   // it defaults to the instrument register. On the host (a static class, not
   // a template wrapper) because :host is the ancestor the register's three
@@ -152,147 +198,73 @@ interface MetricTile {
   // Provided on the component: created on entry, destroyed on exit, so the
   // workspace cannot hold stale exposure while you are looking at another.
   template: `
-    <sb-section-head>
-      @if (store.error(); as message) {
-        <!-- Kept unconditional, unlike Dashboard/Trades: the killswitch and
-             scan-health panels below stay outside the sb-async wrap (see
-             its comment) and have no error surface of their own -- this is
-             the only place their staleness shows. It does duplicate the
-             wrapped panel's own error/stale display on a first-load
-             failure, which is an acceptable trade for not losing the
-             killswitch's error visibility. -->
-        <span actions class="stale" role="status">{{ message }}</span>
-      }
-    </sb-section-head>
-
-    <!-- killswitch ------------------------------------------------------ -->
-
-    <sb-panel heading="Killswitch">
-      <div class="kill">
-        <div class="kill-state">
-          <span class="kill-value" [class.engaged]="store.killswitchOn() === true" role="status">
-            {{ store.killswitchOn() === null ? 'Unavailable' : store.killswitchOn() ? 'ENGAGED' : 'Clear' }}
-          </span>
-          <p class="kill-explain">
-            @if (store.killswitchOn() === null) {
-              Current killswitch state is unavailable. Choose an explicit action if needed.
-            } @else if (store.killswitchOn() === true) {
-              The bot is not opening new positions. Open trades remain monitored.
-            } @else {
-              This killswitch is clear. Other risk controls may still prevent new positions.
-            }
-          </p>
-          @if (killswitchDetail(); as detail) {
-            <p class="kill-detail">{{ detail }}</p>
-          }
-        </div>
-
+    <sb-page>
+      <div page-actions class="page-actions">
+        @if (store.error(); as message) {
+          <!-- The killswitch panel stays outside every sb-async and has no
+               error surface of its own: this is the only place its staleness
+               shows. It duplicates Portfolio heat's own stale display on a
+               first-load failure, an acceptable trade for not losing the
+               killswitch's. -->
+          <span class="stale" role="status">{{ message }}</span>
+        }
         <!-- Both directions go through the dialog. Releasing is as
              consequential as engaging -- it puts money back at risk -- and a
              one-click release beside a guarded engage is an invitation to
              undo a deliberate stop by accident. -->
         <div class="kill-actions">
           @if (store.killswitchOn() !== true) {
-            <button sb-button variant="danger" type="button" class="sb-hit"
+            <button sb-button data-action="killswitch" variant="danger" type="button" class="sb-hit"
               [loading]="store.toggling()" [disabled]="store.toggling()" (click)="ask(true)">
               Engage killswitch
             </button>
           }
           @if (store.killswitchOn() !== false) {
-            <button sb-button variant="secondary" type="button" class="sb-hit"
+            <button sb-button data-action="killswitch" variant="secondary" type="button" class="sb-hit"
               [loading]="store.toggling()" [disabled]="store.toggling()" (click)="ask(false)">
               Release killswitch
             </button>
           }
         </div>
-      </div>
-
-      @if (store.commandError(); as message) {
-        <!-- Held until the next attempt rather than auto-dismissed: the user
-             asked for a state change that did not happen, and nothing else
-             on this screen says so. -->
-        <p class="command-error" role="alert">
-          {{ message }}
-          <button sb-button variant="ghost" type="button" (click)="store.dismissCommandError()">
-            Dismiss
-          </button>
-        </p>
-      }
-    </sb-panel>
-
-    <sb-confirm-dialog
-      [open]="asking()"
-      [title]="dialogTitle()"
-      [consequence]="dialogConsequence()"
-      [confirmLabel]="dialogConfirm()"
-      [working]="store.toggling()"
-      (confirmed)="confirm()"
-      (cancelled)="asking.set(false)"
-    />
-
-    <!-- institutional risk metrics (v85 D37) ------------------------------
-         Six sb-stat-tiles over R8-01's computations, each carrying the
-         sample it was actually computed from -- distributional metrics
-         (VaR, ES, vol, beta) share one N off the daily-return series;
-         Sharpe and max drawdown carry the closed-trade count instead, which
-         is why the two families' N routinely differ.
-         Its own sb-async, [empty] hardcoded false, deliberately NOT the one
-         wrapping heat/exposure/correlation below: these six are computed
-         from the daily-return/closed-trade series, not from currently open
-         positions, so "zero open positions right now" is not a reason to
-         hide a trader's own historical risk profile. It used to share the
-         position-count-gated async below, which meant every one of these
-         tiles disappeared the moment the book went flat -- reported back as
-         "Risk metrics shows nothing". -->
-    <sb-async
-      [loading]="async().loading"
-      [error]="async().error"
-      [empty]="false"
-      emptyReason="measured-zero"
-      emptyTitle="No open risk"
-      [skeletonRows]="2"
-      [skeletonCols]="6"
-    >
-    <sb-panel heading="Risk metrics">
-      <div class="metrics">
-        <!-- Per panel, not global (D30): the bar date the daily-return
-             series behind these six tiles was computed from -- the killswitch
-             and exposure numbers above are live and carry no such date. -->
-        <sb-freshness [at]="store.metrics()?.as_of ?? null" />
-        <!-- v186 D3: one strip, tiles split by hairlines; no cols, so the
-             strip's default auto-fit at 140px keeps today's column count. -->
-        <p class="section-help">Quote returns; entry notionals valued in account currency; historical FX returns excluded</p>
-        @for (key of metricDomains; track key) {
-          @if (store.availability()?.[key]) {
-            @if (domainProblem(key, metricDomainLabels[key]); as problem) {
-              <p class="section-help" role="status">{{ problem }}</p>
-            }
-          }
+        @if (store.commandError(); as message) {
+          <!-- Held until the next attempt rather than auto-dismissed: the user
+               asked for a state change that did not happen, and it is
+               reported beside the button that asked. -->
+          <p class="command-error" role="alert">
+            {{ message }}
+            <button sb-button variant="ghost" type="button" (click)="store.dismissCommandError()">
+              Dismiss
+            </button>
+          </p>
         }
-        @if (rCoverage(); as coverage) { <p class="section-help" role="status">{{ coverage }}</p> }
-        @if (moneyDateCoverage(); as coverage) { <p class="section-help" role="status">{{ coverage }}</p> }
-        <sb-stat-strip class="metric-grid">
-          @for (tile of metricTiles(); track tile.label) {
-            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample"
-              [about]="tile.about" [secondary]="tile.secondary ?? null" [hint]="tile.hint" />
-          }
-        </sb-stat-strip>
       </div>
-    </sb-panel>
-    </sb-async>
 
-    <!-- heat, exposure, sector/cluster breakdown --------------------------
-         One sb-async around the panels that need a currently open position
-         to mean anything. The killswitch panel above and the scan-health
-         panel below stay outside it deliberately: the killswitch is an
-         operational control that must stay usable at zero open risk (an
-         operator may want to engage it exactly when flat, to stop the bot
-         opening anything new), and scan health answers "is the scanner
-         healthy", a question that has nothing to do with whether risk
-         exposure happens to be zero right now. Both already degrade
-         gracefully via the store's own null-safe defaults while the first
-         fetch is in flight. -->
+      <!-- v195 §5.2: the four figures acted on. Risk carries money and % of
+           account together (riskUnits); the money half is blank, never
+           guessed, until the balance read lands. -->
+      <sb-stat-strip page-kpis class="kpis" [cols]="4" [colsMd]="2">
+        <sb-stat-tile label="Open risk" [value]="openRiskText()" [secondary]="capText()"
+                      [about]="kpiAbout.openRisk" />
+        <sb-stat-tile label="Cap headroom" [value]="headroomText()" [tone]="headroomTone()"
+                      [about]="kpiAbout.headroom" />
+        <sb-stat-tile label="Top sector" [value]="topSector()?.sector ?? null" [secondary]="topSectorText()"
+                      [hint]="unmappedHint()" [about]="kpiAbout.topSector" />
+        <sb-stat-tile label="Max cluster" [value]="maxClusterText()" [secondary]="maxClusterTickers()"
+                      [about]="kpiAbout.maxCluster" />
+      </sb-stat-strip>
+
+    <!-- Portfolio heat, the primary panel. Its sb-async owns the first-load
+         skeleton, the error, the stale marker and the "No open risk" empty
+         state for the four breakdown panels below too: they are hidden
+         (breakdownDisplay) whenever this one is not showing content. The
+         killswitch panel stays outside it deliberately: it is an operational
+         control that must stay usable at zero open risk (an operator may want
+         to engage it exactly when flat, to stop the bot opening anything
+         new). It already degrades gracefully via the store's own null-safe
+         defaults while the first fetch is in flight. -->
     <sb-async
+      page-primary
+      class="heat-async"
       [loading]="async().loading"
       [error]="async().error"
       [empty]="async().empty"
@@ -408,10 +380,91 @@ interface MetricTile {
         }
       </div>
     </sb-panel>
+    </sb-async>
+
+    <!-- killswitch ------------------------------------------------------ -->
+
+    <sb-panel page-secondary heading="Killswitch">
+      <div class="kill">
+        <div class="kill-state">
+          <span class="kill-value" [class.engaged]="store.killswitchOn() === true" role="status">
+            {{ store.killswitchOn() === null ? 'Unavailable' : store.killswitchOn() ? 'ENGAGED' : 'Clear' }}
+          </span>
+          <p class="kill-explain">
+            @if (store.killswitchOn() === null) {
+              Current killswitch state is unavailable. Choose an explicit action if needed.
+            } @else if (store.killswitchOn() === true) {
+              The bot is not opening new positions. Open trades are still
+              monitored and can still close.
+            } @else {
+              This killswitch is clear. Other risk controls may still prevent new positions.
+            }
+          </p>
+          @if (killswitchDetail(); as detail) {
+            <p class="kill-detail">{{ detail }}</p>
+          }
+          <p class="kill-where">The control is at the top of this page.</p>
+        </div>
+
+      </div>
+    </sb-panel>
+
+    <!-- institutional risk metrics (v85 D37) ------------------------------
+         Six sb-stat-tiles over R8-01's computations, each carrying the
+         sample it was actually computed from -- distributional metrics
+         (VaR, ES, vol, beta) share one N off the daily-return series;
+         Sharpe and max drawdown carry the closed-trade count instead, which
+         is why the two families' N routinely differ.
+         Its own sb-async, [empty] hardcoded false, deliberately NOT the one
+         wrapping heat/exposure/correlation below: these six are computed
+         from the daily-return/closed-trade series, not from currently open
+         positions, so "zero open positions right now" is not a reason to
+         hide a trader's own historical risk profile. It used to share the
+         position-count-gated async below, which meant every one of these
+         tiles disappeared the moment the book went flat -- reported back as
+         "Risk metrics shows nothing". -->
+    <sb-async
+      page-secondary
+      class="metrics-async"
+      [loading]="async().loading"
+      [error]="async().error"
+      [empty]="false"
+      emptyReason="measured-zero"
+      emptyTitle="No open risk"
+      [skeletonRows]="2"
+      [skeletonCols]="6"
+    >
+    <sb-panel heading="Risk metrics">
+      <div class="metrics">
+        <!-- Per panel, not global (D30): the bar date the daily-return
+             series behind these six tiles was computed from -- the killswitch
+             and exposure numbers above are live and carry no such date. -->
+        <sb-freshness [at]="store.metrics()?.as_of ?? null" />
+        <!-- v186 D3: one strip, tiles split by hairlines; no cols, so the
+             strip's default auto-fit at 140px keeps today's column count. -->
+        <p class="section-help">Quote returns; entry notionals valued in account currency; historical FX returns excluded</p>
+        @for (key of metricDomains; track key) {
+          @if (store.availability()?.[key]) {
+            @if (domainProblem(key, metricDomainLabels[key]); as problem) {
+              <p class="section-help" role="status">{{ problem }}</p>
+            }
+          }
+        }
+        @if (rCoverage(); as coverage) { <p class="section-help" role="status">{{ coverage }}</p> }
+        @if (moneyDateCoverage(); as coverage) { <p class="section-help" role="status">{{ coverage }}</p> }
+        <sb-stat-strip class="metric-grid">
+          @for (tile of metricTiles(); track tile.label) {
+            <sb-stat-tile [label]="tile.label" [value]="tile.value" [sample]="tile.sample"
+              [about]="tile.about" [secondary]="tile.secondary ?? null" [hint]="tile.hint" />
+          }
+        </sb-stat-strip>
+      </div>
+    </sb-panel>
+    </sb-async>
 
     <!-- exposure -------------------------------------------------------- -->
 
-    <sb-panel heading="Exposure by position" [flush]="true" [description]="exposureAbout()">
+    <sb-panel page-secondary class="exposure" [style.display]="breakdownDisplay()" heading="Exposure by position" [flush]="true" [description]="exposureAbout()">
       @if (positionsKnown()) {
       <sb-data-table
         [rows]="exposurePage.visible()"
@@ -434,7 +487,7 @@ interface MetricTile {
       }
     </sb-panel>
 
-    <sb-panel heading="Sector heat" [problem]="sectorProblem()">
+    <sb-panel page-secondary [style.display]="breakdownDisplay()" heading="Sector heat" [problem]="sectorProblem()">
       @if (store.availability()?.sector_heat?.state === 'partial') {
         @if (unmappedProblem(); as problem) { <p class="section-help" role="status">{{ problem }}</p> }
       }
@@ -462,109 +515,73 @@ interface MetricTile {
          list is untouched and sits beside it, because the clusters are
          what actually throttle position size and still deserve a plain,
          readable list of their own. -->
-    <div class="split">
-      <sb-panel heading="Underlying-asset correlation">
-        <!-- Same reasoning as the metrics panel's own marker: the matrix
-             is computed from the same daily-bar fetch, and shares its date --
-             not the whole page's freshness, which the Killswitch/Exposure
-             panels have no equivalent for. -->
-        <sb-freshness [at]="store.metrics()?.as_of ?? null" />
-        <p class="section-help">
-          Pairwise correlation of daily quote returns across open positions.
-          Pairs outlined together sit in the same cluster listed beside it.
-        </p>
-        @if (store.correlation(); as corr) {
-          @if (corr.labels.length) {
-            <sb-matrix
-              [labels]="corr.labels"
-              [values]="corr.values"
-              [clusters]="clusterTickerLists()"
-            />
-          } @else if (positionsKnown() && store.availability()?.distribution_metrics?.state !== 'unavailable') {
-            <p class="none">Not enough open positions to correlate.</p>
-          } @else {
-            <p class="section-help" role="status">Correlation data unavailable.</p>
-          }
+    <sb-panel page-secondary [style.display]="breakdownDisplay()" heading="Underlying-asset correlation">
+      <!-- Same reasoning as the metrics panel's own marker: the matrix
+           is computed from the same daily-bar fetch, and shares its date --
+           not the whole page's freshness, which the Killswitch/Exposure
+           panels have no equivalent for. -->
+      <sb-freshness [at]="store.metrics()?.as_of ?? null" />
+      <p class="section-help">
+        Pairwise correlation of daily quote returns across open positions.
+        Pairs outlined together sit in the same cluster listed beside it.
+      </p>
+      @if (store.correlation(); as corr) {
+        @if (corr.labels.length) {
+          <sb-matrix
+            [labels]="corr.labels"
+            [values]="corr.values"
+            [clusters]="clusterTickerLists()"
+          />
+        } @else if (positionsKnown() && store.availability()?.distribution_metrics?.state !== 'unavailable') {
+          <p class="none">Not enough open positions to correlate.</p>
         } @else {
           <p class="section-help" role="status">Correlation data unavailable.</p>
         }
-      </sb-panel>
-
-      <sb-panel heading="Correlated clusters">
-        <!-- SR62. risk.html:97-100. The panel listed the clusters without
-             ever saying why they matter. -->
-        <p class="section-help">
-          Positions in one cluster tend to lose together, so their combined
-          risk is larger than the per-trade numbers suggest.
-        </p>
-        @if (domainProblem('clusters', 'Clusters'); as problem) {
-          <p class="section-help" role="status">{{ problem }}</p>
-        }
-        @if (store.clusters(); as clusters) {
-          @if (clusters.length) {
-            <!-- Correlated positions are one bet wearing several tickers:
-                 the heat figure above counts them separately, and this is
-                 the panel that says so. -->
-            <ul class="clusters">
-              @for (cluster of clusters; track cluster.index) {
-                <li>
-                  <span class="cluster-index">{{ cluster.index }}</span>
-                  <span class="cluster-tickers num">{{ cluster.tickers.join(' · ') }}</span>
-                </li>
-              }
-            </ul>
-          } @else if (!domainProblem('clusters', 'Clusters')) {
-            <p class="none">No correlated clusters among open positions.</p>
-          }
-        }
-      </sb-panel>
-    </div>
-    </sb-async>
-
-    <sb-panel heading="Scan health">
-      <div class="scan">
-        <div class="scan-figures">
-          <span class="scan-latest num">{{ fmt(store.scanLatestS(), 1) }}s</span>
-          <span class="scan-label">last scan</span>
-        </div>
-        @if (store.scanDurations().length) {
-          <sb-sparkline
-            [points]="store.scanDurations()"
-            label="Recent scan durations, in seconds"
-          />
-        }
-      </div>
-      @if (store.scanSlowdown()) {
-        <!-- Amber, not red: a slow scan is a caution about freshness, not a
-             loss. It matters here because stale scans mean the exposure
-             above is older than it looks. -->
-        <p class="heat-note warn">
-          Scans are running slower than usual — setups and prices may be stale.
-        </p>
-      }
-    </sb-panel>
-
-    <!-- v106: where live bars and prices come from, and how often Alpaca
-         misses. A fallback price is still a real price, so the rate is
-         information; an open breaker is the caution -- every eligible
-         symbol is on yfinance until it closes. -->
-    <sb-panel heading="Data source">
-      @if (store.dataSources(); as ds) {
-        <div class="sources" [class.warn]="ds.breaker_open">
-          <span class="source-name">{{ sourceName(ds) }}</span>
-          @if (ds.enabled) {
-            <span class="source-rate num">{{ fallbackText(ds) }}</span>
-          }
-        </div>
-        @if (ds.enabled && ds.breaker_open) {
-          <p class="heat-note warn">
-            Alpaca breaker open — live prices are coming from yfinance until it closes.
-          </p>
-        }
       } @else {
-        <p class="none">No data-source reading yet.</p>
+        <p class="section-help" role="status">Correlation data unavailable.</p>
       }
     </sb-panel>
+
+    <sb-panel page-secondary [style.display]="breakdownDisplay()" heading="Correlated clusters">
+      <!-- SR62. risk.html:97-100. The panel listed the clusters without
+           ever saying why they matter. -->
+      <p class="section-help">
+        Positions in one cluster tend to lose together, so their combined
+        risk is larger than the per-trade numbers suggest.
+      </p>
+      @if (domainProblem('clusters', 'Clusters'); as problem) {
+        <p class="section-help" role="status">{{ problem }}</p>
+      }
+      @if (store.clusters(); as clusters) {
+        @if (clusters.length) {
+          <!-- Correlated positions are one bet wearing several tickers:
+               the heat figure above counts them separately, and this is
+               the panel that says so. -->
+          <ul class="clusters">
+            @for (cluster of clusters; track cluster.index) {
+              <li>
+                <span class="cluster-index">{{ cluster.index }}</span>
+                <span class="cluster-tickers num">{{ cluster.tickers.join(' · ') }}</span>
+              </li>
+            }
+          </ul>
+        } @else if (!domainProblem('clusters', 'Clusters')) {
+          <p class="none">No correlated clusters among open positions.</p>
+        }
+      }
+    </sb-panel>
+
+    <sb-confirm-dialog
+      [open]="asking()"
+      [title]="dialogTitle()"
+      [consequence]="dialogConsequence()"
+      [confirmLabel]="dialogConfirm()"
+      [working]="store.toggling()"
+      dangerVariant="danger"
+      (confirmed)="confirm()"
+      (cancelled)="asking.set(false)"
+    />
+    </sb-page>
 
     <!-- cells ----------------------------------------------------------- -->
 
@@ -584,17 +601,22 @@ interface MetricTile {
     </ng-template>
   `,
   styles: `
-    /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
-       at its widest child's min-content, so one un-shrinkable panel stretched
-       the workspace past the viewport and took the page sideways with it.
-       Clamping the track is what makes the children's own overflow-x
-       containers the thing that scrolls instead.
-       No backticks in here: these styles live in a TS template literal. */
-    /* v54 D1: --space-20 was this rule's own literal before the registers
-       existed; --register-pad's instrument rung is --space-10, so both
-       gaps below shrink -- the tighter rhythm density is the point of
-       opting this workspace into the instrument register. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    /* v195 Phase 4: sb-page lays out the header, the KPI strip, the primary
+       panel and the secondary grid, and owns their gaps; the host is only a
+       block. No backticks in here: these styles live in a TS template
+       literal. */
+    :host { display: block; }
+
+    /* The header's actions: the stale notice, the killswitch, and a failed
+       toggle's error on its own line beneath them. sb-page's own actions
+       row lays them out; this hook div adds no box of its own. */
+    .page-actions { display: contents; }
+    .page-actions .command-error { flex-basis: 100%; justify-content: flex-end; margin: 0; }
+
+    /* A table: it takes both secondary columns from 1440px. */
+    .exposure { grid-column: 1 / -1; }
+
+    .kill-where { margin-top: var(--space-6); color: var(--text-secondary); font-size: var(--text-table); }
 
     /* -- killswitch -- */
     .kill {
@@ -610,7 +632,7 @@ interface MetricTile {
       letter-spacing: 0.04em;
     }
     /* The one place on this screen where red is not P&L, matching the
-       danger button: a stop that does not look like a stop is worse than a
+       solid danger button (v195: the killswitch's alone): a stop that does not look like a stop is worse than a
        colour rule kept perfectly. */
     .kill-value.engaged { color: var(--neg); }
     .kill-explain {
@@ -705,20 +727,6 @@ interface MetricTile {
     /* -- risk metrics -- */
     .metrics { display: grid; gap: var(--space-8); }
 
-    /* -- the two side-by-side panels -- */
-    /* v89 audit (UA15): this gap is between sibling PANELS, so it takes
-       --section-gap like every other panel boundary, not --register-pad --
-       that token governs density inside a panel, not the space between two
-       of them (spec §4.2; same rule watchlist's own :host comment states). */
-    .split {
-      display: grid;
-      /* v95 D1: the 300px floor used to be bare, which overflows a 320px
-         phone once panel padding is taken off. min() lets the track
-         collapse rather than push the panel sideways -- same idiom as
-         analytics.ts:1264 and panel-grid.ts. */
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-      gap: var(--section-gap);
-    }
     .sectors > div {
       display: flex;
       justify-content: space-between;
@@ -738,20 +746,6 @@ interface MetricTile {
     .cluster-index { color: var(--text-faint); font-size: var(--register-label); }
 
     .none { color: var(--text-faint); font-size: var(--text-table); }
-
-    /* -- scan health -- */
-    .scan { display: flex; align-items: center; gap: var(--register-pad); }
-    .scan-figures { display: flex; align-items: baseline; gap: var(--space-6); }
-    .scan-latest { font-size: var(--text-subhead); font-weight: 600; }
-    /* --text-micro, not --register-label -- an eyebrow tag, see .state above. */
-    .scan-label { color: var(--text-secondary); font-size: var(--text-micro); text-transform: uppercase; letter-spacing: 0.1em; }
-    .scan sb-sparkline { flex: 1 1 auto; min-width: 80px; max-width: 320px; }
-
-    /* -- data source (v106) -- */
-    .sources { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
-    .source-name { font-weight: 600; }
-    .source-rate { color: var(--text-secondary); font-size: var(--text-table); }
-    .sources.warn .source-name { color: var(--warn); }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
@@ -829,18 +823,57 @@ export class Risk {
   protected readonly asking = signal(false);
   protected readonly requestedOn = signal<boolean | null>(null);
 
+  /* -- v195 §5.2: the KPI strip ----------------------------------------- */
+
+  protected readonly kpiAbout = RISK_KPI_ABOUT;
+
+  /** One place that turns a % of account into "money · %". */
+  private units(pct: number | null): string {
+    return riskUnits(pct, this.store.balance(), this.connection.currency());
+  }
+
+  protected readonly openRiskText = computed(() => this.units(this.store.openHeatPct()));
+  /** The cap, in the same two units: the dollar-risk cap is the reference. */
+  protected readonly capText = computed(() => {
+    const cap = this.store.heatCapPct();
+    return cap === null ? null : `cap ${this.units(cap)}`;
+  });
+  protected readonly headroomText = computed(() => this.units(this.store.headroomPct()));
+  /** Over the cap is a loss of room, so the one tile that can go negative
+   *  reads neg there; at or under the cap it is a plain figure. */
+  protected readonly headroomTone = computed<StatTone>(() =>
+    ((this.store.headroomPct() ?? 0) < 0 ? 'neg' : 'neutral'));
+
+  protected readonly topSector = computed(() => topSectorOf(this.store.sectorHeat()));
+  protected readonly topSectorText = computed(() => {
+    const top = this.topSector();
+    return top === null ? null : this.units(top.heat_pct);
+  });
+  /** v194 B6: positions the sector map does not know make "top sector" a
+   *  partial answer, so the tile says how many it could not count. */
+  protected readonly unmappedHint = computed(() => {
+    const n = this.store.unmappedCount();
+    return n > 0 ? `${n} position${n === 1 ? '' : 's'} without a sector` : undefined;
+  });
+
+  protected readonly maxCluster = computed(() => largestCluster(this.store.clusters()));
+  /** "None" once the read has landed and found no cluster; no value before. */
+  protected readonly maxClusterText = computed(() => {
+    if (this.store.empty() || this.domainProblem('clusters', 'Clusters')) return null;
+    const cluster = this.maxCluster();
+    return cluster === null ? 'None' : `${cluster.tickers.length} positions`;
+  });
+  protected readonly maxClusterTickers = computed(() => this.maxCluster()?.tickers.join(' · ') ?? null);
+
+  /** The four breakdown panels need an open position to mean anything. They
+   *  are hidden exactly when Portfolio heat's sb-async shows no content
+   *  (before the first answer, a first-load failure, nothing open), and that
+   *  sb-async says why. `display`, not `@if`: each panel stays one stable
+   *  slot element (the sb-page contract). */
+  protected readonly breakdownDisplay = computed(() =>
+    (this.store.empty() || (this.positionsKnown() && this.store.positions().length === 0) ? 'none' : null));
+
   protected readonly rowKey = (row: RiskPosition) => row.trade_id;
-
-  /** v106: "Alpaca · IEX" when Alpaca serves the live path, else the plain
-   *  pre-v106 source. */
-  protected sourceName(ds: DataSourcesHealth): string {
-    return ds.enabled ? `Alpaca · ${ds.feed.toUpperCase()}` : 'yfinance only';
-  }
-
-  protected fallbackText(ds: DataSourcesHealth): string {
-    if (ds.fallback_rate === null) return `no Alpaca traffic yet (${ds.scans} scans)`;
-    return `${(ds.fallback_rate * 100).toFixed(1)}% fallback (${ds.scans} scans)`;
-  }
 
   protected readonly emptyState = {
     title: 'No open positions',

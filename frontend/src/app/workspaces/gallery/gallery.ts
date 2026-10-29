@@ -41,6 +41,8 @@ import { Matrix } from '../../ui/matrix';
 import { MetricCard } from '../../ui/metric-card';
 import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
+import { Page } from '../../ui/page';
+import { riskUnits } from '../../ui/risk-units';
 import { PanelError } from '../../ui/panel-error';
 import { PanelGrid } from '../../ui/panel-grid';
 import { PanelHeader } from '../../ui/panel-header';
@@ -96,6 +98,10 @@ interface ContractRow {
  * the production bundle behind the same auth guard as every workspace --
  * a gallery that only exists in dev rots, because nothing fails when it
  * does. Reachable by URL only; not in the sidebar (v54 Task 5's wave).
+ *
+ * Since v195 it is also the reference for the page template: it renders
+ * sb-page with a demo in every slot, and shows the two danger variants and
+ * the rail's anchored label beside the rest.
  */
 @Component({
   selector: 'sb-gallery',
@@ -142,6 +148,7 @@ interface ContractRow {
     Spinner,
     Panel,
     PaginationComponent,
+    Page,
     PanelError,
     PanelGrid,
     PanelHeader,
@@ -171,7 +178,31 @@ interface ContractRow {
     Waterfall,
   ],
   template: `
-    <h1>UI gallery</h1>
+    <!-- v195 §5.1: the gallery is the reference for the page template too.
+         Every slot holds a demo of what belongs there; the route title is
+         the h1, as on every page. -->
+    <sb-page>
+      <!-- The header's actions: the only home for a destructive command,
+           always behind its confirm (spec Phase 4). -->
+      <div page-actions class="page-actions">
+        <button sb-button variant="danger-quiet" type="button" data-action="demo-clear"
+                (click)="headerConfirmOpen.set(true)">Clear demo log</button>
+      </div>
+
+      <!-- The scope bar: filters and tabs only, never a destructive action. -->
+      <sb-segmented page-scope label="Scope (demo)" [options]="scopeOptions" [(value)]="scopeValue" />
+
+      <!-- The KPI strip (spec §5.2): ExpR first, win rate after it, N and the
+           basis on every performance figure, risk as money · % of account. -->
+      <sb-stat-strip page-kpis class="demo-kpis">
+        <sb-stat-tile label="ExpR" value="+0.21R" [sample]="412" [about]="perfAbout" />
+        <sb-stat-tile label="Win rate" value="54.2%" [sample]="412" [about]="perfAbout" />
+        <sb-stat-tile label="Open risk" [value]="openRisk" secondary="cap 6.00%" />
+        <sb-stat-tile label="Payoff ratio" value="1.80" [sample]="7" [about]="perfAbout" />
+      </sb-stat-strip>
+
+      <!-- The primary panel: every primitive, section by section. -->
+      <div page-primary class="reference">
 
     <!-- -- buttons ------------------------------------------------------ -->
     <sb-section-head [heading]="'Buttons'" [level]="2" />
@@ -183,7 +214,7 @@ interface ContractRow {
       </sb-control-row>
       <p class="sb-help">
         Hover any button above to see its hover state. <code>chip</code> and
-        <code>segment</code> are deprecated (v80 D4): use sb-segmented.
+        <code>segment</code> are deprecated (v80 D4): use sb-segmented. <code>danger</code> (solid) is the killswitch's alone; every other destructive control is <code>danger-quiet</code>.
       </p>
       <sb-control-row>
         <button sb-button variant="icon" type="button" aria-label="Menu"><sb-icon name="menu" /></button>
@@ -194,6 +225,22 @@ interface ContractRow {
         <button sb-button variant="secondary" type="button" [disabled]="true">disabled</button>
         <button sb-button variant="primary" type="button" [loading]="true">loading</button>
       </sb-control-row>
+    </sb-panel>
+
+    <!-- -- destructive actions (v195 Phase 2, Phase 4) -------------------- -->
+    <sb-section-head [heading]="'Destructive actions'" [level]="2" />
+    <sb-panel heading="danger is the killswitch alone; danger-quiet is housekeeping">
+      <sb-control-row>
+        <button sb-button variant="danger" type="button" data-demo="killswitch"
+                (click)="haltConfirmOpen.set(true)">Halt trading</button>
+        <button sb-button variant="danger-quiet" type="button" data-demo="housekeeping"
+                (click)="quietConfirmOpen.set(true)">Delete demo row</button>
+      </sb-control-row>
+      <p class="sb-help">
+        Both always open a confirm, with the matching style on its confirm button,
+        and live only in a page's header actions. A per-row command (the
+        <code>danger-icon</code> bin, or a row's own Delete) stays in its row with its own confirm.
+      </p>
     </sb-panel>
 
     <!-- -- form controls -------------------------------------------------- -->
@@ -241,10 +288,9 @@ interface ContractRow {
 
     <!-- -- composites ------------------------------------------------------ -->
     <sb-section-head [heading]="'Composites'" [level]="2" />
-    <sb-panel heading="sb-section-head, both levels, back and status slots">
-      <sb-section-head heading="Level 1 heading" [level]="1" />
+    <sb-panel heading="sb-section-head, level 2 (level 1 is the page h1 sb-page renders), back and status slots">
       <sb-section-head heading="Level 2 heading" [level]="2" />
-      <sb-section-head heading="AAPL" [level]="1">
+      <sb-section-head heading="AAPL" [level]="2">
         <sb-row-link back [link]="['/ui']">Trades</sb-row-link>
         <span status class="num">as of 14:02 · 3 open</span>
       </sb-section-head>
@@ -286,6 +332,16 @@ interface ContractRow {
         <sb-hint [text]="expectancyHint" label="About expectancy" />
       </p>
     </sb-panel>
+    <sb-panel heading="sb-hint anchor mode -- the rail's label: hover or focus the icon">
+      <a #railDemo class="rail-demo sb-hit" href="#gallery-rail-demo" id="gallery-rail-demo" aria-label="Dashboard">
+        <sb-icon name="dashboard" />
+      </a>
+      <sb-hint [anchor]="railDemo" text="Dashboard" />
+      <p class="sb-help">
+        No trigger button and no extra tab stop: the label opens on the link's
+        hover and keyboard focus and closes on Escape, the way every rail entry names itself.
+      </p>
+    </sb-panel>
     <sb-panel heading="sb-inline-md -- **bold** only, added by UA13, never demoed here">
       <p class="sb-help"><sb-inline-md text="Cut losers **faster** on choppy days; the plan's stop is not a suggestion." /></p>
     </sb-panel>
@@ -298,7 +354,7 @@ interface ContractRow {
       </sb-drawer>
     </sb-panel>
     <sb-panel heading="sb-confirm-dialog">
-      <button sb-button variant="danger" type="button" (click)="confirmOpen.set(true)">
+      <button sb-button variant="danger-quiet" type="button" (click)="confirmOpen.set(true)">
         Open confirm dialog
       </button>
       <sb-confirm-dialog
@@ -770,9 +826,49 @@ interface ContractRow {
         </sb-control-row>
       </sb-drawer>
     </sb-panel>
+      </div>
+
+      <!-- The secondary grid: one column, two from 1440px. -->
+      <sb-panel page-secondary heading="Secondary panel">
+        <p class="sb-help">Supporting panels sit here, after the primary one: one column below 1440px, two from it.</p>
+      </sb-panel>
+      <sb-panel page-secondary heading="Secondary panel, second column">
+        <p class="sb-help">An empty slot takes no space, so a page without secondary panels shows no gap.</p>
+      </sb-panel>
+
+      <sb-confirm-dialog
+        [open]="headerConfirmOpen()"
+        title="Clear the demo log?"
+        consequence="Nothing is cleared: this is the gallery's demo of a header action."
+        confirmLabel="Clear"
+        (confirmed)="headerConfirmOpen.set(false)"
+        (cancelled)="headerConfirmOpen.set(false)"
+      />
+      <sb-confirm-dialog
+        [open]="haltConfirmOpen()"
+        title="Halt trading?"
+        consequence="Demo only. On Risk this stops every new plan until it is re-armed."
+        confirmLabel="Halt"
+        dangerVariant="danger"
+        (confirmed)="haltConfirmOpen.set(false)"
+        (cancelled)="haltConfirmOpen.set(false)"
+      />
+      <sb-confirm-dialog
+        [open]="quietConfirmOpen()"
+        title="Delete this demo row?"
+        consequence="Demo only. Housekeeping confirms in the quiet style."
+        confirmLabel="Delete"
+        (confirmed)="quietConfirmOpen.set(false)"
+        (cancelled)="quietConfirmOpen.set(false)"
+      />
+    </sb-page>
   `,
   styles: `
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); padding: var(--space-20); }
+    :host { display: block; min-width: 0; padding: var(--space-20); }
+    .page-actions { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+    .reference { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); min-width: 0; }
+    .rail-demo { display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+    .rail-demo:hover, .rail-demo:focus-visible { color: var(--text); }
     h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
     sb-panel { display: block; }
 
@@ -826,7 +922,7 @@ interface ContractRow {
 })
 export class Gallery {
   protected readonly buttonVariants: ButtonVariant[] = [
-    'primary', 'secondary', 'danger', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment',
+    'primary', 'secondary', 'danger', 'danger-quiet', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment',
   ];
 
   protected readonly textInputTypes: ('text' | 'search' | 'number' | 'password' | 'date')[] = [
@@ -859,6 +955,20 @@ export class Gallery {
 
   protected readonly drawerOpen = signal(false);
   protected readonly confirmOpen = signal(false);
+
+  /** v195 §5.1: the sb-page demos -- the header action, the scope bar and
+   *  the KPI strip, built from the same rules the workspaces follow. */
+  protected readonly headerConfirmOpen = signal(false);
+  protected readonly haltConfirmOpen = signal(false);
+  protected readonly quietConfirmOpen = signal(false);
+  protected readonly scopeOptions: SegmentOption[] = [
+    { value: 'all', label: 'All' },
+    { value: 'long', label: 'Long' },
+    { value: 'short', label: 'Short' },
+  ];
+  protected readonly scopeValue = signal('all');
+  protected readonly perfAbout = `Demo figures. ${PERFORMANCE_CAVEAT}`;
+  protected readonly openRisk = riskUnits(1.42, 100_000, '$');
 
   /* -- v80 D4 / D6 ---------------------------------------------------------- */
 
