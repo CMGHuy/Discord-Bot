@@ -17,7 +17,7 @@ Cost here is almost entirely context re-read per turn, not output. Over the
 185 recorded implementer runs (session transcripts under
 `$CLAUDE_CONFIG_DIR/projects/<repo slug>/*/subagents/`, deduplicated by
 message id), the
-input side was 206M tokens against 1.4M output. A median run was 11 turns
+input side was 206M tokens against 0.66M output. A median run was 11 turns
 and 517k input tokens (p90 32 turns). So the levers are fewer turns and
 less carried per turn.
 
@@ -29,12 +29,12 @@ less carried per turn.
 | Input-side tokens, total / median run | 206M / 517k |
 | Starting context per turn | ~33k tokens (system, tools, `CLAUDE.md`, two preloaded skills) |
 | Preloaded skills share | TDD ~2.6k + verification ~1k tokens per turn; together ~5.6% of all input |
-| Bash calls that are lookups (grep/sed/cat/head) | 1139 of 2803 (~40%) |
-| Lookup calls before the first edit | median 8, p90 20 |
-| Runs that touched a plan file | 99 of 185, though the agent file forbids it |
+| Bash calls that are lookups (grep/sed/cat/head) | 1139 of 2803 (~40%); the § 5 regex, which also counts `tail`/`ls`/`find`, gives 2517 because `tail` follows most test runs |
+| Lookup calls before the first edit | median 7, p90 18.6 |
+| Runs that touched a plan file | 101 of 185, though the agent file forbids it |
 | UI-ish runs | 110 of 185, ~68% of input tokens; all top-10 runs were Playwright audit/fix waves of 40–110 min |
 | Full-page screenshot reads | 49 |
-| `task-reviewer` reports in the required `VERDICT:` shape | 7 of 97 |
+| `task-reviewer` reports in the required `VERDICT:` shape | 0 of 97 (reports arrive through the hand-back call, none in the shape) |
 
 Causes, as read from the transcripts:
 
@@ -47,6 +47,11 @@ Causes, as read from the transcripts:
   later turn, and open-ended "fix all audit findings" tasks run for an hour.
 - **Fidelity is unmeasurable**: reviewer output is free-form, so nothing
   counts missed or divergent deliverables.
+
+Baseline corrected 2026-10-29 to the figures `agent_cost.py` reproduces
+under § 5's fixed definitions (plan V199-9); the first draft came from an
+ad-hoc script that counted lookups, plan touches, output and reviewer shape
+slightly differently. Targets are absolute and unchanged.
 
 ## Decisions (partner, 2026-10-29)
 
