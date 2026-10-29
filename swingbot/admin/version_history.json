@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-28 14:34:19 UTC",
+  "generated_at": "2026-10-29 13:56:26 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.36.2",
+    "ui": "1.37.0",
     "bot": "2.15.5"
   },
   "releases": [
@@ -2175,6 +2175,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "e84dc206",
+      "subject": "release(ui): 1.37.0 -- Graphite: the whole admin UI redesigned -- icon rail, command palette, one page template, dense rows, true-minus signs, ExpR-first figures (v195)",
+      "versions": {
+        "ui": "1.37.0",
+        "bot": "2.15.5"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
