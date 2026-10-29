@@ -5,7 +5,7 @@
 **Spec:** [Instant admin page loads](../specs/2026-10-29-v201-instant-admin-page-loads.md)
 **Index:** [`_0-index.md`](2026-10-29-v201-instant-admin-page-loads_0-index.md): Goal, Global Constraints, Review Focus, Parallelisation and every cross-task contract (Config fields, Contract module, Tables, Repositories) live there and bind every task below.
 
-Part scope: V201-1 … V201-5 (V201-6, the quote cycle, is in part 1b). The config/asker/session contract, the five tables, their repositories, persisted FX quote codes with never-fetch reads, the refresher process and its quote cycle. Nothing in this part changes what a page handler does; part 2 (V201-7+) switches the request path over.
+Part scope: V201-1 … V201-5 (V201-6, the quote cycle, is in part 1b). The config/asker/session contract, the four tables, their repositories, persisted FX quote codes with never-fetch reads, the refresher process and its quote cycle. Nothing in this part changes what a page handler does; part 2 (V201-7+) switches the request path over.
 
 `<wt>` is the implementation worktree's absolute path. Every DB-backed test needs the shared `swing-db` replica (`/replicate-prod-db`) before its first run.
 
@@ -16,8 +16,8 @@ Part scope: V201-1 … V201-5 (V201-6, the quote cycle, is in part 1b). The conf
 **Model:** opus — cross-cutting contract every later task imports; a wrong default or mapping silently changes freshness behaviour.
 
 **Files:**
-- Modify: `swingbot/config.py` (12 `Field`s directly after the `TAPE_PROXY_SYMBOLS` field, ~line 888; `_MODE_VALUES` ~line 1527)
-- Modify: `.env.example` (12 keys directly after the `TAPE_PROXY_SYMBOLS=` line, ~line 501). Not in the ledger row, but `tests/infra/test_env_example_sync.py` fails without it.
+- Modify: `swingbot/config.py` (9 `Field`s directly after the `TAPE_PROXY_SYMBOLS` field, ~line 888; `_MODE_VALUES` ~line 1527)
+- Modify: `.env.example` (9 keys directly after the `TAPE_PROXY_SYMBOLS=` line, ~line 501). Not in the ledger row, but `tests/infra/test_env_example_sync.py` fails without it.
 - Modify: `swingbot/core/marketdata/shared/kinds.py` (`Asker`, `_PRIORITY`, `_QUOTE_ATTR`)
 - Modify: `swingbot/core/market/session.py` (append after `is_nyse_regular_session`)
 - Create: `swingbot/core/marketdata/shared/admin_refresh.py`
@@ -47,14 +47,11 @@ V201_FIELDS = {
     "ADMIN_REFRESH_REGULAR_S": ("number", "30", 10, 300),
     "ADMIN_REFRESH_EXTENDED_S": ("number", "300", 60, 3600),
     "ADMIN_REFRESH_CLOSED_S": ("number", "1800", 300, 7200),
-    "ADMIN_REFRESH_SNAPSHOT_S": ("number", "300", 60, 3600),
     "ADMIN_REFRESH_YF_FALLBACK_CAP": ("number", "25", 0, 500),
     "ADMIN_REFRESH_MARK_TIMEOUT_S": ("number", "120", 30, 900),
     "ADMIN_REFRESH_FX_UNKNOWN_RETRY_S": ("number", "21600", 600, 604800),
     "ADMIN_STALE_PRICE_REGULAR_S": ("number", "120", 30, 1800),
     "ADMIN_STALE_PRICE_EXTENDED_S": ("number", "900", 60, 7200),
-    "ADMIN_STALE_SNAPSHOT_REGULAR_S": ("number", "600", 60, 7200),
-    "ADMIN_STALE_SNAPSHOT_EXTENDED_S": ("number", "1800", 300, 14400),
 }
 
 
@@ -156,11 +153,11 @@ def test_cadence_and_staleness_read_config_at_call_time(monkeypatch):
     assert ar.cadence_s("extended") == 300.0 and ar.cadence_s("closed") == 1800.0
     assert ar.stale_after_s("price", "regular") == 120.0
     assert ar.stale_after_s("price", "extended") == 900.0
-    assert ar.stale_after_s("snapshot", "regular") == 600.0
-    assert ar.stale_after_s("snapshot", "extended") == 1800.0
     assert ar.stale_after_s("price", "closed") is None
     with pytest.raises(ValueError):
         ar.cadence_s("lunch")
+    with pytest.raises(ValueError):          # snapshot staleness is v204's
+        ar.stale_after_s("snapshot", "regular")
 
 
 def test_heartbeat_stalled_after_three_cadences():
@@ -170,17 +167,11 @@ def test_heartbeat_stalled_after_three_cadences():
     assert ar.heartbeat_stalled(now - timedelta(seconds=91), 30.0, now) is True
 
 
-def test_keys_priorities_and_snapshot_patterns():
+def test_keys_and_priorities():
     assert ar.quote_mark_key(" aapl ") == "quote:AAPL"
-    assert ar.snapshot_mark_key("risk") == "snapshot:risk"
     assert (ar.PRIORITY_USER, ar.PRIORITY_FRESH_HINT, ar.PRIORITY_MISSING) == (0, 1, 2)
     assert (ar.QUEUE_KIND_QUOTE, ar.QUEUE_KIND_SNAPSHOT) == ("quote", "snapshot")
     assert (ar.HEARTBEAT_KEY, ar.QUEUE_RETENTION_S) == ("refresher", 3600)
-    for key in ("risk", "analytics.snapshot", "analytics.performance:main",
-                "analytics.equity_curve:weak", "calendar.pnl:2026-10"):
-        assert ar.is_snapshot_key(key), key
-    for key in ("riskx", "calendar.pnl", "analytics", "", None):
-        assert not ar.is_snapshot_key(key), key
 ```
 
 - [ ] **Step 3: Extend the kinds and budget tests**
@@ -221,19 +212,19 @@ Expected: FAIL (`StopIteration` for the fields, `ModuleNotFoundError: ...admin_r
 
 - [ ] **Step 6: Implement the config fields**
 
-After the `TAPE_PROXY_SYMBOLS` `Field(...)` in `swingbot/config.py`, add 12 `Field`s in `V201_FIELDS` order, all `"Data Sources"`, `key == attr`, each `help` starting `"v201. "`. Number fields: `type="number"`, `step=1`, except `step=60` for `ADMIN_REFRESH_FX_UNKNOWN_RETRY_S`; min/max per the table. The kill switch:
+After the `TAPE_PROXY_SYMBOLS` `Field(...)` in `swingbot/config.py`, add 9 `Field`s in `V201_FIELDS` order, all `"Data Sources"`, `key == attr`, each `help` starting `"v201. "`. Number fields: `type="number"`, `step=1`, except `step=60` for `ADMIN_REFRESH_FX_UNKNOWN_RETRY_S`; min/max per the table. The kill switch:
 
 ```python
     Field("ADMIN_REFRESHER", "ADMIN_REFRESHER", "Data Sources",
           "Admin market refresher", type="select", default="on", options=["on", "off"],
-          help="v201. 'on' (with MARKETDATA_LAYER=on) = admin pages read prices, FX and heavy "
-               "snapshots only from what the refresher service stored; no page load fetches. "
+          help="v201. 'on' (with MARKETDATA_LAYER=on) = admin pages read prices and FX only "
+               "from what the refresher service stored; no page load fetches. "
                "'off' = the pre-v201 request-time fetch paths, exactly."),
 ```
 
-Labels for the rest, in order: "Refresher cadence: regular hours (s)", "Refresher cadence: pre/after hours (s)", "Refresher cadence: market closed (s)", "Refresher: heavy snapshot interval (s)", "Refresher: yfinance fallback cap per cycle", "Refresher: in-flight mark timeout (s)", "Refresher: retry an unknown quote currency after (s)", "Price stale after: regular hours (s)", "Price stale after: pre/after hours (s)", "Snapshot stale after: regular hours (s)", "Snapshot stale after: pre/after hours (s)". Add `"ADMIN_REFRESHER": ("on", "off"),` to `_MODE_VALUES` (no `_MODE_FALLBACK` entry: a typo lands on `"off"`, today's paths).
+Labels for the rest, in order: "Refresher cadence: regular hours (s)", "Refresher cadence: pre/after hours (s)", "Refresher cadence: market closed (s)", "Refresher: yfinance fallback cap per cycle", "Refresher: in-flight mark timeout (s)", "Refresher: retry an unknown quote currency after (s)", "Price stale after: regular hours (s)", "Price stale after: pre/after hours (s)". Add `"ADMIN_REFRESHER": ("on", "off"),` to `_MODE_VALUES` (no `_MODE_FALLBACK` entry: a typo lands on `"off"`, today's paths).
 
-In `.env.example`, directly after `TAPE_PROXY_SYMBOLS=...`, add a `# v201: admin market refresher (compose service "refresher").` comment and the 12 `KEY=default` lines in the same order.
+In `.env.example`, directly after `TAPE_PROXY_SYMBOLS=...`, add a `# v201: admin market refresher (compose service "refresher").` comment and the 9 `KEY=default` lines in the same order. (The snapshot interval and snapshot staleness knobs are v204's, not added here.)
 
 - [ ] **Step 7: Implement kinds and session**
 
@@ -272,7 +263,7 @@ def last_regular_close(now: dt.datetime | None = None) -> dt.datetime:
 
 - [ ] **Step 8: Implement `swingbot/core/marketdata/shared/admin_refresh.py`**
 
-Module docstring: the one contract the refresher, the request door and the SPA payloads share. Imports only `config`, `fnmatch.fnmatchcase`, `datetime`/`timezone` and `swingbot.core.market.session`. Constants exactly as the index's "Contract module". Body:
+Module docstring: the one contract the refresher, the request door and the SPA payloads share. Imports only `config`, `datetime`/`timezone` and `swingbot.core.market.session`. Constants exactly as the index's "Contract module". Body:
 
 ```python
 _CADENCE_ATTR = {
@@ -283,8 +274,6 @@ _CADENCE_ATTR = {
 _STALE_ATTR = {
     ("price", session.SESSION_REGULAR): "ADMIN_STALE_PRICE_REGULAR_S",
     ("price", session.SESSION_EXTENDED): "ADMIN_STALE_PRICE_EXTENDED_S",
-    ("snapshot", session.SESSION_REGULAR): "ADMIN_STALE_SNAPSHOT_REGULAR_S",
-    ("snapshot", session.SESSION_EXTENDED): "ADMIN_STALE_SNAPSHOT_EXTENDED_S",
 }
 
 
@@ -319,14 +308,6 @@ def heartbeat_stalled(beat_at: datetime | None, cadence: float,
 
 def quote_mark_key(symbol: str) -> str:
     return f"quote:{str(symbol).upper().strip()}"
-
-
-def snapshot_mark_key(key: str) -> str:
-    return f"snapshot:{key}"
-
-
-def is_snapshot_key(key) -> bool:
-    return isinstance(key, str) and any(fnmatchcase(key, p) for p in SNAPSHOT_KEY_PATTERNS)
 ```
 
 - [ ] **Step 9: Run the changed files and the guards they touch**
@@ -343,23 +324,23 @@ git -C <wt> commit -m "feat(v201): refresher config, ADMIN_REFRESH asker, sessio
 
 # Phase 2: Storage
 
-### Task V201-2: Alembic revision `v201_001`: five tables + `market_cache` index
+### Task V201-2: Alembic revision `v201_001`: four tables + `market_cache` index
 
 **Model:** opus — a schema migration on production Postgres; the declared schema and the revision must match exactly or `test_migrations.py` drifts.
 
 **Files:**
 - Create: `swingbot/core/db/migrations/versions/v201_001_admin_refresher.py`
-- Modify: `swingbot/core/db/schema.py` (five `register(...)` tables after `preregistration_verdicts` ~line 305; one `sa.Index` on `market_cache` ~line 309; five `PROMOTION_REASONS` entries ~line 488)
+- Modify: `swingbot/core/db/schema.py` (four `register(...)` tables after `preregistration_verdicts` ~line 305; one `sa.Index` on `market_cache` ~line 309; four `PROMOTION_REASONS` entries ~line 488)
 - Test: `tests/db/test_v201_tables.py`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: tables `admin_snapshots`, `quote_currencies`, `market_refresh_queue`, `market_refresh_marks`, `refresher_heartbeat` exactly as the index's "Tables", importable from `swingbot.core.db.schema` under those names; index `market_cache_kind_updated_idx (kind, updated_at)`. None in `events.TABLE_CHANNELS`.
+- Produces: tables `quote_currencies`, `market_refresh_queue`, `market_refresh_marks`, `refresher_heartbeat` exactly as the index's "Tables", importable from `swingbot.core.db.schema` under those names; index `market_cache_kind_updated_idx (kind, updated_at)`. None in `events.TABLE_CHANNELS`.
 
 - [ ] **Step 1: Write the failing test** `tests/db/test_v201_tables.py`
 
 ```python
-"""v201: revision v201_001 -- the admin refresher's five stores and the
+"""v201: revision v201_001 -- the admin refresher's four stores and the
 market_cache (kind, updated_at) index behind GET /market/updates."""
 import pathlib
 
@@ -373,7 +354,6 @@ from swingbot.core.db import events, schema
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 TABLES = {
-    "admin_snapshots": ("key", "computed_at", "inputs", "stale_inputs"),
     "quote_currencies": ("symbol", "code", "outcome", "checked_at", "retry_after"),
     "market_refresh_queue": ("kind", "key", "priority", "requested_at", "taken_at"),
     "market_refresh_marks": ("key", "started_at", "expires_at", "error", "error_at"),
@@ -398,7 +378,6 @@ def _indexes(table):
 
 
 def test_indexes_and_the_pending_queue_uniqueness():
-    assert _indexes(schema.admin_snapshots) == {"admin_snapshots_updated_idx": (["updated_at"], False)}
     assert _indexes(schema.market_refresh_marks) == {
         "market_refresh_marks_updated_idx": (["updated_at"], False)}
     queue = _indexes(schema.market_refresh_queue)
@@ -415,8 +394,7 @@ def test_column_types():
     assert isinstance(schema.market_refresh_queue.c.id.type, sa.BigInteger)
     assert isinstance(schema.market_refresh_queue.c.priority.type, sa.SmallInteger)
     assert isinstance(schema.refresher_heartbeat.c.cadence_s.type, sa.Float)
-    assert isinstance(schema.admin_snapshots.c.stale_inputs.type, sa.Boolean)
-    for table, col in (("admin_snapshots", "computed_at"), ("quote_currencies", "checked_at"),
+    for table, col in (("quote_currencies", "checked_at"),
                        ("market_refresh_marks", "expires_at"), ("refresher_heartbeat", "beat_at")):
         assert schema.METADATA.tables[table].c[col].type.timezone is True
 
@@ -432,7 +410,7 @@ def _tables(connection) -> set[str]:
     return set(sa.inspect(connection).get_table_names())
 
 
-def test_downgrade_drops_the_five_and_upgrade_restores_them(db_engine_empty):
+def test_downgrade_drops_the_four_and_upgrade_restores_them(db_engine_empty):
     cfg = Config(str(REPO / "alembic.ini"))
     with db_engine_empty.begin() as connection:
         cfg.attributes["connection"] = connection
@@ -451,22 +429,13 @@ def test_downgrade_drops_the_five_and_upgrade_restores_them(db_engine_empty):
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `python <wt>/scripts/dev/testrun.py file tests/db/test_v201_tables.py`
-Expected: FAIL with `KeyError: 'admin_snapshots'`.
+Expected: FAIL with `KeyError: 'market_refresh_marks'`.
 
 - [ ] **Step 3: Declare the tables in `swingbot/core/db/schema.py`**
 
 Add `sa.Index("market_cache_kind_updated_idx", "kind", "updated_at")` as the last argument of the `market_cache` `sa.Table(...)`. After `preregistration_verdicts`, under one comment block ("v201: the admin market refresher's stores. Written by the refresher process (swingbot/refresher), read by the admin request door. No SSE trigger: the refresher raises `market` itself, once per cycle."):
 
 ```python
-admin_snapshots = register(sa.Table("admin_snapshots", METADATA,
-    sa.Column("key", sa.Text, primary_key=True),
-    sa.Column("computed_at", sa.TIMESTAMP(timezone=True), nullable=False),
-    sa.Column("inputs", JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")),
-    sa.Column("stale_inputs", sa.Boolean, nullable=False, server_default=sa.false()),
-    *standard_columns(),
-    sa.Index("admin_snapshots_updated_idx", "updated_at")),
-    ("key", "computed_at", "inputs", "stale_inputs"))
-
 quote_currencies = register(sa.Table("quote_currencies", METADATA,
     sa.Column("symbol", sa.Text, primary_key=True),
     sa.Column("code", sa.Text),
@@ -491,15 +460,15 @@ market_refresh_queue = register(sa.Table("market_refresh_queue", METADATA,
     ("kind", "key", "priority", "requested_at", "taken_at"))
 ```
 
-`market_refresh_marks` (key PK; `started_at`, `expires_at` NOT NULL TIMESTAMPTZ; `error` Text; `error_at` TIMESTAMPTZ; `market_refresh_marks_updated_idx (updated_at)`) and `refresher_heartbeat` (key PK; `beat_at` NOT NULL TIMESTAMPTZ; `cadence_s` `sa.Float(53)` NOT NULL; `session` Text NOT NULL; `cycle_ms` Integer; `last_error` Text) follow the same shape. `PROMOTION_REASONS` gets one entry per promoted column, each a reason in the existing style, e.g. `"computed_at": "NOT NULL; the snapshot's own clock the UI ages"`, `"retry_after": "the FX job's backoff WHERE for an unknown answer; NULL when known"`, `"taken_at": "pending-vs-taken split in the partial unique index and the take index"`, `"expires_at": "in-flight test (expires_at > now) in every active() read"`, `"beat_at": "stalled test (age > 3 x cadence) in /system/health and /market/updates"`.
+`market_refresh_marks` (key PK; `started_at`, `expires_at` NOT NULL TIMESTAMPTZ; `error` Text; `error_at` TIMESTAMPTZ; `market_refresh_marks_updated_idx (updated_at)`) and `refresher_heartbeat` (key PK; `beat_at` NOT NULL TIMESTAMPTZ; `cadence_s` `sa.Float(53)` NOT NULL; `session` Text NOT NULL; `cycle_ms` Integer; `last_error` Text) follow the same shape. `PROMOTION_REASONS` gets one entry per promoted column, each a reason in the existing style, e.g. `"retry_after": "the FX job's backoff WHERE for an unknown answer; NULL when known"`, `"taken_at": "pending-vs-taken split in the partial unique index and the take index"`, `"expires_at": "in-flight test (expires_at > now) in every active() read"`, `"beat_at": "stalled test (age > 3 x cadence) in /system/health and /market/updates"`. No snapshot table here: it is v204's, in its own revision.
 
 - [ ] **Step 4: Write the revision** `swingbot/core/db/migrations/versions/v201_001_admin_refresher.py`
 
 First find the head: `python -m alembic -c <wt>/alembic.ini heads` (expect `v173_002`; `v200_001` if v200 merged first). Use it as `down_revision`.
 
 ```python
-"""v201: admin market refresher stores -- snapshots, quote currencies, refresh
-queue, in-flight marks, heartbeat -- and market_cache (kind, updated_at).
+"""v201: admin market refresher stores -- quote currencies, refresh queue,
+in-flight marks, heartbeat -- and market_cache (kind, updated_at).
 
 Additive: rollback is this revision's downgrade; leaving the tables after a
 code rollback is also safe (nothing else reads them).
@@ -526,15 +495,14 @@ def _standard():
 
 
 def upgrade() -> None:
-    op.create_table("admin_snapshots",
-        sa.Column("key", sa.Text, primary_key=True),
-        sa.Column("computed_at", _TS, nullable=False),
-        sa.Column("inputs", postgresql.JSONB(), nullable=False,
-                  server_default=sa.text("'{}'::jsonb")),
-        sa.Column("stale_inputs", sa.Boolean, nullable=False, server_default=sa.false()),
+    op.create_table("quote_currencies",
+        sa.Column("symbol", sa.Text, primary_key=True),
+        sa.Column("code", sa.Text),
+        sa.Column("outcome", sa.Text, nullable=False),
+        sa.Column("checked_at", _TS, nullable=False),
+        sa.Column("retry_after", _TS),
         *_standard())
-    op.create_index("admin_snapshots_updated_idx", "admin_snapshots", ["updated_at"])
-    # quote_currencies, market_refresh_queue (+ both indexes; the unique one with
+    # market_refresh_queue (+ both indexes; the unique one with
     # postgresql_where=sa.text("taken_at IS NULL")), market_refresh_marks (+ index),
     # refresher_heartbeat: column for column as schema.py.
     op.create_index("market_cache_kind_updated_idx", "market_cache", ["kind", "updated_at"])
@@ -543,11 +511,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("market_cache_kind_updated_idx", table_name="market_cache")
     for name in ("refresher_heartbeat", "market_refresh_marks", "market_refresh_queue",
-                 "quote_currencies", "admin_snapshots"):
+                 "quote_currencies"):
         op.drop_table(name)   # drops each table's own indexes with it
 ```
 
-The four elided `create_table` calls are written out in full; the comment above only marks where.
+The three elided `create_table` calls are written out in full; the comment above only marks where.
 
 - [ ] **Step 5: Run the new test and the schema guards**
 
@@ -561,9 +529,9 @@ git -C <wt> add swingbot/core/db/schema.py swingbot/core/db/migrations/versions/
 git -C <wt> commit -m "feat(v201): v201_001 -- admin refresher stores and market_cache (kind, updated_at) index"
 ```
 
-### Task V201-3: Repositories for snapshots, quote currencies, queue, marks, heartbeat
+### Task V201-3: Repositories for quote currencies, queue, marks, heartbeat
 
-**Model:** sonnet — five small repositories on a fixed schema; the two non-obvious statements (queue upsert, take) are given below.
+**Model:** sonnet — four small repositories on a fixed schema; the two non-obvious statements (queue upsert, take) are given below.
 
 **Files:**
 - Create: `swingbot/core/db/repositories/market_refresh.py`
@@ -577,7 +545,7 @@ git -C <wt> commit -m "feat(v201): v201_001 -- admin refresher stores and market
 - [ ] **Step 1: Write the failing repository tests** `tests/db/test_market_refresh_repos.py`
 
 ```python
-"""v201: the refresher's stores -- snapshots, quote currencies, queue, marks, heartbeat."""
+"""v201: the refresher's stores -- quote currencies, queue, marks, heartbeat."""
 from datetime import datetime, timedelta, timezone
 
 import sqlalchemy as sa
@@ -587,22 +555,6 @@ from swingbot.core.db.repositories import market_refresh as mr
 UTC = timezone.utc
 T0 = datetime(2026, 10, 28, 15, 0, tzinfo=UTC)
 EPOCH = datetime(2000, 1, 1, tzinfo=UTC)
-
-
-def test_snapshot_put_overwrites_and_changed_since_follows_updated_at(db_conn):
-    repo = mr.AdminSnapshotRepository()
-    repo.put("risk", {"heat": 1}, {"missing": {}}, computed_at=T0, stale_inputs=False, conn=db_conn)
-    repo.put("risk", {"heat": 2}, {"missing": {"bars": ["X"]}},
-             computed_at=T0 + timedelta(minutes=1), stale_inputs=True, conn=db_conn)
-    got = repo.get("risk", conn=db_conn)
-    assert got["doc"] == {"heat": 2} and got["inputs"] == {"missing": {"bars": ["X"]}}
-    assert got["computed_at"] == T0 + timedelta(minutes=1) and got["stale_inputs"] is True
-    assert repo.get("nope", conn=db_conn) is None
-    assert set(repo.get_many(["risk", "nope"], conn=db_conn)) == {"risk"}
-    assert repo.get_many([], conn=db_conn) == {}
-    changed = repo.changed_since(got["updated_at"] - timedelta(microseconds=1), conn=db_conn)
-    assert [(r["key"], r["stale_inputs"]) for r in changed] == [("risk", True)]
-    assert repo.changed_since(got["updated_at"], conn=db_conn) == []
 
 
 def test_quote_currency_due_honours_the_unknown_backoff(db_conn):
@@ -674,7 +626,7 @@ def test_heartbeat_is_one_upserted_row(db_conn):
 
 
 def test_accessors_are_singletons():
-    for accessor in (mr.admin_snapshot_repo, mr.quote_currency_repo, mr.refresh_queue_repo,
+    for accessor in (mr.quote_currency_repo, mr.refresh_queue_repo,
                      mr.refresh_mark_repo, mr.refresher_heartbeat_repo):
         assert accessor() is accessor()
 ```
@@ -698,7 +650,7 @@ Expected: FAIL (`ModuleNotFoundError: ...market_refresh`; `AttributeError: ... c
 
 - [ ] **Step 3: Implement `swingbot/core/db/repositories/market_refresh.py`**
 
-Module docstring: the five v201 stores, their one writer (the refresher; the queue's writer is the request door) and that none raises an SSE event. Five classes subclassing `Repository` (`super().__init__(<table>, key=<pk>)`), each method one statement inside `with self._tx(conn) as c:`, `_STAMP = sa.func.clock_timestamp()` for every `updated_at`. Readers return plain dicts built from row columns (not `_record`), so `doc` stays the payload. Accessors follow `equity_samples_repo()` (module `_repos: dict` or one global per class).
+Module docstring: the four v201 stores, their one writer (the refresher; the queue's writer is the request door) and that none raises an SSE event. Four classes subclassing `Repository` (`super().__init__(<table>, key=<pk>)`), each method one statement inside `with self._tx(conn) as c:`, `_STAMP = sa.func.clock_timestamp()` for every `updated_at`. Readers return plain dicts built from row columns (not `_record`), so `doc` stays the payload. Accessors follow `equity_samples_repo()` (module `_repos: dict` or one global per class).
 
 The two statements the tests do not determine:
 
@@ -732,7 +684,7 @@ The two statements the tests do not determine:
         return [{"kind": r.kind, "key": r.key, "priority": int(r.priority)} for r in rows]
 ```
 
-The rest, by the tests: `prune` deletes `requested_at < older_than` (taken or not) and returns `rowcount`. `mark` upserts each key with `started_at=now`, `expires_at=now+timeout_s`, `error=None`, `error_at=None`. `clear` updates the given keys to `expires_at=now`, `error=error`, `error_at=now if error else None` (a key with no row is inserted that way, so an error on a never-marked key is still visible). `active` = keys with `expires_at > now`. `errors` = `{key: error}` where `error IS NOT NULL`. Marks' `changed_since` returns `{key, in_flight: expires_at > now, error, updated_at}` with `updated_at > since`, ordered by `updated_at`. `AdminSnapshotRepository.put` upserts on `key` setting `doc`, `inputs`, `computed_at`, `stale_inputs`; its `changed_since` returns `key, computed_at, stale_inputs, updated_at`. `QuoteCurrencyRepository.put` upserts on `symbol.upper()`; `due` returns, in input order and upper-cased, symbols with no row or with `outcome = 'unknown' AND retry_after <= now`. `RefresherHeartbeatRepository` writes one row under `key = HEARTBEAT_KEY = "refresher"` (restated here so `core/db` imports nothing from `core/marketdata`; V201-5's test asserts it equals `admin_refresh.HEARTBEAT_KEY`).
+The rest, by the tests: `prune` deletes `requested_at < older_than` (taken or not) and returns `rowcount`. `mark` upserts each key with `started_at=now`, `expires_at=now+timeout_s`, `error=None`, `error_at=None`. `clear` updates the given keys to `expires_at=now`, `error=error`, `error_at=now if error else None` (a key with no row is inserted that way, so an error on a never-marked key is still visible). `active` = keys with `expires_at > now`. `errors` = `{key: error}` where `error IS NOT NULL`. Marks' `changed_since` returns `{key, in_flight: expires_at > now, error, updated_at}` with `updated_at > since`, ordered by `updated_at`. `QuoteCurrencyRepository.put` upserts on `symbol.upper()`; `due` returns, in input order and upper-cased, symbols with no row or with `outcome = 'unknown' AND retry_after <= now`. `RefresherHeartbeatRepository` writes one row under `key = HEARTBEAT_KEY = "refresher"` (restated here so `core/db` imports nothing from `core/marketdata`; V201-5's test asserts it equals `admin_refresh.HEARTBEAT_KEY`).
 
 - [ ] **Step 4: `market_shared.py`**
 
@@ -1046,7 +998,7 @@ git -C <wt> commit -m "feat(v201): persisted quote-currency codes, never-fetch F
 
 **Interfaces:**
 - Consumes: `admin_refresh.cadence_s`, `HEARTBEAT_KEY`, `QUEUE_KIND_QUOTE/SNAPSHOT`, `QUEUE_RETENTION_S`; `session.session_state` (V201-1); `refresh_queue_repo().take/prune`, `refresher_heartbeat_repo().beat`, `market_refresh.HEARTBEAT_KEY` (V201-3).
-- Produces (ledger): `lock.ADVISORY_LOCK_KEY = 201001`; `lock.single_instance() -> ContextManager[bool]`. `symbols.SymbolSet(quotes: tuple[str, ...], index: tuple[str, ...])` (frozen); `symbols.symbol_set() -> SymbolSet`. `loop.CycleReport`, `loop.CycleContext` (fields exactly as the ledger; `CycleReport` fields after `cadence_s` default to `()`/`0`/`None`/`False`), `loop.STEPS: list[Callable[[CycleContext], None]]`, `loop.run_cycle(now=None) -> CycleReport`, `loop.run_forever(stop: threading.Event) -> None`, `__main__.main() -> int`. Also: `loop.LOCK_RETRY_S = 30.0`, `loop.QUEUE_POLL_S = 5.0`, `loop.QUEUE_TAKE_LIMIT = 500`, the seam `loop._wait(stop, seconds)`, and the rule **a cycle between full cadences carries `SymbolSet((), ())` and only the queued keys**, so a user's Refresh is served within `QUEUE_POLL_S` without refetching the whole set. **The process never exits on a database error**, missing tables included: `deploy/deploy.sh` runs `up --wait` before `alembic upgrade`, so the first cycles can meet a schema without the v201 tables. **Every inner tick (`QUEUE_POLL_S`) reloads a changed `.env` and re-reads the cadence**, so a flag or cadence change, or a queued Refresh while the market is closed, never waits out a 30-minute cadence. V201-6 appends its steps to `STEPS` and its NOTIFY to `run_cycle`'s tail.
+- Produces (ledger): `lock.ADVISORY_LOCK_KEY = 201001`; `lock.single_instance() -> ContextManager[bool]`. `symbols.SymbolSet(quotes: tuple[str, ...], index: tuple[str, ...])` (frozen); `symbols.symbol_set() -> SymbolSet`. `loop.CycleReport`, `loop.CycleContext` (fields exactly as the ledger; `CycleReport` fields after `cadence_s` default to `()`/`0`/`None`/`False`; `queued_snapshots` and `snapshots_written` stay empty in v201, inert slots for v204's snapshot job), `loop.STEPS: list[Callable[[CycleContext], None]]`, `loop.run_cycle(now=None) -> CycleReport`, `loop.run_forever(stop: threading.Event) -> None`, `__main__.main() -> int`. Also: `loop.LOCK_RETRY_S = 30.0`, `loop.QUEUE_POLL_S = 5.0`, `loop.QUEUE_TAKE_LIMIT = 500`, the seam `loop._wait(stop, seconds)`, and the rule **a cycle between full cadences carries `SymbolSet((), ())` and only the queued keys**, so a user's Refresh is served within `QUEUE_POLL_S` without refetching the whole set. **The process never exits on a database error**, missing tables included: `deploy/deploy.sh` runs `up --wait` before `alembic upgrade`, so the first cycles can meet a schema without the v201 tables. **Every inner tick (`QUEUE_POLL_S`) reloads a changed `.env` and re-reads the cadence**, so a flag or cadence change, or a queued Refresh while the market is closed, never waits out a 30-minute cadence. V201-6 appends its steps to `STEPS` and its NOTIFY to `run_cycle`'s tail.
 
 - [ ] **Step 1: Write the failing tests**
 

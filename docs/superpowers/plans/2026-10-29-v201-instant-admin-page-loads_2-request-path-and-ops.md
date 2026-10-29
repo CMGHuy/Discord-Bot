@@ -17,7 +17,7 @@ test run is preceded once per session by `/replicate-prod-db` into the shared
 
 **Shared test scaffolding (created in V201-7, used by every task here):**
 `tests/admin_market/conftest.py` gives `market` (fake quote cache, queue,
-marks, snapshots and heartbeat), `session_is` (pins the session state),
+marks and heartbeat), `session_is` (pins the session state),
 `refresher_on` (flags only) and `on_client` (an authenticated admin test
 client with the refresher on). `tests/admin_market/test_page_loads_never_fetch.py`
 (V201-8) gives `PAGE_LOAD_ENDPOINTS`, `FORBIDDEN` and the `network_forbidden`
@@ -38,8 +38,8 @@ fixture.
 - Modify: `tests/admin/conftest.py` (one autouse fixture; the `fx.quote_currency_code` lambda accepts keywords)
 
 **Interfaces:**
-- Consumes (V201-1): `admin_refresh.refresher_on`, `stale_after_s`, `quote_mark_key`, `snapshot_mark_key`, `is_snapshot_key`, `PRIORITY_USER/FRESH_HINT/MISSING`, `QUEUE_KIND_QUOTE/SNAPSHOT`; `session.session_state(now=None) -> str`. (V201-3) `market_refresh.refresh_queue_repo()`, `refresh_mark_repo()`, `admin_snapshot_repo()` with the index's "Repositories" methods. Existing: `layer.last_cached(kind, symbols) -> dict[str, Entry]` (`{}` unless `MARKETDATA_LAYER == "on"`), `kinds.is_fresh_request()`, `kinds.Entry` (`value, fetched_at, source, outcome`).
-- Produces: the index's "Request-path door" exactly, plus two **additive keyword defaults** fixed here for V201-8 and V201-10: `read_quotes(symbols, *, kind: DataKind = DataKind.QUOTE, enqueue: bool = True, now: datetime | None = None)` and `read_snapshot(key, *, enqueue: bool = True)`. `MarketQuote` gains a trailing `source: str | None = None` (the provider label the watchlist shows). `enqueue=False` is the read the updates endpoint uses; it never writes the queue.
+- Consumes (V201-1): `admin_refresh.refresher_on`, `stale_after_s`, `quote_mark_key`, `PRIORITY_USER/FRESH_HINT/MISSING`, `QUEUE_KIND_QUOTE`; `session.session_state(now=None) -> str`. (V201-3) `market_refresh.refresh_queue_repo()`, `refresh_mark_repo()` with the index's "Repositories" methods. Existing: `layer.last_cached(kind, symbols) -> dict[str, Entry]` (`{}` unless `MARKETDATA_LAYER == "on"`), `kinds.is_fresh_request()`, `kinds.Entry` (`value, fetched_at, source, outcome`).
+- Produces: the index's "Request-path door" exactly, plus **additive keyword defaults** fixed here for V201-8 and V201-10: `read_quotes(symbols, *, kind: DataKind = DataKind.QUOTE, enqueue: bool = True, now: datetime | None = None)`. The snapshot reads (`read_snapshot`, `snapshot_meta`) are v204's. `MarketQuote` gains a trailing `source: str | None = None` (the provider label the watchlist shows). `enqueue=False` is the read the updates endpoint uses; it never writes the queue.
 - Produces (tests): fixtures `market`, `session_is`, `refresher_on`, `on_client` in `tests/admin_market/conftest.py`; helper `quote_entry(symbol, price, *, age_s, source="alpaca-iex") -> Entry`.
 
 **Behaviour fixed here (the tests pin each line):**
@@ -48,14 +48,12 @@ fixture.
 - A missing symbol → `price=None, refreshing=True`, enqueued at `PRIORITY_MISSING`. A cached symbol older than `stale_after_s("price", state)` and not in flight is enqueued at `PRIORITY_MISSING`, and its `refreshing` reflects the mark only. In `closed` state the threshold is `None`, so nothing old is enqueued. Under `kinds.is_fresh_request()` every wanted symbol is enqueued at `PRIORITY_FRESH_HINT` instead.
 - Repository errors (marks read, queue write) fail open through `swallowed(log, "admin.market_values.<op>", exc, ...)`. With no marks, `refreshing` comes only from "missing", and a failed enqueue never fails the page.
 - `total_meta`: `missing_count = (#None or price-None quotes) + extra_missing`; `as_of` = the oldest priced `as_of` (ISO string); `stale_count` = priced quotes with `age_s > stale_after_s("price", state)` (`0` when closed); `refreshing` = any; `error` = first non-`None`; `computed_at=None`, `stale_inputs=False`, `source="request"`.
-- `read_snapshot`: a row → `{"doc", "computed_at" (ISO), "inputs", "stale_inputs", "refreshing", "error"}`, with refreshing/error from the `snapshot:<key>` mark. No row → enqueue `QUEUE_KIND_SNAPSHOT` at `PRIORITY_MISSING` (when `enqueue`) and return `None`.
-- `snapshot_meta(None)` → `refreshing=True`, every count `0`, `as_of=None`, `source="snapshot"`. With a snapshot: `as_of = inputs["oldest_quote_as_of"]`, `missing_count = len(set(missing.quotes) | set(missing.fx))`, plus `computed_at`, `stale_inputs`, `error`. `stale_count` and extra `refreshing` come from `quotes_meta` when given.
-- `request_refresh` upper-cases and dedupes symbols, raises `ValueError` for a key failing `is_snapshot_key`, enqueues both kinds at `priority` and returns the inserted-row total. It does not swallow repository errors: the endpoint answers 500 rather than hiding a half-done enqueue.
+- `request_refresh(symbols, *, priority=PRIORITY_USER)` upper-cases and dedupes symbols, enqueues them as `QUEUE_KIND_QUOTE` at `priority` and returns the inserted-row count (`0` for no symbols, without touching the queue). It does not swallow repository errors: the endpoint answers 500 rather than hiding a half-done enqueue.
 
 - [ ] **Step 1: Write the shared fixtures** in `tests/admin_market/conftest.py`
 
 ```python
-"""Fakes for the v201 request-path door: quote cache, queue, marks, snapshots, heartbeat.
+"""Fakes for the v201 request-path door: quote cache, queue, marks, heartbeat.
 
 The admin app fixtures are reused as-is from tests/admin/conftest.py. Its
 autouse `_pin_admin_refresher_off` is deliberately NOT imported."""
@@ -112,18 +110,6 @@ class FakeMarks:
 
 
 @dataclass
-class FakeSnapshots:
-    rows: dict = field(default_factory=dict)
-
-    def get(self, key):
-        return self.rows.get(key)
-
-    def changed_since(self, since):
-        return [{k: r[k] for k in ("key", "computed_at", "stale_inputs", "updated_at")}
-                for r in self.rows.values()]
-
-
-@dataclass
 class FakeHeartbeat:
     row: dict | None = None
 
@@ -136,7 +122,6 @@ class Market:
     cache: dict = field(default_factory=dict)             # (kind, SYMBOL) -> Entry
     queue: FakeQueue = field(default_factory=FakeQueue)
     marks: FakeMarks = field(default_factory=FakeMarks)
-    snapshots: FakeSnapshots = field(default_factory=FakeSnapshots)
     heartbeat: FakeHeartbeat = field(default_factory=FakeHeartbeat)
 
     def quote(self, symbol, price, *, age_s, kind=DataKind.QUOTE, source="alpaca-iex"):
@@ -153,7 +138,6 @@ def market(monkeypatch):
         s: state.cache[(kind, s)] for s in symbols if (kind, s) in state.cache})
     monkeypatch.setattr(market_refresh, "refresh_queue_repo", lambda: state.queue)
     monkeypatch.setattr(market_refresh, "refresh_mark_repo", lambda: state.marks)
-    monkeypatch.setattr(market_refresh, "admin_snapshot_repo", lambda: state.snapshots)
     monkeypatch.setattr(market_refresh, "refresher_heartbeat_repo", lambda: state.heartbeat)
     return state
 
@@ -195,7 +179,7 @@ from swingbot.admin import market_values as mv
 from swingbot.core.marketdata import data
 from swingbot.core.marketdata.shared import kinds
 from swingbot.core.marketdata.shared.admin_refresh import (
-    PRIORITY_FRESH_HINT, PRIORITY_MISSING, PRIORITY_USER, QUEUE_KIND_QUOTE, QUEUE_KIND_SNAPSHOT)
+    PRIORITY_FRESH_HINT, PRIORITY_MISSING, PRIORITY_USER, QUEUE_KIND_QUOTE)
 from swingbot.core.marketdata.shared.kinds import DataKind
 
 ROW_QUOTE_FIELDS = {"current_price", "current_price_stale", "price_as_of", "price_age_s",
@@ -309,39 +293,20 @@ def test_total_meta_closed_session_counts_nothing_stale(market, session_is):
 
 
 def test_market_meta_always_has_every_key():
-    assert set(mv.total_meta([])) == META_KEYS and set(mv.snapshot_meta(None)) == META_KEYS
-
-
-def test_missing_snapshot_is_enqueued_and_reads_none(market):
-    assert mv.read_snapshot("risk") is None
-    assert market.queue.pending == {(QUEUE_KIND_SNAPSHOT, "risk"): PRIORITY_MISSING}
-    assert mv.snapshot_meta(None)["refreshing"] is True
-
-
-def test_snapshot_reads_with_marks_and_inputs(market):
-    at = datetime(2026, 10, 29, 14, 30, tzinfo=timezone.utc)
-    market.snapshots.rows["risk"] = {
-        "key": "risk", "doc": {"heat": 1.0}, "computed_at": at, "stale_inputs": True,
-        "updated_at": at,
-        "inputs": {"oldest_quote_as_of": "2026-10-29T14:29:00+00:00",
-                   "missing": {"quotes": ["X"], "bars": ["Y"], "fx": ["X", "Z"]}}}
-    market.marks.in_flight.add("snapshot:risk")
-    snap = mv.read_snapshot("risk")
-    assert snap["doc"] == {"heat": 1.0} and snap["refreshing"] is True
-    meta = mv.snapshot_meta(snap)
-    assert meta["as_of"] == "2026-10-29T14:29:00+00:00" and meta["missing_count"] == 2
-    assert meta["stale_inputs"] is True and meta["computed_at"].startswith("2026-10-29T14:30")
+    meta = mv.total_meta([])
+    assert set(meta) == META_KEYS
+    assert (meta["computed_at"], meta["stale_inputs"], meta["source"]) == (None, False, "request")
 
 
 def test_request_refresh_enqueues_at_user_priority(market):
-    assert mv.request_refresh(["msft", "MSFT", "nvda"], ["risk"]) == 3
-    assert market.queue.pending[(QUEUE_KIND_QUOTE, "MSFT")] == PRIORITY_USER
-    assert market.queue.pending[(QUEUE_KIND_SNAPSHOT, "risk")] == PRIORITY_USER
+    assert mv.request_refresh(["msft", "MSFT", "nvda"]) == 2
+    assert market.queue.pending == {(QUEUE_KIND_QUOTE, "MSFT"): PRIORITY_USER,
+                                    (QUEUE_KIND_QUOTE, "NVDA"): PRIORITY_USER}
 
 
-def test_request_refresh_rejects_an_unknown_snapshot_key(market):
-    with pytest.raises(ValueError):
-        mv.request_refresh([], ["nope"])
+def test_request_refresh_with_no_symbols_enqueues_nothing(market):
+    assert mv.request_refresh([]) == 0
+    assert market.queue.pending == {}
 ```
 
 - [ ] **Step 3: Run the tests to verify they fail**
@@ -353,7 +318,7 @@ Expected: FAIL, `ModuleNotFoundError: No module named 'swingbot.admin.market_val
 
 The module docstring says it is the only door page handlers use for market values when `admin_refresh.refresher_on()`: it never fetches, and the Refresh control only enqueues. Top-level imports: `from swingbot.core.db.repositories import market_refresh` and `from swingbot.core.market import session`, both called through the module attribute (`market_refresh.refresh_queue_repo()`, `session.session_state()`) so the fixtures can patch them. Also import `admin_refresh`, `kinds`, `DataKind` and `swallowed`. Import `layer` inside `_cached(kind, symbols)`, as `freshness.cached_quotes` does.
 
-The public names are exactly the contract: `MarketQuote` (frozen dataclass: `symbol, price, as_of, age_s, refreshing, error, source=None`), `read_quotes`, `quote_fields`, `total_meta`, `read_snapshot`, `snapshot_meta` and `request_refresh`. The private helpers each stay well under complexity 15:
+The public names are exactly the contract: `MarketQuote` (frozen dataclass: `symbol, price, as_of, age_s, refreshing, error, source=None`), `read_quotes`, `quote_fields`, `total_meta` and `request_refresh`. The private helpers each stay well under complexity 15:
 - `_upper_unique(symbols) -> list[str]`
 - `_cached(kind, symbols) -> dict[str, Entry]`
 - `_doc_as_of(entry) -> datetime`: `datetime.fromisoformat` on `trade_at`/`quote_at`, falling back to `entry.fetched_at`
@@ -413,13 +378,13 @@ git -C <wt> commit -m "feat(v201): never-fetch market_values door for admin page
 **Interfaces:**
 - Consumes: V201-7 `market_values.read_quotes(symbols, *, kind=DataKind.QUOTE, enqueue=True)`, `quote_fields`, `total_meta`, `MarketQuote` (`.source`); V201-1 `admin_refresh.refresher_on()`; V201-4 `money.convert_amount`/`to_account_currency` already pass `fetch=not refresher_on()`. Fixtures `market`, `session_is`, `on_client` (V201-7).
 - Produces: `/api/v1/dashboard` body key `market_meta: MarketMeta` (the open-position totals: `open_pnl_pct`, `open_pnl_amount`), always present, refresher on or off. `build_open_trade_views(...)` return dict gains `"quotes": dict[str, MarketQuote]` (`{}` when off). `/market/tape` rows and watchlist rows gain the **row quote fields** when the refresher is on. The Dashboard's open-positions table reads `/trades` (TradesStore), so its rows get their quote fields in V201-9.
-- Produces (tests): `tests/admin_market/test_page_loads_never_fetch.py` with `PAGE_LOAD_ENDPOINTS: list[str]`, `FORBIDDEN: list[tuple[str, str]]`, fixtures `network_forbidden` (returns the list of forbidden names called) and `book` (an `on_client` with an open MSFT pair, a two-name watchlist and cached quotes). V201-9, 13 and 14 append to both lists and import the fixtures.
+- Produces (tests): `tests/admin_market/test_page_loads_never_fetch.py` with `PAGE_LOAD_ENDPOINTS: list[str]`, `FORBIDDEN: list[tuple[str, str]]`, fixtures `network_forbidden` (returns the list of forbidden names called) and `book` (an `on_client` with an open MSFT pair, a two-name watchlist and cached quotes). V201-9 appends to both lists and imports the fixtures.
 
 **Behaviour fixed here:**
 - **Refresher off: every path below is today's code, byte for byte.** Each new branch is the first statement of the function it guards: `if admin_refresh.refresher_on(): return <door path>`.
 - Dashboard (`_open_trade_market(open_trades) -> tuple[dict, dict]`): on → `market_values.read_quotes(tickers)`, prices `{ticker: quote.price}`; off → `(_open_trade_prices(open_trades), {})`. `build_open_trade_views` replaces its one `prices = _open_trade_prices(...)` line with `prices, quotes = _open_trade_market(open_trades)` and adds `"quotes": quotes` to its return dict. That adds no branch to the legacy C(17) function.
 - `_open_meta(open_trades, views, fx_missing) -> dict`: with quotes → `total_meta([quotes.get(TICKER) per open trade], extra_missing=fx_missing)`; without (off, or no positions) → `total_meta([], extra_missing=<positions with price None> + fx_missing)`. `_open_figures` returns it as `"market_meta"`.
-- `_equity_30d` when on: `load_snapshot(max_age_seconds=_ANY_AGE_S)` (`_ANY_AGE_S = 10**9`), never `refresh_snapshot()`. V201-13 replaces this read with the `analytics.snapshot` row.
+- `_equity_30d` when on: `load_snapshot(max_age_seconds=_ANY_AGE_S)` (`_ANY_AGE_S = 10**9`), never `refresh_snapshot()`. The sparkline keeps its `analytics_snapshot.json` source (kept fresh by the bot's scan loop); v204 moves it to its snapshot table.
 - Tape when on (`_door_tape_quotes`): tape symbols (`tape.is_tape_symbol`) read `read_quotes(mine, kind=DataKind.INDEX_QUOTE)` for price and age, `tape.read_tape(mine)` for `change_pct`/proxy, and `tape.record_demand(mine)` as today. They never `_tape_self_fetch`. Other symbols read `read_quotes(others)`, and their `change_pct` comes from `_tape_change_pct(s, price, _disk_frames(others))`, where `_disk_frames` is `data_store.load_normalized(sym, "daily")` of any age, errors dropped, never refreshed. Each row's extras: `_NO_EXTRAS` keys (proxy fields from the tape entry, `age_s` = `round(q.age_s, 1)` or `None`) plus `quote_fields(q)`.
 - Watchlist when on: `_door_overlay(tickers)` returns `({}, {})` when `not is_us_market_active()` (the closed market shows the last close, as today, and nothing is enqueued). Otherwise it returns `({T: q.price for priced}, read_quotes(tickers))`. `_stamp` dispatches a `MarketQuote` to `_stamp_door(row, q)`: `row.update(quote_fields(q))`, then `price_source = _quote_provider(q.source or "")` when both prices are set. `_cold_frames` reads `_disk_frames(cold)`: any-age disk files, no `page_daily`, no `get_daily_data_batch`.
 
@@ -649,8 +614,7 @@ Run: `git -C <wt> grep -nE "page_quotes|get_quote_batch|get_current_price|prefet
 Write `docs/superpowers/results/2026-10-29-v201-endpoint-sweep.md` with a one-line purpose, the command, the date and the worktree HEAD. Then add one table row per hit: `file:line` · the endpoint(s) reaching it · verdict. The verdict is one of:
 - `door (V201-8)`
 - `door (V201-9)` for `api_v1/trades.py`
-- `snapshot (V201-13)` for `risk.py`, `_equity_30d`, `analytics._snapshot`
-- `measure + door (V201-14)` for Analytics and Calendar
+- `v204 (snapshot pages)` for `risk.py`, `analytics.py` and `calendar.py`: they keep today's request path until v204
 - `refresher-off fallback only` (the hit sits behind a `refresher_on()` guard)
 - `out of scope: <reason>` for an endpoint listed in the index's "Out of scope (endpoint sweep)"
 - `UNCLASSIFIED`
@@ -832,16 +796,16 @@ git -C <wt> commit -m "feat(v201): trades list and detail price from the cache w
 - Modify: `swingbot/admin/api_v1/ops_health.py` (`get_system_health` gains `"refresher"`)
 
 **Interfaces:**
-- Consumes: V201-7 `market_values.read_quotes(..., kind=, enqueue=False)`, `read_snapshot(key, enqueue=False)`, `request_refresh`; V201-3 `MarketSharedRepository.changed_since(kind, since, *, conn)`, `refresh_mark_repo().changed_since(since)` (`key, in_flight, error, updated_at`), `admin_snapshot_repo().changed_since(since)`, `refresher_heartbeat_repo().read()` (`beat_at, cadence_s, session, cycle_ms, last_error`); V201-1 `admin_refresh.cadence_s`, `stale_after_s`, `heartbeat_stalled(beat_at, cadence, now=None)`, `is_snapshot_key`, `refresher_on`; `session.session_state(now)`, `session.last_regular_close(now)`; `tape.is_tape_symbol`; `side_connection` (`swingbot.core.db.side_engine`); `iso`, `ApiError`, `api_v1`, `require_auth`.
+- Consumes: V201-7 `market_values.read_quotes(..., kind=, enqueue=False)`, `request_refresh`; V201-3 `MarketSharedRepository.changed_since(kind, since, *, conn)`, `refresh_mark_repo().changed_since(since)` (`key, in_flight, error, updated_at`), `refresher_heartbeat_repo().read()` (`beat_at, cadence_s, session, cycle_ms, last_error`); V201-1 `admin_refresh.cadence_s`, `stale_after_s`, `heartbeat_stalled(beat_at, cadence, now=None)`, `refresher_on`; `session.session_state(now)`, `session.last_regular_close(now)`; `tape.is_tape_symbol`; `side_connection` (`swingbot.core.db.side_engine`); `iso`, `ApiError`, `api_v1`, `require_auth`.
 - Produces: the index's "Endpoints" JSON exactly. Also `market_updates.status_block(now: datetime | None = None) -> dict` (the `status` object) and `market_updates.refresher_health() -> dict` (the health block), which `ops_health` imports. `MAX_REFRESH_SYMBOLS = 200`.
 
 **Behaviour fixed here:**
-- `GET /market/updates`: `now` is taken first and becomes `cursor` (`iso(now)`). A row written while the read runs is therefore sent again next time rather than lost. A missing or empty `since` means empty lists plus `status`. `since` parses with `datetime.fromisoformat` after a trailing `Z` → `+00:00`; a naive value is UTC; anything unparsable raises `ApiError("invalid", "since must be an ISO-8601 timestamp", 400)`.
+- `GET /market/updates`: `now` is taken first and becomes `cursor` (`iso(now)`). A row written while the read runs is therefore sent again next time rather than lost. A missing or empty `since` means an empty `quotes` list plus `status`. `since` parses with `datetime.fromisoformat` after a trailing `Z` → `+00:00`; a naive value is UTC; anything unparsable raises `ApiError("invalid", "since must be an ISO-8601 timestamp", 400)`.
 - Quote updates: `symbols = {row["symbol"] for kinds "quote" and "index" changed since} ∪ {key[len("quote:"):] for changed marks starting "quote:"}`. Tape symbols read `kind=DataKind.INDEX_QUOTE`, the rest `QUOTE`, both with `enqueue=False`. The list is sorted by symbol, items `{"symbol", "price", "as_of", "refreshing", "error"}`. The cache read is the private `_cache_changes(since) -> list[dict]` (one `side_connection`, both kinds), which the tests patch.
-- Snapshot updates: `keys = {changed snapshot rows} ∪ {mark keys starting "snapshot:"}`. With a row: `{"key", "computed_at", "refreshing", "stale_inputs", "error"}` from `read_snapshot(key, enqueue=False)`. Without one: `computed_at=None, stale_inputs=False`, plus `refreshing`/`error` from the mark row. Sorted by key.
-- `status_block(now)`: `session = session_state(now)`, `last_close_at = iso(last_regular_close(now))`, `stale_price_s`/`stale_snapshot_s` from `stale_after_s`. `heartbeat.cadence_s` is the row's, else `cadence_s(session)`. `heartbeat.stalled = refresher_on() and heartbeat_stalled(beat_at, cadence, now)`: with the kill switch off, no refresher is expected and the SPA must not raise "prices paused". A heartbeat read error fails open to "no row".
+- No `snapshots` list and no `stale_snapshot_s` in v201 (v204 adds both).
+- `status_block(now)`: `session = session_state(now)`, `last_close_at = iso(last_regular_close(now))`, `stale_price_s` from `stale_after_s("price", session)`. `heartbeat.cadence_s` is the row's, else `cadence_s(session)`. `heartbeat.stalled = refresher_on() and heartbeat_stalled(beat_at, cadence, now)`: with the kill switch off, no refresher is expected and the SPA must not raise "prices paused". A heartbeat read error fails open to "no row".
 - `refresher_health()`: `{"status": "off" | "ok" | "stalled", "beat_at", "cadence_s", "last_error"}`. `"off"` when `not refresher_on()`, with the other three `None`.
-- `POST /market/refresh`: body `{"symbols": [str], "snapshots": [str]}`, both optional lists. Any of the following → `400 invalid` and nothing is enqueued: a non-list, a non-string item, both empty, more than `MAX_REFRESH_SYMBOLS` symbols, or a key failing `is_snapshot_key`. Success → `202 {"queued": n}`. It never fetches.
+- `POST /market/refresh`: body `{"symbols": [str]}`. Any of the following → `400 invalid` and nothing is enqueued: `symbols` missing or not a list, a non-string item, an empty list, or more than `MAX_REFRESH_SYMBOLS` symbols. Success → `202 {"queued": n}`. It never fetches.
 
 - [ ] **Step 1: Write the failing tests** in `tests/admin_market/test_market_updates.py`
 
@@ -852,7 +816,7 @@ import pytest
 
 from swingbot import config
 from swingbot.admin.api_v1 import market_updates
-from swingbot.core.marketdata.shared.admin_refresh import PRIORITY_USER, QUEUE_KIND_SNAPSHOT
+from swingbot.core.marketdata.shared.admin_refresh import PRIORITY_USER, QUEUE_KIND_QUOTE
 from tests.admin_market.test_page_loads_never_fetch import network_forbidden  # noqa: F401
 
 NOW = datetime.now(timezone.utc)
@@ -873,10 +837,11 @@ def changes(monkeypatch):
 def test_without_since_only_status_is_filled(on_client, market, changes):
     market.heartbeat.row = _beat(10)
     body = on_client.get("/api/v1/market/updates").get_json()
-    assert body["quotes"] == [] and body["snapshots"] == []
+    assert body["quotes"] == [] and "snapshots" not in body
     datetime.fromisoformat(body["cursor"])
     status = body["status"]
     assert status["session"] == "regular" and status["stale_price_s"] == 120
+    assert "stale_snapshot_s" not in status
     assert status["heartbeat"]["stalled"] is False and status["heartbeat"]["cadence_s"] == 30.0
     assert status["last_close_at"] is not None
 
@@ -899,20 +864,6 @@ def test_since_lists_changed_quotes_and_in_flight_marks(on_client, market, chang
     assert network_forbidden == []
 
 
-def test_since_lists_snapshots_with_and_without_a_row(on_client, market, changes):
-    market.snapshots.rows["risk"] = {"key": "risk", "doc": {}, "inputs": {},
-                                     "computed_at": NOW, "stale_inputs": True, "updated_at": NOW}
-    market.marks.changed.append({"key": "snapshot:analytics.snapshot", "in_flight": True,
-                                 "error": None, "updated_at": NOW})
-    body = on_client.get("/api/v1/market/updates",
-                         query_string={"since": "2026-01-01T00:00:00Z"}).get_json()
-    snaps = {s["key"]: s for s in body["snapshots"]}
-    assert snaps["risk"]["stale_inputs"] is True and snaps["risk"]["computed_at"]
-    assert snaps["analytics.snapshot"] == {"key": "analytics.snapshot", "computed_at": None,
-                                           "refreshing": True, "stale_inputs": False,
-                                           "error": None}
-
-
 def test_malformed_since_is_400(on_client, market, changes):
     resp = on_client.get("/api/v1/market/updates?since=yesterday")
     assert resp.status_code == 400 and resp.get_json()["error"]["code"] == "invalid"
@@ -927,18 +878,17 @@ def test_heartbeat_not_stalled_when_the_refresher_is_off(on_client, market, chan
 
 def test_refresh_enqueues_and_answers_202(on_client, market):
     resp = on_client.post("/api/v1/market/refresh",
-                          json={"symbols": ["msft", "nvda"], "snapshots": ["risk"]})
-    assert resp.status_code == 202 and resp.get_json() == {"queued": 3}
-    assert market.queue.pending[(QUEUE_KIND_SNAPSHOT, "risk")] == PRIORITY_USER
+                          json={"symbols": ["msft", "nvda"]})
+    assert resp.status_code == 202 and resp.get_json() == {"queued": 2}
+    assert market.queue.pending[(QUEUE_KIND_QUOTE, "MSFT")] == PRIORITY_USER
 
 
 @pytest.mark.parametrize("body", [
     {},
-    {"symbols": [], "snapshots": []},
+    {"symbols": []},
     {"symbols": "MSFT"},
     {"symbols": [1]},
     {"symbols": [f"S{i}" for i in range(201)]},
-    {"snapshots": ["not-a-key"]},
 ])
 def test_refresh_rejects_a_bad_body(on_client, market, body):
     resp = on_client.post("/api/v1/market/refresh", json=body)
@@ -971,7 +921,7 @@ Expected: FAIL, `ImportError: cannot import name 'market_updates'`.
 
 - [ ] **Step 3: Implement `swingbot/admin/api_v1/market_updates.py`**
 
-Two routes (`market_updates_view`, `refresh_view`), both `@require_auth`, plus `status_block`, `refresher_health`, `MAX_REFRESH_SYMBOLS`. Private helpers: `_parse_since(raw) -> datetime | None`, `_cache_changes(since) -> list[dict]`, `_mark_changes(since) -> list[dict]` (fails open to `[]` through `swallowed`), `_quote_updates(since, marks) -> list[dict]`, `_snapshot_updates(since, marks) -> list[dict]`, `_heartbeat_row() -> dict | None` (fails open), `_validated_refresh(payload) -> tuple[list[str], list[str]]` (raises `ApiError("invalid", ..., 400)`). Every function is under complexity 15. Follow this package's own rule: import `swingbot.admin.market_values` and the repositories inside the functions, never at module top (the circular-import note in `api_v1/__init__.py`).
+Two routes (`market_updates_view`, `refresh_view`), both `@require_auth`, plus `status_block`, `refresher_health`, `MAX_REFRESH_SYMBOLS`. Private helpers: `_parse_since(raw) -> datetime | None`, `_cache_changes(since) -> list[dict]`, `_mark_changes(since) -> list[dict]` (fails open to `[]` through `swallowed`), `_quote_updates(since, marks) -> list[dict]`, `_heartbeat_row() -> dict | None` (fails open), `_validated_refresh(payload) -> list[str]` (raises `ApiError("invalid", ..., 400)`). Every function is under complexity 15. Follow this package's own rule: import `swingbot.admin.market_values` and the repositories inside the functions, never at module top (the circular-import note in `api_v1/__init__.py`).
 
 - [ ] **Step 4: Register and wire health**
 
@@ -1027,7 +977,7 @@ git -C <wt> commit -m "feat(v201): market updates and refresh endpoints, refresh
   ```
 
   Step 4 becomes `docker compose stop bot admin refresher`, which is a no-op for a service with no container.
-- `cpus: "0.5"` is a hard cap. The bot keeps its `1.0` and admin its `cpu_shares: 2048` on the 2-vCPU box, and a 52 s `collect_portfolio_state` in the refresher can no longer starve the admin worker. `mem_limit: 1g` covers pandas daily-bar frames for the snapshot builders.
+- `cpus: "0.5"` is a hard cap. The bot keeps its `1.0` and admin its `cpu_shares: 2048` on the 2-vCPU box, and a long refresher batch can never starve the admin worker. `mem_limit: 1g` also leaves room for the pandas daily-bar frames of v204's snapshot builders.
 
 - [ ] **Step 1: Write the failing compose and deploy tests** in `tests/db/test_compose.py`
 
@@ -1048,8 +998,8 @@ def test_refresher_runs_its_own_entry_point_off_the_bot_image(compose):
 
 
 def test_refresher_mounts_exactly_the_bot_state(compose):
-    # Same daily-cache volume as bot and admin (spec Operations): the snapshot
-    # builders read the bars the scan keeps warm, and nothing else.
+    # Same daily-cache volume as bot and admin (spec Operations): the FX pair
+    # files it refreshes, and the bars v204's snapshot job will read.
     assert compose["services"]["refresher"]["volumes"] == compose["services"]["bot"]["volumes"]
 
 
@@ -1089,11 +1039,11 @@ Expected: FAIL, `ValueError: substring not found`.
 ```yaml
   refresher:
     # v201: the admin's market refresher. A process of its own, so a slow
-    # batch or a long portfolio-state build can neither hold the admin's
+    # batch can neither hold the admin's
     # gunicorn threads nor share a yfinance download lock with the scan and
     # the stop monitor (each process has its own _DOWNLOAD_LOCK). It fetches
     # quotes, quote-currency codes and FX pairs as the tier-5 ADMIN_REFRESH
-    # asker, stores the heavy page snapshots, and NOTIFYs `market`. The admin
+    # asker, and NOTIFYs `market`. The admin
     # pages only read what it stored. Kill switch: ADMIN_REFRESHER=off puts
     # the admin back on request-time fetching (docs/deploy/DEPLOY_HETZNER.md).
     image: ${SWING_BOT_IMAGE:-swing-bot:latest}
@@ -1107,7 +1057,7 @@ Expected: FAIL, `ValueError: substring not found`.
     env_file:
       - .env
     # Exactly the bot's state mounts (see its comment): the daily-bar cache
-    # it reads read-only for snapshots, the FX pair files it refreshes, and
+    # (read-only, for v204's snapshot job), the FX pair files it refreshes, and
     # .env for hot reload.
     volumes:
       - ./data:/app/data
