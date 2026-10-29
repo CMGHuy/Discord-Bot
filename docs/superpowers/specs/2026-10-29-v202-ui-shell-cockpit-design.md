@@ -181,8 +181,9 @@ invented.
   `sb-nav-indicator` bar is retired: the pill is the indicator. Labels are
   always rendered, so the `sb-hint` per link goes away. The brand keeps its
   hint ("Bomeo Capital · Dashboard").
-- **Alarm chip.** It shows only while data is stale (freshness past its
-  existing threshold), the event stream is `dead` or `degraded`, or the bot
+- **Alarm chip.** It shows only while data is stale (bot last success older
+  than the existing 900 s rule in `ui/freshness.ts`, the same rule the
+  freshness chip's tone uses), the event stream is `dead` or `degraded`, or the bot
   is not alive. It is the one live-state signal that must not depend on the
   dock being open. When nothing is wrong it renders nothing, so the top bar
   stays clean. It names the problem ("Data stale 12 min", "Disconnected",
@@ -209,21 +210,21 @@ small component so it can be tested alone. All times are **Berlin local**
    - Last successful scan time and age.
    - Data freshness: the current `sb-freshness-chip` content, as a row.
    - Event-stream connection: the current `sb-connection-status`, as a row.
-   - Market session: pre-market, open, after-hours or closed, with the time
-     to the next open when closed. It comes from the session state the
-     connection store already exposes (`marketActive`, and the
-     `known-traps.md` § session state machine); the brief confirms which
-     signal carries more than open/closed. If only open/closed exists, the
-     row shows that and nothing is invented.
+   - Market: open or closed, from `marketActive`. `/health` carries only
+     that boolean. A finer session (pre-market, after-hours, time to the
+     next open) needs `/health` to expose `swingbot/core/market/session.py`,
+     which is named in What follows; nothing is invented here.
    - Killswitch state, in plain language: "Active: new alerts paused since
      09:31" when engaged, "Clear" when not.
    - This absorbs the top bar's freshness and connection chips and the
      clock.
-2. **Plans awaiting order.** A count of open plans not yet filled, expired or
-   cancelled. This is the pre-open list a trader places resting orders
-   from. It shows the soonest expiry ("next expires in 2 sessions", from
-   the plan's existing validity) and links to Trades → Book filtered to
-   those plans. It is a **state count, not a since-last-visit badge**: it
+2. **Plans awaiting order.** A count of plans with status `PENDING`: not yet
+   filled, expired or cancelled. This is the pre-open list a trader places
+   resting orders from. It links to Trades → Book filtered to those plans.
+   - It shows the soonest expiry only among plans that carry
+     `valid_session`, where the expiry is exact ("next expires 30 Oct").
+   - Other plans expire by bar count from the on-disk daily cache, which a
+     DB-only read cannot know, so no guessed expiry is shown for them. It is a **state count, not a since-last-visit badge**: it
    does not grow with every scan or clear when seen. It drops only when a
    plan fills, expires or is cancelled, so it never nudges the trader to
    check the screen.
@@ -314,22 +315,26 @@ depend on v201 and can land before or after it.
 
   `events` is newest first. `?limit=` sets its length: default 8, maximum 50.
   `ref` is the trade id or plan id to link to, or null.
-- **Heat.** It calls the Risk page's heat read-model function. If that
-  function needs live prices, `/live` returns the last stored heat figures
-  with their timestamp instead, and the dock shows the age. The brief
-  decides which applies, after reading `risk_read_model.py`. **Heat is never
-  recomputed differently from Risk.**
+- **Heat.** It calls `swingbot/core/edge/heat.py` `open_heat` over the
+  stored trades and the account balance, the same function `risk.py:get_risk`
+  projects (lines 453-509).
+  - It needs no live prices, so there is no stored-figure fallback.
+  - It skips the slow `collect_portfolio_state` work (clusters, daily
+    frames), which only the Risk page needs.
+  - Heat counts resting orders, because a trade row exists from alert time
+    while its plan is `PENDING`. The dock labels it "incl. resting orders",
+    as the Risk page means it.
+  - **Heat is never recomputed differently from Risk.**
 - **Event kinds in Phase 1.** Every kind comes from data that already
   exists, and the brief names the exact doc keys for each:
 
   | `kind` | Source | Text (example) |
   |---|---|---|
   | `plan_alerted` | `plans.created_at` | `Alert · MSFT long · entry 418.50` |
-  | `paper_filled` | the plan's `status_history` entry for the fill transition (its `at`; `plan_manager.py:1069-1081`) | `Paper fill · XLE short at 92.10` |
-  | `tp1_hit` | the plan's first realized leg (`legs_realized`) and its time, *if* the leg carries one | `TP1 · NVDA · +1.0R ($210) (paper, pre-cost)` |
-  | `trade_closed` | `trades.closed_at` with the outcome, R and dollar P&L in `doc` | `NVDA closed · TP2 · +2.1R ($441) (paper, pre-cost)` |
-  | `killswitch` | the current `killswitch` row: `engaged` and `engaged_at` | `Killswitch engaged` or `Killswitch released` |
-  | `scan_finished` | the `scan_progress` doc's finish time and new-plan count, *if* those keys exist | `Scan finished · 3 new plans` |
+  | `paper_filled` | the plan's first `status_history` entry with `status == "ACTIVE"` (its `at`; written at `plan_manager.py:1037-1056`) | `Paper fill · XLE short at 92.10` |
+  | `tp1_hit` | the plan's TP1 leg in `legs_realized` and its `closed_at` (TP1 legs carry it; stop and scratch legs do not) | `TP1 · NVDA · +1.0R ($210) (paper, pre-cost)` |
+  | `trade_closed` | `trades.closed_at`; R from `closed_r_multiple(t)` (no stored trade-level R) and dollars from `realized_pnl_amount` | `NVDA closed · TP2 · +2.1R ($441) (paper, pre-cost)` |
+  | `killswitch` | `killswitch` repository `state()`: `on` and `at` | `Killswitch engaged` or `Killswitch released` |
 
 - **What the sources can and cannot say.**
   - `trades.opened_at` is the record-creation time at alert, not a fill
@@ -342,13 +347,11 @@ depend on v201 and can land before or after it.
     the **latest** transition, worded by the `engaged` flag, and never
     claims an engagement at a release time. A killswitch history is named
     in What follows.
-  - `scan_progress` is ephemeral and holds the last scan only
-    (`schema.py:190-194`). `bot_heartbeat.ts` is a liveness beat, not a
-    finish time. If the `scan_progress` doc carries no finish time and
-    count, `scan_finished` is dropped. The Bot section's "last successful
-    scan" then comes from the connection store, as today.
-  - `tp1_hit` is included only if a realized leg carries its own time.
-    Otherwise it joins stop moves under What follows.
+  - **No `scan_finished` kind.** The `scan_progress` doc holds `at, pct,
+    stage, current_ticker, done, total, qualifying_found`, with no finish
+    time, and the row is deleted when the scan ends. `bot_heartbeat.ts` is
+    a liveness beat, not a finish time. The Bot section's "last successful
+    scan" comes from the connection store's `botLastSuccess`, as today.
   - **Stop moves are not in the feed.** No persisted record holds their
     time; they are live events only (`plan_manager.py:268`). The trader is
     not left without a follow-up, because Discord already sends each one as
@@ -370,7 +373,6 @@ depend on v201 and can land before or after it.
 |---|---|
 | Connection store has no `/health` yet | Bot section rows show `—`. No row claims "Running" before an answer. |
 | Heat `unavailable` | "Heat unavailable" with the panel-error retry. The strip and edge tab show `Heat —`. |
-| Heat is stored, not live | The figures plus "as of 14:05 · 27 min ago". |
 | Activity `unavailable` | "Activity unavailable" plus a retry. |
 | Activity `partial` | The events, then a faint line: "Some sources unavailable: …". |
 | No events today, last scan recent | "Nothing yet today". |
@@ -464,6 +466,9 @@ cases included (partner rule).
 - A bot spec that persists stop moves (and TP1 times, and killswitch
   transitions if they are still missing) as an event log, so the dock can
   list them. `Edge: harvest`: the trader amends resting orders from them.
+- `/health` exposing the market session state (pre-market, after-hours,
+  time to the next open) from `swingbot/core/market/session.py`, so the
+  dock's Market row can show it (veteran-trader 6).
 - A concentration row in the dock: sector and correlated-cluster heat, from
   the Risk read model (financial-advisor).
 - Phase 4's close-out removes the six old route names together with
@@ -491,7 +496,8 @@ financial-advisor and veteran-trader (sonnet).
 
 - staff-engineer 1: the dock would instantiate the slow, route-scoped
   `RiskStore`. **Applied:** the dock reads only the DB-only `/live`
-  endpoint; heat comes from the same read model, stored if it needs prices.
+  endpoint, and heat comes from the same `open_heat` function the Risk page
+  uses. It needs no prices (confirmed by the plan brief).
 - staff-engineer 2: the `calendar/:date` redirect was missing and the
   in-app links were understated. **Applied:** both redirect routes, the
   links listed, and a no-old-path test.
@@ -501,7 +507,8 @@ financial-advisor and veteran-trader (sonnet).
 - staff-engineer 4, financial-advisor 1: "filled" wording. **Applied** (see
   veteran-trader 1).
 - staff-engineer 5: `scan_finished` sources were not real columns.
-  **Applied:** named as `scan_progress` doc keys, dropped if absent.
+  **Applied:** the plan brief found no finish time in `scan_progress`, so
+  the kind is dropped.
 - staff-engineer 6: `PreferencesStore` already exists and rejects
   localStorage. **Applied:** server-side only, keyed by destination path.
 - staff-engineer 7: `navEntryFor` is first-segment only, and the label
