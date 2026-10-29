@@ -823,7 +823,7 @@ def projection_state(monkeypatch):
              "availability": {key: dict(ok) for key in
                               ("positions", "heat", "sector_heat", "clusters", "throttle", "killswitch")}}
     monkeypatch.setattr(portfolio_state, "collect_portfolio_state", lambda: state)
-    monkeypatch.setattr(risk, "_risk_metrics_and_correlation", lambda: ({}, {"labels": [], "values": []}))
+    monkeypatch.setattr(risk, "_risk_metrics_and_correlation", lambda: ({}, {"labels": [], "values": []}, {}))
     monkeypatch.setattr(risk, "_scan_health", lambda: {})
     monkeypatch.setattr(throttle, "kill_state", lambda: {"on": False, "reason": None, "at": None})
     return state
@@ -941,3 +941,175 @@ def test_projection_empty_book_and_controls_keep_observed_values(projection_clie
     assert body["throttle"] == {"multiplier": 1.0, "paused": False}
     assert body["killswitch"]["availability"]["state"] == "ok"
     assert "last_known" not in body["killswitch"]
+
+
+@pytest.fixture
+def distribution_inputs(monkeypatch):
+    import numpy as np
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.marketdata import fx
+
+    closes = 100 * np.cumprod(1 + 0.01 * np.sin(np.arange(100)))
+    frame = pd.DataFrame({"Close": closes}, index=pd.date_range("2026-01-01", periods=100))
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: "EUR")
+    monkeypatch.setattr(fx, "fx_rate", lambda *args: 1.0)
+    monkeypatch.setattr(risk, "_risk_bars", lambda symbols: {symbol: frame for symbol in symbols})
+    return risk, frame
+
+
+_DISTRIBUTION_CHECKED = "2026-10-28T00:00:00+00:00"
+
+
+@pytest.mark.parametrize("direction,beta", [("bullish", 1.0), ("bearish", -1.0)])
+def test_distribution_beta_preserves_position_direction(distribution_inputs, direction, beta):
+    risk, _ = distribution_inputs
+    trade = {**_open_trade("direction"), "direction": direction}
+    metrics, corr, availability = risk._distribution_metrics([trade], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["beta_spy"]["value"] == pytest.approx(beta)
+    assert availability["distribution_metrics"]["state"] == "ok"
+    assert corr["labels"] == ["AAPL"]
+
+
+def test_distribution_offset_book_does_not_renormalize_risk(distribution_inputs):
+    risk, _ = distribution_inputs
+    long = _open_trade("long")
+    short = {**long, "id": "short", "direction": "bearish"}
+    metrics, corr, availability = risk._distribution_metrics([long, short], "SPY", _DISTRIBUTION_CHECKED)
+    for name in ("var_95", "expected_shortfall_95", "annualised_vol", "beta_spy"):
+        assert metrics[name]["value"] is None
+    assert corr["labels"] == ["AAPL"]
+    assert availability["distribution_metrics"]["state"] == "ok"
+
+
+def test_distribution_missing_bars_are_unavailable(distribution_inputs, monkeypatch):
+    risk, frame = distribution_inputs
+    monkeypatch.setattr(risk, "_risk_bars", lambda symbols: {"SPY": frame})
+    metrics, _, availability = risk._distribution_metrics([_open_trade("missing")], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["var_95"]["value"] is None
+    assert availability["distribution_metrics"]["reason"] == "incomplete_bars"
+
+
+def test_distribution_signed_exposures_keep_asset_correlation(distribution_inputs):
+    risk, _ = distribution_inputs
+    rows = [_open_trade("long", ticker="AAA"),
+            {**_open_trade("short", ticker="BBB"), "direction": "bearish"}]
+    _, corr, _ = risk._distribution_metrics(rows, "SPY", _DISTRIBUTION_CHECKED)
+    assert corr["values"][0][1] == pytest.approx(1.0)
+
+
+def test_distribution_market_failure_preserves_trade_metrics(distribution_inputs, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
+                        [_open_trade("open")] if status == "open" else [_closed_trade("closed")])
+    monkeypatch.setattr(risk, "_max_drawdown_amount", lambda closed: {"value": 0, "n": 1, "fx_missing_count": 0})
+    monkeypatch.setattr(risk, "_risk_bars", unavailable_read)
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["max_drawdown_r"]["n"] == 1
+    assert metrics["max_drawdown_amount"]["n"] == 1
+    assert availability["distribution_metrics"]["reason"] == "market_data_unavailable"
+
+
+def test_distribution_missing_fx_is_explicit(distribution_inputs, monkeypatch):
+    from swingbot.core.marketdata import fx
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(fx, "fx_rate", lambda *args: None)
+    metrics, _, availability = risk._distribution_metrics([_open_trade("missing-fx")], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["var_95"]["value"] is None
+    assert availability["distribution_metrics"]["reason"] == "missing_fx"
+
+
+@pytest.mark.parametrize("rows,state,reason", [
+    ([], "ok", None), (None, "unavailable", "positions_unavailable"),
+])
+def test_distribution_empty_and_unknown_positions(distribution_inputs, rows, state, reason):
+    risk, _ = distribution_inputs
+    metrics, corr, availability = risk._distribution_metrics(rows, "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["as_of"] is None
+    assert metrics["var_95"] == {"value": None, "n": 0}
+    assert corr == {"labels": [], "values": []}
+    assert availability["distribution_metrics"] == {
+        "state": state, "reason": reason, "checked_at": _DISTRIBUTION_CHECKED}
+
+
+def test_distribution_unavailable_open_read_and_configured_benchmark(distribution_inputs, monkeypatch):
+    from swingbot import config
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "QQQ")
+    monkeypatch.setattr(TradeLog, "get_trades", lambda *args, **kwargs: None)
+    monkeypatch.setattr(risk, "_max_drawdown_amount", lambda closed: {"value": None, "n": 0, "fx_missing_count": 0})
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["benchmark_symbol"] == "QQQ"
+    assert availability["distribution_metrics"]["reason"] == "positions_unavailable"
+
+
+def test_distribution_availability_merges_without_mutating_cache(projection_client, projection_state, monkeypatch):
+    from swingbot.admin.api_v1 import risk
+    availability = {"distribution_metrics": {"state": "unavailable", "reason": "missing_fx",
+                                             "checked_at": _DISTRIBUTION_CHECKED}}
+    monkeypatch.setattr(risk, "_risk_metrics_and_correlation", lambda: ({}, {"labels": [], "values": []}, availability))
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["availability"]["distribution_metrics"] == availability["distribution_metrics"]
+    assert body["availability"]["positions"] == projection_state["availability"]["positions"]
+    assert set(availability) == {"distribution_metrics"}
+    assert "distribution_metrics" not in projection_state["availability"]
+
+
+def test_distribution_uses_one_valuation_date(distribution_inputs, monkeypatch):
+    from datetime import date
+    from swingbot.core.marketdata import fx
+    risk, _ = distribution_inputs
+    calls = []
+
+    def rate(quote, account, on):
+        calls.append((quote, account, on))
+        return 1.0
+
+    monkeypatch.setattr(fx, "fx_rate", rate)
+    rows = [_open_trade("a", ticker="AAA"), _open_trade("b", ticker="BBB")]
+    metrics, _, availability = risk._distribution_metrics(rows, "QQQ", _DISTRIBUTION_CHECKED)
+    assert calls == [("EUR", "EUR", date(2026, 10, 28))] * 2
+    assert metrics["beta_spy"]["value"] == pytest.approx(1.0)
+    assert metrics["beta_spy"]["n"] == 99
+    assert availability["distribution_metrics"]["state"] == "ok"
+
+
+def test_distribution_failed_open_read_preserves_closed_metrics(distribution_inputs, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+
+    def trades(self, status=None, **kwargs):
+        if status == "open":
+            raise OSError("private positions diagnostic")
+        return [_closed_trade("closed")]
+
+    monkeypatch.setattr(TradeLog, "get_trades", trades)
+    monkeypatch.setattr(risk, "_max_drawdown_amount", lambda closed: {"value": 0, "n": 1, "fx_missing_count": 0})
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["max_drawdown_r"]["n"] == 1
+    assert metrics["max_drawdown_amount"]["n"] == 1
+    assert availability["distribution_metrics"]["reason"] == "positions_unavailable"
+
+
+@pytest.mark.parametrize("bad_frame", [
+    pd.DataFrame(), pd.DataFrame({"Close": [100.0, float("nan")]}),
+    pd.DataFrame({"Close": [100.0, 0.0]}), pd.DataFrame({"Open": [100.0]}),
+])
+def test_distribution_invalid_frames_are_unavailable(distribution_inputs, monkeypatch, bad_frame):
+    risk, frame = distribution_inputs
+    monkeypatch.setattr(risk, "_risk_bars", lambda symbols: {"AAPL": bad_frame, "SPY": frame})
+    metrics, _, availability = risk._distribution_metrics([_open_trade("bad")], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["var_95"]["value"] is None
+    assert availability["distribution_metrics"]["reason"] == "incomplete_bars"
+
+
+def test_distribution_computation_failure_is_sanitized(distribution_inputs, monkeypatch):
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(risk, "_market_values", unavailable_read)
+    metrics, corr, availability = risk._distribution_metrics([_open_trade("bad")], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["var_95"]["value"] is None
+    assert corr["labels"] == ["AAPL"]
+    assert availability["distribution_metrics"]["reason"] == "market_data_unavailable"
+    assert "private diagnostic" not in str(availability)

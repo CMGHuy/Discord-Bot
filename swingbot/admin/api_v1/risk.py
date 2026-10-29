@@ -287,26 +287,100 @@ def _risk_bars(symbols: list[str]) -> dict:
     return get_daily_data_batch(symbols)
 
 
-def _risk_metrics_and_correlation() -> tuple[dict, dict]:
-    """The institutional metric set (v85 D37) and the correlation matrix
-    (D38), both over the open book's notional weights and cached daily
-    bars.
+_DISTRIBUTION_KEYS = ("var_95", "expected_shortfall_95", "annualised_vol", "beta_spy")
 
-    Weight is each ticker's share of total open notional (`entry * shares`
-    summed per ticker) -- the same "how big is this position" figure
-    `_positions` already reports per row, just aggregated. Reads
-    `TradeLog` directly rather than through `state`, matching
-    `_positions`' own precedent of not going through the `!portfolio`
-    collector for this.
+
+def _empty_distribution() -> dict:
+    return {**{key: _metric(None, 0) for key in _DISTRIBUTION_KEYS}, "as_of": None}
+
+
+def _distribution_status(checked: str, reason: str | None) -> dict:
+    return {"distribution_metrics": {"state": "unavailable" if reason else "ok",
+                                      "checked_at": checked, "reason": reason}}
+
+
+def _asset_symbols(rows: list) -> list[str]:
+    return sorted({str(row["ticker"]).strip().upper() for row in rows
+                   if isinstance(row, dict) and isinstance(row.get("ticker"), str) and row["ticker"].strip()})
+
+
+def _asset_correlation(symbols: list[str], bars: dict) -> dict:
+    from swingbot.core.analytics import risk_metrics as rm
+    try:
+        labels, values = rm.correlation_matrix(symbols, bars)
+        return {"labels": labels, "values": values}
+    except Exception as exc:
+        swallowed(log, "ops.risk.asset_correlation", exc, level=logging.DEBUG)
+        return {"labels": symbols, "values": []}
+
+
+def _market_values(weights: dict, bars: dict, benchmark: str) -> dict:
+    from swingbot.core.analytics import risk_metrics as rm
+    returns = rm.portfolio_returns(weights, bars)
+    benchmark_returns = rm.portfolio_returns({benchmark: 1.0}, bars)
+    count = len(returns)
+    volatility = rm.annualised_vol(returns)
+    beta = rm.beta_vs(returns, benchmark_returns) if volatility is not None else None
+    return {
+        "var_95": _metric(rm.value_at_risk(returns), count),
+        "expected_shortfall_95": _metric(rm.expected_shortfall(returns), count),
+        "annualised_vol": _metric(volatility, count),
+        "beta_spy": _metric(beta, len(returns.align(benchmark_returns, join="inner")[0])),
+        "as_of": returns.index[-1].strftime("%Y-%m-%d") if count else None,
+    }
+
+
+def _covered_distribution(weights: dict, symbols: list, bars: dict,
+                          benchmark: str, checked: str) -> tuple:
+    from .risk_read_model import complete_bars
+    if not complete_bars(sorted(set(symbols) | {benchmark}), bars):
+        return _empty_distribution(), _distribution_status(checked, "incomplete_bars")
+    try:
+        values = _market_values(weights, bars, benchmark)
+    except Exception as exc:
+        swallowed(log, "ops.risk.distribution_values", exc, level=logging.DEBUG)
+        return _empty_distribution(), _distribution_status(checked, "market_data_unavailable")
+    reason = None if values["as_of"] is not None else "incomplete_bars"
+    return values, _distribution_status(checked, reason)
+
+
+def _distribution_metrics(open_trades: list | None, benchmark: str, checked: str) -> tuple[dict, dict, dict]:
+    from .risk_read_model import signed_weights
+    if open_trades is None:
+        return _empty_distribution(), {"labels": [], "values": []}, _distribution_status(checked, "positions_unavailable")
+    if not open_trades:
+        return _empty_distribution(), {"labels": [], "values": []}, _distribution_status(checked, None)
+    symbols = _asset_symbols(open_trades)
+    weights, reason = signed_weights(open_trades, on=datetime.fromisoformat(checked).date())
+    try:
+        bars = _risk_bars(sorted(set(symbols) | {benchmark}))
+    except Exception as exc:
+        swallowed(log, "ops.risk.distribution_bars", exc, level=logging.DEBUG)
+        return _empty_distribution(), {"labels": symbols, "values": []}, _distribution_status(checked, reason or "market_data_unavailable")
+    correlation = _asset_correlation(symbols, bars)
+    if reason:
+        return _empty_distribution(), correlation, _distribution_status(checked, reason)
+    values, availability = _covered_distribution(weights, symbols, bars, benchmark, checked)
+    return values, correlation, availability
+
+
+def _risk_metrics_and_correlation() -> tuple[dict, dict, dict]:
+    """Independent trade metrics, signed market metrics and their availability.
+
+    Open entry notionals are valued in account currency on one UTC date,
+    signed by direction, and normalized by gross exposure before netting.
+    Daily quote returns omit historical FX effects; correlation remains
+    between underlying assets. These reads are cached independently of the
+    collector snapshot used by the positions projection.
     """
     from swingbot.core.analytics import metrics as trade_metrics
     from swingbot.core.analytics import risk_metrics as rm
     from swingbot.core.tracking.performance import TradeLog
 
     try:
-        open_trades = TradeLog().get_trades(status="open", limit=None) or []
+        open_trades = TradeLog().get_trades(status="open", limit=None)
     except Exception:
-        open_trades = []
+        open_trades = None
 
     try:
         closed = [
@@ -348,77 +422,10 @@ def _risk_metrics_and_correlation() -> tuple[dict, dict]:
     null_metrics["as_of"] = None
     null_metrics["benchmark_symbol"] = benchmark
 
-    # Notional/weights/symbols come entirely from the open-trade rows -- no
-    # price data needed -- but a bad cache entry or a string-typed JSON field
-    # on a trade can still raise (e.g. `abs(entry * shares)` TypeError), so
-    # this stays its own guard, separate from the market-data fetch below.
-    # The correlation matrix's `labels` are just this symbol list, so on a
-    # pure market-data failure (the try below) they can still be reported
-    # even though the `values` matrix cannot.
-    try:
-        notional: dict[str, float] = {}
-        for trade in open_trades:
-            ticker = trade.get("ticker")
-            entry = trade.get("entry")
-            shares = trade.get("shares")
-            if not ticker or entry is None or shares is None:
-                continue
-            notional[ticker] = notional.get(ticker, 0.0) + abs(entry * shares)
-        total_notional = sum(notional.values())
-        weights = (
-            {ticker: value / total_notional for ticker, value in notional.items()}
-            if total_notional else {}
-        )
-        symbols = sorted(weights)
-    except Exception:
-        weights, symbols = {}, []
+    checked = datetime.now(timezone.utc).isoformat()
+    market, correlation, availability = _distribution_metrics(open_trades, benchmark, checked)
+    return {**null_metrics, **market}, correlation, availability
 
-    empty_correlation = {"labels": symbols, "values": []}
-
-    # Everything below reads market data: fetched bars, per-pair alignment,
-    # correlations. A bad cache entry or a network hiccup can raise from any
-    # of `get_daily_data_batch`, `portfolio_returns` (`frame["Close"]`),
-    # `.align()`/`.strftime()`, or `correlation_matrix` -- and this whole
-    # tuple feeds one endpoint whose killswitch must keep rendering
-    # regardless. One guard around this section degrades to null
-    # market-data metrics (trade-derived ones already seeded above) + an
-    # empty correlation `values` matrix, rather than 500ing the page over a
-    # single missing bar.
-    try:
-        bars = _risk_bars(sorted(set(symbols) | {benchmark})) if symbols else {}
-
-        returns = rm.portfolio_returns(weights, bars)
-        # The benchmark's own daily returns, gotten by asking portfolio_returns
-        # for a one-symbol "portfolio" that IS the benchmark -- reuses the same
-        # pct_change/notional-drop logic rather than a second copy of it.
-        benchmark_returns = rm.portfolio_returns({benchmark: 1.0}, bars)
-
-        n_returns = len(returns)
-        metrics = {
-            "var_95": _metric(rm.value_at_risk(returns), n_returns),
-            "expected_shortfall_95": _metric(rm.expected_shortfall(returns), n_returns),
-            "annualised_vol": _metric(rm.annualised_vol(returns), n_returns),
-            "beta_spy": _metric(
-                rm.beta_vs(returns, benchmark_returns),
-                len(returns.align(benchmark_returns, join="inner")[0]),
-            ),
-            "sharpe_r": sharpe_r,
-            "max_drawdown_r": max_drawdown_r,
-            # v194 B8: {value, n, fx_missing_count} -- money, account currency.
-            "max_drawdown_amount": max_drawdown_amount,
-            "as_of": (returns.index[-1].strftime("%Y-%m-%d") if not returns.empty else None),
-            # v85 R8 fix (I4): the tile label must name the ACTUAL configured
-            # benchmark, not a hardcoded "SPY" -- `beta_spy` keeps its key
-            # (a bigger rename is a separate decision) but the symbol behind
-            # it now rides along so the frontend can label it correctly.
-            "benchmark_symbol": benchmark,
-        }
-
-        labels, values = rm.correlation_matrix(symbols, bars)
-        correlation = {"labels": labels, "values": values}
-        return metrics, correlation
-    except Exception:
-        return null_metrics, empty_correlation
 
 
 @api_v1.route("/risk", methods=["GET"])
@@ -456,7 +463,7 @@ def get_risk():
         if open_pct is not None and cap_pct else None
     )
 
-    metrics, correlation = _cached("metrics", _risk_metrics_and_correlation)
+    metrics, correlation, metric_availability = _cached("metrics", _risk_metrics_and_correlation)
     kill = _fresh_kill(throttle, state)
     return jsonify({
         "heat": {
@@ -465,7 +472,8 @@ def get_risk():
             "utilisation_pct": utilisation,
             **_heat_gap_block(state.get("open_trades")),
         },
-        "availability": {**state.get("availability", {}), "killswitch": kill["availability"]},
+        "availability": {**state.get("availability", {}), **metric_availability,
+                         "killswitch": kill["availability"]},
         "positions": _positions(state.get("open_trades"), balance),
         "sector_heat": _sector_rows(state.get("sector_heat")),
         "unmapped_count": int(state.get("unmapped_count") or 0),
