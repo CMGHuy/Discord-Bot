@@ -69,3 +69,18 @@ A slate row is a hypothesis. No gate moves: it never edits code, config, thresho
 | stop-fill-overshoot-audit | exit-harvester | cell exit_reason=stop Δ lower bound -2.032 is at or below zero or unavailable |
 | bank-partial-on-favourable-open-gap | exit-harvester | cell open_gap_bucket=favourable Δ lower bound -1.175 is at or below zero or unavailable |
 | no-chase-favourable-gap-limit | setup-scout | cell open_gap_bucket=favourable Δ lower bound -1.175 is at or below zero or unavailable |
+
+## Panel review
+
+Run 2026-10-29 over `bf8e6b37` (quant-researcher on opus). No BLOCKING findings.
+
+- quant-researcher [ADVISORY]: `alert_hour=20` is a timestamp artefact. `_alert_hour` (`scripts/reports/autopsy/rows.py:125-132`) takes a date-only `plan_first_status_at` as 00:00 UTC, which is 20:00 EDT. Controller check: in the export, 521 trade rows carry a 10-character date-only value, 74 carry a full timestamp and 236 are empty. The cell's own net ExpR is -0.051, its q 0.083 -- **applied**: Rank 2 withdrawn. The `after_close 613` tally is inflated by the same artefact. Fix owner: quant-engineer.
+- quant-researcher [ADVISORY]: `weekend_hold=yes` is survivorship. The cut (`scripts/reports/autopsy/cuts.py:68-73`) is exit-defined. 749 of the 756 non-weekend trades lasted under 3 calendar days, and the entry-time cut `friday_entry=yes` shows nothing (Δ +0.108, q 0.667) -- **applied**: Rank 1 withdrawn.
+- quant-researcher [ADVISORY]: no forced Friday flatten exists in code, and a daily-bar /screen cannot test a carry policy or intraday alert timing -- recorded; moot after the withdrawals.
+- quant-researcher [ADVISORY]: both scouts misread the `open_gap_bucket=favourable` sign again (`scripts/reports/autopsy/bars.py:129-133`; 2026-10-21 panel, 2nd bullet). The drops stand, for the wrong reason, and the contrast counts once -- recorded. The playbook and role prompts still carry no sign note: quant-engineer.
+- quant-researcher [ADVISORY]: the merge's one-sided rule (`scripts/dev/scout_merge.py:294-298`) can never rank a row that reduces a losing cell, and it ignores q -- recorded as the partner's call.
+- quant-researcher [ADVISORY]: the 32 trades closed in the 2026-08-04/05 stop-monitor stall batches (18 below -1.05R gross, worst -6.03R) still feed the stop cells -- recorded; exclusion owner: quant-engineer.
+- quant-researcher [ADVISORY]: there is no exit-model era split (exit changes 2026-09-03/09/10), unlike the 10-21 slate -- recorded.
+- quant-researcher [ADVISORY]: Rank 3 (atr-reentry-after-stop) borders the closed v108 E re-arm and the v114/v139 stop-geometry work (`docs/claude/backtest-methodology.md:260-261,288`). A /screen must freeze a distinct trigger with unchanged stop width, and the edge is probably `volume` as well -- recorded as a condition on that route.
+- quant-researcher [ADVISORY]: Rank 4 (tight-base-breakout) borders `range_breakdown_close` SCREEN-FAIL, `high52w` SCREEN-FAIL and v105 NO-LIFT (`backtest-methodology.md:266,309,323`). Controller note: Support/Resistance already carries a tight-base breakout (`docs/strategy-types/support-resistance.md:21`, WEAK). It was picked for /screen on 2026-10-16 and never screened -- recorded as a condition on that route.
+- quant-researcher [ADVISORY]: uncertainty comes from 14 week-clusters with lopsided complements, and thin complements should be reported as thin -- recorded.
