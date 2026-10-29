@@ -187,7 +187,10 @@ invented.
   is not alive. It is the one live-state signal that must not depend on the
   dock being open. When nothing is wrong it renders nothing, so the top bar
   stays clean. It names the problem ("Data stale 12 min", "Disconnected",
-  "Bot down") and opens the dock.
+  "Bot down") and opens the dock. Below 640 px it shows its dot only,
+  with its words in its accessible name and a 44 px hit area. The 390 px
+  bar cannot fit the words, and the live strip directly under the bar names
+  the same state.
 - **More sheet (phone).** It lists Insights (with its three sections) and
   System (Health, Versions), the entries that do not fit the four tabs. The
   profile actions stay in the phone top bar's `sb-profile-menu` and are not
