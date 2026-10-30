@@ -169,7 +169,7 @@ Discord side reads it: the scan loop `commands/scanning/loops.py:179-239`,
 
   | | Regular hours | Pre/after hours | Market closed |
   |---|---|---|---|
-  | Risk/analytics snapshot is stale after | 10 min | 30 min | — |
+  | Risk/analytics snapshot is stale after | 10 min | 30 min | built before the last regular close, or `stale_inputs` |
 
   Risk figures (heat vs account, drawdown, correlation) are warned at the same
   level as prices, never only prices. `stale_inputs` shows as stale
@@ -270,10 +270,73 @@ earlier text in this spec, they win.
 - **Rollback:** the Alembic downgrade drops the snapshot table. v201's
   `rollback_to.sh` refresher stop/start already covers the process.
 
+The quant-engineer and financial-advisor findings add the following:
+
+- **Recorded inputs, extended.** Beyond the list in Design 1, each snapshot
+  records the quote price and `as_of` per symbol, the FX rate and its `as_of`
+  per currency, a bar-file fingerprint per symbol (path, mtime, last-bar
+  date, row count), the staleness thresholds in force, and the code version
+  (`VERSION.json` bot version). That is enough to audit a figure after the
+  caches have moved on. Reproduction is exact only while those bar files are
+  unchanged; that limit is stated, not hidden.
+- **"Last completed session" has one source.** `stale_inputs` compares each
+  symbol's newest bar date with `session.last_regular_close(now)` (v201's
+  V201-1, UTC-aware, NYSE calendar from `session.NYSE_HOLIDAYS`), converted
+  to its ET session date. Tests cover a Monday morning, a holiday, a
+  Saturday, and the 16:00–20:00 ET window before the scan updates the daily
+  file (there the previous session counts as complete, so the snapshot is
+  not flagged before the file has had a chance to update). Half days use
+  the same close-date rule. Non-US tickers use the same NYSE-date rule. That
+  is a known simplification, so the bars clock on Risk shows each symbol's
+  own last-bar date. Spot metals are excluded from `stale_inputs` and counted
+  under `missing` only.
+- **The bars cache is pinned.** The read-only reader reads only the
+  yfinance-basis shared daily file (`daily_delta.read_daily(ticker,
+  basis=BASIS_YF)`, which `freshness._read_yf` reads today). It never reads
+  `data/backtest_cache/` (`backtest_cache.cache_path`). A file that fails to
+  parse, is empty, or has fewer rows than the metric's window lists the
+  symbol under `missing` with a reason. It never returns a short frame as if
+  it were whole. Tests pin both points.
+- **Parity is pinned to frozen fixtures.** Before the risk code moves, the
+  first task records golden payloads (risk, performance, equity curve,
+  calendar month, sparkline) from the current on-request code over a fixed
+  fixture book. The parity tests compare against those files, not against
+  code that moves with the change.
+- **Writes are ordered.** The snapshot upsert writes only when the incoming
+  `computed_at` is newer than the stored row's (compare-and-set in the
+  `ON CONFLICT ... WHERE` clause). A build abandoned on budget overrun that
+  finishes late can therefore never land over a newer row. A test pins this.
+- **Partial books are labelled, never zeroed.** A position with no quote, no
+  FX code or no bars is left out of heat, drawdown and P&L totals, and is
+  counted in `missing_count`. Each affected total is marked as a lower bound
+  ("≥ $X, 1 position unpriced"), not shown as a complete figure. Correlation
+  with fewer than 2 overlapping bars and beta with zero variance come back as
+  `null` with a reason, never `NaN` or 0. Edge-case tests cover each. An open
+  spot-metal position's heat therefore shows as "unknown" in read-only mode,
+  and the heat total carries the lower-bound label.
+- **Market closed is not exempt.** While the market is closed, a snapshot
+  built before the last regular close, or one carrying `stale_inputs`, shows
+  as stale. A current one shows "as of last close · Ddd HH:MM ET" (the
+  threshold table in SPA reflects this).
+- **Headline figures say what they are.** Calendar P&L, the Analytics totals
+  and the Risk P&L figures carry a short "pre-tax" label. They also say
+  whether modelled frictions are included, worded from what the ledger
+  actually stores (the plan reads this from the code; it is not assumed).
+  Heat and drawdown are shown against the account (percent of account plus
+  dollars) wherever the existing payload has the account value. The
+  verification label check covers both.
+- **No extra notification volume.** The snapshot job and its `market` events
+  feed the admin SPA only. They add no Discord message, alert or push
+  notification. This is a non-goal, pinned by a test that the snapshot job
+  never touches the Discord send path.
+- **Verification records its inputs.** The results document records, per
+  pass, the commit and versions deployed, the scan state, and the snapshot's
+  `bars_as_of` and `computed_at` at probe time.
+
 ## Panel review
 
-Serial run on `21a89358`. **In progress:** staff-engineer done; quant-engineer
-and financial-advisor still to run.
+Serial run on `21a89358`: staff-engineer (opus), then quant-engineer (sonnet)
+and financial-advisor (sonnet) on `9c45125e`, 2026-10-30.
 
 - staff-engineer [BLOCKING]: `ADMIN_REFRESHER=off` left four pages with no fallback. -- applied (Panel amendments, kill switch).
 - staff-engineer [ADVISORY]: a 52 s snapshot inside the single loop stalls quotes. -- applied (own worker thread + time budget).
@@ -282,14 +345,26 @@ and financial-advisor still to run.
 - staff-engineer [ADVISORY]: no retention rule for the snapshot table. -- applied (upsert by key).
 - staff-engineer [ADVISORY]: `queries.py:209` missing from the guard list. -- applied.
 - staff-engineer [ADVISORY]: downgrade and rollback coverage not restated. -- applied.
+- quant-engineer [BLOCKING]: recorded inputs omit quote prices, FX rates, bar-file identity, thresholds and code version. -- applied (recorded inputs, extended; reproduction limit stated).
+- quant-engineer [BLOCKING]: "last completed session" is undefined (calendar, timezone, non-US, metals). -- applied (one source: `session.last_regular_close`, with the listed tests).
+- quant-engineer [BLOCKING]: the bars reader's cache is not pinned, and truncated files are not detected. -- applied (yfinance-basis shared file only, never `backtest_cache`; short frame goes to `missing`).
+- quant-engineer [ADVISORY]: parity is not pinned to frozen output. -- applied (golden payloads recorded before the move).
+- quant-engineer [ADVISORY]: no write-ordering rule for the upsert. -- applied (newer `computed_at` wins, compare-and-set).
+- quant-engineer [ADVISORY]: no `NaN`/`None`/zero edge tests for totals, correlation and beta. -- applied (partial books labelled; `null` with a reason).
+- quant-engineer [ADVISORY]: the verification run does not record its inputs. -- applied.
+- financial-advisor [BLOCKING]: snapshots never read stale while the market is closed. -- applied (market closed is not exempt; threshold table changed).
+- financial-advisor [BLOCKING]: the label check omits pre-tax/frictions and heat against the account. -- applied (headline figures say what they are; the check covers it).
+- financial-advisor [ADVISORY]: drawdown should be in account dollars and show the losing streak. -- applied in part: dollars beside percent where the payload already has the account value. Rejected for new metrics (the losing streak): the parity rule and the no-redesign non-goal keep the payload as it is; this belongs in a later Risk-page spec.
+- financial-advisor [ADVISORY]: spot metals are always missing, so heat understates exposure. -- applied (heat "unknown", total labelled as a lower bound).
+- financial-advisor [ADVISORY]: no statement that the job adds no notification volume. -- applied (non-goal plus test).
+- financial-advisor [ADVISORY]: no concentration view on Risk. -- rejected: a new view is a layout change (non-goal). The existing correlation figure stays in the snapshot payload unchanged; a sector or top-name view belongs in a later Risk-page spec.
 
 ## Handoff
 
 Paused 2026-10-29 because the account's weekly usage limit was nearly spent.
-Resume in this order:
+The panel is complete (2026-10-30). Resume in this order:
 
-1. Run `/panel quant-engineer,financial-advisor` on this spec. staff-engineer
-   is done (above). Apply the findings and complete `## Panel review`.
+1. ~~Run `/panel quant-engineer,financial-advisor`~~ -- done.
 2. Write the v204 plan: `plan-briefer`, then `plan-writer` `mode=index`, then
    the parts. Reuse the drafts already written for the pre-split v201 plan,
    kept in the shared tree at `.superpowers/drafts/v204/` (gitignored):
