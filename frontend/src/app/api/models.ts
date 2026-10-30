@@ -613,6 +613,14 @@ export interface AnalyticsPerformance extends Scoped {
   relocated: Record<string, unknown>;
   win_rate: number | null;
   win_rate_n: number;
+  /** v189 D6: closes the win rate leaves out -- scaled-out closes inside
+   *  +-0.01R (`scratch`) and closes whose net R could not be computed
+   *  (`unscored`). Optional so pre-v189 fixtures stay valid. */
+  scratch_n?: number;
+  unscored_n?: number;
+  /** v189 D6: ISO date from which scaled-out trades are labelled by net R
+   *  (`metrics.LABEL_BASIS_SINCE`); null before the release sets it. */
+  label_basis_since?: string | null;
   expectancy_r: number | null;
   expectancy_n: number;
   by_confidence: Record<string, unknown>;
