@@ -19,6 +19,7 @@ from swingbot.commands.slash import TRADE_FILTER_CHOICES
 from swingbot.core.tracking.risk_metrics import compute_risk_metrics
 from swingbot.core.tracking.performance import closed_pnl_pct
 from swingbot.core.db.engine import LockTimeout
+from swingbot.core.tracking import account_reset
 from swingbot.core.tracking.plan_links import describe_ended
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
@@ -107,7 +108,7 @@ def format_trades_table(trades, header: str) -> str:
     for t in trades:
         lines.append(format_trade_row(t, config.CURRENCY_SYMBOL))
     lines.append("```")
-    lines.append("Use `!trade ID` for full detail, `!trade delete ID` to remove one, `!trades clear` to clear active trades, `!trades clear history` to clear closed trade history.")
+    lines.append("Use `!trade ID` for full detail, `!trade delete ID` to remove one, `!trades clear` to clear active trades, `!trades clear history` to archive and reset closed history (`force` while the kill switch is tripped).")
     return "\n".join(lines)
 
 
@@ -217,10 +218,16 @@ async def handle_trades_clear(reply) -> None:
         result))
 
 
-async def handle_trades_clear_history(reply) -> None:
-    """Clear all CLOSED trade records (win/loss/manually-closed). Open trades are kept."""
-    count = trade_log.clear_history()
-    await reply.send(f"Cleared {count} closed trade record(s). Open trades were not touched.")
+async def handle_trades_clear_history(reply, force: bool = False) -> None:
+    """v189 A6: archive the closed history, then reset realized P&L and the
+    drawdown history to the base balance. Open trades are kept. Refused while
+    the kill switch is tripped unless `force` (which never releases it)."""
+    try:
+        result = account_reset.reset_closed_history(force=force)
+    except (account_reset.ResetRefused, account_reset.ArchiveFailed) as exc:
+        await reply.send_error(str(exc))
+        return
+    await reply.send(account_reset.describe_reset(result))
 
 
 @bot.group(name="trades", invoke_without_command=True)
@@ -247,10 +254,11 @@ async def trades_clear(ctx):
 
 @trades_clear.command(name="history")
 @commands.has_permissions(administrator=True)
-async def trades_clear_history(ctx):
-    """Clear all CLOSED trade records (win/loss/manually-closed). Open trades are kept."""
+async def trades_clear_history(ctx, mode: str = ""):
+    """Archive closed history, then reset realized P&L and drawdown. Open trades are kept.
+    `!trades clear history force` resets even while the kill switch is tripped (it stays tripped)."""
     reply = CtxReply(ctx)
-    await handle_trades_clear_history(reply)
+    await handle_trades_clear_history(reply, force=mode.lower() == "force")
     await send_prefix_tip(ctx, reply)
 
 
@@ -739,11 +747,13 @@ async def slash_trades_clear(interaction: discord.Interaction):
     await handle_trades_clear(InteractionReply(interaction))
 
 
-@bot.tree.command(name="trades-clear-history", description="Clear all closed trade records (open trades are kept)")
+@bot.tree.command(name="trades-clear-history",
+                  description="Archive closed history, then reset realized P&L and drawdown (open trades kept)")
 @app_commands.default_permissions(administrator=True)
 @app_commands.checks.has_permissions(administrator=True)
-async def slash_trades_clear_history(interaction: discord.Interaction):
-    await handle_trades_clear_history(InteractionReply(interaction))
+@app_commands.describe(force="Reset even while the kill switch is tripped (it stays tripped)")
+async def slash_trades_clear_history(interaction: discord.Interaction, force: bool = False):
+    await handle_trades_clear_history(InteractionReply(interaction), force=force)
 
 
 trade_group = app_commands.Group(name="trade", description="Show or delete one logged trade")

@@ -11,6 +11,7 @@ import tempfile
 import discord
 
 from swingbot.commands import trades as trades_mod
+from swingbot.core.tracking import account_reset
 from swingbot.core.tracking.plan_links import DeleteResult, EndedPlan
 from tests.commands.reply_harness import ParityCase
 
@@ -51,9 +52,6 @@ class _FakeLog:
 
     def clear_open(self):
         return DeleteResult(sum(1 for t in self.trades if t["status"] == "open"))
-
-    def clear_history(self):
-        return sum(1 for t in self.trades if t["status"] != "open")
 
     def get_trade_by_id(self, trade_id):
         return next((t for t in self.trades if t["id"] == trade_id), None)
@@ -115,6 +113,30 @@ def _stub(trades=ALL_TRADES, chart=_chart_for_open):
     return stub
 
 
+_RESET = account_reset.ResetResult(
+    removed_trades=2, removed_plans=1,
+    archive_path="/app/data/archives/account-reset-20261009T143000Z.json",
+    throttle_multiplier=1.0, throttle_paused=False, kill_on=False,
+    base_balance=10_000.0, reset_at="2026-10-09T14:30:00+00:00")
+
+
+def _reset_stub(outcome=_RESET):
+    """The trades stub plus a canned account reset (a ResetResult, or an
+    exception to raise)."""
+    base = _stub()
+
+    def stub(monkeypatch):
+        base(monkeypatch)
+
+        def fake(*, force=False, now=None):
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        monkeypatch.setattr(trades_mod.account_reset, "reset_closed_history", fake)
+    return stub
+
+
 def _ending_stub(monkeypatch):
     _stub()(monkeypatch)
     monkeypatch.setattr(trades_mod, "trade_log", _EndingLog(ALL_TRADES))
@@ -127,7 +149,17 @@ CASES = [
     ParityCase("trades_bad_status", trades_mod.handle_trades, args=("pending",),
                stub=_stub(), expect="error"),
     ParityCase("trades_clear", trades_mod.handle_trades_clear, stub=_stub()),
-    ParityCase("trades_clear_history", trades_mod.handle_trades_clear_history, stub=_stub()),
+    ParityCase("trades_clear_history", trades_mod.handle_trades_clear_history, stub=_reset_stub()),
+    ParityCase("trades_clear_history_force", trades_mod.handle_trades_clear_history,
+               kwargs={"force": True}, stub=_reset_stub()),
+    ParityCase("trades_clear_history_refused", trades_mod.handle_trades_clear_history,
+               stub=_reset_stub(account_reset.ResetRefused(account_reset.REFUSED_TEXT)),
+               expect="error"),
+    ParityCase("trades_clear_history_archive_failed", trades_mod.handle_trades_clear_history,
+               stub=_reset_stub(account_reset.ArchiveFailed(
+                   "Reset aborted: the archive account-reset-x.json could not be written "
+                   "(disk full). Nothing was deleted.")),
+               expect="error"),
     ParityCase("trade_show_with_chart", trades_mod.handle_trade_show, args=("T0001",), stub=_stub()),
     ParityCase("trade_show_closed_no_chart", trades_mod.handle_trade_show, args=("T0002",), stub=_stub()),
     ParityCase("trade_show_missing", trades_mod.handle_trade_show, args=("NOPE",),

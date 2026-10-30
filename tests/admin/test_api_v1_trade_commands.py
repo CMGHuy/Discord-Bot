@@ -235,7 +235,7 @@ def test_clear_history_leaves_open_trades(seed, logged_in):
         _trade("cccccccccccccccc", plan_id=None, status="win"),
     ])
     r = logged_in.post("/api/v1/trades/clear-history")
-    assert r.get_json() == {"removed": 1}
+    assert r.get_json()["removed"] == 1
     remaining = logged_in.get("/api/v1/trades").get_json()["items"]
     assert [t["status"] for t in remaining] == ["ACTIVE"]
 

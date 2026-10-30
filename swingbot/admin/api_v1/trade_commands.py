@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 
 from flask import jsonify, request
 
@@ -30,6 +31,7 @@ from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, LockTimeout, transact
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.tracking.performance import TradeLog, run_after_commit
 from swingbot.core.tracking.performance import _usable_price
+from swingbot.core.tracking import account_reset
 from swingbot.core.tracking.plan_links import describe_ended
 from swingbot.core.planning.plan_engine import (PlanStatus, plan_from_dict, plan_to_dict,
                                                 record_transition)
@@ -362,10 +364,41 @@ def clear_open():
     return jsonify({"removed": result.removed, **_ended_body(result)})
 
 
+_TRUE_WORDS = frozenset({"1", "true", "yes"})
+
+
+def _force_requested() -> bool:
+    """`?force=true` (or 1/yes), or a JSON object body `{"force": true}`.
+    Anything else, including a JSON "yes", is no force."""
+    if request.args.get("force", "").strip().lower() in _TRUE_WORDS:
+        return True
+    body = request.get_json(silent=True)
+    return isinstance(body, dict) and body.get("force") is True
+
+
+def _reset_payload(result: account_reset.ResetResult) -> dict:
+    return {
+        "removed": result.removed_trades,
+        "removed_plans": result.removed_plans,
+        "archive": Path(result.archive_path).name,
+        "throttle": {"multiplier": result.throttle_multiplier, "paused": result.throttle_paused},
+        "kill_switch": result.kill_on,
+        "notice": account_reset.describe_reset(result),
+    }
+
+
 @api_v1.route("/trades/clear-history", methods=["POST"])
 @require_auth
 def clear_history():
-    return jsonify({"removed": TradeLog().clear_history()})
+    """v189 A6: the archived full reset. 409 while the kill switch is tripped
+    unless forced; 500 when the archive cannot be written (nothing deleted)."""
+    try:
+        result = account_reset.reset_closed_history(force=_force_requested())
+    except account_reset.ResetRefused as exc:
+        return error("kill_switch_tripped", str(exc), 409)
+    except account_reset.ArchiveFailed as exc:
+        return error("archive_failed", str(exc), 500)
+    return jsonify(_reset_payload(result))
 
 
 _CLOSE_SCOPES = {
