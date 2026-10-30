@@ -66,6 +66,30 @@ def _spy_close(trade_log, monkeypatch, *, fail_times: int) -> list:
     return calls
 
 
+# --- _step_safely: which skips count as check errors --------------------------------
+
+def _raising_step(monkeypatch, mgr, exc):
+    def step(plan, price, now):
+        raise exc
+    monkeypatch.setattr(mgr, "_step", step)
+
+
+def test_a_locked_plan_is_skipped_without_a_check_error(monkeypatch):
+    mgr = PlanManager(PlanStore(), lambda ticker: 100.0)
+    _raising_step(monkeypatch, mgr, plan_manager.LockTimeout("row locked"))
+    assert mgr._step_safely(_active(), 100.0, SATURDAY) is None
+    assert mgr.last_poll_check_errors == []
+
+
+@pytest.mark.parametrize("exc", [RuntimeError("boom"), plan_manager.PlanPersistFailed("p1")],
+                         ids=["unexpected", "persist_failed"])
+def test_a_failed_step_is_recorded_as_a_check_error(monkeypatch, exc):
+    mgr = PlanManager(PlanStore(), lambda ticker: 100.0)
+    _raising_step(monkeypatch, mgr, exc)
+    assert mgr._step_safely(_active(), 100.0, SATURDAY) is None
+    assert mgr.last_poll_check_errors == ["AAPL"]
+
+
 # --- retry once ------------------------------------------------------------------------
 
 def test_a_failed_exit_is_retried_once_with_the_same_price(trade_log, monkeypatch, caplog):
