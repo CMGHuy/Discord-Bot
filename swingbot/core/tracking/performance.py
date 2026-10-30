@@ -331,53 +331,21 @@ def closed_pnl_pct(t: dict) -> float | None:
 
 
 def closed_r_multiple(t: dict) -> float | None:
-    """Realized R-multiple for a closed trade: actual P&L against the
-    ORIGINALLY-planned risk (entry -> the plan's starting stop_loss), not
-    wherever a break-even/trail move may have since tightened it to.
+    """Realized R-multiple for a closed trade, rounded to 2 dp.
 
-    Same last-leg-only bug as closed_pnl_pct (which see) applies to R too:
-    a plain (exit_price - entry) / risk calculation only ever prices the
-    RUNNER's own leg for a scaled-out trade, dropping the TP1 leg's R
-    entirely. Each leg already carries its own `r` -- computed live by
-    plan_manager.py's _step_active/_close_runner against this exact same
-    original-risk denominator -- so the correct blended R-multiple is
-    simply the fraction-weighted sum of those (identical to how
-    plan_engine.py's own backtest simulator computes r_total for a
-    two-leg exit: `frac1 * rr + frac2 * r2`). A leg missing `r` (should
-    not happen on any trade logged after legs existed, but cheap to guard)
-    falls back to deriving it from that leg's own exit_price.
+    v189 D1: a thin delegate to `metrics.r_multiple`, the one trade-level R
+    (fraction-weighted across legs, against the ORIGINALLY-planned risk,
+    entry -> the plan's starting stop_loss). This used to be a second copy
+    of the same blend; the only behaviour difference is that a record whose
+    direction is not exactly ``bullish``/``bearish`` now returns None instead
+    of being priced as a short.
 
-    Falls back to the plain single-exit formula for a trade with no legs,
-    where the two agree exactly anyway.
+    Imported lazily: `swingbot.core.analytics`'s package ``__init__`` pulls in
+    modules that import this one.
     """
-    legs = t.get("legs")
-    if legs:
-        entry, stop_loss = t.get("entry"), t.get("stop_loss")
-        if not entry or not stop_loss:
-            return None
-        risk = abs(entry - stop_loss)
-        if not risk:
-            return None
-        sign = 1 if t.get("direction") == "bullish" else -1
-        total = 0.0
-        for leg in legs:
-            r = leg.get("r")
-            if r is None:
-                exit_p = leg.get("exit_price")
-                if exit_p is None:
-                    return None
-                r = (exit_p - entry) * sign / risk
-            total += leg.get("fraction", 0) * r
-        return round(total, 2)
-
-    ex, en, sl_v = t.get("exit_price"), t.get("entry"), t.get("stop_loss")
-    if not ex or not en or not sl_v:
-        return None
-    risk = abs(en - sl_v)
-    if not risk:
-        return None
-    realized = (ex - en) if t.get("direction") == "bullish" else (en - ex)
-    return round(realized / risk, 2)
+    from swingbot.core.analytics import metrics
+    r = metrics.r_multiple(t)
+    return None if r is None else round(r, 2)
 
 
 def _leg_status(leg: dict, entry: float | None, direction: str | None) -> str:
