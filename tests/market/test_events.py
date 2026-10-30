@@ -20,6 +20,15 @@ def _earnings_index(*timestamps: dt.datetime) -> pd.DatetimeIndex:
     return pd.DatetimeIndex(timestamps, name="Earnings Date")
 
 
+_EDT = dt.timezone(dt.timedelta(hours=-4))
+
+
+def _days_ahead(days: int) -> dt.datetime:
+    """16:00 EDT, `days` calendar days from today -- always in the future."""
+    day = dt.datetime.now(_EDT).date() + dt.timedelta(days=days)
+    return dt.datetime(day.year, day.month, day.day, 16, 0, tzinfo=_EDT)
+
+
 def _frame(*timestamps: dt.datetime) -> pd.DataFrame:
     # A real yfinance response always carries EPS Estimate/Reported EPS/
     # Surprise(%) columns. This matters here, not just for realism: a
@@ -84,8 +93,8 @@ def one_candidate(monkeypatch):
 def test_returns_the_nearest_future_timestamp(monkeypatch):
     tz = dt.timezone(dt.timedelta(hours=-4))  # America/New_York, EDT
     past = dt.datetime(2020, 1, 1, 16, 0, tzinfo=tz)
-    near_future = dt.datetime(2026, 10, 29, 16, 0, tzinfo=tz)
-    far_future = dt.datetime(2027, 1, 28, 16, 0, tzinfo=tz)
+    near_future = _days_ahead(30)
+    far_future = _days_ahead(120)
     frame = _frame(far_future, past, near_future)  # deliberately unsorted
     monkeypatch.setattr(events.yf, "Ticker", lambda symbol: _FakeTicker(frame))
 
@@ -132,14 +141,14 @@ def test_the_returned_datetime_converts_correctly_to_utc(monkeypatch):
     # 16:00 EDT (UTC-4) is 20:00 UTC -- the exact AAPL case from manual
     # verification against the real yfinance API.
     tz = dt.timezone(dt.timedelta(hours=-4))
-    upcoming = dt.datetime(2026, 10, 29, 16, 0, tzinfo=tz)
+    upcoming = _days_ahead(30)
     frame = _frame(upcoming)
     monkeypatch.setattr(events.yf, "Ticker", lambda symbol: _FakeTicker(frame))
 
     result = events.get_next_earnings_datetime("AAPL")
 
     assert result.astimezone(dt.timezone.utc) == dt.datetime(
-        2026, 10, 29, 20, 0, tzinfo=dt.timezone.utc)
+        upcoming.year, upcoming.month, upcoming.day, 20, 0, tzinfo=dt.timezone.utc)
 
 
 # --- caching: the fix for the 23s watchlist load ---------------------------
@@ -179,7 +188,7 @@ def test_peek_returns_not_cached_before_anything_has_been_fetched():
 
 def test_peek_returns_the_cached_value_without_fetching(monkeypatch):
     tz = dt.timezone(dt.timedelta(hours=-4))
-    upcoming = dt.datetime(2026, 10, 29, 16, 0, tzinfo=tz)
+    upcoming = _days_ahead(30)
     monkeypatch.setattr(events.yf, "Ticker", lambda symbol: _FakeTicker(_frame(upcoming)))
     events.get_next_earnings_datetime("AAPL")  # populates the cache
 
@@ -192,7 +201,7 @@ def test_peek_returns_the_cached_value_without_fetching(monkeypatch):
 
 def test_warm_earnings_cache_background_populates_the_cache(monkeypatch):
     tz = dt.timezone(dt.timedelta(hours=-4))
-    upcoming = dt.datetime(2026, 10, 29, 16, 0, tzinfo=tz)
+    upcoming = _days_ahead(30)
     monkeypatch.setattr(events.yf, "Ticker", lambda symbol: _FakeTicker(_frame(upcoming)))
 
     thread = events.warm_earnings_cache_background(["AAPL"])
