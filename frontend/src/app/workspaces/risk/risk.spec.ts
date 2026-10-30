@@ -288,6 +288,59 @@ async function render(overrides: Partial<RiskData> = {}, extra: Provider[] = [])
   return fixture;
 }
 
+/* -- v189 B4: risk of loss beside enforced heat, never instead of it -------- */
+
+describe('Risk of loss beside enforced heat (v189 B4)', () => {
+  const rows = [
+    { trade_id: 't1', ticker: 'AAPL', strategy: 'VWAP', shares: 10, entry: 100, stop_loss: 95,
+      risk_pct: 3, risk_of_loss_amount: 50, risk_of_loss_pct: 0.5 },
+    { trade_id: 't2', ticker: 'MSFT', strategy: 'RSI', shares: 50, entry: 100, stop_loss: 106.67,
+      risk_pct: 2.5, risk_of_loss_amount: 0, risk_of_loss_pct: 0 },          // the golden runner at its floor
+    { trade_id: 't3', ticker: 'NVDA', strategy: 'RSI', shares: 20, entry: 50, stop_loss: 48,
+      risk_pct: 0.4, risk_of_loss_amount: null, risk_of_loss_pct: null },    // a PENDING placeholder
+  ];
+  const heat = { open_pct: 5.9, cap_pct: 6, utilisation_pct: 98 };
+  const el = async () => (await render({ positions: rows, heat })).nativeElement as HTMLElement;
+
+  it('labels the gauge figure as the enforced heat and keeps it on open_pct', async () => {
+    const page = await el();
+    const figure = page.querySelector('.heat')!;
+    expect(figure.textContent).toContain('Heat (enforced)');
+    expect(figure.textContent).toContain('5.90%');
+  });
+
+  it('shows the risk of loss to the stop as its own figure, summed over the rows that have one', async () => {
+    const line = (await el()).querySelector('[data-testid="risk-of-loss"]')!;
+    expect(line.closest('sb-panel')!.getAttribute('heading')).toBe('Portfolio heat');
+    expect(line.textContent).toContain('Risk of loss (to stop)');
+    expect(line.textContent).toContain('50');
+    expect(line.textContent).toContain('0.50%');
+    expect(line.querySelector('[role="meter"]')).toBeNull();               // never a gauge against the cap
+  });
+
+  it('says both figures assume a fill at the stop', async () => {
+    expect((await el()).querySelector('[data-testid="stop-fill-hint"]')!.textContent)
+      .toContain('assume a fill at the stop; a gap through it loses more');
+  });
+
+  it('adds a Risk of loss column whose footer sums the rows, beside the Risk % that sums to heat', async () => {
+    // sb-data-table puts no data-col on desktop th/td: read header and footer cells by index.
+    const table = (await el()).querySelector('sb-data-table')!;
+    const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent!.trim());
+    const footer = [...table.querySelectorAll('tfoot td')].map((td) => td.textContent!.trim());
+    const at = (label: string) => footer[headers.findIndex((h) => h.startsWith(label))];
+    expect(headers.some((h) => h.startsWith('Risk of loss'))).toBe(true);
+    expect(at('Risk of loss')).toBe('50.00');
+    expect(at('Risk %')).toBe('5.90%');
+  });
+
+  it('reads no figure as no figure, not zero', async () => {
+    const fixture = await render({ positions: [rows[2]], heat });
+    const line = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="risk-of-loss"]')!;
+    expect(line.textContent).toContain('—');
+  });
+});
+
 describe('Risk gauge, budget and correlation matrix', () => {
   it('reports heat once without a gauge', async () => {
     const el = (await render({ heat: { open_pct: 3.1, cap_pct: 6, utilisation_pct: 52 } }))
@@ -466,7 +519,7 @@ describe('Risk exposure on a phone (v179 §3.1)', () => {
     openRowDrawer(table);
     fixture.detectChanges();
     expect([...new Set([...compactKeys(table), ...drawerKeys(table)])].sort())
-      .toEqual(['entry', 'risk_pct', 'shares', 'stop_loss', 'strategy', 'ticker']);
+      .toEqual(['entry', 'risk_of_loss', 'risk_pct', 'shares', 'stop_loss', 'strategy', 'ticker']);
     expect(table.querySelector('a.drawer-detail-link')!.getAttribute('href')).toBe('/trades/t1');
   });
 });
@@ -597,7 +650,7 @@ describe('Risk exact tiny figures across device classes (v194 B5)', () => {
         trigger!.click();
         fixture.detectChanges();
       }
-      const footer = root.querySelector(device === 'xs' ? '.compact-footer [data-col="risk_pct"]' : 'tfoot td:last-child')!;
+      const footer = root.querySelector(device === 'xs' ? '.compact-footer [data-col="risk_pct"]' : 'tfoot td:nth-last-child(2)')!;
       expect(footer.textContent).toContain('<0.01%');
       expect(footer.querySelector('sb-hint button')!.getAttribute('aria-label')).toBe('Exact Risk % total');
     });
@@ -822,7 +875,7 @@ it('keeps position identities while explaining incomplete R and sector coverage'
   expect(root.textContent).toContain('1 invalid outcomes');
   expect(root.textContent).toContain('Quote returns');
   expect(root.textContent).toContain('historical FX returns excluded');
-  expect(root.querySelector('tfoot td:last-child')?.textContent?.trim()).toBe('—');
+  expect(root.querySelector('tfoot td:nth-last-child(2)')?.textContent?.trim()).toBe('—');
 });
 
 it('keeps the confirmed action when a fresh observation arrives while the dialog is open', async () => {

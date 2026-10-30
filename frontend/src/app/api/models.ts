@@ -419,7 +419,14 @@ export interface Dashboard {
   open_pnl_amount: number | null;
   /** v194 B7: closes and positions left out of the money figures for want of a rate (main ledger). */
   fx_missing_count?: number;
-  risk_used_pct: number | null;
+  /** v189 B4: `heat.open_heat` -- the figure the scanner gates new alerts on
+   *  (was `risk_used_pct`). */
+  heat_enforced_pct: number | null;
+  /** v189 B4: what fills at the current working stops would still lose below
+   *  entry, filled positions only, floored at 0 per position. Display only;
+   *  never a gauge against `risk_cap_pct`. Null when unknown. */
+  risk_of_loss_pct: number | null;
+  risk_of_loss_amount: number | null;
   risk_cap_pct: number | null;
   open_trades: number;
   avg_confidence: number | null;
@@ -1384,6 +1391,11 @@ export interface RiskPosition {
   entry: number | null;
   stop_loss: number | null;
   risk_pct: number | null;
+  /** v189 B4: risk of loss to the working stop for this row; null for a
+   *  PENDING placeholder. `risk_pct` still sums to `heat.open_pct`.
+   *  Optional so pre-v189 fixtures stay valid. */
+  risk_of_loss_amount?: number | null;
+  risk_of_loss_pct?: number | null;
 }
 
 export interface SectorHeat {
