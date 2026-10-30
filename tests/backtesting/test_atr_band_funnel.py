@@ -227,3 +227,139 @@ def test_stage1_missing_neighbour_expectancy_prevents_selection():
     out = funnel.stage1(rows, "K", cells=(0.75,), n_resamples=N)
     assert out["selected"] is None and out["verdict"] == "NO_ELIGIBLE_CELL"
     assert out["cells"][0]["eligible"] and not out["cells"][0]["plateau"]
+
+
+# --- Stage 2 -------------------------------------------------------------------------------
+
+def _years(lifts_by_year, n_tickers_by_year=None):
+    sizes = n_tickers_by_year or {}
+    return {year: lifted_band_rows({"k1": lift}, year=year, n_tickers=sizes.get(year, 20))
+            for year, lift in lifts_by_year.items()}
+
+
+def test_stage2_passes_with_two_positive_folds():
+    out = funnel.stage2(_years({2021: 0.3, 2022: -0.2, 2023: 0.1}), "K", "k1")
+    assert out["verdict"] == "PASS" and out["positive"] == 2
+    assert [f["year"] for f in out["folds"]] == [2021, 2022, 2023]
+    assert out["folds"][0]["n"] == 80
+
+
+def test_stage2_a_fold_under_n30_never_counts_as_positive():
+    out = funnel.stage2(_years({2021: 0.3, 2022: -0.2, 2023: 0.4}, {2023: 5}), "K", "k1")
+    assert out["folds"][2]["n"] == 20 and out["folds"][2]["positive"] is False
+    assert out["verdict"] == "FAIL"
+
+
+def test_stage2_a_missing_year_is_an_empty_fold():
+    out = funnel.stage2(_years({2021: 0.3, 2022: 0.3}), "K", "k1")
+    assert out["folds"][2]["n"] == 0 and out["verdict"] == "PASS"
+
+
+def test_stage2_reads_only_the_floor_moved_stratum():
+    by_year = _years({2021: 0.3, 2022: 0.3, 2023: 0.3})
+    for rows in by_year.values():
+        for r in rows:
+            r["moved_by"]["k1"] = "ceiling"
+    assert funnel.stage2(by_year, "K", "k1")["verdict"] == "FAIL"
+
+
+# --- Stage 3 -------------------------------------------------------------------------------
+
+def test_stage3_passes_a_clear_lift_with_its_permutation_p():
+    out = funnel.stage3(lifted_band_rows({"k1": 0.3}, year=2024), "K", "k1", n_resamples=N)
+    assert (out["stage"], out["arm"], out["cell"], out["verdict"]) == (3, "K", "k1", "PASS")
+    assert out["permutation_p"] is not None and out["permutation_p"] < 0.05
+    assert out["n_permutations"] == 200
+    assert {c["name"] for c in out["gate"]["clauses"]} >= {"expectancy_gain", "permutation"}
+
+
+def test_stage3_fails_a_loss():
+    out = funnel.stage3(lifted_band_rows({"k1": -0.3}, year=2024), "R", "k1", n_resamples=N)
+    assert out["verdict"] == "FAIL"
+
+
+def test_stage3_scores_the_floor_stratum_alone():
+    rows = (lifted_band_rows({"k1": -0.3}, year=2024)
+            + lifted_band_rows({"k1": 3.0}, year=2025, moved="untouched"))
+    assert funnel.stage3(rows, "K", "k1", n_resamples=N)["verdict"] == "FAIL"
+
+
+# --- Holm family ------------------------------------------------------------------------------
+
+def test_holm_family_a_missing_arm_enters_as_p_one():
+    out = funnel.holm_family({"K": {"verdict": "PASS", "permutation_p": 0.01}, "R": None})
+    assert out["primary"] == "K" and out["method"] == "holm" and out["alpha"] == 0.05
+    assert out["arms"]["R"]["p"] == 1.0 and out["arms"]["R"]["reached_stage3"] is False
+    assert out["arms"]["K"]["p_holm"] == pytest.approx(0.02)
+    assert out["arms"]["R"]["p_holm"] == pytest.approx(1.0)
+    assert out["arms"]["K"]["pass"] is True and out["arms"]["R"]["pass"] is False
+    assert out["passed"] == ["K"]
+    assert set(out["arms"]["K"]) >= {"q_bh", "stage3_verdict"}
+
+
+def test_holm_family_step_down_with_both_arms():
+    out = funnel.holm_family({"K": {"verdict": "PASS", "permutation_p": 0.04},
+                              "R": {"verdict": "PASS", "permutation_p": 0.03}})
+    assert out["arms"]["R"]["p_holm"] == pytest.approx(0.06)     # smallest p x 2
+    assert out["arms"]["K"]["p_holm"] == pytest.approx(0.06)     # max(0.06, 1 x 0.04)
+    assert out["passed"] == []
+
+
+def test_holm_family_a_stage3_fail_never_passes_and_a_none_p_is_one():
+    out = funnel.holm_family({"K": {"verdict": "FAIL", "permutation_p": 0.001},
+                              "R": {"verdict": "PASS", "permutation_p": None}})
+    assert out["arms"]["K"]["pass"] is False
+    assert out["arms"]["R"]["p"] == 1.0 and out["arms"]["R"]["pass"] is False
+
+
+# --- report -------------------------------------------------------------------------------------
+
+def _report_rows():
+    rows = lifted_band_rows({"k1": 0.3}, n_tickers=2)
+    rows += lifted_band_rows({"k1": -0.1}, n_tickers=2, moved="untouched", year=2022)
+    rows.append(band_row(None, {"k1": band_record("T50", "2021-05-17", "win", 2.0)}))
+    rows.append(band_row(band_record("T60", "2021-06-15", "loss", -1.0, moved=None,
+                                     direction="bearish"),
+                         {"k1": band_record("T60", "2021-06-15", "loss", -1.3, pnl=-140.0,
+                                            exceeds=True, direction="bearish")}))
+    return rows
+
+
+def test_report_carries_every_spec_figure():
+    out = funnel.report(_report_rows(), "K", "k1", n_resamples=N)
+    assert (out["arm"], out["cell"], out["decision_stratum"]) == ("K", "k1", "floor")
+    assert out["floor_moved"]["n_rows"] == 10
+    assert set(out["by_moved_by"]) == {"floor", "untouched"}
+    assert set(out["by_direction"]) == {"bullish", "bearish"}
+    assert set(out["by_horizon"]) == {"4w"} and out["top_two_horizon_share"] == 1.0
+    assert out["regime2"] == {"unknown": out["regime2"]["unknown"]}
+
+
+def test_report_carries_dollar_volume_and_geometry_disclosures():
+    out = funnel.report(_report_rows(), "K", "k1", n_resamples=N)
+    assert out["dollars"]["component"]["exceed_bearish"] == 1
+    assert out["dollars"]["component"]["exceed_bullish"] == 0
+    assert out["newly_admitted"]["n"] == 1 and out["newly_admitted"]["max_per_day"] == 1
+    assert out["newly_admitted"]["median_adv_dollars"] == 5e7
+    assert out["volume"]["n_component"] - out["volume"]["n_baseline"] == 1
+    assert out["stop_distance"]["median_atr"] == {"baseline": pytest.approx(0.44),
+                                                  "component": pytest.approx(1.0)}
+    assert set(out["exits"]["component"]) >= {"exit_mix", "early_stops", "gap_through",
+                                              "mean_gap_overshoot_r", "fill_beyond_ceiling"}
+    assert set(out["median_planned_rr"]) == {"baseline", "component"}
+
+
+def test_report_interval_brackets_the_synthetic_lift():
+    out = funnel.report(_report_rows(), "K", "k1", n_resamples=N)
+    lo, hi = out["floor_moved"]["delta_expr_lo95"], out["floor_moved"]["delta_expr_hi95"]
+    assert lo is not None and hi is not None and lo <= out["floor_moved"]["delta_expr"] <= hi
+
+
+def test_report_on_an_empty_stratum_has_no_numbers_and_no_crash():
+    out = funnel.report(lifted_band_rows({"k1": 0.3}, moved="untouched"), "R", "k1",
+                        n_resamples=N)
+    assert out["floor_moved"]["n_rows"] == 0
+    assert out["floor_moved"]["delta_expr"] is None
+    assert out["floor_moved"]["delta_expr_lo95"] is None
+    assert out["newly_admitted"]["mean_per_day"] is None
+    assert out["top_two_horizon_share"] is None

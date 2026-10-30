@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import statistics
 from collections import Counter
 
 import numpy as np
@@ -21,12 +22,17 @@ from swingbot import config
 from swingbot.core.market.atr_band import (MOVED_CEILING, MOVED_FLOOR, MOVED_UNTOUCHED,
                                            REASON_NO_TARGET, REASON_RR_DROP)
 
-from .acceptance import (BOOTSTRAP_RESAMPLES, CLOSED, delta_expectancy_r, mde_paired,
-                         project_target_n, render_json)
-from .acceptance_exit_funnel import ELIGIBILITY_CLAUSES, arm_trades
+from swingbot.core.backtesting.instrument.stats import ledger_qvalues
+
+from .acceptance import (BOOTSTRAP_RESAMPLES, CLOSED, bootstrap_delta, delta_expectancy_r,
+                         expectancy_r, mde_paired, median_planned_rr, project_target_n,
+                         render_json, win_rate)
+from .acceptance_exit_funnel import (ELIGIBILITY_CLAUSES, PERMUTATION_N, _flips, _pp, _sides,
+                                     _triggered_once, arm_trades, sign_flip_p)
 from .acceptance_harvest import evaluate_harvest
 from .atr_band_replay import FLOOR_KNOB, K_STEPS, REFERENCE_ACCOUNT, cell_key
 from .backtest_wf import PLATEAU_TOLERANCE_R, plateau_report
+from .giveback_levels_funnel import holm
 
 FOLD_TRAIN = ("2018-06-01", "2022-12-31")
 VALIDATION = ("2024-01-01", "2025-12-31")
@@ -239,3 +245,207 @@ def stage1(rows, arm, cells=K_STEPS, *, n_resamples: int = BOOTSTRAP_RESAMPLES,
     return {"stage": 1, "arm": arm, "verdict": "SELECTED" if selected else "NO_ELIGIBLE_CELL",
             "selected": selected, "tolerance_r": PLATEAU_TOLERANCE_R,
             "cells": list(table.values())}
+
+
+#: The Holm family (spec § Gate): arm K primary, arm R second, never pooled.
+FAMILY = ("K", "R")
+PRIMARY_ARM = "K"
+
+
+# --- Stage 2 -------------------------------------------------------------------------
+
+def _fold(rows, key, year) -> dict:
+    baseline, component = arm_trades(floor_moved(rows, key), key)
+    n = sum(1 for t in component if t.outcome in CLOSED)
+    delta = delta_expectancy_r(baseline, component)
+    measurable = n >= MIN_FOLD_N and delta is not None
+    return {"year": year, "n": n, "delta_expr": delta, "measurable": measurable,
+            "positive": measurable and delta > 0}
+
+
+def stage2(rows_by_year: dict, arm, key) -> dict:
+    """Walk-forward folds 2021 / 2022 / 2023 for the selected cell: PASS when
+    at least MIN_POSITIVE_FOLDS folds carry N >= MIN_FOLD_N and dExpR > 0."""
+    folds = [_fold(rows_by_year.get(year, []), key, year) for year in FOLD_YEARS]
+    positive = sum(1 for fold in folds if fold["positive"])
+    return {"stage": 2, "arm": arm, "cell": key,
+            "verdict": "PASS" if positive >= MIN_POSITIVE_FOLDS else "FAIL",
+            "positive": positive, "min_positive": MIN_POSITIVE_FOLDS,
+            "min_fold_n": MIN_FOLD_N, "folds": folds}
+
+
+# --- Stage 3 -------------------------------------------------------------------------
+
+def stage3(rows, arm, key, *, n_resamples: int = BOOTSTRAP_RESAMPLES, seed: int = 42) -> dict:
+    """The one VALIDATION shot for the selected cell: all four harvest
+    clauses on the floor-moved stratum, week-clustered, permutation n = 200."""
+    baseline, component = arm_trades(floor_moved(rows, key), key)
+    p = sign_flip_p(baseline, component)
+    result = evaluate_harvest(baseline, component, stage="validation", permutation_p=p,
+                              n_resamples=n_resamples, seed=seed, cluster=CLUSTER)
+    return {"stage": 3, "arm": arm, "cell": key, "verdict": result.verdict,
+            "permutation_p": p, "n_permutations": PERMUTATION_N, "gate": render_json(result)}
+
+
+# --- the family ----------------------------------------------------------------------
+
+def _family_p(out) -> float:
+    p = None if out is None else out.get("permutation_p")
+    return 1.0 if p is None else float(p)
+
+
+def _family_arm(out, p, p_holm, q) -> dict:
+    verdict = None if out is None else out.get("verdict")
+    return {"reached_stage3": out is not None, "stage3_verdict": verdict, "p": p,
+            "p_holm": p_holm, "q_bh": q, "pass": verdict == "PASS" and p_holm < HOLM_ALPHA}
+
+
+def holm_family(stage3_by_arm: dict) -> dict:
+    """Holm across the two arms' Stage 3 permutation p. An arm that never
+    reached Stage 3 (or carries no p) enters as p = 1.0. BH q is reported."""
+    pvalues = {arm: _family_p(stage3_by_arm.get(arm)) for arm in FAMILY}
+    adjusted = holm(pvalues)
+    qvalues = ledger_qvalues([{"id": arm, "p": p} for arm, p in pvalues.items()])
+    arms = {arm: _family_arm(stage3_by_arm.get(arm), pvalues[arm], adjusted[arm], qvalues[arm])
+            for arm in FAMILY}
+    return {"stage": "family", "method": "holm", "alpha": HOLM_ALPHA, "primary": PRIMARY_ARM,
+            "arms": arms, "passed": [arm for arm in FAMILY if arms[arm]["pass"]]}
+
+
+# --- report (spec § Reporting; informational, nothing gates) -----------------------------
+
+def _median(values) -> float | None:
+    vals = [v for v in values if v is not None]
+    return float(statistics.median(vals)) if vals else None
+
+
+def _summary(rows, key, n_resamples, seed, *, interval=True) -> dict:
+    baseline, component = arm_trades(rows, key)
+    wr_base, wr_cell = win_rate(baseline), win_rate(component)
+    out = {"n_rows": len(rows), "n_baseline": len(baseline), "n_component": len(component),
+           "expr_baseline": expectancy_r(baseline), "expr_component": expectancy_r(component),
+           "delta_expr": delta_expectancy_r(baseline, component),
+           "delta_expr_lo95": None, "delta_expr_hi95": None,
+           "wr_baseline": wr_base, "wr_component": wr_cell, "delta_wr_pp": _pp(wr_cell, wr_base),
+           "flips": _flips(rows, key)}
+    if interval and baseline and component:
+        boot = bootstrap_delta(baseline, component, delta_expectancy_r,
+                               n_resamples=n_resamples, seed=seed, cluster=CLUSTER)
+        out["delta_expr_lo95"], out["delta_expr_hi95"] = boot.lo, boot.hi
+    return out
+
+
+def _groups(rows, name_of) -> dict:
+    out: dict = {}
+    for row in rows:
+        out.setdefault(str(name_of(row)), []).append(row)
+    return dict(sorted(out.items()))
+
+
+def _by(rows, key, n_resamples, seed, name_of, *, interval=True) -> dict:
+    return {name: _summary(group, key, n_resamples, seed, interval=interval)
+            for name, group in _groups(rows, name_of).items()}
+
+
+def _regime_of(key):
+    def name(row):
+        record = row["cells"][key] or row["baseline"] or {}
+        return record.get("regime2_state") or "unknown"
+    return name
+
+
+def _top_two_share(rows, key) -> float | None:
+    counts = Counter(r["horizon_key"] for r in rows if r["cells"][key] is not None)
+    total = sum(counts.values())
+    return sum(n for _, n in counts.most_common(2)) / total if total else None
+
+
+def _dollar_side(records) -> dict:
+    out = {"pnl": round(sum(r["dollar_pnl"] for r in records), 2)}
+    for direction in ("bullish", "bearish"):
+        out[f"exceed_{direction}"] = sum(1 for r in records if r["direction"] == direction
+                                         and r["dollar_exceeds_budget"])
+    return out
+
+
+def _dollars(rows, key) -> dict:
+    base, comp = _sides(rows, key)
+    budget = REFERENCE_ACCOUNT["balance"] * REFERENCE_ACCOUNT["risk_pct"] / 100.0
+    return {"budget": budget, "baseline": _dollar_side(base), "component": _dollar_side(comp)}
+
+
+def _two_sided_median(base, comp, field, horizon=None) -> dict:
+    def pick(records):
+        return _median(r[field] for r in records if horizon is None or r["horizon_key"] == horizon)
+    return {"baseline": pick(base), "component": pick(comp)}
+
+
+def _stop_distance(rows, key) -> dict:
+    base, comp = _sides(rows, key)
+    horizons = sorted({r["horizon_key"] for r in base + comp})
+    return {"median_pct": _two_sided_median(base, comp, "stop_distance_pct"),
+            "median_atr": _two_sided_median(base, comp, "stop_distance_atr"),
+            "median_pct_by_horizon": {h: _two_sided_median(base, comp, "stop_distance_pct", h)
+                                      for h in horizons}}
+
+
+def _newly(rows, key) -> dict:
+    new = [r for r in rows if r["newly_admitted"][key]]
+    per_day = Counter(r["entry_date"] for r in new)
+    return {"n": len(new), "alert_days": len(per_day),
+            "max_per_day": max(per_day.values(), default=0),
+            "mean_per_day": len(new) / len(per_day) if per_day else None,
+            "median_adv_dollars": _median(r["adv_dollars"] for r in new)}
+
+
+def _mean_gap_overshoot(records) -> float | None:
+    overshoots = [r["gap_overshoot_r"] for r in records
+                  if r["gap_through"] and r["gap_overshoot_r"] is not None]
+    return sum(overshoots) / len(overshoots) if overshoots else None
+
+
+def _exit_side(records) -> dict:
+    return {"exit_mix": dict(Counter(r["exit_mix"] for r in records)),
+            "early_stops": sum(1 for r in records if r["early_stop"]),
+            "gap_through": sum(1 for r in records if r["gap_through"]),
+            "mean_gap_overshoot_r": _mean_gap_overshoot(records),
+            "fill_beyond_ceiling": sum(1 for r in records if r["fill_beyond_ceiling"])}
+
+
+def _exits(rows, key) -> dict:
+    base, comp = _sides(rows, key)
+    return {"baseline": _exit_side(base), "component": _exit_side(comp)}
+
+
+def _volume(rows, key, baseline, component) -> dict:
+    n_base = sum(1 for t in baseline if t.outcome in CLOSED)
+    n_comp = sum(1 for t in component if t.outcome in CLOSED)
+    return {"n_baseline": n_base, "n_component": n_comp,
+            "change_pct": (n_comp - n_base) / n_base * 100.0 if n_base else None,
+            "removed_rows": sum(1 for r in rows
+                                if r["baseline"] is not None and r["cells"][key] is None)}
+
+
+def report(rows, arm, key, *, n_resamples: int = BOOTSTRAP_RESAMPLES, seed: int = 42) -> dict:
+    """Everything spec § Reporting asks for one arm and cell. The decision
+    stratum is floor-moved; the moved_by split covers every row."""
+    stratum = floor_moved(rows, key)
+    baseline, component = arm_trades(stratum, key)
+    only_base, only_cell = _triggered_once(stratum, key)
+    return {
+        "arm": arm, "cell": key, "decision_stratum": MOVED_FLOOR,
+        "floor_moved": _summary(stratum, key, n_resamples, seed),
+        "by_moved_by": _by(rows, key, n_resamples, seed, lambda r: r["moved_by"].get(key)),
+        "by_direction": _by(stratum, key, n_resamples, seed, lambda r: r["direction"]),
+        "by_horizon": _by(stratum, key, n_resamples, seed, lambda r: r["horizon_key"]),
+        "top_two_horizon_share": _top_two_share(stratum, key),
+        "regime2": _by(stratum, key, n_resamples, seed, _regime_of(key), interval=False),
+        "dollars": _dollars(stratum, key),
+        "stop_distance": _stop_distance(stratum, key),
+        "newly_admitted": _newly(stratum, key),
+        "exits": _exits(stratum, key),
+        "volume": _volume(stratum, key, baseline, component),
+        "median_planned_rr": {"baseline": median_planned_rr(baseline),
+                              "component": median_planned_rr(component)},
+        "only_baseline_triggered": only_base, "only_cell_triggered": only_cell,
+    }
