@@ -481,6 +481,14 @@ def _settle_reversal(trade_log, existing_trade: dict, live_price: float | None) 
         return None
 
 
+def _log_heat_block(ticker: str, enforced_pct: float, add_pct: float, cap_pct: float) -> None:
+    """v189 B4: name the ENFORCED heat whenever the portfolio cap flags an
+    alert, so the log never reads as headroom the dashboard's risk-of-loss
+    figure might suggest."""
+    log.info("heat blocked (enforced %.2f%% + %.2f%% > cap %.2f%%) %s",
+             enforced_pct, add_pct, cap_pct, ticker)
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
                     min_confluence: int = None, params: ScanParams | None = None) -> tuple:
     """
@@ -1203,6 +1211,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                                        candidate_risk_pct=account_cfg.get("risk_pct", 1.0))
         if not heat_chk["allowed"]:
             item.heat_blocked = heat_chk
+            _log_heat_block(result.ticker, heat_chk["open_heat"],
+                            account_cfg.get("risk_pct", 1.0), heat_chk["cap"])
 
         # Correlation-aware cluster cap (Edge plan E8): same flagged-not-
         # hidden pattern as E7. `dfs` reuses `fresh_data` -- every ticker's
