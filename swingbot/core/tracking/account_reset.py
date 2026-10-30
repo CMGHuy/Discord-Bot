@@ -49,6 +49,9 @@ REFUSED_TEXT = (
     "Reset refused: the kill switch is tripped. Release it first, or force the reset "
     "(`force=true` on the endpoint, `!trades clear history force` or "
     "`/trades-clear-history force:True`); the kill switch stays on either way.")
+LOCKED_TEXT = (
+    "The book is being updated by the bot right now; the reset was not run and nothing "
+    "was changed or archived. Try again in a moment.")
 
 
 class ResetRefused(Exception):

@@ -101,3 +101,14 @@ def test_the_slash_command_describes_its_force_option():
     [param] = command.parameters
     assert (param.name, param.required) == ("force", False)
     assert param.description == "Reset even while the kill switch is tripped (it stays tripped)"
+
+
+def test_a_lock_timeout_is_an_error_reply_that_says_nothing_changed(monkeypatch):
+    from swingbot.core.db.engine import LockTimeout
+
+    calls = _patch_reset(monkeypatch, LockTimeout("book held by the bot"))
+    reply = _Reply()
+    asyncio.run(trades_mod.handle_trades_clear_history(reply))
+    assert calls == [False]
+    assert reply.errors == [account_reset.LOCKED_TEXT]
+    assert reply.sent == []

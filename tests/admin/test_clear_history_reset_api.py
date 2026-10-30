@@ -98,3 +98,23 @@ def test_a_failed_archive_is_a_500_that_says_nothing_was_deleted(seed, logged_in
     assert_error(r, "archive_failed", 500)
     assert r.get_json()["error"]["message"] == text
     assert _statuses(logged_in) == ["ACTIVE", "CLOSED"]
+
+
+def test_a_lock_timeout_is_a_409_that_changed_nothing_and_left_no_archive(seed, logged_in, monkeypatch):
+    from contextlib import contextmanager
+
+    from swingbot.core.db.engine import LockTimeout
+
+    _book(seed)
+
+    @contextmanager
+    def locked(**kwargs):
+        raise LockTimeout("book held by the bot")
+        yield
+
+    monkeypatch.setattr(account_reset, "transaction", locked)
+    r = logged_in.post(URL)
+    assert_error(r, "conflict", 409)
+    assert r.get_json()["error"]["message"] == account_reset.LOCKED_TEXT
+    assert _statuses(logged_in) == ["ACTIVE", "CLOSED"]
+    assert not list(account_reset.archive_dir().glob("account-reset-*.json"))

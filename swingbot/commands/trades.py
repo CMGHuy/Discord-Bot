@@ -227,6 +227,9 @@ async def handle_trades_clear_history(reply, force: bool = False) -> None:
     except (account_reset.ResetRefused, account_reset.ArchiveFailed) as exc:
         await reply.send_error(str(exc))
         return
+    except LockTimeout:
+        await reply.send_error(account_reset.LOCKED_TEXT)
+        return
     await reply.send(account_reset.describe_reset(result))
 
 

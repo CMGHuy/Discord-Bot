@@ -398,6 +398,8 @@ def clear_history():
         return error("kill_switch_tripped", str(exc), 409)
     except account_reset.ArchiveFailed as exc:
         return error("archive_failed", str(exc), 500)
+    except LockTimeout:
+        return error("conflict", account_reset.LOCKED_TEXT, 409)
     return jsonify(_reset_payload(result))
 
 
