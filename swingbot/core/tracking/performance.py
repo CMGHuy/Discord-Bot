@@ -1727,10 +1727,14 @@ class TradeLog:
             removed = int(trades_repo().delete(trade_id, conn=tx))
         return DeleteResult(removed, (ended,) if ended else ())
 
-    def clear_history(self) -> int:
-        """Delete all closed (win/loss/manually-closed) trade records, leaving open trades untouched."""
-        with _LOCK:
-            return self._db_delete_rows("closed")
+    def clear_history(self, *, force: bool = False) -> int:
+        """v189 A6: the archived full reset (`account_reset.reset_closed_history`);
+        returns how many closed trades it removed. Raises ResetRefused while the
+        kill switch is tripped unless forced, ArchiveFailed when the archive
+        cannot be written (then nothing is deleted). No `_LOCK`: the reset
+        serialises on a Postgres table lock."""
+        from swingbot.core.tracking import account_reset   # lazy: it imports this module
+        return account_reset.reset_closed_history(force=force).removed_trades
 
     def clear_open(self) -> "DeleteResult":
         """Delete every open trade this call reads, leaving closed history
