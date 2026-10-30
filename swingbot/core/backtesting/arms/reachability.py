@@ -56,8 +56,8 @@ _V139 = ("v139: builders.confluence_stop_geometry inside build_confluence_plan, 
 _V191 = ("v191: atr_band.band_stop inside builders.build_confluence_plan, and the band admission "
          "in levels.build_scenarios that backtest_scenarios.scenarios_at reaches, so "
          "replay_scenarios (ConfluenceEngine) observes it. Confluence plans only; strategy plans "
-         "never. Gated by the v92 harvest gate through a v139-style staged driver, not "
-         "measure_arms.py.")
+         "never. Gated by the v92 harvest gate through "
+         "scripts/backtest/measure_atr_band_stop.py, not measure_arms.py.")
 _HEADROOM = ("v135 headroom veto (edge/gates.py), applied to the built plan in "
              "StrategyEngine._gated_plan and to each scenario in "
              "backtest_scenarios._headroom_kept. Inert unless HEADROOM_SCOPE != off and "
