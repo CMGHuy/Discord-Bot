@@ -169,3 +169,150 @@ def test_csv_frames_pick_the_freshest_file_per_ticker(tmp_path):
     _bars(0.5, n=9, start="2024-01-01").to_csv(b / "AAA.csv")
     out = imp._csv_frames(["AAA", "ZZZ"], [a, b])
     assert len(out["AAA"]) == 9 and out["ZZZ"] is None
+
+
+# --- v191: --side long / both ----------------------------------------------------------------
+
+def _down_bars(down_pct, n=300, start="2024-01-01"):
+    """Close 100 every day; even days open down_pct below the prior close, odd days 0.5% above,
+    so every down-gap equals down_pct (p99 == down_pct) and n_down is about n / 2."""
+    rows = []
+    for i in range(n):
+        o = 100.0 * (1 - down_pct / 100.0) if i % 2 == 0 else 100.5
+        rows.append((o, max(o, 100.0) * 1.001, min(o, 100.0) * 0.999, 100.0))
+    return make_ohlcv(rows, start=start)
+
+
+def _long(tid="l1", ticker="AAA", exit_price=97.0, status="loss", **kw):
+    t = {"id": tid, "ticker": ticker, "direction": "bullish", "status": status,
+         "entry": 100.0, "stop_loss": 99.0, "exit_price": exit_price,
+         "opened_at": "2025-03-01T15:00:00+00:00", "closed_at": "2025-03-05T15:00:00+00:00"}
+    t.update(kw)
+    return t
+
+
+def _run_long(trades, frames):
+    return imp.resize_closed(trades, frames, side=imp.LONG, balance=BAL, risk_pct=RISK)
+
+
+def test_sides_table():
+    assert imp.SIDES == {"short": imp.SHORT, "long": imp.LONG}
+    assert (imp.LONG.direction, imp.LONG.stamp_key, imp.LONG.stats_key, imp.LONG.count_key) == \
+        ("bullish", "down_gap_p99_pct", "p99_down_gap_pct", "n_down")
+    assert imp.LONG.min_gaps == imp.MIN_DOWN_GAPS == 60
+    assert (imp.SHORT.direction, imp.SHORT.stamp_key) == ("bearish", "up_gap_p99_pct")
+
+
+def test_long_down_gap_wider_than_stop_cuts_shares_and_counts_the_exceedance():
+    out = _run_long([_long()], {"AAA": _down_bars(3.0)})
+    (row,) = out["rows"]
+    assert out["n_closed_longs"] == 1
+    assert (row["p99"], row["p99_source"]) == (pytest.approx(3.0), "bars")
+    assert row["shares_before"] == pytest.approx(100.0)
+    assert row["shares_after"] == pytest.approx(33.33)
+    assert row["r"] == pytest.approx(-3.0)                       # gapped through 99 to 97
+    assert (row["pnl_before"], row["pnl_after"]) == (pytest.approx(-300.0), pytest.approx(-99.99))
+    s = out["summary"]
+    assert (s["n_exceed_before"], s["n_exceed_after"]) == (1, 0)
+
+
+def test_long_stamp_wins_and_too_few_down_gaps_mean_no_cut():
+    stamp = {"rule": "gap_p99", "down_gap_p99_pct": 2.0, "n_down_gaps": 120}
+    (row,) = _run_long([_long(gap_sizing=stamp)], {})["rows"]
+    assert (row["p99"], row["p99_source"], row["shares_after"]) == (2.0, "stamp", pytest.approx(50.0))
+    (row,) = _run_long([_long()], {"AAA": _down_bars(3.0, n=40)})["rows"]
+    assert (row["p99"], row["p99_source"]) == (None, "none")
+    assert row["shares_after"] == row["shares_before"]
+
+
+def test_each_side_reads_only_its_own_direction():
+    trades = [_long(), _short()]
+    assert [r["id"] for r in _run_long(trades, {"AAA": _down_bars(3.0)})["rows"]] == ["l1"]
+    assert [r["id"] for r in _run(trades, {"AAA": _bars(3.0)})["rows"]] == ["t1"]
+
+
+def test_short_summary_counts_exceedances_but_its_markdown_is_unchanged():
+    out = _run([_short()], {"AAA": _bars(3.0)})
+    assert (out["summary"]["n_exceed_before"], out["summary"]["n_exceed_after"]) == (1, 0)
+    text = imp.render_markdown(out, run_date="2026-11-02", db_name="swingbot_prod_replica",
+                               balance=BAL, risk_pct=RISK)
+    assert "Losses past the fixed risk" not in text
+    assert "| Closed shorts in the book | 1 |" in text
+    assert "| Mean size cut, gap-sized shorts |" in text
+
+
+def test_long_markdown_carries_every_measure_and_the_coupled_rollback():
+    out = _run_long([_long()], {"AAA": _down_bars(3.0)})
+    text = imp.render_long_markdown(out, run_date="2026-11-02", db_name="swingbot_prod_replica",
+                                    balance=BAL, risk_pct=RISK)
+    for needle in ("# v191 gap sizing impact: the live book's closed longs re-sized",
+                   "| Closed longs in the book | 1 |", "| Losses past the fixed risk, before | 1 |",
+                   "| Losses past the fixed risk, after | 0 |", "## Long-book drawdown",
+                   "## Limits", "## Rollback", "LONG_GAP_SIZING=false",
+                   "CONFLUENCE_ATR_STOP_FLOOR", "stay in the book as recorded",
+                   "-$300.00", "-$99.99", "not a gate", "--side long"):
+        assert needle in text, needle
+
+
+def _main(monkeypatch, tmp_path, capsys, name, *extra):
+    from swingbot import config
+    from swingbot.core.db import engine
+    monkeypatch.setattr(config, "DATABASE_URL", "postgresql+psycopg://u:p@h:5/swingbot")
+    monkeypatch.setattr(engine, "reset_engine", lambda: None)
+    monkeypatch.setattr(imp, "_trades", lambda: [_short(), _long()])
+    monkeypatch.setattr(imp, "_frames", lambda tickers: {"AAA": _bars(3.0)})
+    out = tmp_path / name
+    assert imp.main(["--out", str(out), *extra]) == 0
+    return capsys.readouterr().out, out.read_text(encoding="utf-8")
+
+
+def test_default_side_is_short_and_byte_identical(monkeypatch, tmp_path, capsys):
+    default_out, default_md = _main(monkeypatch, tmp_path, capsys, "a.md")
+    short_out, short_md = _main(monkeypatch, tmp_path, capsys, "b.md", "--side", "short")
+    assert (default_out, default_md) == (short_out, short_md)
+    result = imp.resize_closed_shorts([_short(), _long()], {"AAA": _bars(3.0)},
+                                      balance=BAL, risk_pct=RISK)
+    assert default_out == "\n".join(imp._stdout_lines(result)) + "\n"
+    run_date = default_md.split("**Run:** ")[1][:10]
+    assert default_md == imp.render_markdown(result, run_date=run_date,
+                                             db_name="swingbot_prod_replica", balance=BAL, risk_pct=RISK)
+
+
+def test_both_sides_print_and_write_short_then_long(monkeypatch, tmp_path, capsys):
+    out, md = _main(monkeypatch, tmp_path, capsys, "c.md", "--side", "both")
+    lines = out.splitlines()
+    assert lines[0].startswith("closed_shorts: ")
+    assert any(line.startswith("closed_longs: ") for line in lines)
+    assert lines[-1].startswith("exceed_before/after: ")
+    assert md.index("closed shorts re-sized") < md.index("closed longs re-sized")
+
+
+def test_short_report_matches_pre_v191_output_bytes():
+    import hashlib
+    result = _run([_short()], {"AAA": _bars(3.0)})
+    markdown = imp.render_markdown(result, run_date="2026-11-02", db_name="swingbot_prod_replica",
+                                   balance=BAL, risk_pct=RISK)
+    stdout = "\n".join(imp._stdout_lines(result)) + "\n"
+    assert hashlib.sha256(markdown.encode()).hexdigest() == \
+        "a938a65ea93b4f037e8d990c168b22ffc88086380abe94559dcf26dd3a67817e"
+    assert hashlib.sha256(stdout.encode()).hexdigest() == \
+        "02d2dc5180e06f2e58070db6364fa16ef98492fc083419cc2c08dc272a9c07fe"
+
+
+def test_long_p99_ignores_open_session_and_future_bars():
+    early = _down_bars(0.5, n=300, start="2023-01-02")
+    first_late = early.index[-1] + pd.offsets.BDay(1)
+    late = _down_bars(9.0, n=300, start=str(first_late.date()))
+    trade = _long(opened_at=first_late.strftime("%Y-%m-%dT14:00:00+00:00"))
+    full = imp.trade_p99(trade, pd.concat([early, late]), imp.LONG)
+    truncated = imp.trade_p99(trade, early, imp.LONG)
+    assert full == truncated == (pytest.approx(0.5), "bars")
+
+
+def test_empty_long_book_renders_without_numbers():
+    result = _run_long([], {})
+    assert result["n_closed_longs"] == 0
+    text = imp.render_long_markdown(result, run_date="2026-11-02", db_name="replica",
+                                    balance=BAL, risk_pct=RISK)
+    assert "n/a" in text
+    assert "| Losses past the fixed risk, after | 0 |" in text
