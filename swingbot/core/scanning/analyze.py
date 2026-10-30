@@ -24,7 +24,7 @@ from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.market import earnings_calendar, levels, trendlines
+from swingbot.core.market import atr_band, earnings_calendar, levels, trendlines
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
@@ -809,11 +809,30 @@ def _default_hard_filters(hard_filters: dict | None = None) -> dict:
         'min_risk_reward_ratio': config.MIN_RISK_REWARD_RATIO,
         'mtf_adjacent_gate': config.MTF_ADJACENT_GATE,
         'confluence_deviation_pct': config.CONFLUENCE_DEVIATION_PCT,
+        'confluence_atr_stop_floor': config.CONFLUENCE_ATR_STOP_FLOOR,
     }
 
 
+def _band_live(df, current_price: float, k: float, now, ticker: str,
+               horizon_label: str) -> atr_band.AtrBand | None:
+    """Read raw ATR14 only from completed bars; missing ATR keeps legacy gates."""
+    if not k or k <= 0:
+        return None
+    from .strategy_pass import completed_frame
+    try:
+        frame = completed_frame(df, now or datetime.now(timezone.utc))
+    except Exception as exc:
+        swallowed(log, "scan.analyze.band_frame", exc, level=logging.DEBUG)
+        frame = None
+    band = atr_band.band_for(frame, current_price, k)
+    if band.atr_pct is None:
+        log.info("%s (%s): plan rejected (%s) -- ATR14 unavailable, today's stop band applies",
+                 ticker, horizon_label, atr_band.REASON_NO_ATR)
+    return band
+
+
 def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
-                       hard_filters: dict) -> HorizonBuild:
+                       hard_filters: dict, *, ticker: str = "", now=None) -> HorizonBuild:
     """One horizon's level map and scenarios at `current_price` (v171 D5 seam:
     `_scan_one` at the scan price, `rescenario` at a re-quoted one)."""
     # Computed once here and threaded through to build_level_map() and
@@ -859,11 +878,13 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     # continue to evaluate the same candidates.
     effective_min_reward = max(hard_filters["min_reward_pct"], h.get("sr_target_min_pct", hard_filters["min_reward_pct"]) * 0.15)
     effective_max_stop = max(hard_filters["max_stop_loss_pct"], h.get("max_risk_pct", hard_filters["max_stop_loss_pct"]))
+    band = _band_live(df, current_price, hard_filters.get("confluence_atr_stop_floor", 0.0),
+                      now, ticker, h.get("label", ""))
     scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
                                         atr_floor=floor_pct, min_stop_distance_pct=hard_filters["min_stop_distance_pct"],
                                         max_stop_distance_pct=effective_max_stop,
                                         min_risk_reward=hard_filters["min_risk_reward_ratio"],
-                                        block_bullish=veto_bullish_for(df))
+                                        block_bullish=veto_bullish_for(df), band=band)
     return HorizonBuild(candidates, supports, resistances, scenarios)
 
 
@@ -1048,7 +1069,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
 
         log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
         candidates, supports, resistances, scenarios = _horizon_scenarios(
-            df, h, current_price, trendline_candidates, hard_filters)
+            df, h, current_price, trendline_candidates, hard_filters, ticker=ticker)
         log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                    ticker, horizon_key, len(supports), len(resistances))
         stats["checked"] += 1
@@ -1244,7 +1265,7 @@ def rescenario(item, df, price: float):
         return None
     horizon_key = item.result.horizon_key
     build = _horizon_scenarios(df, HORIZONS[horizon_key], price, item.trendline_candidates,
-                               _default_hard_filters(item.hard_filters))
+                               _default_hard_filters(item.hard_filters), ticker=item.result.ticker)
     kept = _apply_headroom(build.scenarios, build.supports, build.resistances,
                            {"failed_counts": {"headroom": 0}}, item.result.ticker, horizon_key)
     scenario = next((s for s in kept if s.direction == item.plan.direction), None)

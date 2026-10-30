@@ -45,7 +45,7 @@ def test_horizon_scenarios_matches_the_inline_calls(loose):
 def test_default_hard_filters_reads_config(monkeypatch):
     monkeypatch.setattr(config, "MIN_REWARD_PCT", 4.5)
     assert analyze._default_hard_filters()["min_reward_pct"] == 4.5
-    assert set(analyze._default_hard_filters()) == set(HF)
+    assert set(analyze._default_hard_filters()) == set(HF) | {"confluence_atr_stop_floor"}
 
 
 def test_default_hard_filters_keeps_a_given_snapshot(monkeypatch):
