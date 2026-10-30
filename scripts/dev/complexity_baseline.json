@@ -80,7 +80,7 @@
     "swingbot.core.marketdata.data_refresh:refresh_all": 17,
     "swingbot.core.planning.account:get_daily_summary": 16,
     "swingbot.core.planning.plan_manager:PlanManager._step_active": 21,
-    "swingbot.core.planning.plan_manager:PlanManager.poll": 20,
+    "swingbot.core.planning.plan_manager:PlanManager.poll": 19,
     "swingbot.core.scanning.alert_embeds:build_embed": 33,
     "swingbot.core.scanning.analyze:_scan_one": 35,
     "swingbot.core.scanning.analyze:build_decision_context": 23,
