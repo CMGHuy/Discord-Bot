@@ -8,11 +8,14 @@ gap are stamped on a plan once, at live creation, from completed
 bars; every reader uses that stamp, so a later switch flip or a missing
 frame never re-sizes an alerted plan differently. A long reaches the gap
 branch only with a long stamp (`n_down_gaps`), written while LONG_GAP_SIZING
-is on (v191 Part B). Sizing and display only -- no filter, score or gate reads this.
+is on (v191 Part B). A band plan is stamped long or short and sized on its
+stored worst-fill distance; stamps without band_sizing_distance retain v183
+sizing. Sizing and display only -- no filter, score or gate reads this.
 """
 from __future__ import annotations
 
 import logging
+import math
 
 from swingbot import config
 from swingbot.core.infra.swallowed import swallowed
@@ -22,6 +25,7 @@ log = logging.getLogger(__name__)
 
 RULE_GAP = "gap_p99"
 RULE_STOP = "stop"
+BAND_KEY = "band_sizing_distance"
 MIN_UP_GAPS = 60
 MIN_DOWN_GAPS = 60
 LOOKBACK = 250
@@ -82,6 +86,8 @@ def _log_missing_p99(plan) -> None:
 
 def stamp_gap_sizing(plan, df) -> None:
     """Set plan.gap_sizing; never raises. A missing usable p99 logs one line."""
+    if getattr(plan, "stop_moved_by", None) is not None:
+        return _stamp_band_plan(plan, df)
     try:
         plan.gap_sizing = gap_sizing_stamp(df, plan.direction)
     except Exception as exc:
@@ -125,6 +131,8 @@ def _with_no_gap(result):
 
 def size_for(entry, stop_loss, *, direction, gap_sizing, account_cfg=None, label: str = "") -> dict | None:
     """The share count for one plan or trade under its stamped rule."""
+    if (gap_sizing or {}).get(BAND_KEY) is not None:
+        return _band_size(entry, stop_loss, direction, gap_sizing, account_cfg, label)
     if not _on_gap_path(direction, gap_sizing):
         return _stop_only(entry, stop_loss, account_cfg, label)
     floor = gap_floor_for(direction, gap_sizing)
@@ -160,3 +168,76 @@ def gap_risk_amount_for(shares, entry, stop_loss, gap_sizing, direction: str = "
         return None
     distance = account._sizing_distance(float(entry), abs(float(entry) - float(stop_loss)), floor)
     return round(float(shares) * distance, 2)
+
+
+def worst_fill_distance(stop_loss, stop_ceiling_pct, direction) -> float:
+    """Distance at the fill whose planned loss reaches the stored ceiling."""
+    ceiling = float(stop_ceiling_pct)
+    denominator = 100.0 - ceiling if direction == "bullish" else 100.0 + ceiling
+    return float(stop_loss) * ceiling / denominator
+
+
+def band_sizing_distance(trigger, stop_loss, stop_ceiling_pct, direction, gap_sizing) -> float:
+    """Cover the worst accepted fill and the stamped adverse gap allowance."""
+    distance = worst_fill_distance(stop_loss, stop_ceiling_pct, direction)
+    floor = gap_floor_for(direction, gap_sizing)
+    return max(distance, float(trigger) * floor / 100.0) if floor is not None else distance
+
+
+def _band_base_stamp(df, direction) -> dict:
+    return gap_sizing_stamp(df, direction) or _long_stamp(df, RULE_STOP)
+
+
+def _empty_band_stamp(direction) -> dict:
+    return _fallback_stamp(direction) or {
+        "rule": RULE_STOP, "down_gap_p99_pct": None, "n_down_gaps": 0}
+
+
+def _stamp_band_plan(plan, df) -> None:
+    try:
+        stamp = _band_base_stamp(df, plan.direction)
+    except Exception as exc:
+        stamp = _empty_band_stamp(plan.direction)
+        swallowed(log, "scan.gap_sizing.band_stamp", exc,
+                  "%s: band sizing stamp failed (%s) -- sized on the worst fill",
+                  plan.ticker, exc, level=logging.INFO)
+    stamp[BAND_KEY] = band_sizing_distance(
+        plan.trigger_price, plan.stop_loss, plan.stop_ceiling_pct, plan.direction, stamp)
+    plan.gap_sizing = stamp
+
+
+def _band_size(entry, stop_loss, direction, gap_sizing, account_cfg, label):
+    distance = float(gap_sizing[BAND_KEY])
+    try:
+        kwargs = {"ticker": label} if label else {}
+        result = account.compute_position_size(
+            entry, stop_loss, account_cfg, gap_floor_pct=distance / float(entry) * 100.0, **kwargs)
+    except Exception as exc:
+        swallowed(log, "scan.gap_sizing.band_size", exc,
+                  "%s: band sizing failed (%s) -- left unsized", label, exc, level=logging.INFO)
+        return None
+    if result is None:
+        return None
+    for key in _NO_GAP:
+        result.pop(key, None)
+    if result["mode"] == "risk_pct":
+        budget = result["balance"] * result["risk_pct"] / 100.0
+        shares = math.floor(min(result["shares"], budget / distance) * 100 + 1e-9) / 100
+        result.update(shares=shares, risk_amount=round(shares * abs(entry - stop_loss), 2),
+                      position_value=round(shares * entry, 2))
+    result[BAND_KEY] = distance
+    result.update(_band_gap_fields(entry, stop_loss, direction, gap_sizing, result["shares"], distance))
+    return result
+
+
+def _band_gap_fields(entry, stop_loss, direction, gap_sizing, shares, distance) -> dict:
+    if gap_sizing.get("rule") == RULE_STOP:
+        return {}
+    floor = gap_floor_for(direction, gap_sizing)
+    if floor is None:
+        return dict(_NO_GAP)
+    return {
+        "gap_risk_amount": round(shares * account._sizing_distance(entry, abs(entry - stop_loss), floor), 2),
+        "gap_sized": entry * floor / 100.0 >= distance - 1e-9,
+        "gap_floor_pct": floor,
+    }
