@@ -298,9 +298,13 @@ def test_utilisation_is_not_clamped_at_100(logged_in, tmp_path):
 def test_every_metric_carries_its_own_sample_size(client, open_book):
     open_book(["AAPL", "MSFT"])
     metrics = client.get("/api/v1/risk").get_json()["metrics"]
-    for key in ("var_95", "expected_shortfall_95", "annualised_vol",
-                "beta_spy", "sharpe_r", "max_drawdown_r"):
+    for key in ("var_95", "expected_shortfall_95", "annualised_vol", "beta_spy"):
         assert set(metrics[key]) == {"value", "n"}
+    # The closed-trade R metrics also report how many records were excluded
+    # and why (chronology coverage, 60975f95); value and n stay mandatory.
+    chronology = {"value", "n", "excluded_count", "invalid_date_count", "invalid_outcome_count"}
+    for key in ("sharpe_r", "max_drawdown_r"):
+        assert set(metrics[key]) == chronology
 
 
 def test_a_metric_that_cannot_be_computed_is_null_not_zero(client, open_book):
