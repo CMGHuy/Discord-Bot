@@ -386,7 +386,10 @@ and financial-advisor (sonnet) on `9c45125e`, 2026-10-30.
 ## Handoff
 
 Paused 2026-10-29 because the account's weekly usage limit was nearly spent.
-The panel is complete (2026-10-30). Resume in this order:
+**Done 2026-10-30:** the panel is complete and the plan is written
+(`plans/2026-10-29-v204-admin-snapshot-pages_0-index.md` plus parts 1–5,
+20 tasks, lint PASS). Next: implement after v201 is merged. The steps below
+are kept for the record.
 
 1. ~~Run `/panel quant-engineer,financial-advisor`~~ -- done.
 2. Write the v204 plan: `plan-briefer`, then `plan-writer` `mode=index`, then
