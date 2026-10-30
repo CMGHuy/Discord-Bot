@@ -50,9 +50,13 @@ paths = ["tests/backtesting/test_[a-k]*.py"]
 description = "backtesting top-level files test_l* .. test_z*, minus test_s* (validate_component, v131/v139 witnesses)"
 paths = ["tests/backtesting/test_[l-r]*.py", "tests/backtesting/test_[t-z]*.py"]
 
-[suites.edge-analytics]
-description = "edge modules and analytics"
-paths = ["tests/edge/", "tests/analytics/"]
+[suites.edge]
+description = "edge modules"
+paths = ["tests/edge/"]
+
+[suites.analytics]
+description = "analytics, journal metrics and reports"
+paths = ["tests/analytics/"]
 
 [suites.storage]
 description = "Postgres stores, migrations, and the paper trade log"
