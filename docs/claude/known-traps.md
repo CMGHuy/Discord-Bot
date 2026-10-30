@@ -403,6 +403,81 @@ selection. That is the 2% cap minus `CLAMP_HEADROOM_PCT` (0.25, a constant in
   still the measured route if the partner later wants the band instead of
   the clamp.
 
+- **v191 can replace this band on confluence plans.** With
+  `CONFLUENCE_ATR_STOP_FLOOR` above 0 the percent band, the admission floor
+  and the clamp above all step aside for that plan, and an ATR band plus a
+  dollar rule take their place: next section.
+
+## Confluence ATR-band stops (v191): inert by default, coupled to gap sizing
+
+Three knobs, all off by default: `CONFLUENCE_ATR_STOP_FLOOR` (`k`, `"0"`),
+`CONFLUENCE_ATR_TARGET_MODE` (`rechoose` = arm R, `keep` = arm K) and
+`LONG_GAP_SIZING` (`"false"`). With all three at default, replay rows and
+plan dicts are byte-identical to before v191, pinned by the goldens in
+`tests/fixtures/v191/`. A golden that moves is a behaviour change, never a
+fixture to refresh.
+
+- **The ATR is raw Wilder ATR14 of completed bars**
+  (`market/atr_band.raw_atr14_pct`), never `levels.atr_floor_pct` or
+  `Scenario.atr_floor_pct`: those are already multiplied by the horizon's
+  `atr_stop_multiple` and would make the band 1.5-2x too wide. Live reads
+  `strategy_pass.completed_frame(df, now)` (`analyze._band_live`); replay
+  reads `window`. The value rides on `Scenario.atr14_pct` from admission to
+  the builder, so the two always agree.
+- **Band stop:** `d < k x a` moves the stop out to the floor, `d > 2 x a`
+  pulls it in to the ceiling, otherwise the level stands
+  (`stop_moved_by` = `floor` / `ceiling` / `untouched` on the plan doc).
+  Moved stops round away from entry to the tick (0.01, or 0.0001 under $1).
+  Computed once at creation: a SIGHUP or knob flip never rewrites an open or
+  pending plan.
+- **What steps aside for a band plan:** `MIN_STOP_DISTANCE_PCT`, the max-stop
+  gate `max(MAX_STOP_LOSS_PCT, horizon max_risk_pct)`, the v115 clamp, and
+  the 2% `risk_cap` reject in `attach_plan_v2`. The plan stores
+  `stop_ceiling_pct = band distance + 0.25`, which `plan_stop_ceiling` and
+  `PlanManager._step_pending` already read. A stop-entry fill past that
+  headroom is still cancelled `risk_cap`, as in v115.
+- **The dollar rule replaces the price caps.** Shares are sized on
+  `gap_sizing.band_sizing_distance`: the larger of the worst accepted fill to
+  the stop (`stop x c / (100 - c)` long, `stop x c / (100 + c)` short) and
+  the p99 gap allowance, floored to 0.01 shares. A size of 0.00 is
+  `band_size_zero`; a non-`risk_pct` sizing mode, a sizing error or an
+  overshoot is `risk_sizing`. The distance rides in the `gap_sizing` stamp
+  (`band_sizing_distance` key), so alert, engine and paper book share one
+  number. A band long gets a stamp even with `LONG_GAP_SIZING` off (rule
+  `stop`).
+- **Rejections log the usual line.** `band_no_target` (arm R),
+  `band_rr_drop` (arm K), `band_size_zero` and `risk_sizing` print
+  `plan rejected (<reason>, ...)` through `scan_run._skip_rejected_plan`.
+  `band_no_atr` (ATR missing: today's admission and geometry apply) logs its
+  own INFO line containing `plan rejected (band_no_atr`. On a quiet day with
+  the floor on, grep `plan rejected (band_` before suspecting data.
+- **Coupling.** A live floor is honoured only with `LONG_GAP_SIZING` and
+  `SHORT_GAP_SIZING` both on. At import and at every SIGHUP reload
+  `config.enforce_atr_band_coupling()` sets the floor to 0 and logs an ERROR
+  containing `needs LONG_GAP_SIZING and SHORT_GAP_SIZING both on`; the admin
+  settings save and preview return 400 `invalid` (`system._coupling_problem`).
+  A floor that "does nothing" in production is this guard first.
+  Replay and measurement set knobs through `arms.knobs.apply_knobs`, which
+  skips the load hook, so measurement is uncoupled by design.
+- **Legacy replay gates.** Under `CONFLUENCE_GATES` the replay builds plans
+  with `ScanParams.from_config()`, so the band knobs reach the builder only
+  through config globals (`apply_knobs`), never through a
+  `dataclasses.replace(params, ...)`.
+- **Heat is unchanged.** Candidate heat and the correlated cap still count the
+  configured `risk_pct`, and open trades count `|entry - stop| x shares`, so
+  a wider stop with fewer shares buys no extra heat. Heat does not add the gap
+  allowance (disclosed in the spec).
+- **v114 is overridden for the measurement only.** The partner decides again
+  before any band knob goes live; the verdict is in
+  `docs/superpowers/results/2026-10-24-v191-atr-band-stops.md`.
+- **Part B (`LONG_GAP_SIZING`)** mirrors v183 for longs with the p99
+  *down*-gap (`gap_stats` keys `p99_down_gap_pct`, `n_down`; stamp keys
+  `down_gap_p99_pct`, `n_down_gaps`; fewer than 60 down-gaps: sized on the
+  stop). R stays measured on the stop; only the share count shrinks. A gap
+  beyond the ticker's own p99 can still exceed the budget (accepted by the
+  partner). The alert shows `ATR-band stop ...` on band plans and the gap
+  line on gap-sized longs.
+
 ## Futures skipped for dollar volume is deliberate (v115)
 
 `SI=F: skipping new-signal scan -- avg dollar vol $0.1M < $20M floor` is the

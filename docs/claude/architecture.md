@@ -18,7 +18,9 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   (fetching and caching: both OHLCV caches, the v162 Alpaca history store
   `history_store.py` and the training-data switch `training_data.py`), `core/market/`
   (everything computed from bars — indicators, levels, strategies, entry
-  filters), `core/planning/` (plan construction, lifecycle and sizing —
+  filters; v191 `atr_band.py` is the pure ATR-band stop arithmetic shared by
+  admission, the builder, the live scan and the replay), `core/planning/`
+  (plan construction, lifecycle and sizing —
   `plan_engine.py`, `plan_manager.py`, `plan_store.py`), `core/backtesting/`
   (offline replay, walk-forward and the validation registry —
   `backtest.py`, `backtest_wf.py`, `backtest_scenarios.py`, `registry.py`,
@@ -130,6 +132,14 @@ Every Alpaca and yfinance request in `swingbot/` (bot, spawned `_run_bounded` wo
   positions have no prices);
   `backtesting/backtest_scenarios.py` replays the confluence scan
   historically.
+- **Confluence ATR-band path (v191, off by default).** With
+  `CONFLUENCE_ATR_STOP_FLOOR` above 0, `levels.build_scenarios(..., band=)`
+  drops the percent stop gates and stamps `Scenario.atr14_pct`;
+  `builders.build_confluence_plan` asks `_plan_geometry` for the band stop
+  (arm R re-selects TP1, arm K keeps today's TP1 and drops under the minimum
+  R:R); `analyze.attach_plan_v2` stamps the band sizing before its dollar
+  check (`_sizing_reject_reason`). Trap list and coupling:
+  `known-traps.md` § Confluence ATR-band stops (v191).
 - **Badges/registry:** `swingbot/core/backtesting/validation_registry.json`
   (loader: `backtesting/registry.py`) stamps every v2 plan ✅ VALIDATED or
   ⚠️ WEAK with real out-of-sample stats. It is regenerated ONLY via
