@@ -3,11 +3,12 @@
 Every site that turns a plan or a paper trade into a share count calls
 size_for / size_for_plan / size_for_trade, never compute_position_size
 directly (stop_scope.risk_sizing_ok excepted: it runs before the stamp
-exists, and a gap cut only lowers shares). The rule in force and the p99
-up-gap are stamped on a SHORT plan once, at live creation, from completed
+exists, and a gap cut only lowers shares). The rule in force and the adverse p99
+gap are stamped on a plan once, at live creation, from completed
 bars; every reader uses that stamp, so a later switch flip or a missing
-frame never re-sizes an alerted plan differently. A long never reaches the
-gap branch. Sizing and display only -- no filter, score or gate reads this.
+frame never re-sizes an alerted plan differently. A long reaches the gap
+branch only with a long stamp (`n_down_gaps`), written while LONG_GAP_SIZING
+is on (v191 Part B). Sizing and display only -- no filter, score or gate reads this.
 """
 from __future__ import annotations
 
@@ -22,7 +23,11 @@ log = logging.getLogger(__name__)
 RULE_GAP = "gap_p99"
 RULE_STOP = "stop"
 MIN_UP_GAPS = 60
+MIN_DOWN_GAPS = 60
 LOOKBACK = 250
+_P99_KEY = {"bearish": "up_gap_p99_pct", "bullish": "down_gap_p99_pct"}
+_COUNT_KEY = {"bearish": "n_up_gaps", "bullish": "n_down_gaps"}
+_GAP_WORD = {"bearish": "up-gaps", "bullish": "down-gaps"}
 _NO_GAP = {"gap_risk_amount": None, "gap_sized": False, "gap_floor_pct": None}
 
 
@@ -30,10 +35,8 @@ def _rule() -> str:
     return RULE_GAP if config.SHORT_GAP_SIZING else RULE_STOP
 
 
-def gap_sizing_stamp(df, direction: str) -> dict | None:
-    """The stamp for a plan created now from `df` (completed bars only); None for a long."""
-    if direction != "bearish":
-        return None
+def _short_stamp(df) -> dict:
+    """Record the short rule and its adverse up-gap distribution."""
     from swingbot.core.edge.gates import gap_stats
     stats = gap_stats(df, lookback=LOOKBACK)
     n_up = int(stats["n_up"])
@@ -41,28 +44,71 @@ def gap_sizing_stamp(df, direction: str) -> dict | None:
     return {"rule": _rule(), "up_gap_p99_pct": p99, "n_up_gaps": n_up}
 
 
+def _long_stamp(df, rule: str) -> dict:
+    """Record the supplied long rule and its adverse down-gap distribution."""
+    from swingbot.core.edge.gates import gap_stats
+    stats = gap_stats(df, lookback=LOOKBACK)
+    n_down = int(stats["n_down"])
+    p99 = stats["p99_down_gap_pct"] if n_down >= MIN_DOWN_GAPS else None
+    return {"rule": rule, "down_gap_p99_pct": p99, "n_down_gaps": n_down}
+
+
+def gap_sizing_stamp(df, direction: str) -> dict | None:
+    """The stamp for a plan created now from `df` (completed bars only)."""
+    if direction == "bearish":
+        return _short_stamp(df)
+    if direction == "bullish" and config.LONG_GAP_SIZING:
+        return _long_stamp(df, RULE_GAP)
+    return None
+
+
+def _fallback_stamp(direction) -> dict | None:
+    """Keep the creation-time rule when its gap distribution cannot be read."""
+    if direction == "bearish":
+        return {"rule": _rule(), "up_gap_p99_pct": None, "n_up_gaps": 0}
+    if direction == "bullish" and config.LONG_GAP_SIZING:
+        return {"rule": RULE_GAP, "down_gap_p99_pct": None, "n_down_gaps": 0}
+    return None
+
+
+def _log_missing_p99(plan) -> None:
+    direction = plan.direction
+    if plan.gap_sizing is None or plan.gap_sizing[_P99_KEY[direction]] is not None:
+        return
+    minimum = MIN_UP_GAPS if direction == "bearish" else MIN_DOWN_GAPS
+    log.info("%s: gap sizing p99 n/a (%d %s, need %d) -- sized on the stop",
+             plan.ticker, plan.gap_sizing[_COUNT_KEY[direction]], _GAP_WORD[direction], minimum)
+
+
 def stamp_gap_sizing(plan, df) -> None:
-    """Set plan.gap_sizing; never raises. A short without a usable p99 logs one line."""
+    """Set plan.gap_sizing; never raises. A missing usable p99 logs one line."""
     try:
         plan.gap_sizing = gap_sizing_stamp(df, plan.direction)
     except Exception as exc:
-        plan.gap_sizing = ({"rule": _rule(), "up_gap_p99_pct": None, "n_up_gaps": 0}
-                           if plan.direction == "bearish" else None)
+        plan.gap_sizing = _fallback_stamp(plan.direction)
         swallowed(log, "scan.gap_sizing.stamp", exc,
                   "%s: gap sizing stamp failed (%s) -- sized on the stop", plan.ticker, exc,
                   level=logging.INFO)
         return
-    if plan.gap_sizing is not None and plan.gap_sizing["up_gap_p99_pct"] is None:
-        log.info("%s: gap sizing p99 n/a (%d up-gaps, need %d) -- sized on the stop",
-                 plan.ticker, plan.gap_sizing["n_up_gaps"], MIN_UP_GAPS)
+    _log_missing_p99(plan)
 
 
 def gap_floor_for(direction: str | None, gap_sizing: dict | None) -> float | None:
-    """The p99 floor (percent) to size on, or None: long, no stamp, rule stop, no p99."""
-    if direction != "bearish" or not gap_sizing or gap_sizing.get("rule") != RULE_GAP:
+    """The adverse p99 floor (percent), or None without a usable gap-rule stamp."""
+    key = _P99_KEY.get(direction)
+    if key is None or not gap_sizing or gap_sizing.get("rule") != RULE_GAP:
         return None
-    p99 = gap_sizing.get("up_gap_p99_pct")
+    p99 = gap_sizing.get(key)
     return float(p99) if p99 is not None and p99 > 0 else None
+
+
+def _on_gap_path(direction, gap_sizing) -> bool:
+    """A long opts in only through its own stamp; an unstamped short keeps n/a."""
+    if (gap_sizing or {}).get("rule") == RULE_STOP:
+        return False
+    if direction == "bearish":
+        return True
+    return direction == "bullish" and "n_down_gaps" in (gap_sizing or {})
 
 
 def _stop_only(entry, stop_loss, account_cfg, label=""):
@@ -79,7 +125,7 @@ def _with_no_gap(result):
 
 def size_for(entry, stop_loss, *, direction, gap_sizing, account_cfg=None, label: str = "") -> dict | None:
     """The share count for one plan or trade under its stamped rule."""
-    if direction != "bearish" or (gap_sizing or {}).get("rule") == RULE_STOP:
+    if not _on_gap_path(direction, gap_sizing):
         return _stop_only(entry, stop_loss, account_cfg, label)
     floor = gap_floor_for(direction, gap_sizing)
     if floor is None:
@@ -107,9 +153,9 @@ def size_for_trade(trade: dict, entry=None, account_cfg=None) -> dict | None:
                     label=trade.get("ticker", ""))
 
 
-def gap_risk_amount_for(shares, entry, stop_loss, gap_sizing) -> float | None:
-    """What a p99 gap would cost an open short of `shares`; None without a usable p99."""
-    floor = gap_floor_for("bearish", gap_sizing)
+def gap_risk_amount_for(shares, entry, stop_loss, gap_sizing, direction: str = "bearish") -> float | None:
+    """What a p99 gap would cost an open position of `shares`; None without a usable p99."""
+    floor = gap_floor_for(direction, gap_sizing)
     if floor is None or shares is None or entry is None or stop_loss is None:
         return None
     distance = account._sizing_distance(float(entry), abs(float(entry) - float(stop_loss)), floor)

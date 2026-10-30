@@ -69,7 +69,8 @@ def test_existing_keys_are_unchanged_by_the_new_ones():
     stats = gap_stats(_with_gaps())
     assert stats["n"] == 250
     assert stats["p99_gap_pct"] >= stats["p90_gap_pct"]
-    assert set(stats) == {"p90_gap_pct", "p99_gap_pct", "n", "p99_up_gap_pct", "n_up"}
+    assert set(stats) == {"p90_gap_pct", "p99_gap_pct", "n", "p99_up_gap_pct", "n_up",
+                          "p99_down_gap_pct", "n_down"}
 
 
 def test_no_up_gaps_gives_none_not_zero():
@@ -86,10 +87,34 @@ def test_flat_opens_are_not_up_gaps():
 def test_empty_frame_carries_the_new_keys():
     empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
     assert gap_stats(empty) == {"p90_gap_pct": 0.0, "p99_gap_pct": 0.0, "n": 0,
-                                "p99_up_gap_pct": None, "n_up": 0}
+                                "p99_up_gap_pct": None, "n_up": 0,
+                                "p99_down_gap_pct": None, "n_down": 0}
 
 
 def test_up_gap_lookback_bound_respected():
     df = _signed_gaps(n=400)
     df.iloc[:100, df.columns.get_loc("Open")] = 150.0          # huge up gaps OUTSIDE the 250-bar window
     assert gap_stats(df)["p99_up_gap_pct"] == pytest.approx(2.0)
+
+
+def test_down_gap_p99_measures_only_the_adverse_side_for_a_long():
+    stats = gap_stats(_signed_gaps())                         # up 2%, down 6%, alternating
+    assert stats["p99_down_gap_pct"] == pytest.approx(6.0)    # a positive percent
+    assert stats["n_down"] == 125
+    assert stats["p99_up_gap_pct"] == pytest.approx(2.0)      # v183 keys unchanged
+    assert stats["n_up"] == 125
+
+
+def test_no_down_gaps_gives_none_and_an_empty_frame_carries_both_keys():
+    only_up = _signed_gaps(down_pct=-2.0)                     # every gap opens above the prior close
+    assert gap_stats(only_up)["p99_down_gap_pct"] is None and gap_stats(only_up)["n_down"] == 0
+    empty = gap_stats(_signed_gaps().iloc[:1])
+    assert (empty["p99_down_gap_pct"], empty["n_down"]) == (None, 0)
+
+
+def test_down_gap_lookback_excludes_old_crashes_and_flat_opens():
+    frame = _signed_gaps(n=400, up_pct=0.0)
+    frame.iloc[:100, frame.columns.get_loc("Open")] = 10.0
+    stats = gap_stats(frame)
+    assert stats["n_down"] == 125
+    assert stats["p99_down_gap_pct"] == pytest.approx(6.0)
