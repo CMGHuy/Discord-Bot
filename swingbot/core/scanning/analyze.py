@@ -35,8 +35,8 @@ from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
 from swingbot.core.planning.gap_sizing import size_for_plan, stamp_gap_sizing
 from swingbot.core.scanning.risk_notice import stamp_risk_notice
-from swingbot.core.planning.builders import confluence_stop_dropped
-from swingbot.core.planning.stop_scope import plan_stop_ceiling, risk_sizing_ok
+from swingbot.core.planning.builders import band_no_plan_reason, confluence_stop_dropped
+from swingbot.core.planning.stop_scope import band_sizing_verdict, plan_stop_ceiling, risk_sizing_ok
 from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
@@ -413,8 +413,11 @@ def pd_normalize(when):
 
 
 def _no_plan_reason(scenario, level_map) -> str:
-    """Why build_confluence_plan returned None: v139 arm D's ceiling, or no
+    """Why no plan: band_no_target, band_rr_drop, v139's ceiling, or no
     level paying MIN_RISK_REWARD_RATIO."""
+    band = band_no_plan_reason(scenario, level_map)
+    if band is not None:
+        return band
     if confluence_stop_dropped(scenario, level_map):
         return "stop_beyond_confluence_ceiling"
     return "no_qualifying_target"
@@ -484,6 +487,17 @@ def _stamp_risk_notice_live(plan, df, now) -> None:
     stamp_risk_notice(plan, frame)
 
 
+def _sizing_reject_reason(plan, df, now) -> str | None:
+    """Stamp a band plan before its dollar check sizes on the stored distance.
+    Every other plan keeps v139's risk-sizing rule."""
+    if plan.stop_moved_by is not None:
+        _stamp_gap_sizing_live(plan, df, now)
+        return band_sizing_verdict(plan)
+    if plan.stop_ceiling_pct is not None and not risk_sizing_ok(plan):
+        return "risk_sizing"
+    return None
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     regime=None, rs_percentile=None, breadth=None, regime2_state=None,
                     issued_at=None, now=None):
@@ -529,12 +543,14 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             _reject_plan(item, "risk_cap", ticker, horizon_key, plan=plan,
                          margin=loss_pct - ceiling)
             return
-        if plan.stop_ceiling_pct is not None and not risk_sizing_ok(plan):
+        reason = _sizing_reject_reason(plan, df, now)
+        if reason is not None:
             # v139 arm S: a structural stop past 2% is honest only when the
             # position is sized to fixed dollar risk (spec Arm S). Checked
             # only for such plans: a confluence plan's strategy is its primary
             # attribution, which in_scope() could otherwise match.
-            _reject_plan(item, "risk_sizing", ticker, horizon_key)
+            # v191: band plans are stamped before checking their dollar risk.
+            _reject_plan(item, reason, ticker, horizon_key, plan=plan)
             return
         # item.plan_v2 is set BEFORE risk_features stamping (below) is even
         # attempted -- a render-only feature's stamping failure must never
@@ -548,7 +564,8 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             "sector_pctile": getattr(item, "sector_rs_percentile", None),
             "rs_combined": getattr(item, "rs_combined", None),
         })
-        _stamp_gap_sizing_live(plan, df, now)
+        if plan.stop_moved_by is None:
+            _stamp_gap_sizing_live(plan, df, now)
         _stamp_risk_notice_live(plan, df, now)
         try:
             plan.risk_features = risk_features.build(
