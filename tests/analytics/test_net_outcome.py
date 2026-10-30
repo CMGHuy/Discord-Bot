@@ -3,6 +3,7 @@ of its UNROUNDED net R, with a ±SCRATCH_EPS_R scratch band (edges
 exclusive) and `closed`/`unscored` when the net cannot be trusted."""
 import logging
 import math
+from datetime import date
 
 import pytest
 
@@ -21,7 +22,10 @@ def _two_leg(net_r, *, trade_id="t-1"):
 
 def test_constants():
     assert metrics.SCRATCH_EPS_R == 0.01
-    assert metrics.LABEL_BASIS_SINCE is None
+    # v189 D6: scaled-out closes are labelled by net R from this date on;
+    # earlier ones keep their TP1-touch label (no backfill).
+    assert metrics.LABEL_BASIS_SINCE == "2026-10-30"
+    assert date.fromisoformat(metrics.LABEL_BASIS_SINCE).isoformat() == metrics.LABEL_BASIS_SINCE
 
 
 @pytest.mark.parametrize("row", load_golden()["label_table"], ids=lambda r: str(r["net_r"]))

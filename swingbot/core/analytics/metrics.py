@@ -60,8 +60,9 @@ SCRATCH_EPS_R: float = 0.01
 
 #: v189 D6: the date (ISO, UTC) from which scaled-out closes are labelled by
 #: net R; earlier ones were labelled by the TP1 touch and were not
-#: backfilled. Set by the release task; None until deployed.
-LABEL_BASIS_SINCE: str | None = None
+#: backfilled. Set at release (v189 V189-27) to the UTC merge date; the deploy
+#: follows the merge. If the deploy slips past it, amend it in the deploy commit.
+LABEL_BASIS_SINCE: str | None = "2026-10-30"
 
 
 def resolve_outcome(trade: dict) -> str:
