@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-29 15:45:17 UTC",
+  "generated_at": "2026-10-30 18:14:26 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.37.2",
-    "bot": "2.15.7"
+    "ui": "1.37.3",
+    "bot": "2.15.8"
   },
   "releases": [
     {
@@ -2239,6 +2239,20 @@
         "bot": "2.15.7"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-30",
+      "last_seen": "2026-10-30",
+      "commit": "f1f6b3cb",
+      "subject": "release(bot,ui): bot 2.15.8, ui 1.37.3 -- v189 book integrity and partial-trade truth",
+      "versions": {
+        "ui": "1.37.3",
+        "bot": "2.15.8"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
