@@ -39,6 +39,7 @@ from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
+from swingbot.core.analytics import metrics
 from swingbot.admin.trade_why import legacy_why_fields, plan_why_fields
 from swingbot.core.analytics.override_fidelity import MANUAL_REASONS
 from swingbot.core.tracking.performance import TradeLog
@@ -320,8 +321,12 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "banked_fraction": view.banked.fraction if view.banked else None,
         "banked_exit_price": view.banked.exit_price if view.banked else None,
         "banked_r": view.banked.r if view.banked else None,
+        "banked_contribution_r": _banked_contribution(plan, view),
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
+        # The ORIGINAL size: `shares` becomes the remaining count on an open
+        # PARTIAL row in `_strip_internal_fields` (v189 B1).
+        "entry_shares": t.get("shares"),
         "open_shares": _open_shares(t.get("shares"), plan.get("legs_realized") or []),
         "position_value": t.get("position_value"),
         "current_price": None,
@@ -331,7 +336,7 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "exit_price": t.get("exit_price"),
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t) if trade else None,
-        "r_multiple": dash.closed_r(t) if trade else None,
+        "r_multiple": _plan_row_r(plan, trade),
         # The plan's ORIGINAL risk stop (v166, public). `stop_loss` above is
         # `view.stop` -- the working/trailing stop once PARTIAL -- so this is
         # the only place the original survives on the row. Also read by
@@ -447,6 +452,39 @@ def _runner_exit_fields(plan: dict, trade: dict | None) -> dict:
     return dict(_NO_RUNNER_EXIT)
 
 
+def _banked_contribution(plan: dict, view) -> float | None:
+    """v189 B3: the realized legs' share of the trade's R, `Σ fraction x r`
+    (+1.00R for a +2R TP1 on half). Present exactly when `banked_r` is;
+    `banked_r` keeps meaning the TP1 leg's own R."""
+    if view.banked is None:
+        return None
+    return metrics.banked_contribution_r(plan.get("legs_realized") or [])
+
+
+def _plan_row_r(plan: dict, trade: dict | None) -> float | None:
+    """A closed plan's R is its trade's blended R. An open plan has none
+    until `_attach_unrealized_pnl` prices it: the banked blend alone is not
+    the trade's R (v189 B3)."""
+    if trade is None or plan.get("status") not in _TERMINAL:
+        return None
+    return dash.closed_r(trade)
+
+
+def _live_r(row: dict, price: float) -> float | None:
+    """Live R for an open row. A row with a banked TP1 leg gets the blended
+    trade R, `metrics.open_trade_r` over that one leg (an open plan has
+    realized at most its TP1 leg) -- None when the leg has no `r`. A row
+    with nothing banked keeps the whole position's live R. Both measure
+    against the ORIGINAL stop (`risk_stop`)."""
+    entry, stop, direction = row.get("entry"), row.get("risk_stop"), row.get("direction")
+    if row.get("banked_fraction") is None:
+        return dash.unrealized_r(entry, stop, direction, price)
+    banked_leg = {"fraction": row["banked_fraction"], "r": row.get("banked_r")}
+    blended = metrics.open_trade_r(
+        {"entry": entry, "stop_loss": stop, "direction": direction, "legs": [banked_leg]}, price)
+    return None if blended is None else round(blended, 2)
+
+
 def _runner_cell_fields(plan: dict, trade: dict | None, row: dict) -> dict:
     """Exactly the five v177 keys, for `_row_from_plan` to merge."""
     out = {"tp1": plan.get("tp1") if _is_trailing_runner(row) else None}
@@ -543,6 +581,7 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
         "banked_fraction": None,
         "banked_exit_price": None,
         "banked_r": None,
+        "banked_contribution_r": None,
         "closed_at": closed_at,
         # The leg's OWN holding period -- from the position's open to this
         # leg's own close, not the whole position's span (`_row_from_plan`'s
@@ -636,8 +675,10 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "banked_fraction": None,
         "banked_exit_price": None,
         "banked_r": None,
+        "banked_contribution_r": None,
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
+        "entry_shares": t.get("shares"),
         # Legacy v1 trades have no PARTIAL status and never scale out --
         # the full size stays open until the whole position closes at once.
         "open_shares": t.get("shares") if t.get("status") == "open" else None,
@@ -1243,6 +1284,8 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
     that needs a price for every row, not just the page (see the
     `_SORT_ALIASES` branch in `list_trades`), so it only ever reads it.
 
+    v189 B3: a row with a banked TP1 leg gets the blended trade R (`_live_r`).
+
     Sets transient `_display_shares` when a row has realized a leg; this is
     applied to the public `shares` field exactly once by `_strip_internal_fields`
     to avoid overwriting the original value before all P&L calculations complete.
@@ -1254,7 +1297,7 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
         entry, direction = row.get("entry"), row.get("direction")
         if price is not None and entry is not None:
             row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
-            row["r_multiple"] = dash.unrealized_r(entry, row.get("risk_stop"), direction, price)
+            row["r_multiple"] = _live_r(row, price)
             row["realized_pnl_amount"], row["fx_missing"] = convert_amount(
                 dash.unrealized_pnl_amount(entry, direction, row.get("open_shares"), price),
                 row.get("ticker"), date.today())

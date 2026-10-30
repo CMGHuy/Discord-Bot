@@ -31,7 +31,6 @@
     "swingbot.admin.api_v1.analytics:analytics_strategies": 15,
     "swingbot.admin.api_v1.market:chart": 24,
     "swingbot.admin.api_v1.system:_validate": 21,
-    "swingbot.admin.api_v1.trades:_row_from_plan": 15,
     "swingbot.admin.api_v1.trades:list_trades": 34,
     "swingbot.admin.dashboard:build_open_trade_views": 17,
     "swingbot.admin.queries:_plan_lifecycle": 20,
