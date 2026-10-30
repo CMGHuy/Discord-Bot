@@ -224,7 +224,7 @@ def test_clear_open_leaves_closed_history(seed, logged_in):
     ])
     r = logged_in.post("/api/v1/trades/clear-open")
     assert r.status_code == 200
-    assert r.get_json() == {"removed": 1}
+    assert r.get_json() == {"removed": 1, "ended": [], "notice": ""}
     remaining = logged_in.get("/api/v1/trades").get_json()["items"]
     assert [t["status"] for t in remaining] == ["CLOSED"]
 
@@ -242,7 +242,8 @@ def test_clear_history_leaves_open_trades(seed, logged_in):
 
 def test_clear_open_on_an_empty_store_is_not_an_error(seed, logged_in):
     seed()
-    assert logged_in.post("/api/v1/trades/clear-open").get_json() == {"removed": 0}
+    assert logged_in.post("/api/v1/trades/clear-open").get_json() == {
+        "removed": 0, "ended": [], "notice": ""}
 
 
 # --- close-open (bulk close, NOT clear-open -- see close_open's docstring) --

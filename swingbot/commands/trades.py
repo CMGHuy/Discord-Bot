@@ -18,6 +18,8 @@ from swingbot.commands.reply import CtxReply, InteractionReply, send_prefix_tip
 from swingbot.commands.slash import TRADE_FILTER_CHOICES
 from swingbot.core.tracking.risk_metrics import compute_risk_metrics
 from swingbot.core.tracking.performance import closed_pnl_pct
+from swingbot.core.db.engine import LockTimeout
+from swingbot.core.tracking.plan_links import describe_ended
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
 
 trade_log = scan_engine.trade_log
@@ -192,10 +194,27 @@ async def handle_trades(reply, status: str = "all", per_page: int = DEFAULT_PER_
     view.message = await reply.send(view.render(), view=view)
 
 
+_DELETE_LOCKED = ("A plan behind this is being updated by the bot right now; "
+                  "nothing was deleted. Try again in a moment.")
+
+
+def _with_ended(text: str, result) -> str:
+    """`text`, then the A7 lines naming every plan the delete ended."""
+    notice = describe_ended(result)
+    return f"{text}\n{notice}" if notice else text
+
+
 async def handle_trades_clear(reply) -> None:
-    """Clear all currently OPEN/active trades. Closed trade history is kept."""
-    count = trade_log.clear_open()
-    await reply.send(f"Cleared {count} open trade(s). Closed win/loss history was not touched.")
+    """Clear all currently OPEN/active trades and end their linked plans.
+    Closed trade history is kept."""
+    try:
+        result = trade_log.clear_open()
+    except LockTimeout:
+        await reply.send_error(_DELETE_LOCKED)
+        return
+    await reply.send(_with_ended(
+        f"Cleared {result.removed} open trade(s). Closed win/loss history was not touched.",
+        result))
 
 
 async def handle_trades_clear_history(reply) -> None:
@@ -363,11 +382,15 @@ async def handle_trade_show(reply, trade_id: str) -> None:
 
 
 async def handle_trade_delete(reply, trade_id: str) -> None:
-    deleted = trade_log.delete_trade(trade_id)
-    if not deleted:
+    try:
+        result = trade_log.delete_trade(trade_id)
+    except LockTimeout:
+        await reply.send_error(_DELETE_LOCKED)
+        return
+    if not result:
         await reply.send_error(f"No trade found with id `{trade_id}`.")
         return
-    await reply.send(f"Deleted trade `{trade_id}`.")
+    await reply.send(_with_ended(f"Deleted trade `{trade_id}`.", result))
 
 
 async def handle_tradecharts(reply, status: str = "open", limit: int = 5) -> None:

@@ -20,6 +20,7 @@ the trade-history channel goes quiet without it.
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 from datetime import datetime, timezone
 
 from flask import jsonify, request
@@ -29,6 +30,7 @@ from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, LockTimeout, transact
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.tracking.performance import TradeLog, run_after_commit
 from swingbot.core.tracking.performance import _usable_price
+from swingbot.core.tracking.plan_links import describe_ended
 from swingbot.core.planning.plan_engine import (PlanStatus, plan_from_dict, plan_to_dict,
                                                 record_transition)
 from swingbot.core.planning.plan_store import PlanStore
@@ -303,6 +305,15 @@ def cancel_trade(trade_id: str):
 
 # --- delete --------------------------------------------------------------
 
+_DELETE_LOCKED = ("A plan behind this delete is being updated by the bot; "
+                  "nothing was deleted. Try again in a moment.")
+
+
+def _ended_body(result) -> dict:
+    """The A7 part of a delete response: every plan ended, and the copy."""
+    return {"ended": [asdict(e) for e in result.ended], "notice": describe_ended(result)}
+
+
 @api_v1.route("/trades/<trade_id>", methods=["DELETE"])
 @require_auth
 def delete_trade(trade_id: str):
@@ -316,6 +327,11 @@ def delete_trade(trade_id: str):
 
     Supporting it would need a PlanStore.delete() in core, which is outside
     this migration's remit. Left as an open question for sub-project 5.
+
+    v189 A7: a trade-id delete of a plan-linked trade ends that plan in the
+    same transaction (PENDING cancelled, ACTIVE/PARTIAL closed, no P&L); the
+    response lists it under `ended`, with the confirmation in `notice`. A
+    lock timeout is a 409 and nothing is deleted.
     """
     if _looks_like_a_plan_id(trade_id):
         if PlanStore().get_record(trade_id) is None:
@@ -325,9 +341,13 @@ def delete_trade(trade_id: str):
             "Plans cannot be deleted; cancel a PENDING plan or close an active one.",
             422,
         )
-    if not TradeLog().delete_trade(trade_id):
+    try:
+        result = TradeLog().delete_trade(trade_id)
+    except LockTimeout:
+        return error("conflict", _DELETE_LOCKED, 409)
+    if not result:
         return error("not_found", f"No trade with id {trade_id!r}", 404)
-    return jsonify({"deleted": trade_id})
+    return jsonify({"deleted": trade_id, **_ended_body(result)})
 
 
 # --- bulk clears ---------------------------------------------------------
@@ -335,7 +355,11 @@ def delete_trade(trade_id: str):
 @api_v1.route("/trades/clear-open", methods=["POST"])
 @require_auth
 def clear_open():
-    return jsonify({"removed": TradeLog().clear_open()})
+    try:
+        result = TradeLog().clear_open()
+    except LockTimeout:
+        return error("conflict", _DELETE_LOCKED, 409)
+    return jsonify({"removed": result.removed, **_ended_body(result)})
 
 
 @api_v1.route("/trades/clear-history", methods=["POST"])
