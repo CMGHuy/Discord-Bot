@@ -18,6 +18,7 @@ from typing import NamedTuple
 
 from swingbot import config
 from swingbot.core.analytics import runner_path as rp
+from swingbot.core.analytics.metrics import net_outcome
 from swingbot.core.db.engine import BOT_LOCK_TIMEOUT_MS, LockTimeout, transaction
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.session import (RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
@@ -1522,6 +1523,17 @@ class PlanManager:
                 "giveback_extreme": float(plan.runner_high_close),
                 "giveback_stop": level}
 
+    def _plan_outcome(self, plan: TradePlanV2) -> tuple[str, str | None]:
+        """The trade status and close_reason of a close with two or more
+        realized legs (v189 D2): the sign of the unrounded blended net R via
+        metrics.net_outcome -- win above +SCRATCH_EPS_R, loss below its
+        negative, closed/scratch inside, closed/unscored when the net cannot
+        be computed. Never "TP1 was touched, so win". Live only: the backtest
+        keeps its event labels (exit_sim_v2)."""
+        return net_outcome({"plan_id": plan.plan_id, "entry": plan.entry_price,
+                            "stop_loss": plan.stop_loss, "direction": plan.direction,
+                            "legs": [dict(leg) for leg in plan.legs_realized]})
+
     def _close_runner(self, plan: TradePlanV2, fill: float, reason: str,
                       risk: float, sign: int, extra: dict | None = None) -> list[PlanEvent]:
         r2 = (fill - plan.entry_price) * sign / risk if risk > 0 else 0.0
@@ -1532,7 +1544,10 @@ class PlanManager:
         record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at)
         rp.stamp_runner_path(plan, self.runner_bars_fn, source="live")   # v142; never raises
         self._structure_seen.pop(plan.plan_id, None)
-        persisted = self._persist_terminal(plan, leg, "win" if reason.startswith("tp1_") else "closed")
+        # v189 D2: labelled by the net of every realized leg (the runner leg
+        # was appended above), not by the reason's "tp1_" prefix.
+        status, close_reason = self._plan_outcome(plan)
+        persisted = self._persist_terminal(plan, leg, status, close_reason)
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg,
                            "_terminal_persisted": persisted})]
@@ -1621,7 +1636,9 @@ class PlanManager:
 
     def _close_time_exit(self, plan: TradePlanV2, auction: te.AuctionClose) -> list[PlanEvent]:
         """Persist the paper close of whatever is still open at the official
-        auction price, through the one terminal path."""
+        auction price, through the one terminal path. A scaled-out plan closes
+        its runner through _close_runner and is labelled by net R (v189 D2);
+        a plan with no realized leg keeps the single-leg label."""
         sign = 1 if plan.direction == "bullish" else -1
         entry = plan.entry_price
         risk = abs(entry - plan.stop_loss)

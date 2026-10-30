@@ -221,8 +221,9 @@ def test_a_terminal_target_close_reaches_the_trade_log_as_a_win(tmp_path):
     _step_extended path used to skip straight to a one-tick "win" close
     when tp2 was None, which the full machine has no equivalent of. The
     runner then closes on its own floor like any other runner, and still
-    reaches the trade log as a win (close_plan_trade's reason ->
-    status mapping treats every "tp1_..." reason as a win)."""
+    reaches the trade log as a win: since v189 the label is the net R of
+    both legs (+2.2R on half, +1.2R on half, net +1.7R), not the "tp1_"
+    reason."""
     feed = FakePriceFeed()
     feed.set_series("AAPL", [111.0, 106.0])
     store = PlanStore()
