@@ -385,6 +385,12 @@ def expand_trade_legs(trade: dict) -> list[dict]:
     already-realized leg, not the fraction-weighted blend those two
     functions use for a still-nested multi-leg trade.
 
+    v189 B2: each leg row also carries `fraction` (that leg's share of the
+    original position; the remainder's share on the open row) and `leg_r`
+    (the leg's stored `r`, None when it has none or on the open row), so
+    anything that sums leg rows can weight them with
+    `metrics.leg_contribution_r`. A trade with no legs gains neither key.
+
     NOT a blanket drop-in: only some of a returned row's fields are
     leg-accurate. Leg-accurate are `status`, `shares`, `exit_price`,
     `closed_at`, and anything derived through
@@ -420,6 +426,10 @@ def expand_trade_legs(trade: dict) -> list[dict]:
             "entry": entry,
             "direction": direction,
             "stop_loss": stop_loss,
+            # v189 B2: the leg's share of the original position and its own
+            # stored R, so a sum can add its contribution (fraction x r).
+            "fraction": leg.get("fraction"),
+            "leg_r": leg.get("r"),
         })
 
     if trade.get("status") == "open":
@@ -433,6 +443,8 @@ def expand_trade_legs(trade: dict) -> list[dict]:
             ),
             "exit_price": None,
             "status": "open",
+            "fraction": remaining_fraction,
+            "leg_r": None,
         })
 
     return rows
@@ -464,8 +476,9 @@ def expand_realized_legs(trade: dict) -> list[dict]:
     table's leg rows carry.
 
     This is how the Dashboard's chips and the P&L calendar count a partial:
-    as an individual trade, on the day it banked, with its own outcome and
-    its own R (`metrics.r_multiple` on a row prices the leg's own exit).
+    as an individual trade, on the day it banked, with its own outcome. Its R
+    on the calendar is its contribution (`fraction x r`, v189 B2), not the
+    leg's R at full size.
     """
     expanded = expand_trade_legs(trade)
     total = len(expanded)
