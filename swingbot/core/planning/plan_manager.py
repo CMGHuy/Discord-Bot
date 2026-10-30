@@ -9,6 +9,7 @@ gap-aware fills (Task 67) handle the overnight case."""
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -102,6 +103,18 @@ def _session_label(now) -> str:
     if not is_tape_open(now):
         return "closed"
     return "pre-market" if now_et(now).time() < RTH_OPEN else "after-hours"
+
+
+def _usable_price(price) -> bool:
+    """A quote the state machine may act on: a finite number above zero.
+    ``not price`` let NaN through (NaN is truthy and ``NaN <= 0`` is False),
+    and a NaN never crosses a level, so it silently looked like 'no move'
+    (v189 D4)."""
+    try:
+        value = float(price)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(value) and value > 0
 
 
 def quote_stamp(q, now) -> dict | None:
@@ -539,6 +552,9 @@ class PlanManager:
         # priced. None = nothing demanded (quiet hours, serial seam, not polled).
         self.last_poll_demand: PollDemand | None = None
         self.last_poll_check_errors: list[str] = []
+        # v189 D3.3: exits that failed twice, drained by take_exit_failures()
+        # and posted to the ops channel by commands/scanning/loops.py.
+        self._exit_failures: list[dict] = []
         # v189 D3.3: the bot path waits at most BOT_LOCK_TIMEOUT_MS for a plan
         # row another process holds, then skips that plan for one poll. Store
         # doubles without the attribute are left alone.
@@ -709,7 +725,7 @@ class PlanManager:
                 prices = {}
         self._record_poll_demand(open_plans, prices)
         details = getattr(prices, "details", {})
-        for plan in open_plans:
+        for plan in self._ordered(open_plans):
             if prices is not None:
                 price = prices.get(plan.ticker)
             else:
@@ -718,7 +734,7 @@ class PlanManager:
                 except Exception as exc:
                     log.debug("poll: price fetch failed for %s: %s", plan.ticker, exc)
                     continue
-            if not price or price <= 0:
+            if not _usable_price(price):
                 continue
             # Step the plan as it is NOW, not the copy open_plans() handed out
             # before this and every earlier plan's price fetch. The admin UI
@@ -729,12 +745,8 @@ class PlanManager:
                     PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL):
                 continue
             self._warn_legacy_open_risk(plan)
-            try:
-                new_events = self._step(plan, price, now)
-            except Exception:
-                log.warning("poll: step failed for plan %s", plan.plan_id,
-                            exc_info=True)
-                self.last_poll_check_errors.append(plan.ticker)
+            new_events = self._step_safely(plan, price, now)
+            if new_events is None:
                 continue
             if is_tape_open(now):
                 # Prints from a LIVE TAPE only -- not merely "a tick we
@@ -764,6 +776,34 @@ class PlanManager:
             events.extend(self._feed_bookkeeping(plan, new_events, regular, now))
             events.extend(self._near_stop_event(plan, price, now))
         return events
+
+    @staticmethod
+    def _ordered(plans: list) -> list:
+        """Stop-bearing (non-PENDING) plans first, each group in its given
+        order: with a 1s lock budget per plan, exits are attempted before
+        entries (v189 D3.3)."""
+        return sorted(plans, key=lambda plan: plan.status == PlanStatus.PENDING)
+
+    def _step_safely(self, plan: TradePlanV2, price: float, now) -> list[PlanEvent] | None:
+        """``_step`` for one plan of a poll. None = skip the plan this poll:
+        nothing was written, so nothing is emitted or bookkept. A refused stale
+        write or a locked row is a skip, not a check error; a rolled-back write
+        or an unexpected exception is one (v184 liveness stamp)."""
+        try:
+            return self._step(plan, price, now)
+        except PlanWriteAborted:
+            return None          # logged at INFO by the store
+        except PlanPersistFailed:
+            self.last_poll_check_errors.append(plan.ticker)
+            return None          # logged at ERROR where it rolled back
+        except LockTimeout:
+            log.info("poll: plan %s is locked by another writer; skipped this poll",
+                     plan.plan_id)
+            return None
+        except Exception:
+            log.warning("poll: step failed for plan %s", plan.plan_id, exc_info=True)
+            self.last_poll_check_errors.append(plan.ticker)
+            return None
 
     def _near_stop_event(self, plan: TradePlanV2, price, now) -> list[PlanEvent]:
         """v152 D1: one near_stop event when an ACTIVE/PARTIAL plan's price is
@@ -950,17 +990,50 @@ class PlanManager:
     def _persist_terminal(self, plan: TradePlanV2, leg: dict, status: str,
                           close_reason: str | None = None) -> bool:
         """Persist a terminal plan and its linked trade as one DB transaction.
-        True when the trade was closed with it; False without a trade log."""
+        True when the trade was closed with it; False without a trade log.
+
+        v189 D3.3: a failed or timed-out exit is retried once, at once, with
+        the same plan, leg and observed price -- a missed stop would flatter
+        the book, and the next poll may never see that price again. A refused
+        stale write (PlanWriteAborted) is not a failure and is never retried."""
         if self.trade_log is None:
             self._save(plan)
             return False
         try:
             self._close_in_transaction(plan, leg, status, close_reason)
-        except _PASS_THROUGH:
+        except PlanWriteAborted:
+            raise
+        except Exception as first:
+            swallowed(log, "scan.plan_manager.exit_retry", first,
+                      "plan %s (%s): exit write failed (%s); retrying once at %s",
+                      plan.plan_id, plan.ticker, first, leg.get("exit_price"), exc_info=True)
+            self._retry_close(plan, leg, status, close_reason)
+        return True
+
+    def _retry_close(self, plan: TradePlanV2, leg: dict, status: str,
+                     close_reason: str | None) -> None:
+        try:
+            self._close_in_transaction(plan, leg, status, close_reason)
+        except PlanWriteAborted:
             raise
         except Exception as exc:
-            raise self._rolled_back(plan, "close", exc) from exc
-        return True
+            self._record_exit_failure(plan, leg, exc)
+            raise PlanPersistFailed(plan.plan_id) from exc
+
+    def _record_exit_failure(self, plan: TradePlanV2, leg: dict, exc: Exception) -> None:
+        failure = {"plan_id": plan.plan_id, "ticker": plan.ticker,
+                   "exit_price": float(leg["exit_price"]), "reason": leg.get("reason"),
+                   "error": f"{type(exc).__name__}: {exc}"}
+        self._exit_failures.append(failure)
+        log.error("plan %s (%s): exit not recorded -- observed %s exit at %.4f failed "
+                  "twice, the book still shows it open: %s",
+                  plan.plan_id, plan.ticker, failure["reason"], failure["exit_price"],
+                  failure["error"], exc_info=exc)
+
+    def take_exit_failures(self) -> list[dict]:
+        """The exits that failed twice since the last call, oldest first."""
+        failures, self._exit_failures = self._exit_failures, []
+        return failures
 
     def _continuous(self, plan: TradePlanV2, stop: float, now=None) -> bool:
         seen = self._last_seen.get(plan.plan_id)
@@ -1778,7 +1851,8 @@ def _monitor_quote_worker(tickers: list) -> tuple:
     from swingbot.core.marketdata.data import get_quote_batch
     from swingbot.core.marketdata.shared import counters
     quotes = get_quote_batch(tickers, asker=Asker.STOP_MONITOR, fresh_only=True)
-    return {t: q.to_doc() for t, q in quotes.items() if q.price}, counters.snapshot_and_clear()
+    return ({t: q.to_doc() for t, q in quotes.items() if _usable_price(q.price)},
+            counters.snapshot_and_clear())
 
 
 def monitor_quotes(tickers: list) -> dict:
@@ -1816,7 +1890,8 @@ def _price_batch_fn(tickers):
     if config.MARKETDATA_LAYER == "off":
         return _legacy_price_batch(tickers)
     details = monitor_quotes(tickers)
-    return QuotePrices({t: q.price for t, q in details.items() if q.price}, details)
+    return QuotePrices({t: q.price for t, q in details.items() if _usable_price(q.price)},
+                       details)
 
 
 # Retain the serial seam for deterministic callers/tests that replace
@@ -1870,6 +1945,14 @@ def run_manager_tick() -> list[PlanEvent]:
         return []
     # Production reads the wall clock; poll's optional clock is test injection.
     return _manager().poll()
+
+
+def drain_exit_failures() -> list[dict]:
+    """The process manager's failed exits since the last call (v189 D3.3), for
+    the trade_monitor loop to post; [] before the manager's first tick."""
+    if _MANAGER is None:
+        return []
+    return _MANAGER.take_exit_failures()
 
 
 def last_poll_demand() -> PollDemand | None:
