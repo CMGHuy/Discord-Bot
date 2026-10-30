@@ -200,13 +200,18 @@ def test_a_price_failure_on_one_plan_does_not_stop_the_others(tmp_path):
 
 
 class _RecordingLog:
-    """Minimal TradeLog stand-in: PlanManager._on_event only ever calls
-    close_plan_trade() on a terminal close."""
+    """Minimal TradeLog stand-in: the plan manager writes the TP1 leg and the
+    terminal close through it, inside the plan's transaction (v189 D3.1)."""
 
     def __init__(self):
         self.closed = []
+        self.legs = []
 
-    def close_plan_trade(self, plan_id, leg, status, *, conn=None):
+    def append_leg_by_plan(self, plan_id, leg, *, conn=None):
+        self.legs.append((plan_id, leg))
+
+    def close_plan_trade(self, plan_id, leg, status, *, conn=None, close_reason=None,
+                         after_commit=None):
         self.closed.append((plan_id, leg, status))
 
 
