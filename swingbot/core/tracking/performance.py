@@ -22,6 +22,7 @@ import string
 from contextlib import nullcontext
 from datetime import datetime, timezone, timedelta
 from threading import Lock
+from typing import TYPE_CHECKING
 
 # Full alphanumeric charset (62 chars: 0-9, a-z, A-Z) trade ids are drawn
 # from -- see log_trade() below.
@@ -32,6 +33,9 @@ from swingbot.core.planning import account as account_module
 from swingbot.core.planning import gap_sizing as gap_sizing_mod
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
 from swingbot.core.market.strategy_types import HORIZONS as _HORIZONS
+
+if TYPE_CHECKING:
+    from swingbot.core.tracking.plan_links import DeleteResult
 
 # Baseline horizon the raw NEAR_TP_TIMEOUT_MINUTES/NEAR_TP_STALL_CHECK_MINUTES
 # settings are tuned for -- see check_near_tp_timeout()'s horizon-scaling below.
@@ -194,6 +198,24 @@ def _close_linked_plan_safely(plan_id: str, reason: str, *, conn=None) -> None:
     except Exception:
         log.warning(
             "could not close plan %s after its trade closed", plan_id, exc_info=True)
+
+
+def _end_plan_for_delete(trade: dict, *, conn):
+    """End the v2 plan behind a trade that is being deleted (v189 A7), in the
+    delete's transaction, and queue its notice. None for a legacy trade or a
+    plan that is already terminal."""
+    plan_id = trade.get("plan_id")
+    if not plan_id:
+        return None
+    from swingbot.core.tracking import plan_links
+    return plan_links.end_linked_plan(plan_id, plan_links.TRADE_DELETED_REASON,
+                                      conn=conn, notice=True)
+
+
+def _plan_lock_order(trade: dict) -> tuple:
+    """Plan rows lock in plan_id order (index lock-order rule); legacy rows last."""
+    plan_id = trade.get("plan_id")
+    return (plan_id is None, plan_id or "", trade["id"])
 
 
 def _refresh_snapshot_safely() -> None:
@@ -1689,20 +1711,52 @@ class TradeLog:
                     return True
         return False
 
-    def delete_trade(self, trade_id: str) -> bool:
-        """Remove a single trade record by id. Returns True if something was deleted."""
-        with _LOCK:
-            return bool(self._db_delete_rows(trade_id=trade_id))
+    def delete_trade(self, trade_id: str) -> "DeleteResult":
+        """Remove one trade record by id, any status. v189 A7: its linked plan
+        ends in the same transaction -- PENDING cancels, ACTIVE/PARTIAL close
+        with no P&L -- with its feed / follow notice queued. Falsy when nothing
+        was deleted. LockTimeout propagates and nothing changes."""
+        from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, transaction
+        from swingbot.core.db.repositories.trades import trades_repo
+        from swingbot.core.tracking.plan_links import DeleteResult
+        trade = next((t for t in self._all() if t["id"] == trade_id), None)
+        if trade is None:
+            return DeleteResult(0)
+        with transaction(lock_timeout_ms=ADMIN_LOCK_TIMEOUT_MS) as tx:
+            ended = _end_plan_for_delete(trade, conn=tx)
+            removed = int(trades_repo().delete(trade_id, conn=tx))
+        return DeleteResult(removed, (ended,) if ended else ())
 
     def clear_history(self) -> int:
         """Delete all closed (win/loss/manually-closed) trade records, leaving open trades untouched."""
         with _LOCK:
             return self._db_delete_rows("closed")
 
-    def clear_open(self) -> int:
-        """Delete every trade currently in status='open', leaving closed win/loss history untouched."""
-        with _LOCK:
-            return self._db_delete_rows("open")
+    def clear_open(self) -> "DeleteResult":
+        """Delete every open trade this call reads, leaving closed history
+        untouched, and end each one's linked plan in the same transaction
+        (v189 A7). Plan rows lock in plan_id order, each trade row after its
+        plan; a trade closed meanwhile is kept. LockTimeout propagates and
+        nothing changes."""
+        from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, transaction
+        from swingbot.core.tracking.plan_links import DeleteResult
+        doomed = sorted((t for t in self._all() if t["status"] == "open"), key=_plan_lock_order)
+        if not doomed:
+            return DeleteResult(0)
+        with transaction(lock_timeout_ms=ADMIN_LOCK_TIMEOUT_MS) as tx:
+            outcomes = [self._delete_open_with_plan(t, conn=tx) for t in doomed]
+        return DeleteResult(sum(removed for removed, _ in outcomes),
+                            tuple(ended for _, ended in outcomes if ended))
+
+    def _delete_open_with_plan(self, trade: dict, *, conn) -> tuple:
+        """(rows removed, EndedPlan | None) for one open trade inside `conn`:
+        the plan first, then the trade row under its lock, deleted only if
+        it is still open."""
+        from swingbot.core.db.repositories.trades import trades_repo
+        ended = _end_plan_for_delete(trade, conn=conn)
+        if self._open_trade_by_id(trade["id"], conn=conn) is None:
+            return 0, ended
+        return int(trades_repo().delete(trade["id"], conn=conn)), ended
 
     def clear_all(self) -> int:
         """Delete every trade record. Returns how many were removed."""

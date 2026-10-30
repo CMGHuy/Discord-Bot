@@ -34,6 +34,9 @@ LINKED_TERMINAL = {PlanStatus.PENDING: PlanStatus.CANCELLED,
 #: the cancel event a PENDING plan announces when its placeholder is deleted.
 TRADE_DELETED_EVENT = "cancelled_trade_deleted"
 
+#: the transition reason a delete writes on the plan it ends.
+TRADE_DELETED_REASON = "trade_deleted"
+
 
 @dataclass(frozen=True)
 class EndedPlan:
@@ -107,3 +110,33 @@ def cancel_if_unfilled(plan_id: str, reason: str) -> bool:
     (the reversal runs in the scanner). LockTimeout propagates."""
     with transaction(lock_timeout_ms=BOT_LOCK_TIMEOUT_MS) as tx:
         return cancel_unfilled_in(plan_id, reason, conn=tx)
+
+
+def _names(ended) -> str:
+    """`AAPL (`p1`, was PARTIAL), ...` for the plans a delete ended."""
+    return ", ".join(f"{e.ticker} (`{e.plan_id}`, was {e.status_before})" for e in ended)
+
+
+def _cancel_line(cancelled: list[EndedPlan]) -> str:
+    """The confirmation line for the unfilled plans a delete cancelled."""
+    tail = "Its order never filled." if len(cancelled) == 1 else "Their orders never filled."
+    return f"Cancelled {len(cancelled)} unfilled plan(s): {_names(cancelled)}. {tail}"
+
+
+def describe_ended(result: DeleteResult) -> str:
+    """The confirmation lines for the plans a delete ended ("" when none).
+    Held positions first: they lose their monitoring and alerts. An open
+    PARTIAL's TP1 leg is not in the balance until the close settles, so the
+    deleted trade takes it along."""
+    closed = [e for e in result.ended if e.status_after == PlanStatus.CLOSED]
+    cancelled = [e for e in result.ended if e.status_after == PlanStatus.CANCELLED]
+    lines = []
+    if closed:
+        lines.append(
+            f"Ended {len(closed)} open position(s): {_names(closed)}. "
+            "The bot no longer monitors them and sends no more stop or take-profit alerts "
+            "for them. Any TP1 dollars they banked are deleted with the trade and never "
+            "reach the balance.")
+    if cancelled:
+        lines.append(_cancel_line(cancelled))
+    return "\n".join(lines)

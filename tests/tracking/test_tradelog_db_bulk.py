@@ -33,6 +33,10 @@ class FakeTradesRepo:
     def delete(self, key, conn=None):
         return self.rows.pop(key, None) is not None
 
+    def get_for_update(self, key, *, conn):
+        row = self.rows.get(key)
+        return dict(row) if row is not None else None
+
     def clear(self, *, status=None, conn=None):
         doomed = [k for k, r in self.rows.items()
                   if status is None
@@ -117,9 +121,9 @@ def test_check_near_tp_timeout_start_clock_is_persisted(env):
 def test_delete_trade_removes_db_only_row(env):
     log, repo = _db_log(env)
     repo.seed(_trade("T1"))
-    assert log.delete_trade("T1") is True
+    assert log.delete_trade("T1").removed == 1
     assert repo.rows == {}
-    assert log.delete_trade("T1") is False
+    assert not log.delete_trade("T1")
 
 
 def test_delete_trade_removes_only_that_row(env):
@@ -144,7 +148,7 @@ def test_clear_open_deletes_open_db_rows_only(env):
     repo.seed(_trade("O1"))
     repo.seed(_trade("O2"))
     repo.seed(_trade("C1", status="win"))
-    assert log.clear_open() == 2
+    assert log.clear_open().removed == 2
     assert _live(repo) == ["C1"] and repo.upserts == []
 
 
@@ -159,7 +163,7 @@ def test_clear_all_deletes_every_db_row(env):
 def test_clear_on_empty_db_returns_zero(env):
     log, repo = _db_log(env)
     assert log.clear_history() == 0
-    assert log.clear_open() == 0
+    assert log.clear_open().removed == 0
     assert log.clear_all() == 0
 
 
