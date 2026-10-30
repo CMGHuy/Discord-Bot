@@ -818,26 +818,45 @@ def _risk_notice_detail_lines(plan: dict | None, trade: dict | None) -> list[str
     return risk_notice_lines(snapshot, currency=config.CURRENCY_SYMBOL) if snapshot else None
 
 
-def _recorded_sizing_view(sizing: dict, shares, entry, stop, stamp) -> dict:
+def _recorded_sizing_view(sizing: dict, shares, entry, stop, stamp, direction: str) -> dict:
     """The size_for result re-expressed on the shares actually shown."""
     if shares is None or "gap_sized" not in sizing:
         return dict(sizing)
     return {**sizing, "risk_amount": round(float(shares) * abs(float(entry) - float(stop)), 2),
-            "gap_risk_amount": gap_risk_amount_for(shares, entry, stop, stamp)}
+            "gap_risk_amount": gap_risk_amount_for(shares, entry, stop, stamp, direction=direction)}
+
+
+def _gap_stamp_for(p: dict, t: dict) -> tuple[str, dict] | None:
+    """The saved stamp, plan first, for a short or an explicitly stamped long."""
+    stamp = p.get("gap_sizing") or t.get("gap_sizing")
+    direction = (p or t).get("direction")
+    if not stamp or direction not in ("bullish", "bearish"):
+        return None
+    if direction == "bullish" and "n_down_gaps" not in stamp:
+        return None
+    return direction, stamp
+
+
+def _p99_keys(direction: str, stamp: dict) -> dict:
+    """Keep the short response shape and expose the adverse-side long percentile."""
+    if direction == "bearish":
+        return {"up_gap_p99_pct": stamp.get("up_gap_p99_pct")}
+    return {"up_gap_p99_pct": None, "down_gap_p99_pct": stamp.get("down_gap_p99_pct")}
 
 
 def _gap_sizing_detail(plan: dict | None, trade: dict | None) -> dict | None:
-    """v183: the order block's share count and gap-risk line for a stamped short."""
+    """The order block's share count and gap-risk line for a stamped short or long."""
     p, t = plan or {}, trade or {}
-    stamp = p.get("gap_sizing") or t.get("gap_sizing")
-    if (p or t).get("direction") != "bearish" or not stamp:
+    found = _gap_stamp_for(p, t)
+    if found is None:
         return None
+    direction, stamp = found
     entry = t.get("entry") or p.get("trigger_price") or p.get("entry_price")
     stop = t.get("stop_loss") or p.get("stop_loss")
-    sizing = size_for(entry, stop, direction="bearish", gap_sizing=stamp) or {}
+    sizing = size_for(entry, stop, direction=direction, gap_sizing=stamp) or {}
     shares = t["shares"] if t.get("shares") is not None else sizing.get("shares")
-    view = _recorded_sizing_view(sizing, shares, entry, stop, stamp)
-    return {"rule": stamp.get("rule"), "up_gap_p99_pct": stamp.get("up_gap_p99_pct"),
+    view = _recorded_sizing_view(sizing, shares, entry, stop, stamp, direction)
+    return {"rule": stamp.get("rule"), **_p99_keys(direction, stamp),
             "shares": shares, "risk_amount": view.get("risk_amount"),
             "gap_risk_amount": view.get("gap_risk_amount"), "gap_sized": bool(view.get("gap_sized")),
             "line": gap_risk_line(view, currency=config.CURRENCY_SYMBOL)}
