@@ -333,6 +333,30 @@ The quant-engineer and financial-advisor findings add the following:
   pass, the commit and versions deployed, the scan state, and the snapshot's
   `bars_as_of` and `computed_at` at probe time.
 
+### Brief corrections (plan-briefer, 2026-10-30)
+
+These are facts found in the code. They override the text above.
+
+- **Risk has no quote-derived figure.** Heat comes from entry, stop and
+  balance, and `/risk` rows carry no price. Risk's two clocks are therefore
+  **"FX rates as of"** and **"daily bars through"**, not "prices as of". On
+  Risk, the recorded quote prices and the oldest quote `as_of` are empty.
+  Missing inputs there mean missing bars or missing FX. Analytics, Calendar
+  and the sparkline record quotes only where they really use them.
+- **Stored P&L is gross of modelled frictions.** Paper fills carry no
+  slippage or fees (`performance.py:15`). The headline label therefore reads
+  "pre-tax, before modelled frictions".
+- **The sparkline caller** is `swingbot/admin/api_v1/dashboard.py:56-57`, not
+  `swingbot/admin/dashboard.py:57`.
+- **The snapshot build does not swallow errors.** `refresh_snapshot`,
+  `_asset_correlation` and `_distribution_metrics` turn errors into
+  None/empty today. The snapshot path surfaces those errors (loud failure,
+  `missing` with a reason), and the success-path payload stays identical, as
+  the parity test requires.
+- **The no-notification guard** is an import guard on the refresher and
+  snapshot modules plus a runtime check, because there is no single Discord
+  sender to patch.
+
 ## Panel review
 
 Serial run on `21a89358`: staff-engineer (opus), then quant-engineer (sonnet)
