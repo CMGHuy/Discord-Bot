@@ -3,8 +3,9 @@ the trade record's settled realized_pnl_amount (spec §1 / A2).
 
 Only plan_manager closes emit a feed close, and each settles the linked trade
 (close_plan_trade -> TradeLog._settle_account_balance) before the event
-exists. One test per emitting route, the _on_event fallback, and every
-unsettled case, which must print R only. Reversal (close_trade_reversed),
+exists. One test per emitting route, the _on_event fallback, every
+unsettled case, which must print R only, and the one failure that rolls the
+close back. Reversal (close_trade_reversed),
 manual close, backfill_exit_price, update_open_trades,
 close_if_live_price_hit and check_near_tp_timeout settle but never emit a
 feed message (the last three skip plan-linked trades), so they get no render
@@ -168,17 +169,25 @@ def test_a_trade_with_no_share_snapshot_closes_with_r_only(tmp_path, monkeypatch
     assert _pnl_lines(store, event) == [R_ONLY]
 
 
-def test_a_failed_balance_update_closes_with_r_only(trade_log, monkeypatch):
+def test_a_failed_balance_update_rolls_the_close_back(trade_log, monkeypatch):
+    """v189 D3.2: the balance point is written inside the close transaction, so
+    a failed balance write rolls the whole close back -- no closed event, the
+    plan still ACTIVE, the trade still open with nothing realized."""
     def refuse(*_args, **_kwargs):
         raise RuntimeError("account store down")
 
     monkeypatch.setattr(performance.account_module, "apply_realized_pnl", refuse)
     _placeholder(trade_log)
-    store, event = _run(trade_log, [106, 103])
+    feed = FakePriceFeed([("AAPL", p) for p in (106, 103)])
+    store = PlanStore()
+    store.add(_pending(stop_loss=104.0))
+    mgr = PlanManager(store, feed.get_price, trade_log=trade_log)
+    events = [e for _ in range(2) for e in mgr.poll(now=SATURDAY)]
+
+    assert [e for e in events if e.transition == "closed"] == []
+    assert store.get("p1").status == "ACTIVE"
     record = trade_log.trade_for_plan("p1")
-    assert record["status"] == "loss" and record["shares"]
-    assert record["realized_pnl_amount"] is None
-    assert _pnl_lines(store, event) == [R_ONLY]
+    assert record["status"] == "open" and record.get("realized_pnl_amount") is None
 
 
 def test_a_plan_with_no_linked_trade_closes_with_r_only(tmp_path, monkeypatch):

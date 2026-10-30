@@ -24,6 +24,7 @@ import {
   CalendarDaySparklines,
   CalendarDayTrades,
   ChartResponse,
+  ClearHistoryResult,
   ClearResult,
   CloseOpenResult,
   CloseScope,
@@ -189,8 +190,8 @@ export class ApiClient {
     return this.http.post<ClearResult>(`${this.base}/trades/clear-open`, {});
   }
 
-  clearTradeHistory(): Observable<ClearResult> {
-    return this.http.post<ClearResult>(`${this.base}/trades/clear-history`, {});
+  clearTradeHistory(force = false): Observable<ClearHistoryResult> {
+    return this.http.post<ClearHistoryResult>(`${this.base}/trades/clear-history`, force ? { force: true } : {});
   }
 
   setTradeNote(id: string, note: string): Observable<TradeNote> {

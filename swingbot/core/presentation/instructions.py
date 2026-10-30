@@ -431,8 +431,25 @@ def _close_head(detail: dict, side: dict, exit_price, lead: str,
     return EXITED, headline, [pnl, f"If your broker order did not fill: {side['exit']}"]
 
 
+#: v189 A7: closes with no exit behind them. The bot stopped monitoring the
+#: position because its trade record was deleted; nothing was exited.
+_NO_EXIT_REASONS = frozenset({"trade_deleted"})
+
+
+def _no_exit_close(side: dict, common: dict) -> Instruction:
+    return Instruction(
+        verb=EXITED, headline="NO LONGER MONITORED · trade record deleted",
+        lines=("The paper trade record was deleted, so the bot stopped monitoring this "
+               "position: no more stop or target alerts.",
+               "Nothing was exited by the bot. If you hold it at your broker, its orders "
+               f"are yours to manage; to close it: {side['exit']}."),
+        tone="inert", **common)
+
+
 def _closed(plan, detail: dict, side: dict, common: dict,
             money: Money | None = None) -> Instruction:
+    if detail.get("reason") in _NO_EXIT_REASONS:
+        return _no_exit_close(side, common)
     exit_price = detail.get("exit_price")
     r = total_r(plan, exit_price)
     outcome = outcome_key(r)
@@ -543,7 +560,7 @@ def _stop_moved(plan, event, side: dict, common: dict, money: Money | None) -> I
 #: cancel transition -> its headline's FEED_SYMBOLS key ('' = no glyph, v170 Decision 4).
 _CANCEL_LEADS = {"cancelled_expired": "expiry", "cancelled_invalidated": "invalid",
                  "cancelled_risk_cap": "", "cancelled_limit": "",
-                 "cancelled_gap_through_stop": ""}
+                 "cancelled_gap_through_stop": "", "cancelled_trade_deleted": ""}
 
 
 def _limit_cancel_why(detail: dict) -> str:
@@ -557,10 +574,16 @@ def _gap_through_stop_why(detail: dict) -> str:
             "nothing was opened.")
 
 
+def _trade_deleted_why(detail: dict) -> str:
+    return ("The trade record was deleted before the order filled. Nothing was opened "
+            "and the plan is no longer monitored.")
+
+
 #: v187 D3: the limit-entry cancels, each worded from its own detail keys.
 _CANCEL_WHY: dict[str, Callable[[dict], str]] = {
     "cancelled_limit": _limit_cancel_why,
     "cancelled_gap_through_stop": _gap_through_stop_why,
+    "cancelled_trade_deleted": _trade_deleted_why,
 }
 
 
@@ -602,6 +625,7 @@ _BUILDERS = {
     "cancelled_risk_cap": _cancelled,
     "cancelled_limit": _cancelled,
     "cancelled_gap_through_stop": _cancelled,
+    "cancelled_trade_deleted": _cancelled,
     "time_exit_due": _time_exit,
     "time_exit_unresolved": _time_exit,
     "closed": _closed_event,

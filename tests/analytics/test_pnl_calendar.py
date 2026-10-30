@@ -334,14 +334,14 @@ def test_a_scaled_out_trade_yields_one_row_per_leg_on_each_legs_own_day():
         ("2026-08-03", 0, 2), ("2026-08-05", 1, 2)]
     # Dollars per leg: 5 shares x +10 = +50, 5 shares x +5 = +25.
     assert [r["pnl_amount"] for r in rows] == [50.0, 25.0]
-    # Each leg is an individual trade with its own R.
-    assert [r["r_multiple"] for r in rows] == pytest.approx([2.0, 1.0])
+    # Each leg is its own row; its R is its contribution: 0.5 x 2 and 0.5 x 1.
+    assert [r["r_multiple"] for r in rows] == pytest.approx([1.0, 0.5])
     assert [r["outcome"] for r in rows] == ["win", "win"]
 
 
-def test_a_legs_r_is_its_own_even_when_the_journal_has_the_blended_one():
+def test_a_legs_r_is_its_contribution_even_when_the_journal_has_the_blended_one():
     rows = joined_rows([_scaled_trade("a" * 16)], [_entry("a" * 16, r=1.5)])
-    assert [r["r_multiple"] for r in rows] == pytest.approx([2.0, 1.0])
+    assert [r["r_multiple"] for r in rows] == pytest.approx([1.0, 0.5])
     # The journal's lesson still rides every leg of its trade.
     assert all(r["auto_lesson"] == "Held to target." for r in rows)
 
@@ -359,7 +359,7 @@ def test_a_banked_tp1_leg_of_a_still_open_runner_is_counted():
     row = rows[0]
     assert (row["day"], row["leg_index"], row["leg_total"]) == ("2026-08-03", 0, 2)
     assert row["pnl_amount"] == 50.0
-    assert row["r_multiple"] == pytest.approx(2.0)
+    assert row["r_multiple"] == pytest.approx(1.0)    # 0.5 x +2R
 
 
 def test_a_trade_that_never_scaled_out_is_still_one_row():

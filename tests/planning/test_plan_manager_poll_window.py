@@ -200,13 +200,18 @@ def test_a_price_failure_on_one_plan_does_not_stop_the_others(tmp_path):
 
 
 class _RecordingLog:
-    """Minimal TradeLog stand-in: PlanManager._on_event only ever calls
-    close_plan_trade() on a terminal close."""
+    """Minimal TradeLog stand-in: the plan manager writes the TP1 leg and the
+    terminal close through it, inside the plan's transaction (v189 D3.1)."""
 
     def __init__(self):
         self.closed = []
+        self.legs = []
 
-    def close_plan_trade(self, plan_id, leg, status, *, conn=None):
+    def append_leg_by_plan(self, plan_id, leg, *, conn=None):
+        self.legs.append((plan_id, leg))
+
+    def close_plan_trade(self, plan_id, leg, status, *, conn=None, close_reason=None,
+                         after_commit=None):
         self.closed.append((plan_id, leg, status))
 
 
@@ -216,8 +221,9 @@ def test_a_terminal_target_close_reaches_the_trade_log_as_a_win(tmp_path):
     _step_extended path used to skip straight to a one-tick "win" close
     when tp2 was None, which the full machine has no equivalent of. The
     runner then closes on its own floor like any other runner, and still
-    reaches the trade log as a win (close_plan_trade's reason ->
-    status mapping treats every "tp1_..." reason as a win)."""
+    reaches the trade log as a win: since v189 the label is the net R of
+    both legs (+2.2R on half, +1.2R on half, net +1.7R), not the "tp1_"
+    reason."""
     feed = FakePriceFeed()
     feed.set_series("AAPL", [111.0, 106.0])
     store = PlanStore()

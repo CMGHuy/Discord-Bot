@@ -198,6 +198,8 @@ def test_position_rows_sum_to_open_heat(logged_in, tmp_path):
         "trade_id": str, "ticker": str, "strategy": NULLABLE_STR,
         "shares": NULLABLE_NUMBER, "entry": NULLABLE_NUMBER,
         "stop_loss": NULLABLE_NUMBER, "risk_pct": NULLABLE_NUMBER,
+        # v189 B4 -- beside the enforced figure, never summed into it.
+        "risk_of_loss_amount": NULLABLE_NUMBER, "risk_of_loss_pct": NULLABLE_NUMBER,
     }, where="position")
 
     total = sum(p["risk_pct"] for p in body["positions"])

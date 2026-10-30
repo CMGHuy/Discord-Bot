@@ -395,9 +395,10 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
         [floorR]="row.floor_r" [priceR]="row.price_r" [headroomR]="row.headroom_r"
         [bankedFraction]="row.banked_fraction"
         [bankedR]="row.banked_r"
+        [bankedContributionR]="row.banked_contribution_r ?? null"
         [bankedEntry]="row.banked_exit_price"
         [bankedPct]="bankedLegPct(row.entry, row.banked_exit_price, row.direction)"
-        [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.shares, row.direction)"
+        [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.entry_shares ?? null, row.direction)"
         [planTp1]="rc.planTp1" [planStop]="rc.planStop"
         [trailBest]="rc.trailBest" [trailBestPct]="rc.trailBestPct" [trailExitPct]="rc.trailExitPct"
         [runnerExit]="rc.runnerExit" [runnerExitPct]="rc.runnerExitPct" [runnerExitReason]="rc.runnerExitReason"
@@ -649,7 +650,7 @@ export class Dashboard {
   /** Open risk for Trading performance's card: money and % of account
    *  together (§5.2), against the dollar-risk cap. */
   protected readonly openRiskText = computed(() =>
-    riskUnits(this.store.riskUsedPct(), this.store.balance(), this.connection.currency()));
+    riskUnits(this.store.heatEnforcedPct(), this.store.balance(), this.connection.currency()));
   protected readonly riskCapText = computed(() => {
     const cap = this.store.riskCapPct();
     return cap === null ? null : `cap ${riskUnits(cap, this.store.balance(), this.connection.currency())}`;

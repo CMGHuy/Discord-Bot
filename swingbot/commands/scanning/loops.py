@@ -133,6 +133,33 @@ async def _post_cooldown_note(held: list) -> None:
         log.warning("cooldown: could not post the held-alerts note", exc_info=True)
 
 
+def _exit_failure_text(failure: dict) -> str:
+    return (f"⚠️ Exit not recorded: {failure['ticker']} plan `{failure['plan_id']}` -- "
+            f"observed {failure['reason']} exit at {failure['exit_price']:.2f}. "
+            "The book still shows the position open; check it by hand.")
+
+
+async def _post_exit_failures(failures: list[dict]) -> None:
+    """v189 D3.3: an exit the plan manager could not record after one retry is
+    never silent -- one line per plan on the ops channel (else the trades
+    channel). Not silent(): it must notify. A failed send is one WARNING and
+    never raises into the monitor tick."""
+    if not failures:
+        return
+    channel = _ops_channel()
+    if channel is None:
+        log.error("exit not recorded for %d plan(s) and no ops channel is configured: %s",
+                  len(failures), ", ".join(f["plan_id"] for f in failures))
+        return
+    for failure in failures:
+        try:
+            await channel.send(content=_exit_failure_text(failure))
+        except Exception as exc:
+            swallowed(log, "scan.loops.exit_failure_notice", exc,
+                      "could not post the exit-failure notice for plan %s",
+                      failure.get("plan_id"), exc_info=True)
+
+
 async def _prune_alert_posts() -> None:
     """v152 D3: the nightly alert_posts trim (keeps max(window, 7 days));
     a failure is logged, never raised."""
@@ -770,6 +797,7 @@ async def _monitor_tick(rec: "monitor_liveness.TickRecord") -> None:
     rec.fetch_failed = plan_manager.monitor_batch_failed()
     if plan_events:
         await _post_plan_events(plan_events)
+    await _post_exit_failures(plan_manager.drain_exit_failures())
     await _record_equity_sample(live_prices)
     await _retry_notifications()
 

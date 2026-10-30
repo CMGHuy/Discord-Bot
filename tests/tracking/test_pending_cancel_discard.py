@@ -40,10 +40,11 @@ def _trades_for(tlog, plan_id):
     return [t for t in tlog.get_trades(status=None, limit=None) if t.get("plan_id") == plan_id]
 
 
-def test_the_set_holds_exactly_the_five_pending_cancel_events():
+def test_the_set_holds_exactly_the_six_pending_cancel_events():
     assert PENDING_CANCEL_EVENTS == frozenset({
         "cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap",
         "cancelled_limit", "cancelled_gap_through_stop",
+        "cancelled_trade_deleted",      # v189 A7
     })
 
 

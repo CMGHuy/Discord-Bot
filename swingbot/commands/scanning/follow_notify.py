@@ -55,6 +55,7 @@ _BY_TRANSITION: dict[str, str] = {
     "cancelled_risk_cap": "closed_other",
     "cancelled_limit": "closed_other",
     "cancelled_gap_through_stop": "closed_other",
+    "cancelled_trade_deleted": "closed_other",
     "closed": "closed_other",
 }
 
@@ -72,7 +73,13 @@ _CLOSED_OTHER_KIND = {
     "cancelled_risk_cap": Kind.RISK_CAP,
     "cancelled_limit": Kind.INVALIDATED,
     "cancelled_gap_through_stop": Kind.INVALIDATED,
+    "cancelled_trade_deleted": Kind.INVALIDATED,
 }
+
+# v189 A7: closes with no exit behind them -- the trade record was deleted.
+# Factual copy and the withdrawn-plan kind; never an R.
+_NO_EXIT_CLOSES = {"trade_deleted": "is no longer monitored: its trade record was deleted."}
+_CLOSED_OTHER_KIND_BY_REASON = {"trade_deleted": Kind.INVALIDATED}
 
 FOLLOWING_DEFAULTS: dict[str, bool] = dict.fromkeys(NOTIFY_EVENTS, True)
 WATCH_DEFAULTS: dict[str, bool] = {
@@ -94,7 +101,8 @@ def notify_event_for(event: PlanEvent) -> str | None:
 def kind_for(event: PlanEvent, notify_event: str) -> Kind:
     """The registry Kind the message renders as (never MOVE STOP or CANCEL)."""
     if notify_event == "closed_other":
-        return _CLOSED_OTHER_KIND[event.transition]
+        reason = (event.detail or {}).get("reason")
+        return _CLOSED_OTHER_KIND_BY_REASON.get(reason) or _CLOSED_OTHER_KIND[event.transition]
     return _KIND_BY_EVENT[notify_event]
 
 
@@ -146,6 +154,7 @@ _CANCEL_LABELS = {
     "cancelled_risk_cap": "risk cap reached",
     "cancelled_limit": "limit cancelled before fill",
     "cancelled_gap_through_stop": "gapped through the stop before fill",
+    "cancelled_trade_deleted": "trade record deleted before fill",
 }
 
 
@@ -198,6 +207,9 @@ def _other_copy(plan, transition: str, detail: dict) -> str:
     if transition != "closed":
         label = _CANCEL_LABELS.get(transition, "withdrawn before entry")
         return f"cancelled: {label}."
+    no_exit = _NO_EXIT_CLOSES.get(detail.get("reason"))
+    if no_exit is not None:
+        return no_exit
     reason = detail.get("reason") or "other exit"
     label = _EXIT_LABELS.get(reason, reason.replace("_", " "))
     return (f"closed by {label} at {ui.fmt_price(detail.get('exit_price'))}: "
@@ -226,13 +238,21 @@ def message_line(plan, notify_event: str, transition: str, detail: dict) -> str:
     return line
 
 
+def _close_r(plan, transition: str, detail: dict) -> float | None:
+    """The stripe R of a close; None for anything else and for a close with
+    no exit behind it."""
+    if transition != "closed" or detail.get("reason") in _NO_EXIT_CLOSES:
+        return None
+    return instructions.total_r(plan, detail.get("exit_price"))
+
+
 def build_notify_embed(plan, notify_event: str, transition: str, detail: dict) -> ui.PushEmbed:
     """Build a registry-styled factual update, linked to the current admin URL."""
     kind = kind_for(PlanEvent(plan.plan_id, transition, detail), notify_event)
     line = message_line(plan, notify_event, transition, detail)
     embed = ui.push_embed(kind, plan.ticker, plan.direction, description=line)
     embed.push_text = line
-    close_r = instructions.total_r(plan, detail.get("exit_price")) if transition == "closed" else None
+    close_r = _close_r(plan, transition, detail)
     ui.apply_chrome(embed, kind=kind, plan_id=plan.plan_id, r=close_r,
                     link_base=config.ADMIN_PUBLIC_URL)
     embed.set_footer(text=embed.footer.text + " · " + FOOTER)

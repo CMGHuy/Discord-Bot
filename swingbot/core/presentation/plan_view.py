@@ -20,7 +20,7 @@ class BarSpec:
 class BankedLeg:
     fraction: float
     exit_price: float
-    r: float
+    r: float | None  # a leg written without r (v189 B3) cannot be weighted
 
 
 @dataclass(frozen=True)
@@ -123,7 +123,7 @@ def _partial_view(plan, price: float | None) -> PlanView:
     """Project the remaining runner after its TP1 leg has been banked."""
     leg = plan.legs_realized[0] if plan.legs_realized else None
     banked = (BankedLeg(fraction=leg["fraction"], exit_price=leg["exit_price"],
-                        r=leg["r"]) if leg else None)
+                        r=leg.get("r")) if leg else None)
     runner_entry = leg["exit_price"] if leg else plan.tp1
     original_entry = plan.entry_price if plan.entry_price is not None else plan.trigger_price
 

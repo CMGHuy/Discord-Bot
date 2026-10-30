@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { HistogramBucket } from '../../../api/models';
+import { AnalyticsPerformance, HistogramBucket } from '../../../api/models';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { AnalyticsStore, RELOCATED_METRICS } from '../../../stores/analytics.store';
 import { BarList } from '../../../ui/bar-list';
@@ -84,6 +84,21 @@ interface MonthRow {
 interface OutcomeTableRow {
   metric: string;
   value: string;
+}
+
+/** v189 D6: the win-rate tile's hint -- the label basis date and the closes
+ *  the rate leaves out. Undefined when the server sends neither (an older
+ *  payload), so the tile renders exactly as before. */
+export function winRateHint(
+  performance: Pick<AnalyticsPerformance, 'scratch_n' | 'unscored_n' | 'label_basis_since'> | null,
+): string | undefined {
+  if (!performance) return undefined;
+  const { scratch_n: scratch, unscored_n: unscored, label_basis_since: since } = performance;
+  const counts = scratch === undefined && unscored === undefined
+    ? null : `Not in the rate: ${scratch ?? 0} scratch, ${unscored ?? 0} unscored.`;
+  const basis = since ? `Scaled-out trades are labelled by net R from ${since}; earlier ones by TP1 touch.` : null;
+  const parts = [basis, counts].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(' ') : undefined;
 }
 
 /** Peak-to-current drawdown, the max over the series -- the same
@@ -324,7 +339,8 @@ export class OverviewTab {
       // it, never in the lead slot. Each carries its N and its basis.
       { ...tile('ExpR', performance?.expectancy_r ?? null, null, expectancyMoney, expectancyN),
         about: ANALYTICS_EXPR_ABOUT },
-      { ...fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend()),
+      { ...fixedTile('Win rate', share(winRate, 2), performance?.win_rate_n ?? null, this.winRateTrend(),
+        winRateHint(performance ?? null)),
         about: ANALYTICS_WIN_RATE_ABOUT },
       { ...tile('Total R', last?.cum_r ?? null, derived?.total_return_pct ?? null, last?.cum_pnl ?? null,
         equityCurve?.points_n ?? null, this.totalRTrend()), about: ANALYTICS_TOTAL_R_ABOUT },

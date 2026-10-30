@@ -5,6 +5,7 @@ Everything is faked -- the plan store, the trade log, the live quote and the
 daily cache -- so no test here opens a database or the network."""
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import datetime
 
 import pandas as pd
@@ -53,8 +54,12 @@ class FakeStore:
     def get(self, plan_id):
         return self.plans.get(plan_id)
 
-    def update(self, plan):
+    def lock_for_update(self, plan_id, *, conn):
+        return self.plans.get(plan_id)
+
+    def update(self, plan, *, conn=None):
         self.updated.append(plan.plan_id)
+        return True
 
 
 class FakeTradeLog:
@@ -64,7 +69,8 @@ class FakeTradeLog:
     def get_trades(self, status=None, limit=None):
         return list(FakeTradeLog.trades)
 
-    def close_trade_manual(self, trade_id, reason="manual", *, exit_price=None):
+    def close_trade_manual(self, trade_id, reason="manual", *, exit_price=None,
+                           conn=None, after_commit=None):
         FakeTradeLog.closes.append({"id": trade_id, "reason": reason, "exit_price": exit_price})
         return True
 
@@ -96,6 +102,7 @@ def env(monkeypatch):
     monkeypatch.setattr(rp, "stamp_runner_path",
                         lambda plan, fn, *, source="live": state["runner_stamps"].append(plan.plan_id))
     monkeypatch.setattr(tc, "TradeLog", FakeTradeLog)
+    monkeypatch.setattr(tc, "transaction", lambda *args, **kwargs: nullcontext(None))
     monkeypatch.setattr(tc, "_queue_notify", state["notified"].append)
     return state
 

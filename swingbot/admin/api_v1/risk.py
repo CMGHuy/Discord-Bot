@@ -53,13 +53,45 @@ def _position_risk(trade: dict, balance: float | None) -> float | None:
         return None
 
 
+def _plans_or_none() -> dict | None:
+    """Every stored plan by id, or None when the store cannot be read -- a
+    row then shows no risk of loss rather than pricing a PENDING placeholder
+    as held."""
+    from swingbot.core.tracking.equity import load_plans_by_id
+
+    try:
+        return load_plans_by_id()
+    except Exception as exc:
+        swallowed(log, "ops.risk.plans_by_id", exc, level=logging.DEBUG)
+        return None
+
+
+def _risk_of_loss_fields(trade: dict, plans: dict | None, balance: float | None) -> dict:
+    """v189 B4: the row's risk of loss beside its enforced `risk_pct`. Never
+    summed into `risk_pct`: those rows still add up to `heat.open_pct`, and
+    the utilisation gauge stays on enforced heat."""
+    from swingbot.core.tracking.equity import position_risk_of_loss
+
+    if plans is None:
+        return {"risk_of_loss_amount": None, "risk_of_loss_pct": None}
+    amount = position_risk_of_loss(trade, plans.get(trade.get("plan_id")))
+    pct = (round(amount / balance * 100.0, 3)
+           if amount is not None and balance is not None and balance > 0 else None)
+    return {"risk_of_loss_amount": amount, "risk_of_loss_pct": pct}
+
+
 def _positions(open_trades: list[dict] | None, balance: float | None) -> list[dict] | None:
+    """One row per open trade, its enforced `risk_pct` from `trade_risk_pct`.
+    Each row also carries its risk of loss to the working stop (v189 B4),
+    shown beside risk_pct and never added to it."""
     if open_trades is None:
         return None
+    plans = _plans_or_none()
     rows = [{"trade_id": t.get("id"), "ticker": t.get("ticker"),
              "strategy": t.get("strategy"), "shares": t.get("shares"),
              "entry": t.get("entry"), "stop_loss": t.get("stop_loss"),
-             "risk_pct": _position_risk(t, balance)} for t in open_trades]
+             "risk_pct": _position_risk(t, balance),
+             **_risk_of_loss_fields(t, plans, balance)} for t in open_trades]
     rows.sort(key=lambda row: row["risk_pct"] if row["risk_pct"] is not None else -math.inf,
               reverse=True)
     return rows

@@ -9,6 +9,7 @@ gap-aware fills (Task 67) handle the overnight case."""
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -17,6 +18,8 @@ from typing import NamedTuple
 
 from swingbot import config
 from swingbot.core.analytics import runner_path as rp
+from swingbot.core.analytics.metrics import net_outcome
+from swingbot.core.db.engine import BOT_LOCK_TIMEOUT_MS, LockTimeout, transaction
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.session import (RTH_OPEN, US_MARKET_TZ, is_quiet_hours,
                                           is_regular_session, is_tape_open, now_et,
@@ -103,6 +106,18 @@ def _session_label(now) -> str:
     return "pre-market" if now_et(now).time() < RTH_OPEN else "after-hours"
 
 
+def _usable_price(price) -> bool:
+    """A quote the state machine may act on: a finite number above zero.
+    ``not price`` let NaN through (NaN is truthy and ``NaN <= 0`` is False),
+    and a NaN never crosses a level, so it silently looked like 'no move'
+    (v189 D4)."""
+    try:
+        value = float(price)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(value) and value > 0
+
+
 def quote_stamp(q, now) -> dict | None:
     """The stored quote stamp (D2) of one monitor quote, or None."""
     if q is None or q.price is None:
@@ -144,6 +159,7 @@ STOP_EVENTS = frozenset({"be_moved", "tp1_partial", "stop_moved"})
 PENDING_CANCEL_EVENTS = frozenset({
     "cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap",
     "cancelled_limit", "cancelled_gap_through_stop",
+    "cancelled_trade_deleted",     # v189 A7: queued by tracking/plan_links, not by a step
 })
 NOTICE_EVENTS = frozenset({"filled", "closed"}) | PENDING_CANCEL_EVENTS
 NOTICE_RESEND_DAYS = 5
@@ -170,6 +186,7 @@ _TRANSITION_LOG = {
     "cancelled_risk_cap": ("risk cap hit", "entry_price"),
     "cancelled_limit": ("limit cancelled", "live_price"),
     "cancelled_gap_through_stop": ("gap through stop", "live_price"),
+    "cancelled_trade_deleted": ("trade deleted", "live_price"),
 }
 # Closes where a stop took the position out (initial, break-even, the
 # post-TP1 runner floor, or the chandelier trail), not a target or a time rule.
@@ -479,6 +496,33 @@ def _daily_frame(ticker):
     return _manager_daily(ticker)
 
 
+class PlanWriteAborted(Exception):
+    """PlanStore.update refused a stale write: the stored plan is terminal and
+    this copy is not the same terminal write (v189 D3.3). The store logged it
+    at INFO; the step that produced the write emits nothing."""
+
+    def __init__(self, plan_id: str):
+        super().__init__(plan_id)
+        self.plan_id = plan_id
+
+
+class PlanPersistFailed(Exception):
+    """A plan transition and its trade write rolled back together; logged at
+    ERROR where it failed. The step emits nothing and the next poll
+    re-evaluates the plan from its stored state (v189 D3.1)."""
+
+    def __init__(self, plan_id: str):
+        super().__init__(plan_id)
+        self.plan_id = plan_id
+
+
+# Errors a persist helper re-raises untouched: an abort is not a failure, and
+# a lock timeout is the caller's to skip (v189 D3.3 "Deadlock rules").
+_PASS_THROUGH = (PlanWriteAborted, LockTimeout)
+# Every way a step can end with nothing written for this plan this cycle.
+_SKIP_PLAN = (PlanWriteAborted, PlanPersistFailed, LockTimeout)
+
+
 class PlanManager:
     def __init__(self, store: PlanStore, price_fn, bar_count_fn=None,
                  atr_fn=None, trade_log=None, price_batch_fn=None,
@@ -511,6 +555,14 @@ class PlanManager:
         # priced. None = nothing demanded (quiet hours, serial seam, not polled).
         self.last_poll_demand: PollDemand | None = None
         self.last_poll_check_errors: list[str] = []
+        # v189 D3.3: exits that failed twice, drained by take_exit_failures()
+        # and posted to the ops channel by commands/scanning/loops.py.
+        self._exit_failures: list[dict] = []
+        # v189 D3.3: the bot path waits at most BOT_LOCK_TIMEOUT_MS for a plan
+        # row another process holds, then skips that plan for one poll. Store
+        # doubles without the attribute are left alone.
+        if hasattr(store, "lock_timeout_ms"):
+            store.lock_timeout_ms = BOT_LOCK_TIMEOUT_MS
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -676,7 +728,7 @@ class PlanManager:
                 prices = {}
         self._record_poll_demand(open_plans, prices)
         details = getattr(prices, "details", {})
-        for plan in open_plans:
+        for plan in self._ordered(open_plans):
             if prices is not None:
                 price = prices.get(plan.ticker)
             else:
@@ -685,7 +737,7 @@ class PlanManager:
                 except Exception as exc:
                     log.debug("poll: price fetch failed for %s: %s", plan.ticker, exc)
                     continue
-            if not price or price <= 0:
+            if not _usable_price(price):
                 continue
             # Step the plan as it is NOW, not the copy open_plans() handed out
             # before this and every earlier plan's price fetch. The admin UI
@@ -696,12 +748,8 @@ class PlanManager:
                     PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL):
                 continue
             self._warn_legacy_open_risk(plan)
-            try:
-                new_events = self._step(plan, price, now)
-            except Exception:
-                log.warning("poll: step failed for plan %s", plan.plan_id,
-                            exc_info=True)
-                self.last_poll_check_errors.append(plan.ticker)
+            new_events = self._step_safely(plan, price, now)
+            if new_events is None:
                 continue
             if is_tape_open(now):
                 # Prints from a LIVE TAPE only -- not merely "a tick we
@@ -731,6 +779,34 @@ class PlanManager:
             events.extend(self._feed_bookkeeping(plan, new_events, regular, now))
             events.extend(self._near_stop_event(plan, price, now))
         return events
+
+    @staticmethod
+    def _ordered(plans: list) -> list:
+        """Stop-bearing (non-PENDING) plans first, each group in its given
+        order: with a 1s lock budget per plan, exits are attempted before
+        entries (v189 D3.3)."""
+        return sorted(plans, key=lambda plan: plan.status == PlanStatus.PENDING)
+
+    def _step_safely(self, plan: TradePlanV2, price: float, now) -> list[PlanEvent] | None:
+        """``_step`` for one plan of a poll. None = skip the plan this poll:
+        nothing was written, so nothing is emitted or bookkept. A refused stale
+        write or a locked row is a skip, not a check error; a rolled-back write
+        or an unexpected exception is one (v184 liveness stamp)."""
+        try:
+            return self._step(plan, price, now)
+        except PlanWriteAborted:
+            return None          # logged at INFO by the store
+        except PlanPersistFailed:
+            self.last_poll_check_errors.append(plan.ticker)
+            return None          # logged at ERROR where it rolled back
+        except LockTimeout:
+            log.info("poll: plan %s is locked by another writer; skipped this poll",
+                     plan.plan_id)
+            return None
+        except Exception:
+            log.warning("poll: step failed for plan %s", plan.plan_id, exc_info=True)
+            self.last_poll_check_errors.append(plan.ticker)
+            return None
 
     def _near_stop_event(self, plan: TradePlanV2, price, now) -> list[PlanEvent]:
         """v152 D1: one near_stop event when an ACTIVE/PARTIAL plan's price is
@@ -780,8 +856,9 @@ class PlanManager:
                 # plan_id the moment the stop_entry setup was first detected
                 # (still PENDING, sized against the trigger price) -- this is
                 # that same trade catching up to the real fill, not a new
-                # position. record_plan_fill() finds it by plan_id and moves
-                # its entry (and resized shares) onto plan.entry_price.
+                # position. _persist_fill -> record_plan_fill() finds it by
+                # plan_id and moves its entry (and resized shares) onto
+                # plan.entry_price, in the plan's own transaction.
                 # log_trade()-ing a SECOND record here (the old behaviour)
                 # left two open trades sharing one plan_id: close_plan_trade()
                 # only ever finds and closes the first, so the second -- the
@@ -789,8 +866,10 @@ class PlanManager:
                 # that join keeps the LAST trade per plan_id -- never closed,
                 # no matter what price did (production incident, 2026-09-10:
                 # QCOM sat "open" well past its armed stop indefinitely).
-                trade_id = self.trade_log.record_plan_fill(
-                    plan.plan_id, plan.entry_price)
+                # v189 D3.1: the fill step already moved the placeholder onto
+                # the fill inside the plan's own transaction (_persist_fill)
+                # and put the trade id on the event.
+                trade_id = event.detail.get("trade_id")
                 if trade_id is None:
                     # No placeholder found -- plan reached the store some
                     # other way than the normal scan_run.py alert path.
@@ -813,8 +892,6 @@ class PlanManager:
                         gap_sizing=plan.gap_sizing,
                         risk_notice=plan.risk_notice)
                 event.detail["trade_id"] = trade_id
-            elif event.transition == "tp1_partial":
-                self.trade_log.append_leg_by_plan(plan.plan_id, event.detail)
             elif event.transition in PENDING_CANCEL_EVENTS:
                 # A PENDING plan never filled -- scan_run.py's placeholder
                 # trade for it (still open, sized against the trigger price)
@@ -851,16 +928,115 @@ class PlanManager:
             log.warning("trade-log hook failed for plan %s", plan.plan_id,
                         exc_info=True)   # bookkeeping must never break the manager
 
-    def _persist_terminal(self, plan: TradePlanV2, leg: dict, status: str) -> bool:
-        """Persist a terminal plan and its linked trade as one DB transaction."""
-        if self.trade_log is not None:
-            from swingbot.core.db.engine import transaction
-            with transaction() as conn:
-                self.store.update(plan, conn=conn)
-                self.trade_log.close_plan_trade(plan.plan_id, leg, status, conn=conn)
-            return True
-        self.store.update(plan)
-        return False
+    def _save(self, plan: TradePlanV2, *, conn=None) -> None:
+        """Write the plan through the guarded store (v189 D3.3). A refused
+        stale write raises PlanWriteAborted; ``is False`` (not falsiness) so a
+        store double returning None keeps working."""
+        if conn is None:
+            written = self.store.update(plan)
+        else:
+            written = self.store.update(plan, conn=conn)
+        if written is False:
+            raise PlanWriteAborted(plan.plan_id)
+
+    @staticmethod
+    def _rolled_back(plan: TradePlanV2, what: str, exc: Exception) -> PlanPersistFailed:
+        log.error("plan %s (%s): %s not recorded, transaction rolled back: %s",
+                  plan.plan_id, plan.ticker, what, exc, exc_info=exc)
+        return PlanPersistFailed(plan.plan_id)
+
+    def _persist_fill(self, plan: TradePlanV2, fill: float) -> str | None:
+        """The ACTIVE transition and the placeholder trade's fill, in one
+        transaction (v189 D3.1). Returns the trade id, or None without a trade
+        log or without a placeholder (``_on_event`` then logs the trade)."""
+        if self.trade_log is None:
+            self._save(plan)
+            return None
+        try:
+            with transaction(lock_timeout_ms=BOT_LOCK_TIMEOUT_MS) as conn:
+                self._save(plan, conn=conn)
+                return self.trade_log.record_plan_fill(plan.plan_id, fill, conn=conn)
+        except _PASS_THROUGH:
+            raise
+        except Exception as exc:
+            raise self._rolled_back(plan, "fill", exc) from exc
+
+    def _persist_partial(self, plan: TradePlanV2, leg: dict) -> None:
+        """The PARTIAL transition and the trade's TP1 leg, in one transaction
+        (v189 D3.1): the plan is never PARTIAL without its trade leg."""
+        if self.trade_log is None:
+            self._save(plan)
+            return
+        try:
+            with transaction(lock_timeout_ms=BOT_LOCK_TIMEOUT_MS) as conn:
+                self._save(plan, conn=conn)
+                self.trade_log.append_leg_by_plan(plan.plan_id, dict(leg), conn=conn)
+        except _PASS_THROUGH:
+            raise
+        except Exception as exc:
+            raise self._rolled_back(plan, "TP1 leg", exc) from exc
+
+    def _close_in_transaction(self, plan: TradePlanV2, leg: dict, status: str,
+                              close_reason: str | None) -> None:
+        """One attempt at the terminal write: the plan, the trade's close and
+        its balance point commit together (v189 D3.2); the journal and the
+        snapshot refresh run only after the commit."""
+        from swingbot.core.tracking.performance import run_after_commit
+        callbacks: list = []
+        with transaction(lock_timeout_ms=BOT_LOCK_TIMEOUT_MS) as conn:
+            self._save(plan, conn=conn)
+            self.trade_log.close_plan_trade(plan.plan_id, leg, status, conn=conn,
+                                            close_reason=close_reason,
+                                            after_commit=callbacks)
+        run_after_commit(callbacks)
+
+    def _persist_terminal(self, plan: TradePlanV2, leg: dict, status: str,
+                          close_reason: str | None = None) -> bool:
+        """Persist a terminal plan and its linked trade as one DB transaction.
+        True when the trade was closed with it; False without a trade log.
+
+        v189 D3.3: a failed or timed-out exit is retried once, at once, with
+        the same plan, leg and observed price -- a missed stop would flatter
+        the book, and the next poll may never see that price again. A refused
+        stale write (PlanWriteAborted) is not a failure and is never retried."""
+        if self.trade_log is None:
+            self._save(plan)
+            return False
+        try:
+            self._close_in_transaction(plan, leg, status, close_reason)
+        except PlanWriteAborted:
+            raise
+        except Exception as first:
+            swallowed(log, "scan.plan_manager.exit_retry", first,
+                      "plan %s (%s): exit write failed (%s); retrying once at %s",
+                      plan.plan_id, plan.ticker, first, leg.get("exit_price"), exc_info=True)
+            self._retry_close(plan, leg, status, close_reason)
+        return True
+
+    def _retry_close(self, plan: TradePlanV2, leg: dict, status: str,
+                     close_reason: str | None) -> None:
+        try:
+            self._close_in_transaction(plan, leg, status, close_reason)
+        except PlanWriteAborted:
+            raise
+        except Exception as exc:
+            self._record_exit_failure(plan, leg, exc)
+            raise PlanPersistFailed(plan.plan_id) from exc
+
+    def _record_exit_failure(self, plan: TradePlanV2, leg: dict, exc: Exception) -> None:
+        failure = {"plan_id": plan.plan_id, "ticker": plan.ticker,
+                   "exit_price": float(leg["exit_price"]), "reason": leg.get("reason"),
+                   "error": f"{type(exc).__name__}: {exc}"}
+        self._exit_failures.append(failure)
+        log.error("plan %s (%s): exit not recorded -- observed %s exit at %.4f failed "
+                  "twice, the book still shows it open: %s",
+                  plan.plan_id, plan.ticker, failure["reason"], failure["exit_price"],
+                  failure["error"], exc_info=exc)
+
+    def take_exit_failures(self) -> list[dict]:
+        """The exits that failed twice since the last call, oldest first."""
+        failures, self._exit_failures = self._exit_failures, []
+        return failures
 
     def _continuous(self, plan: TradePlanV2, stop: float, now=None) -> bool:
         seen = self._last_seen.get(plan.plan_id)
@@ -920,7 +1096,7 @@ class PlanManager:
         closed_at = datetime.combine(eligible, close, tzinfo=US_MARKET_TZ).isoformat()
         reason, extra = self._window_reason(plan, eligible)
         record_transition(plan, PlanStatus.CANCELLED, reason=reason, at=closed_at)
-        self.store.update(plan)
+        self._save(plan)
         return [PlanEvent(plan.plan_id, "cancelled_expired", {
             "bars_waited": 1, "cancel_resting_order": True,
             "eligible_session": eligible.isoformat(), "expires_at": closed_at, **extra})]
@@ -959,7 +1135,7 @@ class PlanManager:
             plan.cancel_reason_message = message
             event.detail[session_expiry.REASON_CODE] = session_expiry.code_for(event.transition)
             event.detail[session_expiry.REASON_MESSAGE] = message
-            self.store.update(plan)
+            self._save(plan)
         return events
 
     def _step_pending(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
@@ -977,7 +1153,7 @@ class PlanManager:
             if pending_expired(plan, bars):
                 record_transition(plan, PlanStatus.CANCELLED, reason="expired",
                                   at=self._now())
-                self.store.update(plan)
+                self._save(plan)
                 return [PlanEvent(plan.plan_id, "cancelled_expired",
                                   {"bars_waited": bars})]
 
@@ -995,7 +1171,7 @@ class PlanManager:
         if pending_invalidated(plan, price):
             record_transition(plan, PlanStatus.CANCELLED, reason="invalidated",
                               at=self._now())
-            self.store.update(plan)
+            self._save(plan)
             return [PlanEvent(plan.plan_id, "cancelled_invalidated",
                               {"live_price": price})]
         return []
@@ -1017,7 +1193,7 @@ class PlanManager:
             if at_or_beyond_stop(plan, price):
                 record_transition(plan, PlanStatus.CANCELLED, reason="gap_through_stop",
                                   at=self._now())
-                self.store.update(plan)
+                self._save(plan)
                 return [PlanEvent(plan.plan_id, "cancelled_gap_through_stop", {
                     "entry_price": plan.trigger_price,
                     "live_price": price,
@@ -1027,7 +1203,7 @@ class PlanManager:
         if limit_cancelled(plan, price, price):
             record_transition(plan, PlanStatus.CANCELLED, reason="limit_cancelled",
                               at=self._now())
-            self.store.update(plan)
+            self._save(plan)
             return [PlanEvent(plan.plan_id, "cancelled_limit", {
                 "live_price": price,
                 "limit_cancel_level": plan.limit_cancel_level,
@@ -1044,7 +1220,7 @@ class PlanManager:
         if risk_pct > ceiling_pct:
             record_transition(plan, PlanStatus.CANCELLED, reason="risk_cap",
                               at=self._now(), extra={"entry_price": fill})
-            self.store.update(plan)
+            self._save(plan)
             return [PlanEvent(plan.plan_id, "cancelled_risk_cap", {
                 "entry_price": fill,
                 "stop_loss": plan.stop_loss,
@@ -1053,9 +1229,11 @@ class PlanManager:
             })]
         plan.entry_price = fill
         record_transition(plan, PlanStatus.ACTIVE, reason=reason, at=self._now())
-        self.store.update(plan)
-        return [PlanEvent(plan.plan_id, "filled",
-                          {"entry_price": fill, "live_price": price})]
+        detail = {"entry_price": fill, "live_price": price}
+        trade_id = self._persist_fill(plan, fill)
+        if trade_id is not None:
+            detail["trade_id"] = trade_id
+        return [PlanEvent(plan.plan_id, "filled", detail)]
 
     def _active_stop(self, plan: TradePlanV2, now=None) -> tuple[float, bool]:
         if plan.working_stop is None:
@@ -1116,7 +1294,7 @@ class PlanManager:
             plan.runner_floor_session = session_date(now)
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
                               at=at)
-            self.store.update(plan)
+            self._persist_partial(plan, leg)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
 
         # Task 13 (v92 Hypothesis 2): the live-poll counterpart of
@@ -1151,7 +1329,7 @@ class PlanManager:
         if reached_be and plan.working_stop is None:
             plan.working_stop = entry
             plan.be_armed_session = session_date(now)
-            self.store.update(plan)
+            self._save(plan)
             return [PlanEvent(plan.plan_id, "be_moved",
                               {"working_stop": entry, "live_price": price})]
         return []
@@ -1217,7 +1395,7 @@ class PlanManager:
             direction=plan.direction, runner_stop=stop, atr_value=atr_value)
         if new_stop != stop:
             plan.working_stop = new_stop
-            self.store.update(plan)
+            self._save(plan)
             _plan_line("structure trail", plan, new_stop, " reason=structure_trail")
         return fires
 
@@ -1286,7 +1464,7 @@ class PlanManager:
         if add is None:
             return []
         plan.pyramid_add = add
-        self.store.update(plan)
+        self._save(plan)
         return [PlanEvent(plan.plan_id, "pyramid_add", dict(add))]
 
     def _track_extreme(self, plan, price: float, is_bull: bool) -> bool:
@@ -1298,7 +1476,7 @@ class PlanManager:
         if extreme == old:
             return False
         plan.runner_high_close = extreme
-        self.store.update(plan)
+        self._save(plan)
         return True
 
     def _apply_giveback(self, plan, price: float) -> None:
@@ -1313,7 +1491,7 @@ class PlanManager:
         if new_stop == current:
             return
         plan.working_stop = new_stop
-        self.store.update(plan)
+        self._save(plan)
         _plan_line("giveback stop", plan, price,
                    f" stop={new_stop:.2f} from={current:.2f}"
                    f" extreme={plan.runner_high_close:.2f}")
@@ -1333,7 +1511,7 @@ class PlanManager:
         new_stop = tighter_stop(floor, trail, is_bull)
         if new_stop != plan.working_stop:
             plan.working_stop = new_stop
-            self.store.update(plan)
+            self._save(plan)
 
     def _runner_stop_extra(self, plan, stop: float) -> dict:
         """v176: the closing runner leg's stop_source, plus the give-back
@@ -1347,6 +1525,17 @@ class PlanManager:
                 "giveback_extreme": float(plan.runner_high_close),
                 "giveback_stop": level}
 
+    def _plan_outcome(self, plan: TradePlanV2) -> tuple[str, str | None]:
+        """The trade status and close_reason of a close with two or more
+        realized legs (v189 D2): the sign of the unrounded blended net R via
+        metrics.net_outcome -- win above +SCRATCH_EPS_R, loss below its
+        negative, closed/scratch inside, closed/unscored when the net cannot
+        be computed. Never "TP1 was touched, so win". Live only: the backtest
+        keeps its event labels (exit_sim_v2)."""
+        return net_outcome({"plan_id": plan.plan_id, "entry": plan.entry_price,
+                            "stop_loss": plan.stop_loss, "direction": plan.direction,
+                            "legs": [dict(leg) for leg in plan.legs_realized]})
+
     def _close_runner(self, plan: TradePlanV2, fill: float, reason: str,
                       risk: float, sign: int, extra: dict | None = None) -> list[PlanEvent]:
         r2 = (fill - plan.entry_price) * sign / risk if risk > 0 else 0.0
@@ -1357,7 +1546,10 @@ class PlanManager:
         record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at)
         rp.stamp_runner_path(plan, self.runner_bars_fn, source="live")   # v142; never raises
         self._structure_seen.pop(plan.plan_id, None)
-        persisted = self._persist_terminal(plan, leg, "win" if reason.startswith("tp1_") else "closed")
+        # v189 D2: labelled by the net of every realized leg (the runner leg
+        # was appended above), not by the reason's "tp1_" prefix.
+        status, close_reason = self._plan_outcome(plan)
+        persisted = self._persist_terminal(plan, leg, status, close_reason)
         return [PlanEvent(plan.plan_id, "closed",
                           {"reason": reason, "exit_price": fill, "leg": leg,
                            "_terminal_persisted": persisted})]
@@ -1410,7 +1602,7 @@ class PlanManager:
             "reason": why, "due_session": due.isoformat() if due else None,
             # no due session known = no cover advice (the position may be days from due)
             "cover_fraction": te.cover_fraction(plan) if due else None})
-        self.store.update(plan)
+        self._save(plan)
         return [event] if event is not None else []
 
     def _due_notice_events(self, plan: TradePlanV2, due, et: datetime,
@@ -1423,7 +1615,7 @@ class PlanManager:
             # The auction is over: "cover in the closing auction" would be stale.
             # Mark it handled and let the close / unresolved notice speak.
             plan.time_exit_due_date = due.isoformat()
-            self.store.update(plan)
+            self._save(plan)
             return []
         deadline = te.notice_deadline(close_at)
         if et < deadline:
@@ -1432,7 +1624,7 @@ class PlanManager:
             "cover_fraction": te.cover_fraction(plan), "auction_time": close_at.isoformat(),
             "due_session": due.isoformat(), "late": et > deadline + te.LATE_GRACE})
         plan.time_exit_due_date = plan.time_exit_notified_date = due.isoformat()
-        self.store.update(plan)
+        self._save(plan)
         return [event] if event is not None else []
 
     def _official_auction(self, plan: TradePlanV2, due) -> te.AuctionClose | None:
@@ -1446,7 +1638,9 @@ class PlanManager:
 
     def _close_time_exit(self, plan: TradePlanV2, auction: te.AuctionClose) -> list[PlanEvent]:
         """Persist the paper close of whatever is still open at the official
-        auction price, through the one terminal path."""
+        auction price, through the one terminal path. A scaled-out plan closes
+        its runner through _close_runner and is labelled by net R (v189 D2);
+        a plan with no realized leg keeps the single-leg label."""
         sign = 1 if plan.direction == "bullish" else -1
         entry = plan.entry_price
         risk = abs(entry - plan.stop_loss)
@@ -1512,16 +1706,25 @@ class PlanManager:
         plan = self.store.get(plan_id)
         if plan is None:
             return []
-        if plan.status == PlanStatus.ACTIVE:
-            events = self._check_bar_active(plan, bar_open, bar_high, bar_low)
-        elif plan.status == PlanStatus.PARTIAL:
-            events = self._check_bar_partial(plan, bar_open, bar_high, bar_low)
-        else:
-            events = []
+        try:
+            events = self._check_bar_step(plan, bar_open, bar_high, bar_low)
+        except _SKIP_PLAN as exc:
+            # v189 D3.3: aborted, rolled back or locked -- nothing was
+            # written, so nothing is emitted (logged where it happened).
+            log.info("check_bar: plan %s skipped (%s)", plan_id, type(exc).__name__)
+            return []
         for event in events:
             log_plan_event(plan, event)
             self._on_event(plan, event)
         return events
+
+    def _check_bar_step(self, plan: TradePlanV2, bar_open: float, bar_high: float,
+                        bar_low: float) -> list[PlanEvent]:
+        if plan.status == PlanStatus.ACTIVE:
+            return self._check_bar_active(plan, bar_open, bar_high, bar_low)
+        if plan.status == PlanStatus.PARTIAL:
+            return self._check_bar_partial(plan, bar_open, bar_high, bar_low)
+        return []
 
     def _check_bar_active(self, plan: TradePlanV2, bar_open: float,
                           bar_high: float, bar_low: float) -> list[PlanEvent]:
@@ -1555,7 +1758,7 @@ class PlanManager:
             plan.working_stop = runner_floor(entry, plan.tp1)   # v39 runner floor
             record_transition(plan, PlanStatus.PARTIAL, reason="tp1_partial",
                               at=at)
-            self.store.update(plan)
+            self._persist_partial(plan, leg)
             return [PlanEvent(plan.plan_id, "tp1_partial", dict(leg))]
         return []
 
@@ -1667,7 +1870,8 @@ def _monitor_quote_worker(tickers: list) -> tuple:
     from swingbot.core.marketdata.data import get_quote_batch
     from swingbot.core.marketdata.shared import counters
     quotes = get_quote_batch(tickers, asker=Asker.STOP_MONITOR, fresh_only=True)
-    return {t: q.to_doc() for t, q in quotes.items() if q.price}, counters.snapshot_and_clear()
+    return ({t: q.to_doc() for t, q in quotes.items() if _usable_price(q.price)},
+            counters.snapshot_and_clear())
 
 
 def monitor_quotes(tickers: list) -> dict:
@@ -1705,7 +1909,8 @@ def _price_batch_fn(tickers):
     if config.MARKETDATA_LAYER == "off":
         return _legacy_price_batch(tickers)
     details = monitor_quotes(tickers)
-    return QuotePrices({t: q.price for t, q in details.items() if q.price}, details)
+    return QuotePrices({t: q.price for t, q in details.items() if _usable_price(q.price)},
+                       details)
 
 
 # Retain the serial seam for deterministic callers/tests that replace
@@ -1759,6 +1964,14 @@ def run_manager_tick() -> list[PlanEvent]:
         return []
     # Production reads the wall clock; poll's optional clock is test injection.
     return _manager().poll()
+
+
+def drain_exit_failures() -> list[dict]:
+    """The process manager's failed exits since the last call (v189 D3.3), for
+    the trade_monitor loop to post; [] before the manager's first tick."""
+    if _MANAGER is None:
+        return []
+    return _MANAGER.take_exit_failures()
 
 
 def last_poll_demand() -> PollDemand | None:

@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { DataSourcesHealth, RiskAvailability, RiskPosition, SectorHeat } from '../../api/models';
+import { RiskAvailability, RiskPosition, SectorHeat } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { RiskStore } from '../../stores/risk.store';
@@ -19,7 +19,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
-import { amount, dateTime, money, num, riskPct, share, shareCount, text } from '../../ui/format';
+import { ABSENT, amount, dateTime, money, num, riskPct, share, shareCount, text } from '../../ui/format';
 import { Hint } from '../../ui/hint';
 import { Freshness } from '../../ui/freshness';
 import { Panel } from '../../ui/layout';
@@ -160,10 +160,12 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
  * the workspace exists, so it sits at the top, above the numbers that justify
  * pulling it.
  *
- * **"Risk used" appears here and on the Dashboard. That is one number in two
- * places, not two features.** The Dashboard's card is the glance; this page is
- * where the breakdown behind it lives, and both read `heat.open_pct` -- the
- * sum of the same `trade_risk_pct` the exposure table lists row by row.
+ * **Two risk figures, never one (v189 B4).** "Heat (enforced)" is
+ * `heat.open_pct`, the sum of the `trade_risk_pct` rows below and the figure the
+ * scanner gates on; the gauge and the budget read it. "Risk of loss (to stop)"
+ * is what fills at the current working stops would still lose below entry,
+ * floored at 0 per position, so a de-risked runner counts 0. It is shown beside
+ * heat, never as headroom against the cap.
  *
  * The engaged state is *also* rendered by the shell, and deliberately so: it
  * changes what the bot does regardless of which workspace is open, so it
@@ -282,6 +284,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
         <p role="status" class="section-help">{{ problem }}</p>
       }
       <div class="heat">
+        <span class="heat-label">Heat (enforced)</span>
         <span class="heat-figure num" [class]="heatClass()">
           {{ fmtRisk(store.openHeatPct()) }}
         </span>
@@ -323,6 +326,14 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
       <p class="gap-risk" data-testid="gap-risk">
         <span class="gap-risk-label">Short gap risk</span>
         <span class="num">{{ gapRiskNote() }}</span>
+      </p>
+      <!-- v189 B4: display only. Never a meter: the scanner gates on heat above. -->
+      <p class="gap-risk" data-testid="risk-of-loss">
+        <span class="gap-risk-label">Risk of loss (to stop)</span>
+        <span class="num">{{ riskOfLossNote() }}</span>
+      </p>
+      <p class="section-help" data-testid="stop-fill-hint">
+        Heat and risk of loss both assume a fill at the stop; a gap through it loses more.
       </p>
 
       @if (domainProblem('throttle', 'Throttle'); as problem) {
@@ -657,7 +668,8 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
     }
 
     /* -- heat -- */
-    .heat { display: flex; align-items: baseline; gap: var(--space-8); }
+    .heat { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
+    .heat-label { color: var(--text-muted); font-size: var(--register-label); }
     .heat-figure { font-size: var(--text-metric); font-weight: 700; line-height: 1.1; }
     /* The caption beside the hero figure -- same role as MetricCard's .sub,
        which is what --register-label was introduced for. --text-table (13px)
@@ -885,10 +897,10 @@ export class Risk {
   private readonly riskCell =
     viewChild.required<TemplateRef<RowContext<RiskPosition>>>('riskCell');
 
-  protected readonly visible = ['ticker', 'strategy', 'shares', 'entry', 'stop_loss', 'risk_pct'];
+  protected readonly visible = ['ticker', 'strategy', 'shares', 'entry', 'stop_loss', 'risk_pct', 'risk_of_loss'];
 
   /** No column picker and no sorting: the server sorts by risk descending,
-   *  which is the one order this table is read in, and a six-column table
+   *  which is the one order this table is read in, and a seven-column table
    *  has nothing to hide. */
   protected readonly columns = computed<ColumnDef<RiskPosition>[]>(() => [
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, cell: this.tickerCell(), sortable: true, compact: { line: 1, order: 1 } },
@@ -900,6 +912,12 @@ export class Risk {
       const text = exactRiskText(knownRiskTotal(rows));
       return text ? { text, label: 'Exact Risk % total' } : null;
     }, compact: { line: 1, order: 2, drawer: true } },
+    { key: 'risk_of_loss', header: 'Risk of loss', numeric: true, sortable: true,
+      value: (row) => num(row.risk_of_loss_amount ?? null),
+      footer: (rows) => {
+        const known = rows.map((row) => row.risk_of_loss_amount).filter((v): v is number => typeof v === 'number');
+        return known.length ? num(known.reduce((sum, v) => sum + v, 0)) : ABSENT;
+      } },
   ]);
 
   /** v179: the money floor keeps Risk % and the stop on the phone row. The
@@ -999,6 +1017,15 @@ export class Risk {
   );
 
   protected readonly heatClass = computed(() => (this.store.heatNearCap() ? 'warn' : ''));
+
+  /** v189 B4: risk of loss to the stop, summed over the rows that carry a figure. */
+  protected readonly riskOfLossNote = computed(() => {
+    const value = this.store.riskOfLossTotal();
+    const pctTotal = this.store.riskOfLossPctTotal();
+    if (value === null) return ABSENT;
+    const money = amount(value, this.connection.currency(), 0);
+    return pctTotal === null ? money : `${money} · ${this.fmt(pctTotal)}% of balance`;
+  });
 
   /** v183: the short gap-risk line. A short without a figure is counted, never guessed at. */
   protected readonly gapRiskNote = computed(() => {

@@ -11,8 +11,12 @@ contribute nothing, since they lack exit_price/realized_pnl_amount)."""
 from __future__ import annotations
 
 from datetime import datetime
+import logging
+import math
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 
 #: Every exit reason the code actually emits, plus "other".
@@ -47,6 +51,18 @@ _EXIT_REASON_ALIASES: dict[str, str] = {
     "auto (near-tp stall)": "timeout",  # performance.py:1647, 1509
     "time_exit": "timeout",             # v119 compression short's tenth-session close (time_exit.TIME_EXIT_REASON)
 }
+
+#: v189 D2: the live scratch band for a close with two or more realized
+#: legs. Net R strictly inside ±SCRATCH_EPS_R is `closed`/`scratch`. Live
+#: only -- exit_sim_v2 keeps its own event labels (the metric-definitions
+#: spec owns reconciling them).
+SCRATCH_EPS_R: float = 0.01
+
+#: v189 D6: the date (ISO, UTC) from which scaled-out closes are labelled by
+#: net R; earlier ones were labelled by the TP1 touch and were not
+#: backfilled. Set at release (v189 V189-27) to the UTC merge date; the deploy
+#: follows the merge. If the deploy slips past it, amend it in the deploy commit.
+LABEL_BASIS_SINCE: str | None = "2026-10-30"
 
 
 def resolve_outcome(trade: dict) -> str:
@@ -170,24 +186,26 @@ def max_drawdown_pct(points: list[dict]) -> float | None:
     return max(dds)
 
 
-def r_multiple(trade: dict) -> float | None:
-    """THE single shared R-multiple computation -- every other stat in this
-    module and in aggregate.py/calibration.py that needs "how many risk
-    units did this trade make or lose" calls this instead of re-deriving
-    it, per the Global Constraint "one definition per stat".
+def leg_contribution_r(leg: dict) -> float | None:
+    """One realized leg's share of its trade's R: ``fraction x r``.
 
-    For a scaled-out trade, blends each leg's fraction-weighted ``r`` (or
-    derives a missing leg ``r`` from that leg's exit price), matching
-    ``performance.closed_r_multiple`` without importing it: performance
-    already imports this pure module. Otherwise r = (exit - entry) /
-    (entry - stop_loss), sign-flipped for a bearish trade so a positive r
-    always means "in the trade's favor" regardless of direction. None when
-    any required price is missing, direction is not exactly ``bullish`` or
-    ``bearish``, or when the stop distance is exactly 0 (a malformed record
-    -- dividing by zero risk is meaningless, not infinite).
+    v189 D1: every place that sums legs (the Calendar's leg rows, the banked
+    figure on an open PARTIAL) adds contributions, never leg Rs at full
+    size -- a +2R TP1 on half the position contributes +1R. None when the
+    leg carries no ``fraction`` or no ``r``; a caller that can derive the
+    leg's R from its exit price passes it in as ``r``.
     """
-    entry = trade.get("entry")
-    stop = trade.get("stop_loss")
+    fraction, r = leg.get("fraction"), leg.get("r")
+    if fraction is None or r is None:
+        return None
+    return float(fraction) * float(r)
+
+
+def _risk_basis(trade: dict) -> tuple[float, float, bool] | None:
+    """(entry, risk per share, is_bull), or None for a trade whose R cannot
+    be measured: a missing entry or stop, a direction that is not exactly
+    ``bullish``/``bearish``, or a zero stop distance."""
+    entry, stop = trade.get("entry"), trade.get("stop_loss")
     if entry is None or stop is None:
         return None
     direction = trade.get("direction")
@@ -196,26 +214,131 @@ def r_multiple(trade: dict) -> float | None:
     risk = abs(entry - stop)
     if risk == 0:
         return None
-    is_bull = direction == "bullish"
+    return entry, risk, direction == "bullish"
+
+
+def _signed_r(price: float, entry: float, risk: float, is_bull: bool) -> float:
+    raw = (price - entry) if is_bull else (entry - price)
+    return raw / risk
+
+
+def _legs_raw(legs: list[dict], entry: float, risk: float, is_bull: bool) -> float | None:
+    """Fraction-weighted sum of the legs' R, a missing leg ``r`` derived from
+    that leg's exit price; None when a leg has neither."""
+    total = 0.0
+    for leg in legs:
+        leg_r = leg.get("r")
+        if leg_r is None:
+            leg_exit = leg.get("exit_price")
+            if leg_exit is None:
+                return None
+            leg_r = _signed_r(leg_exit, entry, risk, is_bull)
+        total += leg.get("fraction", 0) * leg_r
+    return total
+
+
+def _blended_r_raw(trade: dict) -> float | None:
+    """`r_multiple`'s value before any rounding.
+
+    v189 D2: `net_outcome` compares this, not the rounded figure, so the
+    ±`SCRATCH_EPS_R` band is not quantised by ``round(..., 2)``.
+    """
+    basis = _risk_basis(trade)
+    if basis is None:
+        return None
+    entry, risk, is_bull = basis
     legs = trade.get("legs")
     if legs:
-        total = 0.0
-        for leg in legs:
-            leg_r = leg.get("r")
-            if leg_r is None:
-                leg_exit = leg.get("exit_price")
-                if leg_exit is None:
-                    return None
-                raw = (leg_exit - entry) if is_bull else (entry - leg_exit)
-                leg_r = raw / risk
-            total += leg.get("fraction", 0) * leg_r
-        return round(total, 2)
-
+        return _legs_raw(legs, entry, risk, is_bull)
     exit_price = trade.get("exit_price")
     if exit_price is None:
         return None
-    raw = (exit_price - entry) if is_bull else (entry - exit_price)
-    return raw / risk
+    return _signed_r(exit_price, entry, risk, is_bull)
+
+
+def r_multiple(trade: dict) -> float | None:
+    """THE single shared trade-level R-multiple -- every other stat in this
+    module and in aggregate.py/calibration.py that needs "how many risk
+    units did this trade make or lose" calls this instead of re-deriving
+    it, per the Global Constraint "one definition per stat" (v189 D1:
+    `performance.closed_r_multiple` delegates here too).
+
+    For a scaled-out trade, blends each leg's fraction-weighted ``r`` (or
+    derives a missing leg ``r`` from that leg's exit price), rounded to 2 dp.
+    Otherwise r = (exit - entry) / (entry - stop_loss), sign-flipped for a
+    bearish trade so a positive r always means "in the trade's favor"
+    regardless of direction, unrounded. None when any required price is
+    missing, direction is not exactly ``bullish`` or ``bearish``, or when the
+    stop distance is exactly 0 (a malformed record -- dividing by zero risk
+    is meaningless, not infinite). The unrounded value is `_blended_r_raw`.
+    """
+    raw = _blended_r_raw(trade)
+    if raw is None:
+        return None
+    return round(raw, 2) if trade.get("legs") else raw
+
+
+def banked_contribution_r(legs: list[dict] | None) -> float | None:
+    """The realized legs' contribution to the trade's R (v189 B3): the sum of
+    `leg_contribution_r`. +1.00R for a +2R TP1 on half the position.
+
+    Not ``banked_r`` -- that row field keeps its meaning, the TP1 leg's own
+    R. None when there are no legs or any leg lacks ``fraction`` or ``r``.
+    """
+    if not legs:
+        return None
+    parts = [leg_contribution_r(leg) for leg in legs]
+    if any(part is None for part in parts):
+        return None
+    return sum(parts)
+
+
+def open_trade_r(trade: dict, quote: float | None) -> float | None:
+    """The blended R of a still-open trade at ``quote`` (v189 B3).
+
+    ``banked_contribution_r(legs)`` plus the open fraction ``1 - Σ fraction``
+    times the live move ``(quote - entry) / |entry - stop_loss|``, signed per
+    direction. A trade with no legs is the whole position at ``quote``. None
+    without a finite quote, without a risk basis, or when a banked leg has
+    no ``r``. Unrounded; the display rounds.
+    """
+    if quote is None or not math.isfinite(quote):
+        return None
+    basis = _risk_basis(trade)
+    if basis is None:
+        return None
+    entry, risk, is_bull = basis
+    legs = trade.get("legs") or []
+    banked = banked_contribution_r(legs) if legs else 0.0
+    if banked is None:
+        return None
+    open_fraction = max(0.0, 1.0 - sum(leg.get("fraction", 0) for leg in legs))
+    return banked + open_fraction * _signed_r(float(quote), entry, risk, is_bull)
+
+
+def net_outcome(trade: dict) -> tuple[str, str | None]:
+    """(status, close_reason) for a close with two or more realized legs
+    (v189 D2): the sign of the UNROUNDED blended net R (`_blended_r_raw`).
+
+    ``> +SCRATCH_EPS_R`` is ``("win", None)``, ``< -SCRATCH_EPS_R`` is
+    ``("loss", None)``, anything inside the band (edges included) is
+    ``("closed", "scratch")``. A net that cannot be computed (no risk basis,
+    a leg with neither r nor exit price) or is not finite (a NaN/inf leg r
+    or exit price) is ``("closed", "unscored")`` with a warning naming the
+    trade -- never a fallback to the old "TP1 touched means win" rule, and
+    never a silent scratch. Single-leg closes do not come here: they keep
+    their existing labels.
+    """
+    raw = _blended_r_raw(trade)
+    if raw is None or not math.isfinite(raw):
+        log.warning("net_outcome: trade %s has no computable net R; labelled closed/unscored",
+                    trade.get("id") or trade.get("plan_id"))
+        return "closed", "unscored"
+    if raw > SCRATCH_EPS_R:
+        return "win", None
+    if raw < -SCRATCH_EPS_R:
+        return "loss", None
+    return "closed", "scratch"
 
 
 def win_rate(closed: list[dict]) -> float | None:
@@ -230,6 +353,21 @@ def win_rate(closed: list[dict]) -> float | None:
     losses = sum(1 for t in closed if t.get("status") == "loss")
     total = wins + losses
     return (wins / total * 100) if total else None
+
+
+def label_counts(closed: list[dict]) -> dict[str, int]:
+    """v189 D6: how many closes the win rate leaves out because D2 labelled
+    them by net R -- `closed`/`scratch` (net R within +-SCRATCH_EPS_R) and
+    `closed`/`unscored` (net R not computable). Exact `close_reason` match on
+    `status == "closed"` rows only; both keys always present, 0 when none.
+    Shown beside `win_rate` so the step at LABEL_BASIS_SINCE reads as a change
+    of label basis, not an improvement.
+    """
+    counts = {"scratch": 0, "unscored": 0}
+    for t in closed:
+        if t.get("status") == "closed" and t.get("close_reason") in counts:
+            counts[t["close_reason"]] += 1
+    return counts
 
 
 def expectancy_r(closed: list[dict]) -> float | None:

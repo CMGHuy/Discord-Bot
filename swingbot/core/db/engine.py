@@ -4,7 +4,9 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 
+import sqlalchemy as sa
 from sqlalchemy import Engine, create_engine
+from sqlalchemy import exc as sa_exc
 
 from swingbot import config
 
@@ -15,9 +17,38 @@ _POOL_SIZE = 5
 _MAX_OVERFLOW = 5
 _CONNECT_TIMEOUT_SECONDS = 5
 
+# v189 D3.3: how long a writer waits for a row lock before giving up. The bot's
+# poll and scanner skip that plan for one cycle; admin and Discord commands wait
+# longer because a person is waiting on the answer.
+BOT_LOCK_TIMEOUT_MS = 1000
+ADMIN_LOCK_TIMEOUT_MS = 5000
+_LOCK_NOT_AVAILABLE = "55P03"     # Postgres SQLSTATE raised when lock_timeout expires
+
 
 class DatabaseUnavailable(RuntimeError):
     """The database is missing, invalidly configured, or cannot be reached."""
+
+
+class LockTimeout(Exception):
+    """A row lock was not granted within the transaction's lock_timeout.
+
+    Raised out of an owned ``transaction()`` (the whole transaction has already
+    rolled back); ``__cause__`` is the driver error."""
+
+
+def _is_lock_timeout(exc: BaseException) -> bool:
+    """True when the driver error is Postgres' lock_not_available (55P03)."""
+    return getattr(getattr(exc, "orig", None), "sqlstate", None) == _LOCK_NOT_AVAILABLE
+
+
+def _checked_timeout(lock_timeout_ms: int | None) -> int | None:
+    """The timeout as a positive int, or None; refuses 0 (which means 'wait forever')."""
+    if lock_timeout_ms is None:
+        return None
+    ms = int(lock_timeout_ms)
+    if ms <= 0:
+        raise ValueError(f"lock_timeout_ms must be positive, got {lock_timeout_ms!r}")
+    return ms
 
 
 def get_engine() -> Engine:
@@ -65,14 +96,28 @@ def reset_engine() -> None:
 
 
 @contextmanager
-def transaction(conn=None):
+def transaction(conn=None, *, lock_timeout_ms: int | None = None):
     """Yield one transaction for several repository calls.
 
     An existing connection is passed through, allowing an already-atomic
-    caller to compose without opening a second transaction.
+    caller to compose without opening a second transaction; its owner chose
+    the lock timeout and translates a timeout, so nothing is set here.
+
+    An owned transaction with ``lock_timeout_ms`` runs ``SET LOCAL
+    lock_timeout`` first (scoped to this transaction only, so a pooled
+    connection never carries it on) and raises ``LockTimeout`` when a row lock
+    is not granted in time.
     """
     if conn is not None:
         yield conn
         return
-    with get_engine().begin() as owned:
-        yield owned
+    ms = _checked_timeout(lock_timeout_ms)
+    try:
+        with get_engine().begin() as owned:
+            if ms is not None:
+                owned.execute(sa.text(f"SET LOCAL lock_timeout = '{ms}ms'"))
+            yield owned
+    except sa_exc.DBAPIError as exc:
+        if _is_lock_timeout(exc):
+            raise LockTimeout(f"row lock not granted within {ms}ms") from exc
+        raise

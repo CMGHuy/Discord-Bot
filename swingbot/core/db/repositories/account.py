@@ -1,5 +1,7 @@
 """Account configuration and balance history."""
 
+import sqlalchemy as sa
+
 from swingbot.core.db.repositories.base import Repository
 from swingbot.core.db.schema import account, account_balance_history
 
@@ -33,6 +35,12 @@ class AccountRepository(Repository):
             return self._history.list_all(conn=conn, order_by=account_balance_history.c.ts.asc())
         latest = self._history.list_all(conn=conn, order_by=account_balance_history.c.ts.desc(), limit=limit)
         return list(reversed(latest))
+
+    def clear_history(self, *, conn) -> int:
+        """Delete every balance-history point inside the caller's transaction
+        (v189 A6). The caller reseeds one point: an empty history reads as
+        "no data", not as a flat account (known-traps "Measured-empty tables")."""
+        return conn.execute(sa.delete(account_balance_history)).rowcount
 
 
 _repo: AccountRepository | None = None

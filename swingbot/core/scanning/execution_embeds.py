@@ -35,6 +35,7 @@ _EVENT_KINDS = {
     "cancelled_risk_cap": Kind.RISK_CAP,
     "cancelled_limit": Kind.CANCEL,
     "cancelled_gap_through_stop": Kind.CANCEL,
+    "cancelled_trade_deleted": Kind.CANCEL,   # v189 A7
 }
 
 
@@ -118,9 +119,17 @@ def build_ticket_embed(item, plan) -> discord.Embed:
     return render(instruction, kind, block=plan_levels_block(plan, plan.trigger_price))
 
 
+#: v189 A7: a close with no exit behind it (the trade record was deleted) is
+#: shown as a withdrawn plan -- no result block, no R stripe.
+_NO_EXIT_CLOSE_KINDS = {"trade_deleted": Kind.INVALIDATED}
+
+
 def _event_style(plan, event, instruction: Instruction) -> tuple:
     """(kind, ANSI block or None, realised R or None) for one feed event."""
     if event.transition == "closed":
+        no_exit = _NO_EXIT_CLOSE_KINDS.get(event.detail.get("reason"))
+        if no_exit is not None:
+            return no_exit, None, None
         exit_price = event.detail.get("exit_price")
         r = total_r(plan, exit_price)
         kind = Kind.CLOSE_AT_MARKET if instruction.verb == CLOSE_AT_MARKET else Kind.EXITED
