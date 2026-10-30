@@ -97,6 +97,13 @@ interface LaneChip {
  * they sit in the page header's actions slot (spec Phase 4), the one home
  * of a destructive control, and never fold into the filter sheet.
  */
+/** v189 A6: the second, explicit confirmation a forced reset needs. */
+export const FORCE_RESET_CONSEQUENCE =
+  'The kill switch is tripped. Forcing the reset still archives every closed trade and finished plan to a file '
+  + 'on the server first, then deletes them and restarts realized P&L and the drawdown history from the base '
+  + 'balance, which lifts any throttle. The kill switch stays on: release it on the Risk page. New trades are '
+  + 'sized off the base balance.';
+
 export const TRADES_CONTROLS: ToolbarControl[] = [
   { id: 'status', label: 'Status', inlineFrom: 'xs' },
   { id: 'columns', label: 'Columns', inlineFrom: 'xs' },
@@ -181,6 +188,19 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
           <!-- The count, not just "done": "cleared 0" and "cleared 40" are
                different answers and want different reactions. -->
           <p class="cleared" role="status">{{ message }}</p>
+        }
+        @if (store.clearNotice(); as notice) {
+          <!-- v189: the server's own lines -- the plans a delete ended, or the
+               reset's archive, throttle and kill switch. Line breaks kept. -->
+          <p class="clear-notice" role="status" data-testid="clear-notice">{{ notice }}</p>
+        }
+        @if (store.clearRefusal(); as refusal) {
+          <!-- v189 A6: a refusal, not a failure. The force is one more explicit
+               step, never a retry the page makes on its own. -->
+          <div class="clear-refusal" role="alert" data-testid="clear-refusal">
+            <p>{{ refusal }}</p>
+            <button sb-button variant="danger-quiet" type="button" (click)="forceOpen.set(true)">Reset anyway…</button>
+          </div>
         }
         @if (store.clearError(); as message) {
           <p class="command-error" role="alert">{{ message }}</p>
@@ -577,6 +597,16 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
         (confirmed)="runBulk()"
         (cancelled)="bulk.set(null)"
       />
+      <sb-confirm-dialog
+        data-dialog="force-reset"
+        [open]="forceOpen()"
+        title="Reset while the kill switch is tripped"
+        [consequence]="forceResetConsequence"
+        confirmLabel="Force reset"
+        [working]="store.clearing() !== null"
+        (confirmed)="runForceReset()"
+        (cancelled)="forceOpen.set(false)"
+      />
     </sb-page>
   `,
   styles: `
@@ -603,6 +633,21 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
        failed, these numbers are stale", and this one means "the thing you
        asked for did not happen". */
     .command-error { color: var(--neg); font-size: var(--text-table); }
+    /* v189: the server's multi-line notice; an archive name has no spaces to
+       break on, so it may wrap anywhere rather than push the page sideways. */
+    .page-actions .clear-notice {
+      margin: 0; white-space: pre-line; overflow-wrap: anywhere;
+      color: var(--text-secondary); font-size: var(--text-table);
+    }
+    .page-actions .clear-refusal {
+      flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8) var(--space-10);
+      color: var(--neg); font-size: var(--text-table);
+    }
+    .page-actions .clear-refusal p { margin: 0; flex: 1 1 24rem; min-width: 0; overflow-wrap: anywhere; }
+    /* A real target on touch screens; full width on a phone so it never
+       shares a cramped line with the refusal text. */
+    .clear-refusal button { min-height: var(--control-h); }
+    @media (max-width: 639px) { .clear-refusal button { width: 100%; } }
 
     /* R6-05. Same voice as sb-pagination's own .range (muted, --text-table)
        so the two read as one family, not a mismatched addition. */
@@ -838,6 +883,13 @@ export class Trades {
 
   protected readonly pending = signal<PendingAction>(null);
   protected readonly working = signal(false);
+  protected readonly forceOpen = signal(false);
+  protected readonly forceResetConsequence = FORCE_RESET_CONSEQUENCE;
+
+  protected runForceReset(): void {
+    this.store.clearHistory(true);
+    this.forceOpen.set(false);
+  }
 
   /** Which bulk clear is awaiting confirmation. */
   protected readonly bulk = signal<'open' | 'history' | null>(null);
@@ -1186,17 +1238,18 @@ export class Trades {
   });
 
   protected readonly bulkTitle = computed(() =>
-    this.bulk() === 'history' ? 'Clear trade history' : 'Clear open positions',
+    this.bulk() === 'history' ? 'Reset trade history' : 'Clear open positions',
   );
 
-  /** Names what goes and what stays, per spec v14 — these are the two widest
+  /** v189: the history clear is an archived reset, not a plain delete.
+   *  Names what goes and what stays, per spec v14 — these are the two widest
    *  destructive actions in the product, and "are you sure?" is answered yes
    *  reflexively. The counts are deliberately not quoted from the table:
    *  it is one filtered page, and these commands ignore the filter. */
   protected readonly bulkConsequence = computed(() =>
     this.bulk() === 'history'
-      ? 'Every closed trade is deleted permanently, along with its notes — the whole history, not just this page or this filter. Open positions are untouched. This cannot be undone.'
-      : 'Every open position is deleted permanently — the whole book, not just this page or this filter. Closed history is untouched, and nothing is closed at a price: the records simply go. This cannot be undone.',
+      ? 'Clearing history is a full reset. Every closed trade and finished plan is archived to a file on the server, then deleted, and realized P&L and the drawdown history restart from the base balance, which lifts any throttle. New trades are sized off the base balance. Open positions and live plans are untouched. Refused while the kill switch is tripped.'
+      : 'Every open position is deleted permanently — the whole book, not just this page or this filter. Linked plans end with it: waiting plans are cancelled, held positions are no longer monitored (no more stop or take-profit alerts), and banked TP1 dollars leave the balance with the trade. Closed history is untouched, and nothing is closed at a price. This cannot be undone.',
   );
 
   protected runBulk(): void {

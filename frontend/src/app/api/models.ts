@@ -336,12 +336,35 @@ export interface TradeNote {
 /** Filters the list endpoint accepts. A parameter it does not know is a 400,
  *  not a silent no-op -- a silently ignored filter is how a filter that has
  *  stopped working survives to production. */
-/** `POST /trades/clear-open` and `POST /trades/clear-history`. The count is
- *  the only thing either returns, and it is what the confirmation reports —
+/** One plan a delete ended (v189 A7): a waiting plan cancelled, or a held
+ *  position closed with no P&L. */
+export interface EndedPlanRow {
+  plan_id: string;
+  ticker: string;
+  status_before: string;
+  status_after: string;
+}
+
+/** `POST /trades/clear-open`. The count is what the confirmation reports --
  *  "cleared" without a number cannot be told from "there was nothing to
- *  clear". */
+ *  clear". v189 A7: `ended` lists the plans the delete ended and `notice`
+ *  says what that means ("" when nothing ended). Both optional so a reply
+ *  from a pre-v189 server still reads. */
 export interface ClearResult {
   removed: number;
+  ended?: EndedPlanRow[];
+  notice?: string;
+}
+
+/** `POST /trades/clear-history` since v189 A6: an archived full reset.
+ *  `archive` is a file NAME on the server's data volume, never a path. */
+export interface ClearHistoryResult {
+  removed: number;
+  removed_plans: number;
+  archive: string;
+  throttle: { multiplier: number; paused: boolean };
+  kill_switch: boolean;
+  notice: string;
 }
 
 /** What POST /trades/close-open reports. `failed` is separate from `closed`
