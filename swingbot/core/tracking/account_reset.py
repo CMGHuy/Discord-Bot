@@ -32,7 +32,7 @@ from swingbot.core.db.repositories.account import account_repo
 from swingbot.core.db.repositories.base import Repository
 from swingbot.core.db.repositories.plans import plans_repo
 from swingbot.core.db.repositories.trades import trades_repo
-from swingbot.core.db.schema import plan_followers, plan_notifications, plans, starred_plans
+from swingbot.core.db.schema import account_balance_history, plan_followers, plan_notifications, plans, starred_plans
 from swingbot.core.edge import throttle
 from swingbot.core.planning import account as account_module
 from swingbot.core.tracking.performance import _refresh_snapshot_safely, run_after_commit
@@ -216,3 +216,83 @@ def describe_reset(result: ResetResult) -> str:
         f"Kill switch: {kill}.",
         "New trades are sized off the base balance. Open trades and live plans were not touched.",
     ))
+
+
+# --- rollback (scripts/ops/restore_account_reset.py) ------------------------------
+
+_COUNTED = ("trades", "plans", "account_balance_history", *CHILD_TABLES)
+
+
+def _load_archive(path: Path) -> dict:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("version") != ARCHIVE_VERSION:
+        raise ValueError(f"{path.name}: not a version-{ARCHIVE_VERSION} account-reset archive")
+    return payload
+
+
+def _reseed_point(history: list[dict], archive_name: str) -> dict:
+    """This archive's reseed point. Any other picture means a later reset ran
+    (it deleted this point) or this archive was already restored."""
+    points = [entry for entry in history if entry.get("reason") == RESET_REASON]
+    if len(points) != 1 or points[0].get("archive") != archive_name:
+        raise ValueError(f"refusing to restore {archive_name}: a later reset has run since, or "
+                         "this archive was already restored; restore the newest archive first")
+    return points[0]
+
+
+def _insert_rows(payload: dict, *, conn) -> None:
+    """Plans before the rows that reference them; then trades and history."""
+    for record in payload["plans"]:
+        plans_repo().insert(record, conn=conn)
+    for name, table in CHILD_TABLES.items():
+        repo = Repository(table, key="plan_id")
+        for record in payload[name]:
+            repo.insert(record, conn=conn)
+    for record in payload["trades"]:
+        trades_repo().insert(record, conn=conn)
+    history = Repository(account_balance_history, key="ts")
+    for record in payload["account_balance_history"]:
+        history.insert(record, conn=conn)
+
+
+def _apply_restore(payload: dict, reseed: dict, later: list[dict], *, conn) -> float:
+    """Drop the reseed point, re-insert the archive, and add the restored
+    realized P&L to every point written since the reset (each was computed as
+    base + realized without it). Returns that shift."""
+    history = Repository(account_balance_history, key="ts")
+    before = account_module._sum_realized_pnl(conn=conn)
+    history.delete(reseed["ts"], conn=conn)
+    _insert_rows(payload, conn=conn)
+    shift = round(account_module._sum_realized_pnl(conn=conn) - before, 2)
+    for point in later:
+        history.patch(point["ts"], {"balance": round(float(point["balance"]) + shift, 2)},
+                      conn=conn)
+    cfg = account_module.load_account_config(conn=conn)
+    account_module.save_account_config({**cfg, "balance_history": []}, conn=conn)
+    return shift
+
+
+def restore_archive(path: str | Path, *, apply: bool = False) -> dict:
+    """Undo one reset from its archive (spec D4 A6 rollback): one transaction,
+    the book locked (EXCLUSIVE, ADMIN timeout) when applying. A dry run (the
+    default) only checks and counts. Raises ValueError on a foreign file or
+    when a later reset has run since."""
+    archive = Path(path)
+    payload = _load_archive(archive)
+    with transaction(lock_timeout_ms=ADMIN_LOCK_TIMEOUT_MS) as conn:
+        if apply:
+            conn.execute(BOOK_LOCK)
+        history = account_repo().history(conn=conn)
+        reseed = _reseed_point(history, archive.name)
+        later = [entry for entry in history if entry["ts"] > reseed["ts"]]
+        summary = {"archive": archive.name, "reset_at": payload["reset_at"],
+                   **{key: len(payload[key]) for key in _COUNTED},
+                   "later_points": len(later), "balance_shift": None, "applied": apply}
+        if apply:
+            summary["balance_shift"] = _apply_restore(payload, reseed, later, conn=conn)
+    if apply:
+        run_after_commit([_refresh_snapshot_safely])
+        log.info("account reset restored from %s: %d trade(s), %d plan(s), balance shift %.2f "
+                 "on %d later point(s)", archive, summary["trades"], summary["plans"],
+                 summary["balance_shift"], summary["later_points"])
+    return summary
