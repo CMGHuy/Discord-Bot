@@ -636,14 +636,14 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     /* v189: the server's multi-line notice; an archive name has no spaces to
        break on, so it may wrap anywhere rather than push the page sideways. */
     .page-actions .clear-notice {
-      margin: 0; white-space: pre-line; overflow-wrap: anywhere;
+      margin: 0; white-space: pre-line; overflow-wrap: anywhere; text-align: start;
       color: var(--text-secondary); font-size: var(--text-table);
     }
     .page-actions .clear-refusal {
       flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8) var(--space-10);
       color: var(--neg); font-size: var(--text-table);
     }
-    .page-actions .clear-refusal p { margin: 0; flex: 1 1 24rem; min-width: 0; overflow-wrap: anywhere; }
+    .page-actions .clear-refusal p { margin: 0; flex: 1 1 24rem; min-width: 0; overflow-wrap: anywhere; text-align: start; }
     /* A real target on touch screens; full width on a phone so it never
        shares a cramped line with the refusal text. */
     .clear-refusal button { min-height: var(--control-h); }
