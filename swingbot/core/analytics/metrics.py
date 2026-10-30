@@ -11,9 +11,12 @@ contribute nothing, since they lack exit_price/realized_pnl_amount)."""
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 import math
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 
 #: Every exit reason the code actually emits, plus "other".
@@ -48,6 +51,17 @@ _EXIT_REASON_ALIASES: dict[str, str] = {
     "auto (near-tp stall)": "timeout",  # performance.py:1647, 1509
     "time_exit": "timeout",             # v119 compression short's tenth-session close (time_exit.TIME_EXIT_REASON)
 }
+
+#: v189 D2: the live scratch band for a close with two or more realized
+#: legs. Net R strictly inside ±SCRATCH_EPS_R is `closed`/`scratch`. Live
+#: only -- exit_sim_v2 keeps its own event labels (the metric-definitions
+#: spec owns reconciling them).
+SCRATCH_EPS_R: float = 0.01
+
+#: v189 D6: the date (ISO, UTC) from which scaled-out closes are labelled by
+#: net R; earlier ones were labelled by the TP1 touch and were not
+#: backfilled. Set by the release task; None until deployed.
+LABEL_BASIS_SINCE: str | None = None
 
 
 def resolve_outcome(trade: dict) -> str:
@@ -299,6 +313,31 @@ def open_trade_r(trade: dict, quote: float | None) -> float | None:
         return None
     open_fraction = max(0.0, 1.0 - sum(leg.get("fraction", 0) for leg in legs))
     return banked + open_fraction * _signed_r(float(quote), entry, risk, is_bull)
+
+
+def net_outcome(trade: dict) -> tuple[str, str | None]:
+    """(status, close_reason) for a close with two or more realized legs
+    (v189 D2): the sign of the UNROUNDED blended net R (`_blended_r_raw`).
+
+    ``> +SCRATCH_EPS_R`` is ``("win", None)``, ``< -SCRATCH_EPS_R`` is
+    ``("loss", None)``, anything inside the band (edges included) is
+    ``("closed", "scratch")``. A net that cannot be computed (no risk basis,
+    a leg with neither r nor exit price) or is not finite (a NaN/inf leg r
+    or exit price) is ``("closed", "unscored")`` with a warning naming the
+    trade -- never a fallback to the old "TP1 touched means win" rule, and
+    never a silent scratch. Single-leg closes do not come here: they keep
+    their existing labels.
+    """
+    raw = _blended_r_raw(trade)
+    if raw is None or not math.isfinite(raw):
+        log.warning("net_outcome: trade %s has no computable net R; labelled closed/unscored",
+                    trade.get("id") or trade.get("plan_id"))
+        return "closed", "unscored"
+    if raw > SCRATCH_EPS_R:
+        return "win", None
+    if raw < -SCRATCH_EPS_R:
+        return "loss", None
+    return "closed", "scratch"
 
 
 def win_rate(closed: list[dict]) -> float | None:
