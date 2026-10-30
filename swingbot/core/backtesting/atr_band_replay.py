@@ -318,14 +318,14 @@ def _crossed(bull, low, high, level, *, below) -> bool:
     return high >= level if below else low <= level
 
 
-def _reached_tp1_first(df, start, end, plan, lo_pct) -> bool:
+def _reached_tp1_first(df, start, end, plan, lo_pct, stop_index) -> bool:
     bull = plan.direction == "bullish"
     line = plan.trigger_price * (1 - lo_pct / 100 if bull else 1 + lo_pct / 100)
     lows, highs = df["Low"].values, df["High"].values
     for j in range(start, end + 1):
         if _crossed(bull, lows[j], highs[j], line, below=True):
             return False
-        if _crossed(bull, lows[j], highs[j], plan.tp1, below=False):
+        if j > stop_index and _crossed(bull, lows[j], highs[j], plan.tp1, below=False):
             return True
     return False
 
@@ -340,7 +340,7 @@ def _reversal(df, i, base, atr_pct, cells) -> dict | None:
     if res.outcome in UNTRIGGERED or _exit_mix(res) != "stop":
         return None
     end = min(res.entry_index + bs.HORIZONS[base.horizon_key]["max_holding_days"], len(df) - 1)
-    return {cell_key(k): _reached_tp1_first(df, res.entry_index, end, base, atr_pct * float(k))
+    return {cell_key(k): _reached_tp1_first(df, res.entry_index, end, base, atr_pct * float(k), res.exit_index)
             for k in cells}
 
 

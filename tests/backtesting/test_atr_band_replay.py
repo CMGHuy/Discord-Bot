@@ -214,6 +214,18 @@ def test_reversal_counts_tp1_before_a_k_atr_breach(monkeypatch):
     assert abr._reversal(df, 30, TODAY, None, abr.K_STEPS) is None
 
 
+def test_reversal_does_not_count_target_before_or_on_stop_bar(monkeypatch):
+    df = _frame(n=80)
+    df.iloc[31, df.columns.get_loc("High")] = 104.5
+    df.iloc[32, df.columns.get_loc("High")] = 104.5
+    monkeypatch.setattr(abr, "simulate_exit", lambda f, i, p, scale_out=True:
+                        ExitResult(outcome="loss", runner_outcome=None, entry_index=31,
+                                   exit_index=32, entry_price=100.0, r_total=-1.0,
+                                   legs=[{"fraction": 1.0, "exit_price": 98.25, "r": -1.0,
+                                          "reason": "stop"}]))
+    assert abr._reversal(df, 30, TODAY, 4.0, abr.K_STEPS) == dict.fromkeys(KEYS, False)
+
+
 def test_reversal_is_none_for_a_baseline_that_did_not_stop(monkeypatch):
     monkeypatch.setattr(abr, "simulate_exit", lambda f, i, p, scale_out=True:
                         ExitResult(outcome="win", runner_outcome=None, entry_index=31,
