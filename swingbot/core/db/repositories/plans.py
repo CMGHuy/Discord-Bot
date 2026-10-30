@@ -17,6 +17,16 @@ class PlanRepository(Repository):
         from swingbot.core.planning.plan_store import _OPEN_STATUSES
         return tuple(_OPEN_STATUSES)
 
+    #: The statuses that end a plan; the v189 account reset deletes these.
+    TERMINAL_STATUSES = ("CLOSED", "CANCELLED")
+
+    def delete_terminal(self, *, conn) -> int:
+        """Delete every CLOSED/CANCELLED plan (v189 A6) inside the caller's
+        transaction. Its starred_plans, plan_followers and plan_notifications
+        rows go with it (ON DELETE CASCADE); the caller archives them first."""
+        statement = sa.delete(plans).where(plans.c.status.in_(self.TERMINAL_STATUSES))
+        return conn.execute(statement).rowcount
+
     def open_plans(self, *, conn=None) -> list[dict]:
         return self.list_all(conn=conn, where=plans.c.status.in_(self.OPEN_STATUSES),
                              order_by=plans.c.created_at.desc())
