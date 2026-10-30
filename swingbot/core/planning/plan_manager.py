@@ -159,6 +159,7 @@ STOP_EVENTS = frozenset({"be_moved", "tp1_partial", "stop_moved"})
 PENDING_CANCEL_EVENTS = frozenset({
     "cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap",
     "cancelled_limit", "cancelled_gap_through_stop",
+    "cancelled_trade_deleted",     # v189 A7: queued by tracking/plan_links, not by a step
 })
 NOTICE_EVENTS = frozenset({"filled", "closed"}) | PENDING_CANCEL_EVENTS
 NOTICE_RESEND_DAYS = 5
@@ -185,6 +186,7 @@ _TRANSITION_LOG = {
     "cancelled_risk_cap": ("risk cap hit", "entry_price"),
     "cancelled_limit": ("limit cancelled", "live_price"),
     "cancelled_gap_through_stop": ("gap through stop", "live_price"),
+    "cancelled_trade_deleted": ("trade deleted", "live_price"),
 }
 # Closes where a stop took the position out (initial, break-even, the
 # post-TP1 runner floor, or the chandelier trail), not a target or a time rule.

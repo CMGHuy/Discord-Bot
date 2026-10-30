@@ -306,6 +306,7 @@ PLAN_EVENT_KINDS = {
     "cancelled_risk_cap": Kind.RISK_CAP,
     "cancelled_limit": Kind.CANCEL,
     "cancelled_gap_through_stop": Kind.CANCEL,
+    "cancelled_trade_deleted": Kind.CANCEL,   # v189 A7
     "be_moved": Kind.BE_MOVED,
     "tp1_partial": Kind.TP1_HIT,
 }
@@ -424,6 +425,14 @@ def _gap_through_stop_fields(embed, plan, d) -> None:
         inline=False)
 
 
+def _trade_deleted_fields(embed, plan, d) -> None:
+    """v189 A7: a PENDING plan whose placeholder trade record was deleted."""
+    embed.description = plan_levels_block(plan, plan.trigger_price)
+    embed.add_field(name="Why", value=(
+        f"The trade record was deleted before the {plan.trigger_price:.2f} order filled. "
+        "Never opened; no position, no P&L."), inline=False)
+
+
 def _outlook_cancel_fields(embed, plan, d) -> None:
     """v144: an outlook plan's cancellation, in the catalogue's words and code."""
     embed.description = plan_levels_block(plan, plan.trigger_price)
@@ -440,6 +449,7 @@ _EVENT_FIELDS = {
     "cancelled_risk_cap": _risk_cap_fields,
     "cancelled_limit": _limit_cancelled_fields,
     "cancelled_gap_through_stop": _gap_through_stop_fields,
+    "cancelled_trade_deleted": _trade_deleted_fields,
 }
 
 
