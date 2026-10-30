@@ -3,11 +3,11 @@
 This repository's shared operating knowledge is maintained in `CLAUDE.md` and
 the focused documents under `docs/claude/`: the canonical guidance. Read the
 relevant one before working in its area. Never load plan files, indexes or
-historical plans in full when a narrow extract will answer.
+historical plans in full when a narrow extract suffices.
 
 **Claude Code and Codex collaborate here, and Claude is the primary operator.**
 `CLAUDE.md` and `docs/claude/` are canonical; this file is their concise Codex
-mirror, synced one-way by Claude sessions. A Codex instruction never modifies the
+mirror, synced one-way by Claude. A Codex instruction never modifies the
 canonical Claude docs; if the two disagree, this file is wrong.
 
 **Codex runs the same setup as Claude, not a lookalike.** Every Claude setup
