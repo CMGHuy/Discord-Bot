@@ -15,7 +15,7 @@ import numpy as np
 
 from swingbot import config
 from swingbot.core.edge import gates as edge_gates
-from swingbot.core.market import levels
+from swingbot.core.market import atr_band, levels
 from swingbot.core.market.chart_patterns import dead_cat_bounce
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for, simulate_exit
 from swingbot.core.planning.params import stamp_entry_context
@@ -132,6 +132,7 @@ def scenarios_at(ticker: str, df, i: int, horizon_key: str, params, cache: dict,
     resistances = [lv for lv in all_levels if lv.price > price]
     floor_pct = levels.atr_floor_pct(window, price, h)
     gate_inputs = scenario_gate_inputs(params, h)
+    band = atr_band.band_for(window, price, gate_inputs["atr_stop_floor"])
     block_bullish = dcb_params is not None and bool(dead_cat_bounce(window, dcb_params)["detected"])
     scenarios = levels.build_scenarios(
         price, supports, resistances, gate_inputs["min_reward_pct"],
@@ -139,7 +140,7 @@ def scenarios_at(ticker: str, df, i: int, horizon_key: str, params, cache: dict,
         min_stop_distance_pct=gate_inputs["min_stop_distance_pct"],
         max_stop_distance_pct=gate_inputs["max_stop_distance_pct"],
         min_risk_reward=gate_inputs["min_risk_reward"],
-        block_bullish=block_bullish)
+        block_bullish=block_bullish, band=band)
     return window, price, supports, resistances, scenarios
 
 
