@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -114,6 +115,19 @@ def _failed_text(path: Path, exc: Exception) -> str:
             "Nothing was deleted.")
 
 
+VERIFIED_KEYS = ("trades", "plans", "account_balance_history", *CHILD_TABLES)
+
+
+def _verify_archive(path: Path, payload: dict) -> None:
+    """Re-read the archive from disk: it is the only rollback, so a short or
+    unreadable file must stop the reset (ValueError -> ArchiveFailed)."""
+    with path.open(encoding="utf-8") as handle:
+        stored = json.load(handle)
+    for key in VERIFIED_KEYS:
+        if len(stored.get(key, ())) != len(payload[key]):
+            raise ValueError(f"read-back check failed: {key} row count differs")
+
+
 def _write_archive(path: Path, payload: dict) -> None:
     """Exclusive-create the archive (an existing one is never overwritten)."""
     try:
@@ -124,6 +138,9 @@ def _write_archive(path: Path, payload: dict) -> None:
     try:
         with handle:
             json.dump(payload, handle, indent=1, sort_keys=True, allow_nan=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _verify_archive(path, payload)
     except (OSError, TypeError, ValueError) as exc:
         path.unlink(missing_ok=True)
         raise ArchiveFailed(_failed_text(path, exc)) from exc

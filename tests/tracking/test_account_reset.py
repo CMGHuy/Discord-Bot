@@ -217,6 +217,42 @@ def test_a_failure_after_the_archive_rolls_back_and_removes_the_file(book, monke
     assert list(book.glob("*.json")) == []
 
 
+def test_a_truncated_archive_is_caught_before_any_delete(book, monkeypatch):
+    real_dump = json.dump
+
+    def truncating(payload, handle, **kwargs):
+        text = json.dumps(payload, **kwargs)
+        handle.write(text[: len(text) // 2])          # a silently short write
+    monkeypatch.setattr(ar.json, "dump", truncating)
+    before = _state()
+    with pytest.raises(ar.ArchiveFailed, match="Nothing was deleted"):
+        ar.reset_closed_history(now=NOW)
+    monkeypatch.setattr(ar.json, "dump", real_dump)
+    assert _state() == before
+    assert list(book.glob("*.json")) == []
+
+
+def test_an_archive_missing_rows_is_caught_before_any_delete(book, monkeypatch):
+    real_dump = json.dump
+
+    def dropping(payload, handle, **kwargs):          # valid JSON, one trade short
+        real_dump({**payload, "trades": payload["trades"][:-1]}, handle, **kwargs)
+    monkeypatch.setattr(ar.json, "dump", dropping)
+    before = _state()
+    with pytest.raises(ar.ArchiveFailed, match="Nothing was deleted"):
+        ar.reset_closed_history(now=NOW)
+    monkeypatch.setattr(ar.json, "dump", real_dump)
+    assert _state() == before
+    assert list(book.glob("*.json")) == []
+
+
+def test_a_verified_archive_reads_back_with_the_written_row_counts(book):
+    ar.reset_closed_history(now=NOW)
+    payload = json.loads((book / ARCHIVE).read_text(encoding="utf-8"))
+    assert (len(payload["trades"]), len(payload["plans"]),
+            len(payload["account_balance_history"])) == (2, 2, 3)
+
+
 def test_a_second_reset_in_the_same_second_never_overwrites_the_first_archive(book):
     ar.reset_closed_history(now=NOW)
     first = (book / ARCHIVE).read_bytes()
