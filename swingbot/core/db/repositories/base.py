@@ -44,6 +44,18 @@ class Repository:
             row = connection.execute(statement).one_or_none()
         return None if row is None else self._record(row)
 
+    def get_for_update(self, key_value: Any, *, conn: sa.Connection) -> dict | None:
+        """Read one row and hold its row lock until ``conn``'s transaction ends.
+
+        ``conn`` is required: a lock taken in a throwaway transaction would be
+        released the moment this method returned. Waits at most the
+        transaction's ``lock_timeout`` (see ``engine.transaction``)."""
+        if conn is None:
+            raise ValueError(f"{self.table.name}.get_for_update needs the caller's connection")
+        statement = sa.select(self.table).where(self.key_col == key_value).with_for_update()
+        row = conn.execute(statement).one_or_none()
+        return None if row is None else self._record(row)
+
     def list_all(self, *, conn: sa.Connection | None = None, where=None,
                  order_by=None, limit: int | None = None) -> list[dict]:
         statement = sa.select(self.table)
