@@ -20,7 +20,6 @@ the trade-history channel goes quiet without it.
 from __future__ import annotations
 
 import logging
-import math
 from datetime import datetime, timezone
 
 from flask import jsonify, request
@@ -29,6 +28,7 @@ from swingbot.core.analytics import runner_path as rp
 from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, LockTimeout, transaction
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.tracking.performance import TradeLog, run_after_commit
+from swingbot.core.tracking.performance import _usable_price
 from swingbot.core.planning.plan_engine import (PlanStatus, plan_from_dict, plan_to_dict,
                                                 record_transition)
 from swingbot.core.planning.plan_store import PlanStore
@@ -148,16 +148,12 @@ class PlanChanged(Exception):
     bot closed it, or TP1 filled). Nothing was written; the caller reloads."""
 
 
-def _usable(price) -> bool:
-    return price is not None and math.isfinite(price) and price > 0
-
-
 def _runner_leg(plan, price, at: str) -> dict | None:
     """v189 A2: a PARTIAL plan's still-open remainder realized at `price`, in
     the shape `_close_runner` writes. None for an ACTIVE plan, a PARTIAL with
     no banked leg on record, a zero-risk plan or no usable price (the trade
     side then closes unpriced as well, so the two stores still agree)."""
-    if plan.status != PlanStatus.PARTIAL or not plan.legs_realized or not _usable(price):
+    if plan.status != PlanStatus.PARTIAL or not plan.legs_realized or not _usable_price(price):
         return None
     remaining = round(1.0 - sum(leg.get("fraction", 0) for leg in plan.legs_realized), 6)
     risk = abs(plan.entry_price - plan.stop_loss) if plan.entry_price is not None else 0.0
@@ -181,7 +177,10 @@ def _close_plan_onto(plan, price, reason: str, stamp, at: str) -> None:
 def _runner_path_for(plan, price, reason: str, stamp, at: str) -> tuple[bool, dict | None]:
     """(stamped, path). v142: a manual runner close stamps its path; that
     reads the daily cache from disk, so it runs on a closed COPY before any
-    row lock. An ACTIVE plan has no runner: (False, None). Never raises."""
+    row lock. An ACTIVE plan has no runner: (False, None). Never raises.
+    The path is stamped from the pre-lock plan: a stop tightened between the
+    read and the lock is accepted (a narrow window; the leg itself is rebuilt
+    from the locked plan)."""
     if plan.status != PlanStatus.PARTIAL:
         return False, None
     preview = plan_from_dict(plan_to_dict(plan))
@@ -218,6 +217,8 @@ def _close_plan(store: PlanStore, plan, reason: str = "manual") -> None:
     stamp = _override_stamp(plan.ticker)
     price = stamp["exit_price"] if stamp and stamp["price_source"] == "quote" else None
     at = datetime.now(timezone.utc).isoformat()
+    if plan.status == PlanStatus.PARTIAL and _runner_leg(plan, price, at) is None:
+        price = None  # no runner leg (zero-risk plan): the trade closes unpriced too
     stamped, runner_path = _runner_path_for(plan, price, reason, stamp, at)
     tl = TradeLog()
     linked = _linked_trade(tl, plan.plan_id)

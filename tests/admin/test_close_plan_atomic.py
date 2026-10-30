@@ -162,3 +162,49 @@ def test_no_quote_closes_both_stores_unpriced(golden, logged_in):
     trade = TradeLog().get_trade_by_id(TRADE_ID)
     assert plan.status == "CLOSED" and len(plan.legs_realized) == 1
     assert (trade["status"], len(trade["legs"])) == ("closed", 1)
+
+
+def test_a_zero_risk_partial_close_leaves_both_stores_with_the_same_legs(golden, logged_in):
+    entry = G["entry"]
+    seed_store("plans", [{**_golden_partial_plan(), "stop_loss": entry}])
+    seed_store("trades", [{**_golden_open_trade(), "stop_loss": entry}])
+    assert logged_in.post(f"/api/v1/trades/{PLAN_ID}/close").status_code == 200
+    plan = PlanStore().get(PLAN_ID)
+    trade = TradeLog().get_trade_by_id(TRADE_ID)
+    assert len(plan.legs_realized) == len(trade["legs"]) == 1
+
+
+def test_the_quote_and_the_daily_bars_are_read_before_a_transaction_opens(golden, logged_in,
+                                                                         monkeypatch):
+    import threading
+    open_on = set()
+    real_tx = tc.transaction
+    seen = {}
+
+    class Tracked:
+        def __init__(self, *a, **k):
+            self.cm = real_tx(*a, **k)
+
+        def __enter__(self):
+            open_on.add(threading.get_ident())
+            return self.cm.__enter__()
+
+        def __exit__(self, *exc):
+            try:
+                return self.cm.__exit__(*exc)
+            finally:
+                open_on.discard(threading.get_ident())
+
+    def guard(name, inner):
+        def wrapped(*a, **k):
+            seen[name] = threading.get_ident() in open_on
+            return inner(*a, **k)
+        return wrapped
+
+    monkeypatch.setattr(tc, "transaction", Tracked)
+    import swingbot.core.marketdata.data as data_module
+    monkeypatch.setattr(data_module, "get_current_price_detail",
+                        guard("quote", data_module.get_current_price_detail))
+    monkeypatch.setattr(rp, "cached_daily_bars", guard("bars", rp.cached_daily_bars))
+    assert logged_in.post(f"/api/v1/trades/{PLAN_ID}/close").status_code == 200
+    assert seen == {"quote": False, "bars": False}
