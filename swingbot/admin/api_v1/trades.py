@@ -45,6 +45,7 @@ from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.tracking.equity import open_shares as _open_shares  # v172: moved to core
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning.gap_sizing import gap_risk_amount_for, size_for
+from swingbot.core.presentation.band_stop import band_stop_line
 from swingbot.core.presentation.gap_risk import gap_risk_line
 from swingbot.core.presentation.plan_view import plan_view
 from swingbot.core.presentation.short_notice import risk_notice_lines
@@ -862,6 +863,10 @@ def _gap_sizing_detail(plan: dict | None, trade: dict | None) -> dict | None:
             "line": gap_risk_line(view, currency=config.CURRENCY_SYMBOL)}
 
 
+def _band_stop_detail(plan: dict) -> str | None:
+    return band_stop_line(plan or {}, currency=config.CURRENCY_SYMBOL)
+
+
 def _plan_detail(plan: dict, trade: dict | None) -> dict:
     """Heavy fields for a plan-backed position.
 
@@ -901,6 +906,7 @@ def _plan_detail(plan: dict, trade: dict | None) -> dict:
         "quote": _quote_stamp(plan, trade),
         "risk_notice_lines": _risk_notice_detail_lines(plan, trade),
         "gap_sizing": _gap_sizing_detail(plan, trade),
+        "band_stop_line": _band_stop_detail(plan),
     }
 
 
@@ -942,6 +948,7 @@ def _legacy_detail(t: dict) -> dict:
         "quote": _quote_stamp(None, t),
         "risk_notice_lines": _risk_notice_detail_lines(None, t),
         "gap_sizing": _gap_sizing_detail(None, t),
+        "band_stop_line": None,
     }
 
 

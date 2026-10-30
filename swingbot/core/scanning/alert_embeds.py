@@ -67,7 +67,7 @@ from .snapshots import _snapshot_and_diff
 from .requirements import _sources_str
 from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows, cohort_line,
                          stop_figures_for_display)
-from .execution_embeds import build_ticket_embed, ticket_gap_line
+from .execution_embeds import build_ticket_embed, ticket_band_line, ticket_gap_line
 
 
 log = logging.getLogger(__name__)
@@ -138,11 +138,13 @@ def _quote_target(item):
 
 
 GAP_RISK_FIELD = "Position risk"
+BAND_STOP_FIELD = "Stop band"
 
 
 def _gap_risk_fields(item) -> list:
-    line = ticket_gap_line(_v2_plan(item))
-    return [(GAP_RISK_FIELD, line, False)] if line else []
+    plan = _v2_plan(item)
+    lines = ((BAND_STOP_FIELD, ticket_band_line(plan)), (GAP_RISK_FIELD, ticket_gap_line(plan)))
+    return [(name, line, False) for name, line in lines if line is not None]
 
 
 def _quote_fields(item) -> list:
