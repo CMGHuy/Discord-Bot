@@ -16,6 +16,7 @@ This is a paper-trade tracker -- it does not know about slippage, fees,
 partial fills, or gaps beyond what the daily bar shows.
 """
 import logging
+import math
 import secrets
 import string
 from contextlib import nullcontext
@@ -575,6 +576,38 @@ def _apply_exit_price(t: dict, price: float, reason: str) -> None:
     t["exit_price"] = price
 
 
+def _usable_price(price) -> bool:
+    """A price a close may settle at: finite and positive. A NaN quote is
+    truthy, so `if price:` let it write a NaN leg (v189 D4)."""
+    return price is not None and math.isfinite(price) and price > 0
+
+
+def _manual_close_label(t: dict) -> tuple[str, str | None]:
+    """(status, close_reason override) of a manual close (v189 D2).
+
+    Two or more realized legs: the sign of the unrounded net R
+    (`metrics.net_outcome`) -- win/loss keep the caller's reason, a scratch
+    or an uncomputable net replaces it with `scratch` / `unscored`. One leg or
+    none: today's `closed`, reason untouched, so single-leg labels never move.
+    Imported lazily: the analytics package imports this module."""
+    if len(t.get("legs") or []) < 2:
+        return "closed", None
+    from swingbot.core.analytics import metrics
+    return metrics.net_outcome(t)
+
+
+def _close_manually_onto(t: dict, price: float | None, reason: str) -> None:
+    """Apply a manual close to an open trade dict in place (no I/O): the
+    still-open remainder realized as one more leg at a usable `price`, then
+    the label."""
+    if _usable_price(price):
+        _apply_exit_price(t, price, reason="manual")
+    status, labelled = _manual_close_label(t)
+    t["status"] = status
+    t["closed_at"] = datetime.now(timezone.utc).isoformat()
+    t["close_reason"] = labelled or reason
+
+
 def _confidence_point_fields(points, unevaluated) -> dict:
     """v146 I1: the two record fields written beside `confidence_breakdown`.
 
@@ -741,6 +774,25 @@ class TradeLog:
             return next((t for t in self._all()
                          if t.get("plan_id") == plan_id and t["status"] == "open"), None)
         return _locked_open_trade(plan_id, conn)
+
+    def _open_trade_by_id(self, trade_id: str, *, conn=None) -> dict | None:
+        """The open trade `trade_id`. Standalone: from `self._all()` as before.
+        Inside a transaction: read and row-locked on `conn` (lock order plan ->
+        trade -> account), in TradeLog's JSON shape. None when not open."""
+        if conn is None:
+            return next((t for t in self._all()
+                         if t["id"] == trade_id and t["status"] == "open"), None)
+        from swingbot.core.db.repositories.trades import OPEN_STATUS, trades_repo
+        row = trades_repo().get_for_update(trade_id, conn=conn)
+        return _json_record(row) if row and row.get("status") == OPEN_STATUS else None
+
+    def _manual_close_price(self, trade_id: str, exit_price: float | None) -> float | None:
+        """The settlement price of a standalone manual close: the caller's, else
+        one live fetch for the open trade's ticker, made OUTSIDE any lock."""
+        if exit_price is not None:
+            return exit_price
+        trade = self._open_trade_by_id(trade_id)
+        return _manual_close_quote(trade["ticker"]) if trade else None
 
     def _shadow_sizing(self, strategy: str) -> dict | None:
         """What each E6 sizing mode WOULD have sized this trade at, computed
@@ -1541,7 +1593,8 @@ class TradeLog:
         return False
 
     def close_trade_manual(self, trade_id: str, reason: str = "manual", *,
-                           exit_price: float | None = None) -> bool:
+                           exit_price: float | None = None, conn=None,
+                           after_commit: list | None = None) -> bool:
         """
         Marks an open trade as closed, fetching the live market price to
         stand in as its exit (used by the admin UI's "Close" button -- a
@@ -1560,38 +1613,40 @@ class TradeLog:
         second fetch happens, so the stamp and the trade carry one price.
         None keeps the fetch above.
 
-        Locked the same way as every other mutator here so a concurrent
-        write from the bot's own scan loop (a different process, same
-        trades table) can't race with it and corrupt or lose data. The
-        price fetch itself happens OUTSIDE the lock (it's a network call)
-        and is re-validated against the trade's live status once inside.
+        v189 D2: a close that leaves two or more realized legs is labelled by
+        the sign of its net R (`metrics.net_outcome`); one leg or none stays
+        `closed`, as before.
+
+        Concurrency (v189 D3.3). Standalone (no `conn`), the read-modify-write
+        runs under the process-local `_LOCK`, the price fetch outside it --
+        that guards this process only. Cross-process protection comes from
+        the database: with `conn` the trade row is locked (`SELECT ... FOR
+        UPDATE`) inside the caller's transaction, which has already locked
+        the plan row, so a bot close of the same position waits or is
+        refused. With `conn` nothing is fetched (no network inside a row
+        lock), the balance point is written in the same transaction (a
+        failure raises and rolls the close back), and the journal / snapshot
+        hooks go to `after_commit` when given.
         Returns True if a matching OPEN trade was found and closed.
         """
-        with _LOCK:
-            ticker = next((t["ticker"] for t in self._all()
-                           if t["id"] == trade_id and t["status"] == "open"), None)
-        price = exit_price
-        if ticker and price is None:
-            price = _manual_close_quote(ticker)
-
-        closed_trade = None
-        with _LOCK:
-            for t in self._all():
-                if t["id"] == trade_id and t["status"] == "open":
-                    if price:
-                        _apply_exit_price(t, price, reason="manual")
-                    t["status"] = "closed"
-                    t["closed_at"] = datetime.now(timezone.utc).isoformat()
-                    t["close_reason"] = reason
-                    self._settle_account_balance(t)
-                    self._db_upsert(t)
-                    closed_trade = t
-                    break
-        if closed_trade is not None:
-            _after_close(closed_trade)
-            _refresh_snapshot_safely()
-            return True
-        return False
+        price = exit_price if conn is not None else self._manual_close_price(trade_id, exit_price)
+        with _lock_for(conn):
+            t = self._open_trade_by_id(trade_id, conn=conn)
+            if t is None:
+                return False
+            _close_manually_onto(t, price, reason)
+            if conn is None:
+                self._settle_account_balance(t)
+            else:
+                self._settle_account_balance(t, conn=conn)
+            closed_trade = dict(t)
+            self._db_upsert(t, conn=conn)
+        hooks = [lambda: _after_close(closed_trade), lambda: _refresh_snapshot_safely()]
+        if after_commit is None:
+            run_after_commit(hooks)
+        else:
+            after_commit.extend(hooks)
+        return True
 
     def backfill_exit_price(self, trade_id: str, price: float) -> bool:
         """One-time repair for a trade that closed with no exit price on
