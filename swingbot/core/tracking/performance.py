@@ -172,26 +172,25 @@ def _close_onto(t: dict, leg: dict | None, status: str, close_reason: str | None
         t["close_reason"] = close_reason
 
 
-def _close_linked_plan_safely(plan_id: str, reason: str) -> None:
+def _close_linked_plan_safely(plan_id: str, reason: str, *, conn=None) -> None:
     """Close the v2 plan behind a trade row that was closed OUTSIDE the plan
     manager (today: a reversal). The row is only half the position; left
-    alone, the plan stays open in plans.json and the manager keeps stepping
-    it. A PENDING plan (placeholder trade still awaiting its trigger) can only
-    cancel; ACTIVE/PARTIAL close. Lazy imports like the hooks around it, and,
-    like them, it must never break the trade close it follows."""
+    alone, the plan stays open and the manager keeps stepping it. A PENDING
+    plan can only cancel; ACTIVE/PARTIAL close (plan_links.LINKED_TERMINAL).
+
+    v189 D3.2: with `conn` the plan ends inside the caller's transaction and
+    a failure RAISES -- a half-ended position is what this replaces, and a
+    swallowed SQL error would leave the transaction unusable anyway. Without
+    `conn` it runs in its own short transaction and, as before, never breaks
+    the trade close it follows."""
+    from swingbot.core.tracking import plan_links
+    if conn is not None:
+        plan_links.end_linked_plan(plan_id, reason, conn=conn)
+        return
     try:
-        from swingbot.core.planning.plan_engine import PlanStatus, record_transition
-        from swingbot.core.planning.plan_store import PlanStore
-        store = PlanStore()
-        plan = store.get(plan_id)
-        terminal = {PlanStatus.PENDING: PlanStatus.CANCELLED,
-                    PlanStatus.ACTIVE: PlanStatus.CLOSED,
-                    PlanStatus.PARTIAL: PlanStatus.CLOSED}.get(getattr(plan, "status", None))
-        if terminal is None:
-            return
-        record_transition(plan, terminal, reason=reason,
-                          at=datetime.now(timezone.utc).isoformat())
-        store.update(plan)
+        from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, transaction
+        with transaction(lock_timeout_ms=ADMIN_LOCK_TIMEOUT_MS) as tx:
+            plan_links.end_linked_plan(plan_id, reason, conn=tx)
     except Exception:
         log.warning(
             "could not close plan %s after its trade closed", plan_id, exc_info=True)
@@ -1472,30 +1471,47 @@ class TradeLog:
 
         A plan-linked (v2) trade is realized the way close_trade_manual
         realizes one: any runner remainder left after TP1 becomes its own leg
-        at `exit_price`, so settle_legs prices the whole position. Its plan is
-        then closed too (see _close_linked_plan_safely), or the plan manager
-        would keep managing a position that no longer exists.
+        at `exit_price`, so settle_legs prices the whole position.
+
+        v189 A1/D3: one transaction on the bot's lock timeout, lock order plan
+        -> trade -> account. A trade whose plan is still PENDING under its row
+        lock is a never-filled placeholder, not a position: the plan is
+        cancelled, the placeholder discarded, no P&L booked, and None is
+        returned. Otherwise the trade closes, its balance point and its plan's
+        CLOSED transition commit together, and the journal and snapshot hooks
+        run after commit.
 
         Returns the closed record, or None if the trade was not open (a
-        parallel tick may have closed it first).
+        parallel tick may have closed it first) or was a placeholder.
         """
-        closed = None
-        with _LOCK:
-            for t in self._all():
-                if t["id"] == trade_id and t["status"] == "open":
-                    _apply_exit_price(t, exit_price, reason="reversed")
-                    t["status"] = "closed"
-                    t["closed_at"] = datetime.now(timezone.utc).isoformat()
-                    t["close_reason"] = "reversed"
-                    self._settle_account_balance(t)
-                    closed = dict(t)
-                    self._db_upsert(t)
-                    break
+        from swingbot.core.db.engine import BOT_LOCK_TIMEOUT_MS, transaction
+        from swingbot.core.tracking import plan_links
+        found = self._open_trade_by_id(trade_id)
+        plan_id = found.get("plan_id") if found else None
+        with transaction(lock_timeout_ms=BOT_LOCK_TIMEOUT_MS) as tx:
+            if plan_id and plan_links.cancel_unfilled_in(plan_id, "reversed", conn=tx):
+                return None
+            closed = self._reverse_open_trade(trade_id, exit_price, conn=tx)
+            if closed is not None and plan_id:
+                _close_linked_plan_safely(plan_id, reason="reversed", conn=tx)
         if closed is not None:
-            if closed.get("plan_id"):
-                _close_linked_plan_safely(closed["plan_id"], reason="reversed")
-            _after_close(closed)
-            _refresh_snapshot_safely()
+            run_after_commit([lambda: _after_close(closed), lambda: _refresh_snapshot_safely()])
+        return closed
+
+    def _reverse_open_trade(self, trade_id: str, exit_price: float, *, conn) -> dict | None:
+        """The reversal close of one open trade inside `conn`'s transaction:
+        the runner remainder as a leg, `closed`/`reversed`, and its balance
+        point (a failed balance write raises). None when it is not open."""
+        t = self._open_trade_by_id(trade_id, conn=conn)
+        if t is None:
+            return None
+        _apply_exit_price(t, exit_price, reason="reversed")
+        t["status"] = "closed"
+        t["closed_at"] = datetime.now(timezone.utc).isoformat()
+        t["close_reason"] = "reversed"
+        self._settle_account_balance(t, conn=conn)
+        closed = dict(t)
+        self._db_upsert(t, conn=conn)
         return closed
 
     def has_open_trade(self, ticker: str, strategy: str, horizon_key: str, direction: str) -> bool:
