@@ -94,11 +94,11 @@ def _risk_figures(all_trades: list[dict]) -> dict:
         cfg = account_module.load_account_config()
         balance = cfg.get("balance", cfg.get("base_balance", 0.0))
         open_trades = [t for t in all_trades if t.get("status") == "open"]
+        out["heat_enforced_pct"] = heat.open_heat(open_trades, balance)
         plans = load_plans_by_id()
         amounts = [position_risk_of_loss(t, plans.get(t.get("plan_id"))) for t in open_trades]
         amount = round(sum(a for a in amounts if a is not None), 2)
         out.update({
-            "heat_enforced_pct": heat.open_heat(open_trades, balance),
             "risk_of_loss_amount": amount,
             "risk_of_loss_pct": round(amount / balance * 100.0, 3) if balance and balance > 0 else None,
         })

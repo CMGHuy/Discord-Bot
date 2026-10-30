@@ -133,3 +133,47 @@ def test_golden_open_runner_has_its_banked_leg_as_one_realized_part(admin_app): 
     parts = _realized_parts([golden_open_trade()], "all")
     assert len(parts) == 1
     assert _realized(parts)["amount"] == pytest.approx(open_case("quote_113")["banked_amount"])
+
+
+def test_zero_balance_leaves_the_percentages_none_but_the_amount_a_number(book, logged_in):
+    seed_store("account", {"base_balance": 0.0, "balance": 0.0, "risk_pct": 1.0,
+                           "max_position_pct": 20.0, "sizing_mode": "risk_pct",
+                           "balance_history": []})
+    dash = logged_in.get("/api/v1/dashboard").get_json()
+    assert dash["risk_of_loss_pct"] is None
+    assert isinstance(dash["risk_of_loss_amount"], (int, float))
+    risk = logged_in.get("/api/v1/risk").get_json()
+    rows = {r["ticker"]: r for r in risk["positions"]}
+    assert rows["MSFT"]["risk_of_loss_pct"] is None
+    assert rows["MSFT"]["risk_of_loss_amount"] == pytest.approx(200.0)
+
+
+def test_unreadable_plan_store_nulls_risk_page_risk_of_loss_only(book, logged_in, monkeypatch):
+    before = logged_in.get("/api/v1/risk").get_json()
+    from swingbot.admin.api_v1 import risk
+    risk._invalidate_cache()
+
+    def boom():
+        raise RuntimeError("plan store down")
+    monkeypatch.setattr("swingbot.core.tracking.equity.load_plans_by_id", boom)
+    response = logged_in.get("/api/v1/risk")
+    assert response.status_code == 200
+    rows = response.get_json()["positions"]
+    assert rows
+    assert all(r["risk_of_loss_amount"] is None and r["risk_of_loss_pct"] is None for r in rows)
+    assert {r["ticker"]: r["risk_pct"] for r in rows} == {
+        r["ticker"]: r["risk_pct"] for r in before["positions"]}
+
+
+def test_unreadable_plan_store_keeps_dashboard_enforced_heat(book, monkeypatch):
+    # Calls the figures helper directly: the dashboard's other plan read (held_now) is
+    # outside this fix and would fail the whole request first.
+    from swingbot.admin.api_v1.dashboard import _risk_figures
+
+    def boom():
+        raise RuntimeError("plan store down")
+    monkeypatch.setattr("swingbot.core.tracking.equity.load_plans_by_id", boom)
+    out = _risk_figures([t for _, t in book.values()])
+    assert out["heat_enforced_pct"] == pytest.approx(8.0)
+    assert out["risk_of_loss_amount"] is None
+    assert out["risk_of_loss_pct"] is None
