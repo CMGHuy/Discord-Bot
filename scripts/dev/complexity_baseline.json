@@ -79,7 +79,6 @@
     "swingbot.core.market.trendlines:_volume_confirmed_pivots": 15,
     "swingbot.core.marketdata.data_refresh:refresh_all": 17,
     "swingbot.core.planning.account:get_daily_summary": 16,
-    "swingbot.core.planning.plan_manager:PlanManager._on_event": 15,
     "swingbot.core.planning.plan_manager:PlanManager._step_active": 21,
     "swingbot.core.planning.plan_manager:PlanManager.poll": 20,
     "swingbot.core.scanning.alert_embeds:build_embed": 33,
