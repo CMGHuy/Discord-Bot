@@ -354,6 +354,21 @@ def win_rate(closed: list[dict]) -> float | None:
     return (wins / total * 100) if total else None
 
 
+def label_counts(closed: list[dict]) -> dict[str, int]:
+    """v189 D6: how many closes the win rate leaves out because D2 labelled
+    them by net R -- `closed`/`scratch` (net R within +-SCRATCH_EPS_R) and
+    `closed`/`unscored` (net R not computable). Exact `close_reason` match on
+    `status == "closed"` rows only; both keys always present, 0 when none.
+    Shown beside `win_rate` so the step at LABEL_BASIS_SINCE reads as a change
+    of label basis, not an improvement.
+    """
+    counts = {"scratch": 0, "unscored": 0}
+    for t in closed:
+        if t.get("status") == "closed" and t.get("close_reason") in counts:
+            counts[t["close_reason"]] += 1
+    return counts
+
+
 def expectancy_r(closed: list[dict]) -> float | None:
     """Mean r_multiple() over every trade with a computable R -- i.e. every
     trade for which r_multiple() doesn't return None, regardless of its
