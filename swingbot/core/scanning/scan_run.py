@@ -38,6 +38,8 @@ from swingbot.core.planning.account import UnrealizedPnL, compute_unrealized_pnl
 from swingbot.core.planning.plan_manager import log_plan_armed
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning import rebuild
+from swingbot.core.db.engine import LockTimeout
+from swingbot.core.tracking import plan_links
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
@@ -443,6 +445,40 @@ def _rebuild_stats(requote) -> dict:
     if not requote.enabled:
         return {}
     return {"rebuild": requote.stats()}
+
+
+def _usable_reversal_price(price) -> bool:
+    """A live quote a reversal may settle at: finite and positive."""
+    return price is not None and math.isfinite(price) and price > 0
+
+
+def _settle_reversal(trade_log, existing_trade: dict, live_price: float | None) -> dict | None:
+    """Settle the open trade an opposite setup is reversing (v189 A1).
+
+    A trade whose plan never filled is a placeholder for a resting order, not
+    a position: plan_links.cancel_if_unfilled cancels the plan and discards
+    the placeholder under the plan row lock -- no P&L, no price needed.
+    Anything else closes at the live price through close_trade_reversed,
+    which re-checks the plan under the same lock (a fill recorded meanwhile
+    makes it the real position it is).
+
+    Returns the closed trade, the discarded placeholder (status "discarded"),
+    or None when nothing was settled: no usable price for a real position,
+    already closed, or the plan row held by another writer (logged; the next
+    scan tries again)."""
+    plan_id = existing_trade.get("plan_id")
+    try:
+        if plan_id and plan_links.cancel_if_unfilled(plan_id, "reversed"):
+            log.info("%s: reversal cancelled unfilled plan %s; its placeholder booked nothing",
+                     existing_trade.get("ticker"), plan_id)
+            return dict(existing_trade, status="discarded")
+        if not _usable_reversal_price(live_price):
+            return None
+        return trade_log.close_trade_reversed(existing_trade["id"], live_price)
+    except LockTimeout:
+        log.info("%s: reversal deferred -- plan %s is locked by another writer",
+                 existing_trade.get("ticker"), plan_id)
+        return None
 
 
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
@@ -931,14 +967,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # runs when a flip is otherwise approved, so it costs one quote
                 # on a genuinely rare path, not one per scanned ticker.
                 live_price = fetch.get_current_price(result.ticker, allow_stale=False)
-                if live_price and live_price > 0:
-                    closed = trade_log.close_trade_reversed(existing_trade["id"], live_price)
-                    if closed is not None:
-                        reversed_count += 1
-                        already_open = False
-                        log.info("%s: reversed %s -> %s at %.2f (%s)",
-                                 result.ticker, existing_trade["direction"],
-                                 result.trend, live_price, decision.reason)
+                closed = _settle_reversal(trade_log, existing_trade, live_price)
+                if closed is not None:
+                    reversed_count += 1
+                    already_open = False
+                    log.info("%s: reversed %s -> %s at %s (%s)",
+                             result.ticker, existing_trade["direction"],
+                             result.trend, live_price, decision.reason)
             else:
                 log.debug("%s: opposite %s setup not reversing -- %s",
                           result.ticker, result.trend, decision.reason)
