@@ -55,7 +55,20 @@ describe('outcomeTiles', () => {
     ctx.banked = { fraction: 0.5, exitPrice: 110, r: 2, reason: 'tp1' };
     ctx.bankedStats = { pct: 10, amount: 50 };
     expect(outcomeTiles(ctx).at(-1)).toMatchObject({ id: 'banked', value: '50% @ 110.00',
-      sub: '+2.00R · +10.00% · +50.00', tone: 'pos', costCaption: true });
+      sub: 'TP1 +2.00R on 50% · +10.00% · +50.00', tone: 'pos', costCaption: true });
+  });
+
+  it('leads the banked tile with the trade-level contribution (v189 B3)', () => {
+    const ctx = context('PARTIAL', { banked_contribution_r: 1 });
+    ctx.banked = { fraction: 0.5, exitPrice: 110, r: 2, reason: 'tp1' };
+    ctx.bankedStats = { pct: 10, amount: 500 };
+    expect(outcomeTiles(ctx).at(-1)?.sub).toBe('banked +1.00R (TP1 +2.00R on 50%) · +10.00% · +500.00');
+  });
+
+  it.each([['ACTIVE', 'to T1'], ['PARTIAL', 'to T2']])('names the target the %s price tile measures to', (status, word) => {
+    const price = outcomeTiles(context(status, { target: 120 })).find((tile) => tile.id === 'price')!;
+    expect(price.sub).toContain(word);
+    expect(price.sub).not.toContain(word === 'to T1' ? 'to T2' : 'to T1');
   });
 
   it('uses pending status before an exit price', () => {

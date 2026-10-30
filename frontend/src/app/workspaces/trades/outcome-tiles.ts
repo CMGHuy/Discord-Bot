@@ -63,6 +63,13 @@ function closedTiles(ctx: StripContext): OutcomeTile[] {
   ];
 }
 
+/** v189 B3: the banked part is the trade's contribution, never the TP1 leg's own R. */
+function bankedHead(trade: TradeRow, leg: Leg): string {
+  const legText = `TP1 ${rMultiple(leg.r ?? null)} on ${share(leg.fraction == null ? null : leg.fraction * 100)}`;
+  const contribution = trade.banked_contribution_r ?? null;
+  return contribution === null ? legText : `banked ${rMultiple(contribution)} (${legText})`;
+}
+
 function bankedTile(ctx: StripContext): OutcomeTile | null {
   const leg = ctx.banked;
   if (!leg || ctx.trade.status !== 'PARTIAL') return null;
@@ -70,7 +77,7 @@ function bankedTile(ctx: StripContext): OutcomeTile | null {
   const fraction = leg.fraction == null ? null : leg.fraction * 100;
   return tile('banked', 'Banked', `${share(fraction)} @ ${num(leg.exitPrice)}`, {
     tone: outcomeTone(leg.r ?? null), costCaption: true,
-    sub: joined([rMultiple(leg.r), stats ? pct(stats.pct) : null, stats ? signed(stats.amount) : null]),
+    sub: joined([bankedHead(ctx.trade, leg), stats ? pct(stats.pct) : null, stats ? signed(stats.amount) : null]),
   });
 }
 
@@ -79,9 +86,10 @@ function openTiles(ctx: StripContext): OutcomeTile[] {
   const current = t.current_price ?? null;
   const days = daysUntil(ctx.timeExitOn, ctx.now.getTime());
   const stale = t.current_price_stale === true;
+  const targetWord = t.status === 'PARTIAL' ? 'T2' : 'T1';
   const tiles = [
     tile('price', 'Price', num(current), {
-      stale, ageS: t.price_age_s ?? null, sub: `to stop ${pct(pctFrom(current, t.stop_loss ?? null))} · to T1 ${pct(pctFrom(current, t.target ?? null))}`,
+      stale, ageS: t.price_age_s ?? null, sub: `to stop ${pct(pctFrom(current, t.stop_loss ?? null))} · to ${targetWord} ${pct(pctFrom(current, t.target ?? null))}`,
     }),
     tile('unrealised', 'Unrealised', signed(t.realized_pnl_amount), {
       stale, tone: outcomeTone(t.r_multiple ?? null), costCaption: true,

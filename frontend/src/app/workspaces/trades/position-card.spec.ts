@@ -1,10 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { PositionCard, PositionFigures, positionRows } from './position-card';
+import { OPEN_PROFIT_SUB, PositionCard, PositionFigures, positionRows, RISK_OF_LOSS_SUB } from './position-card';
 import { GAP_FRAGILE_HINT } from './why/sizing-panel';
 
-const base: PositionFigures = { status: 'PARTIAL', shares: 3, positionValue: 300, dollarAtRisk: 7.47,
+const base: PositionFigures = { status: 'PARTIAL', shares: 3, positionValue: 300, riskOfLoss: 7.47, openProfitToStop: 12.5,
   sizingMode: 'risk', gapP90Pct: 1.25, gapFragile: true, tp1Pct: 50, breakevenTriggerPct: 60,
   trailAtrMult: 1.5, expiresOn: '2026-10-20', timeExitOn: '2026-10-21', holdCapBars: 10 };
 
@@ -12,21 +12,22 @@ describe('PositionCard', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
   it('labels partial risk at the original stop and formats sizing and management rows', () => {
     const rows = positionRows(base);
-    expect(rows.map(row => row.label)).toEqual(['Open shares', 'Deployed', '$ at risk', 'Sizing mode', 'Gap risk (p90)', 'TP1 closes', 'Break-even at', 'Trail', 'Expires on', 'Time exit on', 'Hold cap']);
+    expect(rows.map(row => row.label)).toEqual(['Open shares', 'Deployed', 'Risk of loss', 'Open profit to stop', 'Sizing mode', 'Gap risk (p90)', 'TP1 closes', 'Break-even at', 'Trail', 'Expires on', 'Time exit on', 'Hold cap']);
     expect(rows[0].value).toBe('3');
-    expect(rows[2]).toMatchObject({ value: '7.47', sub: 'open shares, at original stop' });
-    expect(rows[4]).toMatchObject({ value: '1.25%', fragile: true });
-    expect(rows[5].value).toBe('50%');
-    expect(rows[6].value).toBe('60% of TP1');
-    expect(rows[7].value).toBe('1.5 × ATR');
-    expect(rows[10].value).toBe('10 bars');
+    expect(rows[2]).toMatchObject({ value: '7.47', sub: RISK_OF_LOSS_SUB });
+    expect(rows[3]).toMatchObject({ value: '12.50', sub: OPEN_PROFIT_SUB });
+    expect(rows[5]).toMatchObject({ value: '1.25%', fragile: true });
+    expect(rows[6].value).toBe('50%');
+    expect(rows[7].value).toBe('60% of TP1');
+    expect(rows[8].value).toBe('1.5 × ATR');
+    expect(rows[11].value).toBe('10 bars');
     expect(positionRows({ ...base, status: 'ACTIVE' })[0].label).toBe('Shares');
-    expect(positionRows({ ...base, status: 'ACTIVE' })[2].sub).toBeNull();
+    expect(positionRows({ ...base, status: 'ACTIVE' })[2].sub).toBe(RISK_OF_LOSS_SUB);
   });
   it('hides null rows while retaining real zeros', () => {
     const absent = { ...Object.fromEntries(Object.keys(base).map(key => [key, null])), status: 'ACTIVE' } as unknown as PositionFigures;
     expect(positionRows(absent)).toEqual([]);
-    expect(positionRows({ ...absent, shares: 0, dollarAtRisk: 0, tp1Pct: 0, holdCapBars: 0 }).map(row => row.value)).toEqual(['0', '0.00', '0%', '0 bars']);
+    expect(positionRows({ ...absent, shares: 0, riskOfLoss: 0, tp1Pct: 0, holdCapBars: 0 }).map(row => row.value)).toEqual(['0', '0.00', '0%', '0 bars']);
   });
   it('renders a fractional share count with its decimals (v194 B4)', () => {
     expect(positionRows({ ...base, shares: 2.72 })[0].value).toBe('2.72');
@@ -38,7 +39,8 @@ describe('PositionCard', () => {
     f.componentRef.setInput('figures', base); f.detectChanges();
     const el: HTMLElement = f.nativeElement;
     expect(el.querySelector('h2')?.textContent).toBe('Position');
-    expect(el.querySelector('[data-row="$ at risk"]')?.textContent).toContain('open shares, at original stop');
+    expect(el.querySelector('[data-row="Risk of loss"]')?.textContent).toContain(RISK_OF_LOSS_SUB);
+    expect(el.querySelector('[data-row="Open profit to stop"]')?.textContent).toContain('12.50');
     expect(el.querySelector('sb-chip')?.textContent).toContain('fragile');
     expect(el.querySelector('sb-chip')!.hasAttribute('title')).toBe(false);
     expect(el.querySelector('sb-chip + sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(GAP_FRAGILE_HINT);
