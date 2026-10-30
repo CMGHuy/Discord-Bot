@@ -138,6 +138,8 @@ export class PlanCell {
   readonly bankedFraction = input<number | null>(null);
   /** The TP1 leg's own R-multiple. */
   readonly bankedR = input<number | null>(null);
+  /** v189 B3: the banked legs' contribution to the trade's R (fraction x R). */
+  readonly bankedContributionR = input<number | null>(null);
   /** %-gain on the TP1 leg, from the position's ORIGINAL entry to the
    *  leg's own exit price -- not the same number as the R-multiple. */
   readonly bankedPct = input<number | null>(null);
@@ -290,8 +292,11 @@ export class PlanCell {
       const amountVal = this.bankedAmount();
       const currencyVal = this.currency();
       if (amountVal !== null && currencyVal !== null) extras.push(money(amountVal, currencyVal));
-      const extraText = extras.length ? ` (${extras.join(', ')})` : '';
-      out += ` · ${share(fraction * 100)} banked ${rMultiple(r)}${extraText} @ ${this.fmt(entry)}`;
+      const leg = `TP1 ${rMultiple(r)} on ${share(fraction * 100)}`;
+      const contribution = this.bankedContributionR();
+      const head = contribution === null ? leg : `banked ${rMultiple(contribution)} (${leg})`;
+      const extraText = extras.length ? `, ${extras.join(', ')}` : '';
+      out += ` · ${head}${extraText} @ ${this.fmt(entry)}`;
     }
     return out;
   });
@@ -363,19 +368,20 @@ export function bankedLegPct(
   return direction === 'bearish' ? -raw : raw;
 }
 
-/** $-amount for the same leg -- the ORIGINAL share count times the fraction
- *  that leg closed, times the move from entry to its own fill price. Null
- *  when any input needed to compute it is unknown. */
+/** $-amount for the same leg -- the ORIGINAL share count (`entry_shares`,
+ *  v189 B1; never the remaining count) times the fraction that leg closed,
+ *  times the move from entry to its own fill price. Null when any input
+ *  needed to compute it is unknown. */
 export function bankedLegAmount(
   entry: number | null,
   bankedEntry: number | null,
   bankedFraction: number | null,
-  shares: number | null,
+  entryShares: number | null,
   direction: string,
 ): number | null {
-  if (entry === null || bankedEntry === null || bankedFraction === null || shares === null) {
+  if (entry === null || bankedEntry === null || bankedFraction === null || entryShares === null) {
     return null;
   }
-  const raw = (bankedEntry - entry) * shares * bankedFraction;
+  const raw = (bankedEntry - entry) * entryShares * bankedFraction;
   return direction === 'bearish' ? -raw : raw;
 }

@@ -156,6 +156,7 @@ describe('PlanCell', () => {
     bankedFraction: number | null; bankedR: number | null;
     bankedPct: number | null; bankedAmount: number | null;
     bankedEntry: number | null; currency: string | null;
+    bankedContributionR: number | null;
   }> = {}) {
     const f = TestBed.createComponent(PlanCell);
     f.componentRef.setInput('entry', 51.0);
@@ -164,6 +165,7 @@ describe('PlanCell', () => {
     f.componentRef.setInput('stopKind', 'trailing');
     f.componentRef.setInput('bankedFraction', 'bankedFraction' in overrides ? overrides.bankedFraction : 0.5);
     f.componentRef.setInput('bankedR', 'bankedR' in overrides ? overrides.bankedR : 0.85);
+    f.componentRef.setInput('bankedContributionR', 'bankedContributionR' in overrides ? overrides.bankedContributionR : null);
     f.componentRef.setInput('bankedPct', 'bankedPct' in overrides ? overrides.bankedPct : 4.1);
     f.componentRef.setInput('bankedAmount', 'bankedAmount' in overrides ? overrides.bankedAmount : 42.0);
     f.componentRef.setInput('bankedEntry', 'bankedEntry' in overrides ? overrides.bankedEntry : 102.0);
@@ -175,14 +177,20 @@ describe('PlanCell', () => {
   it('appends the banked leg to the tooltip once PARTIAL', () => {
     expect(renderPartial().querySelector('[title]')!.getAttribute('title')).toBe(
       'Entry 51.00 · Target 150.00 · Trailing stop 118.67 · '
-      + '50% banked +0.85R (+4.10%, +42.00 $) @ 102.00',
+      + 'TP1 +0.85R on 50%, +4.10%, +42.00 $ @ 102.00',
     );
+  });
+
+  it('leads with the trade-level contribution once the API sends it', () => {
+    expect(renderPartial({ bankedContributionR: 0.43 }).querySelector('[title]')!.getAttribute('title'))
+      .toBe('Entry 51.00 · Target 150.00 · Trailing stop 118.67 · '
+        + 'banked +0.43R (TP1 +0.85R on 50%), +4.10%, +42.00 $ @ 102.00');
   });
 
   it('omits the dollar figure when amount or currency is unknown', () => {
     expect(renderPartial({ bankedAmount: null }).querySelector('[title]')!.getAttribute('title'))
       .toBe('Entry 51.00 · Target 150.00 · Trailing stop 118.67 · '
-        + '50% banked +0.85R (+4.10%) @ 102.00');
+        + 'TP1 +0.85R on 50%, +4.10% @ 102.00');
   });
 
   it('omits the whole banked clause when nothing has banked yet', () => {
@@ -249,7 +257,7 @@ describe('bankedLegPct / bankedLegAmount', () => {
     expect(bankedLegPct(100, null, 'bullish')).toBeNull();
   });
 
-  it('computes the dollar amount from shares and fraction', () => {
+  it('computes the dollar amount from the ORIGINAL shares and the fraction', () => {
     expect(bankedLegAmount(100, 110, 0.5, 100, 'bullish')).toBe(500);
   });
 

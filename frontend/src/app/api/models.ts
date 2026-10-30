@@ -118,11 +118,18 @@ export interface TradeRow {
   banked_fraction: number | null;
   banked_exit_price: number | null;
   banked_r: number | null;
+  /** v189 B3: the banked legs' share of the TRADE's R -- sum of fraction x
+   *  leg R (+1.00R for TP1 +2.00R on 50%). `banked_r` keeps its meaning, the
+   *  TP1 leg's own R. Optional so pre-v189 fixtures stay valid. */
+  banked_contribution_r?: number | null;
   risk_reward: number | null;
   shares: number | null;
-  /** The share count still exposed to price movement right now -- `shares`
-   *  is the ORIGINAL size at open and stays that after a TP1 partial closes
-   *  part of the position; a live P&L dollar figure has to scale by this
+  /** v189 B1: the ORIGINAL position size, before any leg closed. `shares`
+   *  is the remaining count on a priced open PARTIAL, so a banked-leg dollar
+   *  figure multiplies this, never `shares`. Optional like `risk_stop`. */
+  entry_shares?: number | null;
+  /** The share count still exposed to price movement right now -- `entry_shares`
+   *  is the ORIGINAL size at open; a live P&L dollar figure has to scale by this
    *  instead. Equal to `shares` until a leg has realized. */
   open_shares: number | null;
   position_value: number | null;
