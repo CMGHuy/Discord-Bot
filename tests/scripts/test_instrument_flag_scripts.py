@@ -52,7 +52,7 @@ def test_help_lists_the_flag(module, monkeypatch, capsys):
     with pytest.raises(SystemExit) as exc:
         _main(monkeypatch, module, "--help")
     assert exc.value.code == 0
-    assert "--instrument {v1,v2}" in capsys.readouterr().out
+    assert "--instrument {v1,v2,v3}" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("module", sorted(SCRIPTS))
