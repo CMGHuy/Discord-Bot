@@ -40,13 +40,13 @@ Partner decision 2026-10-31: freeze as-is with these six excluded; the report ha
 | FI | 2023-06-07 | price+volume | in_span | same issuer: Fiserv ticker change FISV to FI |
 | ARNC | 2020-04-01 | price | in_span | same issuer: Arconic/Howmet separation |
 | CTRA | 2021-10-04 | volume | in_span | same issuer: Cabot/Cimarex merger |
-| APTV | 2017-12-05 | edge | unresolved | same issuer: Delphi Technologies spin-off |
+| APTV | 2017-12-05 | edge | unresolved | same issuer: Delphi Technologies spin-off (excluded earlier as `identity re-derived`, price-mismatch) |
 
 Consequence for v3 results: the universe under-represents blow-ups (SIVB, FRC), a survivorship bias that flatters long-side results slightly. A follow-up spec can add an evidenced admit-override to the integrity contract and re-freeze; until then every v3 figure carries this caveat.
 
 ## Counts
 
-865 tickers in the manifests; 754 admitted, 67 excluded (60 `identity re-derived`, 2 `no daily bars in the store window`, 5 break exclusions: ARNC, CTRA, FI, FRC, SIVB... plus APTV counted under `unresolved`), 44 no bars (alias table empty, see backfill log), 30 members with a trim. Context symbols: all 17 admitted. `td.select('alpaca', 'pit', '2025-12-31')` reports 754 available and 111 excluded (67 plus the 44 no-bars).
+865 tickers in the manifests; 754 admitted, 67 excluded (60 `identity re-derived`, 2 `no daily bars in the store window`, 5 breaks: ARNC, CTRA, FI, FRC, SIVB), 44 no bars (alias table empty, see backfill log). APTV is excluded as `identity re-derived: flagged: price-mismatch` (it also carries an unresolved edge break, so the exclusion is for identity first). 30 members carry a trim. Context symbols: all 17 admitted. `td.select('alpaca', 'pit', '2025-12-31')` reports 754 available and 111 excluded (67 plus the 44 no-bars).
 
 ## Tool summary
 
