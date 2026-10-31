@@ -429,8 +429,8 @@ The CI pipeline above is for *code* changes.
 | Flag | Production value | Set |
 |---|---|---|
 | `MARKETDATA_LAYER` | `on` | 2026-10-29 (V171-38 day A; was `count` from 2026-10-20) |
-| `DAILY_DELTA_FETCH` | `false` | code default |
-| `PLAN_REBUILD_ENABLED` | `false` | code default |
+| `DAILY_DELTA_FETCH` | `true` | 2026-10-30 18:19 UTC (V171-38 day B; read-back passed 2026-10-31: 75 CSV + 75 meta in `daily_alpaca`, no metals, 0 scan errors) |
+| `PLAN_REBUILD_ENABLED` | `true` | 2026-10-31 (V171-38 day C; session read-back due after the next trading day) |
 | `TAPE_SHARED_ENABLED` | `false` | code default |
 
 Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin`;
