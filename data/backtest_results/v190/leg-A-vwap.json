@@ -1,0 +1,26 @@
+{
+  "VWAP": {
+    "n_eval": 1966,
+    "wins": 797,
+    "losses": 1169,
+    "scratches": 526,
+    "timeouts": 12,
+    "closed": 2504,
+    "win_rate": 40.53916581892167,
+    "expectancy_r": 0.041588658146964864,
+    "excluded_share": 0.21485623003194887,
+    "avg_win_r": 1.854604767879548,
+    "max_dd_pct": -71.71810391304538,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 20.70263488080301,
+    "runner_be_pct": 65.99749058971142,
+    "runner_timeout_pct": 13.29987452948557
+  },
+  "_watchlist_slice": {
+    "VWAP": {
+      "status": "thin",
+      "n": 0,
+      "expectancy_r": null
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "EMA Crossover": {
+    "n_eval": 893,
+    "wins": 316,
+    "losses": 577,
+    "scratches": 212,
+    "timeouts": 4,
+    "closed": 1109,
+    "win_rate": 35.38633818589026,
+    "expectancy_r": -0.025892696122633,
+    "excluded_share": 0.19477006311992787,
+    "avg_win_r": 2.063572784810127,
+    "max_dd_pct": -65.55338561116866,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 24.050632911392405,
+    "runner_be_pct": 66.45569620253164,
+    "runner_timeout_pct": 9.49367088607595
+  },
+  "_watchlist_slice": {
+    "EMA Crossover": {
+      "status": "thin",
+      "n": 0,
+      "expectancy_r": null
+    }
+  }
+}

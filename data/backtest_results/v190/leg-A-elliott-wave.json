@@ -1,0 +1,26 @@
+{
+  "Elliott Wave": {
+    "n_eval": 1371,
+    "wins": 439,
+    "losses": 932,
+    "scratches": 266,
+    "timeouts": 13,
+    "closed": 1650,
+    "win_rate": 32.02042304886944,
+    "expectancy_r": -0.010576969696969687,
+    "excluded_share": 0.1690909090909091,
+    "avg_win_r": 2.4149749430523917,
+    "max_dd_pct": -80.34508791685693,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 21.64009111617312,
+    "runner_be_pct": 70.15945330296127,
+    "runner_timeout_pct": 8.200455580865604
+  },
+  "_watchlist_slice": {
+    "Elliott Wave": {
+      "status": "thin",
+      "n": 0,
+      "expectancy_r": null
+    }
+  }
+}

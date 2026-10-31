@@ -1,0 +1,26 @@
+{
+  "RSI": {
+    "n_eval": 448,
+    "wins": 158,
+    "losses": 290,
+    "scratches": 128,
+    "timeouts": 1,
+    "closed": 577,
+    "win_rate": 35.267857142857146,
+    "expectancy_r": -0.07827729636048526,
+    "excluded_share": 0.22357019064124783,
+    "avg_win_r": 1.7688101265822784,
+    "max_dd_pct": -78.60293455421859,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 16.455696202531644,
+    "runner_be_pct": 81.0126582278481,
+    "runner_timeout_pct": 2.5316455696202533
+  },
+  "_watchlist_slice": {
+    "RSI": {
+      "status": "thin",
+      "n": 0,
+      "expectancy_r": null
+    }
+  }
+}
