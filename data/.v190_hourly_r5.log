@@ -1,0 +1,3 @@
+refused: the US regular session is open (Mon-Fri 09:30-16:00 ET); the backfill shares the Alpaca key with the live scan -- run it outside hours or pass --force-hours
+exit 1
+2026-10-29T13:53:07Z
