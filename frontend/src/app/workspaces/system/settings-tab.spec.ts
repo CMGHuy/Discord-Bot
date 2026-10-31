@@ -17,7 +17,7 @@ import {
 } from '../../api/interceptors';
 import { SettingField, Settings } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
-import { SettingsTab } from './settings-tab';
+import { SettingsTab, SETTINGS_RESTART_HINT } from './settings-tab';
 
 function payload(overrides: Partial<Settings> = {}): Settings {
   return { sections: [], audit: [], restart_available: false, ...overrides };
@@ -99,6 +99,26 @@ describe('System settings touch targets', () => {
   });
 });
 
+describe('SettingsTab restart mark (v194 A3)', () => {
+  it('explains the restart mark in a hint beside it, not a native title', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    const sections = [{
+      name: 'Discord', icon: 'settings', description: '',
+      fields: [{
+        key: 'tok', label: 'tok', type: 'str', value: 'x', default: 'x', help: '',
+        min: null, max: null, step: null, options: [], sensitive: false, hot_reloadable: false,
+      }],
+    }];
+    backend.expectOne('/api/v1/system/settings').flush(payload({ sections }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const restart = (fixture.nativeElement as HTMLElement).querySelector('.restart')!;
+    expect(restart.hasAttribute('title')).toBe(false);
+    expect(restart.nextElementSibling!.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe(SETTINGS_RESTART_HINT);
+  });
+});
+
 /* -- v179 §6b.5 -- the settings category rail fades and reveals ----------- */
 
 function field(key: string): SettingField {
@@ -160,5 +180,26 @@ describe('Settings category rail (v179 §6b.5)', () => {
   it('re-measures on window resize and lets the strip shrink in the phone layout', () => {
     expect(src).toContain(`'(window:resize)': 'measureRail()'`);
     expect(src).toMatch(/\.rail-strip \{[^}]*min-width: 0;/);
+  });
+});
+
+describe('SettingsTab after System moved onto sb-page (v195 Phase 4)', () => {
+  it('leaves Discard to the page header and keeps the count, Preview and Save in the save bar', async () => {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend.expectOne('/api/v1/system/settings').flush(payload({ sections: RAIL_SECTIONS }));
+    await fixture.whenStable();
+    const store = TestBed.inject(SystemStore);
+    store.edit(store.fields()[0], 'changed');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const bar = el.querySelector('.bar.unsaved')!;
+    expect(bar.textContent).toContain('1 unsaved change');
+    expect([...bar.querySelectorAll('button')].map((b) => b.textContent!.trim()))
+      .toEqual(['Preview changes', 'Save']);
+    expect(el.querySelector('sb-confirm-dialog')).toBeNull();
   });
 });

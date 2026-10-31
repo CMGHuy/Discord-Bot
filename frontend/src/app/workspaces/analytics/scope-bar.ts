@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 
 import { AnalyticsUnit, BookScope } from '../../api/models';
 import { RANGE_PRESETS, presetRange } from '../../stores/analytics.store';
+import { ConnectionStore } from '../../stores/connection.store';
 import { ControlBar } from '../../ui/control-bar';
 import { DateRange } from '../../ui/date-range';
 import { Select } from '../../ui/form-controls';
@@ -49,13 +50,16 @@ import { Segmented } from '../../ui/segmented';
            .scope centres its children, which put the population text and the
            unit toggle's labels at two heights. -->
       <div ngProjectAs="[scope]" class="scope-line">
-        <sb-segmented label="Unit" [options]="unitOptions" [value]="unit()"
+        <sb-segmented label="Unit" [options]="unitOptions()" [value]="unit()"
                       (valueChange)="unitChange.emit($any($event))" />
         @if (!tuning()) {
           <span class="population" [class.num]="hasSample()">{{ population() }}</span>
           @if (asOf()) { <sb-freshness [at]="asOf()!" /> }
           @if (allTimePanels() > 0) {
             <span class="all-time">{{ allTimePanels() }} panels all-time</span>
+          }
+          @if (fxMissing() > 0) {
+            <span class="fx-caveat" role="note">{{ fxText() }}</span>
           }
         }
       </div>
@@ -64,6 +68,7 @@ import { Segmented } from '../../ui/segmented';
   styles: `
     .scope-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-10); min-width: 0; }
     .population { font-size: var(--text-chip); color: var(--text-secondary); }
+    .fx-caveat { font-size: var(--text-micro); color: var(--warn); min-width: 0; overflow-wrap: anywhere; }
     .all-time { font-size: var(--text-micro); text-transform: uppercase; letter-spacing: .06em; color: var(--warn); }
   `,
 })
@@ -78,6 +83,10 @@ export class ScopeBar {
   /** Tuning has no scoped population of its own, so the bar collapses to the
    *  unit toggle there rather than offering filters nothing below obeys. */
   readonly tuning = input(false);
+  /** v194 B7: closed trades the money figures left out for want of an
+   *  exchange rate (the payloads' `fx_missing_count`). */
+  readonly fxMissing = input(0);
+  private readonly connection = inject(ConnectionStore);
   readonly scopeChange = output<Partial<BookScope>>();
   readonly unitChange = output<AnalyticsUnit>();
   readonly cleared = output<void>();
@@ -88,7 +97,15 @@ export class ScopeBar {
                                       { value: 'weak', label: 'WEAK ledger' },
                                       { value: 'both', label: 'Both ledgers' }];
   protected readonly directionOptions = [{ value: 'bullish', label: 'Long' }, { value: 'bearish', label: 'Short' }];
-  protected readonly unitOptions = [{ value: 'r', label: 'R' }, { value: 'pct', label: '%' }, { value: 'money', label: '$' }];
+  /** The money side carries the account's own symbol (v194 B7): the server
+   *  converts every money figure to the account currency. The value key
+   *  stays `'money'`, so saved preferences survive. Mirrors Calendar's
+   *  `metrics`. */
+  protected readonly unitOptions = computed(() => [
+    { value: 'r', label: 'R' }, { value: 'pct', label: '%' },
+    { value: 'money', label: this.connection.currency() },
+  ]);
+  protected readonly fxText = computed(() => fxMissingText(this.fxMissing()));
 
   protected options(values: readonly string[]) { return values.map((v) => ({ value: v, label: v })); }
 
@@ -119,4 +136,19 @@ export class ScopeBar {
     if (value === 'custom') { this.scopeChange.emit({}); return; }
     this.scopeChange.emit(presetRange(value, new Date()));
   }
+}
+
+/** v194 B7: the caveat when money figures left closed trades out for want
+ *  of an exchange rate on their exit date; '' for none. Calendar uses it too. */
+export function fxMissingText(n: number): string {
+  if (!(n > 0)) return '';
+  return n === 1
+    ? '1 closed trade left out of money figures: no exchange rate for its exit date'
+    : `${n} closed trades left out of money figures: no exchange rate for their exit dates`;
+}
+
+/** The largest left-out count among the scoped payloads a tab fetched. They
+ *  answer one scope, so they count the same population; 0 when none says. */
+export function fxMissingOf(...payloads: ({ fx_missing_count?: number } | null | undefined)[]): number {
+  return Math.max(0, ...payloads.map((p) => p?.fx_missing_count ?? 0));
 }

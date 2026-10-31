@@ -189,6 +189,24 @@ describe('ConnectionStore', () => {
 
     expect(store.botHealthy()).toBeNull();
   });
+
+  it('keeps the last successful tick for the freshness chip (v195)', () => {
+    tick();
+    backend.expectOne('/api/v1/health').flush(HEALTH);
+    backend
+      .expectOne('/api/v1/system/scan')
+      .flush({ ...SCAN, bot_last_success: '2026-08-14T08:55:00Z' });
+
+    expect(store.botLastSuccess()).toBe('2026-08-14T08:55:00Z');
+  });
+
+  it('starts with no last successful tick, which is not the same as an old one', () => {
+    expect(store.botLastSuccess()).toBeNull();
+    tick();
+    backend.expectOne('/api/v1/health').flush(HEALTH);
+    backend.expectOne('/api/v1/system/scan').flush({ ...SCAN, bot_last_success: null });
+    expect(store.botLastSuccess()).toBeNull();
+  });
 });
 
 /* --- scan progress (the shell strip) ------------------------------------ */

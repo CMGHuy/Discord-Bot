@@ -15,7 +15,7 @@ import { CLOCK } from '../../ui/clock';
 import { RowActions } from './row-actions';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
-import { PAPER_MARKER, TradeDrawer, drawerPnl, tradeDrawerFields } from './trade-drawer';
+import { PAPER_HINT, PAPER_MARKER, TradeDrawer, drawerPnl, tradeDrawerFields } from './trade-drawer';
 
 const NOW = Date.parse('2026-10-20T12:00:00Z');
 
@@ -72,7 +72,7 @@ describe('tradeDrawerFields (v179 §3.2)', () => {
   it('shows the realised P&L of a closed leg, signed and toned by its sign', () => {
     const row = tradeRow({ status: 'CLOSED', pnl_pct: -4, realized_pnl_amount: -40, current_price: null });
     const pnl = tradeDrawerFields(row, '€', NOW).find((f) => f.key === 'pnl')!;
-    expect(pnl.value).toBe('-4.00% (-40.00 €)');
+    expect(pnl.value).toBe('−4.00% (−40.00 €)');
     expect(pnl.tone).toBe('neg');
   });
 
@@ -137,6 +137,18 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     const marker = el.querySelector('sb-drawer header .paper-marker')!;
     expect(marker.textContent!.trim()).toBe(PAPER_MARKER);
     expect(PAPER_MARKER).toBe('Paper trade');
+  });
+
+  it('explains the leg field with how the Dashboard counts legs (A4 audit)', () => {
+    const el = mount(tradeRow({ leg_index: 0, leg_total: 2 }));
+    const tip = el.querySelector('.field[data-field="leg"] sb-hint [role="tooltip"]')!.textContent!;
+    expect(tip).toContain('count each realised leg as its own trade');
+  });
+
+  it('explains the paper marker in a hint, not a native title (v194 A3)', () => {
+    const el = mount();
+    expect(el.querySelector('.paper-marker')!.hasAttribute('title')).toBe(false);
+    expect(el.querySelector('.paper-marker-row sb-hint [role="tooltip"]')!.textContent!.trim()).toBe(PAPER_HINT);
   });
 
   it('renders each field as a label/value pair, numbers in the numeric face', () => {
@@ -236,5 +248,17 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     // No workspace media query (spec §4 anti-goal): the drawer's phone,
     // tablet and desktop geometry is sb-drawer's own.
     expect(css).not.toMatch(/@media/);
+  });
+});
+
+/* -- v195 §1.4 -- the drawer's order figures never shrink ------------------ */
+
+describe('sb-trade-drawer order figures (v195 §1.4)', () => {
+  it('sets entry, stop, targets and size on the 14px body step, in both densities', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/trade-drawer.ts'), 'utf8');
+    expect(src).toMatch(/:host \{[^}]*display: contents;[^}]*--text-table: var\(--text-body\);/);
+    // The fields read --text-table, so re-pointing it on the host is what
+    // lifts them; a field on its own fixed size would escape the floor.
+    expect(src).toMatch(/dd \{[^}]*font-size: var\(--text-table\)/);
   });
 });

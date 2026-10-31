@@ -23,7 +23,7 @@ import {
   imports: [Panel, PanelHeader, PanelError, EmptyStateComponent, PaginationComponent],
   template: `
     <sb-panel><sb-panel-header title="Overrides vs engine" [n]="data()?.summary?.counted_n ?? null"
-      hint="Each manual close replayed through the engine from its real fill. Δ is your exit minus the engine's, in dollars and R." />
+      [hint]="headerHint" />
       @if (store.overrideFidelityError(); as error) {
         <sb-panel-error [message]="error" (retry)="store.reload('overrideFidelity')" />
       } @else if (data(); as d) {
@@ -73,6 +73,13 @@ export class OverrideFidelityPanel {
   readonly perPage = tablePerPage('override-fidelity');
   readonly page = createClientPage<OverrideRowDto>(() => this.data()?.rows ?? [], () => this.perPage.value());
   readonly caption = CAPTION;
+  /** v194 A4: the money side is `override_fidelity.to_usd` -- R times the
+   *  trade's shares × stop distance, in the quote currency, never converted
+   *  (B7 left this report out; recorded OPEN in the A4 audit). */
+  readonly headerHint = 'Each manual close replayed through the engine from its real fill. '
+    + "Δ is your exit minus the engine's, in R and in money at the trade's paper size. "
+    + "Money is in the instrument's quote currency, not converted to the account currency. "
+    + 'Net of modelled commissions and slippage, pre-tax.';
   readonly emptyCopy = EMPTY_COPY;
   readonly approxLabel = APPROX_LABEL;
   readonly countsHint = COUNTS_HINT;

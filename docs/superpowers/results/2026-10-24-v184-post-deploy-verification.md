@@ -92,3 +92,9 @@ Read the production `monitor` key on Monday 2026-10-26 at 13:45 UTC and record `
 ## Verdict
 
 The final 2.15.2 deployment, all dry-run verdicts, three post-deploy cron runs, the final monitor-key read, and the advancing scan heartbeat pass. The single approved test post delivered on 2.15.1; the watcher script did not change for 2.15.2. The Monday in-session monitor read remains open before close-out. The quant-engineer panel's plan-step finding was applied in `b933e2f3` and merged in `c8fb1be8`.
+
+## 8. In-session monitor read (close-out gate)
+
+Read through `scripts/ops/ssh-hetzner.sh` on Tuesday 2026-10-27 at 14:40:38 UTC (NYSE regular session; the Monday 10-26 read was missed, so the first in-session read is this one). The `monitor` key: `outcome=ok`, `market_open=true`, `positions` = ARM, AXON, DELL, GOOGL, INTC, MRNA (6), `unquoted=[]`, `unquoted_count=0`, `fetch_failed=false`, `check_errors=[]`, `tick_at` = `priced_at` = 2026-10-27T14:39:13+00:00, so `priced_at` was 85 s old against `STOPS_UNCHECKED_S=600`. The watcher log agrees: every monitor line from 14:30 to 14:40 UTC is `verdict=ok`, `market_open=true`, `positions=6`, tick ages 48-111 s.
+
+The open gate is closed: the in-session read passes.

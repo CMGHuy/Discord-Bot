@@ -1,189 +1,57 @@
 .shell {
-  /* One height for the topbar and the sidebar's wordmark row. */
-  --topbar-h: 68px;
+  /* v195 Phase 3: an always-collapsed icon rail and a 40px top bar. One
+     state, so nothing here animates: the old width animation served the
+     expand/collapse gesture, which is gone. */
+  --rail-w: 48px;
+  --topbar-h: 40px;
   display: grid;
-  /* Fixed sidebar: the nav is six fixed labels and never needs to grow, and
-     a fluid one would move the workspace's left edge between routes. */
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: var(--rail-w) 1fr;
   min-height: 100vh;
-  /* SR21. The width is the only thing that animates; the contents just stop
-     being laid out beside their icons. Slow + spring because this is a
-     deliberate, occasional gesture rather than feedback on a value. */
-  transition: grid-template-columns var(--dur-slow) var(--ease-spring);
-  /* Its own stacking context, so the .ambient layer's z-index -1 lands
-     above body's --bg and below every pane (v168 §3 #10). */
-  isolation: isolate;
 }
 
-/* The page's one ambient glow (v168 §3 #10), moved off body. Fixed, so it
-   takes no grid cell and stays put while the panes scroll; -10% leaves room
-   for the drift, which styles/motion.css runs under Motion=On only (static
-   below 640px). The login page is outside the shell and has no glow until
-   v169. */
-.ambient {
-  position: fixed;
-  inset: -10%;
-  z-index: -1;
-  pointer-events: none;
-  background: var(--glow-ambient);
-}
-
-/* 52px: an icon's 16px plus enough padding that the hit target clears the
-   44px minimum. Narrower looks tidier and is harder to hit. */
-.shell.railed { grid-template-columns: 52px 1fr; }
-
-/* Below sm the rail stops taking a column at all and slides over the page. */
-.shell.overlay { grid-template-columns: 1fr; }
-.shell.overlay .sidebar {
-  position: fixed;
-  inset: 0 auto 0 0;
-  width: 200px;
-  z-index: 30;
-  transform: translateX(-100%);
-  transition: transform var(--dur-slow) var(--ease-spring);
-}
-.shell.overlay.overlay-open .sidebar { transform: translateX(0); }
-
-.scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 25;
-  background: var(--scrim-soft);
-}
-
-.menu-button {
-  position: fixed;
-  top: var(--space-10);
-  left: var(--space-10);
-  z-index: 20;
-}
-
-/* The button above floats over the page rather than taking a grid column
-   (there is no sidebar column to give it one below sm), so nothing reserves
-   its footprint by default -- it lands directly on top of .page-title,
-   turning "Dashboard" into "Dashbo..." behind the icon. Reserve the same
-   width the button actually draws at (--control-h grows under a coarse
-   pointer) plus its own left offset and a gap, so the title starts clear
-   of it instead of under it. */
-.shell.overlay .topbar {
-  padding-left: calc(var(--space-10) + var(--control-h) + var(--space-10));
-  /* The menu button is `position: fixed`, so it stays on screen while the
-     bar scrolled away -- leaving a lone hamburger floating over table rows
-     and paragraphs. Keep the bar with it. */
-  position: sticky;
-  top: 0;
-  z-index: 15;
-  background: var(--bg);
-}
-
-/* On the rail: icons only, centred, labels hidden but still in the DOM so
-   the accessible name survives. The wordmark's `.word` is not listed here --
-   it is removed structurally (shell.html's `@if (!railed())`), not clipped,
-   because collapsed is also asserted by its absence from the DOM. */
-.shell.railed:not(.overlay) .sidebar .label,
-.shell.railed:not(.overlay) .rail-tagline {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.shell.railed:not(.overlay) .sidebar { padding-inline: var(--space-10); }
-.shell.railed:not(.overlay) .nav a { justify-content: center; }
-/* .nav a centers its icon within its own --space-10 horizontal padding
-   (further up this file); .mark carried no padding of its own, so its icon
-   sat flush against the rail's edge instead of centered the same way --
-   visibly to the left of the nav icons below it. Matching padding plus the
-   same justify-content centers both on the same vertical line. */
-.shell.railed:not(.overlay) .mark {
-  justify-content: center;
-  padding-inline: var(--space-10);
-}
-
-.brand sb-icon { flex: none; }
-
-/* The bottom of the sidebar. This box owns the bottom anchor so its children
-   do not have to -- see the note in shell.html. */
-.sidebar-foot {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-10);
-}
-
-.tagline-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }
-.shell.railed:not(.overlay) .tagline-row { justify-content: center; }
-
-/* Sticky and exactly one viewport tall.
- *
- * As a plain grid item the sidebar was as tall as the ROW, i.e. as tall as
- * whichever workspace happened to be open, so its foot -- the collapse
- * toggle and the ui/bot version block -- sat at the bottom of a 4000px
- * document and was only visible after scrolling a table to its end. Pinning
- * it to the viewport is what makes `margin-top: auto` on `.sidebar-foot`
- * mean "the bottom of the screen" rather than "the bottom of the page".
- *
- * `height`, not `min-height`: the foot's bottom anchor needs a definite box
- * to push against, and `overflow-y: auto` then handles the one case a fixed
- * height creates -- a viewport too short for seven nav entries plus the
- * foot. The overlay variant above keeps `position: fixed` on its own higher
- * specificity, so the phone sheet is untouched.
- */
-.sidebar {
+/* Sticky and exactly one viewport tall, so the foot (the version hint) sits
+ * at the bottom of the screen rather than the bottom of a 4000px page.
+ * `height`, not `min-height`: the foot's `margin-top: auto` needs a definite
+ * box, and `overflow-y: auto` handles a viewport too short for eleven
+ * entries. The scrollbar is hidden: on a 48px rail it would eat a third of
+ * the width. */
+.rail {
   position: sticky;
   top: 0;
   height: 100vh;
   height: 100dvh;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-20);
-  /* The wordmark row (.mark) is as tall as the topbar, so its centre meets
-     the page title's; the top inset is that row's own. */
-  padding: 0 var(--space-14) var(--space-20);
+  gap: var(--space-4);
+  padding-bottom: var(--space-10);
   background: var(--surface);
   border-right: 1px solid var(--border);
 }
+.rail::-webkit-scrollbar { display: none; }
 
+/* As tall as the top bar (its border included), so the brand mark and the
+   breadcrumb centre on one line. */
 .mark {
   display: flex;
   align-items: center;
-  /* Same height as .topbar (its border included), so both centre on one line. */
+  justify-content: center;
+  box-sizing: border-box;
   height: var(--topbar-h);
   flex: none;
-  /* Same inset as a nav link (2px border strip + --space-10 padding), so the
-     brand mark sits in the icon column of the entries below it. */
-  padding-inline: calc(2px + var(--space-10)) var(--space-10);
+  border-bottom: 1px solid var(--border);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
-  min-width: 0;
-  color: inherit;
+  justify-content: center;
+  color: var(--accent);
   text-decoration: none;
 }
-
-/* Two spans, not one coloured string: `Capital` takes the accent so the
-   product name and the mockup's own two-tone treatment both survive in one
-   element, rather than a single span with an inline colour run. */
-.brand .word {
-  font-family: var(--font-mono);
-  font-size: var(--text-body);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-}
-.brand .word span:last-child { color: var(--accent); }
-
-.rail-tagline {
-  margin: 0;
-  color: var(--text-faint);
-  font-size: var(--text-micro);
-  line-height: 1.4;
-}
+.brand sb-icon { flex: none; }
 
 .nav {
   display: flex;
@@ -194,70 +62,61 @@
   list-style: none;
 }
 
-/* The group label rides the same `.label` clip rule the nav entries use, so
-   it disappears on the collapsed rail where 52px has no room for it and the
-   icons already group visually by their gaps. */
-.nav-group-label {
-  margin: var(--space-14) 0 var(--space-4) var(--space-10);
-  color: var(--text-faint);
-  font-size: var(--text-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+/* The rule between groups: a divider, never text (spec §1.3). */
+.rail-divider {
+  flex: none;
+  height: 1px;
+  margin: var(--space-4) var(--space-10);
+  background: var(--border-strong);
 }
-.railed .nav-group-label { display: none; }
 
-/* Flex, not block: the icon and the label are two boxes of different heights
-   and only a shared cross-axis centre keeps the glyph on the label's line.
-   There used to be two `.nav a` rules -- a flex one further up the file and
-   a `display: block` one here -- and being later at equal specificity, this
-   one silently won. That is what left every icon riding above its word, and
-   what stopped `justify-content: center` working on the rail. One rule now,
-   so there is nothing left to disagree. */
-.nav a {
+/* One glyph, centred in the rail. 36px tall at a desktop pointer; the touch
+   block raises --control-h to 44px, and min-height wins over block-size.
+   Each link reserves a 2px transparent strip on its left edge, where the
+   sliding sb-nav-indicator lands, so nothing shifts when the bar moves. */
+.rail-link {
   display: flex;
   align-items: center;
-  gap: var(--space-10);
-  padding: var(--space-8) var(--space-10);
+  justify-content: center;
+  block-size: 36px;
   min-height: var(--control-h);
   border-left: 2px solid transparent;
-  border-radius: 0 var(--control-radius) var(--control-radius) 0;
-  color: var(--text-secondary);
-  font-size: var(--text-body);
+  color: var(--text-muted);
   text-decoration: none;
   transition: color var(--transition), background var(--transition);
 }
 
-/* The glyph keeps its box rather than being squeezed by a long label.
-   `sb-icon` already sets its own `display: inline-flex; line-height: 0`, so
-   this only has to say "do not shrink". */
-.nav a sb-icon { flex: none; }
+.rail-link sb-icon { flex: none; }
 
-.nav a:hover { background: var(--surface-raised); color: var(--text); }
+.rail-link:hover { background: var(--surface-raised); color: var(--text); }
 
-/* An accent rail plus a background tint plus weight -- three cues, not
-   colour alone, so the active entry survives a monochrome or low-vision
-   reading. The rail is sb-nav-indicator (v168 §3 #6), one bar that slides
-   between entries; each link still reserves its 2px transparent border
-   (`.nav a`) so the bar lands on that strip and nothing shifts. */
-.nav a.active {
+/* The bar (sb-nav-indicator), a tint and the glyph stepping from muted to
+   full text: three cues, so the active entry survives a monochrome or
+   low-vision reading. */
+.rail-link.active {
   background: var(--accent-soft);
   color: var(--text);
-  font-weight: 600;
 }
 
-/* The indicator's host, placed against .sidebar (sticky, so positioned;
-   absolute children scroll with its content). `left` tracks the sidebar's
-   inline padding, which is where every link's border strip starts. */
+/* Placed against .rail (sticky, so positioned; absolute children scroll
+   with its content), on the links' 2px left strip. */
 sb-nav-indicator {
   position: absolute;
   top: 0;
-  left: var(--space-14);
+  left: 0;
   width: 2px;
   pointer-events: none;
 }
-.shell.railed:not(.overlay) sb-nav-indicator { left: var(--space-10); }
 
-
+.rail-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border);
+}
 
 .main {
   display: flex;
@@ -265,58 +124,64 @@ sb-nav-indicator {
   min-width: 0; /* let wide tables scroll instead of stretching the grid */
 }
 
+/* Every child centres on the bar. Sticky at every width, so the breadcrumb
+   (and, from V195-17, the killswitch and freshness chips) stays in view
+   while a long page scrolls. */
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
   display: flex;
-  /* Every child centres on the bar: the title block, the tape, the status
-     cluster and the avatar share one horizontal axis, at one fixed height
-     (--topbar-h) that the sidebar's wordmark row matches. */
   align-items: center;
   box-sizing: border-box;
   height: var(--topbar-h);
   gap: var(--space-14);
-  padding: 0 var(--space-20);
+  padding: 0 var(--space-14);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
-/* Grows to fill the whole gap between the title and the status cluster --
-   there is no separate .spacer any more, this element does that job -- and
-   still scrolls within its allotted space when more symbols arrive than
-   fit. No extra left margin (2026-09-14: dropped along with the two-lane
-   split below) -- .topbar's own `gap` is the whole title->tape distance
-   now, so the tape sits as far left as the title's own edge allows. */
-.topbar-tape {
-  flex: 1 1 0%;
+.topbar-lead { flex: 0 1 auto; min-width: 0; }
+
+/* v195 §3.1: the palette trigger, a field-shaped quiet button. Its auto left
+   margin and the cluster's split the free space, so it sits mid-bar. */
+.palette-trigger {
+  flex: 0 1 260px;
   min-width: 0;
+  margin-left: auto;
+  justify-content: flex-start;
+  gap: var(--space-8);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.palette-trigger .glyph { display: inline-flex; line-height: 0; }
+.palette-trigger .trigger-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.palette-trigger .shortcut { font-family: var(--font-mono); font-size: var(--text-micro); color: var(--text-muted); }
+
+/* The ticker tape, a strip under the bar (v195 Phase 3). Its lane draws its
+   own hairline and surface, so an empty strip takes no space. Not sticky:
+   it scrolls away with the page, the chips above it do not. */
+.tape-strip {
   display: flex;
-  align-items: center;
-  gap: var(--space-20);
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.topbar-tape::-webkit-scrollbar { display: none; }
+.tape-strip::-webkit-scrollbar { display: none; }
 
-/* 15rem, not the 18rem this used to reserve: measured against every route's
-   title/subtitle (canvas text measurement, Inter at this column's actual
-   font sizes), the longest subtitle ("Scheduled reports and exports,
-   planned") needs ~227px -- 18rem (288px) left ~60px of dead space before
-   the tape even started, which read as the tape sitting too far right of
-   the title it was supposed to sit right next to. 15rem (240px) keeps a
-   ~13px margin on that longest case without truncating anything. */
-.topbar-lead { display: flex; flex: 0 1 15rem; flex-direction: column; gap: 2px; min-width: 0; }
-.page-title {
-  margin: 0;
-  font-size: var(--text-title);
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.page-subtitle {
-  margin: 0;
-  font-size: var(--text-chip);
-  color: var(--text-secondary);
-  white-space: nowrap;
+/* scan-progress.css's :host is absolute at the top of its container; here
+   it hangs from the sticky bar's bottom edge instead, over the tape and the
+   page and never in the flow. Out-ranks the :host rule (two classes and two
+   attributes against one). */
+.topbar > sb-scan-progress {
+  inset: 100% 0 auto 0;
 }
 
 .killswitch-strip {
@@ -334,32 +199,26 @@ sb-nav-indicator {
   flex: 1;
   min-width: 0;
   padding: var(--space-20);
-  /* SR23. Below 1440 the screen is the constraint, not the eye: 20px of
-     chrome on each side of a table is a column's worth of data pushed off. */
-  min-width: 0;
 }
 
 /* SR23 -- spacing per range. The literals are repeated from breakpoints.ts
-   because @media cannot evaluate var(); the test in breakpoints.spec.ts is
-   what keeps the two honest. */
+   because @media cannot evaluate var(); breakpoint-guard.spec.ts keeps the
+   two honest. */
 @media (max-width: 1439px) {
   .workspace { padding: var(--space-14); }
 }
 
-/* At the widest sizes the limit is the reader, not the screen: a table line
-   3000px long is one the eye loses its place on. */
+/* At the widest sizes the limit is the reader, not the screen. */
 @media (min-width: 1920px) {
   .workspace { max-width: 1760px; margin-inline: auto; }
 }
 
-/* -- SR58: market session, zoom, version footer ---------------------- */
-
-/* Sheet 2's form: dot, word and clock read as one cluster, tighter than
-   the wider gap the topbar uses between its other children. */
+/* The right cluster: chips, dot and clock as one group, pushed to the bar's right edge and tighter than the bar's own gap. */
 .status-cluster {
   display: flex;
   align-items: center;
   gap: var(--space-6);
+  margin-left: auto;
 }
 
 .clock {
@@ -372,37 +231,11 @@ sb-nav-indicator {
   white-space: nowrap;
 }
 
-/* SR76: tabular-nums so cycling 90/100/110/125 doesn't jiggle the topbar
-   width as the digit count changes; a fixed min-width for the same reason. */
+/* SR76: tabular-nums so cycling 90/100/110/125 doesn't jiggle the width. */
 .zoom {
   min-width: 4.5rem;
   font-variant-numeric: tabular-nums;
 }
-
-
-/* A column, not a row: the rail is 52px wide, so two versions side by side
-   cannot fit there however they are spaced. */
-.version {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: var(--space-8);
-  border-top: 1px solid var(--border);
-  color: var(--text-faint);
-  font-size: var(--text-micro);
-  font-variant-numeric: tabular-nums;
-}
-
-.version-row { display: flex; gap: var(--space-6); }
-/* Numbers flush right so the two of them line up as a column to compare. */
-.version .num { margin-left: auto; }
-.version .updated { white-space: nowrap; }
-
-/* On the rail the words clip away under the shared `.label` rule above and
-   only the numbers are left, so centre them and drop the flush-right push
-   that has nothing to sit against any more. */
-.shell.railed:not(.overlay) .version { align-items: center; }
-.shell.railed:not(.overlay) .version .num { margin-left: 0; }
 
 .workspace { position: relative; }
 .workspace-content { min-width: 0; transition: opacity var(--transition); }
@@ -410,27 +243,25 @@ sb-nav-indicator {
 .route-loading-overlay { position: absolute; inset: 0; z-index: 10; display: grid; place-content: center; justify-items: center; gap: var(--space-10); color: var(--text-secondary); background: color-mix(in srgb, var(--surface) 58%, transparent); backdrop-filter: blur(1px); }
 .route-loading-mark { width: 24px; height: 24px; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: sb-route-spin 700ms linear infinite; }
 
-/* The drop order, widest trigger first -- spec v85 "Responsive behaviour",
-   retriggered onto the declared breakpoints by v95 A2.
-   Everything here is a removal: the bar never wraps to a second row, because
-   a two-row bar changes the height of every page's content area. The title
-   itself already truncates with an ellipsis (R1-05) and the tape already
-   scrolls (R1-06), so below sm the bar degrades to
-   mark - title - scrolling tape - status, with nothing overflowing.
-
-   v95: these were 900px and 720px -- neither a declared breakpoint, so the
-   stylesheet and ViewportService.isNarrow() disagreed between 640 and 720.
-   The clock and the wide tape now survive down to 640px. */
-@media (max-width: 1023px) {
-  .shell { --topbar-h: 56px; }
-  .page-subtitle { display: none; }
+/* The touch rules win (spec §1.4): under a coarse pointer or below 1024px
+   the bar's controls are 44px, so the bar grows to hold them. */
+@media (pointer: coarse), (max-width: 1023px) {
+  .shell { --topbar-h: 48px; }
+  .palette-trigger .shortcut { display: none; }
 }
+
+/* Everything here is a removal: the bar never wraps to a second row, which
+   would change the height of every page's content area. The breadcrumb
+   already shows only the current crumb below 640px and truncates it with
+   an ellipsis; the rail gives way to the bottom tab bar. */
 @media (max-width: 639px) {
   .clock { display: none; }
-  .topbar { gap: var(--space-10); }
-  /* 7rem showed one clipped "MKT" and nothing a reader could use, while
-     squeezing the status cluster until its clock read "15:2(". The tape is
-     a glance-at-a-quote strip; on a phone the title and the live state win. */
-  .topbar-tape { display: none; }
+  /* The phone frame: no rail and no rail column; the page leaves room under
+     its last row for the fixed tab bar (phone-tab-bar.ts). */
+  .shell { grid-template-columns: 1fr; }
+  .rail { display: none; }
+  .main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+  .topbar { gap: var(--space-10); padding: 0 var(--space-10); }
+  .tape-strip { display: none; }
   .topbar-lead { flex: 1 1 auto; }
 }

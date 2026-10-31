@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_SCOPE } from '../../stores/analytics.store';
-import { ScopeBar } from './scope-bar';
+import { ConnectionStore } from '../../stores/connection.store';
+import { ScopeBar, fxMissingOf, fxMissingText } from './scope-bar';
+
+const connection = { currency: signal('€') };
 
 const create = (inputs: Record<string, unknown> = {}) => {
   const fixture = TestBed.createComponent(ScopeBar);
@@ -24,7 +27,10 @@ const create = (inputs: Record<string, unknown> = {}) => {
 describe('ScopeBar', () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
-    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    connection.currency.set('€');
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), { provide: ConnectionStore, useValue: connection }],
+    });
   });
 
   it('reports the population the scope produced', () => {
@@ -73,5 +79,42 @@ describe('ScopeBar', () => {
     expect(line.querySelector('.population')).not.toBeNull();
     const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/scope-bar.ts'), 'utf8');
     expect(src).toMatch(/\.scope-line \{[^}]*align-items: baseline/);
+  });
+
+  it('labels the money toggle with the account currency, keeping the value key (v194 B7)', () => {
+    for (const symbol of ['€', '$', '£']) {
+      connection.currency.set(symbol);
+      const { el } = create({ unit: 'money' });
+      const labels = [...el.querySelectorAll('sb-segmented button')].map((b) => b.textContent!.trim());
+      expect(labels).toEqual(['R', '%', symbol]);
+      // A saved `unit: 'money'` preference still selects the money segment.
+      expect(el.querySelector('sb-segmented button[aria-pressed="true"]')!.textContent!.trim()).toBe(symbol);
+    }
+  });
+
+  it('names how many closes the money figures left out, and only when some were', () => {
+    expect(create().el.querySelector('.fx-caveat')).toBeNull();
+    const { el } = create({ fxMissing: 2 });
+    const caveat = el.querySelector('.fx-caveat')!;
+    expect(caveat.getAttribute('role')).toBe('note');
+    expect(caveat.textContent!.trim()).toBe(fxMissingText(2));
+    // Tuning shows no population and no money: no caveat either.
+    expect(create({ fxMissing: 2, tuning: true }).el.querySelector('.fx-caveat')).toBeNull();
+  });
+});
+
+describe('fxMissingText', () => {
+  it('is empty for none and counts trades, singular and plural', () => {
+    expect(fxMissingText(0)).toBe('');
+    expect(fxMissingText(1)).toBe('1 closed trade left out of money figures: no exchange rate for its exit date');
+    expect(fxMissingText(3)).toBe('3 closed trades left out of money figures: no exchange rate for their exit dates');
+  });
+});
+
+describe('fxMissingOf', () => {
+  it('reads the largest count among the payloads present, 0 for none', () => {
+    expect(fxMissingOf()).toBe(0);
+    expect(fxMissingOf(null, undefined, {})).toBe(0);
+    expect(fxMissingOf(null, { fx_missing_count: 2 }, { fx_missing_count: 1 })).toBe(2);
   });
 });

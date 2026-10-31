@@ -65,6 +65,9 @@ export interface PageSpec {
 export interface CompactSlot {
   line: 1 | 2;
   order: number;
+  /** Repeat this cell in the row drawer when it has an interactive hint:
+   *  compact-row contents are inert, so the drawer makes it reachable. */
+  drawer?: boolean;
 }
 
 /** What a phone compact-row tap does -- v179 §6a.4. `'drawer'` opens the
@@ -157,4 +160,8 @@ export interface ColumnDef<T> {
   compact?: CompactSlot;
 
   footer?: (rows: T[]) => string | number | null;
+
+  /** An accessible explanation beside the total, in both table and compact
+   *  layouts. Uses the same shown rows as `footer`. */
+  footerHint?: (rows: T[]) => { text: string; label: string } | null;
 }

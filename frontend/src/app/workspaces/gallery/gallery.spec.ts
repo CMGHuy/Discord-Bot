@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { ConnectionStore } from '../../stores/connection.store';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -10,6 +11,19 @@ import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer } from '../../ui/data-table/testing/reachability';
 import { Gallery } from './gallery';
+import { Hint } from '../../ui/hint';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
+
+/** The text of the sb-hint whose aria label is `label` (A4 audit). */
+function hintText(fixture: ComponentFixture<unknown>, label: string): string {
+  const hint = fixture.debugElement
+    .queryAll(By.directive(Hint))
+    .map((debug) => debug.componentInstance as Hint)
+    .find((h) => h.label() === label);
+  if (!hint) throw new Error(`no sb-hint labelled "${label}"`);
+  return hint.text();
+}
 
 // The gallery renders a real sb-trade-chart, and lightweight-charts asks for
 // matchMedia the moment a chart exists. See the polyfill for why.
@@ -71,6 +85,14 @@ describe('the gallery renders', () => {
     });
   });
 
+  it('Expectancy demo hint matches the basis the book is computed on (A4 audit)', () => {
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    const text = hintText(fixture, 'About expectancy');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
+    expect(text).not.toContain('after costs');
+  });
+
   it('mounts without throwing', () => {
     const fixture = TestBed.createComponent(Gallery);
     expect(() => fixture.detectChanges()).not.toThrow();
@@ -114,7 +136,7 @@ describe('the gallery renders', () => {
 
 describe('the gallery is the v80 D6 reference', () => {
   it("shows every button variant, including v77's danger-icon", () => {
-    for (const variant of ['primary', 'secondary', 'danger', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment']) {
+    for (const variant of ['primary', 'secondary', 'danger', 'danger-quiet', 'ghost', 'icon', 'danger-icon', 'link', 'chip', 'segment']) {
       expect(GALLERY).toContain(`'${variant}'`);
     }
   });
@@ -201,5 +223,86 @@ describe('the gallery shows compact rows (v179 §3.1)', () => {
     openRowDrawer(table);
     fixture.detectChanges();
     expect([...compactKeys(table), ...drawerKeys(table)].sort()).toEqual(['note', 'outcome', 'pnl', 'ticker']);
+  });
+});
+
+/* -- v195 §5.1 -- the gallery is the reference page for sb-page ------------- */
+
+describe('the gallery is the sb-page reference (v195 §5.1, Phase 4)', () => {
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideRouter([]),
+        { provide: ConnectionStore, useValue: { marketActive: () => true } }],
+    });
+    TestBed.inject(RouteTitleService).set('UI gallery', 'Every primitive, in one place');
+  });
+
+  function mount() {
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('renders the route title as its one h1, and writes none itself', () => {
+    const { el } = mount();
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('UI gallery');
+    expect(GALLERY).not.toMatch(/<h1[\s>]/);
+  });
+
+  it('fills every slot: actions, scope, KPIs, the primary reference and two secondary panels', () => {
+    const { el } = mount();
+    for (const slot of ['[page-actions]', '[page-scope]', '[page-kpis]', '[page-primary]']) {
+      expect(el.querySelectorAll(`sb-page ${slot}`), slot).toHaveLength(1);
+    }
+    expect(el.querySelectorAll('sb-page [page-secondary]')).toHaveLength(2);
+    expect(el.querySelector('sb-page [page-primary] sb-stat-tile .thin')).not.toBeNull();
+  });
+
+  it('demos the header action as danger-quiet, behind its confirm', () => {
+    const { fixture, el } = mount();
+    const button = el.querySelector<HTMLButtonElement>('sb-page [page-actions] [data-action="demo-clear"]')!;
+    expect(button.classList).toContain('danger-quiet');
+    expect(button.classList).not.toContain('danger');
+    button.click();
+    fixture.detectChanges();
+    expect(el.querySelector('dialog[open]')!.textContent).toContain('Clear the demo log?');
+  });
+
+  it('shows danger for the killswitch alone and danger-quiet for housekeeping, each confirming', () => {
+    const { fixture, el } = mount();
+    const halt = el.querySelector<HTMLButtonElement>('[data-demo="killswitch"]')!;
+    const quiet = el.querySelector<HTMLButtonElement>('[data-demo="housekeeping"]')!;
+    expect(halt.classList).toContain('danger');
+    expect(halt.classList).not.toContain('danger-quiet');
+    expect(quiet.classList).toContain('danger-quiet');
+    halt.click();
+    fixture.detectChanges();
+    const dialog = el.querySelector('dialog[open]')!;
+    expect(dialog.textContent).toContain('Halt trading?');
+    expect(dialog.querySelector('button.danger')).not.toBeNull();
+  });
+
+  it('leads the demo KPI strip with ExpR, with N and the basis, and risk in two units', () => {
+    const { fixture } = mount();
+    const tiles = fixture.debugElement.queryAll(By.css('[page-kpis] sb-stat-tile'))
+      .map((d) => d.componentInstance as StatTile);
+    expect(tiles.map((t) => t.label())).toEqual(['ExpR', 'Win rate', 'Open risk', 'Payoff ratio']);
+    for (const tile of [tiles[0], tiles[1], tiles[3]]) {
+      expect(tile.sample(), tile.label()).not.toBeNull();
+      expect(tile.about(), tile.label()).toContain(PERFORMANCE_CAVEAT);
+    }
+    expect(tiles[2].value()).toMatch(/ · \d+\.\d{2}%$/);
+  });
+
+  it('demos the rail label: an anchored hint beside a link, with no trigger button', () => {
+    const { el } = mount();
+    const link = el.querySelector<HTMLAnchorElement>('a.rail-demo')!;
+    expect(link.getAttribute('aria-label')).toBe('Dashboard');
+    const hint = link.nextElementSibling!;
+    expect(hint.tagName.toLowerCase()).toBe('sb-hint');
+    expect(hint.querySelector('button')).toBeNull();
   });
 });

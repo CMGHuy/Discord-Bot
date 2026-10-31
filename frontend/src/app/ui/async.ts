@@ -63,6 +63,11 @@ export function barWidth(col: number): string {
  *
  * Branch order is error > loading > empty > content, so a refetch that fails
  * reports the failure rather than spinning forever.
+ *
+ * v195 Phase 2: one style per state, in the panel body. Empty is
+ * sb-empty-state (reason included), error is sb-panel-error's look on the
+ * .failed / .retry classes, loading is the skeleton (bars in the strong
+ * rule colour) or, for a refetch, the one grey sb-spinner ring.
  */
 @Component({
   selector: 'sb-async',
@@ -104,12 +109,8 @@ export function barWidth(col: number): string {
         </div>
       }
     } @else if (empty()) {
-      <div class="empty-wrap">
-        <span class="reason" [class]="emptyReason()">
-          {{ emptyReason() === 'measured-zero' ? 'result: 0' : 'awaiting data' }}
-        </span>
-        <sb-empty-state [title]="emptyTitle()" [hint]="emptyHint()" />
-      </div>
+      <!-- v195 Phase 2: the one empty style, reason included. -->
+      <sb-empty-state [title]="emptyTitle()" [hint]="emptyHint()" [reason]="emptyReason()" />
     } @else {
       @if (staleAsOf(); as at) {
         <span class="stale-badge">as of {{ at }}</span>
@@ -131,20 +132,38 @@ export function barWidth(col: number): string {
       white-space: nowrap;
     }
 
-    .failed { padding: var(--space-14); text-align: center; }
-    .failed-text { color: var(--neg); font-size: var(--text-table); }
+    /* v195 Phase 2: the one error style -- sb-panel-error's declarations,
+       kept identical by async.spec.ts; the classes stay because workspace
+       specs query .failed and .retry. */
+    .failed {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-8);
+      min-height: 96px;
+      padding: var(--space-14) var(--panel-pad);
+      border-left: 2px solid var(--neg);
+      border-radius: var(--radius-sm);
+      background: var(--neg-soft);
+      color: var(--text);
+      font-size: var(--text-table);
+    }
+    .failed-text { margin: 0; }
     .retry {
-      margin-top: var(--space-8);
       min-height: var(--control-h);
-      padding: 0 var(--space-14);
+      padding: 0 var(--space-10);
       border: 1px solid var(--border-strong);
       border-radius: var(--control-radius);
-      background: var(--surface-raised);
+      background: transparent;
       color: var(--text);
-      font-family: var(--font-sans);
+      font: inherit;
       font-size: var(--text-table);
       cursor: pointer;
+      transition: background var(--transition);
     }
+    .retry:hover { background: var(--surface-raised); }
+    .retry:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
     .skeleton { display: flex; flex-direction: column; gap: var(--space-6); }
     .skeleton-row { display: flex; gap: var(--space-10); }
@@ -169,7 +188,7 @@ export function barWidth(col: number): string {
       display: block;
       height: 8px;
       border-radius: var(--radius-sm);
-      background: color-mix(in srgb, var(--surface-raised) 55%, var(--border-strong));
+      background: var(--border-strong);
       opacity: 0.7;
       animation: sb-skeleton-pulse calc(1800ms * var(--motion-scale)) ease-in-out infinite;
     }
@@ -188,25 +207,10 @@ export function barWidth(col: number): string {
       flex-direction: column;
       gap: var(--space-10);
       min-width: 0;
-      padding: var(--space-14);
+      padding: var(--space-10) var(--panel-pad);
     }
     .skeleton-bar.label { width: 35%; }
     .skeleton-bar.value { width: 60%; }
-
-    .empty-wrap { text-align: center; }
-    .reason {
-      display: inline-block;
-      padding: var(--space-4) var(--space-8);
-      border-radius: var(--chip-radius);
-      font-family: var(--font-mono);
-      font-size: var(--text-micro);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    /* A measured zero is a NEUTRAL fact; missing data is a CAUTION. The two
-       tokens are the whole visible difference and they are the point. */
-    .reason.measured-zero { background: var(--info-soft); color: var(--info); }
-    .reason.no-data-yet { background: var(--warn-soft); color: var(--warn); }
 
     .stale-badge {
       position: absolute;

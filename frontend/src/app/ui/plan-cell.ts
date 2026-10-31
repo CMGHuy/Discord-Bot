@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { Hint } from './hint';
 import { money, num, pct, rMultiple, share } from './format';
 
 /**
@@ -24,10 +25,11 @@ import { money, num, pct, rMultiple, share } from './format';
 @Component({
   selector: 'sb-plan-cell',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Hint],
   template: `
     @if (runnerMode()) {
       <span class="plan runner">
-        <span class="line l1" [title]="planTooltip">
+        <span class="line l1">
           <span class="entry">{{ fmt(first()) }}</span>
           <span class="sep">{{ ' → ' }}</span>
           <span class="target">{{ fmt(planTp1()) }}</span>
@@ -36,7 +38,7 @@ import { money, num, pct, rMultiple, share } from './format';
           <span class="sep">{{ ' (' }}</span><span class="rise">{{ fmtPct(planRisePct()) }}</span><span class="sep">{{ ' - ' }}</span><span class="drop">{{ fmtPct(planDropPct()) }}</span><span class="sep">{{ ')' }}</span>
         </span>
         @if (trail(); as t) {
-          <span class="line l2" [title]="trailTooltip()">
+          <span class="line l2">
             <span class="trail">Trail</span><span class="sep">{{ ' ' }}</span>
             <span class="best">{{ fmt(t.best) }}</span>
             <span class="sep">{{ ' → ' }}</span>
@@ -44,6 +46,7 @@ import { money, num, pct, rMultiple, share } from './format';
             <span class="sep">{{ ' (' }}</span><span class="peak" [class.loss]="t.bestPct < 0">{{ signedPct(t.bestPct) }}</span><span class="sep">{{ ' / ' }}</span><span class="lock" [class.loss]="t.exitPct < 0">{{ signedPct(t.exitPct) }}</span><span class="sep">{{ ')' }}</span>
           </span>
         }
+        <sb-hint [text]="runnerHint()" label="About this runner's plan" align="left" />
       </span>
     } @else {
       <span class="plan" [title]="tooltip()">
@@ -135,6 +138,8 @@ export class PlanCell {
   readonly bankedFraction = input<number | null>(null);
   /** The TP1 leg's own R-multiple. */
   readonly bankedR = input<number | null>(null);
+  /** v189 B3: the banked legs' contribution to the trade's R (fraction x R). */
+  readonly bankedContributionR = input<number | null>(null);
   /** %-gain on the TP1 leg, from the position's ORIGINAL entry to the
    *  leg's own exit price -- not the same number as the R-multiple. */
   readonly bankedPct = input<number | null>(null);
@@ -198,6 +203,13 @@ export class PlanCell {
       + `${pct(t.exitPct, 1)} is the result if the stop fills at ${this.fmt(t.exit)}, `
       + 'per share from the original entry, before costs and tax. '
       + `${this.isShortRunner() ? SHORT_GAINS : LONG_GAINS} ${PAPER_LEVEL}`;
+  });
+
+  /** v194 A3: one hint for both runner lines -- what line 1 is and, when
+   *  line 2 shows, what its trail figures mean. */
+  protected readonly runnerHint = computed(() => {
+    const trail = this.trailTooltip();
+    return trail ? `${this.planTooltip} ${trail}` : this.planTooltip;
   });
 
   /** Direction is not an input: a short's TP1 sits below its entry. */
@@ -280,8 +292,11 @@ export class PlanCell {
       const amountVal = this.bankedAmount();
       const currencyVal = this.currency();
       if (amountVal !== null && currencyVal !== null) extras.push(money(amountVal, currencyVal));
-      const extraText = extras.length ? ` (${extras.join(', ')})` : '';
-      out += ` · ${share(fraction * 100)} banked ${rMultiple(r)}${extraText} @ ${this.fmt(entry)}`;
+      const leg = `TP1 ${rMultiple(r)} on ${share(fraction * 100)}`;
+      const contribution = this.bankedContributionR();
+      const head = contribution === null ? leg : `banked ${rMultiple(contribution)} (${leg})`;
+      const extraText = extras.length ? `, ${extras.join(', ')}` : '';
+      out += ` · ${head}${extraText} @ ${this.fmt(entry)}`;
     }
     return out;
   });
@@ -353,19 +368,20 @@ export function bankedLegPct(
   return direction === 'bearish' ? -raw : raw;
 }
 
-/** $-amount for the same leg -- the ORIGINAL share count times the fraction
- *  that leg closed, times the move from entry to its own fill price. Null
- *  when any input needed to compute it is unknown. */
+/** $-amount for the same leg -- the ORIGINAL share count (`entry_shares`,
+ *  v189 B1; never the remaining count) times the fraction that leg closed,
+ *  times the move from entry to its own fill price. Null when any input
+ *  needed to compute it is unknown. */
 export function bankedLegAmount(
   entry: number | null,
   bankedEntry: number | null,
   bankedFraction: number | null,
-  shares: number | null,
+  entryShares: number | null,
   direction: string,
 ): number | null {
-  if (entry === null || bankedEntry === null || bankedFraction === null || shares === null) {
+  if (entry === null || bankedEntry === null || bankedFraction === null || entryShares === null) {
     return null;
   }
-  const raw = (bankedEntry - entry) * shares * bankedFraction;
+  const raw = (bankedEntry - entry) * entryShares * bankedFraction;
   return direction === 'bearish' ? -raw : raw;
 }

@@ -81,11 +81,13 @@ def calendar_pnl():
     """
     from swingbot.core.analytics import pnl_calendar as pc
 
+    from .money import missing_count, to_account_currency
+
     _reject_unknown_params()
     month = _month_param()
     strategy, horizon = _filter_args()
 
-    everything = pc.load_rows()
+    everything = pc.load_rows(convert=to_account_currency)
     rows = pc.filter_rows(everything, strategy=strategy, horizon=horizon)
     grid = pc.month_grid(rows, month)
     extremes = pc.best_worst_days(rows)
@@ -102,6 +104,8 @@ def calendar_pnl():
         "best_day": extremes["best"],
         "worst_day": extremes["worst"],
         "streak": pc.day_streak(rows),
+        "fx_missing_count": missing_count(
+            [r for r in rows if r["day"].startswith(grid["month"])]),
         # Derived from the UNFILTERED set -- see `available_filters`.
         "filters": pc.available_filters(everything),
     })
@@ -138,11 +142,14 @@ def calendar_pnl_day():
     """
     from swingbot.core.analytics import pnl_calendar as pc
 
+    from .money import missing_count, to_account_currency
+
     _reject_unknown_params()
     date = _date_param()
     strategy, horizon = _filter_args()
 
-    rows = pc.filter_rows(pc.load_rows(), strategy=strategy, horizon=horizon)
+    rows = pc.filter_rows(pc.load_rows(convert=to_account_currency),
+                          strategy=strategy, horizon=horizon)
     day_rows = sorted(
         (r for r in rows if r["day"] == date),
         key=lambda r: r["closed_at"] or "",
@@ -154,6 +161,7 @@ def calendar_pnl_day():
         "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "date": date,
         "trades": day_rows,
+        "fx_missing_count": missing_count(day_rows),
         **pc.day_totals(day_rows),
         "context": pc.day_context(rows, date),
         "breakdown": pc.day_breakdown(day_rows),

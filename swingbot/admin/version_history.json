@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-26 09:34:17 UTC",
+  "generated_at": "2026-10-30 18:14:26 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.36.1",
-    "bot": "2.15.4"
+    "ui": "1.37.3",
+    "bot": "2.15.8"
   },
   "releases": [
     {
@@ -2148,6 +2148,111 @@
         "bot": "2.15.4"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-28",
+      "last_seen": "2026-10-28",
+      "commit": "cdca28e1",
+      "subject": "release(ui): 1.36.2 -- tooltips that open, figures that are true: sb-hint top layer, money in the account currency, leg labels, honest hint copy (v194)",
+      "versions": {
+        "ui": "1.36.2",
+        "bot": "2.15.4"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-28",
+      "last_seen": "2026-10-28",
+      "commit": "81186be1",
+      "subject": "release(bot): 2.15.5 -- FX rates for admin money, sector-heat unmapped count and failure logging, leg_exit_reason, money drawdown on /risk (v194)",
+      "versions": {
+        "ui": "1.36.2",
+        "bot": "2.15.5"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "e84dc206",
+      "subject": "release(ui): 1.37.0 -- Graphite: the whole admin UI redesigned -- icon rail, command palette, one page template, dense rows, true-minus signs, ExpR-first figures (v195)",
+      "versions": {
+        "ui": "1.37.0",
+        "bot": "2.15.5"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "d810b07b",
+      "subject": "release(bot): 2.15.6 -- Discord chart images follow the Graphite palette, STYLE_VERSION v195 (v195)",
+      "versions": {
+        "ui": "1.37.0",
+        "bot": "2.15.6"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "7c32848d",
+      "subject": "release(ui): 1.37.1 -- Trading performance leads the dashboard; the duplicate KPI strip is merged into it",
+      "versions": {
+        "ui": "1.37.1",
+        "bot": "2.15.6"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "d09b06e2",
+      "subject": "release(ui): 1.37.2 -- correct risk reporting and coverage",
+      "versions": {
+        "ui": "1.37.2",
+        "bot": "2.15.6"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "last_seen": "2026-10-29",
+      "commit": "3de23143",
+      "subject": "release(bot): 2.15.7 -- report unavailable portfolio data",
+      "versions": {
+        "ui": "1.37.2",
+        "bot": "2.15.7"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-30",
+      "last_seen": "2026-10-30",
+      "commit": "f1f6b3cb",
+      "subject": "release(bot,ui): bot 2.15.8, ui 1.37.3 -- v189 book integrity and partial-trade truth",
+      "versions": {
+        "ui": "1.37.3",
+        "bot": "2.15.8"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }

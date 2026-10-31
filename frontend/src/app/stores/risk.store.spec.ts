@@ -19,7 +19,7 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { Risk } from '../api/models';
+import { DomainAvailability, Risk, RiskAvailability } from '../api/models';
 import { RiskStore } from './risk.store';
 
 /* NG49 — exposure, heat and the killswitch.
@@ -52,7 +52,16 @@ class FakeEventStream {
   }
 }
 
+const OK: DomainAvailability = {
+  state: 'ok', checked_at: '2026-10-28T00:00:00+00:00', reason: null,
+};
+const AVAILABILITY: RiskAvailability = {
+  positions: OK, heat: OK, sector_heat: OK, clusters: OK,
+  throttle: OK, killswitch: OK,
+};
+
 const RESPONSE: Risk = {
+  availability: AVAILABILITY,
   heat: { open_pct: 3, cap_pct: 6, utilisation_pct: 50 },
   positions: [
     {
@@ -77,7 +86,7 @@ const RESPONSE: Risk = {
   sector_heat: [{ sector: 'Technology', heat_pct: 3 }],
   clusters: [['AAPL', 'MSFT']],
   throttle: { multiplier: 1, paused: false },
-  killswitch: { on: false, reason: null, at: null },
+  killswitch: { on: false, reason: null, at: null, availability: OK },
   scan_health: { durations_s: [12, 14], latest_s: 14, slowdown: false },
   metrics: {
     var_95: { value: 0.031, n: 118 },
@@ -255,7 +264,7 @@ describe('RiskStore', () => {
     expect(request.request.body.on).toBe(true);
     expect(store.toggling()).toBe(true);
 
-    request.flush({ killswitch: { on: true, reason: 'admin panel', at: '2026-08-13T09:00:00Z' } });
+    request.flush({ killswitch: { on: true, reason: 'admin panel', at: '2026-08-13T09:00:00Z', availability: OK } });
     expect(store.toggling()).toBe(false);
   });
 
@@ -270,7 +279,7 @@ describe('RiskStore', () => {
     store.toggleKillswitch(true);
     backend
       .expectOne('/api/v1/risk/killswitch')
-      .flush({ killswitch: { on: true, reason: 'admin panel', at: null } });
+      .flush({ killswitch: { on: true, reason: 'admin panel', at: null, availability: OK } });
 
     expect(store.killswitchOn()).toBe(true);
     expect(store.killswitch()?.reason).toBe('admin panel');
@@ -286,13 +295,13 @@ describe('RiskStore', () => {
     store.toggleKillswitch(true);
     backend
       .expectOne('/api/v1/risk/killswitch')
-      .flush({ killswitch: { on: true, reason: null, at: null } });
+      .flush({ killswitch: { on: true, reason: null, at: null, availability: OK } });
 
     expect(store.positions()).toHaveLength(2);
     expect(store.openHeatPct()).toBe(3);
   });
 
-  it('says the killswitch is NOT engaged when the command fails', () => {
+  it('marks the current killswitch unknown when the command fails', () => {
     // The failure mode this test exists for: believing the bot stopped
     // taking positions when it did not.
     tick();
@@ -303,22 +312,23 @@ describe('RiskStore', () => {
       .expectOne('/api/v1/risk/killswitch')
       .error(new ProgressEvent('error'), { status: 0 });
 
-    expect(store.killswitchOn()).toBe(false);
+    expect(store.killswitchOn()).toBeNull();
     expect(store.toggling()).toBe(false);
-    expect(store.commandError()).toContain('NOT engaged');
+    expect(store.commandError()).toContain('Current state is unavailable');
   });
 
-  it('names the direction that failed when releasing', () => {
+  it('keeps the last observed engaged state stale when releasing fails', () => {
     tick();
-    respond({ killswitch: { on: true, reason: 'drawdown', at: null } });
+    respond({ killswitch: { on: true, reason: 'drawdown', at: null, availability: OK } });
 
     store.toggleKillswitch(false);
     backend
       .expectOne('/api/v1/risk/killswitch')
       .error(new ProgressEvent('error'), { status: 0 });
 
-    expect(store.killswitchOn()).toBe(true);
-    expect(store.commandError()).toContain('NOT released');
+    expect(store.killswitchOn()).toBeNull();
+    expect(store.killswitch()?.last_known?.on).toBe(true);
+    expect(store.commandError()).toContain('Current state is unavailable');
   });
 
   it('holds a command error until the next attempt', () => {
@@ -340,6 +350,162 @@ describe('RiskStore', () => {
     expect(store.commandError()).toBeNull();
     backend
       .expectOne('/api/v1/risk/killswitch')
-      .flush({ killswitch: { on: true, reason: null, at: null } });
+      .flush({ killswitch: { on: true, reason: null, at: null, availability: OK } });
+  });
+  it('preserves null controls and unknown exposure', () => {
+    const unavailable: DomainAvailability = { ...OK, state: 'unavailable', reason: 'positions_unavailable' };
+    respond({ positions: null, sector_heat: null, clusters: null,
+      throttle: { multiplier: null, paused: null },
+      killswitch: { on: null, reason: null, at: null, availability: unavailable },
+      availability: { ...AVAILABILITY, positions: unavailable, heat: unavailable } });
+    expect(store.killswitchOn()).toBeNull();
+    expect(store.paused()).toBeNull();
+    expect(store.throttled()).toBeNull();
+    expect(store.availability()?.positions.state).toBe('unavailable');
+    expect(store.data()?.positions).toBeNull();
+  });
+
+  it('separates last observed state from current state after transport failure', () => {
+    respond();
+    store.load();
+    backend.expectOne('/api/v1/risk').flush({}, { status: 503, statusText: 'unavailable' });
+    expect(store.killswitchOn()).toBeNull();
+    expect(store.killswitch()?.last_known?.on).toBe(false);
+    expect(store.killswitch()?.last_known?.checked_at).toBe(OK.checked_at);
+    expect(store.error()).toBeTruthy();
+    expect(store.data()?.positions?.length).toBe(2);
+    store.load();
+    backend.expectOne('/api/v1/risk').flush({}, { status: 503, statusText: 'unavailable' });
+    expect(store.killswitch()?.last_known?.checked_at).toBe(OK.checked_at);
+  });
+
+  it('keeps explicit commands usable before a full Risk response exists', () => {
+    backend.expectOne('/api/v1/risk').flush({}, { status: 503, statusText: 'unavailable' });
+    store.toggleKillswitch(true);
+    const request = backend.expectOne('/api/v1/risk/killswitch');
+    expect(request.request.body.on).toBe(true);
+    request.flush({ killswitch: { on: true, reason: 'manual', at: null, availability: OK } });
+    expect(store.killswitchOn()).toBe(true);
+    expect(store.data()).toBeNull();
+  });
+
+  it('does not report requested state as observed after failed readback', () => {
+    respond();
+    store.toggleKillswitch(true);
+    backend.expectOne('/api/v1/risk/killswitch').flush({ killswitch: {
+      on: null, reason: null, at: null,
+      availability: { ...OK, state: 'unavailable', reason: 'killswitch_unavailable' },
+    } });
+    expect(store.killswitchOn()).toBeNull();
+    expect(store.commandError()).toContain('current state is unavailable');
+    backend.expectNone('/api/v1/risk/killswitch');
+  });
+
+
+  it('keeps only risk: scan health and the data source moved to SystemStore (v195 §5.1)', () => {
+    for (const key of ['scanDurations', 'scanLatestS', 'scanSlowdown', 'dataSources']) {
+      expect(key in store).toBe(false);
+    }
+  });
+});
+
+/* -- v195 §5.2 -- the account balance, so risk can be shown in money -- */
+
+describe('RiskStore balance and cap headroom (v195 §5.2)', () => {
+  let store: InstanceType<typeof RiskStore>;
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        RiskStore,
+      ],
+    });
+    store = TestBed.inject(RiskStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  const respond = (body: Partial<Risk> = {}) =>
+    backend.expectOne('/api/v1/risk').flush({ ...RESPONSE, ...body });
+  const unavailable = { status: 503, statusText: 'Service Unavailable' };
+  const DOWN = { error: { code: 'unavailable', message: 'down' } };
+
+  it('reads the balance from the existing dashboard endpoint, beside /risk', () => {
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush({ account_balance: 10000 });
+
+    expect(store.balance()).toBe(10000);
+    expect(store.openHeatPct()).toBe(3);
+  });
+
+  it('leaves the balance null and the risk loaded when the dashboard read fails', () => {
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush(DOWN, unavailable);
+
+    expect(store.balance()).toBeNull();
+    expect(store.error()).toBeNull();
+    expect(store.positions()).toHaveLength(2);
+  });
+
+  it('keeps the last balance when a later dashboard read fails', () => {
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush({ account_balance: 10000 });
+
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush(DOWN, unavailable);
+    expect(store.balance()).toBe(10000);
+  });
+
+  it('never takes a balance that is not a finite number', () => {
+    store.load();
+    respond();
+    backend.expectOne('/api/v1/dashboard').flush({ account_balance: null });
+    expect(store.balance()).toBeNull();
+  });
+
+  it('finishes the route on the /risk read alone, before the balance answers', () => {
+    let finished = 0;
+    store.resolve().subscribe({ complete: () => { finished += 1; } });
+    respond();
+
+    expect(finished).toBe(1);
+    // Still in flight, and that holds nothing up.
+    expect(backend.match('/api/v1/dashboard')).toHaveLength(1);
+  });
+
+  it('reads nothing until the resolver is subscribed', () => {
+    store.resolve();
+    backend.expectNone('/api/v1/risk');
+    backend.expectNone('/api/v1/dashboard');
+  });
+
+  it('measures cap headroom as the cap less the open heat, unclamped', () => {
+    store.load();
+    respond({ heat: { open_pct: 3, cap_pct: 6, utilisation_pct: 50 } });
+    expect(store.headroomPct()).toBe(3);
+
+    store.load();
+    respond({ heat: { open_pct: 7.5, cap_pct: 6, utilisation_pct: 125 } });
+    expect(store.headroomPct()).toBe(-1.5);
+  });
+
+  it('has no headroom when either side is unknown, and before the first answer', () => {
+    expect(store.headroomPct()).toBeNull();
+    store.load();
+    respond({ heat: { open_pct: null, cap_pct: 6, utilisation_pct: null } });
+    expect(store.headroomPct()).toBeNull();
+    store.load();
+    respond({ heat: { open_pct: 3, cap_pct: null, utilisation_pct: null } });
+    expect(store.headroomPct()).toBeNull();
   });
 });

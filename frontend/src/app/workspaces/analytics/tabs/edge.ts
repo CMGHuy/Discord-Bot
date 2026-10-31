@@ -8,6 +8,7 @@ import { Panel } from '../../../ui/layout';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelHeader } from '../../../ui/panel-header';
 import { MultiplePane, SmallMultiples } from '../../../ui/small-multiples';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 import {
   allKeys,
   DRIFT_COLUMNS,
@@ -67,7 +68,8 @@ export class EdgeTab {
   readonly meaning = LIVE_LOSS_MEANING;
   readonly caveat = LIVE_LOSS_LOOKS_CAVEAT;
   readonly contextLabel = REGISTRY_CONTEXT_LABEL;
-  readonly liveLossHint = 'Live trades opened on or after 2026-10-16 (Berlin date), both ledgers, manual closes included. Ignores the scope filter. Rows keep the server order: alerts first.';
+  readonly liveLossHint = 'Live trades opened on or after 2026-10-16 (Berlin date), both ledgers, manual closes included. Ignores the scope filter. Rows keep the server order: alerts first. '
+    + PERFORMANCE_CAVEAT;
   readonly liveLossColumns = LIVE_LOSS_COLUMNS;
   readonly liveLossVisible = allKeys(LIVE_LOSS_COLUMNS);
   readonly liveLossKey = (row: LiveLossRow) => liveLossLabel(row);
@@ -78,7 +80,9 @@ export class EdgeTab {
   readonly countsLine = computed(() => liveLossCountsLine(this.store.liveLossCounts()));
 
   /* -- win-rate drift (badge_drift, unchanged; first rendered in v164) ---- */
-  readonly driftHint = 'Live win rate against the out-of-sample win rate of validated registry rows (badge_drift).';
+  readonly driftHint = 'Live win rate against the out-of-sample win rate of validated registry rows (badge_drift). '
+    + 'N is the trade count behind each rate. A win rate alone does not say a strategy pays: read it with '
+    + `the Live ExpR in the Live loss watch above. Live rows: ${PERFORMANCE_CAVEAT}`;
   readonly driftColumns = DRIFT_COLUMNS;
   readonly driftVisible = allKeys(DRIFT_COLUMNS);
   readonly driftKey = (row: DriftRow) => row.strategy;

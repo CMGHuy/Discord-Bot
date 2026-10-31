@@ -15,7 +15,7 @@ import {
 
 import { Viewport, ViewportService } from './breakpoints';
 import { FocusTrap } from './focus-trap';
-import { Hint } from './hint';
+import { DIALOG_CLOSING_EVENT, Hint } from './hint';
 import { Icon, IconName } from './icon';
 import { playExit } from './motion/exit';
 import { MotionService } from './motion/motion.service';
@@ -31,23 +31,24 @@ import { edgeFades, revealActive } from './scroll-rail';
  * The `actions` slot exists so a panel's controls sit on its own header rather
  * than floating above it; a filter that belongs to one table should be
  * unambiguously attached to that table.
+ *
+ * v195 Phase 2: a surface step and a 1px hairline (--panel-bg, --panel-border),
+ * no lift and no shadow; a 13px sentence-case title with its hint right
+ * beside it; padding from --panel-pad, so the panel follows row density.
  */
 @Component({
   selector: 'sb-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Hint],
-  // The tooltip sits on the host, so any hover inside the panel shows it; a
-  // child with a title of its own (an icon, a cell) still wins over it.
-  host: { '[attr.title]': 'description()' },
   template: `
-    <section class="panel sb-panel sb-lift">
+    <section class="panel sb-panel">
       @if (heading(); as text) {
         <header [class.ruled]="flush() || divided()">
           <h2>{{ text }}</h2>
           @if (description(); as about) {
-            <!-- The host's native title answers a hover; the hint answers a
-                 tap or a keyboard focus, which a title never does. A panel
-                 with a richer hint of its own turns this one off. -->
+            <!-- v194 A3: the hint answers hover, tap and keyboard focus alike;
+                 the host carries no native title. A panel with a richer hint
+                 of its own turns this one off. -->
             @if (descriptionHint()) {
               <sb-hint [text]="about" [label]="'About ' + text" align="left" />
             }
@@ -102,7 +103,7 @@ import { edgeFades, revealActive } from './scroll-rail';
       justify-content: space-between;
       gap: var(--space-6) var(--space-10);
       min-height: calc(var(--control-h) + 2 * var(--space-10) + 1px);
-      padding: var(--space-10) var(--space-14);
+      padding: var(--space-10) var(--panel-pad);
       border-bottom: 1px solid transparent;
     }
     /* v186 D2 -- the rule shows only where it separates something: a flush
@@ -112,7 +113,9 @@ import { edgeFades, revealActive } from './scroll-rail';
        still share one header height. */
     header.ruled { border-bottom-color: var(--border); }
     /* v186 D1 -- the one panel title, the same declarations as
-       sb-panel-header's h2: sentence case as given, Inter 600 at body size.
+       sb-panel-header's h2: sentence case as given, Inter 600. v195 Phase 2:
+       at the 13px table step (spec §1.3), a step under the 14px body so the
+       figures in the panel, not its label, carry the weight.
        .sb-label (mono caps) is the FIELD and tile label style, not a title. */
     h2 {
       margin: 0;
@@ -120,7 +123,7 @@ import { edgeFades, revealActive } from './scroll-rail';
       overflow-wrap: anywhere;
       font-family: var(--font-sans);
       font-weight: 600;
-      font-size: var(--text-body);
+      font-size: var(--text-table);
       color: var(--text);
       letter-spacing: normal;
     }
@@ -136,7 +139,7 @@ import { edgeFades, revealActive } from './scroll-rail';
       align-items: baseline;
       gap: var(--space-8);
     }
-    .body { padding: var(--space-14); }
+    .body { padding: var(--panel-pad); }
     /* v186 D2 -- with no rule under the title, the full body padding read as
        a gap; title to first row is the header's --space-10 plus this. */
     .body.tight { padding-top: var(--space-4); }
@@ -148,8 +151,8 @@ import { edgeFades, revealActive } from './scroll-rail';
     :host ::ng-deep .panel > .body > :first-child { margin-top: 0; }
     /* Tables draw their own edge-to-edge padding. */
     .flush { padding: 0; }
-    .panel-digest { margin: 0; padding: var(--space-10) var(--space-14); color: var(--text-secondary); font-size: var(--text-table); }
-    .panel-problem { margin: 0; padding: var(--space-10) var(--space-14); color: var(--warn); font-size: var(--text-table); }
+    .panel-digest { margin: 0; padding: var(--space-10) var(--panel-pad); color: var(--text-secondary); font-size: var(--text-table); }
+    .panel-problem { margin: 0; padding: var(--space-10) var(--panel-pad); color: var(--warn); font-size: var(--text-table); }
     .panel-toggle {
       min-height: var(--control-h);
       min-width: var(--control-h);
@@ -507,15 +510,17 @@ const SWIPE_CLOSE_PX = 80;
       border-width: 0 0 0 1px;
     }
 
+    /* v195 Phase 2: the drawer pads like a panel (--panel-pad follows row
+       density); its surface and shadow are .elev-overlay's alone. */
     header {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
       gap: var(--space-10);
-      padding: var(--space-14);
+      padding: var(--space-10) var(--panel-pad);
       border-bottom: 1px solid var(--border);
     }
-    h2 { font-size: var(--text-subhead); font-weight: 600; }
+    h2 { font-family: var(--font-sans); font-size: var(--text-subhead); font-weight: 600; letter-spacing: normal; }
     .close {
       margin-left: auto;
       min-width: var(--control-h);
@@ -529,7 +534,7 @@ const SWIPE_CLOSE_PX = 80;
       cursor: pointer;
     }
     .close:hover { color: var(--text); }
-    .body { padding: var(--space-14); overflow-y: auto; }
+    .body { padding: var(--panel-pad); overflow-y: auto; }
     /* v168 §3a: below 640px the drawer is a bottom sheet rising from the
        foot of the screen, with a drag handle and rounded top corners (its
        other edges sit flush, as on desktop); 640-1023px it is 85vw from the
@@ -640,6 +645,8 @@ export class Drawer {
     const element = this.dialog().nativeElement;
     if (this.closing() || !element.open) return;
     this.closing.set(true);
+    // Hints inside close now, not after the exit (v194 A1; hint.ts).
+    element.dispatchEvent(new Event(DIALOG_CLOSING_EVENT));
     this.cancelExit = playExit(element, 'sb-drawer-out', this.motion.active(), () => element.close());
   }
 

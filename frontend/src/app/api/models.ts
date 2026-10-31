@@ -118,11 +118,18 @@ export interface TradeRow {
   banked_fraction: number | null;
   banked_exit_price: number | null;
   banked_r: number | null;
+  /** v189 B3: the banked legs' share of the TRADE's R -- sum of fraction x
+   *  leg R (+1.00R for TP1 +2.00R on 50%). `banked_r` keeps its meaning, the
+   *  TP1 leg's own R. Optional so pre-v189 fixtures stay valid. */
+  banked_contribution_r?: number | null;
   risk_reward: number | null;
   shares: number | null;
-  /** The share count still exposed to price movement right now -- `shares`
-   *  is the ORIGINAL size at open and stays that after a TP1 partial closes
-   *  part of the position; a live P&L dollar figure has to scale by this
+  /** v189 B1: the ORIGINAL position size, before any leg closed. `shares`
+   *  is the remaining count on a priced open PARTIAL, so a banked-leg dollar
+   *  figure multiplies this, never `shares`. Optional like `risk_stop`. */
+  entry_shares?: number | null;
+  /** The share count still exposed to price movement right now -- `entry_shares`
+   *  is the ORIGINAL size at open; a live P&L dollar figure has to scale by this
    *  instead. Equal to `shares` until a leg has realized. */
   open_shares: number | null;
   position_value: number | null;
@@ -142,6 +149,8 @@ export interface TradeRow {
   price_as_of?: string | null;
   exit_price: number | null;
   realized_pnl_amount: number | null;
+  /** v194 B7: no exchange rate for the exit date; `realized_pnl_amount` is then null. */
+  fx_missing?: boolean;
   pnl_pct: number | null;
   r_multiple: number | null;
   held_hours: number | null;
@@ -195,6 +204,10 @@ export interface TradeRow {
    *  isn't split. */
   leg_index: number;
   leg_total: number;
+  /** v194 B3: what closed this leg (the stored leg's `reason`, `giveback`
+   *  for a v176 give-back stop); null on a row that is not a leg, or a leg
+   *  with no recorded reason. Optional: older payloads omit it. */
+  leg_exit_reason?: string | null;
 }
 
 export type GateKey = 'rs' | 'regime' | 'earnings';
@@ -323,12 +336,35 @@ export interface TradeNote {
 /** Filters the list endpoint accepts. A parameter it does not know is a 400,
  *  not a silent no-op -- a silently ignored filter is how a filter that has
  *  stopped working survives to production. */
-/** `POST /trades/clear-open` and `POST /trades/clear-history`. The count is
- *  the only thing either returns, and it is what the confirmation reports —
+/** One plan a delete ended (v189 A7): a waiting plan cancelled, or a held
+ *  position closed with no P&L. */
+export interface EndedPlanRow {
+  plan_id: string;
+  ticker: string;
+  status_before: string;
+  status_after: string;
+}
+
+/** `POST /trades/clear-open`. The count is what the confirmation reports --
  *  "cleared" without a number cannot be told from "there was nothing to
- *  clear". */
+ *  clear". v189 A7: `ended` lists the plans the delete ended and `notice`
+ *  says what that means ("" when nothing ended). Both optional so a reply
+ *  from a pre-v189 server still reads. */
 export interface ClearResult {
   removed: number;
+  ended?: EndedPlanRow[];
+  notice?: string;
+}
+
+/** `POST /trades/clear-history` since v189 A6: an archived full reset.
+ *  `archive` is a file NAME on the server's data volume, never a path. */
+export interface ClearHistoryResult {
+  removed: number;
+  removed_plans: number;
+  archive: string;
+  throttle: { multiplier: number; paused: boolean };
+  kill_switch: boolean;
+  notice: string;
 }
 
 /** What POST /trades/close-open reports. `failed` is separate from `closed`
@@ -404,7 +440,16 @@ export interface Dashboard {
   open_pnl_pct: number | null;
   /** Sum of shares x (price - entry) over open positions; null when none has a share count. */
   open_pnl_amount: number | null;
-  risk_used_pct: number | null;
+  /** v194 B7: closes and positions left out of the money figures for want of a rate (main ledger). */
+  fx_missing_count?: number;
+  /** v189 B4: `heat.open_heat` -- the figure the scanner gates new alerts on
+   *  (was `risk_used_pct`). */
+  heat_enforced_pct: number | null;
+  /** v189 B4: what fills at the current working stops would still lose below
+   *  entry, filled positions only, floored at 0 per position. Display only;
+   *  never a gauge against `risk_cap_pct`. Null when unknown. */
+  risk_of_loss_pct: number | null;
+  risk_of_loss_amount: number | null;
   risk_cap_pct: number | null;
   open_trades: number;
   avg_confidence: number | null;
@@ -430,6 +475,7 @@ export interface Dashboard {
     n: number;
     wins: number;
     losses: number;
+    fx_missing_count?: number;
   };
   /** The plan-lifecycle diagram's "Expires" definition names this number --
    *  projected from the server's own DEFAULT_EXPIRY_BARS constant rather
@@ -556,6 +602,8 @@ export interface AnalyticsEquityCurve extends Scoped {
   points_n: number;
   as_of: string | null;
   benchmark: { spy_indexed: { date: string; pct: number }[] };
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /** One strategy or horizon's aggregate (v85 D40, R9-02). `total_r` is a
@@ -579,6 +627,8 @@ export interface AnalyticsByDimension extends Scoped {
   rows: AnalyticsByDimensionRow[];
   as_of: string | null;
   min_cell_n: number;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 export interface AnalyticsPerformance extends Scoped {
@@ -586,6 +636,14 @@ export interface AnalyticsPerformance extends Scoped {
   relocated: Record<string, unknown>;
   win_rate: number | null;
   win_rate_n: number;
+  /** v189 D6: closes the win rate leaves out -- scaled-out closes inside
+   *  +-0.01R (`scratch`) and closes whose net R could not be computed
+   *  (`unscored`). Optional so pre-v189 fixtures stay valid. */
+  scratch_n?: number;
+  unscored_n?: number;
+  /** v189 D6: ISO date from which scaled-out trades are labelled by net R
+   *  (`metrics.LABEL_BASIS_SINCE`); null before the release sets it. */
+  label_basis_since?: string | null;
   expectancy_r: number | null;
   expectancy_n: number;
   by_confidence: Record<string, unknown>;
@@ -615,6 +673,8 @@ export interface AnalyticsPerformance extends Scoped {
     best_win_streak: number;
     worst_loss_streak: number;
   };
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /**
@@ -1362,6 +1422,11 @@ export interface RiskPosition {
   entry: number | null;
   stop_loss: number | null;
   risk_pct: number | null;
+  /** v189 B4: risk of loss to the working stop for this row; null for a
+   *  PENDING placeholder. `risk_pct` still sums to `heat.open_pct`.
+   *  Optional so pre-v189 fixtures stay valid. */
+  risk_of_loss_amount?: number | null;
+  risk_of_loss_pct?: number | null;
 }
 
 export interface SectorHeat {
@@ -1369,15 +1434,42 @@ export interface SectorHeat {
   heat_pct: number | null;
 }
 
-export interface Throttle {
-  multiplier: number | null;
-  paused: boolean;
+export interface DomainAvailability {
+  state: 'ok' | 'partial' | 'unavailable';
+  checked_at: string;
+  reason: string | null;
 }
 
-export interface Killswitch {
+export interface RiskAvailability {
+  positions: DomainAvailability;
+  heat: DomainAvailability;
+  sector_heat: DomainAvailability;
+  clusters: DomainAvailability;
+  throttle: DomainAvailability;
+  killswitch: DomainAvailability;
+  distribution_metrics?: DomainAvailability;
+  drawdown_r?: DomainAvailability;
+  drawdown_amount?: DomainAvailability;
+}
+
+export interface LastKnownKillswitch {
   on: boolean;
   reason: string | null;
   at: string | null;
+  checked_at: string;
+}
+
+export interface Throttle {
+  multiplier: number | null;
+  paused: boolean | null;
+}
+
+export interface Killswitch {
+  on: boolean | null;
+  reason: string | null;
+  at: string | null;
+  availability: DomainAvailability;
+  last_known?: LastKnownKillswitch;
 }
 
 /** v106 -- the live data provider and how often Alpaca misses.
@@ -1411,6 +1503,9 @@ export interface KillswitchResult {
 export interface RiskMetric {
   value: number | null;
   n: number;
+  excluded_count?: number;
+  invalid_date_count?: number;
+  invalid_outcome_count?: number;
 }
 
 export interface RiskMetrics {
@@ -1420,6 +1515,12 @@ export interface RiskMetrics {
   beta_spy: RiskMetric;
   sharpe_r: RiskMetric;
   max_drawdown_r: RiskMetric;
+  /** v194 B8: the largest peak-to-trough fall of cumulative realised P&L
+   *  over every closed main-ledger trade, oldest close first, in the account
+   *  currency (a positive magnitude). `fx_missing_count` trades had no FX
+   *  rate for their exit day and are left out of it. Optional: older
+   *  payloads and spec fixtures omit it. */
+  max_drawdown_amount?: RiskMetric & { fx_missing_count: number };
   as_of: string | null;
   /** The ticker `beta_spy` was actually computed against --
    *  `config.MARKET_REGIME_TICKER`, which an operator can change away from
@@ -1438,10 +1539,16 @@ export interface Correlation {
 }
 
 export interface Risk {
+  availability: RiskAvailability;
   heat: RiskHeat;
-  positions: RiskPosition[];
-  sector_heat: SectorHeat[];
-  clusters: unknown[];
+  positions: RiskPosition[] | null;
+  sector_heat: SectorHeat[] | null;
+  /** v194 B6: open positions with no sector in the scan universe's map, so
+   *  absent from `sector_heat`. Above zero, an empty `sector_heat` means "no
+   *  sector data", not "no exposure". Optional: specs build full `Risk`
+   *  literals, and an older server omits it. */
+  unmapped_count?: number;
+  clusters: unknown[] | null;
   throttle: Throttle;
   killswitch: Killswitch;
   scan_health: ScanHealth;
@@ -2052,6 +2159,8 @@ export interface PnlCalendar {
   worst_day: CalendarDay | null;
   streak: CalendarStreak;
   filters: CalendarFilters;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 export interface CalendarDayTrades {
@@ -2075,6 +2184,8 @@ export interface CalendarDayTrades {
   context: DayContext;
   /** v165 D3 -- exactly the rows in `trades`, grouped four ways. */
   breakdown: DayBreakdown;
+  /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
+  fx_missing_count?: number;
 }
 
 /** A difference from a reference day. Null when either side has no figure. */

@@ -75,3 +75,34 @@ describe('SectionHead slots (v80 D4)', () => {
   it('keeps actions outside title group', () => expect(render().querySelector('button')!.closest('.title-group')).toBeNull());
   it('lets long title wrap', () => { expect(SOURCE).toMatch(/h1 \{[^}]*overflow-wrap: anywhere/); expect(SOURCE).toMatch(/h2 \{[^}]*overflow-wrap: anywhere/); });
 });
+
+/* v195 Phase 2 / §1.3: headings are sentence case in the UI face; the
+ * status slot is quiet meta, the same style as a panel header's. */
+describe('SectionHead re-skin (v195)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/section-head.ts'), 'utf8');
+  const ruleOf = (pattern: RegExp) => SOURCE.match(pattern)?.[0] ?? '';
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+
+  it('sets both heading levels in the UI face at 600, sentence case as given', () => {
+    const h1 = ruleOf(/\sh1 \{[^}]*\}/);
+    const h2 = ruleOf(/\sh2 \{[^}]*\}/);
+    for (const heading of [h1, h2]) {
+      expect(heading).toContain('font-family: var(--font-sans)');
+      expect(heading).toContain('font-weight: 600');
+      expect(heading).toContain('letter-spacing: normal');
+      expect(heading).not.toContain('text-transform');
+    }
+    expect(h1).toContain('font-size: var(--text-title)');
+    expect(h2).toContain('font-size: var(--text-subhead)');
+  });
+
+  it('renders the status slot as quiet meta, styled once globally', () => {
+    const f = TestBed.createComponent(SlotHost);
+    f.detectChanges();
+    const status = (f.nativeElement as HTMLElement).querySelector('.status')!;
+    expect(status.classList).toContain('sb-meta');
+    const rule = ruleOf(/\.status \{[^}]*\}/);
+    expect(rule).not.toContain('color:');
+    expect(rule).not.toContain('font-size:');
+  });
+});

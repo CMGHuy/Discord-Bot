@@ -21,11 +21,14 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 import { SortSpec } from '../../ui/data-table/data-table.types';
 import { isInline } from '../../ui/priority';
-import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS } from './watchlist';
+import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS, WATCHLIST_FALLBACK_HINT } from './watchlist';
 import { WatchlistStore } from '../../stores/watchlist.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TapeStore } from '../../stores/tape.store';
 import { writeWatchlistTags } from '../../ui/watchlist-prefs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { RouteTitleService } from '../../routing/route-title.service';
 
 function ticker(overrides: Partial<Ticker>): Ticker {
   return {
@@ -66,6 +69,21 @@ function rows(list: Partial<Ticker>[]): Element[] {
 function firstRow(overrides: Partial<Ticker>): Element {
   return rows([overrides])[0];
 }
+
+describe('fallback price badge (v194 A3)', () => {
+  it('explains a yfinance fallback price in a hint beside the badge', () => {
+    const r = firstRow({ price_source: 'yfinance-fallback' });
+    const badge = r.querySelector('.source-badge')!;
+    expect(badge.textContent!.trim()).toBe('fallback');
+    expect(badge.hasAttribute('title')).toBe(false);
+    expect(badge.nextElementSibling!.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe(WATCHLIST_FALLBACK_HINT);
+  });
+
+  it('shows neither badge nor hint for a plain Alpaca price', () => {
+    const r = firstRow({ price_source: 'alpaca' });
+    expect(r.querySelector('.source-badge')).toBeNull();
+  });
+});
 
 describe('compareTickers', () => {
   const asc: SortSpec = { key: 'next_earnings_date', direction: 'asc' };
@@ -585,5 +603,91 @@ describe('Watchlist on a phone (v179 §3.1)', () => {
     const link = table().querySelector('a.drawer-detail-link')!;
     expect(link.textContent!.trim()).toBe('Open ticker →');
     expect(link.getAttribute('href')).toBe('/watchlist/NVDA');
+  });
+});
+
+/* -- v195 Phase 4 and §5.2 -- Watchlist on sb-page ------------------------- */
+
+describe('Watchlist on sb-page (v195 Phase 4, §5.2)', () => {
+  function mountPage(tab?: string): HTMLElement {
+    installDialogPolyfill();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+        provideHttpClientTesting(),
+        WatchlistStore,
+      ],
+    });
+    const fixture = TestBed.createComponent(Watchlist);
+    if (tab) fixture.componentRef.setInput('tab', tab);
+    TestBed.inject(RouteTitleService).set('Watchlist', 'The symbols being scanned');
+    patchState(unprotected(TestBed.inject(WatchlistStore)), {
+      tickers: [ticker({ symbol: 'NVDA' }), ticker({ symbol: 'AAPL', next_earnings_date: '2026-11-02' })],
+      loaded: true,
+    });
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('renders the route title as the one h1, from sb-page', () => {
+    const el = mountPage();
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Watchlist');
+    expect(el.querySelector('sb-section-head')).toBeNull();
+  });
+
+  it('puts the count at the header right and no destructive control there', () => {
+    const actions = mountPage().querySelector('sb-page [page-actions]')!;
+    expect(actions.querySelector('.count')!.textContent!.trim()).toBe('2 watched');
+    expect(actions.querySelector('button')).toBeNull();
+  });
+
+  it('keeps tabs and filters in the scope bar, never an add or remove control', () => {
+    const scope = mountPage().querySelector('sb-page [page-scope]')!;
+    expect(scope.querySelector('sb-tab-bar')).toBeTruthy();
+    expect(scope.querySelector('sb-toolbar [slot="tag"]')).toBeTruthy();
+    expect(scope.querySelector('sb-toolbar [slot="search"]')).toBeTruthy();
+    expect(scope.querySelector('[aria-label="Ticker symbols to add"]')).toBeNull();
+    expect(scope.querySelector('.danger-icon')).toBeNull();
+  });
+
+  it('makes the watchlist table the primary panel', () => {
+    const primary = mountPage().querySelector('sb-page [page-primary]')!;
+    const panel = primary.querySelector('sb-panel[heading="Watchlist"]')!;
+    expect(panel.querySelector('sb-data-table')).toBeTruthy();
+    expect(panel.textContent).toContain('A row pulses when that ticker reports earnings this week.');
+  });
+
+  it('puts Add tickers in the secondary grid, as one element, after the table', () => {
+    const secondary = mountPage().querySelectorAll<HTMLElement>('sb-page [page-secondary]');
+    expect(secondary).toHaveLength(1);
+    expect(secondary[0].getAttribute('heading')).toBe('Add tickers');
+    expect(secondary[0].textContent).toContain('Ticker symbols must match Yahoo Finance format');
+    expect(secondary[0].style.display).toBe('');
+  });
+
+  it('keeps the remove dialog and the cell templates working from the default slot', () => {
+    const el = mountPage();
+    expect(el.querySelector('sb-page sb-confirm-dialog')).toBeTruthy();
+    expect(el.querySelector('tbody tr.row sb-row-link')).toBeTruthy();
+  });
+
+  it('shows the earnings calendar as the primary panel on the Earnings tab, Add tickers hidden in place', () => {
+    const el = mountPage('earnings');
+    const primary = el.querySelector('sb-page [page-primary]')!;
+    expect(primary.querySelector('sb-panel[heading="Earnings"] sb-earnings-calendar')).toBeTruthy();
+    expect(primary.querySelector('sb-data-table')).toBeNull();
+    expect(el.querySelector('sb-page [page-scope] sb-toolbar')).toBeNull();
+    expect(el.querySelector<HTMLElement>('sb-page [page-secondary]')!.style.display).toBe('none');
+  });
+
+  it('carries no hand-laid page grid of its own any more', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/watchlist/watchlist.ts'), 'utf8');
+    expect(src).toContain('<sb-page');
+    expect(src).not.toContain('<sb-section-head');
+    expect(src).not.toMatch(/:host \{[^}]*grid-template-columns/);
   });
 });

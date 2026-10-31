@@ -810,9 +810,9 @@ describe('DataTable row detail', () => {
   });
 });
 
-/* -- v95 C4 -- one pager below md ------------------------------------------ */
+/* -- v195 correction 7 -- one pager, at the bottom only --------------------- */
 
-describe('DataTable single pager below md', () => {
+describe('DataTable one pager, at the bottom (v195 correction 7)', () => {
   let fixture: ComponentFixture<Host>;
   let host: Host;
 
@@ -826,28 +826,37 @@ describe('DataTable single pager below md', () => {
 
   const el = () => fixture.nativeElement as HTMLElement;
 
-  it('shows one pager below md, two above', () => {
-    // Six rows between two six-control pagers is ~250px of chrome for
-    // ~200px of data.
-    host.viewportAt.set('sm');
+  // v95 C4 dropped the top pager below md; Phase 2 drops it everywhere. One
+  // pager, where the eye already is after scanning the rows.
+  it.each(['xs', 'sm', 'md', 'lg', 'xl'] as const)('renders exactly one pager at %s', (viewport) => {
+    host.viewportAt.set(viewport);
     fixture.detectChanges();
     expect(el().querySelectorAll('sb-pagination')).toHaveLength(1);
-
-    host.viewportAt.set('lg');
-    fixture.detectChanges();
-    expect(el().querySelectorAll('sb-pagination')).toHaveLength(2);
   });
 
-  it('keeps the one pager below md at the footer, not the header', () => {
-    // The footer pager also carries per-page below the table's own content,
-    // which is where a reader's eye already is after scanning the rows.
-    host.viewportAt.set('sm');
+  it('puts the one pager after the table, not above it', () => {
+    host.viewportAt.set('lg');
     fixture.detectChanges();
     const pager = el().querySelector('sb-pagination')!;
-    // From the pager's own position, the table PRECEDES it -- i.e. the pager
-    // renders after the table, not above it.
+    // From the pager's own position, the table PRECEDES it.
     expect(pager.compareDocumentPosition(el().querySelector('table')!) &
       Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
+  it('pages from the one pager', () => {
+    host.viewportAt.set('lg');
+    fixture.detectChanges();
+    const next = el().querySelector<HTMLButtonElement>('sb-pagination button[aria-label="Next page"]');
+    expect(next).not.toBeNull();
+    next!.click();
+    fixture.detectChanges();
+    expect(host.pages).toEqual([2]);
+  });
+
+  it('keeps no header-pager switch or nav-only copy in the source', () => {
+    expect(DATA_TABLE_SOURCE).not.toContain('showHeaderPager');
+    expect(DATA_TABLE_SOURCE).not.toContain('pagerTemplate');
+    expect(DATA_TABLE_SOURCE).not.toMatch(/\[navOnly\]/);
   });
 });
 
@@ -1230,5 +1239,29 @@ describe('DataTable header cells are the column-reorder handle (v179 layout audi
   it('gives a header cell the control height and the hit minimum, so the handle is 44px on touch', () => {
     expect(tableRule('thead th')).toContain('height: var(--control-h)');
     expect(DATA_TABLE_SOURCE).toMatch(/thead th:not\(\.expander-cell\)\s*\{[^}]*min-width:\s*var\(--hit-min\)/);
+  });
+});
+
+/* -- v195 Phase 2 -- the table look: density rows, hairlines, muted header -- */
+
+describe('DataTable look (v195 Phase 2)', () => {
+  it('pads every cell with the row-density tokens', () => {
+    // Dense 4px/8px, comfortable 10px/14px, touch 10px/10px (tokens.css, V195-6).
+    expect(tableRule('th, td')).toContain('padding: var(--cell-pad-y) var(--cell-pad-x)');
+    expect(tableRule('th, td')).not.toMatch(/padding: var\(--space-/);
+  });
+
+  it('sizes a body row by --row-h, so density sets its height', () => {
+    expect(tableRule('tbody tr.row > td')).toContain('height: var(--row-h)');
+  });
+
+  it('divides rows with a hairline', () => {
+    expect(tableRule('th, td')).toContain('border-bottom: 1px solid var(--border)');
+  });
+
+  it('sets the header in the muted micro label, never the faint rule colour', () => {
+    // Correction 13: --text-faint is a rule/divider colour, not text.
+    expect(DATA_TABLE_SOURCE).toMatch(/<th\s+class="sb-label"/);
+    expect(DATA_TABLE_SOURCE).not.toContain('color: var(--text-faint)');
   });
 });

@@ -67,6 +67,18 @@ describe('monthLabel', () => {
 describe('cellValue', () => {
   const DAY = { date: '2026-04-24', net_r: 1.2, net_pnl_amount: 480, trade_count: 12, win_rate: 75 };
 
+  it('signs a losing day with the true minus; zero and a gain keep the plus', () => {
+    const loss = { ...DAY, net_r: -0.6, net_pnl_amount: -1234 };
+    expect(cellValue(loss, 'r').text).toBe('−0.60R');
+    expect(cellValue(loss, 'currency').text).toBe('−1,234');
+    expect(cellValue(loss, 'r').text).not.toContain('-');
+    expect(cellValue(loss, 'currency').text).not.toContain('-');
+    const flat = { ...DAY, net_r: 0, net_pnl_amount: 0 };
+    expect(cellValue(flat, 'r').text).toBe('+0.00R');
+    expect(cellValue(flat, 'currency').text).toBe('+0');
+    expect(cellValue(DAY, 'currency').text).toBe('+480');
+  });
+
   it('formats R, currency, count and win-rate with their own semantic tones', () => {
     expect(cellValue(DAY, 'r')).toEqual({ value: 1.2, text: '+1.20R', tone: 'pos' });
     expect(cellValue(DAY, 'currency').text).toContain('480');

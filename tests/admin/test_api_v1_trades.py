@@ -89,10 +89,15 @@ TRADE_ROW = {
     "banked_fraction": NULLABLE_NUMBER,
     "banked_exit_price": NULLABLE_NUMBER,
     "banked_r": NULLABLE_NUMBER,
+    # v189 B3 -- the realized legs' contribution to the trade's R
+    # (sum of fraction x r); `banked_r` stays the TP1 leg's own R.
+    "banked_contribution_r": NULLABLE_NUMBER,
     # v79 -- which row this is out of how many, when a scaled-out position
     # has been split into one row per leg. 0/1 for every row that isn't.
     "leg_index": int,
     "leg_total": int,
+    # v194 B3 -- what closed this leg; None on a row that is not a leg.
+    "leg_exit_reason": NULLABLE_STR,
     "risk_reward": NULLABLE_NUMBER,
     "shares": NULLABLE_NUMBER,
     # The share count still exposed to price movement -- `shares` is the
@@ -100,6 +105,9 @@ TRADE_ROW = {
     # of the position; this is what a live P&L dollar figure must scale by
     # instead. Equal to `shares` until a leg has realized. See `_open_shares`.
     "open_shares": NULLABLE_NUMBER,
+    # v189 B1 -- the ORIGINAL position size. `shares` is the remaining count
+    # on an open PARTIAL row (v79), so a banked-leg dollar figure scales by this.
+    "entry_shares": NULLABLE_NUMBER,
     "position_value": NULLABLE_NUMBER,
     "current_price": NULLABLE_NUMBER,
     # 2026-09-18 -- True when `current_price` did not come from a live
@@ -113,6 +121,7 @@ TRADE_ROW = {
     "price_as_of": NULLABLE_STR,
     "exit_price": NULLABLE_NUMBER,
     "realized_pnl_amount": NULLABLE_NUMBER,
+    "fx_missing": bool,  # v194 B7 -- no rate for the exit date; the amount is then null
     "pnl_pct": NULLABLE_NUMBER,
     "r_multiple": NULLABLE_NUMBER,
     "held_hours": NULLABLE_NUMBER,
@@ -258,6 +267,70 @@ def test_status_filter_returns_the_closed_leg_and_the_open_remainder_separately(
     assert closed["total"] == 1 and closed["items"][0]["id"] == pid
     assert partial["total"] == 1 and partial["items"][0]["id"] == pid
     assert closed["items"][0]["shares"] == 5.0
+
+
+def _two_leg_plan(pid, *, second_leg):
+    plan = _plan(pid, status="CLOSED")
+    plan["legs_realized"] = [
+        {"fraction": 0.5, "exit_price": 110.0, "r": 1.0, "reason": "tp1",
+         "closed_at": "2026-08-02T10:00:00+00:00"},
+        {"fraction": 0.5, "exit_price": 101.0, "r": 0.0,
+         "closed_at": "2026-08-04T15:00:00+00:00", **second_leg},
+    ]
+    return plan
+
+
+def _leg_rows(client, pid):
+    items = client.get("/api/v1/trades").get_json()["items"]
+    return sorted((r for r in items if r["id"] == pid), key=lambda r: r["leg_index"])
+
+
+def test_each_leg_row_carries_its_own_recorded_exit_reason(seed, logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    pid = "66666666-6666-4666-8666-666666666666"
+    seed(plans=[_two_leg_plan(pid, second_leg={"reason": "runner_be"})],
+         trades=[_trade("hhhhhhhhhhhhhhhh", plan_id=pid, status="win")])
+
+    legs = _leg_rows(logged_in, pid)
+    assert [(r["leg_index"], r["leg_total"]) for r in legs] == [(0, 2), (1, 2)]
+    assert [r["leg_exit_reason"] for r in legs] == ["tp1", "runner_be"]
+
+
+def test_a_give_back_stop_leg_reads_giveback(seed, logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    pid = "77777777-7777-4777-8777-777777777777"
+    seed(plans=[_two_leg_plan(pid, second_leg={"reason": "runner_trail", "stop_source": "giveback"})],
+         trades=[_trade("iiiiiiiiiiiiiiii", plan_id=pid, status="win")])
+
+    assert [r["leg_exit_reason"] for r in _leg_rows(logged_in, pid)] == ["tp1", "giveback"]
+
+
+def test_a_leg_with_no_recorded_reason_reads_none(seed, logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    pid = "88888888-8888-4888-8888-888888888888"
+    seed(plans=[_two_leg_plan(pid, second_leg={})],
+         trades=[_trade("jjjjjjjjjjjjjjjj", plan_id=pid, status="win")])
+
+    assert [r["leg_exit_reason"] for r in _leg_rows(logged_in, pid)] == ["tp1", None]
+
+
+def test_rows_that_are_not_legs_carry_no_leg_exit_reason(seed, logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.admin.api_v1.trades._attach_current_prices", lambda rows: None)
+    partial = "99999999-9999-4999-8999-999999999999"
+    plan = _plan(partial, status="PARTIAL")
+    plan["legs_realized"] = [{"fraction": 0.5, "exit_price": 110.0, "r": 1.0,
+                              "reason": "tp1", "closed_at": "2026-08-02T10:00:00+00:00"}]
+    seed(plans=[plan, _plan("12121212-1212-4121-8121-121212121212", status="PENDING")],
+         trades=[_trade("kkkkkkkkkkkkkkkk", plan_id=partial),
+                 _trade("llllllllllllllll", status="win")])
+
+    rows = logged_in.get("/api/v1/trades").get_json()["items"]
+    remainder = next(r for r in rows if r["id"] == partial and r["status"] == "PARTIAL")
+    assert remainder["leg_exit_reason"] is None          # the still-open runner
+    pending = next(r for r in rows if r["status"] == "PENDING")
+    assert pending["leg_exit_reason"] is None            # a plan that never scaled out
+    legacy = next(r for r in rows if r["id"] == "llllllllllllllll")
+    assert legacy["leg_exit_reason"] is None             # a legacy trade
 
 
 def test_a_filled_plan_is_enriched_by_its_trade_row(seed, logged_in):
@@ -1371,14 +1444,16 @@ def test_partial_rows_publish_the_original_stop_as_risk_stop(seed, logged_in, pr
 
 def test_partial_r_multiple_is_still_measured_against_the_original_stop(
         seed, logged_in, priced):
-    """The rename must not change `_attach_unrealized_pnl`'s input."""
+    """Live R on a PARTIAL is the blended trade R; its open part is still measured against the original stop."""
     plan, trade = _partial_pair()
     seed(plans=[plan], trades=[trade])
     priced(115.0)
 
     items = logged_in.get("/api/v1/trades").get_json()["items"]
     runner = next(r for r in items if r["status"] == "PARTIAL")
-    assert runner["r_multiple"] == pytest.approx((115.0 - 101.0) / (101.0 - 95.0), abs=0.01)
+    # v189 B3: the trade's blended R. Banked 0.5 x 1.5 = 0.75, plus the open
+    # half's live move against the ORIGINAL risk: 0.5 x (115 - 101) / (101 - 95).
+    assert runner["r_multiple"] == pytest.approx(0.75 + 0.5 * (115.0 - 101.0) / 6.0, abs=0.01)
 
 
 def test_trade_detail_row_carries_risk_stop(seed, logged_in, priced):

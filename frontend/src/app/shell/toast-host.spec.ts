@@ -34,6 +34,16 @@ describe('ToastHost', () => {
     expect(shown()[1].classList).toContain('error');
   });
 
+  /* v195 Phase 2: a toast is the overlay surface alone; it wraps inside a
+   * phone's width and shows a focus ring, being a real button. */
+  it('wraps inside the viewport and rings in the accent on keyboard focus', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/shell/toast-host.ts'), 'utf8');
+    const toast = source.match(/\n\s*\.toast \{[^}]*\}/)![0];
+    expect(toast).toContain('max-width: min(360px, calc(100vw - 2 * var(--space-20)));');
+    expect(toast).not.toMatch(/background|box-shadow/);
+    expect(source).toMatch(/\.toast:focus-visible \{ outline: 1px solid var\(--accent\); outline-offset: 2px; \}/);
+  });
+
   it('removes a clicked toast; in jsdom the leave animation is skipped, so at once', async () => {
     const { fixture, shown, toasts } = mount();
     toasts.show('Scan triggered');

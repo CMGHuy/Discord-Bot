@@ -10,6 +10,10 @@ Checks the whole plan (a split plan's index and every part):
   * no file over 1500 lines
   * task ids unique; every ledger id has a ### Task and vice versa
   * plans above v145: **Model:** <tier> is the first line under every task
+  * plans above v196: no task over 20 KB (UTF-8 bytes from its ### Task line to
+    the next task, a `# `/`## ` heading outside a code fence, or end of its file)
+  * plans above v196: at most 20 tasks (ledger rows, or ### Task headings when
+    the plan has no ledger)
   * every `Modify:` path exists (tracked or on disk) or is created by an earlier task
   * no leftover heredoc delimiter, no TBD / "similar to Task" placeholders
 
@@ -23,6 +27,9 @@ import sys
 from pathlib import Path
 
 MAX_LINES = 1500
+MAX_TASK_BYTES = 20_000  # decimal KB; about the p90 of v186-v194 (v196 spec)
+MAX_TASKS = 20           # ledger rows per plan, `b` split rows included
+CAPS_FROM = 196          # task-size and task-count caps apply to plans above this
 EDGES = ("expectancy", "harvest", "volume", "none (integrity)")
 MODEL_TIERS = ("haiku", "sonnet", "opus")
 TASK_RE = re.compile(r"^### Task ([A-Za-z0-9-]+)")
@@ -30,6 +37,7 @@ LEDGER_ROW_RE = re.compile(r"^\|\s*`?([A-Z][A-Za-z0-9-]*\d[a-z]?)`?\s*\|")
 PATH_RE = re.compile(r"^- (Create|Modify):\s*`([^`:]+)")
 PLACEHOLDER_RE = re.compile(r"\bTBD\b|[Ss]imilar to Task|^PLAN_TASK_EOF$")
 PART_SUFFIX_RE = re.compile(r"_\d+[a-z]?(-[^.]*)?\.md$")
+FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 
 
 def plan_files(any_file: Path) -> list[Path]:
@@ -103,12 +111,58 @@ def check_paths(name: str, line: str, created: set[str], tracked: set[str]) -> l
     return []
 
 
+def new_task_state(on: bool) -> dict:
+    """Per-file state for the task byte budget; `on` is False below CAPS_FROM."""
+    return {"on": on, "task": None, "bytes": 0, "fence": None}
+
+
+def update_fence(line: str, state: dict) -> bool:
+    """Track ``` / ~~~ code fences; True while `line` opens, sits in or closes one."""
+    m = FENCE_RE.match(line)
+    if not m:
+        return state["fence"] is not None
+    mark, rest = m.group(1), m.group(2).strip()
+    if state["fence"] is None:
+        state["fence"] = mark
+    elif mark[0] == state["fence"][0] and len(mark) >= len(state["fence"]) and not rest:
+        state["fence"] = None
+    return True
+
+
+def close_task(name: str, state: dict) -> list[str]:
+    """Close the open task span; report it when it is over MAX_TASK_BYTES."""
+    task, size = state["task"], state["bytes"]
+    state["task"], state["bytes"], state["fence"] = None, 0, None
+    if task and size > MAX_TASK_BYTES:
+        return [f"{name}: Task {task} is {size / 1000:.1f} KB "
+                f"(cap {MAX_TASK_BYTES // 1000} KB) -- split into two tasks, never compress"]
+    return []
+
+
+def track_task_bytes(name: str, line: str, state: dict) -> list[str]:
+    """Add one line to the open task; a task, `# ` or `## ` heading closes it first."""
+    if not state["on"]:
+        return []
+    in_fence = update_fence(line, state)
+    m = TASK_RE.match(line)
+    problems = []
+    if m or (not in_fence and line.startswith(("# ", "## "))):
+        problems = close_task(name, state)
+    if m:
+        state["task"] = m.group(1)
+    if state["task"]:
+        state["bytes"] += len(line.encode("utf-8")) + 1
+    return problems
+
+
 def scan_file(path: Path, ctx: dict) -> list[str]:
     lines = path.read_text(encoding="utf-8").splitlines()
     problems = []
+    sizes = new_task_state(ctx["caps"])
     if len(lines) > MAX_LINES:
         problems.append(f"{path.name}: {len(lines)} lines (cap {MAX_LINES}) -- split, never compress")
     for i, line in enumerate(lines):
+        problems += track_task_bytes(path.name, line, sizes)
         m = TASK_RE.match(line)
         if m:
             problems += record_task(path.name, m.group(1), ctx)
@@ -117,7 +171,7 @@ def scan_file(path: Path, ctx: dict) -> list[str]:
         problems += check_paths(path.name, line, ctx["created"], ctx["tracked"])
         if PLACEHOLDER_RE.search(line):
             problems.append(f"{path.name}:{i + 1}: placeholder or leftover delimiter: {line.strip()[:60]}")
-    return problems
+    return problems + close_task(path.name, sizes)
 
 
 def record_task(name: str, task: str, ctx: dict) -> list[str]:
@@ -138,15 +192,27 @@ def check_ledger(ledger: list[str], tasks: list[str]) -> list[str]:
     return problems
 
 
+def check_task_count(ledger: list[str], tasks: list[str]) -> list[str]:
+    """Backstop for the plan-writer index check: no plan above v196 has more than 20 tasks."""
+    count = len(ledger) or len(tasks)
+    if count > MAX_TASKS:
+        return [f"ledger: {count} tasks (cap {MAX_TASKS}) -- split the spec"]
+    return []
+
+
 def lint(any_file: Path) -> list[str]:
     files = plan_files(any_file)
     head = files[0].read_text(encoding="utf-8")
     ctx = {"tasks": [], "created": set(), "tracked": tracked_paths(),
-           "needs_model": plan_number(files) > 145}
+           "needs_model": plan_number(files) > 145,
+           "caps": plan_number(files) > CAPS_FROM}
     problems = check_header(head)
     for path in files:
         problems += scan_file(path, ctx)
-    problems += check_ledger(ledger_ids(head), ctx["tasks"])
+    ledger = ledger_ids(head)
+    problems += check_ledger(ledger, ctx["tasks"])
+    if ctx["caps"]:
+        problems += check_task_count(ledger, ctx["tasks"])
     return problems
 
 

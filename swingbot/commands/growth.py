@@ -125,26 +125,52 @@ async def killswitch_command(ctx, action: str = "status"):
     await send_prefix_tip(ctx, reply)
 
 
-def portfolio_report(state: dict) -> str:
-    """Survival dashboard: heat, sectors, clusters, throttle, kill, growth."""
-    lines = ["PORTFOLIO SURVIVAL DASHBOARD"]
-    if state.get("kill", {}).get("on"):
-        lines.append(f"🔴 KILL SWITCH ON — {state['kill'].get('reason')} — no new entries")
-    lines.append(f"heat: {ui.fmt_pct(state.get('open_heat', 0.0))} / {ui.fmt_pct(state.get('heat_cap', 6.0))} cap")
-    for sec, h in sorted(state.get("sector_heat", {}).items(), key=lambda kv: -kv[1]):
-        bar = "█" * int(round(h * 4))
-        lines.append(f"  {sec:<24} {ui.fmt_pct(h)} {bar}")
-    for cluster in state.get("clusters", []):
+def _portfolio_controls(state: dict) -> list[str]:
+    kill = state.get("kill") or {}
+    lines = []
+    if kill.get("on") is None:
+        lines.append("killswitch: unavailable")
+    elif kill["on"]:
+        lines.append(f"🔴 KILL SWITCH ON — {kill.get('reason')} — no new entries")
+    mult = state.get("throttle_mult")
+    if mult is None or state.get("paused") is None:
+        lines.append("throttle: unavailable")
+    else:
+        lines.append(f"throttle: x{mult:.2f}" + (" (PAUSED)" if state["paused"] else ""))
+    return lines
+
+
+def _portfolio_exposure(state: dict) -> list[str]:
+    value = state.get("open_heat")
+    amount = ui.fmt_pct(value) if value is not None else "unavailable"
+    lines = [f"heat: {amount} / {ui.fmt_pct(state.get('heat_cap', 6.0))} cap"]
+    for key, label in (("sector_heat", "sector heat"), ("clusters", "clusters")):
+        status = state.get("availability", {}).get(key, {}).get("state", "ok")
+        if status != "ok":
+            lines.append(f"{label}: {status}")
+    if state.get("unmapped_count"):
+        lines.append(f"sector coverage: {state['unmapped_count']} unmapped")
+    for sec, value in sorted((state.get("sector_heat") or {}).items(), key=lambda kv: -kv[1]):
+        bar = "█" * int(round(value * 4))
+        lines.append(f"  {sec:<24} {ui.fmt_pct(value)} {bar}")
+    for cluster in state.get("clusters") or []:
         lines.append(f"  ⚠ correlated cluster: {', '.join(cluster)}")
-    mult = state.get("throttle_mult", 1.0)
-    lines.append(f"throttle: x{mult:.2f}" + (" (PAUSED)" if state.get("paused") else ""))
-    g = state.get("growth") or {}
-    if g:
-        lines.append(f"growth path: {g.get('current_multiple', 1.0):.2f}x — "
-                     f"{ui.fmt_pct(g.get('pct_to_target', 0.0))} of the way to 10x (log scale)")
+    return lines
+
+
+def portfolio_report(state: dict) -> str:
+    lines = ["PORTFOLIO SURVIVAL DASHBOARD"]
+    controls = _portfolio_controls(state)
+    # Keep an engaged/unknown kill observation prominent, ahead of exposure.
+    lines.extend(controls[:-1])
+    lines.extend(_portfolio_exposure(state))
+    lines.extend(controls[-1:])
+    growth = state.get("growth") or {}
+    if growth:
+        lines.append(f"growth path: {growth.get('current_multiple', 1.0):.2f}x — "
+                     f"{ui.fmt_pct(growth.get('pct_to_target', 0.0))} of the way to 10x (log scale)")
     lines.append("Projections from backtests/paper — real results will differ.")
     return "\n".join(lines)
-
 
 async def handle_portfolio(reply) -> None:
     """Open heat vs cap, sector bars, clusters, throttle + kill state."""

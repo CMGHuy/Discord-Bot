@@ -10,11 +10,14 @@ import {
 import { Router, RouterLink } from '@angular/router';
 
 import type { TradeDetailFields } from '../../api/models';
+import { RouteTitleService } from '../../routing/route-title.service';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { QualityChip } from '../../ui/chip';
 import { dateTime, quantity, text } from '../../ui/format';
+import { Page } from '../../ui/page';
 import { StatusIndicator } from '../../ui/status-indicator';
+import { tradeCrumb } from '../trades/trade-detail';
 import { quoteLine } from '../trades/quote-line';
 import { IfItGetsThere } from '../trades/why/if-it-gets-there';
 import { LevelsBlock } from '../trades/why/levels-block';
@@ -100,11 +103,15 @@ export function shortOrderNotes(
  * Read-only on purpose. The bot is paper-only, and this page places, edits
  * and cancels nothing; the actions stay on the trade record it links to.
  * A plan that is over redirects there (see `redirectFor`).
+ *
+ * On sb-page since v195: the plan header is the summary, the plan body the
+ * primary panel, and every figure reads the 14px body step (spec §1.4).
  */
 @Component({
   selector: 'sb-plan-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    Page,
     RouterLink,
     Async,
     QualityChip,
@@ -117,163 +124,173 @@ export function shortOrderNotes(
     PlanChart,
   ],
   template: `
-    <header class="plan-head">
-      <a class="back sb-hit" routerLink="/trades">← Trades</a>
-
-      @if (store.trade(); as trade) {
-        <div class="plan-title" role="heading" aria-level="2">
-          <span class="ticker">{{ trade.ticker }}</span>
-          <span class="tag">{{ fmtText(trade.direction) }}</span>
-          <sb-status-indicator
-            [status]="trade.status"
-            [current]="trade.current_price"
-            [entry]="trade.entry"
-            [stop]="trade.stop_loss"
-            [target]="trade.target"
-          />
-        </div>
-        <div class="tags">
-          @if (strategyLine(); as line) {
-            <span class="tag">{{ line }}</span>
-          }
-          @if (trade.badge) {
-            <span class="tag">{{ trade.badge }}</span>
-          }
-          @if (trade.confidence_level !== null) {
-            <sb-quality-chip
-              [value]="trade.confidence_level"
-              [label]="'Lv' + trade.confidence_level"
-            />
-          }
-          @if (createdAt(); as at) {
-            <span class="created">created {{ fmtDate(at) }}</span>
-          }
-          <span class="created">Alert price: {{ quoteLine(store.detail()?.quote ?? null) }}</span>
-        </div>
-        @for (line of timing(); track line) {
-          <p class="timing">{{ line }}</p>
-        }
-      } @else if (store.error(); as message) {
-        <p class="plan-title" role="status">{{ message }}</p>
-      } @else {
-        <!-- Not the sb-async placeholder class: this file uses sb-async, and
-             async-coverage.spec.ts bans that literal class name here. -->
-        <p class="plan-title loading-title" role="status">Loading…</p>
-      }
-    </header>
-
-    <sb-async
-      [loading]="async().loading"
-      [error]="async().error"
-      [empty]="async().empty"
-      [staleAsOf]="async().staleAsOf"
-      emptyReason="measured-zero"
-      emptyTitle="Plan not found"
-      [skeletonRows]="3"
-      [skeletonCols]="4"
-      (retry)="store.load()"
-    >
-      @if (store.trade(); as trade) {
-        <div class="body">
-          <div class="panels">
-            <div class="order-block">
-              <sb-levels-block
-                [direction]="trade.direction"
-                [entryType]="store.detail()?.entry_type ?? null"
-                [trigger]="store.triggerPrice()"
+    <!-- v195 Phase 4: the route title is the page's one h1; the
+         breadcrumb's detail segment names the plan (tradeCrumb), and its
+         Trades crumb is the way back. Read-only on purpose, so the header
+         carries no actions; no scope bar (spec §5.2). -->
+    <sb-page>
+      <div page-kpis class="summary">
+        <header class="plan-head">
+          @if (store.trade(); as trade) {
+            <div class="plan-title" role="heading" aria-level="2">
+              <span class="ticker">{{ trade.ticker }}</span>
+              <span class="tag">{{ fmtText(trade.direction) }}</span>
+              <sb-status-indicator
+                [status]="trade.status"
+                [current]="trade.current_price"
                 [entry]="trade.entry"
                 [stop]="trade.stop_loss"
-                [stopLabel]="stopLabel()"
-                [target1]="trade.target1 ?? trade.target"
-                [target2]="trade.target2"
-                [riskReward]="trade.risk_reward"
-                [acceptanceLevel]="store.acceptanceLevel()"
-                [tp1Pct]="store.tp1Pct()"
-                [breakevenTriggerPct]="store.breakevenTriggerPct()"
+                [target]="trade.target"
               />
-              @if (orderNotes(); as notes) {
-                <div class="order-notes" role="group" aria-label="Short order checks">
-                  @if (notes.size) {
-                    <p class="size">{{ notes.size }}</p>
-                  }
-                  @if (notes.gapLine) {
-                    <p class="gap" [class.cut]="notes.cut">{{ notes.gapLine }}</p>
-                  }
-                  @if (notes.lines.length) {
-                    <ul class="risk-notice">
-                      @for (line of notes.lines; track $index) {
-                        <li [class.warn]="line.startsWith('⚠')">{{ line }}</li>
-                      }
-                    </ul>
-                  }
-                </div>
+            </div>
+            <div class="tags">
+              @if (strategyLine(); as line) {
+                <span class="tag">{{ line }}</span>
+              }
+              @if (trade.badge) {
+                <span class="tag">{{ trade.badge }}</span>
+              }
+              @if (trade.confidence_level !== null) {
+                <sb-quality-chip
+                  [value]="trade.confidence_level"
+                  [label]="'Lv' + trade.confidence_level"
+                />
+              }
+              @if (createdAt(); as at) {
+                <span class="created">created {{ fmtDate(at) }}</span>
+              }
+              <span class="created">Alert price: {{ quoteLine(store.detail()?.quote ?? null) }}</span>
+            </div>
+            @for (line of timing(); track line) {
+              <p class="timing">{{ line }}</p>
+            }
+          } @else if (store.error(); as message) {
+            <p class="plan-title" role="status">{{ message }}</p>
+          } @else {
+            <!-- Not the sb-async placeholder class: this file uses sb-async, and
+                 async-coverage.spec.ts bans that literal class name here. -->
+            <p class="plan-title loading-title" role="status">Loading…</p>
+          }
+        </header>
+      </div>
+
+      <sb-async page-primary
+        [loading]="async().loading"
+        [error]="async().error"
+        [empty]="async().empty"
+        [staleAsOf]="async().staleAsOf"
+        emptyReason="measured-zero"
+        emptyTitle="Plan not found"
+        [skeletonRows]="3"
+        [skeletonCols]="4"
+        (retry)="store.load()"
+      >
+        @if (store.trade(); as trade) {
+          <div class="body">
+            <div class="panels">
+              <div class="order-block">
+                <sb-levels-block
+                  [direction]="trade.direction"
+                  [entryType]="store.detail()?.entry_type ?? null"
+                  [trigger]="store.triggerPrice()"
+                  [entry]="trade.entry"
+                  [stop]="trade.stop_loss"
+                  [stopLabel]="stopLabel()"
+                  [target1]="trade.target1 ?? trade.target"
+                  [target2]="trade.target2"
+                  [riskReward]="trade.risk_reward"
+                  [acceptanceLevel]="store.acceptanceLevel()"
+                  [tp1Pct]="store.tp1Pct()"
+                  [breakevenTriggerPct]="store.breakevenTriggerPct()"
+                />
+                @if (orderNotes(); as notes) {
+                  <div class="order-notes" role="group" aria-label="Short order checks">
+                    @if (notes.size) {
+                      <p class="size">{{ notes.size }}</p>
+                    }
+                    @if (notes.gapLine) {
+                      <p class="gap" [class.cut]="notes.cut">{{ notes.gapLine }}</p>
+                    }
+                    @if (notes.lines.length) {
+                      <ul class="risk-notice">
+                        @for (line of notes.lines; track $index) {
+                          <li [class.warn]="line.startsWith('⚠')">{{ line }}</li>
+                        }
+                      </ul>
+                    }
+                  </div>
+                }
+              </div>
+              <!-- PENDING only: the gap and sizing picture before the trigger
+                   fires. A filled plan keeps them on its trade record. -->
+              @if (trade.status === 'PENDING') {
+                <sb-if-it-gets-there
+                  [direction]="trade.direction"
+                  [target2]="trade.target2"
+                  [stopLoss]="trade.stop_loss"
+                />
+                <sb-sizing-panel
+                  [shares]="trade.shares"
+                  [positionValue]="trade.position_value"
+                  [sizingMode]="store.detail()?.sizing_mode ?? null"
+                  [workingStop]="store.detail()?.working_stop ?? null"
+                  [gapP90Pct]="store.gapP90Pct()"
+                  [gapFragile]="store.gapFragile()"
+                />
               }
             </div>
-            <!-- PENDING only: the gap and sizing picture before the trigger
-                 fires. A filled plan keeps them on its trade record. -->
-            @if (trade.status === 'PENDING') {
-              <sb-if-it-gets-there
-                [direction]="trade.direction"
-                [target2]="trade.target2"
-                [stopLoss]="trade.stop_loss"
-              />
-              <sb-sizing-panel
-                [shares]="trade.shares"
-                [positionValue]="trade.position_value"
-                [sizingMode]="store.detail()?.sizing_mode ?? null"
-                [workingStop]="store.detail()?.working_stop ?? null"
-                [gapP90Pct]="store.gapP90Pct()"
-                [gapFragile]="store.gapFragile()"
-              />
-            }
+
+            <sb-why-panel
+              [sections]="sections"
+              [status]="trade.status"
+              [barsToExpiry]="trade.bars_to_expiry"
+              [sessionsSinceCreated]="store.sessionsSinceCreated()"
+              [entry]="trade.entry"
+              [trigger]="store.triggerPrice()"
+              [stop]="trade.stop_loss"
+              [stopLabel]="stopLabel()"
+              [target1]="trade.target1 ?? trade.target"
+              [target2]="trade.target2"
+              [acceptanceLevel]="store.acceptanceLevel()"
+              [targetSources]="store.targetSources()"
+              [stopSources]="store.stopSources()"
+              [target2Sources]="store.target2Sources()"
+              [confirmedBy]="store.confirmedBy()"
+              [confidencePoints]="store.confidencePoints()"
+              [confidenceUnevaluated]="store.confidenceUnevaluated()"
+              [confidenceFactors]="store.confidenceFactors()"
+              [qualityFactors]="store.qualityFactors()"
+              [gates]="store.gates()"
+              [calendar]="store.calendar()"
+              [explanation]="store.explanation()"
+            />
+
+            <sb-plan-chart [ticker]="trade.ticker" [tradeId]="trade.id" />
+
+            <sb-outcome-path [legs]="store.legs()" [timeline]="store.timeline()" />
+
+            <a class="record-link sb-hit" [routerLink]="['/trades', id()]">Open the full trade record</a>
           </div>
-
-          <sb-why-panel
-            [sections]="sections"
-            [status]="trade.status"
-            [barsToExpiry]="trade.bars_to_expiry"
-            [sessionsSinceCreated]="store.sessionsSinceCreated()"
-            [entry]="trade.entry"
-            [trigger]="store.triggerPrice()"
-            [stop]="trade.stop_loss"
-            [stopLabel]="stopLabel()"
-            [target1]="trade.target1 ?? trade.target"
-            [target2]="trade.target2"
-            [acceptanceLevel]="store.acceptanceLevel()"
-            [targetSources]="store.targetSources()"
-            [stopSources]="store.stopSources()"
-            [target2Sources]="store.target2Sources()"
-            [confirmedBy]="store.confirmedBy()"
-            [confidencePoints]="store.confidencePoints()"
-            [confidenceUnevaluated]="store.confidenceUnevaluated()"
-            [confidenceFactors]="store.confidenceFactors()"
-            [qualityFactors]="store.qualityFactors()"
-            [gates]="store.gates()"
-            [calendar]="store.calendar()"
-            [explanation]="store.explanation()"
-          />
-
-          <sb-plan-chart [ticker]="trade.ticker" [tradeId]="trade.id" />
-
-          <sb-outcome-path [legs]="store.legs()" [timeline]="store.timeline()" />
-
-          <a class="record-link sb-hit" [routerLink]="['/trades', id()]">Open the full trade record</a>
-        </div>
-      }
-    </sb-async>
+        }
+      </sb-async>
+    </sb-page>
   `,
   styles: `
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--section-gap); }
+    /* v195 Phase 4: sb-page owns the page rhythm. §1.4: the levels, the
+       sizing panel and the short-order notes are order figures and never
+       shrink below the 14px body step, in either density; they read
+       --text-table, so this page re-points it on its own host. */
+    :host { display: block; min-width: 0; --text-table: var(--text-body); }
     .plan-head {
       display: grid;
       gap: var(--space-8);
     }
-    .back, .record-link {
+    .record-link {
       color: var(--accent);
       font-size: var(--text-table);
       text-decoration: none;
     }
-    .back:hover, .record-link:hover {
+    .record-link:hover {
       text-decoration: underline;
     }
     .plan-title {
@@ -348,6 +365,7 @@ export function shortOrderNotes(
 export class PlanDetail {
   private readonly router = inject(Router);
   protected readonly store = inject(TradeDetailStore);
+  private readonly titles = inject(RouteTitleService);
 
   readonly id = input.required<string>();
 
@@ -405,6 +423,17 @@ export class PlanDetail {
       if (redirectFor(trade.status, trade.bars_to_expiry ?? null) === 'banner') {
         untracked(() => this.leave(id, true));
       }
+    });
+
+    // v195: the breadcrumb's detail segment (Review / Trades / NVDA #a1b2c3),
+    // once the plan has loaded; read detail() so a title update that clears
+    // it while the page is open puts it back. A redirect navigates away, and
+    // that title update clears it for good.
+    effect(() => {
+      const trade = this.store.trade();
+      const crumb = trade ? tradeCrumb(trade.ticker, trade.id) : '';
+      this.titles.detail();
+      untracked(() => this.titles.setDetail(crumb));
     });
   }
 

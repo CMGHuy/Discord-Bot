@@ -30,7 +30,9 @@ import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
-import { StatusCell, partialIconTitle } from '../../ui/status-cell';
+import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
+import { fxMissingText } from '../analytics/scope-bar';
+import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
 import {
   readTableColumns,
   readTableDensity,
@@ -45,6 +47,8 @@ import {
   tradeColumns,
 } from '../trades/trades.columns';
 import { amount, dateTime, money, pct, signed } from '../../ui/format';
+import { Page } from '../../ui/page';
+import { riskUnits } from '../../ui/risk-units';
 import { Magnitude } from '../../ui/magnitude';
 import { Panel } from '../../ui/layout';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -73,6 +77,11 @@ import { TradingPerformance } from './panels/trading-performance';
 import { RecentActivity } from './panels/recent-activity';
 import { MarketMovers } from './panels/market-movers';
 
+/** Lifecycle statuses the server counts all-time in every scope
+ *  (`_lifecycle_counts`): the scoped answer's numbers for these are as true
+ *  as today's, so they stand in when today's fetch has failed. */
+const ALL_TIME_STATUSES = new Set(['PENDING', 'ACTIVE', 'PARTIAL']);
+
 /**
  * The Dashboard — spec v14 Decision 5's two-tier header plus a capped view of
  * what is currently open.
@@ -86,7 +95,9 @@ import { MarketMovers } from './panels/market-movers';
  *
  * Two things live in the shell rather than here: scan status and bot status.
  * They are global facts, and duplicating them into a workspace is how the
- * "one thing in four places" problem started.
+ * "one thing in four places" problem started. The same rule retired the
+ * separate KPI strip: Trading performance already carried expectancy, win
+ * rate, realised and the open count, so the strip showed each twice.
  *
  * **No card-flash on refresh, and no transition on any number.** Spec 3
  * removed it: with push, "something changed" is continuous rather than a
@@ -94,32 +105,39 @@ import { MarketMovers } from './panels/market-movers';
  * animating figure is unreadable at exactly the glance this screen exists to
  * serve.
  *
+ * **On `sb-page` (v195 Phase 4, §5.2).** The route title is the page's one
+ * `h1`; Close all is the header's action. Trading performance leads (the
+ * headline figures, open risk included, linking to Risk), Open positions is
+ * the primary panel, and Recent activity and Market movers are secondary.
+ *
  * The data path is NG36's tracer bullet, unchanged: the stores are provided on
  * the component, this component reads signals and never fetches, and there is
  * no subscription or refresh call anywhere in this file -- each store's own
  * effect owns both the first load and every refetch.
  */
 
+/** The page's order, top to bottom. */
+const PAGE_ORDER = ['performance', 'positions', 'activity', 'movers'];
+
 /**
- * Panel order per band — v95 C3, replacing the old max-width:720px block.
+ * Panel order per band — v95 C3, re-decided in v195 §5.2, then again when the
+ * KPI strip was merged into Trading performance.
  *
- * Performance leads everywhere. The old rule put positions first on phones,
- * which meant the portfolio figure, win rate and expectancy sat below a table
- * that is ~900px tall with five rows. "What is my account doing" is the
- * question a phone is opened to answer; "which six trades are open" is the
- * follow-up.
+ * Trading performance (portfolio value, candles, the full card set including
+ * expectancy, win rate and open risk) leads at every width, above Open
+ * positions: on a phone the figures are no longer buried under the table, and
+ * there is no second strip repeating them.
  *
- * A declaration, not a live reorder: `activity`/`movers` share `.bottom-row`,
- * always adjacent and in this same relative order in every band below, so
- * the three DOM sections (performance-async, positions-panel, bottom-row)
- * already sit in exactly this order in the template. No band here differs
- * from that declaration order, which is why fixing the bug was deleting the
- * override that fought it rather than adding a new one — see the note above
- * the (now-empty-of-reordering) media query below.
+ * A declaration, not a live reorder: sb-page's slots already render in this
+ * order (KPIs slot, primary, secondary) at every band, and the secondary
+ * elements sit in the template in this order.
  */
 export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
-  xs: ['performance', 'positions', 'activity', 'movers'],
-  sm: ['performance', 'positions', 'activity', 'movers'],
+  xs: PAGE_ORDER,
+  sm: PAGE_ORDER,
+  md: PAGE_ORDER,
+  lg: PAGE_ORDER,
+  xl: PAGE_ORDER,
 };
 
 /**
@@ -133,7 +151,12 @@ export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
  * first time either changed — two names for one fact is exactly what this
  * plan's global constraints exist to prevent. `now: signal(Date.now())`
  * default: the gate reads `inlineFrom`, never a cell's rendered value, so
- * which instant it is does not matter here. */
+ * which instant it is does not matter here.
+ *
+ * v195 correction 8: the same function carries NEVER_COLLAPSED_COLUMNS
+ * (trades.columns.ts), so Open positions keeps ticker, side, plan, stop,
+ * P&L, R, tier and the strategy badge inline on a tablet with no list of
+ * its own. */
 export const DASHBOARD_COLUMNS = tradeColumns();
 
 /** The trade drawer's query parameter (v179 §3.2). dashboard.routes.ts's
@@ -151,7 +174,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
     Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
-    RecentActivity, MarketMovers, TradeDrawer,
+    RecentActivity, MarketMovers, TradeDrawer, Page,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
   // level (dashboard.routes.ts). This instance is this page's own, for the
@@ -179,9 +202,50 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
   // `TradesStore` instance (see positions-table.ts) -- neither this one nor
   // that one touch the Trades workspace's own copy.
   template: `
-    <!-- Each panel owns its first-load state. A slow dashboard summary must
-         never hide the independently fetched positions table or activity. -->
-    <sb-async class="performance-async"
+    <sb-page>
+      <!-- v195 Phase 4: Close all is a money-moving bulk action, so it sits
+           in the page header's actions, danger-quiet, behind its menu and its
+           confirm dialog. Deliberately not clear-open (it DELETES records and
+           stays on Trades) -- see closeAllConsequence for the wording that
+           keeps the two apart. A dropdown, not one button: ACTIVE and PARTIAL
+           are different enough states that closing only one of them is a
+           real, distinct action. -->
+      <div page-actions class="close-all-menu" #closeAllMenu>
+            <button sb-button variant="danger-quiet" type="button"
+                    data-action="close-all"
+                    [attr.aria-expanded]="closeAllMenuOpen()"
+                    aria-haspopup="menu"
+                    [disabled]="!openCount()"
+                    (click)="toggleCloseAllMenu($event)">
+              Close all open/partial
+            </button>
+            @if (closeAllMenuOpen()) {
+              <div class="menu elev-overlay" role="menu">
+                <button sb-button variant="ghost" type="button" role="menuitem"
+                        [disabled]="!activeCount()"
+                        (click)="requestCloseAll('open')">
+                  Close all open
+                </button>
+                <button sb-button variant="ghost" type="button" role="menuitem"
+                        [disabled]="!partialCount()"
+                        (click)="requestCloseAll('partial')">
+                  Close all partial
+                </button>
+                <button sb-button variant="ghost" type="button" role="menuitem"
+                        [disabled]="!openCount()"
+                        (click)="requestCloseAll('open_partial')">
+                  Close all open/partial
+                </button>
+              </div>
+            }
+      </div>
+
+    <!-- Trading performance leads the page, above Open positions: the one
+         panel for the headline figures (it absorbed the old KPI strip, whose
+         expectancy, win rate, realised and open-count tiles it already
+         carried; open risk moved in as its own card). Each panel owns its
+         first-load state, so a slow summary never hides the positions table. -->
+    <sb-async page-kpis class="performance-async"
       [loading]="async().loading"
       [error]="async().error"
       [empty]="false"
@@ -212,7 +276,10 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       [realizedAmount]="store.realizedAmount()"
       [todayRealized]="store.todayRealized()"
       [todayLoading]="store.todayLoading()"
+      [todayError]="store.todayError()"
       [openTrades]="store.openTrades()"
+      [openRisk]="openRiskText()"
+      [riskCap]="riskCapText()"
       [payoffRatio]="store.payoffRatio()"
       [currency]="connection.currency()"
       [selection]="store.selection()"
@@ -223,10 +290,15 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       (chartRangeChange)="store.setRange($event)"
       (viewReset)="store.resetView()"
     />
+    <!-- v194 B7: closes and positions with no exchange rate are left out
+         of the money figures above; say how many. -->
+    @if (fxMissing() > 0) {
+      <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
+    }
     </div>
     </sb-async>
 
-    <sb-panel class="positions-panel" heading="Open positions" [flush]="true" [description]="positionsAbout" [descriptionHint]="false">
+    <sb-panel page-primary class="positions-panel" heading="Open positions" [flush]="true" [description]="positionsAbout" [descriptionHint]="false">
       <!-- The lifecycle and sizing context share one help trigger. The
            per-trade sizing mode belongs on the detail view, where its source
            data is available. -->
@@ -241,6 +313,11 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
           its first and final exits.
         </span>
         <sb-plan-lifecycle-diagram />
+        <span class="hint-heading">Columns</span>
+        <span class="hint-copy">
+          <strong>P&amp;L:</strong> live P&L, then projected P&L at target and at stop.
+          <strong>Expected R:</strong> projected R if price reaches target.
+        </span>
         <span class="hint-heading">Sizing</span>
         @if (premiumExplanation(); as explanation) {
           <span class="hint-copy">{{ explanation }}</span>
@@ -268,47 +345,21 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
         (rowActivate)="openTrade($event)"
         (reorder)="onReorder($event)"
       >
-        <!-- v85 D13/D14: replaces the mockup's "+ New Trade" -- there is no
-             create-trade endpoint, the bot authors plans, the admin never
-             does. Deliberately not clear-open (below the fold, DELETES
-             records) -- see closeAllConsequence for the wording that keeps
-             the two apart.
-
-             A dropdown, not one button: ACTIVE and PARTIAL are different
-             enough states (a scaled-out position vs one untouched since
-             entry) that closing only one of them is a real, distinct
-             action, not a convenience shortcut for the combined one. -->
-        <div class="close-all-menu" table-actions #closeAllMenu>
-          <button sb-button variant="danger" type="button"
-                  data-action="close-all"
-                  [attr.aria-expanded]="closeAllMenuOpen()"
-                  aria-haspopup="menu"
-                  [disabled]="!openCount()"
-                  (click)="toggleCloseAllMenu($event)">
-            Close all open/partial
-          </button>
-          @if (closeAllMenuOpen()) {
-            <div class="menu elev-overlay" role="menu">
-              <button sb-button variant="ghost" type="button" role="menuitem"
-                      [disabled]="!activeCount()"
-                      (click)="requestCloseAll('open')">
-                Close all open
-              </button>
-              <button sb-button variant="ghost" type="button" role="menuitem"
-                      [disabled]="!partialCount()"
-                      (click)="requestCloseAll('partial')">
-                Close all partial
-              </button>
-              <button sb-button variant="ghost" type="button" role="menuitem"
-                      [disabled]="!openCount()"
-                      (click)="requestCloseAll('open_partial')">
-                Close all open/partial
-              </button>
-            </div>
-          }
-        </div>
       </sb-positions-table>
     </sb-panel>
+
+    <sb-async page-secondary class="activity-async" [loading]="activityAsync().loading" [error]="activityAsync().error" [empty]="false"
+              emptyReason="measured-zero" emptyTitle="Recent activity"
+              [skeletonRows]="4" [skeletonCols]="3"
+              (retry)="recent.load()">
+      <sb-recent-activity [events]="activity()" (eventActivate)="openActivity($event)" />
+    </sb-async>
+    <sb-async page-secondary class="movers-async" [loading]="tapeAsync().loading" [error]="tapeAsync().error" [empty]="false"
+              emptyReason="measured-zero" emptyTitle="Market movers"
+              [skeletonRows]="4" [skeletonCols]="2"
+              (retry)="tape.load()">
+      <sb-market-movers [rows]="tape.rows()" />
+    </sb-async>
 
     <sb-confirm-dialog
       [open]="confirmCloseAll() !== null"
@@ -325,21 +376,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     @if (drawerTrade(); as trade) {
       <sb-trade-drawer [row]="trade" (closed)="closeTrade()" (actionDone)="onTradeAction()" />
     }
-
-    <div class="bottom-row">
-      <sb-async [loading]="activityAsync().loading" [error]="activityAsync().error" [empty]="false"
-                emptyReason="measured-zero" emptyTitle="Recent activity"
-                [skeletonRows]="4" [skeletonCols]="3"
-                (retry)="recent.load()">
-        <sb-recent-activity [events]="activity()" (eventActivate)="openActivity($event)" />
-      </sb-async>
-      <sb-async [loading]="tapeAsync().loading" [error]="tapeAsync().error" [empty]="false"
-                emptyReason="measured-zero" emptyTitle="Market movers"
-                [skeletonRows]="4" [skeletonCols]="2"
-                (retry)="tape.load()">
-        <sb-market-movers [rows]="tape.rows()" />
-      </sb-async>
-    </div>
+    </sb-page>
 
     <ng-template #statusCell let-row>
       <sb-status-cell [row]="row" />
@@ -358,9 +395,10 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
         [floorR]="row.floor_r" [priceR]="row.price_r" [headroomR]="row.headroom_r"
         [bankedFraction]="row.banked_fraction"
         [bankedR]="row.banked_r"
+        [bankedContributionR]="row.banked_contribution_r ?? null"
         [bankedEntry]="row.banked_exit_price"
         [bankedPct]="bankedLegPct(row.entry, row.banked_exit_price, row.direction)"
-        [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.shares, row.direction)"
+        [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.entry_shares ?? null, row.direction)"
         [planTp1]="rc.planTp1" [planStop]="rc.planStop"
         [trailBest]="rc.trailBest" [trailBestPct]="rc.trailBestPct" [trailExitPct]="rc.trailExitPct"
         [runnerExit]="rc.runnerExit" [runnerExitPct]="rc.runnerExitPct" [runnerExitReason]="rc.runnerExitReason"
@@ -387,17 +425,21 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     <ng-template #numCell let-row>
       <sb-row-link [link]="['/trades', row.id]">
         {{ shortId(row) }}
-        <!-- v79 split a scaled-out position into one row per leg, both
-             carrying the same id -- on the Closed tab that reads as a
-             duplicate row unless the later-closing leg is marked apart
-             from the earlier partial exit it shares an id with. -->
-        @if (partialIconTitle(row); as partialTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="partialTitle" />
+        @if (partialOpenTitle(row)) {
+          <sb-icon name="partial" class="leg-icon" />
         }
         @if (row.bar_kind === 'trailing') {
           <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
         }
       </sb-row-link>
+      @if (partialOpenTitle(row); as openTitle) {
+        <sb-hint [text]="openTitle" label="About this partial position" align="left" />
+      }
+      <!-- v194 B3: every leg says which part of the plan it is; the hint
+           sits outside the link (a button cannot nest in an anchor). -->
+      @if (legLabel(row); as leg) {
+        <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+      }
     </ng-template>
 
     <!-- A real anchor, not a click handler: row activation is mouse-only by
@@ -431,10 +473,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
              the else branch; price_age_s is null on a closed row. -->
         <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />
       } @else {
-        <span
-          class="pnl-plan"
-          title="Live P&L, then projected P&L at target and at stop"
-        >
+        <span class="pnl-plan">
           <span [sbFlash]="livePnlPct(row)" [class]="pnlClass(livePnlPct(row))">
             {{ fmtPct(livePnlPct(row)) }}
             <!-- Only once shares exist to have a dollar value at all -- a
@@ -477,7 +516,6 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
           class="expected"
           [sbFlash]="expectedR(row)"
           [class]="pnlClass(expectedR(row))"
-          title="Projected R if price reaches target"
         >{{ fmtSigned(expectedR(row)) }}</span>
         <sb-magnitude [value]="expectedR(row)" [max]="R_MAGNITUDE_MAX" />
       }
@@ -500,35 +538,18 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     /* Groups the stale message and the scope toggle into one actions
        projection -- as two separate ones they would land at opposite
        ends of sb-section-head's space-between instead of clustered. */
-    /* minmax(0, 1fr), not the implicit auto track. An auto column is floored
-       at its widest child's min-content, so one un-shrinkable panel stretched
-       the workspace past the viewport and took the page sideways with it.
-       Clamping the track is what makes the children's own overflow-x
-       containers the thing that scrolls instead.
-       No backticks in here: these styles live in a TS template literal.
-       v54: gap reads --register-pad, set by the register-presentation class
-       on this same host element (above) -- --space-20 was this rule's own
-       literal before, and register-presentation's rung is the same value,
-       so this changes nothing visually while making the rhythm follow the
-       register instead of a hardcoded token. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    /* v195 Phase 4: sb-page lays out the header, the KPI strip, the primary
+       panel and the secondary grid, and owns their gaps; the host is only a
+       block. No backticks in here: these styles live in a TS template
+       literal. */
+    :host { display: block; }
     .performance-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
-
-    /* Both panels below own their OWN top margin, on top of the grid's own
-       --register-pad, rather than the panel above owning a bottom margin --
-       one rule per element that wants extra space above it, so a later
-       reorder doesn't leave a margin attached to the wrong edge. */
-    .bottom-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: var(--section-gap);
-    }
 
     /* Same overlay pattern as sb-profile-menu's own dropdown: relative
        wrapper, absolutely-positioned menu, elev-overlay for the shared
        surface/shadow treatment. Right-aligned under the trigger rather than
-       left -- this sits inside the table's own right-aligned actions slot,
-       and a left-aligned menu would spill it past the table's right edge. */
+       left -- this sits at the right of the page header, and a left-aligned
+       menu would spill past the page's right edge. */
     .close-all-menu { position: relative; display: inline-flex; }
     .close-all-menu .menu {
       position: absolute;
@@ -574,6 +595,8 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
 
     /* Muted, not accent: the glyph flags the leg, it isn't part of the id. */
     sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
+    .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
 
     /* No size or weight of its own -- it used to render smaller than the %
        it rides beside, which read as a footnote rather than the dollar side
@@ -606,14 +629,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     .pnl-plan .tp { color: var(--pos); }
     .pnl-plan .sl { color: var(--neg); }
 
-    /* v95 C3: the phone reorder above (positions before performance) is
-       deleted, not retriggered. It was backwards -- at 390px it put the
-       portfolio figure, win rate and expectancy below a ~900px table, and it
-       used an undeclared 720px breakpoint besides. :host's declaration order
-       is already performance, positions, bottom-row -- DASHBOARD_PANEL_ORDER
-       below documents that as the intended order at every band; no runtime
-       reordering is needed to produce it, only removing the override that
-       fought it. */
+    /* The order is sb-page's slots, the same at every band -- see DASHBOARD_PANEL_ORDER. Nothing here reorders. */
     @media (max-width: 639px) {
       .lifecycle-hint sb-plan-lifecycle-diagram { min-width: 0; }
     }
@@ -630,6 +646,16 @@ export class Dashboard {
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */
   protected readonly connection = inject(ConnectionStore);
+
+  /** Open risk for Trading performance's card: money and % of account
+   *  together (§5.2), against the dollar-risk cap. */
+  protected readonly openRiskText = computed(() =>
+    riskUnits(this.store.heatEnforcedPct(), this.store.balance(), this.connection.currency()));
+  protected readonly riskCapText = computed(() => {
+    const cap = this.store.riskCapPct();
+    return cap === null ? null : `cap ${riskUnits(cap, this.store.balance(), this.connection.currency())}`;
+  });
+
   /** Root-provided and already loaded by the shell (the top bar's own tape
    *  lanes) -- this page only reads `rows()`, it never calls `load()`. */
   protected readonly tape = inject(TapeStore);
@@ -709,9 +735,14 @@ export class Dashboard {
    *  in every mode: the Closed and Cancelled tabs always list today's
    *  closes (`[today]="true"`), whatever period the KPI cards show, so the
    *  counts come from the today response, never the scoped one. */
-  protected readonly lifecycleCounts = computed(() =>
-    Object.fromEntries(this.store.todayLifecycle().map((e) => [e.status, e.count])),
-  );
+  /** An empty today list (fetch failed or not landed yet) falls back to the all-time open counts. */
+  protected readonly lifecycleCounts = computed(() => {
+    const today = this.store.todayLifecycle();
+    const rows = today.length > 0
+      ? today
+      : this.store.lifecycle().filter((e) => ALL_TIME_STATUSES.has(e.status));
+    return Object.fromEntries(rows.map((e) => [e.status, e.count]));
+  });
 
   /** Bound as a value, not called in the template: the table takes the
    *  function and applies it per tab.
@@ -977,10 +1008,16 @@ export class Dashboard {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
   }
 
-  /** The ID cell's single partial icon tooltip: "still open" for a live PARTIAL
-   *  row, "closed after an earlier partial exit" for a later closed leg of a v79
-   *  scale-out split (`leg_index > 0`), else null. One icon, never two. */
-  protected readonly partialIconTitle = partialIconTitle;
+  protected readonly partialOpenTitle = partialOpenTitle;
+
+  /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
+  protected readonly legLabel = legLabel;
+  /** v194 A4: the chips count each realised leg (`dashboard.py` `_realized_parts`). */
+  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
+
+  /** v194 B7: the main ledger's rows left out of the money figures. */
+  protected readonly fxMissing = computed(() => this.store.data()?.fx_missing_count ?? 0);
+  protected readonly fxText = fxMissingText;
 
   /** sb-magnitude's max for the R column. Not an observed max from the
    *  store: sb-positions-table shows one lifecycle tab's rows at a time, and

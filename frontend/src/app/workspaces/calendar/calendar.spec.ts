@@ -26,7 +26,11 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Calendar } from './calendar';
 import { calendarRoutes } from './calendar.routes';
 import { CalendarStore } from '../../stores/calendar.store';
+import { fxMissingText } from '../analytics/scope-bar';
 import { PAPER_CAPTION } from './day/day-copy';
+import { By } from '@angular/platform-browser';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
 
 const RESPONSE: PnlCalendar = {
   as_of: '2026-08-10T12:00:00Z',
@@ -391,6 +395,8 @@ describe('Calendar day drawer', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].querySelector('.leg')?.textContent).toContain('Leg 1 of 2');
     expect(rows[1].querySelector('.leg')?.textContent).toContain('Leg 2 of 2');
+    // A4 audit: the Calendar counts each realised leg as a trade, and says so.
+    expect(rows[0].querySelector('sb-hint [role="tooltip"]')?.textContent).toContain('count each realised leg as its own trade');
   });
 
   it('does not label an unsplit trade as a leg', async () => {
@@ -556,7 +562,7 @@ describe('Calendar stat digest', () => {
     const component = fixture.componentInstance as unknown as {
       calendarDigest: () => string;
     };
-    expect(component.calendarDigest()).toBe('-60.00 € · 3 trades · 33.3% win');
+    expect(component.calendarDigest()).toBe('−60.00 € · 3 trades · 33.3% win');
   });
 
   it('carries the thin-sample warning into the digest rather than losing it', async () => {
@@ -832,8 +838,8 @@ describe('Calendar totals in a stat strip (v186 D3)', () => {
 
 describe('Calendar totals metric formatting and tone (v179)', () => {
   it.each([
-    ['currency', '-60.00 €', 'neg'],
-    ['r', '-0.60R', 'neg'],
+    ['currency', '−60.00 €', 'neg'],
+    ['r', '−0.60R', 'neg'],
     ['trades', '3', 'neutral'],
     ['win_rate', '33.3%', 'neutral'],
   ] as const)('keeps the %s unit and uses only meaningful sign colours', async (metric, value, tone) => {
@@ -864,5 +870,137 @@ describe('Calendar totals metric formatting and tone (v179)', () => {
     fixture.detectChanges();
     expect(tiles[0]?.querySelector('.value')?.textContent?.trim()).toBe('—');
     expect(tiles[0]?.querySelector('.tile')?.classList).toContain('neutral');
+  });
+});
+
+/* -- v194 B7 -- money left out for want of an exchange rate ----------------- */
+
+describe('Calendar missing-rate caveat', () => {
+  it("names the month's left-out closes beside the totals, and only then", async () => {
+    const plain = seed();
+    await plain.whenStable();
+    plain.detectChanges();
+    expect(el(plain).querySelector('.fx-caveat')).toBeNull();
+
+    const fixture = seed({ ...RESPONSE, fx_missing_count: 2 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const caveat = el(fixture).querySelector('.fx-caveat')!;
+    expect(caveat.getAttribute('role')).toBe('note');
+    expect(caveat.textContent!.trim()).toBe(fxMissingText(2));
+    // Outside the collapsible panel, so the phone digest cannot hide it.
+    expect(caveat.closest('sb-panel')).toBeNull();
+  });
+
+  it("names the day's left-out closes in the drawer", async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    fixture.componentInstance.store.selectDay('2026-08-03');
+    TestBed.inject(HttpTestingController)
+      .expectOne((r) => r.url === '/api/v1/calendar/pnl/day')
+      .flush({ as_of: '2026-08-10T12:00:00Z', date: '2026-08-03', trades: [TRADE], trade_count: 1,
+        winners: 0, losers: 0, total_r: null, total_ccy: null,
+        win_rate: null, avg_trade_r: null, worst_drawdown_r: null,
+        contributors: [], detractors: [],
+        context: { percentile: null, history_days: 0,
+          vs_avg_day: { pnl_amount: null, r: null },
+          vs_weekday_avg: { pnl_amount: null, r: null } },
+        breakdown: { strategy: [], horizon: [], direction: [], exit_reason: [] },
+        fx_missing_count: 1 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const caveats = [...el(fixture).querySelectorAll('.fx-caveat')].map((c) => c.textContent!.trim());
+    expect(caveats).toEqual([fxMissingText(1)]);
+  });
+});
+
+/* -- v195 Phase 4 and §5.2 -- Calendar on sb-page --------------------------- */
+
+describe('Calendar on sb-page (v195 Phase 4, §5.2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/calendar/calendar.ts'), 'utf8');
+
+  /** The KPI tiles by label, read through their inputs, not their text. */
+  function kpis(fixture: ComponentFixture<Calendar>): Map<string, StatTile> {
+    return new Map(fixture.debugElement.queryAll(By.css('[page-kpis] sb-stat-tile'))
+      .map((d) => d.componentInstance as StatTile)
+      .map((tile) => [tile.label(), tile] as const));
+  }
+
+  it('renders the route title as the one h1, from sb-page', async () => {
+    const fixture = seed();
+    TestBed.inject(RouteTitleService).set('Calendar', 'P&L by day');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(el(fixture).querySelectorAll('h1')).toHaveLength(1);
+    expect(el(fixture).querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Calendar');
+    expect(el(fixture).querySelector('sb-section-head')).toBeNull();
+  });
+
+  it('puts the month filters in the scope bar, and nothing destructive', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const scope = el(fixture).querySelector('sb-page [page-scope]')!;
+    expect(scope.tagName.toLowerCase()).toBe('sb-control-row');
+    expect(scope.querySelector('.months')).not.toBeNull();
+    expect(scope.querySelector('.metric')).not.toBeNull();
+    expect(scope.querySelectorAll('sb-select')).toHaveLength(2);
+    expect(scope.querySelector('.danger, .danger-quiet')).toBeNull();
+  });
+
+  it('puts the month totals in the KPI strip and the grid in the primary slot', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const strip = el(fixture).querySelector('sb-page [page-kpis] sb-stat-strip.totals')!;
+    expect(strip.querySelectorAll('sb-stat-tile')).toHaveLength(8);
+    const primary = el(fixture).querySelector('sb-page [page-primary]')!;
+    expect(primary.tagName.toLowerCase()).toBe('sb-async');
+    expect(primary.querySelector('sb-panel.calendar-panel')).not.toBeNull();
+    expect(primary.querySelector('.totals')).toBeNull();
+  });
+
+  it('shows N and the paper basis on the two performance tiles, and on no count', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const tiles = kpis(fixture);
+    // RESPONSE.totals.trade_count is 3: below MIN_SAMPLE_N, so the thin cue shows.
+    for (const label of ['Net this month', 'Win rate']) {
+      expect(tiles.get(label)!.sample(), label).toBe(3);
+      expect(tiles.get(label)!.about(), label).toContain(PERFORMANCE_CAVEAT);
+    }
+    expect(tiles.get('Trades')!.about()).toBeUndefined();
+    expect(el(fixture).querySelector('[page-kpis] .totals sb-stat-tile .thin')).not.toBeNull();
+  });
+
+  it('keeps the KPI slot but no totals while the month loads, then fills it', async () => {
+    const { fixture, backend } = seedUnflushed();
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('sb-page [page-kpis]')).not.toBeNull();
+    expect(el(fixture).querySelector('.totals')).toBeNull();
+    backend.expectOne((r) => r.url === '/api/v1/calendar/pnl').flush(RESPONSE);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(el(fixture).querySelector('[page-kpis] .totals')).not.toBeNull();
+  });
+
+  it('keeps the all-history weekday table as the one secondary panel, the drawer in the default slot', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const secondary = el(fixture).querySelectorAll('sb-page [page-secondary]');
+    expect(secondary).toHaveLength(1);
+    expect(secondary[0].textContent).toContain('By weekday (all history)');
+    expect(secondary[0].querySelectorAll('.dow-row')).toHaveLength(RESPONSE.day_of_week.length);
+    expect(el(fixture).querySelector('sb-page > sb-drawer')).not.toBeNull();
+  });
+
+  it('imports Page and no SectionHead', () => {
+    expect(SOURCE).toContain('<sb-page');
+    expect(SOURCE).toMatch(/import \{ Page \} from '\.\.\/\.\.\/ui\/page';/);
+    expect(SOURCE).not.toContain('<sb-section-head');
+    expect(SOURCE).not.toMatch(/import \{ SectionHead \}/);
   });
 });

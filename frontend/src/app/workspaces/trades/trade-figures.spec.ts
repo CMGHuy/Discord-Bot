@@ -76,7 +76,7 @@ describe('trade figures', () => {
     expect(legRsLine([leg(0.5, 147.54, 2.23), leg(0.5, 145.56, 1.43)]))
       .toBe('+2.23R / +1.43R');
     expect(legRsLine([leg(1, null), leg(1, 100, 0), leg(1, 90, -1)]))
-      .toBe('0.00R / -1.00R');
+      .toBe('0.00R / −1.00R');
   });
 
   it('omits the leg comparison unless at least two R values are recorded', () => {

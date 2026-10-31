@@ -126,8 +126,10 @@ def test_requires_auth(client):
 def test_risk_shape(logged_in):
     body = logged_in.get("/api/v1/risk").get_json()
     assert_shape(body, {
-        "heat": dict, "positions": list, "sector_heat": list,
-        "clusters": list, "throttle": dict, "killswitch": dict,
+        "heat": dict, "positions": (list, type(None)),
+        "sector_heat": (list, type(None)), "unmapped_count": int,
+        "clusters": (list, type(None)), "throttle": dict, "killswitch": dict,
+        "availability": dict,
         "scan_health": dict, "metrics": dict, "correlation": dict,
     })
     assert_shape(body["heat"], {
@@ -136,10 +138,11 @@ def test_risk_shape(logged_in):
         "gap_risk_amount": NULLABLE_NUMBER, "gap_risk_unknown": int,
     }, where="heat")
     assert_shape(body["throttle"], {
-        "multiplier": NULLABLE_NUMBER, "paused": bool,
+        "multiplier": NULLABLE_NUMBER, "paused": (bool, type(None)),
     }, where="throttle")
     assert_shape(body["killswitch"], {
-        "on": bool, "reason": NULLABLE_STR, "at": NULLABLE_STR,
+        "on": (bool, type(None)), "reason": NULLABLE_STR, "at": NULLABLE_STR,
+        "availability": dict,
     }, where="killswitch")
     assert_shape(body["scan_health"], {
         "durations_s": list, "latest_s": NULLABLE_NUMBER, "slowdown": bool,
@@ -150,6 +153,8 @@ def test_risk_shape(logged_in):
                    "beta_spy", "sharpe_r", "max_drawdown_r")
     assert_shape(body["metrics"], {
         **{key: dict for key in metric_keys},
+        # v194 B8 -- the money twin of max_drawdown_r; carries its FX gap count.
+        "max_drawdown_amount": dict,
         "as_of": NULLABLE_STR,
         # I4: the tile label must name the ACTUAL configured benchmark, not
         # a hardcoded "SPY" -- carried on the payload so the frontend can
@@ -157,9 +162,14 @@ def test_risk_shape(logged_in):
         "benchmark_symbol": str,
     }, where="metrics")
     for key in metric_keys:
+        counts = {"excluded_count": int, "invalid_date_count": int,
+                  "invalid_outcome_count": int} if key in ("sharpe_r", "max_drawdown_r") else {}
         assert_shape(body["metrics"][key], {
-            "value": NULLABLE_NUMBER, "n": int,
+            "value": NULLABLE_NUMBER, "n": int, **counts,
         }, where=f"metrics.{key}")
+    assert_shape(body["metrics"]["max_drawdown_amount"], {
+        "value": NULLABLE_NUMBER, "n": int, "fx_missing_count": int, "invalid_date_count": int,
+    }, where="metrics.max_drawdown_amount")
     # v85 D38.
     assert_shape(body["correlation"], {
         "labels": list, "values": list,
@@ -188,6 +198,8 @@ def test_position_rows_sum_to_open_heat(logged_in, tmp_path):
         "trade_id": str, "ticker": str, "strategy": NULLABLE_STR,
         "shares": NULLABLE_NUMBER, "entry": NULLABLE_NUMBER,
         "stop_loss": NULLABLE_NUMBER, "risk_pct": NULLABLE_NUMBER,
+        # v189 B4 -- beside the enforced figure, never summed into it.
+        "risk_of_loss_amount": NULLABLE_NUMBER, "risk_of_loss_pct": NULLABLE_NUMBER,
     }, where="position")
 
     total = sum(p["risk_pct"] for p in body["positions"])
@@ -286,9 +298,13 @@ def test_utilisation_is_not_clamped_at_100(logged_in, tmp_path):
 def test_every_metric_carries_its_own_sample_size(client, open_book):
     open_book(["AAPL", "MSFT"])
     metrics = client.get("/api/v1/risk").get_json()["metrics"]
-    for key in ("var_95", "expected_shortfall_95", "annualised_vol",
-                "beta_spy", "sharpe_r", "max_drawdown_r"):
+    for key in ("var_95", "expected_shortfall_95", "annualised_vol", "beta_spy"):
         assert set(metrics[key]) == {"value", "n"}
+    # The closed-trade R metrics also report how many records were excluded
+    # and why (chronology coverage, 60975f95); value and n stay mandatory.
+    chronology = {"value", "n", "excluded_count", "invalid_date_count", "invalid_outcome_count"}
+    for key in ("sharpe_r", "max_drawdown_r"):
+        assert set(metrics[key]) == chronology
 
 
 def test_a_metric_that_cannot_be_computed_is_null_not_zero(client, open_book):
@@ -419,21 +435,9 @@ def test_a_market_data_failure_degrades_the_metrics_not_the_page(
     assert body["heat"] is not None
 
 
-def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
+def test_a_malformed_closed_trade_preserves_valid_trade_derived_metrics(
         client, open_book, monkeypatch):
-    """Round 3: `r_series = trade_metrics.r_multiples(closed)` and the
-    `sharpe_r`/`max_drawdown_r` computation run entirely OUTSIDE the
-    market-data try/except (that separation was round 2's fix, for the
-    opposite failure domain) -- and were therefore, until this fix,
-    completely unguarded. A malformed closed-trade record (here, a
-    string-typed `entry`) raises a `TypeError` deep inside
-    `metrics.r_multiple()`'s `abs(entry - stop)`, which must degrade only
-    `sharpe_r`/`max_drawdown_r` to null, not 500 the whole endpoint --
-    including the killswitch control block, which has nothing to do with
-    the trade log. This is the structural mirror of
-    `test_a_market_data_failure_degrades_the_metrics_not_the_page` above,
-    for the trade-log failure domain instead of the market-data one.
-    """
+    """A malformed outcome is excluded and counted beside valid closed trades."""
     open_book(["AAPL"], closed_trades=5)
 
     # A numeric column cannot hold a string `entry`, so the malformed record is
@@ -454,11 +458,10 @@ def test_a_malformed_closed_trade_degrades_only_the_trade_derived_metrics(
     body = response.get_json()
     metrics = body["metrics"]
 
-    # Trade-log-derived metrics: degraded to null by the malformed record.
-    assert metrics["sharpe_r"]["value"] is None
-    assert metrics["sharpe_r"]["n"] == 0
-    assert metrics["max_drawdown_r"]["value"] is None
-    assert metrics["max_drawdown_r"]["n"] == 0
+    sharpe = metrics["sharpe_r"]
+    drawdown = metrics["max_drawdown_r"]
+    assert (sharpe["value"] is not None, sharpe["n"], sharpe["invalid_outcome_count"]) == (True, 5, 1)
+    assert (drawdown["value"] is not None, drawdown["n"], drawdown["excluded_count"]) == (True, 5, 1)
 
     # Market-data-derived metrics: unaffected -- this is a trade-log
     # failure, not a market-data one, and the two guards are independent.
@@ -508,7 +511,7 @@ def test_engaging_without_a_reason_still_records_where_it_came_from(
 
 
 @pytest.mark.parametrize("payload", [{}, {"on": "false"}, {"on": 0},
-                                     {"on": None}, {"action": "off"}])
+                                     {"on": None}, {"action": "off"}, [], [True], "off"])
 def test_an_unclear_toggle_is_rejected(logged_in, payload):
     """`on` is required and required to BE a bool.
 
@@ -579,6 +582,30 @@ def test_sector_heat_is_a_sorted_list_not_a_map(logged_in):
                      where="sector_heat row")
 
 
+def test_unmapped_count_carries_the_collectors_count(logged_in, monkeypatch):
+    """v194 B6: `sector_heat: []` over open positions is "no sector data for
+    N positions", and the response says N."""
+    monkeypatch.setattr("swingbot.core.edge.portfolio_state.collect_portfolio_state",
+                        lambda: {"sector_heat": {}, "unmapped_count": 8})
+    body = logged_in.get("/api/v1/risk").get_json()
+    assert body["sector_heat"] == []
+    assert body["unmapped_count"] == 8
+
+
+def test_unmapped_count_is_zero_when_the_collector_has_none(logged_in, monkeypatch):
+    monkeypatch.setattr("swingbot.core.edge.portfolio_state.collect_portfolio_state", lambda: {})
+    assert logged_in.get("/api/v1/risk").get_json()["unmapped_count"] == 0
+
+
+def test_unmapped_count_from_a_real_book_with_a_partial_sector_map(open_book, client, monkeypatch):
+    monkeypatch.setattr("swingbot.core.marketdata.universe.sector_map",
+                        lambda name: {"AAPL": "Technology"})
+    open_book(["AAPL", "ZZZZ"])
+    body = client.get("/api/v1/risk").get_json()
+    assert body["unmapped_count"] == 1
+    assert [row["sector"] for row in body["sector_heat"]] == ["Technology"]
+
+
 def test_scan_health_ships_numbers_not_svg(logged_in, tmp_path, monkeypatch):
     """The Jinja page renders a sparkline server-side because Jinja needs
     one. Sub-project 3 owns how a sparkline looks in the SPA, and markup from
@@ -643,3 +670,636 @@ def test_data_sources_fallback_rate_is_null_without_alpaca_traffic(
         "alpaca": 0, "yfinance": 12, "yfinance-fallback": 0, "cache": 3}})
     ds = logged_in.get("/api/v1/risk").get_json()["scan_health"]["data_sources"]
     assert ds["fallback_rate"] is None and ds["scans"] == 1
+
+
+# -- v194 B8 -- max drawdown in money, beside the R figure. --
+
+def _settled(trade_id, *, ticker="AAPL", pnl, closed_at, status="closed"):
+    """A closed main-ledger trade with a settled amount in its quote currency."""
+    return {
+        "id": trade_id, "ticker": ticker, "status": status,
+        "strategy": "VWAP", "horizon_key": "1m", "direction": "bullish",
+        "entry": 100.0, "stop_loss": 95.0, "exit_price": 105.0, "shares": 10,
+        "opened_at": "2026-07-01T00:00:00+00:00", "closed_at": closed_at,
+        "realized_pnl_amount": pnl,
+    }
+
+
+@pytest.fixture
+def eur_account(logged_in, monkeypatch):
+    """A EUR account: USD quotes convert at 0.5 on every day; `NOFX` has no
+    quote currency, so its rate is missing. Depends on `logged_in` so it is
+    applied after the admin app's own FX pin. Returns the lookups made."""
+    from swingbot.core.marketdata import fx
+    asked = []
+
+    def fake_rate(from_code, to_code, on):
+        asked.append((from_code, to_code, on))
+        return 0.5 if from_code == "USD" else None
+
+    quotes = {"AAPL": "USD", "MSFT": "USD", "ASML.AS": "EUR"}
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: quotes.get(ticker))
+    monkeypatch.setattr(fx, "fx_rate", fake_rate)
+    return asked
+
+
+def test_money_drawdown_walks_converted_pnl_in_close_order(logged_in, eur_account):
+    # Seeded out of order on purpose: the walk sorts by closed_at.
+    # In close order: +100, -300, +50, -200 USD -> x0.5 -> +50, -150, +25, -100 EUR.
+    # Cumulative 50, -100, -75, -175; peak 50 -> largest fall 225.
+    seed_store("trades", [
+        _settled("c3", pnl=50.0, closed_at="2026-08-05T20:00:00+00:00"),
+        _settled("c1", pnl=100.0, closed_at="2026-08-03T20:00:00+00:00"),
+        _settled("c4", pnl=-200.0, closed_at="2026-08-06T20:00:00+00:00", status="loss"),
+        _settled("c2", pnl=-300.0, closed_at="2026-08-04T20:00:00+00:00", status="loss"),
+    ])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    assert metric == {"value": 225.0, "n": 4, "fx_missing_count": 0, "invalid_date_count": 0}
+
+
+def test_a_trade_without_a_rate_is_left_out_and_counted(logged_in, eur_account):
+    seed_store("trades", [
+        _settled("c1", pnl=100.0, closed_at="2026-08-03T20:00:00+00:00"),
+        _settled("c2", ticker="NOFX", pnl=-900.0, closed_at="2026-08-04T20:00:00+00:00"),
+        _settled("c3", pnl=-300.0, closed_at="2026-08-05T20:00:00+00:00"),
+    ])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    # +50, -150 in EUR (cumulative 50, -100): the -900 with no rate is never read as 1.0.
+    assert metric == {"value": 150.0, "n": 2, "fx_missing_count": 1, "invalid_date_count": 0}
+
+
+def test_an_unsettled_close_is_left_out_but_not_counted_as_missing(logged_in, eur_account):
+    seed_store("trades", [
+        _settled("c1", pnl=100.0, closed_at="2026-08-03T20:00:00+00:00"),
+        _settled("c2", pnl=None, closed_at="2026-08-04T20:00:00+00:00"),
+        _settled("c3", pnl=-100.0, closed_at="2026-08-05T20:00:00+00:00"),
+    ])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    assert metric == {"value": 50.0, "n": 2, "fx_missing_count": 0, "invalid_date_count": 0}   # +50, -50 EUR
+
+
+def test_an_account_in_the_quote_currency_converts_nothing(logged_in, eur_account, monkeypatch):
+    from swingbot.core.marketdata import fx
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "USD")
+    seed_store("trades", [
+        _settled("c1", pnl=100.0, closed_at="2026-08-03T20:00:00+00:00"),
+        _settled("c2", pnl=-300.0, closed_at="2026-08-04T20:00:00+00:00"),
+    ])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    assert metric == {"value": 300.0, "n": 2, "fx_missing_count": 0, "invalid_date_count": 0}
+    assert eur_account == []          # identity: no rate was asked for
+
+
+def test_no_closed_trade_gives_a_null_money_drawdown_not_zero(logged_in, eur_account):
+    seed_store("trades", [_open_trade("o1")])
+    metric = logged_in.get("/api/v1/risk").get_json()["metrics"]["max_drawdown_amount"]
+    assert metric == {"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0}
+
+
+def test_a_conversion_failure_degrades_only_the_money_drawdown(logged_in, eur_account, monkeypatch):
+    def boom(rows, **kwargs):
+        raise RuntimeError("rate store down")
+
+    monkeypatch.setattr("swingbot.admin.api_v1.money.to_account_currency", boom)
+    seed_store("trades", [
+        _closed_trade("c1", win=True), _closed_trade("c2", win=False),
+        _settled("c3", pnl=-100.0, closed_at="2026-08-05T20:00:00+00:00"),
+    ])
+    response = logged_in.get("/api/v1/risk")
+    assert response.status_code == 200
+    metrics = response.get_json()["metrics"]
+    assert metrics["max_drawdown_amount"] == {"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0}
+    assert metrics["max_drawdown_r"]["value"] is not None
+
+
+def test_pnl_amounts_sorts_by_close_and_skips_unpriced_rows():
+    import swingbot.admin.app  # noqa: F401 -- api_v1 imports resolve through the app
+    from swingbot.admin.api_v1.risk import _pnl_amounts
+    rows = [
+        {"closed_at": "2026-08-05T00:00:00+00:00", "realized_pnl_amount": 3.0},
+        {"closed_at": "2026-08-03T00:00:00+00:00", "realized_pnl_amount": 1.0},
+        {"closed_at": "2026-08-04T00:00:00+00:00", "realized_pnl_amount": None},
+        {"closed_at": None, "realized_pnl_amount": 9.0},
+    ]
+    assert _pnl_amounts(rows) == [1.0, 3.0]   # undated amounts are excluded before the walk
+    assert _pnl_amounts([]) == []
+
+
+@pytest.fixture
+def projection_client(monkeypatch):
+    """Exercise the decorated API routes without the store-backed app fixture."""
+    from flask import Flask
+    from swingbot.admin import app as app_module
+    from swingbot.admin.api_v1 import risk
+
+    from swingbot.core.tracking.performance import TradeLog
+
+    monkeypatch.setattr(TradeLog, "get_trades", lambda *a, **kw: [])
+    app = Flask(__name__)
+    monkeypatch.setattr(app_module, "_session_authenticated", lambda: True)
+    app.add_url_rule("/api/v1/risk", view_func=risk.get_risk)
+    app.add_url_rule("/api/v1/risk/killswitch", view_func=risk.get_killswitch)
+    app.add_url_rule("/api/v1/risk/killswitch", view_func=risk.set_killswitch,
+                     methods=["POST"])
+    return app.test_client()
+
+
+@pytest.fixture
+def projection_state(monkeypatch):
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.edge import portfolio_state, throttle
+    stamp = "2026-10-28T00:00:00+00:00"
+    ok = {"state": "ok", "checked_at": stamp, "reason": None}
+    state = {"open_trades": [], "balance": 1000.0, "open_heat": 0.0,
+             "heat_cap": 6.0, "sector_heat": {}, "unmapped_count": 0,
+             "clusters": [], "throttle_mult": 1.0, "paused": False,
+             "kill": {"on": False}, "growth": {},
+             "availability": {key: dict(ok) for key in
+                              ("positions", "heat", "sector_heat", "clusters", "throttle", "killswitch")}}
+    monkeypatch.setattr(portfolio_state, "collect_portfolio_state", lambda: state)
+    monkeypatch.setattr(risk, "_risk_metrics_and_correlation", lambda: ({}, {"labels": [], "values": []}, {}))
+    monkeypatch.setattr(risk, "_scan_health", lambda: {})
+    monkeypatch.setattr(throttle, "kill_state", lambda: {"on": False, "reason": None, "at": None})
+    return state
+
+
+def unavailable_read(*args, **kwargs):
+    raise OSError("private diagnostic must not reach JSON")
+
+
+def test_unknown_book_remains_null_in_api(projection_client, projection_state):
+    state = projection_state
+    state.update(open_trades=None, open_heat=None, sector_heat=None, clusters=None)
+    for key in ("positions", "heat", "sector_heat", "clusters"):
+        state["availability"][key].update(state="unavailable", reason="positions_unavailable")
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["positions"] is None
+    assert body["heat"]["open_pct"] is None
+    assert body["sector_heat"] is None
+    assert body["clusters"] is None
+    assert body["availability"]["positions"]["state"] == "unavailable"
+    assert body["killswitch"]["on"] is False
+
+
+def test_invalid_balance_keeps_positions_without_percentage(projection_client, projection_state):
+    projection_state.update(balance=None, open_heat=None,
+                            open_trades=[_open_trade("visible")])
+    projection_state["availability"]["heat"].update(state="unavailable", reason="invalid_balance")
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["positions"][0]["trade_id"] == "visible"
+    assert body["positions"][0]["risk_pct"] is None
+    assert body["heat"]["utilisation_pct"] is None
+
+
+def test_positions_do_not_read_trade_log_again(projection_client, projection_state, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    projection_state["open_trades"] = [_open_trade("snapshot")]
+    monkeypatch.setattr(TradeLog, "get_trades", unavailable_read)
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["positions"][0]["trade_id"] == "snapshot"
+
+
+@pytest.mark.parametrize("path", ["/api/v1/risk", "/api/v1/risk/killswitch"])
+def test_fresh_kill_failure_never_reuses_current_state(projection_client, projection_state, monkeypatch, path):
+    from swingbot.core.edge import throttle
+    first = projection_client.get(path).get_json()["killswitch"]
+    monkeypatch.setattr(throttle, "kill_state", unavailable_read)
+    body = projection_client.get(path).get_json()
+    current = body["killswitch"]
+    assert current["on"] is None
+    assert current["availability"]["state"] == "unavailable"
+    assert current["last_known"]["on"] is False
+    assert current["last_known"]["checked_at"] == first["availability"]["checked_at"]
+    assert "private diagnostic" not in str(body)
+    if path == "/api/v1/risk":
+        assert body["availability"]["killswitch"] == current["availability"]
+        assert body["availability"]["positions"]["checked_at"] == projection_state["availability"]["positions"]["checked_at"]
+
+
+def test_unknown_read_allows_explicit_engage_without_implicit_release(projection_client, projection_state, monkeypatch):
+    from swingbot.core.edge import throttle
+    calls = []
+    monkeypatch.setattr(throttle, "kill_state", unavailable_read)
+    monkeypatch.setattr(throttle, "set_kill", lambda on, **kw: calls.append(on))
+    assert projection_client.get("/api/v1/risk/killswitch").get_json()["killswitch"]["on"] is None
+    assert calls == []
+    response = projection_client.post("/api/v1/risk/killswitch", json={"on": True})
+    assert response.status_code == 200
+    assert calls == [True]
+    assert response.get_json()["killswitch"]["on"] is None
+    assert response.get_json()["killswitch"]["availability"]["state"] == "unavailable"
+    assert projection_client.post("/api/v1/risk/killswitch", json={"on": None}).status_code == 400
+    assert calls == [True]
+
+
+@pytest.mark.parametrize("payload", [[], [True], "off", {"on": None}, {"on": 0}])
+def test_projection_rejects_non_boolean_commands(projection_client, projection_state,
+                                                monkeypatch, payload):
+    from swingbot.core.edge import throttle
+    calls = []
+    monkeypatch.setattr(throttle, "set_kill", lambda *a, **kw: calls.append(a))
+    response = projection_client.post("/api/v1/risk/killswitch", json=payload)
+    assert response.status_code == 400
+    assert calls == []
+
+
+def test_projection_write_failure_reports_unavailable(projection_client, projection_state, monkeypatch):
+    from swingbot.core.edge import throttle
+    monkeypatch.setattr(throttle, "set_kill", unavailable_read)
+    response = projection_client.post("/api/v1/risk/killswitch", json={"on": True})
+    assert response.status_code == 503
+    assert response.get_json()["error"]["code"] == "unavailable"
+    assert "private diagnostic" not in response.get_data(as_text=True)
+
+
+def test_projection_failed_readback_retains_original_observation(projection_client, projection_state,
+                                                               monkeypatch):
+    from swingbot.core.edge import throttle
+    first = projection_client.get("/api/v1/risk/killswitch").get_json()["killswitch"]
+    calls = []
+    monkeypatch.setattr(throttle, "set_kill", lambda on, **kw: calls.append(on))
+    monkeypatch.setattr(throttle, "kill_state", unavailable_read)
+    current = projection_client.post("/api/v1/risk/killswitch", json={"on": True}).get_json()["killswitch"]
+    assert calls == [True]
+    assert current["on"] is None
+    assert current["last_known"]["on"] is False
+    assert current["last_known"]["checked_at"] == first["availability"]["checked_at"]
+
+
+def test_projection_empty_book_and_controls_keep_observed_values(projection_client, projection_state):
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["positions"] == []
+    assert body["sector_heat"] == []
+    assert body["clusters"] == []
+    assert body["heat"]["open_pct"] == 0.0
+    assert body["throttle"] == {"multiplier": 1.0, "paused": False}
+    assert body["killswitch"]["availability"]["state"] == "ok"
+    assert "last_known" not in body["killswitch"]
+
+
+@pytest.fixture
+def distribution_inputs(monkeypatch):
+    import numpy as np
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.marketdata import fx
+
+    closes = 100 * np.cumprod(1 + 0.01 * np.sin(np.arange(100)))
+    frame = pd.DataFrame({"Close": closes}, index=pd.date_range("2026-01-01", periods=100))
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: "EUR")
+    monkeypatch.setattr(fx, "fx_rate", lambda *args: 1.0)
+    monkeypatch.setattr(risk, "_risk_bars", lambda symbols: {symbol: frame for symbol in symbols})
+    return risk, frame
+
+
+_DISTRIBUTION_CHECKED = "2026-10-28T00:00:00+00:00"
+
+
+@pytest.mark.parametrize("direction,beta", [("bullish", 1.0), ("bearish", -1.0)])
+def test_distribution_beta_preserves_position_direction(distribution_inputs, direction, beta):
+    risk, _ = distribution_inputs
+    trade = {**_open_trade("direction"), "direction": direction}
+    metrics, corr, availability = risk._distribution_metrics([trade], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["beta_spy"]["value"] == pytest.approx(beta)
+    assert availability["distribution_metrics"]["state"] == "ok"
+    assert corr["labels"] == ["AAPL"]
+
+
+def test_distribution_offset_book_does_not_renormalize_risk(distribution_inputs):
+    risk, _ = distribution_inputs
+    long = _open_trade("long")
+    short = {**long, "id": "short", "direction": "bearish"}
+    metrics, corr, availability = risk._distribution_metrics([long, short], "SPY", _DISTRIBUTION_CHECKED)
+    for name in ("var_95", "expected_shortfall_95", "annualised_vol", "beta_spy"):
+        assert metrics[name]["value"] is None
+    assert corr["labels"] == ["AAPL"]
+    assert availability["distribution_metrics"]["state"] == "ok"
+
+
+def test_distribution_missing_bars_are_unavailable(distribution_inputs, monkeypatch):
+    risk, frame = distribution_inputs
+    monkeypatch.setattr(risk, "_risk_bars", lambda symbols: {"SPY": frame})
+    metrics, _, availability = risk._distribution_metrics([_open_trade("missing")], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["var_95"]["value"] is None
+    assert availability["distribution_metrics"]["reason"] == "incomplete_bars"
+
+
+def test_distribution_signed_exposures_keep_asset_correlation(distribution_inputs):
+    risk, _ = distribution_inputs
+    rows = [_open_trade("long", ticker="AAA"),
+            {**_open_trade("short", ticker="BBB"), "direction": "bearish"}]
+    _, corr, _ = risk._distribution_metrics(rows, "SPY", _DISTRIBUTION_CHECKED)
+    assert corr["values"][0][1] == pytest.approx(1.0)
+
+
+def test_distribution_market_failure_preserves_trade_metrics(distribution_inputs, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
+                        [_open_trade("open")] if status == "open" else [_closed_trade("closed")])
+    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": 0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}, None))
+    monkeypatch.setattr(risk, "_risk_bars", unavailable_read)
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["max_drawdown_r"]["n"] == 1
+    assert metrics["max_drawdown_amount"]["n"] == 1
+    assert availability["distribution_metrics"]["reason"] == "market_data_unavailable"
+
+
+def test_distribution_missing_fx_is_explicit(distribution_inputs, monkeypatch):
+    from swingbot.core.marketdata import fx
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(fx, "fx_rate", lambda *args: None)
+    metrics, _, availability = risk._distribution_metrics([_open_trade("missing-fx")], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["var_95"]["value"] is None
+    assert availability["distribution_metrics"]["reason"] == "missing_fx"
+
+
+@pytest.mark.parametrize("rows,state,reason", [
+    ([], "ok", None), (None, "unavailable", "positions_unavailable"),
+])
+def test_distribution_empty_and_unknown_positions(distribution_inputs, rows, state, reason):
+    risk, _ = distribution_inputs
+    metrics, corr, availability = risk._distribution_metrics(rows, "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["as_of"] is None
+    assert metrics["var_95"] == {"value": None, "n": 0}
+    assert corr == {"labels": [], "values": []}
+    assert availability["distribution_metrics"] == {
+        "state": state, "reason": reason, "checked_at": _DISTRIBUTION_CHECKED}
+
+
+def test_distribution_unavailable_open_read_and_configured_benchmark(distribution_inputs, monkeypatch):
+    from swingbot import config
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "QQQ")
+    monkeypatch.setattr(TradeLog, "get_trades", lambda *args, **kwargs: None)
+    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0}, None))
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["benchmark_symbol"] == "QQQ"
+    assert availability["distribution_metrics"]["reason"] == "positions_unavailable"
+
+
+def test_distribution_availability_merges_without_mutating_cache(projection_client, projection_state, monkeypatch):
+    from swingbot.admin.api_v1 import risk
+    availability = {"distribution_metrics": {"state": "unavailable", "reason": "missing_fx",
+                                             "checked_at": _DISTRIBUTION_CHECKED}}
+    monkeypatch.setattr(risk, "_risk_metrics_and_correlation", lambda: ({}, {"labels": [], "values": []}, availability))
+    body = projection_client.get("/api/v1/risk").get_json()
+    assert body["availability"]["distribution_metrics"] == availability["distribution_metrics"]
+    assert body["availability"]["positions"] == projection_state["availability"]["positions"]
+    assert set(availability) == {"distribution_metrics"}
+    assert "distribution_metrics" not in projection_state["availability"]
+
+
+def test_distribution_uses_one_valuation_date(distribution_inputs, monkeypatch):
+    from datetime import date
+    from swingbot.core.marketdata import fx
+    risk, _ = distribution_inputs
+    calls = []
+
+    def rate(quote, account, on):
+        calls.append((quote, account, on))
+        return 1.0
+
+    monkeypatch.setattr(fx, "fx_rate", rate)
+    rows = [_open_trade("a", ticker="AAA"), _open_trade("b", ticker="BBB")]
+    metrics, _, availability = risk._distribution_metrics(rows, "QQQ", _DISTRIBUTION_CHECKED)
+    assert calls == [("EUR", "EUR", date(2026, 10, 28))] * 2
+    assert metrics["beta_spy"]["value"] == pytest.approx(1.0)
+    assert metrics["beta_spy"]["n"] == 99
+    assert availability["distribution_metrics"]["state"] == "ok"
+
+
+def test_distribution_failed_open_read_preserves_closed_metrics(distribution_inputs, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+
+    def trades(self, status=None, **kwargs):
+        if status == "open":
+            raise OSError("private positions diagnostic")
+        return [_closed_trade("closed")]
+
+    monkeypatch.setattr(TradeLog, "get_trades", trades)
+    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": 0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}, None))
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["max_drawdown_r"]["n"] == 1
+    assert metrics["max_drawdown_amount"]["n"] == 1
+    assert availability["distribution_metrics"]["reason"] == "positions_unavailable"
+
+
+@pytest.mark.parametrize("bad_frame", [
+    pd.DataFrame(), pd.DataFrame({"Close": [100.0, float("nan")]}),
+    pd.DataFrame({"Close": [100.0, 0.0]}), pd.DataFrame({"Open": [100.0]}),
+])
+def test_distribution_invalid_frames_are_unavailable(distribution_inputs, monkeypatch, bad_frame):
+    risk, frame = distribution_inputs
+    monkeypatch.setattr(risk, "_risk_bars", lambda symbols: {"AAPL": bad_frame, "SPY": frame})
+    metrics, _, availability = risk._distribution_metrics([_open_trade("bad")], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["var_95"]["value"] is None
+    assert availability["distribution_metrics"]["reason"] == "incomplete_bars"
+
+
+def test_distribution_computation_failure_is_sanitized(distribution_inputs, monkeypatch):
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(risk, "_market_values", unavailable_read)
+    metrics, corr, availability = risk._distribution_metrics([_open_trade("bad")], "SPY", _DISTRIBUTION_CHECKED)
+    assert metrics["var_95"]["value"] is None
+    assert corr["labels"] == ["AAPL"]
+    assert availability["distribution_metrics"]["reason"] == "market_data_unavailable"
+
+
+def test_distribution_overflow_is_unavailable_and_json_safe(distribution_inputs, monkeypatch):
+    import json
+
+    risk, frame = distribution_inputs
+    extreme = pd.DataFrame({"Close": [1.0, 1e200] * 50}, index=frame.index)
+    monkeypatch.setattr(risk, "_risk_bars", lambda symbols: {"AAPL": extreme, "SPY": frame})
+    metrics, corr, availability = risk._distribution_metrics(
+        [_open_trade("overflow")], "SPY", _DISTRIBUTION_CHECKED)
+
+    assert availability["distribution_metrics"]["state"] == "unavailable"
+    assert availability["distribution_metrics"]["reason"] == "market_data_unavailable"
+    assert all(metrics[name]["value"] is None for name in risk._DISTRIBUTION_KEYS)
+    assert corr["labels"] == ["AAPL"]
+    json.dumps({"metrics": metrics, "correlation": corr, "availability": availability}, allow_nan=False)
+
+
+def _r_trade(trade_id, stamp, outcome):
+    return {"id": trade_id, "ticker": "AAPL", "status": "closed", "direction": "bullish",
+            "entry": 100.0, "stop_loss": 90.0, "exit_price": 100.0 + outcome * 10,
+            "shares": 10, "opened_at": "2026-01-01T00:00:00Z", "closed_at": stamp}
+
+
+@pytest.fixture
+def isolated_eur_account(monkeypatch):
+    from swingbot.core.marketdata import fx
+    asked = []
+
+    def rate(quote, account, on):
+        asked.append((quote, account, on))
+        return 0.5
+
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: None if ticker == "NOFX" else "USD")
+    monkeypatch.setattr(fx, "fx_rate", rate)
+    return asked
+
+
+def test_closed_projection_r_order_and_reconciled_exclusions(isolated_eur_account):
+    from swingbot.admin.api_v1 import risk
+    rows = [_r_trade("late", "2026-03-03T10:00:00Z", 1),
+            _r_trade("first", "2026-03-01T10:00:00Z", -1),
+            _r_trade("middle", "2026-03-02T10:00:00Z", -1),
+            _r_trade("both_bad", None, float("nan")),
+            _r_trade("bad_outcome", "2026-03-04", float("nan")),
+            {**_r_trade("zero_risk", "2026-03-05", 1), "stop_loss": 100.0}]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_r"] == {
+        "value": 2.0, "n": 3, "excluded_count": 3,
+        "invalid_date_count": 1, "invalid_outcome_count": 2}
+    assert metrics["sharpe_r"]["n"] == 3
+    assert metrics["sharpe_r"]["excluded_count"] == 3
+    assert availability["drawdown_r"]["state"] == "partial"
+    assert json.dumps(metrics, allow_nan=False)
+
+
+@pytest.mark.parametrize("invalid", [{"exit_price": None}, {"legs": ["malformed"]}, {"direction": None}])
+def test_closed_projection_missing_r_is_excluded(invalid, isolated_eur_account):
+    from swingbot.admin.api_v1 import risk
+    metrics, availability = risk._closed_metrics(
+        [{**_r_trade("bad", "2026-03-01", 1), **invalid}], _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_r"] == {
+        "value": None, "n": 0, "excluded_count": 1,
+        "invalid_date_count": 0, "invalid_outcome_count": 1}
+    assert availability["drawdown_r"]["state"] == "unavailable"
+
+
+def test_closed_projection_money_date_filter_precedes_fx(isolated_eur_account):
+    from datetime import date
+    from swingbot.admin.api_v1 import risk
+    rows = [_settled("bad_date", ticker="NOFX", pnl=-900, closed_at=None),
+            _settled("loss", pnl=-100, closed_at="2026-08-04T20:00:00Z")]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_amount"] == {
+        "value": 50.0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 1}
+    assert availability["drawdown_amount"]["state"] == "partial"
+    assert isolated_eur_account == [("USD", "EUR", date(2026, 8, 4))]
+
+
+@pytest.mark.parametrize("amount", [float("nan"), float("inf"), float("-inf")])
+def test_closed_projection_nonfinite_money_blanks_only_money(isolated_eur_account, amount):
+    from swingbot.admin.api_v1 import risk
+    rows = [_settled("nonfinite", pnl=amount, closed_at="2026-08-04T20:00:00Z")]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_amount"]["value"] is None
+    assert availability["drawdown_amount"]["reason"] == "money_conversion_unavailable"
+    assert metrics["max_drawdown_r"]["n"] == 1
+    assert availability["drawdown_r"]["state"] == "ok"
+    assert json.dumps(metrics, allow_nan=False)
+
+
+def test_closed_projection_empty_and_failed_read_differ(isolated_eur_account):
+    from swingbot.admin.api_v1 import risk
+    empty, empty_status = risk._closed_metrics([], _DISTRIBUTION_CHECKED)
+    failed, failed_status = risk._closed_metrics(None, _DISTRIBUTION_CHECKED)
+    assert empty["max_drawdown_r"]["value"] is None
+    assert failed["max_drawdown_r"]["value"] is None
+    assert empty_status["drawdown_r"]["state"] == "ok"
+    assert empty_status["drawdown_amount"]["state"] == "ok"
+    assert failed_status["drawdown_r"]["reason"] == "closed_trades_unavailable"
+    assert failed_status["drawdown_amount"]["state"] == "unavailable"
+
+
+def test_closed_projection_failed_closed_read_preserves_market(distribution_inputs, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+
+    def trades(self, status=None, **kwargs):
+        if status == "open":
+            return [_open_trade("open")]
+        raise OSError("private closed ledger diagnostic")
+
+    monkeypatch.setattr(TradeLog, "get_trades", trades)
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["beta_spy"]["value"] == pytest.approx(1.0)
+    assert availability["distribution_metrics"]["state"] == "ok"
+    assert availability["drawdown_r"]["reason"] == "closed_trades_unavailable"
+
+
+@pytest.mark.parametrize("missing,reason,fx_count", [
+    ({"ticker": "NOFX", "realized_pnl_amount": -900.0}, "missing_fx", 1),
+    ({"realized_pnl_amount": None}, "incomplete_money_outcomes", 0),
+])
+def test_closed_projection_money_partial_reasons(isolated_eur_account, missing, reason, fx_count):
+    from swingbot.admin.api_v1 import risk
+    rows = [_settled("known", pnl=-100, closed_at="2026-08-01"),
+            {**_settled("missing", pnl=-100, closed_at="2026-08-02"), **missing}]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_amount"] == {
+        "value": 50.0, "n": 1, "fx_missing_count": fx_count, "invalid_date_count": 0}
+    assert availability["drawdown_amount"]["state"] == "partial"
+    assert availability["drawdown_amount"]["reason"] == reason
+    assert availability["drawdown_r"]["state"] == "ok"
+
+
+def test_closed_projection_conversion_failure_preserves_r_and_market(distribution_inputs, monkeypatch):
+    from swingbot.admin.api_v1 import money
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
+                        [_open_trade("open")] if status == "open" else [_closed_trade("closed")])
+    monkeypatch.setattr(money, "to_account_currency", unavailable_read)
+    metrics, _, availability = risk._risk_metrics_and_correlation()
+    assert metrics["max_drawdown_r"]["n"] == 1
+    assert availability["drawdown_r"]["state"] == "ok"
+    assert availability["drawdown_amount"]["reason"] == "money_conversion_unavailable"
+    assert availability["distribution_metrics"]["state"] == "ok"
+    assert metrics["beta_spy"]["value"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("closed", [None, {}, "malformed"])
+def test_closed_projection_invalid_history_is_unavailable(distribution_inputs, monkeypatch, closed):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
+                        [_open_trade("open")] if status == "open" else closed)
+    _, _, availability = risk._risk_metrics_and_correlation()
+    assert availability["drawdown_r"]["reason"] == "closed_trades_unavailable"
+    assert availability["distribution_metrics"]["state"] == "ok"
+
+
+def test_closed_projection_wrapper_preserves_same_currency_amounts(isolated_eur_account, monkeypatch):
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.marketdata import fx
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "USD")
+    rows = [_settled("loss", pnl=-100, closed_at="2026-08-01")]
+    assert risk._max_drawdown_amount(rows) == {
+        "value": 100.0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}
+    assert isolated_eur_account == []
+
+
+def test_closed_projection_nonfinite_cumulative_money_is_unavailable(isolated_eur_account, monkeypatch):
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.marketdata import fx
+    monkeypatch.setattr(fx, "account_currency_code", lambda: "USD")
+    rows = [_settled("a", pnl=-1e308, closed_at="2026-08-01"),
+            _settled("b", pnl=-1e308, closed_at="2026-08-02")]
+    metrics, availability = risk._closed_metrics(rows, _DISTRIBUTION_CHECKED)
+    assert metrics["max_drawdown_amount"]["value"] is None
+    assert availability["drawdown_amount"]["reason"] == "money_conversion_unavailable"
+    assert availability["drawdown_r"]["state"] == "ok"
+    assert json.dumps(metrics, allow_nan=False)
+
+
+def test_closed_projection_history_retains_invalid_records_for_counting(distribution_inputs, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+    risk, _ = distribution_inputs
+    rows = [_closed_trade("valid"), _open_trade("open"), "malformed"]
+    monkeypatch.setattr(TradeLog, "get_trades", lambda *args, **kwargs: rows)
+    selected = risk._closed_history()
+    metrics, availability = risk._closed_metrics(selected, _DISTRIBUTION_CHECKED)
+    assert selected == [rows[0], "malformed"]
+    assert metrics["max_drawdown_r"]["invalid_date_count"] == 1
+    assert availability["drawdown_r"]["state"] == "partial"
+    assert "private diagnostic" not in str(availability)

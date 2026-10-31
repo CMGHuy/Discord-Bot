@@ -128,6 +128,11 @@ export function chartPalette(): ChartPalette {
   };
 }
 
+/** Tick-text size when `--text-micro` cannot be resolved (a chart mounted
+ *  before the stylesheet, or jsdom): the 12px micro floor tokens.css sets
+ *  (spec v195 §1.3), so a fallback never paints below the type scale. */
+export const TICK_FALLBACK_PX = 12;
+
 /** Chart chrome shared with the other three charts (v54 D5,
  *  `chart-frame.ts`'s `CHART_CHROME`): grid lines in `CHART_CHROME.grid`, the
  *  same hairline the tables use, so the chart recedes into the page rather
@@ -146,7 +151,7 @@ export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
     layout: {
       background: { color: palette.surface },
       textColor: palette.textMuted,
-      fontSize: tokenPx(CHART_CHROME.tickSize, 11),
+      fontSize: tokenPx(CHART_CHROME.tickSize, TICK_FALLBACK_PX),
       attributionLogo: false,
       // v5 draws the pane separators itself; left at the library's defaults
       // they are a mid-grey from its own theme, which is the one part of the

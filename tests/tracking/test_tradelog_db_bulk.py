@@ -33,6 +33,10 @@ class FakeTradesRepo:
     def delete(self, key, conn=None):
         return self.rows.pop(key, None) is not None
 
+    def get_for_update(self, key, *, conn):
+        row = self.rows.get(key)
+        return dict(row) if row is not None else None
+
     def clear(self, *, status=None, conn=None):
         doomed = [k for k, r in self.rows.items()
                   if status is None
@@ -117,9 +121,9 @@ def test_check_near_tp_timeout_start_clock_is_persisted(env):
 def test_delete_trade_removes_db_only_row(env):
     log, repo = _db_log(env)
     repo.seed(_trade("T1"))
-    assert log.delete_trade("T1") is True
+    assert log.delete_trade("T1").removed == 1
     assert repo.rows == {}
-    assert log.delete_trade("T1") is False
+    assert not log.delete_trade("T1")
 
 
 def test_delete_trade_removes_only_that_row(env):
@@ -130,13 +134,20 @@ def test_delete_trade_removes_only_that_row(env):
     assert _live(repo) == ["T2"] and repo.upserts == []
 
 
-def test_clear_history_deletes_closed_db_rows_only(env):
-    log, repo = _db_log(env)
-    repo.seed(_trade("O1"))
-    repo.seed(_trade("C1", status="win"))
-    repo.seed(_trade("C2", status="loss"))
-    assert log.clear_history() == 2
-    assert _live(repo) == ["O1"] and repo.upserts == []
+def test_clear_history_is_the_archived_reset(monkeypatch):
+    from swingbot.core.tracking import account_reset
+    calls = []
+
+    def fake_reset(*, force=False, now=None):
+        calls.append(force)
+        return account_reset.ResetResult(
+            removed_trades=2, removed_plans=1, archive_path="a.json", throttle_multiplier=1.0,
+            throttle_paused=False, kill_on=False, base_balance=10_000.0, reset_at="x")
+
+    monkeypatch.setattr(account_reset, "reset_closed_history", fake_reset)
+    assert TradeLog().clear_history() == 2
+    assert TradeLog().clear_history(force=True) == 2
+    assert calls == [False, True]
 
 
 def test_clear_open_deletes_open_db_rows_only(env):
@@ -144,7 +155,7 @@ def test_clear_open_deletes_open_db_rows_only(env):
     repo.seed(_trade("O1"))
     repo.seed(_trade("O2"))
     repo.seed(_trade("C1", status="win"))
-    assert log.clear_open() == 2
+    assert log.clear_open().removed == 2
     assert _live(repo) == ["C1"] and repo.upserts == []
 
 
@@ -158,8 +169,7 @@ def test_clear_all_deletes_every_db_row(env):
 
 def test_clear_on_empty_db_returns_zero(env):
     log, repo = _db_log(env)
-    assert log.clear_history() == 0
-    assert log.clear_open() == 0
+    assert log.clear_open().removed == 0
     assert log.clear_all() == 0
 
 

@@ -24,7 +24,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       @if (heading(); as h) {
         @if (level() === 1) { <h1>{{ h }}</h1> } @else { <h2>{{ h }}</h2> }
       }
-      <span class="status"><ng-content select="[status]" /></span>
+      <span class="status sb-meta"><ng-content select="[status]" /></span>
     </div>
     <div class="actions"><ng-content select="[actions]" /></div>
   `,
@@ -41,9 +41,14 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
        inside the flex row as unabsorbed space (flex items don't collapse
        margins the way block layout does), unevenly padding the header. */
     .title-group { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-4) var(--space-10); min-width: 0; }
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; overflow-wrap: anywhere; }
-    h2 { margin: 0; font-size: var(--text-subhead); font-weight: 600; overflow-wrap: anywhere; }
-    .status { display: inline-flex; align-items: baseline; gap: var(--space-8); color: var(--text-secondary); font-size: var(--text-chip); }
+    /* v195 §1.3: sentence case as given, in the UI face. Level 1 is the
+       20px title step (sb-page's title takes it in Phase 4); level 2 marks
+       a section above several panels, so it sits a step above their 13px
+       titles. */
+    h1 { margin: 0; font-family: var(--font-sans); font-size: var(--text-title); font-weight: 600; letter-spacing: normal; overflow-wrap: anywhere; }
+    h2 { margin: 0; font-family: var(--font-sans); font-size: var(--text-subhead); font-weight: 600; letter-spacing: normal; overflow-wrap: anywhere; }
+    /* Colour and size come from the global .sb-meta (styles.css). */
+    .status { display: inline-flex; align-items: baseline; gap: var(--space-8); }
     .status:empty { display: none; }
     .actions { display: contents; }
   `,

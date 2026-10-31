@@ -49,6 +49,9 @@ const EMPTY_STATES: Record<string, EmptyState> = {
  * PENDING and PARTIAL are all-time by definition: a position that is open is
  * open regardless of when it opened, and narrowing those to "today" would
  * hide the book.
+ *
+ * Close all is the Dashboard page header's (v195 Phase 4), so this table
+ * projects no actions of its own.
  */
 @Component({
   selector: 'sb-positions-table',
@@ -67,7 +70,6 @@ const EMPTY_STATES: Record<string, EmptyState> = {
         <a class="all-link sb-hit" routerLink="/trades" [queryParams]="{ status: active() }">
           View in Trades →
         </a>
-        <ng-content select="[table-actions]" />
       </div>
 
       <sb-data-table
@@ -90,7 +92,10 @@ const EMPTY_STATES: Record<string, EmptyState> = {
     </sb-async>
   `,
   styles: `
-    :host { display: block; }
+    /* v195 §1.4: entry, stop, target and size are order figures and never
+       shrink below the 14px body step, in either density. The table and the
+       plan cell read --text-table; this table alone re-points it. */
+    :host { display: block; --text-table: var(--text-body); }
     .table-head {
       display: flex;
       align-items: center;

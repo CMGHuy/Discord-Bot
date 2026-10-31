@@ -4,6 +4,7 @@ export type ButtonVariant =
   | 'primary'
   | 'secondary'
   | 'danger'
+  | 'danger-quiet'
   | 'ghost'
   | 'icon'
   | 'chip'
@@ -22,11 +23,17 @@ export type ButtonVariant =
  * the button the browser already knows how to operate, and this component only
  * supplies the paint.
  *
- * `danger` is not merely a red `primary`: it is the variant every irreversible
- * action uses (close, cancel, delete, killswitch), and pairing it with
- * `ConfirmDialog` is what makes those actions hard to trigger by accident.
- * `danger-icon` is a v77 addition for destructive icon-only controls, and pairs
- * with `ConfirmDialog` exactly as `danger` does.
+ * Two danger variants (v195 Phase 2, correction 6), so a halt never looks
+ * like housekeeping:
+ * - `danger` is the solid loss-colour fill, for the killswitch ALONE -- the
+ *   one safety control. button.spec.ts fails if any other workspace uses it.
+ * - `danger-quiet` (the look `danger` had until v195: a loss-colour outline
+ *   that fills on hover) is every other irreversible action -- close all,
+ *   clear, restart, discard, delete.
+ * Both pair with `ConfirmDialog` (its `dangerVariant` input), which is what
+ * makes those actions hard to trigger by accident. `danger-icon` is a v77
+ * addition for destructive icon-only controls, and pairs with
+ * `ConfirmDialog` exactly as `danger-quiet` does.
  *
  * v80 D4 restyles every variant through tokens. `segment` and `chip` are
  * deprecated in favour of `sb-segmented`; Migration moves their call sites.
@@ -98,15 +105,27 @@ export type ButtonVariant =
 
     /* Red here is not P&L -- it is the one sanctioned exception, because an
        irreversible control that does not look dangerous is worse than a
-       colour rule kept perfectly. */
+       colour rule kept perfectly.
+
+       v195: the solid fill is the killswitch's alone. --bg ink on --neg
+       clears 6:1 (button.spec.ts pins >= 4.5). Hover brightens the fill,
+       which only raises the contrast. */
     :host(.danger) {
+      background: var(--neg);
+      border-color: var(--neg);
+      color: var(--bg);
+    }
+    :host(.danger:not([disabled]):hover) { filter: brightness(1.1); }
+
+    /* Every other irreversible action: the outline danger had until v195.
+       Fills on hover (v80 D4): the moment before an irreversible click is
+       the one place this control should shout. */
+    :host(.danger-quiet) {
       background: transparent;
       border-color: var(--neg);
       color: var(--neg);
     }
-    /* Fills on hover (v80 D4): the moment before an irreversible click is the
-       one place this control should shout. --bg ink on --neg clears 6:1. */
-    :host(.danger:not([disabled]):hover) { background: var(--neg); color: var(--bg); }
+    :host(.danger-quiet:not([disabled]):hover) { background: var(--neg); color: var(--bg); }
 
     :host(.ghost) { min-width: var(--hit-min); background: transparent; color: var(--text-secondary); }
     :host(.ghost:not([disabled]):hover) { color: var(--text); background: var(--surface-raised); }
@@ -120,9 +139,9 @@ export type ButtonVariant =
     }
     :host(.icon:not([disabled]):hover) { color: var(--text); background: var(--surface-raised); }
 
-    /* A destructive icon control. Not expressible as \`icon\` plus \`danger\`:
-       \`classes\` emits exactly one variant class, deliberately. Geometry is
-       \`icon\`'s; the colour is \`danger\`'s. Every call site must supply an
+    /* A destructive icon control. Not expressible as \`icon\` plus
+       \`danger-quiet\`: \`classes\` emits exactly one variant class,
+       deliberately. Geometry is \`icon\`'s; the colour is \`danger-quiet\`'s. Every call site must supply an
        aria-label -- the icon inside is aria-hidden, so without one the
        control announces nothing at all. */
     :host(.danger-icon) {

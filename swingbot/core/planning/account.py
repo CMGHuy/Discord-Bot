@@ -76,7 +76,14 @@ log = logging.getLogger(__name__)
 _MAX_BALANCE_HISTORY = 5000
 
 
-def _sum_realized_pnl() -> float:
+def _with_conn(conn) -> dict:
+    """``{"conn": conn}`` inside a caller's transaction, else ``{}`` -- so a
+    standalone call stays byte-identical to the pre-v189 call (tests replace
+    these functions with zero-argument doubles)."""
+    return {} if conn is None else {"conn": conn}
+
+
+def _sum_realized_pnl(*, conn=None) -> float:
     """
     All-time realized P&L: sum of `realized_pnl_amount` across every trade
     in the trades table that has actually settled (i.e. the field is not None).
@@ -91,7 +98,7 @@ def _sum_realized_pnl() -> float:
     """
     from swingbot.core.db.repositories.trades import trades_repo
     from swingbot.core.db.codec import normalise
-    trades = normalise(trades_repo().list_all())
+    trades = normalise(trades_repo().list_all(**_with_conn(conn)))
     total = 0.0
     for t in trades:
         pnl = t.get("realized_pnl_amount")
@@ -140,7 +147,7 @@ def _validated_seed(defaults: dict) -> dict:
     return seeded
 
 
-def load_account_config() -> dict:
+def load_account_config(*, conn=None) -> dict:
     # Canonical defaults -- every key that exists in the account config schema.
     # Used both as the seed for a brand-new account row AND as a fallback for
     # keys that were added after an existing file was first created (so loading
@@ -158,7 +165,7 @@ def load_account_config() -> dict:
         "balance_history":    [],
     }
     from swingbot.core.db.repositories.account import account_repo
-    stored = account_repo().load()
+    stored = account_repo().load(**_with_conn(conn))
     if stored:
         # Merge: stored values win over defaults, but any key that doesn't
         # exist in the stored file gets the default value.
@@ -168,33 +175,33 @@ def load_account_config() -> dict:
             # Migrating from the old schema, where "balance" was a single
             # incrementally-updated running total with no separate base.
             old_balance = float(stored.get("balance", defaults["base_balance"]))
-            realized_so_far = _sum_realized_pnl()
+            realized_so_far = _sum_realized_pnl(**_with_conn(conn))
             merged["base_balance"] = round(old_balance - realized_so_far, 2)
             needs_save = True
         # The displayed/usable balance is ALWAYS recomputed fresh -- never
         # trusted from storage -- so it cannot silently lose realized P&L.
-        merged["balance"] = round(merged["base_balance"] + _sum_realized_pnl(), 2)
+        merged["balance"] = round(merged["base_balance"] + _sum_realized_pnl(**_with_conn(conn)), 2)
         if needs_save:
-            save_account_config(merged)
+            save_account_config(merged, **_with_conn(conn))
         return merged
     # Brand-new account -- seed balance_history with a starting point so the
     # "balance over time" chart has something to plot from before the first
     # trade ever closes, instead of an empty series until then.
     defaults = _validated_seed(defaults)  # .env values obey the setters' validation rules
-    defaults["balance"] = round(defaults["base_balance"] + _sum_realized_pnl(), 2)
+    defaults["balance"] = round(defaults["base_balance"] + _sum_realized_pnl(**_with_conn(conn)), 2)
     defaults["balance_history"] = [{
         "ts": datetime.now(timezone.utc).isoformat(),
         "balance": defaults["balance"],
         "pnl_amount": None,
         "reason": "account created",
     }]
-    save_account_config(defaults)
+    save_account_config(defaults, **_with_conn(conn))
     return dict(defaults)
 
 
-def save_account_config(config: dict) -> None:
+def save_account_config(config: dict, *, conn=None) -> None:
     from swingbot.core.db.repositories.account import account_repo
-    account_repo().save(config)
+    account_repo().save(config, **_with_conn(conn))
 
 
 def _append_balance_history(cfg: dict, entry: dict) -> dict:
@@ -465,7 +472,7 @@ def get_daily_summary() -> dict:
     }
 
 
-def apply_realized_pnl(pnl_amount: float, meta: dict = None) -> dict:
+def apply_realized_pnl(pnl_amount: float, meta: dict = None, *, conn=None) -> dict:
     """
     Records one trade's realized currency P&L in balance_history (for the
     Performance page's balance-over-time chart) and returns the resulting
@@ -488,8 +495,16 @@ def apply_realized_pnl(pnl_amount: float, meta: dict = None) -> dict:
     into the history entry so it's traceable back to the trade that caused
     it. Returns the account config dict with "balance" reflecting this
     trade's settlement (already saved to disk).
+
+    v189 D3.2: with ``conn`` this runs inside the closing transaction. It first
+    locks the account config row, so two closes committing at once compute
+    their balance points one after the other (the second sees the first's
+    saved trade), and a rollback removes the point together with the close.
     """
-    config = load_account_config()
+    if conn is not None:
+        from swingbot.core.db.repositories.account import CONFIG_KEY, account_repo
+        account_repo().get_for_update(CONFIG_KEY, conn=conn)
+    config = load_account_config(**_with_conn(conn))
     new_balance = round(float(config.get("balance", 0)) + pnl_amount, 2)
     config["balance"] = new_balance
     entry = {
@@ -500,7 +515,7 @@ def apply_realized_pnl(pnl_amount: float, meta: dict = None) -> dict:
     if meta:
         entry.update(meta)
     _append_balance_history(config, entry)
-    save_account_config(config)
+    save_account_config(config, **_with_conn(conn))
     return config
 
 

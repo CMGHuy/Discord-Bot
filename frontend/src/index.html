@@ -22,11 +22,11 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <!-- A copy of --bg (palette.css --navy-950): the browser reads the
+  <!-- A copy of --bg (palette.css --graphite-950): the browser reads the
        theme-color before any stylesheet loads, so it cannot be var(--bg).
        primitives.spec.ts allow-lists it and asserts it equals the resolved
        --bg (spec v167 §7). -->
-  <meta name="theme-color" content="#070b14">
+  <meta name="theme-color" content="#0d0f12">
   <!-- iOS Safari ignores the manifest above for "Add to Home Screen" (pre
        iOS 16.4) -- these three are what it actually reads: standalone
        display (no browser chrome), a dark status bar to match the app's own
@@ -49,7 +49,7 @@
        from --bg in styles/palette.css, as does the manifest's pair. The
        symptom it prevents is a one-frame flash of the old colour on a cold
        load, which is easy to miss and easy to explain once seen. -->
-  <style>html, body { background: #070b14; }</style>
+  <style>html, body { background: #0d0f12; }</style>
 </head>
 <body>
   <sb-root></sb-root>

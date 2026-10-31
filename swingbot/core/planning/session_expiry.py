@@ -3,7 +3,8 @@
 Four cancellations happen DURING session D through the existing live transitions
 (cancelled_invalidated, cancelled_risk_cap, and v187's cancelled_limit and
 cancelled_gap_through_stop for a limit entry); `in_session_message` only words
-them. Two are decided AT D's close by `classify_expiry`, from D's own bars:
+them. v189 adds cancelled_trade_deleted: the placeholder trade was deleted (a
+human act, at any time), worded here so the tables stay complete. Two are decided AT D's close by `classify_expiry`, from D's own bars:
 `never_triggered` (the common case, with the distance in percent and ATR) and
 `no_session_data`.
 
@@ -31,6 +32,7 @@ INVALIDATED = "invalidated"
 RISK_CAP = "risk_cap"
 LIMIT_CANCELLED = "limit_cancelled"
 GAP_THROUGH_STOP = "gap_through_stop"
+TRADE_DELETED = "trade_deleted"            # v189 A7
 
 REASON_CODE = "reason_code"
 REASON_MESSAGE = "reason_message"
@@ -40,6 +42,7 @@ _IN_SESSION_CODES = {
     "cancelled_risk_cap": RISK_CAP,
     "cancelled_limit": LIMIT_CANCELLED,
     "cancelled_gap_through_stop": GAP_THROUGH_STOP,
+    "cancelled_trade_deleted": TRADE_DELETED,
 }
 _ATR_PERIOD = 14
 
@@ -145,10 +148,15 @@ def _gap_through_stop_message(plan, detail: dict) -> str:
             f"{float(plan.stop_loss):.2f} stop; nothing opened")
 
 
+def _trade_deleted_message(plan, detail: dict) -> str:
+    return "The trade record was deleted before the order filled; nothing opened"
+
+
 #: v187 D3: the limit-entry cancellations, worded from their own detail keys.
 _LIMIT_MESSAGES = {
     "cancelled_limit": _limit_cancelled_message,
     "cancelled_gap_through_stop": _gap_through_stop_message,
+    "cancelled_trade_deleted": _trade_deleted_message,
 }
 
 

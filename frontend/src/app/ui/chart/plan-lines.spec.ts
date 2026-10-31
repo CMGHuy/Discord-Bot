@@ -1,8 +1,10 @@
-import { UTCTimestamp } from 'lightweight-charts';
+import { LineStyle, UTCTimestamp } from 'lightweight-charts';
 import { describe, expect, it, vi } from 'vitest';
 
+import { resolveToken } from '../testing/resolve-token';
+
 import { ChartLevels } from '../../api/models';
-import { ChartPalette } from './chart-theme';
+import { ChartPalette, chartPalette } from './chart-theme';
 import { PlanLines, planBands, planLevelPrices, planLineSpecs } from './plan-lines';
 
 /* SR36 — the plan levels and the risk/reward bands.
@@ -234,5 +236,26 @@ describe('PlanLines', () => {
 
     expect(series.lines).toHaveLength(0);
     expect(series.primitives).toHaveLength(0);
+  });
+});
+
+/* -- v195 Phase 6 -- line styles, and the plan on the real palette ----------- */
+
+describe('plan lines (v195 Phase 6)', () => {
+  it('draws the entry solid, stop and targets dashed, the working stop dotted', () => {
+    expect(byTitle(FULL, 'Entry')?.lineStyle).toBe(LineStyle.Solid);
+    expect(byTitle(FULL, 'Stop')?.lineStyle).toBe(LineStyle.Dashed);
+    expect(byTitle(FULL, 'Target 1')?.lineStyle).toBe(LineStyle.Dashed);
+    expect(byTitle(FULL, 'Target 2')?.lineStyle).toBe(LineStyle.Dashed);
+    expect(byTitle(FULL, 'Working stop')?.lineStyle).toBe(LineStyle.Dotted);
+  });
+
+  it('takes accent, loss and gain from the Graphite tokens through chartPalette()', () => {
+    const colour = (title: string) => planLineSpecs(FULL, chartPalette()).find((s) => s.title === title)?.color;
+    expect(colour('Entry')).toBe(resolveToken('--accent'));
+    expect(colour('Stop')).toBe(resolveToken('--neg'));
+    expect(colour('Target 1')).toBe(resolveToken('--pos'));
+    expect(colour('Target 2')).toBe(resolveToken('--pos'));
+    expect(colour('Working stop')).toBe(resolveToken('--warn'));
   });
 });

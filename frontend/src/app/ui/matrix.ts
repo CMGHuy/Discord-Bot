@@ -49,7 +49,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
       font-size: var(--text-micro);
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-weight: 400;
       text-align: right;
       padding: 2px 6px;

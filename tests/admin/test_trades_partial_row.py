@@ -1,4 +1,6 @@
 """API plan rows preserve the projection's provenance."""
+import pytest
+
 import swingbot.admin.app  # initializes API routes before importing one endpoint
 
 from swingbot.admin.api_v1.trades import _expand_plan_row, _row_from_plan, _row_from_trade
@@ -37,8 +39,22 @@ def test_tp2_runner_keeps_target_and_progress_bar():
 
 
 def test_banked_leg_fields_survive_projection():
+    """`banked_r` keeps its meaning, the TP1 leg's own R (v189 B3); the
+    trade-level banked figure is the new `banked_contribution_r` = 0.5 x 2.1."""
     row = _row_from_plan(partial_plan(), None, set())
     assert (row["banked_fraction"], row["banked_exit_price"], row["banked_r"]) == (0.5, 121.0, 2.1)
+    assert row["banked_contribution_r"] == pytest.approx(1.05)
+
+
+def test_an_unpriced_partial_row_has_no_r_multiple():
+    """v189 B3: without a quote an open PARTIAL has no trade R. It used to
+    show the banked blend (here 1.05) as if it were the trade's R."""
+    trade = {"id": "t1", "shares": 10, "status": "open", "entry": 100.0,
+             "stop_loss": 90.0, "direction": "bullish",
+             "legs": [{"fraction": 0.5, "exit_price": 121.0, "r": 2.1}]}
+    row = _row_from_plan(partial_plan(), trade, set())
+    assert row["r_multiple"] is None
+    assert row["entry_shares"] == 10
 
 
 def test_pending_row_carries_no_banked_target():

@@ -9,16 +9,30 @@
 
 export const ABSENT = '—';
 
+/** U+2212 MINUS SIGN: the one glyph a loss is signed with (v195 section 1.1,
+ *  correction 5). Not the hyphen-minus: a hyphen is narrower than a digit
+ *  even in a mono face, so a column of hyphen-negatives does not align with
+ *  a column of positives, and it reads as a dash at a glance. */
+export const MINUS = '−';
+
+/** The sign of a movement: '+' for a gain, MINUS for a loss, nothing for
+ *  zero (or -0, which `< 0` does not catch), because zero has none. The
+ *  caller formats the magnitude, so no formatter prints its own minus. */
+function signOf(value: number): string {
+  if (value > 0) return '+';
+  return value < 0 ? MINUS : '';
+}
+
 export function num(value: number | null | undefined, decimals = 2): string {
   return value === null || value === undefined ? ABSENT : grouped(value, decimals);
 }
 
 /** Percentages carry an explicit sign, so a gain and a loss are told apart
  *  without reading the colour — which matters for the ~8% of people who
- *  cannot rely on the green/red pair at all. */
+ *  cannot rely on the green/red pair at all. A loss is signed with MINUS (v195 correction 5). */
 export function pct(value: number | null | undefined, decimals = 2): string {
   if (value === null || value === undefined) return ABSENT;
-  return `${value > 0 ? '+' : ''}${value.toFixed(decimals)}%`;
+  return `${signOf(value)}${Math.abs(value).toFixed(decimals)}%`;
 }
 
 /** An unsigned percentage: a share or a level, not a movement.
@@ -52,6 +66,26 @@ export function quantity(value: number | null | undefined, maxDecimals = 2): str
   return value.toLocaleString('en-US', { maximumFractionDigits: maxDecimals });
 }
 
+/** v194 B4: the one share-count formatter for Risk, trade detail and the
+ *  row drawer. The paper book sizes positions unrounded under the 2%
+ *  dollar-risk cap, so 2.72 shares is a real figure and "3" overstated it.
+ *  `quantity` at its two-decimal ceiling, named for what it formats. */
+export function shareCount(value: number | null | undefined): string {
+  return quantity(value, 2);
+}
+
+/** v194 B5: the one percentage formatter for portfolio heat, per-position
+ *  risk and their totals. Unsigned like `share` (a budget is a level, not a
+ *  movement), sign kept on a negative. A non-zero value under 0.01 renders
+ *  "<0.01%": at two decimals it printed "0.00%", claiming no risk where
+ *  there is some. An exact zero (or -0) is "0.00%". */
+export function riskPct(value: number | null | undefined): string {
+  if (value === null || value === undefined) return ABSENT;
+  if (value === 0) return '0.00%';
+  if (Math.abs(value) < 0.01) return `${value < 0 ? '-' : ''}<0.01%`;
+  return `${grouped(value, 2)}%`;
+}
+
 /** A realised P&L amount, signed like `pct` -- it is the same gain/loss the
  *  percentage names, just in currency rather than relative terms, so the two
  *  read the same way at a glance. `unit` comes from
@@ -59,9 +93,9 @@ export function quantity(value: number | null | undefined, maxDecimals = 2): str
  *  on why. */
 export function money(value: number | null | undefined, unit: string, decimals = 2): string {
   if (value === null || value === undefined) return ABSENT;
-  // toLocaleString already prints its own minus for a negative value; an
-  // explicit sign is only needed for the positive case.
-  return `${value > 0 ? '+' : ''}${grouped(value, decimals)} ${unit}`;
+  // v195 correction 5: the sign is ours (a true minus) and the magnitude is
+  // toLocaleString's -- which would otherwise print a hyphen-minus itself.
+  return `${signOf(value)}${grouped(Math.abs(value), decimals)} ${unit}`;
 }
 
 /** An unsigned currency magnitude: a cap, an exposure, a risk amount -- not
@@ -76,7 +110,7 @@ export function amount(value: number | null | undefined, unit: string, decimals 
 
 export function rMultiple(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
-  return `${value > 0 ? '+' : ''}${value.toFixed(2)}R`;
+  return `${signOf(value)}${Math.abs(value).toFixed(2)}R`;
 }
 
 /** Holding period at day/hour/minute precision. */
@@ -168,13 +202,12 @@ export function text(value: string | null | undefined): string {
  * the hue but a colour-blind reader does not, and `--pos`/`--neg` are close
  * enough in lightness that a greyscale print loses them entirely.
  *
- * The minus is U+2212, not a hyphen. A hyphen is narrower than a digit even
+ * The minus is U+2212 (MINUS), not a hyphen; since v195 pct, money and rMultiple use it too. A hyphen is narrower than a digit even
  * in a mono face, so a column of hyphen-negatives does not align with a
  * column of positives — which defeats the tabular numerics the whole numeric
  * law rests on. Zero takes no sign, because it has none.
  */
 export function signed(value: number | null | undefined, decimals = 2): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return ABSENT;
-  if (value === 0) return num(0, decimals);
-  return value > 0 ? `+${num(value, decimals)}` : `−${num(Math.abs(value), decimals)}`;
+  return `${signOf(value)}${num(Math.abs(value), decimals)}`;
 }

@@ -9,6 +9,10 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * table and chart container use (`sb-spin`), sized by `--spinner-size`.
  * Under Motion = Off it slows rather than stops (motion.css): a spinner is
  * status, not decoration.
+ *
+ * v195 Phase 2: the ring turns in the secondary grey, not the accent -- a
+ * load is status, and the accent is kept for interactive state. The table's
+ * and the chart frame's rings are the same rule (spinner.spec.ts).
  */
 @Component({
   selector: 'sb-spinner',
@@ -22,7 +26,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       height: var(--spinner-size, 14px);
       box-sizing: border-box;
       border: 2px solid var(--border-strong);
-      border-top-color: var(--accent);
+      border-top-color: var(--text-secondary);
       border-radius: 50%;
       animation: sb-spin 700ms linear infinite;
     }

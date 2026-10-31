@@ -23,6 +23,7 @@ import { Density } from '../../ui/data-table/data-table.types';
 import { tablePerPage } from '../../ui/table-per-page';
 import {
   perPageForApi,
+  readPerPageParam,
   readTableColumns,
   readTableDensity,
   writeTableColumns,
@@ -30,6 +31,7 @@ import {
 } from '../../ui/table-prefs';
 import { TradesStore, toSortParam } from '../../stores/trades.store';
 import { Button } from '../../ui/button';
+import { Page } from '../../ui/page';
 import { QualityChip } from '../../ui/chip';
 import { ColumnPickerComponent } from '../../ui/column-picker';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -48,7 +50,10 @@ import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
-import { StatusCell, partialIconTitle } from '../../ui/status-cell';
+import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
+import { Hint } from '../../ui/hint';
+import { fxMissingText } from '../analytics/scope-bar';
+import { LEG_HINT_TEXT, legLabel } from './leg-label';
 import {
   ACTION_LABELS,
   ACTION_TITLES,
@@ -87,9 +92,18 @@ interface LaneChip {
  * columns fit anything. The eight field filters and the date range are
  * precise tools used occasionally — exactly what a sheet is for.
  *
- * The two destructive controls demote furthest (`lg`). They were the first
- * thing under a thumb at 390px, above the data they destroy.
+ * The two destructive controls are not here. They used to demote furthest
+ * (`lg`), having been the first thing under a thumb at 390px; since v195
+ * they sit in the page header's actions slot (spec Phase 4), the one home
+ * of a destructive control, and never fold into the filter sheet.
  */
+/** v189 A6: the second, explicit confirmation a forced reset needs. */
+export const FORCE_RESET_CONSEQUENCE =
+  'The kill switch is tripped. Forcing the reset still archives every closed trade and finished plan to a file '
+  + 'on the server first, then deletes them and restarts realized P&L and the drawdown history from the base '
+  + 'balance, which lifts any throttle. The kill switch stays on: release it on the Risk page. New trades are '
+  + 'sized off the base balance.';
+
 export const TRADES_CONTROLS: ToolbarControl[] = [
   { id: 'status', label: 'Status', inlineFrom: 'xs' },
   { id: 'columns', label: 'Columns', inlineFrom: 'xs' },
@@ -104,9 +118,14 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
   { id: 'tier', label: 'Tier', inlineFrom: 'md' },
   { id: 'badge', label: 'Badge', inlineFrom: 'md' },
   { id: 'note', label: 'Note', inlineFrom: 'md' },
-  { id: 'clear-open', label: 'Clear open', inlineFrom: 'lg' },
-  { id: 'clear-history', label: 'Clear history', inlineFrom: 'lg' },
 ];
+
+/** v194 B3: what the Trades total counts. The API expands every plan
+ *  into one row per realised leg plus its open remainder
+ *  (`swingbot/admin/api_v1/trades.py` `_expand_plan_row`) before it
+ *  counts, so the pager's "1–50 of 120" is rows. */
+export const EXPORT_HINT = 'Downloads the entire trade log. The filters above do not narrow it.';
+export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts lists one row per leg.';
 
 /**
  * The Trades workspace — the entity that Plans, Journal and the dashboard's
@@ -120,6 +139,10 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
  * fails to do silently.
  *
  * It also means the back button works on filters, for free.
+ *
+ * On sb-page since v195: the toolbar and filter summary are the scope bar,
+ * the table the primary panel, and the two bulk clears the header's
+ * actions, each behind its confirm.
  */
 @Component({
   selector: 'sb-trades',
@@ -131,6 +154,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
   // need to reach.
   host: { class: 'register-instrument' },
   imports: [
+    Page,
     Async,
     Toolbar,
     DataTable,
@@ -144,6 +168,7 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
     ConfirmDialog,
     Flash,
     StatusCell,
+    Hint,
     DirectionArrow,
     PlanCell,
     ConfidenceCell,
@@ -153,390 +178,449 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
     Icon,
   ],
   template: `
-    @if (store.clearResult(); as message) {
-      <!-- The count, not just "done": "cleared 0" and "cleared 40" are
-           different answers and want different reactions. -->
-      <p class="cleared" role="status">{{ message }}</p>
-    }
-    @if (store.clearError(); as message) {
-      <p class="command-error" role="alert">{{ message }}</p>
-    }
-
-    <!-- v95 C1: the ~1700px of chrome that used to sit above the first row at
-         390px -- eight field filters, a date range, Export CSV, the column
-         picker, the density toggle, eight status chips and two destructive
-         buttons -- collapses into one sb-toolbar. status and columns stay
-         inline everywhere (TRADES_CONTROLS); everything else demotes into
-         the sheet below its declared floor. sb-filter-chips (not deprecated
-         sb-segmented: this lane needs the "All" leading chip and the
-         three-key write onLaneChip already provides) still owns the chip
-         markup; only its data and handler changed. -->
-    <sb-toolbar [controls]="toolbarControls()">
-      <sb-filter-chips
-        slot="status"
-        [chips]="laneChips"
-        [selected]="laneSelected()"
-        label="Status"
-        (selectedChange)="onLaneChip($event)"
-      />
-      <sb-column-picker
-        slot="columns"
-        [tableId]="tableId"
-        [density]="density()"
-        [pinned]="pinned"
-        [columns]="allColumns()"
-        [defaults]="defaultColumns()"
-        [visible]="visible()"
-        (visibleChange)="visible.set($event)"
-      />
-      <div slot="density" class="density" role="group" aria-label="Row density">
+    <sb-page>
+      <!-- v195 Phase 4: the header's actions slot is the one home of a
+           destructive control. Both clears are bulk deletes, so they are
+           danger-quiet and open the bulk confirm below; the result and the
+           error read beside the buttons that sent them. -->
+      <div page-actions class="page-actions">
+        @if (store.clearResult(); as message) {
+          <!-- The count, not just "done": "cleared 0" and "cleared 40" are
+               different answers and want different reactions. -->
+          <p class="cleared" role="status">{{ message }}</p>
+        }
+        @if (store.clearNotice(); as notice) {
+          <!-- v189: the server's own lines -- the plans a delete ended, or the
+               reset's archive, throttle and kill switch. Line breaks kept. -->
+          <p class="clear-notice" role="status" data-testid="clear-notice">{{ notice }}</p>
+        }
+        @if (store.clearRefusal(); as refusal) {
+          <!-- v189 A6: a refusal, not a failure. The force is one more explicit
+               step, never a retry the page makes on its own. -->
+          <div class="clear-refusal" role="alert" data-testid="clear-refusal">
+            <p>{{ refusal }}</p>
+            <button sb-button variant="danger-quiet" type="button" (click)="forceOpen.set(true)">Reset anyway…</button>
+          </div>
+        }
+        @if (store.clearError(); as message) {
+          <p class="command-error" role="alert">{{ message }}</p>
+        }
         <button
           sb-button
-          variant="ghost"
+          variant="danger-quiet"
           type="button"
-          [attr.aria-pressed]="density() === 'compact'"
-          (click)="setDensity('compact')"
+          data-action="clear-open"
+          (click)="bulk.set('open')"
         >
-          Compact
+          Clear open
         </button>
         <button
           sb-button
-          variant="ghost"
+          variant="danger-quiet"
           type="button"
-          [attr.aria-pressed]="density() === 'full'"
-          (click)="setDensity('full')"
+          data-action="clear-history"
+          (click)="bulk.set('history')"
         >
-          Full
+          Clear history
         </button>
       </div>
-      <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
-           the server's filename, both of which an XHR throws away.
-           The title names what comes out, because it is NOT what is on
-           screen: the export is the whole trade log, unfiltered. Saying so
-           here is the same courtesy the two Clear dialogs already pay. -->
-      <a
-        slot="export"
-        class="export"
-        [href]="store.exportUrl()"
-        title="Downloads the entire trade log. The filters above do not narrow it."
-        download
-        >Export CSV</a
-      >
-      <!-- v85 D32: the opened-at range narrows WHEN, not WHAT -- a scope
-           control rather than a field filter, same distinction that used to
-           separate the control bar from the filter bar. -->
-      <sb-date-range
-        slot="dates"
-        [from]="opened_from() ?? null"
-        [to]="opened_to() ?? null"
-        (changed)="onDateRange($event)"
-      />
-      <sb-text-input
-        slot="ticker"
-        type="search"
-        label="Ticker"
-        placeholder="AAPL"
-        [value]="ticker() ?? ''"
-        (valueChange)="navigate({ ticker: $event })"
-      />
-      <sb-select
-        slot="origin"
-        label="Origin"
-        placeholder="Any"
-        [value]="origin() ?? ''"
-        [options]="originOptions"
-        (valueChange)="navigate({ origin: $event })"
-      />
-      <!-- SR52. The five the parity audit found, in the order they narrow a
-           search: what the setup was, then how it was graded, then whether it
-           has been written up. -->
-      <sb-text-input
-        slot="strategy"
-        type="search"
-        label="Strategy"
-        placeholder="RSI"
-        [value]="strategy() ?? ''"
-        (valueChange)="navigate({ strategy: $event })"
-      />
-      <sb-select
-        slot="horizon"
-        label="Horizon"
-        placeholder="Any"
-        [value]="horizon() ?? ''"
-        [options]="horizonOptions"
-        (valueChange)="navigate({ horizon: $event })"
-      />
-      <sb-select
-        slot="confidence"
-        label="Confidence"
-        placeholder="Any"
-        [value]="confidence() ?? ''"
-        [options]="confidenceOptions"
-        (valueChange)="navigate({ confidence: $event })"
-      />
-      <sb-select
-        slot="tier"
-        label="Tier"
-        placeholder="Any"
-        [value]="tier() ?? ''"
-        [options]="tierOptions"
-        (valueChange)="navigate({ tier: $event })"
-      />
-      <sb-select
-        slot="badge"
-        label="Badge"
-        placeholder="Any"
-        [value]="badge() ?? ''"
-        [options]="badgeOptions"
-        (valueChange)="navigate({ badge: $event })"
-      />
-      <sb-select
-        slot="note"
-        label="Note"
-        placeholder="Any"
-        [value]="has_note() ?? ''"
-        [options]="noteOptions"
-        (valueChange)="navigate({ has_note: $event })"
-      />
-      <button
-        slot="clear-open"
-        sb-button
-        variant="danger"
-        type="button"
-        (click)="bulk.set('open')"
-      >
-        Clear open
-      </button>
-      <button
-        slot="clear-history"
-        sb-button
-        variant="danger"
-        type="button"
-        (click)="bulk.set('history')"
-      >
-        Clear history
-      </button>
-    </sb-toolbar>
 
-    <!-- What sb-filter-bar keeps after C1: no projected controls (those all
-         moved into sb-toolbar above), just the "N active / Clear all"
-         summary -- a persistent, always-inline affordance distinct from the
-         toolbar's own per-control Guard-1 badge, which counts only DEMOTED
-         actives. -->
-    <sb-filter-bar [activeCount]="store.activeFilterCount()" (cleared)="clearFilters()" />
-
-    <!-- v54: rows=12 cols=8, measured against a full table page at Slow
-         3G (Task 21 G6). measured-zero always -- an empty filtered set is
-         a measured answer, not missing data; asyncInputs already suppresses
-         no-data-yet for the pre-first-response case. -->
-    <sb-async
-      [loading]="async().loading"
-      [error]="async().error"
-      [empty]="async().empty"
-      [staleAsOf]="async().staleAsOf"
-      emptyReason="measured-zero"
-      [emptyTitle]="store.activeFilterCount() > 0 ? 'No trades match this filter' : 'No trades yet'"
-      [emptyHint]="store.activeFilterCount() > 0 ? 'Clear the filters to see the full log.' : undefined"
-      [skeletonRows]="12"
-      [skeletonCols]="8"
-      [announce]="announce()"
-      (retry)="store.load()"
-    >
-      <sb-data-table
-        [rows]="store.rows()"
-        [columns]="allColumns()"
-        [visible]="visible()"
-        [rowKey]="rowKey"
-        [sort]="store.sort()"
-        [pagination]="store.pagination()"
-        [expansion]="expansionTemplate()"
-        phoneTap="drawer"
-        [detailLink]="tradeLink"
-        (sortChange)="onSort($event)"
-        (pageChange)="navigate({ page: $event }, false)"
-        (rowActivate)="open($event)"
-        [pinned]="pinned"
-        (reorder)="onReorder($event)"
-        [showPerPage]="true"
-        [perPageChoice]="perPage()"
-        (perPageChange)="onPerPage($event)"
-      />
-    </sb-async>
-
-    <!-- R6-05: the count footer. Lives outside sb-async on purpose --
-         store.pagination() is set as soon as the first response lands,
-         table or no table, so this still has an answer when async() is
-         showing its own empty state instead of sb-data-table (which happens
-         whenever the page is empty, and is why this can't be reached from
-         inside sb-pagination's own [pagination] binding). Beside, not
-         instead of, that pager's own range span: this is the one that
-         distinguishes a filter that matched nothing from a genuinely empty
-         log, the same measured-zero distinction emptyTitle above already
-         draws. -->
-    @if (countText(); as count) {
-      <p class="count">{{ count }}</p>
-    }
-
-    <!-- cells ---------------------------------------------------------- -->
-
-    <ng-template #numCell let-row>
-      <sb-row-link [link]="['/trades', row.id]">
-        {{ shortId(row) }}
-        <!-- v79 split a scaled-out position into one row per leg, both
-             carrying the same id -- unmarked, the later-closing leg reads
-             as a duplicate of the earlier partial exit it shares an id
-             with. -->
-        @if (partialIconTitle(row); as partialTitle) {
-          <sb-icon name="partial" class="leg-icon" [title]="partialTitle" />
-        }
-        @if (row.bar_kind === 'trailing') {
-          <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
-        }
-      </sb-row-link>
-    </ng-template>
-
-    <ng-template #statusCell let-row>
-      <sb-status-cell [row]="row" />
-    </ng-template>
-
-    <ng-template #directionCell let-row>
-      <sb-direction-arrow [direction]="row.direction" />
-    </ng-template>
-
-    <ng-template #planCell let-row>
-      <!-- v177: runnerCellInputs keys the two-line runner cell and the
-           closed runner's exit on row.status -- identical in dashboard.ts. -->
-      @let rc = runnerCellInputs(row);
-      <sb-plan-cell
-        [entry]="row.entry"
-        [target]="row.target"
-        [stop]="row.stop_loss"
-        [trigger]="row.trigger_price"
-        [stopKind]="row.stop_kind"
-        [targetIsBankedTp1]="row.target_is_banked_tp1"
-        [floorR]="row.floor_r" [priceR]="row.price_r" [headroomR]="row.headroom_r"
-        [bankedFraction]="row.banked_fraction"
-        [bankedR]="row.banked_r"
-        [bankedEntry]="row.banked_exit_price"
-        [bankedPct]="bankedLegPct(row.entry, row.banked_exit_price, row.direction)"
-        [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.shares, row.direction)"
-        [planTp1]="rc.planTp1" [planStop]="rc.planStop"
-        [trailBest]="rc.trailBest" [trailBestPct]="rc.trailBestPct" [trailExitPct]="rc.trailExitPct"
-        [runnerExit]="rc.runnerExit" [runnerExitPct]="rc.runnerExitPct" [runnerExitReason]="rc.runnerExitReason"
-        [currency]="connection.currency()"
-      />
-    </ng-template>
-
-    <!-- See dashboard.ts's own pnlCell -- same pairing, same reasoning:
-         the % alone doesn't say how much money that was. The percentage
-         carries its unit (fmtPct, not fmtSigned) because this cell holds
-         two figures in two different units, and on a phone the header sits
-         in a <dt> beside them rather than above a column -- see
-         dashboard.ts's fmtPct note for the full reversal of v54 Task 28. -->
-    <ng-template #pnlCell let-row>
-      <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
-        {{ fmtPct(row.pnl_pct) }}
-        <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
-      </span>
-    </ng-template>
-
-    <!-- v54 Task 28: sb-magnitude beneath the R figure -- the header ('R')
-         already names the unit, so the cell drops it (signed(), not
-         rMultiple()). -->
-    <ng-template #rMultipleCell let-row>
-      <span [sbFlash]="row.r_multiple" [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
-      <sb-magnitude [value]="row.r_multiple" [max]="maxRMultiple()" />
-    </ng-template>
-
-    <ng-template #tierCell let-row>
-      @if (row.tier) {
-        <sb-quality-chip [value]="row.tier" [label]="row.tier" />
-      }
-    </ng-template>
-
-    <ng-template #confidenceCell let-row>
-      <sb-confidence-cell [level]="row.confidence_level" [score]="row.confidence_score" />
-    </ng-template>
-
-    <ng-template #openedCell let-row>{{ fmtDate(openedAt(row)) }}</ng-template>
-    <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
-
-    <ng-template #actionsCell let-row>
-      <span class="actions">
-        @for (kind of actionsFor(row.status); track kind) {
-          <button sb-button variant="ghost" type="button" (click)="ask(kind, row)">
-            {{ actionLabels[kind] }}
+      <!-- Scope only (spec Phase 4): filters, the column picker, the
+           column-set toggle, Export CSV and the active-filter summary. -->
+      <div page-scope class="scope">
+      <!-- v95 C1: the ~1700px of chrome that used to sit above the first row at
+           390px -- eight field filters, a date range, Export CSV, the column
+           picker, the density toggle, eight status chips and two destructive
+           buttons -- collapses into one sb-toolbar. status and columns stay
+           inline everywhere (TRADES_CONTROLS); everything else demotes into
+           the sheet below its declared floor. sb-filter-chips (not deprecated
+           sb-segmented: this lane needs the "All" leading chip and the
+           three-key write onLaneChip already provides) still owns the chip
+           markup; only its data and handler changed. -->
+      <sb-toolbar [controls]="toolbarControls()">
+        <sb-filter-chips
+          slot="status"
+          [chips]="laneChips"
+          [selected]="laneSelected()"
+          label="Status"
+          (selectedChange)="onLaneChip($event)"
+        />
+        <sb-column-picker
+          slot="columns"
+          [tableId]="tableId"
+          [density]="density()"
+          [pinned]="pinned"
+          [columns]="allColumns()"
+          [defaults]="defaultColumns()"
+          [visible]="visible()"
+          (visibleChange)="visible.set($event)"
+        />
+        <div slot="density" class="density" role="group" aria-label="Row density">
+          <button
+            sb-button
+            variant="ghost"
+            type="button"
+            [attr.aria-pressed]="density() === 'compact'"
+            (click)="setDensity('compact')"
+          >
+            Compact
           </button>
-        }
-      </span>
-    </ng-template>
+          <button
+            sb-button
+            variant="ghost"
+            type="button"
+            [attr.aria-pressed]="density() === 'full'"
+            (click)="setDensity('full')"
+          >
+            Full
+          </button>
+        </div>
+        <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
+             the server's filename, both of which an XHR throws away.
+             The hint names what comes out, because it is NOT what is on
+             screen: the export is the whole trade log, unfiltered. Saying so
+             here is the same courtesy the two Clear dialogs already pay. -->
+        <span slot="export" class="export-wrap">
+          <a class="export" [href]="store.exportUrl()" download>Export CSV</a>
+          <sb-hint [text]="exportHint" label="About the CSV export" align="left" />
+        </span>
+        <!-- v85 D32: the opened-at range narrows WHEN, not WHAT -- a scope
+             control rather than a field filter, same distinction that used to
+             separate the control bar from the filter bar. -->
+        <sb-date-range
+          slot="dates"
+          [from]="opened_from() ?? null"
+          [to]="opened_to() ?? null"
+          (changed)="onDateRange($event)"
+        />
+        <sb-text-input
+          slot="ticker"
+          type="search"
+          label="Ticker"
+          placeholder="AAPL"
+          [value]="ticker() ?? ''"
+          (valueChange)="navigate({ ticker: $event })"
+        />
+        <sb-select
+          slot="origin"
+          label="Origin"
+          placeholder="Any"
+          [value]="origin() ?? ''"
+          [options]="originOptions"
+          (valueChange)="navigate({ origin: $event })"
+        />
+        <!-- SR52. The five the parity audit found, in the order they narrow a
+             search: what the setup was, then how it was graded, then whether it
+             has been written up. -->
+        <sb-text-input
+          slot="strategy"
+          type="search"
+          label="Strategy"
+          placeholder="RSI"
+          [value]="strategy() ?? ''"
+          (valueChange)="navigate({ strategy: $event })"
+        />
+        <sb-select
+          slot="horizon"
+          label="Horizon"
+          placeholder="Any"
+          [value]="horizon() ?? ''"
+          [options]="horizonOptions"
+          (valueChange)="navigate({ horizon: $event })"
+        />
+        <sb-select
+          slot="confidence"
+          label="Confidence"
+          placeholder="Any"
+          [value]="confidence() ?? ''"
+          [options]="confidenceOptions"
+          (valueChange)="navigate({ confidence: $event })"
+        />
+        <sb-select
+          slot="tier"
+          label="Tier"
+          placeholder="Any"
+          [value]="tier() ?? ''"
+          [options]="tierOptions"
+          (valueChange)="navigate({ tier: $event })"
+        />
+        <sb-select
+          slot="badge"
+          label="Badge"
+          placeholder="Any"
+          [value]="badge() ?? ''"
+          [options]="badgeOptions"
+          (valueChange)="navigate({ badge: $event })"
+        />
+        <sb-select
+          slot="note"
+          label="Note"
+          placeholder="Any"
+          [value]="has_note() ?? ''"
+          [options]="noteOptions"
+          (valueChange)="navigate({ has_note: $event })"
+        />
+      </sb-toolbar>
 
-    <!-- expansion: the four groups spec 3 names ------------------------- -->
-
-    <ng-template #expansion let-row>
-      <!-- Label/value grid. SR24 reuses this markup verbatim for the phone
-           card, so its shape has a second consumer -- change it here and the
-           card changes with it. -->
-      <div class="groups">
-        <dl>
-          <dt class="group">Hidden in this view</dt>
-          @for (field of hiddenFields(); track field.key) {
-            <div>
-              <dt>{{ field.header }}</dt>
-              <dd [class.num]="field.numeric">{{ field.render(row) }}</dd>
-            </div>
-          } @empty {
-            <div><dd class="none">Every column is showing.</dd></div>
-          }
-        </dl>
-        <dl>
-          <!-- Never columns at any density, so the expansion is the only
-               place they can live.
-               The task names target sources, the leg breakdown and the note.
-               None of the three is on TradeRow -- they are TradeDetail
-               fields, and this template renders a row. Showing them would
-               mean a fetch per expanded row. These are the row's own
-               never-column fields; the rest stay one click away in the
-               detail view, which is where the row already links to. -->
-          <dt class="group">Detail</dt>
-          <div><dt>Tier</dt><dd>{{ fmtText(row.tier) }}</dd></div>
-          <div><dt>Badge</dt><dd>{{ fmtText(row.badge) }}</dd></div>
-          <div><dt>Quality</dt><dd class="num">{{ fmtNum(row.quality_score, 0) }}</dd></div>
-          <div><dt>Note</dt><dd>{{ row.has_note ? 'Yes' : 'No' }}</dd></div>
-        </dl>
+      <!-- What sb-filter-bar keeps after C1: no projected controls (those all
+           moved into sb-toolbar above), just the "N active / Clear all"
+           summary -- a persistent, always-inline affordance distinct from the
+           toolbar's own per-control Guard-1 badge, which counts only DEMOTED
+           actives. -->
+      <sb-filter-bar [activeCount]="store.activeFilterCount()" (cleared)="clearFilters()" />
       </div>
-    </ng-template>
 
-    <sb-confirm-dialog
-      [open]="pending() !== null"
-      [title]="confirmTitle()"
-      [consequence]="confirmConsequence()"
-      [confirmLabel]="confirmLabel()"
-      [working]="working()"
-      (confirmed)="runPending()"
-      (cancelled)="pending.set(null)"
-    />
+      <!-- v195 §5.2: the trade table is the primary panel. -->
+      <div page-primary class="table-body">
+      <!-- v54: rows=12 cols=8, measured against a full table page at Slow
+           3G (Task 21 G6). measured-zero always -- an empty filtered set is
+           a measured answer, not missing data; asyncInputs already suppresses
+           no-data-yet for the pre-first-response case. -->
+      <sb-async
+        [loading]="async().loading"
+        [error]="async().error"
+        [empty]="async().empty"
+        [staleAsOf]="async().staleAsOf"
+        emptyReason="measured-zero"
+        [emptyTitle]="store.activeFilterCount() > 0 ? 'No trades match this filter' : 'No trades yet'"
+        [emptyHint]="store.activeFilterCount() > 0 ? 'Clear the filters to see the full log.' : undefined"
+        [skeletonRows]="12"
+        [skeletonCols]="8"
+        [announce]="announce()"
+        (retry)="store.load()"
+      >
+        <sb-data-table
+          [rows]="store.rows()"
+          [columns]="allColumns()"
+          [visible]="visible()"
+          [rowKey]="rowKey"
+          [sort]="store.sort()"
+          [pagination]="store.pagination()"
+          [expansion]="expansionTemplate()"
+          phoneTap="drawer"
+          [detailLink]="tradeLink"
+          (sortChange)="onSort($event)"
+          (pageChange)="navigate({ page: $event }, false)"
+          (rowActivate)="open($event)"
+          [pinned]="pinned"
+          (reorder)="onReorder($event)"
+          [showPerPage]="true"
+          [perPageChoice]="perPage()"
+          (perPageChange)="onPerPage($event)"
+        />
+      </sb-async>
 
-    <!-- Its own dialog rather than a widened pending action: the row
-         actions act on a named trade and these act on all of them, and one
-         dialog serving both would have to describe "the selected trade, or
-         every trade" in a single sentence. -->
-    <sb-confirm-dialog
-      [open]="bulk() !== null"
-      [title]="bulkTitle()"
-      [consequence]="bulkConsequence()"
-      confirmLabel="Clear"
-      [working]="store.clearing() !== null"
-      (confirmed)="runBulk()"
-      (cancelled)="bulk.set(null)"
-    />
+      <!-- R6-05: the count footer. Lives outside sb-async on purpose --
+           store.pagination() is set as soon as the first response lands,
+           table or no table, so this still has an answer when async() is
+           showing its own empty state instead of sb-data-table (which happens
+           whenever the page is empty, and is why this can't be reached from
+           inside sb-pagination's own [pagination] binding). Beside, not
+           instead of, that pager's own range span: this is the one that
+           distinguishes a filter that matched nothing from a genuinely empty
+           log, the same measured-zero distinction emptyTitle above already
+           draws. -->
+      @if (countText(); as count) {
+        <p class="count">{{ count }}</p>
+      }
+      <!-- v194 B7: a row with no exchange rate for its exit date shows no
+           amount; say how many on this page rather than let a dash pass
+           for a zero. -->
+      @if (fxMissing() > 0) {
+        <p class="fx-caveat" role="note">{{ fxText(fxMissing()) }}</p>
+      }
+      </div>
+
+      <!-- cells ---------------------------------------------------------- -->
+
+      <ng-template #numCell let-row>
+        <sb-row-link [link]="['/trades', row.id]">
+          {{ shortId(row) }}
+          @if (partialOpenTitle(row)) {
+            <sb-icon name="partial" class="leg-icon" />
+          }
+          @if (row.bar_kind === 'trailing') {
+            <sb-icon name="trailing" class="leg-icon" title="Trailing stop" />
+          }
+        </sb-row-link>
+        @if (partialOpenTitle(row); as openTitle) {
+          <sb-hint [text]="openTitle" label="About this partial position" align="left" />
+        }
+        <!-- v79 split a scaled-out position into one row per leg, all
+             carrying the same id. v194 B3: every leg says which part it
+             is, and the hint (outside the link: a button cannot sit in an
+             anchor) says what a leg row's P&L and the page's N mean. -->
+        @if (legLabel(row); as leg) {
+          <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+        }
+      </ng-template>
+
+      <ng-template #statusCell let-row>
+        <sb-status-cell [row]="row" />
+      </ng-template>
+
+      <ng-template #directionCell let-row>
+        <sb-direction-arrow [direction]="row.direction" />
+      </ng-template>
+
+      <ng-template #planCell let-row>
+        <!-- v177: runnerCellInputs keys the two-line runner cell and the
+             closed runner's exit on row.status -- identical in dashboard.ts. -->
+        @let rc = runnerCellInputs(row);
+        <sb-plan-cell
+          [entry]="row.entry"
+          [target]="row.target"
+          [stop]="row.stop_loss"
+          [trigger]="row.trigger_price"
+          [stopKind]="row.stop_kind"
+          [targetIsBankedTp1]="row.target_is_banked_tp1"
+          [floorR]="row.floor_r" [priceR]="row.price_r" [headroomR]="row.headroom_r"
+          [bankedFraction]="row.banked_fraction"
+          [bankedR]="row.banked_r"
+          [bankedContributionR]="row.banked_contribution_r ?? null"
+          [bankedEntry]="row.banked_exit_price"
+          [bankedPct]="bankedLegPct(row.entry, row.banked_exit_price, row.direction)"
+          [bankedAmount]="bankedLegAmount(row.entry, row.banked_exit_price, row.banked_fraction, row.entry_shares ?? null, row.direction)"
+          [planTp1]="rc.planTp1" [planStop]="rc.planStop"
+          [trailBest]="rc.trailBest" [trailBestPct]="rc.trailBestPct" [trailExitPct]="rc.trailExitPct"
+          [runnerExit]="rc.runnerExit" [runnerExitPct]="rc.runnerExitPct" [runnerExitReason]="rc.runnerExitReason"
+          [currency]="connection.currency()"
+        />
+      </ng-template>
+
+      <!-- See dashboard.ts's own pnlCell -- same pairing, same reasoning:
+           the % alone doesn't say how much money that was. The percentage
+           carries its unit (fmtPct, not fmtSigned) because this cell holds
+           two figures in two different units, and on a phone the header sits
+           in a <dt> beside them rather than above a column -- see
+           dashboard.ts's fmtPct note for the full reversal of v54 Task 28. -->
+      <ng-template #pnlCell let-row>
+        <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
+          {{ fmtPct(row.pnl_pct) }}
+          <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
+        </span>
+      </ng-template>
+
+      <!-- v54 Task 28: sb-magnitude beneath the R figure -- the header ('R')
+           already names the unit, so the cell drops it (signed(), not
+           rMultiple()). -->
+      <ng-template #rMultipleCell let-row>
+        <span [sbFlash]="row.r_multiple" [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
+        <sb-magnitude [value]="row.r_multiple" [max]="maxRMultiple()" />
+      </ng-template>
+
+      <ng-template #tierCell let-row>
+        @if (row.tier) {
+          <sb-quality-chip [value]="row.tier" [label]="row.tier" />
+        }
+      </ng-template>
+
+      <ng-template #confidenceCell let-row>
+        <sb-confidence-cell [level]="row.confidence_level" [score]="row.confidence_score" />
+      </ng-template>
+
+      <ng-template #openedCell let-row>{{ fmtDate(openedAt(row)) }}</ng-template>
+      <ng-template #closedCell let-row>{{ fmtDate(row.closed_at) }}</ng-template>
+
+      <ng-template #actionsCell let-row>
+        <span class="actions">
+          @for (kind of actionsFor(row.status); track kind) {
+            <button sb-button variant="ghost" type="button" (click)="ask(kind, row)">
+              {{ actionLabels[kind] }}
+            </button>
+          }
+        </span>
+      </ng-template>
+
+      <!-- expansion: the four groups spec 3 names ------------------------- -->
+
+      <ng-template #expansion let-row>
+        <!-- Label/value grid. SR24 reuses this markup verbatim for the phone
+             card, so its shape has a second consumer -- change it here and the
+             card changes with it. -->
+        <div class="groups">
+          <dl>
+            <dt class="group">Hidden in this view</dt>
+            @for (field of hiddenFields(); track field.key) {
+              <div>
+                <dt>{{ field.header }}</dt>
+                <dd [class.num]="field.numeric">{{ field.render(row) }}</dd>
+              </div>
+            } @empty {
+              <div><dd class="none">Every column is showing.</dd></div>
+            }
+          </dl>
+          <dl>
+            <!-- Never columns at any density, so the expansion is the only
+                 place they can live.
+                 The task names target sources, the leg breakdown and the note.
+                 None of the three is on TradeRow -- they are TradeDetail
+                 fields, and this template renders a row. Showing them would
+                 mean a fetch per expanded row. These are the row's own
+                 never-column fields; the rest stay one click away in the
+                 detail view, which is where the row already links to. -->
+            <dt class="group">Detail</dt>
+            <div><dt>Tier</dt><dd>{{ fmtText(row.tier) }}</dd></div>
+            <div><dt>Badge</dt><dd>{{ fmtText(row.badge) }}</dd></div>
+            <div><dt>Quality</dt><dd class="num">{{ fmtNum(row.quality_score, 0) }}</dd></div>
+            <div><dt>Note</dt><dd>{{ row.has_note ? 'Yes' : 'No' }}</dd></div>
+            @if (legLabel(row); as leg) {
+              <div class="leg-detail">
+                <dt>Leg</dt>
+                <dd>{{ leg }} <sb-hint [text]="legHint" label="About leg rows" align="left" /></dd>
+              </div>
+            }
+          </dl>
+        </div>
+      </ng-template>
+
+      <sb-confirm-dialog
+        [open]="pending() !== null"
+        [title]="confirmTitle()"
+        [consequence]="confirmConsequence()"
+        [confirmLabel]="confirmLabel()"
+        [working]="working()"
+        (confirmed)="runPending()"
+        (cancelled)="pending.set(null)"
+      />
+
+      <!-- Its own dialog rather than a widened pending action: the row
+           actions act on a named trade and these act on all of them, and one
+           dialog serving both would have to describe "the selected trade, or
+           every trade" in a single sentence. -->
+      <sb-confirm-dialog
+        [open]="bulk() !== null"
+        [title]="bulkTitle()"
+        [consequence]="bulkConsequence()"
+        confirmLabel="Clear"
+        [working]="store.clearing() !== null"
+        (confirmed)="runBulk()"
+        (cancelled)="bulk.set(null)"
+      />
+      <sb-confirm-dialog
+        data-dialog="force-reset"
+        [open]="forceOpen()"
+        title="Reset while the kill switch is tripped"
+        [consequence]="forceResetConsequence"
+        confirmLabel="Force reset"
+        [working]="store.clearing() !== null"
+        (confirmed)="runForceReset()"
+        (cancelled)="forceOpen.set(false)"
+      />
+    </sb-page>
   `,
   styles: `
-    /* v89 audit (UA15): sb-trades had no :host stacking rule, so its
-       top-level children (section head, control bar, filter bar, the
-       table) sat flush against each other instead of --section-gap apart.
-       Same pattern as every other workspace host. */
-    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--section-gap); }
+    /* v195 Phase 4: sb-page owns the page rhythm (header, scope, primary).
+       min-width: 0 keeps the 29-column table scrolling inside its own
+       container instead of taking the page sideways. */
+    :host { display: block; min-width: 0; }
+    .scope, .table-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--register-pad); }
+    /* Wraps under the title on a phone; the result and error lines take
+       their own row above the buttons. */
+    /* contents: sb-page's actions slot is already the right-aligned wrapping row. */
+    .page-actions { display: contents; }
+    .page-actions p { flex: 1 0 100%; margin: 0; text-align: right; }
+    .export-wrap { display: inline-flex; align-items: center; gap: var(--space-4); }
 
     /* v95 C1: sb-toolbar lays out its slotted children; this is just the
        group's own internal gap, which sb-control-row used to supply. */
@@ -549,10 +633,36 @@ export const TRADES_CONTROLS: ToolbarControl[] = [
        failed, these numbers are stale", and this one means "the thing you
        asked for did not happen". */
     .command-error { color: var(--neg); font-size: var(--text-table); }
+    /* v189: the server's multi-line notice; an archive name has no spaces to
+       break on, so it may wrap anywhere rather than push the page sideways. */
+    .page-actions .clear-notice {
+      margin: 0; white-space: pre-line; overflow-wrap: anywhere; text-align: start;
+      color: var(--text-secondary); font-size: var(--text-table);
+    }
+    .page-actions .clear-refusal {
+      flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8) var(--space-10);
+      color: var(--neg); font-size: var(--text-table);
+    }
+    .page-actions .clear-refusal p { margin: 0; flex: 1 1 24rem; min-width: 0; overflow-wrap: anywhere; text-align: start; }
+    /* A real target on touch screens; full width on a phone so it never
+       shares a cramped line with the refusal text. */
+    .clear-refusal button { min-height: var(--control-h); }
+    @media (max-width: 639px) { .clear-refusal button { width: 100%; } }
 
     /* R6-05. Same voice as sb-pagination's own .range (muted, --text-table)
        so the two read as one family, not a mismatched addition. */
     .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
+    /* sb-hint's trigger grows to --control-h (44px) on coarse / tablet
+       widths while its glyph stays 14px. In this stacked cell that padding
+       is empty box under the label, so the cell's ink sat ~7px above its
+       middle (layout audit vcenter, /trades at 768). Pull it back with a
+       negative block margin: the tap area still overlaps the row, it just
+       stops adding height. */
+    @media (pointer: coarse), (max-width: 1023px) {
+      .leg sb-hint { margin-block: calc((var(--control-h) - 14px) / -2); }
+    }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
@@ -607,6 +717,7 @@ export class Trades {
   /* Query parameters, arriving as inputs through withComponentInputBinding.
    * All strings, because that is what a URL carries. */
   readonly page = input<string>();
+  readonly per_page = input<string>();
   readonly sort = input<string>();
   readonly status = input<string>();
   readonly outcome = input<string>();
@@ -716,7 +827,9 @@ export class Trades {
 
   /** Rows per page. 0 means "All", translated at the API boundary. */
   private readonly perPageState = tablePerPage(TRADES_TABLE_ID);
-  protected readonly perPage = this.perPageState.value;
+  protected readonly perPage = computed(() =>
+    readPerPageParam(this.per_page()) ?? this.perPageState.value(),
+  );
 
   /**
    * Apply the saved layout once the server's preferences arrive.
@@ -770,6 +883,13 @@ export class Trades {
 
   protected readonly pending = signal<PendingAction>(null);
   protected readonly working = signal(false);
+  protected readonly forceOpen = signal(false);
+  protected readonly forceResetConsequence = FORCE_RESET_CONSEQUENCE;
+
+  protected runForceReset(): void {
+    this.store.clearHistory(true);
+    this.forceOpen.set(false);
+  }
 
   /** Which bulk clear is awaiting confirmation. */
   protected readonly bulk = signal<'open' | 'history' | null>(null);
@@ -847,8 +967,14 @@ export class Trades {
    *  first page has loaded. */
   protected readonly announce = computed(() => {
     const page = this.store.pagination();
-    return page ? `${page.total} trades` : null;
+    return page ? `${page.total} rows` : null;
   });
+
+  /** v194 B7: rows on this page whose amount has no exchange rate. */
+  protected readonly fxMissing = computed(
+    () => (this.store.data()?.items ?? []).filter((r) => r.fx_missing === true).length,
+  );
+  protected readonly fxText = fxMissingText;
 
   /**
    * R6-05: "Showing 1–12 of 142" — a measured answer, not a decoration. Null
@@ -861,6 +987,9 @@ export class Trades {
    * clamped to `total` so the last page never claims rows past the end of
    * the log (page 12 of 12 at 142 total, 12/page reads "133–142", not
    * "133–144").
+   *
+   * A non-zero total is rows, not plans (v194 B3): the note says so; the
+   * range itself stays the pager's.
    */
   protected readonly countText = computed(() => {
     const page = this.store.pagination();
@@ -871,7 +1000,7 @@ export class Trades {
         ? 'No trades match this filter'
         : 'No trades yet';
     }
-    return null;
+    return ROW_COUNT_NOTE;
   });
 
   constructor() {
@@ -957,10 +1086,15 @@ export class Trades {
     return row.id.length > 6 ? row.id.slice(-6) : row.id;
   }
 
-  /** The ID cell's single partial icon tooltip: "still open" for a live PARTIAL
-   *  row, "closed after an earlier partial exit" for a later closed leg of a v79
-   *  scale-out split (`leg_index > 0`), else null. One icon, never two. */
-  protected readonly partialIconTitle = partialIconTitle;
+  protected readonly partialOpenTitle = partialOpenTitle;
+
+  /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
+  protected readonly legLabel = legLabel;
+  /** v194 A4: this page has no win rate; say how the pages that do count. */
+  protected readonly legHint = LEG_HINT_TEXT
+    + ' Win rate and N count plans on Analytics; the Dashboard and the Calendar count each realised '
+    + 'leg as its own trade.';
+  protected readonly exportHint = EXPORT_HINT;
 
   /**
    * Every control routes through here. `resetPage` is the default because a
@@ -998,7 +1132,7 @@ export class Trades {
     })),
   );
 
-  /** `columns`, `density`, `export` and the two destructive controls are not
+  /** `columns`, `density` and `export` are not
    *  filters -- they have nothing to report here, and stay at the default
    *  `active: undefined`. */
   private isFilterEngaged(id: string): boolean {
@@ -1104,17 +1238,18 @@ export class Trades {
   });
 
   protected readonly bulkTitle = computed(() =>
-    this.bulk() === 'history' ? 'Clear trade history' : 'Clear open positions',
+    this.bulk() === 'history' ? 'Reset trade history' : 'Clear open positions',
   );
 
-  /** Names what goes and what stays, per spec v14 — these are the two widest
+  /** v189: the history clear is an archived reset, not a plain delete.
+   *  Names what goes and what stays, per spec v14 — these are the two widest
    *  destructive actions in the product, and "are you sure?" is answered yes
    *  reflexively. The counts are deliberately not quoted from the table:
    *  it is one filtered page, and these commands ignore the filter. */
   protected readonly bulkConsequence = computed(() =>
     this.bulk() === 'history'
-      ? 'Every closed trade is deleted permanently, along with its notes — the whole history, not just this page or this filter. Open positions are untouched. This cannot be undone.'
-      : 'Every open position is deleted permanently — the whole book, not just this page or this filter. Closed history is untouched, and nothing is closed at a price: the records simply go. This cannot be undone.',
+      ? 'Clearing history is a full reset. Every closed trade and finished plan is archived to a file on the server, then deleted, and realized P&L and the drawdown history restart from the base balance, which lifts any throttle. New trades are sized off the base balance. Open positions and live plans are untouched. Refused while the kill switch is tripped.'
+      : 'Every open position is deleted permanently — the whole book, not just this page or this filter. Linked plans end with it: waiting plans are cancelled, held positions are no longer monitored (no more stop or take-profit alerts), and banked TP1 dollars leave the balance with the trade. Closed history is untouched, and nothing is closed at a price. This cannot be undone.',
   );
 
   protected runBulk(): void {

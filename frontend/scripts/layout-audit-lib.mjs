@@ -19,14 +19,14 @@ export const ROUTES = Object.freeze([
   '/calendar', '/calendar/:date',
   '/watchlist', '/watchlist/:symbol',
   '/risk',
-  '/system', '/system?tab=logs', '/system?tab=scan',
+  '/system', '/system?tab=logs', '/system?tab=scan', '/system?tab=providers',
   '/versions', '/research',
   '/reports', '/reports?tab=gates',
   '/cancels',
   '/ui',
 ]);
 
-export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter']);
+export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label']);
 
 /** Phone, tablet and desktop (docs/claude/ui-design.md § Device classes). */
 export const FULL_WIDTHS = Object.freeze([390, 768, 1440]);
@@ -123,6 +123,47 @@ export function vcenterGeometry() {
       .filter((t) => t.height > 0 && Math.min(t.bottom, icon.bottom) - Math.max(t.top, icon.top) > 0 && gap(icon, t) < maxGap)
       .sort((a, b) => gap(icon, a) - gap(icon, b))[0] ?? null,
   };
+}
+
+
+/** Sub-pixel slack for the hint check's viewport test: a rect at -0.4px is a rounding artefact, not off-screen. */
+const HINT_EDGE_SLACK_PX = 0.5;
+
+/**
+ * The hint check's verdict (spec v194 A2) on one opened sb-hint popover: its
+ * viewport rect, the viewport size, and whether the topmost element at its
+ * centre and at its top-left + 8px is inside it (layout-audit.mjs
+ * measureHint). The first failing rule is the reason: zero-size (never
+ * opened), off-screen (any edge past the viewport), covered-center (an
+ * ancestor clips it or something paints over it), covered-corner. Runs in
+ * Node on the measured numbers, so unlike vcenterGeometry it is never
+ * shipped into the page.
+ */
+export function hintVerdict(rect, viewport, hits) {
+  if (!(rect.width > 0 && rect.height > 0)) return { ok: false, reason: 'zero-size' };
+  const inside = rect.left >= -HINT_EDGE_SLACK_PX && rect.top >= -HINT_EDGE_SLACK_PX
+    && rect.left + rect.width <= viewport.width + HINT_EDGE_SLACK_PX
+    && rect.top + rect.height <= viewport.height + HINT_EDGE_SLACK_PX;
+  if (!inside) return { ok: false, reason: 'off-screen' };
+  if (!hits.center) return { ok: false, reason: 'covered-center' };
+  if (!hits.corner) return { ok: false, reason: 'covered-corner' };
+  return { ok: true, reason: null };
+}
+
+/** Narrowest width the icon rail shows at: below it (the shell's 639px phone breakpoint) the bottom
+ *  tab bar navigates, and its tabs carry visible labels. */
+export const RAIL_MIN_WIDTH = 640;
+
+/**
+ * The rail-label check's verdict (spec v195 Phase 7) on one icon-rail entry: its accessible name and
+ * whether its anchored sb-hint label passed hintVerdict while the entry had keyboard focus
+ * (layout-audit.mjs auditRailLabels). No name fails first (a screen reader hears nothing whatever the
+ * label does), then a hidden label. Runs in Node on the measured facts, never shipped into the page.
+ */
+export function railLabelVerdict(entry) {
+  if (!String(entry.name ?? '').trim()) return { ok: false, reason: 'no-name' };
+  if (!entry.hintVisible) return { ok: false, reason: 'hint-hidden' };
+  return { ok: true, reason: null };
 }
 
 const findingKey = (f) =>`${f.route} @${f.width} ${f.check} ${f.selector}`;

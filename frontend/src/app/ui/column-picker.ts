@@ -108,9 +108,9 @@ export interface PickableColumn {
       justify-content: center;
       min-width: 1.5em;
       padding: 0 var(--space-4);
+      border: 1px solid var(--border-strong);
       border-radius: var(--chip-radius);
-      background: var(--accent-soft);
-      color: var(--text);
+      color: var(--text-secondary);
       font-size: var(--text-chip);
     }
 

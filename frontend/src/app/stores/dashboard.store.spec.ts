@@ -63,7 +63,7 @@ const RESPONSE: Dashboard = {
   account_balance: 10_000,
   open_pnl_pct: 1.5,
   open_pnl_amount: 150,
-  risk_used_pct: 4,
+  heat_enforced_pct: 4, risk_of_loss_pct: 1.5, risk_of_loss_amount: 150,
   risk_cap_pct: 10,
   open_trades: 3,
   avg_confidence: 4.2,
@@ -236,9 +236,26 @@ describe('DashboardStore', () => {
     expect(store.empty()).toBe(false);
   });
 
+  it('reads enforced heat and risk of loss as two figures, never one (v189 B4)', () => {
+    tick();
+    respond({ heat_enforced_pct: 8, risk_of_loss_pct: 0, risk_of_loss_amount: 0, risk_cap_pct: 10 });
+    expect(store.heatEnforcedPct()).toBe(8);
+    expect(store.riskOfLossPct()).toBe(0);
+    expect(store.riskOfLossAmount()).toBe(0);
+    // Utilisation stays on the figure the scanner gates on.
+    expect(store.riskUtilisation()).toBeCloseTo(0.8);
+  });
+
+  it('keeps an unknown risk of loss null, not zero', () => {
+    tick();
+    respond({ risk_of_loss_pct: null, risk_of_loss_amount: null });
+    expect(store.riskOfLossPct()).toBeNull();
+    expect(store.riskOfLossAmount()).toBeNull();
+  });
+
   it('computes risk utilisation as a fraction of the cap', () => {
     tick();
-    respond({ risk_used_pct: 8, risk_cap_pct: 10 });
+    respond({ heat_enforced_pct: 8, risk_cap_pct: 10 });
 
     expect(store.riskUtilisation()).toBeCloseTo(0.8);
   });
@@ -259,14 +276,14 @@ describe('DashboardStore', () => {
     // An empty meter and a meter at zero look identical and mean opposite
     // things.
     tick();
-    respond({ risk_used_pct: null, risk_cap_pct: 10 });
+    respond({ heat_enforced_pct: null, risk_cap_pct: 10 });
 
     expect(store.riskUtilisation()).toBeNull();
   });
 
   it('survives a zero cap without dividing by it', () => {
     tick();
-    respond({ risk_used_pct: 4, risk_cap_pct: 0 });
+    respond({ heat_enforced_pct: 4, risk_cap_pct: 0 });
 
     expect(store.riskUtilisation()).toBeNull();
   });
@@ -768,6 +785,90 @@ describe('DashboardStore', () => {
       vi.advanceTimersByTime(300);
       expect(requests()).toHaveLength(0);
       expect(store.selection()).toEqual({ kind: 'preset', preset: '1D' });
+    });
+
+    /* -- v194 B1: today's figures never go missing for good ----------- */
+
+    const fail = (req: { flush(body: unknown, opts: { status: number; statusText: string }): void }) =>
+      req.flush('boom', { status: 500, statusText: 'Server Error' });
+
+    it("lands a 1D answer as today's figures even after a wider pick superseded it", () => {
+      tick();
+      const [first] = requests();
+      // Picked before the 1D load answered: the 1D request is no longer
+      // current for the scoped figures, but its answer is still today's.
+      store.setPreset('1M');
+      first.flush({ ...RESPONSE, realized: TODAY });
+      const closed = store.todayLifecycle().find((row) => row.status === 'CLOSED')?.count;
+      expect(closed).toBe(3);
+      expect(store.todayRealized()).toEqual(TODAY);
+      expect(store.data()).toBeNull();
+    });
+
+    it('keeps the newest today answer when an older one lands after it', () => {
+      const older = widenThenPush();
+      // A second push issues a newer today fetch while the older is in flight.
+      events.raise('trades');
+      tick();
+      vi.advanceTimersByTime(300);
+      const newer = requests();
+      expect(older.filter((r) => modeOf(r) === 'today')).toHaveLength(1);
+      expect(newer.filter((r) => modeOf(r) === 'today')).toHaveLength(1);
+      const newerFigures = { amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 };
+      flushToday(newer, newerFigures);
+      flushToday(older, { amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
+      flushScoped(older);
+      flushScoped(newer);
+      expect(store.todayRealized()).toEqual(newerFigures);
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('reports a failed today fetch instead of loading forever', () => {
+      tick();
+      const [first] = requests();
+      store.setPreset('1M');
+      fail(first);
+      const reqs = requests();
+      reqs.filter((r) => modeOf(r) === 'today').forEach(fail);
+      flushScoped(reqs);
+      expect(store.todayLoading()).toBe(false);
+      expect(store.todayError()).not.toBeNull();
+      expect(store.todayLifecycle()).toEqual([]);
+      expect(store.realized()).toEqual(SCOPED);
+    });
+
+    it('clears the today error once a today answer lands', () => {
+      const reqs = widenThenPush();
+      flushScoped(reqs);
+      reqs.filter((r) => modeOf(r) === 'today').forEach(fail);
+      expect(store.todayError()).not.toBeNull();
+      events.raise('trades');
+      tick();
+      vi.advanceTimersByTime(300);
+      const again = requests();
+      flushScoped(again);
+      flushToday(again);
+      expect(store.todayError()).toBeNull();
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('ends a request cancelled before it answered with an error, never an endless skeleton', () => {
+      // No tick(): the onInit effect has not issued its own load, so this
+      // subscription is the only, and current, request.
+      const subscription = store.resolve().subscribe();
+      expect(store.loading()).toBe(true);
+      subscription.unsubscribe();
+      expect(store.loading()).toBe(false);
+      expect(store.error()).toBe('The dashboard request did not finish.');
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('lets a superseded request go quietly: the newer one owns loading', () => {
+      const older = store.resolve().subscribe();
+      store.resolve().subscribe();
+      older.unsubscribe();
+      expect(store.loading()).toBe(true);
+      expect(store.error()).toBeNull();
     });
   });
 });

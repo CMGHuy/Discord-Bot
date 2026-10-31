@@ -156,6 +156,7 @@ describe('PlanCell', () => {
     bankedFraction: number | null; bankedR: number | null;
     bankedPct: number | null; bankedAmount: number | null;
     bankedEntry: number | null; currency: string | null;
+    bankedContributionR: number | null;
   }> = {}) {
     const f = TestBed.createComponent(PlanCell);
     f.componentRef.setInput('entry', 51.0);
@@ -164,6 +165,7 @@ describe('PlanCell', () => {
     f.componentRef.setInput('stopKind', 'trailing');
     f.componentRef.setInput('bankedFraction', 'bankedFraction' in overrides ? overrides.bankedFraction : 0.5);
     f.componentRef.setInput('bankedR', 'bankedR' in overrides ? overrides.bankedR : 0.85);
+    f.componentRef.setInput('bankedContributionR', 'bankedContributionR' in overrides ? overrides.bankedContributionR : null);
     f.componentRef.setInput('bankedPct', 'bankedPct' in overrides ? overrides.bankedPct : 4.1);
     f.componentRef.setInput('bankedAmount', 'bankedAmount' in overrides ? overrides.bankedAmount : 42.0);
     f.componentRef.setInput('bankedEntry', 'bankedEntry' in overrides ? overrides.bankedEntry : 102.0);
@@ -175,14 +177,20 @@ describe('PlanCell', () => {
   it('appends the banked leg to the tooltip once PARTIAL', () => {
     expect(renderPartial().querySelector('[title]')!.getAttribute('title')).toBe(
       'Entry 51.00 · Target 150.00 · Trailing stop 118.67 · '
-      + '50% banked +0.85R (+4.10%, +42.00 $) @ 102.00',
+      + 'TP1 +0.85R on 50%, +4.10%, +42.00 $ @ 102.00',
     );
+  });
+
+  it('leads with the trade-level contribution once the API sends it', () => {
+    expect(renderPartial({ bankedContributionR: 0.43 }).querySelector('[title]')!.getAttribute('title'))
+      .toBe('Entry 51.00 · Target 150.00 · Trailing stop 118.67 · '
+        + 'banked +0.43R (TP1 +0.85R on 50%), +4.10%, +42.00 $ @ 102.00');
   });
 
   it('omits the dollar figure when amount or currency is unknown', () => {
     expect(renderPartial({ bankedAmount: null }).querySelector('[title]')!.getAttribute('title'))
       .toBe('Entry 51.00 · Target 150.00 · Trailing stop 118.67 · '
-        + '50% banked +0.85R (+4.10%) @ 102.00');
+        + 'TP1 +0.85R on 50%, +4.10% @ 102.00');
   });
 
   it('omits the whole banked clause when nothing has banked yet', () => {
@@ -249,7 +257,7 @@ describe('bankedLegPct / bankedLegAmount', () => {
     expect(bankedLegPct(100, null, 'bullish')).toBeNull();
   });
 
-  it('computes the dollar amount from shares and fraction', () => {
+  it('computes the dollar amount from the ORIGINAL shares and the fraction', () => {
     expect(bankedLegAmount(100, 110, 0.5, 100, 'bullish')).toBe(500);
   });
 
@@ -272,6 +280,9 @@ function renderWith(inputs: Record<string, unknown>): HTMLElement {
 }
 
 const text = (el: Element | null): string => el!.textContent!.replace(/\s+/g, ' ').trim();
+
+const hintText = (el: Element): string =>
+  el.querySelector('.plan.runner sb-hint [role="tooltip"]')!.textContent!.replace(/\s+/g, ' ').trim();
 
 /** The live RKLB short: TP1 banked at 58.33, the stop trailing at 52.437
  *  behind a best price of 49.94. Today's inputs plus the v177 ones. */
@@ -310,21 +321,22 @@ describe('PlanCell runner (two lines)', () => {
     expect(text(renderWith(RKLB_RUNNER).querySelector('.l2 .trail'))).toBe('Trail');
   });
 
-  it('puts the tooltips on the lines, not on the root', () => {
+  it('explains both runner lines in one hint, with no native titles', () => {
     const el = renderWith(RKLB_RUNNER);
+    expect(el.querySelector('.plan.runner [title]')).toBeNull();
     expect(el.querySelector('.plan.runner')!.hasAttribute('title')).toBe(false);
-    expect(el.querySelector('[title]')).toBe(el.querySelector('.line.l1'));
+    expect(el.querySelectorAll('.plan.runner sb-hint')).toHaveLength(1);
   });
 
   it('explains line 1 as the original plan', () => {
-    expect(renderWith(RKLB_RUNNER).querySelector('.l1')!.getAttribute('title')).toBe(
+    expect(hintText(renderWith(RKLB_RUNNER)).startsWith(
       'Original plan (TP1 already filled): entry → TP1 / original stop. '
       + 'Percentages are the distance from the entry to each level. '
-      + 'The stop shown is the original; the live exit is on the next line.');
+      + 'The stop shown is the original; the live exit is on the next line.')).toBe(true);
   });
 
   it('explains line 2: unrealised peak, per share, before costs, paper level', () => {
-    expect(renderWith(RKLB_RUNNER).querySelector('.l2')!.getAttribute('title')).toBe(
+    expect(hintText(renderWith(RKLB_RUNNER))).toContain(
       'Trailing stop. Best price so far → price the trailing stop would exit at. '
       + '+17.7% is the peak since TP1 (unrealised); +13.6% is the result if the stop '
       + 'fills at 52.44, per share from the original entry, before costs and tax. '
@@ -335,20 +347,18 @@ describe('PlanCell runner (two lines)', () => {
     const el = renderWith(LONG_RUNNER);
     expect(text(el.querySelector('.l1'))).toBe('100.00 → 120.00 / 90.00 (20.0% - 10.0%)');
     expect(text(el.querySelector('.l2'))).toBe('Trail 130.00 → 113.33 (+30.0% / +13.3%)');
-    expect(el.querySelector('.l2')!.getAttribute('title')).toContain('A long gains when price rises.');
+    expect(hintText(el)).toContain('A long gains when price rises.');
   });
 
-  it('names a derived floor "Locked-in floor" in the line 2 tooltip', () => {
-    const title = renderWith({ ...RKLB_RUNNER, stopKind: 'derived_floor' })
-      .querySelector('.l2')!.getAttribute('title')!;
-    expect(title.startsWith(
-      'Locked-in floor. Best price so far → price the locked-in floor would exit at. ')).toBe(true);
-    expect(title).toContain('is the result if the stop fills at 52.44');
+  it('names a derived floor "Locked-in floor" in the hint', () => {
+    const hint = hintText(renderWith({ ...RKLB_RUNNER, stopKind: 'derived_floor' }));
+    expect(hint).toContain('Locked-in floor. Best price so far → price the locked-in floor would exit at. ');
+    expect(hint).toContain('is the result if the stop fills at 52.44');
   });
 
   it('keeps an explicit minus on the loss side of line 2', () => {
     const el = renderWith({ ...RKLB_RUNNER, trailExitPct: -2.5 });
-    expect(text(el.querySelector('.l2'))).toBe('Trail 49.94 → 52.44 (+17.7% / -2.5%)');
+    expect(text(el.querySelector('.l2'))).toBe('Trail 49.94 → 52.44 (+17.7% / −2.5%)');
     expect(el.querySelector('.l2 .lock')!.classList).toContain('loss');
     expect(el.querySelector('.l2 .peak')!.classList).not.toContain('loss');
   });
@@ -404,7 +414,7 @@ describe('PlanCell closed runner', () => {
   it('signs and colours a runner exit on the loss side of the entry', () => {
     const el = renderWith({ entry: 100, target: 120, stop: 90,
       runnerExit: 97, runnerExitPct: -3, runnerExitReason: 'tp1_runner_be' });
-    expect(text(el)).toBe('100.00 → 97.00 / 90.00 (-3.0% - 10.0%)');
+    expect(text(el)).toBe('100.00 → 97.00 / 90.00 (−3.0% - 10.0%)');
     expect(el.querySelector('.rise')!.classList).toContain('loss');
     expect(el.querySelector('.target')!.classList).toContain('loss');
   });

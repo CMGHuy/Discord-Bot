@@ -116,12 +116,12 @@ describe('sb-stat-strip (v186 D3)', () => {
       '--tile-bg: transparent;',
       '--tile-border: 0;',
       '--tile-radius: 0;',
-      '--tile-tint-off: none;',
-      '--panel-shadow-lift: none;',
       'display: block;',
       'overflow: hidden;',
       'min-width: 0;',
     ]) expect(host, declaration).toContain(declaration);
+    // v195 Phase 2: no metric card is filled any more, so there is no fill to switch off.
+    expect(host).not.toContain('--tile-tint-off');
     // The other half of the contract: the tiles read them (V186-3).
     for (const source of [TILE, CARD]) {
       expect(source).toContain('border-left: var(--figure-rule, 0px) solid var(--border);');
@@ -145,17 +145,18 @@ describe('sb-stat-strip (v186 D3)', () => {
     expect(tilesIn()).toHaveLength(1);
   });
 
-  it('drops a metric card tint inside a strip and keeps it outside', () => {
+  it('keeps the judgement on a metric card in and out of a strip, and fills neither (v195 Phase 2)', () => {
     const f = TestBed.createComponent(CardStripHost);
     f.detectChanges();
     const [inside, outside] = [...(f.nativeElement as HTMLElement).querySelectorAll('sb-metric-card')];
     expect(inside.closest('sb-stat-strip')).not.toBeNull();
     expect(outside.closest('sb-stat-strip')).toBeNull();
-    // The judgement stays on both hosts; only the fill reads the strip's switch.
-    expect(inside.classList).toContain('tint-pos');
-    expect(outside.classList).toContain('tint-pos');
-    expect(hostRule()).toContain('--tile-tint-off: none;');
-    expect(CARD).toContain('background: var(--tile-tint-off, linear-gradient(var(--pos-soft), var(--pos-soft)), var(--surface));');
+    for (const card of [inside, outside]) {
+      expect(card.classList).toContain('tint-pos');
+      expect(card.querySelector('.value')!.classList).toContain('pos');
+    }
+    expect(STRIP).not.toContain('--tile-tint-off');
+    expect(CARD).not.toContain('--tile-tint-off');
   });
 
   it('keeps both thin-sample cues on a tile inside a strip', () => {
@@ -203,10 +204,61 @@ describe('the strip grid (styles.css, v186 D3)', () => {
   });
 });
 
-describe('no hover lift inside a strip (motion.css, v186 D3)', () => {
-  it('cancels the translate straight after the lift, inside the hover-only block', () => {
-    expect(MOTION).toMatch(
-      /@media \(hover: hover\) \{[^@]*\[data-motion=on\] \.sb-lift:hover \{ transform: translateY\(-2px\); \}\s*\[data-motion=on\] sb-stat-strip \.sb-lift:hover \{ transform: none; \}/,
-    );
+/* v186 D3 cancelled the hover lift inside a strip; v195 §1.2 deleted the
+ * lift, so there is nothing left to cancel. */
+describe('nothing in a strip lifts (v195 §1.2)', () => {
+  it('has no lift rule in motion.css and no lift token on the strip', () => {
+    expect(MOTION).not.toContain('sb-lift');
+    expect(STRIP).not.toContain('--panel-shadow-lift');
+  });
+});
+
+/* v195 Phase 2: one KPI-strip look -- hairline-split cells inside one
+ * bordered surface. Inside a panel the panel is that surface; standing
+ * alone (sb-page's [page-kpis] slot) the strip frames itself. The frame is
+ * a global rule, so the strip's own scoped CSS still draws nothing. */
+describe('one KPI-strip look (v195 Phase 2)', () => {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const globalRule = (selector: string) =>
+    GLOBAL.match(new RegExp(`(?:^|\\n)${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+  const cellRule = (source: string, selector: string) =>
+    source.match(new RegExp(`(?:^|\\n)\\s*${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+  const CELL = [
+    'display: flex;',
+    'flex-direction: column;',
+    'gap: var(--space-4);',
+    'height: 100%;',
+    'box-sizing: border-box;',
+    'padding: var(--space-10) var(--panel-pad);',
+  ];
+
+  it('frames a strip that stands alone as one bordered panel surface', () => {
+    const frame = globalRule('sb-stat-strip');
+    expect(frame).toContain('background: var(--panel-bg);');
+    expect(frame).toContain('border: var(--panel-border);');
+    expect(frame).toContain('border-radius: var(--panel-radius);');
+    expect(frame).not.toContain('box-shadow');
+  });
+
+  it('drops the frame inside a panel, which is already the bordered surface', () => {
+    const inPanel = globalRule('.sb-panel sb-stat-strip');
+    expect(inPanel).toContain('background: none;');
+    expect(inPanel).toContain('border: 0;');
+    expect(inPanel).toContain('border-radius: 0;');
+    expect(GLOBAL.search(/\n\.sb-panel sb-stat-strip\s*\{/)).toBeGreaterThan(GLOBAL.search(/\nsb-stat-strip\s*\{/));
+  });
+
+  it('lays a stat tile and a metric card out as the same cell', () => {
+    const tile = cellRule(TILE, '.tile');
+    const card = cellRule(CARD, '.card');
+    for (const declaration of CELL) {
+      expect(tile, `stat-tile ${declaration}`).toContain(declaration);
+      expect(card, `metric-card ${declaration}`).toContain(declaration);
+    }
+  });
+
+  it('fills no metric card: the value colour and its sign carry the valence', () => {
+    expect(CARD).not.toMatch(/:host\(\.tint-(pos|neg)\) \.card/);
+    expect(CARD).not.toContain('linear-gradient');
   });
 });

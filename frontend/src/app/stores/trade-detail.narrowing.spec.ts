@@ -419,7 +419,7 @@ describe('TradeDetailStore — banked leg stats (v58)', () => {
   });
 
   function openPartial(overrides: {
-    entry?: number | null; shares?: number | null;
+    entry?: number | null; shares?: number | null; entryShares?: number | null;
     direction?: string; legsRealized?: unknown[];
   } = {}) {
     store.setId(ID);
@@ -434,6 +434,7 @@ describe('TradeDetailStore — banked leg stats (v58)', () => {
       stop_loss: 101.33,
       target: 105,
       shares: overrides.shares === undefined ? 100 : overrides.shares,
+      entry_shares: overrides.entryShares === undefined ? 100 : overrides.entryShares,
       has_note: false,
       detail: {
         ...LEGACY_DETAIL,
@@ -468,9 +469,14 @@ describe('TradeDetailStore — banked leg stats (v58)', () => {
     expect(store.bankedStats()).toEqual({ pct: 10, amount: 500 });
   });
 
-  it('omits the dollar amount when shares are unknown', () => {
-    openPartial({ shares: null });
+  it('omits the dollar amount when the original size is unknown', () => {
+    openPartial({ entryShares: null });
     expect(store.bankedStats()).toEqual({ pct: 10, amount: null });
+  });
+
+  it('banks off entry_shares, not the remaining open shares (v189 B1)', () => {
+    openPartial({ shares: 50, entryShares: 100 });
+    expect(store.bankedStats()).toEqual({ pct: 10, amount: 500 });
   });
 
   it('is null once the position is no longer PARTIAL', () => {

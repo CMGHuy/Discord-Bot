@@ -25,6 +25,7 @@ import {
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
+import { RouteTitleService } from '../../routing/route-title.service';
 import { PlanDetail, looksLikePlanId, redirectFor, shortOrderNotes, timingLines } from './plan-detail';
 
 // The page renders sb-plan-chart, whose TradeChart asks for matchMedia.
@@ -346,5 +347,83 @@ describe('plan-detail title on one baseline (v179 layout audit)', () => {
   it('sets the 20px ticker and its 12px direction chip on the text baseline, the status glyph centred', () => {
     expect(rule('.plan-title')).toMatch(/align-items:\s*baseline/);
     expect(rule('.tags')).toMatch(/align-items:\s*baseline/);
+  });
+});
+
+/* -- v195 Phase 4, §5.2, §1.4 -- plan detail on sb-page --------------------- */
+
+describe('PlanDetail on sb-page (v195 Phase 4, §5.2, §1.4)', () => {
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    backend = TestBed.inject(HttpTestingController);
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    TestBed.inject(RouteTitleService).set('Plan detail', 'Why this plan, and how it is going');
+  });
+
+  function mount(status = 'ACTIVE') {
+    const fixture = TestBed.createComponent(PlanDetail);
+    fixture.componentRef.setInput('id', PLAN_ID);
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${PLAN_ID}`).flush(planResponse(status));
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('renders the route title as the one h1, from sb-page', () => {
+    const { el } = mount();
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Plan detail');
+  });
+
+  it('names the plan as the breadcrumb detail segment, with the short id the Trades list shows', () => {
+    mount();
+    expect(TestBed.inject(RouteTitleService).detail()).toBe('AAPL #444444');
+  });
+
+  it('puts the crumb back after a title update clears it while the page is open', () => {
+    const { fixture } = mount('PENDING');
+    const titles = TestBed.inject(RouteTitleService);
+    titles.set('Plan detail', null, '/somewhere-else');
+    fixture.detectChanges();
+    expect(titles.detail()).toBe('AAPL #444444');
+  });
+
+  it('stays read-only: no header actions, no scope bar, no in-page back link', () => {
+    const { el } = mount();
+    expect(el.querySelector('[page-actions]')).toBeNull();
+    expect(el.querySelector('[page-scope]')).toBeNull();
+    expect(el.querySelector('a.back')).toBeNull();
+    expect(el.querySelector('sb-page button.danger, sb-page button.danger-quiet')).toBeNull();
+  });
+
+  it('keeps the plan header as the summary and the plan body as the primary panel', () => {
+    const { el } = mount('PENDING');
+    const summary = el.querySelector('sb-page [page-kpis]')!;
+    expect(summary.querySelector('header.plan-head .plan-title .ticker')!.textContent).toBe('AAPL');
+    expect(summary.textContent).toContain('Expires 2026-10-12 at the close (ET) (3 bars left)');
+    const primary = el.querySelector('sb-page [page-primary]')!;
+    expect(primary.tagName.toLowerCase()).toBe('sb-async');
+    expect(primary.querySelector('sb-levels-block')).toBeTruthy();
+    expect(primary.querySelector('sb-sizing-panel')).toBeTruthy();
+    expect(primary.querySelector('a.record-link')!.getAttribute('href')).toBe(`/trades/${PLAN_ID}`);
+  });
+
+  it('sets its order figures on the 14px body step, in both densities', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/plans/plan-detail.ts'), 'utf8');
+    expect(src).toMatch(/:host \{[^}]*--text-table: var\(--text-body\);/);
   });
 });

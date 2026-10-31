@@ -20,6 +20,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
 import { TextInput } from '../../ui/form-controls';
 import { Drawer, Panel } from '../../ui/layout';
+import { Page } from '../../ui/page';
 import { SegmentOption, Segmented } from '../../ui/segmented';
 import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 
@@ -62,9 +63,14 @@ const fixed = (value: number | null, digits: number): string | null =>
 @Component({
   selector: 'sb-research',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, Chip, DataTable, Drawer, Panel, Segmented, TextInput, Toolbar],
+  imports: [Page, Async, Button, Chip, DataTable, Drawer, Panel, Segmented, TextInput, Toolbar],
   host: { class: 'register-instrument' },
   template: `
+    <!-- v195 Phase 4: the route title is the page's one h1. One primary
+         element: the registry stays above the ledger it gives context to
+         (see the class comment), and the footer closes it. -->
+    <sb-page>
+      <div page-primary class="research-body">
     <sb-async
       [loading]="async().loading"
       [error]="async().error"
@@ -138,6 +144,7 @@ const fixed = (value: number | null, digits: number): string | null =>
     </sb-async>
 
     <p class="disclaimer">{{ disclaimer }}</p>
+      </div>
 
     <sb-drawer [open]="store.selected() !== null" [heading]="store.selected()?.id ?? ''"
                (closed)="store.select(null)">
@@ -183,9 +190,11 @@ const fixed = (value: number | null, digits: number): string | null =>
     <ng-template #hypothesisCell let-row>
       <span [attr.title]="row.hypothesis">{{ truncate(row.hypothesis) }}</span>
     </ng-template>
+    </sb-page>
   `,
   styles: `
-    :host { display: grid; gap: var(--space-14); }
+    :host { display: block; min-width: 0; }
+    .research-body { display: grid; gap: var(--space-14); min-width: 0; }
     .caption, .disclaimer { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
     .verdicts { display: flex; flex-wrap: wrap; gap: var(--space-6); }
     .verdict.on { color: var(--accent); }

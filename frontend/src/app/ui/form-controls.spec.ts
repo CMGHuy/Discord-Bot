@@ -82,3 +82,28 @@ describe('v80 D4: form controls', () => {
     expect(styles).toMatch(/\n {4}input \{[^}]*min-width: 0;/);
   });
 });
+
+/* v195 Phase 2: since V195-3 a panel is the flat --surface, so a field on
+ * --surface had no fill step left against it. Fields sit one step down, on
+ * the --bg well, behind the strong hairline; the accent is the focus ring
+ * and the checkbox tick only. */
+describe('v195 Phase 2: flat fields', () => {
+  const field = (tag: 'select' | 'input') => SOURCE.match(new RegExp(`\\n {4}${tag} \\{[^}]*\\}`))?.[0] ?? '';
+
+  it('fills the select and the text input with the --bg well behind the strong hairline', () => {
+    for (const tag of ['select', 'input'] as const) {
+      const rule = field(tag);
+      expect(rule, tag).toContain('background: var(--bg);');
+      expect(rule, tag).toContain('border: 1px solid var(--border-strong);');
+      expect(rule, tag).toContain('border-radius: var(--control-radius);');
+      expect(rule, tag).toContain('transition: border-color var(--transition);');
+    }
+    expect(SOURCE).not.toContain('background: var(--surface);');
+  });
+
+  it('keeps the accent to the focus ring and the checkbox tick', () => {
+    expect(SOURCE).toMatch(/select:focus-visible \{ outline: 1px solid var\(--accent\); outline-offset: 1px; \}/);
+    expect(SOURCE).toMatch(/input:focus-visible \{ outline: 1px solid var\(--accent\); outline-offset: 1px; \}/);
+    expect(SOURCE).toMatch(/input \{ accent-color: var\(--accent\); \}/);
+  });
+});

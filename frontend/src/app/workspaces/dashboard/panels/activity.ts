@@ -1,5 +1,5 @@
 import { TradeRow } from '../../../api/models';
-import { num } from '../../../ui/format';
+import { num, rMultiple } from '../../../ui/format';
 
 export interface ActivityEvent {
   kind: 'opened' | 'closed' | 'cancelled';
@@ -55,7 +55,7 @@ export function deriveActivity(
         status: row.status ?? '',
         detail: cancelled
           ? 'Plan cancelled before filling'
-          : `Closed${row.r_multiple != null ? ` at ${row.r_multiple > 0 ? '+' : ''}${row.r_multiple.toFixed(2)}R` : ''}`,
+          : `Closed${row.r_multiple != null ? ` at ${rMultiple(row.r_multiple)}` : ''}`,
         r: cancelled ? null : (row.r_multiple ?? null),
         id: `${row.id}:${cancelled ? 'cancelled' : 'closed'}`,
         tradeId: row.id,

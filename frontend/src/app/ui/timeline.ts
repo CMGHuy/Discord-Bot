@@ -72,7 +72,7 @@ export interface TimelineItem {
       border-radius: var(--chip-radius);
       padding: 0 4px;
     }
-    .meta { font-size: var(--text-micro); color: var(--text-faint); }
+    .meta { font-size: var(--text-micro); color: var(--text-muted); }
   `,
 })
 export class Timeline {

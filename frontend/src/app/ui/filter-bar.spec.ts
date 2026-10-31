@@ -73,3 +73,24 @@ describe('FilterChips on a phone (v179 §3.3)', () => {
     expect(labels).toEqual(['All', 'Open', 'Closed']);
   });
 });
+
+/* v195 Phase 2: a selected filter chip looks like a selected segment (the
+ * accent tint, here with the accent edge too); hover is the raised surface
+ * and never borrows the accent. */
+describe('FilterChips selected and hover states (v195 Phase 2)', () => {
+  it('marks the selected chip with the accent edge on the accent tint', () => {
+    const selected = rule('.chip.active');
+    expect(selected).toContain('color: var(--text)');
+    expect(selected).toContain('border-color: var(--accent)');
+    expect(selected).toContain('background: var(--accent-soft)');
+  });
+
+  it('raises an unselected chip on hover without touching the accent', () => {
+    const hover = rule('.chip:not(.active):hover');
+    expect(hover).toContain('color: var(--text)');
+    expect(hover).toContain('border-color: var(--border-strong)');
+    expect(hover).toContain('background: var(--surface-raised)');
+    expect(hover).not.toContain('accent');
+    expect(SOURCE).not.toMatch(/\.chip:hover \{/);
+  });
+});

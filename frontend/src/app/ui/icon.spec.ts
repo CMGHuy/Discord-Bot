@@ -46,7 +46,7 @@ describe('Icon', () => {
 
   it('covers every name the shell needs', () => {
     for (const needed of ['dashboard', 'trades', 'analytics', 'watchlist', 'risk',
-                          'system', 'collapse', 'expand', 'profile', 'signout', 'menu']) {
+                          'system', 'collapse', 'expand', 'profile', 'signout', 'menu', 'search']) {
       expect(ICON_NAMES, `missing icon: ${needed}`).toContain(needed);
     }
   });
@@ -63,5 +63,21 @@ describe('Icon', () => {
 
   it('renders the brand icon (R1-14)', () => {
     expect(ICON_NAMES).toContain('brand');
+  });
+
+  it('carries the search glyph the top bar and the phone bar use (v195 correction 1)', () => {
+    expect(ICON_NAMES).toContain('search');
+    expect(render('search').querySelector('svg path')).not.toBeNull();
+    // Named by its default label when the caller gives none.
+    expect(render('search').getAttribute('title')).toBe('Search');
+  });
+
+  it('never draws two names with the same glyph -- an icon-only rail reads by shape', () => {
+    const glyphs = new Map<string, string>();
+    for (const name of ICON_NAMES) {
+      const d = render(name).querySelector('svg path')!.getAttribute('d')!;
+      expect(glyphs.get(d), `${name} draws the same glyph as ${glyphs.get(d)}`).toBeUndefined();
+      glyphs.set(d, name);
+    }
   });
 });

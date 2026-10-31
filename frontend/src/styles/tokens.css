@@ -45,17 +45,19 @@
    * enough apart (0c0f16 -> 131722 -> 1c212d -> 242936) that panels read as
    * separate objects without a shadow; --surface is TradingView's own chart
    * pane, so the admin and the Discord charts sit on one ground. */
-  /* v167 §2, Arctic Navy. The ground steps 070b14 -> 0c1320 -> 121b2d ->
-   * 1a2540. Every colour in this tier is a var() into styles/palette.css
-   * (tier 1): a tier-2 token names a MEANING and never holds a hue.
-   * --surface is still the Discord chart ground (chart_style.CHART_BG). */
-  --bg: var(--navy-950);
-  --surface: var(--navy-900);
-  --surface-raised: var(--navy-850);
-  --surface-overlay: var(--navy-800);
-  --overlay-dim: var(--navy-950-a72);
-  --border: var(--navy-750);
-  --border-strong: var(--navy-700);
+  /* v195 §1.1, Graphite (supersedes v167 §2's Arctic Navy). A neutral
+   * near-black ground stepping 0d0f12 -> 15181d -> 1c2128 -> 1f242b; depth
+   * comes from these steps and 1px borders only (v195 §1.2). Every colour
+   * in this tier is a var() into styles/palette.css (tier 1): a tier-2
+   * token names a MEANING and never holds a hue. --surface is still the
+   * Discord chart ground (chart_style.CHART_BG). */
+  --bg: var(--graphite-950);
+  --surface: var(--graphite-900);
+  --surface-raised: var(--graphite-850);
+  --surface-overlay: var(--graphite-800);
+  --overlay-dim: var(--graphite-950-a72);
+  --border: var(--graphite-750);
+  --border-strong: var(--graphite-700);
 
   /* -- elevation --------------------------------------------------------
    * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
@@ -85,54 +87,52 @@
    * (versions.ts faked one with a 9999px spread). */
   --scrim: var(--overlay-dim);
 
-  --text: var(--slate-100);
-  --text-secondary: var(--slate-300);
-  /* v80 D1: direction C's first muted grey (#888c97) measured 4.32:1 on
-   * --surface-overlay -- under the 4.5:1 gate contrast.spec.ts enforces on
-   * all four surfaces, for real readable labels at --text-micro (nav group
-   * headers, chip captions, .sb-label). #9195a0 is the smallest lift that
-   * clears it with v54's safety margin: worst case 4.85:1 on
-   * --surface-overlay. v54 Task 42 made the same kind of measured,
-   * single-token change for the previous palette.
-   * v167 §2: now --slate-400, worst case 5.54:1 (on --surface-overlay). */
-  --text-muted: var(--slate-400);
-  /* --text-faint is a RULE AND DIVIDER colour (~2:1 on --surface) -- never
+  --text: var(--grey-100);
+  --text-secondary: var(--grey-300);
+  /* v80 D1 / v167 §2 measured this token against the 4.5:1 gate that
+   * contrast.spec.ts enforces on all four surfaces, for readable labels at
+   * --text-micro (KPI captions, table headers, .sb-label).
+   * v195 §1.1: --grey-400, worst case 6.19:1 (on --surface-overlay). Micro
+   * labels and captions use this, never --text-faint (correction 13). */
+  --text-muted: var(--grey-400);
+  /* --text-faint is a RULE AND DIVIDER colour (~3.7:1 on --surface) -- never
    * text that must be read. contrast.spec.ts's `no-text-uses-text-faint`
-   * assumes this and this comment is what it checks for. */
-  --text-faint: var(--navy-600);
+   * assumes this and this comment is what it checks for. v195: it is also
+   * the disabled-glyph colour, and nothing else. */
+  --text-faint: var(--graphite-500);
 
-  --pos: var(--teal-400);
-  --neg: var(--red-400);
-  --warn: var(--amber-300);
+  --pos: var(--green-500);
+  --neg: var(--red-500);
+  --warn: var(--amber-500);
   /* v80 D1: the accent is two tokens. --accent is the colour of interactive
    * TEXT and state -- links, the active tab, the sort arrow, focus -- and
-   * #5593ff clears 4.85:1 on every surface. --accent-fill is the deeper
-   * TradingView blue a filled button paints, with --on-accent on top at
-   * 4.90:1; the text-safe blue is too light to carry white ink.
-   * v167 §2: --accent is --sky-300 (8.10:1 worst case); --accent-fill is
-   * --sky-600 (white 5.06:1); --accent-fill-hi (new) is --sky-550, the top
-   * stop of the primary button's gradient (tier 3 --btn-fill), white 4.66:1.
-   * That margin is thin, so contrast.spec.ts checks it by name. */
-  --accent: var(--sky-300);
-  --accent-fill: var(--sky-600);
-  --accent-fill-hi: var(--sky-550);
+   * must read on every surface. --accent-fill is the deeper blue a filled
+   * button paints, with --on-accent on top; the text-safe blue is too light
+   * to carry white ink.
+   * v195 §1.1: --accent is --steel-400 (6.46:1 worst case) and is used for
+   * interactive state only; --accent-fill is --steel-600 (white 5.74:1);
+   * --accent-fill-hi is --steel-500 (white 5.00:1), the hover fill.
+   * contrast.spec.ts checks both fills by name. */
+  --accent: var(--steel-400);
+  --accent-fill: var(--steel-600);
+  --accent-fill-hi: var(--steel-500);
   --on-accent: var(--white);
-  /* v80 D1: info moved off sky blue. Under direction C the accent took the
-   * blue, and two blues would make "neutral" read as "interactive".
-   * v167 §2: still violet (--violet-300), 7.39:1 worst case. */
-  --info: var(--violet-300);
+  /* v80 D1: info is off the blue, so "neutral" never reads as
+   * "interactive". v195 §1.1: --violet-400, 6.44:1 worst case, moved from
+   * the spec's #b392f0 to clear OKLab dE 10 from the accent entry line. */
+  --info: var(--violet-400);
 
   /* 12% tints, for cell and chip backgrounds, hover states and the chart's
-   * risk/reward bands; --info-soft is 14%. --accent-soft is 18% of the FILL
-   * blue: the selected-segment ground needs to separate from
-   * --surface-raised. v167 amendment 2: each is a tier-1 alpha entry in
-   * palette.css (literal rgba of the hue), so jsdom and lightweight-charts
-   * still receive a plain colour string and this file holds no hued rgba. */
-  --pos-soft: var(--teal-400-a12);
-  --neg-soft: var(--red-400-a12);
-  --warn-soft: var(--amber-300-a12);
-  --accent-soft: var(--sky-600-a18);
-  --info-soft: var(--violet-300-a14);
+   * risk/reward bands; --info-soft is 14%; --accent-soft (the selected-
+   * segment ground) is 18% of the accent. v167 amendment 2: each is a
+   * tier-1 alpha entry in palette.css (literal rgba of the hue), so jsdom
+   * and lightweight-charts still receive a plain colour string and this
+   * file holds no hued rgba. */
+  --pos-soft: var(--green-500-a12);
+  --neg-soft: var(--red-500-a12);
+  --warn-soft: var(--amber-500-a12);
+  --accent-soft: var(--steel-400-a18);
+  --info-soft: var(--violet-400-a14);
 
   /* Quality ramp — confidence Lv1-5 and tier A/B/C.
    *
@@ -179,15 +179,19 @@
    * getComputedStyle under vitest, and jsdom does not substitute a nested
    * var() inside a custom property; chart-palette.spec.ts also parses this
    * file as text. That spec is the gate. */
+  /* v195 §1.1: re-checked on the Graphite ground (#15181d) against the new
+   * --pos/--neg/--warn. Five series keep their v80 values; --chart-2 moves
+   * from #c97a22 (OKLab dE 8.0 from --warn) to #bd6c18 (12.0 from --warn,
+   * 12.3 from --neg, L 0.610, C 0.136, 4.51:1 on --surface). */
   --chart-1: #4c8dff;
-  --chart-2: #c97a22;
+  --chart-2: #bd6c18;
   --chart-3: #a868e0;
   --chart-4: #b08c14;
   --chart-5: #1a9db3;
   --chart-6: #7076e8;
 
   /* -- type ------------------------------------------------------------
-   * Named by role, not by size: the scale is closed (11/12/13/14/16/20/28)
+   * Named by role, not by size: the scale is closed (12/13/14/16/20/28, plus the hero; v195 §1.3)
    * and a component should be choosing "this is a chip" rather than
    * "this is 10px". A size not on this list is a review defect.
    */
@@ -225,13 +229,14 @@
      end, and this is the anchor every step multiplies from -- raising it
      here moves 100% (and, proportionally, 90/110/125%) together rather than
      special-casing one step. */
-  /* v179 §6b.6 -- an 11px floor inside the two tokens the 90% zoom step
-     would push below it (9.9px and 10.8px). Zoom still scales every size
-     above the floor; a zoomed-out view fits more, but never drops its
-     smallest labels below legibility. tokens.spec.ts checks every size
-     token at 90/100/110/125%. */
-  --text-micro: max(11px, calc(11px * var(--text-scale)));  /* micro-label */
-  --text-chip: max(11px, calc(12px * var(--text-scale)));   /* chip */
+  /* v179 §6b.6, raised by v195 §1.3 -- a 12px floor inside the two
+     smallest tokens. Micro and chip are both 12px at 100% (v195's scale is
+     12/13/14/16/20/28), and the floor keeps the 90% zoom step from pushing
+     them to 10.8px. Zoom still scales every size above the floor: a
+     zoomed-out view fits more, but never drops its smallest labels below
+     12px. tokens.spec.ts checks every size token at 90/100/110/125%. */
+  --text-micro: max(12px, calc(12px * var(--text-scale)));  /* micro-label */
+  --text-chip: max(12px, calc(12px * var(--text-scale)));   /* chip */
   --text-table: calc(13px * var(--text-scale));     /* table body */
   --text-body: calc(14px * var(--text-scale));      /* body */
   --text-control: calc(14px * var(--text-scale));   /* form-control text; 16px on touch, below */
@@ -278,8 +283,16 @@
   --control-h: 28px;
 
   /* v80 D3: one row height for every table row, so a table beside a list
-   * lines up. Grows with --control-h in the touch block below. */
-  --row-h: 32px;
+   * lines up. v195 §1.4: 28px is the dense default (was 32px); the touch
+   * block below and the comfortable density raise it to 44px. */
+  --row-h: 28px;
+
+  /* v195 §1.4: the padding that moves with the row height -- a table
+   * cell's vertical and horizontal padding and a panel body's padding.
+   * Dense values here; comfortable and touch values below. */
+  --cell-pad-y: var(--space-4);
+  --cell-pad-x: var(--space-8);
+  --panel-pad: var(--space-14);
 
   /* v179 §3.4 -- the smallest hit area an interactive control may have.
      24px is WCAG 2.2's minimum target for a mouse; the touch block below
@@ -297,7 +310,7 @@
    * Tight radii: terminal, not consumer app.
    * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
    * the corners are the four targets in the tier-3 block at the end of this
-   * file (--panel-radius 8px, --control-radius 6px, --chip-radius 999px,
+   * file (v195 §1.5: --panel-radius 6px, --control-radius 4px, --chip-radius 4px,
    * --radius-sm 2px); --radius and --radius-chip are deleted.
    *
    * Motion (spec v168). Entrances run once per route activation and never on
@@ -307,9 +320,11 @@
    * changed: the cell flash and the count-up on a change.
    *
    *   --dur-instant  hover, press, focus ring
+   *   --dur-ui       v195 §1.2: the one UI transition (colour, opacity,
+   *                  border), read through the --transition alias
    *   --dur-base     state change, value flash, bar easing, Reduced fades
    *   --dur-slow     layout: sidebar, panel reflow
-   *   --dur-enter, --dur-count, --dur-draw (tier 3): entrance, count-up, draw-in
+   *   --dur-count, --dur-draw (tier 3): count-up, draw-in
    *
    * Every duration is multiplied by --motion-scale (tier 3): 1 normally, 0
    * under the shell's Motion = Off, which styles/motion.css sets.
@@ -330,14 +345,16 @@
   /* v168 §1: scaled by --motion-scale (tier 3, below), which is 1 and
    * becomes 0 only under [data-motion=off] in styles/motion.css. */
   --dur-instant: calc(90ms * var(--motion-scale));
+  --dur-ui: calc(120ms * var(--motion-scale));
   --dur-base: calc(160ms * var(--motion-scale));
   --dur-slow: calc(260ms * var(--motion-scale));
   --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* Alias, so existing `transition: var(--transition)` call sites keep
-   * working. New code names the duration it wants. */
-  --transition: var(--dur-base) var(--ease-out);
+   * working. v195 §1.2: every one of them is a colour, opacity or border
+   * change, and Graphite times those at 120ms (--dur-ui), down from 160. */
+  --transition: var(--dur-ui) var(--ease-out);
 }
 
 /* v89 -- width only, not pointer: a touch laptop at 1440 keeps desktop
@@ -355,13 +372,39 @@
  * move: gutters stay put, so this is a hit-target change, not a zoom. 16px
  * control text is also the size below which mobile browsers zoom into a
  * focused field. Every component's own touch block uses this exact
- * condition (ui/hit-area.spec.ts). */
+ * condition (ui/hit-area.spec.ts). v195 §1.4 (correction 15): because the
+ * condition includes (pointer: coarse) at any width, a touch device wider
+ * than 1023px also gets these, so row density can never shrink a touch
+ * target. */
 @media (pointer: coarse), (max-width: 1023px) {
   :root {
     --control-h: 44px;
     --row-h: 44px;
     --text-control: calc(16px * var(--text-scale));
     --hit-min: 44px;
+    --cell-pad-y: var(--space-10);
+    --cell-pad-x: var(--space-10);
+    --panel-pad: var(--space-14);
+  }
+}
+
+/* v195 §1.4 -- row density, a per-device choice: ui/density.service.ts
+ * writes <html data-density="dense|comfortable"> from localStorage
+ * ui.density (default dense). Dense is the :root default above; this is
+ * the only place comfortable lives, and only a desktop-width window driven
+ * by a fine pointer reaches it. Below 1024px, or under a coarse pointer at
+ * any width, the touch block above wins whatever the setting: density
+ * never lowers that gate. Outside :root on purpose -- dump_tokens.py and
+ * resolve-token.ts read only top-level :root, so the fixture holds the
+ * dense default. --text-body is never set here: order figures read it (or
+ * larger) and stay >= 14px in both densities. */
+@media (min-width: 1024px) and (pointer: fine) {
+  html[data-density=comfortable] {
+    --row-h: 44px;
+    --cell-pad-y: var(--space-10);
+    --cell-pad-x: var(--space-14);
+    --panel-pad: var(--space-20);
+    --text-table: calc(14px * var(--text-scale));
   }
 }
 
@@ -376,51 +419,50 @@
 /* ===== Tier 3: component tokens (spec v167 §3) ===== */
 /* What a panel, a control, a chip and a button LOOK like, named once, so a
  * component reads these instead of re-spelling background + border +
- * radius + shadow. Every colour here derives from tier 2 by var() or
- * color-mix(): a palette change reaches it. The only rgb()/rgba() literals
- * are black or white at an alpha, inside --panel-shadow, --shadow-overlay,
- * --panel-shadow-lift and --scrim-soft (the colour gate, primitives.spec.ts).
+ * radius + shadow. Every colour here derives from tier 2 by var(): a
+ * palette change reaches it. The only rgb()/rgba() literals here are black
+ * or white at an alpha, inside --shadow-overlay and --scrim-soft (the
+ * colour gate, primitives.spec.ts).
  *
- * --panel-bg, --btn-fill, --btn-fill-hover and --glow-ambient are
- * GRADIENTS, i.e. images: `background` / `background-image` only, never
- * `background-color` (tokens.spec.ts checks styles.css and ui/). A
- * background between two gradients does not transition; v168 animates
- * button hover with filter and glow instead.
+ * v195 §1.2 / §1.5 (Graphite): flat. A panel is the --surface step and a
+ * 1px --border, with no gradient and no shadow (--panel-shadow is none);
+ * the primary button is one flat fill. Depth comes only from the surface
+ * steps; the one shadow left is --shadow-overlay, for out-of-flow
+ * elements. The ambient glow, the button glow, the hover-lift shadow and
+ * the route-entrance duration are deleted (tokens.spec.ts checks no
+ * reader is left).
  *
  * Last block in the file on purpose: scripts/dev/dump_tokens.py and
  * resolve-token.ts read every top-level :root, and tokens.spec.ts slices
  * tier 3 from this banner to the end. */
 :root {
-  /* The four radius targets. Every border-radius in the app is one of
-   * these, or 50% (dots), 0 (flush edges) or inherit. */
-  --panel-radius: 8px;     /* panels, cards, drawers' inner sections, dialogs */
-  --control-radius: 6px;   /* buttons, inputs, selects, segmented controls */
-  --chip-radius: 999px;    /* pills */
-  --radius-sm: 2px;        /* thin bars, cells, swatches, tracks: under ~12px tall */
+  /* The four radius targets (v195 §1.5). Every border-radius in the app is
+   * one of these, or 50% (status dots), 0 (flush edges) or inherit. */
+  --panel-radius: 6px;     /* panels, cards, drawers' inner sections, dialogs */
+  --control-radius: 4px;   /* buttons, inputs, selects, segmented controls */
+  --chip-radius: 4px;      /* chips and tags: squared like a control, not a pill */
+  --radius-sm: 2px;        /* cells, thin bars, swatches, tracks: under ~12px tall */
 
   /* The panel (L1/L2), painted by sb-panel, sb-figure-strip and
-   * sb-chart-container; the shadow comes from the global .sb-panel class. */
-  --panel-bg: linear-gradient(180deg, var(--surface-raised), var(--surface));
+   * sb-chart-container. The global .sb-panel class still casts
+   * var(--panel-shadow), which is none under v195. */
+  --panel-bg: var(--surface);
   --panel-border: 1px solid var(--border);
-  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 -- shadow values have no natural expression via the closed --space-* scale. */
-  --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 6px 18px rgba(0, 0, 0, .25);
-  /* A panel nested in a panel: flat, no gradient, and no shadow -- one
-   * level of elevation per stack. */
+  --panel-shadow: none;
+  /* A panel nested in a panel: one surface step up, no shadow. */
   --panel-inner-bg: var(--surface-raised);
   --panel-inner-radius: var(--control-radius);
 
   /* Out of flow (L3): dropdown, popover, tooltip, toast, drawer, dialog,
-   * through the global .elev-overlay class. */
+   * through the global .elev-overlay class -- the one shadow v195 keeps. */
+  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 -- shadow values have no natural expression via the closed --space-* scale. */
   --shadow-overlay: 0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4);
 
-  /* The primary button. Top stop --accent-fill-hi (white 4.66:1), bottom
-   * --accent-fill (white 5.06:1); contrast.spec.ts checks both. */
-  --btn-fill: linear-gradient(180deg, var(--accent-fill-hi), var(--accent-fill));
-  --btn-fill-hover: linear-gradient(180deg, color-mix(in srgb, var(--accent-fill-hi) 88%, white), color-mix(in srgb, var(--accent-fill) 88%, white));
-
-  /* Glows are hued, so they derive from the fill blue, never an rgba. */
-  --glow-accent: 0 4px 14px color-mix(in srgb, var(--accent-fill) 35%, transparent);
-  --glow-ambient: radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent-fill) 12%, transparent), transparent 60%);
+  /* The primary button: one flat fill, --accent-fill (white 5.74:1), and
+   * --accent-fill-hi on hover (white 5.00:1); contrast.spec.ts checks
+   * both. Colours, not images, so they transition. */
+  --btn-fill: var(--accent-fill);
+  --btn-fill-hover: var(--accent-fill-hi);
 
   /* The mobile-nav scrim (shell.css), given a name. Softer than --scrim,
    * which dims behind a modal. */
@@ -434,16 +476,10 @@
    * The default must live in this file: motion.css is outside the token
    * resolver's STYLE_FILES, so the fixture would not see it. */
   --motion-scale: 1;
-  --dur-enter: calc(420ms * var(--motion-scale));   /* route entrance, stagger */
   --dur-count: calc(900ms * var(--motion-scale));   /* first count-up */
   --dur-draw: calc(1200ms * var(--motion-scale));   /* chart draw-in */
 
   /* The text colour a changed cell takes while its tint fades (#8). */
   --flash-up-text: var(--pos);
   --flash-down-text: var(--neg);
-
-  /* The hover lift's deeper shadow (#5), cast only from styles/motion.css;
-   * primitives.spec.ts G3 holds that file to it and --glow-accent. */
-  /* Box-shadow geometry (blur/offset) is intentionally exempt from the "px only for 1px/2px borders" rule per design spec D2 -- shadow values have no natural expression via the closed --space-* scale. */
-  --panel-shadow-lift: 0 10px 28px rgba(0, 0, 0, .35);
 }

@@ -22,7 +22,9 @@ Inlined from the `/new-doc` skill and `docs/claude/document-conventions.md` —
 - Header: `**Bump:**` level only, `**Edge:**` one of `expectancy`/`harvest`/`volume`/`none (integrity)`, `**Spec:**` link back.
 - A spec numbered above v140 must carry `**Screen:**` under `Edge:`; a spec without one is a `BLOCKED:` question, not a plan.
 - `### Task <PREFIX><n>:` headings, `# Phase` sections. **No file over 1500 lines**; aim for 1000–1500 per part, a task is never split across files, never compress a task to fit.
-- Every task carries real test code, real implementation code, exact paths and commands (`superpowers:writing-plans`). Full code stays — speed comes from the phases below, not from thinner tasks.
+- Every task carries real test code, real implementation code, exact paths and commands (`superpowers:writing-plans`).
+- **Size caps (plans above v196, checked by `plan_lint.py`):** a task is at most **20 KB** (UTF-8 bytes from its `### Task` line to the next task or `# `/`## ` heading); aim for **14 KB or less**. A plan is at most **20 tasks** (ledger rows, `b` split rows included).
+- **A task past 20 KB is split, never compressed:** write it as two tasks, `<id>` and `<id>b`, appended in order, each with real test code, real implementation code and exact paths. Report it as `SPLIT: <id> -> <id>b` and never edit the index — the controller adds the `b` ledger row directly below `<id>`.
 - Plans numbered above v145: the first line under every `### Task` is `**Model:** <haiku|sonnet|opus> — <one-clause reason>`, from the rubric in `docs/claude/model-routing.md` (the higher tier wins).
 - `## Parallelisation`: disjoint files + no contract dependency; name every sequential-edge reason.
 - Per-task verification is the narrow run (`python scripts/dev/testrun.py file <test>`); one full-suite run as the final task.
@@ -62,8 +64,13 @@ expected while they are still being written — ignore only those.
 ## mode=index
 
 1. Read the spec whole and the brief.
-2. Decide the layout: estimate lines per task (recent tasks run 150–300).
+2. Decide the layout: a task is ≤ 20 KB, aim 14 KB.
    **≤ ~1300 lines total → single file; otherwise split into parts.**
+   Count the ledger rows before writing anything: **over 20, write nothing
+   further** and return `SCOPE: <N> tasks > 20 -- split the spec` — the
+   controller splits the spec and asks the partner where to cut. A task
+   split later that pushes the ledger past 20 is the same `SCOPE`; the cap
+   is never raised.
 3. Write the index **before any task body** — this is your first file write:
    the header block, goal (a short explanatory paragraph block, not one sentence: why the work exists, what changes once shipped, how it works in idea, what it leaves alone, how success is measured; `document-conventions.md` § The plan's Goal section), architecture, `## Global Constraints`,
    `## Parallelisation`, and a **task ledger** table with one row per task:
@@ -104,9 +111,10 @@ partner's decisions from the session that was cut off.
 ## Return shape
 
 ```
-STATUS: DONE | PARTS | BLOCKED: <one question>
+STATUS: DONE | PARTS | SCOPE: <N> tasks > 20 -- split the spec | BLOCKED: <one question>
 FILES: <plan path(s)> (<line count> each)
 TASKS: <first id>..<last id> (<count>)
 PARTS: <N> -- <file> (<task ids>), ...      # mode=index on a split plan only
+SPLIT: <id> -> <id>b, ...                   # mode=part, only when a task passed 20 KB
 OPEN: <= 3 lines -- decisions the controller should check
 ```
