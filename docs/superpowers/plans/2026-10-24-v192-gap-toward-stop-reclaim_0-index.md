@@ -9,6 +9,8 @@
 **Brief:** `.superpowers/briefs/2026-10-24-v192-gap-toward-stop-reclaim.md`
 **Worktree:** every code task runs in `.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim` (branch of the same name, created in V192-1's first step; `docs/claude/document-lifecycle.md`). The measurement tasks (V192-22..V192-25) run from the same worktree and read the main checkout's git-ignored training data by absolute path. The merge to `main` is V192-26's last step.
 
+**V192-4 test correction (2026-10-31):** The examples opening a bullish plan at 101 with stop 98.5 and a bearish plan at 99 with stop 101.5 exceed the existing confluence stop-risk ceiling. Both must return `RISK_CAP`; use opens 100.1 and 99.9 respectively to test away-from-stop fills within that ceiling. This corrects test inputs only; the risk rule and research gates are unchanged.
+
 ## Goal
 
 In both 2026 autopsy windows the live book's worst bucket was the trades
