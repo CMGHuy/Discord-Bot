@@ -20,6 +20,7 @@ from typing import NamedTuple
 # file via spec_from_file_location (same reason as testrun.py).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import plan_lint  # noqa: E402
+import testrun  # noqa: E402
 
 SECTIONS = ("Task", "Deliverables", "Environment", "Preflight", "Code")
 PREFLIGHT_SLOT = "<!-- task-brief: fill Preflight -->"
@@ -197,3 +198,103 @@ def derive_deliverables(section: str, task_id: str) -> list[Deliverable]:
     if not items:
         raise HandoffError(f"no deliverables derivable for {task_id}")
     return items
+
+
+DB_PREFIXES = (
+    "alembic",
+    "swingbot/core/db/",
+    "swingbot/core/infra/expectancy_attribution_store.py",
+    "swingbot/core/infra/gate_counterfactual_store.py",
+    "swingbot/core/marketdata/data_store.py",
+    "swingbot/core/marketdata/history_store.py",
+    "swingbot/core/planning/plan_store.py",
+    "swingbot/core/scanning/progress_store.py",
+    "tests/db/",
+)
+FRONTEND_PREFIXES = ("frontend/",)
+TEST_DB_URL = testrun.TEST_DB_URL_DEFAULT
+TEST_DB_CONTAINER = "swing-db-test"
+TEST_DB_SERVICE = "db-test"
+NG_TEST_WRAPPER = "frontend/scripts/ng-test.mjs"
+MAX_IMAGE_READS = 4
+_TASK_HEADING_RE = re.compile(r"^### Task ([A-Za-z0-9-]+):")
+
+
+def _normal(path: str) -> str:
+    return path.replace("\\", "/").removeprefix("./")
+
+
+def needs_db(paths) -> bool:
+    return any(_normal(p).startswith(DB_PREFIXES) for p in paths)
+
+
+def needs_frontend(paths) -> bool:
+    return any(_normal(p).startswith(FRONTEND_PREFIXES) for p in paths)
+
+
+def _base_lines(wt: str, branch: str, attribution: str) -> list[str]:
+    return [
+        f"- Worktree: `{wt}` on branch `{branch}`. Use absolute paths and `git -C {wt}`; never `cd`.",
+        f"- Tests: `python {wt}/scripts/dev/testrun.py file {wt}/<test file>`; never the full suite, never `fast`.",
+        "- Complexity: `python -m radon cc -s -n C <changed .py files>` prints nothing; "
+        f"`git -C {wt} add` new files, then `python {wt}/scripts/dev/complexity_gate.py` exits 0.",
+        f"- Every commit message ends with: `{attribution}`",
+        "- These facts are settled; do not probe them again.",
+    ]
+
+
+def _db_lines() -> list[str]:
+    return [
+        f"- Database: tests use `TEST_DATABASE_URL={TEST_DB_URL}`, the one shared test server "
+        f"(compose service `{TEST_DB_SERVICE}`, container `{TEST_DB_CONTAINER}`, profile `test`). "
+        "The test fixtures create their own databases on it; never create a container or a database by hand.",
+        "- If that server is unreachable, return `BLOCKED:`; the controller owns the containers and `/replicate-prod-db`.",
+    ]
+
+
+def _frontend_lines(wt: str) -> list[str]:
+    return [
+        f"- Frontend tests: `node {wt}/{NG_TEST_WRAPPER} {wt}/frontend --include <spec path under frontend/>` "
+        "(no `cd`, no `npx`). A 60 s start timeout under load is cured by one re-run.",
+        f"- UI checks: run `node {wt}/frontend/scripts/layout-audit.mjs --base http://localhost:1234` first and "
+        "work from its findings. Screenshots are clipped to a named element: "
+        f"`node {wt}/frontend/scripts/browse.mjs shots --path <route> --clip <css selector>`. "
+        f"At most {MAX_IMAGE_READS} image reads per task; needing more is `BLOCKED:` with the reason.",
+    ]
+
+
+def environment_block(worktree: Path, branch: str, paths: list[str], attribution: str) -> str:
+    """The handoff's Environment body: base facts, plus DB/frontend lines by path prefix."""
+    wt = worktree.as_posix()
+    lines = _base_lines(wt, branch, attribution)
+    if needs_db(paths):
+        lines += _db_lines()
+    if needs_frontend(paths):
+        lines += _frontend_lines(wt)
+    return "\n".join(lines) + "\n"
+
+
+def _deliverable_line(item: Deliverable) -> str:
+    indent = "  " if "." in item.id else ""
+    return f"{indent}- {item.id} {item.text}"
+
+
+def render_handoff(task_text: str, deliverables: list[Deliverable], environment: str) -> str:
+    """The handoff file: heading, then the SECTIONS in order; slots left for /task-brief."""
+    heading = _TASK_HEADING_RE.match(task_text)
+    if not heading:
+        raise HandoffError("task text does not start with a `### Task <id>:` heading")
+    bodies = {
+        "Task": task_text.rstrip("\n"),
+        "Deliverables": "\n".join(_deliverable_line(d) for d in deliverables),
+        "Environment": environment.rstrip("\n"),
+        "Preflight": PREFLIGHT_SLOT,
+        "Code": CODE_SLOT,
+    }
+    blocks = [f"# Handoff: Task {heading.group(1)}"] + [f"## {name}\n\n{bodies[name]}" for name in SECTIONS]
+    return "\n\n".join(blocks) + "\n"
+
+
+def handoff_path(main_root: Path, plan: Path, task_id: str) -> Path:
+    """Where a task's handoff lives: the main checkout's gitignored .superpowers/sdd/."""
+    return main_root / ".superpowers" / "sdd" / plan_base(plan) / f"task-{task_id}-handoff.md"
