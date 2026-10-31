@@ -1,0 +1,45 @@
+2026-10-31T20:00:53Z [1/22] A ema-crossover start (0% done)
+2026-10-31T20:03:51Z [1/22] A ema-crossover exit 0 Wrote 1109 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-ema-crossover.jsonl wall 177s
+2026-10-31T20:03:51Z [2/22] A vwap start (4% done)
+2026-10-31T20:10:13Z [2/22] A vwap exit 0 Wrote 2504 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-vwap.jsonl wall 381s
+2026-10-31T20:10:13Z [3/22] A fibonacci start (9% done)
+2026-10-31T20:25:35Z [3/22] A fibonacci exit 0 Wrote 6492 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-fibonacci.jsonl wall 922s
+2026-10-31T20:25:35Z [4/22] A support-resistance start (13% done)
+2026-10-31T20:33:37Z [4/22] A support-resistance exit 0 Wrote 5318 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-support-resistance.jsonl wall 481s
+2026-10-31T20:33:37Z [5/22] A rsi start (18% done)
+2026-10-31T20:35:32Z [5/22] A rsi exit 0 Wrote 577 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-rsi.jsonl wall 115s
+2026-10-31T20:35:32Z [6/22] A macd start (22% done)
+2026-10-31T20:42:53Z [6/22] A macd exit 0 Wrote 4805 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-macd.jsonl wall 440s
+2026-10-31T20:42:53Z [7/22] A elliott-wave start (27% done)
+2026-10-31T20:46:04Z [7/22] A elliott-wave exit 0 Wrote 1650 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-elliott-wave.jsonl wall 190s
+2026-10-31T20:46:04Z [8/22] A ma-ribbon start (31% done)
+2026-10-31T20:53:58Z [8/22] A ma-ribbon exit 0 Wrote 6551 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-ma-ribbon.jsonl wall 474s
+2026-10-31T20:53:58Z [9/22] A break-retest start (36% done)
+2026-10-31T20:58:50Z [9/22] A break-retest exit 0 Wrote 3666 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-break-retest.jsonl wall 292s
+2026-10-31T20:58:50Z [10/22] A rsi-divergence start (40% done)
+2026-10-31T21:45:40Z [10/22] A rsi-divergence exit 0 Wrote 38068 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-rsi-divergence.jsonl wall 2809s
+2026-10-31T21:45:40Z [11/22] A volume-profile start (45% done)
+2026-10-31T21:52:54Z [11/22] A volume-profile exit 0 Wrote 2477 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-volume-profile.jsonl wall 434s
+2026-10-31T21:52:54Z [12/22] B ema-crossover start (50% done)
+2026-10-31T21:53:19Z [12/22] B ema-crossover exit 0 Wrote 65 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-ema-crossover.jsonl wall 25s
+2026-10-31T21:53:19Z [13/22] B vwap start (54% done)
+2026-10-31T21:53:40Z [13/22] B vwap exit 0 Wrote 78 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-vwap.jsonl wall 21s
+2026-10-31T21:53:40Z [14/22] B fibonacci start (59% done)
+2026-10-31T21:54:49Z [14/22] B fibonacci exit 0 Wrote 353 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-fibonacci.jsonl wall 68s
+2026-10-31T21:54:49Z [15/22] B support-resistance start (63% done)
+2026-10-31T21:56:22Z [15/22] B support-resistance exit 0 Wrote 342 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-support-resistance.jsonl wall 93s
+2026-10-31T21:56:22Z [16/22] B rsi start (68% done)
+2026-10-31T21:56:38Z [16/22] B rsi exit 0 Wrote 60 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-rsi.jsonl wall 16s
+2026-10-31T21:56:38Z [17/22] B macd start (72% done)
+2026-10-31T21:57:33Z [17/22] B macd exit 0 Wrote 179 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-macd.jsonl wall 54s
+2026-10-31T21:57:33Z [18/22] B elliott-wave start (77% done)
+2026-10-31T21:58:04Z [18/22] B elliott-wave exit 0 Wrote 148 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-elliott-wave.jsonl wall 30s
+2026-10-31T21:58:04Z [19/22] B ma-ribbon start (81% done)
+2026-10-31T21:58:54Z [19/22] B ma-ribbon exit 0 Wrote 282 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-ma-ribbon.jsonl wall 50s
+2026-10-31T21:58:54Z [20/22] B break-retest start (86% done)
+2026-10-31T21:59:20Z [20/22] B break-retest exit 0 Wrote 120 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-break-retest.jsonl wall 25s
+2026-10-31T21:59:20Z [21/22] B rsi-divergence start (90% done)
+2026-10-31T22:04:20Z [21/22] B rsi-divergence exit 0 Wrote 1936 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-rsi-divergence.jsonl wall 300s
+2026-10-31T22:04:20Z [22/22] B volume-profile start (95% done)
+2026-10-31T22:04:59Z [22/22] B volume-profile exit 0 Wrote 82 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-volume-profile.jsonl wall 39s
+2026-10-31T22:04:59Z ALL CHUNKS ATTEMPTED
