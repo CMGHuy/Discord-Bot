@@ -22,10 +22,15 @@ cache_read_input_tokens + cache_creation_input_tokens.
 """
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import re
+import statistics
+import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Iterable, Iterator, Mapping, NamedTuple
 
@@ -300,3 +305,123 @@ def run_metrics(events: list[Event], agent: str) -> RunMetrics:
         report_shaped=report_shaped(report), missing=missing, different=different,
         no_handoff=NO_HANDOFF_LINE in [line.strip() for line in report.splitlines()],
         unparsed=sum(e.kind == "unparsed" for e in events), lines=len(events))
+
+
+def _values(rows: list[RunMetrics], field: str) -> list:
+    return [getattr(row, field) for row in rows]
+
+
+def _total(rows: list[RunMetrics], field: str) -> int:
+    return sum(_values(rows, field))
+
+
+def _num(value: float) -> str:
+    return f"{round(value, 1):g}"
+
+
+def _tokens(count: float) -> str:
+    if count >= 1e6:
+        return f"{count / 1e6:.1f}M"
+    if count >= 1e3:
+        return f"{count / 1e3:.0f}k"
+    return _num(count)
+
+
+def _spread(values: list) -> str:
+    """'<median> / <p90>'; inclusive p90 reproduces the spec's baseline (turns p90 32)."""
+    p90 = statistics.quantiles(values, n=10, method="inclusive")[-1] if len(values) > 1 else values[0]
+    return f"{_num(statistics.median(values))} / {_num(p90)}"
+
+
+def _agent_rows(rows: list[RunMetrics]) -> list[tuple[str, str]]:
+    runs = len(rows)
+    images = _values(rows, "image_reads")
+    tokens = _values(rows, "input_tokens")
+    return [
+        ("Runs / turns", f"{runs} / {_total(rows, 'turns')}"),
+        ("Turns per run, median / p90", _spread(_values(rows, "turns"))),
+        ("Input-side tokens, total / median run",
+         f"{_tokens(sum(tokens))} / {_tokens(statistics.median(tokens))}"),
+        ("Output tokens, total", _tokens(_total(rows, "output_tokens"))),
+        ("Lookups before first edit, median / p90", _spread(_values(rows, "lookups_before_edit"))),
+        ("Runs with no Edit or Write call", str(runs - _total(rows, "edited"))),
+        ("Runs that touched a plan file", f"{_total(rows, 'plan_touch')} of {runs}"),
+        ("Image reads, total / runs with any / max per run",
+         f"{sum(images)} / {runs - images.count(0)} / {max(images)}"),
+        ("Reports in the required shape", f"{_total(rows, 'report_shaped')} of {runs}"),
+        ("Deliverable lines missing / different",
+         f"{_total(rows, 'missing')} / {_total(rows, 'different')}"),
+        (f"Reports with `{NO_HANDOFF_LINE}`", str(_total(rows, "no_handoff"))),
+        ("Unparsed lines", f"{_total(rows, 'unparsed')} of {_total(rows, 'lines')}"),
+    ]
+
+
+def render_table(rows: list[RunMetrics]) -> str:
+    """One Markdown table per agent, agents sorted; '' for no rows."""
+    blocks = []
+    for agent in sorted({row.agent for row in rows}):
+        lines = [f"| {measure} | {value} |"
+                 for measure, value in _agent_rows([r for r in rows if r.agent == agent])]
+        blocks.append(f"## {agent}\n\n| Measure | Value |\n|---|---|\n" + "\n".join(lines) + "\n")
+    return "\n".join(blocks)
+
+
+def _main_checkout() -> Path:
+    """The main checkout, from the common dir of the repo (same rule as task_handoff's main_checkout)."""
+    here = Path(__file__).resolve().parent
+    out = subprocess.run(["git", "-C", str(here), "rev-parse", "--git-common-dir"],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    common = Path(out)
+    return (common if common.is_absolute() else here / common).resolve().parent
+
+
+def _default_root() -> Path:
+    return transcript_root(os.environ, Path.home(), repo_slug(_main_checkout()))
+
+
+def _in_window(started: str | None, since: date | None, until: date | None) -> bool:
+    """Inclusive UTC-date window on a run's first timestamp; unknown dates fail a filter."""
+    if since is None and until is None:
+        return True
+    try:
+        day = date.fromisoformat(started[:10])
+    except (TypeError, ValueError):
+        return False
+    return (since is None or day >= since) and (until is None or day <= until)
+
+
+def _collect(root: Path, agent: str, since: date | None, until: date | None) -> list[RunMetrics]:
+    rows = []
+    for run in find_runs(root):
+        if run.agent != agent:
+            continue
+        with run.path.open(encoding="utf-8", errors="replace") as handle:
+            metrics = run_metrics(list(iter_events(handle)), agent)
+        if _in_window(metrics.started, since, until):
+            rows.append(metrics)
+    return rows
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Per-agent cost table from subagent transcripts.")
+    parser.add_argument("--agent", default="task-implementer")
+    parser.add_argument("--since", type=date.fromisoformat)
+    parser.add_argument("--until", type=date.fromisoformat)
+    parser.add_argument("--root", type=Path, default=None)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    root = args.root if args.root is not None else _default_root()
+    rows = _collect(root, args.agent, args.since, args.until)
+    if not rows:
+        print(f"agent_cost: no {args.agent} transcripts under {root} for the given dates",
+              file=sys.stderr)
+        return 1
+    print(render_table(rows))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
