@@ -55,14 +55,24 @@ def _stamp_observed_days(path):
     start, end = (dt.date.fromisoformat(value) for value in stamp["signal_window"])
     return (end - start).days + 1
 
-def stage_reachability(args):
-    blob = json.loads(Path(args.arms).read_text()); delta = (blob.get("provenance") or {}).get("knob_delta") or {}
+def _unreachable(delta):
+    """The refusal line for the first knob of ``delta`` the replay cannot reach, else None."""
     for attr in delta:
         cls = reachability.classify(attr)
         if cls != reachability.REACHABLE:
-            print(f"refused:unreachable:{cls} -- {reachability.reason(attr)} Budget intact.", file=sys.stderr); return 1
+            return f"refused:unreachable:{cls} -- {reachability.reason(attr)} Budget intact."
+    return None
+
+def stage_reachability(args):
+    stamp = json.loads(Path(args.arms).read_text()).get("provenance") or {}
+    delta, baseline_delta = stamp.get("knob_delta") or {}, stamp.get("baseline_knob_delta") or {}
+    refusal = _unreachable(delta) or _unreachable(baseline_delta)
+    if refusal:
+        print(refusal, file=sys.stderr); return 1
     baseline, component = load_arms(args.arms); changed = changed_outcomes(baseline, component)
     print(f"knobs: {delta} baseline N={len(baseline)} component N={len(component)} changed outcomes: {changed}")
+    if baseline_delta:
+        print(f"baseline knobs: {baseline_delta}")
     split = population_split(baseline, component)
     print(f"split removed={len(split['removed'])} added={len(split['added'])} changed={len(split['changed'])} is_subset={split['is_subset']}")
     if not changed:

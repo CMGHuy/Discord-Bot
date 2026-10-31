@@ -3,6 +3,7 @@
 
 v147: `--record-blocked PATH [--from --to]` writes TRAIN compression gate rows instead (see `record_blocked_main`).
 v180: --knob TURTLE_SOUP_RESEARCH_MODE=structural also writes <out stem>.turtle_soup.json (see turtle_soup_sidecar).
+v192: --baseline-knob ATTR=value runs the BASELINE arm under its own delta (stamped as baseline_knob_delta).
 """
 from __future__ import annotations
 
@@ -93,6 +94,40 @@ def population_refusal(delta: dict):
     return None
 
 
+def _baseline_population_refusal(delta: dict, baseline_delta: dict):
+    """v192: the population path runs the baseline under the component's engine, so a baseline
+    delta that would route to a different whole-scan engine cannot be honoured."""
+    engine_id = population_engine_for(baseline_delta)
+    if engine_id is None or engine_id == population_engine_for(delta):
+        return None
+    return "refused:baseline-population-mismatch", (
+        f"the baseline delta routes to {engine_id}, the component to {population_engine_for(delta)}.")
+
+
+def _refusal(delta: dict, baseline_delta: dict):
+    """The first static or population refusal over the component delta, then the baseline delta."""
+    return (static_refusal(delta) or population_refusal(delta) or static_refusal(baseline_delta)
+            or population_refusal(baseline_delta) or _baseline_population_refusal(delta, baseline_delta))
+
+
+def _unclassified(knobs) -> str | None:
+    return next((knob.partition("=")[0] for knob in knobs
+                 if reachability.classify(knob.partition("=")[0]) == reachability.UNCLASSIFIED), None)
+
+
+def _deltas(args):
+    """(component delta, baseline delta) parsed from --knob / --baseline-knob, or exit code 1 with
+    the refusal on stderr when a knob is unknown or its value does not cast."""
+    try:
+        delta = dict(parse_knob(knob) for knob in args.knob)
+        baseline_delta = dict(parse_knob(knob) for knob in args.baseline_knob)
+    except ValueError as exc:
+        unknown = _unclassified([*args.knob, *args.baseline_knob])
+        print(f"{'refused:unreachable:unclassified' if unknown else 'refused:bad-knob'} -- {exc}", file=sys.stderr)
+        return 1
+    return delta, baseline_delta
+
+
 def _worker(task):
     ticker, engine_ids, horizons, signal_window, delta = task
     try:
@@ -163,14 +198,14 @@ def _population_arm(engine_id, frames, universe, horizons, window, delta) -> lis
         return engine.run_population(frames, window, params, mode=config.SHORT_UNIVERSE_RESEARCH_MODE)
 
 
-def _produce_population(engine_id, universe, horizons, signal_window, delta) -> tuple:
-    """Load each frame once, then baseline (the knob at its default, i.e. off) and
+def _produce_population(engine_id, universe, horizons, signal_window, delta, baseline_delta=None) -> tuple:
+    """Load each frame once, then baseline (``baseline_delta``, by default none: the knob off) and
     component (the knob applied) over the identical frames. One process: the
     replay is cross-sectional per decision date, not per ticker."""
     frames = {symbol: frame for symbol in population_symbols()
               if (frame := load_frame(symbol)) is not None}
     baseline_hash = code_hash()
-    baseline = _population_arm(engine_id, frames, universe, horizons, signal_window, {})
+    baseline = _population_arm(engine_id, frames, universe, horizons, signal_window, dict(baseline_delta or {}))
     print(f"  [baseline] {len(baseline)} trades", flush=True)
     component_hash = code_hash()
     component = _population_arm(engine_id, frames, universe, horizons, signal_window, delta)
@@ -178,26 +213,29 @@ def _produce_population(engine_id, universe, horizons, signal_window, delta) -> 
     return baseline_hash, baseline, component_hash, component
 
 
-def produce(stage, delta, *, universe, spec=None, horizons=None, engines=DEFAULT_ENGINES,
+def produce(stage, delta, *, universe, baseline_delta=None, spec=None, horizons=None, engines=DEFAULT_ENGINES,
             workers=None, progress_path=None, preregistration=None) -> dict:
+    """v192: ``baseline_delta`` is the baseline arm's own config delta (default none, today's
+    baseline); the stamp records it as ``baseline_knob_delta`` when non-empty."""
     spec = spec or windows.resolve(stage)
     horizons = tuple(horizons or windows.ALL_HORIZONS)
+    baseline_delta = dict(baseline_delta or {})
     population = population_engine_for(delta)
     if population is not None:
         engines = (population,)
         baseline_hash, baseline, component_hash, component = _produce_population(
-            population, universe, horizons, spec.signal_window, delta)
+            population, universe, horizons, spec.signal_window, delta, baseline_delta)
     else:
         workers = _resolve_replay_workers(workers)
         total, counter = 2 * len(universe), [0]
         baseline_hash = code_hash()
-        baseline = _run_arm_all("baseline", universe, engines, horizons, spec.signal_window, {}, workers, progress_path, counter, total)
+        baseline = _run_arm_all("baseline", universe, engines, horizons, spec.signal_window, baseline_delta, workers, progress_path, counter, total)
         component_hash = code_hash()
         component = _run_arm_all("component", universe, engines, horizons, spec.signal_window, delta, workers, progress_path, counter, total)
     stamp = build_stamp(stage=stage, signal_window=spec.signal_window, universe=universe, horizons=horizons,
                         engines=engines, knob_delta=delta, engine_hash_baseline=baseline_hash,
                         engine_hash_component=component_hash, changed_outcomes=changed_outcomes(baseline, component),
-                        preregistration=preregistration)
+                        preregistration=preregistration, baseline_knob_delta=baseline_delta)
     blob: dict = {"provenance": stamp}
     if spec.fold_key != "folds":
         blob["baseline"], blob["component"] = _rows(baseline, *spec.signal_window), _rows(component, *spec.signal_window)
@@ -297,6 +335,8 @@ def _write_sidecar_or_warn(out: Path, blob, delta, universe, spec) -> None:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--knob", action="append", required=True)
+    parser.add_argument("--baseline-knob", action="append", default=[],
+                        help="v192: ATTR=value the BASELINE arm runs under (repeatable; default none)")
     parser.add_argument("--stage", required=True, choices=sorted(windows.STAGES))
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--workers", type=int, default=None)
@@ -308,13 +348,11 @@ def main(argv=None) -> int:
     instrument_cli.require_v1(instrument_cli.spec_from_args(args), "measure_arms.py",
                               "phase 5 (v2 stage table)")
     apply_data_source(args)
-    try:
-        delta = dict(parse_knob(knob) for knob in args.knob)
-    except ValueError as exc:
-        unknown = next((knob.partition("=")[0] for knob in args.knob if reachability.classify(knob.partition("=")[0]) == reachability.UNCLASSIFIED), None)
-        print(f"{'refused:unreachable:unclassified' if unknown else 'refused:bad-knob'} -- {exc}", file=sys.stderr)
-        return 1
-    refusal = static_refusal(delta) or population_refusal(delta)
+    deltas = _deltas(args)
+    if isinstance(deltas, int):
+        return deltas
+    delta, baseline_delta = deltas
+    refusal = _refusal(delta, baseline_delta)
     if refusal:
         print(f"{refusal[0]} -- {refusal[1]} Budget intact.", file=sys.stderr)
         return 1
@@ -324,8 +362,8 @@ def main(argv=None) -> int:
     universe = windows.universe_for(args.stage, cached_universe())
     LOG_DIR.mkdir(exist_ok=True)
     progress = LOG_DIR / f"measure_arms.{uuid.uuid4().hex[:8]}.progress"
-    blob = produce(args.stage, delta, universe=universe, workers=args.workers, progress_path=progress,
-                   preregistration=str(args.preregistration) if args.preregistration else None)
+    blob = produce(args.stage, delta, universe=universe, baseline_delta=baseline_delta, workers=args.workers,
+                   progress_path=progress, preregistration=str(args.preregistration) if args.preregistration else None)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(blob), encoding="utf-8")
     training_data.write_provenance(args.out)
