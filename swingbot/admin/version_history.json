@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-30 18:14:26 UTC",
+  "generated_at": "2026-10-31 22:33:19 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.37.3",
-    "bot": "2.15.8"
+    "bot": "2.15.9"
   },
   "releases": [
     {
@@ -2253,6 +2253,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-31",
+      "last_seen": "2026-10-31",
+      "commit": "2d914d84",
+      "subject": "release(bot): 2.15.9 -- instrument v3: point-in-time S&P 500 on the Alpaca store, integrity report, describe-only re-baseline",
+      "versions": {
+        "ui": "1.37.3",
+        "bot": "2.15.9"
+      },
+      "changed": [
         "bot"
       ]
     }
