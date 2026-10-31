@@ -55,3 +55,9 @@ Members with `skipped: no Alpaca bars` (V190-20's input), 44 in daily:
 `ACS ANRZQ AYE BDK BJS BMC BNI BTUUQ CBE CEPH CFN CMCSK COV CPWR CVH EKDKQ FDO GR HCBK HNZ HSH HSP KRFT LO MEE MFE MHS MOLX MWV NOVL NYX PBG PETM PGN PTV RSHCQ RX SIAL SUNEQ SWY TEG TIE TLAB XTO`
 
 Hourly and 15min carry the same 44 plus `SBNY` (45).
+
+## Context pass
+
+`fetch_alpaca_history.py --universe sp500_pit --root $PIT --backtest-dir $EXT --tickers DIA,GLD,IWM,QQQ,SPY,TLT,XLB,XLC,XLE,XLF,XLI,XLK,XLP,XLRE,XLU,XLV,XLY` (all three timeframes). UTC start 2026-10-31T18:10:56Z, end 2026-10-31T18:43:46Z, exit 0.
+
+Result: all 17 context symbols (SPY, the regime ticker, the `etfs.json` set) are in the daily, hourly and 15min manifests, each `flagged: no-reference` (no backtest_cache_ext reference exists for ETFs, which the plan accepts). Step 4 check: `BAD []`. Each manifest now holds 865 entries (848 members + 17).
