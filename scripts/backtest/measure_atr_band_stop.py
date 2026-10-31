@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import argparse
 import functools
+import hashlib
 import json
+import shutil
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -122,26 +124,72 @@ def _run_tasks(tasks, record, workers) -> None:
             record(*future.result())
 
 
+def _code_fingerprint() -> str:
+    """Hash of the code a replay depends on, so a checkpoint never outlives an edit."""
+    digest = hashlib.sha1()
+    files = sorted((ROOT / "swingbot").rglob("*.py")) + [Path(__file__).resolve()]
+    for path in files:
+        digest.update(path.relative_to(ROOT).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _checkpoint_fingerprint(kind, arm, window, cells) -> str:
+    key = json.dumps([kind, arm, list(window), [float(k) for k in cells], _code_fingerprint()])
+    return hashlib.sha1(key.encode()).hexdigest()
+
+
+def _load_checkpoints(directory: Path, fingerprint: str, names) -> dict:
+    """Finished tickers from an earlier, interrupted run of the same replay."""
+    done: dict = {}
+    for ticker in names:
+        try:
+            blob = json.loads((directory / f"{ticker}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(blob, dict) and blob.get("fingerprint") == fingerprint:
+            done[ticker] = blob["rows"]
+    return done
+
+
+def _save_checkpoint(directory: Path, fingerprint: str, ticker: str, rows) -> None:
+    tmp = directory / f"{ticker}.json.tmp"
+    tmp.write_text(json.dumps({"fingerprint": fingerprint, "rows": rows}), encoding="utf-8")
+    tmp.replace(directory / f"{ticker}.json")
+
+
 def build(kind, arm, window, cells, *, tickers=None, workers=None) -> list:
     """Replay every universe ticker for one arm; rows come back in ticker
-    order, so the output is identical whatever order the pool finishes in."""
+    order, so the output is identical whatever order the pool finishes in.
+    Each finished ticker is checkpointed under logs/ and a restart replays
+    only the missing ones (a changed arm, window, grid or any swingbot edit
+    discards the checkpoints)."""
     _init_worker()
     names = universe()
     names = names[:tickers] if tickers else names
-    tasks = [(kind, arm, ticker, tuple(window), tuple(float(k) for k in cells))
-             for ticker in names]
     LOG_DIR.mkdir(exist_ok=True)
+    directory = LOG_DIR / f"measure_atr_band_stop.{arm}.{kind}.ckpt"
+    directory.mkdir(exist_ok=True)
+    fingerprint = _checkpoint_fingerprint(kind, arm, window, cells)
+    by_ticker: dict = _load_checkpoints(directory, fingerprint, names)
+    if by_ticker:
+        print(f"  [arm {arm} {kind}] resuming: {len(by_ticker)}/{len(names)} tickers "
+              f"restored from checkpoints", flush=True)
+    tasks = [(kind, arm, ticker, tuple(window), tuple(float(k) for k in cells))
+             for ticker in names if ticker not in by_ticker]
+    total = len(names)
     progress = LOG_DIR / f"measure_atr_band_stop.{arm}.{kind}.progress"
-    by_ticker: dict = {}
 
     def record(ticker, rows):
         by_ticker[ticker] = rows or []
-        print(f"  [arm {arm} {kind} {window[0]}..{window[1]}] {len(by_ticker)}/{len(tasks)} "
+        _save_checkpoint(directory, fingerprint, ticker, by_ticker[ticker])
+        print(f"  [arm {arm} {kind} {window[0]}..{window[1]}] {len(by_ticker)}/{total} "
               f"{ticker}: {len(by_ticker[ticker])} entries", flush=True)
-        _write_progress(progress, len(by_ticker), len(tasks))
+        _write_progress(progress, len(by_ticker), total)
 
     _run_tasks(tasks, record, workers)
     progress.unlink(missing_ok=True)
+    shutil.rmtree(directory, ignore_errors=True)
     return [row for ticker in sorted(by_ticker) for row in by_ticker[ticker]]
 
 

@@ -235,3 +235,55 @@ def test_build_sorts_completed_tickers_and_removes_progress(tmp_path, monkeypatc
     rows = mabs.build("census", "R", funnel.FOLD_TRAIN, GRID, workers=2)
     assert rows == [{"ticker": "AAA"}, {"ticker": "BBB"}]
     assert not list(tmp_path.glob("*.progress"))
+
+
+def _ckpt_env(monkeypatch, tmp_path, names):
+    monkeypatch.setattr(mabs, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(mabs.training_data, "select", lambda name: name)
+    monkeypatch.setattr(mabs, "universe", lambda: names)
+    monkeypatch.setattr(mabs, "_code_fingerprint", lambda: "code-1")
+
+
+def test_build_resumes_from_checkpoints_and_replays_only_missing(tmp_path, monkeypatch):
+    _ckpt_env(monkeypatch, tmp_path, ["AAA", "BBB", "CCC"])
+    seen = []
+
+    def crash_after_two(tasks, record, workers):
+        seen.append([t[2] for t in tasks])
+        record("AAA", [{"ticker": "AAA"}])
+        record("BBB", [{"ticker": "BBB"}])
+        raise RuntimeError("killed")
+
+    monkeypatch.setattr(mabs, "_run_tasks", crash_after_two)
+    with pytest.raises(RuntimeError):
+        mabs.build("census", "K", funnel.FOLD_TRAIN, GRID, workers=2)
+
+    def finish(tasks, record, workers):
+        seen.append([t[2] for t in tasks])
+        record("CCC", [{"ticker": "CCC"}])
+
+    monkeypatch.setattr(mabs, "_run_tasks", finish)
+    rows = mabs.build("census", "K", funnel.FOLD_TRAIN, GRID, workers=2)
+    assert seen == [["AAA", "BBB", "CCC"], ["CCC"]]
+    assert rows == [{"ticker": "AAA"}, {"ticker": "BBB"}, {"ticker": "CCC"}]
+    assert not list(tmp_path.glob("*.ckpt"))
+
+
+def test_build_ignores_checkpoints_from_other_code_or_arm(tmp_path, monkeypatch):
+    _ckpt_env(monkeypatch, tmp_path, ["AAA"])
+    directory = tmp_path / "measure_atr_band_stop.K.census.ckpt"
+    directory.mkdir()
+    stale = mabs._checkpoint_fingerprint("census", "K", funnel.FOLD_TRAIN, GRID)
+    mabs._save_checkpoint(directory, stale, "AAA", [{"v": "stale"}])
+    monkeypatch.setattr(mabs, "_code_fingerprint", lambda: "code-2")
+    ran = []
+    monkeypatch.setattr(mabs, "_run_tasks", lambda tasks, record, workers: (
+        ran.append(len(tasks)), record("AAA", [{"v": "fresh"}])))
+    assert mabs.build("census", "K", funnel.FOLD_TRAIN, GRID, workers=1) == [{"v": "fresh"}]
+    assert ran == [1]
+
+
+def test_load_checkpoints_skips_corrupt_and_empty_ticker_files(tmp_path):
+    (tmp_path / "AAA.json").write_text("{not json", encoding="utf-8")
+    mabs._save_checkpoint(tmp_path, "fp", "BBB", [])
+    assert mabs._load_checkpoints(tmp_path, "fp", ["AAA", "BBB", "CCC"]) == {"BBB": []}
