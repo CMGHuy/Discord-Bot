@@ -24,8 +24,26 @@ from __future__ import annotations
 
 import json
 import re
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, Mapping, NamedTuple
+
+# scripts/dev is sys.path[0] when run directly, but not when a test loads this
+# file via spec_from_file_location (same reason as testrun.py).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from task_handoff import NO_HANDOFF_LINE, REVIEWER_STATES  # noqa: E402
+
+INPUT_FIELDS = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+HANDBACK_TOOL = "SubagentHandback"
+PLAN_DIR = "docs/superpowers/plans/"
+FINDING_TAGS = ("spec", "correctness", "complexity", "test")
+VERDICT_RE = re.compile(r"^VERDICT: (CLEAN|FINDINGS|BLOCKED: \S.*)$")
+_DONE, *_FLAGGED = REVIEWER_STATES
+DELIVERABLE_RE = re.compile(
+    rf"^D\d+(?:\.\d+)? (?:(?P<done>{_DONE})|(?P<flag>{'|'.join(_FLAGGED)}) -- \S.*)$")
+FINDING_RE = re.compile(rf"^\d+\. \[(?:{'|'.join(FINDING_TAGS)})\] \S+:\d+ -- \S.*$")
+FIX_RE = re.compile(r"^\s+fix: \S.*$")
 
 LOOKUP_RE = re.compile(r"\b(grep|rg|cat|sed -n|head|tail|ls|find)\b")
 LOOKUP_TOOLS = ("Read", "Grep", "Glob")
@@ -166,3 +184,119 @@ def is_image_read(block: object) -> bool:
     content = block.get("content")
     return isinstance(content, list) and any(
         isinstance(item, Mapping) and item.get("type") == "image" for item in content)
+
+
+@dataclass(frozen=True)
+class RunMetrics:
+    agent: str
+    started: str | None        # first timestamp in the transcript (UTC ISO)
+    turns: int
+    input_tokens: int
+    output_tokens: int
+    lookups_before_edit: int   # every lookup when the run never edits
+    edited: bool
+    image_reads: int
+    plan_touch: bool
+    report_shaped: bool
+    missing: int               # reviewer `D<n> missing -- ...` lines
+    different: int             # reviewer `D<n> different -- ...` lines
+    no_handoff: bool           # the report carries NO_HANDOFF_LINE
+    unparsed: int
+    lines: int                 # events read, unparsed included
+
+
+def _input_tokens(usage: Mapping) -> int:
+    return sum(int(usage.get(field) or 0) for field in INPUT_FIELDS)
+
+
+def _tool_calls(turns: list[Event]) -> list[tuple[str, Mapping]]:
+    calls = []
+    for event in turns:
+        for block in event.blocks:
+            if isinstance(block, Mapping) and block.get("type") == "tool_use":
+                calls.append((str(block.get("name", "")), block.get("input") or {}))
+    return calls
+
+
+def _lookups_before_edit(calls: list[tuple[str, Mapping]]) -> int:
+    count = 0
+    for name, tool_input in calls:
+        if name in EDIT_TOOLS:
+            break
+        count += is_lookup(name, tool_input)
+    return count
+
+
+def _touches_plan(name: str, tool_input: Mapping) -> bool:
+    if name == HANDBACK_TOOL:
+        return False
+    return PLAN_DIR in json.dumps(tool_input, ensure_ascii=False).replace("\\\\", "/")
+
+
+def _handbacks(calls: list[tuple[str, Mapping]]) -> list[str]:
+    return [tool_input.get("message") for name, tool_input in calls
+            if name == HANDBACK_TOOL and isinstance(tool_input.get("message"), str)]
+
+
+def _texts(turns: list[Event]) -> list[str]:
+    blocks = [b for e in turns for b in e.blocks if isinstance(b, Mapping) and b.get("type") == "text"]
+    return [str(b.get("text") or "") for b in blocks if str(b.get("text") or "").strip()]
+
+
+def _report_text(turns: list[Event], calls: list[tuple[str, Mapping]]) -> str:
+    found = _handbacks(calls) or _texts(turns)
+    return found[-1] if found else ""
+
+
+def _flag_counts(report: str) -> tuple[int, int]:
+    matches = (DELIVERABLE_RE.match(line.strip()) for line in report.splitlines())
+    flags = [m.group("flag") for m in matches if m and m.group("flag")]
+    return flags.count(_FLAGGED[0]), flags.count(_FLAGGED[1])
+
+
+def _line_kind(line: str) -> str:
+    if line == NO_HANDOFF_LINE or DELIVERABLE_RE.match(line):
+        return "deliverable"
+    if FINDING_RE.match(line) or FIX_RE.match(line):
+        return "finding"
+    return "other"
+
+
+def report_shaped(text: str) -> bool:
+    """The reviewer's required shape: VERDICT line, deliverable lines, then findings."""
+    lines = [line.rstrip() for line in text.strip().splitlines() if line.strip()]
+    if not lines or not VERDICT_RE.match(lines[0]):
+        return False
+    kinds = [_line_kind(line) for line in lines[1:]]
+    if "other" in kinds:
+        return False
+    first_finding = kinds.index("finding") if "finding" in kinds else len(kinds)
+    return "deliverable" not in kinds[first_finding:]
+
+
+def _started(events: list[Event]) -> str | None:
+    return next((e.timestamp for e in events if e.timestamp), None)
+
+
+def _image_reads(events: list[Event]) -> int:
+    return sum(is_image_read(b) for e in events if e.kind == "user" for b in e.blocks)
+
+
+def run_metrics(events: list[Event], agent: str) -> RunMetrics:
+    """One run's measures from its raw events (dedup is applied here)."""
+    merged = dedup(events)
+    turns = [e for e in merged if e.kind == "assistant"]
+    calls = _tool_calls(turns)
+    report = _report_text(turns, calls)
+    missing, different = _flag_counts(report)
+    return RunMetrics(
+        agent=agent, started=_started(events), turns=len(turns),
+        input_tokens=sum(_input_tokens(e.usage) for e in turns),
+        output_tokens=sum(_output(e.usage) for e in turns),
+        lookups_before_edit=_lookups_before_edit(calls),
+        edited=any(name in EDIT_TOOLS for name, _ in calls),
+        image_reads=_image_reads(merged),
+        plan_touch=any(_touches_plan(name, tool_input) for name, tool_input in calls),
+        report_shaped=report_shaped(report), missing=missing, different=different,
+        no_handoff=NO_HANDOFF_LINE in [line.strip() for line in report.splitlines()],
+        unparsed=sum(e.kind == "unparsed" for e in events), lines=len(events))
