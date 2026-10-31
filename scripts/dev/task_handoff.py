@@ -11,7 +11,9 @@ deliverables.
 """
 from __future__ import annotations
 
+import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -298,3 +300,66 @@ def render_handoff(task_text: str, deliverables: list[Deliverable], environment:
 def handoff_path(main_root: Path, plan: Path, task_id: str) -> Path:
     """Where a task's handoff lives: the main checkout's gitignored .superpowers/sdd/."""
     return main_root / ".superpowers" / "sdd" / plan_base(plan) / f"task-{task_id}-handoff.md"
+
+
+def _git(start: Path, *args: str) -> str:
+    done = subprocess.run(["git", "-C", str(start), *args], capture_output=True, text=True, check=False)
+    if done.returncode != 0:
+        raise HandoffError(f"not a git checkout: {start}")
+    return done.stdout.strip()
+
+
+def main_checkout(start: Path) -> Path:
+    """The main checkout's root, from any of its worktrees (via --git-common-dir)."""
+    common = Path(_git(start, "rev-parse", "--git-common-dir"))
+    if not common.is_absolute():
+        common = start / common
+    return common.resolve().parent
+
+
+def _refuse_filled(target: Path) -> None:
+    if not target.exists():
+        return
+    text = target.read_text(encoding="utf-8")
+    if PREFLIGHT_SLOT not in text or CODE_SLOT not in text:
+        raise HandoffError(f"{target} is already filled by /task-brief; delete it to regenerate")
+
+
+def build_handoff(plan: Path, task_id: str, worktree: Path, attribution: str) -> Path:
+    """Locate, derive, render and write one task's handoff; returns its path."""
+    if not plan.is_file():
+        raise HandoffError(f"plan file not found: {plan}")
+    _, section = find_task(plan_lint.plan_files(plan.resolve()), task_id)
+    deliverables = derive_deliverables(section, task_id)
+    paths = [path for _, path in files_paths(section)]
+    branch = _git(worktree, "rev-parse", "--abbrev-ref", "HEAD")
+    environment = environment_block(worktree.resolve(), branch, paths, attribution)
+    target = handoff_path(main_checkout(worktree), plan, task_id)
+    _refuse_filled(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_handoff(section, deliverables, environment), encoding="utf-8")
+    return target
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="task_handoff.py", description="Write one task's handoff file.")
+    parser.add_argument("plan", type=Path, help="any file of the plan (index or part)")
+    parser.add_argument("task_id", help="exact task id, e.g. V199-5")
+    parser.add_argument("--worktree", type=Path, required=True, help="the implementer's worktree")
+    parser.add_argument("--attribution", required=True, help="commit attribution line")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    try:
+        target = build_handoff(args.plan, args.task_id, args.worktree, args.attribution)
+    except HandoffError as exc:
+        print(f"task_handoff: {exc}")
+        return 2
+    print(target.resolve())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
