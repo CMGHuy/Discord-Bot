@@ -61,3 +61,14 @@ Hourly and 15min carry the same 44 plus `SBNY` (45).
 `fetch_alpaca_history.py --universe sp500_pit --root $PIT --backtest-dir $EXT --tickers DIA,GLD,IWM,QQQ,SPY,TLT,XLB,XLC,XLE,XLF,XLI,XLK,XLP,XLRE,XLU,XLV,XLY` (all three timeframes). UTC start 2026-10-31T18:10:56Z, end 2026-10-31T18:43:46Z, exit 0.
 
 Result: all 17 context symbols (SPY, the regime ticker, the `etfs.json` set) are in the daily, hourly and 15min manifests, each `flagged: no-reference` (no backtest_cache_ext reference exists for ETFs, which the plan accepts). Step 4 check: `BAD []`. Each manifest now holds 865 entries (848 members + 17).
+
+## Aliases
+
+`data/universe/symbol_aliases.json` is committed as `{"aliases": []}`: no no-bars member qualifies as a same-issuer ticker change (spec §2.4). Every one of the 44 daily no-bars members (45 in hourly/15min with SBNY) also has its last membership span ending on or before 2015-12-14, before the store start 2016-01-04, so even a correct mapping would add no bars inside the window. Nothing was fetched for this task.
+
+Unmapped, with reason (acquisition/merger/bankruptcy/spin-off is not a rename):
+- Acquired or merged away: ACS (Xerox 2010), AYE (AES 2011), BDK (Stanley Works 2010), BJS (Baker Hughes 2010), BMC (private buyout 2013), BNI (Berkshire 2010), CBE (Eaton 2012), CEPH (Teva 2011), CFN (Becton Dickinson 2015), COV (Medtronic 2015, new entity), CPWR (Thoma Bravo 2014), CVH (Aetna 2013), FDO (Dollar Tree 2015), GR (Berkshire/United Technologies 2012), HCBK (M&T 2015), HNZ (Berkshire/3G 2013), HSH (Hillshire Brands, Tyson 2014 after 2012 Sara Lee spin; membership span ended 2012-06-29), HSP (Pfizer 2015), LO (Reynolds American 2015), MEE (Alpha Natural Resources 2011), MFE (Intel 2011), MHS (Express Scripts 2012), MOLX (Koch 2013), MWV (RockTenn 2015), NOVL (Attachmate 2011), NYX (ICE 2013), PBG (Pepsi 2010), PETM (private buyout 2015), PGN (Duke 2012), PTV (private 2010), RX (private/IMS 2010), SIAL (Merck KGaA 2015), SWY (Albertsons 2015), TEG (Wisconsin Energy 2015), TIE (private 2012), TLAB (Alcatel-Lucent 2012), XTO (Exxon 2010).
+- Bankrupt or delisted: ANRZQ, BTUUQ, EKDKQ, RSHCQ, SUNEQ, SBNY (bank closure 2023).
+- Share class or successor entity, not a rename: CMCSK (Comcast Class K retired Dec 2015), KRFT (Kraft Foods Group merged into Kraft Heinz, new KHC entity).
+
+The reasons are from memory of public corporate events, not re-sourced per entry; none feeds a mapping, so an error here cannot splice bars.
