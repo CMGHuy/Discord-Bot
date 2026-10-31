@@ -1,0 +1,161 @@
+# v190 re-baseline: instrument v3
+
+*describes an instrument change; never a lift; selects nothing*
+
+Every v3 fold is in-sample or tainted for today's strategies: test years 2021-2023 lie inside v1 TRAIN, which tuned every live setting, and 2024-2025 is v1 VALIDATION. No out-of-fold figure below is out-of-sample, and the 2021 fold has a little under four effective training years (the regime gate's ~320-bar warm-up eats into 2017).
+
+Confluence is not measured on legs A and C: run_backtest_range --scenarios is refused under every non-v1 instrument (scan replay is unwired there). No v1 figure stands in for it.
+
+Leg B uses the v1 cost model (zero commission and financing); legs A and C use v2/v3 fills and costs. WR and ExpR across legs are not like for like.
+
+| Leg | Instrument / universe |
+| --- | --- |
+| A | v3, PIT S&P 500 |
+| C | v3, watchlist PIT members |
+| B | v1, watchlist |
+
+## Power (citable)
+
+Bootstrap resamples: 10000.
+
+| Leg | Population | N | Tickers | Weeks | mde_r_formula | mde_r_ticker | mde_r_week |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A | fold-train 2017-01-01..2024-12-31 (purged) | 65619 | 586 | 413 | +0.076 | +0.080 (seed 190) | +0.110 (seed 42) |
+| C | fold-train 2017-01-01..2024-12-31 (purged) | 6455 | 52 | 401 | +0.238 | +0.236 (seed 190) | +0.264 (seed 42) |
+| B | TRAIN 2020-01-01..2023-12-31 | 3645 | 61 | 200 | +0.285 | +0.295 (seed 190) | +0.309 (seed 42) |
+
+Population N ratios: A/B = 18.002; C/B = 1.771.
+
+cells: 11 strategies × 2 directions × 10 horizons × 3 legs = 660 (249 non-empty)
+
+### Coverage
+
+Integrity SHA-256: `15fc954888263f3a8041a8387416cdf12ec10cd605cbeb9c7eff0c83c725f99b`.
+
+Tickers: 821; admitted: 754; no bars: 44; trimmed: 30; with signal cuts: 58.
+
+| Exclusion reason | N |
+| --- | --- |
+| identity re-derived: flagged: price-mismatch | 55 |
+| identity re-derived: flagged: short-overlap | 5 |
+| in-span break 2020-04-01 (price): resolve by hand | 1 |
+| in-span break 2021-10-04 (volume): resolve by hand | 1 |
+| in-span break 2023-03-13 (volume): resolve by hand | 1 |
+| in-span break 2023-06-07 (price+volume): resolve by hand | 1 |
+| no daily bars in the store window | 2 |
+| unresolved break 2023-03-09 (edge) | 1 |
+
+### First counted entry
+
+| Leg | Strategy | First entry |
+| --- | --- | --- |
+| A | Break & Retest | 2017-01-04 |
+| A | EMA Crossover | 2017-01-05 |
+| A | Elliott Wave | 2017-01-09 |
+| A | Fibonacci | 2017-01-04 |
+| A | MA Ribbon | 2017-01-04 |
+| A | MACD | 2017-01-06 |
+| A | RSI | 2017-05-09 |
+| A | RSI Divergence | 2017-01-04 |
+| A | Support/Resistance | 2017-01-04 |
+| A | VWAP | 2017-01-04 |
+| A | Volume Profile | 2017-03-20 |
+| C | Break & Retest | 2017-01-06 |
+| C | EMA Crossover | 2017-02-21 |
+| C | Elliott Wave | 2017-01-09 |
+| C | Fibonacci | 2017-01-04 |
+| C | MA Ribbon | 2017-01-05 |
+| C | MACD | 2017-01-27 |
+| C | RSI | 2020-02-04 |
+| C | RSI Divergence | 2017-01-05 |
+| C | Support/Resistance | 2017-01-19 |
+| C | VWAP | 2017-01-05 |
+| C | Volume Profile | 2017-04-18 |
+| B | Break & Retest | 2020-01-02 |
+| B | EMA Crossover | 2020-05-05 |
+| B | Elliott Wave | 2020-01-02 |
+| B | Fibonacci | 2020-01-06 |
+| B | MA Ribbon | 2020-01-08 |
+| B | MACD | 2020-04-09 |
+| B | RSI | 2020-02-03 |
+| B | RSI Divergence | 2020-01-07 |
+| B | Support/Resistance | 2020-01-02 |
+| B | VWAP | 2020-01-06 |
+| B | Volume Profile | 2020-01-06 |
+
+## Folds (legs A and C)
+
+| Leg | Test year | Effective fold-train N | Fold-test N |
+| --- | --- | --- | --- |
+| A | 2021 | 31288 | 11125 |
+| A | 2022 | 42275 | 5860 |
+| A | 2023 | 48273 | 6816 |
+| A | 2024 | 55090 | 10535 |
+| A | 2025 | 65619 | 7491 |
+| C | 2021 | 2991 | 1115 |
+| C | 2022 | 4096 | 484 |
+| C | 2023 | 4581 | 681 |
+| C | 2024 | 5261 | 1193 |
+| C | 2025 | 6455 | 880 |
+
+## WR and ExpR (description only)
+
+| Leg | Population | N | N evaluated | WR (%) | ExpR |
+| --- | --- | --- | --- | --- | --- |
+| A | fold-train 2017-01-01..2024-12-31 (purged) | 65619 | 52724 | 36.9 | +0.019 |
+| A | all trades | 73217 | 58750 | 36.9 | +0.011 |
+| C | fold-train 2017-01-01..2024-12-31 (purged) | 6455 | 5210 | 42.8 | +0.207 |
+| C | all trades | 7349 | 5950 | 42.4 | +0.222 |
+| B | TRAIN 2020-01-01..2023-12-31 | 3645 | 2926 | 41.5 | +0.372 |
+| B | all trades | 3645 | 2926 | 41.5 | +0.372 |
+
+### Entry year (all trades)
+
+| Leg | Population | N | N evaluated | WR (%) | ExpR |
+| --- | --- | --- | --- | --- | --- |
+| A | 2017 | 9242 | 7287 | 44.8 | +0.232 |
+| A | 2018 | 7477 | 5996 | 32.4 | -0.057 |
+| A | 2019 | 8084 | 6203 | 37.1 | -0.019 |
+| A | 2020 | 6587 | 5480 | 37.8 | -0.015 |
+| A | 2021 | 11125 | 8861 | 35.2 | -0.102 |
+| A | 2022 | 5860 | 4919 | 26.3 | -0.222 |
+| A | 2023 | 6816 | 5649 | 35.5 | +0.032 |
+| A | 2024 | 10535 | 8393 | 41.5 | +0.203 |
+| A | 2025 | 7491 | 5962 | 36.5 | -0.079 |
+| C | 2017 | 854 | 666 | 56.6 | +0.582 |
+| C | 2018 | 617 | 515 | 44.1 | +0.239 |
+| C | 2019 | 826 | 613 | 43.7 | +0.194 |
+| C | 2020 | 699 | 558 | 41.0 | +0.028 |
+| C | 2021 | 1115 | 887 | 36.0 | -0.047 |
+| C | 2022 | 484 | 391 | 34.3 | +0.022 |
+| C | 2023 | 681 | 565 | 46.4 | +0.279 |
+| C | 2024 | 1193 | 1029 | 41.4 | +0.359 |
+| C | 2025 | 880 | 726 | 38.8 | +0.260 |
+| B | 2020 | 798 | 639 | 46.2 | +0.420 |
+| B | 2021 | 1264 | 993 | 38.0 | +0.282 |
+| B | 2022 | 690 | 524 | 35.1 | +0.243 |
+| B | 2023 | 893 | 770 | 46.5 | +0.556 |
+
+### Fold test side
+
+| Leg | Population | N | N evaluated | WR (%) | ExpR |
+| --- | --- | --- | --- | --- | --- |
+| A | 2021 test | 11125 | 8861 | 35.2 | -0.102 |
+| A | 2022 test | 5860 | 4919 | 26.3 | -0.222 |
+| A | 2023 test | 6816 | 5649 | 35.5 | +0.032 |
+| A | 2024 test | 10535 | 8393 | 41.5 | +0.203 |
+| A | 2025 test | 7491 | 5962 | 36.5 | -0.079 |
+| C | 2021 test | 1115 | 887 | 36.0 | -0.047 |
+| C | 2022 test | 484 | 391 | 34.3 | +0.022 |
+| C | 2023 test | 681 | 565 | 46.4 | +0.279 |
+| C | 2024 test | 1193 | 1029 | 41.4 | +0.359 |
+| C | 2025 test | 880 | 726 | 38.8 | +0.260 |
+
+### Top two horizons
+
+| Leg | Population | Horizons | N share | R share |
+| --- | --- | --- | --- | --- |
+| A | fold-train 2017-01-01..2024-12-31 (purged) | 4w, 3m | 0.310 | +0.402 |
+| C | fold-train 2017-01-01..2024-12-31 (purged) | 4w, 3m | 0.317 | +0.361 |
+| B | TRAIN 2020-01-01..2023-12-31 | 4w, 2m | 0.317 | +0.305 |
+
