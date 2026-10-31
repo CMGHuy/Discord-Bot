@@ -357,3 +357,97 @@ no BLOCKING.
 - senior-engineer: baseline not reproducible -- applied (`--until` and a baseline-reproduction task)
 - senior-engineer: `--clip` box logic untested; which audit is meant -- applied (`browse-lib.mjs`; `layout-audit.mjs`)
 - senior-engineer: agent files and handoff headings could drift -- applied (wiring test)
+
+## Baseline reproduction
+
+Run on 2026-10-31 (plan V199-9) with `scripts/dev/agent_cost.py` at
+`4144c440`, no definition changed.
+
+**Transcript root.** Transcripts are kept per Claude Code profile
+(`CLAUDE_CONFIG_DIR`), and this repo is worked from four of them
+(`config-bo`, `config-meo`, `config-personal`, `config-work`, none sharing
+a session). The default root follows the running session's profile. The
+2026-10-29 baseline was taken under **`config-work`**: it is the only root
+whose image reads match the baseline exactly (49 / 8 runs / max 9), and its
+632 subagent files fit the 626 seen at authoring less pruning plus the runs
+added since. The commands therefore name that root explicitly:
+
+```
+python scripts/dev/agent_cost.py --root <config-work>/projects/E--Documents-Private-Projects-Discord-Bot --until 2026-10-28
+python scripts/dev/agent_cost.py --root <config-work>/projects/E--Documents-Private-Projects-Discord-Bot --until 2026-10-29
+python scripts/dev/agent_cost.py --root <config-work>/projects/E--Documents-Private-Projects-Discord-Bot --agent task-reviewer --until 2026-10-28
+```
+
+`task-implementer`, `--until 2026-10-28`:
+
+| Measure | Value |
+|---|---|
+| Runs / turns | 170 / 2914 |
+| Turns per run, median / p90 | 10.5 / 32 |
+| Input-side tokens, total / median run | 188.7M / 503k |
+| Output tokens, total | 653k |
+| Lookups before first edit, median / p90 | 7 / 19 |
+| Runs with no Edit or Write call | 85 |
+| Runs that touched a plan file | 98 of 170 |
+| Image reads, total / runs with any / max per run | 49 / 8 / 9 |
+| Reports in the required shape | 0 of 170 |
+| Deliverable lines missing / different | 0 / 0 |
+| Reports with `DELIVERABLES: n/a (no handoff)` | 0 |
+| Unparsed lines | 0 of 22304 |
+
+`--until 2026-10-29` adds one run (171 / 2915 turns, median 10 / 499k,
+188.8M, output 654k, 86 with no Edit or Write, 98 of 171 plan touches,
+0 of 22326 unparsed, the other rows unchanged). That run started at
+2026-10-29T15:53Z, after this spec and its plan were committed (by
+11:16Z), so the
+2026-10-28 table is the one compared.
+
+`task-reviewer`, `--until 2026-10-28`:
+
+| Measure | Value |
+|---|---|
+| Runs / turns | 86 / 505 |
+| Turns per run, median / p90 | 4 / 9.5 |
+| Input-side tokens, total / median run | 25.7M / 156k |
+| Output tokens, total | 41k |
+| Lookups before first edit, median / p90 | 4 / 8 |
+| Runs with no Edit or Write call | 86 |
+| Runs that touched a plan file | 15 of 86 |
+| Image reads, total / runs with any / max per run | 0 / 0 / 0 |
+| Reports in the required shape | 0 of 86 |
+| Deliverable lines missing / different | 0 / 0 |
+| Reports with `DELIVERABLES: n/a (no handoff)` | 0 |
+| Unparsed lines | 0 of 4326 |
+
+For the record, the same commands without `--root` (this session's
+`config-meo` profile) give a different population: 181 / 3385 implementer
+runs, median 14 turns and 690k input, 250.1M total, 13 image reads in 2
+runs, 101 of 181 plan touches; 148 reviewer runs. `config-bo` gives 268
+implementer runs to 2026-10-28. Neither is the baseline's population.
+
+**Deltas** (spec Evidence, as corrected, against the `config-work`
+reproduction; image reads match exactly):
+
+| Measure | Spec Evidence | Reproduced | Cause |
+|---|---|---|---|
+| Runs / turns | 185 / 3216 | 170 / 2914 | Claude Code's 30-day `cleanupPeriodDays` pruned the oldest sessions between 2026-10-29 and 2026-10-31 (earliest surviving run now starts 2026-10-01T18:54Z), taking 15 runs and 302 turns with them. |
+| Input-side tokens, total / median run | 206M / 517k | 188.7M / 503k | Same pruning: 17.3M tokens left with those 15 runs, which shifts the median. |
+| Turns per run, median / p90 | 11 / 32 | 10.5 / 32 | Same pruning; the median moved onto an even run count. |
+| Lookups before first edit, median / p90 | 7 / 18.6 | 7 / 19 | Same pruning moved the p90. |
+| Runs that touched a plan file | 101 of 185 | 98 of 170 | Same pruning; 3 of the 15 pruned runs touched a plan. |
+| `task-reviewer` reports in shape | 0 of 97 | 0 of 86 | Same pruning took 11 reviewer runs; the share is unchanged. |
+| Output tokens (Goal) | 0.66M | 653k | Same pruning. |
+
+No delta comes from a definition: `Unparsed lines` is 0, the image-read
+count (whose UI runs all postdate the pruned window) matches exactly, and
+every count moved downwards, as removing runs does. Per the plan's
+decision rule (cause 1), the authoring numbers stay the baseline of record.
+
+**Baseline of record for the post-merge Success check:** median input
+tokens per run **517,917 (518k)** over the 185 runs of 2026-10-29, so the
+"down at least 30%" target is a median of 362.5k or less. The four absolute
+targets are unchanged: median lookups before first edit 3 or fewer,
+plan-file touches 0, image reads per UI task 4 or fewer, reviewer reports
+in the required shape 90% or more. Because the default root follows the
+profile, the Success check names its `--root` (or runs once per profile
+the post-merge runs came from) rather than relying on the default.
