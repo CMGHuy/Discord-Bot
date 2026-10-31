@@ -51,3 +51,21 @@ Consequence for v3 results: the universe under-represents blow-ups (SIVB, FRC), 
 ## Tool summary
 
 See `2026-10-v190-pit-integrity-report.md`.
+
+## Coverage gate and smoke run
+
+**Gate** (`check_cache_coverage.py --instrument v3 --store-root $PIT`, 2026-10-31): exit 1, `COVERAGE: GAPS 72 gap(s)`. Members checked 702 | covered 630 | late 72 | missing 0.
+
+**Accounting:** 66 of the 72 late members are explained by the frozen report (no bars, not admitted, first bar on or before first membership, or a signal cut past the first stored bar). Six were **not** explained by the plan's rule (c): AABA, INFO, LB, SE, STI, WYND. For all six the store holds no bar inside the membership span (first stored bar: AABA 2017-06-19, INFO 2024-10-10, LB 2024-06-28, SE 2017-10-20, STI 2022-05-02, WYND 2018-06-01), and the frozen report already carries a `missing run` signal cut over the whole span, so they place no trades. Aliasing cannot fill them: Alpaca keeps no pre-rename history under the new symbol (BBWI's first stored bar is its rename day, 2021-08-03), and SE, STI and INFO were acquisitions, not renames.
+
+Partner decision 2026-10-31: remove those six and note they are not used. **AABA, INFO, LB, SE, STI and WYND are not used by v3** (L Brands, SunTrust, Spectra Energy, IHS Markit, Altaba, Wyndham Worldwide are absent from every v3 result). The frozen `_integrity.json` was not re-frozen; it still lists them as admitted, with the full-span cuts above.
+
+**Smoke run** (plumbing check; no WR or ExpR recorded). 2026-10-31T19:10:43Z to 19:18:04Z, run beside two v191 `measure_atr_band_stop.py` jobs (partner approved):
+
+```
+python data/backtest_results/v190/run_smoke_local.py --instrument v3 --exit-model v2 --scale-out --tp2 none --from 2019-01-01 --to 2019-12-31 --strategy "RSI" --json $OUT/smoke-v3.json --trades-jsonl $OUT/smoke-v3.jsonl
+```
+
+The wrapper only stubs `load_watchlist` to `[]`: the local `swing-db` rejected the `.env` credentials, and the first direct run died in the report step on the unresolvable `.env` DB host after the simulation had finished. The watchlist slice line therefore reads 0/0 and means nothing.
+
+Output: exit 0, `Wrote 30 trade rows`, 848 tickers in the run, CELG processed (progress line `[149/848] CELG`). Step 4: `store pit source alpaca integrity ok True`; `MON rows 0`; `holdout rows 0`; none of the delisted probe names traded in 2019.
