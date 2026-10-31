@@ -2,8 +2,8 @@
 
 *describes an instrument change; never a lift; selects nothing*
 
-**Spec:** `docs/superpowers/specs/2026-10-24-v190-pit-alpaca-universe-design.md`
-**Plan:** `docs/superpowers/plans/2026-10-24-v190-pit-alpaca-universe_0-index.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-10-24-v190-pit-alpaca-universe-design.md`
+**Plan:** `docs/superpowers/plans/implemented/2026-10-24-v190-pit-alpaca-universe_0-index.md`
 **Code:** `f76e608433630881bd9265a72db4891da6a5cf11`
 **Integrity:** frozen `_integrity.json` sha256 `15fc954888263f3a8041a8387416cdf12ec10cd605cbeb9c7eff0c83c725f99b`; see `2026-10-v190-pit-integrity.md`.
 

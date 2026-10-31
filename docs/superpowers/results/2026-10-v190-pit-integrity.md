@@ -1,7 +1,7 @@
 # v190 PIT store: frozen integrity report
 
-**Spec:** `docs/superpowers/specs/2026-10-24-v190-pit-alpaca-universe-design.md`
-**Plan:** `docs/superpowers/plans/2026-10-24-v190-pit-alpaca-universe_0-index.md` (Task V190-21)
+**Spec:** `docs/superpowers/specs/implemented/2026-10-24-v190-pit-alpaca-universe-design.md`
+**Plan:** `docs/superpowers/plans/implemented/2026-10-24-v190-pit-alpaca-universe_0-index.md` (Task V190-21)
 
 ## Freeze
 
@@ -42,11 +42,11 @@ Partner decision 2026-10-31: freeze as-is with these six excluded; the report ha
 | CTRA | 2021-10-04 | volume | in_span | same issuer: Cabot/Cimarex merger |
 | APTV | 2017-12-05 | edge | unresolved | same issuer: Delphi Technologies spin-off (excluded earlier as `identity re-derived`, price-mismatch) |
 
-Consequence for v3 results: the universe under-represents blow-ups (SIVB, FRC), a survivorship bias that flatters long-side results slightly. A follow-up spec can add an evidenced admit-override to the integrity contract and re-freeze; until then every v3 figure carries this caveat.
+Consequence for v3 results: the universe under-represents blow-ups (SIVB, FRC), a survivorship bias whose size was not measured: it flatters long-side results and understates short-side results. A follow-up spec can add an evidenced admit-override to the integrity contract and re-freeze; until then every v3 figure carries this caveat.
 
 ## Counts
 
-865 tickers in the manifests; 754 admitted, 67 excluded (60 `identity re-derived`, 2 `no daily bars in the store window`, 5 breaks: ARNC, CTRA, FI, FRC, SIVB), 44 no bars (alias table empty, see backfill log). APTV is excluded as `identity re-derived: flagged: price-mismatch` (it also carries an unresolved edge break, so the exclusion is for identity first). 30 members carry a trim. Context symbols: all 17 admitted. `td.select('alpaca', 'pit', '2025-12-31')` reports 754 available and 111 excluded (67 plus the 44 no-bars).
+865 tickers in the manifests; 754 admitted (748 effective: AABA, INFO, LB, SE, STI and WYND are listed admitted but unused), 67 excluded (60 `identity re-derived`, 2 `no daily bars in the store window`, 5 breaks: ARNC, CTRA, FI, FRC, SIVB), 44 no bars (alias table empty, see backfill log). APTV is excluded as `identity re-derived: flagged: price-mismatch` (it also carries an unresolved edge break, so the exclusion is for identity first). 30 members carry a trim. Context symbols: all 17 admitted. `td.select('alpaca', 'pit', '2025-12-31')` reports 754 available and 111 excluded (67 plus the 44 no-bars).
 
 ## Tool summary
 
