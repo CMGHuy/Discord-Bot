@@ -263,6 +263,32 @@ the percentage it states, not a paraphrase of recent prints. **Delete the log
 once the task finishes** (success or failure) — it exists only to answer that
 one question while the task is live, not as a permanent artifact.
 
+## Long runs must checkpoint (never hold results only in memory)
+
+**A script that runs past a few minutes writes each finished unit of work
+(ticker, fold, chunk) to disk the moment it completes, and a restart reads
+those files and replays only the missing units.** A progress line says how far
+a run got; only a checkpoint lets the next session pick it up. The
+counterexample: the v191 arm K Stage -1 census held every ticker's rows in a
+dict, died at 61/67 tickers after ~20 hours, and all 61 were lost -- a rerun of
+the 6 missing tickers was impossible.
+
+- **Location and format:** under git-ignored `logs/`, one JSON file per unit,
+  written to a `.tmp` and `replace`d so a kill never leaves a half file; remove
+  the directory when the run completes (like the percent log above).
+- **Invalidate on change:** each checkpoint carries a fingerprint of everything
+  the unit depends on (arm, window, grid and a hash of the code it replays). A
+  mismatch is ignored and recomputed, never reused -- a stale checkpoint must
+  not leak into frozen evidence.
+- **The final artifact comes from one complete pass over all units**, merged in
+  a fixed order, so a resumed run is byte-identical to an uninterrupted one.
+- **Say it on resume:** print `resuming: n/N units restored` first, so the log
+  shows the run did not start from scratch.
+- **Before launching** any run expected past a few minutes, confirm the script
+  checkpoints; if it does not, add it (with a test that kills mid-run and
+  resumes) before the first run, not after the first crash. Reference
+  implementation: `build()` in `scripts/backtest/measure_atr_band_stop.py`.
+
 ## Subagents must keep a progress file
 
 **A subagent dispatched for multi-step or long-running work keeps a plain-text

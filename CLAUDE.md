@@ -131,7 +131,7 @@ lists). A new `tests/` directory joins exactly one suite in the same commit; a
 suite past `max_tests` is **split by feature**, never the limit raised. CI runs
 one job per suite from that file — never hand-list one. `testing-cost.md` § Test suites.
 
-**Long backtest/grid runs** go to `backtest-runner`, chunked per strategy; 15 min+ prints a percent.
+**Long backtest/grid runs** go to `backtest-runner`, chunked per strategy; 15 min+ prints a percent. **Any run past a few minutes persists each finished unit (ticker/fold/chunk) to disk as it completes and a restart skips them -- never results held only in memory**: `working-conventions.md` § Long runs must checkpoint.
 
 ## Naming specs and plans
 

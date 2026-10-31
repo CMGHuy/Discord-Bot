@@ -387,6 +387,10 @@ re-measure to justify a change. Backtests and grids run minutes to hours; chunk
 them per strategy, no casual broad sweeps. Any script past a couple of minutes
 prints flushed per-unit progress; past 15 minutes, a percent-complete figure
 rewritten each unit (never summed by the reader) in a log deleted on completion.
+Any run past a few minutes also checkpoints each finished unit (ticker/fold/chunk) to
+git-ignored `logs/` as it completes (fingerprinted on arm/window/grid/code, atomic
+write) and a restart replays only the missing units; never keep results only in
+memory. Confirm a script checkpoints before launching it (`working-conventions.md`).
 
 Use at most one subagent at a time by default: dispatch, wait for its result,
 then decide on another. Parallel subagents need the partner's explicit request;
