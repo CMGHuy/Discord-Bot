@@ -41,7 +41,7 @@ Daily and hourly completed before this takeover (attempts r1-r5 of the hourly pa
 
 | Timeframe | Command | UTC start | UTC end | Summary line | Exit |
 | --- | --- | --- | --- | --- | --- |
-| 15min (r6) | `fetch_alpaca_history.py --universe sp500_pit --root $PIT --backtest-dir $EXT --timeframes 15min` | 2026-10-31T09:23:08Z | ~09:23Z | none logged (log holds only the exit line) | 1 |
+| 15min (r6) | `fetch_alpaca_history.py --universe sp500_pit --root $PIT --backtest-dir $EXT --timeframes 15min` | 2026-10-31T09:23:08Z | ~11:48Z (log mtime) | none logged (log holds only the exit line) | 1 |
 | 15min (r7) | same, no `--tickers` | 2026-10-31T12:28Z | 2026-10-31T13:13:00Z | none: stopped by the operator at ~103 re-written files; it was re-fetching existing members instead of the missing ones | 127 (kill) |
 | 15min (r8) | same plus `--tickers <the 414 members absent from the manifest>` | 2026-10-31T13:13Z | 2026-10-31T16:59:10Z | `written 391, unchanged 0, refetched 0, skipped 23, flagged 112, requests 4554` | 0 |
 
