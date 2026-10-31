@@ -155,7 +155,14 @@ cache); `--data-source yfinance` or that `.env` line rolls back, and
 `BACKTEST_CACHE_DIR` or `--cache-dir` means yfinance. A missing store is an error,
 never an empty run. Live badges use the yfinance registry row. A new data source
 resets no validation budget and reopens no closed pre-registration; each names its
-`data_source`. Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
+`data_source`.
+`--instrument v3` (v190) alone reads the PIT Alpaca store `data/market_data_pit/`
+(every S&P member from 2016, local only); no universe name or variable selects it,
+it refuses without a fresh `_integrity.json`, and one fetcher runs per store root.
+v3's folds are in-sample or tainted for today's strategies, the 2026 holdout is
+shared with v2, and `validate_component.py` refuses v3 until a methodology spec
+maps its stages.
+Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
 § Windows.
 
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter

@@ -99,5 +99,6 @@ def describe(cache_dir) -> str:
 
 
 def pool_kwargs() -> dict:
-    """Hand a spawned pool worker the parent's selection (spawn re-imports)."""
-    return {"initializer": training_data.select, "initargs": (training_data.active(),)}
+    """Hand a spawned pool worker the parent's selection (spawn re-imports);
+    the PIT store and its cut travel too (v190)."""
+    return {"initializer": training_data.select, "initargs": training_data.selection_args()}

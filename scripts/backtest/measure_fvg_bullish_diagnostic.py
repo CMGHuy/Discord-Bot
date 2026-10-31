@@ -185,7 +185,7 @@ def run_replay(universe, earnings_dir, workers=None) -> dict:
             record(*_worker(task))
     else:
         with ProcessPoolExecutor(max_workers=n_workers, initializer=training_data.select,
-                                 initargs=(training_data.active(),)) as pool:
+                                 initargs=training_data.selection_args()) as pool:
             for future in as_completed([pool.submit(_worker, task) for task in tasks]):
                 record(*future.result())
     PROGRESS.unlink(missing_ok=True)

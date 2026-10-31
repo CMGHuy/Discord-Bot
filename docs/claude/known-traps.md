@@ -53,6 +53,37 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   `data/backtest_cache/` stays: it is the live bot's daily cache, the journal
   backfill's source, the `yfinance` training source and the identity-check
   reference.
+- **The PIT Alpaca store is a fourth directory, chosen only by instrument v3
+  (v190).** `data/market_data_pit/{daily,hourly,15min}/{TICKER}.csv` has the
+  v162 store's layout and manifests, holds every `sp500_pit` member (delisted
+  names included) from 2016-01-04 plus SPY, the regime ticker and every
+  `data/universe/etfs.json` symbol, and lives on this laptop only (never the
+  VM, no cron). `history_store.store_root("pit")` never reads
+  `HISTORY_STORE_DIR`; `store_root()` (the watchlist store) still does. **No
+  universe name and no environment variable selects it:** `sp500_pit` is v2's
+  universe too, and `training_data.available_tickers()` feeds about a dozen
+  scripts their universe, so a store chosen by name would widen them. Only
+  `contract.resolve("v3").store == "pit"` selects it, inside
+  `fetch_backtest_data.apply_data_source`, which also cuts every frame
+  (SPY and the ETFs included) at `research_end`; pool workers receive the
+  choice through `training_data.selection_args()`. **Integrity before use:**
+  `scripts/data/check_history_store.py --pit` writes
+  `data/market_data_pit/_integrity.json`; selection refuses without it and
+  raises `StaleIntegrityError` once the daily manifest's sha256 differs from
+  the one frozen in it, so a `--mode update` after a freeze stops every v3 run
+  until the report is rebuilt. It carries **frame trims** (a reused symbol's
+  foreign bars, MON after mid-2018, removed in `history_store.load` before
+  any indicator reads them) and **signal-date cuts** (runs of more than 5
+  missing sessions; dates whose trailing 60 sessions hold under 95% of their
+  bars), subtracted from the membership spans. `flagged: no-reference` is
+  admitted on the PIT store only; the watchlist store's `_manifest_exclusions`
+  is unchanged. Renamed members map through `data/universe/symbol_aliases.json`
+  (`fetch_alpaca_history.py --universe sp500_pit`). **One fetcher per root at
+  a time:** each process rewrites the whole per-timeframe manifest, so two on
+  one root lose each other's entries. **Worktrees:** both store roots resolve
+  through `history_store.resolve_data_root`, so a worktree without its own
+  `data/market_data[_pit]` reads the main checkout's; a directory that exists
+  in the worktree wins.
 - **The history store holds the same tickers as `data/backtest_cache/`:** the
   watchlist plus `MARKET_REGIME_TICKER`. The sector ETFs of
   `data/universe/etfs.json` (QQQ, IWM, DIA, the XL* funds, GLD, TLT) are in

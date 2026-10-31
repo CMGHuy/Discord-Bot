@@ -94,12 +94,43 @@ def membership_file_for(universe: str | None) -> str | None:
     return os.path.join(_universe_dir(), filename) if filename else None
 
 
-def membership_map(universe: str | None, symbols) -> dict | None:
+def _minus(span: tuple[str, str], cut: tuple[str, str]) -> list[tuple[str, str]]:
+    """`span` with the half-open `cut` removed: zero, one or two pieces."""
+    (start, end), (cut_start, cut_end) = span, cut
+    if not (cut_start < end and cut_end > start):
+        return [span]
+    parts = []
+    if start < cut_start:
+        parts.append((start, cut_start))
+    if cut_end < end:
+        parts.append((cut_end, end))
+    return parts
+
+
+def subtract_spans(spans: list[tuple[str, str]],
+                   cuts: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """The parts of `spans` outside every cut. All intervals are half-open
+    ISO `[start, end)`; the result is sorted with no empty interval and
+    neither input is mutated."""
+    out = list(spans)
+    for cut in sorted(cuts):
+        out = [piece for span in out for piece in _minus(span, cut)]
+    return sorted(out)
+
+
+def membership_map(universe: str | None, symbols,
+                   cuts: dict[str, list[tuple[str, str]]] | None = None) -> dict | None:
     """{symbol: spans} for a `_pit` universe, None for any other. A symbol
     with no row (e.g. a watchlist extra such as SPY) maps to an empty list --
-    never a member, so it can never contribute a trade to a PIT run."""
+    never a member, so it can never contribute a trade to a PIT run.
+    `cuts` is `training_data.signal_cuts()` under instrument v3 (spec section
+    3); every cut is decided from bars on or before its dates, so subtracting
+    it is causal. None or {} leaves the spans untouched."""
     path = membership_file_for(universe)
     if path is None:
         return None
     intervals = load_intervals(path)
-    return {sym: intervals.get(sym, []) for sym in symbols}
+    if not cuts:
+        return {sym: intervals.get(sym, []) for sym in symbols}
+    return {sym: subtract_spans(intervals.get(sym, []), cuts.get(sym, []))
+            for sym in symbols}

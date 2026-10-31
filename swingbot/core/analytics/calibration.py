@@ -279,15 +279,18 @@ LIVE_LOSS_LOOKS_CAVEAT = ("11 correlated looks per week; flags are prompts to "
 REGISTRY_CONTEXT_LABEL = "backtest context — not comparable"
 
 #: backtest-methodology.md windows, matched by exact string; never guessed.
+#: v190 adds instrument v3's research span (additive: the two v1 strings keep
+#: their labels, so no stored registry row changes label on deploy).
 _WINDOW_KINDS = {
     "2020-01-01..2023-12-31": "TRAIN",
     "2024-01-01..2025-12-31": "VALIDATION",
+    "2017-01-01..2025-12-31": "RESEARCH",
 }
 _BOUND_PERCENTILE = round(EXPR_WATCH_CONFIDENCE * 100, 6)   # 90.0, not 90.00000000000001
 
 
 def registry_window_kind(window: str | None) -> str | None:
-    """TRAIN / VALIDATION for the two methodology windows, else None."""
+    """TRAIN / VALIDATION for the two v1 methodology windows, RESEARCH for instrument v3's research span (v190), else None."""
     return _WINDOW_KINDS.get(window) if window else None
 
 

@@ -88,7 +88,7 @@ def test_the_rule_constants_are_the_spec_values():
 
 
 def test_the_ledger_accepts_the_three_outcomes_and_never_waiting():
-    assert stats.VERDICTS[-3:] == ("COST", "SAVED", "INCONCLUSIVE")
+    assert stats.VERDICTS[9:12] == ("COST", "SAVED", "INCONCLUSIVE")
     assert ov.WAITING not in stats.VERDICTS
 
 
