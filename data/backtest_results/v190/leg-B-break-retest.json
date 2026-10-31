@@ -1,0 +1,19 @@
+{
+  "Break & Retest": {
+    "n_eval": 94,
+    "wins": 42,
+    "losses": 52,
+    "scratches": 26,
+    "timeouts": 0,
+    "closed": 120,
+    "win_rate": 44.680851063829785,
+    "expectancy_r": 0.3008166666666667,
+    "excluded_share": 0.21666666666666667,
+    "avg_win_r": 2.097571428571429,
+    "max_dd_pct": -7.066544616836542,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 28.57142857142857,
+    "runner_be_pct": 71.42857142857143,
+    "runner_timeout_pct": 0.0
+  }
+}

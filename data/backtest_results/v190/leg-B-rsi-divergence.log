@@ -1,0 +1,103 @@
+training data: alpaca (11 excluded)
+excluded ASML: flagged: price-mismatch
+excluded CVX: flagged: price-mismatch
+excluded HD: flagged: price-mismatch
+excluded HPQ: flagged: price-mismatch
+excluded IBM: flagged: price-mismatch
+excluded QCOM: flagged: price-mismatch
+excluded SPCX: flagged: short-overlap
+excluded UNH: flagged: price-mismatch
+excluded WDC: flagged: price-mismatch
+excluded XAGUSD: skipped: spot metal (built from futures)
+excluded XAUUSD: skipped: spot metal (built from futures)
+[1/77] AAPL
+[2/77] ABNB
+[3/77] ADBE
+[4/77] AMAT
+[5/77] AMD
+[6/77] AMZN
+[7/77] ARM
+[9/77] ASTS
+[10/77] AVGO
+[11/77] AXON
+[12/77] BA
+[13/77] BKNG
+[14/77] CEG
+[15/77] CRM
+[16/77] CRWD
+[17/77] CRWV: excluded (bad data) -- CRWV: >40% bar on 2025-04-01 without volume spike (bad split adjust?)
+[19/77] DDOG
+[20/77] DELL
+[21/77] DOCU
+[22/77] EBAY
+[23/77] FTNT
+[24/77] GD
+[25/77] GEV
+[26/77] GLW
+[27/77] GM
+[28/77] GOOGL
+[29/77] GS
+[31/77] HIMS
+[32/77] HOOD
+[35/77] ILMN
+[36/77] INTC
+[37/77] INTU
+[38/77] IREN
+[39/77] ISRG
+[40/77] JNJ
+[41/77] JPM
+[42/77] META
+[43/77] MRNA
+[44/77] MRVL
+[45/77] MSFT
+[46/77] MSTR
+[47/77] MU
+[48/77] NBIS
+[49/77] NFLX
+[50/77] NKE
+[51/77] NOW
+[52/77] NVDA
+[53/77] ORCL
+[54/77] PANW
+[55/77] PEP
+[56/77] PFE
+[57/77] PLTR
+[58/77] PYPL
+[59/77] QBTS
+[61/77] RKLB
+[62/77] SBUX
+[63/77] SHOP
+[64/77] SNDK
+[65/77] SNOW
+[66/77] SNPS
+[67/77] SOFI
+[69/77] STX
+[70/77] TSLA
+[71/77] UBER
+[73/77] V
+[75/77] WMT
+
+-- excluded (bad data, Task E16): 1 of 77 ticker(s) --
+  CRWV: CRWV: >40% bar on 2025-04-01 without volume spike (bad split adjust?)
+
+== TRAIN 2020-01-01 .. 2023-12-31 | pass: WR>=80, ExpR>0, N>=30, excl<=50% ==
+Strategy                   N   Win%    ExpR  MaxDD% AvgWinR   Scr    TO  Excl%   tp2% trail%    be%   rto%  PASS
+RSI Divergence          1526   43.6  +0.442   -60.2  +2.577   410     0    21%   0.0%  35.3%  62.9%   1.8%  FAIL
+
+-- per strategy x horizon (for gating decisions) --
+Strategy               Horiz      N   Win%    ExpR
+RSI Divergence         2m       153   43.8  +0.445
+RSI Divergence         2w       153   43.8  +0.443
+RSI Divergence         3m       153   43.8  +0.445
+RSI Divergence         4m       153   43.8  +0.445
+RSI Divergence         4w       153   43.8  +0.455
+RSI Divergence         5m       153   43.8  +0.445
+RSI Divergence         6m       153   43.8  +0.445
+RSI Divergence         7m       153   43.8  +0.445
+RSI Divergence         8m       152   43.4  +0.436
+RSI Divergence         9m       150   42.7  +0.415
+Wrote 1936 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-rsi-divergence.jsonl
+Wrote provenance to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-rsi-divergence.json.provenance.json
+Wrote provenance to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-B-rsi-divergence.jsonl.provenance.json
+
+Saved backtest_range_summary.txt

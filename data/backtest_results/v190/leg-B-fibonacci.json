@@ -1,0 +1,19 @@
+{
+  "Fibonacci": {
+    "n_eval": 291,
+    "wins": 85,
+    "losses": 206,
+    "scratches": 61,
+    "timeouts": 1,
+    "closed": 353,
+    "win_rate": 29.20962199312715,
+    "expectancy_r": 0.0649660056657224,
+    "excluded_share": 0.17563739376770537,
+    "avg_win_r": 2.6805176470588234,
+    "max_dd_pct": -48.91536458566857,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 30.58823529411765,
+    "runner_be_pct": 67.05882352941175,
+    "runner_timeout_pct": 2.3529411764705883
+  }
+}
