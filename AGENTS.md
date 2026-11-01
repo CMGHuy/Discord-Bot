@@ -221,7 +221,7 @@ Read the `docs/claude/` file before acting:
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
   exit 0 (allow-list entries carry a reason and a date; its `hint` check fails
   an off-screen or covered `sb-hint` popover, and its `rail-label` check fails an icon-rail entry with no accessible name or no visible label on keyboard focus; fix either, never allow it).
-  UI tasks: audit first, `shots --clip <css selector>` only, max 4 image reads, one page per task.
+  UI: `shots --clip <css selector>`, one page per task.
 
 ## Skills: the same ones Claude uses
 
@@ -399,7 +399,7 @@ Claude's role agents are mirrored as Codex agents (`.codex/agents/`); route the
 same work to them so bulk output stays out of your context:
 `test-runner` (full or fast suite), `backtest-runner` (runs past ~2 minutes),
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
-symbols exist), `task-implementer` then `task-reviewer` (one plan task each, from a handoff file: `python scripts/dev/task_handoff.py <plan file> <id> --worktree <wt> --attribution "<line>"`, then `task-brief <handoff path>`; the dispatch carries task id, handoff path and tier; `python scripts/dev/agent_cost.py` is the cost check),
+symbols exist), `task-implementer` then `task-reviewer` (one plan task each: `task_handoff.py <plan> <id>` writes the handoff; `agent_cost.py` checks cost),
 `plan-briefer` (gathers a spec's code context into
 `.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
 approved spec and that brief: `mode=index` (index and task ledger) first,
