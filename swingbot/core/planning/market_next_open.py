@@ -8,7 +8,7 @@ exit walk (``next_open_fill_bar``): an open beyond TP1 first (v180's gap-target
 convention), then the stop (stop-first), then TP1 -- banked whole, or as the
 scale-out TP1 leg with the runner continuing from the fill bar. With the gap
 veto armed (a stored reclaim_level) the plan rests at E for that session instead
-(``_reclaim_exit``).
+(``_reclaim_exit``: one tick through E fills, else ``gap_no_reclaim``).
 
 Every next-open decision is reported to the callbacks registered with
 ``observing`` -- the census (V192-15) reads them; nothing else does. v1 only;
@@ -144,10 +144,21 @@ def _filled(df, j: int, fill: float, plan, scale_out: bool, max_holding_days: in
 
 def _reclaim_exit(df, signal_index: int, open_price: float, plan, scale_out: bool,
                   max_holding_days: int) -> ExitResult:
-    """The armed veto: the open sat at or beyond X. V192-7 adds the same-session
-    reclaim fill; until then every armed plan cancels gap_no_reclaim."""
-    _emit(_decision(plan, df, signal_index, open_price, gap_reclaim.RECLAIM_WAIT))
-    return exit_sim._not_triggered(gap_reclaim.GAP_NO_RECLAIM)
+    """The armed veto: the open sat at or beyond X toward the stop, so the plan rests
+    as a DAY stop order at E for session t+1 only. One tick through E fills at
+    reclaim_fill_price (E +/- one adverse tick, the stop order's slippage) and walks
+    exactly as an open fill; no reclaim cancels gap_no_reclaim. A reclaim bar that
+    also reaches the stop is ambiguous: filled, then stopped at -1R by
+    next_open_fill_bar's stop-first rule."""
+    j = signal_index + 1
+    high, low = float(df["High"].values[j]), float(df["Low"].values[j])
+    if not gap_reclaim.reclaim_touched(plan, high, low):
+        _emit(_decision(plan, df, signal_index, open_price, gap_reclaim.RECLAIM_WAIT))
+        return exit_sim._not_triggered(gap_reclaim.GAP_NO_RECLAIM)
+    fill = gap_reclaim.reclaim_fill_price(plan)
+    _emit(_decision(plan, df, signal_index, open_price, gap_reclaim.RECLAIM_WAIT,
+                    fill_price=fill, reclaimed=True, ambiguous=stop_touched(plan, high, low)))
+    return _filled(df, j, fill, plan, scale_out, max_holding_days)
 
 
 def next_open_market_exit(df, signal_index: int, plan, scale_out: bool,
