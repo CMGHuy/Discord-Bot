@@ -74,7 +74,10 @@ Referenced from the root `CLAUDE.md`.
   opens a persistent profile under `%LOCALAPPDATA%\swingbot-playwright`, so
   one sign-in lasts until the session cookie expires. `node
   frontend/scripts/browse.mjs shots --out <dir> --path "trades/<id>?tab=live"
-  --widths 1440,820,390` writes full-height PNG + text per width; `... api
+  --widths 1440,820,390` writes full-height PNG + text per width (`--clip <css selector>`
+  captures only the first match's box plus 8px and exits 1 naming the selector
+  when nothing matches; it is the form UI tasks read, `ui-design.md` § UI tasks);
+  `... api
   --path "api/v1/trades/<id>"` prints JSON. Write paths without the leading
   slash (Git Bash rewrites `/trades/...`). The extension isn't installed/connected in this
   repo's sessions, so trying it first is a wasted round trip every time — go
@@ -296,8 +299,8 @@ Serial, one at a time — except plan parts (§ Plan writing below). Opus
 
 | Work | Agent | Model |
 |---|---|---|
-| Implement one plan task from `/task-brief` | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
-| Review that task's commits | `task-reviewer` | sonnet |
+| Implement one plan task from its handoff file (`task_handoff.py`, then `/task-brief`) | `task-implementer` | the task's `**Model:**` tier (default sonnet) |
+| Review that task's commits against the handoff's deliverables | `task-reviewer` | sonnet |
 | Review a spec, plan, diff or result through one expert role (via `/panel`) | `expert-reviewer` | the role's model from § Expert roles |
 | Propose hypotheses from a book autopsy through one generator role (via `/trade-scout`) | `scout` | sonnet |
 | Gather a plan's code context into one brief | `plan-briefer` | sonnet |
@@ -307,15 +310,60 @@ Serial, one at a time — except plan parts (§ Plan writing below). Opus
 | Full or fast suite run | `test-runner` | sonnet |
 | Check a plan's symbols exist | `symbol-verifier` | haiku |
 
-Plan loop: `/task-brief` → `task-implementer`, dispatched with the task's
-`**Model:**` tier as the `model` override (plans above v145; default sonnet)
-→ `task-reviewer` (always sonnet) → Opus reads findings → next task, or the
-escalation ladder in `model-routing.md`: `SendMessage` the same implementer
-once, then a fresh implementer one tier up with the findings attached, then
-Opus inline, each step logged in `.superpowers/sdd/progress.md`.
-Brainstorming never goes to an agent — it needs the partner. `/gate` and
-`/task-brief` run forked on sonnet, so their tool output never reaches the
-Opus context.
+Plan loop: `task_handoff.py` → `/task-brief <handoff path>` →
+`task-implementer`, dispatched with the task's `**Model:**` tier as the
+`model` override (plans above v145; default sonnet) → `task-reviewer`
+(always sonnet) → Opus reads findings → next task, or the escalation ladder
+in `model-routing.md`: `SendMessage` the same implementer once, then a fresh
+implementer one tier up with the findings attached, then Opus inline, each
+step logged in `.superpowers/sdd/progress.md`. Brainstorming never goes to
+an agent — it needs the partner. `/gate` and `/task-brief` run forked on
+sonnet, so their tool output never reaches the Opus context.
+
+### Dispatching a plan task (v199)
+
+1. Write the handoff:
+   `python scripts/dev/task_handoff.py <plan file> <id> --worktree <wt> --attribution "<line>"`,
+   the attribution line copied from your own system reminder. Its last
+   output line is the handoff path (`.superpowers/sdd/<plan base>/task-<id>-handoff.md`
+   under the main checkout): the task text verbatim, deliverables `D1`…`Dn`,
+   and the environment (worktree, branch, test command, test database,
+   frontend wrapper, radon, attribution). Exit 2 names the reason: an id in
+   no part or in two, a missing plan file, a handoff `/task-brief` already
+   filled, or `no deliverables derivable for <id>`. For the last, fix the
+   plan task or fall back to `/task-brief <id>` and a pasted brief; both
+   agents then report `DELIVERABLES: n/a (no handoff)`.
+2. `/task-brief <handoff path>` fills its Preflight and Code slots and
+   nothing else.
+3. Dispatch with exactly this prompt — no environment, no plan paths, no
+   "sed -n the plan":
+
+   ```
+   Implement task <id>. Handoff: <handoff path>. Model tier: <tier>.
+   Return the report shape in your agent file.
+   ```
+
+   and the reviewer with:
+
+   ```
+   Review task <id>. Handoff: <handoff path>. Worktree: <wt>. Commits: <base>..<head>.
+   Return the report shape in your agent file.
+   ```
+
+4. Plans already in flight switch at their next undispatched task; there is
+   no cut-over date.
+
+**Standing cost check.**
+`python scripts/dev/agent_cost.py [--agent task-implementer] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--root <dir>]`
+reads the subagent transcripts under `$CLAUDE_CONFIG_DIR/projects/<repo slug>/`
+(falling back to `~/.claude/projects/`) without changing them, and prints
+runs, turns, input tokens, lookups before the first edit, image reads and
+plan-file touches; for `task-reviewer`, the share of reports in the
+required shape and the `missing`/`different` counts. Run it before and
+after any change to an agent file, a preloaded skill or the dispatch
+prompt, and compare like with like (same `--agent`, a window wholly after
+the change). A non-zero `unparsed` count means Claude Code changed its
+transcript format. It stays after v199 (spec v199 § 5).
 
 ### Plan writing (two phases)
 

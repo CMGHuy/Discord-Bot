@@ -28,6 +28,7 @@ Inlined from the `/new-doc` skill and `docs/claude/document-conventions.md` —
 - Plans numbered above v145: the first line under every `### Task` is `**Model:** <haiku|sonnet|opus> — <one-clause reason>`, from the rubric in `docs/claude/model-routing.md` (the higher tier wins).
 - `## Parallelisation`: disjoint files + no contract dependency; name every sequential-edge reason.
 - Per-task verification is the narrow run (`python scripts/dev/testrun.py file <test>`); one full-suite run as the final task.
+- **UI fix waves: one page per task** (its route and tabs, all three widths); an audit that finds issues on several pages produces one task per page (`docs/claude/ui-design.md` § UI tasks).
 - Verify every named symbol exists (`git grep -n`) or mark it created by an earlier task.
 - **Do not commit** — the controller reviews and commits on `main`.
 

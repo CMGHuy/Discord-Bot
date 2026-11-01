@@ -79,3 +79,18 @@ def test_task_brief_fills_only_the_two_slots():
     assert '"^### Task <id>:"' in skill
     for check in "abcdefgh":
         assert f"**3{check}." in skill, f"trap check 3{check} must stay"
+
+
+def test_docs_name_the_handoff_route_cost_check_and_ui_rules():
+    tools = _text("docs/claude/skills-tools.md")
+    assert "python scripts/dev/task_handoff.py <plan file> <id> --worktree <wt> --attribution" in tools
+    assert "Return the report shape in your agent file." in tools
+    assert "python scripts/dev/agent_cost.py" in tools
+    assert "--clip <css selector>" in tools
+    ui = _text("docs/claude/ui-design.md").lower()
+    assert f"at most {task_handoff.MAX_IMAGE_READS} image reads per task" in ui
+    assert "one page per task" in ui and "--clip <css selector>" in ui
+    assert "one page per task" in _text(".claude/agents/plan-writer.md")
+    agents_md = _text("AGENTS.md")
+    for needle in ("task_handoff.py", "agent_cost.py", "--clip <css selector>", "one page per task"):
+        assert needle in agents_md, needle
