@@ -997,7 +997,7 @@ git commit -m "feat(v192): gap-reclaim census -- every next-open market decision
 
 Clauses 1 (ΔWR, standardised), 2 (ΔExpR lower bound > −0.01R) and 3 (geometry over the whole component, re-priced included) are `acceptance.evaluate`'s own, under `cluster="week"`. Clauses 4 and 6 are replaced by the strata versions: `acceptance._clause_volume` nets added trades against removed ones and `_clause_mechanism` returns `SKIPPED` for any non-subset pair. **A SKIPPED clause fails** (`skipped_fails=True`). The permutation clause is `SKIPPED` by design below VALIDATION (`acceptance._clause_permutation`), so at stage `walkforward` the verdict is scored without it; at `validation` it counts like every other clause.
 
-- [ ] **Step 1: Write the failing acceptance tests** — append to `tests/backtesting/test_acceptance_gate.py`
+- [x] **Step 1: Write the failing acceptance tests** — append to `tests/backtesting/test_acceptance_gate.py`
 
 ```python
 def test_verdict_of_ignores_skipped_by_default_and_fails_it_on_request():
@@ -1024,7 +1024,7 @@ def test_evaluate_with_skipped_fails_fails_a_non_subset_feature():
     assert strict.clauses == default.clauses
 ```
 
-- [ ] **Step 2: Write the failing clause tests** — create `tests/backtesting/arms/test_gap_reclaim_clauses.py`
+- [x] **Step 2: Write the failing clause tests** — create `tests/backtesting/arms/test_gap_reclaim_clauses.py`
 
 ```python
 """V192-16: the frozen v192 strata (removed / re-priced / added / unchanged), clause 6 scored
@@ -1211,7 +1211,7 @@ def test_the_result_renders_through_the_stock_renderers():
 
 Check the numbers by hand before running. Per ticker: removed 2 (indices 8, 9: losses), re-priced 1 (index 0), unchanged 7 (indices 1–7: 3 wins, 4 losses, WR 300/7 ≈ 42.86%), added 1. Over 30 tickers: removed 60, re-priced 30, unchanged 210, added 30. Baseline WR 40%, ExpR (8 − 6)/10 = 0.2R; component per ticker 9 trades, 5 wins (55.6%), ExpR (2.2 + 6 − 4 + 2)/9 ≈ 0.689R; mean win R 2.04 vs 2.0 (no drop); planned RR median 2.0 both. With `removed=(7, 8, 9)`: strata cut 90/300 = 30%; the stock netted cut is (300 − 240)/300 = 20%.
 
-- [ ] **Step 3: Run them to see them fail**
+- [x] **Step 3: Run them to see them fail**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtesting/test_acceptance_gate.py
@@ -1220,7 +1220,7 @@ python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_claus
 
 Expected: FAIL — `ImportError: cannot import name 'verdict_of'`, `evaluate() got an unexpected keyword argument 'skipped_fails'`, `ModuleNotFoundError: ... gap_reclaim_clauses`.
 
-- [ ] **Step 4: `acceptance.py`** — add `verdict_of` after `_clause_mechanism` (`:607`) and give `evaluate` the opt-in
+- [x] **Step 4: `acceptance.py`** — add `verdict_of` after `_clause_mechanism` (`:607`) and give `evaluate` the opt-in
 
 ```python
 def verdict_of(clauses, *, skipped_fails: bool = False) -> str:
@@ -1257,7 +1257,7 @@ and replace the line `verdict = "FAIL" if any(c.verdict == "FAIL" for c in claus
 
 Nothing else in `evaluate` changes (cc unchanged: the `any` moved into `verdict_of`).
 
-- [ ] **Step 5: Create `swingbot/core/backtesting/arms/gap_reclaim_clauses.py`**
+- [x] **Step 5: Create `swingbot/core/backtesting/arms/gap_reclaim_clauses.py`**
 
 ```python
 """v192: the gap-reclaim veto's frozen scoring (spec § Gate).
@@ -1373,7 +1373,7 @@ def strata_rows(split: dict) -> list[dict]:
 
 `acceptance.evaluate` raises `ValueError("stage must be one of ...")` for a stage outside `STAGES`, which `test_an_unknown_stage_is_refused` relies on; `dataclasses.replace` keeps `cluster="week"`, `seed`, `strata` and `wr_statistic` from the stock result.
 
-- [ ] **Step 6: Run the tests, the neighbouring gate suites and the gate**
+- [x] **Step 6: Run the tests, the neighbouring gate suites and the gate**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_clauses.py
@@ -1386,7 +1386,7 @@ python scripts/dev/complexity_gate.py
 
 Expected: `0 failed` each; the gate passes (`evaluate` cc unchanged, `strata_split` cc 7, `mechanism_clause` cc 6, `evaluate_gap_reclaim` cc 3).
 
-- [ ] **Step 7: Commit (in the worktree)**
+- [x] **Step 7: Commit (in the worktree)**
 
 ```bash
 git add swingbot/core/backtesting/acceptance.py tests/backtesting/test_acceptance_gate.py swingbot/core/backtesting/arms/gap_reclaim_clauses.py tests/backtesting/arms/test_gap_reclaim_clauses.py
