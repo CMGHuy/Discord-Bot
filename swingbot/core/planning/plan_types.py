@@ -208,6 +208,13 @@ class TradePlanV2:
     # entry_context key; never read by a filter, score or backtest.
     # Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
     risk_notice: dict | None = None
+    # v192 (planning/gap_reclaim.py): the next-open fill and gap-veto stamps,
+    # frozen at creation; reclaim_session records the live resting session.
+    # Omitted while None so plans without the feature retain their document shape.
+    reclaim_atr: float | None = None
+    reclaim_level: float | None = None
+    reclaim_session: str | None = None
+    waits_next_open: bool | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
@@ -228,7 +235,8 @@ _PLAN_FIELDS = None   # cached field list
 # v183: optional fields written only when set -- a None here is omitted, never
 # stored as null, so every plan doc without them (every long) stays
 # byte-identical to its pre-v183 shape. plan_from_dict defaults them back.
-_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice")
+_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice", "reclaim_atr", "reclaim_level",
+                   "reclaim_session", "waits_next_open")
 
 
 def plan_to_dict(plan: TradePlanV2) -> dict:
