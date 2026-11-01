@@ -228,7 +228,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Why:** the motivating `open_gap_bucket=favourable` cell pools stop-entry, limit and market rows, and for live market plans it compares the alert-day open with the alert price (spec § Edge, panel). The spec requires the cells re-cut to market plans only, as disclosure, before TRAIN. The re-cut motivates and never selects: both windows overlap the 2026 holdout, and nothing in it changes the frozen grid, a threshold or the prediction.
 
-- [ ] **Step 1: Pre-flight**
+- [x] **Step 1: Pre-flight**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -240,7 +240,7 @@ ls "$WT/docs/superpowers/results/2026-10-24-v192-gap-reclaim.md" "$WT/docs/super
 
 Expected: empty status; every V192-1..V192-19 id present; `1`; both `ls` targets absent ("No such file or directory"). An existing results doc or `v192/` directory means a run happened outside this task: stop and report it.
 
-- [ ] **Step 2: Export the live book, read-only**
+- [x] **Step 2: Export the live book, read-only**
 
 The export runs on the VM through the wrapper (CLAUDE.md: never a raw `ssh`), opens its psql session READ ONLY and writes nothing there. Raw CSVs stay under the worktree's git-ignored `logs/`:
 
@@ -255,7 +255,7 @@ wc -l "$WT/logs/v192/autopsy/rows.csv" "$WT/logs/v192/autopsy/rejections.csv"
 
 Expected: `1` (the `entry_type` column is there) and both files non-empty. `scripts/ops/ssh-hetzner.sh` is uncommitted and lives in the main checkout; if the worktree has no copy, call it as `bash E:/Documents/Private/Projects/Discord-Bot/scripts/ops/ssh-hetzner.sh` with the same arguments.
 
-- [ ] **Step 3: Cut the export to the two 2026-10-21 windows (scratch)**
+- [x] **Step 3: Cut the export to the two 2026-10-21 windows (scratch)**
 
 Create `"$WT/logs/v192/cut_autopsy.py"` with exactly this content. It reproduces the two committed windows: the full book as of 2026-10-21 (every trade closed on or before that Eastern date, every plan created on or before it), and the current exit-model era (the same, restricted to trades opened on or after 2026-09-01 whose plan, when it has one, was created on or after that date, and plans created on or after it). Rejection tallies are cut at 2026-10-21 and carry no entry type:
 
@@ -330,7 +330,7 @@ python "$WT/logs/v192/cut_autopsy.py" "$WT"
 
 Expected: four `<name>: <n> rows` lines with non-zero counts, then the ticker count and the first plan date (2026-07-20 or earlier).
 
-- [ ] **Step 4: Fetch bars into a scratch cache (never `data/backtest_cache/`)**
+- [x] **Step 4: Fetch bars into a scratch cache (never `data/backtest_cache/`)**
 
 The fetcher needs 260 daily bars, so start at least 550 calendar days before the first plan date Step 3 printed (for 2026-07-20 that is 2025-01-16 or earlier; `2025-01-01` covers it):
 
@@ -342,7 +342,7 @@ ls "$WT/logs/v192/autopsy/bars" | wc -l
 
 Expected: about one CSV per ticker. If Step 3 printed a first plan date before 2026-07-01, move `--start` back to 550 days before it. A ticker the provider cannot serve is left uncovered; the autopsy counts it under `bar_covered_n`.
 
-- [ ] **Step 5: Run the autopsy four times — market only and the same-export control, per window**
+- [x] **Step 5: Run the autopsy four times — market only and the same-export control, per window**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -357,7 +357,7 @@ Expected: each prints two `wrote ...` lines and `N <n>, bar-covered <b>, cells t
 
 The controls exist because the book has moved since 2026-10-21 (late closes, re-journaled rows): the market-only cut is compared against the same export unfiltered, never against the committed file alone.
 
-- [ ] **Step 6: Write the renderer (scratch) and print the disclosure tables**
+- [x] **Step 6: Write the renderer (scratch) and print the disclosure tables**
 
 Create `"$WT/logs/v192/render_autopsy.py"` with exactly this content:
 
@@ -428,7 +428,7 @@ Expected: two `### full` / `### sep-era` blocks, each a header table with three 
 - The same-export N differs from the committed N (776 full, 221 era) by more than 5%: disclose it in Step 7 as book drift since 2026-10-21; it does not stop the task.
 - No market-only `favourable` row (N 0) is a reading, not a failure: it says the motivating cell carried no market rows, and Step 7 says so in words.
 
-- [ ] **Step 7: Write the results doc (header, frozen block, disclosure) and commit it before any run**
+- [x] **Step 7: Write the results doc (header, frozen block, disclosure) and commit it before any run**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
