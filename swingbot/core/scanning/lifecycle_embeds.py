@@ -307,6 +307,9 @@ PLAN_EVENT_KINDS = {
     "cancelled_limit": Kind.CANCEL,
     "cancelled_gap_through_stop": Kind.CANCEL,
     "cancelled_trade_deleted": Kind.CANCEL,   # v189 A7
+    "cancelled_open_through_stop": Kind.INVALIDATED,     # v192
+    "cancelled_gap_no_reclaim": Kind.EXPIRED,            # v192
+    "gap_reclaim_order": Kind.RECLAIM_ORDER,             # v192
     "be_moved": Kind.BE_MOVED,
     "tp1_partial": Kind.TP1_HIT,
 }

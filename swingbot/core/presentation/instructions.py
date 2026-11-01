@@ -39,6 +39,7 @@ _EXIT_WORDS = {
     "tp1_runner_tp2": "TP2",
     "time_exit": "ten-session time exit",
     "tp1_runner_progress_stall": "higher high failed on cooling range and volume",
+    "gap_target": "opened past TP1",
 }
 
 #: Closes the bot books with no resting broker order behind them (v123):
@@ -560,7 +561,9 @@ def _stop_moved(plan, event, side: dict, common: dict, money: Money | None) -> I
 #: cancel transition -> its headline's FEED_SYMBOLS key ('' = no glyph, v170 Decision 4).
 _CANCEL_LEADS = {"cancelled_expired": "expiry", "cancelled_invalidated": "invalid",
                  "cancelled_risk_cap": "", "cancelled_limit": "",
-                 "cancelled_gap_through_stop": "", "cancelled_trade_deleted": ""}
+                 "cancelled_gap_through_stop": "", "cancelled_trade_deleted": "",
+                 "cancelled_open_through_stop": "invalid",     # v192
+                 "cancelled_gap_no_reclaim": "expiry"}         # v192
 
 
 def _limit_cancel_why(detail: dict) -> str:
@@ -587,12 +590,48 @@ _CANCEL_WHY: dict[str, Callable[[dict], str]] = {
 }
 
 
+def _through_stop_why(plan, detail: dict) -> str:
+    price, stop = _price(detail["live_price"]), _price(plan.stop_loss)
+    if detail.get("phase") == "premarket":
+        return (f"traded at {price} before the open, at or through the stop {stop} "
+                "on two checks; never filled")
+    return f"opened at {price}, at or through the stop {stop}; never filled"
+
+
+def _no_reclaim_why(plan, detail: dict) -> str:
+    return (f"opened toward the stop and never traded back through "
+            f"{_price(detail['entry_price'])} on {detail['session']}; never filled")
+
+
+def _missed_open_why(plan, detail: dict) -> str:
+    return f"the bot saw no price at the {detail.get('session') or 'deciding'} open; never filled"
+
+
+#: v192: the cancels of a market plan waiting for its next open, by transition.
+_WAITING_WHY = {
+    "cancelled_open_through_stop": _through_stop_why,
+    "cancelled_gap_no_reclaim": _no_reclaim_why,
+}
+
+
+def _waiting_why(plan, transition: str, detail: dict) -> str | None:
+    """v192: the reason of a waiting market plan's cancel, or None when the
+    cancel is not one of them (the missed open rides on cancelled_expired)."""
+    why = _WAITING_WHY.get(transition)
+    if why is None and detail.get("reason") == "missed_open":
+        why = _missed_open_why
+    return why(plan, detail) if why is not None else None
+
+
 def _cancel_why(plan, transition: str, detail: dict) -> str:
     if detail.get("reason_message"):
         return detail["reason_message"]             # v144: an outlook plan states its reason
     why = _CANCEL_WHY.get(transition)
     if why is not None:
         return why(detail)                          # v187: limit-entry cancels
+    waiting = _waiting_why(plan, transition, detail)
+    if waiting is not None:
+        return waiting                              # v192: waiting market-plan cancels
     if short_notice.is_compression(plan) and transition != "cancelled_invalidated":
         return short_notice.compression_cancel_why(plan, transition, detail)
     if transition == "cancelled_expired":
@@ -605,13 +644,47 @@ def _cancel_why(plan, transition: str, detail: dict) -> str:
             f"{detail['max_planned_loss_pct']:.1f}% cap; never filled")
 
 
+def _cancel_order(plan, side: dict, transition: str) -> str:
+    """The order a cancel withdraws: v192's DAY stop at E after a gap with no
+    reclaim, the market-on-open order of any other plan built to wait for the
+    open (the marker survives the cancel), else the stop entry as before."""
+    if transition == "cancelled_gap_no_reclaim":
+        return f"{side['entry_stop']} {_price(plan.trigger_price)} (DAY)"
+    if getattr(plan, "waits_next_open", None) is True:
+        return f"{side['entry_market']} ON OPEN"
+    return f"{side['entry_stop']} {_price(plan.trigger_price)}"
+
+
 def _cancelled(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
     key = _CANCEL_LEADS[event.transition]
     lead = f"{_S[key]} " if key else ""
     return Instruction(
         verb=CANCEL,
-        headline=f"{lead}CANCEL {side['entry_stop']} {_price(plan.trigger_price)}",
+        headline=f"{lead}CANCEL {_cancel_order(plan, side, event.transition)}",
         lines=(_cancel_why(plan, event.transition, event.detail),), tone="inert", **common)
+
+
+#: v192: what a reader must not do at the open, and which side of X the open sat.
+_REFRAIN = {"bullish": "buy", "bearish": "short"}
+_BEYOND = {"bullish": "below", "bearish": "above"}
+
+
+def _reclaim_order(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
+    """v192: the open sat at or beyond X toward the stop -- no entry at the open;
+    a DAY stop order at E for this one session instead."""
+    detail = event.detail
+    entry = _price(detail["entry_price"])
+    return Instruction(
+        verb=PLACE,
+        headline=(f"{_S['entry']} {side['entry_stop']} {entry} DAY · "
+                  f"don't {_REFRAIN[plan.direction]} at the open"),
+        lines=(f"Opened at {_price(detail['open_price'])}, at or {_BEYOND[plan.direction]} "
+               f"{_price(detail['reclaim_level'])} toward the stop {_price(plan.stop_loss)}",
+               "Cancel any market-on-open order still working; this order fills only if "
+               f"price trades through {entry} today and is cancelled at the close",
+               f"After a fill: {_S['stop']} {side['stop']} {_price(plan.stop_loss)} · "
+               f"{_S['tp1']} {side['limit']} {_price(plan.tp1)}"),
+        tone="neutral", **common)
 
 
 #: Every feed transition's builder; each takes (plan, event, side, common, money).
@@ -626,6 +699,9 @@ _BUILDERS = {
     "cancelled_limit": _cancelled,
     "cancelled_gap_through_stop": _cancelled,
     "cancelled_trade_deleted": _cancelled,
+    "cancelled_open_through_stop": _cancelled,     # v192
+    "cancelled_gap_no_reclaim": _cancelled,        # v192
+    "gap_reclaim_order": _reclaim_order,           # v192
     "time_exit_due": _time_exit,
     "time_exit_unresolved": _time_exit,
     "closed": _closed_event,
