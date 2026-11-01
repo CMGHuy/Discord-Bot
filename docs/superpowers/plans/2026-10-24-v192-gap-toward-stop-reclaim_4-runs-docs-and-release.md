@@ -500,7 +500,7 @@ Order: V192-22 (Stage −1, three pilot runs), then V192-23 (fold-train: three v
 - Consumes: `measure_arms.py --knob ... --baseline-knob ... --stage pilot --out F --preregistration F --data-source alpaca` (V192-14), which writes `F`, `F.provenance.json` and (component delta with `GAP_RECLAIM_ATR > 0`) the census `<F stem>.gap_reclaim.json` (V192-15), and on the pilot stage exits 1 with `refused:zero-diff` when no outcome changed, after writing those files; `validate_component.py --gap-reclaim --stage reachability` (V192-18), which prints the `knobs:` / `baseline knobs:` / `split` lines, the census summary as JSON, then `REACHABLE -- the veto arms on market plans; Stage 0 may proceed.` (exit 0) or a `refused:zero-diff -- ...` line (exit 1); the census keys `knob_delta`, `baseline_knob_delta`, `signal_window`, `universe_count`, `summary` (`cells`, `total`, `gap_atr`, `verdict`), `repriced_in_component`, `repriced_absent_from_component`, `rows`; the results doc and its frozen block (V192-21).
 - Produces: one reachability verdict per cell, which V192-23 reads from the results doc: a cell is **REACHABLE** only when its producer exited 0 (outcomes changed) **and** its judge printed `REACHABLE`; otherwise it is closed `refused:zero-diff` at Stage −1.
 
-- [ ] **Step 1: Pre-flight — frozen block committed, code frozen, nothing closed covers this**
+- [x] **Step 1: Pre-flight — frozen block committed, code frozen, nothing closed covers this**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -524,7 +524,7 @@ python "$WT/scripts/dev/doc_section.py" "$WT/docs/claude/backtest-methodology.md
 
 Expected: no row closes "a same-session reclaim of the planned entry after a next-open gap toward the stop on market plans". v180's Turtle Soup row (a next-open fill on one strategy, no veto) and the `gap_volume` screen (buying after a gap *up*, which the spec says is not evidence here) are different mechanisms. If another row does close this mechanism, stop and ask the partner (`AskUserQuestion`, one question, recommended option first: "Stop: v192 re-runs <row> (Recommended)" / "Proceed: the mechanism differs because <reason>").
 
-- [ ] **Step 2: Write the census renderer (scratch)**
+- [x] **Step 2: Write the census renderer (scratch)**
 
 Create `"$WT/logs/v192/render_census.py"` with exactly this content. It prints one cell's census and stamp from the files the producer wrote, so no number is retyped:
 
@@ -591,7 +591,7 @@ if __name__ == "__main__":
     main(sys.argv[1])
 ```
 
-- [ ] **Step 3: Pilot for g = 0.10**
+- [x] **Step 3: Pilot for g = 0.10**
 
 Confirm `git -C "$WT" status --short -- swingbot/ scripts/` prints nothing. Invoke `backtest-gate`. Dispatch `backtest-runner` with the worktree path, the progress file (the newest `"$WT"/logs/measure_arms.*.progress`; after the two arms the census writes no percent, so the runner reports "census running" until the process exits), and:
 
@@ -602,7 +602,7 @@ MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Disc
 
 Expected: `exit 0`, or `refused:zero-diff -- the component changed no trade on the pilot slice. Budget intact.` and `exit 1`. Either way the three files exist: `ls "$WT"/docs/superpowers/results/v192/2026-10-24-v192-g010-pilot*`. Ask the runner to report the wall time; Step 7 uses it.
 
-- [ ] **Step 4: Pilot for g = 0.25**
+- [x] **Step 4: Pilot for g = 0.25**
 
 After the first runner has returned, confirm the frozen-code status again, invoke `backtest-gate`, and dispatch `backtest-runner` the same way with:
 
@@ -613,7 +613,7 @@ MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Disc
 
 Expected: as in Step 3, for `g025`.
 
-- [ ] **Step 5: Pilot for g = 0.50**
+- [x] **Step 5: Pilot for g = 0.50**
 
 After the second runner has returned, the same checks, then:
 
@@ -624,7 +624,7 @@ MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Disc
 
 Expected: as in Step 3, for `g050`.
 
-- [ ] **Step 6: The judge's reachability reading, per cell (inline, quick)**
+- [x] **Step 6: The judge's reachability reading, per cell (inline, quick)**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -638,7 +638,7 @@ done
 
 Expected per cell: `exit 0` with `REACHABLE -- the veto arms on market plans; Stage 0 may proceed.`, or `exit 1` with a `refused:...` line. A `refused:no-gap-reclaim-sidecar` or a stamp-gate token (`refused:...stamp...`) is a code or environment fault, not a reading: stop and report it with the file.
 
-- [ ] **Step 7: Sanity checks before anything is read as a result**
+- [x] **Step 7: Sanity checks before anything is read as a result**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -686,7 +686,7 @@ WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-g
 MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/market_data BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache python -c "import sys; w=sys.argv[1]; sys.path[:0] = [w, w + '/scripts/backtest', w + '/scripts/data']; import measure_arms; print(len(measure_arms.cached_universe()))" "$WT"
 ```
 
-- [ ] **Step 8: Write the Stage −1 section**
+- [x] **Step 8: Write the Stage −1 section**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -709,7 +709,7 @@ Append to the results doc:
 
 Note any evidence file of 50 MB or more (part rule: excluded locally, size and `sha256sum` recorded here).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
