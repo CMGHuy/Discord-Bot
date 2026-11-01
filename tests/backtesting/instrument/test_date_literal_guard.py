@@ -57,7 +57,6 @@ NO_REPLAY = {
     "scripts/backtest/compare_backtest_json.py": "diffs two run_backtest_range --json outputs; runs no backtest",
     "scripts/backtest/harvest_select.py": "v123 harvest selection over stamped arm files; runs no backtest",
     "scripts/backtest/turtle_soup_report.py": "v180 Turtle Soup badge check over stamped arm files; runs no backtest",
-    "scripts/backtest/validate_component.py": "v100 acceptance funnel over stamped arm files; runs no backtest",
 }
 
 #: The live scripts this plan wired (WC8, WC9, WC10).

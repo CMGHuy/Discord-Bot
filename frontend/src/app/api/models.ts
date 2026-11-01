@@ -118,11 +118,18 @@ export interface TradeRow {
   banked_fraction: number | null;
   banked_exit_price: number | null;
   banked_r: number | null;
+  /** v189 B3: the banked legs' share of the TRADE's R -- sum of fraction x
+   *  leg R (+1.00R for TP1 +2.00R on 50%). `banked_r` keeps its meaning, the
+   *  TP1 leg's own R. Optional so pre-v189 fixtures stay valid. */
+  banked_contribution_r?: number | null;
   risk_reward: number | null;
   shares: number | null;
-  /** The share count still exposed to price movement right now -- `shares`
-   *  is the ORIGINAL size at open and stays that after a TP1 partial closes
-   *  part of the position; a live P&L dollar figure has to scale by this
+  /** v189 B1: the ORIGINAL position size, before any leg closed. `shares`
+   *  is the remaining count on a priced open PARTIAL, so a banked-leg dollar
+   *  figure multiplies this, never `shares`. Optional like `risk_stop`. */
+  entry_shares?: number | null;
+  /** The share count still exposed to price movement right now -- `entry_shares`
+   *  is the ORIGINAL size at open; a live P&L dollar figure has to scale by this
    *  instead. Equal to `shares` until a leg has realized. */
   open_shares: number | null;
   position_value: number | null;
@@ -329,12 +336,35 @@ export interface TradeNote {
 /** Filters the list endpoint accepts. A parameter it does not know is a 400,
  *  not a silent no-op -- a silently ignored filter is how a filter that has
  *  stopped working survives to production. */
-/** `POST /trades/clear-open` and `POST /trades/clear-history`. The count is
- *  the only thing either returns, and it is what the confirmation reports —
+/** One plan a delete ended (v189 A7): a waiting plan cancelled, or a held
+ *  position closed with no P&L. */
+export interface EndedPlanRow {
+  plan_id: string;
+  ticker: string;
+  status_before: string;
+  status_after: string;
+}
+
+/** `POST /trades/clear-open`. The count is what the confirmation reports --
  *  "cleared" without a number cannot be told from "there was nothing to
- *  clear". */
+ *  clear". v189 A7: `ended` lists the plans the delete ended and `notice`
+ *  says what that means ("" when nothing ended). Both optional so a reply
+ *  from a pre-v189 server still reads. */
 export interface ClearResult {
   removed: number;
+  ended?: EndedPlanRow[];
+  notice?: string;
+}
+
+/** `POST /trades/clear-history` since v189 A6: an archived full reset.
+ *  `archive` is a file NAME on the server's data volume, never a path. */
+export interface ClearHistoryResult {
+  removed: number;
+  removed_plans: number;
+  archive: string;
+  throttle: { multiplier: number; paused: boolean };
+  kill_switch: boolean;
+  notice: string;
 }
 
 /** What POST /trades/close-open reports. `failed` is separate from `closed`
@@ -412,7 +442,14 @@ export interface Dashboard {
   open_pnl_amount: number | null;
   /** v194 B7: closes and positions left out of the money figures for want of a rate (main ledger). */
   fx_missing_count?: number;
-  risk_used_pct: number | null;
+  /** v189 B4: `heat.open_heat` -- the figure the scanner gates new alerts on
+   *  (was `risk_used_pct`). */
+  heat_enforced_pct: number | null;
+  /** v189 B4: what fills at the current working stops would still lose below
+   *  entry, filled positions only, floored at 0 per position. Display only;
+   *  never a gauge against `risk_cap_pct`. Null when unknown. */
+  risk_of_loss_pct: number | null;
+  risk_of_loss_amount: number | null;
   risk_cap_pct: number | null;
   open_trades: number;
   avg_confidence: number | null;
@@ -599,6 +636,14 @@ export interface AnalyticsPerformance extends Scoped {
   relocated: Record<string, unknown>;
   win_rate: number | null;
   win_rate_n: number;
+  /** v189 D6: closes the win rate leaves out -- scaled-out closes inside
+   *  +-0.01R (`scratch`) and closes whose net R could not be computed
+   *  (`unscored`). Optional so pre-v189 fixtures stay valid. */
+  scratch_n?: number;
+  unscored_n?: number;
+  /** v189 D6: ISO date from which scaled-out trades are labelled by net R
+   *  (`metrics.LABEL_BASIS_SINCE`); null before the release sets it. */
+  label_basis_since?: string | null;
   expectancy_r: number | null;
   expectancy_n: number;
   by_confidence: Record<string, unknown>;
@@ -1377,6 +1422,11 @@ export interface RiskPosition {
   entry: number | null;
   stop_loss: number | null;
   risk_pct: number | null;
+  /** v189 B4: risk of loss to the working stop for this row; null for a
+   *  PENDING placeholder. `risk_pct` still sums to `heat.open_pct`.
+   *  Optional so pre-v189 fixtures stay valid. */
+  risk_of_loss_amount?: number | null;
+  risk_of_loss_pct?: number | null;
 }
 
 export interface SectorHeat {

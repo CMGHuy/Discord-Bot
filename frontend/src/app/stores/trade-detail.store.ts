@@ -222,6 +222,17 @@ function toSources(raw: unknown): string[] {
   return [...seen];
 }
 
+/** Open shares x the distance from `from` down to the stop (long) or up to it
+ *  (short), floored at 0. `from` = entry gives the risk of loss, `from` =
+ *  the quote gives the open profit to the stop. Null on any unknown input. */
+function stopDistance(trade: TradeDetail | null, workingStop: number | null, from: number | null): number | null {
+  const stop = workingStop ?? asNumber(trade?.stop_loss);
+  const shares = asNumber(trade?.open_shares) ?? asNumber(trade?.shares);
+  if (!trade || from === null || stop === null || shares === null) return null;
+  const sign = trade.direction === 'bearish' ? -1 : 1;
+  return shares * Math.max(0, (from - stop) * sign);
+}
+
 function originalRiskPerShare(trade: TradeDetail | null): number | null {
   const entry = asNumber(trade?.entry);
   const stop = asNumber(trade?.risk_stop) ?? asNumber(trade?.stop_loss);
@@ -410,8 +421,9 @@ export const TradeDetailStore = signalStore(
     /** %-gain and $-amount for that leg, from the position's ORIGINAL entry
      *  (not the leg's own price) to the leg's exit -- the number a trader
      *  means by "how much did that leg make". `amount` is null when
-     *  `shares` is unknown (a legacy record) -- omitted rather than shown
-     *  as zero, same convention `embeds.py`'s server-side $ fallback uses. */
+     *  `entry_shares` is unknown (a legacy record or a pre-v189 payload) --
+     *  never computed off `shares`, which is the remaining count on a priced
+     *  PARTIAL (v189 B1). */
     bankedStats: computed<{ pct: number; amount: number | null } | null>(() => {
       const trade = data();
       const detail = trade?.detail;
@@ -422,9 +434,10 @@ export const TradeDetailStore = signalStore(
       if (!leg || leg.exitPrice === null || leg.fraction === null) return null;
       const sign = trade.direction === 'bearish' ? -1 : 1;
       const pct = ((leg.exitPrice - trade.entry) / trade.entry) * 100 * sign;
-      const amount = trade.shares === null
+      const entryShares = asNumber(trade.entry_shares);
+      const amount = entryShares === null
         ? null
-        : trade.shares * leg.fraction * (leg.exitPrice - trade.entry) * sign;
+        : entryShares * leg.fraction * (leg.exitPrice - trade.entry) * sign;
       return { pct, amount };
     }),
 
@@ -547,13 +560,15 @@ export const TradeDetailStore = signalStore(
       return rows.find((row) => row.strategy === name) ?? null;
     }),
   })),
-  withComputed(({ data, riskPerShare, gates }) => ({
-    /** Remaining open shares carry the original plan risk per share. */
-    dollarAtRisk: computed(() => {
-      const shares = asNumber(data()?.shares);
-      const risk = riskPerShare();
-      return shares === null || risk === null ? null : shares * risk;
-    }),
+  withComputed(({ data, workingStop, gates }) => ({
+    /** v189 B4/B5: what a fill at the working stop would still lose below
+     *  entry, on the open shares, floored at 0 -- a PARTIAL at its runner
+     *  floor or a break-even stop risks nothing. The server's
+     *  `heat.risk_of_loss_amount`, from the row's own numbers. */
+    riskOfLoss: computed(() => stopDistance(data(), workingStop(), asNumber(data()?.entry))),
+    /** v189 B5: the open profit a fill at the working stop would give back;
+     *  null without a live quote. */
+    openProfitToStop: computed(() => stopDistance(data(), workingStop(), asNumber(data()?.current_price))),
     earningsDays: computed(() => asNumber(gates().find((gate) => gate.key === 'earnings')?.value)),
   })),
   withMethods((store, api = inject(ApiClient)) => ({

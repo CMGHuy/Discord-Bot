@@ -1,0 +1,19 @@
+{
+  "Volume Profile": {
+    "n_eval": 63,
+    "wins": 29,
+    "losses": 34,
+    "scratches": 19,
+    "timeouts": 0,
+    "closed": 82,
+    "win_rate": 46.03174603174603,
+    "expectancy_r": 0.41717073170731706,
+    "excluded_share": 0.23170731707317074,
+    "avg_win_r": 2.352,
+    "max_dd_pct": -9.11421381019769,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 34.48275862068966,
+    "runner_be_pct": 65.51724137931035,
+    "runner_timeout_pct": 0.0
+  }
+}

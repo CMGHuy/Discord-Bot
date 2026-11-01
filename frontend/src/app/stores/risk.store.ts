@@ -14,8 +14,13 @@ import { Observable, defer } from 'rxjs';
 
 import { routeRequest } from '../routing/route-request';
 import {
-  Correlation, DataSourcesHealth, Killswitch, Risk, RiskAvailability, RiskMetrics, RiskPosition, SectorHeat,
+  Correlation, Killswitch, Risk, RiskAvailability, RiskMetrics, RiskPosition, SectorHeat,
 } from '../api/models';
+
+function sumKnown(values: readonly (number | null | undefined)[]): number | null {
+  const known = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  return known.length ? known.reduce((sum, v) => sum + v, 0) : null;
+}
 
 interface RiskSlice {
   data: Risk | null;
@@ -154,6 +159,11 @@ export const RiskStore = signalStore(
      *  `heat.trade_risk_pct`, which is what makes the table and the meter
      *  above it agree. */
     positions: computed<RiskPosition[]>(() => data()?.positions ?? []),
+    /** v189 B4: summed risk of loss to the stop over the rows that carry one
+     *  (a PENDING placeholder carries none). Null when no row has a figure,
+     *  so "nothing known" never reads as "nothing at risk". */
+    riskOfLossTotal: computed(() => sumKnown((data()?.positions ?? []).map((row) => row.risk_of_loss_amount))),
+    riskOfLossPctTotal: computed(() => sumKnown((data()?.positions ?? []).map((row) => row.risk_of_loss_pct))),
 
     sectorHeat: computed<SectorHeat[]>(() => data()?.sector_heat ?? []),
 

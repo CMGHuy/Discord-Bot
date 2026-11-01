@@ -212,7 +212,9 @@ export const DashboardStore = signalStore(
     balance: computed(() => data()?.account_balance ?? null),
     openPnlPct: computed(() => data()?.open_pnl_pct ?? null),
     openPnlAmount: computed(() => data()?.open_pnl_amount ?? null),
-    riskUsedPct: computed(() => data()?.risk_used_pct ?? null),
+    heatEnforcedPct: computed(() => data()?.heat_enforced_pct ?? null),
+    riskOfLossPct: computed(() => data()?.risk_of_loss_pct ?? null),
+    riskOfLossAmount: computed(() => data()?.risk_of_loss_amount ?? null),
     riskCapPct: computed(() => data()?.risk_cap_pct ?? null),
 
     openTrades: computed(() => data()?.open_trades ?? 0),
@@ -297,11 +299,11 @@ export const DashboardStore = signalStore(
      *  number in the legend is worse than a blank line for a beat. */
     defaultExpiryBars: computed(() => data()?.default_expiry_bars ?? null),
 
-    /** Risk used as a fraction of the cap, for a meter. Null rather than 0
+    /** Enforced heat as a fraction of the cap, for a meter. Null rather than 0
      *  when either side is missing: an empty meter and a meter at zero look
      *  identical and mean opposite things. */
     riskUtilisation: computed(() => {
-      const used = data()?.risk_used_pct;
+      const used = data()?.heat_enforced_pct;
       const cap = data()?.risk_cap_pct;
       if (used == null || cap == null || cap === 0) return null;
       return used / cap;

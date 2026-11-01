@@ -7,6 +7,9 @@ data/backtest_cache/<SAFE>.csv (fallback: the root market_data/daily cache):
 the median fresh/reference close ratio over at least MIN_IDENTITY_OVERLAP
 finite bars must lie within ALPACA_TOLERANCE of 1. A disagreeing ticker is
 still written, but flagged; training leaves flagged tickers out.
+On the PIT store (`--universe`, v190) `market_dir` is `None`:
+`backtest_cache_ext` is the only reference, never the mutable root
+`market_data/daily` cache.
 """
 import math
 import statistics
@@ -70,13 +73,23 @@ def _read_reference(path: Path) -> pd.DataFrame | None:
     return frame.sort_index()
 
 
-def reference_frame(ticker: str, *, backtest_dir: Path, market_dir: Path) -> pd.DataFrame | None:
+def reference_path(ticker: str, *, backtest_dir: Path,
+                   market_dir: Path | None) -> Path | None:
+    """The first usable reference file, skipping an absent fallback directory."""
     name = f"{safe_symbol(ticker)}.csv"
     for folder in (backtest_dir, market_dir):
-        frame = _read_reference(Path(folder) / name)
-        if frame is not None:
-            return frame
+        if folder is None:
+            continue
+        path = Path(folder) / name
+        if _read_reference(path) is not None:
+            return path
     return None
+
+
+def reference_frame(ticker: str, *, backtest_dir: Path,
+                    market_dir: Path | None) -> pd.DataFrame | None:
+    path = reference_path(ticker, backtest_dir=backtest_dir, market_dir=market_dir)
+    return _read_reference(path) if path is not None else None
 
 
 @dataclass(frozen=True)

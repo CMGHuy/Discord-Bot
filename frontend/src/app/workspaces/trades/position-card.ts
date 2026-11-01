@@ -7,7 +7,7 @@ import { GAP_FRAGILE_HINT } from './why/sizing-panel';
 
 export interface PositionFigures {
   status: string; shares: number | null; positionValue: number | null;
-  dollarAtRisk: number | null; sizingMode: string | null; gapP90Pct: number | null;
+  riskOfLoss: number | null; openProfitToStop: number | null; sizingMode: string | null; gapP90Pct: number | null;
   gapFragile: boolean | null; tp1Pct: number | null; breakevenTriggerPct: number | null;
   trailAtrMult: number | null; expiresOn: string | null; timeExitOn: string | null;
   holdCapBars: number | null;
@@ -16,7 +16,9 @@ export interface PositionFigures {
 }
 export interface PositionRow { label: string; value: string; sub: string | null; fragile: boolean; }
 export const SNAPSHOT_SENTENCE = 'Position size is snapshotted when the trade opens. A trade with no sizing snapshot was logged before that feature existed.';
-export const PARTIAL_RISK_SUB = 'open shares, at original stop';
+/** v189 B4/B5: two labelled figures so neither reads as the other. */
+export const RISK_OF_LOSS_SUB = 'to the working stop; assumes a fill at the stop, a gap through it loses more';
+export const OPEN_PROFIT_SUB = 'open shares, quote to the working stop';
 
 export function positionRows(f: PositionFigures): PositionRow[] {
   const rows: PositionRow[] = [];
@@ -26,7 +28,8 @@ export function positionRows(f: PositionFigures): PositionRow[] {
   const partial = f.status === 'PARTIAL';
   add(partial ? 'Open shares' : 'Shares', f.shares, shareCount(f.shares));
   add('Deployed', f.positionValue, num(f.positionValue));
-  add('$ at risk', f.dollarAtRisk, num(f.dollarAtRisk), partial ? PARTIAL_RISK_SUB : null);
+  add('Risk of loss', f.riskOfLoss, num(f.riskOfLoss), RISK_OF_LOSS_SUB);
+  add('Open profit to stop', f.openProfitToStop, num(f.openProfitToStop), OPEN_PROFIT_SUB);
   add('Sizing mode', f.sizingMode, text(f.sizingMode));
   add('Gap risk (p90)', f.gapP90Pct, share(f.gapP90Pct, 2), null, f.gapFragile === true);
   add('TP1 closes', f.tp1Pct, share(f.tp1Pct));

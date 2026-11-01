@@ -89,6 +89,9 @@ TRADE_ROW = {
     "banked_fraction": NULLABLE_NUMBER,
     "banked_exit_price": NULLABLE_NUMBER,
     "banked_r": NULLABLE_NUMBER,
+    # v189 B3 -- the realized legs' contribution to the trade's R
+    # (sum of fraction x r); `banked_r` stays the TP1 leg's own R.
+    "banked_contribution_r": NULLABLE_NUMBER,
     # v79 -- which row this is out of how many, when a scaled-out position
     # has been split into one row per leg. 0/1 for every row that isn't.
     "leg_index": int,
@@ -102,6 +105,9 @@ TRADE_ROW = {
     # of the position; this is what a live P&L dollar figure must scale by
     # instead. Equal to `shares` until a leg has realized. See `_open_shares`.
     "open_shares": NULLABLE_NUMBER,
+    # v189 B1 -- the ORIGINAL position size. `shares` is the remaining count
+    # on an open PARTIAL row (v79), so a banked-leg dollar figure scales by this.
+    "entry_shares": NULLABLE_NUMBER,
     "position_value": NULLABLE_NUMBER,
     "current_price": NULLABLE_NUMBER,
     # 2026-09-18 -- True when `current_price` did not come from a live
@@ -1438,14 +1444,16 @@ def test_partial_rows_publish_the_original_stop_as_risk_stop(seed, logged_in, pr
 
 def test_partial_r_multiple_is_still_measured_against_the_original_stop(
         seed, logged_in, priced):
-    """The rename must not change `_attach_unrealized_pnl`'s input."""
+    """Live R on a PARTIAL is the blended trade R; its open part is still measured against the original stop."""
     plan, trade = _partial_pair()
     seed(plans=[plan], trades=[trade])
     priced(115.0)
 
     items = logged_in.get("/api/v1/trades").get_json()["items"]
     runner = next(r for r in items if r["status"] == "PARTIAL")
-    assert runner["r_multiple"] == pytest.approx((115.0 - 101.0) / (101.0 - 95.0), abs=0.01)
+    # v189 B3: the trade's blended R. Banked 0.5 x 1.5 = 0.75, plus the open
+    # half's live move against the ORIGINAL risk: 0.5 x (115 - 101) / (101 - 95).
+    assert runner["r_multiple"] == pytest.approx(0.75 + 0.5 * (115.0 - 101.0) / 6.0, abs=0.01)
 
 
 def test_trade_detail_row_carries_risk_stop(seed, logged_in, priced):

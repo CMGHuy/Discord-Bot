@@ -63,7 +63,7 @@ const RESPONSE: Dashboard = {
   account_balance: 10_000,
   open_pnl_pct: 1.5,
   open_pnl_amount: 150,
-  risk_used_pct: 4,
+  heat_enforced_pct: 4, risk_of_loss_pct: 1.5, risk_of_loss_amount: 150,
   risk_cap_pct: 10,
   open_trades: 3,
   avg_confidence: 4.2,
@@ -236,9 +236,26 @@ describe('DashboardStore', () => {
     expect(store.empty()).toBe(false);
   });
 
+  it('reads enforced heat and risk of loss as two figures, never one (v189 B4)', () => {
+    tick();
+    respond({ heat_enforced_pct: 8, risk_of_loss_pct: 0, risk_of_loss_amount: 0, risk_cap_pct: 10 });
+    expect(store.heatEnforcedPct()).toBe(8);
+    expect(store.riskOfLossPct()).toBe(0);
+    expect(store.riskOfLossAmount()).toBe(0);
+    // Utilisation stays on the figure the scanner gates on.
+    expect(store.riskUtilisation()).toBeCloseTo(0.8);
+  });
+
+  it('keeps an unknown risk of loss null, not zero', () => {
+    tick();
+    respond({ risk_of_loss_pct: null, risk_of_loss_amount: null });
+    expect(store.riskOfLossPct()).toBeNull();
+    expect(store.riskOfLossAmount()).toBeNull();
+  });
+
   it('computes risk utilisation as a fraction of the cap', () => {
     tick();
-    respond({ risk_used_pct: 8, risk_cap_pct: 10 });
+    respond({ heat_enforced_pct: 8, risk_cap_pct: 10 });
 
     expect(store.riskUtilisation()).toBeCloseTo(0.8);
   });
@@ -259,14 +276,14 @@ describe('DashboardStore', () => {
     // An empty meter and a meter at zero look identical and mean opposite
     // things.
     tick();
-    respond({ risk_used_pct: null, risk_cap_pct: 10 });
+    respond({ heat_enforced_pct: null, risk_cap_pct: 10 });
 
     expect(store.riskUtilisation()).toBeNull();
   });
 
   it('survives a zero cap without dividing by it', () => {
     tick();
-    respond({ risk_used_pct: 4, risk_cap_pct: 0 });
+    respond({ heat_enforced_pct: 4, risk_cap_pct: 0 });
 
     expect(store.riskUtilisation()).toBeNull();
   });

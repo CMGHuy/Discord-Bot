@@ -374,49 +374,72 @@ describe('TradeDetailStore — original risk and plan figures', () => {
     });
     expect(store.riskStop()).toBe(95);
     expect(store.riskPerShare()).toBe(5);
-    expect(store.dollarAtRisk()).toBe(50);
+    expect(store.riskOfLoss()).toBe(30);
     expect(store.workingStop()).toBe(97);
     expect(store.trailAtrMult()).toBe(2.5);
     expect(store.sizingMode()).toBe('risk');
     expect(store.entryType()).toBe('stop');
   });
 
-  it('uses remaining open shares and original risk for a PARTIAL position', () => {
+  it('has no risk of loss once a PARTIAL stop sits at entry', () => {
     open({ status: 'PARTIAL', risk_stop: 95, stop_loss: 100, shares: 4 });
-    expect(store.dollarAtRisk()).toBe(20);
+    expect(store.riskOfLoss()).toBe(0);
   });
 
   it.each([
-    { row: {}, stop: null, risk: 5, dollars: 50 },
-    { row: { risk_stop: null }, stop: null, risk: 5, dollars: 50 },
-    { row: { risk_stop: 105 }, stop: 105, risk: 5, dollars: 50 },
-    { row: { risk_stop: 95, stop_loss: null }, stop: 95, risk: 5, dollars: 50 },
-    { row: { risk_stop: 100, shares: 0 }, stop: 100, risk: 0, dollars: 0 },
-    { row: { risk_stop: '95' }, stop: null, risk: 5, dollars: 50 },
-    { row: { risk_stop: NaN }, stop: null, risk: 5, dollars: 50 },
-    { row: { risk_stop: Infinity }, stop: null, risk: 5, dollars: 50 },
-    { row: { stop_loss: null }, stop: null, risk: null, dollars: null },
-    { row: { stop_loss: undefined }, stop: null, risk: null, dollars: null },
-    { row: { stop_loss: '95' }, stop: null, risk: null, dollars: null },
-    { row: { entry: null }, stop: null, risk: null, dollars: null },
-    { row: { entry: undefined }, stop: null, risk: null, dollars: null },
-    { row: { entry: Infinity }, stop: null, risk: null, dollars: null },
-    { row: { entry: '100' }, stop: null, risk: null, dollars: null },
-    { row: { shares: null }, stop: null, risk: 5, dollars: null },
-    { row: { shares: undefined }, stop: null, risk: 5, dollars: null },
-    { row: { shares: NaN }, stop: null, risk: 5, dollars: null },
-    { row: { shares: '10' }, stop: null, risk: 5, dollars: null },
-  ])('narrows original risk and open shares: $row', ({ row, stop, risk, dollars }) => {
+    { row: {}, stop: null, risk: 5, loss: 50 },
+    { row: { risk_stop: null }, stop: null, risk: 5, loss: 50 },
+    { row: { risk_stop: 105 }, stop: 105, risk: 5, loss: 50 },
+    { row: { risk_stop: 95, stop_loss: null }, stop: 95, risk: 5, loss: null },
+    { row: { risk_stop: 100, shares: 0 }, stop: 100, risk: 0, loss: 0 },
+    { row: { risk_stop: '95' }, stop: null, risk: 5, loss: 50 },
+    { row: { risk_stop: NaN }, stop: null, risk: 5, loss: 50 },
+    { row: { risk_stop: Infinity }, stop: null, risk: 5, loss: 50 },
+    { row: { stop_loss: null }, stop: null, risk: null, loss: null },
+    { row: { stop_loss: undefined }, stop: null, risk: null, loss: null },
+    { row: { stop_loss: '95' }, stop: null, risk: null, loss: null },
+    { row: { entry: null }, stop: null, risk: null, loss: null },
+    { row: { entry: undefined }, stop: null, risk: null, loss: null },
+    { row: { entry: Infinity }, stop: null, risk: null, loss: null },
+    { row: { entry: '100' }, stop: null, risk: null, loss: null },
+    { row: { shares: null }, stop: null, risk: 5, loss: null },
+    { row: { shares: undefined }, stop: null, risk: 5, loss: null },
+    { row: { shares: NaN }, stop: null, risk: 5, loss: null },
+    { row: { shares: '10' }, stop: null, risk: 5, loss: null },
+  ])('narrows original risk and risk of loss: $row', ({ row, stop, risk, loss }) => {
     open(row);
     expect(store.riskStop()).toBe(stop);
     expect(store.riskPerShare()).toBe(risk);
-    expect(store.dollarAtRisk()).toBe(dollars);
+    expect(store.riskOfLoss()).toBe(loss);
+  });
+
+  it.each([
+    { row: { open_shares: 4 }, loss: 20 },                                         // remaining shares win over shares
+    { row: { direction: 'bearish', stop_loss: 105 }, loss: 50 },                   // short: stop above entry
+    { row: { direction: 'bearish', stop_loss: 98 }, loss: 0 },                     // short with a locked-in stop
+    { row: { stop_loss: 101 }, loss: 0 },                                          // long stop above entry
+  ])('measures risk of loss on the loss side, floored at 0: $row', ({ row, loss }) => {
+    open(row);
+    expect(store.riskOfLoss()).toBe(loss);
+  });
+
+  it.each([
+    { row: { current_price: 103 }, profit: 80 },                                   // 10 x (103 - 95)
+    { row: { current_price: 94 }, profit: 0 },                                     // quote through the stop
+    { row: { direction: 'bearish', stop_loss: 105, current_price: 101 }, profit: 40 },
+    { row: { current_price: null }, profit: null },
+    { row: { current_price: NaN }, profit: null },
+    { row: { current_price: '103' }, profit: null },
+  ])('measures open profit to the stop only with a finite quote: $row', ({ row, profit }) => {
+    open(row);
+    expect(store.openProfitToStop()).toBe(profit);
   });
 
   it('keeps figures unknown before a response arrives', () => {
     expect(store.riskStop()).toBeNull();
     expect(store.riskPerShare()).toBeNull();
-    expect(store.dollarAtRisk()).toBeNull();
+    expect(store.riskOfLoss()).toBeNull();
+    expect(store.openProfitToStop()).toBeNull();
     expect(store.workingStop()).toBeNull();
     expect(store.trailAtrMult()).toBeNull();
     expect(store.sizingMode()).toBeNull();

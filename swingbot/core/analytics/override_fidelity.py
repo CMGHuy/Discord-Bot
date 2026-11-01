@@ -237,6 +237,8 @@ def outcome_of(delta_r: float | None) -> str | None:
 # --- the engine path and the two arms (V173-8) ---------------------------------
 
 #: The instrument every arm is booked on: v2 fills and costs, as the sim.
+#: v190 audit: v2 alone -- v173 books override fidelity on v2 fills and costs;
+#: instrument v3 (the PIT Alpaca store) does not move this.
 INSTRUMENT = contract.resolve("v2")
 #: "Before costs": the same legs with no slippage and no commission. Shown
 #: next to the net figure, never used by the verdict decision (spec §4).

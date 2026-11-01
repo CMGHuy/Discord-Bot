@@ -43,6 +43,8 @@ data/backtest_cache_ext/
 # 2016-truncated copy), rebuilt by scripts/data/snapshot_backtest_cache.py.
 data/backtest_cache_snapshot_v162*/
 data/backups/
+# v189 account-reset archives (closed trades, plans, balance history): account data.
+data/archives/
 # v116 point-in-time recovery: pgBackRest repo, .env versions, restic repo,
 # deploys.jsonl. VM-only; never committed.
 /backups/

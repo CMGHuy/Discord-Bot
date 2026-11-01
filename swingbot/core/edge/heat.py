@@ -6,6 +6,8 @@ posts, labeled, with size 0, so the operator always sees what the cap
 cost them and can free heat deliberately."""
 from __future__ import annotations
 
+import math
+
 from swingbot import config
 
 
@@ -22,6 +24,26 @@ def trade_risk_pct(trade: dict, balance: float) -> float:
 
 def open_heat(open_trades: list, balance: float) -> float:
     return sum(trade_risk_pct(t, balance) for t in open_trades)
+
+
+def risk_of_loss_amount(entry, working_stop, direction: str, open_shares) -> float:
+    """v189 B4: what a fill at the current working stop would still lose
+    below entry -- ``open_shares x (entry - stop)`` long, ``(stop - entry)``
+    short, floored at 0 (a stop at or past entry risks nothing; a gap
+    through it can lose more, which the screens say in their hint).
+
+    Display only: `open_heat` (original risk, every open trade) stays what
+    the scanner enforces. 0.0 on a missing or non-finite input or a
+    direction that is neither ``bullish`` nor ``bearish``.
+    """
+    values = (entry, working_stop, open_shares)
+    if any(v is None for v in values) or direction not in ("bullish", "bearish"):
+        return 0.0
+    entry, stop, shares = (float(v) for v in values)
+    if not all(math.isfinite(v) for v in (entry, stop, shares)):
+        return 0.0
+    distance = entry - stop if direction == "bullish" else stop - entry
+    return round(max(0.0, distance) * max(0.0, shares), 2)
 
 
 def heat_check(open_trades: list, balance: float, candidate_risk_pct: float,

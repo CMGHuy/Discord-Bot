@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from tests.admin.api_v1_contract import NULLABLE_NUMBER, assert_error, assert_shape
+from tests.admin.api_v1_contract import NULLABLE_NUMBER, NULLABLE_STR, assert_error, assert_shape
 from tests.store_seed import seed_store
 
 _LOGIN = {"username": "admin", "password": "admin"}
@@ -196,6 +196,8 @@ def test_distributions_and_series_are_present_and_scoped(seed, logged_in):
         "weak": dict,
         # v94 T1 -- the Overview tab's Streaks row.
         "streaks": dict,
+        # v189 D6 -- the label basis beside the win rate.
+        "scratch_n": int, "unscored_n": int, "label_basis_since": NULLABLE_STR,
         # v194 B7 -- rows left out of the money figures for want of an FX rate.
         "fx_missing_count": int,
     })

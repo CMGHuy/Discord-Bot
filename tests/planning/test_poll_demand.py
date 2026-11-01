@@ -18,7 +18,9 @@ class _Store:
     skips every step after the price filter. No notices to resend."""
 
     def __init__(self, tickers):
-        self._plans = [SimpleNamespace(ticker=t, plan_id=f"p{i}") for i, t in enumerate(tickers)]
+        # status: poll() orders stop-bearing plans first (v189 D3.3).
+        self._plans = [SimpleNamespace(ticker=t, plan_id=f"p{i}", status=pm.PlanStatus.ACTIVE)
+                       for i, t in enumerate(tickers)]
 
     def all(self):
         return []

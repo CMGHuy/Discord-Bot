@@ -27,6 +27,7 @@ from swingbot.core.tracking.performance import closed_pnl_pct, primary_strategy_
 from swingbot.core.planning import account as account_module
 from swingbot import config as app_config
 from swingbot.core.analytics import calibration
+from swingbot.core.analytics import metrics
 from swingbot.core.analytics.insights import edge_decay_report
 from swingbot.core.analytics.journal import JournalStore
 from swingbot.core.tracking import live_loss_watch as loss_watch
@@ -185,19 +186,6 @@ def _pnl_pct(trade: dict) -> float | None:
     return closed_pnl_pct(trade)
 
 
-def _r_multiple(trade: dict) -> float | None:
-    entry = trade.get("entry")
-    sl    = trade.get("stop_loss")
-    exit_ = trade.get("exit_price")
-    if not entry or not sl or not exit_:
-        return None
-    risk = abs(entry - sl)
-    if risk == 0:
-        return None
-    pnl_abs = (exit_ - entry) if trade.get("direction") == "bullish" else (entry - exit_)
-    return round(pnl_abs / risk, 2)
-
-
 def _days_held(trade: dict) -> int | None:
     opened = _to_berlin(trade.get("opened_at", ""))
     closed = _to_berlin(trade.get("closed_at", ""))
@@ -326,7 +314,7 @@ def _collect_weekly_risk_stats(all_trades: list, today: dt.date) -> dict:
         stats["biggest_cluster"] = []
 
     try:
-        r_multiples = [r for t in all_trades if (r := _r_multiple(t)) is not None]
+        r_multiples = [r for t in all_trades if (r := metrics.r_multiple(t)) is not None]
         if len(r_multiples) >= 10:
             risk_pct = account_module.load_account_config().get("risk_pct", 1.0)
             stats["mc"] = ruin.simulate(r_multiples, risk_pct=risk_pct)
@@ -521,7 +509,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
     avg_pnl   = round(sum(pnls) / len(pnls), 2) if pnls else None
     total_pnl = round(sum(pnls), 2) if pnls else None
 
-    r_mults   = [r for t in closed_today if (r := _r_multiple(t)) is not None]
+    r_mults   = [r for t in closed_today if (r := metrics.r_multiple(t)) is not None]
     avg_r     = round(sum(r_mults) / len(r_mults), 2) if r_mults else None
 
     gross_win  = sum(p for p in pnls if p > 0)
@@ -617,7 +605,7 @@ def build_daily_retrospective(all_trades: list, today: dt.date | None = None) ->
             closed_rows = []
             for t in sorted(closed_today, key=lambda x: x.get("closed_at", "")):
                 pnl  = _pnl_pct(t)
-                r    = _r_multiple(t)
+                r    = metrics.r_multiple(t)
                 days = _days_held(t)
                 amt  = t.get("realized_pnl_amount")
                 strategy = _strategy_label(t)[:15]
@@ -969,7 +957,7 @@ def _analyse(closed: list, opened_today: list, still_open: list,
             lessons.append(f"'{strat}' was flawless today ({len(trades)} trades, all wins).")
 
     # --- R-multiple and risk/reward ---
-    r_mults = [r for t in losses if (r := _r_multiple(t)) is not None]
+    r_mults = [r for t in losses if (r := metrics.r_multiple(t)) is not None]
     if r_mults:
         avg_loss_r = round(sum(r_mults) / len(r_mults), 2)
         if avg_loss_r < -1.5:
@@ -980,8 +968,8 @@ def _analyse(closed: list, opened_today: list, still_open: list,
                 config_key="MAX_STOP_LOSS_PCT",
             )
 
-    win_rs = [r for t in wins if (r := _r_multiple(t)) is not None]
-    loss_rs = [r for t in losses if (r := _r_multiple(t)) is not None]
+    win_rs = [r for t in wins if (r := metrics.r_multiple(t)) is not None]
+    loss_rs = [r for t in losses if (r := metrics.r_multiple(t)) is not None]
     if win_rs and loss_rs:
         avg_win_r  = round(sum(win_rs)  / len(win_rs),  2)
         avg_loss_r = round(sum(loss_rs) / len(loss_rs), 2)

@@ -53,6 +53,37 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   `data/backtest_cache/` stays: it is the live bot's daily cache, the journal
   backfill's source, the `yfinance` training source and the identity-check
   reference.
+- **The PIT Alpaca store is a fourth directory, chosen only by instrument v3
+  (v190).** `data/market_data_pit/{daily,hourly,15min}/{TICKER}.csv` has the
+  v162 store's layout and manifests, holds every `sp500_pit` member (delisted
+  names included) from 2016-01-04 plus SPY, the regime ticker and every
+  `data/universe/etfs.json` symbol, and lives on this laptop only (never the
+  VM, no cron). `history_store.store_root("pit")` never reads
+  `HISTORY_STORE_DIR`; `store_root()` (the watchlist store) still does. **No
+  universe name and no environment variable selects it:** `sp500_pit` is v2's
+  universe too, and `training_data.available_tickers()` feeds about a dozen
+  scripts their universe, so a store chosen by name would widen them. Only
+  `contract.resolve("v3").store == "pit"` selects it, inside
+  `fetch_backtest_data.apply_data_source`, which also cuts every frame
+  (SPY and the ETFs included) at `research_end`; pool workers receive the
+  choice through `training_data.selection_args()`. **Integrity before use:**
+  `scripts/data/check_history_store.py --pit` writes
+  `data/market_data_pit/_integrity.json`; selection refuses without it and
+  raises `StaleIntegrityError` once the daily manifest's sha256 differs from
+  the one frozen in it, so a `--mode update` after a freeze stops every v3 run
+  until the report is rebuilt. It carries **frame trims** (a reused symbol's
+  foreign bars, MON after mid-2018, removed in `history_store.load` before
+  any indicator reads them) and **signal-date cuts** (runs of more than 5
+  missing sessions; dates whose trailing 60 sessions hold under 95% of their
+  bars), subtracted from the membership spans. `flagged: no-reference` is
+  admitted on the PIT store only; the watchlist store's `_manifest_exclusions`
+  is unchanged. Renamed members map through `data/universe/symbol_aliases.json`
+  (`fetch_alpaca_history.py --universe sp500_pit`). **One fetcher per root at
+  a time:** each process rewrites the whole per-timeframe manifest, so two on
+  one root lose each other's entries. **Worktrees:** both store roots resolve
+  through `history_store.resolve_data_root`, so a worktree without its own
+  `data/market_data[_pit]` reads the main checkout's; a directory that exists
+  in the worktree wins.
 - **The history store holds the same tickers as `data/backtest_cache/`:** the
   watchlist plus `MARKET_REGIME_TICKER`. The sector ETFs of
   `data/universe/etfs.json` (QQQ, IWM, DIA, the XL* funds, GLD, TLT) are in
@@ -181,6 +212,35 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   useful stretch, so more threads bought no real parallelism and were
   measurably slower than serial). Anything touching shared state
   (`state.confirm_or_update`, funnel counters) must stay serial/post-join.
+- **Every plan write is one guarded call (v189).** `PlanStore.update` takes
+  the plan row `FOR UPDATE`, returns `False` instead of overwriting a CLOSED
+  or CANCELLED row with a stale copy, and keeps the tighter of the stored and
+  incoming stops. Never write a plan document any other way (a raw repository
+  upsert brings back the lost update v189 closed). Lock order is plan row,
+  then trade row, then account rows; no `threading.Lock` is held while
+  waiting on a row, and network calls happen before any lock.
+- **A trade's leg, fill and close commit with the plan, or not at all.** The
+  plan manager's `_persist_*` helpers pass one `conn` to `TradeLog` and the
+  account balance; only the journal and the snapshot refresh run after
+  commit (`run_after_commit`). A new close path passes `conn=` through and
+  collects its hooks the same way. A failed exit is retried once and then
+  posted to the ops channel (`take_exit_failures`), never dropped silently.
+- **Deleting a trade ends its plan.** `clear_open` and `delete_trade` end the
+  linked plan in the same transaction (`plan_links.end_linked_plan`): a
+  PENDING plan is cancelled (`cancelled_trade_deleted`), an ACTIVE/PARTIAL
+  one closed with no P&L. A reversal against an unfilled placeholder cancels
+  the plan instead of booking P&L.
+- **Clearing history is an archived reset.** `account_reset.reset_closed_history`
+  writes `data/archives/account-reset-<UTC>.json` first, then deletes closed
+  trades, terminal plans and the balance history and reseeds one point at
+  `base_balance`. It is refused while the kill switch is tripped unless
+  forced, and never releases it. `scripts/ops/restore_account_reset.py`
+  undoes the latest reset (`docs/deploy/DEPLOY_HETZNER.md`).
+- **Leg sums use the contribution, labels use the net.** Anything that adds
+  legs uses `metrics.leg_contribution_r` (fraction × R); a close with two or
+  more legs is labelled by `metrics.net_outcome` (live only — the backtest
+  still labels a TP1 touch `win`, pinned by a test). Scaled-out labels before
+  `metrics.LABEL_BASIS_SINCE` were not backfilled.
 
 ## Full-history cache and the live scan read
 
@@ -249,6 +309,15 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 
 ## `PlanManager.check_bar()` is unwired — do not "fix" it
 
+`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for the `plans` table. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
+
+v189 routed every plan write through the guarded `PlanStore.update` (row lock,
+stale-terminal refusal, tighter-stop merge) and the `_persist_fill` /
+`_persist_partial` / `_persist_terminal` transactions. `check_bar` shares those
+helpers, so it inherits the guards, but it has no dedicated tests and its
+exit-retry path is reachable from tests only. Wiring it in is still a design
+change, not a fix.
+
 ## Scan parameter and replay gate parity (v74)
 
 `ScanParams` is frozen and picklable so process-pool search cells cannot share
@@ -258,8 +327,6 @@ Do not silently unify them: v68 deliberately measured `min_confluence=1` and
 `min_risk_reward=0.0`, unlike the shipped 2 and 1.5, and its fixture inherits
 that population. `tests/backtesting/test_knob_observability.py` documents the
 replay harness blind spots explicitly.
-
-`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for the `plans` table. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
 
 ## The full state machine now runs across the whole Berlin-local active window
 

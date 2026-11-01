@@ -1,0 +1,19 @@
+{
+  "VWAP": {
+    "n_eval": 63,
+    "wins": 30,
+    "losses": 33,
+    "scratches": 15,
+    "timeouts": 0,
+    "closed": 78,
+    "win_rate": 47.61904761904761,
+    "expectancy_r": 0.5206666666666667,
+    "excluded_share": 0.19230769230769232,
+    "avg_win_r": 2.4537333333333335,
+    "max_dd_pct": -9.044232184776659,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 36.666666666666664,
+    "runner_be_pct": 60.0,
+    "runner_timeout_pct": 3.3333333333333335
+  }
+}

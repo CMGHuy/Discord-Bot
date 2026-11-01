@@ -509,7 +509,7 @@ describe('TradeDetail — banked leg and open runner', () => {
     fixture.detectChanges();
     backend.expectOne(`/api/v1/trades/${ID}`).flush(
       tradeResponse({ ...DETAIL, legs_realized: legsRealized, working_stop: 101.33 },
-                    'PARTIAL'),
+                    'PARTIAL', { entry_shares: 10 }),
     );
     fixture.detectChanges();
     return (fixture.nativeElement as HTMLElement).textContent ?? '';
@@ -526,7 +526,7 @@ describe('TradeDetail — banked leg and open runner', () => {
 
   it('shows the pct and dollar figures for the banked leg', () => {
     const text = renderPartial();
-    // tradeResponse() defaults entry=100, shares=10: (110-100)*0.5*10 = 50
+    // entry=100, entry_shares=10 (v189 B1: the ORIGINAL size): (110-100)*0.5*10 = 50
     expect(text).toContain('+10.00%');
     expect(text).toContain('+50.00');
   });
@@ -684,12 +684,12 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(el.textContent).toContain('Paper plan — this page places no orders.');
   });
 
-  it('uses the current stop in the Outcome next block and original risk in Position', () => {
+  it("uses the current stop in the Outcome next block and in Position's risk of loss", () => {
     const el = mount('overview', { ...DETAIL, working_stop: 101 }, 'PARTIAL',
       { risk_stop: 95, stop_loss: 101, shares: 5, position_value: 500 });
     const position = el.querySelector('sb-trade-position-card')!;
     expect(position.querySelector('[data-row="Open shares"]')?.textContent).toContain('5');
-    expect(position.querySelector('[data-row="$ at risk"]')?.textContent).toContain('25.00');
+    expect(position.querySelector('[data-row="Risk of loss"]')?.textContent).toContain('0.00');
     expect(position.querySelector('[data-row="Deployed"]')?.textContent).toContain('500.00');
     expect(el.querySelector('sb-trade-outcome-card sb-if-it-gets-there')?.textContent).toContain('101.00');
   });

@@ -10,7 +10,7 @@ grepping for "dashboard.py" will find both. The Jinja one dies at NG57.
 Fourteen equal-weight stat cards became three large cards and six compact
 chips. This endpoint returns exactly those nine:
 
-    primary   account_balance · open_pnl_pct · risk_used_pct
+    primary   account_balance · open_pnl_pct · heat_enforced_pct · risk_of_loss_pct
     chips     open_trades · avg_confidence · win_rate · expectancy_r ·
               payoff_ratio · equity_30d · position_premium
 
@@ -70,34 +70,41 @@ def _equity_30d() -> dict:
     return {"points": points, "change_pct": change}
 
 
-def _risk_used(all_trades: list[dict]) -> tuple[float | None, float | None]:
-    """Open portfolio heat, and the cap it is measured against.
+def _risk_figures(all_trades: list[dict]) -> dict:
+    """Enforced heat, risk of loss beside it, and the cap (v189 B4).
 
-    Spec 3 promotes this from the Risk page because current exposure
-    belongs beside current P&L. The cap travels with it -- a heat figure
-    without its cap says nothing about whether you are near the limit.
+    `heat_enforced_pct` is `heat.open_heat` over every open trade, both
+    ledgers, at original size, placeholders included: exactly what the
+    scanner gates on, so the admin view never shows headroom the scanner
+    does not grant. `risk_of_loss_*` is the money below entry a fill at each
+    held position's working stop would still lose (`position_risk_of_loss`),
+    unheld placeholders excluded; it is never shown as a gauge against the
+    cap. Not `collect_portfolio_state` (its per-ticker fetches cost ~3.7s).
 
-    Degrades to (None, cap) rather than failing: every other collector on
-    the Risk page already treats heat as best-effort, and the Dashboard is
-    the landing page.
+    Degrades to None for everything but the cap: every other collector on
+    the Risk page treats heat as best-effort, and this is the landing page.
     """
     cap = float(getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0))
+    out = {"heat_enforced_pct": None, "risk_of_loss_pct": None,
+           "risk_of_loss_amount": None, "risk_cap_pct": cap}
     try:
-        # Not `collect_portfolio_state`: that also builds sector heat, the
-        # throttle, the growth path and correlation clusters (one market-data
-        # fetch per open ticker, ~3.7s on production), and this page shows
-        # none of it. Heat is a pure function of the open trades and balance.
         from swingbot.core.edge import heat
         from swingbot.core.planning import account as account_module
+        from swingbot.core.tracking.equity import load_plans_by_id, position_risk_of_loss
         cfg = account_module.load_account_config()
         balance = cfg.get("balance", cfg.get("base_balance", 0.0))
-        # Both ledgers, as the collector counted them: heat is portfolio
-        # exposure. Filtered from the caller's list -- the handler has
-        # already read the whole log, and re-reading it cost ~0.9s.
         open_trades = [t for t in all_trades if t.get("status") == "open"]
-        return heat.open_heat(open_trades, balance), cap
+        out["heat_enforced_pct"] = heat.open_heat(open_trades, balance)
+        plans = load_plans_by_id()
+        amounts = [position_risk_of_loss(t, plans.get(t.get("plan_id"))) for t in open_trades]
+        amount = round(sum(a for a in amounts if a is not None), 2)
+        out.update({
+            "risk_of_loss_amount": amount,
+            "risk_of_loss_pct": round(amount / balance * 100.0, 3) if balance and balance > 0 else None,
+        })
     except Exception:
-        return None, cap
+        pass
+    return out
 
 
 def _closed_row_in_scope(row: dict, mode: str, window: ClosedWindow | None) -> bool:
@@ -353,7 +360,6 @@ def dashboard():
     scoped_rs = m.r_multiples(closed_scoped)
 
     account_cfg = dash.load_account_config()
-    heat, cap = _risk_used(all_raw)
     open_figures = _open_figures(all_raw, account_cfg)
     open_missing = open_figures.pop("_fx_missing")
     realized = _realized(closed_scoped)
@@ -362,8 +368,7 @@ def dashboard():
         # primary
         "account_balance": account_cfg.get("balance"),
         **open_figures,
-        "risk_used_pct": heat,
-        "risk_cap_pct": cap,
+        **_risk_figures(all_raw),
         # chips
         "win_rate": m.win_rate(closed_scoped),
         "win_rate_n": sum(1 for t in closed_scoped if t.get("status") in ("win", "loss")),

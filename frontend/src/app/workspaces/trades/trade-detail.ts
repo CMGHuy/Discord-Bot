@@ -659,7 +659,7 @@ export class TradeDetail {
     if (!trade) return null;
     return {
       status: trade.status, shares: trade.shares, positionValue: trade.position_value,
-      dollarAtRisk: this.store.dollarAtRisk(), sizingMode: this.store.sizingMode(),
+      riskOfLoss: this.store.riskOfLoss(), openProfitToStop: this.store.openProfitToStop(), sizingMode: this.store.sizingMode(),
       gapP90Pct: this.store.gapP90Pct(), gapFragile: this.store.gapFragile(),
       tp1Pct: this.store.tp1Pct(), breakevenTriggerPct: this.store.breakevenTriggerPct(),
       trailAtrMult: this.store.trailAtrMult(), expiresOn: this.store.expiresOn(),

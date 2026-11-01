@@ -180,6 +180,32 @@ def held_now(open_trades: list[dict], plans_by_id: dict) -> list[dict]:
     return live
 
 
+def position_risk_of_loss(trade: dict, plan: dict | None) -> float | None:
+    """v189 B4: one open trade's risk of loss to its current working stop.
+
+    `plan` is the stored plan record (`load_plans_by_id()[trade["plan_id"]]`)
+    or None for a trade with no plan, which is priced on its own stop and
+    size. A plan that is not ACTIVE/PARTIAL is not held (a PENDING
+    placeholder, or a terminal plan): None, never 0.0, so a caller can tell
+    "nothing at risk" from "nothing held". A held plan uses its working stop,
+    else its risk stop, and the shares still open after any banked leg.
+
+    A PARTIAL plan written before v39 may lack `working_stop`; it falls back
+    to the risk stop, which overstates its risk of loss -- the conservative
+    side for a display figure.
+    """
+    from swingbot.core.edge.heat import risk_of_loss_amount
+
+    if plan is None:
+        return risk_of_loss_amount(trade.get("entry"), trade.get("stop_loss"),
+                                   trade.get("direction"), trade.get("shares"))
+    if plan.get("status") not in _LIVE_PLAN_STATUSES:
+        return None
+    stop = plan.get("working_stop") or plan.get("stop_loss")
+    held = open_shares(trade.get("shares"), plan.get("legs_realized") or [])
+    return risk_of_loss_amount(trade.get("entry"), stop, trade.get("direction"), held)
+
+
 def live_open_positions(trades: list[dict], plans_by_id: dict) -> list[dict]:
     """Main-book trades with status `open`, through `held_now`."""
     opened = [trade for trade in main_book(trades) if trade.get("status") == "open"]

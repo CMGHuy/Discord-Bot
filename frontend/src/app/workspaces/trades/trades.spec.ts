@@ -645,8 +645,10 @@ describe('Trades on sb-page (v195 Phase 4, §5.2)', () => {
     const fixture = mountPage();
     el(fixture).querySelector<HTMLButtonElement>('[page-actions] [data-action="clear-history"]')!.click();
     fixture.detectChanges();
-    const dialog = el(fixture).querySelector('sb-page sb-confirm-dialog:last-of-type')!;
-    expect(dialog.textContent).toContain('Clear trade history');
+    // The force-reset dialog (v189) follows the bulk one, so :last-of-type no longer picks it.
+    const dialog = [...el(fixture).querySelectorAll('sb-page sb-confirm-dialog')]
+      .find((d) => d.textContent!.includes('Reset trade history'))!;
+    expect(dialog.textContent).toContain('full reset');
     expect(TestBed.inject(TradesStore).clearing()).toBeNull();
   });
 

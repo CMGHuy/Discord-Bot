@@ -180,6 +180,11 @@ def analytics_performance():
     (`weak_summary()`), which are each other's own separate, never-scoped
     records, not projections of `closed`.
 
+    `scratch_n`/`unscored_n` count the scoped `closed` rows that D2 (v189)
+    labelled `closed`/`scratch` or `closed`/`unscored` -- excluded from
+    `win_rate` and `win_rate_n` -- and `label_basis_since` is the date from
+    which scaled-out closes are labelled by net R (None until deployed).
+
     Every figure is computed in `core.analytics.metrics` -- this route selects
     and assembles, it does not derive. That is the same "one definition per
     stat" rule that keeps `aggregate.py` delegating, and the reason the
@@ -206,6 +211,7 @@ def analytics_performance():
     start, end = scope.start, scope.end
     stats = tl.get_stats(trades=all_raw)             # totals.total/open stay book-wide
     stats.update(tl.get_extended_stats(trades=all_raw))
+    labels = m.label_counts(closed)
     realized = [p for p in (closed_pnl(t) for t in closed) if p is not None]
 
     from swingbot.core.planning import account as account_module
@@ -236,6 +242,11 @@ def analytics_performance():
         },
         "win_rate": m.win_rate(closed),
         "win_rate_n": sum(1 for t in closed if t.get("status") in ("win", "loss")),
+        # v189 D6 -- the closes the rate leaves out, and the date their basis
+        # changed. Read through `m.` at request time: V189-27 sets the date.
+        "scratch_n": labels["scratch"],
+        "unscored_n": labels["unscored"],
+        "label_basis_since": m.LABEL_BASIS_SINCE,
         "expectancy_r": m.expectancy_r(closed),
         "expectancy_n": len(m.r_multiples(closed)),
         "by_confidence": tl.get_stats_by_confidence(),

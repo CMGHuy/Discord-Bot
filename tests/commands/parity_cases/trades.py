@@ -11,6 +11,8 @@ import tempfile
 import discord
 
 from swingbot.commands import trades as trades_mod
+from swingbot.core.tracking import account_reset
+from swingbot.core.tracking.plan_links import DeleteResult, EndedPlan
 from tests.commands.reply_harness import ParityCase
 
 _NOW = dt.datetime(2026, 10, 9, 14, 30, tzinfo=dt.timezone.utc)
@@ -49,16 +51,13 @@ class _FakeLog:
         return rows[:limit] if limit else rows
 
     def clear_open(self):
-        return sum(1 for t in self.trades if t["status"] == "open")
-
-    def clear_history(self):
-        return sum(1 for t in self.trades if t["status"] != "open")
+        return DeleteResult(sum(1 for t in self.trades if t["status"] == "open"))
 
     def get_trade_by_id(self, trade_id):
         return next((t for t in self.trades if t["id"] == trade_id), None)
 
     def delete_trade(self, trade_id):
-        return self.get_trade_by_id(trade_id) is not None
+        return DeleteResult(int(self.get_trade_by_id(trade_id) is not None))
 
     def get_stats(self, level=None, ledger=None):
         rows = [t for t in self.trades if level is None or t["confidence_level"] == level]
@@ -74,6 +73,20 @@ class _FakeLog:
 
     def weak_summary(self):
         return {"wins": 1, "losses": 2, "n": 3, "total_pnl": -12.5}
+
+
+_ENDED = (EndedPlan("p-aapl-0001", "AAPL", "PARTIAL", "CLOSED"),
+          EndedPlan("p-msft-0002", "MSFT", "PENDING", "CANCELLED"))
+
+
+class _EndingLog(_FakeLog):
+    """A log whose deletes end linked plans (v189 A7): the reply names them."""
+
+    def clear_open(self):
+        return DeleteResult(2, _ENDED)
+
+    def delete_trade(self, trade_id):
+        return DeleteResult(1, _ENDED[:1])
 
 
 def _freeze_clock(monkeypatch):
@@ -100,6 +113,35 @@ def _stub(trades=ALL_TRADES, chart=_chart_for_open):
     return stub
 
 
+_RESET = account_reset.ResetResult(
+    removed_trades=2, removed_plans=1,
+    archive_path="/app/data/archives/account-reset-20261009T143000Z.json",
+    throttle_multiplier=1.0, throttle_paused=False, kill_on=False,
+    base_balance=10_000.0, reset_at="2026-10-09T14:30:00+00:00")
+
+
+def _reset_stub(outcome=_RESET):
+    """The trades stub plus a canned account reset (a ResetResult, or an
+    exception to raise)."""
+    base = _stub()
+
+    def stub(monkeypatch):
+        base(monkeypatch)
+
+        def fake(*, force=False, now=None):
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        monkeypatch.setattr(trades_mod.account_reset, "reset_closed_history", fake)
+    return stub
+
+
+def _ending_stub(monkeypatch):
+    _stub()(monkeypatch)
+    monkeypatch.setattr(trades_mod, "trade_log", _EndingLog(ALL_TRADES))
+
+
 CASES = [
     ParityCase("trades_all", trades_mod.handle_trades, stub=_stub()),
     ParityCase("trades_open_two_per_page", trades_mod.handle_trades, args=("open", 2), stub=_stub()),
@@ -107,7 +149,17 @@ CASES = [
     ParityCase("trades_bad_status", trades_mod.handle_trades, args=("pending",),
                stub=_stub(), expect="error"),
     ParityCase("trades_clear", trades_mod.handle_trades_clear, stub=_stub()),
-    ParityCase("trades_clear_history", trades_mod.handle_trades_clear_history, stub=_stub()),
+    ParityCase("trades_clear_history", trades_mod.handle_trades_clear_history, stub=_reset_stub()),
+    ParityCase("trades_clear_history_force", trades_mod.handle_trades_clear_history,
+               kwargs={"force": True}, stub=_reset_stub()),
+    ParityCase("trades_clear_history_refused", trades_mod.handle_trades_clear_history,
+               stub=_reset_stub(account_reset.ResetRefused(account_reset.REFUSED_TEXT)),
+               expect="error"),
+    ParityCase("trades_clear_history_archive_failed", trades_mod.handle_trades_clear_history,
+               stub=_reset_stub(account_reset.ArchiveFailed(
+                   "Reset aborted: the archive account-reset-x.json could not be written "
+                   "(disk full). Nothing was deleted.")),
+               expect="error"),
     ParityCase("trade_show_with_chart", trades_mod.handle_trade_show, args=("T0001",), stub=_stub()),
     ParityCase("trade_show_closed_no_chart", trades_mod.handle_trade_show, args=("T0002",), stub=_stub()),
     ParityCase("trade_show_missing", trades_mod.handle_trade_show, args=("NOPE",),
@@ -115,6 +167,9 @@ CASES = [
     ParityCase("trade_delete", trades_mod.handle_trade_delete, args=("T0003",), stub=_stub()),
     ParityCase("trade_delete_missing", trades_mod.handle_trade_delete, args=("NOPE",),
                stub=_stub(), expect="error"),
+    ParityCase("trades_clear_ends_plans", trades_mod.handle_trades_clear, stub=_ending_stub),
+    ParityCase("trade_delete_ends_plan", trades_mod.handle_trade_delete, args=("T0001",),
+               stub=_ending_stub),
     ParityCase("tradecharts_all", trades_mod.handle_tradecharts, args=("all", 3),
                stub=_stub(), expect="multi_send"),
     ParityCase("tradecharts_empty", trades_mod.handle_tradecharts, args=("loss",),

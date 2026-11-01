@@ -86,7 +86,7 @@ function payload(overrides: Partial<DashboardData> = {}): DashboardData {
     account_balance: 10000,
     open_pnl_pct: 1.2,
     open_pnl_amount: 120,
-    risk_used_pct: 3,
+    heat_enforced_pct: 3, risk_of_loss_pct: 1, risk_of_loss_amount: 100,
     risk_cap_pct: 20,
     open_trades: 2,
     avg_confidence: 3.5,
@@ -1143,7 +1143,7 @@ describe('Dashboard headline figures, merged into Trading performance', () => {
   });
 
   it('shows open risk as money and % of account, the cap beneath, linking to Risk', async () => {
-    const fixture = await loaded({ account_balance: 10000, risk_used_pct: 3, risk_cap_pct: 20 });
+    const fixture = await loaded({ account_balance: 10000, heat_enforced_pct: 3, risk_cap_pct: 20 });
     const tile = openRiskTile(fixture);
     expect(tile.value()).toBe('300 $ · 3.00%');
     expect(tile.secondary()).toBe('cap 2,000 $ · 20.00%');
@@ -1155,7 +1155,7 @@ describe('Dashboard headline figures, merged into Trading performance', () => {
   });
 
   it('never invents money without a balance', async () => {
-    expect(openRiskTile(await loaded({ account_balance: null, risk_used_pct: 3 })).value())
+    expect(openRiskTile(await loaded({ account_balance: null, heat_enforced_pct: 3 })).value())
       .toBe('— · 3.00%');
   });
 

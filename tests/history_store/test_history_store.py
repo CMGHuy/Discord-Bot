@@ -36,9 +36,11 @@ def _daily(dates, close=10.0):
 
 # --- paths --------------------------------------------------------------------
 
-def test_default_root_is_data_market_data(monkeypatch):
+def test_default_root_is_data_market_data(monkeypatch, tmp_path):
     monkeypatch.delenv("HISTORY_STORE_DIR", raising=False)
-    assert hs.store_root() == Path(config.DATA_DIR) / "market_data"
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
+    assert hs.store_root() == tmp_path / "data" / "market_data"
+    assert hs.store_root("watchlist") == tmp_path / "data" / "market_data"
 
 
 def test_env_override_is_read_on_every_call(monkeypatch, tmp_path):
@@ -188,3 +190,91 @@ def test_daily_round_trip_across_both_dst_changes(store_root):
     loaded = hs.load("AAPL", "daily")
     assert [d.strftime("%Y-%m-%d") for d in loaded.index] == DST_DAYS
     pd.testing.assert_frame_equal(loaded, fetched, check_freq=False)
+
+
+# --- v190: the PIT store root, worktree resolution ------------------------------------
+
+def _worktree(tmp_path, monkeypatch):
+    """A fake main checkout with a worktree under .claude/worktrees/wt1; DATA_DIR
+    points at the worktree's data/, as config computes it there."""
+    main = tmp_path / "repo"
+    wt_data = main / ".claude" / "worktrees" / "wt1" / "data"
+    wt_data.mkdir(parents=True)
+    monkeypatch.setattr(config, "DATA_DIR", str(wt_data))
+    monkeypatch.delenv("HISTORY_STORE_DIR", raising=False)
+    return main, wt_data
+
+
+def test_pit_root_is_data_market_data_pit(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
+    assert hs.store_root("pit") == tmp_path / "data" / "market_data_pit"
+    assert hs.PIT_DIRNAME == "market_data_pit"
+
+
+def test_pit_root_ignores_history_store_dir(monkeypatch, tmp_path):
+    """HISTORY_STORE_DIR is set on the VM and in tests; it must never redirect
+    the PIT store, and it still redirects the watchlist store."""
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("HISTORY_STORE_DIR", str(tmp_path / "elsewhere"))
+    assert hs.store_root("pit") == tmp_path / "data" / "market_data_pit"
+    assert hs.store_root() == tmp_path / "elsewhere"
+
+
+def test_unknown_store_is_rejected():
+    with pytest.raises(ValueError, match="unknown history store 'sp500_pit'"):
+        hs.store_root("sp500_pit")
+    assert hs.store_key(None) == hs.store_key("watchlist") == "watchlist"
+    assert hs.store_key("pit") == "pit"
+
+
+@pytest.mark.parametrize("store, dirname", [(None, "market_data"), ("pit", "market_data_pit")])
+def test_a_worktree_without_the_store_reads_the_main_checkouts(monkeypatch, tmp_path,
+                                                                store, dirname):
+    main, _ = _worktree(tmp_path, monkeypatch)
+    (main / "data" / dirname).mkdir(parents=True)
+    assert hs.store_root(store) == main / "data" / dirname
+
+
+@pytest.mark.parametrize("store, dirname", [(None, "market_data"), ("pit", "market_data_pit")])
+def test_a_worktrees_own_store_wins(monkeypatch, tmp_path, store, dirname):
+    main, wt_data = _worktree(tmp_path, monkeypatch)
+    (main / "data" / dirname).mkdir(parents=True)
+    (wt_data / dirname).mkdir()
+    assert hs.store_root(store) == wt_data / dirname
+
+
+def test_missing_everywhere_names_the_local_path(monkeypatch, tmp_path):
+    """No store in the worktree or the main checkout: the local path, so the
+    MissingStoreError message names where this checkout looked."""
+    _, wt_data = _worktree(tmp_path, monkeypatch)
+    assert hs.store_root("pit") == wt_data / "market_data_pit"
+
+
+def test_outside_a_worktree_nothing_falls_back(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "plain" / "data"))
+    (tmp_path / "data" / "market_data_pit").mkdir(parents=True)   # a sibling, not a main checkout
+    assert hs.resolve_data_root("market_data_pit") == tmp_path / "plain" / "data" / "market_data_pit"
+
+
+def test_store_keyword_reaches_paths_manifest_and_load(monkeypatch, tmp_path, store_root):
+    """store_root fixture sets HISTORY_STORE_DIR (the watchlist store); the PIT
+    store is a different tree under DATA_DIR, read only with store='pit'."""
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
+    pit = tmp_path / "data" / "market_data_pit"
+    assert hs.file_path("AAPL", "daily", store="pit") == pit / "daily" / "AAPL.csv"
+    assert hs.manifest_path("hourly", store="pit") == pit / "hourly" / hs.MANIFEST_NAME
+    assert hs.file_path("AAPL", "daily") == store_root / "daily" / "AAPL.csv"
+    _manifest(pit, "daily", {"AAPL": {"status": "ok"}})
+    assert hs.manifest("daily", store="pit")["tickers"] == {"AAPL": {"status": "ok"}}
+    assert hs.manifest("daily") is None
+    with pytest.raises(hs.MissingStoreError, match="market_data_pit"):
+        hs.require_manifest("hourly", store="pit")
+
+
+def test_pit_missing_manifest_message_names_the_pit_backfill(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "data"))
+    with pytest.raises(hs.MissingStoreError) as exc:
+        hs.require_manifest("daily", store="pit")
+    message = str(exc.value)
+    assert "--universe sp500_pit" in message
+    assert "TRAINING_DATA_SOURCE=yfinance" not in message

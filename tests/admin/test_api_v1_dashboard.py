@@ -6,7 +6,7 @@ nothing else -- the six that moved to Analytics (wins, losses, avg realised
 P&L, best trade, worst trade, avg holding period) are NOT here, and
 `test_relocated_metrics_are_absent` is what stops them drifting back.
 
-  primary   account_balance · open_pnl_pct · risk_used_pct
+  primary   account_balance · open_pnl_pct · heat_enforced_pct · risk_of_loss_pct
   chips     open_trades · avg_confidence · win_rate · expectancy ·
             equity_30d (sparkline series) · position_premium
 
@@ -32,7 +32,11 @@ DASHBOARD = {
     "account_balance": NULLABLE_NUMBER,
     "open_pnl_pct": NULLABLE_NUMBER,
     "open_pnl_amount": NULLABLE_NUMBER,
-    "risk_used_pct": NULLABLE_NUMBER,
+    # v189 B4 -- enforced heat (what the scanner gates on) and, beside it,
+    # risk of loss to the working stop. `risk_used_pct` was the first one.
+    "heat_enforced_pct": NULLABLE_NUMBER,
+    "risk_of_loss_pct": NULLABLE_NUMBER,
+    "risk_of_loss_amount": NULLABLE_NUMBER,
     "risk_cap_pct": NULLABLE_NUMBER,
     "open_trades": int,
     "avg_confidence": NULLABLE_NUMBER,
@@ -275,7 +279,7 @@ def test_risk_used_skips_the_full_portfolio_collector(seed, logged_in, monkeypat
     # Heat spans BOTH ledgers' open trades (it is portfolio exposure), unlike
     # the main-ledger-only figures beside it -- and never counts closed ones.
     expected = heat.open_heat([main_trade, weak_trade], body["account_balance"] or 0.0)
-    assert body["risk_used_pct"] == expected
+    assert body["heat_enforced_pct"] == expected
     assert body["risk_cap_pct"] is not None
 
 
@@ -644,7 +648,8 @@ AFTER = "2026-01-07T15:00:00+00:00"
 # read the window (open P&L is left out: it prices open trades live).
 _PARITY_KEYS = ("win_rate", "win_rate_n", "expectancy_r", "expectancy_n",
                 "payoff_ratio", "realized", "realized_weak", "lifecycle",
-                "open_trades", "risk_used_pct", "account_balance")
+                "open_trades", "heat_enforced_pct", "risk_of_loss_pct", "risk_of_loss_amount",
+                "account_balance")
 
 
 def _range(client, start=RANGE_FROM, end=RANGE_TO):

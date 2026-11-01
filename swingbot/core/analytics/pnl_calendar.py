@@ -166,19 +166,39 @@ def _detail_fields(part: dict, trade: dict) -> dict:
         "exit_reason": row_exit_reason(part, trade),
     }
 
+def _part_r(part: dict, entry: dict) -> float | None:
+    """The R a calendar row adds to its day.
+
+    A whole trade (one part) keeps today's rule: the journal's r_realized
+    when present (computed by the same `metrics.r_multiple` at close), else
+    `metrics.r_multiple`. A leg row adds its CONTRIBUTION (v189 B2):
+    `fraction x r`, the leg's stored r or, when it has none, the leg's own
+    exit priced by `metrics.r_multiple` (a leg row has `legs: None`, so that
+    prices the single exit). A +2R TP1 on half the position adds +1R.
+    """
+    if part["leg_total"] == 1:
+        journal_r = _float_or_none(entry.get("r_realized"))
+        return journal_r if journal_r is not None else metrics.r_multiple(part)
+    leg_r = part.get("leg_r")
+    if leg_r is None:
+        leg_r = metrics.r_multiple(part)
+    return metrics.leg_contribution_r({"fraction": part.get("fraction"), "r": leg_r})
+
+
 def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
     """One calendar row for one realized part of a trade.
 
     `part` is a row of `performance.expand_realized_legs`: the trade itself
     when it never scaled out, else one realized leg. A leg is counted as an
-    individual trade -- its own day, its own win/loss, its own R -- which is
-    how the Dashboard's Trades table and its chips count it too.
+    individual trade -- its own day, its own win/loss, its own contribution
+    to R -- which is how the Dashboard's Trades table and its chips count it
+    too.
 
     For a whole trade the journal's r_realized is authoritative when
     present: it was computed by the same metrics.r_multiple at close time,
-    and reusing it avoids a second answer for one trade. A leg's R is the
-    leg's own (`metrics.r_multiple` on a leg row prices that leg's exit); the
-    journal only ever recorded the blended R of the whole position.
+    and reusing it avoids a second answer for one trade. A leg's R is its
+    contribution, fraction x r (`_part_r`, v189 B2); the journal only ever
+    recorded the blended R of the whole position.
 
     `trade` is the part's parent record: a leg part has `legs: None`, and its
     exit reason only lives in `trade["legs"]` (see `row_exit_reason`).
@@ -187,9 +207,7 @@ def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
     if day is None:
         return None
     whole = part["leg_total"] == 1
-    r = _float_or_none(entry.get("r_realized")) if whole else None
-    if r is None:
-        r = metrics.r_multiple(part)
+    r = _part_r(part, entry)
     return {
         "trade_id": part.get("id"),
         # The Trades detail route is keyed by plan id when the trade has

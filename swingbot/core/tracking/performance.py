@@ -16,10 +16,13 @@ This is a paper-trade tracker -- it does not know about slippage, fees,
 partial fills, or gaps beyond what the daily bar shows.
 """
 import logging
+import math
 import secrets
 import string
+from contextlib import nullcontext
 from datetime import datetime, timezone, timedelta
 from threading import Lock
+from typing import TYPE_CHECKING
 
 # Full alphanumeric charset (62 chars: 0-9, a-z, A-Z) trade ids are drawn
 # from -- see log_trade() below.
@@ -30,6 +33,9 @@ from swingbot.core.planning import account as account_module
 from swingbot.core.planning import gap_sizing as gap_sizing_mod
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
 from swingbot.core.market.strategy_types import HORIZONS as _HORIZONS
+
+if TYPE_CHECKING:
+    from swingbot.core.tracking.plan_links import DeleteResult
 
 # Baseline horizon the raw NEAR_TP_TIMEOUT_MINUTES/NEAR_TP_STALL_CHECK_MINUTES
 # settings are tuned for -- see check_near_tp_timeout()'s horizon-scaling below.
@@ -116,29 +122,100 @@ def _after_close(trade: dict) -> None:
     _journal_close_safely(trade)
 
 
-def _close_linked_plan_safely(plan_id: str, reason: str) -> None:
+def run_after_commit(callbacks: list) -> None:
+    """Run the hooks a transaction collected, once it has committed. Each is a
+    zero-argument callable; one failing never stops the rest (v189 D3.2: the
+    journal and the snapshot are rebuildable, the committed close is not)."""
+    for callback in callbacks:
+        try:
+            callback()
+        except Exception:
+            log.warning("after-commit hook %r failed", callback, exc_info=True)
+
+
+def _with_conn(conn) -> dict:
+    """``{"conn": conn}`` inside a caller's transaction, else ``{}``, so a
+    standalone call is byte-identical to the pre-v189 call."""
+    return {} if conn is None else {"conn": conn}
+
+
+def _lock_for(conn):
+    """The process-local ``_LOCK`` for a standalone write. Inside a caller's
+    transaction the plan row lock serialises writers across processes, and no
+    threading lock may be held while waiting on a row lock (v189 D3.3)."""
+    return _LOCK if conn is None else nullcontext()
+
+
+def _locked_open_trade(plan_id: str, conn) -> dict | None:
+    """The plan's open trade, read on ``conn`` and row-locked there (lock order
+    plan -> trade -> account), in TradeLog's JSON shape; None when none is open."""
+    import sqlalchemy as sa
+    from swingbot.core.db.repositories.trades import OPEN_STATUS, trades_repo
+    from swingbot.core.db.schema import trades as trades_table
+    repo = trades_repo()
+    rows = repo.list_all(conn=conn, limit=1, where=sa.and_(
+        trades_table.c.doc["plan_id"].astext == plan_id,
+        trades_table.c.status == OPEN_STATUS))
+    if not rows:
+        return None
+    locked = repo.get_for_update(rows[0]["trade_id"], conn=conn)
+    if locked is None or locked.get("status") != OPEN_STATUS:
+        return None
+    return _json_record(locked)
+
+
+def _close_onto(t: dict, leg: dict | None, status: str, close_reason: str | None) -> None:
+    """Apply a terminal close to an open trade dict in place (no I/O)."""
+    if leg is not None:
+        append_leg(t, leg)
+    t["status"] = status
+    t["exit_price"] = (t["legs"][-1]["exit_price"] if t.get("legs")
+                       else t.get("exit_price"))
+    t["closed_at"] = datetime.now(timezone.utc).isoformat()
+    if close_reason is not None:
+        t["close_reason"] = close_reason
+
+
+def _close_linked_plan_safely(plan_id: str, reason: str, *, conn=None) -> None:
     """Close the v2 plan behind a trade row that was closed OUTSIDE the plan
     manager (today: a reversal). The row is only half the position; left
-    alone, the plan stays open in plans.json and the manager keeps stepping
-    it. A PENDING plan (placeholder trade still awaiting its trigger) can only
-    cancel; ACTIVE/PARTIAL close. Lazy imports like the hooks around it, and,
-    like them, it must never break the trade close it follows."""
+    alone, the plan stays open and the manager keeps stepping it. A PENDING
+    plan can only cancel; ACTIVE/PARTIAL close (plan_links.LINKED_TERMINAL).
+
+    v189 D3.2: with `conn` the plan ends inside the caller's transaction and
+    a failure RAISES -- a half-ended position is what this replaces, and a
+    swallowed SQL error would leave the transaction unusable anyway. Without
+    `conn` it runs in its own short transaction and, as before, never breaks
+    the trade close it follows."""
+    from swingbot.core.tracking import plan_links
+    if conn is not None:
+        plan_links.end_linked_plan(plan_id, reason, conn=conn)
+        return
     try:
-        from swingbot.core.planning.plan_engine import PlanStatus, record_transition
-        from swingbot.core.planning.plan_store import PlanStore
-        store = PlanStore()
-        plan = store.get(plan_id)
-        terminal = {PlanStatus.PENDING: PlanStatus.CANCELLED,
-                    PlanStatus.ACTIVE: PlanStatus.CLOSED,
-                    PlanStatus.PARTIAL: PlanStatus.CLOSED}.get(getattr(plan, "status", None))
-        if terminal is None:
-            return
-        record_transition(plan, terminal, reason=reason,
-                          at=datetime.now(timezone.utc).isoformat())
-        store.update(plan)
+        from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, transaction
+        with transaction(lock_timeout_ms=ADMIN_LOCK_TIMEOUT_MS) as tx:
+            plan_links.end_linked_plan(plan_id, reason, conn=tx)
     except Exception:
         log.warning(
             "could not close plan %s after its trade closed", plan_id, exc_info=True)
+
+
+def _end_plan_for_delete(trade: dict, *, conn):
+    """End the v2 plan behind a trade that is being deleted (v189 A7), in the
+    delete's transaction, and queue its notice. None for a legacy trade or a
+    plan that is already terminal."""
+    plan_id = trade.get("plan_id")
+    if not plan_id:
+        return None
+    from swingbot.core.tracking import plan_links
+    return plan_links.end_linked_plan(plan_id, plan_links.TRADE_DELETED_REASON,
+                                      conn=conn, notice=True)
+
+
+def _plan_lock_order(trade: dict) -> tuple:
+    """Plan rows lock in plan_id order (index lock-order rule); legacy rows last."""
+    plan_id = trade.get("plan_id")
+    return (plan_id is None, plan_id or "", trade["id"])
 
 
 def _refresh_snapshot_safely() -> None:
@@ -331,53 +408,21 @@ def closed_pnl_pct(t: dict) -> float | None:
 
 
 def closed_r_multiple(t: dict) -> float | None:
-    """Realized R-multiple for a closed trade: actual P&L against the
-    ORIGINALLY-planned risk (entry -> the plan's starting stop_loss), not
-    wherever a break-even/trail move may have since tightened it to.
+    """Realized R-multiple for a closed trade, rounded to 2 dp.
 
-    Same last-leg-only bug as closed_pnl_pct (which see) applies to R too:
-    a plain (exit_price - entry) / risk calculation only ever prices the
-    RUNNER's own leg for a scaled-out trade, dropping the TP1 leg's R
-    entirely. Each leg already carries its own `r` -- computed live by
-    plan_manager.py's _step_active/_close_runner against this exact same
-    original-risk denominator -- so the correct blended R-multiple is
-    simply the fraction-weighted sum of those (identical to how
-    plan_engine.py's own backtest simulator computes r_total for a
-    two-leg exit: `frac1 * rr + frac2 * r2`). A leg missing `r` (should
-    not happen on any trade logged after legs existed, but cheap to guard)
-    falls back to deriving it from that leg's own exit_price.
+    v189 D1: a thin delegate to `metrics.r_multiple`, the one trade-level R
+    (fraction-weighted across legs, against the ORIGINALLY-planned risk,
+    entry -> the plan's starting stop_loss). This used to be a second copy
+    of the same blend; the only behaviour difference is that a record whose
+    direction is not exactly ``bullish``/``bearish`` now returns None instead
+    of being priced as a short.
 
-    Falls back to the plain single-exit formula for a trade with no legs,
-    where the two agree exactly anyway.
+    Imported lazily: `swingbot.core.analytics`'s package ``__init__`` pulls in
+    modules that import this one.
     """
-    legs = t.get("legs")
-    if legs:
-        entry, stop_loss = t.get("entry"), t.get("stop_loss")
-        if not entry or not stop_loss:
-            return None
-        risk = abs(entry - stop_loss)
-        if not risk:
-            return None
-        sign = 1 if t.get("direction") == "bullish" else -1
-        total = 0.0
-        for leg in legs:
-            r = leg.get("r")
-            if r is None:
-                exit_p = leg.get("exit_price")
-                if exit_p is None:
-                    return None
-                r = (exit_p - entry) * sign / risk
-            total += leg.get("fraction", 0) * r
-        return round(total, 2)
-
-    ex, en, sl_v = t.get("exit_price"), t.get("entry"), t.get("stop_loss")
-    if not ex or not en or not sl_v:
-        return None
-    risk = abs(en - sl_v)
-    if not risk:
-        return None
-    realized = (ex - en) if t.get("direction") == "bullish" else (en - ex)
-    return round(realized / risk, 2)
+    from swingbot.core.analytics import metrics
+    r = metrics.r_multiple(t)
+    return None if r is None else round(r, 2)
 
 
 def _leg_status(leg: dict, entry: float | None, direction: str | None) -> str:
@@ -417,6 +462,12 @@ def expand_trade_legs(trade: dict) -> list[dict]:
     already-realized leg, not the fraction-weighted blend those two
     functions use for a still-nested multi-leg trade.
 
+    v189 B2: each leg row also carries `fraction` (that leg's share of the
+    original position; the remainder's share on the open row) and `leg_r`
+    (the leg's stored `r`, None when it has none or on the open row), so
+    anything that sums leg rows can weight them with
+    `metrics.leg_contribution_r`. A trade with no legs gains neither key.
+
     NOT a blanket drop-in: only some of a returned row's fields are
     leg-accurate. Leg-accurate are `status`, `shares`, `exit_price`,
     `closed_at`, and anything derived through
@@ -452,6 +503,10 @@ def expand_trade_legs(trade: dict) -> list[dict]:
             "entry": entry,
             "direction": direction,
             "stop_loss": stop_loss,
+            # v189 B2: the leg's share of the original position and its own
+            # stored R, so a sum can add its contribution (fraction x r).
+            "fraction": leg.get("fraction"),
+            "leg_r": leg.get("r"),
         })
 
     if trade.get("status") == "open":
@@ -465,6 +520,8 @@ def expand_trade_legs(trade: dict) -> list[dict]:
             ),
             "exit_price": None,
             "status": "open",
+            "fraction": remaining_fraction,
+            "leg_r": None,
         })
 
     return rows
@@ -496,8 +553,9 @@ def expand_realized_legs(trade: dict) -> list[dict]:
     table's leg rows carry.
 
     This is how the Dashboard's chips and the P&L calendar count a partial:
-    as an individual trade, on the day it banked, with its own outcome and
-    its own R (`metrics.r_multiple` on a row prices the leg's own exit).
+    as an individual trade, on the day it banked, with its own outcome. Its R
+    on the calendar is its contribution (`fraction x r`, v189 B2), not the
+    leg's R at full size.
     """
     expanded = expand_trade_legs(trade)
     total = len(expanded)
@@ -537,6 +595,38 @@ def _apply_exit_price(t: dict, price: float, reason: str) -> None:
             append_leg(t, {"fraction": remaining, "exit_price": price,
                            "r": r, "reason": reason})
     t["exit_price"] = price
+
+
+def _usable_price(price) -> bool:
+    """A price a close may settle at: finite and positive. A NaN quote is
+    truthy, so `if price:` let it write a NaN leg (v189 D4)."""
+    return price is not None and math.isfinite(price) and price > 0
+
+
+def _manual_close_label(t: dict) -> tuple[str, str | None]:
+    """(status, close_reason override) of a manual close (v189 D2).
+
+    Two or more realized legs: the sign of the unrounded net R
+    (`metrics.net_outcome`) -- win/loss keep the caller's reason, a scratch
+    or an uncomputable net replaces it with `scratch` / `unscored`. One leg or
+    none: today's `closed`, reason untouched, so single-leg labels never move.
+    Imported lazily: the analytics package imports this module."""
+    if len(t.get("legs") or []) < 2:
+        return "closed", None
+    from swingbot.core.analytics import metrics
+    return metrics.net_outcome(t)
+
+
+def _close_manually_onto(t: dict, price: float | None, reason: str) -> None:
+    """Apply a manual close to an open trade dict in place (no I/O): the
+    still-open remainder realized as one more leg at a usable `price`, then
+    the label."""
+    if _usable_price(price):
+        _apply_exit_price(t, price, reason="manual")
+    status, labelled = _manual_close_label(t)
+    t["status"] = status
+    t["closed_at"] = datetime.now(timezone.utc).isoformat()
+    t["close_reason"] = labelled or reason
 
 
 def _confidence_point_fields(points, unevaluated) -> dict:
@@ -637,6 +727,30 @@ def _manual_close_quote(ticker: str) -> float | None:
         return None
 
 
+def _realized_amount(t: dict) -> float | None:
+    """The trade's realized currency P&L, or None when the close settles
+    nothing (no share snapshot, no entry, an unsettled status, or a manual
+    close without an exit price). Pure: no account I/O."""
+    shares = t.get("shares")
+    entry = t.get("entry")
+    status = t.get("status")
+    if not shares or entry is None or status not in ("win", "loss", "closed"):
+        return None
+    if t.get("legs"):
+        # v2 two-leg trade: a runner scratch settles as status "closed",
+        # not "win"/"loss" -- settle_legs handles the sign/fraction math.
+        return settle_legs(t)
+    exit_price = t.get("exit_price")
+    # "closed" is included because a reversal exits early at the live price --
+    # real money moved, so it must hit the account balance like any win/loss.
+    # A manual admin close still no-ops: it records no exit_price.
+    if exit_price is None:
+        return None
+    is_bull = t.get("direction") == "bullish"
+    pnl_amount = shares * (exit_price - entry) if is_bull else shares * (entry - exit_price)
+    return round(pnl_amount, 2)
+
+
 class TradeLog:
     """The trade ledger. Every read goes to the `trades` table and every write
     is a row-level upsert/delete, so an instance holds no snapshot."""
@@ -648,9 +762,9 @@ class TradeLog:
         trades_repo().upsert(_db_record(trade), conn=conn)
 
     @staticmethod
-    def _db_delete(trade_id: str) -> None:
+    def _db_delete(trade_id: str, *, conn=None) -> None:
         from swingbot.core.db.repositories.trades import trades_repo
-        trades_repo().delete(trade_id)
+        trades_repo().delete(trade_id, conn=conn)
 
     @staticmethod
     def _db_delete_rows(status: str | None = None,
@@ -673,6 +787,33 @@ class TradeLog:
         """Every trade, in TradeLog's API shape."""
         from swingbot.core.db.repositories.trades import trades_repo
         return [_json_record(row) for row in trades_repo().list_all()]
+
+    def _open_trade_for_plan(self, plan_id: str, *, conn=None) -> dict | None:
+        """The plan's open trade. Standalone: from ``self._all()`` exactly as
+        before. Inside a transaction: read and row-locked on ``conn``."""
+        if conn is None:
+            return next((t for t in self._all()
+                         if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+        return _locked_open_trade(plan_id, conn)
+
+    def _open_trade_by_id(self, trade_id: str, *, conn=None) -> dict | None:
+        """The open trade `trade_id`. Standalone: from `self._all()` as before.
+        Inside a transaction: read and row-locked on `conn` (lock order plan ->
+        trade -> account), in TradeLog's JSON shape. None when not open."""
+        if conn is None:
+            return next((t for t in self._all()
+                         if t["id"] == trade_id and t["status"] == "open"), None)
+        from swingbot.core.db.repositories.trades import OPEN_STATUS, trades_repo
+        row = trades_repo().get_for_update(trade_id, conn=conn)
+        return _json_record(row) if row and row.get("status") == OPEN_STATUS else None
+
+    def _manual_close_price(self, trade_id: str, exit_price: float | None) -> float | None:
+        """The settlement price of a standalone manual close: the caller's, else
+        one live fetch for the open trade's ticker, made OUTSIDE any lock."""
+        if exit_price is not None:
+            return exit_price
+        trade = self._open_trade_by_id(trade_id)
+        return _manual_close_quote(trade["ticker"]) if trade else None
 
     def _shadow_sizing(self, strategy: str) -> dict | None:
         """What each E6 sizing mode WOULD have sized this trade at, computed
@@ -828,19 +969,19 @@ class TradeLog:
             self._db_upsert(record)
         return trade_id
 
-    def append_leg_by_plan(self, plan_id: str, leg: dict) -> None:
+    def append_leg_by_plan(self, plan_id: str, leg: dict, *, conn=None) -> None:
         """Bank a leg (e.g. TP1 partial) onto the still-open v2 trade this
         plan created. No-op if the plan's trade can't be found (log_trade
-        may have failed, or trade_log was wired in after the fill)."""
-        with _LOCK:
-            t = next((t for t in self._all()
-                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+        may have failed, or trade_log was wired in after the fill). With
+        ``conn`` the leg commits or rolls back with the plan's transition."""
+        with _lock_for(conn):
+            t = self._open_trade_for_plan(plan_id, conn=conn)
             if t is None:
                 return
             append_leg(t, leg)
-            self._db_upsert(t)
+            self._db_upsert(t, conn=conn)
 
-    def record_plan_fill(self, plan_id: str, fill_price: float) -> str | None:
+    def record_plan_fill(self, plan_id: str, fill_price: float, *, conn=None) -> str | None:
         """Move the placeholder trade a stop_entry plan_v2 got at scan-detection
         time (see scan_run.py's log_trade() call, fired while the plan is still
         PENDING and waiting for its trigger) onto its real fill price.
@@ -856,10 +997,12 @@ class TradeLog:
         Deliberately does NOT create a new trade itself: a second log_trade()
         call here is exactly the bug this method replaces -- two trade
         records for one plan_id, of which close_plan_trade() only ever
-        finds and closes one, leaving the other open forever."""
-        with _LOCK:
-            t = next((t for t in self._all()
-                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+        finds and closes one, leaving the other open forever.
+
+        With ``conn`` the fill commits or rolls back with the plan's ACTIVE
+        transition (v189 D3.1)."""
+        with _lock_for(conn):
+            t = self._open_trade_for_plan(plan_id, conn=conn)
             if t is None:
                 return None
             t["entry"] = fill_price
@@ -869,10 +1012,10 @@ class TradeLog:
                 t["shares"] = sizing["shares"]
                 t["position_value"] = sizing["position_value"]
                 t["sizing_mode"] = sizing["mode"]
-            self._db_upsert(t)
+            self._db_upsert(t, conn=conn)
             return t["id"]
 
-    def discard_plan_placeholder(self, plan_id: str) -> bool:
+    def discard_plan_placeholder(self, plan_id: str, *, conn=None) -> bool:
         """Remove the still-open placeholder trade a PENDING plan_v2 got at
         scan-detection time (see scan_run.py's log_trade() call), for a plan
         that was cancelled before it ever filled.
@@ -883,41 +1026,49 @@ class TradeLog:
         invent a trade that never happened and double up win/loss/expectancy
         stats. Returns False if no open placeholder exists for this plan
         (already handled, or trade_log was wired in after the alert)."""
-        with _LOCK:
-            t = next((t for t in self._all()
-                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+        with _lock_for(conn):
+            t = self._open_trade_for_plan(plan_id, conn=conn)
             if t is None:
                 return False
-            self._db_delete(t["id"])
+            self._db_delete(t["id"], conn=conn)
         return True
 
-    def close_plan_trade(self, plan_id: str, leg: dict | None, status: str, *, conn=None) -> None:
+    def close_plan_trade(self, plan_id: str, leg: dict | None, status: str, *, conn=None,
+                         close_reason: str | None = None,
+                         after_commit: list | None = None) -> dict | None:
         """Final leg + terminal status for a v2 plan's trade. `leg` is the
         real leg dict for a runner close; the caller (PlanManager._on_event,
         which has the TradePlanV2 and so can recompute the r-multiple)
         synthesizes a fraction=1.0 leg for a pre-TP1 loss/scratch that
         closes the ORIGINAL single position -- this method just appends
-        whatever it's given so settle_legs always has a leg to work from."""
-        closed_trade = None
-        with _LOCK:
-            t = next((t for t in self._all()
-                      if t.get("plan_id") == plan_id and t["status"] == "open"), None)
+        whatever it's given so settle_legs always has a leg to work from.
+
+        v189 D3.2: with ``conn`` the close and its balance point join the
+        caller's transaction (a failed balance write raises). The journal hook
+        and the snapshot refresh are appended to ``after_commit`` when the
+        caller passes a list, to run once it has committed
+        (``run_after_commit``); with no list they run at once, as before.
+        Returns the closed trade, or None when the plan has no open trade."""
+        with _lock_for(conn):
+            t = self._open_trade_for_plan(plan_id, conn=conn)
             if t is None:
-                return
-            if leg is not None:
-                append_leg(t, leg)
-            t["status"] = status
-            t["exit_price"] = (t["legs"][-1]["exit_price"] if t.get("legs")
-                               else t.get("exit_price"))
-            t["closed_at"] = datetime.now(timezone.utc).isoformat()
-            self._settle_account_balance(t)
+                return None
+            _close_onto(t, leg, status, close_reason)
+            if conn is None:
+                self._settle_account_balance(t)
+            else:
+                self._settle_account_balance(t, conn=conn)
             _restamp_taken_by(t, plan_id)
             closed_trade = dict(t)
             self._db_upsert(t, conn=conn)
-        _after_close(closed_trade)
-        _refresh_snapshot_safely()
+        hooks = [lambda: _after_close(closed_trade), lambda: _refresh_snapshot_safely()]
+        if after_commit is None:
+            run_after_commit(hooks)
+        else:
+            after_commit.extend(hooks)
+        return closed_trade
 
-    def _settle_account_balance(self, t: dict) -> None:
+    def _settle_account_balance(self, t: dict, *, conn=None) -> None:
         """
         Computes this trade's realized currency P&L -- using the share
         count SNAPSHOTTED at log_trade() time, not today's account
@@ -940,44 +1091,29 @@ class TradeLog:
         Call this BEFORE saving `t` to disk (inside the same lock the
         caller already holds) so realized_pnl_amount/account_balance_after
         land in the same write instead of needing a second save.
+
+        v189 D3.2: with ``conn`` the balance point is written in the caller's
+        transaction and a failure RAISES, rolling the whole close back -- a
+        close without its balance point is the half-write this replaces.
+        Without ``conn`` a failure is logged and swallowed, as before.
         """
-        shares = t.get("shares")
-        entry = t.get("entry")
-        status = t.get("status")
-        if not shares or entry is None:
+        pnl_amount = _realized_amount(t)
+        if pnl_amount is None:
             return
-        if t.get("legs"):
-            # v2 two-leg trade: a runner scratch settles as status "closed",
-            # not "win"/"loss" -- settle_legs handles the sign/fraction math.
-            if status not in ("win", "loss", "closed"):
-                return
-            pnl_amount = settle_legs(t)
-            if pnl_amount is None:
-                return
-        else:
-            exit_price = t.get("exit_price")
-            # "closed" is included because a reversal exits early at the live
-            # price -- real money moved, so it must hit the account balance
-            # like any win/loss. A manual admin close still no-ops, because it
-            # records no exit_price and is caught by the check above it.
-            if exit_price is None or status not in ("win", "loss", "closed"):
-                return
-            is_bull = t.get("direction") == "bullish"
-            pnl_amount = shares * (exit_price - entry) if is_bull else shares * (entry - exit_price)
-            pnl_amount = round(pnl_amount, 2)
+        meta = {"trade_id": t.get("id"), "ticker": t.get("ticker"), "status": t.get("status")}
         try:
-            updated_cfg = account_module.apply_realized_pnl(
-                pnl_amount, {"trade_id": t.get("id"), "ticker": t.get("ticker"), "status": t.get("status")},
-            )
-            t["realized_pnl_amount"] = pnl_amount
-            t["account_balance_after"] = updated_cfg.get("balance")
+            updated_cfg = account_module.apply_realized_pnl(pnl_amount, meta, **_with_conn(conn))
         except Exception:
-            # Account bookkeeping must never prevent the trade itself from
-            # closing -- worst case the account balance simply doesn't
-            # reflect this one trade yet. Logged, though: a silent miss here
+            if conn is not None:
+                raise
+            # Standalone close: account bookkeeping must never prevent the
+            # trade itself from closing. Logged, though: a silent miss here
             # leaves the balance wrong with nothing to say why.
             log.warning(
                 "account settlement failed for trade %s", t.get("id"), exc_info=True)
+            return
+        t["realized_pnl_amount"] = pnl_amount
+        t["account_balance_after"] = updated_cfg.get("balance")
 
     def update_open_trades(self, ticker: str, df, live_price: float | None = None) -> list:
         """
@@ -1357,30 +1493,47 @@ class TradeLog:
 
         A plan-linked (v2) trade is realized the way close_trade_manual
         realizes one: any runner remainder left after TP1 becomes its own leg
-        at `exit_price`, so settle_legs prices the whole position. Its plan is
-        then closed too (see _close_linked_plan_safely), or the plan manager
-        would keep managing a position that no longer exists.
+        at `exit_price`, so settle_legs prices the whole position.
+
+        v189 A1/D3: one transaction on the bot's lock timeout, lock order plan
+        -> trade -> account. A trade whose plan is still PENDING under its row
+        lock is a never-filled placeholder, not a position: the plan is
+        cancelled, the placeholder discarded, no P&L booked, and None is
+        returned. Otherwise the trade closes, its balance point and its plan's
+        CLOSED transition commit together, and the journal and snapshot hooks
+        run after commit.
 
         Returns the closed record, or None if the trade was not open (a
-        parallel tick may have closed it first).
+        parallel tick may have closed it first) or was a placeholder.
         """
-        closed = None
-        with _LOCK:
-            for t in self._all():
-                if t["id"] == trade_id and t["status"] == "open":
-                    _apply_exit_price(t, exit_price, reason="reversed")
-                    t["status"] = "closed"
-                    t["closed_at"] = datetime.now(timezone.utc).isoformat()
-                    t["close_reason"] = "reversed"
-                    self._settle_account_balance(t)
-                    closed = dict(t)
-                    self._db_upsert(t)
-                    break
+        from swingbot.core.db.engine import BOT_LOCK_TIMEOUT_MS, transaction
+        from swingbot.core.tracking import plan_links
+        found = self._open_trade_by_id(trade_id)
+        plan_id = found.get("plan_id") if found else None
+        with transaction(lock_timeout_ms=BOT_LOCK_TIMEOUT_MS) as tx:
+            if plan_id and plan_links.cancel_unfilled_in(plan_id, "reversed", conn=tx):
+                return None
+            closed = self._reverse_open_trade(trade_id, exit_price, conn=tx)
+            if closed is not None and plan_id:
+                _close_linked_plan_safely(plan_id, reason="reversed", conn=tx)
         if closed is not None:
-            if closed.get("plan_id"):
-                _close_linked_plan_safely(closed["plan_id"], reason="reversed")
-            _after_close(closed)
-            _refresh_snapshot_safely()
+            run_after_commit([lambda: _after_close(closed), lambda: _refresh_snapshot_safely()])
+        return closed
+
+    def _reverse_open_trade(self, trade_id: str, exit_price: float, *, conn) -> dict | None:
+        """The reversal close of one open trade inside `conn`'s transaction:
+        the runner remainder as a leg, `closed`/`reversed`, and its balance
+        point (a failed balance write raises). None when it is not open."""
+        t = self._open_trade_by_id(trade_id, conn=conn)
+        if t is None:
+            return None
+        _apply_exit_price(t, exit_price, reason="reversed")
+        t["status"] = "closed"
+        t["closed_at"] = datetime.now(timezone.utc).isoformat()
+        t["close_reason"] = "reversed"
+        self._settle_account_balance(t, conn=conn)
+        closed = dict(t)
+        self._db_upsert(t, conn=conn)
         return closed
 
     def has_open_trade(self, ticker: str, strategy: str, horizon_key: str, direction: str) -> bool:
@@ -1478,7 +1631,8 @@ class TradeLog:
         return False
 
     def close_trade_manual(self, trade_id: str, reason: str = "manual", *,
-                           exit_price: float | None = None) -> bool:
+                           exit_price: float | None = None, conn=None,
+                           after_commit: list | None = None) -> bool:
         """
         Marks an open trade as closed, fetching the live market price to
         stand in as its exit (used by the admin UI's "Close" button -- a
@@ -1497,38 +1651,40 @@ class TradeLog:
         second fetch happens, so the stamp and the trade carry one price.
         None keeps the fetch above.
 
-        Locked the same way as every other mutator here so a concurrent
-        write from the bot's own scan loop (a different process, same
-        trades table) can't race with it and corrupt or lose data. The
-        price fetch itself happens OUTSIDE the lock (it's a network call)
-        and is re-validated against the trade's live status once inside.
+        v189 D2: a close that leaves two or more realized legs is labelled by
+        the sign of its net R (`metrics.net_outcome`); one leg or none stays
+        `closed`, as before.
+
+        Concurrency (v189 D3.3). Standalone (no `conn`), the read-modify-write
+        runs under the process-local `_LOCK`, the price fetch outside it --
+        that guards this process only. Cross-process protection comes from
+        the database: with `conn` the trade row is locked (`SELECT ... FOR
+        UPDATE`) inside the caller's transaction, which has already locked
+        the plan row, so a bot close of the same position waits or is
+        refused. With `conn` nothing is fetched (no network inside a row
+        lock), the balance point is written in the same transaction (a
+        failure raises and rolls the close back), and the journal / snapshot
+        hooks go to `after_commit` when given.
         Returns True if a matching OPEN trade was found and closed.
         """
-        with _LOCK:
-            ticker = next((t["ticker"] for t in self._all()
-                           if t["id"] == trade_id and t["status"] == "open"), None)
-        price = exit_price
-        if ticker and price is None:
-            price = _manual_close_quote(ticker)
-
-        closed_trade = None
-        with _LOCK:
-            for t in self._all():
-                if t["id"] == trade_id and t["status"] == "open":
-                    if price:
-                        _apply_exit_price(t, price, reason="manual")
-                    t["status"] = "closed"
-                    t["closed_at"] = datetime.now(timezone.utc).isoformat()
-                    t["close_reason"] = reason
-                    self._settle_account_balance(t)
-                    self._db_upsert(t)
-                    closed_trade = t
-                    break
-        if closed_trade is not None:
-            _after_close(closed_trade)
-            _refresh_snapshot_safely()
-            return True
-        return False
+        price = exit_price if conn is not None else self._manual_close_price(trade_id, exit_price)
+        with _lock_for(conn):
+            t = self._open_trade_by_id(trade_id, conn=conn)
+            if t is None:
+                return False
+            _close_manually_onto(t, price, reason)
+            if conn is None:
+                self._settle_account_balance(t)
+            else:
+                self._settle_account_balance(t, conn=conn)
+            closed_trade = dict(t)
+            self._db_upsert(t, conn=conn)
+        hooks = [lambda: _after_close(closed_trade), lambda: _refresh_snapshot_safely()]
+        if after_commit is None:
+            run_after_commit(hooks)
+        else:
+            after_commit.extend(hooks)
+        return True
 
     def backfill_exit_price(self, trade_id: str, price: float) -> bool:
         """One-time repair for a trade that closed with no exit price on
@@ -1555,20 +1711,56 @@ class TradeLog:
                     return True
         return False
 
-    def delete_trade(self, trade_id: str) -> bool:
-        """Remove a single trade record by id. Returns True if something was deleted."""
-        with _LOCK:
-            return bool(self._db_delete_rows(trade_id=trade_id))
+    def delete_trade(self, trade_id: str) -> "DeleteResult":
+        """Remove one trade record by id, any status. v189 A7: its linked plan
+        ends in the same transaction -- PENDING cancels, ACTIVE/PARTIAL close
+        with no P&L -- with its feed / follow notice queued. Falsy when nothing
+        was deleted. LockTimeout propagates and nothing changes."""
+        from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, transaction
+        from swingbot.core.db.repositories.trades import trades_repo
+        from swingbot.core.tracking.plan_links import DeleteResult
+        trade = next((t for t in self._all() if t["id"] == trade_id), None)
+        if trade is None:
+            return DeleteResult(0)
+        with transaction(lock_timeout_ms=ADMIN_LOCK_TIMEOUT_MS) as tx:
+            ended = _end_plan_for_delete(trade, conn=tx)
+            removed = int(trades_repo().delete(trade_id, conn=tx))
+        return DeleteResult(removed, (ended,) if ended else ())
 
-    def clear_history(self) -> int:
-        """Delete all closed (win/loss/manually-closed) trade records, leaving open trades untouched."""
-        with _LOCK:
-            return self._db_delete_rows("closed")
+    def clear_history(self, *, force: bool = False) -> int:
+        """v189 A6: the archived full reset (`account_reset.reset_closed_history`);
+        returns how many closed trades it removed. Raises ResetRefused while the
+        kill switch is tripped unless forced, ArchiveFailed when the archive
+        cannot be written (then nothing is deleted). No `_LOCK`: the reset
+        serialises on a Postgres table lock."""
+        from swingbot.core.tracking import account_reset   # lazy: it imports this module
+        return account_reset.reset_closed_history(force=force).removed_trades
 
-    def clear_open(self) -> int:
-        """Delete every trade currently in status='open', leaving closed win/loss history untouched."""
-        with _LOCK:
-            return self._db_delete_rows("open")
+    def clear_open(self) -> "DeleteResult":
+        """Delete every open trade this call reads, leaving closed history
+        untouched, and end each one's linked plan in the same transaction
+        (v189 A7). Plan rows lock in plan_id order, each trade row after its
+        plan; a trade closed meanwhile is kept. LockTimeout propagates and
+        nothing changes."""
+        from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, transaction
+        from swingbot.core.tracking.plan_links import DeleteResult
+        doomed = sorted((t for t in self._all() if t["status"] == "open"), key=_plan_lock_order)
+        if not doomed:
+            return DeleteResult(0)
+        with transaction(lock_timeout_ms=ADMIN_LOCK_TIMEOUT_MS) as tx:
+            outcomes = [self._delete_open_with_plan(t, conn=tx) for t in doomed]
+        return DeleteResult(sum(removed for removed, _ in outcomes),
+                            tuple(ended for _, ended in outcomes if ended))
+
+    def _delete_open_with_plan(self, trade: dict, *, conn) -> tuple:
+        """(rows removed, EndedPlan | None) for one open trade inside `conn`:
+        the plan first, then the trade row under its lock, deleted only if
+        it is still open."""
+        from swingbot.core.db.repositories.trades import trades_repo
+        ended = _end_plan_for_delete(trade, conn=conn)
+        if self._open_trade_by_id(trade["id"], conn=conn) is None:
+            return 0, ended
+        return int(trades_repo().delete(trade["id"], conn=conn)), ended
 
     def clear_all(self) -> int:
         """Delete every trade record. Returns how many were removed."""

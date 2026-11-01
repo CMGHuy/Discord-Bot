@@ -306,7 +306,7 @@ def test_a_banked_tp1_partial_counts_on_the_day_it_closed(seed, logged_in):
     body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
     leg = next(t for t in body["trades"] if t["trade_id"] == "m" * 16)
     assert (leg["leg_index"], leg["leg_total"]) == (0, 2)
-    assert leg["r_multiple"] == pytest.approx(2.0)
+    assert leg["r_multiple"] == pytest.approx(1.0)    # contribution: 0.5 x +2R
 
 
 # --- v165: day context and breakdown on the day route ----------------------
@@ -385,7 +385,7 @@ def test_a_leg_row_on_the_day_route_carries_its_own_d1_fields(seed, logged_in):
     # 2026-08-01T14:00Z -> 2026-08-03T15:00Z.
     assert leg["held_hours"] == 49.0
     assert body["breakdown"]["exit_reason"] == [
-        {"key": "tp1", "n": 1, "pnl_amount": 50.0, "r": 2.0, "win_rate": 100.0}]
+        {"key": "tp1", "n": 1, "pnl_amount": 50.0, "r": 1.0, "win_rate": 100.0}]
 
 
 def test_the_day_route_still_404s_before_computing_context(seed, logged_in):

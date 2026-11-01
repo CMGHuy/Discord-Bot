@@ -286,3 +286,17 @@ Run 2026-10-23, serially: staff-engineer (opus), quant-engineer (sonnet), risk-m
 - risk-manager: deleting ends monitoring silently. Applied: the confirmation names the positions and states the effects. The cancel notice is test-pinned.
 - risk-manager: A1 fill race. Applied: the fill check runs in the locked transaction.
 - risk-manager: one stuck lock stalls the poll. Applied: a 1s skip-and-requeue on the bot path, with stop-bearing plans first.
+
+## Panel review (pre-close-out, 2026-10-30)
+
+staff-engineer, quant-engineer and risk-manager reviewed the merged diff (`1dce1450^1...1dce1450^2`): no BLOCKING finding. Every ADVISORY is carried forward, none applied in v189.
+
+- staff-engineer: pre-action "Clear open positions" dialog is generic; the ended positions are named in the notice and Discord reply (spec met) -- rejected: not a breach, UX follow-up.
+- staff-engineer: reset archives under `data/archives/` are outside `pg_dump` and `/backup-pull`, have no owner and no retention rule -- carried forward.
+- staff-engineer: the reset's EXCLUSIVE lock on plans/trades/balance history lasts through the archive write and read-back, stalling scans and alert issuance; not written in known-traps -- carried forward.
+- quant-engineer: `LABEL_BASIS_SINCE` is the merge date (2026-10-30), the deploy follows; amend in the deploy commit if it slips -- carried forward.
+- quant-engineer: `r_multiple` rounds to 2 dp only for legged trades; no finite check on the expectancy path (NaN leg R makes the mean NaN); `_close_runner` stores 0.0 runner R for malformed risk; `closed_r_multiple` now yields an R for a zero exit price/entry -- carried forward.
+- quant-engineer: live and backtest win rates are on different bases from the label date; ExpR unaffected -- carried forward to the metric-definitions spec.
+- risk-manager: a reset restarts the drawdown ladder and loss-streak damper (accepted by the spec); the confirmation and the restore dry run should name the throttle/drawdown state they lift or bring back -- carried forward.
+- risk-manager: dashboard `_risk_figures` swallows failures silently instead of `swallowed()`; `position_risk_of_loss` prices a trade whose `plan_id` has no plan row as held -- carried forward.
+- risk-manager (unverified): check that a PARTIAL runner open across a reset keeps its TP1 leg rows -- carried forward, to verify.

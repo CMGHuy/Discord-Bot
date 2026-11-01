@@ -1,0 +1,19 @@
+{
+  "Support/Resistance": {
+    "n_eval": 283,
+    "wins": 102,
+    "losses": 181,
+    "scratches": 59,
+    "timeouts": 0,
+    "closed": 342,
+    "win_rate": 36.042402826855124,
+    "expectancy_r": 0.32009649122807016,
+    "excluded_share": 0.17251461988304093,
+    "avg_win_r": 2.847774509803921,
+    "max_dd_pct": -20.638571635634445,
+    "runner_tp2_pct": 15.686274509803921,
+    "runner_trail_pct": 26.47058823529412,
+    "runner_be_pct": 56.86274509803921,
+    "runner_timeout_pct": 0.9803921568627451
+  }
+}
