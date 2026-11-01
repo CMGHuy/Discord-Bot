@@ -493,7 +493,7 @@ git commit -m "feat(v192): measure_arms --baseline-knob -- baseline arm under it
 
 **Why a separate replay:** `observing` is in-process (V192-6), and `measure_arms` runs each arm in a `ProcessPoolExecutor`; a callback registered in the driver never sees a worker's decisions. The census therefore replays the **component** arm once more, observing inside each worker, and returns plain dicts. It costs one more arm's wall time per run; part 4's runner budgets for it. The arm rows are never touched, and a census failure only warns (the existing `_write_sidecar_or_warn` contract): V192-18's judges refuse a v192 validation without the sidecar.
 
-- [ ] **Step 1: Write the failing tests** — create `tests/backtesting/arms/test_gap_reclaim_census.py`
+- [x] **Step 1: Write the failing tests** — create `tests/backtesting/arms/test_gap_reclaim_census.py`
 
 ```python
 """V192-15: the gap-reclaim census -- every next-open market decision the component replay makes,
@@ -733,7 +733,7 @@ def test_a_census_failure_only_warns(monkeypatch, tmp_path, capsys, fake_produce
 
 Check the median in `test_reachability_summary_reports_the_gap_over_atr_distribution` by hand before running: the six non-None gaps sorted are `-0.2, 0.05, 0.12, 0.30, 0.60, 2.6`; `numpy.quantile(..., 0.5)` is the mean of the middle two, `(0.12 + 0.30) / 2 = 0.21`. At or above 0.10: `0.12, 0.30, 0.60, 2.6` (4); at or above 0.25: 3; at or above 0.5: 2.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_census.py
@@ -741,7 +741,7 @@ python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_censu
 
 Expected: FAIL at collection — `ModuleNotFoundError: No module named 'swingbot.core.backtesting.arms.gap_reclaim_census'`.
 
-- [ ] **Step 3: Create `swingbot/core/backtesting/arms/gap_reclaim_census.py`**
+- [x] **Step 3: Create `swingbot/core/backtesting/arms/gap_reclaim_census.py`**
 
 ```python
 """v192: the gap-reclaim census -- one row per next-open market decision the component replay makes.
@@ -898,7 +898,7 @@ def load_sidecar(arms_path) -> dict | None:
     return json.loads(path.read_text(encoding="utf-8"))
 ```
 
-- [ ] **Step 4: The sidecar builder in `scripts/backtest/measure_arms.py`**
+- [x] **Step 4: The sidecar builder in `scripts/backtest/measure_arms.py`**
 
 Add after `turtle_soup_sidecar` (`:272`):
 
@@ -944,7 +944,7 @@ v192: --knob GAP_RECLAIM_ATR=g (> 0) also writes <out stem>.gap_reclaim.json, th
 
 `repriced_absent_from_component` is a health count: a reclaimed plan whose walk booked `no_trade` has no arm row. Part 4 records it beside the strata; a large value means the census and the arm disagree and the run stops for review.
 
-- [ ] **Step 5: Run the census tests, the neighbours and the gate**
+- [x] **Step 5: Run the census tests, the neighbours and the gate**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_census.py
@@ -956,7 +956,7 @@ python scripts/dev/complexity_gate.py
 
 Expected: `0 failed` each; the gate passes (`census` cc 3, `_results` cc 5, `gap_reclaim_sidecar` cc 4). If `test_the_veto_census_pairs_with_the_component_rows` finds no rows, the fixture has no market plan on the 4w horizon: widen its horizons to `("2w", "4w", "3m")` (the golden of V192-1 uses the same frame) rather than weaken the assertions.
 
-- [ ] **Step 6: Commit (in the worktree)**
+- [x] **Step 6: Commit (in the worktree)**
 
 ```bash
 git add swingbot/core/backtesting/arms/gap_reclaim_census.py scripts/backtest/measure_arms.py tests/backtesting/arms/test_gap_reclaim_census.py

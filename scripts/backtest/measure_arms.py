@@ -4,6 +4,7 @@
 v147: `--record-blocked PATH [--from --to]` writes TRAIN compression gate rows instead (see `record_blocked_main`).
 v180: --knob TURTLE_SOUP_RESEARCH_MODE=structural also writes <out stem>.turtle_soup.json (see turtle_soup_sidecar).
 v192: --baseline-knob ATTR=value runs the BASELINE arm under its own delta (stamped as baseline_knob_delta).
+v192: --knob GAP_RECLAIM_ATR=g (> 0) also writes <out stem>.gap_reclaim.json, the census (see gap_reclaim_sidecar).
 """
 from __future__ import annotations
 
@@ -310,8 +311,34 @@ def turtle_soup_sidecar(blob, delta, universe, spec) -> dict | None:
             "matches_component_rows": _matches_component_rows(measured["rows"], blob, spec)}
 
 
+GAP_RECLAIM_KNOB = "GAP_RECLAIM_ATR"
+
+
+def gap_reclaim_sidecar(blob, delta, universe, spec) -> dict | None:
+    """v192: every next-open market decision of the component arm (the census), replayed under
+    the same delta. None unless the component sets GAP_RECLAIM_ATR > 0 (the next-open basis run
+    has nothing to label). The stamped arm rows are never touched."""
+    if not float(delta.get(GAP_RECLAIM_KNOB) or 0.0) > 0.0:
+        return None
+    from swingbot.core.backtesting.arms import gap_reclaim_census as grc
+    stamp = blob.get("provenance") or {}
+    rows = grc.census(universe, stamp.get("engines") or DEFAULT_ENGINES,
+                      stamp.get("horizons") or windows.ALL_HORIZONS, tuple(spec.signal_window), delta,
+                      workers=_resolve_replay_workers(None))
+    component, _ = _component_and_spans(blob, spec)
+    stamped = {grc.row_key(dict(row, signal_date=row["entry_date"])) for row in component}
+    repriced = grc.repriced_keys(rows)
+    return {"knob_delta": dict(delta), "baseline_knob_delta": stamp.get("baseline_knob_delta") or {},
+            "signal_window": list(spec.signal_window), "universe_count": len(universe),
+            "summary": grc.reachability_summary(rows),
+            "repriced_in_component": len(repriced & stamped),
+            "repriced_absent_from_component": len(repriced - stamped), "rows": rows}
+
+
 #: (file suffix, builder name) per sidecar; looked up by name so a test can monkeypatch the builder.
-_SIDECARS = (("diagnostics", "compression_sidecar"), ("turtle_soup", "turtle_soup_sidecar"))
+#: "gap_reclaim" is gap_reclaim_census.SIDECAR_SUFFIX (pinned by test_gap_reclaim_census.py).
+_SIDECARS = (("diagnostics", "compression_sidecar"), ("turtle_soup", "turtle_soup_sidecar"),
+             ("gap_reclaim", "gap_reclaim_sidecar"))
 
 
 def _write_sidecar(out: Path, sidecar, suffix: str = "diagnostics") -> None:
