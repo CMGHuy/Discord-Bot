@@ -67,3 +67,15 @@ def test_reviewer_reads_the_handoff_not_the_report():
     body = _agent("task-reviewer")
     assert "never the implementer's report" in body
     assert "`[spec]` finding" in body
+
+
+def test_task_brief_fills_only_the_two_slots():
+    skill = _text(".claude/skills/task-brief/SKILL.md")
+    assert task_handoff.PREFLIGHT_SLOT in skill
+    assert task_handoff.CODE_SLOT in skill
+    assert "task_handoff.py" in skill
+    assert "`## Task`" in skill
+    assert "12 KB" in skill and "path:line-range" in skill
+    assert '"^### Task <id>:"' in skill
+    for check in "abcdefgh":
+        assert f"**3{check}." in skill, f"trap check 3{check} must stay"

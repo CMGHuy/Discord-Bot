@@ -161,8 +161,10 @@ def _rule_huge_implemented_plan(ti: dict):
         return None
     return _deny(
         f"That file is {size // 1024} KB (~{size // 4 // 1000}K tokens) and reading it "
-        "whole would consume a large share of this session. Pull the one task instead: "
-        '/task-brief <id>, or grep -n "^### Task <id>" -A 120 <plan>. '
+        "whole would consume a large share of this session. Pull the one task instead. "
+        "An implementer gets it in its handoff file: python scripts/dev/task_handoff.py "
+        '<plan> <id> --worktree <wt> --attribution "<line>", then /task-brief <handoff path>. '
+        'Otherwise /task-brief <id>, or grep -n "^### Task <id>:" -A 120 <plan>. '
         'Use grep -c "^### Task" to orient first.'
     )
 

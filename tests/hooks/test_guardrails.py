@@ -200,7 +200,10 @@ def test_reading_a_huge_implemented_plan_is_denied(tmp_path):
     big.write_text("x" * 200_000)
     out = evaluate({"tool_name": "Read", "tool_input": {"file_path": str(big)}})
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "task-brief" in out["hookSpecificOutput"]["permissionDecisionReason"]
+    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "task-brief" in reason
+    assert "task_handoff.py" in reason
+    assert '"^### Task <id>:"' in reason
 
 
 def test_reading_a_small_implemented_plan_is_allowed(tmp_path):
