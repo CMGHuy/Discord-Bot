@@ -214,9 +214,7 @@ Read the `docs/claude/` file before acting:
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
   exit 0 (allow-list entries carry a reason and a date; its `hint` check fails
   an off-screen or covered `sb-hint` popover, and its `rail-label` check fails an icon-rail entry with no accessible name or no visible label on keyboard focus; fix either, never allow it).
-  UI tasks: audit first, screenshots clipped to one element
-  (`browse.mjs shots --clip <css selector>`), at most 4 image reads per task;
-  a UI fix-wave plan task covers one page per task.
+  UI tasks: audit first, `shots --clip <css selector>` only, max 4 image reads, one page per task.
 
 ## Skills: the same ones Claude uses
 
@@ -276,8 +274,7 @@ the marketplace `skill-creator`. Codex has no counterpart; never name their skil
 or agents as a next step.
 
 Drive any browser, including production at bomeo-capital.com, with Playwright
-(`node frontend/scripts/browse.mjs shots|api ...`, `shots --clip <css selector>`
-for one element, persistent profile so one
+(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile so one
 sign-in lasts; paths without a leading slash). Log in to bomeo-capital.com or a
 local testing instance with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded
 inside the script and never printed, echoed, passed as arguments or written
@@ -395,12 +392,7 @@ Claude's role agents are mirrored as Codex agents (`.codex/agents/`); route the
 same work to them so bulk output stays out of your context:
 `test-runner` (full or fast suite), `backtest-runner` (runs past ~2 minutes),
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
-symbols exist), `task-implementer` then `task-reviewer` (one plan task each, from a handoff
-file: `python scripts/dev/task_handoff.py <plan file> <id> --worktree <wt>
---attribution "<line>"` writes it, `task-brief <handoff path>` fills its
-Preflight and Code, and the dispatch carries only the task id, the handoff
-path and the tier; `python scripts/dev/agent_cost.py` is the standing cost
-check for any agent change),
+symbols exist), `task-implementer` then `task-reviewer` (one plan task each, from a handoff file: `python scripts/dev/task_handoff.py <plan file> <id> --worktree <wt> --attribution "<line>"`, then `task-brief <handoff path>`; the dispatch carries task id, handoff path and tier; `python scripts/dev/agent_cost.py` is the cost check),
 `plan-briefer` (gathers a spec's code context into
 `.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
 approved spec and that brief: `mode=index` (index and task ledger) first,
