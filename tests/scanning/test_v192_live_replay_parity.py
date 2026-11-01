@@ -68,31 +68,49 @@ def _live(make, overrides, open_price, later):
     return store.get("p1"), events
 
 
+def _check_fill(replay, live, events, plan, bar):
+    assert replay.entry_price == live.entry_price == bar[0]
+    assert live.status == PlanStatus.ACTIVE
+
+
+def _check_through_stop(replay, live, events, plan, bar):
+    assert replay.outcome == "not_triggered" and replay.cancel_reason == gr.OPEN_THROUGH_STOP
+    assert "cancelled_open_through_stop" in _tr(events)
+
+
+def _check_risk_cap(replay, live, events, plan, bar):
+    assert replay.cancel_reason == gr.RISK_CAP and "cancelled_risk_cap" in _tr(events)
+
+
+def _check_gap_target(replay, live, events, plan, bar):
+    assert (replay.outcome, replay.r_total, replay.entry_price) == ("scratch", 0.0, bar[0])
+    assert replay.legs[0]["reason"] == "gap_target"
+    closed = [e for e in events if e.transition == "closed"]
+    assert closed and closed[0].detail["leg"]["r"] == 0.0
+    assert closed[0].detail["reason"] == "gap_target" and live.entry_price == bar[0]
+
+
+def _check_reclaim(replay, live, events, plan, bar):
+    transitions = _tr(events)
+    assert replay.entry_price == gr.reclaim_fill_price(plan)
+    assert live.entry_price == plan.trigger_price
+    assert transitions[0] == "gap_reclaim_order" and "filled" in transitions
+
+
+def _check_no_reclaim(replay, live, events, plan, bar):
+    assert replay.cancel_reason == gr.GAP_NO_RECLAIM
+    assert live.status == PlanStatus.CANCELLED and "cancelled_gap_no_reclaim" in _tr(events)
+
+
+#: case -> the assertions both halves must satisfy (table-driven: keeps the test under cc 15)
+CHECKS = {"fill": _check_fill, "through_stop": _check_through_stop, "risk_cap": _check_risk_cap,
+          "gap_target": _check_gap_target, "reclaim": _check_reclaim,
+          "no_reclaim": _check_no_reclaim}
+
+
 @pytest.mark.parametrize("case, make, overrides, bar, later", CASES,
                          ids=[f"{c[0]}-{c[1].__name__}" for c in CASES])
 def test_the_open_decision_is_the_same_live_and_in_replay(case, make, overrides, bar, later):
     replay = simulate_exit(_bars(bar), SIGNAL, make(**overrides), scale_out=True)
     live, events = _live(make, overrides, bar[0], later)
-    transitions = _tr(events)
-    if case == "fill":
-        assert replay.entry_price == live.entry_price == bar[0]
-        assert live.status == PlanStatus.ACTIVE
-    elif case == "through_stop":
-        assert replay.outcome == "not_triggered" and replay.cancel_reason == gr.OPEN_THROUGH_STOP
-        assert "cancelled_open_through_stop" in transitions
-    elif case == "risk_cap":
-        assert replay.cancel_reason == gr.RISK_CAP and "cancelled_risk_cap" in transitions
-    elif case == "gap_target":
-        assert (replay.outcome, replay.r_total, replay.entry_price) == ("scratch", 0.0, bar[0])
-        assert replay.legs[0]["reason"] == "gap_target"
-        closed = [e for e in events if e.transition == "closed"]
-        assert closed and closed[0].detail["leg"]["r"] == 0.0
-        assert closed[0].detail["reason"] == "gap_target" and live.entry_price == bar[0]
-    elif case == "reclaim":
-        plan = make(**overrides)
-        assert replay.entry_price == gr.reclaim_fill_price(plan)
-        assert live.entry_price == plan.trigger_price
-        assert transitions[0] == "gap_reclaim_order" and "filled" in transitions
-    else:
-        assert replay.cancel_reason == gr.GAP_NO_RECLAIM
-        assert live.status == PlanStatus.CANCELLED and "cancelled_gap_no_reclaim" in transitions
+    CHECKS[case](replay, live, events, make(**overrides), bar)
