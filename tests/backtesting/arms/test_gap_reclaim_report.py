@@ -183,18 +183,30 @@ def test_repriced_dollars_with_no_repriced_trade():
     assert out["n"] == 0 and out["delta_dollars"] == 0.0 and out["mean_delta_dollars"] is None
 
 
-def test_the_report_carries_every_spec_section():
+def _full_report():
     baseline, component, repriced = veto_arms()
     rows = _census_for(baseline, repriced, ambiguous=set(list(sorted(repriced))[:3]))
-    out = grc.report(baseline, component, rows, **FAST)
+    return grc.report(baseline, component, rows, **FAST)
+
+
+def test_the_report_carries_every_spec_section():
+    out = _full_report()
     assert set(out) == {"n", "win_rate", "expectancy_r", "delta_win_rate_pp", "delta_expectancy_r",
                         "outcome_flips", "strata", "repriced_dollars", "ambiguous_sensitivity", "census",
                         "splits", "removed_top2_horizon_share", "earnings_proximity"}
     assert out["n"] == {"baseline": 300, "component": 270}
+
+
+def test_the_report_sections_hold_the_pair_numbers():
+    out = _full_report()
     assert out["delta_win_rate_pp"]["lo"] <= out["delta_win_rate_pp"]["point"] <= out["delta_win_rate_pp"]["hi"]
     assert [row["stratum"] for row in out["strata"]] == list(grc.STRATA)
     assert out["repriced_dollars"]["n"] == 30 and out["ambiguous_sensitivity"]["ambiguous_n"] == 3
     assert out["census"]["total"]["reclaimed"] == 30
+
+
+def test_the_report_splits_concentration_and_earnings_disclosure():
+    out = _full_report()
     assert set(out["splits"]) == set(grc.SPLIT_FIELDS) == {"source", "direction", "horizon_key"}
     assert out["splits"]["direction"]["bullish"]["n_baseline"] == 300
     assert out["removed_top2_horizon_share"] == 1.0
