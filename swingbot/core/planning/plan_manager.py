@@ -199,14 +199,14 @@ _STOPPED_REASONS = frozenset({"loss", "scratch", "tp1_runner_be", "tp1_runner_tr
 GAP_TARGET_REASON = "gap_target"
 
 #: v192: market_open phase -> the PlanManager method that steps a waiting market
-#: plan in it. V192-9 points WAITING and AFTER_CLOSE at the reclaim handlers.
+#: plan in it.
 _MARKET_PHASE_STEPS = {
     market_open.BEFORE: "_market_hold",
     market_open.EXTENDED: "_market_extended",
     market_open.OPEN: "_market_at_open",
     market_open.MISSED: "_market_missed",
-    market_open.WAITING: "_market_hold",
-    market_open.AFTER_CLOSE: "_market_hold",
+    market_open.WAITING: "_market_waiting",
+    market_open.AFTER_CLOSE: "_market_after_close",
 }
 
 #: v192: gap_reclaim.decide_at_open verdict -> the PlanManager method acting on it.
@@ -1366,6 +1366,36 @@ class PlanManager:
             "reason": "missed_open", "bars_waited": 0,
             "session": session.isoformat() if session else None,
             "cancel_resting_order": True})]
+
+    def _market_waiting(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        """Resting as a DAY stop order at E: fill at E on the first regular-session
+        print one tick through it (the live price stands in for High and Low). A
+        print through the stop cancels nothing -- the stop order rests above. No
+        risk-cap check: the scan admitted the plan on its loss at this same E. The
+        ACTIVE write and the placeholder trade's move share one transaction
+        (_persist_fill, v189 D3.1)."""
+        if not is_regular_session(now) or not gap_reclaim.reclaim_touched(plan, price, price):
+            return []
+        entry = plan.trigger_price
+        plan.entry_price = entry
+        record_transition(plan, PlanStatus.ACTIVE, reason="gap_reclaim_fill", at=self._now())
+        detail = {"entry_price": entry, "live_price": price, "fill": "reclaim"}
+        trade_id = self._persist_fill(plan, entry)
+        if trade_id is not None:
+            detail["trade_id"] = trade_id
+        return [PlanEvent(plan.plan_id, "filled", detail)]
+
+    def _market_after_close(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        """The resting session closed without a reclaim: the DAY order is gone.
+        Recorded at that session's official close, whenever the poll lands.
+        market_phase returns AFTER_CLOSE only for a readable reclaim_session."""
+        rest = date.fromisoformat(plan.reclaim_session)
+        closed_at = datetime.combine(rest, session_close(rest), tzinfo=US_MARKET_TZ).isoformat()
+        record_transition(plan, PlanStatus.CANCELLED, reason=gap_reclaim.GAP_NO_RECLAIM,
+                          at=closed_at)
+        self._save(plan)
+        return [PlanEvent(plan.plan_id, "cancelled_gap_no_reclaim",
+                          {"entry_price": plan.trigger_price, "session": plan.reclaim_session})]
 
     def _active_stop(self, plan: TradePlanV2, now=None) -> tuple[float, bool]:
         if plan.working_stop is None:
