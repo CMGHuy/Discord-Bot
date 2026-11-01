@@ -15,7 +15,7 @@ from swingbot.core.backtesting.acceptance import ALPHA, CLOSED, BOOTSTRAP_RESAMP
 from swingbot.core.backtesting.acceptance_harvest import HARVEST_VERSION, WIN_RATE_FLOOR_PP, evaluate_harvest, mde_expectancy_r  # noqa: E402
 from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
 from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell, with_clause  # noqa: E402
-from swingbot.core.backtesting.arms import dryup_clauses, headroom_clauses, reachability  # noqa: E402
+from swingbot.core.backtesting.arms import dryup_clauses, gap_reclaim_census, gap_reclaim_clauses, headroom_clauses, reachability  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate, win_rate_fold_row  # noqa: E402
@@ -77,11 +77,68 @@ def stage_reachability(args):
     print(f"split removed={len(split['removed'])} added={len(split['added'])} changed={len(split['changed'])} is_subset={split['is_subset']}")
     if not changed:
         print("refused:zero-diff -- the component reached no trade. Budget intact.", file=sys.stderr); return 1
+    if _gap_reclaim(args):
+        return _gap_reclaim_reachability(args)
     print("REACHABLE -- the component changes trades; Stage 0 may proceed."); return 0
 
 def _wr_statistic(args):
     """v180 A1: the clause-1 / fold-row statistic; hand-built args predating the flag read the default."""
     return getattr(args, "wr_statistic", "standardised")
+
+def _gap_reclaim(args):
+    """v192: --gap-reclaim scores the gap-reclaim veto on its frozen strata."""
+    return getattr(args, "gap_reclaim", False)
+
+def _cluster(args):
+    """v192: the gap-reclaim gate's intervals are week-clustered (spec § Gate); v1 elsewhere."""
+    return gap_reclaim_clauses.CLUSTER if _gap_reclaim(args) else "ticker"
+
+def _dump(path, payload):
+    if path:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(json.dumps(payload, indent=1), encoding="utf-8")
+
+def _gap_sidecar(arms_path):
+    """The census beside ``arms_path`` when the same run wrote it (same knob delta), else None."""
+    side = gap_reclaim_census.load_sidecar(arms_path)
+    stamp = json.loads(Path(arms_path).read_text()).get("provenance") or {}
+    if side is None or side.get("knob_delta") != (stamp.get("knob_delta") or {}):
+        return None
+    return side
+
+def _repriced_for(arms_path):
+    return gap_reclaim_census.repriced_keys(_gap_sidecar(arms_path)["rows"])
+
+def _refuse_no_sidecar():
+    print("refused:no-gap-reclaim-sidecar -- --gap-reclaim needs the census measure_arms wrote beside "
+          "these arms (<arms stem>.gap_reclaim.json, same knob delta). Budget intact.", file=sys.stderr)
+    return 1
+
+def _gap_reclaim_reachability(args):
+    """Stage -1 for v192: the census summary decides reachability (spec § Gate)."""
+    side = _gap_sidecar(args.arms)
+    if side is None:
+        return _refuse_no_sidecar()
+    summary = side["summary"]
+    print(json.dumps(summary, indent=1))
+    _dump(args.out_json, summary)
+    if summary["verdict"] != gap_reclaim_census.REACHABLE:
+        print("refused:zero-diff -- no market plan armed the veto (census). Budget intact.", file=sys.stderr)
+        return 1
+    print("REACHABLE -- the veto arms on market plans; Stage 0 may proceed.")
+    return 0
+
+def _gap_reclaim_conflict(args):
+    """The parser error for a flag the v192 gate does not combine with, else None."""
+    if not args.gap_reclaim:
+        return None
+    if args.gate == "harvest":
+        return "--gap-reclaim scores the v72 win-rate funnel; the v92 harvest gate is a different gate"
+    if args.dryup_mechanism or args.headroom_mechanism or args.mechanism_json:
+        return "--gap-reclaim scores clause 6 on its own strata; drop the other mechanism reading"
+    if _wr_statistic(args) != "standardised":
+        return "--gap-reclaim is pre-registered on the standardised dWR"
+    return None
 
 def _mde_design(args, baseline, component):
     harvest = args.gate == "harvest"
@@ -94,7 +151,8 @@ def _mde_design(args, baseline, component):
     paired = None
     if overlap(baseline, component):
         paired = mde_paired(baseline, component, statistic, observed_n=observed,
-                            target_n=target, n_resamples=args.resamples, seed=args.seed)
+                            target_n=target, n_resamples=args.resamples, seed=args.seed,
+                            cluster=_cluster(args))
     return harvest, observed, days, target, paired, unpaired
 
 def _claimed_effect(args, baseline, component, harvest):
@@ -203,6 +261,8 @@ def with_mechanism_clause(result, clause):
 
 def _evaluate(args, baseline, component, stage):
     common = dict(stage=stage, permutation_p=args.permutation_p, n_resamples=args.resamples, seed=args.seed)
+    if _gap_reclaim(args):
+        return gap_reclaim_clauses.evaluate_gap_reclaim(baseline, component, _repriced_for(args.arms), **common)
     return evaluate_harvest(baseline, component, **common) if args.gate == "harvest" else evaluate(baseline, component, wr_statistic=_wr_statistic(args), **common)
 
 def _run_gate(args, stage):
@@ -221,7 +281,10 @@ def _run_gate(args, stage):
     if args.out_json: Path(args.out_json).parent.mkdir(parents=True, exist_ok=True); Path(args.out_json).write_text(json.dumps(render_json(result), indent=1), encoding="utf-8")
     return 0 if result.verdict == "PASS" else 1
 
-def stage_validation(args): return _run_gate(args, "validation")
+def stage_validation(args):
+    if _gap_reclaim(args) and _gap_sidecar(args.arms) is None:
+        return _refuse_no_sidecar()
+    return _run_gate(args, "validation")
 
 def _parse_grid(items):
     grid = []
@@ -297,6 +360,8 @@ def _refuse_not_headroom():
 
 def _selection_axis(args):
     """(config attr, printed label, tie rule) of the grid the active mechanism selects on."""
+    if _gap_reclaim(args):
+        return 'GAP_RECLAIM_ATR', 'g', 'smaller'
     if getattr(args, 'headroom_mechanism', False):
         return 'HEADROOM_MIN_R', 'h', 'smaller'
     return 'PULLBACK_DRYUP_MAX_RATIO', 'd', 'larger'
@@ -342,6 +407,17 @@ def _selection_input(path, full_universe):
         return None
 
 
+def _selection_cell_for(args, value, path, baseline, component):
+    """One Stage 1 cell: v192's dExpR-floor cell under --gap-reclaim, else today's evaluate_cell."""
+    resolvable = value not in args.mde_refused
+    if _gap_reclaim(args):
+        return gap_reclaim_clauses.selection_cell(value, baseline, component, resolvable=resolvable,
+                                                  n_resamples=args.resamples, seed=args.seed)
+    mechanism = _cell_mechanism(args, path, baseline, component, value)
+    return evaluate_cell(value, baseline, component, resolvable=resolvable,
+                         n_resamples=args.resamples, seed=args.seed, mechanism=mechanism)
+
+
 def _selection_cells(args, grid):
     full_universe = _full_universe()
     cells = []
@@ -349,12 +425,7 @@ def _selection_cells(args, grid):
         arms = _selection_input(path, full_universe)
         if arms is None:
             return None
-        baseline, component = arms
-        mechanism = _cell_mechanism(args, path, baseline, component, value)
-        cells.append(evaluate_cell(value, baseline, component,
-                                   resolvable=value not in args.mde_refused,
-                                   n_resamples=args.resamples, seed=args.seed,
-                                   mechanism=mechanism))
+        cells.append(_selection_cell_for(args, value, path, *arms))
     return cells
 
 
@@ -394,6 +465,7 @@ def main(argv=None):
     parser.add_argument("--grid-arms", action="append", default=[])
     parser.add_argument("--mde-refused", action="append", type=float, default=[])
     parser.add_argument('--dryup-mechanism', action='store_true'); parser.add_argument('--headroom-mechanism', action='store_true'); parser.add_argument("--mechanism-json", default=None)
+    parser.add_argument("--gap-reclaim", action="store_true", help="v192: score the gap-reclaim veto on its frozen strata (needs <arms stem>.gap_reclaim.json)")
     cache_dir_source.add_args(parser)
     args = parser.parse_args(argv)
     cache_dir_source.resolve(args)
@@ -405,6 +477,9 @@ def main(argv=None):
         parser.error("--dryup-mechanism scores v72 clause 6; the v92 harvest gate has no mechanism clause")
     if _wr_statistic(args) != "standardised" and args.gate == "harvest":
         parser.error("--wr-statistic selects the v72 win-rate clause-1 statistic; the v92 harvest gate has no win-rate clause")
+    conflict = _gap_reclaim_conflict(args)
+    if conflict:
+        parser.error(conflict)
     if args.stage == "selection":
         return stage_selection(args)
     if args.arms is None:
