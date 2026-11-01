@@ -16,6 +16,7 @@ from swingbot.core.market.strategy_types import COMPRESSION_SHORT, HORIZONS, TUR
 from swingbot.core.risk_limits import planned_loss_pct
 from .stop_scope import plan_stop_ceiling
 from .plan_types import TradePlanV2
+from . import gap_reclaim
 from .params import RUNNER_FLOOR_FRACTION
 from .lifecycle import (at_or_beyond_stop, fill_price, limit_cancelled, limit_fill_price,
                         limit_hit, pending_expired, pending_invalidated, stop_touched,
@@ -768,7 +769,10 @@ SESSION_ONE_HOLD_CAP = frozenset({COMPRESSION_SHORT, TURTLE_SOUP})
 
 
 def _counts_fill_session(plan) -> bool:
-    return getattr(plan, "strategy", None) in SESSION_ONE_HOLD_CAP
+    """v180: the compression short and Turtle Soup; v192: a market plan waiting for
+    its next open (its fill session is session 1 of a hold cap)."""
+    return (getattr(plan, "strategy", None) in SESSION_ONE_HOLD_CAP
+            or gap_reclaim.waits_for_open(plan))
 
 
 def _compression_fill(df, j: int, entry_price: float, plan: TradePlanV2,
@@ -823,8 +827,8 @@ def _limit_entry_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
 
 def _hold_cap_bars(plan: TradePlanV2, max_holding_days: int) -> int:
     """The walkers' scan length after the plan's hold cap. They scan
-    entry_index+1 .. entry_index+N; the compression short's and Turtle Soup's
-    fill session is session 1 (SESSION_ONE_HOLD_CAP), so their cap of N
+    entry_index+1 .. entry_index+N; the compression short's, Turtle Soup's and a
+    waiting v192 market plan's fill session is session 1 (SESSION_ONE_HOLD_CAP), so their cap of N
     sessions ends at entry_index + N - 1 (live: the tenth session). Every
     other strategy keeps entry_index + N."""
     hold_cap = getattr(plan, "hold_cap_bars", None)
@@ -836,11 +840,15 @@ def _hold_cap_bars(plan: TradePlanV2, max_holding_days: int) -> int:
 
 def _market_exit(df, signal_index: int, plan: TradePlanV2, scale_out: bool,
                  max_holding_days: int) -> ExitResult:
-    """A market entry: v180 next-open plans fill at Open[t+1] (next_open_entry); every other
-    market plan fills at the signal bar's close, exactly as before."""
+    """A market entry: v180 next-open plans fill at Open[t+1] (next_open_entry); a v192
+    plan waiting for its next open goes to market_next_open; every other market plan
+    fills at the signal bar's close, exactly as before."""
     from . import next_open_entry     # next_open_entry imports this module
     if next_open_entry.uses_next_open_fill(plan):
         return next_open_entry.next_open_exit(df, signal_index, plan, max_holding_days)
+    if gap_reclaim.waits_for_open(plan):
+        from .market_next_open import next_open_market_exit   # it imports this module
+        return next_open_market_exit(df, signal_index, plan, scale_out, max_holding_days)
     entry_price = float(df["Close"].values[signal_index])
     return _walk_for(plan, scale_out)(df, signal_index, entry_price, plan, max_holding_days)
 
@@ -863,7 +871,8 @@ def simulate_exit(
 
     ``market`` entries fill immediately at the signal bar's close, except a
     v180 next-open strategy (``next_open_entry.NEXT_OPEN_STRATEGIES``), which
-    fills at the next bar's open.
+    fills at the next bar's open, and a v192 plan waiting for its next open
+    (``gap_reclaim.waits_for_open``), which ``market_next_open`` fills.
     ``stop_entry`` entries scan forward from signal_index + 1 through the
     plan's expiry window looking for a trigger touch (Task 18's
     ``trigger_hit``/``fill_price``). If the plan invalidates (closes through
