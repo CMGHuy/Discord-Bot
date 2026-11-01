@@ -40,16 +40,19 @@ def _trades_for(tlog, plan_id):
     return [t for t in tlog.get_trades(status=None, limit=None) if t.get("plan_id") == plan_id]
 
 
-def test_the_set_holds_exactly_the_six_pending_cancel_events():
+def test_the_set_holds_exactly_the_eight_pending_cancel_events():
     assert PENDING_CANCEL_EVENTS == frozenset({
         "cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap",
         "cancelled_limit", "cancelled_gap_through_stop",
         "cancelled_trade_deleted",      # v189 A7
+        "cancelled_open_through_stop", "cancelled_gap_no_reclaim",   # v192
     })
 
 
 def test_notice_events_derive_from_the_cancel_set():
-    assert NOTICE_EVENTS == frozenset({"filled", "closed"}) | PENDING_CANCEL_EVENTS
+    # v192: the reclaim DAY order is a notice that is not a cancel.
+    assert NOTICE_EVENTS == (frozenset({"filled", "closed", "gap_reclaim_order"})
+                             | PENDING_CANCEL_EVENTS)
 
 
 @pytest.mark.parametrize("transition", sorted(PENDING_CANCEL_EVENTS))
