@@ -1,6 +1,7 @@
 """v93 strategy-sourced alert pass helpers."""
 from __future__ import annotations
 
+import datetime as dt
 import logging
 from collections import Counter
 from dataclasses import dataclass, field
@@ -8,6 +9,7 @@ import pandas as pd
 
 from swingbot.core.market import market_context
 from swingbot.core.market.entry_filters import ENTRY_FUNCS, entries_for
+from swingbot.core.planning import gap_reclaim
 from swingbot.core.planning.builders import build_strategy_plan
 from swingbot.core.planning.params import stamp_badge, stamp_cohort, stamp_entry_context
 from swingbot.core.planning.gap_sizing import stamp_gap_sizing
@@ -147,6 +149,15 @@ def _open_trade(deps: _PassDeps, plan, *, ticker, strategy, horizon, direction) 
         ledger=plan.ledger, entry_context=plan.entry_context,
         gap_sizing=plan.gap_sizing,
         risk_notice=plan.risk_notice)
+
+
+def _stamp_issued_for_open(plan, now) -> None:
+    """v192: a strategy plan waiting for its next open records when it was issued,
+    so market_open.deciding_session picks the first open after the alert -- never
+    the open of the session this pass runs in, already past. Every other plan
+    (and a plan that already carries the stamp) is left alone."""
+    if gap_reclaim.waits_for_open(plan) and getattr(plan, "issued_at", None) is None:
+        plan.issued_at = (now or dt.datetime.now(dt.timezone.utc)).isoformat()
 
 
 def _compression_context(ticker, strategy, frame, deps: _PassDeps):
@@ -293,6 +304,7 @@ def _emit_signal(result: PassResult, frame, *, ticker, strategy, direction, hori
             ticker, strategy, horizon, direction)
         result.sizing_blocked += 1
         return
+    _stamp_issued_for_open(plan, deps.now)
     deps.plan_store.add(plan)
     result.plans.append(plan)
     goes_live = _goes_live(deps, strategy)
