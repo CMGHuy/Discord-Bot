@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from swingbot.core.planning.exit_sim import runner_floor
+from swingbot.core.planning.gap_reclaim import waits_for_open
 from swingbot.core.planning.plan_types import breakeven_trigger
 from swingbot.core.presentation import short_notice, tokens
 from swingbot.core.presentation.plan_view import plan_view
@@ -59,6 +60,10 @@ _EXIT_GLYPH_KEYS = {
 
 #: close outcome -> Instruction.tone (the bands the close always used).
 _OUTCOME_TONES = {"win": "good", "loss": "bad", "flat": "neutral"}
+
+#: v192: what a reader must not do at the open, and which side of X the open sat.
+_REFRAIN = {"bullish": "buy", "bearish": "short"}
+_BEYOND = {"bullish": "below", "bearish": "above"}
 
 
 @dataclass(frozen=True)
@@ -260,6 +265,25 @@ def _cancel_line(plan) -> str:
                  f"{_price(plan.stop_loss)} first")
 
 
+#: v192: the alert line of a market plan waiting for its next open (spec wording).
+MARKET_ON_OPEN = "Enter at the open (market-on-open)"
+
+
+def market_on_open_lines(plan) -> list[str]:
+    """v192: the alert's market-on-open line, and the X reference line when the
+    gap veto is armed; [] for every plan that does not wait for its open."""
+    if not waits_for_open(plan):
+        return []
+    lines = [MARKET_ON_OPEN]
+    level = getattr(plan, "reclaim_level", None)
+    if level is not None:
+        side = _sides(plan.direction)
+        lines.append(f"If it opens at or {_BEYOND[plan.direction]} {_price(level)} (toward the "
+                     f"stop): don't {_REFRAIN[plan.direction]} at the open; the bot posts a DAY "
+                     f"{side['entry_stop']} at {_price(plan.trigger_price)}")
+    return lines
+
+
 def ticket_for(plan, *, logged: bool, not_logged_reason: str | None,
                money: Money | None = None, warnings: tuple[str, ...] = (),
                level: int | None = None) -> Instruction:
@@ -284,9 +308,12 @@ def ticket_for(plan, *, logged: bool, not_logged_reason: str | None,
     whole = money.shares if money is not None else None
     if plan.entry_type == "stop_entry":
         order = f"{side['entry_stop']} {_price(plan.trigger_price)}"
+    elif waits_for_open(plan):
+        order = f"{side['entry_market']} ON OPEN ~{_price(plan.trigger_price)}"   # v192
     else:
         order = f"{side['entry_market']} ~{_price(plan.trigger_price)}"
     lines = [
+        *market_on_open_lines(plan),
         _join(f"{_S['stop']} {side['stop']} {_price(plan.stop_loss)}",
               _if_hit(plan, entry, plan.stop_loss, whole, money)),
         _join(f"{_S['tp1']} {side['limit']} {_price(plan.tp1)}", tp1_qty,
@@ -662,11 +689,6 @@ def _cancelled(plan, event, side: dict, common: dict, money: Money | None) -> In
         verb=CANCEL,
         headline=f"{lead}CANCEL {_cancel_order(plan, side, event.transition)}",
         lines=(_cancel_why(plan, event.transition, event.detail),), tone="inert", **common)
-
-
-#: v192: what a reader must not do at the open, and which side of X the open sat.
-_REFRAIN = {"bullish": "buy", "bearish": "short"}
-_BEYOND = {"bullish": "below", "bearish": "above"}
 
 
 def _reclaim_order(plan, event, side: dict, common: dict, money: Money | None) -> Instruction:
