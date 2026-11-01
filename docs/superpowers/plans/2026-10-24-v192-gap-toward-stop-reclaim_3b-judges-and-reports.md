@@ -42,7 +42,7 @@
 
 **Re-priced dollars (spec § Reporting).** Sizing is unchanged live: `gap_sizing.size_for_plan` sizes on `E` and the stop, so both arms hold `shares = risk$ / |E − stop|` with `risk$ = reference_account × risk_pct / 100`. A baseline twin filled at the open books `r × |open − stop| × shares`; the re-priced trade filled at the reclaim price books `r × |fill − stop| × shares`. That is the one view in which the two arms' R units (`Open − stop` vs `E − stop`) compare.
 
-- [ ] **Step 1: Write the failing tests** — create `tests/backtesting/arms/test_gap_reclaim_report.py`
+- [x] **Step 1: Write the failing tests** — create `tests/backtesting/arms/test_gap_reclaim_report.py`
 
 ```python
 """V192-17: the re-priced-fixed permutation null, the Stage 1 cell, the ambiguous-bar
@@ -255,7 +255,7 @@ def test_the_report_of_an_empty_pair_does_not_crash():
     assert out["census"]["verdict"] == census_mod.ZERO_DIFF and out["removed_top2_horizon_share"] == 0.0
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_report.py
@@ -263,7 +263,7 @@ python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_repor
 
 Expected: FAIL — `AttributeError: module '...gap_reclaim_clauses' has no attribute 'repriced_permutation'` (and the other new names).
 
-- [ ] **Step 3: Append to `swingbot/core/backtesting/arms/gap_reclaim_clauses.py`**
+- [x] **Step 3: Append to `swingbot/core/backtesting/arms/gap_reclaim_clauses.py`**
 
 Extend the imports at the top of the module (keep V192-16's):
 
@@ -446,7 +446,7 @@ Check the dollar test by hand: risk $1,000 (100,000 × 1%); `|E − stop| = 5` �
 
 `acceptance.bootstrap_delta` on two empty arms returns `point=None` without resampling (`draws.size == 0`), which `test_the_report_of_an_empty_pair_does_not_crash` relies on.
 
-- [ ] **Step 4: Run the report tests, V192-15/16's tests and the gate**
+- [x] **Step 4: Run the report tests, V192-15/16's tests and the gate**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_report.py
@@ -457,7 +457,7 @@ python scripts/dev/complexity_gate.py
 
 Expected: `0 failed` each; the gate passes (`repriced_permutation` cc 5, `repriced_dollars` cc 6, `report` cc 2). If `test_removing_losers_is_distinguishable_from_luck` lands at `p ≥ 0.05`, print `out` and the null's spread before touching anything: the fixture, not the rule, is what may be changed (more tickers), and the rule's null must keep the held and added trades in every draw.
 
-- [ ] **Step 5: Commit (in the worktree)**
+- [x] **Step 5: Commit (in the worktree)**
 
 ```bash
 git add swingbot/core/backtesting/arms/gap_reclaim_clauses.py tests/backtesting/arms/test_gap_reclaim_report.py
