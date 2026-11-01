@@ -193,7 +193,9 @@ Read the `docs/claude/` file before acting:
 - `architecture.md`: changing `swingbot/core`, plan engine or scan pipeline.
 - `known-traps.md`: data caching (v171: every provider call goes through
   `core/marketdata/shared/`, guard test), scan output, embeds, the 2% stop
-  cap/clamp, the liquidity floor, production `.env` (never `sed -i`).
+  cap/clamp, the liquidity floor, the v192 market-on-open path
+  (`GAP_RECLAIM_ATR` needs `MARKET_ENTRY_NEXT_OPEN`, else zeroed at load),
+  production `.env` (never `sed -i`).
 - `backtest-methodology.md`: running or interpreting a backtest, grid or
   validation. `edge-priorities.md`: choosing strategy work.
 - `document-conventions.md`: authoring a spec or plan.
