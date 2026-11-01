@@ -58,7 +58,7 @@ class _Log:
     def __init__(self):
         self.calls = []
 
-    def record_plan_fill(self, plan_id, price):
+    def record_plan_fill(self, plan_id, price, conn=None):     # v189 D3.1: in the fill transaction
         self.calls.append(("fill", plan_id, price))
         return "t1"
 

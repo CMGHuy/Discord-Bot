@@ -41,6 +41,7 @@ from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning.stop_scope import plan_stop_ceiling
 from swingbot.core.planning.plan_types import breakeven_trigger, effective_stop
 from swingbot.core.planning import session_expiry
+from swingbot.core.planning import gap_reclaim, market_open
 from swingbot.core.tracking.origin import NEXT_SESSION
 
 log = logging.getLogger(__name__)
@@ -191,6 +192,35 @@ _TRANSITION_LOG = {
 # Closes where a stop took the position out (initial, break-even, the
 # post-TP1 runner floor, or the chandelier trail), not a target or a time rule.
 _STOPPED_REASONS = frozenset({"loss", "scratch", "tp1_runner_be", "tp1_runner_trail"})
+
+# v192: the close reason of a waiting market plan whose next open sat at or
+# beyond TP1 -- next_open_entry.GAP_TARGET_REASON (that module imports this one,
+# so the string is restated; tests pin the two equal).
+GAP_TARGET_REASON = "gap_target"
+
+#: v192: market_open phase -> the PlanManager method that steps a waiting market
+#: plan in it. V192-9 points WAITING and AFTER_CLOSE at the reclaim handlers.
+_MARKET_PHASE_STEPS = {
+    market_open.BEFORE: "_market_hold",
+    market_open.EXTENDED: "_market_extended",
+    market_open.OPEN: "_market_at_open",
+    market_open.MISSED: "_market_missed",
+    market_open.WAITING: "_market_hold",
+    market_open.AFTER_CLOSE: "_market_hold",
+}
+
+#: v192: gap_reclaim.decide_at_open verdict -> the PlanManager method acting on it.
+_OPEN_DECISIONS = {
+    gap_reclaim.FILL_OPEN: "_fill_at_open",
+    gap_reclaim.RECLAIM_WAIT: "_rest_for_reclaim",
+    gap_reclaim.RISK_CAP: "_cancel_open_risk_cap",
+    gap_reclaim.OPEN_THROUGH_STOP: "_cancel_open_through_stop",
+}
+
+
+def _opens_beyond_tp1(plan, price: float) -> bool:
+    """The open already sits at or beyond TP1 (v180 _bar_exit's gap-target case)."""
+    return price >= plan.tp1 if plan.direction == "bullish" else price <= plan.tp1
 
 
 def _fmt_price(value) -> str:
@@ -555,6 +585,10 @@ class PlanManager:
         # priced. None = nothing demanded (quiet hours, serial seam, not polled).
         self.last_poll_demand: PollDemand | None = None
         self.last_poll_check_errors: list[str] = []
+        # v192: plan_id -> consecutive extended-hours polls at or through the stop
+        # of a market plan waiting for its next open. In memory on purpose: after
+        # a restart two fresh confirming polls are needed before it cancels.
+        self._premarket_hits: dict[str, int] = {}
         # v189 D3.3: exits that failed twice, drained by take_exit_failures()
         # and posted to the ops channel by commands/scanning/loops.py.
         self._exit_failures: list[dict] = []
@@ -1047,6 +1081,8 @@ class PlanManager:
     # -- per-status handlers -------------------------------------------------
 
     def _step(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        if gap_reclaim.waits_for_open(plan):
+            return self._step_market_open(plan, price, now)     # v192
         if plan.status == PlanStatus.PENDING:
             return self._annotate_outlook(plan, self._step_pending(plan, price, now))
         if self._past_time_exit_close(plan, now):
@@ -1215,18 +1251,8 @@ class PlanManager:
         """Fill a PENDING plan at `fill` (tick `price`), or cancel it when the
         planned loss from that fill is over the plan's stop ceiling. Shared by
         the stop-entry and limit branches; only the ACTIVE reason differs."""
-        risk_pct = planned_loss_pct(fill, plan.stop_loss)
-        ceiling_pct = plan_stop_ceiling(plan)
-        if risk_pct > ceiling_pct:
-            record_transition(plan, PlanStatus.CANCELLED, reason="risk_cap",
-                              at=self._now(), extra={"entry_price": fill})
-            self._save(plan)
-            return [PlanEvent(plan.plan_id, "cancelled_risk_cap", {
-                "entry_price": fill,
-                "stop_loss": plan.stop_loss,
-                "planned_loss_pct": round(risk_pct, 4),
-                "max_planned_loss_pct": ceiling_pct,
-            })]
+        if planned_loss_pct(fill, plan.stop_loss) > plan_stop_ceiling(plan):
+            return self._cancel_risk_cap(plan, fill)
         plan.entry_price = fill
         record_transition(plan, PlanStatus.ACTIVE, reason=reason, at=self._now())
         detail = {"entry_price": fill, "live_price": price}
@@ -1234,6 +1260,112 @@ class PlanManager:
         if trade_id is not None:
             detail["trade_id"] = trade_id
         return [PlanEvent(plan.plan_id, "filled", detail)]
+
+    def _cancel_risk_cap(self, plan: TradePlanV2, fill: float) -> list[PlanEvent]:
+        """Cancel a plan whose fill would breach its stop ceiling: the stop-entry
+        and limit fills and (v192) a waiting market plan's open. Same record, same event."""
+        risk_pct = planned_loss_pct(fill, plan.stop_loss)
+        ceiling_pct = plan_stop_ceiling(plan)
+        record_transition(plan, PlanStatus.CANCELLED, reason="risk_cap",
+                          at=self._now(), extra={"entry_price": fill})
+        self._save(plan)
+        return [PlanEvent(plan.plan_id, "cancelled_risk_cap", {
+            "entry_price": fill,
+            "stop_loss": plan.stop_loss,
+            "planned_loss_pct": round(risk_pct, 4),
+            "max_planned_loss_pct": ceiling_pct,
+        })]
+
+    # -- v192: a market plan waiting for its next open -------------------------
+
+    def _step_market_open(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        """One poll of a market plan waiting for its next open. market_open picks
+        the phase; the open decision is gap_reclaim.decide_at_open, the function
+        the replay calls. Outside EXTENDED the premarket count starts over."""
+        phase = market_open.market_phase(plan, now)
+        if phase != market_open.EXTENDED:
+            self._premarket_hits.pop(plan.plan_id, None)
+        return getattr(self, _MARKET_PHASE_STEPS[phase])(plan, price, now)
+
+    def _market_hold(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        return []
+
+    def _market_extended(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        """A live extended-hours print before the deciding open: PREMARKET_STOP_CONFIRM_POLLS
+        consecutive prints at or through the stop cancel; a print back inside resets."""
+        if not at_or_beyond_stop(plan, price):
+            self._premarket_hits.pop(plan.plan_id, None)
+            return []
+        hits = self._premarket_hits.get(plan.plan_id, 0) + 1
+        if hits < market_open.PREMARKET_STOP_CONFIRM_POLLS:
+            self._premarket_hits[plan.plan_id] = hits
+            return []
+        self._premarket_hits.pop(plan.plan_id, None)
+        return self._cancel_through_stop(plan, price, "premarket")
+
+    def _market_at_open(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        decision = gap_reclaim.decide_at_open(plan, price)
+        return getattr(self, _OPEN_DECISIONS[decision])(plan, price, now)
+
+    def _fill_at_open(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        """Fill at the deciding open. The ACTIVE write and the placeholder trade's
+        move onto the open share one transaction (_persist_fill, v189 D3.1)."""
+        plan.entry_price = price
+        record_transition(plan, PlanStatus.ACTIVE, reason="next_open_fill", at=self._now())
+        detail = {"entry_price": price, "live_price": price, "fill": "open"}
+        trade_id = self._persist_fill(plan, price)
+        if trade_id is not None:
+            detail["trade_id"] = trade_id
+        filled = PlanEvent(plan.plan_id, "filled", detail)
+        if not _opens_beyond_tp1(plan, price):
+            return [filled]
+        return [filled, self._gap_target_close(plan, price)]
+
+    def _gap_target_close(self, plan: TradePlanV2, price: float) -> PlanEvent:
+        """v180's _bar_exit convention, booked as the replay books it: an open at or
+        beyond TP1 fills there and closes there, a 0R scratch. The trade-log close
+        runs from _on_event (``_terminal_persisted: False``) after the fill event,
+        so the placeholder trade is on the open before it is closed."""
+        leg = {"fraction": 1.0, "exit_price": price, "r": 0.0, "reason": GAP_TARGET_REASON}
+        record_transition(plan, PlanStatus.CLOSED, reason=GAP_TARGET_REASON, at=self._now())
+        self._save(plan)
+        return PlanEvent(plan.plan_id, "closed", {"reason": GAP_TARGET_REASON, "exit_price": price,
+                                                  "leg": leg, "_terminal_persisted": False})
+
+    def _rest_for_reclaim(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        """The veto armed: the open sat at or beyond X. The plan rests for this one
+        session as a DAY stop order at E; V192-9 fills or cancels it."""
+        plan.reclaim_session = session_date(now)
+        self._save(plan)
+        order = "buy_stop" if plan.direction == "bullish" else "sell_stop"
+        return [PlanEvent(plan.plan_id, "gap_reclaim_order", {
+            "entry_price": plan.trigger_price, "open_price": price,
+            "reclaim_level": plan.reclaim_level, "order": order, "tif": "DAY"})]
+
+    def _cancel_open_risk_cap(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        return self._cancel_risk_cap(plan, price)
+
+    def _cancel_open_through_stop(self, plan: TradePlanV2, price: float,
+                                  now=None) -> list[PlanEvent]:
+        return self._cancel_through_stop(plan, price, "open")
+
+    def _cancel_through_stop(self, plan: TradePlanV2, price: float, phase: str) -> list[PlanEvent]:
+        record_transition(plan, PlanStatus.CANCELLED, reason=gap_reclaim.OPEN_THROUGH_STOP,
+                          at=self._now(), extra={"phase": phase})
+        self._save(plan)
+        return [PlanEvent(plan.plan_id, "cancelled_open_through_stop",
+                          {"live_price": price, "phase": phase})]
+
+    def _market_missed(self, plan: TradePlanV2, price: float, now=None) -> list[PlanEvent]:
+        """No poll saw the deciding open (the bot was down or silent through it):
+        cancel, never fill at a stale price."""
+        session = market_open.deciding_session(plan)
+        record_transition(plan, PlanStatus.CANCELLED, reason="missed_open", at=self._now())
+        self._save(plan)
+        return [PlanEvent(plan.plan_id, "cancelled_expired", {
+            "reason": "missed_open", "bars_waited": 0,
+            "session": session.isoformat() if session else None,
+            "cancel_resting_order": True})]
 
     def _active_stop(self, plan: TradePlanV2, now=None) -> tuple[float, bool]:
         if plan.working_stop is None:
