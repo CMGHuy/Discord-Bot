@@ -436,6 +436,23 @@ def _trade_deleted_fields(embed, plan, d) -> None:
         "Never opened; no position, no P&L."), inline=False)
 
 
+def _open_through_stop_fields(embed, plan, d) -> None:
+    """v192: a waiting market plan whose next open sat at or through its stop."""
+    embed.description = plan_levels_block(plan, plan.trigger_price)
+    embed.add_field(name="Why", value=(
+        f"Opened at {d['live_price']:.2f}, at or through the stop {plan.stop_loss:.2f}, "
+        f"before the {plan.trigger_price:.2f} entry. Never opened; no position, no P&L."),
+        inline=False)
+
+
+def _gap_no_reclaim_fields(embed, plan, d) -> None:
+    """v192: the DAY stop order at the entry expired with its session."""
+    embed.description = plan_levels_block(plan, plan.trigger_price)
+    embed.add_field(name="Why", value=(
+        f"Opened toward the stop and never reclaimed the {d['entry_price']:.2f} entry in the "
+        f"{d['session']} session. Never opened; no position, no P&L."), inline=False)
+
+
 def _outlook_cancel_fields(embed, plan, d) -> None:
     """v144: an outlook plan's cancellation, in the catalogue's words and code."""
     embed.description = plan_levels_block(plan, plan.trigger_price)
@@ -453,6 +470,8 @@ _EVENT_FIELDS = {
     "cancelled_limit": _limit_cancelled_fields,
     "cancelled_gap_through_stop": _gap_through_stop_fields,
     "cancelled_trade_deleted": _trade_deleted_fields,
+    "cancelled_open_through_stop": _open_through_stop_fields,    # v192
+    "cancelled_gap_no_reclaim": _gap_no_reclaim_fields,          # v192
 }
 
 

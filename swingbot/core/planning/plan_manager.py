@@ -161,8 +161,16 @@ PENDING_CANCEL_EVENTS = frozenset({
     "cancelled_expired", "cancelled_invalidated", "cancelled_risk_cap",
     "cancelled_limit", "cancelled_gap_through_stop",
     "cancelled_trade_deleted",     # v189 A7: queued by tracking/plan_links, not by a step
+    # v192: a waiting market plan's open-time cancels (through the stop; no reclaim)
+    "cancelled_open_through_stop", "cancelled_gap_no_reclaim",
 })
-NOTICE_EVENTS = frozenset({"filled", "closed"}) | PENDING_CANCEL_EVENTS
+#: Cancels of a plan that never filled: scan_run.py logged a placeholder trade for
+#: it at alert time (sized on the trigger), which _on_event deletes (2026-09-11
+#: incident). The same set as PENDING_CANCEL_EVENTS, named for that reader.
+PLACEHOLDER_DISCARD_EVENTS = PENDING_CANCEL_EVENTS
+# v192: the reclaim DAY stop order is re-sent until acknowledged; the session's
+# fill or its gap_no_reclaim cancel overwrites the single pending_notice slot.
+NOTICE_EVENTS = frozenset({"filled", "closed", "gap_reclaim_order"}) | PENDING_CANCEL_EVENTS
 NOTICE_RESEND_DAYS = 5
 
 # v152 D1: events only the notify channel (commands/scanning/follow_notify.py)
@@ -188,6 +196,9 @@ _TRANSITION_LOG = {
     "cancelled_limit": ("limit cancelled", "live_price"),
     "cancelled_gap_through_stop": ("gap through stop", "live_price"),
     "cancelled_trade_deleted": ("trade deleted", "live_price"),
+    "cancelled_open_through_stop": ("opened through stop", "live_price"),   # v192
+    "cancelled_gap_no_reclaim": ("no reclaim", "entry_price"),             # v192
+    "gap_reclaim_order": ("reclaim order at entry", "entry_price"),        # v192
 }
 # Closes where a stop took the position out (initial, break-even, the
 # post-TP1 runner floor, or the chandelier trail), not a target or a time rule.
@@ -926,7 +937,7 @@ class PlanManager:
                         gap_sizing=plan.gap_sizing,
                         risk_notice=plan.risk_notice)
                 event.detail["trade_id"] = trade_id
-            elif event.transition in PENDING_CANCEL_EVENTS:
+            elif event.transition in PLACEHOLDER_DISCARD_EVENTS:
                 # A PENDING plan never filled -- scan_run.py's placeholder
                 # trade for it (still open, sized against the trigger price)
                 # has no real position behind it. Left unhandled, it sat
