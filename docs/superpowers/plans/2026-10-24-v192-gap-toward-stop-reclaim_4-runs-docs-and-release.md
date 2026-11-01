@@ -77,7 +77,7 @@ git -C "$WT" grep -n "def strata_split\|def evaluate_gap_reclaim\|def repriced_p
 
 Expected: at least one hit per command. A command with no hit means an earlier task is missing from this worktree: stop and report it.
 
-- [ ] **Step 1: Append the known-traps section**
+- [x] **Step 1: Append the known-traps section**
 
 Append this section at the very end of `"$WT/docs/claude/known-traps.md"` (one blank line before the heading):
 
@@ -151,7 +151,7 @@ change, never a fixture to refresh.
   (next-open vs close fill) before the partner flips both.
 ```
 
-- [ ] **Step 2: Architecture**
+- [x] **Step 2: Architecture**
 
 In `"$WT/docs/claude/architecture.md"`, `## Plan engine, registry and scan pipeline`, directly before the line that starts `- **Opex-day caution (v44):**`, insert:
 
@@ -167,7 +167,7 @@ In `"$WT/docs/claude/architecture.md"`, `## Plan engine, registry and scan pipel
   gap-reclaim veto (v192).
 ```
 
-- [ ] **Step 3: The Codex mirror**
+- [x] **Step 3: The Codex mirror**
 
 In `"$WT/AGENTS.md"`, the bullet that starts ``- `known-traps.md`: data caching`` today ends with ``production `.env` (never `sed -i`).``. Insert this clause directly before ``production `.env` ``:
 
@@ -203,7 +203,7 @@ python "$WT/scripts/dev/testrun.py" changed
 
 Expected: the section heading prints; `1`; `1`; `0 failed` in both runs (`changed` selects whatever tests read these docs).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
