@@ -33,8 +33,7 @@ from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.tracking.performance import _usable_price
 from swingbot.core.tracking import account_reset
 from swingbot.core.tracking.plan_links import describe_ended
-from swingbot.core.planning.plan_engine import (PlanStatus, plan_from_dict, plan_to_dict,
-                                                record_transition)
+from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_store import PlanStore
 
 from . import api_v1, error
@@ -51,7 +50,6 @@ from .trades import (
 log = logging.getLogger(__name__)
 
 _CLOSEABLE_PLAN = (PlanStatus.ACTIVE, PlanStatus.PARTIAL)
-_OPEN_LEGACY = "open"
 
 
 def _linked_trade(log_: TradeLog, plan_id: str) -> dict | None:
@@ -132,11 +130,6 @@ def _override_stamp(ticker: str) -> dict | None:
         return None
 
 
-class PlanChanged(Exception):
-    """The plan's status moved between the admin's read and the row lock (the
-    bot closed it, or TP1 filled). Nothing was written; the caller reloads."""
-
-
 def _runner_leg(plan, price, at: str) -> dict | None:
     """v189 A2: a PARTIAL plan's still-open remainder realized at `price`, in
     the shape `_close_runner` writes. None for an ACTIVE plan, a PARTIAL with
@@ -151,38 +144,6 @@ def _runner_leg(plan, price, at: str) -> dict | None:
     sign = 1 if plan.direction == "bullish" else -1
     return {"fraction": remaining, "exit_price": price,
             "r": (price - plan.entry_price) * sign / risk, "reason": "manual", "closed_at": at}
-
-
-def _close_plan_onto(plan, price, reason: str, stamp, at: str) -> None:
-    """The close on an in-memory plan, no I/O: the A2 runner leg, then the
-    CLOSED transition carrying the v173 override stamp. `at` is explicit --
-    the lifecycle strip's "today" counts read status_history[-1]["at"]."""
-    leg = _runner_leg(plan, price, at)
-    if leg is not None:
-        plan.legs_realized.append(leg)
-    record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at, extra={"override": stamp})
-
-
-def _runner_path_for(plan, price, reason: str, stamp, at: str) -> tuple[bool, dict | None]:
-    """(stamped, path). v142: a manual runner close stamps its path; that
-    reads the daily cache from disk, so it runs on a closed COPY before any
-    row lock. An ACTIVE plan has no runner: (False, None). Never raises.
-    The path is stamped from the pre-lock plan: a stop tightened between the
-    read and the lock is accepted (a narrow window; the leg itself is rebuilt
-    from the locked plan)."""
-    if plan.status != PlanStatus.PARTIAL:
-        return False, None
-    preview = plan_from_dict(plan_to_dict(plan))
-    _close_plan_onto(preview, price, reason, stamp, at)
-    return True, rp.stamp_runner_path(preview, rp.cached_daily_bars, source="live")
-
-
-def _close_linked_trade(tl: TradeLog, linked: dict | None, price, conn, hooks: list) -> None:
-    """Settle the plan's open trade inside the plan's transaction (trade row
-    locked after the plan row), at the stamp's quote; hooks wait for commit."""
-    if linked and linked.get("status") == _OPEN_LEGACY:
-        tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)",
-                              exit_price=price, conn=conn, after_commit=hooks)
 
 
 def _close_plan(store: PlanStore, plan, reason: str = "manual") -> None:
