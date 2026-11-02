@@ -610,6 +610,10 @@ _NOT_READ = {
     # and the directory walk also lists these READMEs.
     "frontend/README.md",
     "frontend/chart-harness/README.md",
+    # test_event_stream.py names a directory; the walk also lists these v190
+    # re-baseline write-ups, which no test opens.
+    "data/backtest_results/v190/coverage-v3.md",
+    "data/backtest_results/v190/rebaseline-body.md",
     # test_guardrails.py feeds these to the hook's plan-doc shape check.
     "docs/superpowers/plans/implemented/2026-09-18-v96-claude-skills-layer.md",
     "docs/superpowers/plans/implemented/2026-09-16-v92-exit-quality-harvest.md",
