@@ -163,7 +163,7 @@ def _perform_lifecycle(action, identity, projection):
                      "This position changed or is being updated by the bot; "
                      "reload and try again.", 409)
     except Exception as exc:
-        log.error("admin lifecycle action could not commit type=%s", type(exc).__name__)
+        log.error("admin lifecycle action could not commit type=%s", type(exc).__name__, exc_info=True)
         return error("unavailable", "The action could not be saved. Try again.", 503)
     # Projection failure after commit must not be described as an action rollback.
     return projection(identity)
@@ -348,7 +348,7 @@ def close_open():
             closed += 1
             tickers.append(plan.ticker)
         except Exception as exc:
-            log.error("bulk close failed plan=%s type=%s", plan.plan_id, type(exc).__name__)
+            log.error("bulk close failed plan=%s type=%s", plan.plan_id, type(exc).__name__, exc_info=True)
             failed += 1
     return jsonify({"closed": closed, "failed": failed, "tickers": tickers})
 
