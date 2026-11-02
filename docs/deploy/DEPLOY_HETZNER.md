@@ -330,6 +330,10 @@ no per-store stage and no import step. Only `analytics_snapshot.json`,
   place and snapshots it; `sed -i` leaves the containers reading the old inode
   (`docs/claude/known-traps.md`, "Editing production `.env` with `sed -i`").
 
+### Lifecycle notification queue (v197)
+
+`deploy.sh` stops bot and admin, migrates with the new image, then starts them. Export `LIFECYCLE_CHANNEL_ID` before the first v197 deploy if the queue holds rows, and never roll back by image alone: see `LIFECYCLE_NOTIFICATIONS.md` (Rollout prerequisites, Rollback).
+
 ### Point-in-time rollback
 
 `scripts/ops/rollback_to.sh "<UTC timestamp>"` (run on the VM as root) restores

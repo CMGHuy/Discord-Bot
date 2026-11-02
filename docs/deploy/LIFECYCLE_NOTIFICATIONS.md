@@ -12,7 +12,7 @@ Logs separate attempted, acknowledged, retried and blocked counts. An acknowledg
 
 ## Rollout prerequisites
 
-Obtain explicit deployment authorization and follow DEPLOY_HETZNER.md. Use scripts/ops/ssh-hetzner.sh for every production connection. Take and verify the normal database backup before migration, and record pending row count and event identities. Stop every bot consumer and prevent admin close/cancel writes during migration; no old DELETE-drain consumer may run during or after the upgrade.
+Obtain explicit deployment authorization and follow DEPLOY_HETZNER.md. Use scripts/ops/ssh-hetzner.sh for every production connection. Take and verify the normal database backup before migration, and record pending row count and event identities. deploy/deploy.sh does the stop for you: it stops bot and admin, runs `alembic upgrade head` with the new image via `docker compose run --rm --no-deps`, and only then starts the services. For existing queue rows export LIFECYCLE_CHANNEL_ID (the reviewed historical destination) before running it; deploy.sh passes it as `-x lifecycle_channel_id`. No old DELETE-drain consumer may run during or after the upgrade.
 
 Confirm one Alembic head and inspect the v197 revision against that head. Upgrade to the reviewed application/schema pair while consumers remain stopped. For existing queue rows, pass the reviewed historical destination explicitly with Alembic's -x lifecycle_channel_id argument; do not silently copy a future configuration value. The invocation shape is: python -m alembic -x lifecycle_channel_id=123456789012345678 upgrade head (the number is an example, not a deploy target). An empty queue needs no destination argument. Without a valid destination, legacy rows stay pending and blocked for explicit retargeting.
 
@@ -29,5 +29,7 @@ Import notify_queue_repo from swingbot.core.db.repositories.notify_queue and dat
 ## Rollback
 
 Prefer a forward repair. If rollback is required, stop the new consumer and pause admin close/cancel writes first; take and verify a database backup and record the pending queue. Application and schema rollback must be planned together. The downgrade copies promoted delivery fields into doc and preserves every queue row and immutable snapshot; a later re-upgrade preserves canonical identity.
+
+**Image-only rollback is forbidden.** `deploy.sh` with an older image would start the old DELETE-drain consumer against the preserved v197 queue: it would re-post every acknowledged notice kept for seven days and fail on the nested payload, and old admin closes would fail their queue insert against the NOT NULL v197 columns and silently drop the notice. The only supported rollback is the point-in-time restore through `scripts/ops/rollback_to.sh` / DB_RESTORE.md, which returns schema and queue together with the image.
 
 An old application still contains destructive draining and cannot safely consume this preserved queue. Do not start it against new pending records without an explicitly reviewed compatibility conversion and inspection. Keep delivery stopped while deciding the recovery path; queue preservation takes precedence over a nominal application restart. Use DB_RESTORE.md for a separately authorized point-in-time restore, including its scanning-paused recovery state. No rollback action is authorized merely by this document.
