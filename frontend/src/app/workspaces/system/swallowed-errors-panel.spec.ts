@@ -24,9 +24,10 @@ const HEALTH: SystemHealth = {
   bot_counts_since: '2026-10-10T06:00:00Z',
 };
 
-function render(health: SystemHealth | null): HTMLElement {
+function render(health: SystemHealth | null, stale = false): HTMLElement {
   const fixture = TestBed.createComponent(SwallowedErrorsPanel);
   fixture.componentRef.setInput('health', health);
+  fixture.componentRef.setInput('stale', stale);
   fixture.detectChanges();
   return fixture.nativeElement as HTMLElement;
 }
@@ -88,4 +89,18 @@ describe('SwallowedErrorsPanel', () => {
     expect(el.querySelector('table')).toBeNull();
     expect(el.textContent).toContain('None since the processes started');
   });
+});
+
+describe('SwallowedErrorsPanel unavailable state', () => {
+  beforeEach(() => TestBed.configureTestingModule({
+    providers: [provideZonelessChangeDetection()],
+  }));
+
+  it.each([[null, false], [HEALTH, true]] as const)(
+    'says unavailable, not empty, when health is missing or stale', (health, stale) => {
+      const el = render(health, stale);
+      expect(el.textContent).toContain('Swallowed-error counts unavailable');
+      expect(el.textContent).not.toContain('None since the processes started');
+    },
+  );
 });

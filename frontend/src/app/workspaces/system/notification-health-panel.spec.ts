@@ -29,8 +29,8 @@ describe('NotificationHealthPanel', () => {
     expect(el.querySelector('[role="status"]')).not.toBeNull();
   });
 
-  it.each([null, undefined])('shows unknown for an absent health projection: %s', (health) => {
-    const el = render(health ?? null);
+  it('shows unknown for an absent health projection', () => {
+    const el = render(null);
     expect(el.textContent).toContain('Notification delivery status unavailable');
     expect(el.textContent).not.toContain('No pending notifications');
     expect(el.querySelector('dl')).toBeNull();

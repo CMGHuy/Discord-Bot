@@ -31,6 +31,7 @@ const ALPACA: DataSourcesHealth = {
 interface Reading {
   scanHealth?: Record<string, unknown>;
   riskFails?: boolean;
+  health?: Record<string, unknown> | 'fail';
 }
 
 async function render(reading: Reading = {}): Promise<HTMLElement> {
@@ -46,7 +47,15 @@ async function render(reading: Reading = {}): Promise<HTMLElement> {
   const fixture = TestBed.createComponent(ProvidersTab);
   const backend = TestBed.inject(HttpTestingController);
   TestBed.inject(SystemStore).loadProviders();
-  backend.expectOne('/api/v1/system/health').flush(HEALTH);
+  const healthReq = backend.expectOne('/api/v1/system/health');
+  if (reading.health === 'fail') {
+    healthReq.flush(
+      { error: { code: 'unavailable', message: 'down' } },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+  } else {
+    healthReq.flush(reading.health ?? HEALTH);
+  }
   const risk = backend.expectOne('/api/v1/risk');
   if (reading.riskFails) {
     risk.flush(
@@ -88,11 +97,28 @@ describe('Providers tab helpers (moved from risk.ts, v195 §5.1)', () => {
 });
 
 describe('Providers tab (v195 §5.1)', () => {
-  it('holds Data providers, Data source, Scan health, Swallowed errors and Lifecycle notifications, in that order', async () => {
+  it('holds Lifecycle notifications, Data providers, Data source, Scan health and Swallowed errors, in that order', async () => {
     expect(headings(await render())).toEqual([
-      'Data providers', 'Data source', 'Scan health', 'Swallowed errors',
-      'Lifecycle notifications',
+      'Lifecycle notifications', 'Data providers', 'Data source', 'Scan health',
+      'Swallowed errors',
     ]);
+  });
+
+  it('reads a health payload without the notifications key as unknown, not healthy', async () => {
+    const legacy: Record<string, unknown> = { ...HEALTH };
+    delete legacy['notifications'];
+    const el = await render({ health: legacy });
+    expect(el.textContent).toContain('Notification delivery status unavailable');
+    expect(el.textContent).not.toContain('No pending notifications');
+  });
+
+  it('shows unavailable, not empty values, on every health panel after a failed refresh', async () => {
+    const el = await render({ health: 'fail' });
+    expect(el.textContent).toContain('Notification delivery status unavailable');
+    expect(el.textContent).toContain('Provider health unavailable');
+    expect(el.textContent).toContain('Swallowed-error counts unavailable');
+    expect(el.textContent).not.toContain('No scan recorded yet');
+    expect(el.textContent).not.toContain('None since the processes started');
   });
 
   it('shows the last scan duration and the recent durations', async () => {
