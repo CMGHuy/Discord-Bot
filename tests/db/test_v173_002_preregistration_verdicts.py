@@ -46,7 +46,7 @@ def test_v173_002_sits_on_v173_001_and_is_the_single_head():
     scripts = ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
     revision = scripts.get_revision("v173_002")
     assert revision.down_revision == "v173_001"
-    assert scripts.get_heads() == ["v173_002"]
+    assert scripts.get_heads() == ["v197_001"]  # v173_002 is no longer the head
 
 
 def _tables(connection) -> set[str]:
