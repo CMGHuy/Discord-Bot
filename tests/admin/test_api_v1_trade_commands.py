@@ -46,9 +46,9 @@ def logged_in(client):
 
 @pytest.fixture
 def notify_queue():
-    """The bot's manual-close notification queue (reading it drains it)."""
+    """Inspect durable events without acknowledging or deleting them."""
     from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-    return notify_queue_repo().drain
+    return notify_queue_repo().list_all
 
 
 @pytest.fixture(autouse=True)
@@ -101,7 +101,7 @@ def test_closing_a_plan_queues_a_notify_record_for_that_plan(seed, logged_in, no
 
     logged_in.post(f"/api/v1/trades/{_PLAN_ID}/close")
 
-    assert any(r.get("plan_id") == _PLAN_ID for r in notify_queue())
+    assert any(r["payload"].get("plan_id") == _PLAN_ID for r in notify_queue())
 
 
 def test_close_a_pending_plan_is_rejected(seed, logged_in):
@@ -133,23 +133,22 @@ def test_close_an_open_legacy_trade(seed, logged_in, notify_queue):
     r = logged_in.post(f"/api/v1/trades/{_TRADE_ID}/close")
     assert r.status_code == 200
     assert r.get_json()["status"] == "CLOSED"
-    # The record's own `id` is a reserved column name in the queue table, so
-    # it is queued as `trade_id`; queued as `id` the insert is rejected and the
-    # trade-history channel never hears about the close.
-    assert any(r.get("trade_id") == _TRADE_ID for r in notify_queue())
+    # The event carries an immutable nested trade snapshot plus its trade_id.
+    assert any(r["payload"].get("trade_id") == _TRADE_ID for r in notify_queue())
 
 
 def test_closing_a_legacy_trade_reaches_the_db_queue_under_its_trade_id(
         seed, logged_in, store_db):
-    """A legacy trade's own `id` is a reserved column in manual_close_notify:
-    queued as `id` the insert is rejected (and swallowed) and the trade-history
-    channel never hears about the close."""
+    """The queued event carries the trade_id and an immutable nested trade
+    snapshot, so the trade-history channel hears about the close."""
     from swingbot.core.db.repositories.notify_queue import notify_queue_repo
     seed(trades=[_trade(_TRADE_ID, plan_id=None, status="open")])
 
     assert logged_in.post(f"/api/v1/trades/{_TRADE_ID}/close").status_code == 200
 
-    assert [r.get("trade_id") for r in notify_queue_repo().drain()] == [_TRADE_ID]
+    queued = notify_queue_repo().list_all()
+    assert [row["payload"]["trade_id"] for row in queued] == [_TRADE_ID]
+    assert queued[0]["payload"]["trade"]["id"] == _TRADE_ID
 
 
 def test_close_an_already_closed_legacy_trade_is_rejected(seed, logged_in):
@@ -367,3 +366,79 @@ def test_close_open_reports_failures_without_aborting_the_rest(seed, logged_in, 
     body = logged_in.post("/api/v1/trades/close-open").get_json()
     assert body["closed"] == 1
     assert body["failed"] == 1
+
+
+def test_close_queue_failure_returns_503_and_rolls_back(seed, logged_in, monkeypatch):
+    from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
+    from swingbot.core.planning.plan_store import PlanStore
+    from swingbot.core.tracking.performance import TradeLog
+    seed(plans=[_plan(_PLAN_ID, status="ACTIVE")], trades=[_trade(_TRADE_ID, plan_id=_PLAN_ID)])
+    def fail(self, event, *, conn=None):
+        raise RuntimeError("private diagnostic must not reach HTTP")
+    monkeypatch.setattr(NotifyQueueRepository, "enqueue", fail)
+    response = logged_in.post(f"/api/v1/trades/{_PLAN_ID}/close")
+    assert_error(response, "unavailable", 503)
+    assert "private diagnostic" not in response.get_data(as_text=True)
+    assert PlanStore().get(_PLAN_ID).status == "ACTIVE"
+    assert TradeLog().get_trade_by_id(_TRADE_ID)["status"] == "open"
+
+
+def test_cancel_queue_failure_keeps_plan_pending(seed, logged_in, monkeypatch):
+    from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
+    from swingbot.core.planning.plan_store import PlanStore
+    seed(plans=[_plan(_PLAN_ID, status="PENDING")])
+    def fail(self, event, *, conn=None):
+        raise RuntimeError("database unavailable")
+    monkeypatch.setattr(NotifyQueueRepository, "enqueue", fail)
+    assert_error(logged_in.post(f"/api/v1/trades/{_PLAN_ID}/cancel"), "unavailable", 503)
+    assert PlanStore().get(_PLAN_ID).status == "PENDING"
+
+
+def test_cancel_queues_unfilled_transition_with_recorded_identity(seed, logged_in, notify_queue):
+    seed(plans=[_plan(_PLAN_ID, status="PENDING")])
+    assert logged_in.post(f"/api/v1/trades/{_PLAN_ID}/cancel").status_code == 200
+    events = notify_queue()
+    assert len(events) == 1
+    assert events[0]["kind"] == "plan_transition"
+    assert events[0]["payload"]["new_status"] == "CANCELLED"
+    assert events[0]["payload"]["prior_status"] == "PENDING"
+    assert "trade" not in events[0]["payload"]
+    assert events[0]["transition_id"] and events[0]["event_id"]
+
+
+def test_bulk_failure_counts_only_committed_positions(seed, logged_in, monkeypatch, notify_queue):
+    from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
+    from swingbot.core.planning.plan_store import PlanStore
+    first = "11111111-1111-4111-8111-111111111111"
+    second = "22222222-2222-4222-8222-222222222222"
+    seed(plans=[_plan(first, ticker="AAPL", status="ACTIVE"),
+                _plan(second, ticker="MSFT", status="ACTIVE")])
+    original = NotifyQueueRepository.enqueue
+    def fail_one(self, event, *, conn=None):
+        if event["payload"]["plan_id"] == first:
+            raise RuntimeError("queue failed for first position")
+        return original(self, event, conn=conn)
+    monkeypatch.setattr(NotifyQueueRepository, "enqueue", fail_one)
+    response = logged_in.post("/api/v1/trades/close-open")
+    assert response.status_code == 200
+    assert response.get_json() == {"closed": 1, "failed": 1, "tickers": ["MSFT"]}
+    assert PlanStore().get(first).status == "ACTIVE"
+    assert PlanStore().get(second).status == "CLOSED"
+    assert [event["payload"]["plan_id"] for event in notify_queue()] == [second]
+
+
+def test_close_lock_timeout_is_a_409_conflict(seed, logged_in, monkeypatch):
+    from swingbot.admin.api_v1 import lifecycle_commands
+    from swingbot.core.db.engine import LockTimeout
+    seed(plans=[_plan(_PLAN_ID, status="ACTIVE")])
+    def held(*args, **kwargs):
+        raise LockTimeout("plan row held by the bot")
+    monkeypatch.setattr(lifecycle_commands, "close_plan_atomic", held)
+    assert_error(logged_in.post(f"/api/v1/trades/{_PLAN_ID}/close"), "conflict", 409)
+
+
+def test_cancel_unknown_plan_is_404_and_closed_plan_is_422(seed, logged_in):
+    seed(plans=[_plan(_PLAN_ID, status="CLOSED")])
+    assert_error(logged_in.post(f"/api/v1/trades/{_PLAN_ID}/cancel"), "invalid", 422)
+    other = "99999999-9999-4999-8999-999999999999"
+    assert_error(logged_in.post(f"/api/v1/trades/{other}/cancel"), "not_found", 404)
