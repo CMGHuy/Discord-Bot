@@ -15,6 +15,7 @@ from swingbot import config
 from swingbot.admin.api_v1 import trade_commands as tc
 from swingbot.core.analytics import runner_path as rp
 from swingbot.core.db.repositories.account import AccountRepository
+from swingbot.core.db.repositories.notify_queue import notify_queue_repo
 from swingbot.core.marketdata import data as md
 from swingbot.core.marketdata.data import PriceQuote
 from swingbot.core.planning.plan_store import PlanStore
@@ -112,6 +113,8 @@ def test_a_bulk_close_stamps_manual_bulk(env):
     _, entry = _close(reason="manual_bulk")
     assert entry["reason"] == "manual_bulk"
     assert entry["override"]["price_source"] == "quote"
+    trade = TradeLog().get_trade_by_id(TRADE_ID)
+    assert trade["close_reason"] == "manual (plan close, admin UI)"
 
 
 def test_no_quote_falls_back_to_the_cached_daily_close(env):
@@ -121,6 +124,8 @@ def test_no_quote_falls_back_to_the_cached_daily_close(env):
     assert entry["override"] == {
         "exit_price": pytest.approx(101.5), "price_source": "bar_close",
         "quote_ts": None, "bars_asof": "2026-10-16"}
+    # A daily close is never written to the trade as a live fill.
+    assert TradeLog().get_trade_by_id(TRADE_ID)["exit_price"] is None
 
 
 def test_a_quote_that_raises_is_treated_as_no_quote(env):
@@ -152,6 +157,8 @@ def test_an_unreadable_cache_writes_a_null_stamp_and_still_closes(env):
     plan, entry = _close()
     assert "override" in entry and entry["override"] is None
     assert plan.status == "CLOSED"
+    events = notify_queue_repo().list_all()
+    assert [e["payload"]["new_status"] for e in events] == ["CLOSED"]
 
 
 def test_a_stamp_builder_failure_still_closes(env, monkeypatch):
@@ -162,6 +169,7 @@ def test_a_stamp_builder_failure_still_closes(env, monkeypatch):
     _seed()
     _, entry = _close()
     assert entry["override"] is None
+    assert TradeLog().get_trade_by_id(TRADE_ID)["exit_price"] is None
 
 
 def test_override_stamp_never_raises(env):
@@ -202,6 +210,13 @@ def test_close_open_passes_manual_bulk(env, monkeypatch, client):
     body = client.post("/api/v1/trades/close-open").get_json()
     assert body == {"closed": 2, "failed": 0, "tickers": ["AAA", "BBB"]}
     assert sorted(seen) == [("AAA", "manual_bulk"), ("BBB", "manual_bulk")]
+
+
+def test_close_trade_passes_the_default_manual(env, client):
+    client.post("/api/v1/session", json=_LOGIN)
+    _seed(trades=[])
+    assert client.post(f"/api/v1/trades/{PLAN_ID}/close").status_code == 200
+    assert PlanStore().get(PLAN_ID).status_history[-1]["reason"] == "manual"
 
 
 def test_a_bulk_close_end_to_end_stamps_every_plan(env, client):

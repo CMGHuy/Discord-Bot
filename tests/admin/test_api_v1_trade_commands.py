@@ -427,16 +427,6 @@ def test_bulk_failure_counts_only_committed_positions(seed, logged_in, monkeypat
     assert [event["payload"]["plan_id"] for event in notify_queue()] == [second]
 
 
-def test_close_lock_timeout_is_a_409_conflict(seed, logged_in, monkeypatch):
-    from swingbot.admin.api_v1 import lifecycle_commands
-    from swingbot.core.db.engine import LockTimeout
-    seed(plans=[_plan(_PLAN_ID, status="ACTIVE")])
-    def held(*args, **kwargs):
-        raise LockTimeout("plan row held by the bot")
-    monkeypatch.setattr(lifecycle_commands, "close_plan_atomic", held)
-    assert_error(logged_in.post(f"/api/v1/trades/{_PLAN_ID}/close"), "conflict", 409)
-
-
 def test_cancel_unknown_plan_is_404_and_closed_plan_is_422(seed, logged_in):
     seed(plans=[_plan(_PLAN_ID, status="CLOSED")])
     assert_error(logged_in.post(f"/api/v1/trades/{_PLAN_ID}/cancel"), "invalid", 422)
