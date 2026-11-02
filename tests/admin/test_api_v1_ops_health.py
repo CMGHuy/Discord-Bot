@@ -83,12 +83,56 @@ def test_requires_auth(client):
 def test_nothing_recorded_yet_is_empty_not_an_error(logged_in, telemetry_rows):
     body = _health(logged_in)
     assert_shape(body, {"providers": list, "thresholds": dict, "swallowed": list,
-                        "bot_counts_since": NULLABLE_STR})
+                        "bot_counts_since": NULLABLE_STR,
+                        "notifications": (dict, type(None))})
     assert_shape(body["thresholds"], {"fallback_pct": NUMBER, "empty_pct": NUMBER},
                  where="thresholds")
     assert body["providers"] == []
     assert body["swallowed"] == []
     assert body["bot_counts_since"] is None
+
+
+def test_notification_health_empty_is_known_zero(logged_in, telemetry_rows):
+    health = _health(logged_in)["notifications"]
+    assert_shape(health, {"pending_count": int, "oldest_pending_age_seconds": NULLABLE_NUMBER,
+                         "blocked_count": int}, where="notifications")
+    assert health == {"pending_count": 0, "oldest_pending_age_seconds": None,
+                      "blocked_count": 0}
+
+
+def test_notification_health_passes_only_public_projection(logged_in, telemetry_rows, monkeypatch):
+    from types import SimpleNamespace
+    from swingbot.admin.api_v1 import ops_health
+
+    seen = []
+    projection = {"pending_count": 3, "oldest_pending_age_seconds": 901.5, "blocked_count": 1}
+
+    def health(*, now):
+        seen.append(now)
+        return projection
+
+    monkeypatch.setattr(ops_health, "notify_queue_repo", lambda: SimpleNamespace(health=health))
+    body = _health(logged_in)
+    assert body["notifications"] == projection
+    assert set(body["notifications"]) == set(projection)
+    assert len(seen) == 1 and seen[0].utcoffset().total_seconds() == 0
+
+
+def test_notification_query_outage_is_unknown_without_private_details(
+        logged_in, telemetry_rows, monkeypatch, caplog):
+    from types import SimpleNamespace
+    from swingbot.admin.api_v1 import ops_health
+
+    def fail(*, now):
+        raise RuntimeError("private connection credentials")
+
+    monkeypatch.setattr(ops_health, "notify_queue_repo", lambda: SimpleNamespace(health=fail))
+    body = _health(logged_in)
+    assert body["notifications"] is None
+    assert body["providers"] == []
+    assert body["swallowed"] == []
+    assert "private connection credentials" not in json.dumps(body) + caplog.text
+    assert "notification_health_unavailable" in caplog.text
 
 
 def test_provider_rows_are_newest_first_and_capped_at_20(logged_in, telemetry_rows):
