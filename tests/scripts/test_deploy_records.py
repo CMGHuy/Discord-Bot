@@ -77,3 +77,16 @@ def test_chown_failure_is_fatal_when_archiving_is_on_else_a_loud_warning(src):
 
 def test_lf_line_endings():
     assert b"\r" not in SCRIPT.read_bytes()
+
+
+def test_it_migrates_with_bot_and_admin_stopped_before_compose_up(src):
+    """v197: the lifecycle queue migration runs with no consumer or writer up."""
+    stop = src.index("docker compose stop bot admin")
+    migrate = src.index("run --rm --no-deps -T bot alembic")
+    up = src.index("docker compose up -d --no-build --wait\n")
+    assert stop < migrate < up
+
+
+def test_it_passes_the_lifecycle_destination_only_when_exported(src):
+    assert 'LIFECYCLE_CHANNEL_ID:-' in src
+    assert '-x "lifecycle_channel_id=${LIFECYCLE_CHANNEL_ID}"' in src

@@ -167,6 +167,25 @@ docker pull "$DB_IMAGE"
 echo "==> Pulling cloudflared (Cloudflare Tunnel image)"
 docker compose pull cloudflared || echo "WARNING: could not pull cloudflared -- continuing deploy anyway" >&2
 
+# v197: the lifecycle queue migration must run while NO consumer or writer is
+# up. The previous image's watcher drains the queue with DELETE ... RETURNING,
+# and the new one polls the new schema, so a migration applied after `up` races
+# both. Stop bot and admin first, migrate with the new image, then start. Legacy
+# queue rows need their historical destination: export LIFECYCLE_CHANNEL_ID
+# (reviewed channel id) before running this script; unset means no -x argument
+# and any legacy rows stay blocked for the audited retarget
+# (docs/deploy/LIFECYCLE_NOTIFICATIONS.md).
+echo "==> Ensuring the database is up for the schema migration"
+docker compose up -d --no-build --wait db
+echo "==> Stopping bot and admin for the schema migration"
+docker compose stop bot admin
+echo "==> Applying database migrations before start (alembic upgrade head)"
+if [ -n "${LIFECYCLE_CHANNEL_ID:-}" ]; then
+  docker compose run --rm --no-deps -T bot alembic -x "lifecycle_channel_id=${LIFECYCLE_CHANNEL_ID}" upgrade head
+else
+  docker compose run --rm --no-deps -T bot alembic upgrade head
+fi
+
 echo "==> Starting services"
 # --no-build is the assertion, not an optimisation: if anything ever makes
 # this server build its own image again, the artifact that was tested in CI
