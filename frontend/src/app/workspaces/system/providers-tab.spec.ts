@@ -19,6 +19,7 @@ import { ProvidersTab, dataSourceName, fallbackText, scanSecondsText } from './p
 const HEALTH: SystemHealth = {
   providers: [],
   thresholds: { fallback_pct: 20, empty_pct: 5 },
+  notifications: null,
   swallowed: [],
   bot_counts_since: null,
 };
@@ -87,9 +88,10 @@ describe('Providers tab helpers (moved from risk.ts, v195 §5.1)', () => {
 });
 
 describe('Providers tab (v195 §5.1)', () => {
-  it('holds Data providers, Data source, Scan health and Swallowed errors, in that order', async () => {
+  it('holds Data providers, Data source, Scan health, Swallowed errors and Lifecycle notifications, in that order', async () => {
     expect(headings(await render())).toEqual([
       'Data providers', 'Data source', 'Scan health', 'Swallowed errors',
+      'Lifecycle notifications',
     ]);
   });
 

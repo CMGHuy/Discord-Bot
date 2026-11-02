@@ -10,6 +10,7 @@ const NOW = Date.parse('2026-10-10T12:00:00Z');
 const HEALTH: SystemHealth = {
   providers: [],
   thresholds: { fallback_pct: 20, empty_pct: 5 },
+  notifications: null,
   swallowed: [
     { process: 'admin', tag: 'runstate.read_heartbeat', count: 1,
       first_at: '2026-10-10T11:00:00Z', last_at: '2026-10-10T11:00:00Z',

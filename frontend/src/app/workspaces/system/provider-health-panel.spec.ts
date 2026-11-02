@@ -28,6 +28,7 @@ const HEALTH: SystemHealth = {
       stale_symbols: null, empty_symbols: null, empty_rate: null },
   ],
   thresholds: { fallback_pct: 20, empty_pct: 5 },
+  notifications: null,
   swallowed: [],
   bot_counts_since: null,
 };
