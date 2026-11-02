@@ -117,4 +117,6 @@ def test_agents_md_names_the_scout_tooling_and_stays_under_the_codex_cap():
     text = _text(AGENTS_MD)
     for name in ("trade-scout", "exit-harvester", "setup-scout", "regime-desk", "scout"):
         assert f"`{name}`" in text, name
-    assert len(AGENTS_MD.read_bytes()) < CODEX_CAP_BYTES
+    # Codex reads the LF blob; a Windows checkout (core.autocrlf=true) adds one
+    # byte per line, which pushed a 32,766-byte file to 33,305 and failed here.
+    assert len(AGENTS_MD.read_bytes().replace(b"\r\n", b"\n")) < CODEX_CAP_BYTES
