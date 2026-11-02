@@ -1,6 +1,9 @@
 {
   "permissions": {
     "allow": [
+      "Read(.env)",
+      "Read(**/.env)",
+      "Bash(bash scripts/ops/ssh-hetzner.sh:*)",
       "Bash(python -m pytest:*)",
       "Bash(python -m py_compile:*)",
       "Bash(python scripts/dev/testrun.py:*)",
@@ -58,7 +61,6 @@
       "Skill(superpowers:brainstorming)"
     ],
     "deny": [
-      "Read(./.env)",
       "Read(./.env.bak)"
     ]
   },
