@@ -213,3 +213,26 @@ def test_health_includes_blocked_and_leased_but_excludes_acknowledged(db_conn):
         pending_count=0, oldest_pending_age_seconds=None, blocked_count=0)
     assert repo.prune_delivered(now=later + timedelta(days=6), conn=db_conn) == 0
     assert repo.prune_delivered(now=later + timedelta(days=8), conn=db_conn) == 1
+
+
+def test_retarget_clears_destination_block(db_conn):
+    repo = NotifyQueueRepository()
+    event = fresh()
+    event.update(blocked=True, last_error="permission_denied")
+    repo.insert(event, conn=db_conn)
+    assert repo.retarget(event["event_id"], "8", actor="operator", reason="repair",
+                         now=NOW, conn=db_conn)
+    saved = record(repo, db_conn, event)
+    assert saved["blocked"] is False
+    assert saved["last_error"] is None
+
+
+@pytest.mark.parametrize("actor,reason,channel", [
+    ("", "repair", "9"), ("operator", "", "9"),
+    ("operator", "repair", "abc"), ("operator", "repair", "0"),
+    ("operator", "repair", "-3"), ("operator", "repair", ""),
+])
+def test_retarget_rejects_invalid_arguments(db_conn, actor, reason, channel):
+    with pytest.raises(ValueError, match="invalid_retarget"):
+        NotifyQueueRepository().retarget("any", channel, actor=actor, reason=reason,
+                                         now=NOW, conn=db_conn)
