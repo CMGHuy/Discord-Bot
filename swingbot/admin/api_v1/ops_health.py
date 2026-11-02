@@ -31,6 +31,7 @@ from flask import jsonify
 from swingbot import config
 from swingbot.core.db.repositories.notify_queue import notify_queue_repo
 from swingbot.core.infra import swallowed as swallowed_mod
+from swingbot.core.infra.swallowed import swallowed
 
 from . import api_v1
 from .auth import require_auth
@@ -70,8 +71,9 @@ def _bot_block() -> dict:
 def _notification_health() -> dict | None:
     try:
         return notify_queue_repo().health(now=datetime.now(timezone.utc))
-    except Exception:
-        log.error("notification_health_unavailable")
+    except Exception as exc:
+        swallowed(log, "ops.notification_health", exc, "notification_health_unavailable",
+                  level=logging.ERROR)
         return None
 
 

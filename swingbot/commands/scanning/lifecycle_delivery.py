@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import discord
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.db.repositories.notify_queue import notify_queue_repo
 from swingbot.core.scanning.lifecycle_notifications import (
     BlockedDelivery, send_lifecycle_notification,
@@ -40,15 +41,17 @@ def _delay(event, error, blocked):
 def _prune(repo, clock):
     try:
         repo.prune_delivered(now=clock())
-    except Exception:
-        log.error("lifecycle delivery cause=prune_storage_failed")
+    except Exception as exc:
+        swallowed(log, "ops.lifecycle_prune", exc, "lifecycle delivery cause=prune_storage_failed",
+                  level=logging.ERROR)
 
 
 def _claim(repo, owner, clock):
     try:
         return repo.claim_one(owner, now=clock())
-    except Exception:
-        log.error("lifecycle delivery cause=claim_storage_failed")
+    except Exception as exc:
+        swallowed(log, "ops.lifecycle_claim", exc, "lifecycle delivery cause=claim_storage_failed",
+                  level=logging.ERROR)
         return None
 
 
@@ -56,8 +59,10 @@ def _acknowledge(repo, event, message_id, clock):
     try:
         committed = repo.acknowledge(event["event_id"], event["lease_token"],
                                      message_id, now=clock())
-    except Exception:
-        log.error("lifecycle delivery event=%s cause=ack_storage_failed", event["event_id"])
+    except Exception as exc:
+        swallowed(log, "ops.lifecycle_ack", exc,
+                  "lifecycle delivery event=%s cause=ack_storage_failed", event["event_id"],
+                  level=logging.ERROR)
         return None
     if not committed:
         log.warning("lifecycle delivery event=%s cause=stale_ack", event["event_id"])
@@ -71,8 +76,10 @@ def _reschedule(repo, event, error, clock):
         committed = repo.reschedule(event["event_id"], event["lease_token"], now=clock(),
                                     delay_s=_delay(event, error, blocked),
                                     error_code=code, blocked=blocked)
-    except Exception:
-        log.error("lifecycle delivery event=%s cause=retry_storage_failed", event["event_id"])
+    except Exception as exc:
+        swallowed(log, "ops.lifecycle_retry", exc,
+                  "lifecycle delivery event=%s cause=retry_storage_failed", event["event_id"],
+                  level=logging.ERROR)
         return None
     if not committed:
         log.warning("lifecycle delivery event=%s cause=stale_retry", event["event_id"])
@@ -86,6 +93,8 @@ async def _deliver_one(bot, repo, event, clock):
     except asyncio.CancelledError:
         raise
     except Exception as error:
+        swallowed(log, "ops.lifecycle_send", error, "lifecycle delivery event=%s send failed",
+                  event["event_id"])
         return _reschedule(repo, event, error, clock)
     return _acknowledge(repo, event, message_id, clock)
 

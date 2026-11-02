@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import sqlalchemy as sa
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot import config
 from swingbot.core.analytics import runner_path as rp
 from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, transaction
@@ -73,7 +74,8 @@ def _prepared_plan(plan_id: str):
         quote = _manual_close_quote(plan.ticker)
     try:
         bars = rp.cached_daily_bars(plan.ticker)
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "ops.lifecycle_bars", exc)
         bars = None
     return plan.ticker, stamp, quote, bars
 
@@ -125,9 +127,10 @@ def _after_commit(closed: dict | None) -> None:
         return
     try:
         TradeLog().after_manual_close_commit(closed)
-    except Exception:
-        log.error("lifecycle post-commit derived hooks failed trade=%s", closed["id"],
-                  exc_info=True)
+    except Exception as exc:
+        swallowed(log, "ops.lifecycle_post_commit", exc,
+                  "lifecycle post-commit derived hooks failed trade=%s", closed["id"],
+                  level=logging.ERROR, exc_info=True)
 
 
 def _locked_plan(store: PlanStore, plan_id: str, statuses, conn):
