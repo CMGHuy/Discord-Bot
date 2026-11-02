@@ -178,6 +178,81 @@ def test_partial_close_realizes_the_runner_leg_at_the_prepared_quote(book):
     assert NotifyQueueRepository().list_all()[0]["payload"]["prior_status"] == "PARTIAL"
 
 
+def test_partial_close_without_a_runner_leg_closes_the_trade_unpriced(book):
+    _set_plan(status="PARTIAL", legs_realized=[])  # no banked leg: _runner_leg is None
+    command.close_plan_atomic(PLAN)
+    plan = PlanRepository().get(PLAN)
+    assert plan["status"] == "CLOSED"
+    assert plan["legs_realized"] == []
+    trade = TradeRepository().get(TRADE)
+    assert trade["status"] == "closed"
+    assert trade.get("exit_price") is None
+    assert AccountRepository().history() == []
+    events = NotifyQueueRepository().list_all()
+    assert [event["kind"] for event in events] == ["plan_transition"]
+    assert events[0]["payload"]["trade"]["exit_price"] is None
+
+
+def _refuse_update(monkeypatch):
+    monkeypatch.setattr(PlanStore, "update", lambda self, plan, conn=None: False)
+
+
+def _ticker_moved(monkeypatch):
+    prepared = command._prepared_plan
+    monkeypatch.setattr(command, "_prepared_plan",
+                        lambda plan_id: ("MSFT",) + tuple(prepared(plan_id)[1:]))
+
+
+def _linked_close_lost(monkeypatch):
+    monkeypatch.setattr(TradeLog, "close_trade_manual_in_transaction",
+                        lambda self, *args, **kwargs: None)
+
+
+@pytest.mark.parametrize("conflict", [_refuse_update, _ticker_moved, _linked_close_lost],
+                         ids=["update_refused", "ticker_changed", "linked_close_none"])
+def test_plan_close_revalidation_conflict_rolls_everything_back(book, monkeypatch, conflict):
+    before = snapshot()
+    conflict(monkeypatch)
+    with pytest.raises(command.LifecycleConflict):
+        command.close_plan_atomic(PLAN)
+    assert snapshot() == before
+    assert book == []
+
+
+def test_refused_plan_update_rolls_back_the_settled_trade(book, monkeypatch):
+    """The refusal comes after the trade settled in the same transaction."""
+    settled = []
+    original = TradeLog.close_trade_manual_in_transaction
+    def spy(self, *args, **kwargs):
+        closed = original(self, *args, **kwargs)
+        settled.append(closed["realized_pnl_amount"])
+        return closed
+    monkeypatch.setattr(TradeLog, "close_trade_manual_in_transaction", spy)
+    _refuse_update(monkeypatch)
+    before = snapshot()
+    with pytest.raises(command.LifecycleConflict):
+        command.close_plan_atomic(PLAN)
+    assert settled == [10]
+    assert snapshot() == before
+    assert book == []
+
+
+@pytest.mark.parametrize("stale", [dict(plan_id=None), dict(ticker="MSFT")],
+                         ids=["gained_plan_id", "ticker_changed"])
+def test_unlinked_close_revalidation_conflict_writes_nothing(book, monkeypatch, stale):
+    row = TradeRepository().get(TRADE)
+    row["plan_id"] = None if "ticker" in stale else PLAN
+    TradeRepository().upsert(row)
+    read = TradeLog.get_trade_by_id
+    monkeypatch.setattr(TradeLog, "get_trade_by_id",
+                        lambda self, trade_id: {**read(self, trade_id), **stale})
+    before = snapshot()
+    with pytest.raises(command.LifecycleConflict):
+        command.close_legacy_atomic(TRADE)
+    assert snapshot() == before
+    assert book == []
+
+
 def test_close_of_a_missing_plan_is_not_found_and_writes_nothing(book):
     before = snapshot()
     with pytest.raises(command.LifecycleNotFound):
