@@ -229,17 +229,20 @@ def sector_map(name: str) -> dict:
 # into sp500.json.
 
 _ETF_CACHE: set | None = None
+_ETF_CACHE_DIR: str | None = None
 
 
 def is_etf(symbol: str) -> bool:
-    global _ETF_CACHE
-    if _ETF_CACHE is None:
+    global _ETF_CACHE, _ETF_CACHE_DIR
+    # Keyed by the folder it was read from: a read made while UNIVERSE_DIR
+    # pointed somewhere empty must not outlive that folder.
+    if _ETF_CACHE is None or _ETF_CACHE_DIR != UNIVERSE_DIR:
         cache = set()
         for name in ("etfs", "sp500"):
             for row in load(name):
                 if row["etf"]:
                     cache.add(row["symbol"])
-        _ETF_CACHE = cache
+        _ETF_CACHE, _ETF_CACHE_DIR = cache, UNIVERSE_DIR
     return symbol.upper() in _ETF_CACHE
 
 

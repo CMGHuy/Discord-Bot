@@ -141,6 +141,19 @@ def test_is_etf():
     assert is_etf("NVDA") is False
 
 
+def test_is_etf_ignores_a_cache_built_from_another_universe_dir(tmp_path, monkeypatch):
+    # An is_etf call made while UNIVERSE_DIR points at an empty/other folder
+    # must not freeze an empty set for the rest of the process (it did, and
+    # made test_is_etf fail depending on which xdist worker ran what).
+    from swingbot.core.marketdata import universe
+    real_dir = universe.UNIVERSE_DIR
+    monkeypatch.setattr(universe, "_ETF_CACHE", None)
+    monkeypatch.setattr(universe, "UNIVERSE_DIR", str(tmp_path))
+    assert universe.is_etf("SPY") is False
+    monkeypatch.setattr(universe, "UNIVERSE_DIR", real_dir)
+    assert universe.is_etf("SPY") is True
+
+
 def test_etf_skips_earnings_lookup(monkeypatch):
     # get_next_earnings_date must return None for ETFs WITHOUT ever calling
     # yfinance. Note: the function's per-candidate loop wraps yf.Ticker(...)
