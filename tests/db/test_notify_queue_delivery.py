@@ -148,3 +148,68 @@ def test_blocked_log_only_on_state_or_cause_change(db_conn, caplog):
             assert repo.reschedule(event["event_id"], claim["lease_token"], now=tick,
                 delay_s=900, error_code="permission_denied", blocked=True, conn=db_conn)
     assert len([r for r in caplog.records if "lifecycle blocked" in r.message]) == 1
+
+
+def test_retarget_audits_and_refuses_live_lease_or_delivered(db_conn):
+    repo = NotifyQueueRepository()
+    event = fresh(channel=None)
+    repo.enqueue(event, conn=db_conn)
+    assert repo.retarget(event["event_id"], "9", actor="operator", reason="channel repair",
+                         now=NOW, conn=db_conn)
+    changed = record(repo, db_conn, event)
+    assert changed["payload"] == event["payload"]
+    assert changed["event_id"] == event["event_id"]
+    assert changed["target_channel_id"] == "9"
+    assert changed["retarget_history"][0]["from_channel_id"] is None
+    assert changed["retarget_history"][0]["actor"] == "operator"
+    claim = repo.claim_one("w", now=NOW, conn=db_conn)
+    assert not repo.retarget(event["event_id"], "10", actor="operator", reason="repair",
+                             now=NOW, conn=db_conn)
+    repo.acknowledge(event["event_id"], claim["lease_token"], "123", now=NOW, conn=db_conn)
+    assert not repo.retarget(event["event_id"], "10", actor="operator", reason="repair",
+                             now=NOW, conn=db_conn)
+
+
+def test_empty_health_is_known_zero_but_age_unknown(db_conn):
+    assert NotifyQueueRepository().health(now=NOW, conn=db_conn) == dict(
+        pending_count=0, oldest_pending_age_seconds=None, blocked_count=0)
+
+
+def test_retarget_does_not_clear_malformed_payload_block(db_conn):
+    repo = NotifyQueueRepository()
+    event = fresh()
+    event.update(blocked=True, last_error="legacy_snapshot_incomplete")
+    repo.insert(event, conn=db_conn)  # migration-shaped blocked record
+    assert repo.retarget(event["event_id"], "8", actor="operator", reason="repair",
+                         now=NOW, conn=db_conn)
+    saved = record(repo, db_conn, event)
+    assert saved["blocked"] is True
+    assert saved["last_error"] == "legacy_snapshot_incomplete"
+
+
+def test_missing_message_id_is_never_pruned(db_conn):
+    repo = NotifyQueueRepository()
+    event = fresh()
+    event["delivered_at"] = NOW.isoformat()
+    repo.insert(event, conn=db_conn)  # damaged acknowledgement retains evidence
+    assert repo.prune_delivered(now=NOW + timedelta(days=8), conn=db_conn) == 0
+
+
+def test_health_includes_blocked_and_leased_but_excludes_acknowledged(db_conn):
+    repo = NotifyQueueRepository()
+    event = fresh()
+    repo.enqueue(event, conn=db_conn)
+    claim = repo.claim_one("w", now=NOW, conn=db_conn)
+    assert repo.health(now=NOW, conn=db_conn)["pending_count"] == 1
+    repo.reschedule(event["event_id"], claim["lease_token"], now=NOW,
+                    delay_s=900, error_code="permission_denied", blocked=True, conn=db_conn)
+    assert repo.health(now=NOW + timedelta(seconds=901), conn=db_conn) == dict(
+        pending_count=1, oldest_pending_age_seconds=901.0, blocked_count=1)
+    assert repo.prune_delivered(now=NOW + timedelta(days=100), conn=db_conn) == 0
+    later = NOW + timedelta(seconds=901)
+    claim = repo.claim_one("w", now=later, conn=db_conn)
+    repo.acknowledge(event["event_id"], claim["lease_token"], "222", now=later, conn=db_conn)
+    assert repo.health(now=later, conn=db_conn) == dict(
+        pending_count=0, oldest_pending_age_seconds=None, blocked_count=0)
+    assert repo.prune_delivered(now=later + timedelta(days=6), conn=db_conn) == 0
+    assert repo.prune_delivered(now=later + timedelta(days=8), conn=db_conn) == 1

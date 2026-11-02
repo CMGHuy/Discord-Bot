@@ -13,6 +13,8 @@ from swingbot.core.infra.lifecycle_events import validate_event
 
 log = logging.getLogger(__name__)
 
+DESTINATION_ERRORS = frozenset(("destination_unresolved", "channel_unavailable", "permission_denied"))
+
 
 def _instant(value):
     return datetime.fromisoformat(value) if isinstance(value, str) else value
@@ -130,6 +132,49 @@ class NotifyQueueRepository(Repository):
         if changed:
             log.error("lifecycle blocked event=%s kind=%s age_s=%.0f cause=%s",
                       event_id, event["kind"], _age(event, now), error_code)
+        return True
+
+    def health(self, *, now, conn=None) -> dict:
+        _check_now(now)
+        statement = sa.select(sa.func.count(), sa.func.min(queue.c.queued_at),
+            sa.func.count().filter(queue.c.doc["blocked"].as_boolean().is_(True))
+        ).select_from(queue).where(queue.c.delivered_at.is_(None))
+        with self._tx(conn) as connection:
+            pending, oldest, blocked = connection.execute(statement).one()
+        age = None if oldest is None else max(0.0, (now - oldest).total_seconds())
+        return dict(pending_count=int(pending), oldest_pending_age_seconds=age, blocked_count=int(blocked))
+
+    def prune_delivered(self, *, now, conn=None) -> int:
+        _check_now(now)
+        statement = queue.delete().where(
+            queue.c.delivered_at < now - timedelta(days=7),
+            queue.c.doc["delivered_message_id"].astext.is_not(None),
+            queue.c.doc["delivered_message_id"].astext != "")
+        with self._tx(conn) as connection:
+            return connection.execute(statement).rowcount
+
+    def retarget(self, event_id, channel_id, *, actor, reason, now, conn=None) -> bool:
+        _check_now(now)
+        channel = str(channel_id)
+        if not actor or not reason or not channel.isdecimal() or int(channel) <= 0:
+            raise ValueError("invalid_retarget")
+        statement = sa.select(queue).where(queue.c.event_id == event_id,
+            queue.c.delivered_at.is_(None),
+            sa.or_(queue.c.lease_until.is_(None), queue.c.lease_until <= now)
+        ).with_for_update()
+        with self._tx(conn) as connection:
+            row = connection.execute(statement).one_or_none()
+            if row is None:
+                return False
+            event = self._record(row)
+            event.setdefault("retarget_history", []).append(dict(at=now.isoformat(), actor=actor,
+                reason=reason, from_channel_id=event.get("target_channel_id"), to_channel_id=channel))
+            event.update(target_channel_id=channel, next_attempt_at=now.isoformat())
+            _clear_lease(event)
+            if event.get("last_error") in DESTINATION_ERRORS:
+                event.update(blocked=False, last_error=None)
+            self._write(connection, event)
+        log.info("lifecycle retarget event=%s channel=%s audit=retarget_history", event_id, channel)
         return True
 
 
