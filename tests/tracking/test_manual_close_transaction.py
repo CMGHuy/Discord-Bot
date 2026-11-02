@@ -101,10 +101,23 @@ def test_partial_close_preserves_recorded_leg_and_settles_once(db_conn):
     seed(db_conn, legs=[dict(fraction=0.5, exit_price=110, r=2, reason="tp1")])
     result = close(db_conn, price=105)
     assert [leg["exit_price"] for leg in result["legs"]] == [110, 105]
+    # Two realized legs (+2R, +1R): labelled by net R like the legacy close.
+    assert result["status"] == "win"
     assert result["realized_pnl_amount"] == 75
     assert account.load_account_config(conn=db_conn)["balance"] == 1075
     assert close(db_conn, price=105) is None
     assert len(AccountRepository().history(conn=db_conn)) == 1
+
+
+def test_nan_price_records_no_leg_and_settles_nothing(db_conn):
+    seed(db_conn)
+    result = close(db_conn, price=float("nan"))
+    assert result["status"] == "closed"
+    assert result["legs"] == []
+    assert result.get("exit_price") is None
+    assert result.get("realized_pnl_amount") is None
+    assert AccountRepository().history(conn=db_conn) == []
+    assert account.load_account_config(conn=db_conn)["balance"] == 1000
 
 
 def test_unknown_trade_returns_none(db_conn):
