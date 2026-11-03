@@ -12,7 +12,8 @@ from swingbot.core.db import events, notify
 FRONTEND = pathlib.Path(__file__).resolve().parents[2] / "frontend"
 
 EXPECTED_EVENTS = {"trades", "account", "analytics", "scan", "journal",
-                   "bot", "risk", "watchlist", "jobs", "settings"}
+                   "bot", "risk", "watchlist", "jobs", "settings", "market"}
+SPA_PENDING = {"market"}  # V201-16 subscribes the SPA; remove this set then
 
 
 def test_the_event_names_are_exactly_what_they_were():
@@ -43,4 +44,4 @@ def test_the_spa_subscribes_to_no_event_this_backend_cannot_raise():
     assert listened, "EVENT_NAMES parsed empty -- the regex, not the SPA, is wrong"
     unknown = listened - EXPECTED_EVENTS
     assert not unknown, f"SPA listens for events nothing raises: {sorted(unknown)}"
-    assert listened == EXPECTED_EVENTS
+    assert listened | SPA_PENDING == EXPECTED_EVENTS

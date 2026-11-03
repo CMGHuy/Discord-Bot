@@ -11,7 +11,8 @@ looks like a quiet market.
 A full cycle (the whole symbol set) runs once per session cadence; a cycle in
 between carries ``SymbolSet((), ())`` and only the queued keys, so a user's
 Refresh is served within ``QUEUE_POLL_S`` without refetching everything.
-V201-6 appends its steps to ``STEPS``.
+``STEPS`` starts with the quote and FX steps (``quotes``); a cycle that
+changed something raises one ``market`` NOTIFY at its end.
 """
 from __future__ import annotations
 
@@ -25,13 +26,13 @@ from typing import Callable
 import sqlalchemy as sa
 
 from swingbot import config
-from swingbot.core.db import engine
+from swingbot.core.db import engine, notify
 from swingbot.core.db.repositories.market_refresh import (refresh_queue_repo,
                                                           refresher_heartbeat_repo)
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import session
 from swingbot.core.marketdata.shared import admin_refresh
-from swingbot.refresher import lock
+from swingbot.refresher import lock, quotes
 from swingbot.refresher.symbols import SymbolSet, symbol_set
 
 log = logging.getLogger(__name__)
@@ -62,9 +63,10 @@ class CycleContext:
     queued_snapshots: list[str]
     scan_running: bool
     report: CycleReport = field(repr=False)
+    marks_announced: bool = False
 
 
-STEPS: list[Callable[[CycleContext], None]] = []
+STEPS: list[Callable[[CycleContext], None]] = [quotes.quote_step, quotes.fx_step]
 
 _last_full: datetime | None = None
 
@@ -128,6 +130,8 @@ def run_cycle(now: datetime | None = None) -> CycleReport:
     _guard("refresher.heartbeat", lambda: refresher_heartbeat_repo().beat(
         cadence_s=report.cadence_s, session=state, last_error=report.error, now=now,
         cycle_ms=int((time.monotonic() - started) * 1000)))
+    if report.changed:
+        _guard("refresher.notify", lambda: notify.publish("market"))
     return report
 
 
