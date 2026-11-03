@@ -18,3 +18,131 @@
 - Disclosed spec inconsistency: the spec's panel log says "0.05R tolerance frozen", while its § Gate (the binding text, after the plan-briefer correction) freezes `plateau_report`'s existing 0.03R. The § Gate text governs; the code uses 0.03R unchanged.
 
 ## Stage −1 (census, plans only, no outcome read)
+
+### Arm K
+
+**arm K stage -1: REACHABLE** (instrument v1, data alpaca)
+
+plans today 9903; arm S overlap 6494; ATR missing 0
+
+| cell | verdict | plans | floor | ceiling | untouched | newly_admitted | removed | band_rr_drop | band_no_target | band_size_zero | baseline_stop_exits | reversal | conc max | conc p95 | days over heat slots |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| k0.75 | REACHABLE | 35546 | 34024 | 19 | 1503 | 33971 | 8328 | 7042 | 551 | 0 | 5251 | 815 | 5178 | 4983.3000 | 1475 |
+| k1 | REACHABLE | 18214 | 17799 | 19 | 396 | 17579 | 9268 | 7026 | 223 | 0 | 5251 | 1378 | 3346 | 3148.5000 | 1470 |
+| k1.5 | REACHABLE | 4735 | 4671 | 19 | 45 | 4607 | 9775 | 4001 | 45 | 0 | 5251 | 2298 | 1157 | 984.7000 | 1433 |
+
+| ATR14 % bucket | rows |
+|---|---|
+| 0.0-0.5 | 147 |
+| 0.5-1.0 | 407 |
+| 1.0-1.5 | 3509 |
+| 1.5-2.0 | 10576 |
+| 2.0-2.5 | 11342 |
+| 2.5-3.0 | 8605 |
+| 3.0-3.5 | 5727 |
+| 3.5-4.0 | 3768 |
+| 4.0-4.5 | 2355 |
+| 4.5-5.0 | 1870 |
+| 5.0-5.5 | 1317 |
+| 5.5-6.0 | 1063 |
+| 6.0-6.5 | 689 |
+| 6.5-7.0 | 587 |
+| 7.0-7.5 | 515 |
+| 7.5-8.0 | 462 |
+| 8.0-8.5 | 410 |
+| 8.5-9.0 | 267 |
+| 9.0-9.5 | 213 |
+| 9.5-10.0 | 160 |
+| 10.0-10.5 | 153 |
+| 10.5-11.0 | 119 |
+| 11.0-11.5 | 105 |
+| 11.5-12.0 | 49 |
+| 12.0-12.5 | 46 |
+| 12.5-13.0 | 51 |
+| 13.0-13.5 | 24 |
+| 13.5-14.0 | 28 |
+| 14.0-14.5 | 22 |
+| 14.5-15.0 | 37 |
+| 15.0-15.5 | 31 |
+| 15.5-16.0 | 5 |
+| 16.0-16.5 | 10 |
+| 16.5-17.0 | 29 |
+| 17.0-17.5 | 17 |
+| 17.5-18.0 | 10 |
+| 18.0-18.5 | 4 |
+| 18.5-19.0 | 10 |
+| 19.0-19.5 | 20 |
+| 19.5-20.0 | 7 |
+| 20.0-20.5 | 2 |
+| 21.5-22.0 | 8 |
+| 23.0-23.5 | 2 |
+| 29.0-29.5 | 10 |
+| 32.0-32.5 | 10 |
+
+reachable cells [0.75, 1.0, 1.5]; identical adjacent []
+### Arm R
+
+**arm R stage -1: REACHABLE** (instrument v1, data alpaca)
+
+plans today 9903; arm S overlap 6494; ATR missing 0
+
+| cell | verdict | plans | floor | ceiling | untouched | newly_admitted | removed | band_rr_drop | band_no_target | band_size_zero | baseline_stop_exits | reversal | conc max | conc p95 | days over heat slots |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| k0.75 | REACHABLE | 40643 | 38612 | 95 | 1936 | 37840 | 7100 | 0 | 0 | 0 | 5251 | 815 | 5626 | 5321.4500 | 1476 |
+| k1 | REACHABLE | 23032 | 22331 | 95 | 606 | 21476 | 8347 | 0 | 0 | 0 | 5251 | 1378 | 3838 | 3687.2000 | 1475 |
+| k1.5 | REACHABLE | 7256 | 7037 | 103 | 116 | 6755 | 9402 | 0 | 0 | 0 | 5251 | 2298 | 1508 | 1413.2500 | 1454 |
+
+| ATR14 % bucket | rows |
+|---|---|
+| 0.0-0.5 | 140 |
+| 0.5-1.0 | 396 |
+| 1.0-1.5 | 3456 |
+| 1.5-2.0 | 10312 |
+| 2.0-2.5 | 10798 |
+| 2.5-3.0 | 8132 |
+| 3.0-3.5 | 5061 |
+| 3.5-4.0 | 3204 |
+| 4.0-4.5 | 1953 |
+| 4.5-5.0 | 1554 |
+| 5.0-5.5 | 1100 |
+| 5.5-6.0 | 913 |
+| 6.0-6.5 | 619 |
+| 6.5-7.0 | 541 |
+| 7.0-7.5 | 479 |
+| 7.5-8.0 | 405 |
+| 8.0-8.5 | 388 |
+| 8.5-9.0 | 255 |
+| 9.0-9.5 | 190 |
+| 9.5-10.0 | 140 |
+| 10.0-10.5 | 151 |
+| 10.5-11.0 | 119 |
+| 11.0-11.5 | 104 |
+| 11.5-12.0 | 49 |
+| 12.0-12.5 | 43 |
+| 12.5-13.0 | 50 |
+| 13.0-13.5 | 24 |
+| 13.5-14.0 | 28 |
+| 14.0-14.5 | 22 |
+| 14.5-15.0 | 37 |
+| 15.0-15.5 | 31 |
+| 15.5-16.0 | 5 |
+| 16.0-16.5 | 10 |
+| 16.5-17.0 | 28 |
+| 17.0-17.5 | 17 |
+| 17.5-18.0 | 10 |
+| 18.0-18.5 | 4 |
+| 18.5-19.0 | 10 |
+| 19.0-19.5 | 20 |
+| 19.5-20.0 | 7 |
+| 20.0-20.5 | 2 |
+| 21.5-22.0 | 8 |
+| 23.0-23.5 | 2 |
+| 29.0-29.5 | 10 |
+| 32.0-32.5 | 10 |
+
+reachable cells [0.75, 1.0, 1.5]; identical adjacent []
+Arm K: verdict REACHABLE, reachable_cells [0.75, 1.0, 1.5], no identical-adjacent cells; per-horizon/direction counts are in the file's `by_stratum`.
+
+Arm R: verdict REACHABLE, reachable_cells [0.75, 1.0, 1.5], no identical-adjacent cells; per-horizon/direction counts are in the file's `by_stratum`.
+
+Census sanity check (plan V191-20 Step 7): `census sane`; `plans_today` 9903 and `arm_s_overlap` 6494 match across arms. Both census rows files are under 50 MB (K 32,016,946 B, R 29,560,136 B) and are committed.
