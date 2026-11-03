@@ -45,12 +45,12 @@ QUEUE_TAKE_LIMIT = 500
 class CycleReport:
     session: str
     cadence_s: float
-    quotes_fetched: tuple[str, ...] = ()
-    quotes_written: int = 0
-    queued_snapshots: tuple[str, ...] = ()
+    quotes_ok: tuple[str, ...] = ()
+    quotes_missed: tuple[str, ...] = ()
+    fallback_used: int = 0
     snapshots_written: tuple[str, ...] = ()
     error: str | None = None
-    skipped_for_scan: bool = False
+    changed: bool = False
 
 
 @dataclass
@@ -89,10 +89,11 @@ def _scan_running() -> bool:
 
 
 def _context(now: datetime, state: str, report: CycleReport, *, full: bool) -> CycleContext:
+    # Symbols first: a failure here must leave the queue untaken, never lost.
+    symbols = symbol_set() if full else SymbolSet((), ())
     taken = refresh_queue_repo().take(QUEUE_TAKE_LIMIT)
     quotes = [r["key"] for r in taken if r.get("kind") == admin_refresh.QUEUE_KIND_QUOTE]
     snaps = [r["key"] for r in taken if r.get("kind") == admin_refresh.QUEUE_KIND_SNAPSHOT]
-    symbols = symbol_set() if full else SymbolSet((), ())
     return CycleContext(now=now, session=state, symbols=symbols, queued_quotes=quotes,
                         queued_snapshots=snaps, scan_running=_scan_running(), report=report)
 

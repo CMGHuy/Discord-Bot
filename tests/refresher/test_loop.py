@@ -142,3 +142,24 @@ def test_main_runs_the_loop_with_a_stop_event(monkeypatch):
     got = []
     monkeypatch.setattr(entry.loop, "run_forever", got.append)
     assert entry.main() == 0 and isinstance(got[0], threading.Event)
+
+
+def test_cycle_report_carries_the_ledger_fields_and_defaults():
+    import dataclasses
+    report = loop.CycleReport("regular", 30.0)
+    assert [f.name for f in dataclasses.fields(report)] == [
+        "session", "cadence_s", "quotes_ok", "quotes_missed", "fallback_used",
+        "snapshots_written", "error", "changed"]
+    assert (report.quotes_ok, report.quotes_missed, report.fallback_used,
+            report.snapshots_written, report.error, report.changed) == ((), (), 0, (), None, False)
+
+
+def test_symbol_set_failure_leaves_the_queue_untouched(env, monkeypatch):
+    env.queue.rows = [{"kind": "quote", "key": "NEW", "priority": 0}]
+
+    def down():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(loop, "symbol_set", down)
+    report = loop.run_cycle(REGULAR)
+    assert report.error == "RuntimeError: db down"
+    assert env.queue.rows == [{"kind": "quote", "key": "NEW", "priority": 0}]
