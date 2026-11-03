@@ -45,13 +45,6 @@ def test_a_bad_limit_is_a_400(logged_in, query):
     assert_error(logged_in.get(f"/api/v1/live{query}"), "invalid", 400)
 
 
-def test_events_are_not_wired_until_v202_3(logged_in):
-    body = _live(logged_in)
-    assert body["events"] == []
-    assert body["events_meta"]["availability"] == "unavailable"
-    assert body["events_meta"]["reason"] == "not wired"
-
-
 OPEN_TRADE = {"id": "t1", "ticker": "AAPL", "status": "open", "direction": "bullish",
               "strategy": "VWAP", "horizon_key": "1m", "entry": 100.0, "stop_loss": 95.0,
               "take_profit": 120.0, "shares": 10, "opened_at": "2026-10-28T12:00:00+00:00"}
@@ -143,15 +136,6 @@ def test_a_failed_killswitch_read_is_unavailable(logged_in, monkeypatch):
     kill = _live(logged_in)["killswitch"]
     assert (kill["availability"], kill["reason"]) == ("unavailable", "killswitch_unavailable")
     assert kill["engaged"] is None
-
-
-def test_utc_text_normalises_offsets(admin_app):
-    from datetime import datetime, timezone
-    from swingbot.admin.api_v1 import live
-    assert live._utc_text(None) is None
-    assert live._utc_text("2026-10-29T09:31:00+02:00") == "2026-10-29T07:31:00+00:00"
-    assert live._utc_text(datetime(2026, 10, 29, 7, 31, tzinfo=timezone.utc)) \
-        == "2026-10-29T07:31:00+00:00"
 
 
 def test_live_is_postgres_only(logged_in, no_network, monkeypatch):

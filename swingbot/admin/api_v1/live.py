@@ -1,7 +1,8 @@
 """GET /api/v1/live: the shell's Live dock in one DB-only read (v202).
 
 Heat is the Risk page's own definition (`portfolio_state.open_heat_state`);
-plans awaiting an order and the killswitch are one guarded read each.
+plans awaiting an order and the killswitch are one guarded read each, and the
+activity feed merges plans, closed trades and the killswitch with per-kind failure.
 Postgres only: no market-data provider, no `collect_portfolio_state`. Each
 section catches its own failure and answers `availability: "unavailable"`
 with its keys kept as null, so a failed read never passes for zero heat.
@@ -17,6 +18,7 @@ from swingbot.core.infra.swallowed import swallowed
 
 from . import api_v1, error, iso
 from .auth import require_auth
+from .live_events import EVENT_KINDS, collect_events, iso_at
 
 log = logging.getLogger(__name__)
 
@@ -117,21 +119,13 @@ def awaiting_section(now: datetime) -> dict:
     return _guarded("awaiting", lambda: _awaiting_values(now), _AWAITING_EMPTY, now)
 
 
-def _utc_text(value) -> str | None:
-    """A datetime or ISO string as ISO-8601 UTC; None stays None."""
-    if value is None:
-        return None
-    moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
-    return iso(moment)
-
-
 def _killswitch_values() -> dict:
     """Latest state only: `release()` overwrites `engaged_at`, so `since` is
     reported only while engaged and is never read as an engagement time."""
     from swingbot.core.db.repositories.killswitch import killswitch_repo
     state = killswitch_repo().state()
     engaged = bool(state.get("on"))
-    return {"engaged": engaged, "since": _utc_text(state.get("at")) if engaged else None,
+    return {"engaged": engaged, "since": iso_at(state.get("at")) if engaged else None,
             "detail": state.get("reason")}
 
 
@@ -145,9 +139,13 @@ def _sections(now: datetime) -> dict:
 
 
 def _events(limit: int, now: datetime) -> tuple[list, dict]:
-    """Placeholder until V202-3 wires `live_events.collect_events`."""
-    return [], {"availability": "unavailable", "as_of": iso(now), "missing": [],
-                "reason": "not wired"}
+    """The activity feed; a failure past the per-source guards is unavailable."""
+    try:
+        return collect_events(limit, now=now)
+    except Exception as exc:
+        swallowed(log, "ops.live.events", exc, level=logging.WARNING)
+        return [], {"availability": "unavailable", "as_of": iso(now),
+                    "missing": [kind.kind for kind in EVENT_KINDS]}
 
 
 @api_v1.route("/live", methods=["GET"])

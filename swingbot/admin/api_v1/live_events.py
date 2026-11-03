@@ -12,10 +12,16 @@ row rather than a guessed time.
 """
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Mapping
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Callable, Mapping
+
+from swingbot.core.infra.swallowed import swallowed
 
 from . import iso
+
+log = logging.getLogger(__name__)
 
 _DIRECTION_WORDS = {"bullish": "long", "long": "long", "bearish": "short", "short": "short"}
 
@@ -131,3 +137,148 @@ def tp1_hit_rows(plans: list[dict], shares_by_plan: Mapping[str, float]) -> list
         rows.append(event_row(at, "tp1_hit", f"TP1 · {plan.get('ticker') or '?'}",
                               tone_for(r), plan.get("plan_id"), pnl))
     return rows
+
+
+#: Last leg's reason -> the outcome word on a closed-trade line.
+_OUTCOMES = {
+    "tp1_runner_tp2": "TP2", "tp1_runner_be": "runner at floor",
+    "tp1_runner_trail": "trailed", "tp1_runner_progress_stall": "runner stalled",
+    "time_exit": "time exit", "stall_exit": "stall exit", "scratch": "scratch",
+    "loss": "stop", "tp1": "TP1",
+}
+
+
+def _outcome(trade: Mapping) -> str | None:
+    legs = trade.get("legs") or []
+    last = legs[-1] if legs and isinstance(legs[-1], Mapping) else {}
+    label = _OUTCOMES.get(str(last.get("reason") or ""))
+    return label or trade.get("close_reason") or trade.get("status")
+
+
+def trade_closed_rows(trades: list[dict]) -> list[dict]:
+    from swingbot.core.tracking.performance import closed_r_multiple
+    rows = []
+    for trade in trades:
+        at = iso_at(trade.get("closed_at"))
+        if at is None or trade.get("status") == "open":
+            continue
+        r = closed_r_multiple(trade)
+        pnl = None if r is None else {"r": r, "amount": _number(trade.get("realized_pnl_amount"))}
+        outcome = _outcome(trade)
+        text = f"{trade.get('ticker') or '?'} closed" + (f" · {outcome}" if outcome else "")
+        rows.append(event_row(at, "trade_closed", text, tone_for(r), trade.get("id"), pnl))
+    return rows
+
+
+def killswitch_rows(state: Mapping) -> list[dict]:
+    """The latest transition only, worded by `on`: the table holds one row and
+    `release()` overwrites its time, so no history and no engagement claimed
+    at a release time."""
+    at = iso_at(state.get("at")) if isinstance(state, Mapping) else None
+    if at is None:
+        return []
+    engaged = bool(state.get("on"))
+    text = "Killswitch engaged" if engaged else "Killswitch released"
+    return [event_row(at, "killswitch", text, "warning" if engaged else "neutral", None)]
+
+
+@dataclass(frozen=True)
+class EventKind:
+    kind: str
+    source: str
+    build: Callable[[dict], list[dict]]
+
+
+EVENT_KINDS: tuple[EventKind, ...] = (
+    EventKind("plan_alerted", "plans", lambda s: plan_alerted_rows(s["plans"])),
+    EventKind("paper_filled", "plans", lambda s: paper_filled_rows(s["plans"])),
+    EventKind("tp1_hit", "plans", lambda s: tp1_hit_rows(s["plans"], s.get("shares") or {})),
+    EventKind("trade_closed", "trades", lambda s: trade_closed_rows(s["trades"])),
+    EventKind("killswitch", "killswitch", lambda s: killswitch_rows(s["killswitch"])),
+)
+
+#: Most recently updated plans read per request. A fill or TP1 rewrites its
+#: plan's row, so a recent event's plan is near the top of this window.
+PLAN_WINDOW = 200
+#: Closed trades read per request: no more than `live.MAX_LIMIT` can show.
+TRADE_WINDOW = 50
+
+
+def _load_plans() -> list[dict]:
+    from swingbot.core.db.repositories.plans import plans_repo
+    from swingbot.core.db.schema import plans
+    return plans_repo().list_all(order_by=plans.c.updated_at.desc(), limit=PLAN_WINDOW)
+
+
+def _load_trades() -> list[dict]:
+    from swingbot.core.db.repositories.trades import trades_repo
+    from swingbot.core.tracking.performance import _json_record
+    return [_json_record(row) for row in trades_repo().closed_trades(limit=TRADE_WINDOW)]
+
+
+def _load_killswitch() -> dict:
+    from swingbot.core.db.repositories.killswitch import killswitch_repo
+    return killswitch_repo().state()
+
+
+def _load_shares() -> dict[str, float]:
+    """plan_id -> shares, for TP1 amounts; open and recently closed trades."""
+    from swingbot.core.db.repositories.trades import trades_repo
+    repo = trades_repo()
+    rows = repo.open_trades() + repo.closed_trades(limit=PLAN_WINDOW)
+    return {str(row["plan_id"]): row["shares"] for row in rows
+            if row.get("plan_id") and row.get("shares")}
+
+
+SOURCE_LOADERS: dict[str, Callable[[], Any]] = {
+    "plans": _load_plans, "trades": _load_trades,
+    "killswitch": _load_killswitch, "shares": _load_shares,
+}
+
+
+def _load_sources(loaders: Mapping[str, Callable[[], Any]]) -> dict:
+    sources = {}
+    for name, load in loaders.items():
+        try:
+            sources[name] = load()
+        except Exception as exc:
+            swallowed(log, f"ops.live.events.{name}", exc, level=logging.WARNING)
+    return sources
+
+
+def _build(kind: EventKind, sources: dict) -> list[dict] | None:
+    """The kind's rows, or None when its source failed or its data was bad."""
+    if kind.source not in sources:
+        return None
+    try:
+        return kind.build(sources)
+    except Exception as exc:
+        swallowed(log, f"ops.live.events.{kind.kind}", exc, level=logging.WARNING)
+        return None
+
+
+def _meta(missing: list[str], now: datetime) -> dict:
+    if not missing:
+        state = "ok"
+    elif len(missing) == len(EVENT_KINDS):
+        state = "unavailable"
+    else:
+        state = "partial"
+    return {"availability": state, "as_of": iso(now), "missing": missing}
+
+
+def collect_events(limit: int, *, loaders: Mapping[str, Callable[[], Any]] | None = None,
+                   now: datetime | None = None) -> tuple[list[dict], dict]:
+    """Every kind's rows merged newest first and cut to `limit`, plus the meta
+    naming each kind whose source failed, so a gap never reads as a quiet day."""
+    now = now or datetime.now(timezone.utc)
+    sources = _load_sources(SOURCE_LOADERS if loaders is None else loaders)
+    rows, missing = [], []
+    for kind in EVENT_KINDS:
+        built = _build(kind, sources)
+        if built is None:
+            missing.append(kind.kind)
+        else:
+            rows.extend(built)
+    rows.sort(key=lambda row: datetime.fromisoformat(row["at"]), reverse=True)
+    return rows[:limit], _meta(missing, now)
