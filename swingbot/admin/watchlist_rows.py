@@ -148,8 +148,24 @@ def _cached_daily(ticker: str) -> pd.DataFrame | None:
         return None
 
 
+def _disk_frames(symbols: list[str]) -> dict:
+    """v201: daily frames off disk at any age; errors dropped, never refreshed."""
+    frames: dict = {}
+    for sym in symbols:
+        try:
+            df = data_store.load_normalized(sym, "daily")
+        except Exception:
+            continue
+        if df is not None:
+            frames[sym] = df
+    return frames
+
+
 def _cold_frames(cold: list[str]) -> dict:
     """Frames for symbols the warm cache lacks: the shared layer when on, else today's batch."""
+    from swingbot.core.marketdata.shared import admin_refresh
+    if admin_refresh.refresher_on():
+        return _disk_frames(cold)
     from swingbot.admin import freshness
     if freshness.layer_on():
         return freshness.page_daily(cold, period="6mo")
@@ -181,10 +197,23 @@ def build_market_rows(tickers: list[str]) -> dict[str, dict]:
 
 def _overlay(tickers: list[str]):
     """(live prices, their quotes). Layer off/count: today's overlay, no quotes."""
+    from swingbot.core.marketdata.shared import admin_refresh
+    if admin_refresh.refresher_on():
+        return _door_overlay(tickers)
     from swingbot.admin import freshness
     if not freshness.layer_on():
         return _live_overlay(tickers), {}
     return _layer_overlay(tickers)
+
+
+def _door_overlay(tickers: list[str]):
+    """v201, refresher on: cached quotes through the never-fetch door. A
+    closed market shows the last close, as today, and enqueues nothing."""
+    if not is_us_market_active():
+        return {}, {}
+    from swingbot.admin import market_values
+    quotes = market_values.read_quotes(tickers)
+    return {t: q.price for t, q in quotes.items() if q.price is not None}, quotes
 
 
 def _layer_overlay(tickers: list[str]):
@@ -216,11 +245,23 @@ def _quote_provider(source: str) -> str | None:
 
 def _stamp(row: dict, quote) -> dict:
     """Age and provider of the layer quote behind a row's live price."""
+    from swingbot.admin import market_values
+    if isinstance(quote, market_values.MarketQuote):
+        return _stamp_door(row, quote)
     if quote is None or row["price"] is None:
         return row
     from swingbot.admin import freshness
     row["price_age_s"], row["price_as_of"] = freshness.quote_age(quote)
     row["price_source"] = _quote_provider(quote.source)
+    return row
+
+
+def _stamp_door(row: dict, quote) -> dict:
+    """v201: the door's row quote fields, and the provider behind a live price."""
+    from swingbot.admin import market_values
+    row.update(market_values.quote_fields(quote))
+    if row["price"] is not None and quote.price is not None:
+        row["price_source"] = _quote_provider(quote.source or "")
     return row
 
 

@@ -46,6 +46,20 @@ from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
 
 
+#: v201: with the refresher on, the sparkline reads the snapshot at any age
+#: (the bot's scan loop keeps it fresh) and never rebuilds it on a request.
+_ANY_AGE_S = 10**9
+
+
+def _equity_snapshot():
+    from swingbot.core.analytics.snapshots import load_snapshot
+    from swingbot.core.marketdata.shared import admin_refresh
+    if admin_refresh.refresher_on():
+        return load_snapshot(max_age_seconds=_ANY_AGE_S)
+    from swingbot.core.analytics.snapshots import refresh_snapshot
+    return load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+
+
 def _equity_30d() -> dict:
     """The last 30 balance points, raw, plus the window's change.
 
@@ -53,8 +67,7 @@ def _equity_30d() -> dict:
     before the SVG: the SPA gets the series and draws it itself.
     """
     try:
-        from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
-        snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+        snap = _equity_snapshot()
         points = [
             p["balance"]
             for p in ((snap or {}).get("equity_curve") or {}).get("points", [])[-30:]
@@ -311,6 +324,22 @@ def _open_amounts(open_trades: list[dict], prices: dict) -> tuple[list[float], i
     return amounts, missing
 
 
+def _open_meta(open_trades: list[dict], views: dict, fx_missing: int) -> dict:
+    """v201 MarketMeta over the open-position totals (open_pnl_pct/_amount).
+
+    With the door's quotes, each position's quote counts; without (refresher
+    off, or no positions) an unpriced position counts as missing. A position
+    left out for want of today's FX rate is missing either way."""
+    from swingbot.admin import market_values
+    quotes = views.get("quotes") or {}
+    if quotes:
+        return market_values.total_meta(
+            [quotes.get(str(t.get("ticker") or "").upper()) for t in open_trades],
+            extra_missing=fx_missing)
+    unpriced = sum(1 for t in open_trades if views["price"].get(t["id"]) is None)
+    return market_values.total_meta([], extra_missing=unpriced + fx_missing)
+
+
 def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
     """Current main-ledger positions and P&L, independent of date scope."""
     from swingbot.core.tracking.ledger import is_main
@@ -336,6 +365,7 @@ def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
         "avg_confidence": (
             round(sum(confidences) / len(confidences), 2) if confidences else None
         ),
+        "market_meta": _open_meta(open_trades, views, fx_missing),
         "_fx_missing": fx_missing,
     }
 
