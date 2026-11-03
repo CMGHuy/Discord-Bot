@@ -318,11 +318,10 @@ At most 2 implementers at once (shared tree, CPU). Suggested pairs: V192-2 + V19
 
 ## Handoff
 
-Updated 2026-11-03 (resume V192-23 from Step 5; Steps 1-4 done).
+Updated 2026-11-03 (V192-23 Steps 1-6 done; Step 7 Stage 0 running).
 
-- **Done:** V192-1..22. Stage -1: g=0.10, 0.25, 0.50 all REACHABLE.
-- **V192-23 Steps 2-4 done (untracked, commit with the task):** `docs/superpowers/results/v192/2026-10-24-v192-g{010,025,050}-selection{.json,.json.provenance.json,.gap_reclaim.json}`. g050 was rerun from scratch after an earlier run died at 42%.
-- **Step 5 (basis run) in progress / may be incomplete:** output `2026-10-24-v192-basis-selection.json` (+ `.provenance.json`, NO `.gap_reclaim.json`). It was killed once by Claude Code's memory-pressure reaper (about 53%), then restarted. If the json is missing, rerun the Step 5 command alone (about 15-20 min). Do not start it while another session's backtest is running (v191 `measure_atr_band_stop.py` was); check memory first.
-- **Remaining in V192-23:** Step 6 sanity script + `render_census.py` per cell (stop if an absent share exceeds 1%); Step 7 Stage 0 MDE per cell -> `logs/v192/g0XX-mde.txt`, `collect_stage0.py` -> `stage0.json`; then Stage 1 (`validate_component.py --stage selection ... --out-json stage1.json`), per-cell `gap_reclaim_report.py`, results-doc sections, commit in scoped commits. Then V192-24..26.
-- **Scratch (uncommitted, in the worktree `logs/v192/`):** `run_veto.sh <tag> <g>`, `render_census.py`, `*-run.txt`. If `logs/` is gone, read Stage -1 verdicts from the results doc.
-- **Code is frozen:** `git status --short -- swingbot/ scripts/` must stay empty before every run.
+- **Done:** V192-1..22; V192-23 Steps 1-6: all three veto runs + basis run (`2026-10-24-v192-{g010,g025,g050,basis}-selection.json`, untracked, commit with the task). Sanity script printed `fold-train sane`; census health ok (absent share 0%) for all cells; census verdict REACHABLE for g=0.10 (re-priced 1701), 0.25 (628), 0.50 (95).
+- **Step 7 (Stage 0 MDE) in progress:** `logs/v192/g0XX-mde.txt`; g010 = RESOLVABLE exit 0. If g025/g050 txt files lack a final `exit N` line, rerun that cell's `validate_component.py --stage mde` command from the task. Then `python logs/v192/collect_stage0.py logs/v192 docs/superpowers/results/v192/2026-10-24-v192-stage0.json`.
+- **Remaining in V192-23:** Stage 1 (`validate_component.py --gap-reclaim --stage selection --grid-arms g=F --mde-refused g --out-json stage1.json`), per-cell `gap_reclaim_report.py`, results-doc sections (`## Stages 0 and 1`, `## Next-open vs close fill`), scoped commits. Then V192-24..26.
+- **Scratch (uncommitted, worktree `logs/v192/`):** `run_veto.sh`, `render_census.py`, `collect_stage0.py`, `*-run.txt`, `*-mde.txt`.
+- **Cautions:** code frozen (`git status --short -- swingbot/ scripts/` empty before each run); check memory and other sessions' backtests before long runs (the memory reaper killed one basis run).
