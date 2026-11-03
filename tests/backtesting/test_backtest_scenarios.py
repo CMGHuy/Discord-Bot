@@ -105,6 +105,13 @@ def test_replayed_plans_carry_no_issued_at():
     assert all(plan.issued_at is None for _, plan in out)
 
 
+def test_replayed_plans_carry_no_issued_at_source():
+    """v200: a replayed plan has no wall-clock issue-time provenance."""
+    out = bs.replay_scenarios("AAPL", _structured_df(), "4w", gates=GATES)
+    assert out, "fixture must produce at least one plan"
+    assert all(plan.issued_at_source is None for _, plan in out)
+
+
 def test_bucket_bar_is_the_first_bar_the_replay_visits_in_the_bucket():
     from swingbot.core.market.strategy_types import MIN_BARS
 
