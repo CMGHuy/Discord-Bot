@@ -1,6 +1,7 @@
 """GET /api/v1/live: the shell's Live dock in one DB-only read (v202).
 
-Heat is the Risk page's own definition (`portfolio_state.open_heat_state`).
+Heat is the Risk page's own definition (`portfolio_state.open_heat_state`);
+plans awaiting an order and the killswitch are one guarded read each.
 Postgres only: no market-data provider, no `collect_portfolio_state`. Each
 section catches its own failure and answers `availability: "unavailable"`
 with its keys kept as null, so a failed read never passes for zero heat.
@@ -8,7 +9,7 @@ with its keys kept as null, so a failed read never passes for zero heat.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from flask import jsonify, request
 
@@ -84,12 +85,63 @@ def heat_section(now: datetime) -> dict:
     return _section(as_of, _heat_figures(state["open_heat"], state["heat_cap"], state["balance"]))
 
 
+def _session_expiry(valid_session) -> datetime | None:
+    """The NYSE close of a plan's `valid_session` day, in UTC; None if unparseable."""
+    from swingbot.core.market.session import US_MARKET_TZ, session_close
+    try:
+        day = date.fromisoformat(str(valid_session)[:10])
+    except ValueError:
+        return None
+    return datetime.combine(day, session_close(day), tzinfo=US_MARKET_TZ).astimezone(timezone.utc)
+
+
+def _next_expiry(pending: list[dict], now: datetime) -> str | None:
+    """Soonest future close among session-window plans only. Bar-count plans
+    expire by the on-disk daily cache, which a DB-only read cannot know, so
+    they contribute no guess (spec section 4.2)."""
+    closes = [_session_expiry(p["valid_session"]) for p in pending if p.get("valid_session")]
+    future = [close for close in closes if close is not None and close >= now]
+    return iso(min(future)) if future else None
+
+
+def _awaiting_values(now: datetime) -> dict:
+    """A state count, not a since-last-visit badge: it drops only when a plan
+    fills, expires or is cancelled."""
+    from swingbot.core.db.repositories.plans import plans_repo
+    from swingbot.core.db.schema import plans
+    pending = plans_repo().list_all(where=plans.c.status == "PENDING")
+    return {"count": len(pending), "next_expiry": _next_expiry(pending, now)}
+
+
+def awaiting_section(now: datetime) -> dict:
+    return _guarded("awaiting", lambda: _awaiting_values(now), _AWAITING_EMPTY, now)
+
+
+def _utc_text(value) -> str | None:
+    """A datetime or ISO string as ISO-8601 UTC; None stays None."""
+    if value is None:
+        return None
+    moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    return iso(moment)
+
+
+def _killswitch_values() -> dict:
+    """Latest state only: `release()` overwrites `engaged_at`, so `since` is
+    reported only while engaged and is never read as an engagement time."""
+    from swingbot.core.db.repositories.killswitch import killswitch_repo
+    state = killswitch_repo().state()
+    engaged = bool(state.get("on"))
+    return {"engaged": engaged, "since": _utc_text(state.get("at")) if engaged else None,
+            "detail": state.get("reason")}
+
+
+def killswitch_section(now: datetime) -> dict:
+    return _guarded("killswitch", _killswitch_values, _KILLSWITCH_EMPTY, now)
+
+
 def _sections(now: datetime) -> dict:
-    """V202-1b replaces the two placeholders with the real sections."""
-    as_of = iso(now)
-    return {"heat": heat_section(now),
-            "awaiting": _section(as_of, _AWAITING_EMPTY, "not wired"),
-            "killswitch": _section(as_of, _KILLSWITCH_EMPTY, "not wired")}
+    return {"heat": heat_section(now), "awaiting": awaiting_section(now),
+            "killswitch": killswitch_section(now)}
 
 
 def _events(limit: int, now: datetime) -> tuple[list, dict]:
