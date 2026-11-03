@@ -66,6 +66,10 @@ paths = ["tests/db/", "tests/tracking/"]
 description = "Flask admin API"
 paths = ["tests/admin/"]
 
+[suites.live-api]
+description = "v202 GET /api/v1/live: heat, plans awaiting order, killswitch, activity feed"
+paths = ["tests/live_api/"]
+
 [suites.discord]
 description = "slash commands, embeds/presentation, infra"
 paths = ["tests/commands/", "tests/presentation/", "tests/infra/"]

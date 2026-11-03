@@ -206,7 +206,7 @@ def register(app) -> None:
     # would drag those modules in at api_v1 import time and re-create the
     # circular-import deadlock app.py documents.
     from . import (analytics, calendar, cancel_precision, dashboard, equity,  # noqa: F401
-                   jobs, market, ops_health, reports, research, risk, session,
+                   jobs, live, market, ops_health, reports, research, risk, session,
                    system, trade_commands, trades, versions, watchlist)  # (register routes)
     # /api/v1/events lives outside this package -- it is one route on top of
     # the watcher and broker, and splitting those across two packages to put
