@@ -890,6 +890,44 @@ FIELDS: list[Field] = [
           default="^GSPC=SPY,^NDX=QQQ,^DJI=DIA,^VIX=VIXY,SI=F=SLV",
           help="v171 D7. Shown as change % only, labelled as a proxy, when Yahoo is blank for "
                "the index. The last '=' separates the ETF (so 'SI=F=SLV' maps SI=F to SLV)."),
+    # v201: admin market refresher (compose service "refresher").
+    Field("ADMIN_REFRESHER", "ADMIN_REFRESHER", "Data Sources",
+          "Admin market refresher", type="select", default="on", options=["on", "off"],
+          help="v201. 'on' (with MARKETDATA_LAYER=on) = admin pages read prices and FX only "
+               "from what the refresher service stored; no page load fetches. "
+               "'off' = the pre-v201 request-time fetch paths, exactly."),
+    Field("ADMIN_REFRESH_REGULAR_S", "ADMIN_REFRESH_REGULAR_S", "Data Sources",
+          "Refresher cadence: regular hours (s)", type="number", default="30",
+          min=10, max=300, step=1,
+          help="v201. Seconds between refresher quote cycles during the NYSE regular session."),
+    Field("ADMIN_REFRESH_EXTENDED_S", "ADMIN_REFRESH_EXTENDED_S", "Data Sources",
+          "Refresher cadence: pre/after hours (s)", type="number", default="300",
+          min=60, max=3600, step=1,
+          help="v201. Seconds between refresher quote cycles in pre-market and after-hours."),
+    Field("ADMIN_REFRESH_CLOSED_S", "ADMIN_REFRESH_CLOSED_S", "Data Sources",
+          "Refresher cadence: market closed (s)", type="number", default="1800",
+          min=300, max=7200, step=1,
+          help="v201. Seconds between refresher quote cycles while the market is closed."),
+    Field("ADMIN_REFRESH_YF_FALLBACK_CAP", "ADMIN_REFRESH_YF_FALLBACK_CAP", "Data Sources",
+          "Refresher: yfinance fallback cap per cycle", type="number", default="25",
+          min=0, max=500, step=1,
+          help="v201. Most symbols one refresher cycle may fetch from yfinance when Alpaca has no quote."),
+    Field("ADMIN_REFRESH_MARK_TIMEOUT_S", "ADMIN_REFRESH_MARK_TIMEOUT_S", "Data Sources",
+          "Refresher: in-flight mark timeout (s)", type="number", default="120",
+          min=30, max=900, step=1,
+          help="v201. An in-flight refresh mark older than this is treated as abandoned."),
+    Field("ADMIN_REFRESH_FX_UNKNOWN_RETRY_S", "ADMIN_REFRESH_FX_UNKNOWN_RETRY_S", "Data Sources",
+          "Refresher: retry an unknown quote currency after (s)", type="number", default="21600",
+          min=600, max=604800, step=60,
+          help="v201. A symbol whose quote currency could not be resolved is retried after this long."),
+    Field("ADMIN_STALE_PRICE_REGULAR_S", "ADMIN_STALE_PRICE_REGULAR_S", "Data Sources",
+          "Price stale after: regular hours (s)", type="number", default="120",
+          min=30, max=1800, step=1,
+          help="v201. A stored price older than this is labelled stale during the regular session."),
+    Field("ADMIN_STALE_PRICE_EXTENDED_S", "ADMIN_STALE_PRICE_EXTENDED_S", "Data Sources",
+          "Price stale after: pre/after hours (s)", type="number", default="900",
+          min=60, max=7200, step=1,
+          help="v201. A stored price older than this is labelled stale in pre-market and after-hours."),
     # v148: ops alerts (spec O3/O4).
     Field("PROVIDER_FALLBACK_ALERT_PCT", "PROVIDER_FALLBACK_ALERT_PCT", "Data Sources",
           "Ops alert: provider fallback above (%)", type="number", default="20",
@@ -1536,6 +1574,7 @@ _MODE_VALUES = {
     "TURTLE_SOUP_RESEARCH_MODE": ("off", "structural"),
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
     "TRAINING_DATA_SOURCE": ("alpaca", "yfinance"),
+    "ADMIN_REFRESHER": ("on", "off"),
 }
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level

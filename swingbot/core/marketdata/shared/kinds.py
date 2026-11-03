@@ -41,6 +41,7 @@ class Asker(str, Enum):
     ADMIN_DASHBOARD = "admin_dashboard"
     ADMIN_PAGE = "admin_page"
     ADMIN_FRESH = "admin_fresh"
+    ADMIN_REFRESH = "admin_refresh"
 
     @property
     def priority(self) -> int:
@@ -62,6 +63,7 @@ class Asker(str, Enum):
 _PRIORITY = {
     Asker.STOP_MONITOR: 1, Asker.REQUOTE: 2, Asker.SCAN: 3, Asker.BACKGROUND: 4,
     Asker.ADMIN_DASHBOARD: 5, Asker.ADMIN_PAGE: 5, Asker.ADMIN_FRESH: 5,
+    Asker.ADMIN_REFRESH: 5,
 }
 
 _QUOTE_ATTR = {
@@ -71,6 +73,7 @@ _QUOTE_ATTR = {
     Asker.BACKGROUND: "QUOTE_MAX_AGE_SCAN_S",
     Asker.ADMIN_DASHBOARD: "QUOTE_MAX_AGE_DASHBOARD_S",
     Asker.ADMIN_PAGE: "QUOTE_MAX_AGE_ADMIN_S",
+    Asker.ADMIN_REFRESH: "ADMIN_REFRESH_REGULAR_S",
 }
 
 _KIND_ATTR = {

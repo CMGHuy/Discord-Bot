@@ -93,3 +93,7 @@ paths = ["tests/history_store/"]
 [suites.scout]
 description = "v161 trade scout: book export, autopsy, merge, generator roles"
 paths = ["tests/scout/"]
+
+[suites.refresher]
+description = "v201 admin market refresher: contract, process, quote cycle, never-fetch request door"
+paths = ["tests/refresher/", "tests/admin_market/"]
