@@ -301,11 +301,11 @@ At most 2 implementers at once (shared tree, CPU). Suggested pairs: V191-2 + V19
 
 ## Handoff
 
-State at 2026-11-02 (worktree `.claude/worktrees/2026-10-24-v191-confluence-atr-band-stops`):
+State at 2026-11-03 (worktree `.claude/worktrees/2026-10-24-v191-confluence-atr-band-stops`):
 
-- **V191-1..V191-19 done and committed.** V191-20 (Stage -1 runs) is in progress; V191-21..25 not started.
-- **Arm K Stage -1 census was running** (driver started ~18:17 UTC, 11 workers). **Stopped on purpose at 2026-11-02 ~23:00 Berlin: driver and workers killed, 39/67 tickers checkpointed, arm R never started (run K, then R, by hand; nothing is running).** No stage file exists yet under `docs/superpowers/results/v191/`.
-- **Resume (safe at any time; the driver restores finished tickers from per-ticker checkpoints):** from the worktree root, never `cd` elsewhere in Bash (breaks the guardrails hook), set `MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/market_data BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache PYTHONUNBUFFERED=1`, then `python scripts/backtest/measure_atr_band_stop.py --arm K --stage -1` and the same with `--arm R`. Check first that no `measure_atr_band_stop` python process is still alive (a stale `status: running` in `logs/v191/*-run.json` is not proof).
-- **Checkpoints:** `logs/measure_atr_band_stop.K.census.ckpt` (arm R: `...R.census.ckpt`). Logs and the runner's own notes: `logs/v191/` (`stage20k.log`, `stage20r.log`, `run-progress.md`, `k.exit`, `r.exit`). All git-ignored, so only this machine has them.
-- **Next after both runs exit 0:** V191-20 Step 7 census sanity check, render with `logs/v191/render_stage.py`, append the Stage -1 section to `docs/superpowers/results/2026-10-24-v191-atr-band-stops.md`, commit the four JSON files plus the doc; then V191-21, V191-22.
+- **V191-1..V191-20 done and committed** (Stage -1 census: arm K and arm R both REACHABLE, cells 0.75/1/1.5, commit `085bfc11`). **V191-21 (arm K chain) is in progress at Step 2 (Stage 0 fold-train rows replay);** V191-22..25 not started.
+- **Stage 0 arm K was running** (started 2026-11-03, 67 tickers; log `logs/v191/stage21k0.log`, exit code `logs/v191/k0.exit`, progress `logs/measure_atr_band_stop.K.rows.progress`). Check first that no `measure_atr_band_stop` python process is alive (a stale log is not proof). The driver restores finished tickers from per-ticker checkpoints, so re-running is safe.
+- **Resume Stage 0:** from the worktree root (never `cd` in Bash), set `MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/market_data BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache PYTHONUNBUFFERED=1`, then `python scripts/backtest/measure_atr_band_stop.py --arm K --stage 0` in the background, output to the log.
+- **Then follow V191-21 Steps 2..9** (part `_4-runs-docs-and-release.md`): render with `logs/v191/render_stage.py` (git-ignored scratch; recreate from Step 1 if absent), check the stop-and-report conditions, commit after each stage group. V191-22 is the same chain for arm R. Stage 3 is a ONE-SHOT validation: never re-run it.
+- Logs and checkpoints are git-ignored, so only this machine has them.
 - Main is 330 commits ahead of this branch; merge main in before V191-25.
