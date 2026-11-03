@@ -15,6 +15,9 @@ PAGE_LOAD_ENDPOINTS: list[str] = [
     "/api/v1/dashboard?mode=all",
     "/api/v1/market/tape?symbols=MSFT,NEWX,%5EGSPC",
     "/api/v1/watchlist/tickers",
+    "/api/v1/trades?page=1&per_page=200",
+    "/api/v1/trades?status=open&sort=-pnl_pct",
+    "/api/v1/trades/22222222-2222-4222-8222-222222222222",
 ]
 
 FORBIDDEN: list[tuple[str, str]] = [
