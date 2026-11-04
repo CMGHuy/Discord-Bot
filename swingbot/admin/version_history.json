@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-04 10:27:43 UTC",
+  "generated_at": "2026-11-04 11:42:23 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.37.4",
-    "bot": "2.15.10"
+    "bot": "2.15.11"
   },
   "releases": [
     {
@@ -2280,6 +2280,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "last_seen": "2026-11-04",
+      "commit": "7d171b0e",
+      "subject": "release(bot): 2.15.11 -- v200 scout tooling integrity",
+      "versions": {
+        "ui": "1.37.4",
+        "bot": "2.15.11"
+      },
+      "changed": [
         "bot"
       ]
     }
