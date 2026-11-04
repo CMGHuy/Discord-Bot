@@ -64,6 +64,7 @@ One block per row, keys in this order, two-space indent. Nothing fits: return
   evidence: cell <cell id>; N <n>; weeks <w>; Δ net ExpR <d> [<lo>, <hi>]; q <q>
   exploratory: yes
   edge: expectancy | harvest | volume
+  direction: exploit | avoid
   mechanism: <why a trader expects it to pay, one or two sentences>
   order_form: <stop-buy / limit / market-on-open, validity>
   manual_actions: none | <mid-trade action and the alert that carries it>
@@ -71,6 +72,13 @@ One block per row, keys in this order, two-space indent. Nothing fits: return
   divergence: no | yes
   route: /prereg | harvest-headroom <results path>
 ```
+
+`direction: exploit` proposes trading the cell: the merge keeps it only when
+the cell's Δ lower bound is above 0. `direction: avoid` proposes standing
+aside from it: the merge keeps it only when the cell's Δ upper bound is below
+0. Both need q ≤ 0.10. A cell the autopsy marks `not known at entry` (its cut
+is `fill`- or `outcome`-defined) is no evidence for either, so leave the row
+out.
 
 ## Trigger table
 

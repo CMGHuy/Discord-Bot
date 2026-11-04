@@ -21,7 +21,7 @@ GOOD_EVIDENCE = "cell regime=risk_on; N 40; weeks 12; Δ net ExpR 0.200 [0.050, 
 def _row(**kw):
     base = {f.name: "" for f in fields(merge.ScoutRow)}
     base.update(role="setup-scout", idea="idea-a", claim="A claim.", evidence=GOOD_EVIDENCE,
-                exploratory="yes", edge="expectancy", mechanism="Why it pays.",
+                exploratory="yes", edge="expectancy", direction="exploit", mechanism="Why it pays.",
                 order_form="stop-buy above the signal high, day order", manual_actions="none",
                 pairs_with="n/a", divergence="no", route="/prereg")
     base.update(kw)
@@ -268,12 +268,14 @@ def test_a_pinned_row_says_so_in_its_heading():
 
 # ---- CLI, against the real ledger and the real closed table ----------------
 
-def _block(idea, evidence=GOOD_EVIDENCE, route="/prereg", edge="expectancy"):
+def _block(idea, evidence=GOOD_EVIDENCE, route="/prereg", edge="expectancy",
+           direction="exploit"):
     return (f"- idea: {idea}\n"
             f"  claim: One sentence.\n"
             f"  evidence: {evidence}\n"
             f"  exploratory: yes\n"
             f"  edge: {edge}\n"
+            f"  direction: {direction}\n"
             f"  mechanism: Why a trader expects it to pay.\n"
             f"  order_form: stop-buy above the signal high, day order\n"
             f"  manual_actions: none\n"

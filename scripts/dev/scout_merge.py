@@ -21,10 +21,11 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 LEDGER = ROOT / "docs" / "superpowers" / "results" / "preregistration-ledger.jsonl"
 METHODOLOGY = ROOT / "docs" / "claude" / "backtest-methodology.md"
 CLOSED_HEADING = "### Closed pre-registrations — do not re-run these"
-ROW_FIELDS = ("idea", "claim", "evidence", "exploratory", "edge", "mechanism", "order_form",
-              "manual_actions", "pairs_with", "divergence", "route")
+ROW_FIELDS = ("idea", "claim", "evidence", "exploratory", "edge", "direction", "mechanism",
+              "order_form", "manual_actions", "pairs_with", "divergence", "route")
 EXACT_ONLY = "="   # prefix: a name from a PASS row matches only an identical idea
 _EDGES = ("expectancy", "harvest", "volume")
+DIRECTIONS = ("exploit", "avoid")
 _ROLE_RE = re.compile(r"^## role:\s*(\S+)\s*$")
 _START_RE = re.compile(r"^- idea:\s*(.*)$")
 _FIELD_RE = re.compile(r"^  ([^:]+):\s*(.*)$")
@@ -54,6 +55,7 @@ class ScoutRow:
     evidence: str
     exploratory: str
     edge: str
+    direction: str
     mechanism: str
     order_form: str
     manual_actions: str
@@ -123,6 +125,7 @@ def _problems(role: str, fields: dict, problems: list[str]) -> list[str]:
         out.append("no '## role:' heading above it")
     checks = (("exploratory", ("yes",), "exploratory must be yes (spec boundary 5)"),
               ("edge", _EDGES, "edge must be expectancy, harvest or volume"),
+              ("direction", DIRECTIONS, "direction must be exploit or avoid"),
               ("divergence", ("yes", "no"), "divergence must be yes or no"))
     out += [message for key, allowed, message in checks
             if fields.get(key) and fields[key] not in allowed]
