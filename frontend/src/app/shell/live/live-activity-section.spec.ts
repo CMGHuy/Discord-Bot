@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { LiveEvent, LiveEventsMeta } from '../../api/models';
-import { activityLine, activityView, missingText, pnlParts } from './live-activity-section';
+import { LiveActivitySection, activityLine, activityView, missingText, pnlParts } from './live-activity-section';
 
 const NOW = new Date('2026-10-29T13:00:00Z');               // 14:00 Berlin
 const ago = (min: number) => new Date(NOW.getTime() - min * 60_000).toISOString();
@@ -54,5 +57,70 @@ describe('activityView (spec v202 §6)', () => {
       key: `${ago(6)}|trade_closed|812`, time: '13:54 · 6m ago', text: 'NVDA closed · TP2', tone: 'positive',
       pnl: { r: '+2.1R', amount: '441 €' }, line: 'NVDA closed · TP2 · +2.1R (441 €) (paper, pre-cost)',
     }]);
+  });
+});
+
+describe('LiveActivitySection', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] }));
+
+  function mount(events: LiveEvent[], m: LiveEventsMeta | null, lastSuccess: string | null = ago(2), loading = false) {
+    const fixture = TestBed.createComponent(LiveActivitySection);
+    fixture.componentRef.setInput('events', events);
+    fixture.componentRef.setInput('meta', m);
+    fixture.componentRef.setInput('loading', loading);
+    fixture.componentRef.setInput('lastSuccess', lastSuccess);
+    fixture.componentRef.setInput('now', NOW);
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+  const text = (node: Element) => node.textContent!.replace(/\s+/g, ' ').trim();
+
+  it('lists the events newest first as given, each line with its tone', () => {
+    const { el } = mount([event(), ALERT], meta());
+    expect(text(el.querySelector('h2.title')!)).toBe('Activity');
+    const rows = [...el.querySelectorAll('ol.events > li')];
+    expect(rows.map((row) => text(row.querySelector('.line')!))).toEqual([activityLine(event()), activityLine(ALERT)]);
+    expect(rows.map((row) => text(row.querySelector('time')!))).toEqual(['13:54 · 6m ago', '13:40 · 20m ago']);
+    expect(rows[0].classList).toContain('tone-positive');
+    expect(rows[0].querySelector('.amt')!.classList).not.toContain('tone');
+  });
+
+  it('adds the faint partial line after the rows', () => {
+    const { el } = mount([ALERT], meta({ availability: 'partial', missing: ['tp1_hit'] }));
+    const faint = el.querySelector('ol.events + .faint')!;
+    expect(text(faint)).toBe('Some sources unavailable: TP1 hits');
+  });
+
+  it('says Nothing yet today on a quiet, fresh day', () => {
+    const { el } = mount([], meta());
+    expect(text(el.querySelector('.quiet')!)).toBe('Nothing yet today');
+    expect(el.querySelector('.scan-warning')).toBeNull();
+  });
+
+  it('warns No scan since 09:00 (5h ago) when the bot stopped, never Nothing yet today', () => {
+    const { el } = mount([], meta(), ago(300));
+    const warning = el.querySelector('.scan-warning')!;
+    expect(text(warning)).toBe('No scan since 09:00 (5h ago)');
+    expect(warning.classList).toContain('warn');
+    expect(el.querySelector('.quiet')).toBeNull();
+  });
+
+  it('shows Activity unavailable with a retry, and still links the full log', () => {
+    const { fixture, el } = mount([], meta({ availability: 'unavailable' }));
+    let retried = 0;
+    fixture.componentInstance.retry.subscribe(() => retried++);
+    expect(text(el.querySelector('sb-panel-error')!)).toContain('Activity unavailable');
+    el.querySelector<HTMLButtonElement>('sb-panel-error button.retry')!.click();
+    expect(retried).toBe(1);
+    const link = el.querySelector<HTMLAnchorElement>('a.link')!;
+    expect(link.getAttribute('href')).toBe('/system?tab=logs');
+    expect(link.textContent!.trim()).toBe('Full activity log →');
+    expect(link.classList).toContain('sb-hit');
+  });
+
+  it('says loading before the first answer, with no link yet', () => {
+    const { el } = mount([], null, ago(2), true);
+    expect(text(el.querySelector('[role=status]')!)).toBe('Loading…');
+    expect(el.querySelector('a.link')).toBeNull();
   });
 });

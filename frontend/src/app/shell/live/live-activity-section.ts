@@ -1,5 +1,8 @@
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { LiveEvent, LiveEventKind, LiveEventsMeta, LiveTone } from '../../api/models';
 import { MINUS, amount, timeInZone } from '../../ui/format';
+import { PanelError } from '../../ui/panel-error';
 import { scanAge } from '../freshness-chip';
 import { isStale, liveTime } from './live-state';
 
@@ -72,4 +75,83 @@ export function activityView(
   const warning = scanWarning(lastSuccess, now);
   const state = activityState(meta, loading);
   return { state, rows, missing: missingText(meta), scanWarning: warning, quiet: state === 'ok' && rows.length === 0 && warning === null };
+}
+
+let nextId = 0;
+
+/**
+ * Activity -- v203 (spec v202 §4.4). The last events from /live, each with
+ * its Berlin time and age, a tone and one line; every P&L line reads
+ * "(paper, pre-cost)". A partial read says which sources failed, a failed
+ * one says so with a retry, and a stopped bot reads "No scan since …".
+ */
+@Component({
+  selector: 'sb-live-activity',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, PanelError],
+  template: `
+    <section class="live-section" [attr.aria-labelledby]="headingId">
+      <h2 class="title" [id]="headingId">Activity</h2>
+      @switch (view().state) {
+        @case ('loading') { <p class="muted" role="status">Loading…</p> }
+        @case ('unavailable') { <sb-panel-error message="Activity unavailable" (retry)="retry.emit()" /> }
+        @default {
+          @if (view().scanWarning; as warning) { <p class="scan-warning warn" role="status">{{ warning }}</p> }
+          @if (view().rows.length) {
+            <ol class="events">
+              @for (row of view().rows; track row.key) {
+                <li [class]="'tone-' + row.tone">
+                  <span class="dot" aria-hidden="true"></span>
+                  <time>{{ row.time }}</time>
+                  <span class="line">{{ row.text }}@if (row.pnl; as pnl) { · <span class="r">{{ pnl.r }}</span>@if (pnl.amount) {<span class="amt"> ({{ pnl.amount }})</span>}<span class="paper"> (paper, pre-cost)</span>}</span>
+                </li>
+              }
+            </ol>
+          }
+          @if (view().quiet) { <p class="quiet">Nothing yet today</p> }
+          @if (view().missing; as missing) { <p class="faint">{{ missing }}</p> }
+        }
+      }
+      @if (view().state !== 'loading') {
+        <a class="link sb-hit" routerLink="/system" [queryParams]="logParams">Full activity log →</a>
+      }
+    </section>
+  `,
+  styles: `
+    :host { display: block; min-width: 0; }
+    .title { margin: 0 0 var(--space-6); color: var(--text-muted); font-size: var(--text-micro); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+    p { margin: 0 0 var(--space-4); font-size: var(--text-table); overflow-wrap: anywhere; }
+    .events { display: flex; flex-direction: column; gap: var(--space-6); margin: 0 0 var(--space-6); padding: 0; list-style: none; }
+    li { display: grid; grid-template-columns: auto 1fr; gap: 0 var(--space-6); align-items: baseline; min-width: 0; font-size: var(--text-table); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); grid-row: span 2; align-self: center; }
+    time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .line { grid-column: 2; min-width: 0; color: var(--text); overflow-wrap: anywhere; }
+    .amt, .paper { color: var(--text-secondary); }
+    .tone-info .dot { background: var(--accent); }
+    .tone-positive .dot { background: var(--pos); }
+    .tone-positive .r { color: var(--pos); }
+    .tone-negative .dot { background: var(--neg); }
+    .tone-negative .r { color: var(--neg); }
+    .tone-warning .dot { background: var(--warn); }
+    .muted, .quiet, .faint { color: var(--text-muted); }
+    .faint { font-size: var(--text-micro); }
+    .warn { color: var(--warn); }
+    .link { display: inline-flex; align-items: center; min-height: var(--control-h); color: var(--accent); font-size: var(--text-table); text-decoration: none; }
+    .link:hover { text-decoration: underline; }
+  `,
+})
+export class LiveActivitySection {
+  readonly events = input<readonly LiveEvent[]>([]);
+  readonly meta = input<LiveEventsMeta | null>(null);
+  readonly loading = input(false);
+  readonly lastSuccess = input<string | null>(null);
+  readonly now = input.required<Date>();
+  readonly currency = input(DEFAULT_CURRENCY);
+  readonly retry = output<void>();
+
+  protected readonly headingId = `live-activity-${nextId++}`;
+  protected readonly logParams = { tab: 'logs' };
+  protected readonly view = computed(() => activityView(
+    this.events(), this.meta(), this.loading(), this.lastSuccess(), this.now(), this.currency(),
+  ));
 }
