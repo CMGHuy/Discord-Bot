@@ -1,6 +1,6 @@
 """SessionStart hook: give every worktree the main checkout's permissions.
 
-`.claude/settings.local.json` is git-ignored, so a fresh worktree starts with
+`.claude/settings.local.json` is local to the checkout it lives in, so a worktree on an older branch starts with
 none of the allow rules the partner granted on the main checkout. This copies
 the file when missing and otherwise adds any allow/deny/ask rule main has and
 the worktree lacks (never removes a worktree-only allow rule); deny/ask
