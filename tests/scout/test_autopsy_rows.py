@@ -1,5 +1,6 @@
 """autopsy.rows: the VM export CSV as typed BookRows, with modelled net R."""
 import csv
+import datetime as dt
 import sys
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from autopsy import rows  # noqa: E402
 from autopsy.rows import BookRow, RejectionCount  # noqa: E402
 from swingbot import config  # noqa: E402
 from tests.scout.test_export_script import EXPECTED_COLUMNS, SCRIPT, select_aliases  # noqa: E402
+
+UTC = dt.timezone.utc
 
 
 @pytest.fixture(autouse=True)
@@ -36,7 +39,8 @@ TRADE = {
     "row_kind": "trade", "trade_id": "T1", "plan_id": "P1", "ticker": "AAA",
     "strategy": "RSI", "horizon": "2w", "direction": "bullish",
     "plan_created_at": "2026-03-02 00:00:00+00",
-    "plan_first_status_at": "2026-03-02T14:35:10.123456+00:00",
+    "plan_first_status_at": "2026-03-03 15:00:00+00",
+    "plan_issued_at": "2026-03-02T14:35:10.123456+00:00", "plan_issued_at_source": "live",
     "plan_status": "CLOSED", "plan_status_reason": "tp1_runner_tp2",
     "entry_type": "stop_entry", "expiry_bars": "3", "valid_session": "2026-03-03",
     "planned_entry": "99.5", "opened_at": "2026-03-03 15:00:00+00", "entry": "100",
@@ -68,6 +72,7 @@ def test_every_book_row_field_has_a_default():
     a, b = BookRow(), BookRow()
     assert a.ticker is None and a.gross_r is None and a.close_reason == ""
     assert a.bars == {} and a.bars is not b.bars
+    assert a.hour_source == "unknown" and a.opened_at_utc is None and a.closed_at_utc is None
 
 
 def test_a_closed_trade_row_parses_into_eastern_dates(tmp_path):
@@ -75,7 +80,8 @@ def test_a_closed_trade_row_parses_into_eastern_dates(tmp_path):
     assert (row.row_kind, row.trade_id, row.plan_id, row.ticker) == ("trade", "T1", "P1", "AAA")
     assert (row.strategy, row.horizon, row.direction) == ("RSI", "2w", "bullish")
     assert row.plan_date == "2026-03-02"
-    assert row.plan_hour == 9                    # 14:35 UTC = 09:35 EST
+    assert row.plan_hour == 9                    # issued 14:35 UTC = 09:35 EST
+    assert row.hour_source == "live"
     assert row.entry_date == "2026-03-03"
     assert row.exit_date == "2026-03-09"         # 01:30 UTC on the 10th = 21:30 EDT on the 9th
 
@@ -105,22 +111,65 @@ def test_a_missing_close_reason_is_an_empty_string(tmp_path):
     assert row.close_reason == ""
 
 
-def test_a_date_only_created_at_gives_no_alert_hour(tmp_path):
-    record = dict(TRADE, plan_first_status_at="")
+def test_export_columns_end_with_the_issued_columns():
+    assert len(rows.EXPORT_COLUMNS) == 38
+    assert rows.EXPORT_COLUMNS[-2:] == rows.ISSUED_COLUMNS == ("plan_issued_at", "plan_issued_at_source")
+    assert rows.LEGACY_EXPORT_COLUMNS == rows.EXPORT_COLUMNS[:-2]
+
+
+def test_alert_hour_reads_a_real_issue_time_only():
+    assert rows._alert_hour("2026-03-02T14:35:10+00:00") == 9
+    assert rows._alert_hour("2026-08-04T23:40:00+00:00") == 19
+    assert rows._alert_hour("2026-08-04 13:02:11+00") == 9
+    assert rows._alert_hour("2026-03-02") is None
+    assert rows._alert_hour("") is None and rows._alert_hour(None) is None
+
+
+def test_neither_first_status_nor_created_at_is_an_hour_source(tmp_path):
+    record = dict(TRADE, plan_issued_at="", plan_issued_at_source="",
+                  plan_first_status_at="2026-03-02T14:35:10+00:00",
+                  plan_created_at="2026-03-02 15:10:00+00")
     [row] = rows.load_rows(_write_csv(tmp_path, [record]))
-    assert row.plan_hour is None
+    assert row.plan_hour is None and row.hour_source == "unknown"
+    assert row.plan_date == "2026-03-02"
+
+
+def test_issued_at_without_a_source_counts_as_live(tmp_path):
+    [row] = rows.load_rows(_write_csv(tmp_path, [dict(TRADE, plan_issued_at_source="")]))
+    assert (row.plan_hour, row.hour_source) == (9, "live")
+
+
+def test_a_discord_issue_time_is_tagged_discord(tmp_path):
+    record = dict(TRADE, plan_issued_at="2026-08-04T23:40:00+00:00", plan_issued_at_source="discord")
+    [row] = rows.load_rows(_write_csv(tmp_path, [record]))
+    assert (row.plan_hour, row.hour_source) == (19, "discord")
+
+
+def test_a_date_only_issued_at_is_unknown(tmp_path):
+    [row] = rows.load_rows(_write_csv(tmp_path, [dict(TRADE, plan_issued_at="2026-03-02")]))
+    assert (row.plan_hour, row.hour_source) == (None, "unknown")
+
+
+def test_an_old_csv_without_the_issued_columns_loads_with_unknown_hours(tmp_path):
+    path = _write_csv(tmp_path, [TRADE, PLAN], columns=EXPECTED_COLUMNS[:-2])
+    trade, plan = rows.load_rows(path)
+    assert (trade.plan_hour, trade.hour_source) == (None, "unknown")
+    assert (plan.plan_hour, plan.hour_source) == (None, "unknown")
+    assert trade.gross_r == 2.0 and trade.entry_date == "2026-03-03"
+
+
+def test_open_and_close_keep_their_utc_timestamps(tmp_path):
+    trade, plan = rows.load_rows(_write_csv(tmp_path, [TRADE, PLAN]))
+    assert trade.opened_at_utc == dt.datetime(2026, 3, 3, 15, 0, tzinfo=UTC)
+    assert trade.closed_at_utc == dt.datetime(2026, 3, 10, 1, 30, tzinfo=UTC)
+    assert trade.closed_at_utc.utcoffset() == dt.timedelta(0)
+    assert plan.opened_at_utc is None and plan.closed_at_utc is None
 
 
 def test_postgres_and_date_only_timestamps_parse():
     assert rows._eastern_date("2026-03-10 01:30:00+00") == "2026-03-09"
     assert rows._eastern_date("2026-03-02") == "2026-03-01"   # naive = UTC midnight
     assert rows._eastern_date("") is None
-
-
-def test_a_timed_created_at_is_the_alert_hour_fallback(tmp_path):
-    record = dict(TRADE, plan_first_status_at="", plan_created_at="2026-03-02 15:10:00+00")
-    [row] = rows.load_rows(_write_csv(tmp_path, [record]))
-    assert row.plan_hour == 10
 
 
 def test_modelled_net_r_subtracts_slippage_and_commission():
@@ -166,8 +215,14 @@ def test_a_trade_without_realised_r_is_not_a_closed_trade(tmp_path):
     assert rows.closed_trades(loaded) == []
 
 
-def test_a_wrong_header_is_refused_naming_the_gap(tmp_path):
-    path = _write_csv(tmp_path, [TRADE], columns=EXPECTED_COLUMNS[:-1])
+def test_a_wrong_header_is_still_refused_naming_the_gap(tmp_path):
+    for columns in ([c for c in EXPECTED_COLUMNS if c != "rs_percentile"],
+                    [c for c in EXPECTED_COLUMNS[:-2] if c != "rs_percentile"],
+                    list(EXPECTED_COLUMNS[:-1])):
+        path = _write_csv(tmp_path, [TRADE], columns=columns)
+        with pytest.raises(ValueError, match="missing"):
+            rows.load_rows(path)
+    path = _write_csv(tmp_path, [TRADE], columns=[c for c in EXPECTED_COLUMNS if c != "rs_percentile"])
     with pytest.raises(ValueError, match="rs_percentile"):
         rows.load_rows(path)
 

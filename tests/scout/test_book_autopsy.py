@@ -43,6 +43,7 @@ def _trade(i: int, ticker: str) -> dict:
         "strategy": "RSI" if i % 2 else "MACD", "horizon": "2w", "direction": "bullish",
         "plan_created_at": f"{plan_day} 00:00:00+00",
         "plan_first_status_at": f"{plan_day}T13:00:00+00:00", "plan_status": "CLOSED",
+        "plan_issued_at": f"{plan_day}T13:00:00+00:00", "plan_issued_at_source": "live",
         "entry_type": "stop_entry", "expiry_bars": "2", "planned_entry": "100",
         "opened_at": f"{plan_day + timedelta(days=1)}T15:00:00+00:00", "entry": "100",
         "stop_loss": "98", "take_profit": "103",
