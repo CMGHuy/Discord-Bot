@@ -131,7 +131,12 @@
     }
 
     <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
-      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null"><router-outlet /></div>
+      <!-- v202 §1: the destination's section tabs, drawn here from the nav
+           model and never by a workspace, above the page's sb-page header. -->
+      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null">
+        <sb-section-tabs [entry]="navHere()?.entry ?? null" [active]="navHere()?.section ?? null" />
+        <router-outlet />
+      </div>
       @if (routeLoading.visible()) {
         <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
       }
