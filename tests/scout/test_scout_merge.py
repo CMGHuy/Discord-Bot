@@ -28,13 +28,14 @@ def _row(**kw):
     return merge.ScoutRow(**base)
 
 
-def _cell(cid, *, n=40, weeks=12, lo=0.05, hi=0.35, thin=False):
+def _cell(cid, *, n=40, weeks=12, lo=0.05, hi=0.35, thin=False, defined_at="entry"):
     cut, value = cid.split("=", 1)
     ci = None if lo is None else [lo, hi]
     delta = None if lo is None else (lo + hi) / 2
     return {"id": cid, "cut": cut, "value": value, "n": n, "weeks": weeks, "win_rate": 0.5,
             "net_expr": 0.2, "gross_expr": 0.22, "delta": delta, "ci": ci, "p": 0.01,
-            "q": 0.04, "thin": thin, "bar_covered_n": None, "extra": {}}
+            "q": 0.04, "thin": thin, "bar_covered_n": None, "extra": {},
+            "defined_at": defined_at}
 
 
 CELLS = {c["id"]: c for c in (

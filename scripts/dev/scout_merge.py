@@ -13,6 +13,7 @@ import datetime as dt
 import json
 import math
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -260,10 +261,43 @@ def _is_playbook_screen(row: ScoutRow) -> bool:
             and row.route.strip().startswith("/screen"))
 
 
+SCHEMAS = (1, 2)
+DEFINED_AT_TAGS = ("entry", "fill", "outcome")
+NOT_AT_ENTRY = ("fill", "outcome")
+
+
+class SchemaError(ValueError):
+    """The autopsy JSON breaks the contract the merge relies on (v200): an unknown
+    autopsy_schema, or a schema-2 cell without a valid defined_at."""
+
+
+def autopsy_schema(header: dict) -> int:
+    """1 when the header has no autopsy_schema; 1 or 2 as written; anything else raises."""
+    if "autopsy_schema" not in header:
+        return 1
+    value = header["autopsy_schema"]
+    if type(value) is int and value in SCHEMAS:
+        return value
+    raise SchemaError(f"autopsy_schema {value!r} is not one of 1, 2")
+
+
+def check_defined_at(cells: dict[str, dict]) -> None:
+    """Schema 2 only: every cell must say when its value is known."""
+    bad = sorted(cid for cid, cell in cells.items() if cell.get("defined_at") not in DEFINED_AT_TAGS)
+    if bad:
+        raise SchemaError("cells without a valid defined_at: " + ", ".join(bad))
+
+
 def _lower_bound(cell: dict | None) -> float | None:
     if not cell or not cell.get("ci"):
         return None
     return float(cell["ci"][0])
+
+
+def _upper_bound(cell: dict | None) -> float | None:
+    if not cell or not cell.get("ci"):
+        return None
+    return float(cell["ci"][1])
 
 
 def _signed(value: float | None) -> str:
@@ -294,15 +328,37 @@ def _finite_number(value) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _statistical_reason(cell: dict) -> str | None:
-    """Apply evidence thresholds to unrounded JSON, including the q boundary."""
+def _known_at_entry_reason(cell: dict, schema: int) -> str | None:
+    """Schema 2: a fill- or outcome-defined cell is no evidence for an entry-time rule."""
+    if schema == 2 and cell.get("defined_at") in NOT_AT_ENTRY:
+        return f"cell {cell['id']} is {cell['defined_at']}-defined (not known at entry)"
+    return None
+
+
+def _bound_reason(cell: dict, direction: str, schema: int) -> str | None:
+    """exploit (and all of schema 1): lower bound > 0; schema-2 avoid: upper bound < 0."""
+    if schema == 2 and direction == "avoid":
+        upper = _upper_bound(cell)
+        if _finite_number(upper) is None or upper >= 0:
+            return f"cell {cell['id']} Δ upper bound {_signed(upper)} is at or above zero or unavailable"
+        return None
     lower = _lower_bound(cell)
     if _finite_number(lower) is None or lower <= 0:
         return f"cell {cell['id']} Δ lower bound {_signed(lower)} is at or below zero or unavailable"
+    return None
+
+
+def _q_reason(cell: dict) -> str | None:
     q = _finite_number(cell.get("q"))
     if q is None or not 0 <= q <= 0.10:
         return f"cell {cell['id']} q must be finite and between 0 and 0.10 in the autopsy JSON"
     return None
+
+
+def _statistical_reason(cell: dict, direction: str = "exploit", schema: int = 1) -> str | None:
+    """Apply evidence thresholds to unrounded JSON, including the q boundary."""
+    return (_known_at_entry_reason(cell, schema) or _bound_reason(cell, direction, schema)
+            or _q_reason(cell))
 
 
 def _quoted_figures_reason(row: ScoutRow, cell: dict) -> str | None:
@@ -325,7 +381,7 @@ def _quoted_figures_reason(row: ScoutRow, cell: dict) -> str | None:
     return None
 
 
-def _cell_reason(row: ScoutRow, cells: dict[str, dict]) -> str | None:
+def _cell_reason(row: ScoutRow, cells: dict[str, dict], schema: int = 1) -> str | None:
     """Evidence checks against the autopsy JSON, the only source of figures."""
     cid = row.cell_id
     if cid is None:
@@ -337,23 +393,54 @@ def _cell_reason(row: ScoutRow, cells: dict[str, dict]) -> str | None:
         return f"cell {cid} is thin (N {cell['n']}, {cell['weeks']} weeks)"
     if not _is_yes(row.exploratory):
         return "autopsy evidence must be marked exploratory: yes (spec boundary 5)"
-    return _statistical_reason(cell) or _quoted_figures_reason(row, cell)
+    return (_statistical_reason(cell, row.direction.strip(), schema)
+            or _quoted_figures_reason(row, cell))
+
+
+def rule_key(row: ScoutRow, cells: dict[str, dict]) -> tuple[str, str] | None:
+    """(cut, value the rule trades) for a cell row on a two-value cut, else None.
+    "avoid X" and "exploit not-X" trade the same value, so they share a key."""
+    cell = cells.get(row.cell_id) if row.cell_id else None
+    if cell is None:
+        return None
+    values = {c["value"] for c in cells.values() if c["cut"] == cell["cut"]}
+    if len(values) != 2:
+        return None
+    if row.direction.strip() == "avoid":
+        (other,) = values - {cell["value"]}
+        return cell["cut"], other
+    return cell["cut"], cell["value"]
+
+
+def _rule_reason(row: ScoutRow, cells: dict[str, dict], rules: dict, schema: int) -> str | None:
+    """Schema 2: one kept row per rule on a two-value cut."""
+    key = rule_key(row, cells) if schema == 2 else None
+    if key is None or key not in rules:
+        return None
+    role, idea = rules[key]
+    return f"same rule as the {role} row {idea} on two-value cut {key[0]}"
 
 
 def screen_rows(rows: list[ScoutRow], *, closed: set[str], ledger: dict[str, str],
-                cells: dict[str, dict]) -> tuple[list[ScoutRow], list[Drop]]:
+                cells: dict[str, dict], schema: int = 1) -> tuple[list[ScoutRow], list[Drop]]:
     """Drop closed, duplicate and unsupported rows; every drop keeps its reason."""
+    if schema == 2:
+        check_defined_at(cells)
     kept: list[ScoutRow] = []
     drops: list[Drop] = []
     seen: dict[str, str] = {}
+    rules: dict[tuple[str, str], tuple[str, str]] = {}
     for row in rows:
         reason = _identity_reason(row, seen, closed, ledger)
         if reason is None and not _is_playbook_screen(row):
-            reason = _cell_reason(row, cells)
+            reason = _cell_reason(row, cells, schema) or _rule_reason(row, cells, rules, schema)
         if reason is not None:
             drops.append(Drop(idea=row.idea, role=row.role, reason=reason))
             continue
         seen[normalise(row.idea)] = row.role
+        key = rule_key(row, cells) if schema == 2 else None
+        if key is not None:
+            rules[key] = (row.role, row.idea)
         kept.append(row)
     return kept, drops
 
@@ -441,8 +528,13 @@ def main(argv: list[str] | None = None) -> int:
     report = json.loads(args.autopsy.read_text(encoding="utf-8"))
     cells = {cell["id"]: cell for cell in report.get("cells", [])}
     rows, parse_drops = parse_rows(args.role_output.read_text(encoding="utf-8"))
-    kept, drops = screen_rows(rows, closed=closed_names(args.methodology),
-                              ledger=ledger_names(args.ledger), cells=cells)
+    try:
+        schema = autopsy_schema(report.get("header", {}))
+        kept, drops = screen_rows(rows, closed=closed_names(args.methodology),
+                                  ledger=ledger_names(args.ledger), cells=cells, schema=schema)
+    except SchemaError as exc:
+        print(f"scout_merge: {exc}", file=sys.stderr)
+        return 2
     ranked = rank(kept, cells)
     all_drops = parse_drops + drops
     slate = render_slate(ranked, all_drops, report.get("header", {}), date=args.date,
