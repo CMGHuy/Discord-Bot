@@ -89,5 +89,7 @@ def test_refresher_is_capped_and_never_built_or_published(compose):
 
 def test_deploy_verifies_the_refresher_runs_the_pulled_image():
     src = DEPLOY.read_text(encoding="utf-8")
-    assert "for svc in bot admin refresher; do" in src
+    # v201: the list is probed (refresher only when the image has the module)
+    assert 'SERVICES="bot admin refresher"' in src
+    assert "for svc in $SERVICES; do" in src
     assert "for svc in bot admin; do" not in src

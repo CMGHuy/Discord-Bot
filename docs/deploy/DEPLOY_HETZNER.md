@@ -232,6 +232,14 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db 
 Rolling forward again needs nothing: the first tick of a v184-or-later bot
 writes the key back.
 
+**Rolling back past v201: no refresher on the old image.** A pre-v201 image has no
+`swingbot.refresher` module, yet `main`'s compose starts the `refresher` service on
+whatever `SWING_BOT_IMAGE` says. `deploy.sh` probes the image and, when the module
+is missing, starts and verifies only `bot admin` and prints a `rolling back past
+v201` notice (`rollback_to.sh` does the same). The admin then runs on a pre-v201
+image too, so pages fetch at request time as before. Rolling forward again needs
+nothing: the next deploy of a v201 image starts the refresher.
+
 **The admin's server is chosen inside the image (v148).** Compose runs the
 admin as `python admin_ui.py`, and it must keep doing so. A v148+ image execs
 gunicorn from there (`deploy/gunicorn.conf.py`, one gthread worker); an older
@@ -303,6 +311,9 @@ pages only read what it stored.
 - Kill switch: `python3 scripts/ops/env_set.py ADMIN_REFRESHER off`, then
   `docker compose restart admin refresher`. The admin pages go back to
   request-time fetching exactly as before v201.
+  `MARKETDATA_LAYER=off` does the same. The refresher process stays up, holds its
+  lock and keeps beating, but fetches nothing and drains no queue; it picks a
+  flip back to `on` up from `.env` within one poll tick, with no restart needed.
 - `scripts/ops/rollback_to.sh` stops it with the other writers and starts it only
   when the target image has `swingbot.refresher`.
 
