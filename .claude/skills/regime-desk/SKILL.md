@@ -29,11 +29,7 @@ entry, alert timing against the session, and same-day clustering of losers.
 - `session_bucket` and `alert_hour` cells, and the `alerts_per_day`, `alert_hour_session` and `actionable_before_open` tallies: can a trader who is not watching rest the order before the open?
 - Same-day losers clustered by sector (`swingbot/core/edge/correlation.py`), described from `sector_today` and labelled not point-in-time.
 - Every stand-aside row names in `pairs_with` where the volume comes back; a tightening is paired with a widening.
-- Gap sign: open_gap_pct compares the fill-day open with the planned entry and
-  is positive when the open was worse for the trade (higher for a long, lower
-  for a short), so open_better is an open more than 0.25% on the trade's side of
-  the planned entry, flat is within 0.25%, open_worse_small is worse by up to
-  1.0% and open_worse_large is worse by more than 1.0%.
+- Gap sign: open_gap_pct compares the fill-day open with the planned entry and is positive when the open was worse for the trade (higher for a long, lower for a short), so open_better is an open more than 0.25% on the trade's side of the planned entry, flat is within 0.25%, open_worse_small is worse by up to 1.0% and open_worse_large is worse by more than 1.0%.
 
 ## Red flags
 
@@ -71,12 +67,7 @@ One block per row, keys in this order, two-space indent. Nothing fits: return
   route: /screen <idea> | /prereg
 ```
 
-`direction: exploit` proposes trading the cell: the merge keeps it only when
-the cell's Δ lower bound is above 0. `direction: avoid` proposes standing
-aside from it: the merge keeps it only when the cell's Δ upper bound is below
-0. Both need q ≤ 0.10. A cell the autopsy marks `not known at entry` (its cut
-is `fill`- or `outcome`-defined) is no evidence for either, so leave the row
-out.
+`direction: exploit` proposes trading the cell: the merge keeps it only when the cell's Δ lower bound is above 0. `direction: avoid` proposes standing aside from it: the merge keeps it only when the cell's Δ upper bound is below 0. Both need q ≤ 0.10. A cell the autopsy marks `not known at entry` (its cut is `fill`- or `outcome`-defined) is no evidence for either, so leave the row out.
 
 ## Trigger table
 

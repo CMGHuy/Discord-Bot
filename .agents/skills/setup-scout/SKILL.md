@@ -33,11 +33,7 @@ registry. Read `.claude/skills/setup-scout/references/playbook.md` too.
 - Variants of the one `SCREEN-PASS` (`screen-uptrend_pullback`) only as a new mechanism, never a new threshold.
 - `sector_today` is today's map, not point-in-time: describe concentration, never filter on it.
 - Any tightening names in `pairs_with` where the volume comes back.
-- Gap sign: open_gap_pct compares the fill-day open with the planned entry and
-  is positive when the open was worse for the trade (higher for a long, lower
-  for a short), so open_better is an open more than 0.25% on the trade's side of
-  the planned entry, flat is within 0.25%, open_worse_small is worse by up to
-  1.0% and open_worse_large is worse by more than 1.0%.
+- Gap sign: open_gap_pct compares the fill-day open with the planned entry and is positive when the open was worse for the trade (higher for a long, lower for a short), so open_better is an open more than 0.25% on the trade's side of the planned entry, flat is within 0.25%, open_worse_small is worse by up to 1.0% and open_worse_large is worse by more than 1.0%.
 
 ## Red flags
 
@@ -74,13 +70,7 @@ One block per row, keys in this order, two-space indent. Nothing fits: return
   route: /screen <idea> | /prereg
 ```
 
-`direction: exploit` proposes trading the cell: the merge keeps it only when
-the cell's Δ lower bound is above 0. `direction: avoid` proposes standing
-aside from it: the merge keeps it only when the cell's Δ upper bound is below
-0. Both need q ≤ 0.10. A cell the autopsy marks `not known at entry` (its cut
-is `fill`- or `outcome`-defined) is no evidence for either, so leave the row
-out.
-
+`direction: exploit` proposes trading the cell: the merge keeps it only when the cell's Δ lower bound is above 0. `direction: avoid` proposes standing aside from it: the merge keeps it only when the cell's Δ upper bound is below 0. Both need q ≤ 0.10. A cell the autopsy marks `not known at entry` (its cut is `fill`- or `outcome`-defined) is no evidence for either, so leave the row out.
 ## Trigger table
 
 Should fire: /trade-scout dispatching the scout agent with role=setup-scout.

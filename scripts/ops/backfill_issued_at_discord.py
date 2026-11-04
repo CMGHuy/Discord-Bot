@@ -54,9 +54,10 @@ from collections import Counter
 from dataclasses import dataclass
 
 from swingbot.core.market.session import US_MARKET_TZ, nyse_calendar
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS
 
-HORIZON_LABEL_TO_KEY: dict[str, str] = {spec["label"]: key for key, spec in HORIZONS.items()}
+# The alerts in the backfill window were posted on the legacy horizons (v113 masks "1w").
+HORIZON_LABEL_TO_KEY: dict[str, str] = {HORIZONS[key]["label"]: key for key in LEGACY_HORIZONS}
 CSV_COLUMNS = ("plan_id", "plan_candidates", "message_candidates", "message_id",
                "issued_at", "lag_hours", "method")
 WINDOW_FIRST = dt.date(2026, 7, 1)

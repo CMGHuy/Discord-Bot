@@ -50,4 +50,10 @@ See [the dry-run record](2026-10-29-v200-backfill-dry-run.md) (V200-6): the part
 
 ## Item 4 — full suite
 
-pending V200-18
+2026-11-04. One full run: 13588 passed, 2298 skipped, 4 failed, 0 xfailed. The 2298 skips include the database tests: `swing-db` is published on 127.0.0.1:56499, not the test default 127.0.0.1:55432, so they did not run in this run (the V200-7 revision itself was verified against the replica in V200-8).
+
+Fixes, each in its owning task's files, re-run alone and green:
+- `tests/hooks/test_skill_shape.py::test_new_skills_stay_within_the_line_budget` for exit-harvester, regime-desk and setup-scout (V200-12 and V200-14 grew the skills to 88-90 lines against the 80 budget): the gap-sign bullet and the direction paragraph now sit on one line each; setup-scout also loses the blank line before `## Trigger table`. Codex mirror regenerated.
+- `tests/scripts/test_v113_script_horizons.py::test_no_script_iterates_horizons` (V200-5): `HORIZON_LABEL_TO_KEY` is built from `LEGACY_HORIZONS` by lookup instead of iterating `HORIZONS`.
+
+Static gates after the fixes: complexity gate PASS, Codex mirror current.
