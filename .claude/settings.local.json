@@ -53,7 +53,8 @@
       "Read(./.env)",
       "Bash(docker ps:*)",
       "Read(//e/Documents/Private/Projects/Discord-Bot/.env)",
-      "Read(//e/Documents/Private/Projects/Discord-Bot/.claude/worktrees/*/.env)"
+      "Read(//e/Documents/Private/Projects/Discord-Bot/.claude/worktrees/*/.env)",
+      "Bash(bash scripts/ops/replicate_prod_db.sh:*)"
     ],
     "deny": [
       "Bash(cat .env.bak:*)",
