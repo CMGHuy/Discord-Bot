@@ -30,7 +30,9 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   definition — main-book realized legs walk plus open-position unrealized —
   shared by the equity recorder, the backfill and the admin), `core/infra/`
   (JSON, locks and delivery channels — `jsonio.py`, `state.py`,
-  `notifier.py`, `silent_channel.py`), plus the four that predate the
+  `notifier.py`, `silent_channel.py`; v205 `read_memo.py`, the opt-in
+  `contextvars` memo that loads each store once per admin GET request,
+  switched on only by `@read_scope`), plus the four that predate the
   restructure: `core/edge/`, `core/scanning/`, `core/analytics/`,
   `core/charts/`, and `core/presentation/`. `presentation/` owns every
   Discord colour, glyph, number format and embed part: pure `tokens.py`,
