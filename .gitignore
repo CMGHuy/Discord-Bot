@@ -135,7 +135,6 @@ swingbot/admin/static/app/
 # Editor / tooling config and local-only Claude Code state
 # ==========================================================================
 .vscode/
-.claude/settings.local.json
 .claude/worktrees/
 # Scratch output from the Playwright MCP server: browser profile, traces and
 # screenshots from a local session. Machine-specific and can be large.
