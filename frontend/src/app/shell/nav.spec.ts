@@ -3,44 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { routes } from '../app.routes';
 import { ICON_NAMES } from '../ui/icon';
 import {
-  ALIASES, DESTINATION_LABEL_OVERRIDES, NAV_ENTRIES, NAV_GROUPS, PHONE_TABS, SECTION_LABEL_OVERRIDES,
-  SECTION_WORDS, breadcrumbFor, detailCrumb, navEntryFor,
+  ALIASES, DESTINATION_LABEL_OVERRIDES, NAV_ENTRIES, PHONE_TABS, SECTION_LABEL_OVERRIDES, SECTION_WORDS,
+  breadcrumbFor, destinationFor, detailCrumb, isSectionUrl, navEntryFor,
 } from './nav';
 
 const paths = (entries: readonly { path: string }[]) => entries.map((entry) => entry.path);
-const allEntries = NAV_GROUPS.flatMap((group) => [...group.entries]);
-
-describe('NAV_GROUPS (v195 §5.1)', () => {
-  it('is four groups in rail order, named in sentence case', () => {
-    expect(NAV_GROUPS.map((group) => [group.id, group.label])).toEqual([
-      ['nav-monitor', 'Monitor'],
-      ['nav-review', 'Review'],
-      ['nav-insights', 'Insights'],
-      ['nav-system', 'System'],
-    ]);
-  });
-
-  it('puts each workspace in its group, in order', () => {
-    expect(NAV_GROUPS.map((group) => paths(group.entries))).toEqual([
-      ['/dashboard', '/watchlist', '/risk'],
-      ['/trades', '/calendar', '/cancels'],
-      ['/analytics', '/research', '/reports'],
-      ['/system', '/versions'],
-    ]);
-  });
-
-  it('lists all eleven workspaces once and leaves the /ui gallery off the rail', () => {
-    expect(allEntries).toHaveLength(11);
-    expect(new Set(paths(allEntries)).size).toBe(11);
-    expect(paths(allEntries)).not.toContain('/ui');
-  });
-
-  it('draws each entry with a known icon, no two entries sharing one', () => {
-    const icons = allEntries.map((entry) => entry.icon);
-    for (const icon of icons) expect(ICON_NAMES).toContain(icon);
-    expect(new Set(icons).size).toBe(icons.length);
-  });
-});
 
 const titleAt = (path: string) => routes.find((route) => `/${route.path}` === path)?.title;
 
@@ -131,48 +98,93 @@ describe('ALIASES (v202 §1)', () => {
   });
 });
 
-describe('PHONE_TABS (v195 Phase 3)', () => {
-  it('is Dashboard, Watchlist, Trades and Risk, taken from the same model', () => {
+describe('PHONE_TABS', () => {
+  it('is Dashboard, Watchlist, Trades and Risk, each drawn as its destination', () => {
     expect(paths(PHONE_TABS)).toEqual(['/dashboard', '/watchlist', '/trades', '/risk']);
-    for (const tab of PHONE_TABS) expect(allEntries).toContain(tab);
+    for (const tab of PHONE_TABS) {
+      expect(NAV_ENTRIES.find((entry) => entry.path === tab.path)?.icon).toBe(tab.icon);
+    }
   });
 });
 
-describe('navEntryFor', () => {
+describe('navEntryFor (v202 second-segment rule)', () => {
   const at = (url: string) => {
     const found = navEntryFor(url);
-    return found ? [found.group.label, found.entry.label] : null;
+    return found ? [found.entry.label, found.section?.label ?? null] : null;
   };
 
   it.each([
-    ['/trades', ['Review', 'Trades']],
-    ['/trades/812?tab=plan#why', ['Review', 'Trades']],
-    ['/plans/5', ['Review', 'Trades']],
-    ['/watchlist/NVDA', ['Monitor', 'Watchlist']],
-    ['/universe', ['Monitor', 'Watchlist']],
-    ['/calendar/2026-10-01', ['Review', 'Calendar']],
-    ['/system?tab=providers', ['System', 'System']],
-    ['/analytics', ['Insights', 'Analytics']],
+    ['/dashboard', ['Dashboard', null]],
+    ['/trades', ['Trades', 'Book']],
+    ['/trades/812?tab=plan#why', ['Trades', 'Book']],
+    ['/trades/calendar', ['Trades', 'Calendar']],
+    ['/trades/calendar/2026-10-01', ['Trades', 'Calendar']],
+    ['/trades/cancels?page=2', ['Trades', 'Cancels']],
+    // Another destination's word is a detail id here, not a section.
+    ['/trades/analytics', ['Trades', 'Book']],
+    ['/plans/5', ['Trades', 'Book']],
+    ['/watchlist/NVDA', ['Watchlist', null]],
+    ['/universe', ['Watchlist', null]],
+    ['/cockpit', ['Dashboard', null]],
+    ['/calendar/2026-10-01', ['Trades', 'Calendar']],
+    ['/cancels', ['Trades', 'Cancels']],
+    ['/analytics?tab=tuning#x', ['Insights', 'Analytics']],
+    ['/research', ['Insights', 'Research']],
+    ['/reports', ['Insights', 'Reports']],
+    ['/insights', ['Insights', 'Analytics']],
+    ['/insights/reports?tab=gates', ['Insights', 'Reports']],
+    ['/system?tab=providers', ['System', 'Health']],
+    ['/system/versions', ['System', 'Versions']],
+    ['/versions', ['System', 'Versions']],
   ])('places %s', (url, expected) => {
     expect(at(url)).toEqual(expected);
   });
 
-  it.each(['/ui', '/', '', '/nowhere'])('finds nothing for %j', (url) => {
+  it.each(['/ui', '/', '', '/nowhere', '/nowhere/calendar'])('finds nothing for %j', (url) => {
     expect(navEntryFor(url)).toBeNull();
   });
 });
 
-describe('breadcrumbFor', () => {
-  it('is group then page on a workspace', () => {
-    expect(breadcrumbFor('/risk', null)).toEqual(['Monitor', 'Risk']);
+describe('destinationFor', () => {
+  it.each([
+    ['/analytics?tab=tuning#x', '/insights'],
+    ['/trades/812', '/trades'],
+    ['/trades/calendar/2026-10-01', '/trades'],
+    ['/system/versions', '/system'],
+    ['/risk', '/risk'],
+    ['/ui', null],
+    ['', null],
+  ])('is the destination path of %j', (url, expected) => {
+    expect(destinationFor(url)).toBe(expected);
+  });
+});
+
+describe('isSectionUrl', () => {
+  it.each(['/trades/calendar', '/trades/calendar/2026-10-01', '/trades/cancels', '/insights/analytics',
+    '/insights/research?page=2', '/system/versions', '/calendar', '/versions'])('is true for %s', (url) => {
+    expect(isSectionUrl(url)).toBe(true);
   });
 
-  it('adds the detail segment a detail route supplies', () => {
-    expect(breadcrumbFor('/trades/812', 'NVDA #812')).toEqual(['Review', 'Trades', 'NVDA #812']);
+  it.each(['/trades', '/trades/812', '/trades/analytics', '/system', '/system?tab=logs', '/risk',
+    '/watchlist/NVDA', '/plans/5', '/ui', ''])('is false for %j', (url) => {
+    expect(isSectionUrl(url)).toBe(false);
   });
+});
 
-  it('treats an empty detail as none', () => {
-    expect(breadcrumbFor('/risk', '')).toEqual(['Monitor', 'Risk']);
+describe('breadcrumbFor (Destination / Section)', () => {
+  it.each([
+    ['/risk', null, ['Risk']],
+    ['/risk', '', ['Risk']],
+    ['/trades', null, ['Trades', 'Book']],
+    ['/trades/calendar', null, ['Trades', 'Calendar']],
+    ['/insights/analytics?tab=edge', null, ['Insights', 'Analytics']],
+    ['/system', null, ['System', 'Health']],
+    ['/system/versions', null, ['System', 'Versions']],
+    ['/trades/812', 'NVDA #812', ['Trades', 'Book', 'NVDA #812']],
+    ['/trades/calendar/2026-10-01', 'Calendar day', ['Trades', 'Calendar', 'Calendar day']],
+    ['/watchlist/NVDA', 'NVDA', ['Watchlist', 'NVDA']],
+  ])('reads %s (detail %j) as %j', (url, detail, expected) => {
+    expect(breadcrumbFor(url, detail)).toEqual(expected);
   });
 
   it('is empty off the nav, so the caller can fall back to the route title', () => {

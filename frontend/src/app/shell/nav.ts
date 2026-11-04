@@ -20,6 +20,7 @@ export interface NavEntry {
   foot?: boolean;
 }
 
+/** @deprecated v202: the four-group model. Read NAV_ENTRIES; V203-1 deletes it. */
 export interface NavGroup {
   id: string;
   label: string;
@@ -27,16 +28,11 @@ export interface NavGroup {
 }
 
 /**
- * The nav model -- v195 §5.1. Four groups, split by question:
- *   Monitor   what is happening right now
- *   Review    the trade book and its history
- *   Insights  what the measurements say (split out of Review, which had six)
- *   System    what the bot itself is doing
- *
- * One model for the rail, the phone tab bar and More sheet, the command
- * palette and the breadcrumb. The rail shows the groups as dividers; the
- * breadcrumb shows their names. The /ui gallery is a developer surface,
- * reachable by URL and the palette, never the rail.
+ * @deprecated v202: the v195 four-group rail (Monitor, Review, Insights,
+ * System), kept unchanged only while shell.ts (the rail), more-sheet.ts and
+ * palette-items.ts still read it. V202-7 moves the sheet and the palette
+ * onto NAV_ENTRIES; V203-1 rewrites the rail and deletes this block. Its
+ * pre-v202 paths still work: app.routes.ts redirects each one.
  */
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
@@ -133,11 +129,6 @@ export const SECTION_WORDS: ReadonlySet<string> = new Set(
     .filter((word): word is string => word !== undefined),
 );
 
-/** The v195 lookup's aliases: a plan is part of the trade book, and
- *  /universe is the watchlist's old name. Read only by the NAV_GROUPS
- *  navEntryFor below; V202-6b deletes both. */
-const GROUP_ALIASES: Readonly<Record<string, string>> = { '/plans': '/trades', '/universe': '/watchlist' };
-
 /** v202: the paths that belong to another destination. A plan is part of
  *  the trade book, /universe and /cockpit are older names, and the six
  *  pre-v202 pages moved under a destination (app.routes.ts redirects all
@@ -155,22 +146,49 @@ export const ALIASES: Readonly<Record<string, string>> = {
   '/versions': '/system/versions',
 };
 
-/** '/trades/812?tab=plan#why' -> '/trades'; '' and '/' -> '/'. */
-function firstSegment(url: string): string {
-  const path = url.split(/[?#]/)[0];
-  return `/${path.split('/').find((part) => part !== '') ?? ''}`;
+/** '/calendar/2026-10-01?x#y' -> ['trades', 'calendar', '2026-10-01']; '' -> []. */
+function segments(url: string): string[] {
+  const parts = url.split(/[?#]/)[0].split('/').filter((part) => part !== '');
+  if (parts.length === 0) return [];
+  const alias = ALIASES[`/${parts[0]}`];
+  return alias ? [...alias.split('/').filter((part) => part !== ''), ...parts.slice(1)] : parts;
 }
 
-/** The group and entry a URL belongs to, by its first path segment; null off
- *  the nav (the /ui gallery, the root, an unknown path). */
-export function navEntryFor(url: string): { group: NavGroup; entry: NavEntry } | null {
-  const first = firstSegment(url);
-  const path = GROUP_ALIASES[first] ?? first;
-  for (const group of NAV_GROUPS) {
-    const entry = group.entries.find((candidate) => candidate.path === path);
-    if (entry) return { group, entry };
-  }
-  return null;
+function entryAt(first: string | undefined): NavEntry | undefined {
+  return first === undefined ? undefined : NAV_ENTRIES.find((entry) => entry.path === `/${first}`);
+}
+
+/** The section a second segment names in this destination, if it names one. */
+function namedSection(entry: NavEntry, word: string | undefined): NavSection | undefined {
+  if (word === undefined) return undefined;
+  return entry.sections?.find((section) => section.path === `${entry.path}/${word}`);
+}
+
+/**
+ * The destination and section a URL belongs to -- v202 second-segment rule.
+ * The second segment is a section exactly when it is one of this
+ * destination's section words; anything else there (`/trades/812`) is a
+ * detail id and keeps the first section. A single page has no section.
+ * Null off the nav (the /ui gallery, the root, an unknown path).
+ */
+export function navEntryFor(url: string): { entry: NavEntry; section: NavSection | null } | null {
+  const [first, second] = segments(url);
+  const entry = entryAt(first);
+  if (!entry) return null;
+  return { entry, section: namedSection(entry, second) ?? entry.sections?.[0] ?? null };
+}
+
+/** The destination path a URL belongs to ('/insights'), or null off the nav. */
+export function destinationFor(url: string): string | null {
+  return navEntryFor(url)?.entry.path ?? null;
+}
+
+/** True when the URL's second segment (after ALIASES) names one of its
+ *  destination's sections: '/trades/calendar', not '/trades' or '/trades/812'. */
+export function isSectionUrl(url: string): boolean {
+  const [first, second] = segments(url);
+  const entry = entryAt(first);
+  return entry !== undefined && namedSection(entry, second) !== undefined;
 }
 
 /** The phone bottom bar's four page tabs (Phase 3), in order; PhoneTabBar
@@ -178,12 +196,13 @@ export function navEntryFor(url: string): { group: NavGroup; entry: NavEntry } |
 export const PHONE_TABS: readonly NavEntry[] = ['/dashboard', '/watchlist', '/trades', '/risk']
   .map((path) => navEntryFor(path)!.entry);
 
-/** `Group / Page`, plus the detail segment a detail route supplies
- *  ('Review / Trades / NVDA #812'). Empty off the nav. */
+/** `Destination / Section` ('Trades / Calendar'), the destination alone on a
+ *  single page ('Risk'), plus the detail segment a detail route supplies
+ *  ('Trades / Book / NVDA #812'). Empty off the nav. */
 export function breadcrumbFor(url: string, detail: string | null): string[] {
   const found = navEntryFor(url);
   if (!found) return [];
-  const crumbs = [found.group.label, found.entry.label];
+  const crumbs = found.section ? [found.entry.label, found.section.label] : [found.entry.label];
   return detail ? [...crumbs, detail] : crumbs;
 }
 

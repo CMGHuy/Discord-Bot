@@ -48,7 +48,7 @@ describe('PhoneTabBar (v195 Phase 3)', () => {
   });
 
   it('lights More for a page the bar does not hold', async () => {
-    const { el } = await mount('/calendar');
+    const { el } = await mount('/insights/analytics');
     expect(current(el)).toEqual([]);
     expect(el.querySelector('button.tab.more')!.classList).toContain('active');
   });

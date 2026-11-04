@@ -609,7 +609,7 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
     expect(bar.firstElementChild!.tagName.toLowerCase()).toBe('sb-breadcrumb');
     const crumbs = [...bar.querySelectorAll('nav[aria-label="Breadcrumb"] li')]
       .map((li) => li.textContent!.replace('/', '').trim());
-    expect(crumbs).toEqual(['Review', 'Trades']);
+    expect(crumbs).toEqual(['Trades', 'Book']);
     expect(el.querySelectorAll('h1')).toHaveLength(0);
     expect(el.querySelector('.page-title, .page-subtitle')).toBeNull();
   });

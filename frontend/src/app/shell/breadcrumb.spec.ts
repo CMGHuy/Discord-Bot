@@ -13,25 +13,48 @@ const SOURCE = readFileSync(join(process.cwd(), 'src/app/shell/breadcrumb.ts'), 
 
 class Blank {}
 
-describe('crumbsFor (v195 Phase 3)', () => {
-  it('is group and page on a workspace, neither a link', () => {
+describe('crumbsFor (v202: Destination / Section)', () => {
+  it('is destination and section on a sectioned page, neither a link', () => {
     expect(crumbsFor('/trades', null, 'Trades')).toEqual([
-      { label: 'Review', link: null },
       { label: 'Trades', link: null },
+      { label: 'Book', link: null },
     ]);
   });
 
-  it('links the page crumb back to its list when a detail follows it', () => {
+  it('is the destination alone on a single page', () => {
+    expect(crumbsFor('/risk', null, 'Risk')).toEqual([{ label: 'Risk', link: null }]);
+  });
+
+  it.each([
+    ['/trades/calendar', 'Calendar', ['Trades', 'Calendar']],
+    ['/trades/cancels', 'Cancels', ['Trades', 'Cancels']],
+    ['/insights/analytics', 'Analytics', ['Insights', 'Analytics']],
+    ['/system/versions', 'Versions', ['System', 'Versions']],
+    ['/system?tab=logs', 'System', ['System', 'Health']],
+  ])('never reads the section of %s as a detail page', (url, title, expected) => {
+    expect(crumbsFor(url, null, title)).toEqual(expected.map((label) => ({ label, link: null })));
+  });
+
+  it('links the crumb before a detail back to its list', () => {
     expect(crumbsFor('/trades/812', 'NVDA #812', 'Trade detail')).toEqual([
-      { label: 'Review', link: null },
-      { label: 'Trades', link: '/trades' },
+      { label: 'Trades', link: null },
+      { label: 'Book', link: '/trades' },
       { label: 'NVDA #812', link: null },
     ]);
+    expect(crumbsFor('/watchlist/NVDA', 'NVDA', 'Ticker detail')).toEqual([
+      { label: 'Watchlist', link: '/watchlist' },
+      { label: 'NVDA', link: null },
+    ]);
   });
 
-  it('stands the route title in for a detail that has not loaded yet', () => {
+  it("stands the route title in for a detail that has not loaded yet, below a section's list", () => {
     expect(crumbsFor('/plans/5', null, 'Plan detail').map((crumb) => crumb.label))
-      .toEqual(['Review', 'Trades', 'Plan detail']);
+      .toEqual(['Trades', 'Book', 'Plan detail']);
+    expect(crumbsFor('/trades/calendar/2026-10-01', null, 'Calendar day')).toEqual([
+      { label: 'Trades', link: null },
+      { label: 'Calendar', link: '/trades/calendar' },
+      { label: 'Calendar day', link: null },
+    ]);
   });
 
   it('is the route title alone off the nav', () => {
@@ -54,6 +77,7 @@ describe('Breadcrumb (sb-breadcrumb)', () => {
         provideZonelessChangeDetection(),
         provideRouter([
           { path: 'trades', component: Blank, title: 'Trades' },
+          { path: 'trades/calendar', component: Blank, title: 'Calendar' },
           { path: 'trades/:id', component: Blank, title: 'Trade detail' },
           { path: 'ui', component: Blank, title: 'UI gallery' },
         ]),
@@ -81,24 +105,30 @@ describe('Breadcrumb (sb-breadcrumb)', () => {
     expect(el().querySelector('h1, h2, h3, h4, h5, h6')).toBeNull();
   });
 
-  it('shows group and page on a workspace, the page marked current', async () => {
+  it('shows destination and section, the section marked current', async () => {
     await go('/trades');
-    expect(labels()).toEqual(['Review', 'Trades']);
-    expect(el().querySelector('[aria-current="page"]')!.textContent!.trim()).toBe('Trades');
+    expect(labels()).toEqual(['Trades', 'Book']);
+    expect(el().querySelector('[aria-current="page"]')!.textContent!.trim()).toBe('Book');
     expect(el().querySelector('a')).toBeNull();
   });
 
   it('shows the detail segment once the detail route supplies it, linking back to the list', async () => {
     await go('/trades/812');
-    expect(labels()).toEqual(['Review', 'Trades', 'Trade detail']);
+    expect(labels()).toEqual(['Trades', 'Book', 'Trade detail']);
     titles.setDetail('NVDA #812');
     fixture.detectChanges();
-    expect(labels()).toEqual(['Review', 'Trades', 'NVDA #812']);
+    expect(labels()).toEqual(['Trades', 'Book', 'NVDA #812']);
     const back = el().querySelector('a')!;
-    expect(back.textContent!.trim()).toBe('Trades');
+    expect(back.textContent!.trim()).toBe('Book');
     expect(back.getAttribute('href')).toBe('/trades');
     expect(back.classList).toContain('sb-hit');
     expect(el().querySelector('[aria-current="page"]')!.textContent!.trim()).toBe('NVDA #812');
+  });
+
+  it('shows a section page as destination and section, with no third crumb', async () => {
+    await go('/trades/calendar');
+    expect(labels()).toEqual(['Trades', 'Calendar']);
+    expect(el().querySelector('a')).toBeNull();
   });
 
   it('falls back to the route title off the nav', async () => {
