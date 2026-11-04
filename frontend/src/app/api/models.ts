@@ -2461,3 +2461,44 @@ export interface CancelPrecision {
   };
   rows: CancelPlanRow[];
 }
+
+/* -- v203: GET /api/v1/live, the dock's one read (spec v202 §5) ---------- */
+
+/** Per section. `partial` only on events: heat and awaiting are all or nothing. */
+export type LiveAvailability = 'ok' | 'partial' | 'unavailable';
+
+/** Every section's envelope. A failed section keeps its keys with null
+ *  values, `availability: 'unavailable'` and a short `reason`. */
+interface LiveSectionBase { availability: LiveAvailability; as_of: string; reason: string | null; }
+
+/** Open heat against the cap: the Risk page's own definition (v202
+ *  `open_heat_state`), counting resting orders. `utilisation_pct` is
+ *  unclamped; `headroom_*` goes negative over the cap. */
+export interface LiveHeat extends LiveSectionBase {
+  open_pct: number | null; cap_pct: number | null; utilisation_pct: number | null;
+  open_amount: number | null; cap_amount: number | null; headroom_pct: number | null; headroom_amount: number | null;
+  balance: number | null; includes_resting: boolean;
+}
+
+/** PENDING plans. `next_expiry` only among plans with a `valid_session`. */
+export interface LiveAwaiting extends LiveSectionBase { count: number | null; next_expiry: string | null; }
+
+/** The current killswitch row. `since` is set only while engaged. */
+export interface LiveKillswitch extends LiveSectionBase { engaged: boolean | null; since: string | null; detail: string | null; }
+
+export type LiveEventKind = 'plan_alerted' | 'paper_filled' | 'tp1_hit' | 'trade_closed' | 'killswitch';
+export type LiveTone = 'info' | 'positive' | 'negative' | 'warning' | 'neutral';
+
+/** One activity row. `text` carries no P&L; `pnl.amount` may be null. */
+export interface LiveEvent {
+  at: string; kind: LiveEventKind; text: string; tone: LiveTone; ref: string | null;
+  pnl: { r: number; amount: number | null } | null;
+}
+
+/** `missing` names the kinds whose source failed. */
+export interface LiveEventsMeta { availability: LiveAvailability; as_of: string; missing: LiveEventKind[]; }
+
+export interface LiveSnapshot {
+  heat: LiveHeat; awaiting: LiveAwaiting; killswitch: LiveKillswitch;
+  events: LiveEvent[]; events_meta: LiveEventsMeta;
+}
