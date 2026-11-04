@@ -966,6 +966,11 @@ FIELDS: list[Field] = [
           type="number", default="10", min=2, max=300, step=1,
           help="How often the Logs page auto-refreshes while its own 'Auto-refresh' checkbox is on. "
                "Takes effect on your next Logs page load -- no restart needed."),
+    Field("ADMIN_SLOW_REQUEST_MS", "ADMIN_SLOW_REQUEST_MS", "Admin UI", "Slow admin request log threshold (ms)",
+          type="number", default="2000", min=100, max=60000, step=100,
+          help="v205. An /api/v1 request slower than this logs one 'slow request' line in the admin log "
+               "(path, total, db time, statement count). Read on every request: a saved .env applies "
+               "on the next request, no restart."),
 
     # --- Discord Alerts (Cockpit v3 / Plan B) ---
     Field("ALERT_EMBED_LAYOUT", "ALERT_EMBED_LAYOUT", "Discord Alerts", "Alert embed layout",
