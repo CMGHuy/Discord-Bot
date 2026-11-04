@@ -61,3 +61,9 @@ def test_the_live_local_database_needs_an_explicit_flag():
 def test_a_target_name_cannot_carry_sql():
     r = _run("a;drop database swingbot")
     assert r.returncode == 2
+
+
+def test_a_worktree_falls_back_to_the_main_checkouts_ssh_wrapper(source):
+    # ssh-hetzner.sh is git-ignored, so a worktree has no copy of its own.
+    assert "--git-common-dir" in source
+    assert 'SSH_HETZNER:-}" ]' in source  # an explicit SSH_HETZNER still wins
