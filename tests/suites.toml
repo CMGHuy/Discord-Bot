@@ -66,6 +66,10 @@ paths = ["tests/db/", "tests/tracking/"]
 description = "Flask admin API"
 paths = ["tests/admin/"]
 
+[suites.admin-perf]
+description = "v205 admin read performance: SQL tally, Server-Timing, goldens and budgets of the profiled endpoints"
+paths = ["tests/admin_perf/"]
+
 [suites.live-api]
 description = "v202 GET /api/v1/live: heat, plans awaiting order, killswitch, activity feed"
 paths = ["tests/live_api/"]
