@@ -24,8 +24,7 @@ import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
 import { DENSITY_STORAGE } from '../ui/density.service';
 import { provideMotion } from '../ui/motion/motion.service';
-import { POPOVER_OPEN_ATTR } from '../testing/popover-polyfill';
-import { NAV_GROUPS } from './nav';
+import { NAV_ENTRIES } from './nav';
 import { Shell } from './shell';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
@@ -250,11 +249,11 @@ describe('shell navigation', () => {
     expect(workspace.querySelector('[role="status"]')?.textContent).toContain('Loading Trades');
     expect(workspace.querySelector('.route-loading-overlay')).not.toBeNull();
   });
-  it('keeps each of the four groups a real, named list for assistive tech', () => {
+  it('keeps the work destinations and System as two named lists', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
-    const groups = (f.nativeElement as HTMLElement).querySelectorAll('nav.rail ul.nav[aria-label]');
-    expect(groups.length).toBe(4);
+    const lists = (f.nativeElement as HTMLElement).querySelectorAll('nav.rail ul.nav[aria-label]');
+    expect([...lists].map((ul) => ul.getAttribute('aria-label'))).toEqual(['Destinations', 'System']);
   });
 
   it('cycles the text-size control in the profile menu through 90/100/110/125 and wraps back to 90', () => {
@@ -282,20 +281,21 @@ describe('shell navigation', () => {
     expect(button.textContent?.trim()).toBe('Aa 90%');
   });
 
-  it('marks the active entry with the bar, a tint and a brighter glyph, not colour alone', () => {
-    // v168 §3 #6 kept: one sliding sb-nav-indicator in the rail. On an
-    // icon-only rail weight means nothing, so the third cue is the glyph's
-    // colour stepping from muted to full text.
-    const f = TestBed.createComponent(Shell);
-    f.detectChanges();
-    const el = f.nativeElement as HTMLElement;
-    expect(el.querySelectorAll('nav.rail > sb-nav-indicator').length).toBe(1);
+  it('marks the active entry with the pill and a brighter glyph and label', () => {
     const css = readSource('src/app/shell/shell.css');
-    const active = css.match(/^\.rail-link\.active \{[^}]*\}/m)?.[0] ?? '';
-    expect(active).toContain('background: var(--accent-soft);');
-    expect(active).toContain('color: var(--text);');
+    expect(css.match(/^\.rail-link\.active \.rail-pill \{[^}]*\}/m)?.[0]).toContain('background: var(--accent-soft);');
+    expect(css.match(/^\.rail-link\.active \{[^}]*\}/m)?.[0]).toContain('color: var(--text);');
     expect(css.match(/^\.rail-link \{[^}]*\}/m)?.[0]).toContain('color: var(--text-muted);');
-    expect(css).not.toMatch(/border-left-color/);
+    expect(css).not.toMatch(/sb-nav-indicator|border-left-color/);
+  });
+
+  it('sizes each entry 64x52, a 24px icon over a micro label', () => {
+    const css = readSource('src/app/shell/shell.css');
+    const link = css.match(/^\.rail-link \{[^}]*\}/m)?.[0] ?? '';
+    expect(link).toContain('width: 64px;');
+    expect(link).toContain('min-height: 52px;');
+    expect(css).toMatch(/^\.rail-pill sb-icon svg \{[^}]*width: 24px;[^}]*height: 24px;/m);
+    expect(css.match(/^\.rail-label \{[^}]*\}/m)?.[0]).toContain('font-size: var(--text-micro);');
   });
 
   it('keeps the ui and bot versions in a hint at the foot of the rail', async () => {
@@ -317,7 +317,7 @@ describe('shell navigation', () => {
     }
     f.detectChanges();
     await f.whenStable();
-    const foot = el.querySelector('nav.rail > .rail-foot')!;
+    const foot = el.querySelector('nav.rail > .rail-version')!;
     const hint = foot.querySelector('sb-hint.version')!;
     expect(hint.querySelector('[role=tooltip]')!.textContent!.trim())
       .toBe('ui 1.36.1 · bot 2.15.3 · updated 2026-10-25T06:00:00Z');
@@ -337,7 +337,7 @@ describe('shell navigation', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
-    const brand = el.querySelector('nav.rail .mark a.brand') as HTMLAnchorElement;
+    const brand = el.querySelector('nav.rail > a.rail-brand') as HTMLAnchorElement;
     expect(brand.querySelector('sb-icon')).not.toBeNull();
     expect(brand.textContent!.trim()).toBe('');
     expect(brand.getAttribute('aria-label')).toContain('Bomeo Capital');
@@ -348,7 +348,7 @@ describe('shell navigation', () => {
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
-    const brand = el.querySelector('.brand') as HTMLAnchorElement;
+    const brand = el.querySelector('a.rail-brand') as HTMLAnchorElement;
     expect(brand.tagName).toBe('A');
     // RouterLink resolves and sets a real `href`, independent of whether the
     // test's route table (provideRouter([])) actually registers the path.
@@ -504,14 +504,22 @@ describe('shell topbar centred on one axis (v179 layout audit)', () => {
 
   it('gives the topbar and the rail mark the same height, so the two centres meet', () => {
     expect(rule('.topbar')).toContain('height: var(--topbar-h)');
-    expect(rule('.mark')).toContain('height: var(--topbar-h)');
+    expect(rule('.rail-brand')).toContain('height: var(--topbar-h)');
     expect(rule('.topbar')).toContain('position: sticky;');
   });
 });
 
-describe('shell icon rail (v195 Phase 3, correction 10)', () => {
+describe('shell labelled rail (v202 §3)', () => {
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'trades', component: Blank }]) });
+    TestBed.configureTestingModule({
+      providers: shellProviders([
+        { path: 'trades', component: Blank },
+        { path: 'trades/calendar', component: Blank },
+        { path: 'plans/:id', component: Blank },
+        { path: 'insights/analytics', component: Blank },
+        { path: 'system/versions', component: Blank },
+      ]),
+    });
   });
 
   async function mount() {
@@ -522,62 +530,60 @@ describe('shell icon rail (v195 Phase 3, correction 10)', () => {
     return { fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('is one rail of four unlabelled groups split by thin rules', async () => {
+  const labelOf = (link: Element) => link.querySelector('.rail-label')!.textContent!.trim();
+
+  it('draws six labelled destinations, five work entries then System at the foot (v202 §3)', async () => {
     const { el } = await mount();
     const rail = el.querySelector('nav.rail')!;
     expect(rail.getAttribute('aria-label')).toBe('Primary');
-    expect([...rail.querySelectorAll('ul.nav')].map((ul) => ul.getAttribute('aria-label')))
-      .toEqual(['Monitor', 'Review', 'Insights', 'System']);
-    const dividers = [...rail.querySelectorAll('.rail-divider')];
-    expect(dividers).toHaveLength(3);
-    for (const divider of dividers) {
-      expect(divider.getAttribute('aria-hidden')).toBe('true');
-      expect(divider.textContent!.trim()).toBe('');
-      // Between groups, never before the first or after the last.
-      expect(divider.previousElementSibling!.matches('ul.nav')).toBe(true);
-      expect(divider.nextElementSibling!.matches('ul.nav')).toBe(true);
-    }
-    expect(el.querySelector('.nav-group-label')).toBeNull();
+    expect(rail.firstElementChild!.matches('a.rail-brand')).toBe(true);
+    const lists = [...rail.querySelectorAll(':scope > ul.nav')];
+    expect(lists.map((ul) => ul.className)).toEqual(['nav rail-work', 'nav rail-foot']);
+    const labels = (ul: Element) => [...ul.querySelectorAll(':scope > li > a.rail-link')].map(labelOf);
+    expect(labels(lists[0])).toEqual(['Dashboard', 'Watchlist', 'Trades', 'Risk', 'Insights']);
+    expect(labels(lists[1])).toEqual(['System']);
+    expect(lists[1].nextElementSibling!.matches('.rail-version')).toBe(true);
+    expect(rail.querySelector('.rail-divider, sb-nav-indicator, .nav-group-label')).toBeNull();
   });
 
-  it('names every entry and labels it with an anchored hint, never a title', async () => {
+  it('draws each entry as its icon over its visible label, with no hint and no title', async () => {
     const { el } = await mount();
     const links = [...el.querySelectorAll<HTMLAnchorElement>('nav.rail a.rail-link')];
-    expect(links.map((a) => a.getAttribute('aria-label')))
-      .toEqual(NAV_GROUPS.flatMap((group) => group.entries.map((entry) => entry.label)));
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(NAV_ENTRIES.map((entry) => entry.path));
     for (const link of links) {
-      const name = link.getAttribute('aria-label')!;
-      expect(link.hasAttribute('title'), name).toBe(false);
-      expect(link.querySelector('sb-icon')!.getAttribute('title'), name).toBe('');
-      expect(link.textContent!.trim(), name).toBe('');
-      const hint = link.nextElementSibling as HTMLElement;
-      expect(hint.tagName.toLowerCase(), name).toBe('sb-hint');
-      expect(hint.classList, name).toContain('anchored');
-      const pop = hint.querySelector('[role=tooltip]')!;
-      expect(pop.textContent!.trim(), name).toBe(name);
-      expect(link.getAttribute('aria-describedby'), name).toBe(pop.id);
+      const label = labelOf(link);
+      // The visible label is the accessible name; the icon is aria-hidden.
+      expect(link.hasAttribute('aria-label'), label).toBe(false);
+      expect(link.hasAttribute('title'), label).toBe(false);
+      expect(link.querySelector(':scope > .rail-pill > sb-icon')!.getAttribute('title'), label).toBe('');
+      expect(link.textContent!.trim(), label).toBe(label);
+      expect(link.parentElement!.querySelector('sb-hint'), label).toBeNull();
     }
-  });
-
-  it('shows an entry label on keyboard focus without adding a tab stop', async () => {
-    const { fixture, el } = await mount();
-    const trades = el.querySelector<HTMLAnchorElement>('a.rail-link[aria-label="Trades"]')!;
-    const pop = trades.nextElementSibling!.querySelector('[role=tooltip]')!;
-    expect(pop.hasAttribute(POPOVER_OPEN_ATTR)).toBe(false);
-    trades.dispatchEvent(new FocusEvent('focus'));
-    fixture.detectChanges();
-    await fixture.whenStable();
-    expect(pop.hasAttribute(POPOVER_OPEN_ATTR)).toBe(true);
     expect(el.querySelectorAll('nav.rail ul.nav button')).toHaveLength(0);
   });
 
-  it('marks the routed entry active', async () => {
+  it.each([
+    ['/trades', 'Trades'],
+    ['/trades/calendar', 'Trades'],
+    ['/plans/7', 'Trades'],
+    ['/insights/analytics?tab=tuning#x', 'Insights'],
+    ['/system/versions', 'System'],
+  ])('lights exactly one entry, aria-current, on %s', async (url, label) => {
     const { fixture, el } = await mount();
-    await TestBed.inject(Router).navigateByUrl('/trades');
+    await TestBed.inject(Router).navigateByUrl(url);
     fixture.detectChanges();
     await fixture.whenStable();
-    expect([...el.querySelectorAll('a.rail-link.active')].map((a) => a.getAttribute('aria-label')))
-      .toEqual(['Trades']);
+    fixture.detectChanges();
+    const active = [...el.querySelectorAll('a.rail-link.active')];
+    expect(active.map(labelOf)).toEqual([label]);
+    expect(active[0].getAttribute('aria-current')).toBe('page');
+    expect(el.querySelectorAll('nav.rail [aria-current]')).toHaveLength(1);
+  });
+
+  it('lights nothing off the nav model', async () => {
+    // The test bed starts at '', which navEntryFor resolves to null.
+    const { el } = await mount();
+    expect(el.querySelectorAll('a.rail-link.active, nav.rail [aria-current]')).toHaveLength(0);
   });
 
   it('has no expanded, collapsed or overlay state, and ignores a stored shell.sidebar', async () => {
@@ -626,9 +632,9 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
   it('sizes the rail and the bar from two shell tokens, with no animated width', () => {
     const css = readSource('src/app/shell/shell.css');
     const shell = css.match(/^\.shell \{[^}]*\}/m)?.[0] ?? '';
-    expect(shell).toContain('--rail-w: 48px;');
+    expect(shell).toContain('--rail-width: 80px;');
     expect(shell).toContain('--topbar-h: 40px;');
-    expect(shell).toContain('grid-template-columns: var(--rail-w) 1fr;');
+    expect(shell).toContain('grid-template-columns: var(--rail-width) 1fr;');
     expect(shell).not.toContain('transition');
     // The touch rules win (spec §1.4): the bar grows to hold 44px controls.
     expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{\s*\.shell \{ --topbar-h: 48px; \}/);

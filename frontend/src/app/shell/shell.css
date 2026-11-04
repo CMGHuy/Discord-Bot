@@ -1,20 +1,15 @@
 .shell {
-  /* v195 Phase 3: an always-collapsed icon rail and a 40px top bar. One
-     state, so nothing here animates: the old width animation served the
-     expand/collapse gesture, which is gone. */
-  --rail-w: 48px;
+  /* v203 (spec v202 §3): an 80px labelled rail and a 40px top bar. One
+     state, so nothing here animates. */
+  --rail-width: 80px;
   --topbar-h: 40px;
   display: grid;
-  grid-template-columns: var(--rail-w) 1fr;
+  grid-template-columns: var(--rail-width) 1fr;
   min-height: 100vh;
 }
 
-/* Sticky and exactly one viewport tall, so the foot (the version hint) sits
- * at the bottom of the screen rather than the bottom of a 4000px page.
- * `height`, not `min-height`: the foot's `margin-top: auto` needs a definite
- * box, and `overflow-y: auto` handles a viewport too short for eleven
- * entries. The scrollbar is hidden: on a 48px rail it would eat a third of
- * the width. */
+/* Sticky and one viewport tall, so the foot (System, the version) sits at
+ * the bottom of the screen; overflow-y handles a window too short for it. */
 .rail {
   position: sticky;
   top: 0;
@@ -25,16 +20,14 @@
   scrollbar-width: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   padding-bottom: var(--space-10);
   background: var(--surface);
   border-right: 1px solid var(--border);
 }
 .rail::-webkit-scrollbar { display: none; }
 
-/* As tall as the top bar (its border included), so the brand mark and the
-   breadcrumb centre on one line. */
-.mark {
+/* As tall as the top bar (its border included), so the two centre on one line. */
+.rail-brand {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -42,80 +35,84 @@
   height: var(--topbar-h);
   flex: none;
   border-bottom: 1px solid var(--border);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   color: var(--accent);
   text-decoration: none;
 }
-.brand sb-icon { flex: none; }
+.rail-brand sb-icon { flex: none; }
 
 .nav {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
   margin: 0;
-  padding: 0;
+  padding: var(--space-6) 0 0;
   list-style: none;
 }
 
-/* The rule between groups: a divider, never text (spec §1.3). */
-.rail-divider {
-  flex: none;
-  height: 1px;
-  margin: var(--space-4) var(--space-10);
-  background: var(--border-strong);
+/* System, apart from the work destinations. */
+.rail-foot {
+  margin-top: auto;
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border);
 }
 
-/* One glyph, centred in the rail. 36px tall at a desktop pointer; the touch
-   block raises --control-h to 44px, and min-height wins over block-size.
-   Each link reserves a 2px transparent strip on its left edge, where the
-   sliding sb-nav-indicator lands, so nothing shifts when the bar moves. */
+/* 64x52 at every width: past the 44px touch size, so no .sb-hit. */
 .rail-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  width: 64px;
+  min-height: 52px;
+  padding: var(--space-4) 0;
+  border-radius: var(--control-radius);
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.rail-link:hover { color: var(--text); }
+.rail-link:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+/* The pill behind the icon is the indicator. */
+.rail-pill {
   display: flex;
   align-items: center;
   justify-content: center;
-  block-size: 36px;
-  min-height: var(--control-h);
-  border-left: 2px solid transparent;
-  color: var(--text-muted);
-  text-decoration: none;
-  transition: color var(--transition), background var(--transition);
+  width: 48px;
+  height: 28px;
+  border-radius: var(--control-radius);
+  transition: background var(--transition);
+}
+.rail-pill sb-icon svg { width: 24px; height: 24px; }
+.rail-link:hover .rail-pill { background: var(--surface-raised); }
+
+.rail-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--text-micro);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.rail-link sb-icon { flex: none; }
-
-.rail-link:hover { background: var(--surface-raised); color: var(--text); }
-
-/* The bar (sb-nav-indicator), a tint and the glyph stepping from muted to
-   full text: three cues, so the active entry survives a monochrome or
-   low-vision reading. */
-.rail-link.active {
+/* Three cues, so the active entry survives a monochrome reading: the pill,
+   glyph and label stepping up to full text, and aria-current. */
+.rail-link.active .rail-pill {
   background: var(--accent-soft);
+}
+.rail-link.active {
   color: var(--text);
 }
 
-/* Placed against .rail (sticky, so positioned; absolute children scroll
-   with its content), on the links' 2px left strip. */
-sb-nav-indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 2px;
-  pointer-events: none;
-}
-
-.rail-foot {
-  margin-top: auto;
+.rail-version {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-6);
   padding-top: var(--space-8);
-  border-top: 1px solid var(--border);
 }
 
 .main {

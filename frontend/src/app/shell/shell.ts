@@ -8,7 +8,7 @@ import {
   untracked,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 
 import { ApiClient } from '../api/api-client';
@@ -26,7 +26,6 @@ import { Button } from '../ui/button';
 import { DensityService } from '../ui/density.service';
 import { Hint } from '../ui/hint';
 import { Icon } from '../ui/icon';
-import { NavIndicator } from './nav-indicator';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
@@ -39,19 +38,19 @@ import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/comm
 import { PhoneTabBar } from './phone-tab-bar';
 import { RefresherBanner } from './refresher-banner';
 import { ConnectionStatus } from './connection-status';
-import { NAV_GROUPS, navEntryFor } from './nav';
+import { NAV_ENTRIES, navEntryFor } from './nav';
 import { SectionTabs } from './section-tabs';
 import { ScanProgressStrip } from './scan-progress';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
 
 /**
- * Icon rail, top bar, connection status, toast host, outlet -- v195 Phase 3.
+ * Labelled rail, top bar, connection status, toast host, outlet -- v195 Phase 3.
  *
  * Rendered by App instead of the login form -- it is not itself routed, so
  * there is no state in which the shell exists without a session.
  *
- * **One rail state.** The rail is always 48px and always icons: there is no
+ * **One rail state.** The rail is always 80px, each entry an icon over its label (v202 §3): there is no
  * expanded sidebar, no overlay and no stored collapse choice. The server's
  * pre-v195 sidebar preference is left in place (an older image reads it
  * again on rollback) and is never read or written here.
@@ -72,8 +71,8 @@ const ZOOM_DEFAULT = 100;
 @Component({
   selector: 'sb-shell',
   imports: [
-    RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
-    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, NavIndicator, Tape,
+    RouterOutlet, RouterLink, ConnectionStatus, ToastHost,
+    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -111,12 +110,11 @@ export class Shell {
     return `${date} ${time}`;
   });
 
-  /**
-   * The four rail groups (v195 §5.1), from the one nav model the phone bar,
-   * the More sheet, the palette and the breadcrumb also read. The /ui
-   * gallery is deliberately absent: a developer surface, reachable by URL.
-   */
-  protected readonly navGroups = NAV_GROUPS;
+  /** The rail's five work destinations and its foot (System), from the one
+   *  nav model the phone bar, More sheet, palette and breadcrumb read
+   *  (v202 §1). The /ui gallery is not on it: a developer surface. */
+  protected readonly railWork = NAV_ENTRIES.filter((entry) => !entry.foot);
+  protected readonly railFoot = NAV_ENTRIES.filter((entry) => entry.foot);
 
   private readonly router = inject(Router);
   private readonly url = toSignal(
@@ -130,6 +128,9 @@ export class Shell {
   /** The destination and section the current URL belongs to (v202 §1):
    *  the section tabs read it, and the rail (V203-1) lights its entry. */
   protected readonly navHere = computed(() => navEntryFor(this.url()));
+
+  /** The destination the rail lights: one entry, or none off the nav model. */
+  protected readonly activePath = computed(() => this.navHere()?.entry.path ?? null);
 
   /** The rail foot's version hint: the words the old footer block showed,
    *  on one line. Empty until the first /health answer; the template
