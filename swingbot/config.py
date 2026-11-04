@@ -812,7 +812,7 @@ FIELDS: list[Field] = [
                "Alpaca/yfinance call is made exactly as today and counted per hour by provider, "
                "kind, asker and outcome (the baseline week). 'on' = one shared, Postgres-"
                "coordinated cache with per-asker freshness windows, cross-process single-flight "
-               "and one money-first budget. Production ships 'count'."),
+               "and one money-first budget. Production runs 'on' since 2026-10-29."),
     Field("DAILY_DELTA_FETCH", "DAILY_DELTA_FETCH", "Data Sources",
           "Daily bars: delta fetch + write-back", type="checkbox", default="false",
           help="v171 D3/D4. On: the scan keeps closed daily bars on disk (Alpaca-basis "
@@ -822,7 +822,7 @@ FIELDS: list[Field] = [
     Field("PLAN_REBUILD_ENABLED", "PLAN_REBUILD_ENABLED", "Data Sources",
           "Rebuild plans from a last-second quote", type="checkbox", default="false",
           help="v171 D5. On: every main-scan and SHORT-lane plan is re-priced from a quote "
-               "at most 5 s old right before it posts, and its price gates re-run."),
+               "(a trade or bid/ask midpoint under 60 s old; the quote-to-persist clock is 5 s) right before it posts, and its price gates re-run."),
     Field("TAPE_SHARED_ENABLED", "TAPE_SHARED_ENABLED", "Data Sources",
           "Admin tape from the bot's shared copy", type="checkbox", default="false",
           help="v171 D7. On: the bot fetches the index tape once a minute into the shared "
