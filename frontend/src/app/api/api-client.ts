@@ -29,6 +29,7 @@ import {
   CloseOpenResult,
   CloseScope,
   Dashboard,
+  MarketUpdates,
   DashboardScope,
   Collection,
   EquityBasis,
@@ -124,6 +125,19 @@ export class ApiClient {
 
   health(): Observable<Health> {
     return this.http.get<Health>(`${this.base}/health`);
+  }
+
+  /* -- v201: live market values ------------------------------------------ */
+
+  /** Everything that changed since `since` (null: everything held). */
+  marketUpdates(since: string | null): Observable<MarketUpdates> {
+    const options = since === null ? {} : { params: { since } };
+    return this.http.get<MarketUpdates>(`${this.base}/market/updates`, options);
+  }
+
+  /** Ask the refresher for fresh quotes; the answer arrives as a market event. */
+  refreshMarket(body: { symbols: string[] }): Observable<{ queued: number }> {
+    return this.http.post<{ queued: number }>(`${this.base}/market/refresh`, body, this.skipRouteRefresh);
   }
 
   /* -- dashboard --------------------------------------------------------- */

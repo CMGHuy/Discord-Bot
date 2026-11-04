@@ -64,6 +64,8 @@ DASHBOARD = {
     "default_expiry_bars": int,
     # v194 B7 -- positions/closes left out of the money cards for want of an FX rate.
     "fx_missing_count": int,
+    # v201 -- MarketMeta over the open-position totals, refresher on or off.
+    "market_meta": dict,
 }
 
 RELOCATED = [

@@ -8,7 +8,8 @@ from typing import Callable
 
 import numpy as np
 
-from swingbot.core.marketdata import fx
+from swingbot.core.marketdata import fx, fx_convert
+from swingbot.core.marketdata.shared import admin_refresh
 from swingbot.core.infra.swallowed import swallowed
 
 log = logging.getLogger(__name__)
@@ -29,14 +30,15 @@ def _positive(value, reason: str) -> float:
 
 
 def _quote_rate(ticker: str, account: str, on: date) -> float:
+    fetch = not admin_refresh.refresher_on()
     try:
-        quote = fx.quote_currency_code(ticker)
+        quote = fx_convert.quote_code(ticker, fetch=fetch)
     except Exception as exc:
         raise _WeightError("missing_quote_currency") from exc
     if not quote:
         raise _WeightError("missing_quote_currency")
     try:
-        rate = fx.fx_rate(quote, account, on)
+        rate = fx_convert.rate(quote, account, on, fetch=fetch)
     except Exception as exc:
         raise _WeightError("missing_fx") from exc
     if rate is None:

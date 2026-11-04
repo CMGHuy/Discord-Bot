@@ -19,6 +19,8 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 import { EARNINGS_REFRESH_DELAY_MS, WatchlistStore, parseSymbols } from './watchlist.store';
 
 /* NG51 — the watchlist.
@@ -90,6 +92,7 @@ describe('WatchlistStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         WatchlistStore,
       ],
     });
@@ -103,6 +106,19 @@ describe('WatchlistStore', () => {
     tick();
     backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS);
   };
+
+  it('rows take a newer live quote in place, keyed by symbol', () => {
+    boot();
+    expect(store.rows()[0].price_as_of).toBeUndefined();
+
+    (TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues)
+      .set('MSFT', { price: 301, as_of: '2026-10-29T14:01:00Z' });
+
+    expect(store.rows()[1].price_as_of).toBe('2026-10-29T14:01:00Z');
+    expect(store.rows()[0].price_as_of).toBeUndefined();
+    // The earnings calendar keeps reading the untouched list.
+    expect(store.tickers()[1].price_as_of).toBeUndefined();
+  });
 
   it('reads the list out of the tickers envelope, not a collection', () => {
     // Typed `Collection<Ticker>` this compiled and handed the store
@@ -229,6 +245,7 @@ describe('WatchlistStore earnings-date follow-up', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         WatchlistStore,
       ],
     });

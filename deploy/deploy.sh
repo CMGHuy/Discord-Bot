@@ -262,7 +262,7 @@ fi
 echo "==> Verifying the containers run the image this deploy pulled"
 WANT=$(docker image inspect --format '{{.Id}}' "$IMAGE")
 MISMATCH=""
-for svc in bot admin; do
+for svc in bot admin refresher; do
   GOT=$(docker inspect --format '{{.Image}}' "$(docker compose ps -q "$svc")")
   if [ "$GOT" != "$WANT" ]; then
     echo "  FAIL $svc is running $GOT" >&2
@@ -273,7 +273,7 @@ for svc in bot admin; do
 done
 
 if [ -z "$MISMATCH" ]; then
-  echo "==> Both services run the pulled image."
+  echo "==> All three services run the pulled image."
 else
   echo "" >&2
   echo "DEPLOY VERIFICATION FAILED --$MISMATCH did not adopt the pulled image." >&2

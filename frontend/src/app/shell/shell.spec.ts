@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventStream } from '../api/event-stream';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { PreferencesStore } from '../stores/preferences.store';
+import { LiveValuesStore } from '../stores/live-values.store';
 import { TapeStore } from '../stores/tape.store';
 import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
@@ -65,6 +66,10 @@ class FakeEventStream {
   }
 }
 
+/** The shell mounts the stalled-refresher banner, which reads this store; the
+ *  fake keeps the real one (and its /market/updates fetch) out of these specs. */
+const fakeLiveValues = () => ({ stalled: signal(false), status: signal(null) });
+
 @Component({ template: '' })
 class Blank {}
 
@@ -78,6 +83,7 @@ function shellProviders(routes: Routes = []) {
     provideHttpClientTesting(),
     { provide: EventStream, useValue: new FakeEventStream() },
     { provide: TapeStore, useValue: { load: vi.fn(), visible: signal(false), rows: signal([]), asOf: signal(null) } },
+    { provide: LiveValuesStore, useValue: fakeLiveValues() },
   ];
 }
 
@@ -108,6 +114,7 @@ describe('shell navigation', () => {
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
         { provide: TapeStore, useValue: tapeStub },
+        { provide: LiveValuesStore, useValue: fakeLiveValues() },
       ],
     });
   });
@@ -119,7 +126,7 @@ describe('shell navigation', () => {
 
     const main = el.querySelector('.main') as HTMLElement;
     expect(Array.from(main.children).map((c) => c.tagName.toLowerCase()))
-      .toEqual(['header', 'div', 'main']);
+      .toEqual(['header', 'div', 'sb-refresher-banner', 'main']);
     expect(main.children[1].classList).toContain('tape-strip');
     expect(main.querySelector(':scope > .tape-strip > sb-tape')).not.toBeNull();
     expect(el.querySelector('header.topbar sb-tape')).toBeNull();
@@ -377,6 +384,8 @@ describe('shell motion preference (v168 §1)', () => {
         provideHttpClientTesting(),
         { provide: EventStream, useValue: new FakeEventStream() },
         { provide: TapeStore, useValue: { load: vi.fn(), visible: signal(false), rows: signal([]), asOf: signal(null) } },
+        { provide: LiveValuesStore, useValue: fakeLiveValues() },
+    { provide: LiveValuesStore, useValue: fakeLiveValues() },
         provideMotion('live'),
       ],
     });

@@ -53,7 +53,7 @@ from swingbot.core.presentation.short_notice import risk_notice_lines
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
-from .money import convert_amount, to_account_currency
+from .money import convert_amount, missing_count, to_account_currency
 
 # Legacy v1 trades carry their own status vocabulary. They have no PENDING,
 # PARTIAL or CANCELLED equivalent and none is synthesised for them.
@@ -1016,6 +1016,7 @@ def get_trade(trade_id: str):
     _attach_status_fields([row])
     _attach_unrealized_pnl([row])
     _strip_internal_fields([row])
+    row["market_meta"] = _page_market_meta([row])
     return jsonify(row)
 
 
@@ -1141,12 +1142,49 @@ def list_trades():
     _attach_unrealized_pnl(page_rows)
     _strip_internal_fields(page_rows)
     body = collection(page_rows, total, params.page, params.per_page)
-    body["prices_as_of"] = (
-        datetime.now(timezone.utc).isoformat(timespec="seconds")
-        if any(row.get("current_price") is not None for row in page_rows)
-        else None
-    )
+    body["prices_as_of"] = _prices_as_of(page_rows)
+    body["market_meta"] = _page_market_meta(page_rows)
     return jsonify(body)
+
+
+def _prices_as_of(page_rows: list[dict]) -> str | None:
+    """v201: with the refresher on, the OLDEST input's as-of among the priced
+    rows (the page is only as fresh as its stalest price); off, today's
+    now-stamp whenever any row is priced."""
+    from swingbot.core.marketdata.shared import admin_refresh
+    if not admin_refresh.refresher_on():
+        return (datetime.now(timezone.utc).isoformat(timespec="seconds")
+                if any(row.get("current_price") is not None for row in page_rows)
+                else None)
+    stamps = [row["price_as_of"] for row in page_rows
+              if row.get("current_price") is not None and row.get("price_as_of")]
+    return min(stamps, key=datetime.fromisoformat, default=None)
+
+
+def _position_rows(rows: list[dict]) -> list[dict]:
+    """Rows that hold a position: not terminal, not PENDING, with a ticker."""
+    return [r for r in rows
+            if r["status"] not in _TERMINAL and r["status"] != "PENDING" and r.get("ticker")]
+
+
+def _row_quote(row: dict):
+    """The door's `MarketQuote`, rebuilt from the row's quote fields."""
+    from swingbot.admin.market_values import MarketQuote
+    return MarketQuote(str(row["ticker"]).upper(), row.get("current_price"),
+                       row.get("price_as_of"), row.get("price_age_s"),
+                       bool(row.get("price_refreshing")), row.get("price_error"))
+
+
+def _page_market_meta(rows: list[dict]) -> dict:
+    """`MarketMeta` for a page: unpriced positions and FX gaps count as missing."""
+    from swingbot.admin.market_values import total_meta
+    from swingbot.core.marketdata.shared import admin_refresh
+    pos = _position_rows(rows)
+    fx = missing_count(pos)
+    if admin_refresh.refresher_on():
+        return total_meta([_row_quote(r) for r in pos], extra_missing=fx)
+    unpriced = sum(1 for r in pos if r.get("current_price") is None)
+    return total_meta([], extra_missing=fx + unpriced)
 
 
 def _status_fields(row: dict, price: float | None) -> dict:
@@ -1342,6 +1380,14 @@ def _attach_layer_prices(live: list[dict]) -> None:
             r["price_age_s"], r["price_as_of"] = freshness.quote_age(q)
 
 
+def _attach_door_prices(live: list[dict]) -> None:
+    """v201: price the live rows from the never-fetch door -- one cache read."""
+    from swingbot.admin import market_values
+    quotes = market_values.read_quotes([r["ticker"] for r in live])
+    for r in live:
+        r.update(market_values.quote_fields(quotes.get(str(r["ticker"]).upper())))
+
+
 def _attach_current_prices(rows: list[dict]) -> None:
     """Live price for the still-open rows ON THIS PAGE only.
 
@@ -1364,6 +1410,10 @@ def _attach_current_prices(rows: list[dict]) -> None:
     """
     live = [r for r in rows if r["status"] not in _TERMINAL and r.get("ticker")]
     if not live:
+        return
+    from swingbot.core.marketdata.shared import admin_refresh
+    if admin_refresh.refresher_on():
+        _attach_door_prices(live)
         return
     from swingbot.admin import freshness
     if freshness.layer_on():

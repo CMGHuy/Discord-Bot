@@ -4,7 +4,7 @@
 
 A push-to-deploy pipeline: push to `main` on GitHub, GitHub Actions SSHs
 into your Hetzner server and runs `deploy/deploy.sh`, which pulls the
-latest code and restarts both Docker services (`bot` and `admin`). No
+latest code and restarts the Docker services (`bot`, `admin` and, since v201, `refresher`). No
 manual server work after the one-time setup below.
 
 ## How it works, in short
@@ -283,6 +283,29 @@ If it failed, the remedy depends on the image now running:
   `docker compose restart bot` — `on_ready` re-syncs on every start. Clients
   may list the removed commands for up to an hour while Discord propagates.
 
+## The refresher service (v201)
+
+`refresher` is the admin's market refresher, a third container off the same
+image (`python -m swingbot.refresher`). It runs as a process of its own so a
+slow batch can neither hold the admin's gunicorn threads nor share a yfinance
+download lock with the scan and the stop monitor. It fetches quotes,
+quote-currency codes and FX pairs, stores them and NOTIFYs `market`; the admin
+pages only read what it stored.
+
+- A normal deploy starts it: `up -d --no-build --wait` creates it with the pulled
+  image and the digest loop verifies it. No manual step, and `.env` needs no edit
+  (`ADMIN_REFRESHER` defaults to `on`).
+- Its first cycles after a migration-bearing deploy may log a missing-table error
+  until the `alembic upgrade head` step runs; it retries on the next cadence and
+  recovers by itself.
+- Logs: `docker compose logs -f refresher`.
+- Health: the admin's `/system` page `refresher` line (`ok` / `stalled` / `off`).
+- Kill switch: `python3 scripts/ops/env_set.py ADMIN_REFRESHER off`, then
+  `docker compose restart admin refresher`. The admin pages go back to
+  request-time fetching exactly as before v201.
+- `scripts/ops/rollback_to.sh` stops it with the other writers and starts it only
+  when the target image has `swingbot.refresher`.
+
 ## Accessing the admin UI
 
 The admin UI runs on port `1234` (or `$ADMIN_PORT`), published on
@@ -433,7 +456,7 @@ The CI pipeline above is for *code* changes.
 | `PLAN_REBUILD_ENABLED` | `true` | 2026-10-31 (V171-38 day C; read-back passed 2026-11-03: 11 plans stamped, max quote age 3.44 s, 0 misses) |
 | `TAPE_SHARED_ENABLED` | `true` | 2026-11-03 ~12:30 UTC (V171-38 day D, pre-open; four indices read back with prices; session read-back and 3-width screenshots pending) |
 
-Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin`;
+Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin refresher`;
 (2) the previous image per [Rolling back](#rolling-back);
 (3) `scripts/ops/rollback_to.sh` with `--dry-run` first, only for damaged data.
 The `v171_001` tables stay on every rollback.

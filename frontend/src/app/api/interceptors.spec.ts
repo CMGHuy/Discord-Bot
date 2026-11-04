@@ -194,6 +194,22 @@ describe('http interceptors', () => {
     expect(requestMutationRefresh).toHaveBeenCalledOnce();
   });
 
+  it('a POST to /api/v1/market/refresh never asks for a route refresh', () => {
+    const refresh = TestBed.inject(RouteRefreshService);
+    const requestMutationRefresh = vi.spyOn(refresh, 'requestMutationRefresh');
+    http.post('/api/v1/market/refresh', {}).subscribe();
+    backend.expectOne('/api/v1/market/refresh').flush({}, { status: 202, statusText: 'Accepted' });
+    expect(requestMutationRefresh).not.toHaveBeenCalled();
+  });
+
+  it('a POST that closes a trade still asks for a route refresh', () => {
+    const refresh = TestBed.inject(RouteRefreshService);
+    const requestMutationRefresh = vi.spyOn(refresh, 'requestMutationRefresh');
+    http.post('/api/v1/trades/x/close', {}).subscribe();
+    backend.expectOne('/api/v1/trades/x/close').flush({});
+    expect(requestMutationRefresh).toHaveBeenCalledOnce();
+  });
+
   it('never counts below zero', () => {
     const loading = TestBed.inject(LoadingService);
     loading.finished();

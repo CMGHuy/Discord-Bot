@@ -35,6 +35,7 @@ import { KillswitchChip } from './killswitch-chip';
 import { MoreSheet } from './more-sheet';
 import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/command-palette';
 import { PhoneTabBar } from './phone-tab-bar';
+import { RefresherBanner } from './refresher-banner';
 import { ConnectionStatus } from './connection-status';
 import { NAV_GROUPS } from './nav';
 import { ScanProgressStrip } from './scan-progress';
@@ -70,7 +71,7 @@ const ZOOM_DEFAULT = 100;
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
     ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, NavIndicator, Tape,
-    Button, PhoneTabBar, MoreSheet, CommandPalette,
+    Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',

@@ -708,7 +708,67 @@ def _shared_tape_quotes(symbols: list[str]) -> tuple[dict, dict, dict]:
     return prices, changes, extras
 
 
+def _disk_frames(symbols: list[str]) -> dict:
+    """v201: daily frames off disk at any age; errors dropped, never refreshed."""
+    from swingbot.core.marketdata import data_store
+
+    frames: dict = {}
+    for sym in symbols:
+        try:
+            df = data_store.load_normalized(sym, "daily")
+        except Exception as exc:
+            swallowed(logging.getLogger(__name__), "ops.market.disk_frames", exc,
+                      "disk frame for %s unreadable: %s", sym, exc, level=logging.DEBUG)
+            continue
+        if df is not None:
+            frames[sym] = df
+    return frames
+
+
+def _door_extras(q, entry) -> dict:
+    """A door row's extras: the proxy fields of its tape entry, its age, its quote fields."""
+    from swingbot.admin import market_values
+
+    age = getattr(q, "age_s", None)
+    return {"is_proxy": bool(getattr(entry, "is_proxy", False)),
+            "proxy_symbol": getattr(entry, "proxy_symbol", None),
+            "age_s": None if age is None else round(age, 1),
+            **market_values.quote_fields(q)}
+
+
+def _door_tape_quotes(symbols: list[str]) -> tuple[dict, dict, dict]:
+    """v201, refresher on: every tape price from the cache through the
+    never-fetch door; tape symbols never self-fetch."""
+    from swingbot.admin import market_values
+    from swingbot.core.marketdata.shared import tape
+    from swingbot.core.marketdata.shared.kinds import DataKind
+
+    mine = [s for s in symbols if tape.is_tape_symbol(s)]
+    others = [s for s in symbols if not tape.is_tape_symbol(s)]
+    prices, changes, extras = {}, {}, {}
+    if mine:
+        tape.record_demand(mine)
+        quotes = market_values.read_quotes(mine, kind=DataKind.INDEX_QUOTE)
+        entries = tape.read_tape(mine)
+        for s in mine:
+            q, entry = quotes.get(s), entries.get(s)
+            prices[s] = getattr(q, "price", None)
+            changes[s] = getattr(entry, "change_pct", None)
+            extras[s] = _door_extras(q, entry)
+    if others:
+        quotes = market_values.read_quotes(others)
+        frames = _disk_frames(others)
+        for s in others:
+            prices[s] = getattr(quotes.get(s), "price", None)
+            changes[s] = _tape_change_pct(s, prices[s], frames)
+            extras[s] = _door_extras(quotes.get(s), None)
+    return prices, changes, extras
+
+
 def _tape_quotes(symbols: list[str]) -> tuple[dict, dict, dict]:
+    from swingbot.core.marketdata.shared import admin_refresh
+    if admin_refresh.refresher_on():
+        return _door_tape_quotes(symbols)
     if _tape_shared():
         return _shared_tape_quotes(symbols)
     return _tape_quotes_direct(symbols)

@@ -16,7 +16,7 @@ import { PreferencesStore } from '../../stores/preferences.store';
 import { TapeStore } from '../../stores/tape.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
-import { AgeHint, PAGE_PRICE_WINDOW_S } from '../../ui/age-hint';
+import { MarketValue } from '../../ui/market-value';
 import { Chip } from '../../ui/chip';
 import { Hint } from '../../ui/hint';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -179,7 +179,7 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, Page, Async, Icon, Sparkline, AgeHint, Hint],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, Page, Async, Icon, Sparkline, MarketValue, Hint],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -456,9 +456,10 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
            .lagging tint read as "this price is stale" rather than an
            unexplained row colour. -->
       <ng-template #priceCell let-row>
-        <span class="price">{{ num(row.price) }}</span>
+        <!-- v201: price, age and refresh spinner through sb-market-value;
+             the bar date beside it is unchanged. -->
+        <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null"><span class="price">{{ num(row.price) }}</span></sb-market-value>
         <span class="as-of">{{ text(row.as_of) }}</span>
-        <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="pageWindowS" />
         <!-- v106: only the exception is flagged -- Alpaca missed and yfinance
              answered. An Alpaca or plain-yfinance price stays quiet. -->
         @if (row.price_source === 'yfinance-fallback') {
@@ -590,7 +591,6 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
 export class Watchlist {
   protected readonly fallbackHint = WATCHLIST_FALLBACK_HINT;
   private readonly router = inject(Router);
-  protected readonly pageWindowS = PAGE_PRICE_WINDOW_S;
   protected readonly store = inject(WatchlistStore);
   private readonly preferences = inject(PreferencesStore);
   protected readonly tape = inject(TapeStore);
@@ -612,7 +612,7 @@ export class Watchlist {
   protected readonly async = computed(() =>
     asyncInputs(
       {
-        data: () => (this.store.empty() ? null : this.store.tickers()),
+        data: () => (this.store.empty() ? null : this.store.rows()),
         loading: this.store.loading,
         error: this.store.error,
       },
@@ -691,7 +691,7 @@ export class Watchlist {
   }
 
   protected readonly sortedRows = computed(() =>
-    [...this.store.tickers()].sort((a, b) => compareTickers(a, b, this.sort(), this.tape.symbols())));
+    [...this.store.rows()].sort((a, b) => compareTickers(a, b, this.sort(), this.tape.symbols())));
 
   /** Symbol -> tag names (spec D35, R7-03's reader). View-only: nothing here
    *  writes `data/watchlist.json` or touches what the scanner covers. */

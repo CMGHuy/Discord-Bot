@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { EventStream } from '../../../api/event-stream';
 import { Leg, StatusEvent, TradeDetailStore } from '../../../stores/trade-detail.store';
+import { FakeLiveValues } from '../../../testing/fake-live-values';
+import { LiveValuesStore } from '../../../stores/live-values.store';
 import { dateTime } from '../../../ui/format';
 import { OutcomePath } from './outcome-path';
 
@@ -30,6 +32,7 @@ describe('OutcomePath', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: { changes: () => signal(0) } },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
       ],
     });

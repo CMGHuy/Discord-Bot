@@ -53,7 +53,8 @@ def test_capacity_per_provider(fake):
 
 @pytest.mark.parametrize("asker,reserve", [
     (Asker.STOP_MONITOR, 0.0), (Asker.REQUOTE, 0.0), (Asker.SCAN, 0.0),
-    (Asker.BACKGROUND, 37.5), (Asker.ADMIN_DASHBOARD, 75.0), (Asker.ADMIN_PAGE, 75.0)])
+    (Asker.BACKGROUND, 37.5), (Asker.ADMIN_DASHBOARD, 75.0), (Asker.ADMIN_PAGE, 75.0),
+    (Asker.ADMIN_REFRESH, 75.0)])
 def test_take_passes_the_tier_reserve(fake, asker, reserve):
     assert budget.take(PROVIDER_ALPACA, asker) is True
     assert fake.takes == [(PROVIDER_ALPACA, 150.0, 150.0, reserve)]
@@ -115,3 +116,10 @@ def test_admin_storm_never_takes_budget_from_tiers_1_to_3(shared_db):
     assert admin == 5                 # 10 -> 5: half the bucket stays for tiers 1-4
     assert background == 2            # 5 -> 3: a quarter (2.5) stays for tiers 1-3
     assert all(money[:3])             # tiers 1-3 still get tokens after the storm
+
+
+def test_refresher_storm_leaves_budget_for_stop_monitor_and_scan(shared_db):
+    taken = sum(budget.take(PROVIDER_ALPACA, Asker.ADMIN_REFRESH) for _ in range(100))
+    assert taken <= 6                         # bucket 10, tier 5 keeps 5 (+1 refill slack)
+    assert budget.take(PROVIDER_ALPACA, Asker.STOP_MONITOR) is True
+    assert budget.take(PROVIDER_ALPACA, Asker.SCAN) is True
