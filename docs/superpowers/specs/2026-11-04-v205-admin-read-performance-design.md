@@ -411,3 +411,27 @@ role and is recorded as applied or rejected.
 ## Results
 
 Filled by each plan after its production measurement.
+
+### Before v205 (script)
+
+Measured 2026-11-04 ~23:15 Berlin with `scripts/ops/admin_endpoint_timing.py --month 2026-11 --date 2026-11-03 --runs 2`
+inside the production `admin` container (piped over stdin), script at commit 4f1f8230.
+
+| Endpoint | Path | Run | Status | ms | Bytes | db ms | Statements |
+|---|---|---|---|---|---|---|---|
+| dashboard | `/api/v1/dashboard` | 1 | 200 | 4422.2 | 1430 | - | - |
+| dashboard_today | `/api/v1/dashboard?mode=today` | 1 | 200 | 4007.9 | 1429 | - | - |
+| trades | `/api/v1/trades` | 1 | 200 | 5149.4 | 43190 | - | - |
+| trades_open | `/api/v1/trades?status=open` | 1 | 200 | 4763.2 | 28085 | - | - |
+| live | `/api/v1/live` | 1 | 200 | 1381.8 | 2040 | - | - |
+| calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 1 | 200 | 4116.4 | 2332 | - | - |
+| calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 1 | 200 | 4131.4 | 7384 | - | - |
+| calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 1 | 200 | 948.1 | 2939 | - | - |
+| dashboard | `/api/v1/dashboard` | 2 | 200 | 4114.2 | 1430 | - | - |
+| dashboard_today | `/api/v1/dashboard?mode=today` | 2 | 200 | 3812.9 | 1429 | - | - |
+| trades | `/api/v1/trades` | 2 | 200 | 4907.0 | 43189 | - | - |
+| trades_open | `/api/v1/trades?status=open` | 2 | 200 | 4885.4 | 28076 | - | - |
+| live | `/api/v1/live` | 2 | 200 | 1401.7 | 2040 | - | - |
+| calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 2 | 200 | 4197.7 | 2332 | - | - |
+| calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 2 | 200 | 4191.5 | 7384 | - | - |
+| calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 2 | 200 | 780.6 | 2939 | - | - |
