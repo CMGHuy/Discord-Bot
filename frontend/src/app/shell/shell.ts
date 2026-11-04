@@ -41,6 +41,11 @@ import { ConnectionStatus } from './connection-status';
 import { NAV_ENTRIES, navEntryFor } from './nav';
 import { SectionTabs } from './section-tabs';
 import { ScanProgressStrip } from './scan-progress';
+import { LiveStore } from '../stores/live.store';
+import { DockState } from './live/dock-state';
+import { LiveDock } from './live/live-dock';
+import { LiveEdgeTab } from './live/live-edge-tab';
+import { heatStripText, liveWarnings } from './live/live-state';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
 
@@ -74,6 +79,7 @@ const ZOOM_DEFAULT = 100;
     RouterOutlet, RouterLink, ConnectionStatus, ToastHost,
     ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
+    LiveDock, LiveEdgeTab,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -316,6 +322,27 @@ export class Shell {
   protected readonly killObservation = signal<Killswitch | null>(null);
   protected readonly killswitchOn = computed(() => this.killObservation()?.on ?? null);
   protected readonly killswitchStale = computed(() => this.killObservation()?.availability?.state === 'unavailable');
+
+  /* -- v203: the Live dock (spec v202 §4) ------------------------------ */
+
+  /** Where the dock is and whether it is open, per destination. */
+  protected readonly dock = inject(DockState);
+  /** /live: the dock's, the edge tab's and the strip's only data. */
+  protected readonly live = inject(LiveStore);
+  /** The shell clock as a Date, so every live surface ages on one tick. */
+  protected readonly liveNow = computed(() => new Date(this.clock()));
+  /** Every warning that applies, worded once in live-state.ts. The
+   *  killswitch reading is the chip's own, so the bar and the tab agree. */
+  protected readonly dockWarnings = computed(() => liveWarnings({
+    utilisationPct: this.live.heat()?.utilisation_pct ?? null,
+    lastSuccess: this.connection.botLastSuccess(),
+    now: this.liveNow(),
+    streamState: this.connection.state(),
+    botAlive: this.connection.botAlive(),
+    killswitchOn: this.killswitchOn(),
+  }));
+  protected readonly heatText = computed(() => heatStripText(this.live.heat(), this.connection.currency()));
+  protected readonly awaitingCount = computed(() => this.live.awaiting()?.count ?? null);
 
   constructor() {
     // Read once, here rather than in an app initializer: preferences are

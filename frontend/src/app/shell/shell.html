@@ -123,17 +123,33 @@
     }
     <sb-refresher-banner />
 
-    <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
-      <!-- v202 §1: the destination's section tabs, drawn here from the nav
-           model and never by a workspace, above the page's sb-page header. -->
-      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null">
-        <sb-section-tabs [entry]="navHere()?.entry ?? null" [active]="navHere()?.section ?? null" />
-        <router-outlet />
-      </div>
-      @if (routeLoading.visible()) {
-        <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
+    <!-- v203 (spec v202 §4): the workspace and, from 1024px, the Live dock
+         beside it -- 320px open, a 40px edge tab collapsed. Below 1024px the
+         dock never docks; the live strip opens it as a sheet. -->
+    <div class="workspace-row" [class.dock-open]="dock.docked() && dock.open()"
+         [class.dock-collapsed]="dock.docked() && !dock.open()">
+      <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
+        <!-- v202 §1: the destination's section tabs, drawn here from the nav
+             model and never by a workspace, above the page's sb-page header. -->
+        <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null">
+          <sb-section-tabs [entry]="navHere()?.entry ?? null" [active]="navHere()?.section ?? null" />
+          <router-outlet />
+        </div>
+        @if (routeLoading.visible()) {
+          <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
+        }
+      </main>
+      @if (dock.docked()) {
+        <aside class="live-column" aria-label="Live">
+          @if (dock.open()) {
+            <sb-live-dock variant="docked" (close)="dock.toggle()" />
+          } @else {
+            <sb-live-edge-tab [warnings]="dockWarnings()" [heatText]="heatText()" [awaitingCount]="awaitingCount()"
+                              (expand)="dock.toggle()" />
+          }
+        </aside>
       }
-    </main>
+    </div>
   </div>
 
   <!-- v195 Phase 3, phone: the bottom tab bar and its More sheet. Both hosts

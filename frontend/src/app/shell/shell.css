@@ -235,6 +235,26 @@
 }
 
 .workspace { position: relative; }
+
+/* v203 (spec v202 §4): the workspace and the docked Live column side by
+   side, from 1024px only (DockState.docked). The column is sticky under the
+   bar and scrolls on its own: a long page never scrolls the dock away, and
+   the dock takes its own width rather than covering the page. */
+.workspace-row { display: flex; flex: 1; min-width: 0; align-items: flex-start; }
+.workspace-row > .workspace { align-self: stretch; }
+.dock-open { --dock-width: 320px; }
+.dock-collapsed { --dock-width: 40px; }
+.live-column {
+  flex: 0 0 var(--dock-width);
+  width: var(--dock-width);
+  position: sticky;
+  top: var(--topbar-h);
+  height: calc(100dvh - var(--topbar-h));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
 .workspace-content { min-width: 0; transition: opacity var(--transition); }
 .route-pending .workspace-content { opacity: 0.32; pointer-events: none; user-select: none; }
 .route-loading-overlay { position: absolute; inset: 0; z-index: 10; display: grid; place-content: center; justify-items: center; gap: var(--space-10); color: var(--text-secondary); background: color-mix(in srgb, var(--surface) 58%, transparent); backdrop-filter: blur(1px); }

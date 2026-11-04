@@ -125,7 +125,10 @@ describe('shell navigation', () => {
 
     const main = el.querySelector('.main') as HTMLElement;
     expect(Array.from(main.children).map((c) => c.tagName.toLowerCase()))
-      .toEqual(['header', 'div', 'sb-refresher-banner', 'main']);
+      .toEqual(['header', 'div', 'sb-refresher-banner', 'div']);
+    // v203 Moved: the workspace now sits in .workspace-row beside the Live column.
+    expect(main.children[3].classList).toContain('workspace-row');
+    expect(main.querySelector(':scope > .workspace-row > main.workspace')).not.toBeNull();
     expect(main.children[1].classList).toContain('tape-strip');
     expect(main.querySelector(':scope > .tape-strip > sb-tape')).not.toBeNull();
     expect(el.querySelector('header.topbar sb-tape')).toBeNull();
@@ -1037,5 +1040,101 @@ describe('section tabs in the shell (v202 §1)', () => {
     expect(current(el)).toEqual(['Calendar']);
     await go(fixture, '/risk');
     expect(el.querySelectorAll('sb-section-tabs a')).toHaveLength(0);
+  });
+});
+
+describe('shell live dock (v203)', () => {
+  const NOW = Date.parse('2026-10-29T13:00:00Z');
+  const narrow = signal(false);
+  const at = '2026-10-29T12:59:00Z';
+  const SNAPSHOT = {
+    heat: { availability: 'ok', as_of: at, reason: null, open_pct: 5.1, cap_pct: 6, utilisation_pct: 85, open_amount: 2459,
+            cap_amount: 2893, headroom_pct: 0.9, headroom_amount: 434, balance: 48210, includes_resting: true },
+    awaiting: { availability: 'ok', as_of: at, reason: null, count: 3, next_expiry: null },
+    killswitch: { availability: 'ok', as_of: at, reason: null, engaged: false, since: null, detail: null },
+    events: [], events_meta: { availability: 'ok', as_of: at, missing: [] },
+  };
+  const scan = (botAlive: boolean) => ({
+    pending: false, triggered_at: null, paused: false, paused_at: null, running: false, bot_alive: botAlive,
+    bot_last_seen: '2026-10-29T12:58:00Z', bot_healthy: true, bot_last_success: '2026-10-29T12:58:00Z',
+    bot_consecutive_failures: 0, bot_session_active: true, bot_scan_paused: false, progress: null,
+  });
+
+  beforeEach(() => {
+    narrow.set(false);
+    TestBed.configureTestingModule({ providers: shellProviders(['dashboard', 'trades', 'risk'].map((path) => ({ path, component: Blank }))) });
+    TestBed.overrideProvider(CLOCK, { useValue: signal(NOW) });
+    TestBed.overrideProvider(ViewportService, { useValue: { isPhone: signal(false), isNarrow: narrow, viewport: signal('lg') } });
+  });
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  async function mount(url: string) {
+    await TestBed.inject(Router).navigateByUrl(url);
+    const fixture = TestBed.createComponent(Shell);
+    await settle(fixture);
+    const backend = TestBed.inject(HttpTestingController);
+    for (const request of backend.match((r) => r.url.endsWith('/system/preferences'))) request.flush({ preferences: {} });
+    for (const request of backend.match((r) => r.url.endsWith('/live'))) request.flush(SNAPSHOT);
+    await settle(fixture);
+    return { fixture, el: fixture.nativeElement as HTMLElement, backend };
+  }
+
+  it('docks the open dock on Dashboard, beside the workspace', async () => {
+    const { el } = await mount('/dashboard');
+    const row = el.querySelector('.main > .workspace-row')!;
+    expect(row.classList).toContain('dock-open');
+    expect(row.querySelector(':scope > main.workspace + aside.live-column[aria-label="Live"] > sb-live-dock')).not.toBeNull();
+    expect(row.querySelector('sb-live-edge-tab')).toBeNull();
+  });
+
+  it('collapses to the edge tab elsewhere, warning-toned and named', async () => {
+    const { el } = await mount('/trades');
+    expect(el.querySelector('.workspace-row')!.classList).toContain('dock-collapsed');
+    const tab = el.querySelector<HTMLButtonElement>('aside.live-column > sb-live-edge-tab button.edge-tab')!;
+    expect(tab.classList).toContain('warn');
+    expect(tab.getAttribute('aria-label')).toBe('Open the live dock. Warning: Heat near cap. Heat 2,459 € · 5.1% / 6%. 3 awaiting order');
+    expect(el.querySelector('sb-live-dock')).toBeNull();
+  });
+
+  it('names a downed bot on the edge tab', async () => {
+    const { fixture, el, backend } = await mount('/trades');
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) request.flush(scan(false));
+    await settle(fixture);
+    expect(el.querySelector('button.edge-tab')!.getAttribute('aria-label')).toContain('Warning: Heat near cap, Bot down.');
+  });
+
+  it('remembers the toggle per destination, through PreferencesStore', async () => {
+    const { fixture, el } = await mount('/trades');
+    el.querySelector<HTMLButtonElement>('button.edge-tab')!.click();
+    await settle(fixture);
+    expect(el.querySelector('aside.live-column > sb-live-dock')).not.toBeNull();
+    expect(TestBed.inject(PreferencesStore).values()['shell.dock']).toEqual({ '/trades': true });
+    el.querySelector<HTMLButtonElement>('sb-live-dock .dock-head button')!.click();
+    await settle(fixture);
+    expect(el.querySelector('sb-live-edge-tab')).not.toBeNull();
+    expect(TestBed.inject(PreferencesStore).values()['shell.dock']).toEqual({ '/trades': false });
+  });
+
+  it('never docks below 1024 px', async () => {
+    narrow.set(true);
+    const { el } = await mount('/dashboard');
+    expect(el.querySelector('aside.live-column')).toBeNull();
+    expect(el.querySelector('sb-live-dock')).toBeNull();
+    expect(el.querySelector('.workspace-row')!.className).not.toMatch(/dock-/);
+  });
+
+  it('sizes the column from one token: 320px open, 40px collapsed, sticky under the bar', () => {
+    const css = readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = (selector: string) => css.match(new RegExp(`^${selector.replace(/[.]/g, '\\.')} \\{[^}]*\\}`, 'm'))?.[0] ?? '';
+    expect(rule('.dock-open')).toContain('--dock-width: 320px;');
+    expect(rule('.dock-collapsed')).toContain('--dock-width: 40px;');
+    for (const declaration of ['width: var(--dock-width);', 'position: sticky;', 'top: var(--topbar-h);', 'overflow-y: auto;']) {
+      expect(rule('.live-column')).toContain(declaration);
+    }
   });
 });
