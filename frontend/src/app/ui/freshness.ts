@@ -12,6 +12,11 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
  * The failure mode this guards is a panel that silently claims to be current
  * because its data arrived without a time on it.
  */
+/** The one staleness rule (spec v202 §3): older than this, data is stale.
+ *  The shell's alarm chip, the dock's warning tone and "No scan since" read
+ *  it through shell/live/live-state.ts. */
+export const STALE_AFTER_SEC = 900;
+
 @Component({
   selector: 'sb-freshness',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -38,7 +43,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 })
 export class Freshness {
   readonly at = input.required<string | null>();
-  readonly staleAfterSec = input<number>(900);
+  readonly staleAfterSec = input<number>(STALE_AFTER_SEC);
   readonly now = input<Date | null>(null);
 
   private readonly parsed = computed(() => {
