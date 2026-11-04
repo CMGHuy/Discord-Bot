@@ -60,149 +60,354 @@ endpoints take 7–23 s; the local profile is dominated by per-ticker
 lacks the table. That N+1 shape exists on production too (59 calls in
 `/calendar/pnl`, 0.26 s there): unknown codes are never memoised.
 
+
 ## Goal
 
 Every endpoint above answers in **under 1.5 s after Layer 1** and **under
 0.5 s after Layer 2** on production, measured with the same script, with
-**byte-identical JSON** to today for the same database state (Part 3 adds
-fields; it removes none). The Dashboard and Calendar pages settle in a few
-seconds.
+**byte-identical JSON** to today for the same database state, except the
+converted money amounts L1-a deliberately moves onto the daily 08:00 rate
+(Part 3 adds fields; it removes none). The Dashboard and Calendar pages
+settle in a few seconds.
 
 ## Non-goals
 
 - No SQL rewrite of metrics (calendar grid, stats, expectancy) and no
   precomputed payloads in the refresher: both risk the admin's numbers
   drifting from the definitions the backtests and the bot use.
-- No change to the bot process, the scan, or any stored shape. No schema
-  migration.
+- No change to the bot process, the scan, or any existing stored shape.
+  The one schema change is the new `fx_daily_rates` table (L1-a).
+- No change to how the Calendar buckets a close into a day
+  (`pnl_calendar.py:56`, `closed_at[:10]`, the UTC date). The FX day key
+  is its own explicit rule (L1-a); aligning the Calendar's bucket to
+  Berlin is a separate question, not this spec.
 - No second gunicorn worker (in-memory login limiter, SSE broker and
   swallowed-error counter require one).
 - No UI change a user can see beyond speed.
 
+## Three plans
+
+The spec spawns **three plans, in order, each ending with its own one
+full-suite run and then a deploy** (`document-conventions.md` § One full
+suite run): **v205** builds Layer 1; Layer 2 and Part 3 each take the next
+free number at their own creation and link back with `**Spec:** v205`.
+Each plan measures production after its deploy and records the table in
+this spec's `## Results`. A later plan is written only after the earlier
+one's measurement, so Layer 2 can be dropped if Layer 1 already meets
+0.5 s.
+
 ## Design
 
-### Layer 1 — remove the repeated work (no staleness risk)
+### Layer 1 — remove the repeated work (plan v205)
 
-**L1-a. FX lookup in O(log n).** `fx._close_on_or_before` keeps its
-contract (last positive close within `[day - FALLBACK_DAYS, day]`, None
-otherwise) but reads from a per-frame lookup built once: a sorted
-`numpy` array of `date` ordinals and the matching positive closes,
-memoised beside the frame in `_frames` (rebuilt whenever the frame is).
-A lookup is one `searchsorted` and a bounds check. A test pins equality
-with the old implementation over every day of a real pair frame,
-including gaps, non-positive and NaN closes, days before the first bar and
-after the last.
+Layer 1's tasks run in this order: **L1-d first** (goldens and budgets
+pin today's output), then **L1-b and L1-c** (pure refactors, proven
+byte-identical by those goldens), then **L1-a last** (the only
+intended change in output, proven against an independent reference).
 
-**L1-b. Quote codes resolved in one query and negatives memoised.**
+**L1-a. One FX rate per currency pair per day, snapped at 08:00 Berlin
+(partner, 2026-11-04).** Today every converted amount reads the pair's
+whole daily frame and scans it in Python for its exit date's close
+(`fx.py:_close_on_or_before`). That becomes a small stored table of daily
+rates and a dict lookup.
+
+- **One rule for "the day".** The FX day of an amount is the **Berlin
+  calendar date** of its timestamp: `closed_at` (and each leg's
+  `closed_at`) is parsed as an aware ISO stamp, a naive stamp is read as
+  UTC (every writer stores `datetime.now(timezone.utc)`,
+  `performance.py:174,628,1229`), then converted to `Europe/Berlin`. A live
+  amount (open P&L, `dashboard.py:320` `date.today()`, `_day`'s absent-stamp
+  fallback, `risk_read_model.py`) uses **Berlin today**. One helper in
+  `fx_convert` applies it everywhere; no caller takes `str(stamp)[:10]`.
+- **What the table holds.** `fx_daily_rates`: `base` and `account` as
+  **major** ISO codes, `day` (Berlin date), `rate`, `bar_date` (the frame
+  bar the rate came from), `snapped_at`, `source` (`snap`|`backfill`);
+  primary key `(base, account, day)`. It is created by an Alembic revision
+  per `schema-evolution.md`, with a working downgrade, and read by a
+  repository beside `quote_currency_repo`. Minor units never get rows:
+  `fx._major` maps a quote (`GBp`, `ZAc`, `ILA`) to its major code and
+  scale **before** the lookup, and the scale multiplies after it. Identity
+  is decided on **major** codes: GBp into a GBP account is `x 0.01` with no
+  lookup, and GBp into EUR is `GBPEUR x 0.01`. `fx_convert._converted`'s
+  exact-code shortcut (`quote == rates.account`) is replaced by that
+  major-code test.
+- **The day's value: one rule for snap and backfill.** The rate for day D
+  is **the last positive close dated strictly before D** in the pair's
+  daily frame (index normalised to dates explicitly, whatever its tz).
+  That is the newest completed close known at 08:00 Berlin on D. A row is
+  written only if that bar's date is within `FALLBACK_DAYS` (7) of D. Past
+  that, there is no row and the amount is `fx_missing`, exactly as a >7-day
+  gap is today. The partner asked for "one value at 08:00, used all day".
+  The latest completed daily close at that moment is chosen over a live
+  spot because it is reproducible from the frames: `snap(D) == backfill(D)`
+  for the same frame, by construction and by test.
+- **Snap.** The refresher's FX job (`swingbot/refresher/quotes.py:132-135`,
+  after `refresh_pair_frames`) runs on every cycle. When the Berlin clock
+  (`ctx.now` converted, never naive UTC arithmetic) is at or past 08:00, it
+  writes the day's row for every pair in use that lacks one. "In use" means
+  the majors of every `known` code in the quote-currency store.
+  Insert-if-absent, never update: the first value written is the day's
+  value. A currency that first appears after 08:00, or a refresher that
+  was down at 08:00, gets its row on the next cycle, with the same value
+  (the rule depends only on bars before D).
+- **Backfill.** One idempotent script fills every past day the frames
+  allow (same rule, `source=backfill`, insert-if-absent). It runs once on
+  production after the migration, as a step of plan v205's deploy, and
+  can be re-run safely.
+- **Read.** `fx_convert` reads `(base, account, fx-day)` from a
+  process-wide memo of the whole table (a few currencies times a few
+  years, a few thousand rows). The memo is keyed on the table's version
+  (`count(*), max(snapped_at)`). The key is checked at most once per 60 s,
+  so a missing key (before 08:00, refresher down, a pair with no frame)
+  never reloads per request. Before today's row exists, day D falls back to
+  the nearest earlier row whose `bar_date` is within `FALLBACK_DAYS` of D,
+  else `None` with `fx_missing`. **Never 1.0.** An unreadable table is
+  `fx_missing`, never a 500.
+- **Callers.** Read-side and admin-only: `admin/api_v1/money.py`,
+  `admin/api_v1/risk_read_model.py` and the refresher. The bot's sizing,
+  balance, kill switch and every backtest keep using quote-currency
+  amounts, untouched.
+
+**Figures this moves, on purpose.** Admin amounts converted to the
+account currency move from "exit day's close" to "close before the exit
+day": realized P&L amounts (Dashboard, Trades, Analytics), the equity
+curve in account currency, Calendar day and month totals, and the risk
+read model's heat weights, which are now the morning rate all day instead
+of moving intraday. **Unaffected:** R multiples, win rate, expectancy,
+percent P&L, every bot figure.
+
+**L1-b. Quote codes in one query, short negative memo.**
 `fx_convert._Rates` resolves all tickers of a call up front with one
 `quote_currency_repo().get_many(keys)` when `fetch=False`. An `unknown`
-outcome is memoised in the process until its stored `retry_after` passes
-(the refresher's own back-off), so it is no longer re-read per request.
-`fetch=True` behaviour (refresher off) is unchanged.
+outcome is memoised in the process for **at most 5 minutes**, not until
+`retry_after`, so a code the refresher resolves in the meantime shows up
+within 5 minutes. `fetch=True` (refresher off) is unchanged.
 
-**L1-c. Load each store once per request.** A small request-scoped read
-context (`swingbot/admin/read_context.py`) memoises, on `flask.g`:
-the trade list (`TradeLog._all()`), the plan records (`PlanStore._all()`),
-`plan_to_dict` rows, and `load_account_config()`. The admin routes and
-helpers on the profiled paths (`dashboard.py`, `trades.py:build_rows`,
-`admin/queries.py`, `calendar.py`, `pnl_calendar.load_rows`,
-`tracking/equity.load_plans_by_id`) read through it when a request context
-exists and fall back to today's direct call otherwise, so the bot, the
-refresher and every non-request caller are untouched. Callers receive the
-same objects they receive today; the context lives one request only, so a
-write inside the request (a POST) must not read a stale memo -- write
-routes do not use it, and a test asserts no write route imports it.
+**L1-c. Load each store once per request: opt-in, read routes only.**
+The seam lives in **core**, so no core module imports admin or flask: a
+`contextvars`-based memo in `swingbot/core/infra/read_memo.py`.
+`TradeLog._all()`, `PlanStore._all()` and the trade rows
+`account._sum_realized_pnl` reads read through it **only while a memo
+scope is active**. Outside a scope (the bot, the refresher, scripts,
+every write) the memo does nothing, and each call is today's direct call.
+The admin activates a scope with an explicit `@read_scope` decorator on
+**GET routes only**, listed in the plan: `dashboard`, `trades` list,
+`live`, the calendar three and any route the profile shows reading the
+same stores. A request context alone never activates it. A test enumerates
+every `POST/PATCH/PUT/DELETE` route under `/api/v1` and asserts none
+carries the decorator. A behavioural test on each mutating route (write,
+then re-read in the same request where the route does so, e.g.
+`trade_commands.py:80-86` `_plan_row`) asserts the fresh value. Callers
+receive the same objects as today.
 
 **L1-d. Measurement stays in the product.** Every `/api/v1` response gets
-a `Server-Timing` header (`total`, `db` time and statement count via a
-SQLAlchemy `before/after_cursor_execute` listener scoped to the request),
-and a request slower than `ADMIN_SLOW_REQUEST_MS` (default 2000) logs one
-line with path, total, db time and statement count. A test budget pins the
-statement count and the number of `list_all` calls per profiled endpoint
-against a fixture database, so a regression fails CI rather than a page.
+a `Server-Timing` header (`total`, `db` time and statement count). The
+counting listener (`before/after_cursor_execute`) is installed **only by
+the admin app**, through a hook `core/db/engine.get_engine` calls on every
+engine it creates, so it survives `reset_engine()`. The bot's and the
+refresher's engines never carry it. A request slower than
+`ADMIN_SLOW_REQUEST_MS` (default 2000) logs one line: path, total, db
+time, statement count. The knob is declared in `swingbot/config.py`'s
+schema and hot-reloaded on SIGHUP. Golden-output tests capture today's
+JSON of every profiled endpoint from a fixture database, and a budget pins
+statement count and `list_all` calls per endpoint, so a regression fails
+CI rather than a page.
 
-### Layer 2 — a cross-request snapshot of the parsed stores
+### Layer 2 — a cross-request snapshot (second plan)
 
-**L2-a. Snapshot cache.** `swingbot/admin/store_snapshot.py` keeps, per
-process, the parsed trade list and plan records (and `plan_to_dict` rows)
-with a version key. Each request asks for the version with one query per
-store: `select count(*), max(updated_at) from trades` (likewise `plans`),
-~0.5 ms. A changed key rebuilds that store's snapshot under a lock (one
-rebuild, concurrent readers wait for it rather than rebuilding in
-parallel). The read context of L1-c reads through the snapshot.
+**L2-a. Snapshot.** A per-process snapshot of the **raw** parsed records
+(trades, plans and the rows `_sum_realized_pnl` sums) in core, beside the
+L1-c memo, which reads through it when `ADMIN_STORE_SNAPSHOT=on`. Raw
+records only: anything derived from the clock (days held, open P&L,
+`plan_to_dict`'s time-dependent fields, "today") is computed per request
+from them, never stored. One rebuild runs at a time under a lock;
+concurrent readers wait for it.
 
-**L2-b. Version key soundness.** The plan's first Layer 2 task verifies
-that every write path to `trades` and `plans` advances `updated_at`
-(repository `upsert`/`update` paths, the bot's writers, the importer, any
-raw SQL). Any path that does not is fixed to set it, or the key falls back
-to a cheaper-than-parse alternative chosen in that task (e.g. a
-statement-level trigger bumping a sequence). The cache never trusts a key
-the task could not prove.
+**L2-b. Invalidation: the NOTIFY listener first, a version check second.**
+`trades` and `plans` already fire statement-level NOTIFY triggers at
+commit on channel `trades` (`migrations/versions/p1_003_notify_function.py:18`,
+`p2_001_plans_and_starred.py:25`). The admin already runs
+`DbEventListener` (`admin/events/db_listener.py:112-144`). Its
+`on_notification('trades')` bumps a generation counter that keys the
+snapshot. A `resync`, or a listener that is not connected, bypasses the
+snapshot until reconnected. Because delivery is asynchronous (a POST
+followed at once by a GET can beat it), each request also compares the
+stores' version: `PlanRepository.version()` (`repositories/plans.py:44-49`,
+already a cache key) and a twin added on the trades repository. A
+`count`/`max(updated_at)` key alone is not trusted. `clock_timestamp()` is
+statement time, not commit time (`repositories/base.py:89,101`), so a
+long transaction can commit under an older stamp. The NOTIFY generation
+is what closes that gap. The plan's first task records whether the same
+gap affects the two existing callers of `version()`
+(`cancel_precision.py:41`, `watchlist_rows.py:71`) and fixes them the
+same way. Spurious bumps from `starred_plans` (shared channel) are
+harmless.
 
-**L2-c. Mutation safety.** Snapshot records are shared across requests,
-so a caller mutating one would corrupt every later response. The plan
-audits every consumer reached from the admin read context and either
-(a) proves it read-only, or (b) changes it to copy before writing (the
-pattern `fx_convert.to_account_currency` already follows). The snapshot
-hands out records wrapped so that, under tests, any mutation raises
-(`types.MappingProxyType` or a frozen-dict test double over the fixture
-DB); production hands out the plain dicts. A test runs every profiled
-endpoint twice against the frozen snapshot and asserts identical output.
+**L2-c. Mutation safety in production, not only in tests.** Each request
+gets **its own shallow copies** of the snapshot's records (about 1.1k
+dicts, cheap). The plan audits every consumer for writes into **nested**
+values (lists, dicts inside a record) and makes each one copy before
+writing, the pattern `fx_convert.to_account_currency` follows. Under
+tests the snapshot is frozen deeply (`MappingProxyType` or a frozen
+double), so a nested write raises. A test runs every profiled endpoint
+twice against the frozen snapshot and asserts identical output. A second
+test advances an injected clock across midnight Berlin and asserts the
+time-derived fields change.
 
 **L2-d. Kill switch.** `ADMIN_STORE_SNAPSHOT=on|off` (default `on`,
-hot-reloaded via SIGHUP like every `.env` key, added to
-`swingbot/config.py`'s schema). `off` restores Layer 1 behaviour exactly.
+declared in `swingbot/config.py`'s schema, hot-reloaded on SIGHUP). `off`
+restores Layer 1 behaviour exactly.
 
-### Part 3 — fewer heavy requests per page
+### Part 3 — fewer heavy requests per page (third plan)
 
 **P3-a. `/dashboard` carries `today`.** When the scope is wider than 1D,
 the response includes a `today` block with the fields the SPA's
-`landToday` consumes today, computed from the already-loaded trades with
-mode `today`. `dashboard.store.ts` drops the separate `loadToday()`
-request and lands `today` from the main response; the 1D scope is
-unchanged. The old `?mode=today` call keeps working (no API removal).
+`landToday` consumes, computed from the same loaded trades with mode
+`today`. `dashboard.store.ts` lands it from the main response and calls
+`loadToday()` **only when the block is absent** (an older backend after a
+rollback). The 1D scope is unchanged, and `?mode=today` keeps working.
 
-**P3-b. `/calendar/pnl/day` carries `prev_day` / `next_day`.** The
-nearest trading day before and after `date` under the same
+**P3-b. `/calendar/pnl/day` carries `prev_day` / `next_day`.** These are
+the nearest trading days before and after `date` under the same
 strategy/horizon filter, across all history (`null` at either end).
-`calendar-day.store.ts` drops `loadEdge` and its two possible
-`/calendar/pnl` calls. The month grid call stays (the page shows the
-month context), and sparklines stay separate on purpose (tiles render
-before any CSV is parsed).
+`calendar-day.store.ts` uses them and runs `loadEdge` **only when the
+fields are absent**. The month grid call stays (the page shows the month
+context), and sparklines stay separate on purpose (tiles render before any
+CSV is parsed).
 
 ## Error handling
 
-- A failing version query in L2 falls back to a fresh Layer 1 load for
-  that request and logs once per minute (swallowed-error counter), never
-  serving a snapshot it cannot vouch for.
-- A failed snapshot rebuild leaves the previous snapshot unused (not
-  served) and the request loads directly.
-- FX lookup failures keep today's semantics: a missing rate is `None` and
-  `fx_missing`, never 1.0.
+- L2: a failing version query, a disconnected listener or a failed rebuild
+  means that request loads directly (Layer 1 behaviour), logged at most
+  once per minute through the swallowed-error counter. A snapshot the
+  checks cannot vouch for is never served.
+- FX: a missing rate is `None` with `fx_missing`, never 1.0; a missed
+  08:00 snap is written on the next cycle with the same value; an
+  unreadable `fx_daily_rates` is `fx_missing`, never a 500.
 
 ## Testing
 
-Each part ships its own unit tests in the same commits (backend pytest,
-frontend store specs in the runner the existing `*.store.spec.ts` use), including empty and
-edge cases: an empty book, no trades today, a first/last trading day with
-no neighbour, a pair frame with gaps and non-positive closes, an unknown
-quote code past and before its retry time, a write between two reads
-invalidating the snapshot, and the kill switch. Golden-output tests
-capture today's JSON of every profiled endpoint from a fixture database
-before Layer 1 and assert it unchanged after each layer. Complexity stays
-under 15 per function. The plan's last task is the one full-suite run.
+Each change ships its own unit tests in the same commits: backend pytest,
+and frontend store specs in the runner the existing `*.store.spec.ts`
+use. Cases included:
 
-After Layer 1 and again after Layer 2 the plan re-runs the production
-timing script (read-only, from the `admin` container) and records the
-table in this spec's results section; the Goal's thresholds are the
-acceptance bar.
+- An empty book, no trades today, a first or last trading day with no
+  neighbour.
+- A response without the Part 3 fields (the fallback path).
+- An unknown quote code inside and past its 5-minute memo.
+- A write between two reads invalidating the snapshot, a listener
+  resync, and the kill switch.
 
-## Rollout
+FX tests, each against **hand-computed reference rates** on a fixture
+frame, never a recomputation through `fx_convert`:
 
-Layer 1 -> merge, deploy, measure on production -> Layer 2 -> merge,
-deploy, measure -> Part 3 (backend first, then the stores) -> close-out.
-Each step is its own set of scoped commits. The intermediate deploys are
-`bot` patch releases cut by the plan's checkpoint tasks (bump resolved from
-`VERSION.json` at that moment, history regenerated); close-out resolves
-the final `bot` and `ui` patch. Production is changed only by a deploy of
-committed `main`, never a live edit.
+- The "last positive close strictly before D" rule over gaps, NaN and
+  non-positive closes, duplicate and unsorted stamps, first and last bar,
+  and a gap longer than 7 days.
+- `snap(D) == backfill(D)`.
+- Insert-if-absent across two refresher cycles on one Berlin day, with an
+  injected `ctx.now`.
+- The 08:00 Berlin gate on both DST switch days.
+- Closes at 21:59, 22:00, 23:59 and 00:30 UTC mapping to the right Berlin
+  day.
+- GBp→GBP, GBp→EUR and ZAc into each account currency.
+- A scale-out trade whose legs close on different days, with per-leg
+  rounding then a rounded sum, as today.
+
+Goldens compare every non-money field byte-for-byte; money fields compare
+against the hand-computed reference. Complexity stays under 15 per
+function. Each plan's last task is its one full-suite run.
+
+## Rollout and rollback
+
+Each plan: implement in its worktree → its full suite → merge →
+deploy per `docs/deploy/DEPLOY_HETZNER.md` (v205 adds the migration and
+the one-off backfill) → run the read-only production timing script →
+record `## Results` → close-out with that plan's bump. Production changes
+only by deploying committed `main`, never a live edit.
+
+Rollback, per `DEPLOY_HETZNER.md § Rolling back`:
+
+- **Layer 1:** redeploy the previous image. The `fx_daily_rates` table is
+  left in place (the old code never reads it) or removed with the
+  revision's downgrade.
+- **Layer 2:** `ADMIN_STORE_SNAPSHOT=off` and a SIGHUP, no deploy needed.
+- **Part 3:** the SPA tolerates a backend without the new fields, so the
+  backend can roll back while browsers hold the new bundle; an old
+  bundle ignores the new fields.
+
+## Panel review
+
+Spec review, 2026-11-04, after commit 050f4496. Each finding cites its
+role and is recorded as applied or rejected.
+
+- staff-engineer [BLOCKING]: the memo activated by any request context
+  also covers write routes, and their in-request re-reads would see stale
+  data; an import test cannot guard it -- **applied** (L1-c: opt-in
+  `@read_scope` on GET routes only, a route-enumeration test, a
+  write-then-reread behavioural test).
+- staff-engineer [BLOCKING]: `read_context.py` in admin, read by core
+  modules, would add a core -> admin/flask import to bot paths --
+  **applied** (L1-c/L2-a: a contextvar memo in `core/infra`; admin only
+  activates it).
+- staff-engineer [ADVISORY]: `count/max(updated_at)` is unsound under
+  statement-time stamps and late commits -- **applied** (L2-b: NOTIFY
+  generation as primary, version as a second check, the existing
+  `version()` callers reviewed).
+- staff-engineer [ADVISORY]: reuse the existing NOTIFY triggers and
+  `DbEventListener` -- **applied** (L2-b).
+- staff-engineer [ADVISORY]: `_sum_realized_pnl` bypasses the snapshot,
+  so the 0.5 s Goal cannot be met -- **applied** (L1-c/L2-a cover its
+  rows).
+- staff-engineer [ADVISORY]: reuse `PlanRepository.version()` and add a
+  trades twin -- **applied** (L2-b).
+- staff-engineer [ADVISORY]: mid-plan deploys would ship code that never
+  passed the full suite -- **applied** (three plans, each with its own
+  full run before its deploy).
+- staff-engineer [ADVISORY]: no rollback named; the SPA must tolerate
+  missing fields -- **applied** (Rollout and rollback; P3 fallbacks).
+- staff-engineer [ADVISORY]: `ADMIN_SLOW_REQUEST_MS` missing from the
+  config schema -- **applied** (L1-d).
+- staff-engineer [ADVISORY]: freezing only in tests leaves production
+  exposed -- **applied** (L2-c: per-request shallow copies plus a nested
+  audit).
+- staff-engineer [ADVISORY]: the frame-order and duplicate-stamp
+  equivalence for the old lookup -- **applied** in a changed form: L1-a
+  replaces the lookup, and the backfill tests cover duplicate and
+  unsorted stamps.
+- staff-engineer [ADVISORY]: the engine listener must survive
+  `reset_engine()` and stay out of the bot -- **applied** (L1-d: an
+  admin-installed hook in `get_engine`).
+- quant-engineer [BLOCKING]: the FX day key is the UTC date, not Berlin
+  -- **applied** (L1-a: one Berlin-date rule for stamps, legs and
+  "today"; UTC boundary tests).
+- quant-engineer [BLOCKING]: snap (live spot) and backfill (last close)
+  are different quantities -- **applied** (L1-a: both store the last
+  positive close strictly before D; `snap == backfill` test; `bar_date`
+  recorded).
+- quant-engineer [BLOCKING]: minor units and identity are underspecified
+  -- **applied** (L1-a: major-code rows only, scale after lookup,
+  identity on majors).
+- quant-engineer [BLOCKING]: an unbounded forward-fill would hide
+  `fx_missing` -- **applied** (L1-a: a row only when the bar is within
+  7 days; a >7-day gap test).
+- quant-engineer [BLOCKING]: the memo reloads per request when today's
+  key is missing, and has no version -- **applied** (L1-a: version-keyed,
+  checked at most every 60 s).
+- quant-engineer [ADVISORY]: goldens cannot prove the refactors with L1-a
+  in the same layer, and recomputing through `fx_convert` is tautological
+  -- **applied** (L1 order d → b, c → a; hand-computed references;
+  scale-out legs).
+- quant-engineer [ADVISORY]: name the admin figures that move --
+  **applied** ("Figures this moves, on purpose").
+- quant-engineer [ADVISORY]: the snapshot must hold raw records only;
+  time drift test -- **applied** (L2-a, L2-c midnight test).
+- quant-engineer [ADVISORY]: the unknown-code memo until `retry_after`
+  is too long -- **applied** (L1-b: 5-minute cap).
+- quant-engineer [ADVISORY]: the DST gate needs an injected clock, two
+  cycles a day, and a definition of "in use" -- **applied** (L1-a Snap;
+  Testing).
+
+## Results
+
+Filled by each plan after its production measurement.
