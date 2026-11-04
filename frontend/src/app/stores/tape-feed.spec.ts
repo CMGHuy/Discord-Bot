@@ -17,7 +17,7 @@ class FakeEventStream {
     return counter;
   }
 
-  changes(name: string): Signal<number> {
+  changes(name: string, _options?: { minIntervalMs: number }): Signal<number> {
     return this.counterFor(name).asReadonly();
   }
 
@@ -77,6 +77,15 @@ describe('TapeFeed', () => {
     events.raise('scan');
     await flush();
     expect(api.tape).toHaveBeenCalledTimes(2);
+  });
+
+  it('a market event refetches the union once', async () => {
+    feed.register('tape', signal(['NVDA'])); feed.register('index', signal(['^GSPC']));
+    await flush();
+    events.raise('market');
+    await flush();
+    expect(api.tape).toHaveBeenCalledTimes(2);
+    expect(api.tape).toHaveBeenLastCalledWith(['NVDA', '^GSPC']);
   });
 
   it("changing one owner's symbols refetches the new union once", async () => {

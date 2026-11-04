@@ -41,13 +41,27 @@ class FakeEventStream {
     return counter;
   }
 
-  changes(name: string): Signal<number> {
-    return this.counterFor(name).asReadonly();
+  /** Throttled views, as the real stream keeps them: the first bump passes,
+   *  later ones within the interval are dropped. */
+  private readonly throttled: { name: string; interval: number; last: number; out: WritableSignal<number> }[] = [];
+
+  changes(name: string, options?: { minIntervalMs: number }): Signal<number> {
+    if (!options) return this.counterFor(name).asReadonly();
+    const found = this.throttled.find((t) => t.name === name && t.interval === options.minIntervalMs);
+    if (found) return found.out;
+    const view = { name, interval: options.minIntervalMs, last: -Infinity, out: signal(0) };
+    this.throttled.push(view);
+    return view.out;
   }
 
   /** Raise an event, the way a frame arriving on the real stream would. */
   raise(name: string): void {
     this.counterFor(name).update((n) => n + 1);
+    for (const view of this.throttled.filter((t) => t.name === name)) {
+      if (Date.now() - view.last < view.interval) continue;
+      view.last = Date.now();
+      view.out.update((n) => n + 1);
+    }
   }
 }
 
@@ -153,6 +167,49 @@ describe('DashboardStore', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('refetches on a market event, throttled', () => {
+    vi.useFakeTimers();
+    try {
+      tick();
+      respond();
+
+      events.raise('market');
+      tick();
+      vi.advanceTimersByTime(300);
+      tick();
+      respond({ open_pnl_pct: 7 });
+      expect(store.openPnlPct()).toBe(7);
+
+      // A second raise inside the 30 s throttle window adds no request.
+      events.raise('market');
+      tick();
+      vi.advanceTimersByTime(300);
+      tick();
+      backend.expectNone((req) => req.url === '/api/v1/dashboard');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still loads once at creation without a market event', () => {
+    tick();
+    expect(backend.match((req) => req.url === '/api/v1/dashboard')).toHaveLength(1);
+  });
+
+  it('openMeta is null from an older server', () => {
+    tick();
+    respond();
+    expect(store.openMeta()).toBeNull();
+  });
+
+  it('openMeta carries the server market_meta', () => {
+    tick();
+    const market_meta = { as_of: '2026-10-29T14:00:00Z', refreshing: false, stale_count: 0, missing_count: 2,
+      incomplete: true, source: 'request' as const, error: null };
+    respond({ market_meta });
+    expect(store.openMeta()).toEqual(market_meta);
   });
 
   it('refetches on a trades event', () => {

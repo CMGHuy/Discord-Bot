@@ -45,8 +45,11 @@ export class TapeFeed {
   constructor() {
     // v132: `scan` fires ~1/s during a scan and this refetch hits Yahoo.
     const scan = inject(EventStream).changes('scan', { minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS });
+    // v201: a landed price reaches the strip within 30 s, one merged request.
+    const market = inject(EventStream).changes('market', { minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS });
     effect(() => {
       scan();
+      market();
       this.merged();
       this.refresh();
     });

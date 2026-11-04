@@ -19,8 +19,10 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { Collection, TradeRow } from '../api/models';
-import { TradesStore, fromSortParam, toSortParam } from './trades.store';
+import { Collection, MarketMeta, TradeRow } from '../api/models';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
+import { TradesStore, fromSortParam, liveMeta, liveTickers, toSortParam } from './trades.store';
 
 /* NG42 — the Trades list store. */
 
@@ -135,13 +137,43 @@ describe('sort parameter translation', () => {
   });
 });
 
+describe('liveMeta', () => {
+  const meta = { as_of: '2026-10-29T14:00:00Z', refreshing: false, stale_count: 0, missing_count: 1,
+    incomplete: true, computed_at: null, stale_inputs: false, source: 'request', error: null } as MarketMeta;
+  it('is null without a server meta', () => expect(liveMeta(undefined, [])).toBeNull());
+  it('takes the oldest row as-of', () =>
+    expect(liveMeta(meta, [{ price_as_of: '2026-10-29T14:05:00Z' }, { price_as_of: '2026-10-29T14:02:00Z' }])?.as_of)
+      .toBe('2026-10-29T14:02:00Z'));
+  it('falls back to the server as-of when no row has one', () =>
+    expect(liveMeta(meta, [{ price_as_of: null }, {}])?.as_of).toBe('2026-10-29T14:00:00Z'));
+  it('is refreshing when any row is', () =>
+    expect(liveMeta(meta, [{ price_refreshing: true }])?.refreshing).toBe(true));
+  it('is refreshing when the server says so', () =>
+    expect(liveMeta({ ...meta, refreshing: true }, [])?.refreshing).toBe(true));
+  it('keeps the server missing count (FX misses included)', () =>
+    expect(liveMeta(meta, [{ price_as_of: '2026-10-29T14:05:00Z' }])?.missing_count).toBe(1));
+});
+
+describe('liveTickers', () => {
+  it('lists the unique tickers of the PENDING, ACTIVE and PARTIAL rows only', () => {
+    expect(liveTickers([
+      { ticker: 'MSFT', status: 'ACTIVE' }, { ticker: 'MSFT', status: 'PARTIAL' },
+      { ticker: 'AAPL', status: 'CLOSED' }, { ticker: 'NVDA', status: 'PENDING' },
+      { ticker: 'AMD', status: 'CANCELLED' },
+    ])).toEqual(['MSFT', 'NVDA']);
+  });
+  it('is empty for no rows', () => expect(liveTickers([])).toEqual([]));
+});
+
 describe('TradesStore', () => {
   let store: InstanceType<typeof TradesStore>;
   let backend: HttpTestingController;
   let events: FakeEventStream;
+  let live: FakeLiveValues;
 
   beforeEach(() => {
     events = new FakeEventStream();
+    live = new FakeLiveValues();
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -150,6 +182,7 @@ describe('TradesStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        { provide: LiveValuesStore, useValue: live },
         TradesStore,
       ],
     });
@@ -179,6 +212,44 @@ describe('TradesStore', () => {
 
     expect(store.rows()).toHaveLength(1);
     expect(store.empty()).toBe(false);
+  });
+
+  it('rows take a newer live quote in place', () => {
+    store.setQuery({ page: 1, per_page: 25 });
+    tick();
+    respond({ items: [{ ...ROW, ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }] });
+    expect(store.rows()[0].current_price).toBe(410);
+
+    live.set('MSFT', { price: 412, as_of: '2026-10-29T14:01:00Z' });
+
+    expect(store.rows()[0].current_price).toBe(412);
+    expect(store.rows()[0].price_as_of).toBe('2026-10-29T14:01:00Z');
+  });
+
+  it('an older live quote never replaces a newer row price', () => {
+    store.setQuery({ page: 1, per_page: 25 });
+    tick();
+    respond({ items: [{ ...ROW, ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }] });
+    live.set('MSFT', { price: 399, as_of: '2026-10-29T13:00:00Z' });
+    expect(store.rows()[0].current_price).toBe(410);
+  });
+
+  it('meta follows the server meta and the patched rows', () => {
+    store.setQuery({ page: 1, per_page: 25 });
+    tick();
+    const market_meta = { as_of: '2026-10-29T14:00:00Z', refreshing: false, stale_count: 0, missing_count: 0,
+      incomplete: false, source: 'request', error: null } as MarketMeta;
+    respond({ items: [{ ...ROW, ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }], market_meta } as Partial<Collection<TradeRow>>);
+    expect(store.meta()?.refreshing).toBe(false);
+    live.set('MSFT', { price: 410, as_of: '2026-10-29T14:00:00Z', refreshing: true });
+    expect(store.meta()?.refreshing).toBe(true);
+  });
+
+  it('meta is null from an older server', () => {
+    store.setQuery({ page: 1, per_page: 25 });
+    tick();
+    respond();
+    expect(store.meta()).toBeNull();
   });
 
   it('sends the query it was given', () => {
