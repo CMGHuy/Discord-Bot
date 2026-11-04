@@ -63,7 +63,7 @@ Partner decision 2026-10-31: remove those six and note they are not used. **AABA
 **Smoke run** (plumbing check; no WR or ExpR recorded). 2026-10-31T19:10:43Z to 19:18:04Z, run beside two v191 `measure_atr_band_stop.py` jobs (partner approved):
 
 ```
-python data/backtest_results/v190/run_smoke_local.py --instrument v3 --exit-model v2 --scale-out --tp2 none --from 2019-01-01 --to 2019-12-31 --strategy "RSI" --json $OUT/smoke-v3.json --trades-jsonl $OUT/smoke-v3.jsonl
+python docs/superpowers/results/v190-data/run_smoke_local.py --instrument v3 --exit-model v2 --scale-out --tp2 none --from 2019-01-01 --to 2019-12-31 --strategy "RSI" --json $OUT/smoke-v3.json --trades-jsonl $OUT/smoke-v3.jsonl
 ```
 
 The wrapper only stubs `load_watchlist` to `[]`: the local `swing-db` rejected the `.env` credentials, and the first direct run died in the report step on the unresolvable `.env` DB host after the simulation had finished. The watchlist slice line therefore reads 0/0 and means nothing.

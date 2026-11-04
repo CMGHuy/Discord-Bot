@@ -14,7 +14,7 @@ Legs, run 2026-10-31 (20:00-22:05 UTC), one strategy per chunk, all 11 strategie
 - Leg A: `run_backtest_range.py --instrument v3 --tp2 none --train --exit-model v2 --scale-out --strategy "<name>" --json ... --trades-jsonl ...`
 - Leg B: `run_backtest_range.py --instrument v1 --data-source alpaca --tickers-file watchlist.txt --train --exit-model v2 --scale-out --strategy "<name>" --json ... --trades-jsonl ...`
 
-Both ran through a wrapper (`data/backtest_results/v190/run_smoke_local.py`) that only stubs the database-backed watchlist read in the run-end report line; it changes no trade. Leg A carries the AABA, INFO, LB, SE, STI and WYND removal recorded in the integrity results doc (they place no trades).
+Both ran through a wrapper (`docs/superpowers/results/v190-data/run_smoke_local.py`) that only stubs the database-backed watchlist read in the run-end report line; it changes no trade. Leg A carries the AABA, INFO, LB, SE, STI and WYND removal recorded in the integrity results doc (they place no trades).
 
 | Leg | Strategy | Rows | sha256 |
 | --- | --- | --- | --- |

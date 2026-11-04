@@ -173,3 +173,7 @@ data/scan_snapshots.json
 
 # v146 expectancy attribution: run output (TRAIN rows, latest report)
 data/reports/
+
+# v190 evidence now lives under docs/superpowers/results/v190-data/; data/ is the VM bind mount, never tracked
+data/backtest_results/
+data/.v190_*
