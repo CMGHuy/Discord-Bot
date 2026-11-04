@@ -15,11 +15,12 @@ export type EventName =
   | 'risk'
   | 'watchlist'
   | 'jobs'
-  | 'settings';
+  | 'settings'
+  | 'market';
 
 export const EVENT_NAMES: readonly EventName[] = [
   'trades', 'account', 'analytics', 'journal', 'scan',
-  'bot', 'risk', 'watchlist', 'jobs', 'settings',
+  'bot', 'risk', 'watchlist', 'jobs', 'settings', 'market',
 ] as const;
 
 export type StreamState = 'connecting' | 'live' | 'degraded';
@@ -64,6 +65,9 @@ const RECOVERY_INTERVAL_MS = 30_000;
  * events are thin by design (`{seq, at}`, no payload), so there is nothing
  * here to merge into anything. That is the property that stops a store
  * becoming a second, slowly diverging copy of the server's data.
+ *
+ * `market` is answered by a catch-up fetch (`/market/updates`), still never a
+ * patch from the event itself.
  *
  * **Degraded mode is invisible to subscribers.** When the stream fails, the
  * same counters get bumped by a 5-second timer instead. A store never asks
