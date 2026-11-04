@@ -309,3 +309,14 @@ def test_every_cell_carries_three_eras_and_the_header_the_boundary(tmp_path):
         assert cell["eras"]["pre"]["n"] == cell["n"], cell["id"]   # fixture trades close Jan-Apr 2026
         assert cell["notes"] == []
     assert len(report.render_markdown(data).splitlines()) <= report.MD_MAX_LINES
+
+
+def test_the_report_is_schema_2_and_every_cell_carries_its_cut_tag(tmp_path):
+    data = _build(tmp_path)
+    assert data["header"]["autopsy_schema"] == report.AUTOPSY_SCHEMA == 2
+    tags = report.cut_defined_at(data["header"]["sector_map"])
+    assert data["cells"]
+    for cell in data["cells"]:
+        assert cell["defined_at"] == tags[cell["cut"]], cell["id"]
+    assert set(data) == {"header", "cells", "tallies", "giveback"}
+    assert len(report.render_markdown(data).splitlines()) <= report.MD_MAX_LINES

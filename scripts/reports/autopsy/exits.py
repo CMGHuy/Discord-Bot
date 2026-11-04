@@ -74,6 +74,10 @@ def exit_cuts() -> tuple:
             ("gap_through_stop", _gap_through_stop), ("holding_bucket", _holding_bucket))
 
 
+EXIT_DEFINED_AT = {"exit_reason": "outcome", "near_tp_close": "outcome",
+                   "gap_through_stop": "outcome", "holding_bucket": "outcome"}
+
+
 def _overshoots(members: list) -> list[float]:
     return [GAP_THROUGH_R - r.gross_r for r in members
             if _gap_through_stop(r) == "through_stop"]

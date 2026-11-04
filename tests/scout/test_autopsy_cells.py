@@ -139,7 +139,7 @@ def test_cell_json_has_the_contract_keys_in_order():
     out = cell.to_json()
     assert list(out) == ["id", "cut", "value", "n", "weeks", "win_rate", "net_expr",
                          "gross_expr", "delta", "ci", "p", "q", "thin", "bar_covered_n", "extra",
-                         "eras", "notes"]
+                         "eras", "notes", "defined_at"]
     assert out["ci"] == [-0.123456, 0.654321] and out["p"] == 0.012345678 and out["q"] is None
     assert _bare("a=2", None).to_json()["ci"] is None
 

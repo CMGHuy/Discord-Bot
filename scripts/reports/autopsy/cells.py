@@ -56,6 +56,7 @@ class CellStats:
     extra: dict = field(default_factory=dict)
     eras: dict | None = None
     notes: list[str] = field(default_factory=list)
+    defined_at: str | None = None
 
     def to_json(self) -> dict:
         return {
@@ -68,6 +69,7 @@ class CellStats:
             "bar_covered_n": self.bar_covered_n, "extra": dict(self.extra),
             "eras": None if self.eras is None else {k: dict(v) for k, v in self.eras.items()},
             "notes": list(self.notes),
+            "defined_at": self.defined_at,
         }
 
 

@@ -16,6 +16,7 @@ from .cells import apply_bh, cut_cells, net_value
 from .rows import closed_trades, friction_settings
 
 MD_MAX_LINES = 150
+AUTOPSY_SCHEMA = 2     # v200: cells carry defined_at; scout_merge reads this to apply the known-at-entry rule
 DEFAULT_BALANCE = 10_000.0
 REJECTION_LINES = 8
 BAR_CUT_NAMES = frozenset(name for name, _ in bars.bar_cuts())
@@ -42,6 +43,16 @@ def _all_cuts(sector_of: dict) -> tuple:
     return (*cuts.categorical_cuts(sector_of), *bars.bar_cuts(), *exits.exit_cuts())
 
 
+def cut_defined_at(sector_of: dict) -> dict[str, str]:
+    """{cut name: entry|fill|outcome} in cut order; a missing or unknown tag raises."""
+    tags = {**cuts.CATEGORICAL_DEFINED_AT, **bars.BAR_DEFINED_AT, **exits.EXIT_DEFINED_AT}
+    names = [name for name, _ in _all_cuts(sector_of)]
+    bad = [n for n in names if tags.get(n) not in cuts.DEFINED_AT_TAGS]
+    if bad:
+        raise ValueError(f"cuts without a valid defined_at tag: {', '.join(bad)}")
+    return {n: tags[n] for n in names}
+
+
 def _decorate(cell, members: list, balance: float) -> None:
     if cell.cut in BAR_CUT_NAMES:
         cell.bar_covered_n = sum(bool(t.bars.get("covered")) for t in members)
@@ -55,10 +66,12 @@ def _decorate(cell, members: list, balance: float) -> None:
 def _cells(trades: list, sector_of: dict, *, n_resamples: int, seed: int,
            balance: float) -> list:
     out = []
+    tags = cut_defined_at(sector_of)
     for name, key in _all_cuts(sector_of):
         for cell in cut_cells(name, trades, key, n_resamples=n_resamples, seed=seed):
             members = [t for t in trades if _key_text(key(t)) == cell.value]
             _decorate(cell, members, balance)
+            cell.defined_at = tags[name]
             out.append(cell)
     return out
 
@@ -80,7 +93,7 @@ def _header(trades: list, covered_n: int, tested: int, *, n_resamples: int, seed
     wins = round(sum(1 for t in trades if t.gross_r > 0) / len(trades), 4) if trades else None
     return {"window": [exit_days[0], exit_days[-1]] if exit_days else [None, None],
             "n": len(trades), "pooled_net_expr": pooled, "pooled_win_rate": wins,
-            "net_of_frictions": "modelled", "cells_tested": tested, "bar_covered_n": covered_n,
+            "net_of_frictions": "modelled", "autopsy_schema": AUTOPSY_SCHEMA, "cells_tested": tested, "bar_covered_n": covered_n,
             "resamples": n_resamples, "seed": seed, "notes": _notes(trades, balance)}
 
 
@@ -202,6 +215,8 @@ def _extra_text(c: dict) -> str:
         parts.append(f"stop {_fmt(e['mean_stop_atr'], '.2f')} ATR, loss at 2% "
                      f"${_fmt(e['dollar_loss_at_2pct'], '.0f')}, "
                      f"overshoot {_fmt(e['mean_overshoot_r'])}")
+    if c.get("defined_at") in ("fill", "outcome"):
+        parts.append(f"{c['defined_at']}-defined (not known at entry)")
     parts += c.get("notes", [])
     return "; ".join(parts)
 

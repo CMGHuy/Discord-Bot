@@ -329,6 +329,14 @@ def bar_cuts() -> tuple:
             ("near_stop_reversal", _near_stop_reversal))
 
 
+BAR_DEFINED_AT = {
+    "open_gap_bucket": "fill",          # bars.open_gap_pct, measured on the bar the fill selected
+    "gapped_through_entry": "entry",    # bars.gapped_through: the fill happens at that open
+    "dollar_volume_bucket": "entry",    # bars.dollar_volume
+    "near_stop_reversal": "outcome",    # bars.reversal, bars.wider_stop_lost
+}
+
+
 def fill_tallies(rows: list[BookRow]) -> list[Tally]:
     """Fill reality over every exported row (one row = one plan or one closed trade)."""
     counts: Counter = Counter()
