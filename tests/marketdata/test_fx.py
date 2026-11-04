@@ -23,6 +23,7 @@ def _frame(closes: dict[str, float]) -> pd.DataFrame:
 def _isolated(monkeypatch):
     monkeypatch.setattr(fx, "_frames", {})
     monkeypatch.setattr(fx, "_quote_codes", {})
+    monkeypatch.setattr(fx, "_unknown_until", {})
 
 
 @pytest.fixture

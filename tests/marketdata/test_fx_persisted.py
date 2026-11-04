@@ -37,6 +37,7 @@ def _boom(*_a, **_k):
 def _isolated(monkeypatch):
     monkeypatch.setattr(fx, "_frames", {})
     monkeypatch.setattr(fx, "_quote_codes", {})
+    monkeypatch.setattr(fx, "_unknown_until", {})
     monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
 
 

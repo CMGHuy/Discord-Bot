@@ -42,13 +42,21 @@ def _day(stamp) -> date:
     return datetime.now(timezone.utc).date()
 
 
+def _stored_quotes(tickers) -> dict[str, str | None]:
+    """Upper-cased ticker -> stored quote code, one `fx.stored_codes` query (none when empty)."""
+    keys = [key for key in (str(t or "").upper().strip() for t in tickers) if key]
+    return fx.stored_codes(keys) if keys else {}
+
+
 class _Rates:
     """One call's memo: each ticker's quote, each (currency, day) rate, once."""
 
-    def __init__(self, account: str, fetch: bool = True):
+    def __init__(self, account: str, fetch: bool = True, tickers=()):
         self.account = account
         self.fetch = fetch
-        self._quotes: dict[str, str | None] = {}
+        # v205 L1-b: never-fetch reads resolve every ticker of the call in one query;
+        # fetch=True keeps the one-argument per-ticker seam (`quote_code`).
+        self._quotes: dict[str, str | None] = {} if fetch else _stored_quotes(tickers)
         self._rates: dict[tuple[str, date], float | None] = {}
 
     def quote(self, ticker) -> str | None:
@@ -107,7 +115,8 @@ def to_account_currency(rows: list[dict], *, account: str | None = None,
                         fetch: bool = True) -> list[dict]:
     """Copies of `rows`, amounts in the account currency, `fx_missing` on each.
     `fetch=False` never touches the network (an unknown quote or rate flags the row)."""
-    rates = _Rates(account or fx.account_currency_code(), fetch)
+    rates = _Rates(account or fx.account_currency_code(), fetch,
+                   tickers=[row.get("ticker") for row in rows])
     out = []
     for row in rows:
         value, missing = _converted(row, rates)

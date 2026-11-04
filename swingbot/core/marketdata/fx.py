@@ -44,6 +44,10 @@ FALLBACK_DAYS = 7
 #: How long this process trusts a loaded pair frame (or a miss) before asking
 #: the cache again: one admin page converts hundreds of rows.
 FRAME_TTL_S = 15 * 60
+#: v205 L1-b: how long an unknown (or absent) stored quote code is remembered,
+#: so a request never re-asks the store per ticker, and a code the refresher
+#: resolves meanwhile shows within this long.
+UNKNOWN_MEMO_S = 300
 
 #: Yahoo quotes some exchanges in a minor unit: LSE pence, JSE cents, TASE agorot.
 MINOR_UNITS: dict[str, tuple[str, float]] = {
@@ -56,6 +60,7 @@ DEFAULT_ACCOUNT_CODE = "EUR"
 
 _frames: dict[str, tuple[float, pd.DataFrame | None]] = {}
 _quote_codes: dict[str, str] = {}
+_unknown_until: dict[str, float] = {}
 
 
 def account_currency_code() -> str:
@@ -102,15 +107,50 @@ def quote_currency_code(ticker: str, *, fetch: bool = True) -> str | None:
 
 def _stored_code(key: str) -> str | None:
     """v201: the refresher's persisted answer; never the network. Unknown/missing -> None."""
+    return stored_codes([key]).get(key)
+
+
+def stored_codes(keys: Iterable[str]) -> dict[str, str | None]:
+    """v205 L1-b: the refresher's persisted answers for many tickers in one query.
+
+    A known code is memoised for the process (`_quote_codes`); an unknown or
+    absent one for UNKNOWN_MEMO_S (`_unknown_until`, monotonic `_clock()`).
+    Keys in neither memo cost one `get_many` together. A store error answers
+    None for those keys and memoises nothing, so the next call asks again."""
+    now = _clock()
+    out: dict[str, str | None] = {}
+    ask: list[str] = []
+    for key in dict.fromkeys(str(k or "").upper().strip() for k in keys):
+        if not key:
+            continue
+        if key in _quote_codes:
+            out[key] = _quote_codes[key]
+        elif _unknown_until.get(key, 0.0) > now:
+            out[key] = None
+        else:
+            ask.append(key)
+    if ask:
+        out.update(_ask_store(ask, now))
+    return out
+
+
+def _ask_store(keys: list[str], now: float) -> dict[str, str | None]:
+    """One `get_many` for `keys`; memoise every answer (see `stored_codes`)."""
     try:
-        row = quote_currency_repo().get_many([key]).get(key)
+        rows = quote_currency_repo().get_many(keys)
     except Exception as exc:
         swallowed(log, "marketdata.fx.stored_code", exc, level=logging.DEBUG)
-        return None
-    if not row or row.get("outcome") != "known" or not row.get("code"):
-        return None
-    _quote_codes[key] = str(row["code"])
-    return _quote_codes[key]
+        return dict.fromkeys(keys)
+    out: dict[str, str | None] = {}
+    for key in keys:
+        row = rows.get(key)
+        if row and row.get("outcome") == "known" and row.get("code"):
+            _quote_codes[key] = str(row["code"])
+            out[key] = _quote_codes[key]
+        else:
+            _unknown_until[key] = now + UNKNOWN_MEMO_S
+            out[key] = None
+    return out
 
 
 def _ask_provider(key: str) -> tuple[str | None, bool]:
