@@ -61,7 +61,9 @@ def test_v201_001_sits_on_the_single_prior_head():
     scripts = ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
     revision = scripts.get_revision("v201_001")
     assert scripts.get_revision(revision.down_revision) is not None
-    assert scripts.get_heads() == ["v201_001"]
+    heads = scripts.get_heads()
+    assert len(heads) == 1      # later revisions may stack on v201_001; never branch
+    assert "v201_001" in {r.revision for r in scripts.iterate_revisions(heads[0], "base")}
 
 
 def _tables(connection) -> set[str]:
