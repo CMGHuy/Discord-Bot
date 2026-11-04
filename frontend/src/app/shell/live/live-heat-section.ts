@@ -71,7 +71,7 @@ let nextId = 0;
 /**
  * Portfolio heat -- v203 (spec v202 §4.3). Exactly the Risk page's heat
  * (v202's /live computes it with the same `heat.open_heat`), read from
- * /live only: this component never sees RiskStore. Amber from 80 % of the
+ * /live only: this component never sees the risk workspace store. Amber from 80 % of the
  * cap, "Over cap" in words above 100 %, never red in Phase 1.
  */
 @Component({
