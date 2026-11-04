@@ -467,6 +467,8 @@ The CI pipeline above is for *code* changes.
 | `PLAN_REBUILD_ENABLED` | `true` | 2026-10-31 (V171-38 day C; read-back passed 2026-11-03: 11 plans stamped, max quote age 3.44 s, 0 misses) |
 | `TAPE_SHARED_ENABLED` | `true` | 2026-11-03 ~12:30 UTC (V171-38 day D, pre-open; four indices read back with prices; session read-back and 3-width screenshots pending) |
 
+Success week (V171-38 Step 6): **2026-11-04..2026-11-10**, baseline 2026-10-21..2026-10-27. Installed 2026-11-04 ~12:00 UTC: report cron 21:15 UTC weekdays (`logs/v171_success_cron.log`, `logs/v171_success.json`) and tape sampler 13:20 UTC weekdays (`logs/v171_tape_samples.jsonl`, `logs/v171_tape_sampler.log`). Both remove themselves after the last day; the verdict is read in V171-39.
+
 Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin refresher`;
 (2) the previous image per [Rolling back](#rolling-back);
 (3) `scripts/ops/rollback_to.sh` with `--dry-run` first, only for damaged data.
