@@ -1,8 +1,8 @@
 # Known traps
 
 Referenced from the root `CLAUDE.md`. Each of these has already cost a
-session — read this before touching data caching, `scan_engine`/`scan_embeds`,
-`embeds.py`, or the scan loop.
+session — read this before touching data caching, `scanning/scan_run.py`,
+`alert_embeds.py`/`embeds.py`, or the scan loop.
 
 ## Two OHLCV caches
 
