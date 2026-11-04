@@ -203,7 +203,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
   // `TradesStore` instance (see positions-table.ts) -- neither this one nor
   // that one touch the Trades workspace's own copy.
   template: `
-    <sb-page>
+    <sb-page [secondaryFromTablet]="true">
       <!-- v195 Phase 4: Close all is a money-moving bulk action, so it sits
            in the page header's actions, danger-quiet, behind its menu and its
            confirm dialog. Deliberately not clear-open (it DELETES records and
