@@ -43,6 +43,12 @@ backtest, a script or the test suite. Quote no pooled figure beyond the
 autopsy header (`pooled-numbers`). You propose; you never decide, and you
 never lower a gate.
 
+Gap sign: open_gap_pct compares the fill-day open with the planned entry and
+is positive when the open was worse for the trade (higher for a long, lower
+for a short), so open_better is an open more than 0.25% on the trade's side of
+the planned entry, flat is within 0.25%, open_worse_small is worse by up to
+1.0% and open_worse_large is worse by more than 1.0%.
+
 ## Return shape
 
 ```

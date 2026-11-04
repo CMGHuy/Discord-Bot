@@ -33,6 +33,11 @@ already measured leaves R on the table.
 - Bar-covered N beside total N on every bar-reading cell; a thinly covered cell says so in its claim.
 - `order_form` says how the exit rests as an order; `manual_actions` names any mid-trade step and the alert message that carries it.
 - An exit idea an existing results doc already measures routes to `harvest-headroom <results path>`.
+- Gap sign: open_gap_pct compares the fill-day open with the planned entry and
+  is positive when the open was worse for the trade (higher for a long, lower
+  for a short), so open_better is an open more than 0.25% on the trade's side of
+  the planned entry, flat is within 0.25%, open_worse_small is worse by up to
+  1.0% and open_worse_large is worse by more than 1.0%.
 
 ## Red flags
 

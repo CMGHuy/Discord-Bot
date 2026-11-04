@@ -136,7 +136,7 @@ def test_bar_cells_carry_bar_covered_n(tmp_path):
     bar_names = {name for name, _ in bars.bar_cuts()}
     gaps = {c["value"]: (c["n"], c["bar_covered_n"])
             for c in data["cells"] if c["cut"] == "open_gap_bucket"}
-    assert gaps == {"flat": (20, 20), "adverse_small": (4, 4)}
+    assert gaps == {"flat": (20, 20), "open_worse_small": (4, 4)}
     assert data["header"]["bar_covered_n"] == 24
     assert all(c["bar_covered_n"] <= c["n"] for c in data["cells"] if c["cut"] in bar_names)
     assert all(c["bar_covered_n"] is None for c in data["cells"] if c["cut"] == "strategy_horizon")

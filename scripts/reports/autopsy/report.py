@@ -30,6 +30,7 @@ NOTES = (
     "alert hour has hour granularity: 09:00-09:29 ET counts as the regular session",
     "every row drawn from this report is exploratory: the window overlaps the 2026 holdout "
     "(spec v161 boundary 5)",
+    bars.GAP_SIGN_NOTE,
 )
 
 

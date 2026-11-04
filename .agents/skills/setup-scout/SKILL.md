@@ -33,6 +33,11 @@ registry. Read `.claude/skills/setup-scout/references/playbook.md` too.
 - Variants of the one `SCREEN-PASS` (`screen-uptrend_pullback`) only as a new mechanism, never a new threshold.
 - `sector_today` is today's map, not point-in-time: describe concentration, never filter on it.
 - Any tightening names in `pairs_with` where the volume comes back.
+- Gap sign: open_gap_pct compares the fill-day open with the planned entry and
+  is positive when the open was worse for the trade (higher for a long, lower
+  for a short), so open_better is an open more than 0.25% on the trade's side of
+  the planned entry, flat is within 0.25%, open_worse_small is worse by up to
+  1.0% and open_worse_large is worse by more than 1.0%.
 
 ## Red flags
 
