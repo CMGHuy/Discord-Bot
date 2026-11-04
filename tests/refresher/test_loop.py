@@ -46,6 +46,8 @@ def env(monkeypatch):
     monkeypatch.setattr(loop, "_scan_running", lambda: False)
     monkeypatch.setattr(loop, "STEPS", [])
     monkeypatch.setattr(loop, "_last_full", None)
+    monkeypatch.setattr(loop.config, "ADMIN_REFRESHER", "on")
+    monkeypatch.setattr(loop.config, "MARKETDATA_LAYER", "on")
     return SimpleNamespace(queue=queue, beat=beat)
 
 
@@ -163,3 +165,27 @@ def test_symbol_set_failure_leaves_the_queue_untouched(env, monkeypatch):
     report = loop.run_cycle(REGULAR)
     assert report.error == "RuntimeError: db down"
     assert env.queue.rows == [{"kind": "quote", "key": "NEW", "priority": 0}]
+
+
+@pytest.mark.parametrize("attr,value", [("ADMIN_REFRESHER", "off"), ("MARKETDATA_LAYER", "off")])
+def test_kill_switch_idles_the_cycle_but_keeps_the_heartbeat(env, monkeypatch, attr, value):
+    monkeypatch.setattr(loop.config, attr, value)
+    env.queue.rows = [{"kind": "quote", "key": "NEW", "priority": 0}]
+    seen = []
+    loop.STEPS.append(seen.append)
+    report = loop.run_cycle(REGULAR)
+    assert seen == []
+    assert len(env.queue.rows) == 1  # the queue is not drained
+    assert len(env.beat.beats) == 1 and report.error is None
+
+
+def test_flipping_the_kill_switch_back_on_resumes_the_steps(env, monkeypatch):
+    seen = []
+    loop.STEPS.append(seen.append)
+    monkeypatch.setattr(loop.config, "ADMIN_REFRESHER", "off")
+    loop.run_cycle(REGULAR)
+    assert seen == []
+    monkeypatch.setattr(loop.config, "ADMIN_REFRESHER", "on")
+    monkeypatch.setattr(loop.config, "MARKETDATA_LAYER", "on")
+    loop.run_cycle(REGULAR + timedelta(seconds=1))
+    assert len(seen) == 1

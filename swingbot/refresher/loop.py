@@ -119,11 +119,17 @@ def run_cycle(now: datetime | None = None) -> CycleReport:
     report = CycleReport(session=state, cadence_s=admin_refresh.cadence_s(state))
     started = time.monotonic()
     try:
-        full = _last_full is None or (now - _last_full).total_seconds() >= report.cadence_s - 1.0
-        ctx = _context(now, state, report, full=full)
-        if full:
-            _last_full = now
-        _run_steps(ctx)
+        if admin_refresh.refresher_on():
+            full = _last_full is None or (now - _last_full).total_seconds() >= report.cadence_s - 1.0
+            ctx = _context(now, state, report, full=full)
+            if full:
+                _last_full = now
+            _run_steps(ctx)
+        else:
+            # Kill switch (ADMIN_REFRESHER / MARKETDATA_LAYER off): no fetch and
+            # no queue drain, but the heartbeat below still beats; the next
+            # cycle after a .env hot-reload resumes with a full pass.
+            _last_full = None
     except Exception as exc:  # noqa: BLE001 - a cycle never kills the process
         report.error = _describe(exc)
         swallowed(log, "ops.refresher.cycle", exc, level=logging.WARNING)
