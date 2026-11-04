@@ -79,14 +79,16 @@ def _guard(tag: str, fn: Callable[[], object]) -> None:
     try:
         fn()
     except Exception as exc:  # noqa: BLE001 - housekeeping never kills a cycle
-        swallowed(log, tag, exc, level=logging.WARNING)
+        swallowed(log, "ops.refresher.guard", exc, "refresher step %s failed: %s", tag, exc,
+                  level=logging.WARNING)
 
 
 def _scan_running() -> bool:
     try:
         from swingbot.core.scanning import runstate
         return bool(runstate.is_scan_running())
-    except Exception:  # noqa: BLE001 - unknown reads as "not running"
+    except Exception as exc:  # noqa: BLE001 - unknown reads as "not running"
+        swallowed(log, "ops.refresher.scan_running", exc, level=logging.DEBUG)
         return False
 
 
@@ -107,7 +109,7 @@ def _run_steps(ctx: CycleContext) -> None:
         except Exception as exc:  # noqa: BLE001 - one step never stops the others
             if ctx.report.error is None:
                 ctx.report.error = _describe(exc)
-            swallowed(log, "refresher.step", exc, level=logging.WARNING)
+            swallowed(log, "ops.refresher.step", exc, level=logging.WARNING)
 
 
 def run_cycle(now: datetime | None = None) -> CycleReport:
@@ -124,14 +126,14 @@ def run_cycle(now: datetime | None = None) -> CycleReport:
         _run_steps(ctx)
     except Exception as exc:  # noqa: BLE001 - a cycle never kills the process
         report.error = _describe(exc)
-        swallowed(log, "refresher.cycle", exc, level=logging.WARNING)
-    _guard("refresher.prune", lambda: refresh_queue_repo().prune(
+        swallowed(log, "ops.refresher.cycle", exc, level=logging.WARNING)
+    _guard("prune", lambda: refresh_queue_repo().prune(
         now - timedelta(seconds=admin_refresh.QUEUE_RETENTION_S)))
-    _guard("refresher.heartbeat", lambda: refresher_heartbeat_repo().beat(
+    _guard("heartbeat", lambda: refresher_heartbeat_repo().beat(
         cadence_s=report.cadence_s, session=state, last_error=report.error, now=now,
         cycle_ms=int((time.monotonic() - started) * 1000)))
     if report.changed:
-        _guard("refresher.notify", lambda: notify.publish("market"))
+        _guard("notify", lambda: notify.publish("market"))
     return report
 
 
@@ -146,7 +148,7 @@ def _reload_if_env_changed() -> None:
         if config._env_signature() != config._ENV_MTIME:
             config.reload()
     except Exception as exc:  # noqa: BLE001 - a bad .env keeps the old values
-        swallowed(log, "refresher.env_reload", exc, level=logging.WARNING)
+        swallowed(log, "ops.refresher.env_reload", exc, level=logging.WARNING)
 
 
 def _queue_pending() -> bool:
@@ -156,7 +158,7 @@ def _queue_pending() -> bool:
                 "SELECT EXISTS (SELECT 1 FROM market_refresh_queue WHERE taken_at IS NULL)"
             )).scalar())
     except Exception as exc:  # noqa: BLE001 - a missing table reads as "nothing queued"
-        swallowed(log, "refresher.queue_pending", exc, level=logging.DEBUG)
+        swallowed(log, "ops.refresher.queue_pending", exc, level=logging.DEBUG)
         return False
 
 
@@ -164,7 +166,7 @@ def _cadence_now() -> float:
     try:
         return admin_refresh.cadence_s(session.session_state())
     except Exception as exc:  # noqa: BLE001 - fall back to the poll interval
-        swallowed(log, "refresher.cadence", exc, level=logging.WARNING)
+        swallowed(log, "ops.refresher.cadence", exc, level=logging.WARNING)
         return QUEUE_POLL_S
 
 
@@ -195,5 +197,5 @@ def run_forever(stop: threading.Event) -> None:
                     continue
                 _serve(stop)
         except Exception as exc:  # noqa: BLE001 - DB down at start: back off, retry
-            swallowed(log, "refresher.lock", exc, level=logging.WARNING)
+            swallowed(log, "ops.refresher.lock", exc, level=logging.WARNING)
             _wait(stop, LOCK_RETRY_S)

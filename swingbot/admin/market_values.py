@@ -74,7 +74,7 @@ def _marks(keys: list[str]) -> tuple[set[str], dict[str, str]]:
         repo = market_refresh.refresh_mark_repo()
         return set(repo.active(keys, now=datetime.now(timezone.utc))), dict(repo.errors(keys))
     except Exception as exc:  # noqa: BLE001 - fail open: the page renders without marks
-        swallowed(log, "admin.market_values.marks", exc, "refresh marks unreadable: %s", exc)
+        swallowed(log, "ops.admin.market_values.marks", exc, "refresh marks unreadable: %s", exc)
         return set(), {}
 
 
@@ -100,7 +100,7 @@ def _enqueue(kind: str, keys: list[str], priority: int) -> None:
     try:
         market_refresh.refresh_queue_repo().enqueue(kind, keys, priority=priority)
     except Exception as exc:  # noqa: BLE001 - a failed enqueue never fails the page
-        swallowed(log, "admin.market_values.enqueue", exc, "refresh enqueue failed: %s", exc)
+        swallowed(log, "ops.admin.market_values.enqueue", exc, "refresh enqueue failed: %s", exc)
 
 
 def read_quotes(symbols: Iterable[str], *, kind: DataKind = DataKind.QUOTE,

@@ -716,7 +716,9 @@ def _disk_frames(symbols: list[str]) -> dict:
     for sym in symbols:
         try:
             df = data_store.load_normalized(sym, "daily")
-        except Exception:
+        except Exception as exc:
+            swallowed(logging.getLogger(__name__), "ops.market.disk_frames", exc,
+                      "disk frame for %s unreadable: %s", sym, exc, level=logging.DEBUG)
             continue
         if df is not None:
             frames[sym] = df

@@ -52,7 +52,7 @@ def _announce_marks(ctx: "CycleContext") -> None:
     try:
         notify.publish("market")
     except Exception as exc:  # noqa: BLE001 - a missed NOTIFY never stops a refresh
-        swallowed(log, "refresher.notify_marks", exc, level=logging.WARNING)
+        swallowed(log, "ops.refresher.notify_marks", exc, level=logging.WARNING)
 
 
 def _miss_reason(ctx: "CycleContext") -> str:
@@ -117,7 +117,7 @@ def _traded_tickers() -> list[str]:
             rows = conn.execute(sa.text("SELECT DISTINCT ticker FROM trades")).scalars()
             return [str(t).upper() for t in rows if t]
     except Exception as exc:  # noqa: BLE001
-        swallowed(log, "refresher.traded_tickers", exc, level=logging.DEBUG)
+        swallowed(log, "ops.refresher.traded_tickers", exc, level=logging.DEBUG)
         return []
 
 

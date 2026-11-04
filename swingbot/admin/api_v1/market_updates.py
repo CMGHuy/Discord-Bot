@@ -56,7 +56,7 @@ def _mark_changes(since: datetime) -> list[dict]:
         from swingbot.core.db.repositories import market_refresh
         return list(market_refresh.refresh_mark_repo().changed_since(since))
     except Exception as exc:  # noqa: BLE001 - fail open: updates carry no mark changes
-        swallowed(log, "admin.market_updates.marks", exc, "mark changes unreadable: %s", exc)
+        swallowed(log, "ops.admin.market_updates.marks", exc, "mark changes unreadable: %s", exc)
         return []
 
 
@@ -74,7 +74,7 @@ def _quote_updates(since: datetime, marks: list[dict]) -> list[dict]:
     try:
         rows = _cache_changes(since)
     except Exception as exc:  # noqa: BLE001 - fail open: marks alone still tell the SPA
-        swallowed(log, "admin.market_updates.cache", exc, "cache changes unreadable: %s", exc)
+        swallowed(log, "ops.admin.market_updates.cache", exc, "cache changes unreadable: %s", exc)
         rows = []
     symbols = _changed_symbols(rows, marks)
     tape_syms = [s for s in symbols if tape.is_tape_symbol(s)]
@@ -92,7 +92,7 @@ def _heartbeat_row() -> dict | None:
         from swingbot.core.db.repositories import market_refresh
         return market_refresh.refresher_heartbeat_repo().read()
     except Exception as exc:  # noqa: BLE001 - fail open to "no row"
-        swallowed(log, "admin.market_updates.heartbeat", exc, "heartbeat unreadable: %s", exc)
+        swallowed(log, "ops.admin.market_updates.heartbeat", exc, "heartbeat unreadable: %s", exc)
         return None
 
 

@@ -21,12 +21,14 @@ run a scan (minutes of work) -- it reads the plan set PlanStore already holds
 from __future__ import annotations
 
 import copy
+import logging
 import threading
 from collections import OrderedDict
 
 import pandas as pd
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.session import session_date
 from swingbot.core.marketdata import data_refresh, data_store
 from swingbot.core.marketdata.data import (
@@ -154,7 +156,9 @@ def _disk_frames(symbols: list[str]) -> dict:
     for sym in symbols:
         try:
             df = data_store.load_normalized(sym, "daily")
-        except Exception:
+        except Exception as exc:
+            swallowed(logging.getLogger(__name__), "ops.watchlist_rows.disk_frames", exc,
+                      "disk frame for %s unreadable: %s", sym, exc, level=logging.DEBUG)
             continue
         if df is not None:
             frames[sym] = df
