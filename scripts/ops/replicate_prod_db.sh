@@ -73,10 +73,10 @@ bash "$SSH_HETZNER" "true" >/dev/null 2>&1 \
 
 # Incremental only when the target exists on production's revision; otherwise rebuild.
 LOCAL_PSQL=(docker compose exec -T db psql -U swingbot -At)
-PROD_REV="$(bash "$SSH_HETZNER" "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -At -c 'select version_num from alembic_version'" 2>/dev/null | tr -d '')"
-HAVE_TARGET="$("${LOCAL_PSQL[@]}" -d postgres -c "select 1 from pg_database where datname='$TARGET'" | tr -d '')"
+PROD_REV="$(bash "$SSH_HETZNER" "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -At -c 'select version_num from alembic_version'" 2>/dev/null | tr -d '\r')"
+HAVE_TARGET="$("${LOCAL_PSQL[@]}" -d postgres -c "select 1 from pg_database where datname='$TARGET'" | tr -d '\r')"
 LOCAL_REV=""
-[ "$HAVE_TARGET" = "1" ] && LOCAL_REV="$("${LOCAL_PSQL[@]}" -d "$TARGET" -c 'select version_num from alembic_version' 2>/dev/null | tr -d '' || true)"
+[ "$HAVE_TARGET" = "1" ] && LOCAL_REV="$("${LOCAL_PSQL[@]}" -d "$TARGET" -c 'select version_num from alembic_version' 2>/dev/null | tr -d '\r' || true)"
 MODE="full"
 if [ "$MODE_FLAG" != "full" ] && [ -n "$PROD_REV" ] && [ "$PROD_REV" = "$LOCAL_REV" ]; then MODE="incremental"; fi
 echo "replicate_prod_db: mode=$MODE (prod alembic=${PROD_REV:-?} local=${LOCAL_REV:-none})"
@@ -113,7 +113,7 @@ PROD_COUNTS="$(bash "$SSH_HETZNER" "cd /opt/swing-bot && docker compose exec -T 
 
 LOCAL_BEFORE=""
 if [ "$MODE" = "incremental" ]; then
-  LOCAL_BEFORE="$(docker compose exec -T db psql -U swingbot -d "$TARGET" -At -F '|' -c "$COUNTS_SQL" | tr -d '')"
+  LOCAL_BEFORE="$(docker compose exec -T db psql -U swingbot -d "$TARGET" -At -F '|' -c "$COUNTS_SQL" | tr -d '\r')"
   # One transaction: a failed replay leaves the replica exactly as it was.
   gunzip -c "$OUT" | docker compose exec -T db psql -U swingbot -d "$TARGET" -q -1 -v ON_ERROR_STOP=1 >/dev/null     || { echo "replicate_prod_db: FAIL top-up rolled back; replica unchanged (try --full)" >&2; exit 1; }
 # restore_db.sh owns the drop/create/replay and its own live-db refusal.

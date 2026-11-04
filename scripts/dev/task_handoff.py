@@ -215,8 +215,8 @@ DB_PREFIXES = (
 )
 FRONTEND_PREFIXES = ("frontend/",)
 TEST_DB_URL = testrun.TEST_DB_URL_DEFAULT
-TEST_DB_CONTAINER = "swing-db-test"
-TEST_DB_SERVICE = "db-test"
+TEST_DB_CONTAINER = "swing-db"
+TEST_DB_SERVICE = "db"
 NG_TEST_WRAPPER = "frontend/scripts/ng-test.mjs"
 MAX_IMAGE_READS = 4
 _TASK_HEADING_RE = re.compile(r"^### Task ([A-Za-z0-9-]+):")
@@ -247,9 +247,10 @@ def _base_lines(wt: str, branch: str, attribution: str) -> list[str]:
 
 def _db_lines() -> list[str]:
     return [
-        f"- Database: tests use `TEST_DATABASE_URL={TEST_DB_URL}`, the one shared test server "
-        f"(compose service `{TEST_DB_SERVICE}`, container `{TEST_DB_CONTAINER}`, profile `test`). "
-        "The test fixtures create their own databases on it; never create a container or a database by hand.",
+        f"- Database: tests use the one shared local server (compose service `{TEST_DB_SERVICE}`, "
+        f"container `{TEST_DB_CONTAINER}`, 127.0.0.1:56789). The fixtures log in with `.env`'s credentials "
+        "themselves (`scripts/dev/swing_db.py`); you may read `.env`'s database values, never print, log or quote them. "
+        "They create their own databases on it; never create a container or a database by hand.",
         "- If that server is unreachable, return `BLOCKED:`; the controller owns the containers and `/replicate-prod-db`.",
     ]
 
