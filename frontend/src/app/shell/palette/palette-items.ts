@@ -62,13 +62,13 @@ const tab = (route: string, page: string, id: string, label: string): PaletteIte
  * is V195-22's; until it lands the System route falls back to Settings.
  */
 export const TAB_PAGES: readonly PaletteItem[] = [
-  tab('/analytics', 'Analytics', 'attribution', 'Attribution'),
-  tab('/analytics', 'Analytics', 'execution', 'Execution'),
-  tab('/analytics', 'Analytics', 'edge', 'Edge'),
-  tab('/analytics', 'Analytics', 'pipeline', 'Pipeline'),
-  tab('/analytics', 'Analytics', 'tuning', 'Tuning'),
-  tab('/analytics', 'Analytics', 'partials', 'Partials'),
-  tab('/reports', 'Reports', 'gates', 'Gate counterfactual'),
+  tab('/insights/analytics', 'Analytics', 'attribution', 'Attribution'),
+  tab('/insights/analytics', 'Analytics', 'execution', 'Execution'),
+  tab('/insights/analytics', 'Analytics', 'edge', 'Edge'),
+  tab('/insights/analytics', 'Analytics', 'pipeline', 'Pipeline'),
+  tab('/insights/analytics', 'Analytics', 'tuning', 'Tuning'),
+  tab('/insights/analytics', 'Analytics', 'partials', 'Partials'),
+  tab('/insights/reports', 'Reports', 'gates', 'Gate counterfactual'),
   tab('/system', 'System', 'scan', 'Scan'),
   tab('/system', 'System', 'providers', 'Providers'),
   tab('/system', 'System', 'logs', 'Logs'),

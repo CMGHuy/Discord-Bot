@@ -84,7 +84,7 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/workspaces/dashboard/panels/recent-activity.ts', /<a panel-actions class="all-link sb-hit"/],
     ['src/app/workspaces/plans/plan-detail.ts', /<a class="record-link sb-hit"/],
     ['src/app/workspaces/watchlist/ticker-detail.ts', /<a panel-actions class="all-link sb-hit"/],
-    ['src/app/workspaces/analytics/tabs/overview.ts', /<a class="sb-hit" routerLink="\/calendar"/],
+    ['src/app/workspaces/analytics/tabs/overview.ts', /<a class="sb-hit" routerLink="\/trades\/calendar"/],
     ['src/app/workspaces/system/logs-tab.ts', /<a slot="raw" class="raw sb-hit"/],
     ['src/app/workspaces/system/settings-tab.ts', /<a class="export sb-hit"/],
     ['src/app/workspaces/system/settings-tab.ts', /<summary class="sb-hit">/],

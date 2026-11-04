@@ -117,20 +117,20 @@ function sign(value: number | null): 'pos' | 'neg' | null {
     <sb-page [heading]="title()" [description]="caption">
       <!-- The header's right: the stale notice, then the day stepper. The
            month link keeps the filtered-month return the old "← Calendar"
-           link carried (v165 D6); the breadcrumb crumb opens /calendar bare. -->
+           link carried (v165 D6); the breadcrumb crumb opens /trades/calendar bare. -->
       <div page-actions class="page-actions">
         @if (store.error(); as message) {
           <p class="stale" role="status">{{ message }}</p>
         }
         <nav class="steps" aria-label="Trading days">
           @if (store.prevDay(); as prev) {
-            <a class="prev" [routerLink]="['/calendar', prev]" [queryParams]="store.filterParams()">‹ prev day</a>
+            <a class="prev" [routerLink]="['/trades/calendar', prev]" [queryParams]="store.filterParams()">‹ prev day</a>
           } @else {
             <span class="prev off">‹ prev day</span>
           }
-          <a class="month" [routerLink]="['/calendar']" [queryParams]="backParams()">{{ monthName() ?? 'Calendar' }}</a>
+          <a class="month" [routerLink]="['/trades/calendar']" [queryParams]="backParams()">{{ monthName() ?? 'Calendar' }}</a>
           @if (store.nextDay(); as next) {
-            <a class="next" [routerLink]="['/calendar', next]" [queryParams]="store.filterParams()">next day ›</a>
+            <a class="next" [routerLink]="['/trades/calendar', next]" [queryParams]="store.filterParams()">next day ›</a>
           } @else {
             <span class="next off">next day ›</span>
           }

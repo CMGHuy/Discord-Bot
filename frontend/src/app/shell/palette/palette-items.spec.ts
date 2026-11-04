@@ -37,9 +37,9 @@ describe('palette items (v195 §3.1)', () => {
     expect(TAB_PAGES.find((item) => item.label === 'Logs'))
       .toMatchObject({ route: '/system', queryParams: { tab: 'logs' }, sub: 'System' });
     expect(TAB_PAGES.map((item) => `${item.route}?tab=${item.queryParams!['tab']}`)).toEqual([
-      '/analytics?tab=attribution', '/analytics?tab=execution', '/analytics?tab=edge',
-      '/analytics?tab=pipeline', '/analytics?tab=tuning', '/analytics?tab=partials',
-      '/reports?tab=gates',
+      '/insights/analytics?tab=attribution', '/insights/analytics?tab=execution', '/insights/analytics?tab=edge',
+      '/insights/analytics?tab=pipeline', '/insights/analytics?tab=tuning', '/insights/analytics?tab=partials',
+      '/insights/reports?tab=gates',
       '/system?tab=scan', '/system?tab=providers', '/system?tab=logs',
       '/watchlist?tab=earnings',
     ]);
