@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-31 22:33:19 UTC",
+  "generated_at": "2026-11-04 10:27:43 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.37.3",
-    "bot": "2.15.9"
+    "ui": "1.37.4",
+    "bot": "2.15.10"
   },
   "releases": [
     {
@@ -2266,6 +2266,20 @@
         "bot": "2.15.9"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "last_seen": "2026-11-04",
+      "commit": "b7fb4496",
+      "subject": "release(ui,bot): ui 1.37.4 / bot 2.15.10 -- instant admin page loads (v201)",
+      "versions": {
+        "ui": "1.37.4",
+        "bot": "2.15.10"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
