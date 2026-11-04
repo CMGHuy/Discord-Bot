@@ -255,7 +255,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     >
       @if (store.selectedDay(); as day) {
         <!-- v165 D6: the drawer is the quick preview; the page is the full day. -->
-        <a class="open-day" [routerLink]="['/calendar', day]" [queryParams]="dayLinkParams()">Open full day →</a>
+        <a class="open-day" [routerLink]="['/trades/calendar', day]" [queryParams]="dayLinkParams()">Open full day →</a>
       }
       @if (store.dayLoading()) {
         <p class="day-loading">Loading...</p>
@@ -725,7 +725,7 @@ export class Calendar {
   protected readonly paperCaption = PAPER_CAPTION;
   protected readonly legsNote = legsSampleNote;
 
-  /** Only the filters that are set, so a bare day links as `/calendar/<date>`. */
+  /** Only the filters that are set, so a bare day links as `/trades/calendar/<date>`. */
   protected readonly dayLinkParams = computed(() => ({
     ...(this.store.strategy() ? { strategy: this.store.strategy() } : {}),
     ...(this.store.horizon() ? { horizon: this.store.horizon() } : {}),

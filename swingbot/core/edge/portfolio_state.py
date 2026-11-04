@@ -190,17 +190,39 @@ def _growth_state(cfg: dict) -> dict:
     return {}
 
 
-def collect_portfolio_state() -> dict:
+def open_heat_state(checked_at: str | None = None) -> dict:
+    """DB-only open heat: the one definition the Risk page and `/live` read (v202).
+
+    Open trades (resting orders included: a PENDING plan's trade row exists
+    from alert time), the account balance and `heat.open_heat` over them.
+    No prices, no daily frames: sector heat and clusters stay in
+    `collect_portfolio_state`, which builds on this. `availability` is the
+    heat status; the other two statuses and the raw account config are
+    returned for the collector's own blocks.
+    """
     from swingbot.core.edge import heat
-    checked = datetime.now(timezone.utc).isoformat()
+    checked = checked_at or datetime.now(timezone.utc).isoformat()
     cfg, cfg_status = _observed(account_module.load_account_config, checked, "account_unavailable")
     balance, balance_status = _dependent(
         lambda: _balance(cfg), checked, "invalid_balance", [cfg_status])
     trades, positions_status = _observed(_trades, checked, "positions_unavailable")
-    dependencies = [positions_status, balance_status]
     open_heat, heat_status = _dependent(
         lambda: _finite_heat(lambda: heat.open_heat(trades, balance)),
-        checked, "heat_unavailable", dependencies)
+        checked, "heat_unavailable", [positions_status, balance_status])
+    return {
+        "open_trades": trades, "balance": balance, "open_heat": open_heat,
+        "heat_cap": getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0),
+        "availability": heat_status, "positions_availability": positions_status,
+        "balance_availability": balance_status, "account_config": cfg,
+    }
+
+
+def collect_portfolio_state() -> dict:
+    checked = datetime.now(timezone.utc).isoformat()
+    base = open_heat_state(checked)
+    trades, balance = base["open_trades"], base["balance"]
+    positions_status = base["positions_availability"]
+    dependencies = [positions_status, base["balance_availability"]]
     sectors, map_status = _observed(_load_sector_map, checked, "sector_map_unavailable")
     sector_heat, sector_status = _sector_state(
         trades, balance, sectors, checked, dependencies + [map_status])
@@ -211,13 +233,13 @@ def collect_portfolio_state() -> dict:
     kill, kill_status = _observed(_kill_state, checked, "killswitch_unavailable")
     return {
         "open_trades": trades, "balance": balance,
-        "open_heat": open_heat, "heat_cap": getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0),
+        "open_heat": base["open_heat"], "heat_cap": base["heat_cap"],
         "sector_heat": sector_heat,
         "unmapped_count": _unmapped_count(trades or [], sectors or {}),
         "clusters": clusters, "throttle_mult": mult, "paused": paused,
         "kill": kill if kill is not None else {"on": None, "reason": None, "at": None},
-        "growth": _growth_state(cfg or {}),
-        "availability": {"positions": positions_status, "heat": heat_status,
+        "growth": _growth_state(base["account_config"] or {}),
+        "availability": {"positions": positions_status, "heat": base["availability"],
                          "sector_heat": sector_status, "clusters": cluster_status,
                          "throttle": throttle_status, "killswitch": kill_status},
     }

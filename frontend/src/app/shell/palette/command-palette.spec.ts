@@ -120,7 +120,7 @@ describe('CommandPalette (v195 §3.1)', () => {
   it('shows the rail pages and the most recent trades for an empty query', async () => {
     const { el } = await mount();
     const shown = optionLabels(el);
-    expect(shown.slice(0, 3)).toEqual(['Dashboard', 'Watchlist', 'Risk']);
+    expect(shown.slice(0, 3)).toEqual(['Dashboard', 'Watchlist', 'Book']);
     expect(shown.slice(-2)).toEqual(['AMD #901', 'NVDA #812']);
     expect(shown).toHaveLength(13);
   });

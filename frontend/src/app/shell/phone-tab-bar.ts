@@ -4,14 +4,14 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, map } from 'rxjs';
 
 import { Icon } from '../ui/icon';
-import { PHONE_TABS, navEntryFor } from './nav';
+import { PHONE_TABS, phoneTabPathFor } from './nav';
 
 /**
  * The phone's bottom tab bar -- v195 Phase 3.
  *
- * Dashboard · Watchlist · Calendar · Trades, then More. Risk lives in the
- * More sheet; the killswitch chip in the top bar shows the halt state and
- * Risk's page header holds the control. The current tab comes
+ * Home (the Dashboard) · Watchlist · Calendar · Trades, then More (v202 §3).
+ * Risk lives in the More sheet; the killswitch chip in the top bar shows the
+ * halt state and Risk's page header holds the control. The current tab comes
  * from the nav model, not RouterLinkActive, so a plan detail lights Trades
  * and a page the bar does not hold lights More.
  *
@@ -110,7 +110,7 @@ export class PhoneTabBar {
   );
 
   /** The tab the current page belongs to; null off the nav (the /ui gallery). */
-  protected readonly activePath = computed(() => navEntryFor(this.url())?.entry.path ?? null);
+  protected readonly activePath = computed(() => phoneTabPathFor(this.url()));
 
   protected readonly moreActive = computed(() => {
     if (this.moreOpen()) return true;

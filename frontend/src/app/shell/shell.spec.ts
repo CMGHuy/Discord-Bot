@@ -10,7 +10,7 @@ import {
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, Routes, provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -618,7 +618,7 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
     expect(bar.firstElementChild!.tagName.toLowerCase()).toBe('sb-breadcrumb');
     const crumbs = [...bar.querySelectorAll('nav[aria-label="Breadcrumb"] li')]
       .map((li) => li.textContent!.replace('/', '').trim());
-    expect(crumbs).toEqual(['Review', 'Trades']);
+    expect(crumbs).toEqual(['Trades', 'Book']);
     expect(el.querySelectorAll('h1')).toHaveLength(0);
     expect(el.querySelector('.page-title, .page-subtitle')).toBeNull();
   });
@@ -739,7 +739,7 @@ describe('shell on a phone (v195 Phase 3)', () => {
 
   beforeEach(() => {
     phone = signal(true);
-    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'risk', component: Blank }]) });
+    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'insights/research', component: Blank }]) });
     TestBed.overrideProvider(ViewportService, {
       useValue: { isPhone: phone, isNarrow: signal(true), viewport: signal('xs') },
     });
@@ -807,7 +807,7 @@ describe('shell on a phone (v195 Phase 3)', () => {
     expect(sheet(el)).toBeNull();
     moreTab(el).click();
     await settle(fixture);
-    el.querySelector<HTMLAnchorElement>('sb-more-sheet a.page[href="/risk"]')!.click();
+    el.querySelector<HTMLAnchorElement>('sb-more-sheet a.page[href="/insights/research"]')!.click();
     await settle(fixture);
     expect(sheet(el)).toBeNull();
   });
@@ -972,5 +972,64 @@ describe('shell command palette (v195 §3.1)', () => {
     const html = readSource('src/app/shell/shell.html');
     expect(html.indexOf('<sb-command-palette')).toBeGreaterThan(html.indexOf('<sb-more-sheet'));
     expect(html.indexOf('<sb-command-palette')).toBeLessThan(html.indexOf('<sb-toast-host'));
+  });
+});
+
+describe('section tabs in the shell (v202 §1)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: shellProviders([
+        { path: 'trades', component: Blank },
+        { path: 'trades/calendar', component: Blank },
+        { path: 'trades/:id', component: Blank },
+        { path: 'risk', component: Blank },
+      ]),
+    });
+  });
+
+  async function go(fixture: ComponentFixture<Shell>, url: string): Promise<void> {
+    await TestBed.inject(Router).navigateByUrl(url);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  async function at(url: string): Promise<HTMLElement> {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await go(fixture, url);
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  const current = (el: HTMLElement) =>
+    [...el.querySelectorAll('sb-section-tabs a[aria-current="page"]')].map((a) => a.textContent!.trim());
+
+  it('draws the tabs at the top of the workspace, before the routed page', async () => {
+    const el = await at('/trades/calendar');
+    const content = el.querySelector('main.workspace > .workspace-content')!;
+    expect(content.firstElementChild!.tagName.toLowerCase()).toBe('sb-section-tabs');
+    expect([...content.querySelectorAll('sb-section-tabs a')].map((a) => a.textContent!.trim()))
+      .toEqual(['Book', 'Calendar', 'Cancels']);
+    expect(current(el)).toEqual(['Calendar']);
+  });
+
+  it("keeps the destination's first section active on a detail page", async () => {
+    expect(current(await at('/trades/812'))).toEqual(['Book']);
+  });
+
+  it('draws no tabs on a single page', async () => {
+    expect((await at('/risk')).querySelectorAll('sb-section-tabs a')).toHaveLength(0);
+  });
+
+  it('moves the current tab when the URL moves to another section, and drops the tabs off it', async () => {
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    await go(fixture, '/trades');
+    expect(current(el)).toEqual(['Book']);
+    await go(fixture, '/trades/calendar');
+    expect(current(el)).toEqual(['Calendar']);
+    await go(fixture, '/risk');
+    expect(el.querySelectorAll('sb-section-tabs a')).toHaveLength(0);
   });
 });
