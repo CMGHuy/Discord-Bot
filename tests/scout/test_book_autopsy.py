@@ -227,8 +227,9 @@ def test_cli_records_input_hashes_effective_frictions_and_resolved_invocation(tm
     header = data["header"]
     assert header["frictions"] == {"slippage_bps": 17.0, "commission_per_trade": 2.5,
                                     "commission_risk_basis": 250.0, "min_risk_fraction": 0.001}
+    from autopsy import exclusions
     expected = {str(path.resolve()): hashlib.sha256(path.read_bytes()).hexdigest()
-                for path in (rows_csv, rej_csv, bars_dir / "AAA.csv")}
+                for path in (rows_csv, rej_csv, bars_dir / "AAA.csv", exclusions.EXCLUSIONS_PATH)}
     assert header["input_fingerprints"] == expected
     assert header["invocation"]["command"][2:] == argv
     assert header["invocation"]["options"]["balance"] == 25000.0

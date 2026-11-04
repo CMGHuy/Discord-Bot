@@ -91,6 +91,26 @@ def rebuild_trade_ids(rows, windows) -> list[str]:
                    and any(open_in_window(r.opened_at_utc, r.closed_at_utc, w) for w in windows)})
 
 
+def apply_exclusions(rows: list, exclusions: list[Exclusion]) -> tuple[list, list]:
+    """(kept rows, excluded trade rows): a trade whose id any exclusion lists leaves; plans stay."""
+    ids = set().union(*(e.trade_ids for e in exclusions)) if exclusions else set()
+    kept, gone = [], []
+    for row in rows:
+        (gone if row.row_kind == "trade" and row.trade_id in ids else kept).append(row)
+    return kept, gone
+
+
+def stall_summary(exclusions: list[Exclusion], excluded: list) -> list[dict]:
+    """One {key, n, gross_expr, worst_r} per exclusion, in key order, over its excluded rows."""
+    out = []
+    for entry in sorted(exclusions, key=lambda e: e.key):
+        values = [r.gross_r for r in excluded if r.trade_id in entry.trade_ids and r.gross_r is not None]
+        out.append({"key": entry.key, "n": len(values),
+                    "gross_expr": round(sum(values) / len(values), 4) if values else None,
+                    "worst_r": min(values) if values else None})
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="v200: rebuild the stall trade ids from a rows export")
     parser.add_argument("rows", type=Path)

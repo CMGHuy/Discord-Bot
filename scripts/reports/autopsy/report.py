@@ -11,6 +11,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import bars, cuts, exits
+from .exclusions import EXCLUSIONS_PATH, apply_exclusions, load_exclusions, stall_summary
 from .cells import apply_bh, cut_cells, net_value
 from .rows import closed_trades, friction_settings
 
@@ -96,9 +97,12 @@ def _with_hour_coverage(items: list[dict], coverage: dict) -> list[dict]:
 
 def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resamples: int,
                  seed: int, balance: float, frictions: dict | None = None,
-                 input_fingerprints: dict | None = None, invocation: dict | None = None) -> dict:
+                 input_fingerprints: dict | None = None, invocation: dict | None = None,
+                 exclusions_path: Path | None = EXCLUSIONS_PATH) -> dict:
     """The Autopsy JSON (index § Shared contracts) for one export."""
     inputs = dict(input_fingerprints or {})
+    stall = load_exclusions(exclusions_path, input_fingerprints=inputs) if exclusions_path else []
+    rows, excluded = apply_exclusions(rows, stall)
     covered_n = bars.enrich_with_bars(rows, bars_dir, input_fingerprints=inputs)
     trades = closed_trades(rows)
     sector_of = _sector_snapshot(rows)
@@ -108,7 +112,8 @@ def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resam
     tallies = bars.fill_tallies(rows) + exits.alert_supply_tallies(rows, rejections)
     header = _header(trades, covered_n, tested, n_resamples=n_resamples, seed=seed, balance=balance)
     header.update(frictions=dict(frictions if frictions is not None else friction_settings()),
-                  input_fingerprints=inputs, invocation=invocation, sector_map=sector_of)
+                  input_fingerprints=inputs, invocation=invocation, sector_map=sector_of,
+                  stall_exclusions=stall_summary(stall, excluded))
     coverage = {"trades": exits.hour_coverage(trades),
                 "plans": exits.hour_coverage(exits.issued_rows(rows))}
     header["alert_hour_coverage"] = coverage
@@ -152,6 +157,11 @@ def _coverage_line(label: str, cov: dict) -> str:
             f"discord {cov['discord']}, unknown {cov['unknown']}")
 
 
+def _stall_lines(h: dict) -> list[str]:
+    return [f"- stall exclusion {s['key']}: N {s['n']}, gross ExpR {_fmt(s['gross_expr'])}, "
+            f"worst R {_fmt(s['worst_r'])}" for s in h.get("stall_exclusions", [])]
+
+
 def _header_lines(h: dict) -> list[str]:
     w0, w1 = h["window"]
     lines = [f"# Book autopsy, {w0} to {w1}", "",
@@ -159,6 +169,7 @@ def _header_lines(h: dict) -> list[str]:
              f"- N closed trades: {h['n']}; bar-covered: {h['bar_covered_n']}",
              f"- Pooled net ExpR (modelled): {_fmt(h['pooled_net_expr'])}; "
              f"pooled win rate: {_pct(h['pooled_win_rate'])}",
+             *_stall_lines(h),
              f"- Net of frictions: {h['net_of_frictions']}",
              f"- Cells tested: {h['cells_tested']} (one BH pass over all of them); "
              f"bootstrap resamples {h['resamples']}, seed {h['seed']}"]
