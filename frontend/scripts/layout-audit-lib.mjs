@@ -150,19 +150,22 @@ export function hintVerdict(rect, viewport, hits) {
   return { ok: true, reason: null };
 }
 
-/** Narrowest width the icon rail shows at: below it (the shell's 639px phone breakpoint) the bottom
+/** Narrowest width the labelled rail shows at: below it (the shell's 639px phone breakpoint) the bottom
  *  tab bar navigates, and its tabs carry visible labels. */
 export const RAIL_MIN_WIDTH = 640;
 
 /**
- * The rail-label check's verdict (spec v195 Phase 7) on one icon-rail entry: its accessible name and
- * whether its anchored sb-hint label passed hintVerdict while the entry had keyboard focus
- * (layout-audit.mjs auditRailLabels). No name fails first (a screen reader hears nothing whatever the
- * label does), then a hidden label. Runs in Node on the measured facts, never shipped into the page.
+ * The rail-label check's verdict (spec v202 §3) on one labelled-rail entry: its accessible name, its
+ * .rail-label text and whether that label shows (layout-audit.mjs auditRailLabels). No name fails
+ * first, then no label, then a hidden one, then a name without the label (WCAG 2.5.3 label-in-name).
  */
 export function railLabelVerdict(entry) {
-  if (!String(entry.name ?? '').trim()) return { ok: false, reason: 'no-name' };
-  if (!entry.hintVisible) return { ok: false, reason: 'hint-hidden' };
+  const name = String(entry.name ?? '').trim();
+  const label = String(entry.label ?? '').trim();
+  if (!name) return { ok: false, reason: 'no-name' };
+  if (!label) return { ok: false, reason: 'no-label' };
+  if (!entry.labelVisible) return { ok: false, reason: 'label-hidden' };
+  if (!name.toLowerCase().includes(label.toLowerCase())) return { ok: false, reason: 'label-not-in-name' };
   return { ok: true, reason: null };
 }
 

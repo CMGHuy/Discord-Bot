@@ -284,21 +284,25 @@ test('hintVerdict: a popover with no area fails zero-size, whatever else is true
   assert.deepEqual(hintVerdict(box(-500, 100, 0, 60), VIEW, BOTH), { ok: false, reason: 'zero-size' });
 });
 
-// railLabelVerdict (v195 Phase 7): one icon-rail entry's accessible name, and whether its anchored
-// label passed the hint check's own verdict while the entry had keyboard focus.
-test('railLabelVerdict: a named entry whose label shows passes', () => {
-  assert.deepEqual(railLabelVerdict({ name: 'Dashboard', hintVisible: true }), { ok: true, reason: null });
+// railLabelVerdict (v202 §3): a labelled-rail entry's accessible name, its visible .rail-label, and
+// label-in-name (WCAG 2.5.3): the name a screen reader hears contains the word the eye reads.
+test('railLabelVerdict: a named entry whose label shows and is in its name passes', () => {
+  assert.deepEqual(railLabelVerdict({ name: 'Dashboard', label: 'Dashboard', labelVisible: true }), { ok: true, reason: null });
+  assert.deepEqual(railLabelVerdict({ name: 'Insights section', label: 'insights', labelVisible: true }), { ok: true, reason: null });
 });
 
-test('railLabelVerdict: an entry with no accessible name fails no-name, whatever its label does', () => {
+test('railLabelVerdict: no accessible name fails no-name first, whatever the label does', () => {
   for (const name of ['', '   ', null, undefined]) {
-    assert.deepEqual(railLabelVerdict({ name, hintVisible: true }), { ok: false, reason: 'no-name' }, String(name));
-    assert.deepEqual(railLabelVerdict({ name, hintVisible: false }), { ok: false, reason: 'no-name' }, String(name));
+    assert.deepEqual(railLabelVerdict({ name, label: 'Risk', labelVisible: true }), { ok: false, reason: 'no-name' }, String(name));
+    assert.deepEqual(railLabelVerdict({ name, label: '', labelVisible: false }), { ok: false, reason: 'no-name' }, String(name));
   }
 });
 
-test('railLabelVerdict: a named entry whose label stays hidden on focus fails hint-hidden', () => {
-  assert.deepEqual(railLabelVerdict({ name: 'Risk', hintVisible: false }), { ok: false, reason: 'hint-hidden' });
+test('railLabelVerdict: a missing label, a hidden one and a name without it each fail', () => {
+  assert.deepEqual(railLabelVerdict({ name: 'Risk', label: '  ', labelVisible: true }), { ok: false, reason: 'no-label' });
+  assert.deepEqual(railLabelVerdict({ name: 'Risk', label: 'Risk', labelVisible: false }), { ok: false, reason: 'label-hidden' });
+  assert.deepEqual(railLabelVerdict({ name: 'Open the book', label: 'Trades', labelVisible: true }),
+    { ok: false, reason: 'label-not-in-name' });
 });
 
 test('RAIL_MIN_WIDTH: the rail check runs at the tablet and desktop widths, never the phone', () => {
